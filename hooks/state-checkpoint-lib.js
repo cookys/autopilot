@@ -232,7 +232,7 @@ function compactionStateName(sessionId) {
 // send (reply_to). Pure: takes the transcript text, returns the unanswered ones oldest first. Body text is data.
 const ANSWER_TOOL = /^mcp__(?:[\w-]+__)?fleet__(reply|task_result|send)$/;
 const CHANNEL_OPEN = /<channel\s+([^>]*)>/g;
-const INBOUND_FIRST_LINE_MAX = 40;
+const INBOUND_FIRST_LINE_MAX = 20; // bytes; 8 entries (one dispatch) must fit INBOUND_BUDGET 1024
 
 function escapeInboundText(s) {
   return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -268,7 +268,7 @@ function extractUnansweredChannels(raw) {
           const first = (inner.split('\n').map((l) => l.trim()).find((l) => l) || '');
           pending.delete(a.message_id);
           pending.set(a.message_id, {
-            message_id: a.message_id, from: a.from || '', kind: a.kind || '', disposition: a.disposition || '',
+            message_id: a.message_id, from: (a.from || '').replace(/@[^@/]*$/, ''), kind: a.kind || '', disposition: a.disposition || '',
             reply_to: a.reply_to || '', first_line: first,
           });
         });

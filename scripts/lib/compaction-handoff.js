@@ -49,7 +49,7 @@ const SECTION_FLOOR = 300;
 // Unanswered fleet messages (opts.inbound): a reserved section the size cap never cuts. Its bytes come off the top of
 // BODY_CAP before any other section is sized. When more are unanswered than fit, the newest are kept and the count of
 // older ones is written. Bodies are data: every field is escaped (the restore block is wrapped in a tag).
-const INBOUND_BUDGET = 1536;
+const INBOUND_BUDGET = 1024;
 const INBOUND_REREAD_PLACEHOLDER = 'compaction 前可能有 fleet 訊息沒讀到：呼叫 `recent` 並設 `unseen_only=true`，或執行 `fleet recent --unseen`（待上線）';
 // A note written within this long ago, or whose size/mtime moves while it is read, may be mid-write (the model writes
 // it with the Write tool; atomicity is not under our control, so the reader guards).
@@ -404,7 +404,7 @@ function buildHandoff(opts = {}) {
   out += machine;
   out += inboundText;
   const used = Buffer.byteLength(out);
-  const room = bodyCap - used;
+  const room = BODY_CAP - used; // used already holds the reserved section
   if (opts.tail) {
     if (room >= TAIL_MIN_BYTES) {
       const tail = `${opts.tail.header}${opts.tail.body}`;

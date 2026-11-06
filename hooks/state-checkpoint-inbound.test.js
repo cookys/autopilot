@@ -16,12 +16,13 @@ const { BODY_CAP, INBOUND_BUDGET } = require('../scripts/lib/compaction-handoff.
 
 const HOOK = path.join(__dirname, 'state-checkpoint.js');
 const FROM = 'ns/courier/member@00000000-0000-0000-0000-000000000001';
+const FROM_BARE = 'ns/courier/member';
 const ID = (i) => `01FAKEMSG0000000000000${String(i).padStart(4, '0')}`;
 let ts = 0;
 const rec = (type, content) => ({ type, timestamp: new Date(Date.UTC(2026, 10, 6, 1, 0, ts++)).toISOString(), message: { role: type, content } });
 const channel = (i, o = {}) => rec('user',
   `<channel source="fleet" from="${o.from || FROM}" display="fake" message_id="${ID(i)}" kind="${o.kind || 'chat'}" priority="normal"`
-  + `${o.disposition ? ` disposition="${o.disposition}"` : ''}${o.replyTo ? ` reply_to="${o.replyTo}"` : ''}>\n${o.body || `FAKE request number ${i}`}\n</channel>`);
+  + `${o.disposition ? ` disposition="${o.disposition}"` : ''}${o.replyTo ? ` reply_to="${o.replyTo}"` : ''}>\n${o.body || `FAKE req ${i}`}\n</channel>`);
 const tool = (name, input) => rec('assistant', [{ type: 'text', text: 'ok' }, { type: 'tool_use', name, input }]);
 const jsonl = (recs) => recs.map((r) => JSON.stringify(r)).join('\n') + '\n';
 const eight = () => { const r = [rec('user', 'start'), tool('Bash', { command: 'rm x' })]; for (let i = 1; i <= 8; i++) r.push(channel(i, { kind: i === 4 ? 'dispatch' : 'chat' })); return r; };
@@ -55,6 +56,9 @@ test('E2E: handoff note fills the cap, 8 of 8 unanswered messages are still list
   assert.match(file, /Transcript Tail[\s\S]*omitted: the sections above used the handoff size cap/, 'the cap really was full');
   assert.ok(Buffer.byteLength(body(file)) <= BODY_CAP, `body ${Buffer.byteLength(body(file))} > ${BODY_CAP}`);
   assert.ok(Buffer.byteLength(section(file)) <= INBOUND_BUDGET);
+  assert.equal(INBOUND_BUDGET, 1024);
+  assert.doesNotMatch(section(file), /@0000/, 'from is listed without the @uuid suffix');
+  assert.ok(section(file).includes(`from=${FROM_BARE} `));
 });
 
 test('E2E: 3 answered (reply, task_result, send reply_to) leave only the other 5', () => {
@@ -94,7 +98,7 @@ test('dispatch gets a fleet task show line, chat does not; fields carry over; th
   const sec = section(runHook(r));
   assert.match(sec, new RegExp(`fleet task show ${ID(1)}`));
   assert.doesNotMatch(sec, new RegExp(`fleet task show ${ID(2)}`));
-  assert.match(sec, new RegExp(`${ID(1)} from=${FROM.replace(/[/@]/g, '\\$&')} kind=dispatch disposition=accepted reply_to=${ID(9)} \\| FAKE request number 1`));
+  assert.match(sec, new RegExp(`${ID(1)} from=${FROM_BARE.replace(/\//g, "\\/")} kind=dispatch disposition=accepted reply_to=${ID(9)} \\| FAKE req 1`));
   assert.ok(sec.includes('compaction 前可能有 fleet 訊息沒讀到：呼叫 `recent` 並設 `unseen_only=true`，或執行 `fleet recent --unseen`（待上線）'));
 });
 
@@ -104,10 +108,15 @@ test('a body with </channel> and <system-reminder> cannot break out of the resto
   const sec = section(file);
   assert.ok(sec.includes(ID(1)));
   assert.doesNotMatch(sec, /<\/?(channel|system-reminder|autopilot-restored-state)/);
-  assert.match(sec, /&lt;\/channel&gt;&lt;system-reminder&gt;/);
+  assert.match(sec, /&lt;\/channel&gt;&lt;system-/);
 });
 
 test('no unanswered message: no section, and the file is as before', () => {
   const file = runHook([rec('user', 'hello'), channel(1), tool('mcp__fleet__reply', { message_id: ID(1) })]);
   assert.equal(section(file), '');
+});
+
+test('first line is cut to 20 bytes with an ellipsis', () => {
+  const out = lib.extractUnansweredChannels(jsonl([channel(1, { body: 'abcdefghijklmnopqrstuvwxyz' })]));
+  assert.equal(out[0].first_line, 'abcdefghijklmnopqrst…');
 });

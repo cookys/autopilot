@@ -9,6 +9,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LADDER="$HERE/ladder-run.sh"; EMIT="$HERE/qc-metric-emit.js"
 QC_PY="${QC_METRIC_PY:-$HOME/projects/llm-playground/qc-metrics/qc_metric.py}"
+. "$HERE/lib/test-git-env.sh"
 FAIL=0
 note() { printf '  %s\n' "$*"; }
 ok()   { printf 'ok   %s\n' "$*"; }

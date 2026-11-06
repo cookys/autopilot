@@ -35,7 +35,9 @@ export function answerOf(d: LiveDecision, st: DecideState): string | null {
 }
 
 // the batch after the list or the picks changed. Nothing pending closes it.
-export function batchSync(prev: DecideBatch, pending: readonly LiveDecision[], st: DecideState): DecideBatch {
+// A card that left the list without an answer from here was closed elsewhere (another session or the CLI answered it): it stays where it is, greyed, its answer line `elsewhere`
+// (the shell passes t('decide.elsewhere')). The question text is kept in the batch, so the data to keep it is always there; keeping it avoids a reflow under the owner's eyes.
+export function batchSync(prev: DecideBatch, pending: readonly LiveDecision[], st: DecideState, elsewhere: string): DecideBatch {
   if (pending.length === 0) return NO_BATCH
   const b: DecideBatch = { order: [...prev.order], num: { ...prev.num }, next: prev.next, q: { ...prev.q }, ans: { ...prev.ans } }
   const here = new Set<string>()
@@ -48,7 +50,7 @@ export function batchSync(prev: DecideBatch, pending: readonly LiveDecision[], s
     if (a === null) delete b.ans[k]
     else b.ans[k] = a
   }
-  b.order = b.order.filter(k => here.has(k) || b.ans[k] !== undefined) // a card that left unanswered goes; an answered one stays until the batch closes
+  for (const k of b.order) if (!here.has(k) && b.ans[k] === undefined) b.ans[k] = elsewhere // left the list unanswered here: closed elsewhere, stays greyed until the batch closes
   return b
 }
 
@@ -82,3 +84,26 @@ export function answerPlan(o: { lines: readonly PaneLine[]; batch: DecideBatch; 
   if (f >= 0) { if (f < off) off = f; else if (f >= off + room) off = f - room + 1 }
   return { focus, offset: clamp(off) }
 }
+
+// The card id an element key belongs to (`opt:<id>:<k>` or `note:<id>`); null for the send row or anything else.
+export function cardOfKey(key: string | null): string | null {
+  if (key === null) return null
+  const m = /^(?:opt:(.+):\d+|note:(.+))$/.exec(key)
+  return m === null ? null : (m[1] ?? m[2])
+}
+// The focus plan when the sync (not a local press) closed the card the focus was on: the card is in `batch.ans` now and was not in `prev.ans`. The same successor plan as a local answer;
+// null when the focus is elsewhere or the card was already answered.
+export function closedFocusPlan(o: { prev: DecideBatch; batch: DecideBatch; focus: string | null; lines: readonly PaneLine[]; pending: readonly LiveDecision[]; st: DecideState; offset: number; room: number }): AnswerPlan | null {
+  const k = cardOfKey(o.focus)
+  if (k === null || o.prev.ans[k] !== undefined || o.batch.ans[k] === undefined) return null
+  return answerPlan({ lines: o.lines, batch: o.batch, pending: o.pending, st: o.st, answered: k, offset: o.offset, room: o.room })
+}
+// After a submit: the card whose successor the focus goes to, the last of the sent ids that is a typed-only card (an option card was planned when its option was pressed). null when none.
+export function submitSuccessor(pending: readonly LiveDecision[], sent: readonly string[]): string | null {
+  const typed = sent.filter(id => pending.some(d => d.id === id && d.options.length === 0))
+  return typed.length === 0 ? null : typed[typed.length - 1]
+}
+
+// The surfaces whose element table has a text field (a phone has none). One source: the pane draws with it and the plan counts the note rows with it.
+const SURFACES_WITH_INPUT = new Set<string>(['terminal', 'desktop', 'vscode'])
+export const inputsFor = (surface: string): boolean => SURFACES_WITH_INPUT.has(surface)

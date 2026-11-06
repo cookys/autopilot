@@ -41,7 +41,7 @@ import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
-import { NO_BATCH, answerPlan, answerOf, batchSync } from './decidebatch'
+import { NO_BATCH, answerPlan, answerOf, batchSync, closedFocusPlan, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
 import { barStrip, decideTabLines } from './tabs'
 
@@ -62,7 +62,7 @@ import {
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, QuotaWindow, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneLine, PaneTab, SlotId, QuotaWindow, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -78,7 +78,6 @@ let snapshot: LiveSnapshot | null = null
 const DECIDE = atom({ plugin: 'autopilot', key: 'decide' } as const, NO_DECIDE)
 // the timed model requests (speed.ts); a list stored under another shape tag is dropped, it was timed by another method
 const STEPS = atom({ plugin: 'autopilot', key: 'steps' } as const, [] as Step[], { shape: STEPS_SHAPE })
-const SURFACES_WITH_INPUT = new Set<string>(['terminal', 'desktop', 'vscode']) // the elements tables with an `Input`; a phone has none (the resolved table hands out a stand-in for it, so the surface is what tells)
 const DECIDE_KEEP_MS = 24 * 3600 * 1000 // a sent question the session never closed is forgotten after a day
 let timer: { cancel: () => void } | undefined
 let liveBaseSeen: string | null = null // the live base the pointer named on the last tick (codeforge's pet.json sits under it)
@@ -762,6 +761,7 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
     const m = /^pick:(.+):(\d+)$/.exec(id)
     if (m !== null) {
       const k = Number(m[2])
+      decideFocus = optKey(m[1], k)
       await update($, DECIDE, s => {
         const picks = { ...s.picks }
         if (picks[m[1]] === k) delete picks[m[1]]
@@ -882,6 +882,8 @@ async function sendDecide($: EngineInterface): Promise<void> {
     if (reply === null) return
     const at = await $.clock.now()
     await update($, DECIDE, s => ({ ...s, sent: { ...s.sent, ...Object.fromEntries(reply.ids.map(i => [i, at])) } }))
+    const typed = submitSuccessor(snapshot === null ? [] : snapshot.pending, reply.ids)
+    if (typed !== null) await decideAnswered($, typed) // a typed-only card is answered by sending it: the focus goes to its successor even though the send button is gone
     $.prompt.submit({ text: reply.text }).catch(async () => {
       await update($, DECIDE, s => { const sent = { ...s.sent }; for (const i of reply.ids) delete sent[i]; return { ...s, sent } })
     })
@@ -895,6 +897,7 @@ async function decideNote($: EngineInterface, key: string, value: string): Promi
   if (!key.startsWith('note:')) return
   const id = key.slice(5)
   try {
+    decideFocus = noteKey(id)
     await update($, DECIDE, s => ({ ...s, notes: { ...s.notes, [id]: value } }))
   } catch (_e) {
     // keep the last text
@@ -1103,7 +1106,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideSync(await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll, await fleetFor($))))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll, await fleetFor($))))
 
   // The 待決 tab draws its own scrolling window (scroll.tsx), so the person's scroll keys there move the mod's offset and never reach the engine; every other tab keeps the engine's own
   // scrolling (`next(e)`).
@@ -1118,9 +1121,30 @@ const decideScroll = newScroll()
 let decideBatch: DecideBatch = NO_BATCH
 let decideState: DecideState = NO_DECIDE
 let decideCols = DEFAULT_PANE_COLS
+let decideInputs = false // whether the surface being drawn has text fields: the pane draws with it and the plans count the note rows with it (decidebatch.ts inputsFor)
+let decideFocus: string | null = null // the element key the owner last pressed, typed in or was sent to; the host has no call that reads the focus
 function decideSync(st: DecideState): void {
   decideState = st
-  decideBatch = paneTab === 'decide' ? batchSync(decideBatch, snapshot === null ? [] : snapshot.pending, st) : NO_BATCH
+  decideBatch = paneTab === 'decide' ? batchSync(decideBatch, snapshot === null ? [] : snapshot.pending, st, tr('decide.elsewhere')) : NO_BATCH
+}
+// The card lines the plans count: the same ones the pane draws (same inputs flag), without the fixed send strip.
+function decideCardLines(snap: LiveSnapshot, st: DecideState): PaneLine[] {
+  const ctx = { t: tr, cols: decideCols, expanded: new Set<string>(), folded: new Set<string>(), decide: { ...st, inputs: decideInputs, batch: decideBatch } }
+  return decideTabLines(snap, ctx).filter(l => l.bar !== true)
+}
+async function decideFocusTo($: EngineInterface, plan: { focus: string; offset: number }): Promise<void> {
+  decideScroll.offset = plan.offset
+  decideFocus = plan.focus
+  decideScroll.redraw?.()
+  await $.ui.focus({ requestId: PANE_ID, key: plan.focus }).catch(() => undefined)
+}
+// A draw's sync. A card the owner was on that another session or the CLI closed now stays greyed in place (batchSync): the focus goes where a local answer would send it.
+async function decideRepair($: EngineInterface, st: DecideState): Promise<void> {
+  const prev = decideBatch
+  decideSync(st)
+  if (snapshot === null || paneTab !== 'decide') return
+  const plan = closedFocusPlan({ prev, batch: decideBatch, focus: decideFocus, lines: decideCardLines(snapshot, st), pending: snapshot.pending, st, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
+  if (plan !== null) await decideFocusTo($, plan)
 }
 async function decideAnswered($: EngineInterface, id: string): Promise<void> {
   const st = await read($, DECIDE)
@@ -1128,12 +1152,8 @@ async function decideAnswered($: EngineInterface, id: string): Promise<void> {
   decideSync(st)
   const d = pending.find(x => x.id === id)
   if (d === undefined || answerOf(d, st) === null || snapshot === null) return
-  const ctx = { t: tr, cols: decideCols, expanded: new Set<string>(), folded: new Set<string>(), decide: { ...st, inputs: false, batch: decideBatch } }
-  const lines = decideTabLines(snapshot, ctx).filter(l => l.bar !== true)
-  const plan = answerPlan({ lines, batch: decideBatch, pending, st, answered: id, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
-  decideScroll.offset = plan.offset
-  decideScroll.redraw?.()
-  await $.ui.focus({ requestId: PANE_ID, key: plan.focus }).catch(() => undefined)
+  const plan = answerPlan({ lines: decideCardLines(snapshot, st), batch: decideBatch, pending, st, answered: id, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
+  await decideFocusTo($, plan)
 }
 
 // The 待決 tab is exactly the pane's height, so the engine's own window must stand at 0 there; one left scrolled by another tab (the engine keeps one offset per pane) would hide the

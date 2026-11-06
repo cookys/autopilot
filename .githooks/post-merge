@@ -63,5 +63,19 @@ if [ -x scripts/preflight-release.sh ]; then
   fi
 fi
 
+# --- advisory: scratch checkouts that could be reaped (never applies; dry-run only) ---
+SCRATCH_FLAT="$(printf '%s' "$REPO_ROOT" | tr '/' '-')"
+for SCRATCH_DIR in ${AUTOPILOT_SCRATCH_ROOT:-} /tmp/claude-"$(id -u)"/"$SCRATCH_FLAT"/*/scratchpad; do
+  [ -d "$SCRATCH_DIR" ] || continue
+  [ -f "$REPO_ROOT/scripts/reap-scratch-checkouts.js" ] || break
+  REAP_LINE="$(timeout 30 node "$REPO_ROOT/scripts/reap-scratch-checkouts.js" --root "$SCRATCH_DIR" --repo "$REPO_ROOT" 2>/dev/null </dev/null | grep -E '^(reap-scratch:|WARNING)')" || continue
+  case "$REAP_LINE" in
+    "reap-scratch: 0 reapable"*) ;;
+    "") ;;
+    *) echo "$REAP_LINE" | sed 's/^/  /'
+       echo "  apply (depth-0 closeout): bash scripts/scratch-closeout.sh --root $SCRATCH_DIR --repo $REPO_ROOT --keep <in-flight lanes>" ;;
+  esac
+done
+
 echo "Tip: to record this merge — git commit --allow-empty -m \"docs: record merge SHA $MERGE_SHA\""
 exit 0

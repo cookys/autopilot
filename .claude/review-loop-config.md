@@ -1,11 +1,15 @@
 # Review-Loop Config — autopilot (self-hosting)
 
-> Stub that follows the roster (`project-config-template/review-loop-config.md`): no seat fields
-> and no override block, so every seat (loop reviewer, implementer, verification author, qc panel)
-> is the roster's. Seat history before 2026-11-06 is in git; roster changes are logged in the
-> template's changelog. Consumed by `scripts/resolve-review-loop.sh` (precedence slot 3).
+> Follows the roster (`project-config-template/review-loop-config.md`) for every seat (loop reviewer,
+> verification author, qc panel); the one override block below keeps the grok implementer.
+> Seat history before 2026-11-06 is in git; roster changes are logged in the template's changelog. Consumed by `scripts/resolve-review-loop.sh` (precedence slot 3).
 
 ## Settings
+
+- override: implementer | until 2026-11-20 | grok implementer kept until the PM rules on the roster implementer
+- implementer_engine: grok-4.7
+- implementer_effort: low
+- implementer_runner: grok
 
 - on_family_conflict: fallback
 

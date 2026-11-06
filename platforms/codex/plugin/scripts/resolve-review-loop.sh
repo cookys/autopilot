@@ -251,7 +251,7 @@ resolve_config_ladder "review-loop-config.md" "REVIEW_LOOP_CONFIG_OVERRIDE" "bui
 # knobs from the repo when written) in a temp file, and CONFIG points at it so every read_field
 # below sees the effective view. CONFIG_ORIG stays the file the ladder chose: it is what
 # config_path reports and where a relative brain_seat_identity_file resolves.
-ROSTER_TEMPLATE="$REPO_ROOT/project-config-template/review-loop-config.md"
+ROSTER_TEMPLATE="${REVIEW_LOOP_ROSTER_TEMPLATE:-$REPO_ROOT/project-config-template/review-loop-config.md}"  # the env knob is TEST-ONLY
 if [[ ! -r "$ROSTER_TEMPLATE" ]]; then
   echo "resolve-review-loop: roster template unreadable: $ROSTER_TEMPLATE" >&2
   exit 3

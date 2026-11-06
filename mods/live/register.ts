@@ -577,7 +577,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
       ...common, watcher_note: typeof env.exit_reason === 'string' && env.exit_reason !== '' && env.writer === null ? STATE_TEXT.watcherNote(env.exit_reason) : null,
-      band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions, awaiting: jobModel === null ? [] : (jobModel.awaiting_operator ?? []),
+      band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions, awaiting: jobModel === null ? [] : (jobModel.awaiting_operator ?? []), dispatching: jobModel === null ? [] : (jobModel.pending_dispatch ?? []),
       sections: buildSections(src, foreman),
       review,
       detail: {

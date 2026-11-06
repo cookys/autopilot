@@ -133,6 +133,11 @@ function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     const step = (aw[0].awaiting_operator ?? aw[0].question) + (aw.length > 1 ? ' (+' + (aw.length - 1) + ')' : '')
     put(needYou, bare => ui.item(u, needYou, t('now.awaiting_op', { n: aw.length, step }), undefined, { fact: 'now.attention', word: !bare }))
   }
+  const pd = snap.dispatching ?? []
+  if (pd.length > 0) { // answered, but the caller has not confirmed the dispatch yet: its own row (not a question, no press target)
+    const ids = pd.slice(0, 2).map(x => x.id ?? '?').join(', ') + (pd.length > 2 ? ' (+' + (pd.length - 2) + ')' : '')
+    put(needYou, bare => ui.item(u, needYou, t('now.pending_dispatch', { n: pd.length, ids }), undefined, { fact: 'now.attention', word: !bare }))
+  }
   if (a !== null) put(needYou, bare => ui.item(u, needYou, attentionReason(a, nowMs, t), undefined, { fact: 'now.attention', word: !bare }))
   const wt = judgeCountOf(snap)
   if (wt > 0) put(needYou, bare => ui.item(u, needYou, t('now.residue', { n: wt }), undefined, { fact: 'now.attention', word: !bare, goto: 'hygiene' })) // an attention row of this tab that points at 殘留; the one residue.groups line is the summary kv

@@ -138,6 +138,7 @@
             "enum": [
               "open",
               "awaiting_operator_action",
+              "pending_dispatch",
               "closed"
             ]
           },
@@ -177,22 +178,16 @@
               "null"
             ]
           },
-          "delivery_error": {
+          "pending_dispatch_at": {
             "type": [
               "string",
               "null"
             ]
           },
-          "delivery_at": {
+          "dispatched_task_id": {
             "type": [
               "string",
               "null"
-            ]
-          },
-          "delivery": {
-            "enum": [
-              "ok",
-              "failed"
             ]
           },
           "backfilled": {

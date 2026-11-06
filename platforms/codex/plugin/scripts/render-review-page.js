@@ -236,7 +236,11 @@ function buildJobModel(inputs) {
   const awaitingOperator = allCards.filter((d) => d.status === 'awaiting_operator_action').map((d) => ({
     id: optText(d.id), question: d.question, answer: optText(d.answer), awaiting_operator: optText(d.awaiting_operator), executor: optText(d.executor), asker: optText(d.asker), opened_at: optText(d.opened_at),
   }));
-  const decisions = allCards.filter((d) => d.status !== 'awaiting_operator_action').map((d) => ({
+  // answered with an executor, nobody confirmed the dispatch yet (close --dispatched ends it): shown as 答案已出、待派工, also NOT a question
+  const pendingDispatch = allCards.filter((d) => d.status === 'pending_dispatch').map((d) => ({
+    id: optText(d.id), question: d.question, answer: optText(d.answer), executor: optText(d.executor), asker: optText(d.asker), pending_dispatch_at: optText(d.pending_dispatch_at), opened_at: optText(d.opened_at),
+  }));
+  const decisions = allCards.filter((d) => d.status !== 'awaiting_operator_action' && d.status !== 'pending_dispatch').map((d) => ({
     id: optText(d.id), question: d.question, background: optText(d.background),
     options: (Array.isArray(d.options) ? d.options : []).filter(isObject)
       .map((x) => ({ label: String(x.label == null ? '' : x.label), description: String(x.description == null ? '' : x.description) })),
@@ -261,7 +265,7 @@ function buildJobModel(inputs) {
       issued_at: task.issued_at || null,
       failed_predicates: Array.isArray(task.failed_predicates) ? task.failed_predicates.map(String) : [],
     } : null,
-    conclusion, needs_decision: decisions.length > 0, decisions, awaiting_operator: awaitingOperator, wired,
+    conclusion, needs_decision: decisions.length > 0, decisions, awaiting_operator: awaitingOperator, pending_dispatch: pendingDispatch, wired,
     phase: buildPhase(task, progress, o.markerStage, o.taskPhase), progress, planned, compare: o.compare || [], dispatch, gates,
     scope: envelope && isObject(envelope.scope) ? {
       project_key: envelope.scope.project_key || null, repo_identity: envelope.scope.repo_identity || null,
@@ -413,7 +417,9 @@ function renderJobHtml(model) {
   const ph = isObject(m.phase) && typeof m.phase.label === 'string' ? m.phase : null;
   const aw = Array.isArray(m.awaiting_operator) ? m.awaiting_operator.filter(isObject) : [];
   const awaitingHtml = aw.length ? `\n<p>${chip('待你動手', 'warn')}已答覆、還差你本人一步（${aw.length} 件）：${aw.map((a) => `${esc(a.id)} ${a.awaiting_operator ? esc(a.awaiting_operator) : esc(a.question)}`).join('；')}</p>` : '';
-  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定（${ds.length || 1} 件）：${oldest && typeof oldest.question === 'string' ? esc(oldest.question) : unknownSpan()}${oldest && oldest.stale && oldest.age_s !== null ? `（已等 ${Math.floor(oldest.age_s / 86400)} 天）` : ''}${oldest && oldest.orphaned ? '（提問的 session 已結束）' : ''}${ds.length > 1 ? `；另 ${ds.length - 1} 件見下方「待決事項」` : ''}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>`;
+  const pd = Array.isArray(m.pending_dispatch) ? m.pending_dispatch.filter(isObject) : [];
+  const pendingHtml = pd.length ? `\n<p>${chip('待派工', 'info')}答案已出、待派工（${pd.length} 件）：${pd.map((a) => `${esc(a.id)}${a.executor ? ` → ${esc(a.executor)}` : ''}`).join('；')}</p>` : '';
+  const s2 = `<p>${chip(acceptanceChip(m.axes.acceptance, m.axes.can_close), accCls)}${m.needs_decision ? chip('需要你決定', 'warn') : (decWired ? chip('知會', 'info') : chip(NOT_WIRED, 'warn'))}${ph ? chip(`階段：${ph.label}`, 'info') : ''}</p>\n<p><strong>${esc(m.conclusion)}</strong></p>\n<p>${m.needs_decision ? `需要你決定（${ds.length || 1} 件）：${oldest && typeof oldest.question === 'string' ? esc(oldest.question) : unknownSpan()}${oldest && oldest.stale && oldest.age_s !== null ? `（已等 ${Math.floor(oldest.age_s / 86400)} 天）` : ''}${oldest && oldest.orphaned ? '（提問的 session 已結束）' : ''}${ds.length > 1 ? `；另 ${ds.length - 1} 件見下方「待決事項」` : ''}` : (decWired ? '知會：目前沒有待你決定的事項。' : `決定：${NOT_WIRED}（沒有 decision 輸入；不代表沒有待決事項）`)}</p>${awaitingHtml}${pendingHtml}`;
   const decisionBlock = (d, i) => {
     const opts = Array.isArray(d.options) ? d.options.filter(isObject) : [];
     const line = (label, v) => (v ? `<p>${label}：${esc(v)}</p>` : '');

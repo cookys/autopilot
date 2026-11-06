@@ -5,7 +5,7 @@
 // scripts/open-decision.js): one file per scope holding EVERY open question in `decisions`. Present = at least one open
 // question; answered / withdrawn = the helper keeps the entry with status 'closed' (+ closed_at, answer), and this reader skips it.
 // status 'awaiting_operator_action' = answered, but the operator must still do one step: listed, with status/answer/awaiting_operator, and the
-// consumers draw it differently from a question.
+// consumers draw it differently from a question. status 'pending_dispatch' = answered with an executor, dispatch not confirmed yet (close --dispatched ends it): listed, not a question either.
 // Every scope file of the project counts (unbound + each root; see readDecision). A file counts only when every binding matches:
 // schema, project_key, repo_identity and root_run_id agreeing with its own file name (null for the unbound file). Inside it an entry counts when it has a string id, a string question and a parseable opened_at that is
 // not from the future (beyond a small slack); the others are ignored.
@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry } = require('./scope-key');
+const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry, cardState } = require('./scope-key');
 
 const STALE_MS = 7 * 86400 * 1000;
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
@@ -61,8 +61,8 @@ function viewOf(e, nowMs, liveBase) {
     blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
     orphaned: sessionGone(e, liveBase), origin: str(e.origin),
-    status: e.status === 'awaiting_operator_action' ? 'awaiting_operator_action' : 'open',
-    answer: str(e.answer), awaiting_operator: str(e.awaiting_operator), executor: str(e.executor), asker: str(e.asker),
+    status: cardState(e),
+    answer: str(e.answer), awaiting_operator: str(e.awaiting_operator), executor: str(e.executor), asker: str(e.asker), pending_dispatch_at: str(e.pending_dispatch_at),
   };
 }
 
@@ -95,7 +95,7 @@ function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
   }
 }
 
-// Does this project hold at least one open card (any scope file)? The same read as the pane's data source, so "open" means the same thing
+// Does this project hold at least one VISIBLE card (open, awaiting_operator_action or pending_dispatch; any scope file)? The same read as the pane's data source, so "open" means the same thing
 // to the opt-in rule of hooks/runs-watch-autostart.js, the unbound job page of the watcher and `open-decision.js` (BL cardvis).
 function hasOpenDecision({ identity, key, nowMs = Date.now() }) {
   const commonDir = typeof identity === 'string' ? (/^git-common-dir:(.+)$/.exec(identity) || [])[1] : null;

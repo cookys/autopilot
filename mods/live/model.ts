@@ -107,6 +107,8 @@ export type LiveSnapshot = {
   pending: LiveDecision[]
   // answered cards that still need the operator's own step (status awaiting_operator_action); drawn apart from `pending`, never counted as a question
   awaiting?: LiveAwaiting[]
+  // answered cards whose dispatch the caller has not confirmed yet (status pending_dispatch); also never a question
+  dispatching?: LiveAwaiting[]
   project_key: string | null
   root_run_id: string | null
   // page the Link in the pane points at (null until an envelope was found)
@@ -562,6 +564,7 @@ export function mergeJobModels(primary: JobModel | null, campaigns: JobModel[]):
     // every root's page now carries the project's cards (src/status/decision-input.js): one card shows once
     decisions: all.flatMap(m => m.decisions).filter((d, i, a) => d.id === null || a.findIndex(x => x.id === d.id) === i).sort((a, b) => (Date.parse(a.opened_at ?? '') || 0) - (Date.parse(b.opened_at ?? '') || 0)),
     awaiting_operator: all.flatMap(m => m.awaiting_operator ?? []).filter((d, i, a) => d.id === null || a.findIndex(x => x.id === d.id) === i),
+    pending_dispatch: all.flatMap(m => m.pending_dispatch ?? []).filter((d, i, a) => d.id === null || a.findIndex(x => x.id === d.id) === i),
     conclusion: asking !== undefined ? asking.conclusion : base.conclusion,
     progress: frozen !== undefined ? frozen.progress : base.progress,
     phase: phased !== undefined ? phased.phase : base.phase,
@@ -957,6 +960,7 @@ export type JobModel = {
   conclusion: string | null
   decisions: LiveDecision[]
   awaiting_operator?: LiveAwaiting[]
+  pending_dispatch?: LiveAwaiting[]
   progress: JobProgress | null
   phase: { code: string | null; label: string; source: string | null } | null
   sources_manifest: unknown
@@ -995,6 +999,9 @@ export function readJobModel(text: string | null): JobModel | null {
   const awaiting_operator: LiveAwaiting[] = (Array.isArray(m.awaiting_operator) ? m.awaiting_operator : []).filter(isObject).filter(d => typeof d.question === 'string' && d.question !== '').map(d => ({
     id: optText(d.id), question: d.question as string, answer: optText(d.answer), awaiting_operator: optText(d.awaiting_operator), executor: optText(d.executor), asker: optText(d.asker),
   }))
+  const pending_dispatch: LiveAwaiting[] = (Array.isArray(m.pending_dispatch) ? m.pending_dispatch : []).filter(isObject).filter(d => typeof d.question === 'string' && d.question !== '').map(d => ({
+    id: optText(d.id), question: d.question as string, answer: optText(d.answer), awaiting_operator: null, executor: optText(d.executor), asker: optText(d.asker),
+  }))
   const p = m.progress
   const progress: JobProgress | null = isObject(p)
     ? {
@@ -1006,7 +1013,7 @@ export function readJobModel(text: string | null): JobModel | null {
     : null
   const ph = m.phase
   const phase = isObject(ph) && typeof ph.label === 'string' && ph.label ? { code: typeof ph.code === 'string' ? ph.code : null, label: ph.label, source: typeof ph.source === 'string' ? ph.source : null } : null
-  return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decisions, awaiting_operator, progress, phase, sources_manifest: m.sources_manifest }
+  return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decisions, awaiting_operator, pending_dispatch, progress, phase, sources_manifest: m.sources_manifest }
 }
 
 // Axis words follow the review page's chip mapping (plan A12).

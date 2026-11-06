@@ -56,9 +56,21 @@ function readScopeFile(file, { schema, projectKey, identity }) {
 }
 
 // Card status (BL cardtrail). A card entry is kept after `open-decision.js close`: `status` is 'open' (or absent on cards written before this
-// field), 'awaiting_operator_action' (answered, but the operator must still do one step; shown on the panel, differently from a question) or
-// 'closed' (kept with closed_at + answer). "The entry is in the file" never means "the card is open": every reader that lists cards asks this.
-const CARD_STATUS = ['open', 'awaiting_operator_action', 'closed'];
+// field), 'awaiting_operator_action' (answered, but the operator must still do one step; shown on the panel, differently from a question),
+// 'pending_dispatch' (answered with an executor: close printed the dispatch JSON, nobody has confirmed the dispatch yet; `close --dispatched <task_id>`
+// ends it) or 'closed' (kept with closed_at + answer). "The entry is in the file" never means "the card is open": every reader that lists cards asks this.
+// Only 'open' is a pending question (待決). awaiting_operator_action and pending_dispatch are LIVE (still shown, still need someone) but never counted
+// as a question. cardState() is the one place that maps a stored status to a state (absent or unknown = open, the pre-field behaviour).
+const CARD_STATUS = ['open', 'awaiting_operator_action', 'pending_dispatch', 'closed'];
+function cardState(e) {
+  return e && typeof e === 'object' && CARD_STATUS.includes(e.status) ? e.status : 'open';
+}
+function isOpenEntry(e) {
+  return cardState(e) === 'open';
+}
+function isPendingDispatchEntry(e) {
+  return cardState(e) === 'pending_dispatch';
+}
 function isClosedEntry(e) {
   return !!e && typeof e === 'object' && e.status === 'closed';
 }
@@ -77,4 +89,4 @@ function scopeFileHasLive(file) {
   }
 }
 
-module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, isClosedEntry, isAwaitingEntry, scopeFileHasLive };
+module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, scopeFileHasLive };

@@ -131,7 +131,7 @@ assert_contains "$VALIDATE_DENSITY_HIGH" "parity-ok" "conservative density valid
 
 # Case C: reviewer_runner enum parity for direct Anthropic-compatible reviewer.
 AC_CFG="$TEST_TMP/review-loop-anthropic-compatible.md"
-printf -- '- reviewer_runner: anthropic-compatible\n- reviewer_engine: MiniMax-M3\n' > "$AC_CFG"
+printf -- '- override: reviewer | until 2099-01-01 | test fixture seat\n- reviewer_runner: anthropic-compatible\n- reviewer_engine: MiniMax-M3\n- reviewer_effort: low\n' > "$AC_CFG"
 AC_ERR="$TEST_TMP/review-loop-anthropic-compatible.stderr"
 AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" "$REPO_ROOT/scripts/resolve-review-loop.sh" 2>"$AC_ERR")"
 EXIT_AC=$?
@@ -171,7 +171,7 @@ QODER_CFG="$TEST_TMP/review-loop-qoderclicn.md"
 # Same runner in both seats is a dual-seat collision under the runner-axis gate.
 # This fixture's subject is shell/JS enum PARITY, not decorrelation policy, so it
 # opts in explicitly and keeps every other resolved value byte-identical.
-printf -- '- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- allow_same_runner_dual_seat: on\n' > "$QODER_CFG"
+printf -- '- override: reviewer | until 2099-01-01 | test fixture seat\n- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- allow_same_runner_dual_seat: on\n- reviewer_effort: low\n- implementer_effort: high\n' > "$QODER_CFG"
 QODER_ERR="$TEST_TMP/review-loop-qoderclicn.stderr"
 QODER_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$QODER_CFG" "$REPO_ROOT/scripts/resolve-review-loop.sh" 2>"$QODER_ERR")"
 EXIT_QODER=$?
@@ -206,7 +206,7 @@ assert_contains "$VALIDATE_QODER" "parity-ok" "qoderclicn validation returns par
 # qc_panel_seats[].runner on the reviewer_runner enum, so shell, schema, and JS must
 # agree that `kimi` (a first-class dispatch-review.sh transport) is admissible.
 KIMI_CFG="$TEST_TMP/review-loop-kimi.md"
-printf -- '- reviewer_runner: kimi\n- reviewer_engine: kimi-code/k3\n- qc_panel: kimi-code/k3\n- qc_panel_runners: kimi\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$KIMI_CFG"
+printf -- '- override: reviewer | until 2099-01-01 | test fixture seat\n- reviewer_runner: kimi\n- reviewer_engine: kimi-code/k3\n- override: qc_panel | until 2099-01-01 | test fixture seat\n- qc_panel: kimi-code/k3\n- qc_panel_runners: kimi\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n- reviewer_effort: low\n' > "$KIMI_CFG"
 KIMI_ERR="$TEST_TMP/review-loop-kimi.stderr"
 KIMI_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_CFG" "$REPO_ROOT/scripts/resolve-review-loop.sh" 2>"$KIMI_ERR")"
 EXIT_KIMI=$?

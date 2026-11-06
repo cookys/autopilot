@@ -36,7 +36,7 @@ CODEX_IMPL_CFG="$TEST_TMP/impl-codex.md"
 # collision under the runner-axis gate. Opting in (rather than diversifying the
 # reviewer) keeps every other resolved value byte-identical, which matters because
 # this fixture is about quota/capability telemetry, not decorrelation.
-printf -- '- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- implementer_ladder:\n- allow_same_runner_dual_seat: on\n' > "$CODEX_IMPL_CFG"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- implementer_ladder:\n- brain_seat_identity_file:\n- allow_same_runner_dual_seat: on\n' > "$CODEX_IMPL_CFG"
 
 json_get() { # json key -> raw json value
   local json="$1" key="$2"

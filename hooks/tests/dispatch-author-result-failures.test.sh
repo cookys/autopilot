@@ -155,12 +155,16 @@ mkdir -p "$CASE1_DIR/.claude"
 EXPECTED_PATH1="$CASE1_DIR/.claude/review-loop-config.md"
 
 cat <<EOF > "$EXPECTED_PATH1"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: UNREADY_FAIL_EP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 # Fake runner that shouldn't be executed
@@ -201,12 +205,16 @@ mkdir -p "$CASE2_DIR/.claude"
 EXPECTED_PATH2="$CASE2_DIR/.claude/review-loop-config.md"
 
 cat <<EOF > "$EXPECTED_PATH2"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: READY_FAIL_EP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 # Fake runner that starts then exits 17
@@ -250,12 +258,16 @@ mkdir -p "$CASE3_DIR/.claude"
 EXPECTED_PATH3="$CASE3_DIR/.claude/review-loop-config.md"
 
 cat <<EOF > "$EXPECTED_PATH3"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: READY_EMPTY_EP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 # Fake runner that exits 0 with no output
@@ -294,12 +306,16 @@ CASE4_DIR="$TEST_TMP/case4"
 mkdir -p "$CASE4_DIR/.claude"
 EXPECTED_PATH4="$CASE4_DIR/.claude/review-loop-config.md"
 cat <<EOF > "$EXPECTED_PATH4"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: READY_TRUNC_EP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 FAKE_RUNNER4="$TEST_TMP/fake-runner-4"
 cat <<'EOF' > "$FAKE_RUNNER4"

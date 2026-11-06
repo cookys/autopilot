@@ -844,20 +844,24 @@ write_d4_strict_roster_fixture() {
   HERMETIC_SCORECARD_DIR="$TEST_TMP/hermetic-scorecard"
   mkdir -p "$HERMETIC_SCORECARD_DIR"
   cat > "$HERMETIC_REVIEW_LOOP_CFG" <<'CFG'
+- override: reviewer | until 2099-01-01 | test fixture seat
 - reviewer_engine: MiniMax-M3
 - reviewer_effort: high
 - reviewer_runner: cc-shim
 - reviewer_endpoint: minimax
 - reviewer_limitation: minimax-false-central-claim-5-of-6
 - reviewer_limitation_required: true
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: grok-4.7
 - implementer_effort: high
 - implementer_runner: grok
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: GLM-5.3
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: glm
+- override: qc_panel | until 2099-01-01 | test fixture seat
 - qc_panel: gpt-6.1-sol, GLM-5.3, MiniMax-M3
 - qc_panel_runners: codex, cc-shim, cc-shim
 - qc_panel_efforts: max, high, high

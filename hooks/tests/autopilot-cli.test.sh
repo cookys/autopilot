@@ -440,8 +440,8 @@ assert_contains "$OUT" '"strict_level":"l4"' \
 # (qc_panel_seats_complete:false with seats present) cannot be produced from a config file
 # and is pinned at unit level in provider-readiness-consumer.test.sh. All before spend.
 STRICT_QC_EMPTY_CFG="$TEST_TMP/strict-qc-empty-review-loop.md"
-sed -e '/^- qc_panel/d' "$HERMETIC_REVIEW_LOOP_CFG" > "$STRICT_QC_EMPTY_CFG"
-printf -- '- qc_panel:\n' >> "$STRICT_QC_EMPTY_CFG"
+sed -e '/^- qc_panel/d' -e '/^- override: qc_panel/d' "$HERMETIC_REVIEW_LOOP_CFG" > "$STRICT_QC_EMPTY_CFG"
+printf -- '- override: qc_panel | until 2099-01-01 | test fixture seat\n- qc_panel:\n- qc_panel_runners:\n- qc_panel_efforts:\n' >> "$STRICT_QC_EMPTY_CFG"
 for strict_level in l5 l6; do
   OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
     NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
@@ -565,12 +565,12 @@ assert_contains "$OUT" "unknown dispatch subcommand" "missing dispatch subcomman
 # Hermetic: EMPTY_CFG pins the resolver's built-in default reviewer (gpt-6.1-sol) so this asserts
 # the delegation plumbing, not the repo's live dogfood roster (Board decision A → MiniMax-M3).
 EMPTY_CFG="$TEST_TMP/empty-review-loop.md"; : > "$EMPTY_CFG"
-OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard 2>&1)"; EXIT=$?
+OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_ROSTER_TEMPLATE="$REPO_ROOT/hooks/tests/fixtures/review-loop-roster.pre-ssot-2026-11-06.md" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "engine review-loop preserves resolver exit 0"
 assert_contains "$OUT" '"reviewer_engine": "gpt-6.1-sol"' "engine review-loop emits delegated JSON"
 assert_contains "$OUT" '"reviewer_qualified": false' "engine review-loop preserves scorecard fields"
 
-OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard --enforce 2>&1)"; EXIT=$?
+OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_ROSTER_TEMPLATE="$REPO_ROOT/hooks/tests/fixtures/review-loop-roster.pre-ssot-2026-11-06.md" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard --enforce 2>&1)"; EXIT=$?
 assert_eq "3" "$EXIT" "engine review-loop preserves enforce exit 3"
 assert_contains "$OUT" '"reviewer_qualified": false' "engine review-loop emits data on enforce block"
 

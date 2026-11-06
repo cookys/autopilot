@@ -693,12 +693,16 @@ done
 ROSTER_REPO="$TEST_TMP/strict-roster-repo"
 mkdir -p "$ROSTER_REPO/.claude"
 cat > "$ROSTER_REPO/.claude/review-loop-config.md" <<'EOF'
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: gpt-5.5
 - verification_author_runner: codex
 - verification_author_effort: xhigh
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: Gemini 3.1 Pro (High)
+- implementer_runner: agy
+- implementer_effort: high
 EOF
 
 run_dispatch stdout_lf --strict-roster --repo-root "$ROSTER_REPO"

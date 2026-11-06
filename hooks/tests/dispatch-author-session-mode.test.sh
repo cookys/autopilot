@@ -158,12 +158,17 @@ assert_eq "0" "$PY_EXIT_1" "Case 1 schema: $PY_OUT_1"
 CASE2_DIR="$TEST_TMP/case2"
 mkdir -p "$CASE2_DIR/.claude"
 cat <<EOF > "$CASE2_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: codex
 - verification_author_effort: high
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
+- allow_same_runner_dual_seat: on
 EOF
 
 reset_run_count

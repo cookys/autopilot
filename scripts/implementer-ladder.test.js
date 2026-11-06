@@ -113,6 +113,7 @@ test('select: absent ladder is identity', () => {
 
 test('resolver: absent ladder emits empty array and keeps seat fields', () => {
   const cfg = writeConfig([
+    '- override: implementer | until 2099-01-01 | test fixture seat',
     '- implementer_engine: gpt-5.3-codex-spark',
     '- implementer_effort: high',
     '- implementer_runner: auto',
@@ -129,6 +130,7 @@ test('resolver: absent ladder emits empty array and keeps seat fields', () => {
 
 test('resolver: parses engine/effort@runner list', () => {
   const cfg = writeConfig([
+    '- override: implementer | until 2099-01-01 | test fixture seat',
     '- implementer_engine: gpt-5.3-codex-spark',
     '- implementer_effort: high',
     '- implementer_runner: auto',
@@ -143,7 +145,9 @@ test('resolver: parses engine/effort@runner list', () => {
 
 test('resolver: rejects illegal ladder runner', () => {
   const cfg = writeConfig([
+    '- override: implementer | until 2099-01-01 | test fixture seat',
     '- implementer_engine: gpt-5.3-codex-spark',
+    '- implementer_effort: high',
     '- implementer_runner: auto',
     '- implementer_ladder: flash/low@not-a-runner',
     '- allow_same_runner_dual_seat: on',

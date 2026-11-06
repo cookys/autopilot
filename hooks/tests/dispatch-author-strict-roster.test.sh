@@ -41,12 +41,16 @@ ${ERR:-}" "$error_needle" "$desc: semantic diagnostic contains '$error_needle'"
 CASE1_DIR="$TEST_TMP/case1"
 mkdir -p "$CASE1_DIR/.claude"
 cat <<EOF > "$CASE1_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: TESTEP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 rm -f "$SENTINEL"
@@ -77,12 +81,16 @@ assert_precondition_failed "$OUT" "$EXIT" "config" "Case 2: lacking config fails
 CASE3_DIR="$TEST_TMP/case3"
 mkdir -p "$CASE3_DIR/.claude"
 cat <<EOF > "$CASE3_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: false
 - verification_author_engine:
 - verification_author_runner:
 - verification_author_effort:
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 rm -f "$SENTINEL"
@@ -93,12 +101,16 @@ assert_precondition_failed "$OUT" "$EXIT" "present" "Case 3: present=false empty
 CASE4_DIR="$TEST_TMP/case4"
 mkdir -p "$CASE4_DIR/.claude"
 cat <<EOF > "$CASE4_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: gpt-5.5
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 rm -f "$SENTINEL"
@@ -109,12 +121,16 @@ assert_precondition_failed "$OUT" "$EXIT" "family" "Case 4: same family fails cl
 CASE5_DIR="$TEST_TMP/case5"
 mkdir -p "$CASE5_DIR/.claude"
 cat <<EOF > "$CASE5_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: unknown-spec-engine-name
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 rm -f "$SENTINEL"
@@ -125,12 +141,16 @@ assert_precondition_failed "$OUT" "$EXIT" "unknown" "Case 5: unknown family fail
 CASE6_DIR="$TEST_TMP/case6"
 mkdir -p "$CASE6_DIR/.claude"
 cat <<EOF > "$CASE6_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner:
 - verification_author_effort: high
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 rm -f "$SENTINEL"
@@ -142,12 +162,16 @@ assert_precondition_failed "$OUT" "$EXIT" "incomplete" "Case 6: incomplete tuple
 CASE7_DIR="$TEST_TMP/case7"
 mkdir -p "$CASE7_DIR/.claude"
 cat <<'EOF' > "$CASE7_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: grok-4.5
 - verification_author_runner: grok
 - verification_author_effort: high
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 GROK_ARGS="$TEST_TMP/grok-args"
@@ -192,12 +216,16 @@ assert_not_contains "$GROK_ARG_TEXT" '--endpoint' "Case 7: no manual endpoint fl
 CASE8_DIR="$TEST_TMP/case8"
 mkdir -p "$CASE8_DIR/.claude"
 cat <<'EOF' > "$CASE8_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: Gemini 3.1 Pro (High)
 - verification_author_runner: agy
 - verification_author_effort: high
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 FAKE_AGY_RUNNER="$TEST_TMP/fake-agy-runner"

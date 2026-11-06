@@ -489,7 +489,7 @@ assert_eq '["plan_review auto: no qualified plan-review seat on this host — fa
 
 # H. L4 unchanged test
 L4_CFG="$TEST_TMP/l4-cfg.md"
-printf -- '- implementer_engine: claude-3-5-sonnet\n- implementer_runner: auto\n' > "$L4_CFG"
+printf -- '- implementer_engine: claude-3-5-sonnet\n- implementer_runner: auto\n- implementer_ladder:\n- brain_seat_identity_file:\n' > "$L4_CFG"
 cat <<'JSON' > "$TEST_TMP/event-claude-exhausted.json"
 {
   "schema_version": 1,

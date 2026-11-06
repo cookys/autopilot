@@ -154,12 +154,16 @@ mkdir -p "$CASE3_DIR/.claude"
 EXPECTED_PATH="$CASE3_DIR/.claude/review-loop-config.md"
 
 cat <<EOF > "$EXPECTED_PATH"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: MY_UNIQUE_EP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 ENDPOINT_URL_FIXTURE="https://api.unique-endpoint-fixture.xyz/v1"

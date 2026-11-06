@@ -16,7 +16,7 @@ unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_FILE AUTOPILOT_QUALIFICATION
 
 # ---------------------------------------------------------------- BL-0108
 CFG="$TEST_TMP/review-loop.md"
-printf -- '- plan_review: auto\n- implementer_runner: auto\n' > "$CFG"
+printf -- '- plan_review: auto\n- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_runner: auto\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_effort: high\n' > "$CFG"
 
 STALE_TOPO="$TEST_TMP/stale-topology.json"
 cat > "$STALE_TOPO" <<'JSON'
@@ -30,7 +30,11 @@ cat > "$STALE_TOPO" <<'JSON'
 JSON
 
 run_resolver() {
-  AUTOPILOT_TOPOLOGY_FILE="$1" REVIEW_LOOP_CONFIG_OVERRIDE="${CFG_USE:-$CFG}" bash "$RESOLVER" "${@:2}" \
+  # A config that is a full copy of the shipped template (seat fields outside any override block) is the
+  # roster itself in these round trips: hand it to the resolver as the roster, the way production reads it.
+  local roster=""
+  if [ -n "${CFG_USE:-}" ] && grep -q '^- reviewer_engine:' "$CFG_USE" 2>/dev/null; then roster="$CFG_USE"; fi
+  env ${roster:+REVIEW_LOOP_ROSTER_TEMPLATE="$roster"} AUTOPILOT_TOPOLOGY_FILE="$1" REVIEW_LOOP_CONFIG_OVERRIDE="${CFG_USE:-$CFG}" bash "$RESOLVER" "${@:2}" \
     >"$TEST_TMP/r.out" 2>"$TEST_TMP/r.err"
   R_EXIT=$?; R_OUT="$(cat "$TEST_TMP/r.out")"; R_ERR="$(cat "$TEST_TMP/r.err")"
 }
@@ -175,10 +179,10 @@ NC="$TEST_TMP/nc"; mkdir -p "$NC"; cp -r "$REPO_ROOT/scripts" "$NC/scripts"
 sed -i 's#replace(/\\x27/g, Q + "\\\\" + Q + Q)#replace(/ZZZ/g, "")#' "$NC/scripts/resolve-review-loop.sh"
 if grep -q 'ZZZ' "$NC/scripts/resolve-review-loop.sh"; then
   NCC="$QDIR/nc.md"; cp "$TEMPLATE" "$NCC"
-  AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO" REVIEW_LOOP_CONFIG_OVERRIDE="$NCC" bash "$NC/scripts/resolve-review-loop.sh" --field plan_reviewer_engine >/dev/null 2>"$TEST_TMP/nc.err"
+  REVIEW_LOOP_ROSTER_TEMPLATE="$NCC" AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO" REVIEW_LOOP_CONFIG_OVERRIDE="$NCC" bash "$NC/scripts/resolve-review-loop.sh" --field plan_reviewer_engine >/dev/null 2>"$TEST_TMP/nc.err"
   NCL="$(grep -F 'accept the single-family' "$TEST_TMP/nc.err" | head -1)"
   bash -c "${NCL#*: }" >/dev/null 2>&1
-  AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO" REVIEW_LOOP_CONFIG_OVERRIDE="$NCC" bash "$NC/scripts/resolve-review-loop.sh" --field plan_reviewer_engine >/dev/null 2>&1
+  REVIEW_LOOP_ROSTER_TEMPLATE="$NCC" AUTOPILOT_TOPOLOGY_FILE="$STALE_TOPO" REVIEW_LOOP_CONFIG_OVERRIDE="$NCC" bash "$NC/scripts/resolve-review-loop.sh" --field plan_reviewer_engine >/dev/null 2>&1
   assert_eq "$?" "4" "negative control: without the escaping the quoted-path command breaks and the stop stays"
 else
   fail "negative control sed did not apply"
@@ -186,7 +190,7 @@ fi
 
 # implementer runner filter: implementer on grok, topology offers only grok => nothing recommended
 IMPL="$TEST_TMP/impl.md"
-printf -- '- plan_review: auto\n- implementer_runner: grok\n- implementer_engine: grok-fixture\n- implementer_effort: high\n' > "$IMPL"
+printf -- '- plan_review: auto\n- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_runner: grok\n- implementer_engine: grok-fixture\n- implementer_effort: high\n' > "$IMPL"
 GROK_TOPO="$TEST_TMP/grok-topology.json"
 printf '%s' '{"schema_version":1,"consult_ladder":[{"engine":"grok-fixture","effort":"high","runner":"grok","family":"xai","endpoint":""}]}' > "$GROK_TOPO"
 CFG_USE="$IMPL" run_resolver "$GROK_TOPO" --field plan_reviewer_engine
@@ -199,6 +203,8 @@ printf '%s' '{"schema_version":1,"consult_ladder":[{"engine":"grok-fixture","eff
 CFG_USE="$IMPL" run_resolver "$MIX_TOPO" --field plan_reviewer_engine
 assert_not_contains "$R_ERR" "grok-fixture/high@grok" "mixed topology: grok seat filtered out"
 run_printed "write the recommendation" "$IMPL"
+# the printed command writes plan-review seat keys; a repo file may hold them only inside a dated override
+printf -- '- override: plan_reviewer | until 2099-01-01 | test fixture seat\n- override: plan_deep_reviewer | until 2099-01-01 | test fixture seat\n' >> "$IMPL"
 CFG_USE="$IMPL" run_resolver "$MIX_TOPO" --field plan_reviewer_engine
 assert_eq "$R_EXIT" "0" "mixed topology round trip: no exit 3 after writing the recommendation"
 
@@ -316,7 +322,7 @@ assert_contains "$PR_ERR" "required seat has no fallback" "same-family-only topo
 # negative control 3: a candidate on the implementer's own runner is never added (same rule the
 # resolver applies to config-declared seats)
 IMPL_CFG="$TEST_TMP/impl-grok.md"
-printf -- '- implementer_runner: grok\n- implementer_engine: grok-fixture\n- implementer_effort: high\n' > "$IMPL_CFG"
+printf -- '- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_runner: grok\n- implementer_engine: grok-fixture\n- implementer_effort: high\n' > "$IMPL_CFG"
 M4="$TEST_TMP/pr-m4.json"; mk_manifest "$M4" prr-implrunner
 PR_CFG="$IMPL_CFG" run_pr implrunner "$M4" "$TOPO_OK"
 assert_not_contains "$PR_ERR" "added auto-fb" "implementer-runner candidate (grok) is not added as a fallback"

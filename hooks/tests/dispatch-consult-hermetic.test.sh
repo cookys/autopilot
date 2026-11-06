@@ -58,6 +58,7 @@ JSON
 CFG_FILE="$TEST_TMP/review-loop-config.md"
 cat > "$CFG_FILE" <<'EOF'
 - consult_dispatch: auto
+- override: qc_panel | until 2099-01-01 | test fixture seat
 - qc_panel: gpt-5.6
 - qc_panel_runners: codex
 - qc_panel_efforts: high

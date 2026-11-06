@@ -74,12 +74,16 @@ export AUTOPILOT_ENDPOINT_UNIT2B_EP_OK_TOKEN="secret-token-value-here"
 CASE1_DIR="$TEST_TMP/case_ok"
 mkdir -p "$CASE1_DIR/.claude"
 cat <<EOF > "$CASE1_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: UNIT2B_EP_OK
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 # Invoke dispatch-author.sh under strict roster mode
@@ -148,12 +152,16 @@ export ANTHROPIC_AUTH_TOKEN="raw-fallback-token"
 CASE2_DIR="$TEST_TMP/case_unready"
 mkdir -p "$CASE2_DIR/.claude"
 cat <<EOF > "$CASE2_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: UNIT2B_EP_UNREADY
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 # Invoke dispatch-author.sh under strict roster mode

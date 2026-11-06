@@ -560,6 +560,7 @@ assert_eq "gpt-one gpt-two gpt-three" "$ORDER_16" \
 # `judge` before this case (a runner/effort swap stayed green, 2026-09-24).
 JUDGE_CFG="$TEST_TMP/judge-review-loop-config.md"
 cat >"$JUDGE_CFG" <<'CFG'
+- override: reviewer | until 2099-01-01 | test fixture seat
 - reviewer_engine: judge-engine-17
 - reviewer_runner: grok
 - reviewer_effort: medium
@@ -569,7 +570,7 @@ JUDGE_17="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[
 assert_eq "judge-engine-17 grok medium" "$JUDGE_17" \
   "Case 17: judge carries reviewer engine, runner, effort from the resolved config"
 # A config resolve-review-loop.sh refuses (unknown runner ⇒ exit 3) yields an all-null judge.
-printf '%s\n' '- reviewer_engine: judge-engine-17' '- reviewer_runner: no-such-runner' >"$JUDGE_CFG"
+printf '%s\n' '- override: reviewer | until 2099-01-01 | test fixture seat' '- reviewer_engine: judge-engine-17' '- reviewer_runner: no-such-runner' '- reviewer_effort: medium' >"$JUDGE_CFG"
 REVIEW_LOOP_CONFIG_OVERRIDE="$JUDGE_CFG" node "$SCRIPT" --out "$TOPOLOGY_OUT" >/dev/null 2>&1
 JUDGE_17B="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).judge||{}; process.stdout.write([j.reviewer_engine,j.reviewer_runner,j.reviewer_effort].map(String).join(" "))' "$TOPOLOGY_OUT")"
 assert_eq "null null null" "$JUDGE_17B" \

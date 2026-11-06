@@ -36,8 +36,11 @@ export type LiveFleetSummary = {
   topStuck: { lane: string; host: string; title: string; ageMs: number | null; rule: 'unaccepted' | 'quiet' | 'hub' } | null
 }
 
+// `panel_open_at_ms`: clock ms of the last draw of the O4 shell (band.tsx Shell), written at most every 15 s while it is on screen. codeforge's forge-stats reads it: within a minute of now it
+// keeps the quota mirror and its `forge-stats.panel` current. 0 until the shell was first drawn.
+
 declare module 'claude-code' {
   interface PluginState {
-    autopilot: { decide: LiveDecideState; steps: Shaped<LiveStep[]>; fleet: LiveFleetSummary }
+    autopilot: { decide: LiveDecideState; steps: Shaped<LiveStep[]>; fleet: LiveFleetSummary; panel_open_at_ms: number }
   }
 }

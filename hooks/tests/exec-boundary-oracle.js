@@ -6,10 +6,16 @@
  * questions and compares the answers:
  *   1. TRUTH   — did a real shell (zsh, which is what the Bash tool of this host runs,
  *                and bash as a second oracle) execute a recursive rm on an out-of-scope
- *                target? The shell runs in a sandbox: `env -i`, PATH holding ONLY stub
- *                binaries (the stub rm appends its argv to a log and exits 0; the real
- *                rm is not reachable), a throwaway HOME and cwd, `timeout 2`, stdin
- *                /dev/null. Startup asserts that `command -v rm` is the stub.
+ *                target? Every oracle shell runs inside bubblewrap: the host filesystem is
+ *                read-only, only the harness work dir is writable, no network, and the stub
+ *                rm (appends its argv to a log, exits 0) is bind-mounted over every real rm
+ *                path (/usr/bin/rm and /bin/rm, the coreutils and busybox multi-call
+ *                binaries), so `/bin/rm`, `command -p rm` and `busybox rm` hit the stub too.
+ *                Also `env -i`-style clean env, stub-only PATH, throwaway HOME and cwd,
+ *                `timeout 2`, stdin /dev/null. Without bwrap the harness refuses to run (exit 3).
+ *                Before any case a self-check runs each rm spelling under both shells against
+ *                a victim file created outside the sandbox: every one must show in the stub
+ *                log and the victim must survive, else exit 3.
  *   2. VERDICT — does the hook DENY (exit 2) the same string?
  * Truth yes + verdict ALLOW = BYPASS (always blocking). Truth no + verdict DENY = false
  * DENY (reported; blocking only for corpus cases whose expectation is `allow`).
@@ -19,7 +25,7 @@
  *
  * Usage: node exec-boundary-oracle.js [--hook <file>] [--corpus <file>] [--shells zsh,bash]
  *        [--concurrency N] [--fuzz N --seed S] [--list <id-regex>] [--json <out-file>] [--no-generated]
- * Exit: 0 clean; 1 bypass or failed corpus expectation; 3 sandbox self-check failed.
+ * Exit: 0 clean; 1 bypass or failed corpus expectation; 3 bwrap missing or sandbox self-check failed.
  */
 'use strict';
 
@@ -36,6 +42,7 @@ const SHELLS = opt('--shells', 'zsh,bash').split(',');
 const CONC = Number(opt('--concurrency', '8'));
 const LIST = opt('--list', '');
 const JSON_OUT = opt('--json', '');
+const BWRAP = '/usr/bin/bwrap';
 const SHELL_BIN = { zsh: '/usr/bin/zsh', bash: '/usr/bin/bash' };
 const SHELL_FLAGS = { zsh: ['-f', '-c'], bash: ['--norc', '--noprofile', '-c'] };
 
@@ -176,10 +183,33 @@ function spawnP(cmd, args, o, input) {
   });
 }
 
+// bwrap argv for one sandboxed shell run. Lines tagged STUB-BIND overlay the stub on every
+// real rm path; the harness negative control strips them and expects the self-check to fail.
+function stubBinds() {
+  const dests = new Set();
+  for (const p of ['/usr/bin/rm', '/bin/rm', '/usr/bin/busybox', '/usr/bin/coreutils', '/usr/lib/cargo/bin/coreutils/rm']) {
+    try { dests.add(fs.realpathSync(p)); } catch { /* absent on this host */ }
+  }
+  return [...dests].flatMap((d) => ['--ro-bind', path.join(STUBS, 'rm'), d]); // STUB-BIND
+}
+function sandboxArgs(w, inner) {
+  return ['--unshare-all', '--die-with-parent', '--new-session',
+    '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc',
+    '--bind', BASE, BASE,
+    ...stubBinds(),
+    '--chdir', w.dir, '--clearenv',
+    '--setenv', 'PATH', STUBS, '--setenv', 'HOME', w.home, '--setenv', 'RMLOG', w.log,
+    '--setenv', 'T', '/tmp/ebo-t', '--setenv', 'S', '/tmp/ebo-s',
+    ...inner];
+}
+function sandboxShell(shell, cmd, w) {
+  return spawnP(BWRAP, sandboxArgs(w, ['/usr/bin/timeout', '2', SHELL_BIN[shell], ...SHELL_FLAGS[shell], cmd]),
+    { cwd: w.dir, stdio: ['ignore', 'ignore', 'ignore'] });
+}
+
 async function oracleRun(shell, cmd, w) {
   fs.writeFileSync(w.log, '');
-  await spawnP('/usr/bin/env', ['-i', `PATH=${STUBS}`, `HOME=${w.home}`, `RMLOG=${w.log}`, 'T=/tmp/ebo-t', 'S=/tmp/ebo-s', '/usr/bin/timeout', '2',
-    SHELL_BIN[shell], ...SHELL_FLAGS[shell], cmd], { cwd: w.dir, stdio: ['ignore', 'ignore', 'ignore'] });
+  await sandboxShell(shell, cmd, w);
   const lines = fs.readFileSync(w.log, 'utf8').split('\n').filter(Boolean);
   return { calls: lines, hit: lines.some((l) => truthOf(l, w.dir)) };
 }
@@ -191,13 +221,36 @@ async function hookRun(cmd, w) {
   return { deny: r.code === 2, code: r.code, err: r.err.trim() };
 }
 
+// Every spelling of rm that a case could use must land in the stub log, and the victim file
+// (created outside the sandbox, in a dir only this check uses) must survive.
 async function selfCheck() {
+  if (!fs.existsSync(BWRAP)) {
+    process.stderr.write(`oracle harness refuses to run: ${BWRAP} is missing; the PATH-only sandbox is not safe enough (a case could run /bin/rm)\n`);
+    process.exit(3);
+  }
+  const fail = (msg) => { process.stderr.write(`oracle sandbox self-check FAILED: ${msg}\n`); process.exit(3); };
+  const dir = path.join(BASE, 'selfcheck');
+  fs.mkdirSync(path.join(dir, 'home'), { recursive: true });
+  const w = { dir, home: path.join(dir, 'home'), log: path.join(dir, 'rm.log') };
+  const victimDir = fs.mkdtempSync(path.join(process.env.ORACLE_TMP || os.tmpdir(), 'ebo-victim-'));
+  const victim = path.join(victimDir, 'victim');
+  fs.writeFileSync(victim, 'keep');
+  const spellings = ['/bin/rm', '/usr/bin/rm', 'command -p rm', 'rm', '/usr/bin/busybox rm', 'command -p busybox rm', '/usr/bin/coreutils rm'];
   for (const sh of SHELLS) {
-    const r = cp.spawnSync('/usr/bin/env', ['-i', `PATH=${STUBS}`, SHELL_BIN[sh], ...SHELL_FLAGS[sh], 'command -v rm; command -v rmdir; command -v find'], { encoding: 'utf8' });
-    const lines = r.stdout.split('\n').filter(Boolean);
-    if (lines[0] !== path.join(STUBS, 'rm') || lines.length !== 1) {
-      process.stderr.write(`oracle sandbox self-check FAILED for ${sh}: ${JSON.stringify(r.stdout)}\n`);
-      process.exit(3);
+    const r = cp.spawnSync(BWRAP, sandboxArgs(w, [SHELL_BIN[sh], ...SHELL_FLAGS[sh], 'command -v rm; command -v rmdir; command -v find']), { encoding: 'utf8' });
+    const lines = (r.stdout || '').split('\n').filter(Boolean);
+    if (lines[0] !== path.join(STUBS, 'rm') || lines.length !== 1) fail(`${sh}: command -v rm is ${JSON.stringify(r.stdout)}`);
+    for (const sp of spellings) {
+      if (/busybox/.test(sp) && !fs.existsSync('/usr/bin/busybox')) continue;
+      if (/coreutils/.test(sp) && !fs.existsSync('/usr/bin/coreutils')) continue;
+      fs.writeFileSync(w.log, '');
+      const cmd = `${sp} -rf ${victim}`;
+      const rr = cp.spawnSync(BWRAP, sandboxArgs(w, ['/usr/bin/timeout', '2', SHELL_BIN[sh], ...SHELL_FLAGS[sh], cmd]), { encoding: 'utf8' });
+      const log = fs.readFileSync(w.log, 'utf8');
+      const hit = log.includes(victim);
+      const alive = fs.existsSync(victim);
+      console.log(`self-check ${sh.padEnd(4)} ${sp.padEnd(24)} -> ${hit ? 'stub log' : 'NOT IN STUB LOG'}; victim ${alive ? 'intact' : 'GONE'}${rr.status ? ` (rc ${rr.status})` : ''}`);
+      if (!hit || !alive) fail(`${sh}: "${cmd}" ${!hit ? 'did not reach the stub' : ''} ${!alive ? 'and the victim file is gone' : ''}`);
     }
   }
 }

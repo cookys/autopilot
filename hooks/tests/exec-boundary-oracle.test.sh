@@ -11,6 +11,10 @@
 ORACLE="$REPO_ROOT/hooks/tests/exec-boundary-oracle.js"
 export ORACLE_TMP="$TEST_TMP"
 
+if [ ! -x /usr/bin/bwrap ]; then
+  echo "SKIP: bubblewrap is required (the oracle harness refuses to run without it)"
+  finalize_test
+fi
 if [ ! -x /usr/bin/zsh ] || [ ! -x /usr/bin/bash ] || [ ! -x /usr/bin/timeout ]; then
   echo "SKIP: zsh, bash and timeout are required for the oracle shells"
   finalize_test
@@ -29,5 +33,13 @@ printf '#!/usr/bin/env node\nprocess.exit(0);\n' > "$TEST_TMP/allow-all-hook.js"
 NEG="$(node "$ORACLE" --hook "$TEST_TMP/allow-all-hook.js" --no-generated < /dev/null 2>&1)"; NEG_EXIT=$?
 assert_eq "1" "$NEG_EXIT" "negative control: an allow-all hook makes the oracle fail"
 assert_not_contains "$NEG" "BYPASS (truth yes, hook ALLOW): 0" "negative control: bypasses are reported"
+
+# Negative control 2 (sandbox): a copy of the harness whose stub binds are stripped must fail
+# its own self-check (exit 3) before it runs any case: the real rm paths are then not the stub.
+sed 's|^.*// STUB-BIND$|  return [];|' "$ORACLE" > "$TEST_TMP/oracle-nostub.js"
+SB="$(node "$TEST_TMP/oracle-nostub.js" --hook "$REPO_ROOT/hooks/exec-boundary.js" --corpus "$REPO_ROOT/hooks/tests/fixtures/exec-boundary-oracle-cases.txt" < /dev/null 2>&1)"; SB_EXIT=$?
+assert_eq "3" "$SB_EXIT" "negative control: without the stub binds the sandbox self-check exits 3"
+assert_contains "$SB" "NOT IN STUB LOG" "negative control: the self-check names the rm spelling that missed the stub"
+assert_not_contains "$SB" "cases:" "negative control: no case ran after the failed self-check"
 
 finalize_test

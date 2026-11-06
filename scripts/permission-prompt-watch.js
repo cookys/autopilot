@@ -78,7 +78,7 @@ function main(argv) {
   let next = { ...r.state, pane: o.pane, session, cwd: o.cwd, ...(card ? { card } : {}) }; // the state record carries frame, command, pane and session
   if (r.trigger) {
     const opened = o.session && hookGotThere(o.session) ? null
-      : block.openBlockedCard({ cwd: o.cwd, sessionId: session, paneId: o.pane, summary: r.state.command });
+      : block.openBlockedCard({ cwd: o.cwd, sessionId: session, paneId: o.pane, socket: o.socket, summary: r.state.command });
     if (opened) next = { ...next, card: opened };
     L.atomicWriteJson(file, next);
     return out(block.STATE, { command: r.state.command, reason: r.state.reason, frame: r.state.frame, cwd: o.cwd, card: opened ? opened.id : null });

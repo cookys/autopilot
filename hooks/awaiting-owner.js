@@ -227,7 +227,8 @@ function handle(p) {
       // entry not yet marked becomes BLOCKED_ON_PERMISSION and opens ONE card; a repeat Notification finds it marked and only heartbeats.
       const fresh = entries.filter((e) => e.kind === 'permission' && !e.state).sort(bySince)[0];
       if (fresh) {
-        const card = require('./permission-block-lib.js').openBlockedCard({ cwd: fresh.cwd || p.cwd, sessionId: p.session_id, paneId: fresh.pane_id, summary: fresh.summary });
+        const pb = require('./permission-block-lib.js');
+        const card = pb.openBlockedCard({ cwd: fresh.cwd || p.cwd, sessionId: p.session_id, paneId: fresh.pane_id, socket: pb.socketFromTmuxEnv(process.env.TMUX), summary: fresh.summary });
         commit(entries.map((e) => (e === fresh
           ? { ...e, state: require('./permission-block-lib.js').STATE, ...(card ? { decision_file: card.file, decision_id: card.id } : {}) }
           : { ...e })));

@@ -15,17 +15,28 @@ const ORIGIN = 'permission_prompt'; // the card's `origin`: only cards with this
 
 const { sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
 
-const whereOf = (paneId, cwd, sessionId) => [`pane ${paneId || '(unknown)'}`, `cwd ${cwd}`, `session ${sessionId}`].join(' · ');
+// The tmux server a pane id belongs to: pane ids (%0) repeat across servers. The default socket is spelled the same whether it comes
+// from $TMUX (a path) or from a watcher run without --socket (empty), so both normalise to '(default)'.
+function socketOf(socket) {
+  const s = typeof socket === 'string' ? socket : '';
+  const dflt = `${process.env.TMUX_TMPDIR || '/tmp'}/tmux-${typeof process.getuid === 'function' ? process.getuid() : 0}/default`;
+  return !s || s === dflt ? '(default)' : s;
+}
+// $TMUX = "<socket path>,<server pid>,<session>": the socket path is everything before the trailing ",<pid>,<n>".
+const socketFromTmuxEnv = (tmux) => (typeof tmux === 'string' ? tmux.replace(/,\d+,\d+$/, '') : '');
+
+const whereOf = (paneId, cwd, sessionId, socket) => [`pane ${paneId || '(unknown)'}`, `cwd ${cwd}`, `session ${sessionId}`, `socket ${socketOf(socket)}`].join(' · ');
 
 // One prompt = one card, whichever signal (hook or pane watcher) got there first: an open permission_prompt card for the same
-// pane in the same cwd is that prompt's card. -> { file, id } | null. Needs a known pane id.
-function findOpenCard(cwd, paneId) {
+// pane, cwd, session AND tmux socket is that prompt's card. A card of another session (its owner died without SessionEnd) or of
+// another tmux server with the same pane id is never reused, and never closed here. -> { file, id } | null. Needs a known pane id.
+function findOpenCard(cwd, paneId, sessionId, socket) {
   if (!paneId) return null;
-  const prefix = `pane ${paneId} · cwd ${cwd} · `;
+  const needle = `。${whereOf(paneId, cwd, sessionId, socket)}。`;
   try {
     const od = require('../scripts/open-decision.js');
     for (const file of od.projectScopeFiles(cwd)) {
-      const hit = od.readEntries(file).find((e) => e.origin === ORIGIN && typeof e.background === 'string' && e.background.includes(prefix));
+      const hit = od.readEntries(file).find((e) => e.origin === ORIGIN && typeof e.background === 'string' && e.background.includes(needle));
       if (hit) return { file, id: hit.id };
     }
   } catch { /* store unreadable: fall through to opening a card */ }
@@ -33,15 +44,15 @@ function findOpenCard(cwd, paneId) {
 }
 
 // -> { file, id } | null. null = the card could not be written (cwd outside a git repo, store error); the attention state stays.
-// An open card for the same pane and cwd (the other signal's) is returned instead of a second one; it stays owned by its opener.
-function openBlockedCard({ cwd, sessionId, paneId, summary }) {
+// An open card for the same pane, cwd, session and socket (the other signal's) is returned instead of a second one; it stays owned by its opener.
+function openBlockedCard({ cwd, sessionId, paneId, socket, summary }) {
   if (typeof cwd !== 'string' || !cwd) return null;
-  const existing = findOpenCard(cwd, paneId);
+  const existing = findOpenCard(cwd, paneId, sessionId, socket);
   if (existing) return existing;
   let root = null;
   try { root = require('./ask-decision.js').markerRoot(sessionId); } catch { /* unbound scope */ }
   const { openDecision } = require('../scripts/open-decision.js');
-  const where = whereOf(paneId, cwd, sessionId);
+  const where = whereOf(paneId, cwd, sessionId, socket);
   const r = openDecision({
     cwd, root, session: sanitizeSessionId(sessionId),
     question: `工作階段卡在權限確認框，等你本人回應：${summary || '(指令不明)'}`,
@@ -59,4 +70,4 @@ function closeBlockedCard(file, id, sessionId) {
   require('../scripts/open-decision.js').closeDecisionById(file, id, (v) => v.origin === ORIGIN && v.opened_by_session === session);
 }
 
-module.exports = { STATE, ORIGIN, openBlockedCard, closeBlockedCard };
+module.exports = { STATE, ORIGIN, socketFromTmuxEnv, openBlockedCard, closeBlockedCard };

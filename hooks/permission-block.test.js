@@ -301,20 +301,20 @@ test('class B: the pane is gone (capture fails) -> the watcher closes the card i
   assert.deepStrictEqual(fs.readdirSync(stateDir).filter((f) => f.endsWith('.json')), [], 'the state record is removed');
 });
 
-test('class C: the hook opened the card first, the watcher (no --session) opens no second one', () => {
+test('class C: the hook opened the card first, the watcher (same session) opens no second one', () => {
   const { repo, env } = mkEnv();
   feed(env, inRepo(PERM, repo));
   feed(env, inRepo(NOTIF, repo));
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
-  const hit = firePrompt(env, repo, stateDir);
+  const hit = firePrompt(env, repo, stateDir, ['--session', SID]);
   assert.strictEqual(hit.verdict, 'BLOCKED_ON_PERMISSION');
   assert.strictEqual(cards(repo).length, 1, 'one card for one prompt');
 });
 
-test('class C: the watcher opened the card first, the hook then opens no second one', () => {
-  const { repo, env } = mkEnv();
+test('class C: the watcher opened the card first (same session and socket), the hook then opens no second one', () => {
+  const { repo, env } = mkEnv({ TMUX: '/x/a.sock,4242,0' });
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
-  firePrompt(env, repo, stateDir);
+  firePrompt(env, repo, stateDir, ['--session', SID, '--socket', '/x/a.sock']);
   assert.strictEqual(cards(repo).length, 1);
   feed(env, inRepo(PERM, repo));
   feed(env, inRepo(NOTIF, repo));
@@ -340,4 +340,34 @@ test('class D: two tmux servers with the same pane id keep separate state', () =
   watch(env, repo, stateDir, text, 0, ['--socket', '/x/a.sock']);
   watch(env, repo, stateDir, text, 0, ['--socket', '/x/b.sock']);
   assert.strictEqual(fs.readdirSync(stateDir).filter((f) => f.endsWith('.json')).length, 2);
+});
+
+// ---------- g2: a card is reused only by the same session and the same tmux socket ----------
+
+test("g2: an old open card of session S1 is not reused by a new prompt of S2 in the same pane and cwd; S1's card stays", () => {
+  const { repo, env } = mkEnv();
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
+  firePrompt(env, repo, stateDir, ['--session', 'S1-died-without-sessionend']);
+  assert.strictEqual(cards(repo).length, 1);
+  feed(env, inRepo(PERM, repo));
+  feed(env, inRepo(NOTIF, repo));
+  const all = cards(repo);
+  assert.strictEqual(all.length, 2, 'the new session gets its own card');
+  assert.ok(all.some((c) => c.background.includes(`session ${SID}`)));
+  assert.ok(all.some((c) => c.background.includes('session S1-died-without-sessionend')), "the other owner's card is left open");
+});
+
+test('g2: two tmux sockets with the same pane id and cwd get two cards; closing one leaves the other open', () => {
+  const { repo, env } = mkEnv();
+  const sA = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
+  const sB = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
+  assert.strictEqual(firePrompt(env, repo, sA, ['--session', SID, '--socket', '/x/a.sock']).verdict, 'BLOCKED_ON_PERMISSION');
+  assert.strictEqual(firePrompt(env, repo, sB, ['--session', SID, '--socket', '/x/b.sock']).verdict, 'BLOCKED_ON_PERMISSION');
+  assert.strictEqual(cards(repo).length, 2, 'one card per socket');
+  const empty = path.join(sA, 'empty.txt');
+  fs.writeFileSync(empty, 'normal screen\n');
+  assert.strictEqual(watch(env, repo, sA, empty, 13000, ['--session', SID, '--socket', '/x/a.sock']).verdict, 'cleared');
+  const left = cards(repo);
+  assert.strictEqual(left.length, 1, 'the second prompt is still blocked and keeps its card');
+  assert.ok(left[0].background.includes('socket /x/b.sock'));
 });

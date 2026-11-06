@@ -64,15 +64,15 @@ export type StateId = (typeof STATE_IDS)[number]
 // terminal (P0 b). `↓` is East Asian Ambiguous and its width is still unchecked (`pending-owner`); the owner's 2026-10-14 ruling settled only its meaning (behind upstream, nothing else), see the plan §8. `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?' },
-  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★' },
+  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★', fresh: '✦', frameTL: '╭', frameTR: '╮', frameBL: '╰', frameBR: '╯', frameDown: '┬', frameUp: '┴' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
   fallback: { stalled: '◍', findings: '!' },
-  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '★': 'pending-owner', '⋯': 'pending-owner' } as Record<string, string>,
+  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '★': 'pending-owner', '⋯': 'pending-owner', '✦': 'pending-owner', '╭': 'pending-owner', '╮': 'pending-owner', '╰': 'pending-owner', '╯': 'pending-owner', '┬': 'pending-owner', '┴': 'pending-owner' } as Record<string, string>,
 }
 // glyphs that are new to the pane's vocabulary: each must carry a `verified` entry (L3)
-export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '★', '⋯'] as const
+export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '★', '⋯', '✦', '╭', '╮', '╰', '╯', '┬', '┴'] as const
 // Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
 export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
 

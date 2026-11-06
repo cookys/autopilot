@@ -233,7 +233,7 @@ test('watch CLI: pending -> BLOCKED_ON_PERMISSION with one card -> repeat report
   assert.strictEqual(hit.verdict, 'BLOCKED_ON_PERMISSION');
   assert.match(hit.command, /rm -rf/);
   assert.ok(hit.frame.includes('Dangerous rm operation'));
-  const rec = readJ(path.join(stateDir, '_7.json'));
+  const rec = readJ(path.join(stateDir, fs.readdirSync(stateDir).find((f) => /^_7-[0-9a-f]{8}\.json$/.test(f))));
   assert.ok(rec.fired && rec.pane === '%7' && rec.session === 'pane-_7' && rec.cwd === repo && rec.frame === hit.frame && rec.command === hit.command, 'state record carries frame, command, pane, session, cwd');
   assert.strictEqual(cards(repo).length, 1);
   assert.strictEqual(watch(env, repo, stateDir, text, 20000).verdict, 'BLOCKED_ON_PERMISSION');
@@ -275,4 +275,69 @@ test('watch CLI: the hook got there first (attention says BLOCKED) -> no second 
 test('watch CLI: usage error exits 2', () => {
   const r = spawnSync('node', [WATCH, '--pane'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 2);
+});
+
+// ---------- g1 review classes B, C, D ----------
+
+function watchRaw(env, repo, stateDir, args) {
+  return spawnSync('node', [WATCH, '--pane', '%7', '--cwd', repo, '--state-dir', stateDir, ...args], { encoding: 'utf8', env });
+}
+function firePrompt(env, repo, stateDir, extra = []) {
+  const text = path.join(stateDir, 'pane.txt');
+  fs.writeFileSync(text, PANE);
+  watch(env, repo, stateDir, text, 0, extra);
+  return watch(env, repo, stateDir, text, 11000, extra);
+}
+
+test('class B: the pane is gone (capture fails) -> the watcher closes the card it opened and drops its state, exit 3', () => {
+  const { repo, env } = mkEnv();
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
+  const sock = path.join(stateDir, 'no-such.sock');
+  assert.strictEqual(firePrompt(env, repo, stateDir, ['--socket', sock]).verdict, 'BLOCKED_ON_PERMISSION');
+  assert.strictEqual(cards(repo).length, 1);
+  const r = watchRaw(env, repo, stateDir, ['--socket', sock]);
+  assert.strictEqual(r.status, 3, r.stderr);
+  assert.strictEqual(cards(repo).length, 0, 'the card of a vanished pane is closed');
+  assert.deepStrictEqual(fs.readdirSync(stateDir).filter((f) => f.endsWith('.json')), [], 'the state record is removed');
+});
+
+test('class C: the hook opened the card first, the watcher (no --session) opens no second one', () => {
+  const { repo, env } = mkEnv();
+  feed(env, inRepo(PERM, repo));
+  feed(env, inRepo(NOTIF, repo));
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
+  const hit = firePrompt(env, repo, stateDir);
+  assert.strictEqual(hit.verdict, 'BLOCKED_ON_PERMISSION');
+  assert.strictEqual(cards(repo).length, 1, 'one card for one prompt');
+});
+
+test('class C: the watcher opened the card first, the hook then opens no second one', () => {
+  const { repo, env } = mkEnv();
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
+  firePrompt(env, repo, stateDir);
+  assert.strictEqual(cards(repo).length, 1);
+  feed(env, inRepo(PERM, repo));
+  feed(env, inRepo(NOTIF, repo));
+  assert.strictEqual(cards(repo).length, 1, 'one card for one prompt');
+});
+
+test('class D: a run with a different --session than the one that opened the card still closes it', () => {
+  const { repo, env } = mkEnv();
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
+  firePrompt(env, repo, stateDir);
+  assert.strictEqual(cards(repo).length, 1);
+  const empty = path.join(stateDir, 'empty.txt');
+  fs.writeFileSync(empty, 'normal screen\n');
+  assert.strictEqual(watch(env, repo, stateDir, empty, 13000, ['--session', 'OTHER']).verdict, 'cleared');
+  assert.strictEqual(cards(repo).length, 0, 'closed with the session that opened it, not the current one');
+});
+
+test('class D: two tmux servers with the same pane id keep separate state', () => {
+  const { repo, env } = mkEnv();
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-state-'));
+  const text = path.join(stateDir, 'pane.txt');
+  fs.writeFileSync(text, PANE);
+  watch(env, repo, stateDir, text, 0, ['--socket', '/x/a.sock']);
+  watch(env, repo, stateDir, text, 0, ['--socket', '/x/b.sock']);
+  assert.strictEqual(fs.readdirSync(stateDir).filter((f) => f.endsWith('.json')).length, 2);
 });

@@ -12,11 +12,16 @@
  * A frame (scripts/lib/permission-prompt-detect.js) that stays the same for --hold-s seconds (default 10) opens ONE owner-panel
  * card (hooks/permission-block-lib.js, the same leg as the hook) in the repo at --cwd; the card closes when the frame is gone.
  * With --session, a session whose attention entry already says BLOCKED_ON_PERMISSION (the hook got there first) gets no second card.
- * State: <state-dir>/<pane>.json, default <live>/permwatch/.
+ * The card opened here is closed with the session that opened it (the state record's), also when this run is given another --session.
+ * When the pane cannot be read any more (pane or tmux server gone) the card this watcher opened is closed and the state dropped.
+ * A card the hook opened for the same pane and cwd is reused, not doubled; the hook closes its own (a hook-owned card of a session
+ * killed without SessionEnd stays until the owner closes it).
+ * State: <state-dir>/<pane>-<hash of socket+pane>.json, default <live>/permwatch/.
  * stdout: one JSON line {verdict: "idle"|"pending"|"BLOCKED_ON_PERMISSION"|"cleared", ...}. Exit 0; 2 usage; 3 capture failed.
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const detect = require('./lib/permission-prompt-detect.js');
 const block = require('../hooks/permission-block-lib.js');
@@ -51,14 +56,15 @@ function hookGotThere(sessionId) {
 function main(argv) {
   const o = parse(argv);
   if (!o) { process.stderr.write('usage: permission-prompt-watch.js --pane <id> --cwd <dir> [--session <id>] [--socket <path>] [--hold-s N] [--state-dir D] [--text-file F] [--now-ms N]\n'); return 2; }
-  let text;
-  try { text = capture(o); } catch (e) { process.stderr.write(`${e.message}\n`); return 3; }
-  const now = o.nowMs !== undefined ? Number(o.nowMs) : Date.now();
   const dir = o.stateDir || path.join(L.liveBase(), 'permwatch');
-  const file = path.join(dir, `${o.pane.replace(/[^A-Za-z0-9_-]/g, '_')}.json`);
+  const paneKey = o.pane.replace(/[^A-Za-z0-9_-]/g, '_');
+  const file = path.join(dir, `${paneKey}-${crypto.createHash('sha1').update(`${o.socket || ''}\n${o.pane}`).digest('hex').slice(0, 8)}.json`);
   const prev = L.readJsonFile(file);
-  const session = o.session || `pane-${o.pane.replace(/[^A-Za-z0-9_-]/g, '_')}`;
-  const closeOld = () => { if (prev && prev.card) block.closeBlockedCard(prev.card.file, prev.card.id, session); };
+  const session = o.session || `pane-${paneKey}`;
+  const closeOld = () => { if (prev && prev.card) block.closeBlockedCard(prev.card.file, prev.card.id, prev.session || session); };
+  let text;
+  try { text = capture(o); } catch (e) { closeOld(); if (prev) L.removeFile(file); process.stderr.write(`${e.message}\n`); return 3; }
+  const now = o.nowMs !== undefined ? Number(o.nowMs) : Date.now();
 
   const r = detect.step(prev, text, now, o.holdS * 1000);
   const out = (v, extra) => { process.stdout.write(`${JSON.stringify({ verdict: v, pane: o.pane, session, ...extra })}\n`); return 0; };

@@ -15,13 +15,33 @@ const ORIGIN = 'permission_prompt'; // the card's `origin`: only cards with this
 
 const { sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
 
+const whereOf = (paneId, cwd, sessionId) => [`pane ${paneId || '(unknown)'}`, `cwd ${cwd}`, `session ${sessionId}`].join(' · ');
+
+// One prompt = one card, whichever signal (hook or pane watcher) got there first: an open permission_prompt card for the same
+// pane in the same cwd is that prompt's card. -> { file, id } | null. Needs a known pane id.
+function findOpenCard(cwd, paneId) {
+  if (!paneId) return null;
+  const prefix = `pane ${paneId} · cwd ${cwd} · `;
+  try {
+    const od = require('../scripts/open-decision.js');
+    for (const file of od.projectScopeFiles(cwd)) {
+      const hit = od.readEntries(file).find((e) => e.origin === ORIGIN && typeof e.background === 'string' && e.background.includes(prefix));
+      if (hit) return { file, id: hit.id };
+    }
+  } catch { /* store unreadable: fall through to opening a card */ }
+  return null;
+}
+
 // -> { file, id } | null. null = the card could not be written (cwd outside a git repo, store error); the attention state stays.
+// An open card for the same pane and cwd (the other signal's) is returned instead of a second one; it stays owned by its opener.
 function openBlockedCard({ cwd, sessionId, paneId, summary }) {
   if (typeof cwd !== 'string' || !cwd) return null;
+  const existing = findOpenCard(cwd, paneId);
+  if (existing) return existing;
   let root = null;
   try { root = require('./ask-decision.js').markerRoot(sessionId); } catch { /* unbound scope */ }
   const { openDecision } = require('../scripts/open-decision.js');
-  const where = [`pane ${paneId || '(unknown)'}`, `cwd ${cwd}`, `session ${sessionId}`].join(' · ');
+  const where = whereOf(paneId, cwd, sessionId);
   const r = openDecision({
     cwd, root, session: sanitizeSessionId(sessionId),
     question: `工作階段卡在權限確認框，等你本人回應：${summary || '(指令不明)'}`,

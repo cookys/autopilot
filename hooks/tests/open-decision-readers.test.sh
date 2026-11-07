@@ -51,6 +51,9 @@ srt() { printf '%s\n' "$@" | LC_ALL=C sort | paste -sd, -; }
 IDS="$OPEN"; DI="$(srt "$AWAIT=awaiting_operator_action" "$OPEN=open" "$PEND=pending_dispatch")"
 assert_contains "$ASK" "decision-input:$DI" "decision-input lists open + awaiting + pending_dispatch with their statuses, not the closed card"
 assert_not_contains "$ASK" "$CLOSED=" "decision-input does not list the closed card"
+# the panel gets its list from readDecision (src/status/decision-input.js:54 drops closed; the watcher writes this list to the sidecar the mod reads, nothing re-filters later): the bare id must be absent from that layer's whole output
+DI_LINE="$(printf '%s\n' "$ASK" | grep '^decision-input:')"
+assert_not_contains "$DI_LINE" "$CLOSED" "panel list (decision-input output) does not contain the closed card id at all"
 assert_contains "$ASK" "readEntries:$IDS" "open-decision readEntries returns the OPEN card only (advisory-relay, permission-block, ask-decision, owner-question-guard)"
 assert_contains "$ASK" "session-start:$IDS" "session-start open-card list: open only"
 assert_contains "$ASK" "Open decision cards (1): $OPEN" "session-start line counts the open card only"

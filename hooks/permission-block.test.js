@@ -111,6 +111,9 @@ test('clear on deny (UserPromptSubmit) and on SessionEnd', () => {
     feed(env, inRepo({ session_id: SID, hook_event_name: end }, repo));
     assert.ok(!fs.existsSync(attnFile(live)), end);
     assert.strictEqual(cards(repo).length, 0, end);
+    const kept = allCards(repo);
+    assert.strictEqual(kept.length, 1, end + ': the card is kept');
+    assert.ok(kept.every((c) => c.status === 'closed'), end + ': kept as closed, not pending_dispatch');
   }
 });
 

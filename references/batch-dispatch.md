@@ -153,6 +153,10 @@ Each round's dispatch note (the lead's own record, one row per unit) carries the
 - A fixed clock time is allowed only for a real external constraint, and the row says which one: `（外部限制：...）` or `reason:` on the same or the next line. `scripts/check-fixed-times.js` fails a template that writes one without it.
 - The lead goes back and checks on its own when the evidence time passes or a unit sits idle; it does not wait for a notification. While a hand is running, the longest gap between checks is 30 minutes (PM rule).
 
+### Pick the executor (Engine column)
+
+Add an **Engine** column to the row. Default for mechanical or read-only work: `haiku` for grep and file-by-file comparison, `sonnet` for editing to a template or running a fixed check; a cheaper engine seat also qualifies. The lead keeps judgment, checking the key facts and irreversible actions (merge, push), and does a task itself only when it is one or two tool calls. Spread units across accounts and engines by the quota each has left (operator 2026-11-08).
+
 ## Scope cut (deliberately NOT built)
 
 - `/l5` **hetero parallel** dispatch (BACKLOG — weakest leg). The `reap` group-kill

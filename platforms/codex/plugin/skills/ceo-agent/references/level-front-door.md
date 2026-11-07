@@ -522,6 +522,12 @@ source (≈300K to start). The prose rules existed; nothing was in the loop.
 - A fixed clock time is only for a real external constraint, written as `（外部限制：...）` or `reason:` beside it (`scripts/check-fixed-times.js`).
 - Depth-0 checks on its own when the evidence time passes or a unit idles, at the latest every 30 minutes while a hand runs (PM rule).
 
+#### Pick the executor (operator rule, 2026-11-08)
+
+- Mechanical or read-only work in a brief goes to a light subagent (`haiku` for grep and file-by-file comparison, `sonnet` for editing to a template or running a fixed check) or a cheaper engine seat; the `Engine:` header names it.
+- Depth-0 keeps judgment, checking the key facts and irreversible actions (merge, push); it does a task itself only when it is one or two tool calls.
+- Spread load by the quota each account and engine has left.
+
 #### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 
 By default `Agent(isolation:"worktree")` branches the new worktree from the repo's

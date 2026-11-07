@@ -90,4 +90,44 @@ assert_not_contains "$SHOW" "Q-OLD" "closed card of another scope is gone"
 node "$OD" close --cwd "$R" --id "$ID_NEW" >/dev/null
 node "$OD" close --cwd "$R" --root-run-id root-old --id "$ID_UNB" >/dev/null
 node "$OD" show --cwd "$R" >/dev/null 2>&1; assert_eq "1" "$?" "nothing open after closing all three"
+
+# PM report (awaitpane): a backfilled awaiting_operator_action card whose id also has an older OPEN record in another root must not be
+# listed as a question too. One id, one state: the most advanced wins (awaiting here); a card with no other record is awaiting only.
+printf '{"id":"d-faba6ac1","question":"NAS probe sudoers","answer":"one line","closed_at":"2026-11-04T22:16:40Z","executor":"ns/cc/hangar--claude","asker":"ns/cc/hangar--claude","status":"awaiting_operator_action"}\n{"id":"d-df10c6d1","question":"delete the logs","answer":"all","closed_at":"2026-11-05T05:22:38Z","executor":"ns/cc/lead--claude","asker":"ns/cc/lead--claude","status":"awaiting_operator_action"}\n' > "$TEST_TMP/bf.jsonl"
+node "$OD" backfill --cwd "$R" --from "$TEST_TMP/bf.jsonl" --apply --root-run-id root-bf >/dev/null
+printf '{"schema":"autopilot.decision/2","root_run_id":"root-prev","repo_identity":"%s","project_key":"%s","decisions":[{"id":"d-df10c6d1","question":"delete the logs","opened_at":"2026-11-05T01:00:00.000Z"}]}\n' "$IDENT" "$KEY" > "$D/$KEY--root-prev.json"
+VIEW="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e '
+const { scopeFromCwd } = require(process.env.REPO_ROOT + "/src/status/project-key");
+const { commonDirOf } = require(process.env.REPO_ROOT + "/src/status/scope-key");
+const { readDecision } = require(process.env.REPO_ROOT + "/src/status/decision-input");
+const sc = scopeFromCwd(process.env.R);
+const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: "root-bf", identity: sc.repo_identity, nowMs: Date.now(), liveBase: null });
+console.log(r.value.map((d) => d.id + "=" + d.status).sort().join(","));')"
+assert_eq "d-df10c6d1=awaiting_operator_action,d-faba6ac1=awaiting_operator_action" "$VIEW" "an id with an older open record elsewhere shows once, as awaiting"
+
+# (c) show (the CLI's own read path) agrees with the pane for that same id: once, as awaiting
+SHOWJ="$(node "$OD" show --cwd "$R" --json)"
+CNT="$(printf '%s' "$SHOWJ" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8")).decisions.filter((e)=>e.id==="d-df10c6d1");console.log(d.length+":"+d.map((e)=>e.status).join("|"))')"
+assert_eq "1:awaiting_operator_action" "$CNT" "show --json lists d-df10c6d1 once, as awaiting (same as the pane)"
+SHOWID="$(node "$OD" show --cwd "$R" --id d-df10c6d1)"
+assert_contains "$SHOWID" "status: awaiting_operator_action" "show --id d-df10c6d1 picks the most advanced record"
+
+# same-rank duplicates: one id, one output, a fixed winner. (a) pending_dispatch in one root, awaiting_operator_action in another
+# (newest stamp wins); (b) the same id open in two roots (once, the newer opened_at).
+seedcards() { printf '{"schema":"autopilot.decision/2","root_run_id":"%s","repo_identity":"%s","project_key":"%s","decisions":[%s]}\n' "$1" "$IDENT" "$KEY" "$2" > "$D/$KEY--$1.json"; }
+seedcards root-pa '{"id":"d-tie11111","question":"Q-TIE-A?","opened_at":"2026-11-05T01:00:00.000Z","status":"pending_dispatch","answer":"x","pending_dispatch_at":"2026-11-05T02:00:00.000Z","executor":"ns/cc/e"},{"id":"d-open2222","question":"Q-TIE-B?","opened_at":"2026-11-05T01:00:00.000Z"}'
+seedcards root-pb '{"id":"d-tie11111","question":"Q-TIE-A?","opened_at":"2026-11-05T01:00:00.000Z","status":"awaiting_operator_action","answer":"x","answered_at":"2026-11-05T03:00:00.000Z","awaiting_operator":"step"},{"id":"d-open2222","question":"Q-TIE-B?","opened_at":"2026-11-05T01:30:00.000Z"}'
+tiecheck() {
+  R="$R" REPO_ROOT="$REPO_ROOT" node -e '
+const { scopeFromCwd } = require(process.env.REPO_ROOT + "/src/status/project-key");
+const { commonDirOf } = require(process.env.REPO_ROOT + "/src/status/scope-key");
+const { readDecision } = require(process.env.REPO_ROOT + "/src/status/decision-input");
+const sc = scopeFromCwd(process.env.R);
+const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: null, identity: sc.repo_identity, nowMs: Date.now(), liveBase: null });
+console.log(r.value.filter((d) => /^d-(tie|open)/.test(d.id)).map((d) => d.id + "=" + d.status + "@" + d.opened_at).sort().join(","));'
+}
+TIE="$(tiecheck)"
+assert_eq "d-open2222=open@2026-11-05T01:30:00.000Z,d-tie11111=awaiting_operator_action@2026-11-05T01:00:00.000Z" "$TIE" "pane: a same-rank id shows once; newest stamp wins"
+SJ="$(node "$OD" show --cwd "$R" --json | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8")).decisions.filter((e)=>/^d-(tie|open)/.test(e.id));console.log(d.map((e)=>e.id+"="+(e.status||"open")).sort().join(","))')"
+assert_eq "d-open2222=open,d-tie11111=awaiting_operator_action" "$SJ" "show: a same-rank id lists once too"
 finalize_test

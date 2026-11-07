@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry, cardState } = require('./scope-key');
+const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry, cardState, pickCards } = require('./scope-key');
 
 const STALE_MS = 7 * 86400 * 1000;
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
@@ -77,11 +77,13 @@ function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
     const value = [];
     const hashes = [];
     let first = null;
-    for (const file of listScopeFiles(dir, key)) {
-      const sf = readScopeFile(file, { schema: 'autopilot.decision/2', projectKey: key, identity });
-      if (!sf) continue;
-      const { value: v, raw } = sf;
-      const views = v.decisions.map((e) => viewOf(e, nowMs, liveBase)).filter(Boolean);
+    // One card id, one state (pickCards in scope-key.js): the same id kept in several scope files shows once, in its most advanced state
+    // (closed > awaiting_operator_action / pending_dispatch > open); equal rank: newest stamp, then first scope-file name.
+    const sfs = listScopeFiles(dir, key).map((file) => ({ file, sf: readScopeFile(file, { schema: 'autopilot.decision/2', projectKey: key, identity }) })).filter((x) => x.sf);
+    const winners = pickCards(sfs.flatMap(({ file, sf }) => sf.value.decisions.map((e) => ({ file, e }))));
+    for (const { file, sf } of sfs) {
+      const { raw } = sf;
+      const views = winners.filter((w) => w.file === file).map((w) => viewOf(w.e, nowMs, liveBase)).filter(Boolean);
       if (views.length === 0) continue;
       value.push(...views);
       hashes.push(crypto.createHash('sha256').update(raw).digest('hex'));

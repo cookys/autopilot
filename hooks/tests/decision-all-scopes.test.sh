@@ -90,4 +90,18 @@ assert_not_contains "$SHOW" "Q-OLD" "closed card of another scope is gone"
 node "$OD" close --cwd "$R" --id "$ID_NEW" >/dev/null
 node "$OD" close --cwd "$R" --root-run-id root-old --id "$ID_UNB" >/dev/null
 node "$OD" show --cwd "$R" >/dev/null 2>&1; assert_eq "1" "$?" "nothing open after closing all three"
+
+# PM report (awaitpane): a backfilled awaiting_operator_action card whose id also has an older OPEN record in another root must not be
+# listed as a question too. One id, one state: the most advanced wins (awaiting here); a card with no other record is awaiting only.
+printf '{"id":"d-faba6ac1","question":"NAS probe sudoers","answer":"one line","closed_at":"2026-11-04T22:16:40Z","executor":"ns/cc/hangar--claude","asker":"ns/cc/hangar--claude","status":"awaiting_operator_action"}\n{"id":"d-df10c6d1","question":"delete the logs","answer":"all","closed_at":"2026-11-05T05:22:38Z","executor":"ns/cc/lead--claude","asker":"ns/cc/lead--claude","status":"awaiting_operator_action"}\n' > "$TEST_TMP/bf.jsonl"
+node "$OD" backfill --cwd "$R" --from "$TEST_TMP/bf.jsonl" --apply --root-run-id root-bf >/dev/null
+printf '{"schema":"autopilot.decision/2","root_run_id":"root-prev","repo_identity":"%s","project_key":"%s","decisions":[{"id":"d-df10c6d1","question":"delete the logs","opened_at":"2026-11-05T01:00:00.000Z"}]}\n' "$IDENT" "$KEY" > "$D/$KEY--root-prev.json"
+VIEW="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e '
+const { scopeFromCwd } = require(process.env.REPO_ROOT + "/src/status/project-key");
+const { commonDirOf } = require(process.env.REPO_ROOT + "/src/status/scope-key");
+const { readDecision } = require(process.env.REPO_ROOT + "/src/status/decision-input");
+const sc = scopeFromCwd(process.env.R);
+const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.project_key, root: "root-bf", identity: sc.repo_identity, nowMs: Date.now(), liveBase: null });
+console.log(r.value.map((d) => d.id + "=" + d.status).sort().join(","));')"
+assert_eq "d-df10c6d1=awaiting_operator_action,d-faba6ac1=awaiting_operator_action" "$VIEW" "an id with an older open record elsewhere shows once, as awaiting"
 finalize_test

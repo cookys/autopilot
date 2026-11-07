@@ -77,11 +77,16 @@ function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
     const value = [];
     const hashes = [];
     let first = null;
-    for (const file of listScopeFiles(dir, key)) {
-      const sf = readScopeFile(file, { schema: 'autopilot.decision/2', projectKey: key, identity });
-      if (!sf) continue;
+    // One card id, one state: the same id kept in several scope files (an older open record in a previous root, the answered one in the
+    // current root) shows only in its most advanced state (closed > awaiting_operator_action / pending_dispatch > open), so an answered
+    // card is never also listed as a question.
+    const rank = (e) => (isClosedEntry(e) ? 3 : cardState(e) === 'open' ? 1 : 2);
+    const sfs = listScopeFiles(dir, key).map((file) => ({ file, sf: readScopeFile(file, { schema: 'autopilot.decision/2', projectKey: key, identity }) })).filter((x) => x.sf);
+    const best = new Map();
+    for (const { sf } of sfs) for (const e of sf.value.decisions) if (e && typeof e.id === 'string' && e.id) best.set(e.id, Math.max(best.get(e.id) || 0, rank(e)));
+    for (const { file, sf } of sfs) {
       const { value: v, raw } = sf;
-      const views = v.decisions.map((e) => viewOf(e, nowMs, liveBase)).filter(Boolean);
+      const views = v.decisions.filter((e) => e && rank(e) >= best.get(e.id)).map((e) => viewOf(e, nowMs, liveBase)).filter(Boolean);
       if (views.length === 0) continue;
       value.push(...views);
       hashes.push(crypto.createHash('sha256').update(raw).digest('hex'));

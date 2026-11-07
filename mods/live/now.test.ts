@@ -578,6 +578,18 @@ test('AWAITING (現況): every awaiting card is listed with its id and its whole
   }
 })
 
+// The per-card line shows " -> <step>" only when the card has a step; a missing field (undefined, as an older record) must not print "undefined".
+test('AWAITING (現況): a card line shows " -> <step>" when it has one, and never "undefined" when the field is missing', () => {
+  const withStep = { id: 'd-step1', question: 'q one', answer: 'ok', awaiting_operator: '從 PC-1 執行', executor: null, asker: null }
+  const missing = { id: 'd-miss1', question: 'q two', answer: 'ok', executor: null, asker: null } as any
+  for (const [loc, t] of LOCALES) {
+    const text = nowLines({ ...snap(), pending: [], awaiting: [withStep, missing] }, ctxOf(t, 120)).map(l => l.text).join('\n')
+    expect(text, loc).toContain('d-step1  q one -> 從 PC-1 執行')
+    expect(text, loc).toContain('d-miss1  q two')
+    expect(text, loc).not.toContain('undefined')
+  }
+})
+
 // ---- pending_dispatch (BL cardtrail, PM ruling 01M6RV0Y02): answered, the caller has not confirmed the dispatch. Its own row, not 待決 ----
 test('DISPATCHING (現況): a pending_dispatch card is its own 要你處理 row (not a 待決 row, no press target); none -> no such row', () => {
   const pd = [{ id: 'd-7', question: 'sync the rules?', answer: 'yes', awaiting_operator: null, executor: 'ns/cc/exec--claude', asker: null }]

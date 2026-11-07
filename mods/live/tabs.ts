@@ -132,7 +132,7 @@ function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   if (aw.length > 0) { // answered, but one step is left for the owner himself: a different row from 待決 (no press target; the step, not a question)
     const step = (aw[0].awaiting_operator ?? aw[0].question) + (aw.length > 1 ? ' (+' + (aw.length - 1) + ')' : '')
     // the row names the first card's step only; every card is listed under it with its id, whole (wrapped, never cut), so none hides behind "(+N)"
-    const each = aw.flatMap(x => ui.detail(u, (x.id ?? '?') + '  ' + x.question + (x.awaiting_operator === null ? '' : ' -> ' + x.awaiting_operator), { attached: true, fact: 'now.attention' }))
+    const each = aw.flatMap(x => ui.detail(u, (x.id ?? '?') + '  ' + x.question + (x.awaiting_operator == null ? '' : ' -> ' + x.awaiting_operator), { attached: true, fact: 'now.attention' }))
     put(needYou, bare => ui.item(u, needYou, t('now.awaiting_op', { n: aw.length, step }), undefined, { fact: 'now.attention', word: !bare }), each)
   }
   const pd = snap.dispatching ?? []

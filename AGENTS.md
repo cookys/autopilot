@@ -9,7 +9,7 @@ Codex, agy and OpenCode do not descend into subdirectories: before working in `s
 ## Project Structure (spec)
 
 ```
-skills/              30 lifecycle/methodology skills (SKILL.md format)
+skills/              31 lifecycle/methodology skills (SKILL.md format)
 agents/              3 methodology agents (reviewer, debugger, planner) — markdown body + YAML frontmatter
 hooks/               Claude Code hooks (bash + JS) and hooks.json manifest
 platforms/codex/     Codex skills + production PostCompact package + repo-local marketplace

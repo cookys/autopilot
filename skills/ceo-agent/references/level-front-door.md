@@ -514,6 +514,14 @@ source (≈300K to start). The prose rules existed; nothing was in the loop.
   its next Bash at T2 with the handoff directive (`hooks/README.md` § Live context feed). Without
   the feed (no codeforge, or an older one) the Bash cap stays the only ceiling.
 
+#### Evidence time, next unit and stall (lead-watch rule, 2026-11-08)
+
+- An **evidence time** in a brief is the latest moment depth-0 looks back to confirm the work is still moving. It is not a start time and not a delivery time: inputs ready means start, done means hand over.
+- A brief names the next two units (N+1, N+2) and each one's entry condition. When a unit finishes and N+1 is ready and inside the go scope, start it directly and report one line.
+- **Stall** = a unit is done, the next one is ready and in scope, and nobody started it; or a running hand passed its evidence time with no check.
+- A fixed clock time is only for a real external constraint, written as `（外部限制：...）` or `reason:` beside it (`scripts/check-fixed-times.js`).
+- Depth-0 checks on its own when the evidence time passes or a unit idles, at the latest every 30 minutes while a hand runs (PM rule).
+
 #### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 
 By default `Agent(isolation:"worktree")` branches the new worktree from the repo's

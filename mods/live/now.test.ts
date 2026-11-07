@@ -559,6 +559,25 @@ test('AWAITING (現況): an answered card with an operator step is its own 要�
   expect(none.map(l => l.text).join('\n')).not.toContain('your own step left')
 })
 
+// PM report (awaitpane): three backfilled awaiting_operator_action cards (awaiting_operator null) showed as ONE row naming the first card's question, cut at a narrow pane, the
+// other two folded into "(+2)": a patrol looking for d-faba6ac1 on the screen found nothing. Every awaiting card is listed under the row with its id, whole.
+test('AWAITING (現況): every awaiting card is listed with its id and its whole question, at any pane width (none hides behind "(+N)" or the cut)', () => {
+  const card = (id: string, question: string) => ({ id, question, answer: 'ok', awaiting_operator: null, executor: 'ns/cc/x--claude', asker: 'ns/cc/x--claude' })
+  const aw = [
+    card('d-faba6ac1', 'NAS probe 帳號加一行唯讀 sudoers'),
+    card('d-df10c6d1', 'twgameproject：刪除含密碼的封存 log'),
+    card('d-5e83de0a', 'twgameproject：寄信改用專用 noreply 信箱'),
+  ]
+  for (const [loc, t] of LOCALES) for (const cols of [40, 60, 76, 120]) {
+    const ls = nowLines({ ...snap(), pending: [], awaiting: aw }, ctxOf(t, cols))
+    const text = ls.map(l => l.text).join('\n')
+    for (const c of aw) {
+      expect(text, loc + ' cols=' + cols + ' ' + c.id).toContain(c.id)
+      expect(text.replace(/\s+/g, ''), loc + ' cols=' + cols + ' question of ' + c.id).toContain(c.question.replace(/\s+/g, ''))
+    }
+  }
+})
+
 // ---- pending_dispatch (BL cardtrail, PM ruling 01M6RV0Y02): answered, the caller has not confirmed the dispatch. Its own row, not 待決 ----
 test('DISPATCHING (現況): a pending_dispatch card is its own 要你處理 row (not a 待決 row, no press target); none -> no such row', () => {
   const pd = [{ id: 'd-7', question: 'sync the rules?', answer: 'yes', awaiting_operator: null, executor: 'ns/cc/exec--claude', asker: null }]

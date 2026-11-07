@@ -158,7 +158,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-11-07
 - **Origin**: peer
-- **Reporter**: cookys/aimax395-team/codeforge--claude
+- **Reporter**: codeforge
 - **Report**: fleet 01M6SZVASD (2026-11-07)
 - **Reply**: none
 - **Problem**: 待你動手的數字是全域的，不是單張卡的，放在主視窗標題語意不對；改放最上面的選單列，前提是 80 欄寬放得下、不截字。

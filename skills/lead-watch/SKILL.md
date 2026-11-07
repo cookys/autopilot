@@ -32,7 +32,7 @@ Scope: applies to a session that dispatched or coordinates other members. A stuc
 
 ## Pick the executor
 
-The lead keeps three things: judgment, checking the key facts, and irreversible actions. Mechanical or read-only work goes to a light-tier executor (the `hands` role) or a cheaper engine seat; do it yourself only when it is one or two tool calls. Spread the load by what quota each account and engine has left. The tier names the role; the model comes from `scripts/resolve-dispatch.sh` and `references/model-routing.md`, never from this file.
+The lead keeps three things: judgment, checking the key facts, and irreversible actions. Mechanical or read-only work goes to a light- or standard-tier executor (`hands`, or `fast-worker` / `implementer`) or a cheaper engine seat; do it yourself only when it is one or two tool calls. Spread the load by what quota each account and engine has left. The tier names the role; the model comes from `scripts/resolve-dispatch.sh` and `references/model-routing.md`, never from this file.
 
 - grep or file-by-file comparison: light tier (`hands` role).
 - Edit files to a template, run a fixed check: standard tier (`fast-worker` / `implementer` role).

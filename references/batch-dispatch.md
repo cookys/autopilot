@@ -147,7 +147,7 @@ Each round's dispatch note (the lead's own record, one row per unit) carries the
 |--------|---------|
 | unit id / scope / base | as in the units file above |
 | evidence time | the **latest** moment the lead looks back to confirm the work is still moving. It is not a start time and not a delivery time: inputs ready means start now, done means hand over now. |
-| Engine | `tier (resolved by resolve-dispatch)`: light or standard, see below. Never a model name. |
+| Engine | `tier (resolved by resolve-dispatch)`: light or standard, see below. Never a model name. The brief header (`Engine:`) records the resolved model name; this column records the tier. |
 | N+1, N+2 and entry condition | the next two units behind this one, and what must be true for each to enter (inputs ready, preflight passed, inside the go scope). |
 
 - When a unit finishes and N+1 is already ready and inside the go scope, start it at once and report one line. Finished with a ready next unit left idle is a **stall**.

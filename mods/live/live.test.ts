@@ -3263,6 +3263,56 @@ test('G23 Fleet tab: data age, owner cards, lanes in flight before upcoming, stu
   const quiet = (await paneParts($, 'terminal', 'fleet')).texts
   expect(quiet[quiet.findIndex(t => t.includes('KR2 runs')) + 1]).toContain('seat not observed since 5h00m ago')
 })
+// fleetcards 1: the Fleet tab's 其他主機 section, read-only, from the PM host's mirror and to-do files (fleet.ts othersView). The pure half is fleet.test.ts.
+const FC_DIR = '/fc-state'
+const fcMirror = (over: Record<string, unknown> = {}) => JSON.stringify({
+  schema: 'autopilot.fleet-card-mirror/1', synced_at: new Date(NOW_FRESH - 60_000).toISOString(), last_error: null, cursor: null, truncated: false, rejects: [],
+  closed: { 'd-00000a02': { at: new Date(NOW_FRESH - 600_000).toISOString(), state: 'awaiting_operator_action', member: 'proj--claude' } },
+  cards: { 'd-00000a01': { card_id: 'd-00000a01', question: 'Which DNS record?', state: 'open', opened_at: new Date(NOW_FRESH - 3_600_000).toISOString(), member: 'proj--claude', courier: 'host-b', session: 'FAKE-sess-9', message_id: null } },
+  ...over,
+})
+const fcTodo = JSON.stringify({ items: [
+  { card_id: 'd-00000a02', step: 'change the DNS record', owner_session: 'host-b/proj--claude@FAKE-sess-9', since: new Date(NOW_FRESH - 7_200_000).toISOString(), due: null },
+  { card_id: 'd-00000a99', step: 'nobody has this card', owner_session: 'elsewhere', since: new Date(NOW_FRESH - 7_200_000).toISOString() },
+] })
+test('fleetcards: the Fleet tab lists the other hosts\' cards with the session to answer in, and the to-do list reconciled by card id; it runs only `fleet tasks` (terminal)', async ($, on) => {
+  const ran: string[] = []
+  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } })
+  const files = base()
+  files[FC_DIR + '/fleet-card-mirror.json'] = fcMirror()
+  files[FC_DIR + '/fleet-card-todo.json'] = fcTodo
+  const w = worldEn(on, files)
+  w.env.AUTOPILOT_CARD_MIRROR_DIR = FC_DIR
+  await start($, 'terminal')
+  const texts = (await paneParts($, 'terminal', 'fleet')).texts
+  const at = (needle: string) => texts.findIndex(t => t.includes(needle))
+  expect(at('other hosts')).toBeGreaterThan(0)
+  expect(texts[at('d-00000a01 Which DNS record?')]).toContain('▲')
+  expect(texts[at('d-00000a01 Which DNS record?') + 1]).toContain('answer in host-b/proj--claude@FAKE-sess-9')
+  expect(texts[at('d-00000a02 change the DNS record')]).not.toContain('⊘') // answered: the mirror remembers it, reconciled
+  expect(texts[at('d-00000a99 nobody has this card')]).toContain('⊘')
+  expect(at('not reconciled')).toBeGreaterThan(at('d-00000a99'))
+  expect(at('stale')).toBe(-1)
+  expect(ran.every(a => a.startsWith('fleet tasks'))).toBe(true) // read-only: no other command, no claim
+})
+test('fleetcards: a stale mirror, a broken mirror and a missing mirror each say so, never "no card open" (terminal)', async ($, on) => {
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '[]', stderr: '' } }))
+  const files = base()
+  files[FC_DIR + '/fleet-card-mirror.json'] = fcMirror({ synced_at: new Date(NOW_FRESH - 6 * 60_000).toISOString(), last_error: 'fleet recent exit 1' })
+  const w = worldEn(on, files)
+  w.env.AUTOPILOT_CARD_MIRROR_DIR = FC_DIR
+  await start($, 'terminal')
+  const stale = (await paneParts($, 'terminal', 'fleet')).texts
+  expect(stale.some(t => t.includes('mirror is stale'))).toBe(true)
+  expect(stale.some(t => t.includes('last sync failed: fleet recent exit 1'))).toBe(true)
+  files[FC_DIR + '/fleet-card-mirror.json'] = 'not json'
+  const broken = (await paneParts($, 'terminal', 'fleet')).texts
+  expect(broken.some(t => t.includes('card mirror unusable: not JSON'))).toBe(true)
+  expect(broken.some(t => t.includes('no card open on other hosts'))).toBe(false)
+  delete files[FC_DIR + '/fleet-card-mirror.json']
+  const none = (await paneParts($, 'terminal', 'fleet')).texts
+  expect(none.some(t => t.includes('no mirror yet'))).toBe(true)
+})
 // G33a: the feed publishes the summary `autopilot.fleet` (fleet.ts FleetSummary, v 1) for codeforge's forge-stats, and with no band tab open the band gives its second row to the
 // mod below when that mod's heartbeat says it draws the summary row. The reader is an inline plugin loaded beneath the one under test: it reads the atom with `$.state.get`
 // on the ui.render chain and draws one line, or passes when there is nothing to read.

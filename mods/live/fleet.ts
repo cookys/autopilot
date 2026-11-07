@@ -23,7 +23,7 @@ export type StuckReason = 'unaccepted' | 'quiet' | 'hub'
 export type FleetTask = FleetRow & { inflight: boolean; stuck: StuckReason | null; ageMs: number | null; quietMs: number | null }
 export type FleetLane = { lane: string; host: string; inflight: FleetTask[]; upcoming: FleetTask[]; stuck: number }
 // what the pane draws: the lanes as of `nowMs`, when the data was last fetched and the last fetch's error (null while it worked)
-export type FleetView = { lanes: FleetLane[]; fetchedMs: number | null; error: string | null; nowMs: number; capped: number } // capped: work rows past FLEET_MAX_ROWS, not drawn
+export type FleetView = { lanes: FleetLane[]; fetchedMs: number | null; error: string | null; nowMs: number; capped: number; others?: OthersView | null } // capped: work rows past FLEET_MAX_ROWS, not drawn
 
 export const FLEET_TTL_MS = 30_000
 export const OPEN_UNACCEPTED_MS = 3_600_000
@@ -186,7 +186,7 @@ export function makeFleetFeed(ttlMs = FLEET_TTL_MS): FleetFeed {
   }
 }
 
-export const fleetView = (feed: FleetFeed, nowMs: number): FleetView => ({ lanes: fleetLanes(feed.rows(), nowMs), fetchedMs: feed.fetchedMs(), error: feed.error(), nowMs, capped: feed.capped() })
+export const fleetView = (feed: FleetFeed, nowMs: number, others: OthersView | null = null): FleetView => ({ lanes: fleetLanes(feed.rows(), nowMs), fetchedMs: feed.fetchedMs(), error: feed.error(), nowMs, capped: feed.capped(), others })
 
 // ---- the published summary (PM G33a): what another plugin (codeforge's forge-stats band) reads from the `$.state` atom `autopilot.fleet` ----
 // Shape `v: 1`, agreed with the readers; a reader that sees another `v` draws nothing. Counts follow the state the Fleet tab draws for each in-flight row (the caller passes
@@ -232,4 +232,85 @@ export function fleetSummary(view: FleetView, classify: FleetClassifier): FleetS
     return { lane: l.lane, host: l.host, ...counts }
   })
   return { v: FLEET_SUMMARY_V, fetchedMs: view.fetchedMs, error: view.error, capped: view.capped, totals, lanes, topStuck }
+}
+
+// ---- the other hosts' cards (fleetcards phase 1, PM 01M6W4RNP6): READ-ONLY view of two files the PM host keeps (scripts/fleet-card-mirror.js writes the mirror; the PM keeps the to-do file) ----
+// Both files are outside input: every row is checked here again; a row of the wrong shape is skipped and counted, a file that is not JSON is an error line, never an empty table.
+// The panel runs no command and answers nothing: the card is answered in the session named on its row.
+export const OTHERS_MIRROR_SCHEMA = 'autopilot.fleet-card-mirror/1'
+export const OTHERS_STALE_MS = 5 * 60_000
+export const OTHERS_MAX_BYTES = 1_000_000
+export const OTHERS_MAX_ROWS = 200
+export type OtherCard = { id: string; question: string; where: string; openedMs: number }
+export type TodoRow = { id: string; step: string; owner: string; sinceMs: number; dueMs: number | null; reconciled: boolean }
+export type OthersView = {
+  present: boolean // false: no mirror file yet
+  unreadable: string | null // the mirror exists but cannot be used (not JSON, wrong schema, too big)
+  syncedMs: number | null
+  stale: boolean
+  lastError: string | null
+  cards: OtherCard[]
+  skipped: number
+  todo: TodoRow[]
+  todoError: string | null
+  todoSkipped: number
+  nowMs: number
+}
+const CARD_ID_RE = /^d-[0-9a-f]{8}$/
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+const SESSION_RE = /^[A-Za-z0-9_-]{1,64}$/
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
+const CONTROL_RE = /[\u0000-\u001f\u007f]/
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const isoMs = (v: unknown): number | null => (typeof v === 'string' && ISO_RE.test(v) && Number.isFinite(Date.parse(v)) ? Date.parse(v) : null)
+const goodText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= max && !CONTROL_RE.test(v)
+
+export function othersView(mirrorText: string | null, todoText: string | null, nowMs: number): OthersView {
+  const base: OthersView = { present: false, unreadable: null, syncedMs: null, stale: true, lastError: null, cards: [], skipped: 0, todo: [], todoError: null, todoSkipped: 0, nowMs }
+  const known = new Set<string>()
+  if (mirrorText !== null) {
+    base.present = true
+    let m: unknown = null
+    if (utf8Bytes(mirrorText) > OTHERS_MAX_BYTES) base.unreadable = 'over ' + OTHERS_MAX_BYTES + ' bytes'
+    else {
+      try { m = JSON.parse(mirrorText) } catch { base.unreadable = 'not JSON' }
+    }
+    if (base.unreadable === null) {
+      if (!isObj(m) || m.schema !== OTHERS_MIRROR_SCHEMA || !isObj(m.cards) || !isObj(m.closed)) base.unreadable = 'not a card mirror'
+      else {
+        base.syncedMs = isoMs(m.synced_at)
+        base.stale = base.syncedMs === null || nowMs - base.syncedMs > OTHERS_STALE_MS
+        base.lastError = goodText(m.last_error, 300) ? m.last_error : null
+        for (const id of Object.keys(m.closed)) known.add(id)
+        for (const [id, raw] of Object.entries(m.cards)) {
+          known.add(id)
+          const c = isObj(raw) ? raw : null
+          const openedMs = c === null ? null : isoMs(c.opened_at)
+          if (c === null || !CARD_ID_RE.test(id) || c.card_id !== id || !goodText(c.question, 300) || typeof c.courier !== 'string' || !NAME_RE.test(c.courier) || typeof c.member !== 'string' || !NAME_RE.test(c.member)
+            || !(c.session === null || (typeof c.session === 'string' && SESSION_RE.test(c.session))) || openedMs === null) { base.skipped++; continue }
+          if (base.cards.length >= OTHERS_MAX_ROWS) { base.skipped++; continue }
+          base.cards.push({ id, question: c.question as string, where: c.courier + '/' + c.member + (typeof c.session === 'string' ? '@' + c.session : ''), openedMs })
+        }
+        base.cards.sort((a, b) => a.openedMs - b.openedMs)
+      }
+    }
+  }
+  if (todoText !== null) {
+    let v: unknown = null
+    if (utf8Bytes(todoText) > OTHERS_MAX_BYTES) base.todoError = 'over ' + OTHERS_MAX_BYTES + ' bytes'
+    else {
+      try { v = JSON.parse(todoText) } catch { base.todoError = 'not JSON' }
+    }
+    if (base.todoError === null && !(isObj(v) && Array.isArray(v.items))) base.todoError = 'no items list'
+    if (base.todoError === null && isObj(v) && Array.isArray(v.items)) {
+      for (const raw of v.items) {
+        const it = isObj(raw) ? raw : null
+        const sinceMs = it === null ? null : isoMs(it.since)
+        const dueMs = it === null || it.due === undefined || it.due === null ? null : isoMs(it.due)
+        if (it === null || typeof it.card_id !== 'string' || !CARD_ID_RE.test(it.card_id) || !goodText(it.step, 300) || !goodText(it.owner_session, 200) || sinceMs === null || (it.due !== undefined && it.due !== null && dueMs === null) || base.todo.length >= OTHERS_MAX_ROWS) { base.todoSkipped++; continue }
+        base.todo.push({ id: it.card_id, step: it.step, owner: it.owner_session, sinceMs, dueMs, reconciled: known.has(it.card_id) })
+      }
+    }
+  }
+  return base
 }

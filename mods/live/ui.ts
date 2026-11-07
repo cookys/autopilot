@@ -390,7 +390,7 @@ export const FACT_OWNER = {
   'spend.session': 'spend', 'spend.local_today': 'spend',
   'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
   'residue.groups': 'hygiene', 'residue.cleanup': 'hygiene', 'residue.source': 'hygiene',
-  'fleet.lanes': 'fleet', 'fleet.cards': 'fleet', 'fleet.source': 'fleet', // fleet.cards: only the empty line; open cards are a projection of decide.cards
+  'fleet.lanes': 'fleet', 'fleet.cards': 'fleet', 'fleet.source': 'fleet', 'fleet.others': 'fleet', 'fleet.todo': 'fleet', // fleet.cards: only the empty line; open cards are a projection of decide.cards
   'legend.states': 'legend', 'legend.structure': 'legend', 'legend.keys': 'legend',
   'header.verdict': 'header',
   'pane.chrome': 'pane', // lines that carry no fact of the session (the blank between sections, a heading with no chip, a fold / more toggle, an attached detail)
@@ -406,7 +406,7 @@ export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],
   hygiene: ['attention', 'cleanable', 'auto', 'source'],
-  fleet: ['source', 'cards', 'lanes'],
+  fleet: ['source', 'cards', 'others', 'lanes'],
   legend: ['states', 'structure', 'keys'],
 }
 // the sections that start folded: read by recentLines (now.recent) through sectionOpen; review.plan folds only while it is stale (F2, I11), by passing `stale` to sectionOpen

@@ -20,7 +20,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-11-06
 - **Origin**: peer
 - **Reporter**: codeforge
-- **Report**: 2026-11-06 fleet
+- **Report**: fleet 01M6RED2SK (codeforge, 2026-11-06)
 - **Reply**: unknown
 - **Problem**: 想在 band 上直接看用量，現在沒有這個分頁；codeforge 要求，契約裡已標成另案。
 - **Impact**: 看用量得離開畫面；codeforge 的契約一直掛著另案。
@@ -36,7 +36,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-11-06
 - **Origin**: peer
 - **Reporter**: codeforge
-- **Report**: 2026-11-06 fleet
+- **Report**: fleet 01M6RED2SK (codeforge, 2026-11-06)
 - **Reply**: unknown
 - **Problem**: 想在 band 上看寵物，現在沒有這個分頁；codeforge 要求。codepower 那邊可能已經在做。
 - **Impact**: 重複開工會浪費；沒人做 codeforge 就一直等。
@@ -78,7 +78,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-11-06
 - **Origin**: peer
 - **Reporter**: revival.3d
-- **Report**: 2026-11-06 fleet
+- **Report**: fleet 01M6RX2ZRM (revival.3d, 2026-11-06)
 - **Reply**: unknown
 - **Problem**: fingerprint 把 --branch 指定的分支也算進去，該分支每輪都會前進，所以每一輪都被判主 checkout 被動過而拒收。
 - **Impact**: 受影響的專案每輪都被拒，只能手動繞過。
@@ -96,9 +96,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Problem**: PM 要求另排一項：派工時能不能順便帶上下次證據到期時間；hub 79000b8 會丟掉 task_result 的 until，已排在 fleet 的 BL-0014。
 - **Impact**: 沒有到期時間，PM 看不出一個任務何時該有新證據。
 - **Trigger**: fleet BL-0014 unfreezes on 2026-11-10
-- **Trigger-Type**: ready
+- **Trigger-Type**: date:2026-11-10
 - **Effort**: S
-- **Source**: PM 2026-11-06 request
+- **Source**: PM fleet 01M6RQYG00 (2026-11-06)
 - **Pointer**: project/backlog/fleet-lane-text-and-task-due.md
 
 ### dispatch-hetero-account 的 subtest 可能還會跑出 fixture

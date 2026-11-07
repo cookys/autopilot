@@ -1357,11 +1357,11 @@ Preventing artifact: `findings-batch-v3` preregistration with a content-judged `
 
 ## 65. Acceptance suites come from the selector, and "red before me" needs a run on develop
 
-2026-11-06, test-policy d-a62f4abc plus the PM's addendum. In the Z4 batch of 16 lanes, 15 of the suites that went red were not on any lane's own hand-picked list.
+2026-11-06, test-policy d-a62f4abc plus the PM's addendum. In the 2026-11-06 Z4 batch (six lanes), the full suite on the merged tree found 16 lane-introduced red suites that the lanes' own checks had not run.
 
 Rules:
 
-- Acceptance and receipts never rest on a hand-picked suite list. Select with `node scripts/affected-suites.js --base <lane base> --head HEAD`, add its `always_run` and the repo-audit suites, and run them one at a time against the list. A hand-picked suite is a supplement only.
+- Acceptance and receipts never rest on a hand-picked suite list. Select with `node scripts/affected-suites.js --base <lane base> --head HEAD`, add its `always_run` (repo-audit) suites, and run them one at a time against the list. A hand-picked suite is a supplement only.
 - When the selector returns FULL, cannot compute, or selects at least half of all suites, nobody narrows the set: depth-0 runs the full suite on the merged tree (`tools/migrate/suite-baseline.js run-all --jobs 6`), alone, with nothing else running.
 - A red suite counts as "not caused by this change" only when the same suite, run on develop with the same environment, is also red. "It was already red" from memory is not evidence.
 - The selector is known to miss three dependency kinds: layout copies, whole-tree content scans, and the frozen copies inside eval packs. Keep the repo-audit (`always_run`) suites in every selection for that reason, and treat the at-least-half rule as the net for the rest.

@@ -140,7 +140,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: seedclean g3 review 7b5a4738; PM fleet 01M6SZQ03P (2026-11-07)
 - **Pointer**: project/backlog/docsz6-hardening-notes.md
 
-### seedclean g3 其餘加固：trap 還原、fork 窗口、review 路徑 timeout -k
+### seedclean g3 其餘加固：trap 還原、fork 後的空窗、review 路徑 timeout -k
 - **Id**: BL-0421
 - **Status**: open
 - **Since**: 2026-11-07
@@ -157,7 +157,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Id**: BL-0422
 - **Status**: open
 - **Since**: 2026-11-07
-- **Origin**: self
+- **Origin**: peer
+- **Reporter**: cookys/aimax395-team/codeforge--claude
+- **Report**: fleet 01M6SZVASD (2026-11-07)
+- **Reply**: none
 - **Problem**: 待你動手的數字是全域的，不是單張卡的，放在主視窗標題語意不對；改放最上面的選單列，前提是 80 欄寬放得下、不截字。
 - **Impact**: 數字位置會讓人誤以為只屬於目前這張卡。
 - **Trigger**: next change to the band top menu row

@@ -75,14 +75,15 @@ export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, h
 }
 // ---- the band's own tab row (layout E1): the first four pane tabs and, when a mod below draws one, a forge tab, right-aligned on the band's row. The labels and their weights are
 // ui.strip()'s (` name ` per tab, one space after each); the rule under an open tab is built from the SAME widths (ui.tabRule), so the `━` stands exactly under the label by construction. ----
-export type BarTabId = 'now' | 'decide' | 'dispatch' | 'review' | 'forge'
-export const BAR_PANE_TABS = ['now', 'decide', 'dispatch', 'review'] as const
+export type BarTabId = 'now' | 'decide' | 'dispatch' | 'review' | 'usage' | 'forge'
+// 'usage' is the band's own tab (the token table of forge-stats, drawn in the O4 shell); it is no pane tab: where the shell is not drawn its open button opens the pane's 花費 tab
+export const BAR_PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'usage'] as const
 export type BarTab = { id: BarTabId; label: Seg; width: number; start: number } // start counts from the row's first tab
 export type BarStrip = { tabs: BarTab[]; width: number } // width counts the space after each tab
 // forge: the forge tab's text (one string the mod below drew), or null for no forge tab
 export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | null, forge: string | null): BarStrip {
   const needs = snap === null ? {} : tabNeeds(snap)
-  const list = BAR_PANE_TABS.map(id => ({ id: id as BarTabId, label: tabLabel(id, t), ...(needs[id] === undefined ? {} : { need: true }) }))
+  const list = BAR_PANE_TABS.map(id => ({ id: id as BarTabId, label: t('tab.' + id), ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }))
   const built = ui.strip<BarTabId>({ t, cols: 100000 }, active, forge === null ? list : [...list, { id: 'forge' as const, label: forge }], false)
   const tabs: BarTab[] = []
   let x = 0

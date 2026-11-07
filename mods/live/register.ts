@@ -45,7 +45,7 @@ import { NO_BATCH, answerPlan, answerOf, batchSync, cardKey, focusRepair, inputs
 import type { DecideBatch } from './decidebatch'
 import { barStrip, decideTabLines } from './tabs'
 
-import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand } from './band'
+import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
@@ -53,7 +53,7 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BarTabId } from './tabs'
-import { MAIN_CONTENT_ROWS, SHELL_ROWS, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan } from './shell'
+import { MAIN_CONTENT_ROWS, SHELL_ROWS, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
@@ -1189,7 +1189,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
             onMenu: () => { const at = tabIds.indexOf(active); const to = tabIds[(at + 1) % tabIds.length]; if (to !== undefined && to !== active) onTab(to as BarTabId) },
           })
         } else {
-          const parts = active === 'decide'
+          const parts = active === 'usage'
+            ? { rows: usageDraw(el, usageRows(panel, mainCols, MAIN_CONTENT_ROWS, t)), quick: barParts(el, snapshot, 'usage', mainCols, t, { onSlot: slot, onOpen: open }).quick }
+            : active === 'decide'
             ? { rows: decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, MAIN_CONTENT_ROWS), quick: barParts(el, snapshot, 'decide', mainCols, t, { onSlot: slot, onOpen: open }).quick }
             : barParts(el, snapshot, active, mainCols, t, { onSlot: slot, onOpen: open })
           const unit = snapshot.band === null ? [] : snapshot.band.slots.filter(sl => sl.id === 'unit')

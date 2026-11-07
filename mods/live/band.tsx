@@ -109,8 +109,9 @@ export function BarButton(el: { Text: El; Button?: El }, id: string, label: stri
 const PROJECT_SLOTS: SlotId[] = ['position', 'unit', 'review', 'spend']
 
 // the open tab's content: rows (each one drawn row). `barParts` keeps the buttons row apart: the tab-row layout draws it as the last row, the O4 shell as its quick row.
-export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab, columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): { rows: unknown[]; quick: unknown[] } {
+export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): { rows: unknown[]; quick: unknown[] } {
   const { Box, Text } = el
+  if (tab === 'usage') return { rows: [], quick: [<Box key="buttons">{BarButton(el, 'open:usage', t('bar.open'), () => o.onOpen('spend'))}</Box>] }
   if (snap === null || snap.band === null) return { rows: [], quick: [] }
   const band = snap.band
   const sel = (ids: SlotId[]) => band.slots.filter(s => ids.includes(s.id))
@@ -125,7 +126,7 @@ export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnaps
   if (tab === 'review') return { rows: lineOf(['review', 'decisions']), quick: [open] }
   return { rows: [], quick: [] }
 }
-export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab, columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {
+export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {
   const p = barParts(el, snap, tab, columns, t, o)
   return [...p.rows, ...p.quick]
 }
@@ -308,6 +309,11 @@ export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQ
 }
 
 // the progress row's content inside the main window: a one-cell pad, then the segments (slot segs become Buttons through `onSlot`)
+// the usage tab's rows (shell.ts usageRows): one drawn row each, a blank one still takes its row
+export function usageDraw(el: { Box: El; Text: El }, rows: readonly (readonly Seg[])[]): unknown[] {
+  const { Box, Text } = el
+  return rows.map((segs, i) => <Box key={'usage' + i}>{segs.length === 0 ? <Text key="b">{' '}</Text> : drawSegs(el, segs as Seg[], () => undefined)}</Box>)
+}
 export function progressRow(el: { Box: El; Text: El; Button?: El }, segs: readonly Seg[], onSlot?: (id: SlotId) => void): unknown {
   const { Box, Text } = el
   return <Box key="progress"><Text>{' '}</Text>{segs.length === 0 ? <Text key="p">{' '}</Text> : drawSegs(el, segs as Seg[], onSlot ?? (() => undefined))}</Box>

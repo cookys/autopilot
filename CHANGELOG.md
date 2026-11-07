@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- seedclean z4 fix 2 (mechanism, no version bump): `scripts/dispatch-author.sh` runs the claude-native account path in the background and forwards TERM/INT/HUP to it, the same fix `dispatch-review.sh` got, so a killed author dispatch no longer leaves a quota-holding claude behind. Test: `account-rails.test.js` gains the author SIGTERM comparison (account no worse than legacy) for host and GNU timeout. Codex mirror synced.
 - seedclean z4 fix (mechanism, no version bump): `scripts/dispatch-review.sh` runs the claude-native account path (`claude-account.js run`) in the background and forwards TERM/INT/HUP to it, so a killed review no longer leaves a quota-holding claude behind. seedclean made the legacy seeded path forward signals, which turned the `account-rails.test.js` rule "account path leaves no more real claude than legacy" red against the old account leak. Codex mirror synced.
 - gategap g3 (G14 follow-up, mechanism, no version bump, no requirement text changed): gate rule A now lives in `deriveReceiptState` (`scripts/lib/review-chain-derive.js`) for entries carrying `disposition_schema: 2`: a Critical or Major finding with a bare `refuted`, a `deferred` or a missing disposition stays active, so `finalize`, the receipt check, `--packets` and `--post-head-ledger` all read the same state. Test: D1-D4 in `hooks/tests/major-disposition-gate.test.sh`.
 

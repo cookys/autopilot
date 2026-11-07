@@ -1467,8 +1467,15 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       node "$_CNATIVE_ACCT_JS" run --pin-default --purpose author --stdin "$PROMPT_FILE" --stdout "$RAW_LOG" --stderr "$RUNNER_ERR_FILE" --cwd "$CNATIVE_CWD" -- \
       "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "$ROLE_KIT_TOOLS" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} \
-      2>"$CNATIVE_WRAP_ERR"
-    RUNNER_EXIT=$?
+      2>"$CNATIVE_WRAP_ERR" &
+    # Backgrounded so a TERM/INT/HUP aimed at this script reaches the claude child: bash defers a trap until a foreground
+    # child ends, but `wait` returns at once on a trapped signal. Same forwarding as dispatch-review.sh's account path; the
+    # legacy path gets it from seed-claude-config.js --exec.
+    _ACCT_CHILD=$!
+    _acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/dev/null; exit 143; }
+    trap _acct_forward TERM INT HUP
+    wait "$_ACCT_CHILD"; RUNNER_EXIT=$?
+    trap - TERM INT HUP
     cat "$CNATIVE_WRAP_ERR" >> "$RUNNER_ERR_FILE" 2>/dev/null || true
     rm -f "$CNATIVE_WRAP_ERR"
   else

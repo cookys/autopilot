@@ -561,3 +561,21 @@ test('usage colours: subtle / inactive / success are PALETTE roles, dim is dim, 
   assert.ok(all.every(s => s.bold !== true && s.backgroundColor === undefined && s.inverse === undefined && s.bg === undefined), 'nothing but colour and dim')
   assert.ok(!JSON.stringify(rows).includes('red'))
 })
+
+test('plan: at 240 with no lanes, a memory row alone keeps the third column (id fleet) and draws it; the three columns still fill the frame', () => {
+  const p = S.shellPlan(input(240, { fleet: [] }))
+  assert.deepEqual(p.columns.map(c => c.id), ['room', 'usage', 'fleet'])
+  const rows = p.columns.find(c => c.id === 'fleet').rows.map(r => segText(r).trimEnd())
+  assert.ok(rows.includes('記憶 12'), 'the memory row is drawn in the third column')
+  assert.equal(width(p.top), planWidth(p))
+})
+
+test('plan: control: at 240 with no lanes and an empty memory tier the third column is dropped and its width goes to the usage column', () => {
+  const full = S.shellPlan(input(240, { fleet: [] }))
+  const panel = PANEL(); panel.side.memory = { tiers: { 40: [] } }
+  const p = S.shellPlan(input(240, { fleet: [], panel: S.parsePanel(panel, 1_010_000) }))
+  assert.deepEqual(p.columns.map(c => c.id), ['room', 'usage'])
+  const inner = (pl, id) => pl.columns.find(c => c.id === id).inner
+  assert.equal(inner(p, 'usage'), inner(full, 'usage') + inner(full, 'fleet') + 1)
+  assert.equal(width(p.top), planWidth(p))
+})

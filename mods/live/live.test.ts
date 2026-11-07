@@ -7265,4 +7265,34 @@ for (const surface of SURFACES) {
     await again.unmount()
     expect(w.opens.length).toBe(2)
   })
+
+  // design.md section 9: only the 待決 card view has its own quick row (0/7/8/9); every other tab, and 待決 with no card, keeps the open-panel button.
+  const CARD_KEYS = ['send', 'prev', 'next', 'next-menu']
+  test('O4 shell quick row: the dispatch tab keeps the open-panel button and none of the four card keys (' + surface + ')', async ($, on) => {
+    shellWorld(on)
+    await start($, surface)
+    const d = await drawShell($, 160, ['tab:dispatch'])
+    expect(d.buttons).toContain('open:dispatch')
+    for (const k of CARD_KEYS) expect(d.buttons, k).not.toContain(k)
+  })
+
+  test('O4 shell quick row: the 待決 tab with cards has the four keys 0 / 7 / 8 / 9 and no open-panel button (' + surface + ')', async ($, on) => {
+    shellWorld(on)
+    await start($, surface)
+    const d = await drawShell($, 160, ['tab:decide'])
+    for (const k of CARD_KEYS) expect(d.buttons, k).toContain(k)
+    expect(d.hot['send']).toBe('0')
+    expect(d.hot['prev']).toBe('7')
+    expect(d.hot['next']).toBe('8')
+    expect(d.hot['next-menu']).toBe('9')
+    expect(d.buttons).not.toContain('open:decide')
+  })
+
+  test('O4 shell quick row: control: the 待決 tab with no card falls back to the open-panel button (' + surface + ')', async ($, on) => {
+    shellWorld(on, { [W_MODEL]: j(model({ needs_decision: false, decisions: [] })) })
+    await start($, surface)
+    const d = await drawShell($, 160, ['tab:decide'])
+    expect(d.buttons).toContain('open:decide')
+    for (const k of CARD_KEYS) expect(d.buttons, k).not.toContain(k)
+  })
 }

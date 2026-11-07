@@ -1,15 +1,14 @@
-# docsz6 backlog notes (BL-0420..BL-0423)
-
-## BL-0420 TERM forwarding tests for the cc-shim and claude-native paths
-- scripts/dispatch-review.sh:1932 (anchor `CCSHIM_RC=$?`) and scripts/dispatch-author.sh:1432 (anchor `dispatch-author-ccshimcwd`): the cc-shim relies on timeout only and does not forward TERM.
-- scripts/dispatch-hetero.sh:3971 (account, anchor `--purpose hetero-impl`) and 3983 (legacy, anchor `seed-claude-config.js" --parent`): claude-native relies on the `abort_dispatch` trap (`trap abort_dispatch INT TERM`), which calls `reap_container`; a real TERM was never exercised.
-- Plan: add SIGTERM-leftover tests of the same kind the account rails have; fix any leak they show.
-- Source: seedclean g3 review 7b5a4738; PM fleet 01M6SZQ03P (2026-11-07).
+# docsz6 backlog notes (BL-0421..BL-0423)
 
 ## BL-0421 other seedclean g3 hardening
 - Account-path trap restore should put back the previous trap, not reset it (adb8f4b0).
 - A window exists between fork and the trap taking effect (de92deb9).
 - The review account path lacks timeout -k (76f11d50).
+
+Added from the termtest g1 review:
+- Put the trap before the fork, not after it, so no window is left (same finding as de92deb9, now with a concrete fix).
+- Verify exit 137 with a stand-in that ignores the signal: the test must prove the -k kill fires, not only that TERM is forwarded.
+- The review path's cc-shim launch (scripts/dispatch-review.sh, anchor `CCSHIM_RC=$?`) gets `timeout -k` like the other paths.
 
 ## BL-0422 band "waiting for you N" in the top menu row
 - The count is global, not per card, so it belongs in the top menu row. Precondition: it fits 80 columns without truncation.

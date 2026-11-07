@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0424 -->
+<!-- next-id: BL-0425 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -80,10 +80,10 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: revival.3d
 - **Report**: fleet 01M6RX2ZRM (revival.3d, 2026-11-06)
 - **Reply**: unknown
-- **Problem**: fingerprint 把 --branch 指定的分支也算進去，該分支每輪都會前進，所以每一輪都被判主 checkout 被動過而拒收。
+- **Problem**: 原推測「fingerprint 把 --branch 的分支算進去」已實測推翻，該分支本來就被排除；真正原因未明。拒收訊息現在列出變動項目，等下次被拒再判斷。
 - **Impact**: 受影響的專案每輪都被拒，只能手動繞過。
-- **Trigger**: ready；next dispatch-hetero touch
-- **Trigger-Type**: ready
+- **Trigger**: revival.3d 下次被拒時，把新的拒收訊息貼回來
+- **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED revival.3d 2026-11-06
 - **Pointer**: project/backlog/dispatch-hetero-fingerprint-branch-ref.md
@@ -114,38 +114,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: gitenv follow-up 2026-11-06
 - **Pointer**: project/backlog/flaky-under-load-suites.md
 
-### test-identity-guard 把被註解掉的 source 行當成豁免
-- **Id**: BL-0419
-- **Status**: open
-- **Since**: 2026-11-06
-- **Origin**: self
-- **Problem**: lib_exempt 的比對也會抓到被註解掉的 source 行，應只比對程式碼行；舊的 lib.sh 檢查有同樣的盲點。
-- **Impact**: 註解掉的行就讓套件逃過身分檢查，守門形同虛設。
-- **Trigger**: ready；next touch of test-identity-guard
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: gitenv g4 Minor fa0cf3e1
-- **Pointer**: project/backlog/test-identity-guard-commented-source.md
-
-### cc-shim 與 dispatch-hetero 的 claude 路徑沒有 TERM 轉發測試
-- **Id**: BL-0420
-- **Status**: open
-- **Since**: 2026-11-07
-- **Origin**: self
-- **Problem**: 審查與撰寫派工的 cc-shim 只靠逾時機制，收到終止訊號時不會轉給子程序；hetero 派工的 claude 原生路徑靠 trap 收尾，但從沒真的用終止訊號測過。
-- **Impact**: 被終止的派工可能留下殘留程序或容器，佔住資源。
-- **Trigger**: next touch of the cc-shim or dispatch-hetero claude paths
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: seedclean g3 review 7b5a4738; PM fleet 01M6SZQ03P (2026-11-07)
-- **Pointer**: project/backlog/docsz6-hardening-notes.md
-
 ### seedclean g3 其餘加固：trap 還原、fork 後的空窗、review 路徑 timeout -k
 - **Id**: BL-0421
 - **Status**: open
 - **Since**: 2026-11-07
 - **Origin**: self
-- **Problem**: account 路徑還原 trap 時是重設而不是存回原本的；fork 到 trap 生效之間有空窗；review 的 account 路徑缺少強制補殺的逾時參數。
+- **Problem**: account 路徑還原 trap 時是重設而非存回原本的；trap 要放在 fork 之前；要用不回應信號的替身驗 137；review 的 cc-shim 缺強制補殺的逾時參數。
 - **Impact**: 極端時序下憑證副本或子程序可能殘留。
 - **Trigger**: next touch of the account rails seeding code
 - **Trigger-Type**: event
@@ -1494,3 +1468,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: operator d-2d6a93aa via PM, 2026-11-04
 - **Pointer**: project/plans/2026-11-03-g40-agent-lane-quota.md
+
+### 用量分頁的後續整理五項小修
+- **Id**: BL-0424
+- **Status**: open
+- **Since**: 2026-11-07
+- **Origin**: self
+- **Problem**: 用量分頁審查留下五項小問題：空的分組會蓋掉別的分組；窄於四十欄時退回最小版本；指示符號佔掉兩格；一個測試標題寫錯；註冊檔裡的註解與程式不符。
+- **Impact**: 都只影響顯示與可讀性，不影響資料。
+- **Trigger**: next touch of the band usage tab
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: usagetab g1/g2 review Suggestions (2026-11-07)
+- **Pointer**: project/backlog/usage-tab-follow-ups.md

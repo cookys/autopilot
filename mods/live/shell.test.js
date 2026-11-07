@@ -421,3 +421,45 @@ test('left title: a card list is titled with the open tab\'s name, a tab list wi
   assert.ok(top.includes('待決'))
   assert.ok(!top.includes('shell.menu'))
 })
+
+// ---- awaiting_operator_action count (bandawait): tier 80 only, in the main window's title, attention colour, nothing at 0 ----
+test('awaiting: tier 80 shows the count in the main title for N=1 and N>=2; N=0 and absent draw nothing', () => {
+  const top = (cols, over) => S.shellPlan(input(cols, over)).top
+  const one = top(80, { awaiting: 1 })
+  assert.ok(segText(one).includes('main · shell.awaiting{"n":1}'), segText(one))
+  const many = top(80, { awaiting: 3 })
+  assert.ok(segText(many).includes('shell.awaiting{"n":3}'), segText(many))
+  for (const over of [{ awaiting: 0 }, {}]) assert.ok(!segText(top(80, over)).includes('shell.awaiting'), JSON.stringify(over))
+})
+
+test('awaiting: exactly 80 columns - plan exists, the title row keeps the frame width, the count is a PALETTE.attention text colour only', () => {
+  const p = S.shellPlan(input(80, { awaiting: 2 }))
+  assert.equal(p.geo.tier, 80)
+  assert.equal(width(p.top), planWidth(p))
+  assert.ok(width(p.top) <= 80)
+  const seg = p.top.find(s => s.text.includes('shell.awaiting'))
+  assert.equal(seg.color, ui.PALETTE.attention)
+  for (const k of ['backgroundColor', 'inverse', 'bold']) assert.equal(seg[k], undefined, k)
+})
+
+test('awaiting: the other tiers are untouched, whatever the count', () => {
+  for (const cols of [115, 120, 160, 200, 240]) {
+    assert.deepEqual(S.shellPlan(input(cols, { awaiting: 5 })).top, S.shellPlan(input(cols)).top, 'tier at ' + cols)
+  }
+})
+
+// ---- bandawait: the model.json half of the data -> screen chain (the drawn half is live.test.ts "bandawait e2e") ----
+test('awaiting: buildJobModel splits four cards - open is the only 待決, closed is dropped, pending_dispatch and awaiting_operator_action are counted apart', () => {
+  const { buildJobModel } = require(path.join(__dirname, '..', '..', 'scripts', 'render-review-page.js'))
+  const m = buildJobModel({ now: 1, decisions: [
+    { id: 'd-open0001', question: 'OPENCARD merge the plan?', status: 'open', options: [{ label: 'yes', description: '' }], opened_at: '2026-10-04T09:00:00.000Z' },
+    { id: 'd-clos0002', question: 'CLOSEDCARD already answered', status: 'closed', answer: 'x', opened_at: '2026-10-04T09:01:00.000Z' },
+    { id: 'd-disp0003', question: 'DISPATCHCARD sync the rules?', status: 'pending_dispatch', answer: 'yes', executor: 'ns/cc/exec', opened_at: '2026-10-04T09:02:00.000Z' },
+    { id: 'd-awai0004', question: 'AWAITCARD run the migration?', status: 'awaiting_operator_action', answer: 'yes', awaiting_operator: 'run scripts/migrate.sh', opened_at: '2026-10-04T09:03:00.000Z' },
+  ] })
+  assert.deepEqual(m.decisions.map(d => d.id), ['d-open0001'])
+  assert.deepEqual(m.awaiting_operator.map(d => d.id), ['d-awai0004'])
+  assert.deepEqual(m.pending_dispatch.map(d => d.id), ['d-disp0003'])
+  assert.equal(m.needs_decision, true)
+  assert.ok(!JSON.stringify(m).includes('CLOSEDCARD'), 'the closed card is on no list')
+})

@@ -6758,6 +6758,29 @@ for (const surface of SURFACES) {
     for (const w of ['送出 0 張', '上一張', '下一張', '下一個選單']) expect(d.rows[11], w).toContain(w)
   })
 
+  // bandawait, data -> screen: model.json as buildJobModel (scripts/render-review-page.js) writes it for four cards - open, closed, pending_dispatch,
+  // awaiting_operator_action. buildJobModel drops the closed card and splits the other three (pinned against the real function in shell.test.js), so this
+  // file holds three. It then goes through the real readJobModel, the register snapshot and shellPlan to the drawn 80-column band.
+  test('bandawait e2e: at 80 columns the 待決 count is 1 and 待你動手 is 1; the closed card is nowhere; the pending_dispatch card counts in neither (' + surface + ')', async ($, on) => {
+    const AT = { question: 'AWAITCARD run the migration?', answer: 'yes', awaiting_operator: 'run scripts/migrate.sh', executor: null, asker: null, opened_at: '2026-10-04T09:03:00.000Z' }
+    const PD = { question: 'DISPATCHCARD sync the rules?', answer: 'yes', executor: 'ns/cc/exec', asker: null, pending_dispatch_at: null, opened_at: '2026-10-04T09:02:00.000Z' }
+    const OPEN = { question: 'OPENCARD merge the plan?', background: null, options: [{ label: 'yes', description: '' }], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: '2026-10-04T09:00:00.000Z', stale: false, age_s: null, orphaned: false, origin: null }
+    shellWorld(on, { [W_MODEL]: j(model({ needs_decision: true, decisions: [{ id: 'd-open0001', ...OPEN }], awaiting_operator: [{ id: 'd-awai0004', ...AT }], pending_dispatch: [{ id: 'd-disp0003', ...PD }] })) })
+    await start($, surface)
+    const d = await drawShell($, 80, ['tab:decide'])
+    expect(d.rows.length).toBe(12)
+    expect(d.rows[1], 'one 待決 card').toContain('第 1 張，共 1 張')
+    expect(d.rows[1], 'one 待你動手').toContain('待你動手 1')
+    expect(d.rows[1]).not.toContain('待你動手 2')
+    expect(d.rows[1]).not.toContain('共 2 張')
+    expect(d.rows[1]).not.toContain('共 3 張')
+    const queue = d.rows.slice(2, 10).map(r => r.slice(1, 30)).join('\n')
+    expect(queue).toContain('◐ OPENCARD')
+    for (const gone of ['CLOSEDCARD', 'd-clos0002', 'AWAITCARD', 'DISPATCHCARD']) expect(queue, gone).not.toContain(gone)
+    expect(d.rows.join('\n')).not.toContain('CLOSEDCARD')
+    expect(d.rows[10]).toContain(' 1/1 ─')
+  })
+
   test('O4 shell v7: a pick marks the card ◆ with its answer, moves to the next card, and the progress row names the last answer; 160 and wider add 待送 N 張 (' + surface + ')', async ($, on) => {
     shellWorld(on)
     await start($, surface)

@@ -181,17 +181,43 @@ HOOKS_TESTS="$REPO_ROOT/hooks/tests"
 # Exemption (name -> reason): test-git-env-bash.test.sh tests lib.sh's own GIT_DIR scrub, so it must run WITHOUT
 # lib.sh (sourcing it would scrub the very leak it plants). It is exempt only while it sources the shared
 # scripts/lib/test-git-env.sh snippet instead; drop the snippet and the exemption stops applying.
+# Code lines only: a commented-out `# . lib.sh` must not count as a source (BL-0419).
+sources_lib() {
+  grep -Eq '^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*(\.|source)[[:space:]]+[^#]*lib\.sh' "$1"
+}
 lib_exempt() {
   [ "$(basename "$1")" = "test-git-env-bash.test.sh" ] \
-    && grep -Eq '(^|[[:space:]])(\.|source)[[:space:]]+.*scripts/lib/test-git-env\.sh' "$1"
+    && grep -Eq '^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*(\.|source)[[:space:]]+[^#]*scripts/lib/test-git-env\.sh' "$1"
+}
+lib_missing() {
+  grep -Eq '(^|[[:space:];|&])git[[:space:]]' <(grep -aEv '^[[:space:]]*#' "$1") && ! sources_lib "$1" && ! lib_exempt "$1"
 }
 for f in "$HOOKS_TESTS"/*.test.sh; do
-  if grep -Eq '(^|[[:space:];|&])git[[:space:]]' "$f"; then
-    if ! grep -Eq '(^|[[:space:]])(\.|source)[[:space:]]+.*lib\.sh' "$f" && ! lib_exempt "$f"; then
-      fail "git-invoking test missing lib.sh: $(basename "$f")"
-    fi
+  if lib_missing "$f"; then
+    fail "git-invoking test missing lib.sh: $(basename "$f")"
   fi
 done
+
+# NC (BL-0419): commented-out source lines must not satisfy either check.
+LX_FX="$TEST_TMP/libexempt-fx"
+mkdir -p "$LX_FX"
+printf '%s\n' '#!/usr/bin/env bash' '# . "$(dirname "$0")/lib.sh"' 'git status' > "$LX_FX/commented.test.sh"
+printf '%s\n' '#!/usr/bin/env bash' '. "$(dirname "$0")/lib.sh"' 'git status' > "$LX_FX/live.test.sh"
+if lib_missing "$LX_FX/commented.test.sh"; then assert_eq 0 0 "NC: commented-out lib.sh source is reported missing"
+else fail "commented-out lib.sh source slipped through"; fi
+if lib_missing "$LX_FX/live.test.sh"; then fail "live lib.sh source wrongly reported missing"
+else assert_eq 0 0 "NC: live lib.sh source is accepted"; fi
+# NC (BL-0419 g2): a >128 KiB file calling git on line 1 must not be waved through by a SIGPIPE'd pipeline.
+{ printf '%s\n' '#!/usr/bin/env bash' 'git status'; head -c 200000 /dev/zero | tr '\0' 'x'; printf '\n'; } > "$LX_FX/big.test.sh"
+if lib_missing "$LX_FX/big.test.sh"; then assert_eq 0 0 "NC: large early-git file without lib.sh is reported missing"
+else fail "large early-git file without lib.sh slipped through (SIGPIPE)"; fi
+mkdir -p "$LX_FX/c" "$LX_FX/l"
+printf '%s\n' '# . "$REPO_ROOT/scripts/lib/test-git-env.sh"' 'git status' > "$LX_FX/c/test-git-env-bash.test.sh"
+printf '%s\n' '. "$REPO_ROOT/scripts/lib/test-git-env.sh"' 'git status' > "$LX_FX/l/test-git-env-bash.test.sh"
+if lib_exempt "$LX_FX/c/test-git-env-bash.test.sh"; then fail "commented-out test-git-env.sh source still exempt"
+else assert_eq 0 0 "NC: commented-out test-git-env.sh source is not exempt"; fi
+if lib_exempt "$LX_FX/l/test-git-env-bash.test.sh"; then assert_eq 0 0 "NC: live test-git-env.sh source is exempt"
+else fail "live test-git-env.sh source not exempt"; fi
 
 # --- 6. Inventory three: node tests that commit via git carry their own identity (BL-0268) ---
 # RED at dcb44c46a: the scanner did not exist; the planted fixture node test that

@@ -518,6 +518,27 @@
       ]
     },
     {
+      "name": "depth0_delegate_gate.rm_var_target",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "deny",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_RMVAR_MODE"
+      ],
+      "summary": "What to do with a recursive rm whose target expands at run time ($VAR, ${VAR}, $(...) or a backtick): values are \"off\", \"warn\", \"deny\"; default deny.",
+      "type": "enum",
+      "allowed": [
+        "deny",
+        "warn",
+        "off"
+      ]
+    },
+    {
       "name": "depth0_delegate_gate.threshold",
       "kind": "config_key",
       "audience": "user",
@@ -3982,6 +4003,21 @@
         "depth0_delegate_gate.bare_ls"
       ],
       "summary": "Environment override of depth0_delegate_gate.bare_ls; a garbage value maps to deny."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_RMVAR_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.rm_var_target"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.rm_var_target; values are off, warn, deny (default deny); a garbage value maps to deny."
     },
     {
       "name": "AUTOPILOT_CAPTURE_PAYLOAD",

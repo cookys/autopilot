@@ -1287,6 +1287,15 @@ const RMVAR_DENY = [
   'x=$(rm -rf "$D")',
   'rm -rf $HOME/x',
   'rm -rf ~/"$D"',
+  'rm -rf "$D" > log',
+  'rm -rf "$D" 2>&1',
+  'eval "rm -rf $D"',
+  "eval 'rm -rf $D'",
+  'bash <<\'EOF\'\nrm -rf "$D"\nEOF',
+  'command rm -rf "$D"',
+  'timeout 5 rm -rf "$D"',
+  'nohup rm -rf "$D"',
+  'exec rm -rf "$D"',
 ];
 for (const cmd of RMVAR_DENY) {
   test(`rule5 denies: ${JSON.stringify(cmd)}`, () => {
@@ -1321,6 +1330,11 @@ const RMVAR_PASS = [
   'git rm -r "$D"',
   'for d in a b; do echo "$d"; done',
   'echo $D | xargs echo rm -rf',
+  'rm -rf build > "$LOG"',
+  'rm -rf build 2>"$ERR"',
+  'rm -rf build &>"$L"',
+  'rm -rf build >>"$L" 2>&1',
+  'rm -rf build < "$IN"',
 ];
 for (const cmd of RMVAR_PASS) {
   test(`rule5 passes: ${JSON.stringify(cmd)}`, () => {

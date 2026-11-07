@@ -65,7 +65,7 @@
  *            or env AUTOPILOT_BASH_GUARD_RMVAR_MODE = off|warn|deny (default deny). Runs at every depth, subagents included.
  *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`
  *            or an unquoted glob that matches nothing — zsh aborts the whole line.
- * Gate mode `off` silences all three. Rules 1 and 2 deny in `warn` and `block` modes alike.
+ * Gate mode `off` silences all five rules (1, 2, 2b, 2c, 3). Rules 1 and 2 deny in `warn` and `block` modes alike.
  *
  * MODES: ~/.autopilot/config.json {"depth0_delegate_gate": {"mode": "off"|"warn"|"block",
  * "threshold": 8, "guarded_models": ["fable","opus"], "wait_advice_every": 5}} or
@@ -133,7 +133,7 @@ function loadConfig() {
   if (envLs !== undefined && envLs !== '') cfg.lsMode = ['off', 'warn', 'deny'].includes(envLs) ? envLs : 'deny';
   const envRv = process.env.AUTOPILOT_BASH_GUARD_RMVAR_MODE;
   if (envRv !== undefined && envRv !== '') cfg.rmVarMode = ['off', 'warn', 'deny'].includes(envRv) ? envRv : 'deny';
-  const envEvery =process.env.AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY;
+  const envEvery = process.env.AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY;
   if (envEvery !== undefined && /^\d+$/.test(envEvery.trim()) && Number(envEvery) > 0) cfg.waitAdviceEvery = Number(envEvery);
   return cfg;
 }

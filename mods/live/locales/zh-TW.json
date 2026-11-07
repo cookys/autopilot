@@ -301,6 +301,7 @@
   "decide.k_blocks": "卡住",
   "decide.k_options": "選項",
   "decide.elsewhere": "已在別處回答",
+  "decide.k_failed": "未送出",
   "decide.k_answer": "已答",
   "decide.k_advice": "建議",
   "decide.submit_note": "答案會貼進這個對話送出",

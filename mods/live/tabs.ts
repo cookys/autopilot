@@ -393,6 +393,7 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
       out.push(...ui.cardRow(u, t('decide.k_advice'), what, { fact: F })) // the option name on the first row, the reason on its own rows below
       if (d.why !== null) out.push(...ui.cardRow(u, '', d.why, { fact: F }))
     }
+    if (!sent && id !== null && dv.failed?.[id] !== undefined) out.push(...ui.cardRow(u, t('decide.k_failed'), dv.failed[id], { fact: F })) // the claim was refused: this card was not sent, and why
     if (!sent) {
       if (id !== null && dv.inputs && !dialog) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))
       else if (dialog) out.push(...ui.detail(u, t('decide.in_dialog'), { fact: F }))

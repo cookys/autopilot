@@ -301,6 +301,7 @@
   "decide.k_blocks": "Blocks",
   "decide.k_options": "Options",
   "decide.elsewhere": "answered elsewhere",
+  "decide.k_failed": "Not sent",
   "decide.k_answer": "Answer",
   "decide.k_advice": "Advice",
   "decide.submit_note": "answers are pasted into this conversation",

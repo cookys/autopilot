@@ -43,6 +43,8 @@ import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
 import { NO_BATCH, answerPlan, answerOf, batchSync, cardKey, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
+import { claimReply } from './decideclaim'
+import type { ClaimCard } from './decideclaim'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
 
 import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand, usageDraw } from './band'
@@ -61,7 +63,7 @@ import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, decideDialog, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, decideDialog, decidePick, cleanTargets, normalizeAbs, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -814,7 +816,7 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
         const picks = { ...s.picks }
         if (picks[m[1]] === k) delete picks[m[1]]
         else picks[m[1]] = k
-        return { ...s, picks }
+        return { ...s, picks, failed: withoutKey(s.failed, m[1]) }
       })
       await decideAnswered($, m[1])
     } else if (id === 'submit') await sendDecide($)
@@ -922,11 +924,19 @@ async function cleanWorktrees($: EngineInterface, asked: string[], exec: (script
 // a prompt the session refuses takes the marks back. The prompt starts a turn once the session is idle: it is not awaited here.
 // The guard is a module flag taken before the first await: two presses landing together (a double click) both run this function before either has written its marks.
 let sending = false
+// How one card's answer is claimed with the fleet courier before it is sent (F4). Injected so the send step is tested without a process; the real claim is wired through the
+// whitelisted-script path once the PM rules on it. Until then it claims nothing: ok with no answer_id is the no-courier behaviour (a line without an id, which the hook does not close).
+let claimCard: ClaimCard = async () => ({ ok: true, answer_id: null, reason: null })
+export function setClaimCard(fn: ClaimCard): void { claimCard = fn }
+const withoutKey = (r: Record<string, string> | undefined, k: string): Record<string, string> => Object.fromEntries(Object.entries(r ?? {}).filter(([i]) => i !== k))
 async function sendDecide($: EngineInterface): Promise<void> {
   if (sending) return
   sending = true
   try {
-    const reply = decideReply(snapshot === null ? [] : snapshot.pending, await read($, DECIDE))
+    const asked = snapshot === null ? [] : snapshot.pending
+    const { reply, failed } = await claimReply(asked, await read($, DECIDE), claimCard)
+    // the failed marks are replaced as a whole for the cards asked now: a card that claimed this time loses its old reason, one that failed gets the new one
+    await update($, DECIDE, s => { const keep = Object.fromEntries(Object.entries(s.failed ?? {}).filter(([i]) => !asked.some(d => d.id === i))); return { ...s, failed: { ...keep, ...failed } } })
     if (reply === null) return
     const at = await $.clock.now()
     await update($, DECIDE, s => ({ ...s, sent: { ...s.sent, ...Object.fromEntries(reply.ids.map(i => [i, at])) } }))
@@ -946,7 +956,7 @@ async function decideNote($: EngineInterface, key: string, value: string): Promi
   const id = key.slice(5)
   try {
     decideFocus = noteKey(id)
-    await update($, DECIDE, s => ({ ...s, notes: { ...s.notes, [id]: value } }))
+    await update($, DECIDE, s => ({ ...s, notes: { ...s.notes, [id]: value }, failed: withoutKey(s.failed, id) }))
   } catch (_e) {
     // keep the last text
   }
@@ -956,11 +966,11 @@ async function decideNote($: EngineInterface, key: string, value: string): Promi
 async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: boolean, nowMs: number): Promise<void> {
   const st: DecideState = await read($, DECIDE)
   const gone = (id: string): boolean => !listed.has(id) && (st.sent[id] !== undefined ? nowMs - st.sent[id] > DECIDE_KEEP_MS : ok)
-  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent)])
+  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent), ...Object.keys(st.failed ?? {})])
   const drop = [...ids].filter(gone)
   if (drop.length === 0) return
   const keep = <V,>(o: Record<string, V>): Record<string, V> => Object.fromEntries(Object.entries(o).filter(([id]) => !drop.includes(id)))
-  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent) }))
+  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent), failed: keep(s.failed ?? {}) }))
 }
 
 // the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs

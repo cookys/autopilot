@@ -10,6 +10,8 @@ import { decideBandPlan, decideTabLines, nowLines, stripOf, tabNeeds } from './t
 import * as ui from './ui'
 import { applyScroll, newScroll } from './scrollmath'
 import { violations } from './invariants.testkit'
+import { claimReply } from './decideclaim'
+import type { ClaimCard } from './decideclaim'
 
 const LOCALES = [['zh-TW', makeT('zh-TW')], ['en', makeT('en')]] as const
 const dec = (id: string | null, question: string, over: Partial<LiveDecision> = {}): LiveDecision => ({
@@ -749,4 +751,63 @@ test('cardwrap r4b: wrapLines on one long choice row (prefix 16, label with word
     expect(out[at].trim(), loc + ': the URL has a row of its own').toBe(tail)
     expect(out.join('').replace(/ /g, ''), loc).toBe(text.replace(/ /g, ''))
   }
+})
+
+// ---- F4 claim before send (PM spec 2026-11-07): claim per card, only a claimed card is sent, its line ends with the answer_id; a failed card is not sent and says why ----
+const AID = 'a1B2c3D4e5F6g7H8i9J0kLmN' // 24 alphanumerics: the shape hooks/advisory-relay.js accepts as an answer_id
+const ANSWERED = { ...NO_DECIDE, picks: { 'd-4290499d': 0, 'd-c24ecfd9': 1 }, notes: { 'd-0000free': '叫 main' } }
+test('DECIDE claim: each answered card is claimed with its own answer, and the line sent ends with the answer_id that claim returned (the last ｜ field)', async () => {
+  const calls: { id: string; answer: unknown }[] = []
+  const claim: ClaimCard = async (card, answer) => { calls.push({ id: card.id, answer }); return { ok: true, answer_id: AID + calls.length, reason: null } }
+  const r = await claimReply(THREE, ANSWERED, claim)
+  expect(calls).toEqual([{ id: 'd-4290499d', answer: { option: 'OK' } }, { id: 'd-c24ecfd9', answer: { option: '不要' } }, { id: 'd-0000free', answer: { freeText: '叫 main' } }])
+  expect(r.failed).toEqual({})
+  expect(r.reply?.ids).toEqual(['d-4290499d', 'd-c24ecfd9', 'd-0000free'])
+  expect(r.reply?.text).toBe([
+    '[待決回覆]',
+    'd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK｜' + AID + '1',
+    'd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 不要｜' + AID + '2',
+    'd-0000free｜這個分支要叫什麼名字？ → 叫 main｜' + AID + '3',
+  ].join('\n'))
+  // a note after the answer: the id is still the LAST field, so the hook reads it
+  const withNote = await claimReply([THREE[1]], { ...NO_DECIDE, picks: { 'd-c24ecfd9': 1 }, notes: { 'd-c24ecfd9': '但只寫一句' } }, async () => ({ ok: true, answer_id: AID, reason: null }))
+  expect(withNote.reply?.text).toBe('[待決回覆]\nd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 不要｜補充：但只寫一句｜' + AID)
+  // no pick, a note: claimed as free text, the line says 都不選｜補充：<note>
+  const none = await claimReply([THREE[0]], { ...NO_DECIDE, notes: { 'd-4290499d': '自己寫' } }, async (_c, a) => ({ ok: true, answer_id: JSON.stringify(a).length > 0 ? AID : null, reason: null }))
+  expect(none.reply?.text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 都不選｜補充：自己寫｜' + AID)
+})
+
+test('DECIDE claim: a card whose claim fails is not in the reply, is not sent, and keeps the reason; the other cards still go', async () => {
+  const claim: ClaimCard = async card => (card.id === 'd-c24ecfd9' ? { ok: false, answer_id: null, reason: 'answered on the console already' } : { ok: true, answer_id: AID, reason: null })
+  const r = await claimReply(THREE, ANSWERED, claim)
+  expect(r.failed).toEqual({ 'd-c24ecfd9': 'answered on the console already' })
+  expect(r.reply?.ids).toEqual(['d-4290499d', 'd-0000free'])
+  expect(r.reply?.text).not.toContain('d-c24ecfd9')
+  // every claim fails (courier down) and a claim that throws: nothing is sent at all
+  const down = await claimReply(THREE, ANSWERED, async () => { throw new Error('courier unreachable\nretry later') })
+  expect(down.reply).toBeNull()
+  expect(down.failed).toEqual({ 'd-4290499d': 'courier unreachable', 'd-c24ecfd9': 'courier unreachable', 'd-0000free': 'courier unreachable' })
+  // an unanswered card and a card already sent are never claimed
+  const calls: string[] = []
+  await claimReply(THREE, { ...ANSWERED, sent: { 'd-4290499d': 1 } }, async card => { calls.push(card.id); return { ok: true, answer_id: AID, reason: null } })
+  expect(calls).toEqual(['d-c24ecfd9', 'd-0000free'])
+})
+
+test('DECIDE claim: the reason of a failed card is drawn on the card (both locales) and the card stays open; once sent it is greyed, says 已送出 and offers no Button', async () => {
+  for (const [loc, t] of LOCALES) {
+    const open = decideTabLines(snapOf(THREE), ctxOf(t, 76, view({ ...ANSWERED, failed: { 'd-c24ecfd9': 'answered on the console already' } })))
+    expect(texts(open).some(x => x.startsWith('  ' + t('decide.k_failed')) && x.endsWith('answered on the console already')), loc).toBe(true)
+    expect(texts(open).filter(x => x.includes(t('decide.k_failed'))).length, loc).toBe(1)
+    expect(pressIds(open).some(p => p.startsWith('pick:d-c24ecfd9')), loc).toBe(true) // still pressable: the owner can change the answer and send again
+  }
+  // the whole path: claim succeeds, the ids are marked sent, and the card is greyed and dead
+  const r = await claimReply(THREE, ANSWERED, async () => ({ ok: true, answer_id: AID, reason: null }))
+  const sent = Object.fromEntries((r.reply?.ids ?? []).map(i => [i, 1]))
+  const zh = makeT('zh-TW')
+  const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ ...ANSWERED, sent })))
+  expect(texts(ls)[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來 · 已送出，等處理')
+  expect(pressIds(ls)).toEqual([])
+  expect(ls.some(l => l.field !== undefined)).toBe(false)
+  const grey = ls.filter(l => l.kind === 'item').flatMap(l => l.segs ?? [])
+  expect(grey.every(g => g.bold !== true && !('backgroundColor' in g) && !('inverse' in g))).toBe(true)
 })

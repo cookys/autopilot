@@ -22,6 +22,7 @@ process.exit(1);
 JS
 chmod +x "$STUB/fleet"
 export STUB_DIR="$STUB" AUTOPILOT_FLEET_BIN="$STUB/fleet"
+export PATH="$STUB:$PATH" # a bare `fleet` is the stub too: this suite can never reach the real one
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q --allow-empty -m base
 reset_calls() { : > "$STUB/calls.log"; rm -f "$STUB/send-fails" "$STUB/recent-fails"; }
@@ -57,6 +58,15 @@ PARSED="$(node -e 'const n=require(process.argv[1]);const l=JSON.parse(require("
 assert_eq "$PARSED" "open $ID open FAKE-sess-1" "open: the message parses and carries id, state, session"
 # negative control: without the notify call the same scenario sends nothing
 mk_mut open-decision.js "/notifyPm('open', /d" && { reset_calls; open_card "$MUT/scripts/open-decision.js"; assert_eq "$(sends)" 0 "open mutant (notice dropped): nothing sent, so the check above would be red"; }
+
+# ---- 1a. under the suite environment nothing reaches any fleet, stub or real ----
+reset_calls
+( unset AUTOPILOT_FLEET_BIN; export AUTOPILOT_CARD_NOTIFY=off; open_card "$OD"; node "$OD" close --cwd "$R" --root-run-id root-t --id "$OUT" > /dev/null 2>&1 < /dev/null ); assert_eq "$(sends)" 0 "suite default (AUTOPILOT_CARD_NOTIFY=off, bare fleet on PATH): no send on open or close"
+reset_calls
+( unset AUTOPILOT_FLEET_BIN AUTOPILOT_CARD_NOTIFY; export NODE_TEST_CONTEXT=child-v8; node -e 'const r=require(process.argv[1]).notify("open",{card_id:"d-00000001",question:"q",state:"open",session:null});process.stdout.write(r.why)' "$S/lib/card-notice.js" > "$TEST_TMP/nt" ); assert_eq "$(cat "$TEST_TMP/nt")" "node test without a stub" "node:test tree without AUTOPILOT_FLEET_BIN: refuses to send"; assert_eq "$(sends)" 0 "node:test tree: no send"
+assert_eq "$(grep -c 'AUTOPILOT_CARD_NOTIFY=off' "$REPO_ROOT/hooks/tests/lib.sh" | tr -d ' ')" 1 "lib.sh exports AUTOPILOT_CARD_NOTIFY=off for every suite"
+mk_mut open-decision.js "/notifyPm('open', /d" >/dev/null
+sed_mutant "$REPO_ROOT/hooks/tests/lib.sh" "$TEST_TMP/lib-mut.sh" 's/^export AUTOPILOT_CARD_NOTIFY=off$/export AUTOPILOT_CARD_NOTIFY=on/' && assert_eq "$(grep -c 'AUTOPILOT_CARD_NOTIFY=off' "$TEST_TMP/lib-mut.sh" | tr -d ' ')" 0 "lib.sh mutant (default on): the check above would be red"
 
 # ---- 1b. never fails the card ----
 reset_calls; touch "$STUB/send-fails"; open_card "$OD"; assert_eq "$RC" 0 "open: a refused send does not fail the card"; assert_contains "$OUT" "d-" "open: id still printed"

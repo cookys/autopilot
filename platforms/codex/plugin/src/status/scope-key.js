@@ -55,4 +55,38 @@ function readScopeFile(file, { schema, projectKey, identity }) {
   }
 }
 
-module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile };
+// Card status (BL cardtrail). A card entry is kept after `open-decision.js close`: `status` is 'open' (or absent on cards written before this
+// field), 'awaiting_operator_action' (answered, but the operator must still do one step; shown on the panel, differently from a question),
+// 'pending_dispatch' (answered with an executor: close printed the dispatch JSON, nobody has confirmed the dispatch yet; `close --dispatched <task_id>`
+// ends it) or 'closed' (kept with closed_at + answer). "The entry is in the file" never means "the card is open": every reader that lists cards asks this.
+// Only 'open' is a pending question (待決). awaiting_operator_action and pending_dispatch are LIVE (still shown, still need someone) but never counted
+// as a question. cardState() is the one place that maps a stored status to a state (absent or unknown = open, the pre-field behaviour).
+const CARD_STATUS = ['open', 'awaiting_operator_action', 'pending_dispatch', 'closed'];
+function cardState(e) {
+  return e && typeof e === 'object' && CARD_STATUS.includes(e.status) ? e.status : 'open';
+}
+function isOpenEntry(e) {
+  return cardState(e) === 'open';
+}
+function isPendingDispatchEntry(e) {
+  return cardState(e) === 'pending_dispatch';
+}
+function isClosedEntry(e) {
+  return !!e && typeof e === 'object' && e.status === 'closed';
+}
+function isAwaitingEntry(e) {
+  return !!e && typeof e === 'object' && e.status === 'awaiting_operator_action';
+}
+
+// True when the scope file holds at least one entry that is not closed (it needs a string id and question like every reader requires).
+function scopeFileHasLive(file) {
+  const fs = require('fs');
+  try {
+    const v = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return !!v && Array.isArray(v.decisions) && v.decisions.some((e) => e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question && !isClosedEntry(e));
+  } catch (_error) {
+    return false;
+  }
+}
+
+module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, scopeFileHasLive };

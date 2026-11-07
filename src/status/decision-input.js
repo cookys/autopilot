@@ -3,12 +3,14 @@
 // src/status/decision-input.js — the open owner questions of a watcher scope (mods P1W W2a-m).
 // File: <git-common-dir>/autopilot/decisions/<scope_key>.json, schema autopilot.decision/2 (written by
 // scripts/open-decision.js): one file per scope holding EVERY open question in `decisions`. Present = at least one open
-// question; answered / withdrawn = the helper removed that entry (the file goes with the last one).
+// question; answered / withdrawn = the helper keeps the entry with status 'closed' (+ closed_at, answer), and this reader skips it.
+// status 'awaiting_operator_action' = answered, but the operator must still do one step: listed, with status/answer/awaiting_operator, and the
+// consumers draw it differently from a question. status 'pending_dispatch' = answered with an executor, dispatch not confirmed yet (close --dispatched ends it): listed, not a question either.
 // Every scope file of the project counts (unbound + each root; see readDecision). A file counts only when every binding matches:
 // schema, project_key, repo_identity and root_run_id agreeing with its own file name (null for the unbound file). Inside it an entry counts when it has a string id, a string question and a parseable opened_at that is
 // not from the future (beyond a small slack); the others are ignored.
 // Age never hides a question (expiry warns, never blocks): older than STALE_MS only sets `stale: true`; `age_s` is always given.
-// Only `open-decision.js close --id` removes a question. Anything else is ignored.
+// Only `open-decision.js close --id` / `done --id` ends a question. Anything else is ignored.
 // Orphan (BL-0163): a question the ask-decision hook opened (`origin: ask_user_question`, `turn_tracked: true` = the asker's turn file existed at open time;
 // turn tracking has its own knob, so without the flag a missing file proves nothing) whose asking session left no turn file under
 // <liveBase>/turn/ is `orphaned: true` — SessionEnd removes that file and answers close the entry, so an entry that outlived both
@@ -16,13 +18,13 @@
 // It only labels: the entry stays listed until `open-decision.js close --id`. Not judged (false) when no entry names a session, the entry is
 // hand-opened (no origin), or the live dir itself is unavailable. A session killed hard with its live dir intact still has its turn file: not detected.
 // Returns { value, sha256, file } where value is the list shaped for the renderer, oldest first:
-//   [{ id, question, background, options: [{label, description}], recommendation, why, blocks, not_authorized, source, opened_at, stale, age_s, orphaned }]
+//   [{ id, question, background, options: [{label, description}], recommendation, why, blocks, not_authorized, source, opened_at, stale, age_s, orphaned, status, answer, awaiting_operator, executor, asker }]
 // or null when no entry counts.
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { scopeKeyOf, listScopeFiles, readScopeFile } = require('./scope-key');
+const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry, cardState } = require('./scope-key');
 
 const STALE_MS = 7 * 86400 * 1000;
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
@@ -49,6 +51,7 @@ function sessionGone(e, liveBase) {
 
 function viewOf(e, nowMs, liveBase) {
   if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !e.id || typeof e.question !== 'string' || !e.question) return null;
+  if (isClosedEntry(e)) return null; // a kept closed card is a record, not an open card
   const opened = Date.parse(e.opened_at);
   if (!Number.isFinite(opened) || opened - nowMs > FUTURE_SLACK_MS) return null;
   const options = (Array.isArray(e.options) ? e.options : []).filter((o) => o && typeof o === 'object' && typeof o.label === 'string' && o.label)
@@ -58,6 +61,8 @@ function viewOf(e, nowMs, liveBase) {
     blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
     orphaned: sessionGone(e, liveBase), origin: str(e.origin),
+    status: cardState(e),
+    answer: str(e.answer), awaiting_operator: str(e.awaiting_operator), executor: str(e.executor), asker: str(e.asker), pending_dispatch_at: str(e.pending_dispatch_at),
   };
 }
 
@@ -90,7 +95,7 @@ function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
   }
 }
 
-// Does this project hold at least one open card (any scope file)? The same read as the pane's data source, so "open" means the same thing
+// Does this project hold at least one VISIBLE card (open, awaiting_operator_action or pending_dispatch; any scope file)? The same read as the pane's data source, so "open" means the same thing
 // to the opt-in rule of hooks/runs-watch-autostart.js, the unbound job page of the watcher and `open-decision.js` (BL cardvis).
 function hasOpenDecision({ identity, key, nowMs = Date.now() }) {
   const commonDir = typeof identity === 'string' ? (/^git-common-dir:(.+)$/.exec(identity) || [])[1] : null;

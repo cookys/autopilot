@@ -31,17 +31,18 @@ const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
 const TOKEN_DISCIPLINE_DOC = path.join(__dirname, '..', '..', '..', ...require('../../../scripts/lib/repo-layout.js').path('guide_dir').split('/'), 'token-discipline.md');
 const DECISION_SCHEMA = 'autopilot.decision/2';
 
-// Open cards the way scripts/open-decision.js show does. Read failure => no line.
-function openDecisionEntries(cwd) {
+// The live cards of the project, split by state the way scripts/open-decision.js show does: { open, awaiting_operator_action, pending_dispatch } (closed
+// cards are records and are not returned). Only `open` is a pending question. Read failure => all empty.
+function decisionEntriesByState(cwd) {
+  const by = { open: [], awaiting_operator_action: [], pending_dispatch: [] };
   try {
     const fs = require('fs');
     const { scopeFromCwd } = require('../../status/project-key');
-    const { commonDirOf, listScopeFiles, readScopeFile } = require('../../status/scope-key');
+    const { commonDirOf, listScopeFiles, readScopeFile, cardState } = require('../../status/scope-key');
     const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
     const commonDir = commonDirOf(scope.repo_identity);
-    if (!scope.project_key || !commonDir) return [];
+    if (!scope.project_key || !commonDir) return by;
     const dir = path.join(commonDir, 'autopilot', 'decisions');
-    const entries = [];
     for (const file of listScopeFiles(dir, scope.project_key)) {
       if (!readScopeFile(file, { schema: DECISION_SCHEMA, projectKey: scope.project_key, identity: scope.repo_identity })) continue;
       let decisions = [];
@@ -50,20 +51,27 @@ function openDecisionEntries(cwd) {
         decisions = v && v.schema === DECISION_SCHEMA && Array.isArray(v.decisions) ? v.decisions : [];
       } catch { decisions = []; }
       for (const e of decisions) {
-        if (e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question) entries.push(e);
+        if (e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question && by[cardState(e)]) by[cardState(e)].push(e);
       }
     }
-    entries.sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0) || String(a.id).localeCompare(String(b.id)));
-    return entries;
+    for (const k of Object.keys(by)) by[k].sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0) || String(a.id).localeCompare(String(b.id)));
+    return by;
   } catch {
-    return [];
+    return { open: [], awaiting_operator_action: [], pending_dispatch: [] };
   }
 }
 
+// Open cards = pending questions only (awaiting_operator_action and pending_dispatch are not questions).
+function openDecisionEntries(cwd) {
+  return decisionEntriesByState(cwd).open;
+}
+
 function openDecisionCardLine(cwd) {
-  const entries = openDecisionEntries(cwd);
-  if (entries.length === 0) return '';
-  return `\nOpen decision cards (${entries.length}): ${entries.map((e) => e.id).join(', ')}`;
+  const by = decisionEntriesByState(cwd);
+  const ids = (a) => a.map((e) => e.id).join(', ');
+  return (by.open.length ? `\nOpen decision cards (${by.open.length}): ${ids(by.open)}` : '')
+    + (by.awaiting_operator_action.length ? `\nAnswered, waiting for the operator's own step (${by.awaiting_operator_action.length}): ${ids(by.awaiting_operator_action)}` : '')
+    + (by.pending_dispatch.length ? `\nAnswered, not dispatched yet (${by.pending_dispatch.length}): ${ids(by.pending_dispatch)}` : '');
 }
 
 // F4 landing-file pickup (fleet plan oc-f4 R4.1): <git-common-dir>/fleet/decision-answers/<card_id>.json, schema fleet.decision-answer/1, written by
@@ -350,4 +358,6 @@ module.exports = {
   buildBaseContext,
   composeSessionStartContext,
   buildSessionStartOutput,
+  openDecisionEntries,
+  openDecisionCardLine,
 };

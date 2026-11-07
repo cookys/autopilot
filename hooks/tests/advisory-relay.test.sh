@@ -542,7 +542,7 @@ fi
 if node -e '
   const fs = require("fs");
   const src = fs.readFileSync(process.argv[1], "utf8");
-  const show = src.split("if (cmd === '\''show'\'')")[1].split("if (cmd === '\''close'\'')")[0];
+  const show = src.split("if (cmd === '\''show'\'' || cmd === '\''list'\'')")[1].split("if (cmd === '\''done'\'')")[0];
   const close = src.split("if (cmd === '\''close'\'')")[1].split("// open")[0];
   if (!show.includes("projectScopeFiles") || !close.includes("projectScopeFiles")) process.exit(1);
 ' "$REPO_ROOT/scripts/open-decision.js"; then

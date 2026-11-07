@@ -133,6 +133,65 @@
           },
           "turn_tracked": {
             "const": true
+          },
+          "status": {
+            "enum": [
+              "open",
+              "awaiting_operator_action",
+              "pending_dispatch",
+              "closed"
+            ]
+          },
+          "answer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answered_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "executor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "awaiting_operator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pending_dispatch_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dispatched_task_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "backfilled": {
+            "const": true
           }
         }
       }

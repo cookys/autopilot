@@ -13,6 +13,7 @@
  *   verify(...)  `fleet decision verify <card_id> <answer_id> [--content-sha256 H]` — exit 0 and the stored answer on stdout ({outcome:"verified",...}), or 7.
  *                H is required for a via=console answer and must be absent for via=local (fleet R4.1-1; a local claim vouches for itself).
  *                No retry, no sleep (hook-safe).
+ *   isAddress(a) address shape check (namespace/courier/member) for open-decision.js; this module sends nothing but `decision claim|verify`.
  * AUTOPILOT_FLEET_BIN overrides the binary (tests use a stub). Node built-ins only.
  */
 const crypto = require('crypto');
@@ -108,4 +109,8 @@ function verify(cardId, answerId, text) {
   return verifyOnce(cardId, answerId, contentSha256(text));
 }
 
-module.exports = { probe, supportsRecent, claim, verify, verifyOnce, contentSha256 };
+// An address must look like namespace/courier/member (or courier/member). open-decision.js checks --executor/--asker/backfill addresses with it; it
+// sends nothing itself (PM ruling 01M6RV0Y02: `close --answer` prints the dispatch JSON and the caller sends it).
+const ADDRESS = /^[A-Za-z0-9][A-Za-z0-9._@:-]*(\/[A-Za-z0-9][A-Za-z0-9._@:-]*){1,2}$/;
+
+module.exports = { probe, supportsRecent, claim, verify, verifyOnce, contentSha256, isAddress: (a) => typeof a === 'string' && ADDRESS.test(a) };

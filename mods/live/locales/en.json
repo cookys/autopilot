@@ -125,6 +125,8 @@
   "label.host": "host",
   "now.needs_you": "Needs you",
   "now.pending_sum": "{n} pending decisions",
+  "now.awaiting_op": "{n} answered, your own step left: {step}",
+  "now.pending_dispatch": "{n} answered, not dispatched yet: {ids}",
   "now.where": "Position",
   "now.cost": "Cost today",
   "now.since": "{e} since start",

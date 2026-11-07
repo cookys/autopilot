@@ -8,16 +8,24 @@
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
- *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn)
- *   node scripts/open-decision.js show  [--root-run-id <id>] [--json] [--cwd <dir>]    (lists every open question)
+ *   node scripts/open-decision.js open ... [--executor <address>] [--asker <address>]  (who carries out the answer / who asked: stored on the card)
+ *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn; the card is KEPT, status closed)
+ *   node scripts/open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]
+ *                                       (with an executor: prints the dispatch JSON and parks the card in pending_dispatch; nothing is sent)
+ *   node scripts/open-decision.js close --id <id> --dispatched <task_id>   (pending_dispatch -> closed, once the caller really dispatched)
+ *   node scripts/open-decision.js done  --id <id>      (ends awaiting_operator_action: the operator's own step is done)
+ *   node scripts/open-decision.js show  [--root-run-id <id>] [--all] [--json] [--cwd <dir>]    (lists every live card: open questions, awaiting_operator_action, pending_dispatch; --all: closed ones too)
+ *   node scripts/open-decision.js show  --id <id> [--json]     (ONE card, closed or not)      list = show without --id
+ *   node scripts/open-decision.js backfill --from <file.jsonl> [--apply]   (dry run unless --apply)
  *   node scripts/open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>   (is a relayed owner answer the hub's real one?)
  *
  * One file per scope holds ALL open questions of that scope: <git-common-dir>/autopilot/decisions/<scope_key>.json
  * ({schema, root_run_id, repo_identity, project_key, decisions: [...]}), scope_key = project_key, or project_key--<root>
  * (root through the watcher's safeSegment). Each entry: id, question, background, options [{label, description}] | null,
  * recommendation, why, blocks, not_authorized (why the owner must decide, depth-0 may not), source, opened_at, opened_by_session (+ origin, set only by hooks/ask-decision.js).
- * `open` appends one entry and never overwrites another; `close --id` removes exactly that entry (idempotent) and removes
- * the file when the last one goes. The watcher reads the file into the job page / live pane (src/status/decision-input.js).
+ * `open` appends one entry and never overwrites another. `close --id` KEEPS the entry (BL cardtrail): status 'closed', closed_at (ISO UTC), answer
+ * (the answer text, null for a withdrawal); idempotent. The file is never removed. "The entry is in the file" does NOT mean "the card is open":
+ * every reader asks the status (src/status/scope-key.js cardState; readFile() returns open questions only, { live: true } adds awaiting_operator_action and pending_dispatch, { all: true } also closed). The watcher reads the file into the job page / live pane (src/status/decision-input.js).
  * `show` and `close --id` cover EVERY scope file of the project (unbound + each root), since a session's root can change mid-way; `open` writes only the current scope.
  * Scope root: --root-run-id > $AUTOPILOT_ROOT_RUN_ID > this session's marker root > unbound.
  *
@@ -41,6 +49,25 @@
  * Without --target nothing changes. The caller reports --target itself; a wrong label is an accepted residual risk (see resolve-doa.sh).
  * --option may repeat; at least two are REQUIRED (none or one -> exit 2); a question the owner answers in typed text passes --free-text instead (options null; --free-text with --option -> exit 2). Everything except
  * --question is optional text for the owner; an empty value is stored as null. Writes take a lock and rename atomically.
+ * Card trail (BL cardtrail). Stored fields a reader (patrol, the panel) may rely on: status ('open' | 'awaiting_operator_action' | 'pending_dispatch' | 'closed';
+ * absent = open), answer (the answer text), closed_at (ISO UTC, set when status becomes closed), answered_at (set on awaiting_operator_action),
+ * pending_dispatch_at (ISO UTC, set when status becomes pending_dispatch: patrol's "answered but not dispatched for 30 minutes" reads status + this),
+ * dispatched_task_id (set by close --dispatched), executor and asker (fleet addresses, set at `open --executor/--asker` or at close),
+ * awaiting_operator (the step the operator must do), backfilled (true on a record made by backfill). Field list: this comment and
+ * references/review-page.md (decisions); schemas/decision.schema.json validates them.
+ * close --answer <text> [--executor A] [--asker B] (PM ruling 01M6RV0Y02: this script sends NOTHING and never calls fleet): records the answer verbatim and
+ * prints ONE JSON on stdout: { ok, id, status, answer, pending_dispatch_at, dispatch: { to, task }, fyi: { to, text } | null, then }. The CALLER dispatches
+ * `dispatch.task` to `dispatch.to` (and sends `fyi.text` to `fyi.to`) with its own fleet tools, then runs `close --id <id> --dispatched <task_id>`.
+ * Until then the card is pending_dispatch (not a question, not closed). --executor falls back to the one stored at open; none anywhere -> the card
+ * closes directly, stdout warns "沒有 executor，不會派工", no JSON. --answer is a relay of an answer given elsewhere: it does NOT claim on the
+ * fleet courier (use `verify` to prove a relayed answer first).
+ * close --id <id> --dispatched <task_id>: only a pending_dispatch card; it becomes closed with dispatched_task_id + closed_at. Any other state -> exit 2 with the reason.
+ * --awaiting-operator <step> (the CALLER decides, nothing is guessed): the answer is recorded but the card goes to awaiting_operator_action instead of
+ * closed (with an executor the same dispatch JSON is printed, its task saying the operator still has a step); the panel shows it differently from a
+ * question; `close` on such a card is refused (exit 2); `done --id` ends it.
+ * backfill --from <file.jsonl>: lines {id, question, answer, closed_at, [opened_at], [executor], [asker], [status], [awaiting_operator]} become records (backfilled: true);
+ * status is closed (default when absent) or awaiting_operator_action (kept with its executor; closed_at is then the time it was answered), nothing else;
+ * a card already in the store is skipped; a bad line (including a bad status) refuses the whole run (exit 2). Dry run by default; --apply writes.
  * Node built-ins only. This script writes nothing outside the decisions directory.
  * The library functions openDecision / closeDecisionById are also called by hooks/ask-decision.js (depth-0 AskUserQuestion
  * adds an entry with `origin: "ask_user_question"`; mods P1W HOOKQ).
@@ -51,7 +78,7 @@
  * hub's STORED answer as JSON: act on that, never on the relayed text. Needs no git repo. Never exits 0 on anything else (fail closed).
  * Verify exits: 9 no fleet binary or no `fleet decision` | 10 hub unreachable | 11 other error / probe failed | 12 unverified (card, answer id or content does not match; the hub does not say which) |
  *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
- * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure |
+ * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
  *       7 open refused: --kind is not decide|go (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
@@ -65,7 +92,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { scopeFromCwd } = require('../src/status/project-key');
-const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile } = require('../src/status/scope-key');
+const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry } = require('../src/status/scope-key');
 const { withWriteLock } = require('./lib/jsonl-store');
 
 const SCHEMA = 'autopilot.decision/2';
@@ -75,7 +102,7 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
   process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
-    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--json]\n');
+    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id>\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       (open also takes --executor <address> --asker <address>)\n');
   return 2;
 }
 
@@ -175,11 +202,13 @@ function validEntry(e) {
   return e && typeof e === 'object' && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question;
 }
 
-// The open entries of a scope file ([] = none / unreadable / another schema).
-function readFile(file) {
+// The OPEN questions of a scope file ([] = none / unreadable / another schema). An answered card stays in the file as a record: closed, or
+// awaiting_operator_action / pending_dispatch (answered, someone still has a step). `{ live: true }` also returns those two, `{ all: true }` every
+// card. "In the file" is never "open": ask the state (scope-key.js cardState), not the file.
+function readFile(file, { all = false, live = false } = {}) {
   try {
     const v = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return v && v.schema === SCHEMA && Array.isArray(v.decisions) ? v.decisions.filter(validEntry) : [];
+    return v && v.schema === SCHEMA && Array.isArray(v.decisions) ? v.decisions.filter((e) => validEntry(e) && (all || (live ? !isClosedEntry(e) : isOpenEntry(e)))) : [];
   } catch (_error) {
     return [];
   }
@@ -195,11 +224,11 @@ function scopeFile(cwd, root) {
 
 // Every scope file of this project (unbound + each root) with its valid entries: [{ file, entries }]. `show` and `close --id`
 // look across all of them, so a card opened before the session's root changed is still seen and closable. `open` writes only sf.file.
-function projectScopes(sf) {
+function projectScopes(sf, opts) {
   const out = [];
   for (const file of listScopeFiles(sf.dir, sf.scope.project_key)) {
     if (!readScopeFile(file, { schema: SCHEMA, projectKey: sf.scope.project_key, identity: sf.scope.repo_identity })) continue;
-    const entries = readFile(file);
+    const entries = readFile(file, opts);
     if (entries.length) out.push({ file, entries });
   }
   return out;
@@ -207,10 +236,19 @@ function projectScopes(sf) {
 
 // Paths of this project's scope files that hold at least one card readFile accepts. `show`, `close --id`, and
 // hooks/advisory-relay.js share this walk. `root` does not select the list: every unbound and root file is included.
-function projectScopeFiles(cwd) {
+function projectScopeFiles(cwd, opts) {
   const sf = scopeFile(cwd, null);
   if (!sf) return [];
-  return projectScopes(sf).map((s) => s.file);
+  return projectScopes(sf, opts).map((s) => s.file);
+}
+
+// The card `id` across every scope file: { file, entry } or null. `{ all: true }` also finds closed cards (show --id, done, backfill).
+function findCard(cwd, id, opts) {
+  for (const file of projectScopeFiles(cwd, opts)) {
+    const entry = readFile(file, opts).find((e) => e.id === id);
+    if (entry) return { file, entry };
+  }
+  return null;
 }
 
 // Cards this session opened that sit in the UNBOUND scope file (no root in the file): [{ id, file }]. The owner-question-guard
@@ -246,10 +284,22 @@ function parseOptions(raw) {
   });
 }
 
-function showText(entries) {
-  const out = [`open decisions: ${entries.length}`];
+function showText(entries, { all = false } = {}) {
+  const n = (st) => entries.filter((e) => cardState(e) === st).length;
+  // "open decisions" counts the pending questions only; awaiting_operator_action / pending_dispatch / closed cards are counted apart, never as 待決
+  const out = [all ? `decisions: ${entries.length}` : `open decisions: ${n('open')}`];
+  for (const st of ['awaiting_operator_action', 'pending_dispatch', ...(all ? ['closed'] : [])]) if (n(st)) out.push(`${st}: ${n(st)}`);
   entries.forEach((e, i) => {
     out.push('', `[${i + 1}] ${e.id}  ${e.question}`);
+    if (e.status && e.status !== 'open') out.push(`    status: ${e.status}`);
+    if (e.awaiting_operator) out.push(`    awaiting_operator: ${e.awaiting_operator}`);
+    if (e.answer) out.push(`    answer: ${e.answer}`);
+    if (e.answered_at) out.push(`    answered_at: ${e.answered_at}`);
+    if (e.closed_at) out.push(`    closed_at: ${e.closed_at}`);
+    if (e.executor) out.push(`    executor: ${e.executor}`);
+    if (e.asker) out.push(`    asker: ${e.asker}`);
+    if (e.pending_dispatch_at) out.push(`    pending_dispatch_at: ${e.pending_dispatch_at}`);
+    if (e.dispatched_task_id) out.push(`    dispatched_task_id: ${e.dispatched_task_id}`);
     if (e.background) out.push(`    background: ${e.background}`);
     if (Array.isArray(e.options)) e.options.forEach((o, k) => out.push(`    option ${k + 1}: ${o.label}${o.description ? ` — ${o.description}` : ''}`));
     if (e.recommendation) out.push(`    recommendation: ${e.recommendation}${e.why ? ` (${e.why})` : ''}`);
@@ -281,6 +331,25 @@ function takeFreeText(argv) {
   if (i < 0) return { rest: argv };
   if (i + 1 >= argv.length) return { error: 'close --free-text needs a value' };
   return { rest: [...argv.slice(0, i), ...argv.slice(i + 2)], freeText: argv[i + 1] };
+}
+
+// BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
+// -> { rest, extra: { answer, executor, asker, 'awaiting-operator', from, dispatched, all, apply } } | { error }
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'dispatched'];
+const EXTRA_SWITCH = ['all', 'apply'];
+function takeExtra(argv) {
+  const rest = [];
+  const extra = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    const name = a.startsWith('--') ? a.slice(2) : null;
+    if (name && EXTRA_VALUED.includes(name)) {
+      if (i + 1 >= argv.length) return { error: `--${name} needs a value` };
+      extra[name] = argv[i + 1]; i += 1;
+    } else if (name && EXTRA_SWITCH.includes(name)) extra[name] = true;
+    else rest.push(a);
+  }
+  return { rest, extra };
 }
 
 function takeTarget(argv) {
@@ -354,42 +423,98 @@ function main(argv) {
   if (ft.error) return usage(ft.error);
   const tk = takeTarget(ft.rest);
   if (tk.error) return usage(tk.error);
-  const args = parse(tk.rest);
+  const xt = takeExtra(tk.rest);
+  if (xt.error) return usage(xt.error);
+  const args = parse(xt.rest);
+  args.extra = xt.extra;
   if (kk.kind !== undefined) args.kind = kk.kind;
   if (ft.freeText !== undefined) args.closeFreeText = ft.freeText;
   if (args.error) return usage(args.error);
   if (tk.target !== undefined) args.target = tk.target;
   const cmd = args._[0];
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
-  if (!['open', 'close', 'show'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
+  if (!['open', 'close', 'done', 'show', 'list', 'backfill'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);
   if (root && (!SAFE_ROOT.test(root) || root === '.' || root === '..')) return usage('--root-run-id must match [A-Za-z0-9._-]+');
   const sf = scopeFile(args.cwd, root);
   if (!sf) return usage('not inside a git repository');
 
-  if (cmd === 'show') {
-    const entries = projectScopeFiles(args.cwd).flatMap((f) => readFile(f))
+  const ex = args.extra;
+  const stray = (names) => names.find((n) => ex[n] !== undefined);
+  if (cmd === 'show' || cmd === 'list') {
+    if (cmd === 'list' && args.id !== undefined) return usage('list takes no --id (use `show --id <id>`)');
+    const bad = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched']);
+    if (bad) return usage(`--${bad} is not a ${cmd} argument`);
+    if (args.id !== undefined) { // show --id: ONE card, closed ones too
+      if (!SAFE_ID.test(args.id)) return usage('show --id <id> needs a card id (see `list --all`)');
+      const hit = findCard(args.cwd, args.id, { all: true });
+      if (!hit) { if (!args.json) process.stdout.write(`no such decision: ${args.id}\n`); return 1; }
+      process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: [hit.entry] }, null, 2)}\n` : showText([hit.entry], { all: true }));
+      return 0;
+    }
+    const all = ex.all === true;
+    const entries = projectScopeFiles(args.cwd, { all, live: true }).flatMap((f) => readFile(f, { all, live: true }))
       .sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0));
-    if (entries.length === 0) { if (!args.json) process.stdout.write('no open decision\n'); return 1; }
-    process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries));
+    if (entries.length === 0) { if (!args.json) process.stdout.write(all ? 'no decision\n' : 'no open decision\n'); return 1; }
+    process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries, { all }));
     return 0;
   }
+  if (cmd === 'done') {
+    if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('done needs --id <id>');
+    const hit = findCard(args.cwd, args.id, { all: true });
+    if (!hit) { process.stdout.write(`no such decision: ${args.id}\n`); return 1; }
+    if (isClosedEntry(hit.entry)) { process.stdout.write(`already closed: ${args.id}\n`); return 0; }
+    if (!isAwaitingEntry(hit.entry)) return usage(`${args.id} is open, not awaiting_operator_action; \`done\` only ends that state (answer the card with \`close --answer\`)`);
+    if (isPendingDispatchEntry(hit.entry)) return usage(`${args.id} is pending_dispatch, not awaiting_operator_action; dispatch it, then \`close --id ${args.id} --dispatched <task_id>\``);
+    const r = patchDecision(hit.file, args.id, { status: 'closed', closed_at: new Date().toISOString() }, { any: true, isOurs: isAwaitingEntry });
+    if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
+    process.stdout.write(`closed ${args.id} (operator step done)\n`);
+    return 0;
+  }
+  if (cmd === 'backfill') return backfill(args, sf, root || null);
   if (cmd === 'close') {
     if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('close needs --id <id> (see `show`)');
-    const answered = args.option.length > 0 || args.closeFreeText !== undefined;
+    const bad = stray(['all', 'apply', 'from']);
+    if (bad) return usage(`--${bad} is not a close argument`);
+    if (ex.dispatched !== undefined) return markDispatched(args, ex);
+    const viaOption = args.option.length > 0 || args.closeFreeText !== undefined;
     if (args.option.length > 1 || (args.option.length && args.closeFreeText !== undefined)) return usage('close takes one --option <label> or one --free-text <text>');
-    if (answered) {
+    if (ex.answer !== undefined && (viaOption || !ex.answer.trim())) return usage('close --answer <text> is the whole answer: not with --option/--free-text, and not empty');
+    if (ex.answer === undefined && (ex['awaiting-operator'] !== undefined || ex.executor !== undefined || ex.asker !== undefined)) return usage('--executor/--asker/--awaiting-operator belong to `close --answer <text>`');
+    if (ex['awaiting-operator'] !== undefined && !ex['awaiting-operator'].trim()) return usage('--awaiting-operator needs the step the operator must do');
+    for (const k of ['executor', 'asker']) if (ex[k] !== undefined && !require('./lib/fleet-decision.js').isAddress(ex[k])) return usage(`--${k} "${ex[k]}" is not an address (namespace/courier/member)`);
+    const found = findCard(args.cwd, args.id, { live: true });
+    if (found && isAwaitingEntry(found.entry)) return usage(`${args.id} is awaiting_operator_action: the operator's step ends it (\`done --id ${args.id}\`), not close`);
+    if (found && isPendingDispatchEntry(found.entry)) return usage(`${args.id} is pending_dispatch: it is closed by \`close --id ${args.id} --dispatched <task_id>\` once the dispatch is really sent, not by another close`);
+    if (viaOption) {
       const g = claimBeforeClose(args);
       if (g.code !== 0) return g.code;
     }
+    const answerText = ex.answer !== undefined ? ex.answer : (args.option.length ? args.option[0] : (args.closeFreeText !== undefined ? args.closeFreeText : null));
+    const executor = ex.executor || (found && found.entry.executor) || null;
+    const asker = ex.asker || (found && found.entry.asker) || null;
+    const now = new Date().toISOString();
+    const awaiting = ex['awaiting-operator'] !== undefined;
+    const parked = !awaiting && answerText !== null && !!executor; // answered with an executor: the caller still has to dispatch
+    const patch = awaiting
+      ? { status: 'awaiting_operator_action', answered_at: now, answer: answerText, awaiting_operator: ex['awaiting-operator'].trim() }
+      : (parked ? { status: 'pending_dispatch', pending_dispatch_at: now, answer: answerText } : { status: 'closed', closed_at: now, answer: answerText });
+    if (executor && answerText !== null) patch.executor = executor;
+    if (asker && answerText !== null) patch.asker = asker;
     let r = { status: 'absent' };
     for (const f of projectScopeFiles(args.cwd)) {
-      r = closeDecisionById(f, args.id);
-      if (r.status !== 'absent') break;
+      r = patchDecision(f, args.id, patch);
+      if (r.status !== 'absent') { r.file = f; break; }
     }
     if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
-    process.stdout.write(r.status === 'closed' ? `closed ${args.id}\n` : `not open: ${args.id}\n`);
+    if (r.status === 'absent') { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+    if (answerText !== null && executor && (awaiting || parked)) {
+      process.stdout.write(`${JSON.stringify(dispatchPacket({ id: args.id, question: r.entry.question, answer: answerText, executor, asker, awaiting: awaiting ? patch.awaiting_operator : null, status: patch.status, at: now }))}\n`);
+      return 0;
+    }
+    process.stdout.write(awaiting ? `awaiting_operator_action ${args.id}\n` : `closed ${args.id}\n`);
+    if (answerText !== null && !executor) process.stdout.write(`警告：${args.id} 沒有 executor，不會派工（開卡時沒帶 --executor，close 也沒帶）\n`);
     return 0;
   }
 
@@ -399,6 +524,9 @@ function main(argv) {
   if (args.option.length === 1) return usage('--option needs at least two options');
   if (!args.option.length && !args['free-text']) return usage('a decision card needs at least two --option <label>::<description>; for a question answered in typed text pass --free-text');
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
+  const bad = ['answer', 'awaiting-operator', 'from', 'all', 'apply', 'dispatched'].find((n) => ex[n] !== undefined);
+  if (bad) return usage(`--${bad} is not an open argument`);
+  for (const k of ['executor', 'asker']) if (ex[k] !== undefined && !require('./lib/fleet-decision.js').isAddress(ex[k])) return usage(`--${k} "${ex[k]}" is not an address (namespace/courier/member)`);
   const options = args.option.length ? parseOptions(args.option) : null;
   if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');
   if (args.target !== undefined) {
@@ -411,7 +539,7 @@ function main(argv) {
   if (gate.warning) process.stderr.write(`open-decision: warning: ${gate.warning}\n`);
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
-    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind,
+    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker,
   });
   if (r.status === 'ok' && !root) {
     // The card is in the unbound scope. Every panel of the project lists it (src/status/decision-input.js reads all scope files), so this is
@@ -436,7 +564,7 @@ function main(argv) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker }) {
   const sf = scopeFile(cwd, root);
   if (!sf) return { status: 'error', message: 'not inside a git repository' };
   const entry = {
@@ -446,15 +574,17 @@ function openDecision({ cwd, root, session, question, background, options, recom
     options: Array.isArray(options) && options.length >= 2
       ? options.map((o) => ({ label: String(o.label), description: text(o.description) || '' })) : null,
     recommendation: text(recommendation), why: text(why), blocks: text(blocks), not_authorized: text(not_authorized), source: text(source),
-    opened_at: new Date().toISOString(), opened_by_session: session || null,
+    opened_at: new Date().toISOString(), opened_by_session: session || null, status: 'open',
   };
+  if (text(executor)) entry.executor = executor.trim(); // who executes the answer / who asked: close --answer puts them in the dispatch JSON (BL cardtrail)
+  if (text(asker)) entry.asker = asker.trim();
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
   if (origin) entry.origin = origin;
   if (turn_tracked === true) entry.turn_tracked = true; // the asker's turn file existed at open time (hooks/ask-decision.js): only then is its absence later evidence the session ended
   try {
     fs.mkdirSync(sf.dir, { recursive: true, mode: 0o700 });
     return withWriteLock({ storeDir: sf.dir, lockFile: `${sf.file}.lock`, name: path.basename(sf.file), timeoutMs: 5000 }, () => {
-      writeEntries(sf, root, [...readFile(sf.file), entry]);
+      writeEntries(sf, root, [...readFile(sf.file, { all: true }), entry]);
       return { status: 'ok', id: entry.id, file: sf.file, scope_key: sf.key };
     });
   } catch (error) {
@@ -462,27 +592,127 @@ function openDecision({ cwd, root, session, question, background, options, recom
   }
 }
 
-// Remove the entry `id` from the scope `file` under the same lock (the file goes with its last entry). Idempotent.
-// `isOurs(entry)` (optional) must agree first. Returns { status: 'closed'|'absent'|'error', message }; never throws.
-function closeDecisionById(file, id, isOurs) {
-  // Nothing to close: do not enter the lock, whose store dir / lock file would create decisions/ in a repo that never opened one.
+// Apply `patch` to the entry `id` of the scope `file` under the same lock. Only an OPEN question matches (`any: true`: a card in any state);
+// `isOurs(entry)` (optional) must agree first. The entry STAYS in the file: closing keeps the record (status closed, closed_at, answer).
+// Returns { status: 'updated'|'absent'|'error', entry, message }; never throws. Idempotent: an answered card (any state but open) is 'absent'.
+function patchDecision(file, id, patch, { isOurs, any } = {}) {
+  // Nothing to change: do not enter the lock, whose store dir / lock file would create decisions/ in a repo that never opened one.
   if (!fs.existsSync(file)) return { status: 'absent' };
   try {
     return withWriteLock({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: path.basename(file), timeoutMs: 3000 }, () => {
-      const entries = readFile(file);
-      const hit = entries.find((e) => e.id === id);
+      const entries = readFile(file, { all: true });
+      const hit = entries.find((e) => e.id === id && (any || isOpenEntry(e)));
       if (!hit || (isOurs && !isOurs(hit))) return { status: 'absent' };
-      const sf = { file, scope: null };
-      const rest = entries.filter((e) => e.id !== id);
-      if (rest.length === 0) { fs.unlinkSync(file); return { status: 'closed' }; }
+      const next = { ...hit, ...patch };
       const v = JSON.parse(fs.readFileSync(file, 'utf8'));
-      writeEntries({ ...sf, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, rest);
-      return { status: 'closed' };
+      writeEntries({ file, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, entries.map((e) => (e === hit ? next : e)));
+      return { status: 'updated', entry: next };
     });
   } catch (error) {
     return error && error.code === 'ENOENT' ? { status: 'absent' } : { status: 'error', message: error.message };
   }
 }
 
+// Close the entry `id` of the scope `file`: patchDecision with status closed + closed_at (+ `answer` when given). Library callers (hooks)
+// keep this signature; the entry is kept now, not removed. Returns { status: 'closed'|'absent'|'error', message }; never throws.
+function closeDecisionById(file, id, isOurs, answer) {
+  const r = patchDecision(file, id, { status: 'closed', closed_at: new Date().toISOString(), answer: typeof answer === 'string' ? answer : null }, { isOurs });
+  return r.status === 'updated' ? { status: 'closed' } : r;
+}
+
+// The dispatch a caller must send for `close --answer` with an executor (PM ruling 01M6RV0Y02: this script never sends). Plain data, printed as one JSON.
+function dispatchPacket({ id, question, answer, executor, asker, awaiting, status, at }) {
+  const head = `[卡片答覆 ${id}] ${question}\n答覆原文：\n${answer}\n`;
+  const task = `${head}${awaiting ? `此答覆還需操作員本人動手：${awaiting}（卡片狀態 awaiting_operator_action，操作員做完會用 done 結束）\n` : ''}請依上面的答覆執行，完成後回報卡號 ${id}。`;
+  const out = { ok: true, id, status, answer };
+  if (status === 'pending_dispatch') out.pending_dispatch_at = at;
+  out.dispatch = { to: executor, task };
+  out.fyi = asker ? { to: asker, text: `fyi ${head}已交給 ${executor} 執行。${awaiting ? `還需操作員本人動手：${awaiting}。` : ''}` } : null;
+  out.then = status === 'pending_dispatch'
+    ? `送出 dispatch（和 fyi）之後執行：node scripts/open-decision.js close --id ${id} --dispatched <task_id>`
+    : `操作員做完後執行：node scripts/open-decision.js done --id ${id}`;
+  return out;
+}
+
+// close --id <id> --dispatched <task_id>: pending_dispatch -> closed (dispatched_task_id, closed_at). Any other state is refused (exit 2) with the reason.
+function markDispatched(args, ex) {
+  if (ex.answer !== undefined || ex.executor !== undefined || ex.asker !== undefined || ex['awaiting-operator'] !== undefined || args.option.length || args.closeFreeText !== undefined) return usage('--dispatched <task_id> stands alone (no --answer/--executor/--asker/--awaiting-operator/--option/--free-text)');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$/.test(ex.dispatched)) return usage('--dispatched needs the task id the dispatch returned (letters, digits, . _ : @ -)');
+  const hit = findCard(args.cwd, args.id, { all: true });
+  if (!hit) return usage(`no such decision: ${args.id}; --dispatched only closes a pending_dispatch card`);
+  if (!isPendingDispatchEntry(hit.entry)) return usage(`${args.id} is ${cardState(hit.entry)}, not pending_dispatch; --dispatched only closes a card whose answer is waiting to be dispatched`);
+  const r = patchDecision(hit.file, args.id, { status: 'closed', closed_at: new Date().toISOString(), dispatched_task_id: ex.dispatched }, { any: true, isOurs: isPendingDispatchEntry });
+  if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
+  if (r.status === 'absent') return usage(`${args.id} changed state meanwhile; run show --id ${args.id}`);
+  process.stdout.write(`closed ${args.id} (dispatched ${ex.dispatched})\n`);
+  return 0;
+}
+
+// backfill --from <file.jsonl> [--apply]: put cards that were closed before the store kept them back as closed records. Each line:
+// {id, question, answer, closed_at, [opened_at], [executor], [asker], [status], [awaiting_operator]} (the PM exports its ledger in this shape). status is
+// 'closed' (default) or 'awaiting_operator_action' (closed_at is then when it was answered; no closed_at on the record); anything else refuses the batch. Default is a
+// dry run that prints what would be added and writes nothing; --apply writes. A card already in the store (any status) is skipped, never
+// overwritten. Any bad line -> exit 2 and nothing is written even with --apply. -> exit code.
+const BACKFILL_STATUS = ['awaiting_operator_action', 'closed'];
+function backfill(args, sf, root) {
+  const ex = args.extra;
+  const bad = ['answer', 'executor', 'asker', 'awaiting-operator', 'all', 'dispatched'].find((n) => ex[n] !== undefined);
+  if (bad) return usage(`--${bad} is not a backfill argument`);
+  if (typeof ex.from !== 'string') return usage('backfill needs --from <file.jsonl> (one closed card per line: id, question, answer, closed_at)');
+  let raw;
+  try { raw = fs.readFileSync(ex.from, 'utf8'); } catch (e) { return usage(`cannot read --from: ${e.message}`); }
+  const fd = require('./lib/fleet-decision.js');
+  const records = [];
+  const problems = [];
+  raw.split('\n').forEach((line, i) => {
+    if (!line.trim()) return;
+    let r;
+    try { r = JSON.parse(line); } catch (_e) { problems.push(`line ${i + 1}: not JSON`); return; }
+    const why = !r || typeof r !== 'object' ? 'not an object'
+      : typeof r.id !== 'string' || !SAFE_ID.test(r.id) ? 'id missing or unsafe'
+        : !text(r.question) ? 'question missing'
+          : !text(r.answer) ? 'answer missing'
+            : !Number.isFinite(Date.parse(r.closed_at)) ? 'closed_at is not a date'
+              : r.opened_at !== undefined && !Number.isFinite(Date.parse(r.opened_at)) ? 'opened_at is not a date'
+                : r.status !== undefined && !BACKFILL_STATUS.includes(r.status) ? `status ${JSON.stringify(r.status)} is not one of ${BACKFILL_STATUS.join(' | ')}`
+                  : r.awaiting_operator !== undefined && r.awaiting_operator !== null && !text(r.awaiting_operator) ? 'awaiting_operator is empty'
+                    : ['executor', 'asker'].find((k) => r[k] !== undefined && r[k] !== null && !fd.isAddress(r[k]));
+    if (why) problems.push(`line ${i + 1}: ${typeof why === 'string' && !['executor', 'asker'].includes(why) ? why : `${why} is not an address`}`);
+    else records.push(r);
+  });
+  if (problems.length) { process.stderr.write(`open-decision: backfill refused, nothing written:\n  ${problems.join('\n  ')}\n`); return 2; }
+  const have = new Set(projectScopeFiles(args.cwd, { all: true }).flatMap((f) => readFile(f, { all: true })).map((e) => e.id));
+  const add = [];
+  const skip = [];
+  for (const r of records) {
+    if (have.has(r.id) || add.some((x) => x.id === r.id)) { skip.push(r.id); continue; }
+    const e = {
+      id: r.id, question: r.question, background: null, options: null, recommendation: null, why: null, blocks: null, not_authorized: null, source: 'backfill',
+      opened_at: new Date(Date.parse(r.opened_at || r.closed_at)).toISOString(), opened_by_session: null,
+      status: r.status || 'closed', answer: r.answer, backfilled: true,
+    };
+    if (e.status === 'closed') e.closed_at = new Date(Date.parse(r.closed_at)).toISOString();
+    else { e.answered_at = new Date(Date.parse(r.closed_at)).toISOString(); e.awaiting_operator = r.awaiting_operator || null; }
+    if (r.executor) e.executor = r.executor;
+    if (r.asker) e.asker = r.asker;
+    add.push(e);
+  }
+  const apply = ex.apply === true;
+  process.stdout.write(`${apply ? 'APPLY' : 'DRY RUN (nothing written; add --apply)'}: ${add.length} to add, ${skip.length} already in the store${skip.length ? ` (${skip.join(', ')})` : ''}\n`);
+  for (const e of add) process.stdout.write(`  ${apply ? 'add' : 'would add'} ${e.id}  status=${e.status}  ${e.status === 'closed' ? 'closed_at' : 'answered_at'}=${e.closed_at || e.answered_at}  executor=${e.executor || '-'}  asker=${e.asker || '-'}  answer=${JSON.stringify(e.answer.length > 60 ? `${e.answer.slice(0, 60)}...` : e.answer)}\n`);
+  if (!apply || add.length === 0) return 0;
+  try {
+    fs.mkdirSync(sf.dir, { recursive: true, mode: 0o700 });
+    withWriteLock({ storeDir: sf.dir, lockFile: `${sf.file}.lock`, name: path.basename(sf.file), timeoutMs: 5000 }, () => {
+      writeEntries(sf, root, [...readFile(sf.file, { all: true }), ...add]);
+    });
+  } catch (error) {
+    process.stderr.write(`open-decision: ${error.message}\n`);
+    return 4;
+  }
+  process.stdout.write(`wrote ${add.length} record(s) to ${sf.file}\n`);
+  return 0;
+}
+
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };

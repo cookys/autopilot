@@ -43,6 +43,8 @@ import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
 import { NO_BATCH, answerPlan, answerOf, batchSync, cardKey, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
+import { claimReply } from './decideclaim'
+import type { ClaimCard } from './decideclaim'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
 
 import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand, usageDraw } from './band'
@@ -61,7 +63,7 @@ import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, decideDialog, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, decideDialog, decidePick, cleanTargets, normalizeAbs, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -814,7 +816,7 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
         const picks = { ...s.picks }
         if (picks[m[1]] === k) delete picks[m[1]]
         else picks[m[1]] = k
-        return { ...s, picks }
+        return { ...s, picks, failed: withoutKey(s.failed, m[1]) }
       })
       await decideAnswered($, m[1])
     } else if (id === 'submit') await sendDecide($)
@@ -829,7 +831,17 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
 // dirty or unintegrated worktree is never touched) and `prune-plugin-cache.js --version <v>` (a plain version directory, no live pid, not the loaded copy). The arguments come only
 // from the CURRENT clearable lists of the snapshot, so a stale or forged id runs nothing. Owner ruling 2026-10-16 (d-7a7ee75c): no confirmation dialog.
 export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const
+// The send step's claim (F4) is the one other script the pane runs, from its own list: it only wraps `fleet decision claim` and prints JSON (PM ruling 2026-11-07).
+export const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const
 type CleanRun = (argv: string[]) => Promise<{ exitCode: number; stdout: string }>
+// the one exec path for both lists: argv is node + a whitelisted script (ui-lint.test.js pins this); the only place `$.process` is used
+async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[number] | (typeof CLAIM_SCRIPTS)[number], args: string[], run?: CleanRun): Promise<string> {
+  const allowed: readonly string[] = [...CLEAN_SCRIPTS, ...CLAIM_SCRIPTS]
+  if (!allowed.includes(script)) throw new Error('script not allowed')
+  const argv = ['node', $.plugin.root + '/' + script, ...args]
+  const r = run === undefined ? await $.process.run(argv, { timeoutMs: 120_000 }) : await run(argv)
+  return r.stdout
+}
 let cleaning = false
 // the common git dir of the checkout a path belongs to: the first `.git` met walking up (a directory holds HEAD, a gitfile names the gitdir); null when there is none (a directory that is gone)
 async function commonDirAt($: EngineInterface, start: string): Promise<string | null> {
@@ -850,13 +862,7 @@ async function commonDirAt($: EngineInterface, start: string): Promise<string | 
 type CleanNote = { ok: boolean; note: string }
 export async function cleanPress($: EngineInterface, id: string, run?: CleanRun): Promise<void> {
   if (cleaning || snapshot === null) return
-  // the only place `$.process` is used: argv is node + a whitelisted script (ui-lint.test.js pins this)
-  const exec = async (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => {
-    if (!CLEAN_SCRIPTS.includes(script)) throw new Error('script not allowed')
-    const argv = ['node', $.plugin.root + '/' + script, ...args]
-    const r = run === undefined ? await $.process.run(argv, { timeoutMs: 120_000 }) : await run(argv)
-    return r.stdout
-  }
+  const exec = (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => execScript($, script, args, run)
   // the same list the 全部清掉 count is drawn from (model.ts cleanTargets): what is clearable now and was not already reported on
   const left = cleanTargets(snapshot.detail, (await read($, DECIDE)).clean ?? {})
   const asked = id === 'clean:all' ? left.worktrees.map(e => e.target) : left.worktrees.map(e => e.target).filter(x => 'clean:' + x === id)
@@ -922,11 +928,27 @@ async function cleanWorktrees($: EngineInterface, asked: string[], exec: (script
 // a prompt the session refuses takes the marks back. The prompt starts a turn once the session is idle: it is not awaited here.
 // The guard is a module flag taken before the first await: two presses landing together (a double click) both run this function before either has written its marks.
 let sending = false
+// How one card's answer is claimed with the fleet courier before it is sent (F4): `scripts/decision-claim.js` (CLAIM_SCRIPTS) prints {ok, answer_id, reason}. Injectable so the send step
+// is tested without a process (`setClaimCard`). ok with no answer_id is the no-courier host: a line without an id, which the hook does not close.
+let claimCard: ClaimCard | null = null
+export function setClaimCard(fn: ClaimCard | null): void { claimCard = fn }
+const claimWith = ($: EngineInterface): ClaimCard => async (card, answer) => {
+  const args = [card.id, ...('option' in answer ? ['--option', answer.option] : ['--free-text', answer.freeText])]
+  let j: unknown
+  try { j = JSON.parse((await execScript($, CLAIM_SCRIPTS[0], args)).trim().split('\n').pop() ?? '') } catch (_e) { return { ok: false, answer_id: null, reason: 'claim failed' } }
+  const r = j as { ok?: unknown; answer_id?: unknown; reason?: unknown } | null
+  if (r === null || typeof r !== 'object' || typeof r.ok !== 'boolean') return { ok: false, answer_id: null, reason: 'claim failed' }
+  return { ok: r.ok, answer_id: typeof r.answer_id === 'string' && r.answer_id !== '' ? r.answer_id : null, reason: typeof r.reason === 'string' ? r.reason : null }
+}
+const withoutKey = (r: Record<string, string> | undefined, k: string): Record<string, string> => Object.fromEntries(Object.entries(r ?? {}).filter(([i]) => i !== k))
 async function sendDecide($: EngineInterface): Promise<void> {
   if (sending) return
   sending = true
   try {
-    const reply = decideReply(snapshot === null ? [] : snapshot.pending, await read($, DECIDE))
+    const asked = snapshot === null ? [] : snapshot.pending
+    const { reply, failed } = await claimReply(asked, await read($, DECIDE), claimCard ?? claimWith($))
+    // the failed marks are replaced as a whole for the cards asked now: a card that claimed this time loses its old reason, one that failed gets the new one
+    await update($, DECIDE, s => { const keep = Object.fromEntries(Object.entries(s.failed ?? {}).filter(([i]) => !asked.some(d => d.id === i))); return { ...s, failed: { ...keep, ...failed } } })
     if (reply === null) return
     const at = await $.clock.now()
     await update($, DECIDE, s => ({ ...s, sent: { ...s.sent, ...Object.fromEntries(reply.ids.map(i => [i, at])) } }))
@@ -946,7 +968,7 @@ async function decideNote($: EngineInterface, key: string, value: string): Promi
   const id = key.slice(5)
   try {
     decideFocus = noteKey(id)
-    await update($, DECIDE, s => ({ ...s, notes: { ...s.notes, [id]: value } }))
+    await update($, DECIDE, s => ({ ...s, notes: { ...s.notes, [id]: value }, failed: withoutKey(s.failed, id) }))
   } catch (_e) {
     // keep the last text
   }
@@ -956,11 +978,11 @@ async function decideNote($: EngineInterface, key: string, value: string): Promi
 async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: boolean, nowMs: number): Promise<void> {
   const st: DecideState = await read($, DECIDE)
   const gone = (id: string): boolean => !listed.has(id) && (st.sent[id] !== undefined ? nowMs - st.sent[id] > DECIDE_KEEP_MS : ok)
-  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent)])
+  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent), ...Object.keys(st.failed ?? {})])
   const drop = [...ids].filter(gone)
   if (drop.length === 0) return
   const keep = <V,>(o: Record<string, V>): Record<string, V> => Object.fromEntries(Object.entries(o).filter(([id]) => !drop.includes(id)))
-  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent) }))
+  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent), failed: keep(s.failed ?? {}) }))
 }
 
 // the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs

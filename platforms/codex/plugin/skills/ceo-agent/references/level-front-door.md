@@ -524,7 +524,7 @@ source (≈300K to start). The prose rules existed; nothing was in the loop.
 
 #### Pick the executor (operator rule, 2026-11-08)
 
-- Mechanical or read-only work in a brief goes to a light subagent (`haiku` for grep and file-by-file comparison, `sonnet` for editing to a template or running a fixed check) or a cheaper engine seat; the `Engine:` header names it.
+- Mechanical or read-only work in a brief goes to a light-tier executor (`hands` role: grep, file-by-file comparison) or a standard-tier one (`fast-worker` / `implementer` role: editing to a template, running a fixed check), or a cheaper engine seat. The tier is resolved to a model by `scripts/resolve-dispatch.sh` and `references/model-routing.md`; the `Engine:` header carries the resolved model.
 - Depth-0 keeps judgment, checking the key facts and irreversible actions (merge, push); it does a task itself only when it is one or two tool calls.
 - Spread load by the quota each account and engine has left.
 

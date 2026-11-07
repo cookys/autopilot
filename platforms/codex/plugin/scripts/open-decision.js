@@ -55,7 +55,7 @@
  * dispatched_task_id (set by close --dispatched), executor and asker (fleet addresses, set at `open --executor/--asker` or at close),
  * awaiting_operator (the step the operator must do), backfilled (true on a record made by backfill). Field list: this comment and
  * references/review-page.md (decisions); schemas/decision.schema.json validates them.
- * close --answer <text> [--executor A] [--asker B] (PM ruling 01M6RV0Y02: this script sends NOTHING and never calls fleet): records the answer verbatim and
+ * close --answer <text> [--executor A] [--asker B] (PM ruling 01M6RV0Y02: this script sends no dispatch and no fyi; the one thing it sends is the card notice below): records the answer verbatim and
  * prints ONE JSON on stdout: { ok, id, status, answer, pending_dispatch_at, dispatch: { to, task }, fyi: { to, text } | null, then }. The CALLER dispatches
  * `dispatch.task` to `dispatch.to` (and sends `fyi.text` to `fyi.to`) with its own fleet tools, then runs `close --id <id> --dispatched <task_id>`.
  * Until then the card is pending_dispatch (not a question, not closed). --executor falls back to the one stored at open; none anywhere -> the card
@@ -68,6 +68,9 @@
  * backfill --from <file.jsonl>: lines {id, question, answer, closed_at, [opened_at], [executor], [asker], [status], [awaiting_operator]} become records (backfilled: true);
  * status is closed (default when absent) or awaiting_operator_action (kept with its executor; closed_at is then the time it was answered), nothing else;
  * a card already in the store is skipped; a bad line (including a bad status) refuses the whole run (exit 2). Dry run by default; --apply writes.
+ * Card notices (fleetcards phase 1, PM ruling 01M6W4RNP6): `open` and `close` (the paths that leave the open state) send ONE fleet message
+ * `AUTOPILOT-CARD/1 {json}` to the program PM (AUTOPILOT_CARD_NOTIFY_TO, default cookys/aimax395/pm--claude) through the shell `fleet send`, which inside a
+ * Claude session signs as that session. Best effort: no fleet, no courier or a refused send is silent and changes no exit code. AUTOPILOT_CARD_NOTIFY=off stops it.
  * Node built-ins only. This script writes nothing outside the decisions directory.
  * The library functions openDecision / closeDecisionById are also called by hooks/ask-decision.js (depth-0 AskUserQuestion
  * adds an entry with `origin: "ask_user_question"`; mods P1W HOOKQ).
@@ -423,6 +426,16 @@ function verifyAnswer(args) {
   return 0;
 }
 
+// Phase-1 fleetcards: tell the program PM that a card opened or left the open state (scripts/lib/card-notice.js; PM mirror: scripts/fleet-card-mirror.js).
+// Best effort and silent: no fleet binary, no courier, a refused send never changes this script's exit code or output.
+function notifyPm(event, fields) {
+  try { require('./lib/card-notice.js').notify(event, { ...fields, session: sessionForNotice() }); } catch (_e) { /* never fails the card */ }
+}
+function sessionForNotice() {
+  const raw = process.env.CLAUDE_CODE_SESSION_ID;
+  return raw && /^[A-Za-z0-9_-]{1,64}$/.test(raw) ? raw : null;
+}
+
 function main(argv) {
   const kk = takeKind(argv);
   if (kk.error) return usage(kk.error);
@@ -517,6 +530,7 @@ function main(argv) {
     }
     if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
     if (r.status === 'absent') { process.stdout.write(`not open: ${args.id}\n`); return 0; }
+    notifyPm('close', { card_id: args.id, question: r.entry.question, state: patch.status });
     if (answerText !== null && executor && (awaiting || parked)) {
       process.stdout.write(`${JSON.stringify(dispatchPacket({ id: args.id, question: r.entry.question, answer: answerText, executor, asker, awaiting: awaiting ? patch.awaiting_operator : null, status: patch.status, at: now }))}\n`);
       return 0;
@@ -555,6 +569,7 @@ function main(argv) {
     process.stderr.write(`open-decision: note: card ${r.id} written to the UNBOUND scope (${sess.why || 'no root'}); scope_key=${r.scope_key} file=${r.file}; every panel of this project lists unbound cards too, and --root-run-id <id> would bind it to one session root\n`);
   }
   if (r.status === 'ok') {
+    notifyPm('open', { card_id: r.id, question: args.question, state: 'open' });
     process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`);
     // A card written is not a card seen: make sure a watcher publishes it. The card stays written and its id printed either way.
     const vis = require('../src/status/card-visibility').ensureCardVisible({ cwd: path.resolve(args.cwd || process.cwd()), sessionId: sess.session || '', env: process.env });

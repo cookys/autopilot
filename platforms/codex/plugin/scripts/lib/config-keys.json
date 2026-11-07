@@ -5118,6 +5118,60 @@
       "summary": "Set to \"0\" to stop sessions from starting the live runs watcher."
     },
     {
+      "name": "AUTOPILOT_CARD_NOTIFY",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": "on",
+      "readers": [
+        "scripts/lib/card-notice.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" (or 0, false, no) to stop open-decision.js from sending the card open/close notice to the program PM."
+    },
+    {
+      "name": "AUTOPILOT_CARD_NOTIFY_TO",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": "cookys/aimax395/pm--claude",
+      "readers": [
+        "scripts/lib/card-notice.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Fleet address that receives the card open/close notice; \"off\" or \"none\" sends nothing."
+    },
+    {
+      "name": "AUTOPILOT_CARD_MIRROR_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "group": "ui",
+      "default": null,
+      "readers": [
+        "scripts/fleet-card-mirror.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Directory of the PM-side card mirror and to-do files (default: the XDG state dir, autopilot/)."
+    },
+    {
+      "name": "AUTOPILOT_CARD_MIRROR_MEMBER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "group": "ui",
+      "default": "pm--claude",
+      "readers": [
+        "scripts/fleet-card-mirror.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "The fleet seat whose recent messages fleet-card-mirror.js ingests."
+    },
+    {
       "name": "AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S",
       "kind": "env",
       "audience": "user",

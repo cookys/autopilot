@@ -41,6 +41,9 @@ unset __g9_td
 export AUTOPILOT_RUNS_WATCH_AUTOSTART=0
 # The watcher ensures the host review server unless this is 0; no suite may spawn one by accident.
 export AUTOPILOT_REVIEW_SERVER_AUTOSTART=0
+# open-decision.js sends a card notice to the program PM through the real `fleet` unless this is off; no suite may message the fleet by accident.
+# A suite that tests the notice re-exports it with a stub AUTOPILOT_FLEET_BIN.
+export AUTOPILOT_CARD_NOTIFY=off
 
 # Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
 # AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review-{a,b,c}.test.sh so consumer

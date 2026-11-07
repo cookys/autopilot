@@ -14,22 +14,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
-### band 加一個用量分頁，由 autopilot 畫
-- **Id**: BL-0412
-- **Status**: open
-- **Since**: 2026-11-06
-- **Origin**: peer
-- **Reporter**: codeforge
-- **Report**: fleet 01M6RED2SK (codeforge, 2026-11-06)
-- **Reply**: fleet 01M6TXXW4J (2026-11-07)
-- **Problem**: 想在 band 上直接看用量，現在沒有這個分頁；codeforge 要求，契約裡已標成另案。
-- **Impact**: 看用量得離開畫面；codeforge 的契約一直掛著另案。
-- **Trigger**: ready；排在本批第一位，畫面先做預覽讓 owner 決定
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: PEER-REPORTED codeforge 2026-11-06
-- **Pointer**: project/backlog/band-usage-pet-tabs.md
-
 ### band 加一個寵物分頁，先查 codepower 有沒有在做
 - **Id**: BL-0413
 - **Status**: open

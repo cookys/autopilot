@@ -831,7 +831,17 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
 // dirty or unintegrated worktree is never touched) and `prune-plugin-cache.js --version <v>` (a plain version directory, no live pid, not the loaded copy). The arguments come only
 // from the CURRENT clearable lists of the snapshot, so a stale or forged id runs nothing. Owner ruling 2026-10-16 (d-7a7ee75c): no confirmation dialog.
 export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const
+// The send step's claim (F4) is the one other script the pane runs, from its own list: it only wraps `fleet decision claim` and prints JSON (PM ruling 2026-11-07).
+export const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const
 type CleanRun = (argv: string[]) => Promise<{ exitCode: number; stdout: string }>
+// the one exec path for both lists: argv is node + a whitelisted script (ui-lint.test.js pins this); the only place `$.process` is used
+async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[number] | (typeof CLAIM_SCRIPTS)[number], args: string[], run?: CleanRun): Promise<string> {
+  const allowed: readonly string[] = [...CLEAN_SCRIPTS, ...CLAIM_SCRIPTS]
+  if (!allowed.includes(script)) throw new Error('script not allowed')
+  const argv = ['node', $.plugin.root + '/' + script, ...args]
+  const r = run === undefined ? await $.process.run(argv, { timeoutMs: 120_000 }) : await run(argv)
+  return r.stdout
+}
 let cleaning = false
 // the common git dir of the checkout a path belongs to: the first `.git` met walking up (a directory holds HEAD, a gitfile names the gitdir); null when there is none (a directory that is gone)
 async function commonDirAt($: EngineInterface, start: string): Promise<string | null> {
@@ -852,13 +862,7 @@ async function commonDirAt($: EngineInterface, start: string): Promise<string | 
 type CleanNote = { ok: boolean; note: string }
 export async function cleanPress($: EngineInterface, id: string, run?: CleanRun): Promise<void> {
   if (cleaning || snapshot === null) return
-  // the only place `$.process` is used: argv is node + a whitelisted script (ui-lint.test.js pins this)
-  const exec = async (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => {
-    if (!CLEAN_SCRIPTS.includes(script)) throw new Error('script not allowed')
-    const argv = ['node', $.plugin.root + '/' + script, ...args]
-    const r = run === undefined ? await $.process.run(argv, { timeoutMs: 120_000 }) : await run(argv)
-    return r.stdout
-  }
+  const exec = (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => execScript($, script, args, run)
   // the same list the 全部清掉 count is drawn from (model.ts cleanTargets): what is clearable now and was not already reported on
   const left = cleanTargets(snapshot.detail, (await read($, DECIDE)).clean ?? {})
   const asked = id === 'clean:all' ? left.worktrees.map(e => e.target) : left.worktrees.map(e => e.target).filter(x => 'clean:' + x === id)
@@ -924,17 +928,25 @@ async function cleanWorktrees($: EngineInterface, asked: string[], exec: (script
 // a prompt the session refuses takes the marks back. The prompt starts a turn once the session is idle: it is not awaited here.
 // The guard is a module flag taken before the first await: two presses landing together (a double click) both run this function before either has written its marks.
 let sending = false
-// How one card's answer is claimed with the fleet courier before it is sent (F4). Injected so the send step is tested without a process; the real claim is wired through the
-// whitelisted-script path once the PM rules on it. Until then it claims nothing: ok with no answer_id is the no-courier behaviour (a line without an id, which the hook does not close).
-let claimCard: ClaimCard = async () => ({ ok: true, answer_id: null, reason: null })
-export function setClaimCard(fn: ClaimCard): void { claimCard = fn }
+// How one card's answer is claimed with the fleet courier before it is sent (F4): `scripts/decision-claim.js` (CLAIM_SCRIPTS) prints {ok, answer_id, reason}. Injectable so the send step
+// is tested without a process (`setClaimCard`). ok with no answer_id is the no-courier host: a line without an id, which the hook does not close.
+let claimCard: ClaimCard | null = null
+export function setClaimCard(fn: ClaimCard | null): void { claimCard = fn }
+const claimWith = ($: EngineInterface): ClaimCard => async (card, answer) => {
+  const args = [card.id, ...('option' in answer ? ['--option', answer.option] : ['--free-text', answer.freeText])]
+  let j: unknown
+  try { j = JSON.parse((await execScript($, CLAIM_SCRIPTS[0], args)).trim().split('\n').pop() ?? '') } catch (_e) { return { ok: false, answer_id: null, reason: 'claim failed' } }
+  const r = j as { ok?: unknown; answer_id?: unknown; reason?: unknown } | null
+  if (r === null || typeof r !== 'object' || typeof r.ok !== 'boolean') return { ok: false, answer_id: null, reason: 'claim failed' }
+  return { ok: r.ok, answer_id: typeof r.answer_id === 'string' && r.answer_id !== '' ? r.answer_id : null, reason: typeof r.reason === 'string' ? r.reason : null }
+}
 const withoutKey = (r: Record<string, string> | undefined, k: string): Record<string, string> => Object.fromEntries(Object.entries(r ?? {}).filter(([i]) => i !== k))
 async function sendDecide($: EngineInterface): Promise<void> {
   if (sending) return
   sending = true
   try {
     const asked = snapshot === null ? [] : snapshot.pending
-    const { reply, failed } = await claimReply(asked, await read($, DECIDE), claimCard)
+    const { reply, failed } = await claimReply(asked, await read($, DECIDE), claimCard ?? claimWith($))
     // the failed marks are replaced as a whole for the cards asked now: a card that claimed this time loses its old reason, one that failed gets the new one
     await update($, DECIDE, s => { const keep = Object.fromEntries(Object.entries(s.failed ?? {}).filter(([i]) => !asked.some(d => d.id === i))); return { ...s, failed: { ...keep, ...failed } } })
     if (reply === null) return

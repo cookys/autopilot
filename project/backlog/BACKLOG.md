@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0425 -->
+<!-- next-id: BL-0426 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -30,12 +30,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codeforge 2026-11-06
 - **Pointer**: project/backlog/band-usage-pet-tabs.md
 
-### 四支測試套件只在負載下紅，單獨跑綠
+### 三支測試套件只在負載下紅，單獨跑綠
 - **Id**: BL-0414
 - **Status**: open
 - **Since**: 2026-11-06
 - **Origin**: self
-- **Problem**: plan-review-roster-admission 與 runner-binary 在負載高時紅；foreman-eval-sandbox 在 11/6 全套平行時紅；review-server 在 11/7 全套負載 44 時紅。單獨跑都是綠。
+- **Problem**: plan-review-roster-admission 與 runner-binary 在負載高時紅；foreman-eval-sandbox 在 11/6 全套平行時紅。單獨跑都是綠；review-server 另列為 BL-0425。
 - **Impact**: 全套平行時出現假紅，真壞掉會被當成雜訊放過。
 - **Trigger**: next full-suite run, or the next touch of these suites
 - **Trigger-Type**: ready
@@ -1465,3 +1465,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: usagetab g1/g2 review Suggestions (2026-11-07)
 - **Pointer**: project/backlog/usage-tab-follow-ups.md
+
+### review-server 的測試在高負載下回 000，要查出根因
+- **Id**: BL-0425
+- **Status**: open
+- **Since**: 2026-11-07
+- **Origin**: owner
+- **Problem**: review-server 測試裡「watcher 啟動的伺服器回 200」在全套負載 44 時回 000，全套與單獨重跑都紅；但單獨在兩個基底上各跑一次都綠。要在高負載穩定重現並修好根因。
+- **Impact**: 全套高負載時出現假紅，真壞掉會被當成雜訊放過。
+- **Trigger**: ready；在負載 40 以上用壓力工具或平行套件重現
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PM fleet 01M6TY1Q06 (2026-11-07)
+- **Pointer**: project/backlog/flaky-under-load-suites.md

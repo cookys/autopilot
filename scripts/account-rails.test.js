@@ -447,6 +447,95 @@ for (const [label, tool] of TIMEOUTS) {
   });
 }
 
+// ---------------------------------------------------------------- 4b: SIGTERM aimed at the rail itself (BL-0420)
+// orphanRun above signals through an outer `timeout`. These cases send TERM straight to the rail process (no outer timeout) while
+// the claude double is running, wait for the rail to end, and count the claude doubles that are still alive. Four rail arms that
+// had no such case: dispatch-review.sh cc-shim, dispatch-author.sh cc-shim, dispatch-hetero.sh claude-native (account path and
+// legacy seeded path). The double is always the test's own fake claude (the sentinel PATH is on top of the shim bin dir).
+// fork: negative control, the double also starts a detached second claude-named process that outlives any signal to the rail.
+function termRun(arm, fork, deaf) {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  const legacy = arm === 'hetero-legacy';
+  if (legacy) fs.rmSync(fx.regFile);
+  try {
+    const started = path.join(fx.root, 'started');
+    const forkSrc = fork ? "if (process.argv[2] !== 'grandchild') require('child_process').spawn(process.argv[0], [process.argv[1], 'grandchild'], { detached: true, stdio: 'ignore' }).unref();\n" : '';
+    fs.writeFileSync(path.join(fx.shim.binDir, 'claude'), `#!/usr/bin/env node\nrequire('fs').appendFileSync(${JSON.stringify(started)}, 'x');\n${forkSrc}${deaf ? "process.on('SIGTERM', () => {});" : ''}setInterval(() => {}, 1000);\n`, { mode: 0o755 });
+    const pre = path.join(fx.root, 'pre.js');
+    fs.writeFileSync(pre, PRELOAD_SRC);
+    const env = Object.assign({}, fx.env, { NODE_OPTIONS: `--require ${pre}`, G37_TEST_REAL_HOME: fx.realHome, AUTOPILOT_SETTLE_MS: '0', DISPATCH_QUIET: '1' });
+    for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CHILD_SESSION_ID']) delete env[k];
+    const marker = path.join(fx.shim.binDir, 'claude');
+    let cmd; let cwd = REPO;
+    if (arm === 'review-ccshim') {
+      const diff = path.join(fx.root, 'd.diff');
+      fs.writeFileSync(diff, 'diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n');
+      Object.assign(env, { AUTOPILOT_ENDPOINT_TT_URL: 'http://127.0.0.1:9/anthropic', AUTOPILOT_ENDPOINT_TT_TOKEN: 'FAKE-token-ccshim' });
+      cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-review.sh'), '--runner', 'cc-shim', '--endpoint', 'tt', '--model', 'haiku', '--diff-file', diff, '--bin', marker, '--timeout', '120s'];
+    } else if (arm === 'author-ccshim') {
+      const prompt = path.join(fx.root, 'prompt.txt');
+      fs.writeFileSync(prompt, 'Return a small JSON object.\n');
+      Object.assign(env, { ANTHROPIC_BASE_URL: 'http://127.0.0.1:9/anthropic', ANTHROPIC_AUTH_TOKEN: 'FAKE-token-ccshim' });
+      cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-author.sh'), '--runner', 'cc-shim', '--model', 'MiniMax-M3', '--prompt-file', prompt, '--bin', marker, '--timeout', '120s'];
+    } else {
+      const gitq = (a) => spawnSync('git', ['-c', 'user.email=fixture', '-c', 'user.name=t', ...a], { cwd: cwd, stdio: 'ignore' });
+      cwd = path.join(fx.root, 'repo');
+      fs.mkdirSync(cwd);
+      gitq(['init', '-q', '-b', 'develop']);
+      fs.writeFileSync(path.join(cwd, 'a.txt'), 'x\n');
+      gitq(['add', '-A']);
+      gitq(['commit', '-q', '-m', 'base']);
+      const prompt = path.join(fx.root, 'prompt.txt');
+      fs.writeFileSync(prompt, 'do work\n');
+      Object.assign(env, { AUTOPILOT_CONFIG_FILE: fx.configFile, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(fx.root, 'runs'), GIT_CONFIG_NOSYSTEM: '1' });
+      fs.mkdirSync(env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
+      spawnSync('node', [path.join(REPO, 'scripts', 'run-approval.js'), 'confirm-claude-native'], { env, stdio: 'ignore' });
+      cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-hetero.sh'), '--runner', 'claude-native', '--model', 'claude-sonnet-4-6', '--prompt-file', prompt,
+        '--context-window', 'off', '--branch', 'feat/term-' + Math.random().toString(36).slice(2, 8)];
+    }
+    const child = spawn(cmd[0], cmd.slice(1), { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let exited = false; let rc = null; let outTxt = '';
+    child.stdout.on('data', (d) => { outTxt += d; }); child.stderr.on('data', (d) => { outTxt += d; });
+    child.on('exit', (c, s) => { exited = true; rc = c === null ? s : c; });
+    const waitFor = (pred, ms) => { const t0 = Date.now(); return new Promise((res) => { const iv = setInterval(() => { if (pred() || Date.now() - t0 > ms) { clearInterval(iv); res(pred()); } }, 100); }); };
+    return (async () => {
+      const up = await waitFor(() => fs.existsSync(started) || exited, 40000);
+      assert.ok(up && fs.existsSync(started), `the claude double was never started (rail exited=${exited} rc=${rc}): the case proves nothing; output: ${outTxt.slice(0, 600)}`);
+      child.kill('SIGTERM');
+      await waitFor(() => exited, 20000);
+      const railExited = exited;
+      let alive = claudeChildren(marker, fx.shim.binDir);
+      for (let i = 0; i < 12 && alive.length; i++) { await waitFor(() => false, 500); alive = claudeChildren(marker, fx.shim.binDir); }
+      for (const x of alive) { try { process.kill(x.pid, 'SIGKILL'); } catch (_) { /* gone */ } }
+      if (!railExited) child.kill('SIGKILL');
+      const real = alive.filter((x) => x.argv.slice(0, 2).includes(marker));
+      return { railExited, rc, alive, real, out: outTxt };
+    })().finally(() => fx.cleanup());
+  } catch (e) { fx.cleanup(); throw e; }
+}
+
+// LEAK_TODO: observed 2026-11-07 - a TERM aimed at the rail ends the rail at once (no trap on the foreground `timeout ... claude`
+// line), and the `timeout` plus the claude child keep running. Recorded as todo so the suite stays honest and goes
+// green-with-notice when the rail gets a TERM forward; fixing the rail is product work outside this lane.
+const LEAK_TODO = 'BL-0420: TERM to the rail leaves timeout + claude running (rail has no TERM trap on this foreground path)';
+const TERM_ARMS = [
+  ['review-ccshim', 'dispatch-review.sh cc-shim', LEAK_TODO],
+  ['author-ccshim', 'dispatch-author.sh cc-shim', LEAK_TODO],
+  ['hetero-account', 'dispatch-hetero.sh claude-native, account path', false],
+  ['hetero-legacy', 'dispatch-hetero.sh claude-native, legacy seeded path', false],
+];
+for (const [arm, label, todo] of TERM_ARMS) {
+  test(`rail TERM (${label}): SIGTERM to the rail leaves no claude process behind`, { timeout: 120000, todo }, async () => {
+    const r = await termRun(arm, false, false);
+    assert.ok(r.railExited, 'the rail did not end after TERM');
+    assert.deepStrictEqual(r.real, [], `rail rc=${r.rc} left ${JSON.stringify(r.alive.map((x) => ({ pid: x.pid, a: x.argv.slice(0, 3) })))} real=${r.real.length} out=${r.out.slice(0, 400)}`);
+  });
+  test(`rail TERM (${label}) negative control: a surviving claude-named process turns the check red`, { timeout: 120000 }, async () => {
+    const r = await termRun(arm, true, false);
+    assert.ok(r.alive.length > 0, 'the control was not caught: a detached claude survivor was not counted');
+  });
+}
+
 // ---------------------------------------------------------------- 5: test / registry isolation
 
 const SUITE_FOR_ISOLATION = 'hooks/tests/agy-remaining-stdin.test.sh'; // a short real suite that runs a wired caller

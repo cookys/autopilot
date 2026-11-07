@@ -381,6 +381,19 @@ else
   bad "stage-vocab: a shipped file names an old stage id / size enum / marker phase / owner-U4 wording — run node scripts/check-stage-vocab.js"
 fi
 
+# ── lead-watch fixed-time invariant ──────────────────────────────────────────────
+# A fixed clock time in a dispatch template needs its external-constraint reason beside it (rule constants and the
+# default target list are in the script header). A default target that does not exist is skipped.
+if [ "$IS_PLUGIN" = "1" ]; then
+  : # the plugin payload is a mirror of files already gated in the source repo
+elif ! command -v node >/dev/null 2>&1; then
+  envx "fixed-times: node is required to run scripts/check-fixed-times.js"
+elif node "$REPO/scripts/check-fixed-times.js" --root "$REPO" >/dev/null 2>&1; then
+  ok "fixed-times: no unexplained fixed clock time in the dispatch templates"
+else
+  bad "fixed-times: a dispatch template writes a fixed clock time with no reason - run node scripts/check-fixed-times.js"
+fi
+
 echo ""
 if [ "$ENV_ERR" = "1" ]; then
   echo "❌ environment error — a seeded path is wrong (fix the seed table)" >&2

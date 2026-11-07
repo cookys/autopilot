@@ -139,6 +139,20 @@ registers its pgid at `<reap-dir>/<id>.pgid`. `reap` sends **SIGTERM to the grou
 > subprocesses. The orchestrator reaps them with **`TaskStop <agentId>`** (prose,
 > §B). `reap` is the hetero-leaf analogue of that homogeneous primitive.
 
+## Dispatch template — evidence time and the next units
+
+Each round's dispatch note (the lead's own record, one row per unit) carries these columns:
+
+| Column | Meaning |
+|--------|---------|
+| unit id / scope / base | as in the units file above |
+| evidence time | the **latest** moment the lead looks back to confirm the work is still moving. It is not a start time and not a delivery time: inputs ready means start now, done means hand over now. |
+| N+1, N+2 and entry condition | the next two units behind this one, and what must be true for each to enter (inputs ready, preflight passed, inside the go scope). |
+
+- When a unit finishes and N+1 is already ready and inside the go scope, start it at once and report one line. Finished with a ready next unit left idle is a **stall**.
+- A fixed clock time is allowed only for a real external constraint, and the row says which one: `（外部限制：...）` or `reason:` on the same or the next line. `scripts/check-fixed-times.js` fails a template that writes one without it.
+- The lead goes back and checks on its own when the evidence time passes or a unit sits idle; it does not wait for a notification. While a hand is running, the longest gap between checks is 30 minutes (PM rule).
+
 ## Scope cut (deliberately NOT built)
 
 - `/l5` **hetero parallel** dispatch (BACKLOG — weakest leg). The `reap` group-kill

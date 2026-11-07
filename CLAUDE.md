@@ -13,7 +13,7 @@ Original wording of the rules shortened here: [`docs/dev/_archive/entry-docs/cla
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 40 hooks (26 default-on,
+Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 40 hooks (26 default-on,
 14 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
 
 ## Scripts (prefer over LLM judgment)

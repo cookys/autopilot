@@ -89,4 +89,27 @@ function scopeFileHasLive(file) {
   }
 }
 
-module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, scopeFileHasLive };
+// One card id, one state. Among the records sharing an id (the same card kept in several scope files) the most advanced state wins
+// (closed > awaiting_operator_action / pending_dispatch > open); equal rank: the newest stamp (answered_at / pending_dispatch_at / closed_at
+// for an answered card, opened_at for an open one), then the first file in the (sorted) scope-file order. `items` = [{ file, e }] in that
+// file order; returns the winners, one per id (entries with no string id pass through). Tie rule chosen so the outcome never depends on read order.
+const cardRank = (e) => (isClosedEntry(e) ? 3 : cardState(e) === 'open' ? 1 : 2);
+function cardStamp(e) {
+  const t = cardState(e) === 'open' ? [e.opened_at] : [e.answered_at, e.pending_dispatch_at, e.closed_at];
+  return Math.max(0, ...t.map((v) => Date.parse(v)).filter(Number.isFinite));
+}
+function pickCards(items) {
+  const best = new Map();
+  const out = [];
+  for (const it of items) {
+    const id = it.e && typeof it.e.id === 'string' && it.e.id ? it.e.id : null;
+    if (!id) { out.push(it); continue; }
+    const cur = best.get(id);
+    if (!cur) { best.set(id, it); out.push(it); continue; }
+    const better = cardRank(it.e) > cardRank(cur.e) || (cardRank(it.e) === cardRank(cur.e) && cardStamp(it.e) > cardStamp(cur.e));
+    if (better) { out[out.indexOf(cur)] = it; best.set(id, it); }
+  }
+  return out;
+}
+
+module.exports = { cardRank, pickCards, safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, scopeFileHasLive };

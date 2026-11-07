@@ -24,7 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry, cardState } = require('./scope-key');
+const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry, cardState, pickCards } = require('./scope-key');
 
 const STALE_MS = 7 * 86400 * 1000;
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
@@ -77,16 +77,13 @@ function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
     const value = [];
     const hashes = [];
     let first = null;
-    // One card id, one state: the same id kept in several scope files (an older open record in a previous root, the answered one in the
-    // current root) shows only in its most advanced state (closed > awaiting_operator_action / pending_dispatch > open), so an answered
-    // card is never also listed as a question.
-    const rank = (e) => (isClosedEntry(e) ? 3 : cardState(e) === 'open' ? 1 : 2);
+    // One card id, one state (pickCards in scope-key.js): the same id kept in several scope files shows once, in its most advanced state
+    // (closed > awaiting_operator_action / pending_dispatch > open); equal rank: newest stamp, then first scope-file name.
     const sfs = listScopeFiles(dir, key).map((file) => ({ file, sf: readScopeFile(file, { schema: 'autopilot.decision/2', projectKey: key, identity }) })).filter((x) => x.sf);
-    const best = new Map();
-    for (const { sf } of sfs) for (const e of sf.value.decisions) if (e && typeof e.id === 'string' && e.id) best.set(e.id, Math.max(best.get(e.id) || 0, rank(e)));
+    const winners = pickCards(sfs.flatMap(({ file, sf }) => sf.value.decisions.map((e) => ({ file, e }))));
     for (const { file, sf } of sfs) {
-      const { value: v, raw } = sf;
-      const views = v.decisions.filter((e) => e && rank(e) >= best.get(e.id)).map((e) => viewOf(e, nowMs, liveBase)).filter(Boolean);
+      const { raw } = sf;
+      const views = winners.filter((w) => w.file === file).map((w) => viewOf(w.e, nowMs, liveBase)).filter(Boolean);
       if (views.length === 0) continue;
       value.push(...views);
       hashes.push(crypto.createHash('sha256').update(raw).digest('hex'));

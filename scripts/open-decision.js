@@ -92,7 +92,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { scopeFromCwd } = require('../src/status/project-key');
-const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry } = require('../src/status/scope-key');
+const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, cardState, pickCards, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry } = require('../src/status/scope-key');
 const { withWriteLock } = require('./lib/jsonl-store');
 
 const SCHEMA = 'autopilot.decision/2';
@@ -249,6 +249,13 @@ function findCard(cwd, id, opts) {
     if (entry) return { file, entry };
   }
   return null;
+}
+
+// Like findCard({ all: true }) but the winning record when the id sits in several scope files (read-only views: show --id).
+function findBest(cwd, id) {
+  const hits = projectScopeFiles(cwd, { all: true }).flatMap((file) => readFile(file, { all: true }).filter((e) => e.id === id).map((e) => ({ file, e })));
+  const w = pickCards(hits)[0];
+  return w ? { file: w.file, entry: w.e } : null;
 }
 
 // Cards this session opened that sit in the UNBOUND scope file (no root in the file): [{ id, file }]. The owner-question-guard
@@ -448,13 +455,14 @@ function main(argv) {
     if (bad) return usage(`--${bad} is not a ${cmd} argument`);
     if (args.id !== undefined) { // show --id: ONE card, closed ones too
       if (!SAFE_ID.test(args.id)) return usage('show --id <id> needs a card id (see `list --all`)');
-      const hit = findCard(args.cwd, args.id, { all: true });
+      const hit = findBest(args.cwd, args.id);
       if (!hit) { if (!args.json) process.stdout.write(`no such decision: ${args.id}\n`); return 1; }
       process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: [hit.entry] }, null, 2)}\n` : showText([hit.entry], { all: true }));
       return 0;
     }
     const all = ex.all === true;
-    const entries = projectScopeFiles(args.cwd, { all, live: true }).flatMap((f) => readFile(f, { all, live: true }))
+    const entries = pickCards(projectScopeFiles(args.cwd, { all: true }).flatMap((file) => readFile(file, { all: true }).map((e) => ({ file, e })))).map((w) => w.e)
+      .filter((e) => (all ? true : !isClosedEntry(e)))
       .sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0));
     if (entries.length === 0) { if (!args.json) process.stdout.write(all ? 'no decision\n' : 'no open decision\n'); return 1; }
     process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries, { all }));

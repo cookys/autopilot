@@ -1077,4 +1077,53 @@ function detectBareLsUnguarded(cmd) {
   return null;
 }
 
-module.exports = { detectBareLs, globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };
+// Rule 5 (rm-var-target): a recursive `rm` (-r -R -rf -fr -Rf --recursive, flags before or after the targets, any
+// prefix command such as sudo/env/nice) with a target word that expands at run time: `$VAR`, `${VAR}`, `$(…)`,
+// a backtick. The deletion then depends on state the reader of the command cannot see. Rules run on EXECUTABLE
+// text: quoted-heredoc bodies, comments, single-quoted and ANSI-C words are inert and never count; `$(…)` bodies,
+// `bash -c` strings and function-less segments are scanned like any other segment. Non-recursive `rm $F` passes.
+function wordExpands(raw) {
+  // Drop what the shell never expands: `\$`, `\``, single-quoted spans, ANSI-C `$'…'`; what is left is live text.
+  const live = raw.replace(/\\[\s\S]/g, '').replace(/\$'[^']*'/g, '').replace(/'[^']*'/g, '');
+  return /\$[A-Za-z_{(0-9@*#?!$-]|`/.test(live);
+}
+function detectRecursiveRmVar(cmd) {
+  try { return detectRecursiveRmVarUnguarded(cmd); } catch { return null; } // pathological nesting overflows the stack: fail open
+}
+function detectRecursiveRmVarUnguarded(cmd) {
+  const exec = executableText(typeof cmd === 'string' ? cmd : '');
+  if (!exec.includes('rm')) return null; // cheap exit first: this hook runs on every Bash call
+  const text = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
+  if (!/\brm\b/.test(text)) return null;
+  for (const seg of expandSegments(text)) {
+    const { head, rest } = commandPosition(seg.text);
+    if (!head || dequote(head).replace(/^.*\//, '') !== 'rm') continue;
+    let recursive = false;
+    let afterDd = false;
+    const targets = [];
+    // commandPosition strips the outer quotes of each word (unq); the quoting decides what expands, so read the raw words.
+    const rawRest = rest.length ? tokens(seg.text).map((t) => t.raw).slice(-rest.length) : [];
+    for (const w of rawRest) {
+      const flag = !afterDd && /^-/.test(dequote(w));
+      const bare = dequote(w);
+      if (flag && bare === '--') { afterDd = true; continue; }
+      if (flag) {
+        if (bare === '--recursive' || /^-[a-zA-Z]*[rR]/.test(bare)) recursive = true;
+        continue;
+      }
+      targets.push(w);
+    }
+    if (!recursive) continue;
+    const bad = targets.find(wordExpands);
+    if (bad === undefined) continue;
+    return {
+      rule: 'rm-var-target',
+      why: `recursive rm with the expanding target ${bad} (\`$VAR\`, \`\${VAR}\`, \`$(…)\` or a backtick): what it deletes depends on state the command does not show. `
+        + 'Use a literal path, or `mv` the directory into a trash dir (e.g. `mv x "$Q/trash/"`; a $VAR in a mv is fine). '
+        + 'Relax with AUTOPILOT_BASH_GUARD_RMVAR_MODE=warn|off (or depth0_delegate_gate.rm_var_target in ~/.autopilot/config.json)',
+    };
+  }
+  return null;
+}
+
+module.exports = { detectRecursiveRmVar, detectBareLs,globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };

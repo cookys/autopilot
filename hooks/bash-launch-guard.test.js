@@ -1254,3 +1254,115 @@ test('rule4 fails open (no throw) on deeply nested quote/substitution input', ()
     assert.doesNotThrow(() => detectBareLs(`echo ls ${unit.repeat(25000)}`));
   }
 });
+
+// ---- Rule 5: recursive rm with an expanding target => deny (every depth) ----
+const RMVAR_DENY = [
+  'rm -rf "$D"',
+  'rm -rf $D',
+  'rm -rf ${D}/x',
+  'rm -rf "${D}/x"',
+  'rm -fr -- "$(mktemp -d)"',
+  'rm -r $D',
+  'rm -R "$D"',
+  'rm --recursive "$D"',
+  'rm -Rf "$D"',
+  'rm -fR "$D"',
+  'rm -rf -- "$D"',
+  'rm "$D" -rf',
+  'rm -r -f "$D"',
+  'rm -rf `mktemp -d`',
+  'cd x && rm -rf $D',
+  'cd x; rm -rf "$D"/sub',
+  'true\nrm -rf "$D"\ntrue',
+  'echo hi\nrm -rf \\\n  "$D"',
+  'sudo rm -rf "$D"',
+  'env A=1 rm -rf "$D"',
+  'nice -n 10 rm -rf "$D"',
+  '/bin/rm -rf "$D"',
+  'FOO=1 rm -rf "$D"',
+  'if true; then rm -rf "$D"; fi',
+  'rm -rf literal "$D"',
+  'bash -c \'rm -rf "$D"\'',
+  'echo $(rm -rf "$D")',
+  'x=$(rm -rf "$D")',
+  'rm -rf $HOME/x',
+  'rm -rf ~/"$D"',
+  'rm -rf "$D" > log',
+  'rm -rf "$D" 2>&1',
+  'eval "rm -rf $D"',
+  "eval 'rm -rf $D'",
+  'bash <<\'EOF\'\nrm -rf "$D"\nEOF',
+  'command rm -rf "$D"',
+  'timeout 5 rm -rf "$D"',
+  'nohup rm -rf "$D"',
+  'exec rm -rf "$D"',
+];
+for (const cmd of RMVAR_DENY) {
+  test(`rule5 denies: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true, r.reason);
+    assert.match(r.reason, /rm-var-target/);
+    assert.match(r.reason, /literal path|trash/);
+  });
+}
+
+const RMVAR_PASS = [
+  'rm -rf /tmp/blg-literal-dir',
+  'rm -rf ./build dist',
+  'rm -rf -- literal',
+  'rm $F',
+  'rm -f "$F"',
+  'rm "$F" "$G"',
+  "rm -rf '$D'",
+  "rm -rf '$(mktemp -d)'",
+  'rm -rf \\$D',
+  "rm -rf $'$D'",
+  'echo "rm -rf $D"',
+  "echo 'rm -rf $D'",
+  'echo rm -rf $D',
+  '# rm -rf $D\ntrue',
+  "cat <<'EOF'\nrm -rf $D\nEOF",
+  'git commit -m "$(cat <<\'EOF\'\nnote: rm -rf $D is denied\nEOF\n)"',
+  'mv "$D" "$Q/trash/"',
+  'ls -r "$D"',
+  'grep -r foo "$D"',
+  'cp -r "$A" "$B"',
+  'git rm -r "$D"',
+  'for d in a b; do echo "$d"; done',
+  'echo $D | xargs echo rm -rf',
+  'rm -rf build > "$LOG"',
+  'rm -rf build 2>"$ERR"',
+  'rm -rf build &>"$L"',
+  'rm -rf build >>"$L" 2>&1',
+  'rm -rf build < "$IN"',
+];
+for (const cmd of RMVAR_PASS) {
+  test(`rule5 passes: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false, r.reason);
+    assert.doesNotMatch(r.ctx, /rm-var-target/);
+  });
+}
+
+test('rule5 also denies inside a subagent call (agent_id present)', () => {
+  const r = run('rm -rf "$D"', { extra: { agent_id: 'sub-1', agent_type: 'general-purpose' } });
+  assert.strictEqual(r.deny, true, r.reason);
+  assert.match(r.reason, /rm-var-target/);
+});
+
+test('rule5 knob: off passes, warn advises without denying, garbage stays deny', () => {
+  const off = run('rm -rf "$D"', { env: { AUTOPILOT_BASH_GUARD_RMVAR_MODE: 'off' } });
+  assert.strictEqual(off.deny, false);
+  assert.doesNotMatch(off.ctx, /rm-var-target/);
+  const warn = run('rm -rf "$D"', { env: { AUTOPILOT_BASH_GUARD_RMVAR_MODE: 'warn' } });
+  assert.strictEqual(warn.deny, false);
+  assert.match(warn.ctx, /rm-var-target/);
+  assert.strictEqual(run('rm -rf "$D"', { env: { AUTOPILOT_BASH_GUARD_RMVAR_MODE: 'bogus' } }).deny, true);
+});
+
+test('rule5 fails open (no throw) on deeply nested quote/substitution input', () => {
+  const { detectRecursiveRmVar } = require('../scripts/lib/bash-launch-rules.js');
+  for (const unit of ['a=( "$(', 'x="$(', '"`', '"((', "'((", '"<(', '"a=(']) {
+    assert.doesNotThrow(() => detectRecursiveRmVar(`echo rm ${unit.repeat(25000)}`));
+  }
+});

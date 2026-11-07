@@ -1077,4 +1077,79 @@ function detectBareLsUnguarded(cmd) {
   return null;
 }
 
-module.exports = { detectBareLs, globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };
+// Rule 5 (rm-var-target): a recursive `rm` (-r -R -rf -fr -Rf --recursive, flags before or after the targets, any
+// prefix command such as sudo/env/nice) with a target word that expands at run time: `$VAR`, `${VAR}`, `$(…)`,
+// a backtick. The deletion then depends on state the reader of the command cannot see. Rules run on EXECUTABLE
+// text: quoted-heredoc bodies, comments, single-quoted and ANSI-C words are inert and never count; `$(…)` bodies,
+// `bash -c` strings and function-less segments are scanned like any other segment. Non-recursive `rm $F` passes.
+function wordExpands(raw) {
+  // Drop what the shell never expands: `\$`, `\``, single-quoted spans, ANSI-C `$'…'`; what is left is live text.
+  const live = raw.replace(/\\[\s\S]/g, '').replace(/\$'[^']*'/g, '').replace(/'[^']*'/g, '');
+  return /\$[A-Za-z_{(0-9@*#?!$-]|`/.test(live);
+}
+function detectRecursiveRmVar(cmd) {
+  try { return detectRecursiveRmVarUnguarded(cmd); } catch { return null; } // pathological nesting overflows the stack: fail open
+}
+// A redirection word: `>`, `>>`, `2>`, `&>`, `<`, `<<<`, `>&2`, `2>&1`, `>"$LOG"`. Returns null when the word is not one,
+// else { target: true } when the operator stands alone and the NEXT word is its file (not an rm target).
+function redirectWord(raw) {
+  const m = /^(?:\d*|&)(?:>>|>\||>&|<&|<<<|<<|>|<|&>)(.*)$/s.exec(raw) || /^&>>(.*)$/s.exec(raw);
+  if (!m) return null;
+  return { target: m[1] === '' };
+}
+function rmVarHit(seg) {
+  const { head, rest } = commandPosition(seg.text);
+  if (!head || dequote(head).replace(/^.*\//, '') !== 'rm') return undefined;
+  let recursive = false;
+  let afterDd = false;
+  let skipNext = false;
+  const targets = [];
+  // commandPosition strips the outer quotes of each word (unq); the quoting decides what expands, so read the raw words.
+  const rawRest = rest.length ? tokens(seg.text).map((t) => t.raw).slice(-rest.length) : [];
+  for (const w of rawRest) {
+    if (skipNext) { skipNext = false; continue; } // the file word of a standalone redirection operator
+    const redir = redirectWord(w);
+    if (redir) { skipNext = redir.target; continue; } // a redirection is not an rm target
+    const flag = !afterDd && /^-/.test(dequote(w));
+    const bare = dequote(w);
+    if (flag && bare === '--') { afterDd = true; continue; }
+    if (flag) {
+      if (bare === '--recursive' || /^-[a-zA-Z]*[rR]/.test(bare)) recursive = true;
+      continue;
+    }
+    targets.push(w);
+  }
+  if (!recursive) return undefined;
+  return targets.find(wordExpands);
+}
+function detectRecursiveRmVarUnguarded(cmd) {
+  const raw = typeof cmd === 'string' ? cmd : '';
+  const exec = executableText(raw);
+  if (!raw.includes('rm')) return null; // cheap exit first: this hook runs on every Bash call
+  const prep = (e) => expandSegments(stripArrayAssigns(stripArithmetic(rewriteProcSubst(e))));
+  const top = prep(exec);
+  // Like rule 2: heredoc bodies the call RUNS (`bash <<EOF`) and the words after `eval` are scripts of their own.
+  const scripts = [top];
+  for (const body of runHeredocBodies(raw, top)) scripts.push(prep(executableText(body)));
+  for (let si = 0; si < scripts.length && si < 8; si += 1) {
+    for (const seg of scripts[si]) {
+      const pos = commandPosition(seg.text);
+      if (pos.head && dequote(pos.head).replace(/^.*\//, '') === 'eval') {
+        const bodyText = dequote(pos.rest.join(' '));
+        if (bodyText) scripts.push(prep(executableText(bodyText)));
+        continue;
+      }
+      const bad = rmVarHit(seg);
+      if (bad === undefined) continue;
+      return {
+        rule: 'rm-var-target',
+        why: `recursive rm with the expanding target ${bad} (\`$VAR\`, \`\${VAR}\`, \`$(…)\` or a backtick): what it deletes depends on state the command does not show. `
+          + 'Use a literal path, or `mv` the directory into a trash dir (e.g. `mv x "$Q/trash/"`; a $VAR in a mv is fine). '
+          + 'Relax with AUTOPILOT_BASH_GUARD_RMVAR_MODE=warn|off (or depth0_delegate_gate.rm_var_target in ~/.autopilot/config.json)',
+      };
+    }
+  }
+  return null;
+}
+
+module.exports = { detectRecursiveRmVar, detectBareLs, globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };

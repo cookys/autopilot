@@ -6,9 +6,9 @@
 - The review account path lacks timeout -k (76f11d50).
 
 Added from the termtest g1 review:
-- Put the trap before the fork, not after it, so no window is left (same finding as de92deb9, now with a concrete fix).
-- Verify exit 137 with a stand-in that ignores the signal: the test must prove the -k kill fires, not only that TERM is forwarded.
-- The review path's cc-shim launch (scripts/dispatch-review.sh, anchor `CCSHIM_RC=$?`) gets `timeout -k` like the other paths.
+- Put the trap before the fork, not after it, so no window is left (same finding as de92deb9, now with a concrete fix; termtest g1 eef7be08).
+- Verify exit 137 with a stand-in that ignores the signal: the test must prove the -k kill fires, not only that TERM is forwarded (termtest g1 863b7c57).
+- The review path's cc-shim launch (scripts/dispatch-review.sh, anchor `CCSHIM_RC=$?`) gets `timeout -k` like the other paths (termtest g1 6609c9af).
 
 ## BL-0422 band "waiting for you N" in the top menu row
 - The count is global, not per card, so it belongs in the top menu row. Precondition: it fits 80 columns without truncation.

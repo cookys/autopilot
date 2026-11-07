@@ -103,7 +103,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-11-07
 - **Origin**: self
-- **Problem**: account 路徑還原 trap 時是重設而非存回原本的；trap 要放在 fork 之前；要用不回應信號的替身驗 137；review 的 cc-shim 缺強制補殺的逾時參數。
+- **Problem**: account 路徑還原 trap 時是重設而非存回原本的；trap 要放在 fork 之前；要用不回應信號的替身驗 137；review 的 cc-shim 缺 -k；review 的 account 路徑缺 timeout -k（76f11d50）。
 - **Impact**: 極端時序下憑證副本或子程序可能殘留。
 - **Trigger**: next touch of the account rails seeding code
 - **Trigger-Type**: event

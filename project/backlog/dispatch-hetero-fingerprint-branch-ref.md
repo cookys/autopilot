@@ -12,6 +12,6 @@ revival.3d 回報（BL-0416）：每一輪 dispatch-hetero 都以 main_checkout_
 - hetfp：拒收訊息現在列出變動的指紋元件，以及每個被新增、移除或移動的 ref 與前後 sha，不再只有兩個雜湊。
 
 ## 下一步
-- 等 revival.3d 下次被拒時，把新的拒收訊息貼回來（PM 已請 game-lead 轉達），再依訊息列出的元件與 ref 判斷成因。
+- 等 revival.3d 下次被拒時，把新的拒收訊息貼回來（PM 已請 game-lead 轉達，fleet 01M6TPQ03E），再依訊息列出的元件與 ref 判斷成因。
 - 在那之前這一列維持 open，不動指紋邏輯。
 - 負控制仍適用：改動別的 ref 要被拒；只動自己的分支不被拒。

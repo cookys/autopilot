@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0412 -->
+<!-- next-id: BL-0420 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -13,6 +13,119 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`<host>` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
+
+### band 加一個用量分頁，由 autopilot 畫
+- **Id**: BL-0412
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 2026-11-06 fleet
+- **Reply**: unknown
+- **Problem**: 想在 band 上直接看用量，現在沒有這個分頁；codeforge 要求，契約裡已標成另案。
+- **Impact**: 看用量得離開畫面；codeforge 的契約一直掛著另案。
+- **Trigger**: ready；排在本批第一位，畫面先做預覽讓 owner 決定
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED codeforge 2026-11-06
+- **Pointer**: project/backlog/band-usage-pet-tabs.md
+
+### band 加一個寵物分頁，先查 codepower 有沒有在做
+- **Id**: BL-0413
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 2026-11-06 fleet
+- **Reply**: unknown
+- **Problem**: 想在 band 上看寵物，現在沒有這個分頁；codeforge 要求。codepower 那邊可能已經在做。
+- **Impact**: 重複開工會浪費；沒人做 codeforge 就一直等。
+- **Trigger**: ready；開工前先問 codepower 是否已有進行中的工作
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED codeforge 2026-11-06
+- **Pointer**: project/backlog/band-usage-pet-tabs.md
+
+### 三支測試套件只在負載下紅，單獨跑綠
+- **Id**: BL-0414
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: self
+- **Problem**: plan-review-roster-admission 與 runner-binary 在負載高時紅；foreman-eval-sandbox 在 11/6 全套平行時紅，單獨跑都是綠。
+- **Impact**: 全套平行時出現假紅，真壞掉會被當成雜訊放過。
+- **Trigger**: next full-suite run, or the next touch of these suites
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: full-suite runs 2026-11-06
+- **Pointer**: project/backlog/flaky-under-load-suites.md
+
+### fleet lane 文字沒有清掉
+- **Id**: BL-0415
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: self
+- **Problem**: fleet 相關的 lane 文字還留在 repo 裡，沒有清乾淨（參照 2b1d4711）。
+- **Impact**: 舊文字會誤導之後讀文件的人和 agent。
+- **Trigger**: ready；next docs lane
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: fleet lane residue, ref 2b1d4711
+- **Pointer**: project/backlog/fleet-lane-text-and-task-due.md
+
+### dispatch-hetero 每一輪都誤判主 checkout 被改
+- **Id**: BL-0416
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: peer
+- **Reporter**: revival.3d
+- **Report**: 2026-11-06 fleet
+- **Reply**: unknown
+- **Problem**: fingerprint 把 --branch 指定的分支也算進去，該分支每輪都會前進，所以每一輪都被判主 checkout 被動過而拒收。
+- **Impact**: 受影響的專案每輪都被拒，只能手動繞過。
+- **Trigger**: ready；next dispatch-hetero touch
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED revival.3d 2026-11-06
+- **Pointer**: project/backlog/dispatch-hetero-fingerprint-branch-ref.md
+
+### fleet task 派工時能否帶 next_evidence_due
+- **Id**: BL-0417
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: owner
+- **Problem**: PM 要求另排一項：派工時能不能順便帶上下次證據到期時間；hub 79000b8 會丟掉 task_result 的 until，已排在 fleet 的 BL-0014。
+- **Impact**: 沒有到期時間，PM 看不出一個任務何時該有新證據。
+- **Trigger**: fleet BL-0014 unfreezes on 2026-11-10
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PM 2026-11-06 request
+- **Pointer**: project/backlog/fleet-lane-text-and-task-due.md
+
+### dispatch-hetero-account 的 subtest 可能還會跑出 fixture
+- **Id**: BL-0418
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: self
+- **Problem**: 這支套件有個 subtest 會在它的 cwd repo 裡提交；GIT_DIR 外洩那一類已修，但是否還有剩下的情況沒有記錄。
+- **Impact**: 漏掉的情況會改到外層 repo 的檔案。
+- **Trigger**: ready；next touch of dispatch-hetero-account.test.js
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: gitenv follow-up 2026-11-06
+- **Pointer**: project/backlog/flaky-under-load-suites.md
+
+### test-identity-guard 把被註解掉的 source 行當成豁免
+- **Id**: BL-0419
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: self
+- **Problem**: lib_exempt 的比對也會抓到被註解掉的 source 行，應只比對程式碼行；舊的 lib.sh 檢查有同樣的盲點。
+- **Impact**: 註解掉的行就讓套件逃過身分檢查，守門形同虛設。
+- **Trigger**: ready；next touch of test-identity-guard
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: gitenv g4 Minor fa0cf3e1
+- **Pointer**: project/backlog/test-identity-guard-commented-source.md
 
 ### bl-ap-streamjson：json 與 stream-json 的 result 位元組是否一致
 - **Id**: BL-0372

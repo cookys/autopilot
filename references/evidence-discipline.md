@@ -1354,3 +1354,16 @@ Rule: "reads the same evidence" is not an impact analysis. When a fixture or a j
 - Bound the instrument's scope from the real transcripts first: list the operations the models actually used (v1 and v2 moved develop only through the merge lane, 190 times) and state what is and is not guaranteed.
 
 Preventing artifact: `findings-batch-v3` preregistration with a content-judged `m_merge_blocked`, an `instrument_scope` block and a preflight that refuses to dispatch unless the journal hook fires. Evidence: commit e89a6a810, v2 result `$HOME/.autopilot/fbatch-v2/run/formal.jsonl`, v1 result `$HOME/.autopilot/fbatch-formal2/run/formal.jsonl`.
+
+## 65. Acceptance suites come from the selector, and "red before me" needs a run on develop
+
+2026-11-06, test-policy d-a62f4abc plus the PM's addendum. In the Z4 batch of 16 lanes, 15 of the suites that went red were not on any lane's own hand-picked list.
+
+Rules:
+
+- Acceptance and receipts never rest on a hand-picked suite list. Select with `node scripts/affected-suites.js --base <lane base> --head HEAD`, add its `always_run` and the repo-audit suites, and run them one at a time against the list. A hand-picked suite is a supplement only.
+- When the selector returns FULL, cannot compute, or selects at least half of all suites, nobody narrows the set: depth-0 runs the full suite on the merged tree (`tools/migrate/suite-baseline.js run-all --jobs 6`), alone, with nothing else running.
+- A red suite counts as "not caused by this change" only when the same suite, run on develop with the same environment, is also red. "It was already red" from memory is not evidence.
+- The selector is known to miss three dependency kinds: layout copies, whole-tree content scans, and the frozen copies inside eval packs. Keep the repo-audit (`always_run`) suites in every selection for that reason, and treat the at-least-half rule as the net for the rest.
+
+Preventing artifact: `scripts/affected-suites.js` (selector), `tools/migrate/suite-baseline.js run-all` (full run); the l5 acceptance step in `skills/l5/references/hetero-impl-loop.md` points here.

@@ -154,7 +154,8 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    rail then cannot even journal the stop (2026-09-16, two suites red since a config change). The
    managed `full_suite` station reuses an identity-equal GREEN verification receipt (same tree,
    sealed argv, env) instead of running the commands a second time unless `full_suite_reuse` is
-   sealed false.
+   sealed false. Which suites count as acceptance, and when depth-0 runs the full suite instead,
+   is fixed by `references/evidence-discipline.md` § 65 (affected-suites, never a hand-picked list).
 4. `.claude/mission-routing-config.json` → the new graph + sources; then
    `scripts/mission-terminal-reconcile.js legacy --repo-root . --graph-digest <digest>` (the
    legacy B/C disposition is bound to the current graph digest; without it admission fails with

@@ -362,7 +362,11 @@ function orphanRun(tool, flags, kind, deaf, legacy, forkExtra) {
     }
     let cmd;
     if (kind === 'run') cmd = [process.execPath, path.join(REPO, 'scripts', 'claude-account.js'), 'run', '--purpose', 't', '--', 'claude', '-p', marker];
-    else {
+    else if (kind === 'author') {
+      const prompt = path.join(fx.root, 'prompt.txt');
+      fs.writeFileSync(prompt, 'Return a small JSON object.\n');
+      cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-author.sh'), '--runner', 'claude-native', '--model', 'claude-fable-5', '--prompt-file', prompt, '--bin', path.join(fx.shim.binDir, 'claude'), '--timeout', '120s'];
+    } else {
       const diff = path.join(fx.root, 'd.diff');
       fs.writeFileSync(diff, 'diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n');
       cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-review.sh'), '--runner', 'claude-native', '--model', 'haiku', '--diff-file', diff, '--bin', path.join(fx.shim.binDir, 'claude'), '--timeout', '120s'];
@@ -429,6 +433,12 @@ for (const [label, tool] of TIMEOUTS) {
     const account = orphanRun(tool, ['-s', 'TERM'], 'review', false, false);
     assert.ok(account.real.length <= legacy.real.length,
       `account path left more claude processes than legacy (legacy ${legacy.real.length}, account ${JSON.stringify(account.real)})`);
+  });
+  test(`grandchild cleanup (${label}): dispatch-author.sh under a registry, SIGTERM - no more real claude processes than the legacy path`, () => {
+    const legacy = orphanRun(tool, ['-s', 'TERM'], 'author', false, true);
+    const account = orphanRun(tool, ['-s', 'TERM'], 'author', false, false);
+    assert.ok(account.real.length <= legacy.real.length,
+      `author account path left more claude processes than legacy (legacy ${legacy.real.length}, account ${JSON.stringify(account.real)})`);
   });
   test(`grandchild cleanup (${label}) negative control: an extra surviving claude on the account path turns the comparison red`, () => {
     const legacy = orphanRun(tool, ['-s', 'TERM'], 'review', false, true);

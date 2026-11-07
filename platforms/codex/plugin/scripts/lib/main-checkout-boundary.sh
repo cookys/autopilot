@@ -119,8 +119,55 @@ $hooks"
   if printf '%s\n' "$mounts" | grep -q -F -- "$MAIN_CHECKOUT/"; then
     _fp_unverifiable mount-below-checkout; return 0
   fi
-  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$head" "$sym" "$refs" "$dirty" "$walk" "$cfg" "$hooks" "$idx" | sha256sum 2>/dev/null | cut -c1-64 | grep -E '^[0-9a-f]{64}$' \
-    || _fp_unverifiable digest
+  local digest
+  digest="$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$head" "$sym" "$refs" "$dirty" "$walk" "$cfg" "$hooks" "$idx" | sha256sum 2>/dev/null | cut -c1-64 | grep -E '^[0-9a-f]{64}$')" \
+    || { _fp_unverifiable digest; return 0; }
+  # MAIN_CHECKOUT_FP_MODE=parts (BL-0416): the same single measurement, but also print what it was
+  # made of — one `P <part> <sha256>` line per component and one `R <refname>=<sha>=<symref>` line
+  # per measured ref — so a rejection can say WHAT moved instead of two opaque digests. `D <digest>`
+  # is the very digest the default mode prints, from the same read (no second, racing measurement).
+  if [ "${MAIN_CHECKOUT_FP_MODE:-}" = parts ]; then
+    local _pn _pv
+    for _pn in head sym dirty walk cfg hooks idx; do
+      case "$_pn" in head) _pv="$head" ;; sym) _pv="$sym" ;; dirty) _pv="$dirty" ;; walk) _pv="$walk" ;; cfg) _pv="$cfg" ;; hooks) _pv="$hooks" ;; idx) _pv="$idx" ;; esac
+      printf 'P %s %s\n' "$_pn" "$(printf '%s' "$_pv" | sha256sum | cut -c1-64)"
+    done
+    printf 'H %s\n' "$head"
+    printf '%s\n' "$refs" | sed -n 's/^\(.\)/R \1/p'
+    printf 'D %s\n' "$digest"
+    return 0
+  fi
+  printf '%s\n' "$digest"
+}
+
+# main_checkout_parts_digest <parts-text> → the `D` digest of a parts-mode measurement (an
+# UNVERIFIABLE-… answer has no D line and passes through whole).
+main_checkout_parts_digest() {
+  local d
+  d="$(printf '%s\n' "$1" | sed -n 's/^D //p')"
+  if [ -n "$d" ]; then printf '%s' "$d"; else printf '%s' "$1"; fi
+}
+
+# main_checkout_describe_delta <before-parts> <after-parts> → one line naming what differs:
+# the components that changed, HEAD before→after, and every ref that was added, removed or moved
+# with its before and after sha. Used only to explain a rejection; the verdict is the digest compare.
+main_checkout_describe_delta() {
+  local b="$1" a="$2" out="" n bv av
+  for n in sym dirty walk cfg hooks idx; do
+    bv="$(printf '%s\n' "$b" | sed -n "s/^P $n //p")"; av="$(printf '%s\n' "$a" | sed -n "s/^P $n //p")"
+    [ "$bv" = "$av" ] || out="${out:+$out, }component ${n/#sym/HEAD-symref} changed"
+  done
+  bv="$(printf '%s\n' "$b" | sed -n 's/^H //p')"; av="$(printf '%s\n' "$a" | sed -n 's/^H //p')"
+  [ "$bv" = "$av" ] || out="${out:+$out, }HEAD ${bv:0:12} -> ${av:0:12}"
+  # refs: join on refname; a line is refname=sha=symref.
+  local d
+  d="$(awk -F= '
+    FNR==NR { if ($0 ~ /^R /) { l=substr($0,3); split(l,f,"="); B[f[1]]=f[2]; S[f[1]]=l } next }
+    { if ($0 ~ /^R /) { l=substr($0,3); split(l,f,"="); A[f[1]]=f[2]; if (!(f[1] in B)) printf "%s added (-> %s); ", f[1], substr(f[2],1,12); else if (B[f[1]]!=f[2]) printf "%s %s -> %s; ", f[1], substr(B[f[1]],1,12), substr(f[2],1,12) } }
+    END { for (k in B) if (!(k in A)) printf "%s removed (was %s); ", k, substr(B[k],1,12) }
+  ' <(printf '%s\n' "$b") <(printf '%s\n' "$a"))"
+  [ -z "$d" ] || out="${out:+$out, }refs: ${d%; }"
+  printf '%s' "${out:-no component differs (digest differs only through an unmeasured race)}"
 }
 
 # --- sibling-namespace validators (308 BACKLOG #46) -------------------------------------

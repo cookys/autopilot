@@ -42,11 +42,14 @@ function feed(env, ev) {
 }
 const attnFile = (live) => path.join(live, 'attention', `${SID}.json`);
 const readJ = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
-function cards(repo) {
+// All stored cards, closed ones included (cardtrail keeps a closed card with status 'closed').
+function allCards(repo) {
   const dir = path.join(repo, '.git', 'autopilot', 'decisions');
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter((f) => f.endsWith('.json')).flatMap((f) => readJ(path.join(dir, f)).decisions || []);
 }
+// The open questions only (status absent or 'open'): what "the card is closed" means to the owner's panel.
+const cards = (repo) => allCards(repo).filter((c) => !c.status || c.status === 'open');
 const inRepo = (ev, repo) => ({ ...ev, cwd: repo });
 
 // ---------- hook path ----------
@@ -94,6 +97,9 @@ test('clear on resolve: PostToolUse (approved) closes the card and removes the s
   feed(env, inRepo({ ...PERM, hook_event_name: 'PostToolUse', tool_response: {} }, repo));
   assert.ok(!fs.existsSync(attnFile(live)));
   assert.strictEqual(cards(repo).length, 0);
+  const kept = allCards(repo);
+  assert.strictEqual(kept.length, 1, 'cardtrail: the closed card is kept');
+  assert.strictEqual(kept[0].status, 'closed', 'closed, not pending_dispatch (a permission card has no executor)');
 });
 
 test('clear on deny (UserPromptSubmit) and on SessionEnd', () => {

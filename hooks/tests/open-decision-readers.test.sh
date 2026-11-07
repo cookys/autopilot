@@ -58,6 +58,15 @@ assert_contains "$ASK" "$AWAIT" "session-start line still names the awaiting car
 assert_not_contains "$ASK" "Open decision cards (2)" "session-start does not count awaiting/pending as open"
 assert_contains "$ASK" "runs-watch-count:1" "runs-watch counts 1 open question (awaiting and pending_dispatch are not an owner deciding)"
 assert_contains "$ASK" "review-model:$OPEN|needs=true|awaiting=$AWAIT|pending=$PEND" "review job model: question list = open only; awaiting and pending_dispatch kept apart"
+# Count parity (PM, ctfix): the panel, the band and SessionStart must report the SAME number of pending questions for one store holding an open, a closed,
+# a pending_dispatch and an awaiting_operator_action card. panel = decision-input open rows and runs-watch count; band = the job model the band reads
+# (mods/live/model.ts readJobModel parses this buildJobModel output; model.ts is TS under the mod runtime and cannot be required from node, so its
+# source is asserted: needs_decision + the decisions list); SessionStart = the cardState bucket. All must be 1.
+n_di="$(printf '%s\n' "$ASK" | sed -n 's/^decision-input://p' | tr ',' '\n' | grep -c '=open$')"
+n_rw="$(printf '%s\n' "$ASK" | sed -n 's/^runs-watch-count://p')"
+n_band="$(printf '%s\n' "$ASK" | sed -n 's/^review-model:\([^|]*\)|.*/\1/p' | tr ',' '\n' | grep -c .)"
+n_ss="$(printf '%s\n' "$ASK" | sed -n 's/^session-start://p' | tr ',' '\n' | grep -c .)"
+assert_eq "$n_di,$n_rw,$n_band,$n_ss" "1,1,1,1" "count parity: panel (decision-input, runs-watch), band (job model decisions) and SessionStart all count 1 pending question"
 # C1: a page whose only card is an awaiting one must show its step, and must not look like "nothing to do"
 cat > "$TEST_TMP/page.js" <<'JS'
 const rr = require(require('path').join(process.env.REPO_ROOT, 'scripts/render-review-page.js'));

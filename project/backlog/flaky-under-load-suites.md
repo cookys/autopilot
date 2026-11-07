@@ -3,6 +3,7 @@
 BL-0414：
 - plan-review-roster-admission、runner-binary：單獨跑綠，負載高時紅。
 - foreman-eval-sandbox.test.js：2026-11-06 全套平行時紅，單獨跑綠。
+- hooks/tests/review-server.test.sh：2026-11-07 Z7 全套（負載 44）時 pool 與單獨跑都紅，失敗的斷言是 "watcher-started server answers 200: expected '200', got '000'"；之後在 develop d8ffe3ffa 與 Z7 124a507ce 各單獨跑一次，rc=0。
 - 做法：找出共用資源或時間假設，修成與負載無關；不要用重跑掩蓋。
 
 BL-0418：dispatch-hetero-account.test.js 有一個 subtest 會在它的 cwd repo 裡 commit，跑出 fixture 範圍。

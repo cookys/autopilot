@@ -21,7 +21,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: peer
 - **Reporter**: codeforge
 - **Report**: fleet 01M6RED2SK (codeforge, 2026-11-06)
-- **Reply**: unknown
+- **Reply**: fleet 01M6TXXW4J (2026-11-07)
 - **Problem**: 想在 band 上直接看用量，現在沒有這個分頁；codeforge 要求，契約裡已標成另案。
 - **Impact**: 看用量得離開畫面；codeforge 的契約一直掛著另案。
 - **Trigger**: ready；排在本批第一位，畫面先做預覽讓 owner 決定
@@ -46,12 +46,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codeforge 2026-11-06
 - **Pointer**: project/backlog/band-usage-pet-tabs.md
 
-### 三支測試套件只在負載下紅，單獨跑綠
+### 四支測試套件只在負載下紅，單獨跑綠
 - **Id**: BL-0414
 - **Status**: open
 - **Since**: 2026-11-06
 - **Origin**: self
-- **Problem**: plan-review-roster-admission 與 runner-binary 在負載高時紅；foreman-eval-sandbox 在 11/6 全套平行時紅，單獨跑都是綠。
+- **Problem**: plan-review-roster-admission 與 runner-binary 在負載高時紅；foreman-eval-sandbox 在 11/6 全套平行時紅；review-server 在 11/7 全套負載 44 時紅。單獨跑都是綠。
 - **Impact**: 全套平行時出現假紅，真壞掉會被當成雜訊放過。
 - **Trigger**: next full-suite run, or the next touch of these suites
 - **Trigger-Type**: ready

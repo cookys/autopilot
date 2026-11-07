@@ -1145,6 +1145,8 @@ if declare -F context_window_gate > /dev/null 2>&1; then
       "${CONTEXT_WINDOW_VERDICT:-}" "${CONTEXT_WINDOW_JSON:-}" >> "$RAW_LOG"
 fi
 
+# Forward a TERM/INT/HUP aimed at this script to the runner child ($_ACCT_CHILD), then end 143.
+_acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/dev/null; exit 143; }
 RUNNER_EXIT=0
 CODEX_TRANSPORT=0
 CODEX_DEADLINE_HIT=0
@@ -1430,8 +1432,12 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
   timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
     bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
-    _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
-  RUNNER_EXIT=$?
+    _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE" &
+  # Backgrounded + forwarded so a TERM/INT/HUP aimed at this script reaches timeout and the claude child (BL-0420); see _acct_forward.
+  _ACCT_CHILD=$!
+  trap _acct_forward TERM INT HUP
+  wait "$_ACCT_CHILD"; RUNNER_EXIT=$?
+  trap - TERM INT HUP
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   declare -F ccshim_keep_transcript >/dev/null 2>&1 && { ccshim_keep_transcript "$CCSHIM_CWD" "$AUTHOR_RUN_ID" || true; }
@@ -1483,7 +1489,6 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     # child ends, but `wait` returns at once on a trapped signal. Same forwarding as dispatch-review.sh's account path; the
     # legacy path gets it from seed-claude-config.js --exec.
     _ACCT_CHILD=$!
-    _acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/dev/null; exit 143; }
     trap _acct_forward TERM INT HUP
     wait "$_ACCT_CHILD"; RUNNER_EXIT=$?
     trap - TERM INT HUP

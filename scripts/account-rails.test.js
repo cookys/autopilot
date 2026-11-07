@@ -12,7 +12,7 @@
 //      scripts/account-rails-w4.test.js, W5 in scripts/eval-account-rails.test.js, P4 in scripts/lane-reopen.test.js);
 //   3. holds the one env-check reading rule against all four readers (account-state.sh, account-rail.js, eval-account.js, eval-account.sh);
 //   4. asserts that a claude child does not outlive an outer `timeout` (TERM, and -k KILL) - the dispatch-review.sh TERM comparison counts real claude processes only (wrapper residual documented below),
-//      `todo` with the observed leak, so the suite stays honest and goes green-with-notice when the leak is fixed;
+//      and that a TERM aimed at a rail itself (4b) leaves no claude behind, with the cc-shim exit codes (0, N, 124/137) carried through;
 //   5. proves the test/registry isolation: hooks/tests/lib.sh, run.sh and affected-suites.js pin AUTOPILOT_ACCOUNTS_DIR to a path
 //      that does not exist, and a broken registry pointed at a real suite goes red only when the isolation is switched off.
 const test = require('node:test');
@@ -514,18 +514,14 @@ function termRun(arm, fork, deaf) {
   } catch (e) { fx.cleanup(); throw e; }
 }
 
-// LEAK_TODO: observed 2026-11-07 - a TERM aimed at the rail ends the rail at once (no trap on the foreground `timeout ... claude`
-// line), and the `timeout` plus the claude child keep running. Recorded as todo so the suite stays honest and goes
-// green-with-notice when the rail gets a TERM forward; fixing the rail is product work outside this lane.
-const LEAK_TODO = 'BL-0420: TERM to the rail leaves timeout + claude running (rail has no TERM trap on this foreground path)';
 const TERM_ARMS = [
-  ['review-ccshim', 'dispatch-review.sh cc-shim', LEAK_TODO],
-  ['author-ccshim', 'dispatch-author.sh cc-shim', LEAK_TODO],
-  ['hetero-account', 'dispatch-hetero.sh claude-native, account path', false],
-  ['hetero-legacy', 'dispatch-hetero.sh claude-native, legacy seeded path', false],
+  ['review-ccshim', 'dispatch-review.sh cc-shim'],
+  ['author-ccshim', 'dispatch-author.sh cc-shim'],
+  ['hetero-account', 'dispatch-hetero.sh claude-native, account path'],
+  ['hetero-legacy', 'dispatch-hetero.sh claude-native, legacy seeded path'],
 ];
-for (const [arm, label, todo] of TERM_ARMS) {
-  test(`rail TERM (${label}): SIGTERM to the rail leaves no claude process behind`, { timeout: 120000, todo }, async () => {
+for (const [arm, label] of TERM_ARMS) {
+  test(`rail TERM (${label}): SIGTERM to the rail leaves no claude process behind`, { timeout: 120000 }, async () => {
     const r = await termRun(arm, false, false);
     assert.ok(r.railExited, 'the rail did not end after TERM');
     assert.deepStrictEqual(r.real, [], `rail rc=${r.rc} left ${JSON.stringify(r.alive.map((x) => ({ pid: x.pid, a: x.argv.slice(0, 3) })))} real=${r.real.length} out=${r.out.slice(0, 400)}`);
@@ -533,6 +529,46 @@ for (const [arm, label, todo] of TERM_ARMS) {
   test(`rail TERM (${label}) negative control: a surviving claude-named process turns the check red`, { timeout: 120000 }, async () => {
     const r = await termRun(arm, true, false);
     assert.ok(r.alive.length > 0, 'the control was not caught: a detached claude survivor was not counted');
+  });
+}
+
+// BL-0420 fix: the cc-shim claude line is now backgrounded and waited on; its exit code must still reach CCSHIM_RC / RUNNER_EXIT unchanged.
+// The double exits 0, exits 3, or hangs past a 2s --timeout (timeout's 124, or 137 after the author kill grace remap).
+function exitRun(arm, mode) {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    const body = mode === 'ok' ? "process.stdout.write('hello\\n');" : mode === 'fail' ? 'process.exit(3);' : 'setInterval(() => {}, 1000);';
+    fs.writeFileSync(path.join(fx.shim.binDir, 'claude'), `#!/usr/bin/env node\n${body}\n`, { mode: 0o755 });
+    const marker = path.join(fx.shim.binDir, 'claude');
+    const env = Object.assign({}, fx.env, { AUTOPILOT_SETTLE_MS: '0', DISPATCH_QUIET: '1', AUTOPILOT_ENDPOINT_TT_URL: 'http://127.0.0.1:9/anthropic', AUTOPILOT_ENDPOINT_TT_TOKEN: 'FAKE-token-ccshim', ANTHROPIC_BASE_URL: 'http://127.0.0.1:9/anthropic', ANTHROPIC_AUTH_TOKEN: 'FAKE-token-ccshim' });
+    for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CHILD_SESSION_ID']) delete env[k];
+    const tmo = mode === 'hang' ? '2s' : '60s';
+    let cmd;
+    if (arm === 'review') {
+      const diff = path.join(fx.root, 'd.diff');
+      fs.writeFileSync(diff, 'diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-x\n+y\n');
+      cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-review.sh'), '--runner', 'cc-shim', '--endpoint', 'tt', '--model', 'haiku', '--diff-file', diff, '--bin', marker, '--timeout', tmo];
+    } else {
+      const prompt = path.join(fx.root, 'prompt.txt');
+      fs.writeFileSync(prompt, 'Return a small JSON object.\n');
+      cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-author.sh'), '--runner', 'cc-shim', '--model', 'MiniMax-M3', '--prompt-file', prompt, '--bin', marker, '--timeout', tmo];
+    }
+    const r = spawnSync(cmd[0], cmd.slice(1), { cwd: REPO, env, encoding: 'utf8', timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] });
+    return { rc: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  } finally { fx.cleanup(); }
+}
+for (const arm of ['review', 'author']) {
+  test(`cc-shim exit code (${arm}): a claude that exits 0 is not reported as a non-zero exit`, { timeout: 120000 }, () => {
+    const r = exitRun(arm, 'ok');
+    assert.ok(!/exited non-zero|runner (failed|exited)|rc=\d+/.test(r.out.replace(/rc=0/g, '')), `rc=0 case reported a failure: ${r.out.slice(0, 500)}`);
+  });
+  test(`cc-shim exit code (${arm}): a claude that exits 3 reports exit 3`, { timeout: 120000 }, () => {
+    const r = exitRun(arm, 'fail');
+    assert.ok(/(rc=|exit[ _]code"?[:= ]+|exit(ed)? )3\b/.test(r.out), `exit 3 was not carried through: ${r.out.slice(0, 500)}`);
+  });
+  test(`cc-shim exit code (${arm}): a claude past --timeout reports 124 (or 137)`, { timeout: 120000 }, () => {
+    const r = exitRun(arm, 'hang');
+    assert.ok(/(rc=|exit[ _]code"?[:= ]+|exit(ed)? )(124|137)\b/.test(r.out), `timeout code was not carried through: ${r.out.slice(0, 500)}`);
   });
 }
 

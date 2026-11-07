@@ -1365,6 +1365,8 @@ EOF
 # /settings.json env) or pass a high per-call timeout. Silenced with DISPATCH_QUIET=1.
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-review: ${RUNNER}/${MODEL} (effort=${EFFORT}) may run for MINUTES — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs." >&2
 
+# Forward a TERM/INT/HUP aimed at this script to the runner child ($_ACCT_CHILD), then end 143.
+_acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/dev/null; exit 143; }
 # --- dispatch (read-only) ---
 declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_REVIEW_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
 if [[ "$RUNNER" = "codex" ]]; then
@@ -1930,8 +1932,12 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR HOME="$CCSHIM_CWD" \
       CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
-      _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>&1
-  CCSHIM_RC=$?
+      _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>&1 &
+  # Backgrounded + forwarded so a TERM/INT/HUP aimed at this script reaches timeout and the claude child (BL-0420); see _acct_forward.
+  _ACCT_CHILD=$!
+  trap _acct_forward TERM INT HUP
+  wait "$_ACCT_CHILD"; CCSHIM_RC=$?
+  trap - TERM INT HUP
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
   declare -F ccshim_keep_transcript >/dev/null 2>&1 && { ccshim_keep_transcript "$CCSHIM_CWD" "$REVIEW_RUN_ID" || true; }
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
@@ -1984,7 +1990,6 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     # trap until a foreground child ends, but `wait` returns at once on a trapped signal. The legacy path gets the same
     # forwarding from seed-claude-config.js --exec; without this, the quota-holding claude outlived a killed review.
     _ACCT_CHILD=$!
-    _acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/dev/null; exit 143; }
     trap _acct_forward TERM INT HUP
     wait "$_ACCT_CHILD"; _ACCT_RC=$?
     trap - TERM INT HUP

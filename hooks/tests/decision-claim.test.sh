@@ -96,8 +96,10 @@ check_script() {
 }
 assert_eq "$(check_script "$CLAIM")" 0 "(a) decision-claim.js: claimed / free text / every failure / no courier / bad argv all hold"
 # negative controls: mutants of the script must be caught
-sed 's/ok: false, answer_id: null, reason }/ok: true, answer_id: null, reason }/' "$CLAIM" | sed "s#'./lib/fleet-decision'#'$REPO_ROOT/scripts/lib/fleet-decision'#" > "$TEST_TMP/mut-ok.js"
-sed "s#'./lib/fleet-decision'#'$REPO_ROOT/scripts/lib/fleet-decision'#; s/const r = fd.claim(card, flag === '--option' ? { option: value } : { freeText: value });/const r = { outcome: 'claimed', answer_id: 'A0000000000000000000000000' };/" "$CLAIM" > "$TEST_TMP/mut-noclaim.js"
+# the copies sit outside scripts/, so first point the require() at the real lib; every mutant starts from that copy
+sed_mutant "$CLAIM" "$TEST_TMP/claim-abs.js" "s#'./lib/fleet-decision'#'$REPO_ROOT/scripts/lib/fleet-decision'#" || fail "claim-abs copy"
+sed_mutant "$TEST_TMP/claim-abs.js" "$TEST_TMP/mut-ok.js" 's/ok: false, answer_id: null, reason }/ok: true, answer_id: null, reason }/' || fail "mut-ok did not apply"
+sed_mutant "$TEST_TMP/claim-abs.js" "$TEST_TMP/mut-noclaim.js" "s/const r = fd.claim(card, flag === '--option' ? { option: value } : { freeText: value });/const r = { outcome: 'claimed', answer_id: 'A0000000000000000000000000' };/" || fail "mut-noclaim did not apply"
 M1="$(check_script "$TEST_TMP/mut-ok.js")"; M2="$(check_script "$TEST_TMP/mut-noclaim.js")"
 [ "$M1" -gt 0 ]; assert_eq "$?" 0 "(a) control: a script that reports ok on a failed claim is caught ($M1 expectations red)"
 [ "$M2" -gt 0 ]; assert_eq "$?" 0 "(a) control: a script that never claims (invented id) is caught ($M2 expectations red)"

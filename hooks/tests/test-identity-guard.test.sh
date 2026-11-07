@@ -190,7 +190,7 @@ lib_exempt() {
     && grep -Eq '^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*(\.|source)[[:space:]]+[^#]*scripts/lib/test-git-env\.sh' "$1"
 }
 lib_missing() {
-  grep -aEv '^[[:space:]]*#' "$1" | grep -Eq '(^|[[:space:];|&])git[[:space:]]' && ! sources_lib "$1" && ! lib_exempt "$1"
+  grep -Eq '(^|[[:space:];|&])git[[:space:]]' <(grep -aEv '^[[:space:]]*#' "$1") && ! sources_lib "$1" && ! lib_exempt "$1"
 }
 for f in "$HOOKS_TESTS"/*.test.sh; do
   if lib_missing "$f"; then
@@ -207,6 +207,10 @@ if lib_missing "$LX_FX/commented.test.sh"; then assert_eq 0 0 "NC: commented-out
 else fail "commented-out lib.sh source slipped through"; fi
 if lib_missing "$LX_FX/live.test.sh"; then fail "live lib.sh source wrongly reported missing"
 else assert_eq 0 0 "NC: live lib.sh source is accepted"; fi
+# NC (BL-0419 g2): a >128 KiB file calling git on line 1 must not be waved through by a SIGPIPE'd pipeline.
+{ printf '%s\n' '#!/usr/bin/env bash' 'git status'; head -c 200000 /dev/zero | tr '\0' 'x'; printf '\n'; } > "$LX_FX/big.test.sh"
+if lib_missing "$LX_FX/big.test.sh"; then assert_eq 0 0 "NC: large early-git file without lib.sh is reported missing"
+else fail "large early-git file without lib.sh slipped through (SIGPIPE)"; fi
 mkdir -p "$LX_FX/c" "$LX_FX/l"
 printf '%s\n' '# . "$REPO_ROOT/scripts/lib/test-git-env.sh"' 'git status' > "$LX_FX/c/test-git-env-bash.test.sh"
 printf '%s\n' '. "$REPO_ROOT/scripts/lib/test-git-env.sh"' 'git status' > "$LX_FX/l/test-git-env-bash.test.sh"

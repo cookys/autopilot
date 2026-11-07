@@ -73,7 +73,7 @@ import { paneRows, runAgedOut, runEndedMs, runSubject } from './model'
 import * as ui from './ui'
 import { BAND_ROWS } from './band'
 import { COL_GAP, RECENT_COL_W, SPEED_COL_W } from './speedview'
-import { barStrip } from './tabs'
+import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, usageTabFits } from './tabs'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -272,14 +272,23 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
 // Layout E1: the band row also holds the tabs, which take their cells off the line's width. The cases below that read the line itself mount with the width plus the tabs' width and read
 // the tree without the gap and the tabs, so they still measure what the line draws at the width they name.
 let barLocale: 'en' | 'zh-TW' = 'zh-TW'
-const tabsW = (): number => barStrip(null, makeT(barLocale), null, null).width
-const isTabNode = (n: Node): boolean => typeof n.props?.key === 'string' && (n.props.key.startsWith('tab:') || n.props.key === 'forge')
+// The band row holds the tabs; with the 用量 tab left out where the band has no room (usageTabFits) a dim `›` ends the row instead. tabsW(n) is the cells the row's tabs take when the line is meant to get n.
+const tabsOf = (n: number): number => {
+  const t = makeT(barLocale)
+  const full = barStrip(null, t, null, null).width
+  return usageTabFits(n + full + 1, t, ui.GLYPHS.structure.speed) ? full : barStrip(null, t, null, null, false).width + 2 // the `›` and its space
+}
+const isTabNode = (n: Node): boolean => typeof n.props?.key === 'string' && (n.props.key.startsWith('tab:') || n.props.key === 'forge' || n.props.key === 'more')
 function lineOnly(tree: Node): Node {
-  const kids = (tree.children || []) as Node[]
-  return tree.type === 'Box' && kids.length > 5 ? { ...tree, children: kids.slice(0, kids.length - 5) } : tree // the gap and the four tabs
+  const kids = ((tree.children || []) as Node[]).slice()
+  if (tree.type !== 'Box') return tree
+  let cut = 0
+  while (cut < kids.length && isTabNode(kids[kids.length - 1 - cut])) cut++
+  if (cut === 0) return tree
+  return { ...tree, children: kids.slice(0, kids.length - cut - 1) } // the tabs and the gap before them
 }
 async function mountAbove($: any, spec: any) {
-  const ui = await $.ui.mount({ ...spec, props: { ...spec.props, bodyColumns: spec.props.bodyColumns + tabsW() + 1 } })
+  const ui = await $.ui.mount({ ...spec, props: { ...spec.props, bodyColumns: spec.props.bodyColumns + tabsOf(spec.props.bodyColumns) + 1 } })
   const out: Record<string, unknown> = {}
   for (const k of Object.keys(ui)) out[k] = typeof ui[k] === 'function' ? ui[k].bind(ui) : ui[k]
   for (const k of Object.getOwnPropertyNames(Object.getPrototypeOf(ui) ?? {})) if (k !== 'constructor' && typeof ui[k] === 'function') out[k] = ui[k].bind(ui)
@@ -3047,7 +3056,7 @@ for (const surface of SURFACES) {
     expect(strip).toContain('待決')
     expect(strip).toContain('派工')
     expect(strip).toContain('審查')
-    expect(strip).toContain('用量')
+    expect(strip).toContain('花費')
     expect(strip).toContain('殘留')
     expect(strip.trim().endsWith('?')).toBe(true)
     expect(strip).not.toMatch(/[▲●⚑]/) // no symbol badge anywhere in the strip
@@ -3605,7 +3614,7 @@ test('i18n tables: en and zh-TW carry the same ids and the same placeholders; ke
     expect(displayWidth(ZH_TW[id]), 'zh-TW ' + id).toBeLessThanOrEqual(12)
   }
   // tab words (the owner's wording): 殘留 / 用量 / 審查 translated, `?` is the legend
-  expect(PANE_TABS.map(t => ZH_TW['tab.' + t])).toEqual(['現況', '待決', '派工', '審查', '用量', '殘留', '艦隊', '?'])
+  expect(PANE_TABS.map(t => ZH_TW['tab.' + t])).toEqual(['現況', '待決', '派工', '審查', '花費', '殘留', '艦隊', '?'])
   expect(PANE_TABS.map(t => EN['tab.' + t])).toEqual(['Now', 'Decide', 'Dispatch', 'Review', 'Spend', 'Hygiene', 'Fleet', '?'])
 })
 
@@ -5417,7 +5426,7 @@ for (const surface of SURFACES) {
       return active
     }
     const rows = await nowRows($, surface)
-    const targets: [string, string][] = [['派工 ›', 'dispatch'], ['審查 ›', 'review'], ['用量 ›', 'spend'], ['殘留 ›', 'hygiene']]
+    const targets: [string, string][] = [['派工 ›', 'dispatch'], ['審查 ›', 'review'], ['花費 ›', 'spend'], ['殘留 ›', 'hygiene']]
     for (const [prefix, tab] of targets) {
       const at = rows.findIndex(r => r.startsWith(prefix))
       expect(at, prefix).toBeGreaterThanOrEqual(0)
@@ -6408,6 +6417,83 @@ for (const surface of SURFACES) {
     expect(seen[0].endsWith('no tab') && seen[1].endsWith('no tab'), 'at 30 and 40 columns there is no room for the label, so no tab and no view').toBe(true)
   })
 
+  // The band's tab row at one width: the keys of its Buttons, the row's Button text, and whether the speed view is drawn under it.
+  const stripAt = async ($: any, columns: number, press: string[] = []) => {
+    for (const key of press) { const a = await mount($, { bodyColumns: columns }); await a.press({ key }); await a.unmount() }
+    const b = await mount($, { bodyColumns: columns })
+    const buttons = ((await b.findAll({ type: 'Button' })) as Node[]).filter(n => typeof n.props?.key === 'string' && (n.props.key === 'more' || n.props.key === 'forge' || (n.props.key as string).startsWith('tab:')))
+    const tree = (await b.drawn()) as Node
+    await b.unmount()
+    return { keys: buttons.map(n => n.props?.key as string), text: buttons.map(n => walkTexts(n).map(textOf).join('')).join(' '), view: find(tree, 'speedview') !== null }
+  }
+  for (const loc of ['en', 'zh-TW'] as const) {
+    const tOf = makeT(loc)
+    const mk = (on: On) => (loc === 'en' ? worldEn(on, richWorld()) : world(on, richWorld()))
+    const timed = async ($: any, on: On) => {
+      const w = mk(on)
+      forgeMod(w, [])
+      await start($, surface)
+      TURN_PLAN = TWO; TURN_AT = 0
+      await runPlan($, TWO.map(p => p.agent))
+    }
+    // Every width from 60 to 130: the 用量 tab is drawn exactly where usageTabFits says; the row ends in the registered `›` Button exactly when a tab is missing (用量, or forge although a request was timed);
+    // forge, once drawn, stays drawn. The widths of the speed view and the recent table are those of before the 用量 tab (the next test pins them).
+    test('tab row: the 用量 tab and forge leave the row where there is no room, and a `›` Button ends the row exactly then; at 90 columns and up forge is drawn and there is no `›` (' + loc + ', ' + surface + ')', async ($, on) => {
+      await timed($, on)
+      const rows: string[] = []
+      let forgeFrom = -1
+      let usageFrom = -1
+      for (let columns = 60; columns <= 130; columns++) {
+        const r = await stripAt($, columns)
+        const hasForge = r.keys.includes('forge')
+        const hasUsage = r.keys.includes('tab:usage')
+        const more = r.keys.includes('more')
+        if (hasForge && forgeFrom < 0) forgeFrom = columns
+        if (hasUsage && usageFrom < 0) usageFrom = columns
+        expect(hasUsage, columns + ': 用量 is drawn exactly where usageTabFits says').toBe(usageTabFits(columns, tOf, ui.GLYPHS.structure.speed))
+        expect(hasForge || forgeFrom < 0 || columns < forgeFrom, columns + ': forge, once drawn, stays drawn').toBe(true)
+        expect(more, columns + ': `›` exactly when 用量 or forge is missing').toBe(!hasUsage || !hasForge)
+        if (more) expect(r.text.trim().endsWith('›'), columns + ': the row text ends in the registered `›`').toBe(true)
+        else expect(r.text.includes('›'), columns + ': no `›` when nothing is missing').toBe(false)
+        if (columns >= 90) { expect(hasForge, columns + ': forge is drawn').toBe(true) }
+        if (columns === 80 || columns === 89 || columns === 90) rows.push(columns + ': [' + r.text + ']')
+      }
+      console.log('tab row (' + loc + ') forge from ' + forgeFrom + ', 用量 from ' + usageFrom + ' | ' + rows.join(' | '))
+      expect(forgeFrom, 'forge is drawn at some width below 90').toBeGreaterThan(0)
+      expect(usageFrom).toBeGreaterThan(forgeFrom)
+    })
+    // The keyboard path: where both tabs are missing the `›` Button steps 用量, forge, closed (the row of a narrow band has no other Button for them).
+    test('tab row: where 用量 and forge are both missing, `›` opens 用量, then the forge speed view, then closes (' + loc + ', ' + surface + ')', async ($, on) => {
+      await timed($, on)
+      let narrow = 0
+      for (let columns = 100; columns >= 60; columns--) { const r = await stripAt($, columns); if (!r.keys.includes('forge')) { narrow = columns; break } }
+      expect(narrow, 'a width below the forge tab exists').toBeGreaterThan(0)
+      const r0 = await stripAt($, narrow)
+      expect(r0.keys.includes('tab:usage') || r0.keys.includes('forge'), 'both missing').toBe(false)
+      // the open tab is the mod's state, so the presses follow one another (each call presses once more)
+      expect((await stripAt($, narrow, ['more'])).view, 'first press: 用量, no speed view').toBe(false)
+      const two = await stripAt($, narrow, ['more'])
+      expect(two.view, 'second press: the forge speed view at ' + narrow + ' ' + JSON.stringify(two.keys) + two.text).toBe(true)
+      const third = await stripAt($, narrow, ['more'])
+      expect(third.view, 'third press closes').toBe(false)
+      expect(third.keys.includes('more')).toBe(true)
+    })
+    // The speed view's widths are those of before the 用量 tab: forge (and so the view) appears where the four-tab strip leaves it 5 label cells, and the 用量 tab is not drawn there.
+    test('tab row: the speed view appears at the width it had before the 用量 tab, where the 用量 tab is not drawn (' + loc + ', ' + surface + ')', async ($, on) => {
+      await timed($, on)
+      const four = barStrip(null, tOf, null, ui.GLYPHS.structure.speed, false).width
+      const before = BAND_MIN_COLS + four + 3 + FORGE_LABEL_MIN // the formula register.ts used with four tabs
+      let from = -1
+      for (let columns = 40; columns <= 130 && from < 0; columns++) if ((await stripAt($, columns)).keys.includes('forge')) from = columns
+      console.log('forge tab from ' + from + ' columns (' + loc + '); the four-tab formula says ' + before)
+      expect(from, 'forge appears at the width it did on develop d8ffe3ffa (measured there with the same world: en 79, zh-TW 73)').toBe(loc === 'en' ? 79 : 73)
+      const at = await stripAt($, from)
+      expect(at.keys.includes('tab:usage'), 'and the 用量 tab is not drawn there').toBe(false)
+      const opened = await stripAt($, from, ['forge'])
+      expect(opened.view, 'the speed view is drawn at ' + from).toBe(true)
+    })
+  }
+
   test('speed tab: the label colours on the drawn band: ϟ and the trend running, the number default, the unit dim (' + surface + ')', async ($, on) => {
     worldEn(on, richWorld())
     const d = await draw($, on, TWO)
@@ -6705,7 +6791,11 @@ for (const surface of SURFACES) {
     const keys: string[][] = []
     await drawShell($, 240, ['tab:decide'])
     for (const cols of [240, 200, 160, 120, 80]) keys.push((await drawShell($, cols)).buttons)
-    for (const k of keys.slice(1)) expect(k).toEqual(keys[0])
+    // the band row's own 用量 tab is the one Button that moves: at 80 columns it has no room and a `›` Button (key `more`) stands in its place
+    const band = (k: string[]) => k.filter(x => x !== 'tab:usage' && x !== 'more')
+    for (const k of keys.slice(1)) expect(band(k)).toEqual(band(keys[0]))
+    expect(keys[4].includes('more') && !keys[4].includes('tab:usage'), 'at 80 columns the 用量 tab gives way to `›`').toBe(true)
+    expect(keys[3].includes('tab:usage') && !keys[3].includes('more'), 'at 120 columns the 用量 tab is drawn and there is no `›`').toBe(true)
     expect(keys[0]).toContain('card:d-4290499d') // the 待決 submenu is the card list (ux-v7)
     expect(keys[0]).toContain('opt:d-4290499d:0')
     for (const k of ['send', 'prev', 'next', 'next-menu']) expect(keys[0]).toContain(k)
@@ -6714,7 +6804,7 @@ for (const surface of SURFACES) {
     const other = (await drawShell($, 240)).buttons
     expect(other).toContain('menu:now')
     expect(other).toContain('menu:dispatch')
-    expect(other.filter(x => x.startsWith('menu:')).length).toBe(4)
+    expect(other.filter(x => x.startsWith('menu:')).length).toBe(5)
   })
 
   test('O4 shell: the left submenu marks the open item ◐, a press on another item opens that tab, and the open item\'s own press changes nothing (' + surface + ')', async ($, on) => {
@@ -6812,7 +6902,7 @@ for (const surface of SURFACES) {
     expect((await drawShell($, 160, ['card:d-c24ecfd9'])).rows[1]).toContain('第 2 張，共 3 張') // a press on a card in the list goes to it
     const moved = await drawShell($, 160, ['next-menu'])
     expect(moved.rows[1]).not.toContain('第')
-    expect(moved.buttons.filter(x => x.startsWith('menu:')).length).toBe(4)
+    expect(moved.buttons.filter(x => x.startsWith('menu:')).length).toBe(5)
   })
 
   test('O4 shell v7: 送出 sends the answered cards and the progress row then says 已送出 N 張 in place of the last card (' + surface + ')', async ($, on) => {
@@ -6928,6 +7018,91 @@ for (const surface of SURFACES) {
     const d = await drawShell($, 160)
     expect(d.rows.length).toBe(12)
     expect(d.rows[2]).toContain('資料 3 分鐘前')
+  })
+
+  // ---- usagetab: the band's 用量 tab (tokens; the top-level `usage` of codeforge.panel/1), between 審查 and forge ----
+  const usageRowsOf = (n: number, over: Record<string, unknown> = {}) => j({ ...SHELL_PANEL, usage: { tiers: { 40: Array.from({ length: n }, (_x, i) => [{ text: 'tk40 row ' + (i + 1) }]), 60: Array.from({ length: n }, (_x, i) => [{ text: 'tk60 row ' + (i + 1), tone: i === 0 ? 'success' : 'dim' }]) } }, ...over })
+  const usageMain = (d: { rows: string[] }) => d.rows.slice(2, 8)
+  test('usagetab: the strip has 用量 between 審查 and the forge tab; the left menu lists it; the main window is titled by it (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(3) })
+    await start($, surface)
+    await drawShell($, 160, ['tab:usage'])
+    const d = await drawShell($, 160)
+    const order = d.buttons.filter(k => k.startsWith('tab:')).map(k => k.slice(4))
+    expect(order).toEqual(['now', 'decide', 'dispatch', 'review', 'usage'])
+    expect(d.buttons).toContain('menu:usage')
+    expect(d.rows[0]).toContain('用量')
+    expect(d.rows[0].indexOf('審查')).toBeLessThan(d.rows[0].indexOf('用量'))
+    expect(d.rows[1]).toContain('用量')
+  })
+  test('usagetab: the main window draws the table of the largest tier that fits (60 at 160 columns, 40 at 80); the pane keeps its own tab, now named 花費 (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(3) })
+    await start($, surface)
+    await drawShell($, 160, ['tab:usage'])
+    const wide = usageMain(await drawShell($, 160))
+    expect(wide.filter(r => r.includes('tk60 row')).length).toBe(3)
+    expect(wide.some(r => r.includes('tk40'))).toBe(false)
+    const narrow = usageMain(await drawShell($, 80))
+    expect(narrow.filter(r => r.includes('tk40 row')).length).toBe(3)
+    expect(ZH_TW['tab.spend']).toBe('花費')
+    expect(EN['tab.spend']).toBe('Spend')
+    expect(ZH_TW['tab.usage']).toBe('用量')
+    expect(EN['tab.usage']).toBe('Usage')
+  })
+  test('usagetab: a row with $ in its text is not drawn; the other rows stay and, once the money row is gone, six rows just fit with no "more" line (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    const rows = [1, 2, 3, 4, 5, 6].map(i => [{ text: 'tk60 row ' + i }])
+    rows.splice(2, 0, [{ text: 'today ' }, { text: '$1.20' }] as never)
+    shellWorld(on, { '/fake/forge-panel.json': j({ ...SHELL_PANEL, usage: { tiers: { 60: rows } } }) })
+    await start($, surface)
+    await drawShell($, 160, ['tab:usage'])
+    const main = usageMain(await drawShell($, 160))
+    expect(main.join('\n')).not.toContain('$')
+    expect(main.join('\n')).not.toContain('today')
+    expect(main.filter(r => r.includes('tk60 row')).length).toBe(6)
+    expect(main.join('\n')).not.toContain('還有')
+  })
+  test('usagetab: seven rows draw five and a dim line "… 還有 2 列，開面板看全部"; six rows draw all six (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(7) })
+    await start($, surface)
+    await drawShell($, 160, ['tab:usage'])
+    const main = usageMain(await drawShell($, 160))
+    expect(main.filter(r => r.includes('tk60 row')).length).toBe(5)
+    expect(main[5]).toContain('… 還有 2 列，開面板看全部')
+  })
+  test('usagetab: data older than a minute puts its age in front of the first row, with no row of its own (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(3, { updated_at_ms: NOW_FRESH - 200_000 }) })
+    await start($, surface)
+    await drawShell($, 160, ['tab:usage'])
+    const d = await drawShell($, 160)
+    expect(d.rows.length).toBe(12)
+    expect(usageMain(d)[0]).toContain('資料 3 分鐘前')
+    expect(usageMain(d)[0]).toContain('tk60 row 1')
+    expect(usageMain(d).filter(r => r.includes('tk60 row')).length).toBe(3)
+  })
+  test('usagetab: no forge-stats panel (state.get resolves with no value, the same as a forge-stats that has written nothing) is one dim line 沒有用量資料; an unknown schema says the format is not recognised (' + surface + ')', async ($, on) => {
+    shellWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:usage'])
+    expect(usageMain(await drawShell($, 160)).join('\n')).toContain('沒有用量資料')
+  })
+  test('usagetab: a panel of another schema draws no usage row, only the format line (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(3, { schema: 'codeforge.panel/2' }) })
+    await start($, surface)
+    await drawShell($, 160, ['tab:usage'])
+    const main = usageMain(await drawShell($, 160)).join('\n')
+    expect(main).toContain('用量格式不認得')
+    expect(main).not.toContain('tk60')
+  })
+  test('usagetab: where the shell is not drawn (maxRows under 12) the open tab offers one button that opens the pane (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    const w = shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(3) })
+    await start($, surface)
+    await drawShell($, 160, ['tab:usage'])
+    const small = await drawShell($, 160, [], 6)
+    expect(small.rows.some(r => r.includes('╭'))).toBe(false)
+    expect(small.buttons).toContain('open:usage')
+    const before = w.opens.length
+    await drawShell($, 160, ['open:usage'], 6)
+    expect(w.opens.length).toBeGreaterThan(before)
   })
 
   test('O4 shell: colours are PALETTE roles as text colour only: no background, no inverse, no bold in the frame (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {

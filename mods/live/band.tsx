@@ -9,7 +9,7 @@ import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } fr
 import { BODY_ROWS, MAIN_CONTENT_ROWS, PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
-import { actionSeg, dimProps, drawSeg, forgeBar, GLYPHS } from './ui'
+import { actionSeg, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg } from './ui'
 import type { ForgeSegment } from './ui'
 import { barRule, barStrip, decideBandPlan } from './tabs'
 import { COL_GAP } from './speedview'
@@ -71,14 +71,19 @@ export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot 
 export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; onTab: (id: BarTabId) => void }
 
 // the row, and the column its tabs start in (the rule under it is built from that)
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | null, forge: readonly ForgeSegment[] | null): { node: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null): { node: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
   const fb = forge === null ? null : forgeBar(forge)
-  const strip = barStrip(snap, t, active, fb === null ? null : GLYPHS.structure.speed)
+  const strip = barStrip(snap, t, active, fb === null ? null : GLYPHS.structure.speed, usage)
   const forgeW = fb === null ? 0 : fb.width
-  const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1 - forgeW), hd.onInfo, t, hd.onSlot)
-  const gap = Math.max(1, columns - left.width - forgeW - strip.width)
+  // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab
+  const more = moreTo !== null
+  const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
+  const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot)
+  const gap = Math.max(1, columns - left.width - forgeW - strip.width - moreW)
+  const moreText = <Text key="m" {...drawSeg(moreSeg())} wrap="truncate">{GLYPHS.structure.goto}</Text>
+  const moreNode = !more ? [] : [<Box key="more">{Button === undefined ? moreText : <Button key="more" plain onPress={() => hd.onTab(moreTo as BarTabId)}>{moreText}</Button>}<Text> </Text></Box>]
   const texts = fb === null ? [] : fb.segs.map((s, i) => <Text key={'f' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
   const speed = fb === null ? [] : [Button === undefined ? <Box key="speed">{texts}</Box> : <Button key="speed" plain onPress={() => hd.onTab('forge')}>{texts}</Button>]
   const tabs = strip.tabs.map(b => {
@@ -90,7 +95,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       </Box>
     )
   })
-  return { node: <Box>{left.nodes}{speed}<Text>{' '.repeat(gap)}</Text>{tabs}</Box>, strip, tabsAt: left.width + forgeW + gap }
+  return { node: <Box>{left.nodes}{speed}<Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>, strip, tabsAt: left.width + forgeW + gap }
 }
 
 // the rule under the bar
@@ -109,8 +114,9 @@ export function BarButton(el: { Text: El; Button?: El }, id: string, label: stri
 const PROJECT_SLOTS: SlotId[] = ['position', 'unit', 'review', 'spend']
 
 // the open tab's content: rows (each one drawn row). `barParts` keeps the buttons row apart: the tab-row layout draws it as the last row, the O4 shell as its quick row.
-export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab, columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): { rows: unknown[]; quick: unknown[] } {
+export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): { rows: unknown[]; quick: unknown[] } {
   const { Box, Text } = el
+  if (tab === 'usage') return { rows: [], quick: [<Box key="buttons">{BarButton(el, 'open:usage', t('bar.open'), () => o.onOpen('spend'))}</Box>] }
   if (snap === null || snap.band === null) return { rows: [], quick: [] }
   const band = snap.band
   const sel = (ids: SlotId[]) => band.slots.filter(s => ids.includes(s.id))
@@ -125,7 +131,7 @@ export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnaps
   if (tab === 'review') return { rows: lineOf(['review', 'decisions']), quick: [open] }
   return { rows: [], quick: [] }
 }
-export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab, columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {
+export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {
   const p = barParts(el, snap, tab, columns, t, o)
   return [...p.rows, ...p.quick]
 }
@@ -307,6 +313,11 @@ export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQ
   ]
 }
 
+// the usage tab's rows (shell.ts usageRows): one drawn row each, a blank one still takes its row
+export function usageDraw(el: { Box: El; Text: El }, rows: readonly (readonly Seg[])[]): unknown[] {
+  const { Box, Text } = el
+  return rows.map((segs, i) => <Box key={'usage' + i}>{segs.length === 0 ? <Text key="b">{' '}</Text> : drawSegs(el, segs as Seg[], () => undefined)}</Box>)
+}
 // the progress row's content inside the main window: a one-cell pad, then the segments (slot segs become Buttons through `onSlot`)
 export function progressRow(el: { Box: El; Text: El; Button?: El }, segs: readonly Seg[], onSlot?: (id: SlotId) => void): unknown {
   const { Box, Text } = el

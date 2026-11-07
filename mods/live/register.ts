@@ -43,9 +43,9 @@ import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
 import { NO_BATCH, answerPlan, answerOf, batchSync, cardKey, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
-import { barStrip, decideTabLines } from './tabs'
+import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
 
-import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand } from './band'
+import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
@@ -53,7 +53,7 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BarTabId } from './tabs'
-import { MAIN_CONTENT_ROWS, SHELL_ROWS, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan } from './shell'
+import { MAIN_CONTENT_ROWS, SHELL_ROWS, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
@@ -965,8 +965,6 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
 
 // the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs
 const FORGE_LABEL_MAX = 30
-const FORGE_LABEL_MIN = 5
-const BAND_MIN_COLS = 30
 const FORGE_FULL_ROWS = 12
 const FORGE_BELOW_MIN_COLS = 26 // the narrowest the mod below is asked for its view (forge-stats draws a one-row summary under this)
 // Owner previews (BL-0359), two choices open until the owner picks: where the speed view sits against the mod below, and whether the label carries the pet (read from codeforge's pet.json).
@@ -1119,14 +1117,24 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const steps = validSteps(await read($, STEPS))
     // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest (at most FORGE_LABEL_MAX)
     const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
-    const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed).width - 1 - 2)
-    if (rows >= 1 && labelCols >= FORGE_LABEL_MIN) {
+    const usageOn = usageTabFits(columns, t, GLYPHS.structure.speed)
+    const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn).width - 1 - 2)
+    // forgeMore: something was timed but the band has no room for the label (its smallest form) and its tab; the strip then ends in a dim `›` Button (key 'more') that opens the forge view, so the keyboard still reaches it
+    let forgeMore = false
+    if (rows >= 1) {
       const parts = speedLabelParts(steps, SPEED_LABEL_PET ? petText : null)
-      forge = parts === null ? null : forgeFit(parts, labelCols)
+      if (parts !== null) {
+        if (labelCols >= FORGE_LABEL_MIN) forge = forgeFit(parts, labelCols)
+        forgeMore = forge === null
+      }
     }
-    if (barTab === 'forge' && forge === null) barTab = null // nothing is timed (or no room): the tab is gone
+    if (barTab === 'forge' && forge === null && !forgeMore) barTab = null // nothing is timed: the tab is gone
     const active = barTab
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge)
+    // the tabs the band has no room for, in strip order; one dim `›` ends the row and steps through them (the last press closes), so the keyboard still reaches each
+    const hidden: BarTabId[] = [...(usageOn ? [] : ['usage' as const]), ...(forgeMore ? ['forge' as const] : [])]
+    const at = active === null ? -1 : hidden.indexOf(active)
+    const moreTo: BarTabId | null = hidden.length === 0 ? null : at < 0 ? hidden[0] : (hidden[at + 1] ?? active)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo)
     const open = (tab: PaneTab) => { void openOn(tab) }
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
@@ -1135,7 +1143,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const fleet = await read($, FLEET)
       const lanes: FleetLaneSum[] = fleet.lanes.map(l => ({ lane: l.lane, needYou: l.needYou, failed: l.failed, stuck: l.stuck, running: l.running, waiting: l.waiting }))
       const panel: PanelRead = parsePanel(panelRaw, nowMs)
-      const strip = barStrip(snapshot, t, active, null)
+      const strip = barStrip(snapshot, t, active, null) // the shell's menu lists every tab, the 用量 one too
       // ux-v7: the 待決 tab is a card view. One card in the main window (decideCursor), the card list on the left, the progress row and the four quick slots under it.
       const st = active === 'decide' ? await read($, DECIDE) : null
       const pending = active === 'decide' ? snapshot.pending : []
@@ -1189,7 +1197,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
             onMenu: () => { const at = tabIds.indexOf(active); const to = tabIds[(at + 1) % tabIds.length]; if (to !== undefined && to !== active) onTab(to as BarTabId) },
           })
         } else {
-          const parts = active === 'decide'
+          const parts = active === 'usage'
+            ? { rows: usageDraw(el, usageRows(panel, mainCols, MAIN_CONTENT_ROWS, t)), quick: barParts(el, snapshot, 'usage', mainCols, t, { onSlot: slot, onOpen: open }).quick }
+            : active === 'decide'
             ? { rows: decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, MAIN_CONTENT_ROWS), quick: barParts(el, snapshot, 'decide', mainCols, t, { onSlot: slot, onOpen: open }).quick }
             : barParts(el, snapshot, active, mainCols, t, { onSlot: slot, onOpen: open })
           const unit = snapshot.band === null ? [] : snapshot.band.slots.filter(sl => sl.id === 'unit')

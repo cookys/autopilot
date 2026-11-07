@@ -1203,6 +1203,9 @@ export function forgeBar(parts: readonly ForgeSegment[]): ForgeBar {
   return { segs, width: segs.reduce((n, g) => n + displayWidth(g.text), 0) }
 }
 
+// the registered `›` (structure glyph: go to / more), dim: the row-ending hint that a tab has no room and the next press opens it
+export const moreSeg = (): Seg => sg(GLYPHS.structure.goto, { dim: true, role: 'glyph' })
+
 // a pressable control drawn as text: the action colour (`[ label ]`)
 export const actionSeg = (text: string): Seg => sg(text, { role: 'prose', color: PALETTE.action })
 

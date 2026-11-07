@@ -74,14 +74,14 @@ test('geometry: a band too narrow for a main window of 30 gets no shell, so the 
 })
 
 test('reader: nothing written, a non-object, another schema and an old panel without `side` are each a quiet "no summary" and never throw', () => {
-  assert.deepEqual(S.parsePanel(null, 0), { status: 'absent', ageMs: null, side: null })
-  assert.deepEqual(S.parsePanel(undefined, 0), { status: 'absent', ageMs: null, side: null })
+  assert.deepEqual(S.parsePanel(null, 0), { status: 'absent', ageMs: null, side: null, usage: null })
+  assert.deepEqual(S.parsePanel(undefined, 0), { status: 'absent', ageMs: null, side: null, usage: null })
   for (const bad of ['text', 7, true, [], [PANEL()]]) assert.equal(S.parsePanel(bad, 0).status, 'bad', JSON.stringify(bad))
   assert.equal(S.parsePanel({ schema: 'codeforge.panel/2', side: PANEL().side }, 0).status, 'old')
   assert.equal(S.parsePanel({ side: PANEL().side }, 0).status, 'old')
   assert.equal(S.parsePanel({ schema: 'codeforge.panel/2', side: PANEL().side }, 0).side, null)
   const old = PANEL(); delete old.side
-  assert.deepEqual(S.parsePanel(old, 1_005_000), { status: 'ok', ageMs: 5_000, side: null })
+  assert.deepEqual(S.parsePanel(old, 1_005_000), { status: 'ok', ageMs: 5_000, side: null, usage: null })
 })
 
 test('reader: the side parts are read one by one; a broken part is dropped, the others stay; unknown fields are ignored', () => {
@@ -462,4 +462,102 @@ test('awaiting: buildJobModel splits four cards - open is the only 待決, close
   assert.deepEqual(m.pending_dispatch.map(d => d.id), ['d-disp0003'])
   assert.equal(m.needs_decision, true)
   assert.ok(!JSON.stringify(m).includes('CLOSEDCARD'), 'the closed card is on no list')
+})
+
+// ---- usagetab: the band's 用量 tab (top-level `usage` tiers of codeforge.panel/1) ----
+const USAGE_ROW = n => [line('row ' + n)]
+const USAGE = (over = {}, rows = 3) => PANEL({ usage: tiersOf([40, 60], k => Array.from({ length: rows }, (_, i) => line('t' + k + ' row ' + (i + 1)))), ...over })
+const usageText = (panel, cols = 60, now = 1_010_000, n = 6) => S.usageRows(S.parsePanel(panel, now), cols, n, t).map(segText)
+
+test('usage reader: the top-level `usage` tiers are read next to `side`; a broken tier is dropped, control characters are cleaned, `side` is untouched', () => {
+  const p = USAGE({ usage: { tiers: { 40: [line('a'), 'broken'], 60: [[{ text: 'x\u001b[31my', tone: 'success' }], line('b')] } } })
+  const r = S.parsePanel(p, 0)
+  assert.deepEqual(Object.keys(r.usage), ['60'], 'the 40 tier has a line that is not a list of parts: dropped whole')
+  assert.equal(r.usage['60'][0][0].text, 'x[31my')
+  assert.notEqual(r.side, null)
+  assert.equal(S.parsePanel(PANEL(), 0).usage, null, 'empty tiers: no usage')
+})
+
+test('usage reader: a line whose text carries `$` is not kept, the others are (the usage tab draws no money)', () => {
+  const p = USAGE({ usage: { tiers: { 40: [line('5h 41%'), line('today ', { text: '$1.20' }), line('7d 12%'), [{ text: '$' }]] } } })
+  const rows = S.parsePanel(p, 0).usage['40'].map(segText)
+  assert.deepEqual(rows, ['5h 41%', '7d 12%'])
+  assert.deepEqual(usageText(p, 40), ['5h 41%', '7d 12%'])
+  assert.ok(!usageText(p, 40).join('').includes('$'))
+})
+
+test('usage tier: the largest key not wider than the window; under 40 the smallest (40) clipped; pickTier alone gives nothing at 39', () => {
+  const tiers = S.parsePanel(USAGE(), 0).usage
+  const key = inner => S.pickUsageTier(tiers, inner)[0].map(p => p.text).join('').slice(0, 3)
+  assert.equal(S.pickTier(tiers, 39), null)
+  assert.equal(key(39), 't40')
+  assert.equal(key(40), 't40')
+  assert.equal(key(59), 't40')
+  assert.equal(key(60), 't60')
+  assert.equal(key(75), 't60')
+  const only60 = S.parsePanel(USAGE({ usage: tiersOf([60]) }), 0).usage
+  assert.equal(S.pickUsageTier(only60, 45)[0][0].text, 'row 60', 'no 40 table: the smallest there is')
+  assert.equal(S.pickUsageTier(null, 50), null)
+})
+
+test('usage rows: the picked table, each row cut to cols-1', () => {
+  assert.deepEqual(usageText(USAGE(), 60), ['t60 row 1', 't60 row 2', 't60 row 3'])
+  assert.deepEqual(usageText(USAGE(), 45), ['t40 row 1', 't40 row 2', 't40 row 3'])
+  const long = USAGE({ usage: tiersOf([40], () => [line('x'.repeat(80))]) })
+  const segs = S.usageRows(S.parsePanel(long, 0), 40, 6, t)[0]
+  assert.equal(width(segs), 39)
+  assert.ok(segText(segs).endsWith('…'))
+})
+
+test('usage rows: nothing written, an unknown schema or format, and no layout are one dim line each (no throw)', () => {
+  const none = S.usageRows(S.parsePanel(null, 0), 60, 6, t)
+  assert.deepEqual(none.map(segText), ['shell.usage_none'])
+  assert.equal(none[0][0].dim, true)
+  assert.deepEqual(usageText({ ...USAGE(), schema: 'codeforge.panel/2' }), ['shell.usage_format'])
+  assert.deepEqual(S.usageRows(S.parsePanel('junk', 0), 60, 6, t).map(segText), ['shell.usage_format'])
+  assert.deepEqual(usageText(PANEL()), ['shell.usage_nolayout'], 'ok panel with empty usage tiers')
+  assert.deepEqual(usageText(USAGE({ usage: { tiers: { 40: [line('$9')] } } }), 60), ['shell.usage_nolayout'], 'every line was money')
+})
+
+test('usage rows: exactly as many lines as rows fit draws them all; one more draws rows-1 and the dim "N more" line (2 left)', () => {
+  const fit = usageText(USAGE({}, 6))
+  assert.equal(fit.length, 6)
+  assert.ok(!fit.join('|').includes('usage_more'), 'no hint when the rows just fit')
+  const seven = S.usageRows(S.parsePanel(USAGE({}, 7), 1_010_000), 60, 6, t)
+  assert.equal(seven.length, 6)
+  assert.deepEqual(seven.slice(0, 5).map(segText), [1, 2, 3, 4, 5].map(i => 't60 row ' + i))
+  assert.equal(segText(seven[5]), 'shell.usage_more{"n":2}')
+  assert.equal(seven[5][0].dim, true)
+  const ten = S.usageRows(S.parsePanel(USAGE({}, 10), 1_010_000), 60, 6, t)
+  assert.equal(segText(ten[5]), 'shell.usage_more{"n":5}')
+})
+
+test('usage rows: stale data puts its age in front of the first row, with no row of its own; fresh data and the 60 s edge do not', () => {
+  const p = USAGE()
+  const stale = S.usageRows(S.parsePanel(p, 1_000_000 + 150_000), 60, 6, t)
+  assert.equal(stale.length, 3, 'no extra row')
+  assert.equal(segText(stale[0]), 'shell.stale{"n":3} t60 row 1')
+  assert.equal(stale[0][0].dim, true)
+  assert.equal(segText(stale[1]), 't60 row 2')
+  const hinted = S.usageRows(S.parsePanel(USAGE({}, 7), 1_000_000 + 150_000), 60, 6, t)
+  assert.equal(hinted.length, 6, 'stale plus a cut table still fills the window and no more')
+  assert.ok(width(hinted[0]) <= 59)
+  assert.deepEqual(usageText(p, 60, 1_000_000 + 59_000), ['t60 row 1', 't60 row 2', 't60 row 3'])
+  assert.deepEqual(usageText(p, 60, 1_000_000 + 60_000), ['t60 row 1', 't60 row 2', 't60 row 3'], 'exactly STALE_MS is still fresh')
+  assert.equal(usageText(p, 60, 1_000_000 + 60_001)[0].startsWith('shell.stale'), true)
+  assert.equal(width(S.usageRows(S.parsePanel(p, 1_000_000 + 150_000), 20, 6, t)[0]), 19, 'the age and the row are cut together')
+})
+
+test('usage colours: subtle / inactive / success are PALETTE roles, dim is dim, bold and mono are plain text, an unknown tone and a stray bg or inverse field are ignored', () => {
+  const p = USAGE({ usage: { tiers: { 40: [[{ text: 'a', tone: 'subtle', bg: 'red', inverse: true }], [{ text: 'b', tone: 'inactive' }], [{ text: 'c', tone: 'success' }], [{ text: 'd', tone: 'dim' }], [{ text: 'e', tone: 'bold' }], [{ text: 'f', tone: 'mono' }], [{ text: 'g', tone: 'neon' }]] } } })
+  const rows = S.usageRows(S.parsePanel(p, 0), 60, 9, t)
+  const seg = i => rows[i][0]
+  assert.equal(seg(0).color, ui.PALETTE.structure)
+  assert.equal(seg(1).color, ui.PALETTE.idle)
+  assert.equal(seg(2).color, ui.PALETTE.done)
+  assert.equal(seg(3).dim, true)
+  for (const i of [4, 5, 6]) { assert.equal(seg(i).bold, undefined, 'row ' + i); assert.equal(seg(i).color, undefined); assert.equal(seg(i).dim, undefined) }
+  const all = rows.flat()
+  assert.ok(all.every(s => s.bold !== true && s.backgroundColor === undefined && s.inverse === undefined && s.bg === undefined), 'nothing but colour and dim')
+  assert.ok(!JSON.stringify(rows).includes('red'))
 })

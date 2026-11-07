@@ -47,7 +47,8 @@ export type PanelLine = { text: string; tone?: string }[]
 export type Tiers = Record<string, PanelLine[]>
 export type SideData = { usage: Tiers | null; usageFull: Tiers | null; memory: Tiers | null }
 // absent: nothing written (null / undefined); bad: not an object; old: another schema (or none); ok: codeforge.panel/1
-export type PanelRead = { status: 'absent' | 'bad' | 'old' | 'ok'; ageMs: number | null; side: SideData | null }
+// usage: the top-level `usage` tiers (the 用量 tab of the band), money lines already dropped
+export type PanelRead = { status: 'absent' | 'bad' | 'old' | 'ok'; ageMs: number | null; side: SideData | null; usage: Tiers | null }
 export const PANEL_SCHEMA = 'codeforge.panel/1'
 export const STALE_MS = 60_000
 // codeforge's tone words (PanelTone); written as one string so no theme-key literal stands here (ui-lint L8: colours are PALETTE roles)
@@ -57,7 +58,8 @@ const clean = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\x00-\x1
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 // a tiers table: numeric keys, each a list of lines, each line a list of {text, tone?}. A tier that breaks the shape is dropped; a table with no tier left is null.
-function tiersOf(v: unknown): Tiers | null {
+// noMoney: a line any of whose parts carries `$` is dropped (the usage tab draws no money; the same rule as for `side`, per line)
+function tiersOf(v: unknown, noMoney = false): Tiers | null {
   if (!isObj(v) || !isObj(v.tiers)) return null
   const out: Tiers = {}
   for (const [k, lines] of Object.entries(v.tiers)) {
@@ -74,7 +76,7 @@ function tiersOf(v: unknown): Tiers | null {
       if (!ok) break
       rows.push(parts)
     }
-    if (ok) out[k] = rows
+    if (ok) out[k] = noMoney ? rows.filter(r => !r.some(p => p.text.includes('$'))) : rows
   }
   return Object.keys(out).length === 0 ? null : out
 }
@@ -82,15 +84,16 @@ function tiersOf(v: unknown): Tiers | null {
 // A side table that carries money is not drawn at all (the producer already refuses to write one; this is the second lock). Each part of `side` is read on its own: a broken `usage`
 // does not take `memory` down. Unknown fields are ignored.
 export function parsePanel(value: unknown, nowMs: number): PanelRead {
-  if (value === null || value === undefined) return { status: 'absent', ageMs: null, side: null }
-  if (!isObj(value)) return { status: 'bad', ageMs: null, side: null }
-  if (value.schema !== PANEL_SCHEMA) return { status: 'old', ageMs: null, side: null }
+  if (value === null || value === undefined) return { status: 'absent', ageMs: null, side: null, usage: null }
+  if (!isObj(value)) return { status: 'bad', ageMs: null, side: null, usage: null }
+  if (value.schema !== PANEL_SCHEMA) return { status: 'old', ageMs: null, side: null, usage: null }
   const at = value.updated_at_ms
   const ageMs = typeof at === 'number' && Number.isFinite(at) ? Math.max(0, nowMs - at) : null
+  const usage = tiersOf(value.usage, true)
   const s = value.side
-  if (!isObj(s) || JSON.stringify(s).includes('$')) return { status: 'ok', ageMs, side: null }
+  if (!isObj(s) || JSON.stringify(s).includes('$')) return { status: 'ok', ageMs, side: null, usage }
   const side = { usage: tiersOf(s.usage), usageFull: tiersOf(s.usage_full), memory: tiersOf(s.memory) }
-  return { status: 'ok', ageMs, side: side.usage === null && side.usageFull === null && side.memory === null ? null : side }
+  return { status: 'ok', ageMs, side: side.usage === null && side.usageFull === null && side.memory === null ? null : side, usage }
 }
 
 // the largest tier whose key is not wider than the column's inner width; null when none fits (a column is never given a line made for a wider one)
@@ -99,6 +102,19 @@ export function pickTier(tiers: Tiers | null, inner: number): PanelLine[] | null
   let best = -1
   for (const k of Object.keys(tiers)) { const n = Number(k); if (n <= inner && n > best) best = n }
   return best < 0 ? null : tiers[String(best)]
+}
+
+// the usage tab's table: the largest tier that fits, else the smallest there is (the main window is at most 76 wide and codeforge writes 40 and 60; a window under 40 gets the 40 clipped)
+export function pickUsageTier(tiers: Tiers | null, inner: number): PanelLine[] | null {
+  if (tiers === null) return null
+  const fit = pickTier(tiers, inner)
+  if (fit !== null) return fit
+  const keys = Object.keys(tiers).map(Number)
+  return keys.length === 0 ? null : tiers[String(Math.min(...keys))]
+}
+// whole minutes behind, once the data is older than STALE_MS; null while fresh (or no timestamp)
+export function staleMinutes(panel: PanelRead): number | null {
+  return panel.status === 'ok' && panel.ageMs !== null && panel.ageMs > STALE_MS ? Math.max(1, Math.round(panel.ageMs / 60_000)) : null
 }
 
 // ---- drawing helpers ----
@@ -129,7 +145,24 @@ export function padSegs(segs: readonly Seg[], width: number): Seg[] {
 const TONE_STYLE: Record<string, Partial<Seg>> = { subtle: { color: PALETTE.structure }, inactive: { color: PALETTE.idle }, dim: { dim: true }, success: { color: PALETTE.done } }
 // one panel line as segments, cut to inner-1 (the column's last cell stays empty); bold and mono tones are plain text here: bold is a whitelist and this is not on it
 export function panelSegs(line: PanelLine, inner: number): Seg[] {
-  return clipSegs(line.map(p => ({ text: p.text, ...(p.tone === undefined ? {} : (TONE_STYLE[p.tone] ?? {})) })), inner - 1)
+  return clipSegs(lineSegs(line), inner - 1)
+}
+const lineSegs = (line: PanelLine): Seg[] => line.map(p => ({ text: p.text, ...(p.tone === undefined ? {} : (TONE_STYLE[p.tone] ?? {})) }))
+
+// The usage tab's rows in the main window (`cols` = its inner width, `rows` = MAIN_CONTENT_ROWS): the picked table cut to cols-1; more lines than rows: the first rows-1 and a dim last row saying how
+// many are left; stale data puts the age in front of the FIRST row (no row of its own). No data, an unknown schema and a missing layout are one dim line each.
+export function usageRows(panel: PanelRead, cols: number, rows: number, t: T): Seg[][] {
+  const note = (text: string): Seg[][] => [clipSegs([{ text, dim: true }], cols - 1)]
+  if (panel.status === 'absent') return note(t('shell.usage_none'))
+  if (panel.status !== 'ok') return note(t('shell.usage_format'))
+  const lines = pickUsageTier(panel.usage, cols)
+  if (lines === null || lines.length === 0) return note(t('shell.usage_nolayout'))
+  const over = lines.length > rows
+  const out = (over ? lines.slice(0, rows - 1) : lines).map(lineSegs)
+  if (over) out.push([{ text: t('shell.usage_more', { n: lines.length - (rows - 1) }), dim: true }])
+  const mins = staleMinutes(panel)
+  if (mins !== null) out[0] = [{ text: t('shell.stale', { n: mins }) + ' ', dim: true }, ...out[0]]
+  return out.map(r => clipSegs(r, cols - 1))
 }
 
 // ---- the roundtable summary ----
@@ -241,8 +274,8 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
   if (geo === null) return null
   const { t, panel } = inp
   const side = panel.side
-  const stale = panel.status === 'ok' && panel.ageMs !== null && panel.ageMs > STALE_MS
-  const lead: Seg[] | null = stale ? [{ text: t('shell.stale', { n: Math.max(1, Math.round((panel.ageMs as number) / 60_000)) }), dim: true }] : null
+  const mins = staleMinutes(panel)
+  const lead: Seg[] | null = mins !== null ? [{ text: t('shell.stale', { n: mins }), dim: true }] : null
   const usageOf = (tiers: Tiers | null, inner: number, cap: number): PanelLine[] => (pickTier(tiers, inner) ?? []).slice(0, cap)
   const roomRows = (inner: number): Seg[][] => {
     const all = roomLines(inp.room.rows, inner, BODY_ROWS)

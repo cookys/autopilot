@@ -421,3 +421,29 @@ test('left title: a card list is titled with the open tab\'s name, a tab list wi
   assert.ok(top.includes('待決'))
   assert.ok(!top.includes('shell.menu'))
 })
+
+// ---- awaiting_operator_action count (bandawait): tier 80 only, in the main window's title, attention colour, nothing at 0 ----
+test('awaiting: tier 80 shows the count in the main title for N=1 and N>=2; N=0 and absent draw nothing', () => {
+  const top = (cols, over) => S.shellPlan(input(cols, over)).top
+  const one = top(80, { awaiting: 1 })
+  assert.ok(segText(one).includes('main · shell.awaiting{"n":1}'), segText(one))
+  const many = top(80, { awaiting: 3 })
+  assert.ok(segText(many).includes('shell.awaiting{"n":3}'), segText(many))
+  for (const over of [{ awaiting: 0 }, {}]) assert.ok(!segText(top(80, over)).includes('shell.awaiting'), JSON.stringify(over))
+})
+
+test('awaiting: exactly 80 columns - plan exists, the title row keeps the frame width, the count is a PALETTE.attention text colour only', () => {
+  const p = S.shellPlan(input(80, { awaiting: 2 }))
+  assert.equal(p.geo.tier, 80)
+  assert.equal(width(p.top), planWidth(p))
+  assert.ok(width(p.top) <= 80)
+  const seg = p.top.find(s => s.text.includes('shell.awaiting'))
+  assert.equal(seg.color, ui.PALETTE.attention)
+  for (const k of ['backgroundColor', 'inverse', 'bold']) assert.equal(seg[k], undefined, k)
+})
+
+test('awaiting: the other tiers are untouched, whatever the count', () => {
+  for (const cols of [115, 120, 160, 200, 240]) {
+    assert.deepEqual(S.shellPlan(input(cols, { awaiting: 5 })).top, S.shellPlan(input(cols)).top, 'tier at ' + cols)
+  }
+})

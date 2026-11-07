@@ -196,6 +196,7 @@ export type ShellInput = {
   fleet: readonly FleetLaneSum[]
   footLeft?: string // right-aligned in the bottom frame of the left window (the card position, `3/8`)
   footMain?: string // right-aligned in the bottom frame of the main window (the one-line hint)
+  awaiting?: number // answered cards still waiting for the operator's own step (status awaiting_operator_action); drawn in the main window's title at tier 80 only, and only when above 0
 }
 export type ShellColumn = { id: ColId; inner: number; rows: Seg[][] } // BODY_ROWS rows, each padded to exactly `inner` cells
 export type ShellPlan = { geo: Geometry; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[]; divider: { left: Seg; right: Seg; rule: Seg } }
@@ -262,7 +263,9 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
     else if (!foot) spec = [spec[0], { id: 'usage', inner: spec[1].inner + spec[2].inner + 1 }]
   }
 
-  const titles: Seg[][] = [[{ text: inp.menuTitle }], [{ text: inp.mainTitle }]]
+  // tier 80 has no right-hand column to carry it, so the count rides in the main window's title; 0 draws nothing (the same as the roundtable's fresh mark)
+  const awaitingTitle: Seg[] = geo.tier === 80 && (inp.awaiting ?? 0) > 0 ? [{ text: ' · ' }, { text: t('shell.awaiting', { n: inp.awaiting as number }), color: PALETTE.attention }] : []
+  const titles: Seg[][] = [[{ text: inp.menuTitle }], [{ text: inp.mainTitle }, ...awaitingTitle]]
   const columns: ShellColumn[] = []
   spec.forEach((c, idx) => {
     const lead1 = idx === 0 ? lead : null

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0420 -->
+<!-- next-id: BL-0424 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -126,6 +126,58 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: gitenv g4 Minor fa0cf3e1
 - **Pointer**: project/backlog/test-identity-guard-commented-source.md
+
+### cc-shim 與 dispatch-hetero 的 claude 路徑沒有 TERM 轉發測試
+- **Id**: BL-0420
+- **Status**: open
+- **Since**: 2026-11-07
+- **Origin**: self
+- **Problem**: 審查與撰寫派工的 cc-shim 只靠逾時機制，收到終止訊號時不會轉給子程序；hetero 派工的 claude 原生路徑靠 trap 收尾，但從沒真的用終止訊號測過。
+- **Impact**: 被終止的派工可能留下殘留程序或容器，佔住資源。
+- **Trigger**: next touch of the cc-shim or dispatch-hetero claude paths
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: seedclean g3 review 7b5a4738; PM fleet 01M6SZQ03P (2026-11-07)
+- **Pointer**: project/backlog/docsz6-hardening-notes.md
+
+### seedclean g3 其餘加固：trap 還原、fork 窗口、review 路徑 timeout -k
+- **Id**: BL-0421
+- **Status**: open
+- **Since**: 2026-11-07
+- **Origin**: self
+- **Problem**: account 路徑還原 trap 時是重設而不是存回原本的；fork 到 trap 生效之間有空窗；review 的 account 路徑缺少強制補殺的逾時參數。
+- **Impact**: 極端時序下憑證副本或子程序可能殘留。
+- **Trigger**: next touch of the account rails seeding code
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: seedclean g3 review (adb8f4b0, de92deb9, 76f11d50)
+- **Pointer**: project/backlog/docsz6-hardening-notes.md
+
+### band「待你動手 N」改放最上面的選單列
+- **Id**: BL-0422
+- **Status**: open
+- **Since**: 2026-11-07
+- **Origin**: self
+- **Problem**: 待你動手的數字是全域的，不是單張卡的，放在主視窗標題語意不對；改放最上面的選單列，前提是 80 欄寬放得下、不截字。
+- **Impact**: 數字位置會讓人誤以為只屬於目前這張卡。
+- **Trigger**: next change to the band top menu row
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: codeforge fleet 01M6SZVASD (2026-11-07)
+- **Pointer**: project/backlog/docsz6-hardening-notes.md
+
+### panel 一次送多張卡時 claim 依序執行，掛掉時整批卡很久
+- **Id**: BL-0423
+- **Status**: open
+- **Since**: 2026-11-07
+- **Origin**: self
+- **Problem**: 一次送多張卡時，認領是一張接一張，每張最多重試約 30 秒；courier 掛掉時整批會卡很久。
+- **Impact**: courier 故障時操作員要等好幾分鐘才看到結果。
+- **Trigger**: panelclaim is wired onto $.process
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: panelclaim hand report (2026-11-07)
+- **Pointer**: project/backlog/docsz6-hardening-notes.md
 
 ### bl-ap-streamjson：json 與 stream-json 的 result 位元組是否一致
 - **Id**: BL-0372

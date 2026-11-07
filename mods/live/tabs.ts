@@ -73,7 +73,7 @@ export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, h
   const needs = snap === null ? {} : tabNeeds(snap)
   return ui.strip(uiCtxOf(ctx), tab, PANE_TABS.map(id => { const n = needs[id]; return { id, label: tabLabel(id, ctx.t), ...(n === undefined ? {} : { need: true }) } }), hasButton)
 }
-// ---- the band's own tab row (layout E1): the first four pane tabs and, when a mod below draws one, a forge tab, right-aligned on the band's row. The labels and their weights are
+// ---- the band's own tab row (layout E1): the first four pane tabs, the band's own 用量 tab and, when a mod below draws one, a forge tab, right-aligned on the band's row. The labels and their weights are
 // ui.strip()'s (` name ` per tab, one space after each); the rule under an open tab is built from the SAME widths (ui.tabRule), so the `━` stands exactly under the label by construction. ----
 export type BarTabId = 'now' | 'decide' | 'dispatch' | 'review' | 'usage' | 'forge'
 // 'usage' is the band's own tab (the token table of forge-stats, drawn in the O4 shell); it is no pane tab: where the shell is not drawn its open button opens the pane's 花費 tab
@@ -81,9 +81,10 @@ export const BAR_PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'usage'] as
 export type BarTab = { id: BarTabId; label: Seg; width: number; start: number } // start counts from the row's first tab
 export type BarStrip = { tabs: BarTab[]; width: number } // width counts the space after each tab
 // forge: the forge tab's text (one string the mod below drew), or null for no forge tab
-export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | null, forge: string | null): BarStrip {
+// usage: false leaves the 用量 tab out (the band has no room for it; a dim `›` ends the row instead, see usageTabFits; forgeTab is the forge tab's text, the caller's glyph)
+export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | null, forge: string | null, usage = true): BarStrip {
   const needs = snap === null ? {} : tabNeeds(snap)
-  const list = BAR_PANE_TABS.map(id => ({ id: id as BarTabId, label: t('tab.' + id), ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }))
+  const list = BAR_PANE_TABS.filter(id => usage || id !== 'usage').map(id => ({ id: id as BarTabId, label: t('tab.' + id), ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }))
   const built = ui.strip<BarTabId>({ t, cols: 100000 }, active, forge === null ? list : [...list, { id: 'forge' as const, label: forge }], false)
   const tabs: BarTab[] = []
   let x = 0
@@ -94,6 +95,14 @@ export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | nul
   }
   return { tabs, width: x }
 }
+// The forge tab's label room: the narrowest worth asking for, and the cells the indicator keeps at least (register.ts reads both).
+export const FORGE_LABEL_MIN = 5
+export const BAND_MIN_COLS = 30
+// The 用量 tab is the band's fifth tab and takes its cells off the forge label's room, so it is drawn only where the strip WITH it still leaves the speed label its smallest form (`ϟ 999 tok/s`, 11 cells;
+// the indicator at its narrowest, the `│ ` and the gap: the 1 + 2 of register.ts). Narrower, the strip is the four tabs (and forge) it was before the 用量 tab, so the speed label, the speed view and the
+// recent table appear at the same widths as then, and the 用量 tab never makes the forge tab vanish by appearing.
+export const USAGE_LABEL_ROOM = 11
+export const usageTabFits = (columns: number, t: T, forgeTab: string): boolean => columns - BAND_MIN_COLS - barStrip(null, t, null, forgeTab).width - 3 >= USAGE_LABEL_ROOM
 export const barRule = (strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | null): Seg[] => ui.tabRule(strip.tabs, columns, tabsAt, active)
 export const stripRows = (snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } => { const s = stripOf(snap, ctx, tab, hasButton); return { rows: s.rows, exact: s.exact } }
 // every line is one drawn row: pane.tsx draws a blank line as a one-cell Text (an empty Text would take no row)

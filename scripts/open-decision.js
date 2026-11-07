@@ -69,7 +69,7 @@
  * status is closed (default when absent) or awaiting_operator_action (kept with its executor; closed_at is then the time it was answered), nothing else;
  * a card already in the store is skipped; a bad line (including a bad status) refuses the whole run (exit 2). Dry run by default; --apply writes.
  * Card notices (fleetcards phase 1, PM ruling 01M6W4RNP6): `open` and `close` (the paths that leave the open state) send ONE fleet message
- * `AUTOPILOT-CARD/1 {json}` to the program PM (AUTOPILOT_CARD_NOTIFY_TO, default cookys/aimax395/pm--claude) through the shell `fleet send`, which inside a
+ * `AUTOPILOT-CARD/1 {json}` to the program PM (AUTOPILOT_CARD_NOTIFY_TO, no default: unset sends nothing) through the shell `fleet send`, which inside a
  * Claude session signs as that session. Best effort: no fleet, no courier or a refused send is silent and changes no exit code. AUTOPILOT_CARD_NOTIFY=off stops it.
  * Node built-ins only. This script writes nothing outside the decisions directory.
  * The library functions openDecision / closeDecisionById are also called by hooks/ask-decision.js (depth-0 AskUserQuestion

@@ -5135,13 +5135,13 @@
       "kind": "env",
       "audience": "user",
       "group": "ui",
-      "default": "cookys/aimax395/pm--claude",
+      "default": null,
       "readers": [
         "scripts/lib/card-notice.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "summary": "Fleet address that receives the card open/close notice; \"off\" or \"none\" sends nothing."
+      "summary": "Fleet address (namespace/courier/member, e.g. example/host-a/pm--claude) that receives the card open/close notice. No default: unset or empty sends nothing; \"off\" or \"none\" also sends nothing."
     },
     {
       "name": "AUTOPILOT_CARD_MIRROR_DIR",

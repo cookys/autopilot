@@ -8,7 +8,7 @@ export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
 unset AUTOPILOT_ROOT_RUN_ID AUTOPILOT_SESSION_ID CLAUDE_SESSION_ID CODEX_THREAD_ID AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_CARD_NOTIFY_TO
 export CLAUDE_CODE_SESSION_ID=FAKE-sess-1
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/modes"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
-export AUTOPILOT_RUNS_WATCH_AUTOSTART=0 AUTOPILOT_CARD_NOTIFY=on
+export AUTOPILOT_RUNS_WATCH_AUTOSTART=0 AUTOPILOT_CARD_NOTIFY=on AUTOPILOT_CARD_NOTIFY_TO=example/host-a/pm--claude
 export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror"
 S="$REPO_ROOT/scripts"
 STUB="$TEST_TMP/stub"; mkdir -p "$STUB"
@@ -52,7 +52,7 @@ open_card "$OD"; ID="$OUT"
 assert_eq "$RC" 0 "open: exit 0"
 assert_eq "$(sends)" 1 "open: one fleet send"
 LINE="$(grep '"args":\["send"' "$STUB/calls.log" | head -1)"
-assert_contains "$LINE" '"cookys/aimax395/pm--claude"' "open: sent to the PM"
+assert_contains "$LINE" '"example/host-a/pm--claude"' "open: sent to the configured target"
 assert_contains "$LINE" '"fyi":"1"' "open: sent as FYI"
 PARSED="$(node -e 'const n=require(process.argv[1]);const l=JSON.parse(require("fs").readFileSync(process.argv[2],"utf8").split("\n")[0]);const r=n.parse(l.args[2]);process.stdout.write(r.ok?r.notice.event+" "+r.notice.card_id+" "+r.notice.state+" "+r.notice.session:"BAD "+r.reason)' "$S/lib/card-notice.js" "$STUB/calls.log")"
 assert_eq "$PARSED" "open $ID open FAKE-sess-1" "open: the message parses and carries id, state, session"
@@ -72,6 +72,11 @@ sed_mutant "$REPO_ROOT/hooks/tests/lib.sh" "$TEST_TMP/lib-mut.sh" 's/^export AUT
 reset_calls; touch "$STUB/send-fails"; open_card "$OD"; assert_eq "$RC" 0 "open: a refused send does not fail the card"; assert_contains "$OUT" "d-" "open: id still printed"
 reset_calls; ( export AUTOPILOT_FLEET_BIN=/nonexistent/fleet; open_card "$OD"; echo "$RC" > "$TEST_TMP/rc" ); assert_eq "$(cat "$TEST_TMP/rc")" 0 "open: no fleet binary is silent"
 reset_calls; ( export AUTOPILOT_CARD_NOTIFY=off; open_card "$OD" ); assert_eq "$(sends)" 0 "AUTOPILOT_CARD_NOTIFY=off sends nothing"
+# no AUTOPILOT_CARD_NOTIFY_TO (no built-in default address): nothing is sent, the card still opens
+reset_calls; ( unset AUTOPILOT_CARD_NOTIFY_TO; open_card "$OD"; echo "$RC" > "$TEST_TMP/rc" ); assert_eq "$(sends)" 0 "NOTIFY_TO unset: nothing sent"; assert_eq "$(cat "$TEST_TMP/rc")" 0 "NOTIFY_TO unset: the card still opens"
+reset_calls; ( export AUTOPILOT_CARD_NOTIFY_TO=""; open_card "$OD" ); assert_eq "$(sends)" 0 "NOTIFY_TO empty: nothing sent"
+# negative control: a built-in fallback address would send even when NOTIFY_TO is unset, so the check above would be red
+mk_mut lib/card-notice.js "s#NOTIFY_TO || ''#NOTIFY_TO || 'example/fallback/pm--claude'#" && { reset_calls; ( unset AUTOPILOT_CARD_NOTIFY_TO; open_card "$MUT/scripts/open-decision.js" ); assert_eq "$(sends)" 1 "NOTIFY_TO mutant (fallback address): a send happens, so the unset check above would be red"; }
 
 # ---- 2. close sends; mirror clears; 3. replay does not duplicate ----
 reset_calls; open_card "$OD"; ID2="$OUT"

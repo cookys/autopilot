@@ -13,13 +13,12 @@
  *   parseFrom(from)         -> { namespace, courier, member, session } | null
  *   notify(event, fields)   -> { sent: boolean, why } ; never throws, never blocks long. Silent when there is no courier.
  *
- * Knobs: AUTOPILOT_CARD_NOTIFY=off|0|false|no (no send; the hook suites export it), AUTOPILOT_CARD_NOTIFY_TO (target address, default PM_ADDRESS),
+ * Knobs: AUTOPILOT_CARD_NOTIFY=off|0|false|no (no send; the hook suites export it), AUTOPILOT_CARD_NOTIFY_TO (target address; NO default: unset or empty sends nothing, each host supplies the PM address itself),
  * AUTOPILOT_FLEET_BIN (the fleet binary, as in fleet-decision.js). Node built-ins only.
  */
 const { spawnSync } = require('child_process');
 
 const PREFIX = 'AUTOPILOT-CARD/1 ';
-const PM_ADDRESS = 'cookys/aimax395/pm--claude';
 const QUESTION_MAX = 300;
 const STATES = ['open', 'awaiting_operator_action', 'pending_dispatch', 'closed'];
 const EVENTS = ['open', 'close'];
@@ -71,7 +70,8 @@ function parseFrom(from) {
 function notify(event, fields) {
   if (off()) return { sent: false, why: 'off' };
   if (process.env.NODE_TEST_CONTEXT && !process.env.AUTOPILOT_FLEET_BIN) return { sent: false, why: 'node test without a stub' };
-  const to = process.env.AUTOPILOT_CARD_NOTIFY_TO || PM_ADDRESS;
+  const to = String(process.env.AUTOPILOT_CARD_NOTIFY_TO || '').trim();
+  if (!to) return { sent: false, why: 'no target' };
   if (/^(off|0|none)$/i.test(to)) return { sent: false, why: 'off' };
   try {
     const r = spawnSync(bin(), ['send', to, encode(event, fields)], { encoding: 'utf8', timeout: 6000, env: { ...process.env, FLEET_FYI: '1', FLEET_SEND_WAIT_MS: '4000' } });
@@ -82,4 +82,4 @@ function notify(event, fields) {
   }
 }
 
-module.exports = { PREFIX, PM_ADDRESS, QUESTION_MAX, STATES, encode, parse, parseFrom, notify };
+module.exports = { PREFIX, QUESTION_MAX, STATES, encode, parse, parseFrom, notify };

@@ -31,6 +31,7 @@ cat >/dev/null
 case "${STUB_MODE:-ok}" in
   fail) exit 3 ;;
   hang) echo ready > "$STUB_REC.ready"; sleep 60; exit 0 ;;
+  kill9) echo $$ > "$STUB_REC.pid"; echo ready > "$STUB_REC.ready"; sleep 60; exit 0 ;;
 esac
 echo '{"verdict":"READY","findings":[]}'
 STUBEOF
@@ -60,6 +61,19 @@ run_case() {
     wait "$pid" 2>/dev/null; RC=$?
     pkill -f "$STUB" 2>/dev/null || true
     sleep 0.3
+  elif [ "$mode" = kill9 ]; then
+    # SIGKILL the dispatcher only. The seed wrapper is not in that pid; releasing the stub
+    # (its own pid, recorded by the stub) lets the wrapper exit and remove the dir.
+    STUB_MODE=kill9 "${cmd[@]}" >/dev/null 2>&1 < /dev/null &
+    local pid=$! i=0
+    while [ ! -e "$REC.ready" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+    if [ -s "$REC.pid" ]; then kill -KILL "$(cat "$REC.pid")" 2>/dev/null || true; fi
+    i=0
+    while [ "$(ls -A "$TMPDIR" 2>/dev/null | grep -c '^claude-config-' || true)" != 0 ] && [ "$i" -lt 50 ]; do
+      sleep 0.1; i=$((i + 1))
+    done
   else
     STUB_MODE="$mode" "${cmd[@]}" >/dev/null 2>&1 < /dev/null; RC=$?
   fi
@@ -81,7 +95,7 @@ check_case() {
 
 SD="$REPO_ROOT/scripts"
 for kind in review author; do
-  for mode in ok fail term; do
+  for mode in ok fail term kill9; do
     OUTC="$(check_case "$SD" "$kind" "$mode")"; CRC=$?
     assert_eq "0" "$CRC" "$kind claude-native/$mode: seeded credentials-only config dir, removed after ($OUTC)"
   done
@@ -100,7 +114,9 @@ mv "$REAL/.credentials.json.off" "$REAL/.credentials.json"
 
 # Negative control: old behaviour (no CLAUDE_CONFIG_DIR hand-off) must be caught as red.
 OLD="$TEST_TMP/old-scripts"; cp -r "$SD" "$OLD"
-for f in dispatch-review.sh dispatch-author.sh; do sed_mutate "$OLD/$f" 's/ CLAUDE_CONFIG_DIR="\$CNATIVE_CFG"//'; done
+# The hand-off now lives in the wrapper (CLAUDE_CONFIG_DIR: seeded). Neutralising it on the copy
+# makes the child inherit the real config dir, which check_case must reject.
+sed_mutate "$OLD/lib/seed-claude-config.js" 's/CLAUDE_CONFIG_DIR: seeded/CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR/'
 for kind in review author; do
   check_case "$OLD" "$kind" ok >/dev/null; NRC=$?
   assert_neq "0" "$NRC" "negative control: $kind with the old hand-off removed is detected"

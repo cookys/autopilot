@@ -1971,7 +1971,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     *) die_precondition "claude-native refused: the account registry is present but invalid or its env-check output is unrecognised (claude-account.js env-check --any); nothing was spawned, not falling back to ambient or seeded credentials" ;;
   esac
   if [ "$_ACCT_ACTIVE" -eq 0 ]; then
-    CNATIVE_CFG="$(node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
+    node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --check \
       || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"
   fi
   CNATIVE_CWD="$(mktemp -d -t dispatch-review-cnativecwd-XXXXXX)"
@@ -1979,14 +1979,24 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   if [ "$_ACCT_ACTIVE" -eq 1 ]; then
     timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       node "$_REVIEW_SELF_DIR/claude-account.js" run --pin-default --purpose review --stdin "$PROMPT_FILE" --cwd "$CNATIVE_CWD" -- \
-      "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "$ROLE_KIT_TOOLS" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>&1
+      "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "$ROLE_KIT_TOOLS" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>&1 &
+    # The account path is backgrounded so a TERM/INT/HUP aimed at this script reaches the claude child: bash defers a
+    # trap until a foreground child ends, but `wait` returns at once on a trapped signal. The legacy path gets the same
+    # forwarding from seed-claude-config.js --exec; without this, the quota-holding claude outlived a killed review.
+    _ACCT_CHILD=$!
+    _acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/dev/null; exit 143; }
+    trap _acct_forward TERM INT HUP
+    wait "$_ACCT_CHILD"; _ACCT_RC=$?
+    trap - TERM INT HUP
+    (exit "$_ACCT_RC")   # leaves the child's status in $? for the CNATIVE_RC line after the fi
   else
-  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} CLAUDE_CONFIG_DIR="$CNATIVE_CFG" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
+  node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec -- \
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
       _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>&1
   fi
   CNATIVE_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
-  rm -rf "$CNATIVE_CWD" "$CNATIVE_CFG"; CNATIVE_CWD=""; CNATIVE_CFG=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""; CNATIVE_CFG=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   if [ "$CNATIVE_RC" -ne 0 ]; then
     printf '\n[dispatch-review: claude-native (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CNATIVE_RC" "$([ "$CNATIVE_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"

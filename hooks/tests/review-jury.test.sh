@@ -23,10 +23,10 @@ f="$FAKE_DIR/$(echo "$model" | tr / _).json"
 if [ -f "$f" ]; then cat "$f"; else printf '{"runner":"x","model":"%s","status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}\n' "$model"; fi
 FAKE
 chmod +x "$TEST_TMP/fake-dispatch.sh"
-# Fake scorecard: grok-4.7 and glm-5.3 are qualified reviewers, everything else has no record.
+# Fake scorecard: engines grok-4.7 and GLM-5.3 are qualified reviewers, everything else has no record.
 cat > "$TEST_TMP/fake-scorecard.js" <<'FAKE'
 const a = process.argv; const e = a[a.indexOf('--engine') + 1];
-console.log(JSON.stringify({ admission_status: (e === 'grok-4.7' || e === 'glm-5.3') ? 'qualified' : 'no_record' }));
+console.log(JSON.stringify({ admission_status: (e === 'grok-4.7' || e === 'GLM-5.3') ? 'qualified' : 'no_record' }));
 FAKE
 echo "diff --git a/x b/x" > "$TEST_TMP/pack.txt"
 
@@ -384,6 +384,104 @@ bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner codex --model gpt-test --d
   --bin "$TEST_TMP/answer-runner.sh" > "$TEST_TMP/dr-out.json" 2> "$TEST_TMP/dr-err.txt" < /dev/null
 assert_exit_code "$?" "0" "dispatch-review with ANSWER lines: rc 0"
 assert_eq "$("$NODE" -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const a=j.findings.split("\n").filter(l=>/^ANSWER Q\d \|/.test(l));process.stdout.write(j.verdict+","+j.status+","+a.length+","+(j.no_finding_proof||"").startsWith("checked="))' "$TEST_TMP/dr-out.json")" "SHIP-AS-IS,reviewed,2,true" "dispatch-review keeps SHIP-AS-IS, both ANSWER lines and the proof"
+
+# ---- merge keeps each run's recorded qualified verdict; budget-exhausted retry; --seat-max-tokens ----
+cat > "$TEST_TMP/norecord-scorecard.js" <<'FAKE'
+console.log(JSON.stringify({ admission_status: 'no_record' }));
+FAKE
+case_merge_recorded() {
+  local d="$TEST_TMP/$2" a; a="$d/a"; mkdir -p "$a/seats"
+  printf '%s\n' '{"implementer_family":"x","seats":{"grok":{"state":"dispatched","qualified":true,"family":"xai","model":"grok-4.7","runner":"grok","effort":"low"},"kimi":{"state":"dispatched","family":"moonshot","model":"kimi-code/k3","runner":"kimi","effort":"high"}}}' > "$a/run.json"
+  printf '%s\n' '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}' > "$a/seats/grok.json"
+  cp "$a/seats/grok.json" "$a/seats/kimi.json"
+  env -i PATH="/usr/bin:/bin" "$NODE" "$1" merge --out "$d/out" --scorecard-bin "$TEST_TMP/norecord-scorecard.js" "$a" > "$d/stdout" 2>&1 < /dev/null
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.qualified_seats.join()')" = grok ] && [ "$(jq_eval "$m" 'j.advisory_seats.join()')" = kimi ] \
+    && [ "$(jq_eval "$m" 'j.seat_states.grok.qualified_source+","+j.seat_states.kimi.qualified_source')" = "run,missing" ] && echo ok
+}
+check case_merge_recorded mergerecorded "s|qualified: st0.qualified === true, qualified_source: recorded ? 'run' : 'missing'|qualified: isQualified({ ...SEATS[n], model: st.model, effort: st.effort }, process.argv[process.argv.indexOf('--scorecard-bin') + 1]), qualified_source: 'run'|"
+check case_merge_recorded mergemissing "s/qualified: st0.qualified === true,/qualified: st0.qualified !== false,/"
+
+# fake dispatch: the first glm call answers $FAKE_FIRST (a JSON line), later ones a clean SHIP-AS-IS; every argv is logged.
+cat > "$TEST_TMP/retry-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "$*" >> "$FAKE_DIR/args.log"
+case "$*" in *"--endpoint glm"*) ;; *) printf '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}\n'; exit 0 ;; esac
+n=$(cat "$FAKE_DIR/glm.count" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$FAKE_DIR/glm.count"
+if [ "$n" = 1 ]; then printf '%s\n' "$FAKE_FIRST"; exit 1; fi
+printf '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}\n'
+FAKE
+chmod +x "$TEST_TMP/retry-dispatch.sh"
+run_glm() { # run_glm <script> <dir> <first-result JSON> extra args...
+  local script="$1" dir="$2" first="$3"; shift 3; mkdir -p "$dir/fake" "$dir/home"
+  FAKE_FIRST="$first" env -i PATH="$STUBS:/usr/bin:/bin" HOME="$dir/home" AUTOPILOT_ENDPOINTS_ENV="$dir/none.env" FAKE_DIR="$dir/fake" FAKE_FIRST="$first" \
+    AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid AUTOPILOT_ENDPOINT_GLM_TOKEN=FAKE-glm \
+    "$NODE" "$script" run --pack "$TEST_TMP/pack.txt" --seats glm --implementer-family anthropic --dispatch-bin "$TEST_TMP/retry-dispatch.sh" \
+    --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$dir/out" "$@" > "$dir/stdout" 2> "$dir/stderr" < /dev/null
+  echo $? > "$dir/rc"
+}
+BUDGET_JSON='{"runner":"anthropic-compatible","model":"glm-5.3","status":"no_verdict","verdict":null,"findings":"","error":"output_budget_exhausted: reviewer spent the whole output budget on thinking"}'
+case_retry_budget() {
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON"
+  local s="$d/out/seats/glm.json"
+  [ "$(jq_eval "$s" 'j.status+","+j.attempts.length+","+j.attempts[0].max_tokens+","+j.attempts[1].max_tokens+","+j.attempts[0].error.slice(0,23)')" = "reviewed,2,65536,131072,output_budget_exhausted" ] \
+    && [ "$(sed -n 1p "$d/fake/args.log" | grep -c -- '--max-tokens 65536')" = 1 ] \
+    && [ "$(sed -n 2p "$d/fake/args.log" | grep -c -- '--max-tokens 131072')" = 1 ] \
+    && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.glm.status')" = valid ] && echo ok
+}
+check case_retry_budget retrybudget "s/ || !String(first.out).includes('output_budget_exhausted')) return/ || true) return/"
+case_retry_other() {
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" '{"status":"no_verdict","verdict":null,"findings":"","error":"http 500 from endpoint"}'
+  [ "$(cat "$d/fake/glm.count")" = 1 ] && [ "$(jq_eval "$d/out/seats/glm.json" 'String(j.attempts)')" = undefined ] \
+    && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.glm.status')" = invalid ] && echo ok
+}
+check case_retry_other retryother "s/ || !String(first.out).includes('output_budget_exhausted')) return/ || false) return/"
+case_retry_ceiling() { # already at 200000: effort goes high -> medium, max_tokens stays
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=200000
+  [ "$(jq_eval "$d/out/seats/glm.json" 'j.attempts.map(a=>a.max_tokens+"/"+a.effort).join()')" = "200000/high,200000/medium" ] \
+    && sed -n 2p "$d/fake/args.log" | grep -q -- '--effort medium' && echo ok
+}
+check case_retry_ceiling retryceiling "s/const cur = seat.max_tokens || DEFAULT_RUNNER_MAX_TOKENS;/const cur = 1;/"
+case_seat_max_tokens() {
+  local d="$TEST_TMP/$2" rc1 rc2; run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=12345
+  sed -n 1p "$d/fake/args.log" | grep -q -- '--max-tokens 12345' && ! sed -n 1p "$d/fake/args.log" | grep -q -- '--max-tokens 65536' || return
+  sed -n 2p "$d/fake/args.log" | grep -q -- '--max-tokens 24690' || return
+  run_glm "$1" "$d.b" "$BUDGET_JSON" --seat-max-tokens grok=5; rc1="$(cat "$d.b/rc")"
+  run_glm "$1" "$d.c" "$BUDGET_JSON" --seat-max-tokens glm=200001; rc2="$(cat "$d.c/rc")"
+  [ "$rc1$rc2" = 22 ] && echo ok
+}
+check case_seat_max_tokens seatmaxtokens "s/if (seat.max_tokens) args.push('--max-tokens', String(seat.max_tokens));/void 0;/"
+
+# ---- scorecard engine identity (engine != model) and the redacted stderr log ----
+case_engine() {
+  local d="$TEST_TMP/$2" ok=1
+  run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=200000   # default seat: engine GLM-5.3, wire model glm-5.3
+  [ "$(jq_eval "$d/out/run.json" 'j.seats.glm.qualified+","+j.seats.glm.engine+","+j.seats.glm.model')" = "true,GLM-5.3,glm-5.3" ] && sed -n 1p "$d/fake/args.log" | grep -q -- '--model glm-5.3' || return
+  run_glm "$1" "$d.b" "$BUDGET_JSON" --seat-model glm=GLM-5.3   # --seat-model alone: engine follows the model
+  [ "$(jq_eval "$d.b/out/run.json" 'j.seats.glm.qualified+","+j.seats.glm.engine')" = "true,GLM-5.3" ] || return
+  run_glm "$1" "$d.c" "$BUDGET_JSON" --seat-model glm=zzz --seat-engine glm=GLM-5.3   # --seat-engine pins the lookup only
+  [ "$(jq_eval "$d.c/out/run.json" 'j.seats.glm.qualified+","+j.seats.glm.engine+","+j.seats.glm.model')" = "true,GLM-5.3,zzz" ] || return
+  run_glm "$1" "$d.d" "$BUDGET_JSON" --seat-model glm=zzz
+  [ "$(jq_eval "$d.d/out/run.json" 'j.seats.glm.qualified+","+j.seats.glm.engine')" = "false,zzz" ] && echo ok
+}
+check case_engine engine "s/'--engine', seat.engine,/'--engine', seat.model,/"
+check case_engine engineflag "s/\['seat-engine', 'engine'\]/['seat-engine', 'engine_ignored']/"
+
+cat > "$TEST_TMP/stderr-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "transport failed: POST https://glm.example.invalid/anthropic/v1/messages Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789ABCD sk-FAKEkey123 hex=0123456789abcdef0123456789abcdef0123" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/stderr-dispatch.sh"
+case_stderr_log() {
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/stderr-dispatch.sh"
+  local lg="$d/out/seats/glm.stderr.log"
+  [ -f "$lg" ] && [ "$(stat -c %a "$lg")" = 644 ] && [ "$(jq_eval "$d/out/seats/glm.json" 'j.stderr_log')" = "$lg" ] \
+    && grep -q 'Bearer \[redacted\]' "$lg" && grep -q 'https://glm.example.invalid/anthropic/v1/messages' "$lg" \
+    && ! grep -q 'abcdefghijklmnopqrstuvwxyz' "$lg" && ! grep -q 'FAKEkey123' "$lg" && ! grep -q '0123456789abcdef0123456789abcdef' "$lg" && echo ok
+}
+check case_stderr_log stderrlog "s/function redactStderr(t) {/function redactStderr(t) { return String(t);/"
 
 # the fixed seat families agree with familyOfEngine() for each seat's default model
 "$NODE" -e '

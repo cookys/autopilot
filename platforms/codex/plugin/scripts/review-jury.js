@@ -10,13 +10,23 @@
 //   node scripts/review-jury.js run --pack <file> --implementer-family <family> --out <dir>
 //        [--diff <path in pack>] [--questions <path in pack>] [--methodology <file>] [--spec-file <file>] [--seats grok,kimi,glm,minimax]
 //        [--timeout 15m] [--dispatch-bin <path>] [--scorecard-bin <path>]
-//        [--seat-model <seat>=<model>]... [--seat-effort <seat>=<effort>]...
+//        [--seat-model <seat>=<model>]... [--seat-effort <seat>=<effort>]... [--seat-max-tokens <seat>=<n>]... [--seat-engine <seat>=<engine>]...
 //   node scripts/review-jury.js merge --out <dir> <run-dir> [<run-dir> ...]
 //
 // --seat-model / --seat-effort (repeatable) override the table below for one run, e.g.
 //        --seat-model kimi=kimi-code/k3.1-pro --seat-model minimax=MiniMax-M3.1-Flash. The overridden value is used for
 //        dispatch-review's --model/--effort and the seat-status lookup, and is what seats/<seat>.json, run.json and
 //        merged.json record. An unknown seat or a value that is not name=value is a usage error (rc 2).
+// engine is the seat's identity on the scorecard (the `--engine` of seat-status and the `engine` of the official reviewer rows); model is the
+//        string sent to the runner. --seat-model changes the model AND, unless --seat-engine <seat>=<engine> is also given, the engine
+//        (so --seat-model kimi=kimi-code/k3.1-pro looks up engine kimi-code/k3.1-pro). --seat-engine alone changes only the lookup.
+// Each dispatched seat's stderr is kept in <out>/seats/<seat>.stderr.log (mode 0644; seat JSON field stderr_log) after the secret
+//        filter: Bearer <x>, sk-<x> and any run of >= 32 base64/hex characters become [redacted]; URLs stay. A retried seat's log holds both attempts.
+// --seat-max-tokens <seat>=<n> (repeatable) is passed to dispatch-review's --max-tokens (1..200000, anthropic-compatible seats only:
+//        glm, minimax; any other seat is a usage error). A seat whose result says output_budget_exhausted (the reviewer spent the whole
+//        output budget on thinking) is dispatched once more: max_tokens doubled (capped at 200000); when it is already 200000, effort
+//        one step lower (high->medium, medium->low). Both attempts are recorded in the seat JSON's attempts[]; the second result is used.
+//        No other error is retried.
 // run    Dispatches every seat that THIS account can reach, in parallel, each blind to the others,
 //        then merges its own output. A seat whose runner binary (grok, kimi) or endpoint (glm,
 //        minimax: resolve-endpoint.sh ready) is not found here is "unavailable" - not a failure.
@@ -58,23 +68,40 @@
 // is false and the exit code is 1. Exit codes: 0 round valid, 1 round not valid, 2 usage error.
 //
 // Seat table (runner / model / effort; source):
+// engine = scorecard identity, copied verbatim from the official reviewer row's administration.engine (case kept);
+// model = string sent to the runner (the row's administration.model).
 //   grok     grok                 grok-4.7            low   official reviewer row (references/official-qualification-defaults.json)
 //   kimi     kimi                 kimi-code/k3        high  same file; kimi takes effort via KIMI_MODEL_THINKING_EFFORT (dispatch-review.sh)
 //   glm      anthropic-compatible glm-5.3             high  same file; endpoint `glm` (project-config-template/review-loop-config.md)
 //   minimax  anthropic-compatible MiniMax-M3          high  endpoint `minimax` (same template, "MiniMax-M3 (reviewer)")
-// Qualified or advisory is read live from `engine-scorecard.js seat-status ... --role reviewer`
-// (admission_status "qualified" means qualified; no_record, failed or an unreadable answer means advisory).
+// glm and minimax also carry max_tokens 65536 (see the table).
+// Qualified or advisory is read from `engine-scorecard.js seat-status ... --role reviewer` ONCE, by `run`, and recorded in run.json
+// (admission_status "qualified" means qualified; no_record, failed or an unreadable answer means advisory). `merge` never asks
+// a scorecard: it takes each run dir's recorded verdict (qualified_source "run"); a run.json seat without one is advisory with
+// qualified_source "missing".
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
 
+// max_tokens (anthropic-compatible seats only) is dispatch-review's --max-tokens. The runner default is 16384
+// (dispatch-anthropic-review.js:65) and the allowed range is 1..200000 (dispatch-review.sh:462-466, dispatch-anthropic-review.js:632).
+// At 16384 the glm seat spent the whole budget on thinking in three real packs (output_budget_exhausted), so these two seats start at
+// 65536 (4x the default, a third of the 200000 ceiling; a round number, not a measured provider limit). A retry doubles it up to 200000.
+const MAX_TOKENS_CEILING = 200000;
+const DEFAULT_RUNNER_MAX_TOKENS = 16384;
+const EFFORT_STEP_DOWN = Object.freeze({ high: 'medium', medium: 'low' });
+// engine sources (references/official-qualification-defaults.json, reviewer rows): grok official:reviewer:grok-4.7:grok:303 (engine grok-4.7,
+// model grok-4.7); kimi :kimi-code-k3:kimi:304 (engine kimi-code-k3, model kimi-code/k3); glm :GLM-5.3:anthropic-compatible:293/294 (engine
+// GLM-5.3, administration.model glm-5.3, so the wire model stays glm-5.3; project-config-template/review-loop-config.md:63 reviewer_engine
+// GLM-5.3 is the same scorecard identity). minimax: no official reviewer row exists for MiniMax-M3 on anthropic-compatible (only
+// MiniMax-M3.1-Flash-Preview, a different model), so engine is the model name MiniMax-M3 and the seat stays advisory until a local record exists.
 const SEATS = Object.freeze({
-  grok: { runner: 'grok', model: 'grok-4.7', effort: 'low', bin: 'grok', family: 'xai' },
-  kimi: { runner: 'kimi', model: 'kimi-code/k3', effort: 'high', bin: 'kimi', family: 'moonshot' },
-  glm: { runner: 'anthropic-compatible', model: 'glm-5.3', effort: 'high', endpoint: 'glm', family: 'zhipu' },
-  minimax: { runner: 'anthropic-compatible', model: 'MiniMax-M3', effort: 'high', endpoint: 'minimax', family: 'minimax' },
+  grok: { runner: 'grok', engine: 'grok-4.7', model: 'grok-4.7', effort: 'low', bin: 'grok', family: 'xai' },
+  kimi: { runner: 'kimi', engine: 'kimi-code-k3', model: 'kimi-code/k3', effort: 'high', bin: 'kimi', family: 'moonshot' },
+  glm: { runner: 'anthropic-compatible', engine: 'GLM-5.3', model: 'glm-5.3', effort: 'high', endpoint: 'glm', family: 'zhipu', max_tokens: 65536 },
+  minimax: { runner: 'anthropic-compatible', engine: 'MiniMax-M3', model: 'MiniMax-M3', effort: 'high', endpoint: 'minimax', family: 'minimax', max_tokens: 65536 },
 });
 // Family ids as scripts/lib/stage-write.js familyOfEngine() returns them, plus `claude` (what the PM writes for anthropic).
 // A seat's family is fixed by the seat, never by --seat-model.
@@ -90,7 +117,7 @@ function die(msg) {
 function parseArgs(argv) {
   const o = { _: [] };
   const takes = new Set(['pack', 'implementer-family', 'out', 'methodology', 'spec-file', 'seats', 'timeout', 'dispatch-bin', 'scorecard-bin', 'diff', 'questions', 'context-max']);
-  const repeat = new Set(['seat-model', 'seat-effort', 'context-exclude']);
+  const repeat = new Set(['seat-model', 'seat-effort', 'seat-max-tokens', 'seat-engine', 'context-exclude']);
   for (const k of repeat) takes.add(k);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -107,12 +134,19 @@ function parseArgs(argv) {
 // Effective seat table: SEATS with the per-run --seat-model / --seat-effort overrides applied.
 function applyOverrides(o) {
   const eff = Object.fromEntries(Object.entries(SEATS).map(([n, s]) => [n, { ...s }]));
-  for (const [flag, field] of [['seat-model', 'model'], ['seat-effort', 'effort']]) {
+  for (const [flag, field] of [['seat-model', 'model'], ['seat-effort', 'effort'], ['seat-max-tokens', 'max_tokens'], ['seat-engine', 'engine']]) {
     for (const item of o[flag] || []) {
       const m = item.match(/^([^=]+)=(.+)$/);
       if (!m) die(`--${flag} needs <seat>=<value>, got ${item}`);
       if (!eff[m[1]]) die(`--${flag}: unknown seat ${m[1]} (known: ${Object.keys(SEATS).join(', ')})`);
-      eff[m[1]][field] = m[2];
+      if (field === 'max_tokens') {
+        if (!/^[1-9][0-9]{0,5}$/.test(m[2]) || Number(m[2]) > MAX_TOKENS_CEILING) die(`--${flag}: ${m[2]} is not an integer in 1..${MAX_TOKENS_CEILING}`);
+        if (eff[m[1]].runner !== 'anthropic-compatible') die(`--${flag}: seat ${m[1]} (runner ${eff[m[1]].runner}) has no output-token cap; only anthropic-compatible seats take one`);
+        eff[m[1]][field] = Number(m[2]);
+      } else {
+        eff[m[1]][field] = m[2];
+        if (field === 'model') eff[m[1]].engine = m[2]; // a --seat-engine given too is applied after this pass
+      }
     }
   }
   return eff;
@@ -144,8 +178,9 @@ function endpointReady(name) {
   try { return JSON.parse(r.stdout).ready === true; } catch { return false; }
 }
 
+// Used by `run` only; `merge` takes the verdict recorded in run.json.
 function isQualified(seat, scorecardBin) {
-  const args = [scorecardBin, 'seat-status', '--engine', seat.model, '--runner', seat.runner, '--role', 'reviewer', '--effort', seat.effort];
+  const args = [scorecardBin, 'seat-status', '--engine', seat.engine, '--runner', seat.runner, '--role', 'reviewer', '--effort', seat.effort];
   const r = spawnSync(process.execPath, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
   try { return JSON.parse(r.stdout).admission_status === 'qualified'; } catch { return false; }
 }
@@ -153,16 +188,49 @@ function isQualified(seat, scorecardBin) {
 function dispatchSeat(name, seat, opts) {
   const args = ['--runner', seat.runner, '--model', seat.model, '--effort', seat.effort, '--diff-file', opts.pk.diff, '--timeout', opts.timeout];
   if (seat.endpoint) args.push('--endpoint', seat.endpoint);
+  if (seat.max_tokens) args.push('--max-tokens', String(seat.max_tokens));
   if (opts.pk.spec) args.push('--spec-file', opts.pk.spec);
   if (opts.pk.ctx) args.push('--pack-file', opts.pk.ctx);
   return new Promise((resolve) => {
     const child = spawn(opts.dispatchBin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, DISPATCH_QUIET: '1' } });
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
-    child.stderr.resume();
+    let err = '';
+    child.stderr.on('data', (d) => { err += d; });
     child.on('error', (e) => resolve({ name, rc: 127, out: '', err: String(e.message) }));
-    child.on('close', (rc) => resolve({ name, rc: rc === null ? 1 : rc, out, err: '' }));
+    child.on('close', (rc) => resolve({ name, rc: rc === null ? 1 : rc, out, err }));
   });
+}
+
+// One dispatch; when the result says output_budget_exhausted (anthropic-compatible seats), one more with a larger
+// output budget or, at the ceiling, one effort step lower. No other error is retried. Returns the last result plus attempts[].
+async function dispatchWithRetry(name, seat, opts) {
+  const note = (att, s, r) => {
+    let status = null; let error = null;
+    try { const j = JSON.parse(r.out); status = j.status || null; error = j.error || null; } catch { error = `no JSON (rc=${r.rc})`; }
+    return { attempt: att, max_tokens: s.max_tokens, effort: s.effort, rc: r.rc, status, error };
+  };
+  const first = await dispatchSeat(name, seat, opts);
+  const attempts = [note(1, seat, first)];
+  if (seat.runner !== 'anthropic-compatible' || !String(first.out).includes('output_budget_exhausted')) return { ...first, attempts };
+  const firstErr = first.err;
+  const next = { ...seat };
+  const cur = seat.max_tokens || DEFAULT_RUNNER_MAX_TOKENS;
+  if (cur < MAX_TOKENS_CEILING) next.max_tokens = Math.min(cur * 2, MAX_TOKENS_CEILING);
+  else if (EFFORT_STEP_DOWN[seat.effort]) next.effort = EFFORT_STEP_DOWN[seat.effort];
+  else return { ...first, attempts };
+  const second = await dispatchSeat(name, next, opts);
+  attempts.push(note(2, next, second));
+  return { ...second, err: `--- attempt 1 ---\n${firstErr}\n--- attempt 2 ---\n${second.err}`, attempts };
+}
+
+// Seat stderr is kept for diagnosis, so anything token-shaped goes first: Bearer <x>, sk-<x>, and any run of >= 32 base64/hex characters.
+// URLs are left alone (their parts are shorter than 32 characters or contain '.', ':' or '/').
+function redactStderr(t) {
+  return String(t)
+    .replace(/(Bearer\s+)\S+/gi, '$1[redacted]')
+    .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(/[A-Za-z0-9+_=-]{32,}/g, '[redacted]');
 }
 
 const CONTEXT_CAP = 300 * 1024;
@@ -371,23 +439,26 @@ async function cmdRun(o) {
   for (const n of names) {
     const s = seatTable[n];
     const family = SEATS[n].family;
-    const base = { runner: s.runner, model: s.model, effort: s.effort, family, qualified: isQualified(s, scorecardBin) };
+    const base = { runner: s.runner, engine: s.engine, model: s.model, effort: s.effort, family, qualified: isQualified(s, scorecardBin) };
     if (family === o['implementer-family']) { state[n] = { ...base, state: 'excluded_family' }; continue; }
     const reach = s.endpoint ? endpointReady(s.endpoint) : runnerFound(s);
     if (!reach) { state[n] = { ...base, state: 'unavailable', reason: s.endpoint ? `endpoint ${s.endpoint} not ready on this account` : `runner ${s.bin} not found on this account` }; continue; }
     state[n] = { ...base, state: 'dispatched' };
     todo.push(n);
   }
-  const results = await Promise.all(todo.map((n) => dispatchSeat(n, seatTable[n], opts)));
+  const results = await Promise.all(todo.map((n) => dispatchWithRetry(n, seatTable[n], opts)));
   for (const r of results) {
-    let body;
-    try {
-      const j = JSON.parse(r.out); body = r.out;
-      if (pk.questions.length) { const pa = parseAnswers(j.findings, j.no_finding_proof); j.answers = pa.answers; j.duplicate_answers = pa.duplicates; body = `${JSON.stringify(j)}\n`; }
-    } catch {
-      body = `${JSON.stringify({ runner: seatTable[r.name].runner, model: seatTable[r.name].model, status: 'no_verdict', verdict: null, findings: '', error: `dispatch-review produced no JSON (rc=${r.rc}) ${r.err}`.trim() })}\n`;
+    let j;
+    try { j = JSON.parse(r.out); } catch {
+      j = { runner: seatTable[r.name].runner, model: seatTable[r.name].model, status: 'no_verdict', verdict: null, findings: '', error: `dispatch-review produced no JSON (rc=${r.rc}) ${redactStderr(r.err)}`.trim() };
     }
-    fs.writeFileSync(path.join(o.out, 'seats', `${r.name}.json`), body);
+    if (pk.questions.length && j.status !== 'no_verdict') { const pa = parseAnswers(j.findings, j.no_finding_proof); j.answers = pa.answers; j.duplicate_answers = pa.duplicates; }
+    if (r.attempts.length > 1) j.attempts = r.attempts;
+    const logPath = path.join(o.out, 'seats', `${r.name}.stderr.log`);
+    fs.writeFileSync(logPath, redactStderr(r.err), { mode: 0o644 });
+    fs.chmodSync(logPath, 0o644);
+    j.stderr_log = logPath;
+    fs.writeFileSync(path.join(o.out, 'seats', `${r.name}.json`), `${JSON.stringify(j)}\n`);
     state[r.name].rc = r.rc;
   }
   writeJson(path.join(o.out, 'run.json'), { implementer_family: o['implementer-family'], questions: pk.questions, skipped_files: pk.skipped, seats: state });
@@ -438,7 +509,9 @@ function mergeDirs(dirs, outDir) {
       const prev = seats[n];
       // The same seat from two dirs: a valid answer beats anything else; otherwise keep the first.
       if (prev && (prev.status === 'valid' || status !== 'valid')) continue;
-      seats[n] = { status, verdict, qualified: !!st.qualified, family: st.family, runner: st.runner, model: st.model, effort: st.effort, reason: st.reason || error || undefined, from: d, findingsText, proofText };
+      // The verdict recorded by the run is taken as is; merge never asks a scorecard (the merging account's store may differ).
+      const recorded = typeof st0.qualified === 'boolean';
+      seats[n] = { status, verdict, qualified: st0.qualified === true, qualified_source: recorded ? 'run' : 'missing', family: st.family, runner: st.runner, engine: st.engine, model: st.model, effort: st.effort, reason: st.reason || error || undefined, from: d, findingsText, proofText };
     }
   }
   const byId = new Map();
@@ -476,7 +549,7 @@ function mergeDirs(dirs, outDir) {
     min_valid_seats: MIN_VALID,
     qualified_seats: valid.filter((n) => seats[n].qualified),
     advisory_seats: valid.filter((n) => !seats[n].qualified),
-    seat_states: Object.fromEntries(Object.entries(seats).map(([n, s]) => [n, { status: s.status, verdict: s.verdict, qualified: s.qualified, family: s.family, runner: s.runner, model: s.model, effort: s.effort, reason: s.reason, from: s.from, duplicate_answers: s.duplicate_answers }])),
+    seat_states: Object.fromEntries(Object.entries(seats).map(([n, s]) => [n, { status: s.status, verdict: s.verdict, qualified: s.qualified, qualified_source: s.qualified_source, family: s.family, runner: s.runner, engine: s.engine, model: s.model, effort: s.effort, reason: s.reason, from: s.from, duplicate_answers: s.duplicate_answers }])),
     findings,
     questions,
     answers,

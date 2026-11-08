@@ -5288,8 +5288,7 @@
       "default": "on",
       "readers": [
         "scripts/lib/runner-fallback-bin.sh",
-        "scripts/lib/runner-binary.js",
-        "scripts/resolve-dispatch-topology.js"
+        "scripts/lib/runner-binary.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],

@@ -80,6 +80,21 @@
       "path": ".claude/skills/foreman-landing-pipeline/templates/land-brief.md",
       "category": "email",
       "reason": "git author identity used for landing commits; already public in every commit's author field"
+    },
+    {
+      "path": "hooks/tests/cloud-fallback.test.sh",
+      "category": "email",
+      "reason": "test fixture: a placeholder .invalid git identity used by the fixture repo, not personal data"
+    },
+    {
+      "path": "hooks/tests/review-jury.test.sh",
+      "category": "email",
+      "reason": "redaction test: userinfo- and email-shaped .invalid strings are the subject under test"
+    },
+    {
+      "path": "hooks/tests/review-jury.test.sh",
+      "category": "home_path",
+      "reason": "redaction test: a PWD=/home/... value that must be kept is the subject under test"
     }
   ]
 }

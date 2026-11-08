@@ -241,6 +241,10 @@ export type CardView = {
   background: string | null
   options: { label: string; description: string; picked: boolean; recommended: boolean; key: string }[]
   note: string | null // a card the band cannot answer (typed or in a dialog) and has no way to fill: one dim line instead of options
+  meta: string | null // the pane's card state, as the pane words it: `decide.sent` (already sent), `decide.held` (in its undo window), or, on a card the session or the CLI closed elsewhere, the answer line `decide.elsewhere`; drawn dim
+  locked: boolean // sent or in the undo window: the options are plain text (no Button, no hotkey) and a press does nothing, as in the pane
+  grey: boolean // an answered card (sent, or closed elsewhere): the question and the options are dim theme text, the card stays in its place
+  fix: { label: string; onPress: () => void } | null // the pane's 改答案 on a card sent from here
   fill: { label: string; onPress: () => void } | null // the button that puts the reply line in the prompt box (`$.prompt.fill`): an option card's 附註／其他回答, a typed card's 打字回答; null where the surface has no prompt box or the card is a dialog's
   bgRows: number
   width: number // the main window's inner width less the pad
@@ -268,12 +272,16 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   const { Box, Text, Button } = el
   const rows: unknown[] = []
   // the fill button sits in the row under the options; a card of five or six options leaves no such row, so there it stands in front of the question (the button wins over the second background row and never over an option)
-  const inline = v.fill !== null && 1 + v.options.length + 1 > MAIN_CONTENT_ROWS
+  // the state line (meta, dim) takes the same row and the same fallback: under the options when a row is left, else in front of the question
+  const inline = (v.fill !== null || v.meta !== null) && 1 + v.options.length + 1 > MAIN_CONTENT_ROWS
   const fillBtn = v.fill === null ? null : BarButton(el, 'fill', v.fill.label, v.fill.onPress)
-  rows.push(<Box key="q"><Text>{' '}</Text>{inline ? <Box key="fi">{fillBtn}<Text>{' '}</Text></Box> : <Text key="fi">{''}</Text>}<Text wrap="truncate">{v.question}</Text></Box>)
+  const fixBtn = v.fix === null ? null : BarButton(el, 'fix', v.fix.label, v.fix.onPress)
+  const metaText = v.meta === null ? null : <Text key="meta" {...dimProps()} wrap="truncate">{v.meta}</Text>
+  const lead = inline ? (fillBtn !== null ? fillBtn : metaText === null ? null : <Text key="metai" {...dimProps()}>{v.meta + ' · '}</Text>) : null
+  rows.push(<Box key="q"><Text>{' '}</Text>{lead !== null ? <Box key="fi">{lead}{fillBtn !== null ? <Text>{' '}</Text> : <Text>{''}</Text>}</Box> : <Text key="fi">{''}</Text>}<Text {...(v.grey ? dimProps() : {})} wrap="truncate">{v.question}</Text></Box>)
   // the background area is two rows at every tier (one line of text when narrow, two from 160, the second row blank otherwise), so the options sit on the same rows everywhere; it
   // gives rows back only when the options would not fit
-  const tail = inline ? 0 : v.fill !== null || v.note !== null ? 1 : 0
+  const tail = inline ? 0 : v.fill !== null || v.meta !== null || v.note !== null ? 1 : 0
   const area = Math.max(0, Math.min(2, MAIN_CONTENT_ROWS - 1 - v.options.length - tail))
   const bg = v.background === null ? [] : chunkText(v.background, v.width - 6, Math.min(v.bgRows, area))
   for (let i = 0; i < area; i++) {
@@ -282,7 +290,9 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   }
   v.options.slice(0, MAIN_CONTENT_ROWS - rows.length).forEach((o, k) => {
     const hotkey = k < 6 ? String(k + 1) : undefined
-    const label = Button === undefined || hotkey === undefined
+    const label = v.locked
+      ? <Text key="b" {...(v.grey ? dimProps() : {})} wrap="truncate">{o.label + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(o.label)))}</Text>
+      : Button === undefined || hotkey === undefined
       ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + o.label}</Text>
       : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{o.label + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(o.label)))}</Button>
     rows.push(
@@ -295,6 +305,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
     )
   })
   if (v.fill !== null) { if (!inline) rows.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>) }
+  else if (v.meta !== null) { if (!inline) rows.push(<Box key="metar"><Text>{' '}</Text>{metaText}{fixBtn === null ? <Text key="nf">{''}</Text> : <Box key="fx"><Text>{'  '}</Text>{fixBtn}</Box>}</Box>) }
   else if (v.note !== null) rows.push(<Box key="note"><Text>{' '}</Text><Text {...dimProps()} wrap="truncate">{v.note}</Text></Box>)
   return rows.slice(0, MAIN_CONTENT_ROWS)
 }

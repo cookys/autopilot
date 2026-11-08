@@ -7581,8 +7581,105 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     await w.clock.advance(5000)
     const d = await drawShell($, 160)
-    expect(d.rows[1]).toContain('第 1 張，共 1 張')
-    expect(d.rows.slice(2, 8).some(r => r.includes('P5 殘留'))).toBe(true)
+    // bandsent: the cards another session closed stay in the list, greyed, as in the pane (decidebatch.ts batchSync); the cursor stays on the card it was on, now greyed
+    expect(d.rows[1]).toContain('第 3 張，共 3 張')
+    expect(d.rows.slice(2, 8).some(r => r.includes('這個分支要叫什麼名字？'))).toBe(true)
+    expect((await drawShell($, 160, ['prev', 'prev'])).rows.slice(2, 8).some(r => r.includes('P5 殘留'))).toBe(true)
+  })
+
+  // bandsent: the band's card view takes the pane's states (decidebatch.ts batchSync, decideundo.ts hold / sent / fixing): a sent card says 已送出 and greys, a card in its undo window says
+  // 即將送出，可撤回 and can be taken back, a card another session closed stays greyed in place saying 已在別處回答. A pressable option is a Button; none of these has one.
+  const dimOf = (tree: Node, needle: string): boolean[] => walkTexts(tree).filter(x => textOf(x).includes(needle)).map(x => x.props?.dimColor === true)
+  const sendWorld = (on: any) => {
+    const sent: string[] = []
+    const w = shellWorld(on)
+    on('prompt.submit', ($$: any, e: any) => { sent.push(e.text); return { text: e.text } })
+    claimHandle(on)
+    return { w, sent }
+  }
+  const NO_OPT = (buttons: string[]) => buttons.filter(b => b.startsWith('opt:d-4290499d') || b === 'fill')
+  test('bandsent: a sent card says 已送出，等處理, its options and 附註 Button are gone, the question and the list row are grey, and 改答案 is offered; at 80, 100 and 160 columns (' + surface + ')', async ($, on) => {
+    const { w } = sendWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    const before = await drawShell($, 160, ['opt:d-4290499d:0'])
+    expect(NO_OPT(before.buttons).length, 'open card: options and fill are Buttons').toBeGreaterThan(2)
+    expect(dimOf(before.tree, 'P5 殘留分頁要不要把已清掉的也列出來').every(x => !x), 'an open card is not grey').toBe(true)
+    await drawShell($, 160, ['send'])
+    await w.clock.advance(10_000)
+    for (const cols of [80, 100, 160]) {
+      const d = await drawShell($, cols)
+      expect(d.rows.length, 'rows at ' + cols).toBe(12)
+      expect(d.rows.some(r => r.includes('已送出，等處理')), 'the sent mark at ' + cols).toBe(true)
+      expect(NO_OPT(d.buttons), 'no option or fill Button on a sent card at ' + cols).toEqual([])
+      expect(Object.keys(d.hot).filter(k => k.startsWith('opt:d-4290499d')), 'no option hotkey at ' + cols).toEqual([])
+      expect(d.buttons, 'a sent card can be corrected').toContain('fix')
+      expect(dimOf(d.tree, 'P5 殘留').some(x => x), 'the sent card is grey at ' + cols).toBe(true)
+      expect(d.rows.some(r => r.includes('OK') && r.includes('★')), 'the options are still shown as text at ' + cols).toBe(true)
+      if (cols === 100) console.log('RENDER-BEGIN sent-100 (' + surface + ')\n' + d.rows.join('\n') + '\nRENDER-END')
+      for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+    }
+    const again = await drawShell($, 160) // the options are no Buttons, so no press can move the pick; the state shows it is still OK
+    expect(again.rows.some(r => r.includes('◆') && r.includes('OK')), 'the pick is still OK').toBe(true)
+    const fixed = await drawShell($, 160, ['fix'])
+    expect(NO_OPT(fixed.buttons).length, '改答案 opens the card again').toBeGreaterThan(2)
+  })
+  test('bandsent: a card in its undo window says 即將送出，可撤回, has no option Button, and the quick row takes it back; at 80, 100 and 160 columns (' + surface + ')', async ($, on) => {
+    sendWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    await drawShell($, 160, ['opt:d-4290499d:0', 'send'])
+    for (const cols of [80, 100, 160]) {
+      const d = await drawShell($, cols)
+      expect(d.rows.length).toBe(12)
+      expect(d.rows.some(r => r.includes('即將送出，可撤回')), 'the held mark at ' + cols).toBe(true)
+      expect(d.rows[11], 'the quick row offers the undo at ' + cols).toContain('撤回')
+      expect(d.buttons).toContain('undo')
+      expect(NO_OPT(d.buttons), 'no option or fill Button in the window at ' + cols).toEqual([])
+      if (cols === 100) console.log('RENDER-BEGIN held-100 (' + surface + ')\n' + d.rows.join('\n') + '\nRENDER-END')
+      for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+    }
+    const back = await drawShell($, 160, ['undo'])
+    expect(back.rows.some(r => r.includes('即將送出')), 'the undo clears the window').toBe(false)
+    expect(NO_OPT(back.buttons).length, 'the options are Buttons again').toBeGreaterThan(2)
+  })
+  test('bandsent: a card another session closed stays in its place, grey, saying 已在別處回答, with no Button; the open ones keep theirs; at 80, 100 and 160 columns (' + surface + ')', async ($, on) => {
+    const w = shellWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    await drawShell($, 160, ['next']) // cursor on U6
+    w.files[W_MODEL] = j(model({ needs_decision: true, decisions: [DQ1, DQ3] }))
+    await w.clock.advance(5000)
+    await w.clock.advance(5000)
+    for (const cols of [80, 100, 160]) {
+      const d = await drawShell($, cols)
+      expect(d.rows.length).toBe(12)
+      expect(d.rows[1], 'numbering and count hold at ' + cols).toContain('第 2 張，共 3 張')
+      expect(d.rows.slice(2, 8).filter(r => r.includes('U6') || r.includes('這個分支') || r.includes('P5')).length, 'all three stay in the list at ' + cols).toBe(3)
+      expect(d.rows.some(r => r.includes('已在別處回答')), 'the elsewhere mark at ' + cols).toBe(true)
+      expect(d.rows.some(r => r.includes('U6 要不要把建議也寫進回覆')), 'the question is kept at ' + cols).toBe(true)
+      expect(dimOf(d.tree, 'U6 要不要把建議也寫進回覆').some(x => x), 'the closed card is grey at ' + cols).toBe(true)
+      expect(d.buttons.filter(b => b.startsWith('opt:d-c24ecfd9') || b === 'fill'), 'no Button on the closed card at ' + cols).toEqual([])
+      if (cols === 100) console.log('RENDER-BEGIN elsewhere-100 (' + surface + ')\n' + d.rows.join('\n') + '\nRENDER-END')
+      for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+    }
+    const open = await drawShell($, 160, ['prev'])
+    expect(open.buttons, 'the open card keeps its options').toContain('opt:d-4290499d:0')
+    expect(dimOf(open.tree, 'P5 殘留分頁要不要把已清掉的也列出來').every(x => !x), 'an open card is not grey').toBe(true)
+  })
+  test('bandsent: the closed card does not count as sendable or in the progress meter, and the batch closes when the tab is left (' + surface + ')', async ($, on) => {
+    const w = shellWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide', 'opt:d-4290499d:0'])
+    w.files[W_MODEL] = j(model({ needs_decision: true, decisions: [DQ1, DQ3] }))
+    await w.clock.advance(5000)
+    await w.clock.advance(5000)
+    const d = await drawShell($, 160)
+    expect(d.rows[9], 'two live cards: the meter counts two').toContain('1/2')
+    expect(d.rows[11]).toContain('送出 1 張')
+    await drawShell($, 160, ['tab:dispatch'])
+    const back = await drawShell($, 160, ['tab:decide'])
+    expect(back.rows[1], 'the batch was closed with the tab: the closed card is gone').toContain('共 2 張')
   })
 
   test('side pane plan B: the pane is never opened on its own, at 160 or 240 columns, fullscreen with a project; the ⓘ, a slot, the quick row and /live-pane open it (' + surface + ')', async ($, on) => {

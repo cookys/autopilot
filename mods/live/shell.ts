@@ -339,7 +339,8 @@ export const PICK_MARK: Seg = { text: GLYPHS.structure.decisions, color: PALETTE
 export const QUICK_SEP: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', color: PALETTE.structure }
 
 // ---- the card list (ux-v7): the left column of the 待決 tab, one row per question; and the progress row inside the main window ----
-export type Card = { id: string; name: string; answer: string | null; sent: boolean }
+// `grey`: an answered card (sent, or closed elsewhere) stays in its place with dim text, as the pane greys it; `gone`: the session or the CLI closed it, so it has no draft and its glyph is idle
+export type Card = { id: string; name: string; answer: string | null; sent: boolean; grey?: boolean; gone?: boolean }
 // the visible window of `count` rows around the cursor
 function window(n: number, cursor: number, count: number): number {
   return Math.max(0, Math.min(n - count, cursor - Math.floor(count / 2)))
@@ -350,13 +351,13 @@ export function cardRows(cards: readonly Card[], cursor: number, inner: number):
   return cards.slice(from, from + BODY_ROWS).map((c, k) => {
     const here = from + k === cursor
     const answered = c.sent || c.answer !== null
-    const glyph: Seg = here ? { text: GLYPHS.chart.here, color: PALETTE.here } : answered ? { text: GLYPHS.structure.decisions, color: c.sent ? PALETTE.done : PALETTE.action } : { text: GLYPHS.state.pending, color: PALETTE.idle }
+    const glyph: Seg = here ? { text: GLYPHS.chart.here, color: PALETTE.here } : c.gone === true ? { text: GLYPHS.structure.decisions, color: PALETTE.idle } : answered ? { text: GLYPHS.structure.decisions, color: c.sent ? PALETTE.done : PALETTE.action } : { text: GLYPHS.state.pending, color: PALETTE.idle }
     const usable = inner - 1
     const answer = c.answer === null ? '' : clipSegs([{ text: c.answer }], Math.max(1, Math.min(displayWidth(c.answer), Math.floor(usable / 2))))[0]?.text ?? ''
     const answerW = answer === '' ? 0 : displayWidth(answer) + 1
-    const name = clipSegs([{ text: c.name, ...(here ? { color: PALETTE.here } : {}) }], Math.max(1, usable - 2 - answerW))
+    const name = clipSegs([{ text: c.name, ...(here ? { color: PALETTE.here } : {}), ...(c.grey === true ? { dim: true } : {}) }], Math.max(1, usable - 2 - answerW))
     const used = 2 + segWidth(name) + answerW
-    const segs: Seg[] = [glyph, { text: ' ' }, ...name, { text: sp(usable - used) + (answer === '' ? '' : ' ' + answer), ...(answer === '' ? {} : { color: PALETTE.idle }) }]
+    const segs: Seg[] = [glyph, { text: ' ' }, ...name, { text: sp(usable - used) + (answer === '' ? '' : ' ' + answer), ...(answer === '' ? {} : { color: PALETTE.idle, ...(c.grey === true ? { dim: true } : {}) }) }]
     return { id: c.id, key: 'card:' + c.id, segs: padSegs(segs, inner) }
   })
 }

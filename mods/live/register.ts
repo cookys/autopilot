@@ -68,7 +68,7 @@ import {
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneLine, PaneTab, SlotId, QuotaWindow, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, Manifest, PaneLine, PaneTab, SlotId, QuotaWindow, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -214,7 +214,7 @@ async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
   shellRoom = { rows, raw }
   void $.ui.invalidate('ui.render')
 }
-let decideCursor = 0 // the card the O4 shell's main window shows (an index into snapshot.pending; clamped at every draw)
+let decideCursor = 0 // the card the O4 shell's main window shows (an index into the band's batch, bandBatch: the pending cards and the ones closed elsewhere; clamped at every draw)
 let decideLastId: string | null = null // the card answered last from the shell (the progress row names it)
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
@@ -953,7 +953,7 @@ const undoDeps = ($: EngineInterface): UndoDeps => ({
   now: () => $.clock.now(),
   read: () => read($, DECIDE),
   update: fn => update($, DECIDE, fn),
-  pool: st => actionable(snapshot === null ? [] : snapshot.pending, decideBatch, st),
+  pool: st => actionable(snapshot === null ? [] : snapshot.pending, decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
   claim: claimCard ?? claimWith($),
 })
 async function stopHoldTimerIfIdle($: EngineInterface): Promise<void> {
@@ -1198,6 +1198,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo)
     const open = (tab: PaneTab) => { void openOn(tab) }
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
+    if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
     if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
       const nowMs = await $.clock.now()
       const panelRaw = await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
@@ -1208,15 +1209,30 @@ export function registerLive(on: Parameters<Register>[0]): void {
       // ux-v7: the 待決 tab is a card view. One card in the main window (decideCursor), the card list on the left, the progress row and the four quick slots under it.
       const st = active === 'decide' ? await read($, DECIDE) : null
       const pending = active === 'decide' ? snapshot.pending : []
-      const cards: Card[] = st === null ? [] : pending.map(d => ({ id: cardKey(d), name: d.question, answer: draftOf(d, st), sent: d.id !== null && st.sent[d.id] !== undefined && !decideFixing(d, st) }))
+      // The pane's batch (decidebatch.ts batchSync, the same pure function and the same DecideState): the card list keeps its order and its numbers, a card the session or the CLI closed stays greyed in place
+      // (`answered elsewhere`), and a sent card is greyed. The batch is the band's own variable (the pane's closes with the pane's tab), synced at every draw of the 待決 tab and closed on any other.
+      bandBatch = st === null ? NO_BATCH : batchSync(bandBatch, pending, st, t('decide.elsewhere'))
+      const entries = st === null ? [] : bandBatch.order.map(k => {
+        const listed = pending.find(d => cardKey(d) === k)
+        const reopened = listed === undefined ? bandBatch.card[k] : undefined // a sent card the session already closed, reopened here to correct: still actionable
+        const d = listed ?? (reopened !== undefined && reopened.id !== null && st.fixing?.[reopened.id] !== undefined ? reopened : null)
+        return { key: k, d }
+      })
+      const live = entries.flatMap(e => (e.d === null ? [] : [e.d]))
+      const sentOf = (d: LiveDecision): boolean => d.id !== null && st !== null && st.sent[d.id] !== undefined && !decideFixing(d, st)
+      const cards: Card[] = st === null ? [] : entries.map(({ key, d }) => d === null
+        ? { id: key, name: bandBatch.q[key], answer: bandBatch.ans[key] ?? null, sent: false, grey: true, gone: true }
+        : { id: key, name: d.question, answer: draftOf(d, st), sent: sentOf(d), grey: sentOf(d) })
       decideCursor = cards.length === 0 ? 0 : Math.max(0, Math.min(cards.length - 1, decideCursor))
-      const cur = pending[decideCursor]
+      const cur = entries[decideCursor]?.d ?? undefined
+      const curKey = entries[decideCursor]?.key
+      const curLocked = cur !== undefined && st !== null && (sentOf(cur) || decideHeld(cur, st)) // sent, or in its undo window: no option, no fill (decideundo.ts applyPick would refuse the pick anyway)
       const optN = cur === undefined || cur.id === null || decideDialog(cur) ? 0 : cur.options.length
       const plan = shellPlan({
         columns, t, menuTitle: leftTitle(cards.length > 0 ? 'cards' : 'tabs', (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(), t),
         mainTitle: cards.length > 0 ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
         room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes, awaiting: (snapshot.awaiting ?? []).length,
-        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 ? t('shell.hint_pick', { n: Math.min(optN, 6, MAIN_CONTENT_ROWS - 1) }) : '' } : {}),
+        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6, MAIN_CONTENT_ROWS - 1) }) : '' } : {}),
       })
       if (plan !== null) {
         shellDrawnMs = nowMs
@@ -1229,9 +1245,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
         let onLeft: (id: string) => void
         let progress: unknown
         let quick: unknown[]
-        if (active === 'decide' && cards.length > 0 && st !== null && cur !== undefined) {
+        if (active === 'decide' && cards.length > 0 && st !== null && curKey !== undefined) {
           const pickPress = (k: number) => {
-            if (cur.id === null) return
+            if (cur === undefined || cur.id === null || curLocked) return
             const id = cur.id
             void decidePress($, 'pick:' + id + ':' + k).then(async () => { // a press only selects: the card stays where it is, so the pick can still be changed before send
               const now = await read($, DECIDE)
@@ -1241,22 +1257,29 @@ export function registerLive(on: Parameters<Register>[0]): void {
           }
           // 附註／其他回答 (an option card) and 打字回答 (a typed one): the button puts the reply line in the prompt box with `$.prompt.fill` (never a submit); the owner types the rest and presses Enter.
           // The fill is the first thing the press does (nothing awaited before it). A dialog's card (ask_user_question) is answered in its dialog: no button.
-          const fillText = decideFillText(cur, st)
+          const fillText = cur === undefined || curLocked ? null : decideFillText(cur, st)
           const fill = fillText === null ? null : {
             label: t(optN === 0 ? 'shell.fill_type' : 'shell.fill_note'),
             onPress: () => { void $.prompt.fill({ text: fillText, mode: 'replace' }).then(out => { if (!out.isFilled) $.ui.toast(t('shell.fill_refused', { why: out.refusal ?? '-' })) }) },
           }
-          const note = fill !== null ? null : optN === 0 ? t(cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
+          const note = cur === undefined || curLocked || fill !== null ? null : optN === 0 ? t(cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
+          // the pane's state words (tabs.ts decideCards): held, sent, and for a card closed elsewhere the batch's `answered elsewhere` line; a correcting card (fixing) is open again and says nothing here
+          const heldNow = cur !== undefined && decideHeld(cur, st)
+          const meta = cur === undefined ? (bandBatch.ans[curKey] ?? null) : heldNow ? t('decide.held') : sentOf(cur) ? t('decide.sent') : null
+          const fixable = cur !== undefined && cur.id !== null && !heldNow && sentOf(cur) && !decideDialog(cur)
+          const fixId = cur?.id ?? null
           main = cardMain(el, {
-            key: cardKey(cur), question: cur.question, background: cur.background, note, fill, bgRows: plan.geo.tier >= 160 ? 2 : 1, width: mainCols - 1, onPress: pickPress,
-            options: optN === 0 || cur.id === null ? [] : cur.options.map((o, k) => ({ label: o.label, description: o.description, picked: decidePick(cur, st) === k, recommended: cur.recommendation === o.label, key: optKey(cur.id as string, k) })),
+            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill, meta, locked: curLocked, grey: cur === undefined || sentOf(cur),
+            fix: fixable && fixId !== null ? { label: t('decide.fix'), onPress: () => { void decidePress($, 'fix:' + fixId).then(redraw) } } : null,
+            bgRows: plan.geo.tier >= 160 ? 2 : 1, width: mainCols - 1, onPress: pickPress,
+            options: cur === undefined || optN === 0 || cur.id === null ? [] : cur.options.map((o, k) => ({ label: o.label, description: o.description, picked: decidePick(cur, st) === k, recommended: cur.recommendation === o.label, key: optKey(cur.id as string, k) })),
           }, t)
           left = cardRows(cards, decideCursor, plan.geo.left)
           onLeft = (id: string) => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { decideCursor = i; redraw() } }
           const lastCard = cards.find(c => c.id === decideLastId)
-          const prog = progressSegs({ cards, last: lastCard === undefined || lastCard.answer === null || lastCard.sent ? null : { name: lastCard.name, answer: lastCard.answer }, wide: plan.geo.tier >= 160, width: mainCols - 1, t })
+          const prog = progressSegs({ cards: cards.filter(c => c.gone !== true), last: lastCard === undefined || lastCard.answer === null || lastCard.sent ? null : { name: lastCard.name, answer: lastCard.answer }, wide: plan.geo.tier >= 160, width: mainCols - 1, t })
           progress = progressRow(el, prog)
-          const sendN = pending.filter(d => decideOpen(d, st) && !decideHeld(d, st) && decideLine(d, st) !== null).length
+          const sendN = live.filter(d => decideOpen(d, st) && !decideHeld(d, st) && decideLine(d, st) !== null).length
           const holds = Object.values(st.hold ?? {})
           quick = cardQuick(el, t, {
             sendN, ...(holds.length === 0 ? {} : { undo: { secs: Math.max(0, Math.ceil((Math.max(...holds) - nowMs) / 1000)), onUndo: () => { void Promise.all(Object.keys(st.hold ?? {}).map(i => undoDecide($, i))).then(redraw) } } }), tip: t(plan.geo.tier === 80 ? 'shell.tip_short' : 'shell.tip_full'),
@@ -1329,6 +1352,7 @@ const decideScroll = newScroll()
 // The 待決 batch (decidebatch.ts): the shell holds it between draws. It closes when nothing is pending or the tab is left; an answer moves the focus to the next card and the scroll offset
 // where answerPlan put it, so the next card takes the answered card's place and the list never jumps to the top.
 let decideBatch: DecideBatch = NO_BATCH
+let bandBatch: DecideBatch = NO_BATCH // the same batch for the band's card view (the O4 shell draw): the band's own variable, synced there, because decideBatch closes with the pane's tab
 let decideState: DecideState = NO_DECIDE
 let decideCols = DEFAULT_PANE_COLS
 let decideInputs = false // whether the surface being drawn has text fields: the pane draws with it and the plans count the note rows with it (decidebatch.ts inputsFor)

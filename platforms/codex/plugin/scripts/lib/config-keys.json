@@ -4594,11 +4594,12 @@
       "readers": [
         "scripts/lib/load-endpoints-env.js",
         "scripts/load-endpoints-env.sh",
+        "scripts/resolve-endpoint.sh",
         "src/endpoints/cli.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "summary": "Path of the endpoints env file (mode 600) that load-endpoints-env.sh reads."
+      "summary": "Path of the endpoints env file (mode 600) that load-endpoints-env.sh and resolve-endpoint.sh read."
     },
     {
       "name": "AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY",

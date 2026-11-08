@@ -134,3 +134,5 @@ drop "$EF"
 run_r "$R"
 assert_contains "$OUT" '"ready":false' "no file: not ready"
 assert_eq "$ERR" "" "no file: silent"
+
+finalize_test

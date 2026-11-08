@@ -41,7 +41,7 @@ import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
-import { cardTitleOf } from './cardtitle'
+import { cardNameOf } from './cardtitle'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
 import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
@@ -1298,8 +1298,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const live = entries.flatMap(e => (e.d === null ? [] : [e.d]))
       const sentOf = (d: LiveDecision): boolean => d.id !== null && st !== null && st.sent[d.id] !== undefined && !decideFixing(d, st)
       const cards: Card[] = st === null ? [] : entries.map(({ key, d }) => d === null
-        ? { id: key, name: cardTitleOf({ title: bandBatch.card[key]?.title ?? null, question: bandBatch.q[key] }), answer: bandBatch.ans[key] ?? null, sent: false, grey: true, gone: true }
-        : { id: key, name: cardTitleOf(d), answer: draftOf(d, st), sent: sentOf(d), grey: sentOf(d) })
+        ? { id: key, name: cardNameOf({ title: bandBatch.card[key]?.title ?? null, question: bandBatch.q[key] }), answer: bandBatch.ans[key] ?? null, sent: false, grey: true, gone: true }
+        : { id: key, name: cardNameOf(d), answer: draftOf(d, st), sent: sentOf(d), grey: sentOf(d) })
       decideCursor = cards.length === 0 ? 0 : Math.max(0, Math.min(cards.length - 1, decideCursor))
       const cur = entries[decideCursor]?.d ?? undefined
       const curKey = entries[decideCursor]?.key

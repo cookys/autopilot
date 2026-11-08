@@ -7,3 +7,8 @@ export const cardTitleOf = (d: { title?: string | null; question?: string | null
   if (Array.from(q).length <= 20) return q
   return Array.from(q).slice(0, 20).join('') + '…'
 }
+
+// the name a list or heading SHOWS for a card: its explicit short title when it has one, else the question verbatim. Never the 20-code-point cut above:
+// a name the band's 待決 list or the card heading draws is wrapped and drawn whole (bandpolish), so only the console feed (commandtab.ts) takes cardTitleOf's "…".
+export const cardNameOf = (d: { title?: string | null; question: string }): string =>
+  typeof d.title === 'string' && d.title !== '' && !/[\u0000-\u001f\u007f\u2028\u2029]/.test(d.title) ? d.title : d.question

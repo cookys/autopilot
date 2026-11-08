@@ -26,6 +26,8 @@ node --test "$here/ui-lint.test.js"
 node --test "$here/shell.test.js"
 # the operator-console snapshot (the fleet.console/1 trust-boundary parser, the console.json mode reader, fictional fixtures): pure, imports the real console.ts
 node --test "$here/console.test.js"
+# the console tab strip (consoletabs.ts: five tabs, badges, the 120 / 80 / 20 column forms), the console.json mode finder, and the golden that pins the non-console strips byte for byte
+node --test "$here/consolestrip.test.js"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

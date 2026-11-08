@@ -10,6 +10,8 @@ import { residueTally } from './model'
 import type { NeedsHumanEntry } from './model'
 import type { FleetLane, FleetTask, FleetView, OthersView } from './fleet'
 import { actionable, cardKey } from './decidebatch'
+import { consoleBarStrip, consoleStrip } from './consoletabs'
+import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { cardTitleOf } from './cardtitle'
 import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, DECIDE_UNDO_MS, decideDialog, decideFixing, decideHeld, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
@@ -70,7 +72,9 @@ export function tabNeeds(snap: LiveSnapshot): Partial<Record<PaneTab, TabNeed>> 
   if (snap.pending.length > 0) out.decide = {}
   return out
 }
-export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): ui.Strip {
+// con: the operator-console mode (consoletabs.ts): the five console tabs and their badges replace the pane tabs; null (every session without .claude/console.json) draws the tabs below, unchanged
+export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, hasButton: boolean, con: ConsoleNav | null = null): ui.Strip<PaneTab | ConsoleTab> {
+  if (con !== null) return consoleStrip(uiCtxOf(ctx), con, hasButton)
   const needs = snap === null ? {} : tabNeeds(snap)
   return ui.strip(uiCtxOf(ctx), tab, PANE_TABS.map(id => { const n = needs[id]; return { id, label: tabLabel(id, ctx.t), ...(n === undefined ? {} : { need: true }) } }), hasButton)
 }
@@ -79,14 +83,16 @@ export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, h
 export type BarTabId = 'now' | 'decide' | 'dispatch' | 'review' | 'usage' | 'forge'
 // 'usage' is the band's own tab (the token table of forge-stats, drawn in the O4 shell); it is no pane tab: where the shell is not drawn its open button opens the pane's 花費 tab
 export const BAR_PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'usage'] as const
-export type BarTab = { id: BarTabId; label: Seg; width: number; start: number } // start counts from the row's first tab
+export type BarTab = { id: BarTabId | ConsoleTab; label: Seg; width: number; start: number } // start counts from the row's first tab
 export type BarStrip = { tabs: BarTab[]; width: number } // width counts the space after each tab
 // forge: the forge tab's text (one string the mod below drew), or null for no forge tab
 // usage: false leaves the 用量 tab out (the band has no room for it; a dim `›` ends the row instead, see usageTabFits; forgeTab is the forge tab's text, the caller's glyph)
-export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | null, forge: string | null, usage = true): BarStrip {
+// con: the operator-console mode (consoletabs.ts), with the band's width: the console tabs take the room the indicator leaves (BAND_MIN_COLS); null = the tabs below, unchanged
+export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | ConsoleTab | null, forge: string | null, usage = true, con: (ConsoleNav & { cols: number }) | null = null): BarStrip {
+  if (con !== null) return consoleBarStrip(con, t, con.cols, con.cols - BAND_MIN_COLS - 1, forge)
   const needs = snap === null ? {} : tabNeeds(snap)
   const list = BAR_PANE_TABS.filter(id => usage || id !== 'usage').map(id => ({ id: id as BarTabId, label: t('tab.' + id), ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }))
-  const built = ui.strip<BarTabId>({ t, cols: 100000 }, active, forge === null ? list : [...list, { id: 'forge' as const, label: forge }], false)
+  const built = ui.strip<BarTabId>({ t, cols: 100000 }, active as BarTabId | null, forge === null ? list : [...list, { id: 'forge' as const, label: forge }], false)
   const tabs: BarTab[] = []
   let x = 0
   for (const b of built.tabs) {
@@ -104,7 +110,7 @@ export const BAND_MIN_COLS = 30
 // recent table appear at the same widths as then, and the 用量 tab never makes the forge tab vanish by appearing.
 export const USAGE_LABEL_ROOM = 11
 export const usageTabFits = (columns: number, t: T, forgeTab: string): boolean => columns - BAND_MIN_COLS - barStrip(null, t, null, forgeTab).width - 3 >= USAGE_LABEL_ROOM
-export const barRule = (strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | null): Seg[] => ui.tabRule(strip.tabs, columns, tabsAt, active)
+export const barRule = (strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | ConsoleTab | null): Seg[] => ui.tabRule(strip.tabs, columns, tabsAt, active)
 export const stripRows = (snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } => { const s = stripOf(snap, ctx, tab, hasButton); return { rows: s.rows, exact: s.exact } }
 // every line is one drawn row: pane.tsx draws a blank line as a one-cell Text (an empty Text would take no row)
 export const treeRowCount = (strip: number, head: readonly PaneLine[], body: readonly PaneLine[], extra: number): number => strip + head.length + body.length + extra

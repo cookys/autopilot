@@ -12,10 +12,29 @@ import { decideTabLines, dispatchLines, fleetTabLines, headerLines, hygieneTabLi
 import type { FleetView } from './fleet'
 import type { ScrollView } from './tabs'
 import { dimProps, drawSeg } from './ui'
+import type { Strip } from './ui'
+import { consoleStrip } from './consoletabs'
+import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyedGrow, scrollFrame } from './scroll'
 import type { ScrollModel } from './scroll'
 
 export type { PaneTab } from './model'
+
+// The operator-console mode (consoletabs.ts): the shared navigation state (snapshot + tab) and what a press on a tab / the `›` chip does. null = every session without .claude/console.json.
+export type ConsolePane = { nav: ConsoleNav; onTab: (t: ConsoleTab) => void; onNext: () => void }
+
+// The console pane's skeleton (C1 U4): the five-tab strip with its badges, then one line per page from the string tables; the pages' own content is U5 / U6. No source (nav.snap null) says so.
+function consolePane(el: { Box: El; Text: El; Button?: El }, con: ConsolePane, t: T, cols: number) {
+  const { Box, Text } = el
+  const strip = stripView(el, consoleStrip({ t, cols }, con.nav, el.Button !== undefined), con.onTab, con.onNext)
+  return (
+    <Box flexDirection="column">
+      {strip}
+      {con.nav.snap === null ? <Text {...dimProps()} wrap="truncate">{t('console.no_source')}</Text> : null}
+      <Text wrap="truncate">{t('console.stub.' + con.nav.tab)}</Text>
+    </Box>
+  )
+}
 
 // What the 待決 tab's controls call: a press on an option or the send Button (by its `press` id), and an edit of a note field (by the field's key). `state` is the
 // owner's picks and notes as the host holds them; `inputs` is whether the surface draws text fields.
@@ -31,8 +50,11 @@ type El = (props: any) => any
 // where Enter pressed the tab already showing (a no-op): "Ctrl+x Tab, Enter, Enter" cycled tabs only when the ring happened to sit on the band's ⓘ
 // (real machine 2026-10-10, 120 columns). The tab Buttons stay pressable (a click, or Tab / arrows + Enter) and still select their own tab.
 function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (t: PaneTab) => void, onNext: () => void, snap: LiveSnapshot | null, t: T, cols: number) {
+  return stripView(el, stripOf(snap, { t, cols }, tab, el.Button !== undefined) as Strip<PaneTab>, onTab, onNext)
+}
+// the drawing half of the strip, shared with the operator-console pane (same Buttons, same `›` chip, same baseline)
+function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, strip: Strip<Id>, onTab: (t: Id) => void, onNext: () => void) {
   const { Box, Text, Button } = el
-  const strip = stripOf(snap, { t, cols }, tab, Button !== undefined)
   const draw = (s: Seg, k: string | number) => <Text key={k} {...drawSeg(s)} wrap="truncate">{s.text}</Text>
   return (
     <Box flexDirection="column">
@@ -50,8 +72,9 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
   )
 }
 
-export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null, win: ScrollModel | null = null, fleet: FleetView | null = null) {
+export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null, win: ScrollModel | null = null, fleet: FleetView | null = null, con: ConsolePane | null = null) {
   const { Box, Text, Link, Button, Input } = el
+  if (con !== null) return consolePane(el, con, t, paneWidth(bodyColumns))
   const cols = paneWidth(bodyColumns)
   const ctx = { t, cols, expanded, folded, fleet, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), ...(decide.now === undefined ? {} : { now: decide.now }), inputs: decide.inputs && Input !== undefined } }) }
   const segsOf = (l: PaneLine): Seg[] => l.segs ?? [{ text: l.text }]

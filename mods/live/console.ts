@@ -148,3 +148,16 @@ export function consoleModeOf(text: string | null): boolean {
   if (!isObj(raw)) return false
   return s(raw.schema) === 'autopilot.console/1' && s(raw.mode) === 'program'
 }
+
+// the mode of the session's repo: walk up from `cwd` to the FIRST directory that holds a `.git` (a directory with HEAD, or a gitfile) and read that repo's `.claude/console.json`; a parent repo's file is never
+// borrowed. The mod cannot run git, so `readText` is the caller's file reader (null = absent or unreadable). false for no repo, no file, broken JSON, a foreign schema and any mode but program.
+export async function findConsoleMode(cwd: string, readText: (path: string) => Promise<string | null>): Promise<boolean> {
+  let dir = cwd
+  for (let i = 0; i < 16 && dir !== ''; i++) {
+    if ((await readText(dir + '/.git/HEAD')) !== null || (await readText(dir + '/.git')) !== null) return consoleModeOf(await readText(dir + '/.claude/console.json'))
+    const cut = dir.lastIndexOf('/')
+    if (cut <= 0) break
+    dir = dir.slice(0, cut)
+  }
+  return false
+}

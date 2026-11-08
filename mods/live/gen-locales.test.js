@@ -8,7 +8,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const here = __dirname;
-const FILES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'speedview.ts', 'register.ts', 'i18n.ts', 'shell.ts', 'locales.ts'];
+const FILES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'speedview.ts', 'register.ts', 'i18n.ts', 'shell.ts', 'consoletabs.ts', 'locales.ts'];
 function fixture(extra) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'genloc-'));
   fs.mkdirSync(path.join(dir, 'locales'));

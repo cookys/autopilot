@@ -398,4 +398,24 @@ OUT="$(cd "$SBX" && PATH="$BINDIR:$PATH" env -u REPO_ROOT -u CONSUMING_REPO_ROOT
     --context-window off --branch "feat/sbx-codex" --sandbox bwrap 2>"$TEST_TMP/stderr")" || RC=$?
 eq '"precondition_failed"' "$(status_of)" "runner: --sandbox bwrap with a non-cc-shim runner is refused (rc=$RC)"
 
+# ---- brief with a ../ path: warn-only (stderr line, exit code and status unchanged)
+BASE_PROMPT="$PROMPT"
+RC=0; PROMPT="$TEST_TMP/prompt-dotdot.txt"; printf 'edit the file ../x/y please\n' > "$PROMPT"
+run_case bwrap 0 --worktree-parent "$WTPARENT"; RC_WARN=$RC
+eq '"committed"' "$(status_of)" "dotdot-warn: the dispatch still runs and commits (rc=$RC_WARN)"
+eq 0 "$RC_WARN" "dotdot-warn: exit code unchanged"
+case "$(cat "$TEST_TMP/stderr")" in
+  *"dispatch-hetero: warn: brief has a ../ path outside the worktree: ../x/y"*) eq 0 0 "dotdot-warn: the warn line names the first token" ;;
+  *) fail "dotdot-warn: stderr was: $(head -c 300 "$TEST_TMP/stderr")" ;;
+esac
+# absolute paths and a mid-path a/../b are not a ../ at a word start: no warn
+PROMPT="$TEST_TMP/prompt-nodotdot.txt"; printf 'edit /abs/x/y and a/../b and https://h/p/../q\n' > "$PROMPT"
+run_case bwrap 0 --worktree-parent "$WTPARENT"
+eq '"committed"' "$(status_of)" "dotdot-quiet: the dispatch commits"
+case "$(cat "$TEST_TMP/stderr")" in
+  *"brief has a ../ path"*) fail "dotdot-quiet: unexpected warn: $(head -c 300 "$TEST_TMP/stderr")" ;;
+  *) eq 0 0 "dotdot-quiet: no warn for absolute or mid-path ../" ;;
+esac
+PROMPT="$BASE_PROMPT"
+
 finalize_test

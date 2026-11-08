@@ -867,7 +867,7 @@ emit() { # status commit files ins del worktree error
   # `null`, never fails) — NOT worker self-report. Any parse/node failure ⇒ null.
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
-  local usage_json="null"
+  local usage_json="null" ledger_usage_json=""
   if [ "${AGENT_EXIT:-1}" -eq 0 ] && [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] \
      && [ -r "$SELF_DIR/dispatch-status.js" ] && command -v node >/dev/null 2>&1; then
     # Format is DECLARED by runner (this script knows its own invocation flags: codex =
@@ -890,27 +890,31 @@ emit() { # status commit files ins del worktree error
       # type=="result" and an object `usage` yields a value (four keys, each a
       # non-negative integer, 0 when missing or non-integer); no file, bad JSON, a
       # second document, a wrong type or a missing usage object all keep it null.
-      usage_json="$(node - "${CCSHIM_ENVELOPE:-}" <<'NODE'
+      # Two lines: (1) the result-JSON usage (missing keys 0, unchanged contract), (2) the ledger usage
+      # (missing keys null: unknown is null, never guessed), handed to the writer via --usage-json.
+      local _ccs_out
+      _ccs_out="$(node - "${CCSHIM_ENVELOPE:-}" <<'NODE'
 const fs = require('fs');
 const p = process.argv[2];
 let raw;
-try { raw = fs.readFileSync(p, 'utf8'); } catch { console.log('null'); process.exit(0); }
+try { raw = fs.readFileSync(p, 'utf8'); } catch { console.log('null\nnull'); process.exit(0); }
 let doc;
-try { doc = JSON.parse(raw); } catch { console.log('null'); process.exit(0); }
+try { doc = JSON.parse(raw); } catch { console.log('null\nnull'); process.exit(0); }
 if (!doc || typeof doc !== 'object' || Array.isArray(doc) || doc.type !== 'result') {
-  console.log('null'); process.exit(0);
+  console.log('null\nnull'); process.exit(0);
 }
 const u = doc.usage;
-if (!u || typeof u !== 'object' || Array.isArray(u)) { console.log('null'); process.exit(0); }
-const num = (k) => (Number.isInteger(u[k]) && u[k] >= 0 ? u[k] : 0);
-console.log(JSON.stringify({
-  input_tokens: num('input_tokens'),
-  output_tokens: num('output_tokens'),
-  cache_read_input_tokens: num('cache_read_input_tokens'),
-  cache_creation_input_tokens: num('cache_creation_input_tokens'),
-}));
+if (!u || typeof u !== 'object' || Array.isArray(u)) { console.log('null\nnull'); process.exit(0); }
+const keys = ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'];
+const pick = (k, miss) => (Number.isInteger(u[k]) && u[k] >= 0 ? u[k] : miss);
+const zero = {}; const raw0 = {};
+for (const k of keys) { zero[k] = pick(k, 0); raw0[k] = pick(k, null); }
+console.log(JSON.stringify(zero));
+console.log(JSON.stringify(raw0));
 NODE
-)" || usage_json="null"
+)" || _ccs_out="null"
+      usage_json="$(printf '%s\n' "$_ccs_out" | sed -n 1p)"
+      ledger_usage_json="$(printf '%s\n' "$_ccs_out" | sed -n 2p)"
     else
       local log_format="plain"
       [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
@@ -921,7 +925,7 @@ NODE
     fi
     case "$usage_json" in
       '{'*'}') ;;   # single-line JSON object — accepted
-      *) usage_json="null" ;;
+      *) usage_json="null"; ledger_usage_json="" ;;
     esac
   fi
   local wall_json="null"
@@ -1023,7 +1027,8 @@ NODE
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
   [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json)"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
+  local _emit_json
+  _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -1034,7 +1039,14 @@ NODE
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields")"
+  printf '%s\n' "$_emit_json"
+  # dispatch_usage/1 ledger row (never affects the result or the exit code; see lib/dispatch-usage.js).
+  printf '%s' "$_emit_json" | node "$SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-implementer}" \
+    --run-id "${DISPATCH_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
+    --started-at "${DISPATCH_STARTED_EPOCH:-}" --endpoint "${ENDPOINT:-}" \
+    --provider-session-id "${PROVIDER_SESSION_ID:-${CHILD_SESSION_ID:-}}" \
+    ${ledger_usage_json:+--usage-json "$ledger_usage_json"} || true
 }
 
 check_session_mode_gate() {

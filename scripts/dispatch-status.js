@@ -252,6 +252,7 @@ function parseJsonlOpencode(text) {
   let cacheRead = 0;
   let cacheWrite = 0;
   let hadTokens = false;
+  const seen = {}; // a key never reported by any step stays null (unknown is null, never 0)
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith('{') || !t.endsWith('}')) continue;
@@ -267,23 +268,23 @@ function parseJsonlOpencode(text) {
     const tok = part && part.tokens && typeof part.tokens === 'object' ? part.tokens : null;
     if (!tok) continue;
     const cache = tok.cache && typeof tok.cache === 'object' ? tok.cache : {};
-    const add = (v) => (Number.isFinite(v) && v >= 0 ? v : 0);
-    total += add(tok.total);
-    input += add(tok.input);
-    output += add(tok.output);
-    reasoning += add(tok.reasoning);
-    cacheRead += add(cache.read);
-    cacheWrite += add(cache.write);
+    const add = (key, v) => { if (Number.isFinite(v) && v >= 0) { seen[key] = true; return v; } return 0; };
+    total += add('total', tok.total);
+    input += add('input', tok.input);
+    output += add('output', tok.output);
+    reasoning += add('reasoning', tok.reasoning);
+    cacheRead += add('cacheRead', cache.read);
+    cacheWrite += add('cacheWrite', cache.write);
     hadTokens = true;
   }
   const tokens = emptyTokens();
   if (hadTokens) {
-    tokens.total_tokens = total;
-    tokens.input_tokens = input;
-    tokens.output_tokens = output;
-    tokens.cache_read_tokens = cacheRead;
-    tokens.reasoning_tokens = reasoning;
-    tokens.cache_write_tokens = cacheWrite;
+    tokens.total_tokens = seen.total ? total : null;
+    tokens.input_tokens = seen.input ? input : null;
+    tokens.output_tokens = seen.output ? output : null;
+    tokens.cache_read_tokens = seen.cacheRead ? cacheRead : null;
+    tokens.reasoning_tokens = seen.reasoning ? reasoning : null;
+    tokens.cache_write_tokens = seen.cacheWrite ? cacheWrite : null;
   }
   return {
     events: events || null,
@@ -306,6 +307,7 @@ function parsePiRpc(text) {
   let output = 0;
   let cacheRead = 0;
   let hadUsage = false;
+  let seenIn = false; let seenOut = false; let seenCache = false;
   for (const line of lines) {
     const t = line.trim();
     if (!t.startsWith('{') || !t.endsWith('}')) continue;
@@ -321,18 +323,18 @@ function parsePiRpc(text) {
       const iu = Number(usage.input);
       const ou = Number(usage.output);
       const cr = Number(usage.cacheRead);
-      if (Number.isFinite(iu)) input += iu;
-      if (Number.isFinite(ou)) output += ou;
-      if (Number.isFinite(cr)) cacheRead += cr;
+      if (usage.input != null && Number.isFinite(iu)) { input += iu; seenIn = true; }
+      if (usage.output != null && Number.isFinite(ou)) { output += ou; seenOut = true; }
+      if (usage.cacheRead != null && Number.isFinite(cr)) { cacheRead += cr; seenCache = true; }
       hadUsage = true;
     }
   }
   const tokens = emptyTokens();
   if (hadUsage) {
-    tokens.input_tokens = input;
-    tokens.output_tokens = output;
-    tokens.cache_read_tokens = cacheRead;
-    tokens.total_tokens = input + output;
+    tokens.input_tokens = seenIn ? input : null;
+    tokens.output_tokens = seenOut ? output : null;
+    tokens.cache_read_tokens = seenCache ? cacheRead : null;
+    tokens.total_tokens = seenIn && seenOut ? input + output : null;
   }
   return {
     events: events || null,

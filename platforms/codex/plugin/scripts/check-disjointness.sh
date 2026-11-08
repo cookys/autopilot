@@ -312,7 +312,7 @@ git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || err_usage "not a git repos
 # input for wrapper-owned staging (dispatch-hetero edit-only capture).
 NAME_ONLY=""
 if [ "$STAGED" -eq 1 ]; then
-  NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --cached --ita-visible-in-index --name-only)"
+  NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --cached --ignore-submodules=none --ita-visible-in-index --name-only)"
 else
 case "$RANGE" in
   *..*)
@@ -326,18 +326,18 @@ case "$RANGE" in
     # per-unit own-commit path) or a three-dot A...B (merge-base) range — both
     # accepted here. core.quotepath=false so non-ASCII paths arrive as real bytes
     # (else an in-allowlist unicode file fails to match itself → false exit 1).
-    NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --name-only "$RANGE")"
+    NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --ignore-submodules=none --name-only "$RANGE")"
     ;;
   *)
     git -C "$REPO" rev-parse --verify --quiet "$RANGE^{commit}" >/dev/null \
       || err_usage "commit not found: $RANGE"
     if git -C "$REPO" rev-parse --verify --quiet "${RANGE}^" >/dev/null 2>&1; then
       # has a parent → its own diff
-      NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --name-only "${RANGE}^" "$RANGE")"
+      NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --ignore-submodules=none --name-only "${RANGE}^" "$RANGE")"
     else
       # root commit (no parent) → diff vs the empty tree
       EMPTY_TREE="$(git -C "$REPO" hash-object -t tree /dev/null)"
-      NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --name-only "$EMPTY_TREE" "$RANGE")"
+      NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --ignore-submodules=none --name-only "$EMPTY_TREE" "$RANGE")"
     fi
     ;;
 esac

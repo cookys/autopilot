@@ -1663,13 +1663,23 @@ export function recommendedIndex(d: LiveDecision): number | null {
   return part >= 0 ? part : null
 }
 // the answer line of one question, or null when nothing is answered (an option question needs a pick or a non-empty note, a free one needs text)
-export function decideLine(d: LiveDecision, st: DecideState): string | null {
+// `answerId` (F4): the id the fleet courier returned when this card's answer was claimed (mods/live/decideundo.ts). It is the LAST `｜` field of the line, which is where hooks/advisory-relay.js
+// reads it (scripts/lib/decide-line.js parseDecideLine); fleet ids are alphanumeric and the hook only accepts [0-9A-Za-z]{20,40}. No id (claim failed, timed out, no courier): no field.
+export function decideLine(d: LiveDecision, st: DecideState, answerId?: string | null): string | null {
   if (d.id === null || decideDialog(d)) return null
   const note = decideNote(d, st)
   const pick = decidePick(d, st)
   const notePart = note === '' ? '' : DECIDE_NOTE_MARK + wire(note)
   const answer = d.options.length === 0 ? wire(note) : pick === null ? (note === '' ? '' : DECIDE_NONE + notePart) : wire(d.options[pick].label) + notePart
-  return answer === '' ? null : d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' ' + answer
+  return answer === '' ? null : d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' ' + answer + (answerId === undefined || answerId === null || answerId === '' ? '' : '｜' + answerId)
+}
+// what `fleet decision claim` is given for this card: the picked option's label, or the typed text (a free card, or an option card where none was picked and a note was typed).
+// Both are the same strings decideLine writes into the line (before `wire`), because the hook compares the line's answer with what the courier stored.
+export type ClaimAnswer = { option: string } | { freeText: string }
+export function decideAnswer(d: LiveDecision, st: DecideState): ClaimAnswer | null {
+  if (decideLine(d, st) === null) return null
+  const pick = decidePick(d, st)
+  return d.options.length > 0 && pick !== null ? { option: d.options[pick].label } : { freeText: decideNote(d, st) }
 }
 // the correction line of a reopened card: `[待決回覆·更正] <id> → <answer>[｜補充：<note>]`; no excerpt, no answer id (the courier takes one claim per card, so a correction is not claimed)
 export function decideCorrectionLine(d: LiveDecision, st: DecideState): string | null {
@@ -1681,8 +1691,9 @@ export function decideCorrectionLine(d: LiveDecision, st: DecideState): string |
   return DECIDE_FIX_HEAD + ' ' + d.id + ' ' + DECIDE_ARROW + ' ' + answer
 }
 // the reply to send now: every open question that has an answer, in list order; null when there is none. A reopened card is not here: it goes out as its own correction line.
-export function decideReply(list: readonly LiveDecision[], st: DecideState): { text: string; ids: string[] } | null {
-  const rows = list.filter(d => decideOpen(d, st) && !decideFixing(d, st)).flatMap(d => { const line = decideLine(d, st); return line === null ? [] : [{ id: d.id as string, line }] })
+// `answerIds`: the claimed answer_id of the cards that have one (decideundo.ts); a card without one is sent without an id.
+export function decideReply(list: readonly LiveDecision[], st: DecideState, answerIds: Readonly<Record<string, string>> = {}): { text: string; ids: string[] } | null {
+  const rows = list.filter(d => decideOpen(d, st) && !decideFixing(d, st)).flatMap(d => { const line = decideLine(d, st, answerIds[d.id as string]); return line === null ? [] : [{ id: d.id as string, line }] })
   return rows.length === 0 ? null : { text: [DECIDE_REPLY_HEAD, ...rows.map(r => r.line)].join('\n'), ids: rows.map(r => r.id) }
 }
 export const DEFAULT_PANE_COLS = 76

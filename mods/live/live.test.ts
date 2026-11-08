@@ -5708,6 +5708,21 @@ for (const surface of SURFACES) {
 }
 
 // ---- the 待決 tab, mounted: option Buttons, note fields, the send Button, the sent state, a phone without Input. The pure half is decide.test.ts. ----
+// the undo window starts a claim through scripts/decision-claim.js ($.process.run) in the background; the default reply is the no-courier one (ok, no answer_id: a line without an id), a test sets `stdout`
+// to say more, or `hang` so the claim never settles. `limits` collects the process limit each claim was given.
+const NO_COURIER = JSON.stringify({ ok: true, answer_id: null, reason: null }) + '\n'
+const claimHandle = (on: any): { stdout: string; hang: boolean; ran: string[][]; limits: unknown[] } => {
+  const h = { stdout: NO_COURIER, hang: false, ran: [] as string[][], limits: [] as unknown[] }
+  on('process.run', async (_$: any, e: any) => {
+    const argv = e.argv as string[]
+    if (!argv.some(x => x.endsWith('scripts/decision-claim.js'))) return { value: { exitCode: 1, stdout: '', stderr: 'fleet: not here' } }
+    h.ran.push(argv)
+    h.limits.push(e.init?.timeoutMs)
+    if (h.hang) await new Promise(() => undefined)
+    return { value: { exitCode: 0, stdout: h.stdout, stderr: '' } }
+  })
+  return h
+}
 const DQ1 = { id: 'd-4290499d', question: 'P5 殘留分頁要不要把已清掉的也列出來', background: '殘留分頁現在只列要人處理的。', options: [{ label: 'OK', description: '照現況' }, { label: '完整顯示', description: '全列出來' }], recommendation: 'OK', blocks: '下一個派工' }
 const DQ2 = { id: 'd-c24ecfd9', question: 'U6 要不要把建議也寫進回覆', options: [{ label: '要', description: '' }, { label: '不要', description: '' }] }
 const DQ3 = { id: 'd-0000free', question: '這個分支要叫什麼名字？', options: [] }
@@ -5718,7 +5733,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     const submits: { text: string; origin: unknown }[] = []
     on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
-    return { w, files, submits }
+    return { w, files, submits, claim: claimHandle(on) }
   }
   const decideRows = async ($: any) => (await paneParts($, surface, 'decide')).texts
   const act = async ($: any, ...keys: string[]) => {
@@ -5864,6 +5879,34 @@ for (const surface of SURFACES) {
     await w.clock.advance(10_000)
     expect(submits.length).toBe(1)
     expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK')
+  })
+
+  test('claim in the window: a claim that never settles does not hold the send or the tick: sent after 10 s without an answer_id, and a later card still goes (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideWorld(on)
+    claim.hang = true
+    await start($, surface)
+    await act($, 'opt:d-4290499d:1', 'submit')
+    await w.clock.advance(10_000)
+    expect(submits.length, 'sent although the claim never returned').toBe(1)
+    expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 完整顯示')
+    await act($, 'opt:d-c24ecfd9:0', 'submit')
+    await w.clock.advance(10_000)
+    expect(submits.length, 'the tick still runs: the next card goes out too').toBe(2)
+  })
+
+  test('claim in the window: a failed claim, garbage from the script, and no courier all send the line as it was, without an id (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideWorld(on)
+    await start($, surface)
+    const outs = [JSON.stringify({ ok: false, answer_id: null, reason: 'card closed' }) + '\n', 'Traceback', NO_COURIER]
+    for (const [n, stdout] of outs.entries()) {
+      claim.stdout = stdout
+      if (n < 2) await act($, 'opt:' + ['d-4290499d', 'd-c24ecfd9'][n] + ':0', 'submit')
+      else { const pane = await paneOn($, surface, 'decide'); await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' }); await pane.press({ key: 'submit' }); await pane.unmount() }
+      await w.clock.advance(10_000)
+    }
+    expect(claim.ran.length).toBe(3)
+    expect(submits.length).toBe(3)
+    for (const x of submits) expect(x.text.split('\n')[1]).not.toMatch(/｜[0-9A-Za-z]{20,40}$/)
   })
 
   test('DECIDE mounted: a note with no option picked submits that question as 都不選 (' + surface + ')', async ($, on) => {
@@ -6610,7 +6653,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     const submits: { text: string; origin: unknown }[] = []
     on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
-    return { w, submits }
+    return { w, submits, claim: claimHandle(on) }
   }
   const mountD = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-d', props: { ...BAND_PROPS, maxRows: 8, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
   const rowsD = async ($: any, press: string[] = []) => {
@@ -6708,6 +6751,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     let asked = 0
     on('prompt.submit', async () => { asked++; await new Promise(() => undefined); return { text: '' } }) // the session never answers
+    claimHandle(on)
     await start($, surface)
     await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
     await w.clock.advance(10_000)
@@ -6715,6 +6759,49 @@ for (const surface of SURFACES) {
     const keys = (await rowsD($)).keys
     expect(keys, 'the card is sent: its 改答案 button is there').toContain('fix:d-4290499d')
     expect(keys.filter(k => k.startsWith('opt:d-4290499d')), 'and it takes no option Button').toEqual([])
+  })
+
+  // F4 claim in the undo window (PM rule 2026-11-08): started in the background when send is pressed, never awaited by the send, used only if it has already returned an answer_id when the window ends
+  const CLAIM_AID = 'a1B2c3D4e5F6g7H8i9J0kLmN'
+  test('claim in the window: send starts decision-claim.js at once (8 s limit, inside the 10 s window); a claim that returned an answer_id when the window ends is the last field of the line (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideBand(on)
+    claim.stdout = JSON.stringify({ ok: true, answer_id: CLAIM_AID, reason: null }) + '\n'
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    expect(claim.ran.length, 'started inside the window, before anything is sent').toBe(1)
+    expect(claim.ran[0][0]).toBe('node')
+    expect(claim.ran[0].slice(2)).toEqual(['d-4290499d', '--option', '完整顯示'])
+    expect(claim.limits).toEqual([8000])
+    expect(submits.length).toBe(0)
+    await w.clock.advance(10_000)
+    expect(submits.length).toBe(1)
+    expect(submits[0].text.split('\n')[1].endsWith('｜' + CLAIM_AID)).toBe(true)
+  })
+  test('claim in the window: undo throws the claim result away: nothing is sent, and the next send uses its own new claim, not the old id (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideBand(on)
+    claim.stdout = JSON.stringify({ ok: true, answer_id: 'OLDoldOLDoldOLDoldOLDold', reason: null }) + '\n'
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await rowsD($, ['undo:d-4290499d'])
+    await w.clock.advance(20_000)
+    expect(submits.length, 'undone: nothing sent').toBe(0)
+    claim.stdout = NO_COURIER // the second claim gets no id
+    await rowsD($, ['submit'])
+    await w.clock.advance(10_000)
+    expect(claim.ran.length, 'a new claim per send').toBe(2)
+    expect(submits.length).toBe(1)
+    expect(submits[0].text, 'the id of the undone claim is not used').not.toContain('OLDold')
+  })
+  test('claim in the window: a correction is never claimed (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideBand(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(10_000)
+    expect(claim.ran.length).toBe(1)
+    await rowsD($, ['fix:d-4290499d', 'opt:d-4290499d:0', 'submit'])
+    await w.clock.advance(10_000)
+    expect(submits[1].text).toBe('[待決回覆·更正] d-4290499d → OK')
+    expect(claim.ran.length, 'no second claim for a correction').toBe(1)
   })
 
   test('E1 待決: with nothing to answer the tab says so on one line (' + surface + ')', async ($, on) => {
@@ -7055,6 +7142,7 @@ for (const surface of SURFACES) {
     const sent: string[] = []
     const w = shellWorld(on)
     on('prompt.submit', ($$: any, e: any) => { sent.push(e.text); return { text: e.text } })
+    claimHandle(on)
     await start($, surface)
     await drawShell($, 160, ['tab:decide'])
     await drawShell($, 160, ['opt:d-4290499d:0'])

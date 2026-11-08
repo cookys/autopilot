@@ -44,7 +44,7 @@ import type { ForgeSegment } from './ui'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
 import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
-import type { UndoDeps } from './decideundo'
+import type { ClaimCard, UndoDeps } from './decideundo'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
 
 import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand, usageDraw } from './band'
@@ -839,7 +839,17 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
 // dirty or unintegrated worktree is never touched) and `prune-plugin-cache.js --version <v>` (a plain version directory, no live pid, not the loaded copy). The arguments come only
 // from the CURRENT clearable lists of the snapshot, so a stale or forged id runs nothing. Owner ruling 2026-10-16 (d-7a7ee75c): no confirmation dialog.
 export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const
+// The undo window's claim (F4) is the one other script the pane runs, from its own list: it only wraps `fleet decision claim` and prints JSON (PM ruling 2026-11-07).
+export const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const
 type CleanRun = (argv: string[]) => Promise<{ exitCode: number; stdout: string }>
+// the one exec path for both lists: argv is node + a whitelisted script (ui-lint.test.js pins this); the only place `$.process` is used
+async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[number] | (typeof CLAIM_SCRIPTS)[number], args: string[], run?: CleanRun, timeoutMs = 120_000): Promise<string> {
+  const allowed: readonly string[] = [...CLEAN_SCRIPTS, ...CLAIM_SCRIPTS]
+  if (!allowed.includes(script)) throw new Error('script not allowed')
+  const argv = ['node', $.plugin.root + '/' + script, ...args]
+  const r = run === undefined ? await $.process.run(argv, { timeoutMs }) : await run(argv)
+  return r.stdout
+}
 let cleaning = false
 // the common git dir of the checkout a path belongs to: the first `.git` met walking up (a directory holds HEAD, a gitfile names the gitdir); null when there is none (a directory that is gone)
 async function commonDirAt($: EngineInterface, start: string): Promise<string | null> {
@@ -860,13 +870,7 @@ async function commonDirAt($: EngineInterface, start: string): Promise<string | 
 type CleanNote = { ok: boolean; note: string }
 export async function cleanPress($: EngineInterface, id: string, run?: CleanRun): Promise<void> {
   if (cleaning || snapshot === null) return
-  // the only place `$.process` is used: argv is node + a whitelisted script (ui-lint.test.js pins this)
-  const exec = async (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => {
-    if (!CLEAN_SCRIPTS.includes(script)) throw new Error('script not allowed')
-    const argv = ['node', $.plugin.root + '/' + script, ...args]
-    const r = run === undefined ? await $.process.run(argv, { timeoutMs: 120_000 }) : await run(argv)
-    return r.stdout
-  }
+  const exec = (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => execScript($, script, args, run)
   // the same list the 全部清掉 count is drawn from (model.ts cleanTargets): what is clearable now and was not already reported on
   const left = cleanTargets(snapshot.detail, (await read($, DECIDE)).clean ?? {})
   const asked = id === 'clean:all' ? left.worktrees.map(e => e.target) : left.worktrees.map(e => e.target).filter(x => 'clean:' + x === id)
@@ -931,12 +935,26 @@ async function cleanWorktrees($: EngineInterface, asked: string[], exec: (script
 // Send (decideundo.ts): a press on send starts the undo window of every answered card (DECIDE_UNDO_MS); the 1 s timer below redraws the countdown and, when a window ends, calls
 // sendDecide. Nothing on this path awaits the network or a courier. The clock is the engine's ($.clock), so a test advances time instead of waiting.
 const DECIDE_TICK_MS = 1000
+// How one card's answer is claimed with the fleet courier (F4), in the background of its undo window: `scripts/decision-claim.js` (CLAIM_SCRIPTS) prints {ok, answer_id, reason}. Its process limit is
+// below the window (DECIDE_UNDO_MS 10 s), so a stuck courier is abandoned inside it; the send never waits for it either way. Injectable (`setClaimCard`) so a test needs no process.
+const CLAIM_MS = 8000
+let claimCard: ClaimCard | null = null
+export function setClaimCard(fn: ClaimCard | null): void { claimCard = fn }
+const claimWith = ($: EngineInterface): ClaimCard => async (card, answer) => {
+  const args = [card.id, ...('option' in answer ? ['--option', answer.option] : ['--free-text', answer.freeText])]
+  let j: unknown
+  try { j = JSON.parse((await execScript($, CLAIM_SCRIPTS[0], args, undefined, CLAIM_MS)).trim().split('\n').pop() ?? '') } catch (_e) { return { ok: false, answer_id: null, reason: 'claim failed' } }
+  const r = j as { ok?: unknown; answer_id?: unknown; reason?: unknown } | null
+  if (r === null || typeof r !== 'object' || typeof r.ok !== 'boolean') return { ok: false, answer_id: null, reason: 'claim failed' }
+  return { ok: r.ok, answer_id: typeof r.answer_id === 'string' && r.answer_id !== '' ? r.answer_id : null, reason: typeof r.reason === 'string' ? r.reason : null }
+}
 let holdTimer: { cancel: () => void } | undefined
 const undoDeps = ($: EngineInterface): UndoDeps => ({
   now: () => $.clock.now(),
   read: () => read($, DECIDE),
   update: fn => update($, DECIDE, fn),
   pool: st => actionable(snapshot === null ? [] : snapshot.pending, decideBatch, st),
+  claim: claimCard ?? claimWith($),
 })
 async function stopHoldTimerIfIdle($: EngineInterface): Promise<void> {
   if (holdTimer !== undefined && Object.keys((await read($, DECIDE)).hold ?? {}).length === 0) { holdTimer.cancel(); holdTimer = undefined }

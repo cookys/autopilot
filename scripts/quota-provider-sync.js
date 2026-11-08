@@ -27,7 +27,10 @@
 // outside is rejected, so a value in the wrong unit never gets in. Window source is `probe`, observed_at is the
 // request completion time in seconds, an elapsed window is dropped. Rate limit: the newer of the last ATTEMPT
 // (a token-free `<alias>.attempt` stamp, written before the request, failures included) and the mirror row's observed_at,
-// less than 900 s ago, skips the request and returns `too_soon` (the fetch is not called); a held lock gives `too_soon` too.
+// less than 3600 s ago, skips the request and returns `too_soon` (the fetch is not called); a held lock gives `too_soon` too.
+//
+// Not a timer: nothing runs this periodically. The primary data is the dispatch ledger (every dispatch records account,
+// model and tokens); this adapter only CALIBRATES it, run by a caller on demand (before scheduling, or after a 429).
 //
 // Token: read from the environment the caller passes, the same names scripts/resolve-endpoint.sh uses
 // (AUTOPILOT_ENDPOINT_<NAME>_TOKEN; for minimax also the provider-native MINIMAX_API_KEY). This file opens no secret file.
@@ -37,7 +40,7 @@ const observation = require('./lib/account-observation');
 const { resolveLiveDir } = require('./lib/live-state-dir');
 
 const DEFAULT_TIMEOUT_MS = 10000;
-const MIN_INTERVAL_S = 900; // one query per provider/alias per 15 minutes
+const MIN_INTERVAL_S = 3600; // one query per provider/alias per hour (PM): a calibration, not a poll
 const MS_THRESHOLD = 1e11; // observation's EPOCH_MAX_S: above it a value is milliseconds
 
 const PROVIDERS = Object.freeze({
@@ -145,7 +148,7 @@ async function syncProvider(provider, o) {
     if (liveDir === undefined) {
       try { liveDir = resolveLiveDir({ env, warn: () => {} }).base; } catch (_) { return out(false, 'live_dir_refused'); }
     }
-    // Rate limit (PM): at most one query per provider/alias per 15 minutes, judged from the mirror's own observed_at.
+    // Rate limit (PM): at most one query per provider/alias per hour, judged from the mirror's own observed_at.
     const lastAt = lastObservedAt(liveDir, provider, alias);
     const startMs = typeof opts.nowMs === 'function' ? opts.nowMs() : Date.now();
     // The gate counts ATTEMPTS: claimAttempt stamps the attempt (no token) under the per-alias lock before any request,

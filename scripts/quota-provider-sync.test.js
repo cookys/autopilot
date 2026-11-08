@@ -186,7 +186,7 @@ test('CLI: unknown provider exits 1 with the code and no token on stderr; usage 
   assert.strictEqual(c.status, 2);
 });
 
-test('rate limit: a 10 minute old mirror row means no request (too_soon); a 20 minute old one queries again', async () => {
+test('rate limit: a 30 minute old mirror row means no request (too_soon); a 62 minute old one queries again', async () => {
   for (const [provider, body] of [['minimax', { model_remains: [mm()] }], ['glm', glm([g5(10)])]]) {
     const liveDir = tmpLive();
     const env = provider === 'glm' ? { AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN } : { MINIMAX_API_KEY: FAKE_TOKEN };
@@ -194,9 +194,9 @@ test('rate limit: a 10 minute old mirror row means no request (too_soon); a 20 m
     assert.strictEqual(first.wrote, true);
     let calls = 0;
     const counting = async (...a) => { calls++; return fakeFetch(200, body)(...a); };
-    const soon = await real.syncProvider(provider, { liveDir, env, fetch: counting, nowMs: () => NOW + 600e3 });
+    const soon = await real.syncProvider(provider, { liveDir, env, fetch: counting, nowMs: () => NOW + 1800e3 });
     assert.deepStrictEqual([soon.wrote, soon.reason, calls], [false, 'too_soon', 0], provider);
-    const later = await real.syncProvider(provider, { liveDir, env, fetch: counting, nowMs: () => NOW + 1200e3 });
+    const later = await real.syncProvider(provider, { liveDir, env, fetch: counting, nowMs: () => NOW + 3700e3 });
     assert.strictEqual(calls, 1, provider);
     assert.notStrictEqual(later.reason, 'too_soon');
   }
@@ -239,19 +239,19 @@ test('planted: dropping the Bearer split, the clamp, the unit mapping or the ms 
   const u = await run(wrongUnit, 'glm', glm([g5(10)]));
   assert.strictEqual(u.r.wrote, false);
 });
-test('planted: without the rate-limit check the 10 minute old mirror is queried (red)', async () => {
+test('planted: without the rate-limit check the 30 minute old mirror is queried (red)', async () => {
   const bug = mutant([["if (!claim.claimed) return out(false, 'too_soon');", '']]);
   const liveDir = tmpLive(); const env = { MINIMAX_API_KEY: FAKE_TOKEN };
   await bug.syncProvider('minimax', { liveDir, env, fetch: fakeFetch(200, { model_remains: [mm()] }), nowMs: () => NOW });
   let calls = 0;
-  await bug.syncProvider('minimax', { liveDir, env, fetch: async (...a) => { calls++; return fakeFetch(200, { model_remains: [mm()] })(...a); }, nowMs: () => NOW + 600e3 });
+  await bug.syncProvider('minimax', { liveDir, env, fetch: async (...a) => { calls++; return fakeFetch(200, { model_remains: [mm()] })(...a); }, nowMs: () => NOW + 1800e3 });
   assert.strictEqual(calls, 1, 'the mutant calls fetch where the real adapter does not');
 });
 
-// ---- g1 fix: the 15 minute cap counts ATTEMPTS, not only successful writes
+// ---- g1 fix: the hourly cap counts ATTEMPTS, not only successful writes
 const MM_ENV = { MINIMAX_API_KEY: FAKE_TOKEN };
 function counter(status, body) { const c = { n: 0 }; c.fetch = async (...a) => { c.n++; return fakeFetch(status, body)(...a); }; return c; }
-test('attempt cap: a failed query (500, bad JSON, missing fields, expired, hung) still blocks the next call for 15 minutes', async () => {
+test('attempt cap: a failed query (500, bad JSON, missing fields, expired, hung) still blocks the next call for an hour', async () => {
   const cases = [[500, { model_remains: [mm()] }], [200, 'BADJSON'], [200, { other: 1 }], [200, { model_remains: [mm({ end_time: NOW_S - 10, weekly_end_time: NOW_S - 10 })] }]];
   for (const [status, body] of cases) {
     const liveDir = tmpLive();
@@ -260,16 +260,16 @@ test('attempt cap: a failed query (500, bad JSON, missing fields, expired, hung)
     assert.strictEqual(r1.wrote, false);
     assert.strictEqual(first.n, 1);
     const second = counter(200, { model_remains: [mm()] });
-    const r2 = await real.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: second.fetch, nowMs: () => NOW + 600e3 });
+    const r2 = await real.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: second.fetch, nowMs: () => NOW + 1800e3 });
     assert.deepStrictEqual([r2.wrote, r2.reason, second.n], [false, 'too_soon', 0], String(status));
-    const r3 = await real.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: second.fetch, nowMs: () => NOW + 901e3 });
-    assert.strictEqual(second.n, 1, 'after 15 minutes the next attempt goes out');
+    const r3 = await real.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: second.fetch, nowMs: () => NOW + 3601e3 });
+    assert.strictEqual(second.n, 1, 'after an hour the next attempt goes out');
     assert.strictEqual(r3.wrote, true);
   }
   const liveDir = tmpLive(); // a throwing fetch (request_failed) counts as an attempt too
   await real.syncProvider('glm', { liveDir, env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN }, fetch: async () => { throw new Error('down'); }, nowMs: () => NOW });
   const c = counter(200, glm([g5(10)]));
-  const r = await real.syncProvider('glm', { liveDir, env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN }, fetch: c.fetch, nowMs: () => NOW + 600e3 });
+  const r = await real.syncProvider('glm', { liveDir, env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN }, fetch: c.fetch, nowMs: () => NOW + 1800e3 });
   assert.deepStrictEqual([r.reason, c.n], ['too_soon', 0]);
 });
 test('planted: the old success-only cap (no attempt stamp) re-queries after a 500 (red)', async () => {
@@ -278,7 +278,7 @@ test('planted: the old success-only cap (no attempt stamp) re-queries after a 50
   const liveDir = tmpLive();
   await bug.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: fakeFetch(500, {}), nowMs: () => NOW });
   const c = counter(200, { model_remains: [mm()] });
-  await bug.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: c.fetch, nowMs: () => NOW + 600e3 });
+  await bug.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: c.fetch, nowMs: () => NOW + 1800e3 });
   assert.strictEqual(c.n, 1, 'the mutant queries again where the real adapter says too_soon');
 });
 test('attempt cap: a fresh mirror row alone (no stamp file) still blocks; dropping lastObservedAt is red', async () => {
@@ -286,11 +286,11 @@ test('attempt cap: a fresh mirror row alone (no stamp file) still blocks; droppi
   await real.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: fakeFetch(200, { model_remains: [mm()] }), nowMs: () => NOW });
   fs.unlinkSync(path.join(liveDir, 'quota', 'minimax', 'minimax.attempt'));
   const c = counter(200, { model_remains: [mm()] });
-  const r = await real.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: c.fetch, nowMs: () => NOW + 600e3 });
+  const r = await real.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: c.fetch, nowMs: () => NOW + 1800e3 });
   assert.deepStrictEqual([r.reason, c.n], ['too_soon', 0]);
   const bug = mutant([['minIntervalS: MIN_INTERVAL_S, lastObservedAt: lastAt }', 'minIntervalS: MIN_INTERVAL_S }']]);
   const c2 = counter(200, { model_remains: [mm()] });
-  await bug.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: c2.fetch, nowMs: () => NOW + 600e3 });
+  await bug.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: c2.fetch, nowMs: () => NOW + 1800e3 });
   assert.strictEqual(c2.n, 1, 'the mutant ignores the mirror row');
 });
 test('attempt cap: two concurrent calls send one request; the mutant without the claim sends two', async () => {
@@ -302,10 +302,38 @@ test('attempt cap: two concurrent calls send one request; the mutant without the
   };
   const a = await run2(real);
   assert.strictEqual(a.c.n, 1);
-  assert.deepStrictEqual(a.rs.map((x) => x.reason).sort(), [null, 'superseded', 'too_soon'].filter((x) => a.rs.some((y) => y.reason === x)).sort());
+  assert.strictEqual(a.rs.filter((x) => x.reason === 'too_soon').length, 1);
   assert.ok(a.rs.some((x) => x.reason === 'too_soon'));
   const bug = mutant([["if (!claim.claimed) return out(false, 'too_soon');", '']]);
   assert.strictEqual((await run2(bug)).c.n, 2);
+});
+
+// ---- g2 fix: a future timestamp blocks at most one interval
+const stampFile = (liveDir) => path.join(liveDir, 'quota', 'minimax', 'minimax.attempt');
+test('future attempt stamp: first call too_soon (stamp rewritten to now), claimable 3601 s later; the no-rewrite mutant stays blocked', async () => {
+  const liveDir = tmpLive();
+  assert.strictEqual(observation.claimAttempt(liveDir, 'minimax', 'minimax', { nowMs: NOW, minIntervalS: 3600 }).claimed, true);
+  fs.writeFileSync(stampFile(liveDir), `${NOW_S + 10 * 86400}\n`, { mode: 0o600 });
+  const r = observation.claimAttempt(liveDir, 'minimax', 'minimax', { nowMs: NOW, minIntervalS: 3600 });
+  assert.deepStrictEqual([r.ok, r.claimed, r.reason], [true, false, 'too_soon']);
+  assert.strictEqual(fs.readFileSync(stampFile(liveDir), 'utf8').trim(), String(NOW_S));
+  assert.strictEqual(observation.claimAttempt(liveDir, 'minimax', 'minimax', { nowMs: NOW + 3601e3, minIntervalS: 3600 }).claimed, true);
+  const bug = loadObservationMutant([['if (futureStamp) { writeStamp(); return', 'if (futureStamp) { return']]);
+  fs.writeFileSync(stampFile(liveDir), `${NOW_S + 10 * 86400}\n`, { mode: 0o600 });
+  bug.claimAttempt(liveDir, 'minimax', 'minimax', { nowMs: NOW, minIntervalS: 3600 });
+  const later = observation.claimAttempt(liveDir, 'minimax', 'minimax', { nowMs: NOW + 3601e3, minIntervalS: 3600 });
+  assert.strictEqual(later.claimed, false, 'the mutant leaves the future stamp, still blocking after an hour');
+});
+test('future mirror observed_at does not block past one interval; the mutant without the ignore stays blocked', () => {
+  const liveDir = tmpLive();
+  const args = (t) => ({ nowMs: NOW + t * 1e3, minIntervalS: 3600, lastObservedAt: NOW_S + 10 * 86400 });
+  assert.strictEqual(observation.claimAttempt(liveDir, 'minimax', 'minimax', args(0)).claimed, true);
+  assert.strictEqual(observation.claimAttempt(liveDir, 'minimax', 'minimax', args(60)).reason, 'too_soon');
+  assert.strictEqual(observation.claimAttempt(liveDir, 'minimax', 'minimax', args(3601)).claimed, true);
+  const bug = loadObservationMutant([['Number.isFinite(o.lastObservedAt) && o.lastObservedAt <= nowS ?', 'Number.isFinite(o.lastObservedAt) ?']]);
+  const l2 = tmpLive();
+  assert.strictEqual(bug.claimAttempt(l2, 'minimax', 'minimax', args(0)).claimed, false);
+  assert.strictEqual(bug.claimAttempt(l2, 'minimax', 'minimax', args(3601)).claimed, false, 'the mutant blocks forever');
 });
 
 // the lock: loaded copy of account-observation with the lock check removed
@@ -325,7 +353,7 @@ function loadObservationMutant(pairs) {
 test('attempt cap: while another process holds the per-alias lock nothing is claimed (busy); a mutant without the lock check claims', () => {
   const { holdOsLock, installLeakCheck } = require('./lib/account-fixtures/os-lock-holder');
   const liveDir = tmpLive();
-  const args = { nowMs: NOW, minIntervalS: 900, waitMs: 60 };
+  const args = { nowMs: NOW, minIntervalS: 3600, waitMs: 60 };
   assert.strictEqual(observation.claimAttempt(liveDir, 'minimax', 'minimax', args).claimed, true);
   fs.unlinkSync(path.join(liveDir, 'quota', 'minimax', 'minimax.attempt'));
   const h = holdOsLock(path.join(liveDir, 'quota', 'minimax', 'minimax.oslock'));
@@ -360,11 +388,11 @@ test('planted: a token written into the attempt stamp file is caught by the file
   const SENTINEL = 'FAKE-SENTINEL-attempt-5c1d9e';
   const leaks = (liveDir) => allFiles(liveDir).filter((f) => fs.readFileSync(f).includes(SENTINEL));
   const clean = tmpLive();
-  assert.strictEqual(observation.claimAttempt(clean, 'glm', 'glm', { nowMs: NOW, minIntervalS: 900, leak: SENTINEL }).claimed, true);
+  assert.strictEqual(observation.claimAttempt(clean, 'glm', 'glm', { nowMs: NOW, minIntervalS: 3600, leak: SENTINEL }).claimed, true);
   assert.deepStrictEqual(leaks(clean), []);
   const bug = loadObservationMutant([['fs.writeSync(fd, `${Math.floor(nowS)}\\n`)', 'fs.writeSync(fd, `${Math.floor(nowS)} ${o.leak}\\n`)']]);
   const dirty = tmpLive();
-  assert.strictEqual(bug.claimAttempt(dirty, 'glm', 'glm', { nowMs: NOW, minIntervalS: 900, leak: SENTINEL }).claimed, true);
+  assert.strictEqual(bug.claimAttempt(dirty, 'glm', 'glm', { nowMs: NOW, minIntervalS: 3600, leak: SENTINEL }).claimed, true);
   assert.strictEqual(leaks(dirty).length, 1, 'the scan finds the planted token in the .attempt file');
 });
 

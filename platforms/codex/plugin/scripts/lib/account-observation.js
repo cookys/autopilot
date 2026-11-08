@@ -697,19 +697,26 @@ function claimAttempt(liveDir, provider, alias, opts) {
   if (!held) return { ok: true, claimed: false, reason: 'busy' };
   let tmp = null;
   try {
-    let last = Number.isFinite(o.lastObservedAt) ? o.lastObservedAt : null;
+    const nowS = o.nowMs / 1000;
+    // A mirror observed_at from the future (bad host clock) is ignored: it must not block past one interval.
+    let last = Number.isFinite(o.lastObservedAt) && o.lastObservedAt <= nowS ? o.lastObservedAt : null;
+    let futureStamp = false;
     const cur = readSmallFile(file, 64);
     if (cur.text !== undefined) {
       const n = /^\d{1,12}$/.test(cur.text.trim()) ? Number(cur.text.trim()) : null; // junk counts as no stamp
-      if (n !== null && (last === null || n > last)) last = n;
+      if (n !== null && n > nowS) futureStamp = true; // stamp from the future: rewrite it to now, block one interval only
+      else if (n !== null && (last === null || n > last)) last = n;
     }
-    const nowS = o.nowMs / 1000;
+    const writeStamp = () => {
+      tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
+      const fd = fs.openSync(tmp, 'wx', 0o600);
+      try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, `${Math.floor(nowS)}\n`); } finally { fs.closeSync(fd); }
+      fs.renameSync(tmp, file);
+      tmp = null;
+    };
+    if (futureStamp) { writeStamp(); return { ok: true, claimed: false, reason: 'too_soon' }; }
     if (last !== null && nowS - last < o.minIntervalS) return { ok: true, claimed: false, reason: 'too_soon' };
-    tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
-    const fd = fs.openSync(tmp, 'wx', 0o600);
-    try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, `${Math.floor(nowS)}\n`); } finally { fs.closeSync(fd); }
-    fs.renameSync(tmp, file);
-    tmp = null;
+    writeStamp();
     return { ok: true, claimed: true };
   } catch (_) {
     return { ok: false, code: 'write_failed' };

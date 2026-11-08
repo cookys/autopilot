@@ -1,0 +1,2850 @@
+{
+ "pane/en/120/none": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " Spend ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " Hygiene ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " Fleet ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "──",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   },
+   {
+    "text": "━━━━━",
+    "bold": false,
+    "dim": false,
+    "color": "claude",
+    "here": true
+   },
+   {
+    "text": "─────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 2,
+  "exact": true
+ },
+ "band/en/120/none/usage": {
+  "width": 43,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 7,
+    "start": 35,
+    "label": {
+     "text": " Usage ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/en/120/none/nousage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/en/120/waiting": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " Spend ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " Hygiene ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " Fleet ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "──",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   },
+   {
+    "text": "━━━━━",
+    "bold": false,
+    "dim": false,
+    "color": "claude",
+    "here": true
+   },
+   {
+    "text": "─────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 2,
+  "exact": true
+ },
+ "band/en/120/waiting/usage": {
+  "width": 43,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 7,
+    "start": 35,
+    "label": {
+     "text": " Usage ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/en/120/waiting/nousage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/en/80/none": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " Spend ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " Hygiene ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " Fleet ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "──",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   },
+   {
+    "text": "━━━━━",
+    "bold": false,
+    "dim": false,
+    "color": "claude",
+    "here": true
+   },
+   {
+    "text": "─────────────────────────────────────────────────────────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 2,
+  "exact": true
+ },
+ "band/en/80/none/usage": {
+  "width": 43,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 7,
+    "start": 35,
+    "label": {
+     "text": " Usage ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/en/80/none/nousage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/en/80/waiting": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " Spend ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " Hygiene ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " Fleet ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "──",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   },
+   {
+    "text": "━━━━━",
+    "bold": false,
+    "dim": false,
+    "color": "claude",
+    "here": true
+   },
+   {
+    "text": "─────────────────────────────────────────────────────────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 2,
+  "exact": true
+ },
+ "band/en/80/waiting/usage": {
+  "width": 43,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 7,
+    "start": 35,
+    "label": {
+     "text": " Usage ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/en/80/waiting/nousage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/en/20/none": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " Spend ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " Hygiene ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " Fleet ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 5,
+  "exact": false
+ },
+ "band/en/20/none/usage": {
+  "width": 43,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 7,
+    "start": 35,
+    "label": {
+     "text": " Usage ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/en/20/none/nousage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/en/20/waiting": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " Spend ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " Hygiene ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " Fleet ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 5,
+  "exact": false
+ },
+ "band/en/20/waiting/usage": {
+  "width": 43,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 7,
+    "start": 35,
+    "label": {
+     "text": " Usage ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/en/20/waiting/nousage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 5,
+    "start": 0,
+    "label": {
+     "text": " Now ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 8,
+    "start": 6,
+    "label": {
+     "text": " Decide ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 10,
+    "start": 15,
+    "label": {
+     "text": " Dispatch ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 8,
+    "start": 26,
+    "label": {
+     "text": " Review ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/zh-TW/120/none": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " 花費 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " 殘留 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " 艦隊 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "──",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   },
+   {
+    "text": "━━━━━━",
+    "bold": false,
+    "dim": false,
+    "color": "claude",
+    "here": true
+   },
+   {
+    "text": "────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 2,
+  "exact": true
+ },
+ "band/zh-TW/120/none/usage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 6,
+    "start": 28,
+    "label": {
+     "text": " 用量 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/zh-TW/120/none/nousage": {
+  "width": 28,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/zh-TW/120/waiting": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " 花費 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " 殘留 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " 艦隊 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "──",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   },
+   {
+    "text": "━━━━━━",
+    "bold": false,
+    "dim": false,
+    "color": "claude",
+    "here": true
+   },
+   {
+    "text": "────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 2,
+  "exact": true
+ },
+ "band/zh-TW/120/waiting/usage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 6,
+    "start": 28,
+    "label": {
+     "text": " 用量 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/zh-TW/120/waiting/nousage": {
+  "width": 28,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/zh-TW/80/none": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " 花費 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " 殘留 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " 艦隊 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "──",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   },
+   {
+    "text": "━━━━━━",
+    "bold": false,
+    "dim": false,
+    "color": "claude",
+    "here": true
+   },
+   {
+    "text": "────────────────────────────────────────────────────────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 2,
+  "exact": true
+ },
+ "band/zh-TW/80/none/usage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 6,
+    "start": 28,
+    "label": {
+     "text": " 用量 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/zh-TW/80/none/nousage": {
+  "width": 28,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/zh-TW/80/waiting": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " 花費 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " 殘留 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " 艦隊 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "──",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   },
+   {
+    "text": "━━━━━━",
+    "bold": false,
+    "dim": false,
+    "color": "claude",
+    "here": true
+   },
+   {
+    "text": "────────────────────────────────────────────────────────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 2,
+  "exact": true
+ },
+ "band/zh-TW/80/waiting/usage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 6,
+    "start": 28,
+    "label": {
+     "text": " 用量 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/zh-TW/80/waiting/nousage": {
+  "width": 28,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/zh-TW/20/none": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " 花費 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " 殘留 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " 艦隊 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 5,
+  "exact": false
+ },
+ "band/zh-TW/20/none/usage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 6,
+    "start": 28,
+    "label": {
+     "text": " 用量 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/zh-TW/20/none/nousage": {
+  "width": 28,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "pane/zh-TW/20/waiting": {
+  "next": {
+   "text": "›",
+   "bold": false,
+   "dim": true,
+   "color": null,
+   "here": false
+  },
+  "tabs": [
+   {
+    "id": "now",
+    "on": true,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "on": false,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "on": false,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "on": false,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "spend",
+    "on": false,
+    "label": {
+     "text": " 花費 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "hygiene",
+    "on": false,
+    "label": {
+     "text": " 殘留 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "fleet",
+    "on": false,
+    "label": {
+     "text": " 艦隊 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "legend",
+    "on": false,
+    "label": {
+     "text": " ? ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ],
+  "rule": [
+   {
+    "text": "────────────────────",
+    "bold": false,
+    "dim": false,
+    "color": "subtle",
+    "here": false
+   }
+  ],
+  "rows": 5,
+  "exact": false
+ },
+ "band/zh-TW/20/waiting/usage": {
+  "width": 35,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "usage",
+    "width": 6,
+    "start": 28,
+    "label": {
+     "text": " 用量 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ },
+ "band/zh-TW/20/waiting/nousage": {
+  "width": 28,
+  "tabs": [
+   {
+    "id": "now",
+    "width": 6,
+    "start": 0,
+    "label": {
+     "text": " 現況 ",
+     "bold": true,
+     "dim": false,
+     "color": null,
+     "here": true
+    }
+   },
+   {
+    "id": "decide",
+    "width": 6,
+    "start": 7,
+    "label": {
+     "text": " 待決 ",
+     "bold": true,
+     "dim": false,
+     "color": "warning",
+     "here": false
+    }
+   },
+   {
+    "id": "dispatch",
+    "width": 6,
+    "start": 14,
+    "label": {
+     "text": " 派工 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   },
+   {
+    "id": "review",
+    "width": 6,
+    "start": 21,
+    "label": {
+     "text": " 審查 ",
+     "bold": false,
+     "dim": true,
+     "color": null,
+     "here": false
+    }
+   }
+  ]
+ }
+}

@@ -116,10 +116,6 @@
   "console.tab.self": "本席",
   "console.no_source": "指揮台還沒有資料來源",
   "console.stub.command": "指揮頁：各領域摘要、例外與待決的問題（之後補上）",
-  "console.stub.team": "團隊頁：改善提示與每條線一列（之後補上）",
-  "console.stub.quota": "額度頁：每個帳號池一個區塊（之後補上）",
-  "console.stub.hosts": "主機頁：GPU 管線與每台主機一列（之後補上）",
-  "console.stub.self": "本席頁：這個 session 的現況、派工、審查與花費（之後補上）",
   "label.stage": "階段",
   "label.unit": "單元",
   "label.progress": "進度",
@@ -427,5 +423,14 @@
   "fleet.todo_owner": "{owner} · 自 {ago}前",
   "fleet.todo_due": "{ago}後到期",
   "fleet.todo_overdue": "已逾期 {ago}",
-  "fleet.todo_unreconciled": "未對帳：鏡像裡沒有這張卡"
+  "fleet.todo_unreconciled": "未對帳：鏡像裡沒有這張卡",
+  "console.page.no_source": "無來源",
+  "console.page.expired": "過期",
+  "console.team.summary": "團隊：進行中 {running}　等待 {waiting}　卡住 {stalled}",
+  "console.quota.summary": "額度：風險 {risk} 項",
+  "console.quota.summary_worst": "額度：風險 {risk} 項　最差的池 {worst}",
+  "console.hosts.summary": "主機：在線 {online}/{total}　GPU 忙 {busy}/{gpu}",
+  "console.self.now": "現況",
+  "console.self.dispatch": "派工",
+  "console.self.review": "審查"
 }

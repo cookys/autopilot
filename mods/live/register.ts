@@ -250,7 +250,7 @@ async function consoleTick($: EngineInterface): Promise<void> {
 const consoleNav = (): ConsoleNav => ({ snap: consoleSnap, tab: consoleTab })
 // the console pane (pane.tsx consolePane): the same navigation state as the band; it reads no Fleet feed and no decision file, so nothing is fetched while it is drawn
 const consolePaneOf = ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0] & { props: { bodyColumns: number | null } }) =>
-  Pane($.ui.resolve(e), snapshot, 'now', () => {}, tr, e.props.bodyColumns, () => {}, new Set(), () => {}, new Set(), null, null, null, null, {
+  Pane($.ui.resolve(e), snapshot, 'now', () => {}, tr, e.props.bodyColumns, () => {}, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, null, null, null, null, {
     nav: consoleNav(),
     onTab: (tab: ConsoleTab) => { consoleTab = tab; $.ui.invalidate('ui.render'); void ringToNext($) },
     onNext: () => { consoleTab = nextConsoleTab(consoleTab); $.ui.invalidate('ui.render') },
@@ -1411,7 +1411,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
     if (active !== 'forge' && rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
     // No tab open, a second row to spare and a forge-stats that draws the summary row (its heartbeat says so): that row goes to the mod below (PM G33a, TUI guideline
     // §1.1 rule 3). A mod that passes it on (the engine's own element comes back) leaves the band one row high, never a blank row.
-    if (active === null && rows >= 2 && forgeSummaryRow) {
+    // The console mode never hands it over: its second row is not forge-stats' summary (that line is the fleet counts, which the tab badges already say; plan §3.1), so `next(e)` is not called here.
+    if (active === null && rows >= 2 && forgeSummaryRow && !consoleOn) {
       const answer = await lower(1, columns)
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') return stackBand(el, bar.node, [answer])
     }

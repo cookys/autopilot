@@ -14,6 +14,7 @@ import type { ScrollView } from './tabs'
 import { dimProps, drawSeg } from './ui'
 import type { Strip } from './ui'
 import { consoleStrip } from './consoletabs'
+import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyedGrow, scrollFrame } from './scroll'
 import type { ScrollModel } from './scroll'
@@ -23,15 +24,21 @@ export type { PaneTab } from './model'
 // The operator-console mode (consoletabs.ts): the shared navigation state (snapshot + tab) and what a press on a tab / the `›` chip does. null = every session without .claude/console.json.
 export type ConsolePane = { nav: ConsoleNav; onTab: (t: ConsoleTab) => void; onNext: () => void }
 
-// The console pane's skeleton (C1 U4): the five-tab strip with its badges, then one line per page from the string tables; the pages' own content is U5 / U6. No source (nav.snap null) says so.
-function consolePane(el: { Box: El; Text: El; Button?: El }, con: ConsolePane, t: T, cols: number) {
+// The console pane (C1 U4, U6): the five-tab strip with its badges, then the page. The command page's own content is U5; 團隊 · 額度 · 主機 are a skeleton (consolepages.ts: a name line and a summary line, or
+// "no source", never an empty table); 本席 folds this session's own 現況, 派工 and 審查 (the non-console pane's builders, tabs.ts) under one header. `own` is what 本席 draws: null = this session has no snapshot yet.
+type SelfDraw = (l: PaneLine, i: number, k: string) => unknown
+function consolePane(el: { Box: El; Text: El; Button?: El }, con: ConsolePane, t: T, cols: number, own: { parts: { title: string | null; lines: PaneLine[] }[]; draw: SelfDraw } | null) {
   const { Box, Text } = el
   const strip = stripView(el, consoleStrip({ t, cols }, con.nav, el.Button !== undefined), con.onTab, con.onNext)
+  const tab = con.nav.tab
+  const page = tab === 'team' || tab === 'quota' || tab === 'hosts' ? consolePage(con.nav.snap, tab, t) : null
   return (
     <Box flexDirection="column">
       {strip}
-      {con.nav.snap === null ? <Text {...dimProps()} wrap="truncate">{t('console.no_source')}</Text> : null}
-      <Text wrap="truncate">{t('console.stub.' + con.nav.tab)}</Text>
+      {tab === 'command' && con.nav.snap === null ? <Text {...dimProps()} wrap="truncate">{t('console.no_source')}</Text> : null}
+      {tab === 'command' ? <Text wrap="truncate">{t('console.stub.command')}</Text> : null}
+      {page === null ? null : page.lines.map((l, i) => <Text key={'p' + i} {...(page.kind === 'summary' ? {} : dimProps())} wrap="truncate">{l}</Text>)}
+      {tab === 'self' ? (own === null ? <Text {...dimProps()}>{t('pane.waiting')}</Text> : own.parts.map((p, n) => <Box key={'s' + n} flexDirection="column">{p.title === null ? null : <Text {...dimProps()} wrap="truncate">{p.title}</Text>}{p.lines.map((l, i) => own.draw(l, i, 's' + n))}</Box>)) : null}
     </Box>
   )
 }
@@ -74,7 +81,6 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 
 export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null, win: ScrollModel | null = null, fleet: FleetView | null = null, con: ConsolePane | null = null) {
   const { Box, Text, Link, Button, Input } = el
-  if (con !== null) return consolePane(el, con, t, paneWidth(bodyColumns))
   const cols = paneWidth(bodyColumns)
   const ctx = { t, cols, expanded, folded, fleet, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), ...(decide.now === undefined ? {} : { now: decide.now }), inputs: decide.inputs && Input !== undefined } }) }
   const segsOf = (l: PaneLine): Seg[] => l.segs ?? [{ text: l.text }]
@@ -123,6 +129,11 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
     : l.goto !== undefined && Button !== undefined
     ? <Button key={k + 'g' + i} plain onPress={() => onTab(l.goto as PaneTab)}>{drawn(l)}</Button>
     : plainLine(l, i, k)
+  if (con !== null) {
+    // 本席: the header (spend, context), then 現況, 派工, 審查 under a dim name each; the lines are the ones the non-console tabs draw
+    const own = snap === null ? null : { parts: [{ title: null, lines: headerLines(snap, ctx) }, { title: t('console.self.now'), lines: nowLines(snap, ctx) }, { title: t('console.self.dispatch'), lines: dispatchLines(snap, ctx) }, { title: t('console.self.review'), lines: reviewTabLines(snap, ctx) }], draw: line }
+    return consolePane(el, con, t, cols, own)
+  }
   const strip = tabStrip(el, tab, onTab, onNext, snap, t, cols)
   if (snap === null) {
     return (

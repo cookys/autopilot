@@ -120,10 +120,6 @@ export const EN: Record<string, string> = {
   "console.tab.self": "This seat",
   "console.no_source": "No console source yet",
   "console.stub.command": "Command page: summary, exceptions and the open questions (coming)",
-  "console.stub.team": "Team page: improvement hints and one row per line (coming)",
-  "console.stub.quota": "Quota page: one block per account pool (coming)",
-  "console.stub.hosts": "Hosts page: the GPU pipeline and one row per host (coming)",
-  "console.stub.self": "This-seat page: this session's status, dispatches, reviews and spend (coming)",
   "label.stage": "stage",
   "label.unit": "unit",
   "label.progress": "progress",
@@ -431,7 +427,16 @@ export const EN: Record<string, string> = {
   "fleet.todo_owner": "{owner} · since {ago}",
   "fleet.todo_due": "due in {ago}",
   "fleet.todo_overdue": "overdue by {ago}",
-  "fleet.todo_unreconciled": "not reconciled: no such card in the mirror"
+  "fleet.todo_unreconciled": "not reconciled: no such card in the mirror",
+  "console.page.no_source": "No source",
+  "console.page.expired": "Expired",
+  "console.team.summary": "Team: running {running}, waiting {waiting}, stalled {stalled}",
+  "console.quota.summary": "Quota: {risk} at risk",
+  "console.quota.summary_worst": "Quota: {risk} at risk, worst pool {worst}",
+  "console.hosts.summary": "Hosts: online {online}/{total}, GPU busy {busy}/{gpu}",
+  "console.self.now": "Now",
+  "console.self.dispatch": "Dispatch",
+  "console.self.review": "Review"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -552,10 +557,6 @@ export const ZH_TW: Record<string, string> = {
   "console.tab.self": "本席",
   "console.no_source": "指揮台還沒有資料來源",
   "console.stub.command": "指揮頁：各領域摘要、例外與待決的問題（之後補上）",
-  "console.stub.team": "團隊頁：改善提示與每條線一列（之後補上）",
-  "console.stub.quota": "額度頁：每個帳號池一個區塊（之後補上）",
-  "console.stub.hosts": "主機頁：GPU 管線與每台主機一列（之後補上）",
-  "console.stub.self": "本席頁：這個 session 的現況、派工、審查與花費（之後補上）",
   "label.stage": "階段",
   "label.unit": "單元",
   "label.progress": "進度",
@@ -863,5 +864,14 @@ export const ZH_TW: Record<string, string> = {
   "fleet.todo_owner": "{owner} · 自 {ago}前",
   "fleet.todo_due": "{ago}後到期",
   "fleet.todo_overdue": "已逾期 {ago}",
-  "fleet.todo_unreconciled": "未對帳：鏡像裡沒有這張卡"
+  "fleet.todo_unreconciled": "未對帳：鏡像裡沒有這張卡",
+  "console.page.no_source": "無來源",
+  "console.page.expired": "過期",
+  "console.team.summary": "團隊：進行中 {running}　等待 {waiting}　卡住 {stalled}",
+  "console.quota.summary": "額度：風險 {risk} 項",
+  "console.quota.summary_worst": "額度：風險 {risk} 項　最差的池 {worst}",
+  "console.hosts.summary": "主機：在線 {online}/{total}　GPU 忙 {busy}/{gpu}",
+  "console.self.now": "現況",
+  "console.self.dispatch": "派工",
+  "console.self.review": "審查"
 }

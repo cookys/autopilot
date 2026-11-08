@@ -3397,6 +3397,67 @@ test('G33a: no fetch for a heartbeat that is stale, another session\'s, the pane
   expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
   expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
 })
+// C1 U7: in the operator-console mode (.claude/console.json in the session's repo) the band never calls the mod below for its second row: `next(e)` is not called (the reader beneath, which records
+// every ask, hears nothing), and the band's tab row is the console's (指揮 團隊 額度 主機 本席). Without the file the call is the one G33a pins (the negative control).
+const CONSOLE_PROGRAM = j({ schema: 'autopilot.console/1', mode: 'program' })
+const consoleFiles = (): Tree => ({ ...base(), [CWD + '/.git/HEAD']: 'ref: refs/heads/x\n', [CWD + '/.claude/console.json']: CONSOLE_PROGRAM })
+test('C1 U7: console mode: an alive forge-stats with summary_row is never asked for the second row (next(e) 0 calls) and the band row carries the console tab names (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+  g33Ran(on)
+  const w = world(on, consoleFiles())
+  g33Put(w, g33Alive())
+  await start($, 'terminal')
+  await w.clock.advance(5_000) // the tick reads the mode and the heartbeat (alive, summary_row true)
+  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
+  await w.clock.advance(5_000)
+  const texts = await g33Band($)
+  const asks = g33Asks(w).filter(a => a.startsWith('1/'))
+  console.log('console mode next(e) asks for the second row: ' + asks.length + ' | band row: ' + texts.join(' ').replace(/\s+/g, ' ').slice(0, 80))
+  expect(asks).toEqual([])
+  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
+  const row = texts.join(' ')
+  for (const name of ['指揮', '團隊', '額度', '主機', '本席']) expect(row.includes(name)).toBe(true)
+})
+test('C1 U7 control: the same alive heartbeat without the console config still hands the second row to the mod below (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+  g33Ran(on)
+  const w = world(on, base())
+  g33Put(w, g33Alive())
+  await start($, 'terminal')
+  await w.clock.advance(5_000)
+  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
+  await w.clock.advance(5_000)
+  const texts = await g33Band($)
+  const asks = g33Asks(w).filter(a => a.startsWith('1/'))
+  console.log('non-console mode next(e) asks for the second row: ' + asks.length)
+  expect(asks.length).toBeGreaterThan(0)
+  expect(texts.at(-1)?.startsWith('FLEET')).toBe(true)
+})
+// C1 U6: the console pane's pages. The snapshot source answers null until C2, so team / quota / hosts say 無來源 (no table); 本席 folds this session's 現況, 派工 and 審查 under their names.
+test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there is no snapshot, and 本席 carries 現況 · 派工 · 審查 (terminal)', async ($, on) => {
+  const ran: string[] = []
+  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } })
+  const w = world(on, consoleFiles())
+  await start($, 'terminal')
+  await w.clock.advance(5_000) // the tick turns the mode on
+  const mount = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const lines = async (tab: string) => {
+    const first = await mount()
+    await first.press({ key: tab })
+    await first.unmount()
+    const pane = await mount()
+    const out = walkTexts((await pane.drawn()) as Node).map(textOf)
+    await pane.unmount()
+    return out
+  }
+  for (const tab of ['team', 'quota', 'hosts']) {
+    const out = await lines(tab)
+    console.log('console pane ' + tab + ': ' + out.slice(-2).join(' | '))
+    expect(out.includes('無來源')).toBe(true)
+  }
+  const self = await lines('self')
+  for (const name of ['現況', '派工', '審查']) expect(self.includes(name)).toBe(true)
+  expect(self.includes('無來源')).toBe(false)
+  expect(ran.some(a => a.startsWith('fleet console'))).toBe(false) // nothing is fetched for the console pages
+})
 test('G33a review g1: the heartbeat is stat-checked and bounded: a link, a non-file, a size over 4 KiB in UTF-8 bytes (CJK under it in length) or a read error is no heartbeat, and the tick goes on (terminal)', { plugins: [G33_READER] }, async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())

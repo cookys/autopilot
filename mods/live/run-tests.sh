@@ -28,6 +28,8 @@ node --test "$here/shell.test.js"
 node --test "$here/console.test.js"
 # the console tab strip (consoletabs.ts: five tabs, badges, the 120 / 80 / 20 column forms), the console.json mode finder, and the golden that pins the non-console strips byte for byte
 node --test "$here/consolestrip.test.js"
+# the console pane's team / quota / hosts skeleton pages (consolepages.ts): 無來源 for a missing source, the red light with the fixture's lines deleted
+node --test "$here/consolepages.test.js"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

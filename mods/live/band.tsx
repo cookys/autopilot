@@ -6,10 +6,12 @@
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } from './model'
-import { BODY_ROWS, MAIN_CONTENT_ROWS, PICK_MARK, QUICK_SEP } from './shell'
+import { PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
-import { actionSeg, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg } from './ui'
+import { actionSeg, cardParas, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg, PALETTE, wrapPlain } from './ui'
+import { fixedWindow, thumbOf } from './scrollmath'
+import type { ScrollModel } from './scrollmath'
 import type { ForgeSegment } from './ui'
 import { barRule, barStrip, decideBandPlan } from './tabs'
 import { COL_GAP } from './speedview'
@@ -25,6 +27,31 @@ export const BAND_ROWS = 1
 export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
   const { Box } = el
   return <Box flexDirection="column">{band}{below}</Box>
+}
+
+// bandlayout: the rows drawn as they are, top to bottom, no band over them (the shell's own order puts the menu row second from the bottom). The tree is never taller than the band: a host that gets more
+// than maxRows rows opens a window of its own and hides the last row (the quick row) behind a "n more" line, so there is no spare row here.
+export function stackRows(el: { Box: El }, rows: unknown[]) {
+  const { Box } = el
+  return <Box flexDirection="column">{rows}</Box>
+}
+
+// the scroll hint row of a window that holds more than it shows (guideline §13.3): `↑ 還有 N 行 · ↓ 還有 M 行`, each half a Button that moves the window a page (a click, or Tab and Enter, reach what
+// the wheel and the scroll keys also do), a half with nothing in that direction is not drawn
+export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: number, below: number, onUp: () => void, onDown: () => void): unknown {
+  const { Box, Text, Button } = el
+  const half = (k: string, text: string, press: () => void) => {
+    const draw = <Text key="t" {...dimProps()} wrap="truncate">{text}</Text>
+    return Button === undefined ? <Box key={k}>{draw}</Box> : <Button key={k} plain onPress={press}>{draw}</Button>
+  }
+  return (
+    <Box key="scrollhint">
+      <Text>{' '}</Text>
+      {above > 0 ? half('scroll:up', t('shell.more_up', { n: above }), onUp) : <Text key="nu">{''}</Text>}
+      {above > 0 && below > 0 ? <Text key="sep" {...dimProps()}>{' · '}</Text> : <Text key="ns">{''}</Text>}
+      {below > 0 ? half('scroll:down', t('shell.more_down', { n: below }), onDown) : <Text key="nd">{''}</Text>}
+    </Box>
+  )
 }
 
 // consecutive segs of one slot become one Button; a seg with no slot (a separator) stays a bare Text
@@ -186,7 +213,7 @@ export function speedContent(el: { Box: El; Text: El }, cols: readonly SpeedColu
   return [<Box key="speedview" flexDirection="row">{ours}</Box>, below]
 }
 
-// ---- the O4 shell (contract 2026-11-06): menu row on top (BandBar), then a frame of three kinds of window, a progress row and a quick row; 12 rows. shell.ts plans the frame, the
+// ---- the O4 shell (contract 2026-11-06, bandlayout: operation area at the bottom): a frame of three kinds of window, a progress row and a quick row; 12 rows. shell.ts plans the frame, the
 // columns and the left submenu; this file draws them. Only the left submenu, the main window and the quick row hold Buttons: the right-hand columns are Text, so the Tab order and the
 // highlight are the same at every tier. ----
 
@@ -194,9 +221,10 @@ export type ShellDraw = {
   plan: ShellPlan
   left: LeftItem[]
   onLeft: (id: string) => void
-  main: unknown[] // the main window's content rows, at most MAIN_CONTENT_ROWS; the divider and the progress row below them are drawn here
+  main: unknown[] // the main window's content rows, at most plan.bodyRows - 2; the divider and the progress row below them are drawn here
   progress: unknown // the progress row's content (one Box), inside the main window
   quick: unknown[]
+  bar: unknown // the menu row (BandBar): bandlayout puts it on the second row from the bottom, the quick row last (guideline §13: the operation area is the last two rows)
 }
 export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unknown[] {
   const { Box, Text, Button } = el
@@ -208,15 +236,17 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
   }
   const blank = (k: string) => <Text key={k}>{' '}</Text>
   const rows: unknown[] = [<Box key="top">{segsOf(plan.top, 't')}</Box>]
-  for (let r = 0; r < BODY_ROWS; r++) {
+  const body = plan.bodyRows
+  const content = body - 2
+  for (let r = 0; r < body; r++) {
     const item = d.left[r]
-    const divider = r === MAIN_CONTENT_ROWS
+    const divider = r === content
     const leftCell = item === undefined
       ? blank('l')
       : Button === undefined
         ? <Box key="l">{segsOf(item.segs, 'l')}</Box>
         : <Button key={item.key} plain onPress={() => d.onLeft(item.id)}>{segsOf(item.segs, 'l')}</Button>
-    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > MAIN_CONTENT_ROWS ? d.progress : d.main[r] ?? blank('m')
+    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > content ? d.progress : d.main[r] ?? blank('m')
     const cells = [
       vert(0, false),
       <Box key="lc" width={plan.geo.left} flexShrink={0}>{leftCell}</Box>,
@@ -224,79 +254,130 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
       <Box key="mc" width={plan.geo.main} flexShrink={0}>{mainCell}</Box>,
     ]
     plan.columns.forEach((c, i) => {
-      cells.push(vert(2 + i, divider && i === 0), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r], 'c' + i + '-')}</Box>)
+      cells.push(vert(2 + i, divider && i === 0), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r] ?? [], 'c' + i + '-')}</Box>)
     })
     cells.push(vert(2 + plan.columns.length, divider && plan.columns.length === 0))
     rows.push(<Box key={'row' + r}>{cells}</Box>)
   }
   rows.push(<Box key="bottom">{segsOf(plan.bottom, 'b')}</Box>)
+  rows.push(<Box key="menu">{d.bar}</Box>)
   rows.push(<Box key="quick"><Text>{' '}</Text>{d.quick}</Box>)
   return rows
 }
 
-// ---- the card view (ux-v7): the main window of the 待決 tab shows ONE card: its question, its background (dim, one row, two from 160), its options as hotkey Buttons 1..6; under the options one Button (no hotkey: 0-9 are all taken) fills the prompt box with the reply line so the owner types a note or a free answer there and presses Enter ----
+// ---- the card view (ux-v7, bandlayout): the main window of the 待決 tab shows ONE card, every word of it. The rows below are all of the card, wrapped and never cut; the caller (register.ts) shows
+// the window of them that fits (shell scroll, `windowRows`) and grows the frame upward as far as the host's maxRows allows. One option per row (a hotkey Button 1..6), its description wrapped under it;
+// the recommendation (★ on the option and a 建議 row with its reason), the 不授權 line, then one Button (no hotkey: 0-9 are all taken) that fills the prompt box with the reply line so the owner types a
+// note or a free answer there and presses Enter ----
 export type CardView = {
   key: string
   question: string
   background: string | null
+  advice: { label: string; why: string | null } | null // the recommended option's label (or the recommendation as written) and its reason
+  notAuthorized: string | null
   options: { label: string; description: string; picked: boolean; recommended: boolean; key: string }[]
   note: string | null // a card the band cannot answer (typed or in a dialog) and has no way to fill: one dim line instead of options
+  meta: string | null // the pane's card state, as the pane words it: `decide.sent` (already sent), `decide.held` (in its undo window), or, on a card the session or the CLI closed elsewhere, the answer line `decide.elsewhere`; drawn dim
+  locked: boolean // sent or in the undo window: the options are plain text (no Button, no hotkey) and a press does nothing, as in the pane
+  split: boolean // a card too tall for the frame (§12.10): the options, the fill Button and the page Buttons go to the fixed strip under the scrolling rows; the descriptions stay in the rows, each led by its option's number. false: everything in the rows, each description right under its option
+  grey: boolean // an answered card (sent, or closed elsewhere): the question and the options are dim theme text, the card stays in its place
+  fix: { label: string; onPress: () => void } | null // the pane's 改答案 on a card sent from here
   fill: { label: string; onPress: () => void } | null // the button that puts the reply line in the prompt box (`$.prompt.fill`): an option card's 附註／其他回答, a typed card's 打字回答; null where the surface has no prompt box or the card is a dialog's
-  bgRows: number
   width: number // the main window's inner width less the pad
   onPress: (k: number) => void
 }
-// `text` cut into at most `n` lines of `w` cells; the last one ends in … when something is left. Breaks after a punctuation mark when one is near the end of the line.
-export function chunkText(text: string, w: number, n: number): string[] {
-  const out: string[] = []
-  let rest = text.replace(/\s+/g, ' ').trim()
-  while (rest !== '' && out.length < n) {
-    if (displayWidth(rest) <= w) { out.push(rest); rest = ''; break }
-    let cut = 0
-    let used = 0
-    for (const ch of rest) { const cw = displayWidth(ch); if (used + cw > w) break; used += cw; cut += ch.length }
-    const head = rest.slice(0, cut)
-    const brk = Math.max(head.lastIndexOf('，'), head.lastIndexOf('；'), head.lastIndexOf('、'), head.lastIndexOf('。'), head.lastIndexOf(' '))
-    if (brk >= head.length - 8 && brk > 0 && out.length < n - 1) { out.push(head.slice(0, brk + 1).trimEnd()); rest = rest.slice(brk + 1).trimStart() } else { out.push(head); rest = rest.slice(cut) }
+// the option label is padded to this many cells inside its Button, so the highlight sits at the same place at every width (ux-v7: the highlight is 13 wide with `1: `)
+const OPT_LABEL_COLS = 10
+// `text` as rows: the first row `first` cells wide, the next ones `rest`; a paragraph break (newline or a `(1)` item marker) starts a row, an item's continuation hangs under its text
+function paraRows(text: string, first: number, rest: number): { row: string; indent: number }[] {
+  const out: { row: string; indent: number }[] = []
+  for (const para of cardParas(text)) {
+    const hang = Math.max(0, Math.min(para.hang, rest - 2))
+    wrapPlain(para.text, out.length === 0 ? first : rest, Math.max(1, rest - hang)).forEach((row, i) => out.push({ row, indent: i === 0 ? 0 : hang }))
   }
-  if (rest !== '' && out.length > 0) { const last = out[out.length - 1]; out[out.length - 1] = displayWidth(last) >= w ? last.slice(0, Math.max(0, last.length - 1)) + '…' : last + '…' }
   return out
 }
-// the option label is padded to this many cells inside its Button, so the highlight and the description column sit at the same place at every tier (ux-v7: the highlight is 13 wide with `1: `)
-const OPT_LABEL_COLS = 10
-export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): unknown[] {
+export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): { rows: unknown[]; strip: unknown[]; keyed: { k: number; at: number | null }[] } {
   const { Box, Text, Button } = el
   const rows: unknown[] = []
-  // the fill button sits in the row under the options; a card of five or six options leaves no such row, so there it stands in front of the question (the button wins over the second background row and never over an option)
-  const inline = v.fill !== null && 1 + v.options.length + 1 > MAIN_CONTENT_ROWS
+  const strip: unknown[] = []
+  const keyed: { k: number; at: number | null }[] = [] // the options that have a hotkey Button: `at` is the row of `rows` it sits in, null when it stands in the strip
+  const optTo = v.split ? strip : rows
+  const w = Math.max(8, v.width)
+  const dim = (on: boolean) => (on ? dimProps() : {})
+  const line = (k: string, text: string, dimmed = false, lead = '') => rows.push(<Box key={k}><Text>{' ' + lead}</Text><Text {...dim(dimmed)} wrap="truncate">{text}</Text></Box>)
   const fillBtn = v.fill === null ? null : BarButton(el, 'fill', v.fill.label, v.fill.onPress)
-  rows.push(<Box key="q"><Text>{' '}</Text>{inline ? <Box key="fi">{fillBtn}<Text>{' '}</Text></Box> : <Text key="fi">{''}</Text>}<Text wrap="truncate">{v.question}</Text></Box>)
-  // the background area is two rows at every tier (one line of text when narrow, two from 160, the second row blank otherwise), so the options sit on the same rows everywhere; it
-  // gives rows back only when the options would not fit
-  const tail = inline ? 0 : v.fill !== null || v.note !== null ? 1 : 0
-  const area = Math.max(0, Math.min(2, MAIN_CONTENT_ROWS - 1 - v.options.length - tail))
-  const bg = v.background === null ? [] : chunkText(v.background, v.width - 6, Math.min(v.bgRows, area))
-  for (let i = 0; i < area; i++) {
-    const line = bg[i]
-    rows.push(<Box key={'bg' + i}><Text>{' '}</Text>{line === undefined ? <Text key="e">{' '}</Text> : <Text key="e" {...dimProps()} wrap="truncate">{(i === 0 ? t('shell.bg') + '  ' : '      ') + line}</Text>}</Box>)
+  const fixBtn = v.fix === null ? null : BarButton(el, 'fix', v.fix.label, v.fix.onPress)
+  wrapPlain(v.question, w, w).forEach((r, i) => line('q' + i, r, v.grey))
+  // the state line of a sent or closed card (and its 改答案 Button) sits right under the question, so a window that shows only the top of a tall card still shows it
+  if (v.meta !== null) rows.push(<Box key="metar"><Text>{' '}</Text><Text key="meta" {...dimProps()} wrap="truncate">{v.meta}</Text>{fixBtn === null ? <Text key="nf">{''}</Text> : <Box key="fx"><Text>{'  '}</Text>{fixBtn}</Box>}</Box>)
+  // a keyed block (背景, 建議, 不授權): the key at column 1, the value from column KEY; a continuation row hangs under the value
+  const keys = [t('shell.bg'), t('decide.k_advice'), t('decide.k_not_authorized')]
+  const KEY = Math.max(...keys.map(displayWidth)) + 2
+  const block = (id: string, key: string | null, text: string, dimmed: boolean) => {
+    paraRows(text, w - KEY, w - KEY).forEach((p, i) => {
+      const head = i === 0 && key !== null ? key + ' '.repeat(KEY - displayWidth(key)) : ' '.repeat(KEY)
+      line(id + i, ' '.repeat(p.indent) + p.row, dimmed, head)
+    })
   }
-  v.options.slice(0, MAIN_CONTENT_ROWS - rows.length).forEach((o, k) => {
+  if (v.background !== null) block('bg', keys[0], v.background, true)
+  v.options.forEach((o, k) => {
     const hotkey = k < 6 ? String(k + 1) : undefined
-    const label = Button === undefined || hotkey === undefined
-      ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + o.label}</Text>
-      : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{o.label + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(o.label)))}</Button>
-    rows.push(
+    const hasKey = !v.locked && Button !== undefined && hotkey !== undefined
+    // the name wraps by display width: the row has the pad and the pick mark in front (3 cells), the host's `k: ` in front of a Button, and the ★ behind the last piece (2 cells)
+    const room = Math.max(1, w - 3 - (hasKey ? 3 : 0) - 2)
+    const [head = '', ...more] = wrapPlain(o.label, room, room)
+    const label = v.locked
+      ? <Text key="b" {...dim(v.grey)} wrap="truncate">{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Text>
+      : !hasKey
+      ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + head}</Text>
+      : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
+    const star = o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>
+    if (hasKey) keyed.push({ k, at: v.split ? null : rows.length })
+    optTo.push(
       <Box key={'o' + k}>
         <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>
         {label}
-        {o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>}
-        {o.description === '' ? <Text key="d">{''}</Text> : <Text key="d" {...dimProps()} wrap="truncate">{'  ' + o.description}</Text>}
+        {more.length === 0 ? star : <Text key="rec">{''}</Text>}
       </Box>,
     )
+    // the rest of a long name hangs under the first piece; the ★ follows the last piece
+    more.forEach((r, i) => optTo.push(
+      <Box key={'on' + k + '_' + i}><Text>{' '}</Text><Text {...dim(v.grey)} wrap="truncate">{'    ' + r}</Text>{i === more.length - 1 ? star : <Text key="rec">{''}</Text>}</Box>,
+    ))
+    if (o.description !== '') wrapPlain(o.description, w - 4, w - 4).forEach((r, i) => line('od' + k + '_' + i, r, true, v.split && i === 0 ? String(k + 1).padEnd(4) : '    '))
   })
-  if (v.fill !== null) { if (!inline) rows.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>) }
-  else if (v.note !== null) rows.push(<Box key="note"><Text>{' '}</Text><Text {...dimProps()} wrap="truncate">{v.note}</Text></Box>)
-  return rows.slice(0, MAIN_CONTENT_ROWS)
+  if (v.advice !== null) {
+    block('ad', keys[1], v.advice.label, false)
+    if (v.advice.why !== null) block('aw', null, v.advice.why, false)
+  }
+  if (v.notAuthorized !== null) block('na', keys[2], v.notAuthorized, false)
+  if (fillBtn !== null) optTo.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
+  if (v.meta === null && v.note !== null) line('note', v.note, true)
+  return { rows, strip, keyed }
+}
+
+// a card taller than the frame (§12.10, owner d-60e13bd4): `top` scrolls in `room - strip rows - 1 rule - 1 page row` rows with a scrollbar column at its right edge, then one rule, then the fixed `strip`
+// (the options, the fill Button, the page Buttons). The strip never moves with the scroll. `cells` is the main window's width. Returns exactly `room` rows when the strip fits; a strip taller than `room`
+// leaves the window one row and the rest is cut by the shell (reported, not hidden: no layout of its own is invented).
+export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top: unknown[]; strip: unknown[]; room: number; cells: number; model: ScrollModel; onPage: (by: number) => void }): { rows: unknown[]; from: number; to: number } {
+  const { Box, Text } = el
+  const fixed = 1 + o.strip.length // the rule and the strip
+  const fits = o.top.length <= o.room - fixed
+  const winRows = Math.max(1, fits ? o.room - fixed : o.room - fixed - 1) // an overflowing window gives one more row to the page Buttons
+  const win = fixedWindow(o.top.length, winRows, o.model)
+  const th = thumbOf(o.top.length, winRows, win.offset)
+  const shown = o.top.slice(win.offset, win.offset + win.rows)
+  const rows: unknown[] = shown.map((r, i) => {
+    const on = th !== null && i >= th.top && i < th.top + th.len
+    const bar = th === null ? <Text key="sb">{' '}</Text> : <Text key="sb" color={on ? PALETTE.here : PALETTE.structure}>{on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track}</Text>
+    return <Box key={'sw' + i}><Box key="c" width={o.cells - 1} flexShrink={0} overflow="hidden">{r}</Box>{bar}</Box>
+  })
+  while (rows.length < winRows) rows.push(<Text key={'sp' + rows.length}>{' '}</Text>)
+  rows.push(<Text key="rule" color={PALETTE.structure}>{GLYPHS.structure.rule.repeat(Math.max(1, o.cells - 1))}</Text>)
+  rows.push(...o.strip)
+  if (win.hint) rows.push(scrollHint(el, t, win.above, win.below, () => o.onPage(-1), () => o.onPage(1)))
+  return { rows, from: win.offset, to: win.offset + win.rows } // [from, to): the rows of `top` the window shows
 }
 
 // the quick row of the 待決 card view: `0: 送出 N 張 │ 7: 上一張 │ 8: 下一張 │ 9: 下一個選單   tip`. The slots have fixed widths (15, 12, 12, 16), so the four labels sit at the same

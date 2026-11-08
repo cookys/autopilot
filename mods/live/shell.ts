@@ -33,11 +33,12 @@ const RIGHT: Record<Tier, readonly RightCol[]> = {
 }
 export type Geometry = { tier: Tier; left: number; main: number; right: readonly RightCol[] }
 // null: the band is too narrow for a main window of MAIN_MIN cells; the caller keeps the tab-row layout
-export function shellGeometry(bodyColumns: number): Geometry | null {
+// `noRight`: the 待決 card view has no right-hand summary columns (the roundtable and the usage have their own tabs): the main window takes every cell the left list leaves, with no MAIN_MAX cap
+export function shellGeometry(bodyColumns: number, noRight = false): Geometry | null {
   const tier = bandTier(bodyColumns)
-  const right = RIGHT[tier]
+  const right = noRight ? [] : RIGHT[tier]
   const fixed = right.length + 3 + LEFT_COLS + right.reduce((a, c) => a + c.inner, 0) // one vertical line per window edge
-  const main = Math.min(MAIN_MAX, bodyColumns - fixed)
+  const main = noRight ? bodyColumns - fixed : Math.min(MAIN_MAX, bodyColumns - fixed)
   if (!(main >= MAIN_MIN)) return null
   return { tier, left: LEFT_COLS, main, right }
 }
@@ -229,10 +230,12 @@ export type ShellInput = {
   fleet: readonly FleetLaneSum[]
   footLeft?: string // right-aligned in the bottom frame of the left window (the card position, `3/8`)
   footMain?: string // right-aligned in the bottom frame of the main window (the one-line hint)
+  noRight?: boolean // the card view: no right-hand columns, the main window is as wide as the band allows (shellGeometry)
+  bodyRows?: number // the frame's body rows when the content grows up past BODY_ROWS (the card view); right-hand columns are only drawn at BODY_ROWS
   awaiting?: number // answered cards still waiting for the operator's own step (status awaiting_operator_action); drawn in the main window's title at tier 80 only, and only when above 0
 }
 export type ShellColumn = { id: ColId; inner: number; rows: Seg[][] } // BODY_ROWS rows, each padded to exactly `inner` cells
-export type ShellPlan = { geo: Geometry; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[]; divider: { left: Seg; right: Seg; rule: Seg } }
+export type ShellPlan = { geo: Geometry; bodyRows: number; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[]; divider: { left: Seg; right: Seg; rule: Seg } }
 
 const border = (role: 'here' | 'idle'): Partial<Seg> => ({ color: PALETTE[role] })
 function frameRow(kind: 'top' | 'bottom', widths: readonly number[], titles: readonly Seg[][]): Seg[] {
@@ -270,8 +273,9 @@ function stack(head: readonly Seg[][], foot: readonly Seg[][], inner: number, le
 }
 
 export function shellPlan(inp: ShellInput): ShellPlan | null {
-  const geo = shellGeometry(inp.columns)
+  const geo = shellGeometry(inp.columns, inp.noRight === true)
   if (geo === null) return null
+  const bodyRows = inp.bodyRows ?? BODY_ROWS
   const { t, panel } = inp
   const side = panel.side
   const mins = staleMinutes(panel)
@@ -287,8 +291,8 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
 
   // the columns that have something to show; a column with nothing is not drawn and its width goes to the roundtable (no hole)
   let spec = geo.right.map(c => ({ ...c }))
-  if (geo.tier === 200 && !hasUsage(spec[1].inner, true)) spec = [{ id: 'room', inner: spec[0].inner + spec[1].inner + 1 }]
-  if (geo.tier === 240) {
+  if (geo.right.length > 0 && geo.tier === 200 && !hasUsage(spec[1].inner, true)) spec = [{ id: 'room', inner: spec[0].inner + spec[1].inner + 1 }]
+  if (geo.right.length > 0 && geo.tier === 240) {
     const usage = hasUsage(spec[1].inner, true)
     const foot = inp.fleet.length > 0 || usageOf(side?.memory ?? null, spec[2].inner, 2).length > 0
     if (!usage && !foot) spec = [{ id: 'room', inner: spec[0].inner + spec[1].inner + spec[2].inner + 2 }]
@@ -331,7 +335,7 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
   const divider = { left: { text: f.frameLeftT, ...border('here') } as Seg, right: { text: f.frameRightT, ...border('here') } as Seg, rule: { text: f.rule.repeat(geo.main), color: PALETTE.structure } as Seg }
   const foot = (text: string | undefined): Seg[] => (text === undefined || text === '' ? [] : [{ text }])
   const bottomTitles: Seg[][] = [foot(inp.footLeft), foot(inp.footMain)]
-  return { geo, top: frameRow('top', widths, titles), bottom: frameRow('bottom', widths, bottomTitles), verts, columns, divider }
+  return { geo, bodyRows, top: frameRow('top', widths, titles), bottom: frameRow('bottom', widths, bottomTitles), verts, columns, divider }
 }
 
 // the marks band.tsx draws (it sets no colour of its own): a picked option's ◆ and the `│` between the quick row's slots
@@ -339,24 +343,25 @@ export const PICK_MARK: Seg = { text: GLYPHS.structure.decisions, color: PALETTE
 export const QUICK_SEP: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', color: PALETTE.structure }
 
 // ---- the card list (ux-v7): the left column of the 待決 tab, one row per question; and the progress row inside the main window ----
-export type Card = { id: string; name: string; answer: string | null; sent: boolean }
+// `grey`: an answered card (sent, or closed elsewhere) stays in its place with dim text, as the pane greys it; `gone`: the session or the CLI closed it, so it has no draft and its glyph is idle
+export type Card = { id: string; name: string; answer: string | null; sent: boolean; grey?: boolean; gone?: boolean }
 // the visible window of `count` rows around the cursor
 function window(n: number, cursor: number, count: number): number {
   return Math.max(0, Math.min(n - count, cursor - Math.floor(count / 2)))
 }
 // ◐ the card in the main window (here), ◆ an answered one (action; done when it was sent), ○ an open one; the answer is right-aligned with one empty cell at the end
-export function cardRows(cards: readonly Card[], cursor: number, inner: number): { id: string; key: string; segs: Seg[] }[] {
-  const from = window(cards.length, cursor, BODY_ROWS)
-  return cards.slice(from, from + BODY_ROWS).map((c, k) => {
+export function cardRows(cards: readonly Card[], cursor: number, inner: number, rows: number = BODY_ROWS): { id: string; key: string; segs: Seg[] }[] {
+  const from = window(cards.length, cursor, rows)
+  return cards.slice(from, from + rows).map((c, k) => {
     const here = from + k === cursor
     const answered = c.sent || c.answer !== null
-    const glyph: Seg = here ? { text: GLYPHS.chart.here, color: PALETTE.here } : answered ? { text: GLYPHS.structure.decisions, color: c.sent ? PALETTE.done : PALETTE.action } : { text: GLYPHS.state.pending, color: PALETTE.idle }
+    const glyph: Seg = here ? { text: GLYPHS.chart.here, color: PALETTE.here } : c.gone === true ? { text: GLYPHS.structure.decisions, color: PALETTE.idle } : answered ? { text: GLYPHS.structure.decisions, color: c.sent ? PALETTE.done : PALETTE.action } : { text: GLYPHS.state.pending, color: PALETTE.idle }
     const usable = inner - 1
     const answer = c.answer === null ? '' : clipSegs([{ text: c.answer }], Math.max(1, Math.min(displayWidth(c.answer), Math.floor(usable / 2))))[0]?.text ?? ''
     const answerW = answer === '' ? 0 : displayWidth(answer) + 1
-    const name = clipSegs([{ text: c.name, ...(here ? { color: PALETTE.here } : {}) }], Math.max(1, usable - 2 - answerW))
+    const name = clipSegs([{ text: c.name, ...(here ? { color: PALETTE.here } : {}), ...(c.grey === true ? { dim: true } : {}) }], Math.max(1, usable - 2 - answerW))
     const used = 2 + segWidth(name) + answerW
-    const segs: Seg[] = [glyph, { text: ' ' }, ...name, { text: sp(usable - used) + (answer === '' ? '' : ' ' + answer), ...(answer === '' ? {} : { color: PALETTE.idle }) }]
+    const segs: Seg[] = [glyph, { text: ' ' }, ...name, { text: sp(usable - used) + (answer === '' ? '' : ' ' + answer), ...(answer === '' ? {} : { color: PALETTE.idle, ...(c.grey === true ? { dim: true } : {}) }) }]
     return { id: c.id, key: 'card:' + c.id, segs: padSegs(segs, inner) }
   })
 }

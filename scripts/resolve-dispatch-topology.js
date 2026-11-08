@@ -36,6 +36,7 @@ const path = require('path');
 const os = require('os');
 const { configPath } = require('./lib/config-path.js');
 const { normalizeEffort } = require('./lib/effort-scale.js');
+const { RUNNER_BINARY_FALLBACK_PATHS } = require('./lib/runner-binary.js');
 const { spawnSync } = require('child_process');
 
 const RUNNER_TOKENS = Object.freeze([
@@ -50,8 +51,11 @@ const RUNNER_TOKENS = Object.freeze([
 // so candidates_to_qualify is unchanged and the implementer ladder skips these seats explicitly.
 const NON_IMPLEMENTER_RUNNERS = Object.freeze(['claude-native']);
 
+// `kimi` joins because dispatch-author.sh (the plan-review transport) drives it; `opencode` stays
+// out because dispatch-author.sh has no opencode branch, so a panel seat there could never run.
 const PANEL_ELIGIBLE_RUNNERS = Object.freeze([
   'codex', 'agy', 'grok', 'cc-shim', 'anthropic-compatible', 'claude-native', 'qoderclicn', 'cursor',
+  'kimi',
 ]);
 
 const PANEL_RUNNERS_SET = new Set(PANEL_ELIGIBLE_RUNNERS);
@@ -444,10 +448,9 @@ function resolveBinaryPath(binaryName, runner) {
     }
   }
   const home = process.env.HOME || '';
-  const fallbackPaths = {
-    kimi: ['.kimi-code/bin/kimi'],
-  };
-  for (const rel of (fallbackPaths[runner] || [])) {
+  // Same per-runner table the version probe uses (codex/agy under ~/.local/bin, grok under
+  // ~/.grok/bin, kimi under ~/.kimi-code/bin): PATH was searched first, so it still wins.
+  for (const rel of (RUNNER_BINARY_FALLBACK_PATHS[runner] || [])) {
     if (!home) break;
     const candidate = path.join(home, rel);
     try {

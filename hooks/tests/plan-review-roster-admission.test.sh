@@ -352,4 +352,97 @@ node -e 'const f=process.argv[1];const m=JSON.parse(require("fs").readFileSync(f
 run_pr fill "$M2" "$TOPO_OK"
 assert_contains "$PR_ERR" "drifted" "editing the manifest file after the seal is still refused"
 
+# ---------------------------------------------------------------- codex unavailable (BL-0145 follow-up)
+# The primary seat is codex and codex is not installed anywhere (the real dispatch-author.sh answers
+# "codex binary not found" as a precondition). That used to break the attempt loop: a precondition does
+# not heal on the same pipe, and the fallback was never tried. A missing runner binary is the SEAT being
+# unavailable, so the topology fallback (another family, never the implementer's runner) takes over.
+NOCODEX="$TEST_TMP/nocodex"
+mkdir -p "$NOCODEX/bin" "$NOCODEX/home"
+ln -s "$(command -v node)" "$NOCODEX/bin/node"
+ln -s "$(command -v git)" "$NOCODEX/bin/git"
+TOPO_MIX="$TEST_TMP/pr-topo-mix.json"
+cat > "$TOPO_MIX" <<'JSON'
+{"plan_review_panel":[{"engine":"gpt-other","effort":"high","runner":"codex","family":"openai","endpoint":""}],
+ "reviewer_ladder":[
+  {"engine":"grok-fixture","effort":"high","runner":"grok","family":"xai","endpoint":""},
+  {"engine":"GLM-5.3","effort":"high","runner":"cc-shim","family":"zhipu","endpoint":"glm"},
+  {"engine":"MiniMax-M3.1-Flash","effort":"high","runner":"cc-shim","family":"minimax","endpoint":"minimax"}],
+ "consult_ladder":[{"engine":"kimi-code/k3.1-pro","effort":"high","runner":"kimi","family":"moonshot","endpoint":""}]}
+JSON
+SEQ_NC="$(node -e '
+const [r] = process.argv.slice(1);
+process.stdout.write(JSON.stringify({ "auto-fb-architect-1": [{ file: r, classification: "success" }] }));' "$READY")"
+run_pr_nocodex() {  # run_pr_nocodex <ticket> <manifest> <topology> <config> [script]
+  local ticket="$1" manifest="$2" topo="$3" cfg="$4" script="${5:-$PR}"
+  env -i HOME="$NOCODEX/home" PATH="$NOCODEX/bin:/usr/bin:/bin" \
+    AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 AUTOPILOT_TOPOLOGY_FILE="$topo" \
+    REVIEW_LOOP_CONFIG_OVERRIDE="$cfg" AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$SEQ_NC" \
+    AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$TEST_TMP/nocodex-cap" AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/nocodex-acc" \
+    node "$script" --repo-root "$PR_REPO" --plan-file "$PR_REPO/plan.md" --rubric-file "$PR_REPO/rubric.md" \
+      --ticket "$ticket" --session-id "s-$ticket" --generation 1 --manifest-file "$manifest" \
+      --state-dir "$STATE" --allow-unregistered >"$TEST_TMP/pr.out" 2>"$TEST_TMP/pr.err" </dev/null
+  PR_EXIT=$?; PR_OUT="$(cat "$TEST_TMP/pr.out")"; PR_ERR="$(cat "$TEST_TMP/pr.err")"
+}
+mkdir -p "$TEST_TMP/nocodex-cap" "$TEST_TMP/nocodex-acc"
+
+# implementer on grok: the xai ladder entry is skipped (implementer's runner), the next family wins
+IMPL_GROK_CFG="$TEST_TMP/impl-grok2.md"
+printf -- '- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_runner: grok\n- implementer_engine: grok-fixture\n- implementer_effort: high\n' > "$IMPL_GROK_CFG"
+M5="$TEST_TMP/pr-m5.json"; mk_manifest "$M5" prr-nocodex-grok
+run_pr_nocodex nocodex-grok "$M5" "$TOPO_MIX" "$IMPL_GROK_CFG"
+assert_eq "$PR_EXIT" "0" "codex missing: the panel completes through the topology fallback"
+assert_eq "$(jf "$PR_OUT" verdict)" "READY" "codex missing: the fallback seat's verdict is used"
+assert_contains "$PR_OUT" "retry_substitution" "codex missing: the seat is substituted on the second attempt"
+assert_contains "$PR_ERR" "family zhipu" "codex missing, implementer on grok: GLM-5.3 (zhipu) is chosen"
+assert_not_contains "$PR_ERR" "family xai" "codex missing, implementer on grok: the grok (xai) ladder entry is skipped"
+assert_not_contains "$PR_ERR" "family openai" "codex missing: no second openai seat is added"
+
+# implementer on kimi: the moonshot entry that leads the ladder is skipped, GLM-5.3 is next
+IMPL_KIMI_CFG="$TEST_TMP/impl-kimi.md"
+printf -- '- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_runner: kimi\n- implementer_engine: kimi-code/k3.1-pro\n- implementer_effort: high\n' > "$IMPL_KIMI_CFG"
+TOPO_KIMI_FIRST="$TEST_TMP/pr-topo-kimifirst.json"
+cat > "$TOPO_KIMI_FIRST" <<'JSON'
+{"plan_review_panel":[],"reviewer_ladder":[
+  {"engine":"kimi-code/k3.1-pro","effort":"high","runner":"kimi","family":"moonshot","endpoint":""},
+  {"engine":"GLM-5.3","effort":"high","runner":"cc-shim","family":"zhipu","endpoint":"glm"}],"consult_ladder":[]}
+JSON
+M6="$TEST_TMP/pr-m6.json"; mk_manifest "$M6" prr-nocodex-implkimi
+run_pr_nocodex nocodex-implkimi "$M6" "$TOPO_KIMI_FIRST" "$IMPL_KIMI_CFG"
+assert_eq "$PR_EXIT" "0" "codex missing, implementer on kimi: the panel completes"
+assert_contains "$PR_ERR" "family zhipu" "codex missing, implementer on kimi: GLM-5.3 is chosen"
+assert_not_contains "$PR_ERR" "family moonshot" "codex missing, implementer on kimi: the kimi seat (implementer's runner) is skipped"
+
+# the Kimi seat is reachable: grok implementer, ladder holds only the grok seat and the kimi seat
+TOPO_KIMI="$TEST_TMP/pr-topo-kimi.json"
+cat > "$TOPO_KIMI" <<'JSON'
+{"plan_review_panel":[],"reviewer_ladder":[{"engine":"grok-fixture","effort":"high","runner":"grok","family":"xai","endpoint":""}],
+ "consult_ladder":[{"engine":"kimi-code/k3.1-pro","effort":"high","runner":"kimi","family":"moonshot","endpoint":""}]}
+JSON
+M7="$TEST_TMP/pr-m7.json"; mk_manifest "$M7" prr-nocodex-kimi
+run_pr_nocodex nocodex-kimi "$M7" "$TOPO_KIMI" "$IMPL_GROK_CFG"
+assert_eq "$PR_EXIT" "0" "codex missing, implementer on grok: the panel completes on the kimi seat"
+assert_contains "$PR_ERR" "family moonshot" "codex missing, implementer on grok: the kimi-code/k3.1-pro seat is the fallback"
+
+# NEGATIVE CONTROL: take the availability classification out and the old behaviour returns (the
+# precondition breaks the attempt loop, nothing is substituted, the panel fails).
+MUTDIR="$TEST_TMP/mut-pr"
+mkdir -p "$MUTDIR/scripts"
+for f in "$REPO_ROOT"/scripts/*; do [ "$(basename "$f")" = dispatch-plan-review.js ] || ln -s "$f" "$MUTDIR/scripts/$(basename "$f")"; done
+sed_mutant "$PR" "$MUTDIR/scripts/dispatch-plan-review.js" 's/^        unavailable: runnerAbsent,$/        unavailable: false,/' || fail "mutant not built"
+M8="$TEST_TMP/pr-m8.json"; mk_manifest "$M8" prr-nocodex-nc
+run_pr_nocodex nocodex-nc "$M8" "$TOPO_MIX" "$IMPL_GROK_CFG" "$MUTDIR/scripts/dispatch-plan-review.js"
+assert_neq "$PR_EXIT" "0" "NC: without the availability classification a missing codex fails the panel"
+assert_not_contains "$PR_OUT" "retry_substitution" "NC: and no substitution happens"
+
+# NEGATIVE CONTROL 2: with no fallback pool at all (opt-out) the same missing codex also fails
+M9="$TEST_TMP/pr-m9.json"; mk_manifest "$M9" prr-nocodex-nofill
+env -i HOME="$NOCODEX/home" PATH="$NOCODEX/bin:/usr/bin:/bin" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+  AUTOPILOT_TOPOLOGY_FILE="$TOPO_MIX" REVIEW_LOOP_CONFIG_OVERRIDE="$IMPL_GROK_CFG" AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$SEQ_NC" \
+  AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$TEST_TMP/nocodex-cap" AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/nocodex-acc" \
+  node "$PR" --repo-root "$PR_REPO" --plan-file "$PR_REPO/plan.md" --rubric-file "$PR_REPO/rubric.md" \
+    --ticket nocodex-nofill --session-id s-nocodex-nofill --generation 1 --manifest-file "$M9" \
+    --state-dir "$STATE" --allow-unregistered --no-topology-fallbacks >"$TEST_TMP/pr.out" 2>"$TEST_TMP/pr.err" </dev/null
+assert_neq "$?" "0" "NC2: --no-topology-fallbacks leaves the missing codex unrecoverable"
+
 finalize_test

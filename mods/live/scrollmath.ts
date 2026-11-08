@@ -130,13 +130,13 @@ export function sliceCells(text: string, from: number, width: number): string {
 // the frame's room for content: what is left after the head, the rule and the action strip (at least 1 row)
 export const roomOf = (o: { rows: number; headRows: number; barRows: number }): number => Math.max(1, o.rows - o.headRows - 1 - o.barRows)
 
-// bandlayout: a window anchored at the TOP (a card reads from its first line) over `total` rows with `room` rows to draw in. Overflowing content takes one row of `room` for the scroll hint (drawn by the
-// caller at the top of the window), the rest show `rows` content rows from `offset`. The model keeps the clamp state; `framed` is whether this draw overflowed (the ui.scroll hook takes the move only then).
-export function topWindow(total: number, room: number, m: ScrollModel): { hint: boolean; rows: number; offset: number; above: number; below: number } {
+// bandlayout: a window anchored at the TOP (a card reads from its first line) over `total` rows with exactly `room` rows to draw in; the caller keeps its hint Buttons and the action strip outside `room`
+// (§12.10). The model keeps the clamp state; `framed` is whether the content overflowed (the ui.scroll hook takes the move only then).
+export function fixedWindow(total: number, room: number, m: ScrollModel): { hint: boolean; rows: number; offset: number; above: number; below: number } {
   const hint = total > room
-  const rows = hint ? Math.max(1, room - 1) : total
+  const rows = Math.min(total, room)
   m.max = Math.max(0, total - rows)
-  m.room = rows
+  m.room = Math.max(1, rows)
   m.framed = hint
   m.total = total
   m.offset = Math.max(0, Math.min(m.offset, m.max))

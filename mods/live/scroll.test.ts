@@ -1,7 +1,7 @@
 // mods/live/scroll.test.ts — the scrolling window's arithmetic (design plan §12.10): the thumb, the clamp, every ui.scroll key, the cell wrap. The drawing is tested where it is used:
 // the 待決 tab in live.test.ts ("SCROLL decide ...") and the viewer window in viewer.test.ts.
 import { test, expect } from 'claude-code/testing'
-import { applyScroll, bottomRows, topWindow, followsTail, frameOf, jumpCells, jumpOffset, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
+import { applyScroll, bottomRows, fixedWindow, followsTail, frameOf, jumpCells, jumpOffset, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
 
 test('thumb: flush with the top at offset 0, in the middle halfway, flush with the bottom at the last offset', () => {
   // 100 rows through a 20-row window: the thumb is 4 cells, 16 cells of travel for 80 rows of offset
@@ -183,14 +183,14 @@ test('followsTail: a window never drawn follows; one whose offset stood at the l
   expect(followsTail(m)).toBe(false)
 })
 
-test('topWindow: content that fits takes every row and no hint; a taller one takes room - 1 rows and a hint row, the offset clamped to the end (bandlayout)', () => {
+test('fixedWindow: content that fits takes every row and no hint; a taller one takes exactly room rows, the offset clamped to the end (bandlayout)', () => {
   const m = newScroll()
-  expect(topWindow(5, 8, m)).toEqual({ hint: false, rows: 5, offset: 0, above: 0, below: 0 })
+  expect(fixedWindow(5, 8, m)).toEqual({ hint: false, rows: 5, offset: 0, above: 0, below: 0 })
   expect(m.framed).toBe(false)
   m.offset = 99
-  const w = topWindow(20, 8, m)
-  expect(w).toEqual({ hint: true, rows: 7, offset: 13, above: 13, below: 0 })
-  expect(m.framed && m.max === 13 && m.room === 7 && m.total === 20).toBe(true)
+  const w = fixedWindow(20, 8, m)
+  expect(w).toEqual({ hint: true, rows: 8, offset: 12, above: 12, below: 0 })
+  expect(m.framed && m.max === 12 && m.room === 8 && m.total === 20).toBe(true)
   m.offset = 4
-  expect(topWindow(20, 8, m)).toMatchObject({ offset: 4, above: 4, below: 9 })
+  expect(fixedWindow(20, 8, m)).toMatchObject({ offset: 4, above: 4, below: 8 })
 })

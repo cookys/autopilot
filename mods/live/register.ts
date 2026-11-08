@@ -47,7 +47,7 @@ import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './deci
 import type { ClaimCard, UndoDeps } from './decideundo'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
 
-import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, scrollHint, speedContent, stackBand, stackRows, usageDraw } from './band'
+import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
@@ -60,7 +60,7 @@ import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane } from './pane'
-import { type ScrollModel, newScroll, scrollHook, topWindow } from './scroll'
+import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
@@ -1235,7 +1235,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         columns, t, menuTitle: leftTitle(cards.length > 0 ? 'cards' : 'tabs', (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(), t),
         mainTitle: cards.length > 0 ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
         room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes, awaiting: (snapshot.awaiting ?? []).length,
-        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6, MAIN_CONTENT_ROWS - 1) }) : '' } : {}),
+        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}),
         ...(cardMode ? { noRight: true } : {}),
       }
       const plan0 = shellPlan(planInp)
@@ -1274,8 +1274,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const meta = cur === undefined ? (bandBatch.ans[curKey] ?? null) : heldNow ? t('decide.held') : sentOf(cur) ? t('decide.sent') : null
           const fixable = cur !== undefined && cur.id !== null && !heldNow && sentOf(cur) && !decideDialog(cur)
           const fixId = cur?.id ?? null
-          const all = cardMain(el, {
-            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill, meta, locked: curLocked, grey: cur === undefined || sentOf(cur),
+          const view = (split: boolean) => cardMain(el, {
+            key: curKey, question: cur === undefined ? bandBatch.q[curKey] : cur.question, background: cur === undefined ? null : cur.background, note, fill, meta, locked: curLocked, grey: cur === undefined || sentOf(cur), split,
             fix: fixable && fixId !== null ? { label: t('decide.fix'), onPress: () => { void decidePress($, 'fix:' + fixId).then(redraw) } } : null,
             advice: cur === undefined || (cur.recommendation === null && cur.why === null) ? null : { label: cur.recommendation ?? '', why: cur.why },
             notAuthorized: cur === undefined ? null : cur.not_authorized,
@@ -1283,14 +1283,20 @@ export function registerLive(on: Parameters<Register>[0]): void {
             options: cur === undefined || optN === 0 || cur.id === null ? [] : cur.options.map((o, k) => ({ label: o.label, description: o.description, picked: decidePick(cur, st) === k, recommended: cur.recommendation === o.label, key: optKey(cur.id as string, k) })),
           }, t)
           // the frame is as tall as the card, between the 6 content rows of the ordinary frame and what the host's maxRows leaves (the menu row, the quick row and the two frames take 4, the divider and
-          // the progress row 2); a card taller than that shows a window of its rows, top-anchored, with a hint row of two Buttons (guideline §13.3). Each card has its own offset (bandScroll).
-          const room = Math.max(MAIN_CONTENT_ROWS, Math.min(all.length, rows - 6))
+          // the progress row 2); the tree is never taller than maxRows (the host would open a window of its own over the quick row). A card taller than that goes to the split view (§12.10): the rows
+          // scroll over a scrollbar, the options and the Buttons stand fixed under them. Each card has its own offset (bandScroll).
+          const avail = rows - 6
+          let whole = view(false)
+          const split = whole.rows.length > avail
+          // the strip has priority (§12.10: the options stand in view): it takes its place whenever one scrolling row and the page row still fit above it, even at 12 rows where that leaves the rows less than the 3 the ruling wants (reported); a strip too tall for that, or a card with nothing to press (locked), scrolls whole with the page Buttons alone
+          if (split && !curLocked) { const sp = view(true); if (avail - (1 + sp.strip.length) >= 2) whole = sp }
+          const room = split ? avail : Math.max(MAIN_CONTENT_ROWS, whole.rows.length)
           if (room + 2 !== plan.bodyRows) { const again = shellPlan({ ...planInp, bodyRows: room + 2 }); if (again !== null) plan = again }
           const model = bandModel('decide')
           if (model.key !== curKey) { model.key = curKey; model.offset = 0 }
-          const win = topWindow(all.length, room, model)
           const page = (by: number) => { model.offset = Math.max(0, Math.min(model.max, model.offset + by * Math.max(1, model.room))); redraw() }
-          main = win.hint ? [scrollHint(el, t, win.above, win.below, () => page(-1), () => page(1)), ...all.slice(win.offset, win.offset + win.rows)] : all
+          if (split) main = cardSplit(el, t, { top: whole.rows, strip: whole.strip, room, cells: plan.geo.main, model, onPage: page })
+          else { fixedWindow(whole.rows.length, room, model); main = whole.rows }
           left = cardRows(cards, decideCursor, plan.geo.left, plan.bodyRows)
           onLeft = (id: string) => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { decideCursor = i; redraw() } }
           const lastCard = cards.find(c => c.id === decideLastId)
@@ -1318,7 +1324,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           progress = progressRow(el, unit.length === 0 ? [] : layoutBand(unit, mainCols - 1).segs.slice(0, -1), slot)
           quick = parts.quick
         }
-        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: bar.node }), bandScroll.decide?.framed === true)
+        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: bar.node }))
       }
     }
     let content: unknown[] = []

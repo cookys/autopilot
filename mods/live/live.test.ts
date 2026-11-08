@@ -7763,6 +7763,84 @@ for (const surface of SURFACES) {
     expect(main.some(r => r.includes('建議') && r.includes('甲案')), 'the 建議 row names the option').toBe(true)
     expect(main.some(r => r.includes('不授權')), 'the 不授權 row').toBe(true)
   })
+  const LONGLABEL = '長名稱的建議選項' + '一二三四五六七八九十'.repeat(3) + '結尾'
+  const LONGCARD = { id: 'd-lay00006', question: '六個選項而且名稱很長的卡', options: [{ label: LONGLABEL, description: '長名稱說明' }, ...[2, 3, 4, 5, 6].map(n => ({ label: '選項' + n, description: '' }))], recommendation: LONGLABEL, why: '因為名稱最長' }
+  const longRows = (raw: string[], cols: number): string[] => {
+    const main = mainCells(raw, cols)
+    expect(squash(main), 'every character of the long name at ' + cols).toContain(LONGLABEL)
+    expect(squash(main).includes('…'), 'no ellipsis at ' + cols).toBe(false)
+    expect(main.some(r => r.includes('★')), 'the ★ at ' + cols).toBe(true)
+    for (const r of raw) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+    return main
+  }
+  test('bandlayout: a recommended option with a 23-character-plus name wraps whole onto the rows under it, ★ kept, on an open card and on a sent (locked) card; at 80 and 100 columns (' + surface + ')', async ($, on) => {
+    const w = layWorld(on, [LONGCARD])
+    on('prompt.submit', ($$: any, e: any) => ({ text: e.text }))
+    claimHandle(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'], 60)
+    for (const cols of [80, 100]) {
+      const d = await drawShell($, cols, [], 60)
+      const main = longRows(d.raw, cols)
+      expect(d.buttons, 'open card: the option is a Button at ' + cols).toContain('opt:d-lay00006:0')
+      if (cols === 80 && surface === 'terminal') console.log('RENDER-BEGIN layout-longlabel-80\n' + d.raw.join('\n') + '\nRENDER-END')
+      expect(main.filter(r => /一二三四五六七八九十|結尾/.test(r)).length, 'the name takes more than one row at ' + cols).toBeGreaterThan(1)
+    }
+    await drawShell($, 160, ['opt:d-lay00006:0'], 60)
+    await drawShell($, 160, ['send'], 60)
+    await w.clock.advance(10_000)
+    for (const cols of [80, 100]) {
+      const d = await drawShell($, cols, [], 60)
+      expect(d.buttons.filter(b => b.startsWith('opt:')), 'locked card: no option Button at ' + cols).toEqual([])
+      longRows(d.raw, cols)
+    }
+  })
+  // bandlayout (§12.10, d-60e13bd4): a card taller than the frame scrolls its rows over a scrollbar; the options, the 附註 Button and the page Buttons stand in a fixed strip under a rule
+  const stripOf = (main: string[]): string[] => main.slice(main.findIndex(r => /^─+$/.test(r.trim())))
+  test('bandlayout: a tall card at 12 rows is never taller than maxRows, ends with the menu row and the quick row, and shows every option name and Button on the first screen (' + surface + ')', async ($, on) => {
+    layWorld(on, [LAYCARD, DQ2])
+    await start($, surface)
+    await drawShell($, 100, ['tab:decide'], 12)
+    for (const cols of [80, 100, 120, 160]) {
+      const d = await drawShell($, cols, [], 12)
+      expect(d.raw.length, 'rows at ' + cols).toBeLessThanOrEqual(12)
+      expect(d.raw[d.raw.length - 1], 'the quick row is last at ' + cols).toContain('送出')
+      expect(d.raw[d.raw.length - 2], 'the menu row above it at ' + cols).toContain('現況')
+      for (const r of d.raw) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+      const strip = stripOf(mainCells(d.raw, cols))
+      expect(strip.length, 'a fixed strip under a rule at ' + cols).toBeGreaterThan(1)
+      expect(squash(strip), 'the option names are on the first screen at ' + cols).toContain('★')
+      expect(strip.some(r => r.includes('甲案')) && strip.some(r => r.includes('乙案')), 'both options at ' + cols).toBe(true)
+      for (const k of ['opt:d-lay00001:0', 'opt:d-lay00001:1', 'fill', 'scroll:down']) expect(d.buttons, k + ' at ' + cols).toContain(k)
+      expect(d.raw.join('\n').includes('█'), 'the scrollbar thumb at ' + cols).toBe(true)
+      if (surface === 'terminal' && cols === 100) console.log('RENDER-BEGIN layout2-long-100\n' + d.raw.join('\n') + '\nRENDER-END')
+    }
+  })
+  test('bandlayout: scrolling to the bottom and back moves the rows and the thumb, never the fixed strip; the last line of the card shows at the bottom (' + surface + ')', async ($, on) => {
+    layWorld(on, [LAYCARD, DQ2])
+    await start($, surface)
+    await drawShell($, 100, ['tab:decide'], 12)
+    const top = await drawShell($, 100, [], 12)
+    const stripTop = stripOf(mainCells(top.raw, 100))
+    let d = top
+    for (let i = 0; i < 40 && d.buttons.includes('scroll:down'); i++) d = await drawShell($, 100, ['scroll:down'], 12)
+    expect(d.buttons.includes('scroll:down'), 'reached the bottom').toBe(false)
+    expect(d.buttons, 'a way back up').toContain('scroll:up')
+    const main = mainCells(d.raw, 100)
+    expect(squash(main.slice(0, main.findIndex(r => /^─+$/.test(r.trim())))), 'the last line of the card is shown').toContain('刪除任何資料')
+    expect(stripOf(main).filter(r => !r.includes('還有')), 'the strip rows (less the page row) do not move').toEqual(stripTop.filter(r => !r.includes('還有')))
+    expect(mainCells(d.raw, 100), 'the rows moved').not.toEqual(mainCells(top.raw, 100))
+    if (surface === 'terminal') console.log('RENDER-BEGIN layout2-bottom-100\n' + d.raw.join('\n') + '\nRENDER-END')
+  })
+  test('bandlayout: a six-option card hints 1-6 in the bottom frame, as every option is drawn (' + surface + ')', async ($, on) => {
+    layWorld(on, [LONGCARD])
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'], 12)
+    for (const maxRows of [12, 60]) {
+      const d = await drawShell($, 100, [], maxRows)
+      expect(d.raw.join('\n'), 'hint at ' + maxRows).toMatch(/1-6|1–6/)
+    }
+  })
   test('bandlayout: the 待決 tab has no roundtable or usage column (one window beside the card list), and the other tabs keep theirs (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
     layWorld(on, [LAYCARD, DQ2])
     await start($, surface)
@@ -7785,7 +7863,7 @@ for (const surface of SURFACES) {
     for (const cols of [80, 100, 160]) {
       for (const maxRows of [12, 30, 60]) {
         const d = await drawShell($, cols, [], maxRows)
-        expect(d.raw.length, 'the frame fits maxRows ' + maxRows + ' at ' + cols).toBeLessThanOrEqual(maxRows + 1) // +1: the spare row of a windowed card
+        expect(d.raw.length, 'the frame fits maxRows ' + maxRows + ' at ' + cols).toBeLessThanOrEqual(maxRows) // never taller than maxRows: the host would open a window of its own over the quick row
         for (const r of d.raw) expect(displayWidth(r), 'row width at ' + cols + '/' + maxRows).toBeLessThanOrEqual(cols)
       }
       const tall = await drawShell($, cols, [], 60)
@@ -7799,7 +7877,7 @@ for (const surface of SURFACES) {
     const small = await drawShell($, 100, [], 12)
     const tall = await drawShell($, 100, [], 40)
     const bottom = (d: { raw: string[]; buttons: string[] }): string[] => {
-      const n = d.raw.length - (d.buttons.includes('scroll:down') || d.buttons.includes('scroll:up') ? 1 : 0) // a windowed card has a spare row below the quick row
+      const n = d.raw.length
       expect(d.raw[n - 1], 'the quick row is last').toContain('送出')
       expect(d.raw[n - 2], 'the menu row holds the tabs').toContain('現況')
       expect(d.raw[n - 2], 'the open tab is in it').toContain('待決')
@@ -7819,7 +7897,7 @@ for (const surface of SURFACES) {
     const top = await drawShell($, 100, [], 12)
     expect(top.buttons, 'a window over the card at the top has a down half only').toContain('scroll:down')
     expect(top.buttons.includes('scroll:up')).toBe(false)
-    expect(top.raw.length, 'the frame is maxRows high and a spare row stands under it').toBe(13)
+    expect(top.raw.length, 'the frame is maxRows high, no spare row').toBe(12)
     expect(top.raw.join('\n').includes('還有'), 'the hint says how many rows are out of sight').toBe(true)
     expect(squash(mainCells(top.raw, 100))).not.toContain(LONG_BG)
     const scrolled = await drawShell($, 100, ['scroll:down', 'scroll:down'], 12)

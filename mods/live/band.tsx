@@ -9,7 +9,9 @@ import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } fr
 import { PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
-import { actionSeg, cardParas, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg, wrapPlain } from './ui'
+import { actionSeg, cardParas, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg, PALETTE, wrapPlain } from './ui'
+import { fixedWindow, thumbOf } from './scrollmath'
+import type { ScrollModel } from './scrollmath'
 import type { ForgeSegment } from './ui'
 import { barRule, barStrip, decideBandPlan } from './tabs'
 import { COL_GAP } from './speedview'
@@ -27,12 +29,11 @@ export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
   return <Box flexDirection="column">{band}{below}</Box>
 }
 
-// bandlayout: the rows drawn as they are, top to bottom, no band over them (the shell's own order puts the menu row second from the bottom). `spare`: one blank row under the last row, drawn while the
-// card view windows its rows, so the tree is one row taller than the band and the engine raises `ui.scroll` for the wheel and the scroll keys (the host never shows the row: the band is maxRows high
-// and the window stands at its top; the same trick as the pane's spare row, scroll.tsx)
-export function stackRows(el: { Box: El; Text: El }, rows: unknown[], spare = false) {
-  const { Box, Text } = el
-  return <Box flexDirection="column">{spare ? [...rows, <Text key="spare">{' '}</Text>] : rows}</Box>
+// bandlayout: the rows drawn as they are, top to bottom, no band over them (the shell's own order puts the menu row second from the bottom). The tree is never taller than the band: a host that gets more
+// than maxRows rows opens a window of its own and hides the last row (the quick row) behind a "n more" line, so there is no spare row here.
+export function stackRows(el: { Box: El }, rows: unknown[]) {
+  const { Box } = el
+  return <Box flexDirection="column">{rows}</Box>
 }
 
 // the scroll hint row of a window that holds more than it shows (guideline §13.3): `↑ 還有 N 行 · ↓ 還有 M 行`, each half a Button that moves the window a page (a click, or Tab and Enter, reach what
@@ -278,6 +279,7 @@ export type CardView = {
   note: string | null // a card the band cannot answer (typed or in a dialog) and has no way to fill: one dim line instead of options
   meta: string | null // the pane's card state, as the pane words it: `decide.sent` (already sent), `decide.held` (in its undo window), or, on a card the session or the CLI closed elsewhere, the answer line `decide.elsewhere`; drawn dim
   locked: boolean // sent or in the undo window: the options are plain text (no Button, no hotkey) and a press does nothing, as in the pane
+  split: boolean // a card too tall for the frame (§12.10): the options, the fill Button and the page Buttons go to the fixed strip under the scrolling rows; the descriptions stay in the rows, each led by its option's number. false: everything in the rows, each description right under its option
   grey: boolean // an answered card (sent, or closed elsewhere): the question and the options are dim theme text, the card stays in its place
   fix: { label: string; onPress: () => void } | null // the pane's 改答案 on a card sent from here
   fill: { label: string; onPress: () => void } | null // the button that puts the reply line in the prompt box (`$.prompt.fill`): an option card's 附註／其他回答, a typed card's 打字回答; null where the surface has no prompt box or the card is a dialog's
@@ -295,9 +297,11 @@ function paraRows(text: string, first: number, rest: number): { row: string; ind
   }
   return out
 }
-export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): unknown[] {
+export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): { rows: unknown[]; strip: unknown[] } {
   const { Box, Text, Button } = el
   const rows: unknown[] = []
+  const strip: unknown[] = []
+  const optTo = v.split ? strip : rows
   const w = Math.max(8, v.width)
   const dim = (on: boolean) => (on ? dimProps() : {})
   const line = (k: string, text: string, dimmed = false, lead = '') => rows.push(<Box key={k}><Text>{' ' + lead}</Text><Text {...dim(dimmed)} wrap="truncate">{text}</Text></Box>)
@@ -318,27 +322,59 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   if (v.background !== null) block('bg', keys[0], v.background, true)
   v.options.forEach((o, k) => {
     const hotkey = k < 6 ? String(k + 1) : undefined
+    const hasKey = !v.locked && Button !== undefined && hotkey !== undefined
+    // the name wraps by display width: the row has the pad and the pick mark in front (3 cells), the host's `k: ` in front of a Button, and the ★ behind the last piece (2 cells)
+    const room = Math.max(1, w - 3 - (hasKey ? 3 : 0) - 2)
+    const [head = '', ...more] = wrapPlain(o.label, room, room)
     const label = v.locked
-      ? <Text key="b" {...dim(v.grey)} wrap="truncate">{o.label + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(o.label)))}</Text>
-      : Button === undefined || hotkey === undefined
-      ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + o.label}</Text>
-      : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{o.label + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(o.label)))}</Button>
-    rows.push(
+      ? <Text key="b" {...dim(v.grey)} wrap="truncate">{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Text>
+      : !hasKey
+      ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + head}</Text>
+      : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
+    const star = o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>
+    optTo.push(
       <Box key={'o' + k}>
         <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>
         {label}
-        {o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>}
+        {more.length === 0 ? star : <Text key="rec">{''}</Text>}
       </Box>,
     )
-    if (o.description !== '') wrapPlain(o.description, w - 4, w - 4).forEach((r, i) => line('od' + k + '_' + i, r, true, '    '))
+    // the rest of a long name hangs under the first piece; the ★ follows the last piece
+    more.forEach((r, i) => optTo.push(
+      <Box key={'on' + k + '_' + i}><Text>{' '}</Text><Text {...dim(v.grey)} wrap="truncate">{'    ' + r}</Text>{i === more.length - 1 ? star : <Text key="rec">{''}</Text>}</Box>,
+    ))
+    if (o.description !== '') wrapPlain(o.description, w - 4, w - 4).forEach((r, i) => line('od' + k + '_' + i, r, true, v.split && i === 0 ? String(k + 1).padEnd(4) : '    '))
   })
   if (v.advice !== null) {
     block('ad', keys[1], v.advice.label, false)
     if (v.advice.why !== null) block('aw', null, v.advice.why, false)
   }
   if (v.notAuthorized !== null) block('na', keys[2], v.notAuthorized, false)
-  if (fillBtn !== null) rows.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
+  if (fillBtn !== null) optTo.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
   if (v.meta === null && v.note !== null) line('note', v.note, true)
+  return { rows, strip }
+}
+
+// a card taller than the frame (§12.10, owner d-60e13bd4): `top` scrolls in `room - strip rows - 1 rule - 1 page row` rows with a scrollbar column at its right edge, then one rule, then the fixed `strip`
+// (the options, the fill Button, the page Buttons). The strip never moves with the scroll. `cells` is the main window's width. Returns exactly `room` rows when the strip fits; a strip taller than `room`
+// leaves the window one row and the rest is cut by the shell (reported, not hidden: no layout of its own is invented).
+export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top: unknown[]; strip: unknown[]; room: number; cells: number; model: ScrollModel; onPage: (by: number) => void }): unknown[] {
+  const { Box, Text } = el
+  const fixed = 1 + o.strip.length // the rule and the strip
+  const fits = o.top.length <= o.room - fixed
+  const winRows = Math.max(1, fits ? o.room - fixed : o.room - fixed - 1) // an overflowing window gives one more row to the page Buttons
+  const win = fixedWindow(o.top.length, winRows, o.model)
+  const th = thumbOf(o.top.length, winRows, win.offset)
+  const shown = o.top.slice(win.offset, win.offset + win.rows)
+  const rows: unknown[] = shown.map((r, i) => {
+    const on = th !== null && i >= th.top && i < th.top + th.len
+    const bar = th === null ? <Text key="sb">{' '}</Text> : <Text key="sb" color={on ? PALETTE.here : PALETTE.structure}>{on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track}</Text>
+    return <Box key={'sw' + i}><Box key="c" width={o.cells - 1} flexShrink={0} overflow="hidden">{r}</Box>{bar}</Box>
+  })
+  while (rows.length < winRows) rows.push(<Text key={'sp' + rows.length}>{' '}</Text>)
+  rows.push(<Text key="rule" color={PALETTE.structure}>{GLYPHS.structure.rule.repeat(Math.max(1, o.cells - 1))}</Text>)
+  rows.push(...o.strip)
+  if (win.hint) rows.push(scrollHint(el, t, win.above, win.below, () => o.onPage(-1), () => o.onPage(1)))
   return rows
 }
 

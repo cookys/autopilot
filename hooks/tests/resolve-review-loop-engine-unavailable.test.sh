@@ -10,14 +10,23 @@ seed_dogfood_implementer_pin
 
 SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
 
+# The two default cases run from an empty non-git cwd so the ladder lands on the roster template,
+# not on this repo's own .claude/review-loop-config.md (which a canary may set to cloud-fallback).
+NOCFG="$TEST_TMP/nocfg"; mkdir -p "$NOCFG"
+
 # --- Test 1: Default (no config) --field on_engine_unavailable prints ask ---
 unset REVIEW_LOOP_CONFIG_OVERRIDE
-val=$(bash "$SCRIPT" --field on_engine_unavailable)
+val=$(cd "$NOCFG" && bash "$SCRIPT" --field on_engine_unavailable)
 assert_eq "ask" "$val" "default --field on_engine_unavailable is ask"
+# Negative control: a project cloud-fallback config in that cwd must turn the same read away from ask.
+mkdir -p "$NOCFG/.claude"; printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' > "$NOCFG/.claude/review-loop-config.md"
+val_nc=$(cd "$NOCFG" && bash "$SCRIPT" --field on_engine_unavailable)
+[ "$val_nc" != "ask" ] || fail "negative control: a project cloud-fallback config must not read as the default ask"
+mv "$NOCFG/.claude" "$TEST_TMP/nocfg-claude-trash"
 
 # --- Test 2: Default JSON contains the key and it appears AFTER min_panel_size ---
 unset REVIEW_LOOP_CONFIG_OVERRIDE
-json=$(bash "$SCRIPT")
+json=$(cd "$NOCFG" && bash "$SCRIPT")
 assert_contains "$json" '"on_engine_unavailable": "ask"' "default JSON has on_engine_unavailable=ask"
 min_pos=$(printf '%s' "$json" | grep -bo '"min_panel_size"' | head -1 | cut -d: -f1)
 on_pos=$(printf '%s' "$json" | grep -bo '"on_engine_unavailable"' | head -1 | cut -d: -f1)

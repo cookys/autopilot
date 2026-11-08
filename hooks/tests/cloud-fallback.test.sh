@@ -213,7 +213,13 @@ resolver_all "$REPO_ROOT"
 assert_contains "$RES_OK" '"runner": "codex"' "valid cloud rung is emitted"
 assert_contains "$RES_SHIM" "rc=3" "cc-shim rung exits 3"
 assert_contains "$RES_NORUNG" "rc=3" "cloud-fallback without a rung exits 3"
-assert_eq "ask" "$(REVIEW_LOOP_CONFIG_OVERRIDE=/nonexistent bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field on_engine_unavailable < /dev/null)" "default stays ask"
+# Closed: run from a cwd with no project config and outside the repo, so the ladder lands on the roster template, not on this repo's own .claude config.
+NOCFG="$TEST_TMP/nocfg"; mkdir -p "$NOCFG"
+assert_eq "ask" "$(cd "$NOCFG" && REVIEW_LOOP_CONFIG_OVERRIDE=/nonexistent bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field on_engine_unavailable < /dev/null)" "default stays ask"
+# Negative control: a project config saying cloud-fallback in that cwd must turn the same read red.
+mkdir -p "$NOCFG/.claude"; printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' > "$NOCFG/.claude/review-loop-config.md"
+[ "$(cd "$NOCFG" && REVIEW_LOOP_CONFIG_OVERRIDE=/nonexistent bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field on_engine_unavailable < /dev/null)" != "ask" ] || fail "negative control: a project cloud-fallback config must not read as the default ask"
+mv "$NOCFG/.claude" "$TEST_TMP/nocfg-claude-trash"
 T="$(mk_tree mutR)"
 sed_mutant "$REPO_ROOT/scripts/resolve-review-loop.sh" "$T/scripts/resolve-review-loop.sh" \
   's/^    codex|agy|grok|cursor|kimi|qoderclicn) ;;$/    codex|agy|grok|cursor|kimi|qoderclicn|cc-shim) ;;/'

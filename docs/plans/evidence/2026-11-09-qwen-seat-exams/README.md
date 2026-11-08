@@ -43,3 +43,5 @@ Note: cell 2 (VA on) END line is missing because cell-seat.sh was edited while t
 | 7-reviewer-think-off-attempt1-persistfail | 2026-11-09T05:04:51+08:00 | 2026-11-09T05:06:00+08:00 |  | 2 | no row (persist refused) |  |  |
 | 8-reviewer-think-on | 2026-11-09T05:15:25+08:00 | 2026-11-09T05:23:07+08:00 | 457.178 | 0 | qualified | {"corpus_pass":"42/42","false_pass_critical":0,"specificity":"0/38","repeated_trials":2} | 4 |
 | 8-reviewer-think-on-attempt1-persistfail | 2026-11-09T05:07:28+08:00 | 2026-11-09T05:15:19+08:00 |  | 2 | no row (persist refused) |  |  |
+| 9-implementer-effort-medium | 2026-11-09T05:28:56+08:00 | 2026-11-09T05:33:58+08:00 | 301.317 | 0 | qualified | {"corpus_pass":"24/24","false_pass_critical":0,"integrity_violations":0,"fabricated_changes":0,"contract_violations":0,"oracle_misses":0,"repeated_trials":2} | 5 |
+| 9-implementer-effort-medium-attempt1-persistfail | 2026-11-09T05:23:18+08:00 | 2026-11-09T05:28:49+08:00 |  | 2 | no row (persist refused) |  |  |

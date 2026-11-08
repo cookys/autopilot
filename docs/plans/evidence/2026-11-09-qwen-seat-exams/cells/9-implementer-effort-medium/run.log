@@ -1,0 +1,4 @@
+2026-11-09T05:28:55+08:00 gate: GO present, PAUSE absent, /v1/models=200
+2026-11-09T05:28:56+08:00 implementer START model=Qwen3.8-27B-QUASAR-NVFP4 endpoint=qwen_local effort=medium (forwarded by cc-shim) harness=dispatch-hetero:aae44870 runner_version=2.1.319-Claude-Code
+2026-11-09T05:33:58+08:00 implementer effort=medium END rc=0
+rc=0

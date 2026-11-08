@@ -1,0 +1,142 @@
+engine-qualify: --endpoint 'qwen_local' is PLAINTEXT to a private-range address (http://<private-ip>:8001); the row will disclose transport_security=plaintext_private
+engine-qualify: cannot persist qualifier evidence: restrictive evidence eeeb271ea4630a66c34bf938d61340645908a6502c69efd45c3df8017b1da513 is not bound to the active qualification
+Usage:
+  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer|consult|discuss|foreman>
+    --engine <display-id> --model <exact-model-id> --model-version <version>
+    --runner <name> --runner-version <version> --family <family>
+    --harness-version <version> --effort <effort>
+    --prompt-config-hash <sha256> --semantic-fingerprint <sha256>
+    --containment-fingerprint <sha256>
+    (--panel-cmd '<trusted command>' |
+      --remote-provider-cmd '<trusted adapter>' --remote-provider <provider-id>)
+    [--panel-bind-ro <absolute-source>=</panel/or/auth/path>] [--panel-env <name>]
+    [--provider-env <name>] [--remote-timeout-ms <n>]
+    --task-class <class> --domain <domain> --language <language> --tool <tool>
+    [--trials <n>] [--store <path>] [--emit-row]
+    [--seat-file <json>] [--emit-record] [--allow-effort-mismatch]
+
+  --effort is only a label. Before any provider call the label is compared with the effort the
+  provider is told to send (QRP_HTTP_EFFORT / QRP_CLI_EFFORT, counted when passed via --provider-env /
+  --panel-env). A mismatch exits 2 with no exam and no spend; --allow-effort-mismatch runs it anyway
+  and marks the emitted row effort_check_override=true (effort_check stays mismatch). An effort that
+  cannot be observed (custom panel command, no QRP_* variable) is never blocked.
+
+  With --seat-file, identity fields that were not passed as flags are derived
+  before any exam write (a flag always wins):
+    runner-version        scripts/lib/runner-binary.js (fail closed; no "unknown")
+    family                familyOfEngine (scripts/lib/stage-write.js) on the model
+                          id: named vendors (minimax/abab, kimi/moonshot, glm/zhipu,
+                          grok/composer, gpt/codex/o1/o3/o4, claude/opus/sonnet/haiku,
+                          qwen/qwq) before gemini/bison/flash; "unknown" exits 2 and
+                          tells the caller to pass --family
+    semantic-fingerprint  the implementer constant EXPECTED_IMPL_CORPUS_HASH
+    harness-version, containment-fingerprint, task-class, domain, language, tool
+                          references/qualification-headless-pins.json
+  Source precedence (a field is filled from the first source that has it):
+    engine, model, model-version, runner, effort, prompt-config-hash:
+      the seat file supplies them; an explicit flag that disagrees with the
+      seat file value is not an override, it exits 2.
+    runner-version, family, semantic-fingerprint: explicit flag, else derived.
+    harness-version, containment-fingerprint, task-class, domain, language,
+    tool: explicit flag, else the pins file.
+  So: flag, then derived, then pins; the seat file wins only for the six
+  fields it carries. seat-preview prints the winner per field under "sources".
+  Headless derivation is only pinned for the implementer role. Any other role
+  that still needs a pinned field exits 2 and names the first missing scope
+  flag (task-class, then domain, language, tool). A pins file that is unreadable,
+  malformed, or has an unknown key exits 2 and names that pins file and the
+  reason. Seat file missing or schema-invalid stays exit 4.
+
+  scripts/engine-qualify.sh seat-preview --seat-file <f> [--json]
+    [the same identity flags the real run accepts]
+  Runs the same parse and derivation, prints one JSON document on stdout, and
+  exits without sitting an exam and without writing anything. Output is JSON
+  by default; --json is accepted and identical.
+  Schema: an object with role, corpus_version, argv, and sources.
+  argv and sources use these keys: engine, model, model-version, runner,
+  runner-version, family, harness-version, effort, prompt-config-hash,
+  semantic-fingerprint, containment-fingerprint, task-class, domain, language,
+  tool. task-class, domain, language, and tool are arrays.
+  Each sources value is one of "flag", "seat", "derived", "pinned".
+  seat-preview exit codes: 0 success, 2 derivation or precondition failure,
+  4 seat file missing or schema-invalid.
+    [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
+      also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
+      Implementer impl-dispatch-ledger.jsonl and impl-exchanges.jsonl add, for a
+      non-pass case whose dispatch status is not committed: dispatch_error_class
+      (the dispatch JSON error_category, or null when that field is absent — never the
+      free-text error), dispatch_error, agent_log_tail (last 40 lines after the
+      canary in literal/base64/hex/reversed form, the endpoint base_url and its
+      host, and any http(s) URL are masked; secrets redacted; 8 KiB cap)
+      and agent_log_path (canary masked; a file path, so URLs are left as-is).
+      An integrity_violation row also adds integrity_violation_details, each
+      {type, path} only — never the canary value.
+    [--price-usd-per-mtok-in <n> --price-usd-per-mtok-out <n> --price-as-of <YYYY-MM-DD>
+      --price-source <manual|measured> [--price-ref <text>]]   (all four required together;
+      without them cost stays source=unknown and usage.usd_per_solved is null)
+    [--version-source runtime|operator-asserted]   (CLI transports observe no
+      runtime model id — pass operator-asserted so the row says so)
+
+  scripts/engine-qualify.sh corpus-version [--role <role>]
+    Print the current corpus_version for every qualification role, or one role,
+    as JSON. Runs no exam and writes no files. Call it when a seat file needs
+    the live version, including after the foreman asset pins move.
+    corpus-version --help prints this usage text and exits 0.
+
+  implementer is LIVE-RAIL: no panel/remote broker transport — cases dispatch
+  through scripts/dispatch-hetero.sh (plan 2026-08-22-implementer-qualification-
+  suite). Implementer-only flags:
+    [--dispatch-bin <path>]     (default scripts/dispatch-hetero.sh; test seam)
+    [--runner-bin <path>]       (forwarded to the rail's per-runner bin seam —
+      --grok-bin/--codex-bin/--agy-bin/... — so a smoke can substitute ONLY the
+      paid engine while the real rail runs)
+    [--dispatch-timeout <dur>]  (per-case rail timeout, default corpus 600s)
+    [--endpoint <name>]         (--runner cc-shim ONLY: resolve ANTHROPIC_BASE_URL/AUTH_TOKEN
+      through scripts/resolve-endpoint.sh — the SAME named-endpoint definition daily
+      routing uses — instead of the raw env passthrough; not-ready exits 2 uncharged;
+      the emitted row discloses endpoint {name, transport_security}; base_url stays on the rail only)
+  Qualification has no expiry: there is no --expires-days (it is refused). A seat loses standing
+  only through accumulated strikes (references/strike-decay.md), and regains it by re-sitting.
+
+  consult and discuss are QUALIFICATION-SEAT roles (never live-rail): they take
+  the same --panel-cmd / --remote-provider-cmd broker transport as reviewer/owner
+  and REJECT --dispatch-bin/--runner-bin/--dispatch-timeout with a usage error.
+  Both support [--plan]: a dry-run that verifies the five frozen identities
+  (generator, grader, corpus, rubric, seal), runs the corpus admission gates,
+  prints the case plan, and exits WITHOUT any provider/broker call. [--plan]
+  combined with an implementer-only flag exits 2 (the flags are rejected before
+  --plan is ever consulted).
+
+  A LIVE (non-plan) consult/discuss administration additionally requires
+  [--execute] — real money, real provider calls. Without it, the command
+  refuses loud, naming this flag and the Board authorization in
+  docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md
+  ("Board decision — 2026-08-28 (authorization)"). --execute requires the
+  --remote-provider-cmd/--remote-provider (case-broker) transport — the bare
+  --panel-cmd transport has no identity binding and is refused for these
+  two roles.
+
+The qualifier generates fresh role-specific known-bad, clean, and defect-reversal trials.
+Reviewer output uses {"verdict":"pass|fail","findings":[...]} with a structured
+behavioral-call-v1 witness. Owner output uses
+{"decision":"accept|reject","violations":[...]} against a distinct intent/control corpus.
+Local panels run in a fresh fail-closed bubblewrap sandbox. Remote panels cross a one-use Unix
+socket to a host broker; credentials and network access never enter the evaluator sandbox.
+The repository, corpus, oracle, host home, and previous cases are not mounted or disclosed.
+JSONL output is diagnostic telemetry, not admission authority. Only a live in-process
+host-observed run can create a session-local role-capability verifier; serializing the run
+destroys that capability.
+
+Exit codes:
+  0 = qualification passed
+  1 = qualification failed
+  2 = usage/precondition error
+  With --seat-file or --emit-record, 0, 1, and 2 stay for those outcomes and
+  these codes also apply. Without either flag, 3, 4, and 5 are not used, and a
+  no_verdict run stays exit 1 (the 1-versus-3 split is headless only):
+  0 = qualification passed
+  1 = real qualification failure (status failed)
+  2 = usage or precondition error that is not about the seat file
+  3 = no_verdict or an infrastructure failure (the exam could not reach a verdict)
+  4 = seat file missing, unreadable, or schema-invalid
+  5 = emitted record failed validateRecord or checkRecordSemantics

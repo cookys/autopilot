@@ -20,16 +20,27 @@
 // run    Dispatches every seat that THIS account can reach, in parallel, each blind to the others,
 //        then merges its own output. A seat whose runner binary (grok, kimi) or endpoint (glm,
 //        minimax: resolve-endpoint.sh ready) is not found here is "unavailable" - not a failure.
-//        A seat of the implementer's own family is "excluded_family" and never dispatched.
-//        Writes <out>/seats/<seat>.json (dispatch-review's stdout, byte for byte), <out>/run.json
+//        A seat of the implementer's own family is "excluded_family" and never dispatched. A seat's family is fixed in the table
+//        (xai, moonshot, zhipu, minimax), never derived from --seat-model; --implementer-family must be a known family id.
+//        Writes <out>/seats/<seat>.json (dispatch-review's stdout; plus an answers[] field in question mode), <out>/run.json
 //        (what happened to each seat) and <out>/merged.json.
 //        Never borrows another account's credentials or HOME: a seat this account cannot reach is
 //        run by the account that can (grok in team, kimi/glm/minimax in cookys) and merged later.
 // merge  Reads one or more run dirs (they may come from different accounts, moved by fleet blob),
-//        writes <out>/merged.json: union of findings, per-seat state, round_valid.
+//        writes <out>/merged.json: union of findings, per-seat state, round_valid. Run dirs whose implementer_family differ are
+//        refused (rc 2); a seat whose own family equals it is excluded_family and never counts as valid.
 //
-// --pack may also be a review-pack directory or .tar/.tar.xz (FILES.sha256 verified first; --diff default = the one top-level *.diff;
-// QUESTIONS.md becomes --spec-file; other small text files become one --pack-file context, capped at 300 KB).
+// --pack may also be a review-pack directory or .tar/.tar.xz. Pack content is untrusted: every path is checked by lstat,
+// a symlink or special file anywhere in the pack refuses it (rc 2), a tar with an absolute or ".." member (or a link member)
+// is refused before extraction, and --diff / the questions file must resolve inside the pack. A directory or tar pack needs
+// FILES.sha256, its entries must be relative without "..", and its list must equal the pack's file set exactly (then sha256sum -c).
+// A single file passed as --pack needs no FILES.sha256. --diff default = the one top-level *.diff or *.patch.
+// QUESTIONS.md becomes --spec-file; other small text files become one --pack-file context, capped at 300 KB. Files left out
+// (binary or over the cap) are listed first in the context ("以下檔案因大小未附：...") and as skipped_files in run.json and merged.json.
+// Question mode: when QUESTIONS.md has lines starting Q<n> (or `<n>.` / `<n>)`), an answer-format request is appended to the spec (<out>/spec.txt) and each
+// seat must write one `ANSWER Q<n> | conclusion=.. | basis=<file:line> | counterexample=..` line per question inside FINDINGS (the lines
+// dispatch-review keeps). They are parsed into the seat file's answers[]; merged.json lists answers by question and missing_answers
+// (a valid seat that left a question out or left a field empty); that never changes round_valid.
 // What is reviewed: --pack is the artifact under review as TEXT - a diff, a plan or a criteria
 // document alike. dispatch-review.sh makes --diff-file mandatory and treats --pack-file as a
 // methodology pack prepended inside the nonce protocol, so --pack goes to --diff-file and the
@@ -55,14 +66,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
-const { familyOfEngine } = require('./lib/stage-write');
 
 const SEATS = Object.freeze({
-  grok: { runner: 'grok', model: 'grok-4.7', effort: 'low', bin: 'grok' },
-  kimi: { runner: 'kimi', model: 'kimi-code/k3', effort: 'high', bin: 'kimi' },
-  glm: { runner: 'anthropic-compatible', model: 'glm-5.3', effort: 'high', endpoint: 'glm' },
-  minimax: { runner: 'anthropic-compatible', model: 'MiniMax-M3', effort: 'high', endpoint: 'minimax' },
+  grok: { runner: 'grok', model: 'grok-4.7', effort: 'low', bin: 'grok', family: 'xai' },
+  kimi: { runner: 'kimi', model: 'kimi-code/k3', effort: 'high', bin: 'kimi', family: 'moonshot' },
+  glm: { runner: 'anthropic-compatible', model: 'glm-5.3', effort: 'high', endpoint: 'glm', family: 'zhipu' },
+  minimax: { runner: 'anthropic-compatible', model: 'MiniMax-M3', effort: 'high', endpoint: 'minimax', family: 'minimax' },
 });
+// Family ids as scripts/lib/stage-write.js familyOfEngine() returns them, plus `claude` (what the PM writes for anthropic).
+// A seat's family is fixed by the seat, never by --seat-model.
+const KNOWN_FAMILIES = new Set(['anthropic', 'claude', 'openai', 'xai', 'moonshot', 'zhipu', 'minimax', 'google', 'alibaba', 'deepseek', 'meituan', 'reflection']);
 const MIN_VALID = 2;
 const VERDICTS = new Set(['SHIP-AS-IS', 'FIX-THEN-SHIP']);
 
@@ -151,59 +164,159 @@ function dispatchSeat(name, seat, opts) {
 
 const CONTEXT_CAP = 300 * 1024;
 
+function lst(p) {
+  try { return fs.lstatSync(p); } catch (e) { return die(`pack path unreadable: ${p} (${e.code})`); }
+}
+
+// Every entry under root, by lstat (never following a link). A symlink or a special file anywhere refuses the pack.
+// Returns the sorted relative paths of the regular files.
+function walkTree(root) {
+  const files = [];
+  (function walk(d) {
+    for (const f of fs.readdirSync(d).sort()) {
+      const p = path.join(d, f);
+      const st = lst(p);
+      if (st.isSymbolicLink() || (!st.isDirectory() && !st.isFile())) die(`pack refused: ${path.relative(root, p)} is a symlink or a special file`);
+      if (st.isDirectory()) walk(p); else files.push(path.relative(root, p));
+    }
+  })(root);
+  return files;
+}
+
+// A pack file we are going to read must be a regular file whose real path stays under the pack root.
+function insideRoot(rootReal, p, what) {
+  if (!lst(p).isFile()) die(`pack refused: ${what} is not a regular file: ${p}`);
+  const rp = fs.realpathSync(p);
+  if (!rp.startsWith(rootReal + path.sep)) die(`pack refused: ${what} resolves outside the pack: ${p}`);
+}
+
+function badTarName(n) { return n.startsWith('/') || n.split('/').includes('..'); }
+
+// FILES.sha256 is mandatory for a directory or tar pack and must cover exactly the files that are there.
+function checkManifest(root, files) {
+  const sums = 'FILES.sha256';
+  if (!files.includes(sums)) die('pack refused: FILES.sha256 is missing');
+  const listed = new Set();
+  for (const line of fs.readFileSync(path.join(root, sums), 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    const m = line.match(/^([0-9a-fA-F]{64}) [ *](.+)$/);
+    if (!m) die(`pack refused: malformed FILES.sha256 line: ${line.slice(0, 80)}`);
+    const p = m[2];
+    if (p.startsWith('/') || p.startsWith('\\') || p.split('/').includes('..')) die(`pack refused: FILES.sha256 entry is absolute or contains "..": ${p}`);
+    listed.add(path.posix.normalize(p));
+  }
+  const actual = new Set(files.filter((f) => f !== sums));
+  const extra = [...actual].filter((f) => !listed.has(f));
+  const missing = [...listed].filter((f) => !actual.has(f));
+  if (extra.length || missing.length) die(`pack refused: FILES.sha256 does not match the file set (not listed: ${extra.slice(0, 5).join(', ') || '-'}; listed but absent: ${missing.slice(0, 5).join(', ') || '-'})`);
+  const r = spawnSync('sha256sum', ['-c', '--quiet', sums], { cwd: root, encoding: 'utf8' });
+  if (r.status !== 0) die(`pack refused: FILES.sha256 does not match (${(r.stdout + r.stderr).trim().split('\n').slice(0, 3).join('; ')})`);
+}
+
+const ANSWER_RE = /^ANSWER\s+Q(\d+)\s*\|\s*conclusion=(.*?)\s*\|\s*basis=(.*?)\s*\|\s*counterexample=(.*)$/;
+
+function questionIds(text) {
+  const ids = [];
+  for (const line of String(text).split('\n')) { const m = line.match(/^(?:Q(\d+)\b|(\d+)[.)]\s)/); const id = m && (m[1] || m[2]); if (id && !ids.includes(id)) ids.push(id); }
+  return ids;
+}
+
+// Appended to the pack's QUESTIONS.md so every seat answers each numbered question, inside the FINDINGS section
+// (dispatch-review.sh keeps every non-empty line there until NO-FINDING-PROOF).
+function answerFormat(ids) {
+  return `\n\n--- Answer format for the numbered questions above (added by review-jury) ---\n`
+    + `Answer every question (${ids.map((i) => `Q${i}`).join(', ')}). Put one line per question inside the FINDINGS section of your wrapped block, after your finding lines (or after the word none). Each answer is ONE line, outside any code fence, in exactly this shape:\n`
+    + `ANSWER Q<n> | conclusion=<your answer> | basis=<file:line, one or more> | counterexample=<a concrete counterexample, or none: and the reason none can be constructed>\n`
+    + `Keep each ANSWER line under 600 characters. The answer lines do not change the verdict rules: a reachable counterexample is also a MUST-FIX finding line in the usual form.\n`;
+}
+
+function parseAnswers(text) {
+  const out = []; const seen = new Set();
+  for (const raw of String(text || '').split('\n')) {
+    const m = raw.trim().match(ANSWER_RE);
+    if (!m || seen.has(m[1])) continue;
+    const [conclusion, basis, counterexample] = [m[2], m[3], m[4]].map((x) => x.trim());
+    if (!conclusion || !basis || !counterexample) continue;
+    seen.add(m[1]);
+    out.push({ q: m[1], conclusion, basis, counterexample });
+  }
+  return out;
+}
+
 // --pack may be a single text file (the artifact itself), a review-pack directory or a .tar/.tar.xz of one.
-// A pack with FILES.sha256 is verified first (sha256sum -c inside the pack); any mismatch refuses the pack.
-// Inside a pack: diff = --diff or the only top-level *.diff; spec = --questions or QUESTIONS.md;
+// Pack content is untrusted data: it is only read, never executed. Every path is checked by lstat: a symlink or a
+// special file anywhere in the pack refuses it; a tar with an absolute or ".." member name is refused before it is
+// extracted. A directory or tar pack needs FILES.sha256, and its list must equal the file set (sha256sum -c after).
+// Inside a pack: diff = --diff or the only top-level *.diff / *.patch; spec = --questions or QUESTIONS.md;
 // every other small text file is concatenated into one context file (<= CONTEXT_CAP, the rest listed as skipped).
-// Pack content is untrusted data: it is only read, never executed.
 function resolvePack(o) {
-  let root = o.pack;
+  let root = fs.realpathSync(o.pack);
   const st = fs.statSync(root);
-  if (st.isFile() && !/\.(tar|tar\.xz|txz)$/.test(root)) return { diff: root, spec: o['spec-file'], ctx: o.methodology };
+  if (st.isFile() && !/\.(tar|tar\.xz|txz)$/.test(root)) return { diff: root, spec: o['spec-file'], ctx: o.methodology, questions: [], skipped: [] };
   const work = path.join(o.out, 'pack');
   if (st.isFile()) {
+    const names = spawnSync('tar', ['-tf', root], { encoding: 'utf8' });
+    if (names.status !== 0) die(`cannot list ${root}: ${names.stderr}`);
+    for (const n of names.stdout.split('\n')) if (n && badTarName(n)) die(`pack refused: tar member with an absolute or ".." name: ${n}`);
+    const verbose = spawnSync('tar', ['-tvf', root], { encoding: 'utf8' });
+    for (const l of verbose.stdout.split('\n')) if (/^[lh]/.test(l)) die(`pack refused: tar member is a link: ${l.slice(0, 120)}`);
     fs.mkdirSync(work, { recursive: true });
     const r = spawnSync('tar', ['-xf', root, '-C', work], { encoding: 'utf8' });
     if (r.status !== 0) die(`cannot extract ${root}: ${r.stderr}`);
+    walkTree(work);
     const top = fs.readdirSync(work);
-    root = top.length === 1 && fs.statSync(path.join(work, top[0])).isDirectory() ? path.join(work, top[0]) : work;
-  }
+    root = top.length === 1 && lst(path.join(work, top[0])).isDirectory() ? path.join(work, top[0]) : work;
+  } else if (!st.isDirectory()) die(`pack refused: ${root} is neither a file nor a directory`);
+  const rootReal = fs.realpathSync(root);
+  const files = walkTree(root);
+  checkManifest(root, files);
   const sums = path.join(root, 'FILES.sha256');
-  if (fs.existsSync(sums)) {
-    const r = spawnSync('sha256sum', ['-c', '--quiet', 'FILES.sha256'], { cwd: root, encoding: 'utf8' });
-    if (r.status !== 0) die(`pack refused: FILES.sha256 does not match (${(r.stdout + r.stderr).trim().split('\n').slice(0, 3).join('; ')})`);
-  }
-  const top = fs.readdirSync(root).filter((f) => fs.statSync(path.join(root, f)).isFile());
+  const top = files.filter((f) => !f.includes('/'));
   let diff = o.diff ? path.join(root, o.diff) : null;
   if (!diff) {
-    const ds = top.filter((f) => f.endsWith('.diff'));
-    if (ds.length !== 1) die(`pack needs exactly one top-level *.diff or --diff (found ${ds.length})`);
+    const ds = top.filter((f) => f.endsWith('.diff') || f.endsWith('.patch'));
+    if (ds.length !== 1) die(`pack needs exactly one top-level *.diff or *.patch, or --diff (found ${ds.length})`);
     diff = path.join(root, ds[0]);
   }
+  insideRoot(rootReal, diff, 'the diff');
   const qf = path.join(root, o.questions || 'QUESTIONS.md');
-  if (o.questions && !fs.existsSync(qf)) die(`--questions not found in pack: ${o.questions}`);
-  const spec = fs.existsSync(qf) ? qf : o['spec-file'];
-  const files = [];
-  (function walk(d) { for (const f of fs.readdirSync(d).sort()) { const p = path.join(d, f); fs.statSync(p).isDirectory() ? walk(p) : files.push(p); } })(root);
-  files.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+  const hasQf = fs.lstatSync(qf, { throwIfNoEntry: false }) !== undefined;
+  if (o.questions && !hasQf) die(`--questions not found in pack: ${o.questions}`);
+  if (hasQf) insideRoot(rootReal, qf, 'the questions file');
+  let spec = hasQf ? qf : o['spec-file'];
+  let questions = [];
+  if (hasQf) {
+    questions = questionIds(fs.readFileSync(qf, 'utf8'));
+    if (questions.length) {
+      spec = path.join(o.out, 'spec.txt');
+      fs.writeFileSync(spec, fs.readFileSync(qf, 'utf8') + answerFormat(questions));
+    }
+  }
+  const ordered = files.map((f) => path.join(root, f));
+  ordered.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
   let text = ''; const skipped = [];
-  for (const f of files) {
+  for (const f of ordered) {
     if (f === diff || f === qf || f === sums) continue;
     const buf = fs.readFileSync(f);
     const rel = path.relative(root, f);
-    if (buf.includes(0) || text.length + buf.length > CONTEXT_CAP) { skipped.push(rel); continue; }
+    if (buf.includes(0)) { skipped.push({ path: rel, bytes: buf.length, reason: 'binary' }); continue; }
+    if (Buffer.byteLength(text) + buf.length > CONTEXT_CAP) { skipped.push({ path: rel, bytes: buf.length, reason: `over the ${CONTEXT_CAP} byte context cap` }); continue; }
     text += `\n===== ${rel} =====\n${buf.toString('utf8')}\n`;
   }
-  if (skipped.length) text += `\n===== skipped (binary or over the ${CONTEXT_CAP} byte context cap) =====\n${skipped.join('\n')}\n`;
+  if (skipped.length) {
+    text = `以下檔案因大小未附：${skipped.map((s) => s.path).join('、')}\n${text}`;
+    text += `\n===== skipped (binary or over the ${CONTEXT_CAP} byte context cap) =====\n${skipped.map((s) => `${s.path} (${s.bytes} bytes, ${s.reason})`).join('\n')}\n`;
+  }
   const ctx = path.join(o.out, 'context.txt');
   fs.writeFileSync(ctx, text);
-  return { diff, spec, ctx };
+  return { diff, spec, ctx, questions, skipped };
 }
 
 function writeJson(file, obj) { fs.writeFileSync(file, `${JSON.stringify(obj, null, 2)}\n`); }
 
 async function cmdRun(o) {
   for (const k of ['pack', 'implementer-family', 'out']) if (!o[k]) die(`run needs --${k}`);
+  if (!KNOWN_FAMILIES.has(o['implementer-family'])) die(`unknown --implementer-family ${o['implementer-family']} (known: ${[...KNOWN_FAMILIES].join(', ')})`);
   if (!fs.existsSync(o.pack)) die(`--pack not found: ${o.pack}`);
   fs.mkdirSync(o.out, { recursive: true });
   const pk = resolvePack(o);
@@ -218,7 +331,7 @@ async function cmdRun(o) {
   const todo = [];
   for (const n of names) {
     const s = seatTable[n];
-    const family = familyOfEngine(s.model);
+    const family = SEATS[n].family;
     const base = { runner: s.runner, model: s.model, effort: s.effort, family, qualified: isQualified(s, scorecardBin) };
     if (family === o['implementer-family']) { state[n] = { ...base, state: 'excluded_family' }; continue; }
     const reach = s.endpoint ? endpointReady(s.endpoint) : runnerFound(s);
@@ -229,13 +342,16 @@ async function cmdRun(o) {
   const results = await Promise.all(todo.map((n) => dispatchSeat(n, seatTable[n], opts)));
   for (const r of results) {
     let body;
-    try { JSON.parse(r.out); body = r.out; } catch {
+    try {
+      const j = JSON.parse(r.out); body = r.out;
+      if (pk.questions.length) { j.answers = parseAnswers(j.findings); body = `${JSON.stringify(j)}\n`; }
+    } catch {
       body = `${JSON.stringify({ runner: seatTable[r.name].runner, model: seatTable[r.name].model, status: 'no_verdict', verdict: null, findings: '', error: `dispatch-review produced no JSON (rc=${r.rc}) ${r.err}`.trim() })}\n`;
     }
     fs.writeFileSync(path.join(o.out, 'seats', `${r.name}.json`), body);
     state[r.name].rc = r.rc;
   }
-  writeJson(path.join(o.out, 'run.json'), { implementer_family: o['implementer-family'], seats: state });
+  writeJson(path.join(o.out, 'run.json'), { implementer_family: o['implementer-family'], questions: pk.questions, skipped_files: pk.skipped, seats: state });
   return mergeDirs([o.out], o.out);
 }
 
@@ -244,7 +360,7 @@ function parseFindings(text) {
   const unparsed = [];
   for (const raw of String(text || '').split('\n')) {
     const line = raw.trim();
-    if (!line || /^findings:\s*none$/i.test(line) || /^FINDINGS:?$/.test(line)) continue;
+    if (!line || /^(findings:\s*)?none$/i.test(line) || /^FINDINGS:?$/.test(line) || ANSWER_RE.test(line)) continue;
     const m = line.match(/^(\S+)\s+\[([^\]\s]+)\]\s+(.*)$/) || line.match(/^()\[([^\]\s]+)\]\s+(.*)$/);
     if (!m) { unparsed.push(line); continue; }
     const claim = m[3];
@@ -256,12 +372,23 @@ function parseFindings(text) {
 
 function mergeDirs(dirs, outDir) {
   const seats = {};
-  for (const d of dirs) {
-    let run;
-    try { run = JSON.parse(fs.readFileSync(path.join(d, 'run.json'), 'utf8')); } catch { die(`${d} has no readable run.json`); }
-    for (const [n, st] of Object.entries(run.seats)) {
+  const runs = dirs.map((d) => {
+    try { return { d, run: JSON.parse(fs.readFileSync(path.join(d, 'run.json'), 'utf8')) }; } catch { return die(`${d} has no readable run.json`); }
+  });
+  const implFamily = runs[0].run.implementer_family;
+  for (const { d, run } of runs) if (run.implementer_family !== implFamily) die(`run dirs disagree on implementer_family (${runs[0].d}: ${implFamily}, ${d}: ${run.implementer_family}); merge only runs of the same review`);
+  const questionSet = new Set();
+  const skippedFiles = []; const skippedSeen = new Set();
+  for (const { d, run } of runs) {
+    for (const q of run.questions || []) questionSet.add(String(q));
+    for (const sk of run.skipped_files || []) { const key = `${sk.path}\0${sk.bytes}`; if (!skippedSeen.has(key)) { skippedSeen.add(key); skippedFiles.push(sk); } }
+    for (const [n, st0] of Object.entries(run.seats)) {
+      if (!SEATS[n]) die(`${d}/run.json names an unknown seat ${n} (known: ${Object.keys(SEATS).join(', ')})`);
+      // The family is the seat's own, not whatever the (untrusted) run.json says.
+      const st = { ...st0, family: SEATS[n].family };
       let verdict = null; let status = st.state; let findingsText = ''; let error = null;
-      if (st.state === 'dispatched') {
+      if (st.family === implFamily) status = 'excluded_family';
+      else if (st.state === 'dispatched') {
         try {
           const j = JSON.parse(fs.readFileSync(path.join(d, 'seats', `${n}.json`), 'utf8'));
           const ok = j.status === 'reviewed' && VERDICTS.has(j.verdict);
@@ -281,6 +408,7 @@ function mergeDirs(dirs, outDir) {
     if (s.status !== 'valid') continue;
     const { findings, unparsed: u } = parseFindings(s.findingsText);
     if (u.length) unparsed[n] = u;
+    s.answers = parseAnswers(s.findingsText);
     const revoked = new Set(findings.filter((f) => f.class === 'revoked').map((f) => f.id));
     for (const f of findings) {
       if (f.class === 'revoked' || revoked.has(f.id)) continue;
@@ -293,6 +421,16 @@ function mergeDirs(dirs, outDir) {
     return { ...e, blocking_candidate: must.length > 0, blocking_candidate_qualified: must.some((x) => !x.advisory), needs_depth0_verification: must.length > 0 };
   });
   const valid = Object.entries(seats).filter(([, s]) => s.status === 'valid').map(([n]) => n);
+  const questions = [...questionSet].sort((a, b) => Number(a) - Number(b));
+  const answers = {}; const missingAnswers = [];
+  for (const q of questions) {
+    answers[q] = {};
+    for (const n of valid) { const a = seats[n].answers.find((x) => x.q === q); if (a) answers[q][n] = { conclusion: a.conclusion, basis: a.basis, counterexample: a.counterexample }; }
+  }
+  for (const n of valid) {
+    const miss = questions.filter((q) => !answers[q][n]);
+    if (miss.length) missingAnswers.push({ seat: n, questions: miss });
+  }
   const merged = {
     round_valid: valid.length >= MIN_VALID,
     valid_seat_count: valid.length,
@@ -301,6 +439,10 @@ function mergeDirs(dirs, outDir) {
     advisory_seats: valid.filter((n) => !seats[n].qualified),
     seat_states: Object.fromEntries(Object.entries(seats).map(([n, s]) => [n, { status: s.status, verdict: s.verdict, qualified: s.qualified, family: s.family, runner: s.runner, model: s.model, effort: s.effort, reason: s.reason, from: s.from }])),
     findings,
+    questions,
+    answers,
+    missing_answers: missingAnswers,
+    skipped_files: skippedFiles,
     unparsed_finding_lines: unparsed,
     note: 'union of findings, no majority vote; blocking_candidate is a mark, depth-0 verifies each one; advisory seats cannot block or release alone',
   };

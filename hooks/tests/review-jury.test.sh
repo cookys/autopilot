@@ -16,8 +16,9 @@ printf '#!/bin/sh\nexit 0\n' > "$STUBS/grok"; printf '#!/bin/sh\nexit 0\n' > "$S
 # Fake dispatch-review: logs the model, answers from $FAKE_DIR/<model with / as _>.json or a clean SHIP-AS-IS.
 cat > "$TEST_TMP/fake-dispatch.sh" <<'FAKE'
 #!/bin/sh
-model=""; while [ $# -gt 0 ]; do [ "$1" = "--model" ] && model="$2"; shift; done
+allargs="$*"; model=""; while [ $# -gt 0 ]; do [ "$1" = "--model" ] && model="$2"; shift; done
 echo "$model" >> "$FAKE_DIR/calls.log"
+echo "$allargs" >> "$FAKE_DIR/args.log"
 f="$FAKE_DIR/$(echo "$model" | tr / _).json"
 if [ -f "$f" ]; then cat "$f"; else printf '{"runner":"x","model":"%s","status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}\n' "$model"; fi
 FAKE
@@ -123,10 +124,179 @@ check case_family family "s/if (family === o\['implementer-family'\])/if (false)
 check case_unavailable unavailable "s/if (!reach) {/if (false) {/"
 check case_one_valid onevalid "s/const MIN_VALID = 2;/const MIN_VALID = 1;/"
 check case_advisory advisory "s/qualified: isQualified(s, scorecardBin)/qualified: true/"
-check case_merge merge "s/for (const d of dirs) {/for (const d of dirs.slice(0, 1)) {/"
+check case_merge merge "s/const runs = dirs.map(/const runs = dirs.slice(0, 1).map(/"
 check case_override override "s/eff\\[m\\[1\\]\\]\\[field\\] = m\\[2\\];/void 0;/"
 check case_override_bad overridebad "s/if (!eff\[m\[1\]\]) die(/if (false) die(/"
 
 check case_pack pack "s/if (r.status !== 0) die(\`pack refused/if (false) die(\`pack refused/"
+
+# ---- pack hardening, family and question/answer cases ----
+mkpack() { # mkpack <dir>: diff + QUESTIONS (Q1, Q2) + NOTE + a matching FILES.sha256
+  local pk="$1"; mkdir -p "$pk"; echo diff > "$pk/a.diff"; printf 'Q1 first question?\nQ2 second question?\n' > "$pk/QUESTIONS.md"; echo note > "$pk/NOTE.md"
+  (cd "$pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
+}
+run_pack() { # run_pack <script> <case-dir> <pack> args...: rc in <case-dir>/rc
+  local script="$1" d="$2" pk="$3"; shift 3; mkdir -p "$d/fake" "$d/home"
+  env -i PATH="$STUBS:/usr/bin:/bin" HOME="$d/home" AUTOPILOT_ENDPOINTS_ENV="$d/none.env" FAKE_DIR="$d/fake" \
+    "$NODE" "$script" run --pack "$pk" --dispatch-bin "$TEST_TMP/fake-dispatch.sh" --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$d/out" "$@" \
+    > "$d/stdout" 2> "$d/stderr" < /dev/null
+  echo $? > "$d/rc"
+}
+refused() { # refused <case-dir> <stderr fragment>: rc 2, the fragment in stderr, no seat dispatched
+  [ "$(cat "$1/rc")" = 2 ] && grep -q -- "$2" "$1/stderr" && [ ! -s "$1/fake/calls.log" ]
+}
+SEATS2=(--seats grok,kimi --implementer-family anthropic)
+
+case_symlink_file() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo outside > "$d/outside.txt"; rm "$d/pk/NOTE.md"; ln -s "$d/outside.txt" "$d/pk/NOTE.md"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'symlink or a special file' && echo ok
+}
+case_symlink_dir() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; ln -s / "$d/pk/sub"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'symlink or a special file' && echo ok
+}
+case_symlink_diff() { # --diff names a symlink to a file outside the pack
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo outside > "$d/outside.diff"; ln -s "$d/outside.diff" "$d/pk/b.link"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}" --diff b.link; refused "$d" 'symlink or a special file' && echo ok
+}
+case_diff_dotdot() { # --diff ../x resolves outside the pack
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo outside > "$d/outside.diff"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}" --diff ../outside.diff; refused "$d" 'resolves outside the pack' && echo ok
+}
+case_tar_bad() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; (cd "$d/pk" && tar --transform 's,^\./,../,' -cf "$d/dots.tar" .)
+  tar -tf "$d/dots.tar" | grep -q '^\.\./' || return
+  run_pack "$1" "$d" "$d/dots.tar" "${SEATS2[@]}"; refused "$d" 'absolute or ".." name' || return
+  [ ! -e "$d/a.diff" ] || return
+  rm -f "$d/dots.tar"; tar -cPf "$d/abs.tar" "$d/pk/a.diff"
+  run_pack "$1" "$d" "$d/abs.tar" "${SEATS2[@]}"; refused "$d" 'absolute or ".." name' && echo ok
+}
+case_tar_link() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; ln -s / "$d/pk/sub"; (cd "$d/pk" && tar -cf "$d/link.tar" .)
+  run_pack "$1" "$d" "$d/link.tar" "${SEATS2[@]}"; refused "$d" 'tar member is a link' && echo ok
+}
+case_manifest_missing() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; rm "$d/pk/FILES.sha256"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'FILES.sha256 is missing' && echo ok
+}
+case_manifest_extra() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo unlisted > "$d/pk/EXTRA.md"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'not listed: EXTRA.md' && echo ok
+}
+case_manifest_absent() { # listed but not in the pack
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo gone > "$d/pk/GONE.md"; (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md GONE.md > FILES.sha256); rm "$d/pk/GONE.md"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'listed but absent: GONE.md' && echo ok
+}
+case_manifest_dotdot() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo outside > "$d/outside.txt"; printf '%s  ../outside.txt\n' "$(sha256sum "$d/outside.txt" | cut -d' ' -f1)" >> "$d/pk/FILES.sha256"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'absolute or contains' || return
+  mkpack "$d/pk2"; printf '%s  /etc/hostname\n' "$(sha256sum /etc/hostname | cut -d' ' -f1)" >> "$d/pk2/FILES.sha256"
+  rm -rf "$d/fake"; run_pack "$1" "$d" "$d/pk2" "${SEATS2[@]}"; refused "$d" 'absolute or contains' && echo ok
+}
+case_patch_default() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mv "$d/pk/a.diff" "$d/pk/a.patch"; (cd "$d/pk" && sha256sum a.patch QUESTIONS.md NOTE.md > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; grep -q 'a.patch' "$d/fake/args.log" 2>/dev/null && echo ok
+}
+case_family_fixed() { # the family belongs to the seat, not to --seat-model
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family xai --seat-model grok=kimi-code/k3
+  [ "$(jq_eval "$d/out/run.json" 'j.seats.grok.state+","+j.seats.grok.family')" = excluded_family,xai ] && echo ok
+}
+case_kimi_excluded() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family moonshot
+  [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.kimi.status+","+j.seat_states.kimi.family')" = excluded_family,moonshot ] && ! grep -q 'kimi-code/k3' "$d/fake/calls.log" && echo ok
+}
+case_family_unknown() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family nosuchfamily; local rc1; rc1="$(cat "$d/rc")"
+  run_jury "$1" "$d" kimi yes --implementer-family claude; [ "$rc1$(cat "$d/rc")" = 20 ] && echo ok
+}
+case_merge_family_mismatch() {
+  local d="$TEST_TMP/$2" a b; a="$d/a"; b="$d/b"; mkdir -p "$a/seats" "$b/seats"
+  printf '%s\n' '{"implementer_family":"xai","seats":{}}' > "$a/run.json"; printf '%s\n' '{"implementer_family":"anthropic","seats":{}}' > "$b/run.json"
+  env -i PATH="/usr/bin:/bin" "$NODE" "$1" merge --out "$d/out" "$a" "$b" > "$d/stdout" 2> "$d/stderr" < /dev/null; [ "$?" = 2 ] && grep -q 'disagree on implementer_family' "$d/stderr" && echo ok
+}
+case_merge_excluded() { # a run.json written elsewhere cannot make the implementer's own family count as valid
+  local d="$TEST_TMP/$2" a; a="$d/a"; mkdir -p "$a/seats"
+  printf '%s\n' '{"implementer_family":"xai","seats":{"grok":{"state":"dispatched","qualified":true,"family":"anthropic"},"glm":{"state":"dispatched","qualified":true},"minimax":{"state":"dispatched","qualified":false}}}' > "$a/run.json"
+  for n in grok glm minimax; do printf '%s\n' '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"none"}' > "$a/seats/$n.json"; done
+  env -i PATH="/usr/bin:/bin" "$NODE" "$1" merge --out "$d/out" "$a" > "$d/stdout" 2>&1 < /dev/null
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.seat_states.grok.status+","+j.valid_seat_count+","+j.seat_states.grok.family')" = excluded_family,2,xai ] && echo ok
+}
+
+ANS='ANSWER Q%s | conclusion=%s | basis=%s | counterexample=%s'
+answer_seat() { # answer_seat <fake-dir> <file> <verdict> <findings text with \n escapes>
+  printf '{"status":"reviewed","verdict":"%s","findings":"%s"}\n' "$3" "$4" > "$1/$2"
+}
+case_answers_full() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 a2; a1="$(printf "$ANS" 1 no a.js:3 none-because-x)"; a2="$(printf "$ANS" 2 yes a.js:9 none-because-y)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$a2"; answer_seat "$d/fake" kimi-code_k3.json SHIP-AS-IS "none\n$a1\n$a2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(cat "$d/rc")" = 0 ] && [ "$(jq_eval "$m" 'j.questions.join()+"|"+Object.keys(j.answers["1"]).join()+"|"+j.answers["2"].kimi.basis+"|"+j.missing_answers.length')" = "1,2|grok,kimi|a.js:9|0" ] \
+    && [ "$(jq_eval "$d/out/seats/grok.json" 'j.answers.length')" = 2 ] && [ "$(jq_eval "$m" 'Object.keys(j.unparsed_finding_lines).length')" = 0 ] \
+    && grep -q 'ANSWER Q<n> | conclusion=' "$d/out/spec.txt" && grep -q '^Q2 second question' "$d/out/spec.txt" && grep -q -- "--spec-file $d/out/spec.txt" "$d/fake/args.log" \
+    && bash "$REPO_ROOT/scripts/check-blind-evidence.sh" --payload "$d/out/spec.txt" > /dev/null 2>&1 && echo ok
+}
+case_answers_missing() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 a2; a1="$(printf "$ANS" 1 no a.js:3 none-because-x)"; a2="$(printf "$ANS" 2 yes a.js:9 none-because-y)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$a2"; answer_seat "$d/fake" kimi-code_k3.json SHIP-AS-IS "none\n$a1"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'JSON.stringify(j.missing_answers)+","+j.round_valid')" = '[{"seat":"kimi","questions":["2"]}],true' ] && [ "$(cat "$d/rc")" = 0 ] && echo ok
+}
+case_answers_blank() { # an answer with an empty field is not a valid answer
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 a2 b2; a1="$(printf "$ANS" 1 no a.js:3 none-because-x)"; a2="$(printf "$ANS" 2 yes a.js:9 none-because-y)"; b2="$(printf "$ANS" 2 yes a.js:9 '')"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$a2"; answer_seat "$d/fake" kimi-code_k3.json SHIP-AS-IS "none\n$a1\n$b2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(jq_eval "$d/out/merged.json" 'JSON.stringify(j.missing_answers)')" = '[{"seat":"kimi","questions":["2"]}]' ] && echo ok
+}
+case_numbered_questions() { # "1." and "2)" question lines count, a number inside a sentence does not
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; printf 'intro\n1. first?\n2) second?\n70 of 71 receipts fail\n' > "$d/pk/QUESTIONS.md"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; [ "$(jq_eval "$d/out/merged.json" 'j.questions.join()')" = "1,2" ] && echo ok
+}
+case_skipped() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; head -c 350000 /dev/zero | tr '\0' 'x' > "$d/pk/big.txt"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md big.txt > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(jq_eval "$d/out/run.json" 'j.skipped_files[0].path+","+j.skipped_files[0].bytes+","+/context cap/.test(j.skipped_files[0].reason)')" = "big.txt,350000,true" ] \
+    && [ "$(head -n1 "$d/out/context.txt")" = "以下檔案因大小未附：big.txt" ] && [ "$(jq_eval "$d/out/merged.json" 'j.skipped_files.map(x=>x.path).join()')" = big.txt ] && echo ok
+}
+
+check case_symlink_file symlinkfile "s/if (st.isSymbolicLink() || (!st.isDirectory() && !st.isFile())) die(/if (false) die(/"
+check case_symlink_dir symlinkdir "s/if (st.isSymbolicLink() || (!st.isDirectory() && !st.isFile())) die(/if (false) die(/"
+check case_symlink_diff symlinkdiff "s/if (st.isSymbolicLink() || (!st.isDirectory() && !st.isFile())) die(/if (false) die(/"
+check case_diff_dotdot diffdotdot "s/if (!rp.startsWith(rootReal + path.sep)) die(/if (false) die(/"
+check case_tar_bad tarbad "s/if (n && badTarName(n)) die(/if (false) die(/"
+check case_tar_link tarlink "s/if (\/^\[lh\]\/.test(l)) die(/if (false) die(/"
+check case_manifest_missing manifestmissing "s/if (!files.includes(sums)) die(/if (false) die(/"
+check case_manifest_extra manifestextra "s/if (extra.length || missing.length) die(/if (false) die(/"
+check case_manifest_absent manifestabsent "s/if (extra.length || missing.length) die(/if (false) die(/"
+check case_manifest_dotdot manifestdotdot "s/ || p.split('\/').includes('..')) die(/) die(/"
+check case_patch_default patchdefault "s/ || f.endsWith('.patch')//"
+check case_family_fixed familyfixed "s/const family = SEATS\[n\].family;/const family = s.model.startsWith('kimi') ? 'moonshot' : SEATS[n].family;/"
+check case_kimi_excluded kimiexcluded "s/const family = SEATS\[n\].family;/const family = 'none';/"
+check case_family_unknown familyunknown "s/if (!KNOWN_FAMILIES.has(o\['implementer-family'\])) die(/if (false) die(/"
+check case_merge_family_mismatch mergemismatch "s/if (run.implementer_family !== implFamily) die(/if (false) die(/"
+check case_merge_excluded mergeexcluded "s/if (st.family === implFamily) status = 'excluded_family';/if (false) status = 'excluded_family';/"
+check case_answers_full answersfull "s/s.answers = parseAnswers(s.findingsText);/s.answers = [];/"
+check case_answers_missing answersmissing "s/if (miss.length) missingAnswers.push(/if (false) missingAnswers.push(/"
+check case_answers_blank answersblank "s/if (!conclusion || !basis || !counterexample) continue;/if (false) continue;/"
+check case_numbered_questions numbered "s/const id = m && (m\[1\] || m\[2\]);/const id = m && m[1];/"
+check case_skipped skipped "s/if (skipped.length) {/if (false) {/"
+check case_skipped skippedmerged "s/skipped_files: skippedFiles,/skipped_files: [],/"
+
+# the fixed seat families agree with familyOfEngine() for each seat's default model
+"$NODE" -e '
+const { familyOfEngine } = require(process.argv[1] + "/scripts/lib/stage-write");
+const src = require("fs").readFileSync(process.argv[1] + "/scripts/review-jury.js", "utf8");
+const bad = [];
+for (const m of src.matchAll(/^  (\w+): \{[^}]*model: \x27([^\x27]+)\x27[^}]*family: \x27(\w+)\x27 \}/gm)) if (familyOfEngine(m[2]) !== m[3]) bad.push(m[1]);
+process.exit(bad.length || !src.includes("family: \x27xai\x27") ? 1 : 0);' "$REPO_ROOT"
+assert_exit_code "$?" "0" "seat families agree with familyOfEngine"
 
 finalize_test

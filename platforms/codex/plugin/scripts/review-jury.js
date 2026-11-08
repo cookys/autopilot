@@ -213,7 +213,7 @@ function checkManifest(root, files) {
   if (r.status !== 0) die(`pack refused: FILES.sha256 does not match (${(r.stdout + r.stderr).trim().split('\n').slice(0, 3).join('; ')})`);
 }
 
-const ANSWER_RE = /^ANSWER\s+Q(\d+)\s*\|\s*conclusion=(.*?)\s*\|\s*basis=(.*?)\s*\|\s*counterexample=(.*)$/;
+const ANSWER_LINE_RE = /^ANSWER\s+Q\d+\s*\|/;
 
 function questionIds(text) {
   const ids = [];
@@ -230,17 +230,28 @@ function answerFormat(ids) {
     + `Keep each ANSWER line under 600 characters. The answer lines do not change the verdict rules: a reachable counterexample is also a MUST-FIX finding line in the usual form.\n`;
 }
 
-function parseAnswers(text) {
-  const out = []; const seen = new Set();
-  for (const raw of String(text || '').split('\n')) {
-    const m = raw.trim().match(ANSWER_RE);
-    if (!m || seen.has(m[1])) continue;
-    const [conclusion, basis, counterexample] = [m[2], m[3], m[4]].map((x) => x.trim());
-    if (!conclusion || !basis || !counterexample) continue;
+// An answer starts at "ANSWER Q<n> |" anywhere in the text (a seat may put all of them on one line, and in
+// no_finding_proof as well as in findings) and runs to the next "ANSWER Q" or the end of its line. Its three fields are
+// cut at " | key=". A field left empty, or a placeholder such as <your answer> copied from the format request, is no answer.
+// The first occurrence of a question number is the answer; later ones are listed in duplicates.
+function parseAnswers(...texts) {
+  const text = texts.map((t) => String(t || '')).join('\n');
+  const out = []; const duplicates = []; const seen = new Set();
+  const starts = [...text.matchAll(/ANSWER\s+Q(\d+)\s*\|/g)];
+  for (const m of starts) {
+    const rest = text.slice(m.index + m[0].length);
+    const end = rest.search(/ANSWER\s+Q\d|\n/);
+    const seg = (end < 0 ? rest : rest.slice(0, end));
+    if (seen.has(m[1])) { if (!duplicates.includes(m[1])) duplicates.push(m[1]); continue; }
     seen.add(m[1]);
+    const parts = ('|' + seg).split(/\|\s*(conclusion|basis|counterexample)=/);
+    const f = {};
+    for (let i = 1; i + 1 < parts.length; i += 2) if (!(parts[i] in f)) f[parts[i]] = parts[i + 1].trim();
+    const { conclusion, basis, counterexample } = f;
+    if (!conclusion || !basis || !counterexample || /^<[^>]*>$/.test(conclusion)) continue;
     out.push({ q: m[1], conclusion, basis, counterexample });
   }
-  return out;
+  return { answers: out, duplicates };
 }
 
 // --pack may be a single text file (the artifact itself), a review-pack directory or a .tar/.tar.xz of one.
@@ -344,7 +355,7 @@ async function cmdRun(o) {
     let body;
     try {
       const j = JSON.parse(r.out); body = r.out;
-      if (pk.questions.length) { j.answers = parseAnswers(j.findings); body = `${JSON.stringify(j)}\n`; }
+      if (pk.questions.length) { const pa = parseAnswers(j.findings, j.no_finding_proof); j.answers = pa.answers; j.duplicate_answers = pa.duplicates; body = `${JSON.stringify(j)}\n`; }
     } catch {
       body = `${JSON.stringify({ runner: seatTable[r.name].runner, model: seatTable[r.name].model, status: 'no_verdict', verdict: null, findings: '', error: `dispatch-review produced no JSON (rc=${r.rc}) ${r.err}`.trim() })}\n`;
     }
@@ -360,7 +371,7 @@ function parseFindings(text) {
   const unparsed = [];
   for (const raw of String(text || '').split('\n')) {
     const line = raw.trim();
-    if (!line || /^(findings:\s*)?none$/i.test(line) || /^FINDINGS:?$/.test(line) || ANSWER_RE.test(line)) continue;
+    if (!line || /^(findings:\s*)?none$/i.test(line) || /^FINDINGS:?$/.test(line) || ANSWER_LINE_RE.test(line)) continue;
     const m = line.match(/^(\S+)\s+\[([^\]\s]+)\]\s+(.*)$/) || line.match(/^()\[([^\]\s]+)\]\s+(.*)$/);
     if (!m) { unparsed.push(line); continue; }
     const claim = m[3];
@@ -386,20 +397,20 @@ function mergeDirs(dirs, outDir) {
       if (!SEATS[n]) die(`${d}/run.json names an unknown seat ${n} (known: ${Object.keys(SEATS).join(', ')})`);
       // The family is the seat's own, not whatever the (untrusted) run.json says.
       const st = { ...st0, family: SEATS[n].family };
-      let verdict = null; let status = st.state; let findingsText = ''; let error = null;
+      let verdict = null; let status = st.state; let findingsText = ''; let proofText = ''; let error = null;
       if (st.family === implFamily) status = 'excluded_family';
       else if (st.state === 'dispatched') {
         try {
           const j = JSON.parse(fs.readFileSync(path.join(d, 'seats', `${n}.json`), 'utf8'));
           const ok = j.status === 'reviewed' && VERDICTS.has(j.verdict);
           status = ok ? 'valid' : 'invalid';
-          verdict = ok ? j.verdict : null; findingsText = ok ? j.findings : ''; error = j.error || null;
+          verdict = ok ? j.verdict : null; findingsText = ok ? j.findings : ''; proofText = ok ? j.no_finding_proof : ''; error = j.error || null;
         } catch { status = 'invalid'; error = 'seat file missing or unreadable'; }
       }
       const prev = seats[n];
       // The same seat from two dirs: a valid answer beats anything else; otherwise keep the first.
       if (prev && (prev.status === 'valid' || status !== 'valid')) continue;
-      seats[n] = { status, verdict, qualified: !!st.qualified, family: st.family, runner: st.runner, model: st.model, effort: st.effort, reason: st.reason || error || undefined, from: d, findingsText };
+      seats[n] = { status, verdict, qualified: !!st.qualified, family: st.family, runner: st.runner, model: st.model, effort: st.effort, reason: st.reason || error || undefined, from: d, findingsText, proofText };
     }
   }
   const byId = new Map();
@@ -408,7 +419,7 @@ function mergeDirs(dirs, outDir) {
     if (s.status !== 'valid') continue;
     const { findings, unparsed: u } = parseFindings(s.findingsText);
     if (u.length) unparsed[n] = u;
-    s.answers = parseAnswers(s.findingsText);
+    { const pa = parseAnswers(s.findingsText, s.proofText); s.answers = pa.answers; s.duplicate_answers = pa.duplicates; }
     const revoked = new Set(findings.filter((f) => f.class === 'revoked').map((f) => f.id));
     for (const f of findings) {
       if (f.class === 'revoked' || revoked.has(f.id)) continue;
@@ -437,7 +448,7 @@ function mergeDirs(dirs, outDir) {
     min_valid_seats: MIN_VALID,
     qualified_seats: valid.filter((n) => seats[n].qualified),
     advisory_seats: valid.filter((n) => !seats[n].qualified),
-    seat_states: Object.fromEntries(Object.entries(seats).map(([n, s]) => [n, { status: s.status, verdict: s.verdict, qualified: s.qualified, family: s.family, runner: s.runner, model: s.model, effort: s.effort, reason: s.reason, from: s.from }])),
+    seat_states: Object.fromEntries(Object.entries(seats).map(([n, s]) => [n, { status: s.status, verdict: s.verdict, qualified: s.qualified, family: s.family, runner: s.runner, model: s.model, effort: s.effort, reason: s.reason, from: s.from, duplicate_answers: s.duplicate_answers }])),
     findings,
     questions,
     answers,

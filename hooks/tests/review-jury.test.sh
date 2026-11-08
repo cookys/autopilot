@@ -254,6 +254,35 @@ case_answers_blank() { # an answer with an empty field is not a valid answer
   run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
   [ "$(jq_eval "$d/out/merged.json" 'JSON.stringify(j.missing_answers)')" = '[{"seat":"kimi","questions":["2"]}]' ] && echo ok
 }
+proof_seat() { # proof_seat <fake-dir> <file> <findings> <no_finding_proof>: a seat whose answers sit after the findings text
+  "$NODE" -e 'process.stdout.write(JSON.stringify({status:"reviewed",verdict:"SHIP-AS-IS",findings:process.argv[1],no_finding_proof:process.argv[2]})+"\n")' "$3" "$4" > "$1/$2"
+}
+case_answers_proof() { # the shape a real grok-4.7 run produced: findings none, every ANSWER on ONE line inside no_finding_proof
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local p='checked=a.diff; evidence=x; conclusion=ok ANSWER Q1 | conclusion=PASS | basis=a.js:3-9; b.js:1 | counterexample=none: unchanged ANSWER Q2 | conclusion=FAIL | basis=a.js:9 | counterexample=none: the | pipe is inside'
+  proof_seat "$d/fake" grok-4.7.json none "$p"; proof_seat "$d/fake" kimi-code_k3.json none "$p"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.missing_answers.length+","+j.answers["1"].grok.conclusion+","+j.answers["1"].grok.basis+","+j.answers["2"].kimi.conclusion+","+j.answers["2"].kimi.counterexample')" = "0,PASS,a.js:3-9; b.js:1,FAIL,none: the | pipe is inside" ] \
+    && [ "$(jq_eval "$d/out/seats/grok.json" 'j.answers.length')" = 2 ] && echo ok
+}
+case_answers_placeholder() { # the format request echoed back (conclusion=<your answer>) is not an answer
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 a2; a1="$(printf "$ANS" 1 no a.js:3 none-because-x)"; a2="$(printf "$ANS" 2 yes a.js:9 none-because-y)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$a2"
+  proof_seat "$d/fake" kimi-code_k3.json none "checked=x; evidence=y; conclusion=z ANSWER Q1 | conclusion=no | basis=a.js:3 | counterexample=none: x ANSWER Q2 | conclusion=<your answer> | basis=<file:line, one or more> | counterexample=<a concrete counterexample>"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(jq_eval "$d/out/merged.json" 'JSON.stringify(j.missing_answers)')" = '[{"seat":"kimi","questions":["2"]}]' ] && echo ok
+}
+case_answers_duplicate() { # the same question twice: the first one stands, the repeat is recorded
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 b1 a2; a1="$(printf "$ANS" 1 first a.js:3 none-x)"; b1="$(printf "$ANS" 1 second a.js:4 none-y)"; a2="$(printf "$ANS" 2 yes a.js:9 none-z)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$b1\n$a2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.answers["1"].grok.conclusion+","+JSON.stringify(j.seat_states.grok.duplicate_answers)')" = 'first,["1"]' ] \
+    && [ "$(jq_eval "$d/out/seats/grok.json" 'JSON.stringify(j.duplicate_answers)+","+j.answers.length')" = '["1"],2' ] && echo ok
+}
 case_numbered_questions() { # "1." and "2)" question lines count, a number inside a sentence does not
   local d="$TEST_TMP/$2"; mkpack "$d/pk"; printf 'intro\n1. first?\n2) second?\n70 of 71 receipts fail\n' > "$d/pk/QUESTIONS.md"
   (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
@@ -283,12 +312,39 @@ check case_kimi_excluded kimiexcluded "s/const family = SEATS\[n\].family;/const
 check case_family_unknown familyunknown "s/if (!KNOWN_FAMILIES.has(o\['implementer-family'\])) die(/if (false) die(/"
 check case_merge_family_mismatch mergemismatch "s/if (run.implementer_family !== implFamily) die(/if (false) die(/"
 check case_merge_excluded mergeexcluded "s/if (st.family === implFamily) status = 'excluded_family';/if (false) status = 'excluded_family';/"
-check case_answers_full answersfull "s/s.answers = parseAnswers(s.findingsText);/s.answers = [];/"
+check case_answers_full answersfull "s/s.answers = pa.answers;/s.answers = [];/"
 check case_answers_missing answersmissing "s/if (miss.length) missingAnswers.push(/if (false) missingAnswers.push(/"
-check case_answers_blank answersblank "s/if (!conclusion || !basis || !counterexample) continue;/if (false) continue;/"
+check case_answers_blank answersblank "s/if (!conclusion || !basis || !counterexample || /if (false || /"
+check case_answers_proof answersproof "s/texts.map((t) => String(t || ''))/texts.slice(0, 1).map((t) => String(t || ''))/"
+check case_answers_placeholder answersplaceholder "s/ || \\/^<\\[^>\\]\\*>\\$\\/\\.test(conclusion)//"
+check case_answers_duplicate answersduplicate "s/if (seen.has(m\\[1\\])) {/if (false) {/"
 check case_numbered_questions numbered "s/const id = m && (m\[1\] || m\[2\]);/const id = m && m[1];/"
 check case_skipped skipped "s/if (skipped.length) {/if (false) {/"
 check case_skipped skippedmerged "s/skipped_files: skippedFiles,/skipped_files: [],/"
+
+# 8d53f188: the real dispatch-review.sh parsing section (stub runner, no model) keeps SHIP-AS-IS and the ANSWER lines
+# when the block is SHIP-AS-IS + FINDINGS: none + ANSWER lines + NO-FINDING-PROOF.
+cat > "$TEST_TMP/answer-runner.sh" <<'STUB'
+#!/usr/bin/env bash
+prompt=""; i=1
+while [ "$i" -le "$#" ]; do
+  arg="${!i}"
+  if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then ni=$((i+1)); na="${!ni}"; if [ -n "$na" ] && [ -f "$na" ]; then prompt="$(cat "$na")"; else prompt="$na"; fi; break; fi
+  i=$((i+1))
+done
+[ -z "$prompt" ] && prompt="$(cat)"
+begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -z "$begin" ] || [ -z "$end" ] && exit 0
+printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nANSWER Q1 | conclusion=PASS | basis=x.js:1 | counterexample=none: unchanged\nANSWER Q2 | conclusion=FAIL | basis=x.js:2 | counterexample=none: guarded\nNO-FINDING-PROOF: checked=fixture diff and acceptance contract; evidence=changed assignment is present in captured diff; conclusion=specified assignment change has no blocking failure\n%s\n' "$begin" "$end"
+STUB
+chmod +x "$TEST_TMP/answer-runner.sh"
+printf 'diff --git a/x.js b/x.js\n--- a/x.js\n+++ b/x.js\n@@ -1 +1 @@\n-const a = 1\n+const a = 2\n' > "$TEST_TMP/dr.diff"
+echo 'Review the diff against the spec.' > "$TEST_TMP/dr-spec.txt"
+bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner codex --model gpt-test --diff-file "$TEST_TMP/dr.diff" --spec-file "$TEST_TMP/dr-spec.txt" \
+  --bin "$TEST_TMP/answer-runner.sh" > "$TEST_TMP/dr-out.json" 2> "$TEST_TMP/dr-err.txt" < /dev/null
+assert_exit_code "$?" "0" "dispatch-review with ANSWER lines: rc 0"
+assert_eq "$("$NODE" -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const a=j.findings.split("\n").filter(l=>/^ANSWER Q\d \|/.test(l));process.stdout.write(j.verdict+","+j.status+","+a.length+","+(j.no_finding_proof||"").startsWith("checked="))' "$TEST_TMP/dr-out.json")" "SHIP-AS-IS,reviewed,2,true" "dispatch-review keeps SHIP-AS-IS, both ANSWER lines and the proof"
 
 # the fixed seat families agree with familyOfEngine() for each seat's default model
 "$NODE" -e '

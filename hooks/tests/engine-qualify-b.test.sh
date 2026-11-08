@@ -344,17 +344,26 @@ $SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --panel-env HOME 2>/dev/n
 BAD_CONTROL_ENV_RC=$?
 assert_exit_code "$BAD_CONTROL_ENV_RC" "2" "panel env cannot override sandbox control variables"
 
-# 14) BL-0166: the --effort label is checked against the effort the provider is told to send.
-#     Advisory: a mismatch is marked on the row and warned on stderr, never blocks the exam.
+# 14) BL-0166: the --effort label is checked against the effort the provider is told to send, BEFORE any provider call.
+#     PM ruling 2026-11-08 (was advisory-only): a mismatch exits 2 without running; --allow-effort-mismatch runs it,
+#     warns on stderr and marks the row effort_check=mismatch + effort_check_override=true.
+#     (Call-count and mutant coverage: engine-qualify-effort-gate.test.sh.)
 EFFORT_SCORECARD="$TEST_TMP/effort-scorecard"
 EFFORT_ERR="$TEST_TMP/effort-mismatch.err"
-# label high (QUALIFY_ARGS) but the provider is told low -> mismatch, row still emitted and recordable
-EFFORT_ROW="$(QRP_HTTP_EFFORT=low $SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --panel-env QRP_HTTP_EFFORT --emit-row 2>"$EFFORT_ERR")"
+# label high (QUALIFY_ARGS) but the provider is told low -> mismatch: refused, no row
+REFUSED_ROW="$(QRP_HTTP_EFFORT=low $SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --panel-env QRP_HTTP_EFFORT --emit-row 2>"$EFFORT_ERR")"
+REFUSED_RC=$?
+assert_exit_code "$REFUSED_RC" "2" "a label/wire effort mismatch stops the exam with rc=2"
+assert_eq "" "$REFUSED_ROW" "a refused mismatch emits no row"
+assert_contains "$(cat "$EFFORT_ERR")" "effort label" "the refusal names the effort mismatch on stderr"
+# with the override the exam runs; row still emitted and recordable
+EFFORT_ROW="$(QRP_HTTP_EFFORT=low $SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --panel-env QRP_HTTP_EFFORT --allow-effort-mismatch --emit-row 2>"$EFFORT_ERR")"
 EFFORT_RC=$?
-assert_exit_code "$EFFORT_RC" "0" "a label/wire effort mismatch does not block the exam"
+assert_exit_code "$EFFORT_RC" "0" "--allow-effort-mismatch lets a label/wire effort mismatch run"
 assert_contains "$EFFORT_ROW" '"effort_check":{"status":"mismatch","label":"high","sent":"low"' \
   "mismatch is marked on the emitted row with the effort actually sent"
-assert_contains "$(cat "$EFFORT_ERR")" "effort label" "mismatch is warned on stderr"
+assert_contains "$EFFORT_ROW" '"effort_check_override":true' "the override is recorded on the row"
+assert_contains "$(cat "$EFFORT_ERR")" "effort label" "an allowed mismatch is warned on stderr"
 EFFORT_REC_RC=0
 printf '%s\n' "$EFFORT_ROW" | ENGINE_SCORECARD_DIR="$EFFORT_SCORECARD" \
   node "$REPO_ROOT/scripts/engine-scorecard.js" record >/dev/null 2>&1 || EFFORT_REC_RC=$?
@@ -362,6 +371,7 @@ assert_exit_code "$EFFORT_REC_RC" "0" "a row carrying effort_check is still acce
 # negative control twin: label equals the wire value -> match, no warning
 OK_ROW="$(QRP_HTTP_EFFORT=high $SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --panel-env QRP_HTTP_EFFORT --emit-row 2>"$EFFORT_ERR")"
 assert_contains "$OK_ROW" '"effort_check":{"status":"match"' "matching label is recorded as match"
+assert_not_contains "$OK_ROW" "effort_check_override" "a matching label carries no override field"
 assert_not_contains "$(cat "$EFFORT_ERR")" "effort label" "matching label prints no warning"
 # a custom panel command with no QRP_* variable is not observable: no field, no warning
 PLAIN_ROW="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --emit-row 2>"$EFFORT_ERR")"

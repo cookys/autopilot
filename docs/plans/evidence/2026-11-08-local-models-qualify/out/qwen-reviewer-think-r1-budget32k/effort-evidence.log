@@ -1,0 +1,3 @@
+capture skipped: chat protocol not expressible by the provider
+live_ping status=200 model=Qwen3.8-27B-QUASAR-NVFP4 stop= output_tokens=24 finish=stop
+thinking_protocol=chat thinking_content_present=true

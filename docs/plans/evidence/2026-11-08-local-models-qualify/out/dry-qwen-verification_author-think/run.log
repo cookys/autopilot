@@ -1,0 +1,3 @@
+2026-11-08T13:16:53+08:00 lane=qwen role=verification_author START runner=anthropic-compatible model=Qwen3.8-27B-QUASAR-NVFP4 model_version=Qwen3.8-27B-QUASAR-NVFP4 version_source=operator-asserted effort=default(none sent) thinking=messages endpoint=qwen_local dry=1
+2026-11-08T13:16:53+08:00 lane=qwen role=verification_author END rc=1
+rc=1

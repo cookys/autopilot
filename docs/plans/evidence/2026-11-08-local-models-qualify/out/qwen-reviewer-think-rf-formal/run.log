@@ -1,0 +1,5 @@
+2026-11-09T01:41:31+08:00 effort evidence: capture skipped: chat protocol not expressible by the provider live_ping status=200 model=Qwen3.8-27B-QUASAR-NVFP4 stop= output_tokens=33 finish=stop thinking_protocol=chat thinking_content_present=true 
+2026-11-09T01:41:31+08:00 provider=node /home/team/projects/autopilot/scripts/qualification-review-provider.js protocol=chat_completions thinking=enabled
+2026-11-09T01:41:31+08:00 lane=qwen role=reviewer START runner=anthropic-compatible model=Qwen3.8-27B-QUASAR-NVFP4 model_version=Qwen3.8-27B-QUASAR-NVFP4 version_source=runtime effort=default(none sent) thinking=chat endpoint=qwen_local dry=0
+2026-11-09T01:48:35+08:00 lane=qwen role=reviewer END rc=0
+rc=0

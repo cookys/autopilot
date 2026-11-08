@@ -230,11 +230,15 @@ function answerFormat(ids) {
     + `Keep each ANSWER line under 600 characters. The answer lines do not change the verdict rules: a reachable counterexample is also a MUST-FIX finding line in the usual form.\n`;
 }
 
-// An answer starts at "ANSWER Q<n> |" anywhere in the text (a seat may put all of them on one line, and in
+// An answer starts at "ANSWER Q<n> |" (a seat may put all of them on one line, and in
 // no_finding_proof as well as in findings) and runs to the next "ANSWER Q" or the end of its line. Its three fields are
 // cut at " | key=". A field left empty, or a placeholder such as <your answer> copied from the format request, is no answer.
 // The first occurrence of a question number is the answer; later ones are listed in duplicates.
-function parseAnswers(...texts) {
+// In findings only a line whose trimmed text starts with "ANSWER Q" counts (a finding line may quote an answer string);
+// in no_finding_proof the answer may sit anywhere in a line.
+function parseAnswers(findingsText, proofText) {
+  const onlyAnswerLines = String(findingsText || '').split('\n').filter((l) => l.trim().startsWith('ANSWER Q')).join('\n');
+  const texts = [onlyAnswerLines, proofText];
   const text = texts.map((t) => String(t || '')).join('\n');
   const out = []; const duplicates = []; const seen = new Set();
   const starts = [...text.matchAll(/ANSWER\s+Q(\d+)\s*\|/g)];

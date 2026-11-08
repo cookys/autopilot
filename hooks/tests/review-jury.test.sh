@@ -283,6 +283,22 @@ case_answers_duplicate() { # the same question twice: the first one stands, the 
   [ "$(jq_eval "$m" 'j.answers["1"].grok.conclusion+","+JSON.stringify(j.seat_states.grok.duplicate_answers)')" = 'first,["1"]' ] \
     && [ "$(jq_eval "$d/out/seats/grok.json" 'JSON.stringify(j.duplicate_answers)+","+j.answers.length')" = '["1"],2' ] && echo ok
 }
+case_answers_quoted() { # a finding line quoting an answer string is not an answer; the real ANSWER line on the next line is
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local q1 r1 a2; q1="$(printf "$ANS" 1 PASS a.js:3 none-quoted)"; r1="$(printf "$ANS" 1 FAIL a.js:4 none-real)"; a2="$(printf "$ANS" 2 yes a.js:9 none-z)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n[x] MUST-FIX fixture used $q1\n$r1\n$a2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.answers["1"].grok.conclusion+","+JSON.stringify(j.seat_states.grok.duplicate_answers||[])')" = 'FAIL,[]' ] \
+    && [ "$(jq_eval "$d/out/seats/grok.json" 'JSON.stringify(j.duplicate_answers)')" = '[]' ] && echo ok
+}
+case_answers_quoted_missing() { # a finding line quoting ANSWER Q2 does not answer Q2
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 q2; a1="$(printf "$ANS" 1 no a.js:3 none-x)"; q2="$(printf "$ANS" 2 yes a.js:9 none-quoted)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n[x] MUST-FIX fixture used $q2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(jq_eval "$d/out/merged.json" 'JSON.stringify(j.missing_answers.filter(x=>x.seat==="grok"))')" = '[{"seat":"grok","questions":["2"]}]' ] && echo ok
+}
 case_numbered_questions() { # "1." and "2)" question lines count, a number inside a sentence does not
   local d="$TEST_TMP/$2"; mkpack "$d/pk"; printf 'intro\n1. first?\n2) second?\n70 of 71 receipts fail\n' > "$d/pk/QUESTIONS.md"
   (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
@@ -318,6 +334,8 @@ check case_answers_blank answersblank "s/if (!conclusion || !basis || !counterex
 check case_answers_proof answersproof "s/texts.map((t) => String(t || ''))/texts.slice(0, 1).map((t) => String(t || ''))/"
 check case_answers_placeholder answersplaceholder "s/ || \\/^<\\[^>\\]\\*>\\$\\/\\.test(conclusion)//"
 check case_answers_duplicate answersduplicate "s/if (seen.has(m\\[1\\])) {/if (false) {/"
+check case_answers_quoted answersquoted "s/filter((l) => l.trim().startsWith('ANSWER Q'))/filter((l) => l.includes('ANSWER Q'))/"
+check case_answers_quoted_missing answersquotedmissing "s/filter((l) => l.trim().startsWith('ANSWER Q'))/filter((l) => l.includes('ANSWER Q'))/"
 check case_numbered_questions numbered "s/const id = m && (m\[1\] || m\[2\]);/const id = m && m[1];/"
 check case_skipped skipped "s/if (skipped.length) {/if (false) {/"
 check case_skipped skippedmerged "s/skipped_files: skippedFiles,/skipped_files: [],/"

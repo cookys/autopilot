@@ -20,6 +20,7 @@
 // engine is the seat's identity on the scorecard (the `--engine` of seat-status and the `engine` of the official reviewer rows); model is the
 //        string sent to the runner. --seat-model changes the model AND, unless --seat-engine <seat>=<engine> is also given, the engine
 //        (so --seat-model kimi=kimi-code/k3.1-pro looks up engine kimi-code/k3.1-pro). --seat-engine alone changes only the lookup.
+// WARNING: --seat-model also sets the engine used for the qualification lookup. When only the wire model string differs from the qualified engine name (e.g. glm-5.3 vs GLM-5.3), pass --seat-engine <seat>=<engine> too, or omit --seat-model; otherwise the seat runs but is recorded qualified:false.
 // Each dispatched seat's stderr is kept in <out>/seats/<seat>.stderr.log (mode 0644; seat JSON field stderr_log) after the secret
 //        filter: Bearer <x>, sk-<x> and any run of >= 32 base64/hex/dot characters, the whole value after x-api-key / Authorization and the literal values of the endpoint token env vars become [redacted]; URLs stay (userinfo goes, secret-named query/fragment parameters go). A retried seat's log holds both attempts.
 // --seat-max-tokens <seat>=<n> (repeatable) is passed to dispatch-review's --max-tokens (1..200000, anthropic-compatible seats only:

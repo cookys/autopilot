@@ -800,6 +800,18 @@ Full per-runner usage recipes (incl. the cc-shim env setup and which models are 
 The resolver's `family_of()` recognises openai/anthropic/google/xai/minimax/zhipu for the
 decorrelation overlap check.
 
+## Jury when Astra is unavailable - `scripts/review-jury.js`
+
+When codex has no quota, grok, kimi, glm and minimax review together in the Astra seat's place (plan, code and criteria review alike). The jury runs where each credential lives and is merged afterwards:
+
+```
+node scripts/review-jury.js run --pack <artifact.txt> --implementer-family <family> --seats grok --out <dir-team>      # team account
+node scripts/review-jury.js run --pack <artifact.txt> --implementer-family <family> --seats kimi,glm,minimax --out <dir-cookys>   # cookys account
+node scripts/review-jury.js merge --out <merged-dir> <dir-team> <dir-cookys>
+```
+
+`--pack` may be a single file, a review-pack directory or a `.tar`/`.tar.xz` (its `FILES.sha256` is mandatory and must list exactly the pack's files, a symlink or special file anywhere refuses the pack, a tar with an absolute or `..` member is refused before extraction, and a mismatch refuses the pack; `--diff` defaults to the one top-level `*.diff` or `*.patch`, `QUESTIONS.md` becomes the spec, other small text files become the context, 300 KB cap). `--seats` is optional (default all four; a seat this account cannot reach is `unavailable`, not a failure). The seat of the implementer's own family is dropped (family is fixed per seat; `--implementer-family` must be a known family id; `merge` refuses run dirs with different implementer families). When the pack's QUESTIONS.md has `Q<n>` lines each seat answers every question (`ANSWER Q<n> | conclusion=.. | basis=<file:line> | counterexample=..` inside FINDINGS); `merged.json` lists the answers per question and `missing_answers`, which never changes `round_valid`. Files left out of the context are listed as `skipped_files` and named on the first line of the context. Seats are blind to each other. `merged.json` holds the union of findings with every source seat, `qualified_seats` / `advisory_seats` (a seat with no qualified reviewer row is advisory and cannot block or release alone), and `round_valid` (>= 2 valid seats, else exit 1). `blocking_candidate` is a mark only: depth-0 verifies each one. Never run another account's seat with this account's credentials or HOME.
+
 ## The consult seat — `scripts/dispatch-consult.sh`
 
 A mid-run heterogeneous second opinion used to be hand-typed `dispatch-review.sh` argv:

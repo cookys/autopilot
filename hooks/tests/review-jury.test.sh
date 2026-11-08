@@ -1,0 +1,677 @@
+#!/usr/bin/env bash
+# hooks/tests/review-jury.test.sh — scripts/review-jury.js with a fake dispatch-review, fake scorecard and
+# fake runner binaries. No real model is called. Each case runs on the real script (must hold) and on a
+# sed_mutant of it (must NOT hold): the negative control, shown red before green.
+. "$(dirname "$0")/lib.sh"
+
+JURY="$REPO_ROOT/scripts/review-jury.js"
+MUT="$REPO_ROOT/scripts/review-jury-mutant.js"
+NODE="$(command -v node)"
+trap 'rm -f "$REPO_ROOT/scripts/review-jury-mutant.js"' EXIT
+"$NODE" --check "$JURY"; assert_exit_code "$?" "0" "node --check"
+
+STUBS="$TEST_TMP/stubs"; mkdir -p "$STUBS"
+printf '#!/bin/sh\nexit 0\n' > "$STUBS/grok"; printf '#!/bin/sh\nexit 0\n' > "$STUBS/kimi"; chmod +x "$STUBS/grok" "$STUBS/kimi"
+
+# Fake dispatch-review: logs the model, answers from $FAKE_DIR/<model with / as _>.json or a clean SHIP-AS-IS.
+cat > "$TEST_TMP/fake-dispatch.sh" <<'FAKE'
+#!/bin/sh
+allargs="$*"; model=""; while [ $# -gt 0 ]; do [ "$1" = "--model" ] && model="$2"; shift; done
+echo "$model" >> "$FAKE_DIR/calls.log"
+echo "$allargs" >> "$FAKE_DIR/args.log"
+f="$FAKE_DIR/$(echo "$model" | tr / _).json"
+if [ -f "$f" ]; then cat "$f"; else printf '{"runner":"x","model":"%s","status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}\n' "$model"; fi
+FAKE
+chmod +x "$TEST_TMP/fake-dispatch.sh"
+# Fake scorecard: engines grok-4.7 and GLM-5.3 are qualified reviewers, everything else has no record.
+cat > "$TEST_TMP/fake-scorecard.js" <<'FAKE'
+const a = process.argv; const e = a[a.indexOf('--engine') + 1];
+console.log(JSON.stringify({ admission_status: (e === 'grok-4.7' || e === 'GLM-5.3') ? 'qualified' : 'no_record' }));
+FAKE
+echo "diff --git a/x b/x" > "$TEST_TMP/pack.txt"
+
+# run_jury <script> <case-dir> <env assignments for reach: kimi|nokimi> <endpoints: yes|no> args...
+run_jury() {
+  local script="$1" dir="$2" kimi="$3" eps="$4"; shift 4
+  mkdir -p "$dir/fake" "$dir/home"
+  local p="$STUBS:/usr/bin:/bin"
+  [ "$kimi" = nokimi ] && { mkdir -p "$dir/stubs"; cp "$STUBS/grok" "$dir/stubs/"; p="$dir/stubs:/usr/bin:/bin"; }
+  local epenv=()
+  [ "$eps" = yes ] && epenv=(AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid AUTOPILOT_ENDPOINT_GLM_TOKEN=FAKE-glm AUTOPILOT_ENDPOINT_MINIMAX_URL=https://mm.example.invalid AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=FAKE-mm)
+  env -i PATH="$p" HOME="$dir/home" AUTOPILOT_ENDPOINTS_ENV="$dir/none.env" FAKE_DIR="$dir/fake" "${epenv[@]}" \
+    "$NODE" "$script" run --pack "$TEST_TMP/pack.txt" --dispatch-bin "$TEST_TMP/fake-dispatch.sh" --scorecard-bin "$TEST_TMP/fake-scorecard.js" \
+    --out "$dir/out" "$@" > "$dir/stdout" 2> "$dir/stderr" < /dev/null
+  echo $? > "$dir/rc"
+}
+jq_eval() { "$NODE" -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); const r=eval(process.argv[2]); process.stdout.write(String(r))' "$1" "$2" 2>/dev/null; }
+
+# case_* <script> <tag>: prints "ok" when the expectation holds.
+case_family() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family xai
+  [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.grok.status')" = excluded_family ] && ! grep -q grok-4.7 "$d/fake/calls.log" && echo ok
+}
+case_unavailable() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" nokimi yes --implementer-family anthropic
+  [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.kimi.status')" = unavailable ] && [ "$(cat "$d/rc")" = 0 ] && [ "$(jq_eval "$d/out/merged.json" 'j.round_valid')" = true ] && echo ok
+}
+case_one_valid() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" nokimi no --implementer-family anthropic
+  [ "$(jq_eval "$d/out/merged.json" 'j.round_valid')" = false ] && [ "$(cat "$d/rc")" = 1 ] && echo ok
+}
+case_advisory() {
+  local d="$TEST_TMP/$2"; mkdir -p "$d/fake"
+  printf '%s\n' '{"runner":"kimi","model":"kimi-code/k3","status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"FINDINGS:\n🟠 [k-bug] MUST-FIX kimi only claim"}' > "$d/fake/kimi-code_k3.json"
+  run_jury "$1" "$d" kimi yes --implementer-family anthropic
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.qualified_seats.join()')" = "grok,glm" ] && [ "$(jq_eval "$m" 'j.advisory_seats.join()')" = "kimi,minimax" ] \
+    && [ "$(jq_eval "$m" 'j.findings[0].blocking_candidate+","+j.findings[0].blocking_candidate_qualified')" = "true,false" ] && echo ok
+}
+case_merge() {
+  local d="$TEST_TMP/$2" a b; a="$d/a"; b="$d/b"; mkdir -p "$a/seats" "$b/seats"
+  printf '%s\n' '{"implementer_family":"x","seats":{"grok":{"state":"dispatched","qualified":true,"family":"xai"},"kimi":{"state":"unavailable","qualified":false}}}' > "$a/run.json"
+  printf '%s\n' '{"status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"🟠 [shared] MUST-FIX one\n🟡 [only-a] CUT/FOLLOW-UP a"}' > "$a/seats/grok.json"
+  printf '%s\n' '{"implementer_family":"x","seats":{"glm":{"state":"dispatched","qualified":true,"family":"zhipu"}}}' > "$b/run.json"
+  printf '%s\n' '{"status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"🟠 [shared] MUST-FIX two\n🟠 [only-b] MUST-FIX b"}' > "$b/seats/glm.json"
+  env -i PATH="/usr/bin:/bin" "$NODE" "$1" merge --out "$d/out" "$a" "$b" > "$d/stdout" 2>&1 < /dev/null; local rc=$?
+  local m="$d/out/merged.json"
+  [ "$rc" = 0 ] && [ "$(jq_eval "$m" 'j.findings.map(f=>f.id).sort().join()')" = "only-a,only-b,shared" ] \
+    && [ "$(jq_eval "$m" 'j.findings.find(f=>f.id==="shared").sources.length')" = 2 ] && echo ok
+}
+
+case_pack() {
+  local d="$TEST_TMP/$2" pk; pk="$d/pk"; mkdir -p "$pk" "$d/fake"
+  echo "diff" > "$pk/a.diff"; echo "questions" > "$pk/QUESTIONS.md"; echo "ctx-note" > "$pk/NOTE.md"
+  (cd "$pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
+  cat > "$d/argdump.sh" <<'DUMP'
+#!/bin/sh
+echo "$@" >> "$FAKE_DIR/args.log"
+echo '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}'
+DUMP
+  chmod +x "$d/argdump.sh"
+  mkdir -p "$d/home"
+  env -i PATH="$STUBS:/usr/bin:/bin" HOME="$d/home" FAKE_DIR="$d/fake" "$NODE" "$1" run --pack "$pk" --seats grok --implementer-family anthropic \
+    --dispatch-bin "$d/argdump.sh" --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$d/out1" > /dev/null 2>&1 < /dev/null
+  local a; a="$(cat "$d/fake/args.log" 2>/dev/null)"
+  case "$a" in *"a.diff"*"--spec-file"*"QUESTIONS.md"*"--pack-file"*"context.txt"*) ;; *) return ;; esac
+  grep -q "ctx-note" "$d/out1/context.txt" || return
+  echo tampered >> "$pk/QUESTIONS.md"
+  env -i PATH="$STUBS:/usr/bin:/bin" HOME="$d/home" FAKE_DIR="$d/fake" "$NODE" "$1" run --pack "$pk" --seats grok --implementer-family anthropic \
+    --dispatch-bin "$d/argdump.sh" --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$d/out2" > /dev/null 2>&1 < /dev/null
+  [ "$?" = 2 ] && echo ok
+}
+case_override() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family anthropic \
+    --seat-model kimi=kimi-code/k3.1-pro --seat-effort kimi=medium --seat-model minimax=MiniMax-M3.1-Flash
+  grep -qx 'kimi-code/k3.1-pro' "$d/fake/calls.log" && grep -qx 'MiniMax-M3.1-Flash' "$d/fake/calls.log" \
+    && ! grep -q 'kimi-code/k3$' "$d/fake/calls.log" \
+    && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.kimi.model+","+j.seat_states.kimi.effort')" = "kimi-code/k3.1-pro,medium" ] \
+    && [ "$(jq_eval "$d/out/run.json" 'j.seats.minimax.model')" = MiniMax-M3.1-Flash ] && echo ok
+}
+case_override_bad() {
+  local d="$TEST_TMP/$2" rc1 rc2
+  run_jury "$1" "$d" kimi yes --implementer-family anthropic --seat-model nosuch=x; rc1="$(cat "$d/rc")"
+  run_jury "$1" "$d" kimi yes --implementer-family anthropic --seat-effort kimi; rc2="$(cat "$d/rc")"
+  [ "$rc1$rc2" = 22 ] && echo ok
+}
+
+check() { # check <case> <name> <sed command for the mutant> [more sed commands, one per argument]
+  local c="$1" name="$2"
+  assert_eq "$("$c" "$JURY" "${name}_real")" ok "$name holds on the real script"
+  sed_mutant "$JURY" "$MUT" "${@:3}" || return
+  assert_neq "$("$c" "$MUT" "${name}_mut")" ok "$name goes red on the mutant"
+}
+check case_family family "s/if (family === o\['implementer-family'\])/if (false)/"
+check case_unavailable unavailable "s/if (!reach) {/if (false) {/"
+check case_one_valid onevalid "s/const MIN_VALID = 2;/const MIN_VALID = 1;/"
+check case_advisory advisory "s/qualified: isQualified(s, scorecardBin)/qualified: true/"
+check case_merge merge "s/const runs = dirs.map(/const runs = dirs.slice(0, 1).map(/"
+check case_override override "s/eff\\[m\\[1\\]\\]\\[field\\] = m\\[2\\];/void 0;/"
+check case_override_bad overridebad "s/if (!eff\[m\[1\]\]) die(/if (false) die(/"
+
+check case_pack pack "s/if (r.status !== 0) die(\`pack refused/if (false) die(\`pack refused/"
+
+# ---- pack hardening, family and question/answer cases ----
+mkpack() { # mkpack <dir>: diff + QUESTIONS (Q1, Q2) + NOTE + a matching FILES.sha256
+  local pk="$1"; mkdir -p "$pk"; echo diff > "$pk/a.diff"; printf 'Q1 first question?\nQ2 second question?\n' > "$pk/QUESTIONS.md"; echo note > "$pk/NOTE.md"
+  (cd "$pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
+}
+run_pack() { # run_pack <script> <case-dir> <pack> args...: rc in <case-dir>/rc
+  local script="$1" d="$2" pk="$3"; shift 3; mkdir -p "$d/fake" "$d/home"
+  env -i PATH="$STUBS:/usr/bin:/bin" HOME="$d/home" AUTOPILOT_ENDPOINTS_ENV="$d/none.env" FAKE_DIR="$d/fake" \
+    "$NODE" "$script" run --pack "$pk" --dispatch-bin "$TEST_TMP/fake-dispatch.sh" --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$d/out" "$@" \
+    > "$d/stdout" 2> "$d/stderr" < /dev/null
+  echo $? > "$d/rc"
+}
+refused() { # refused <case-dir> <stderr fragment>: rc 2, the fragment in stderr, no seat dispatched
+  [ "$(cat "$1/rc")" = 2 ] && grep -q -- "$2" "$1/stderr" && [ ! -s "$1/fake/calls.log" ]
+}
+SEATS2=(--seats grok,kimi --implementer-family anthropic)
+
+case_symlink_file() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo outside > "$d/outside.txt"; rm "$d/pk/NOTE.md"; ln -s "$d/outside.txt" "$d/pk/NOTE.md"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'symlink or a special file' && echo ok
+}
+case_symlink_dir() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; ln -s / "$d/pk/sub"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'symlink or a special file' && echo ok
+}
+case_symlink_diff() { # --diff names a symlink to a file outside the pack
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo outside > "$d/outside.diff"; ln -s "$d/outside.diff" "$d/pk/b.link"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}" --diff b.link; refused "$d" 'symlink or a special file' && echo ok
+}
+case_diff_dotdot() { # --diff ../x resolves outside the pack
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo outside > "$d/outside.diff"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}" --diff ../outside.diff; refused "$d" 'resolves outside the pack' && echo ok
+}
+case_tar_bad() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; (cd "$d/pk" && tar --transform 's,^\./,../,' -cf "$d/dots.tar" .)
+  tar -tf "$d/dots.tar" | grep '^\.\./' > /dev/null || return
+  run_pack "$1" "$d" "$d/dots.tar" "${SEATS2[@]}"; refused "$d" 'absolute or ".." name' || return
+  [ ! -e "$d/a.diff" ] || return
+  rm -f "$d/dots.tar"; tar -cPf "$d/abs.tar" "$d/pk/a.diff"
+  run_pack "$1" "$d" "$d/abs.tar" "${SEATS2[@]}"; refused "$d" 'absolute or ".." name' && echo ok
+}
+case_tar_link() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; ln -s / "$d/pk/sub"; (cd "$d/pk" && tar -cf "$d/link.tar" .)
+  run_pack "$1" "$d" "$d/link.tar" "${SEATS2[@]}"; refused "$d" 'tar member is a link' && echo ok
+}
+case_manifest_missing() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; rm "$d/pk/FILES.sha256"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'FILES.sha256 is missing' && echo ok
+}
+case_manifest_extra() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo unlisted > "$d/pk/EXTRA.md"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'not listed: EXTRA.md' && echo ok
+}
+case_manifest_absent() { # listed but not in the pack
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo gone > "$d/pk/GONE.md"; (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md GONE.md > FILES.sha256); rm "$d/pk/GONE.md"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'listed but absent: GONE.md' && echo ok
+}
+case_manifest_dotdot() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; echo outside > "$d/outside.txt"; printf '%s  ../outside.txt\n' "$(sha256sum "$d/outside.txt" | cut -d' ' -f1)" >> "$d/pk/FILES.sha256"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'absolute or contains' || return
+  mkpack "$d/pk2"; printf '%s  /etc/hostname\n' "$(sha256sum /etc/hostname | cut -d' ' -f1)" >> "$d/pk2/FILES.sha256"
+  rm -rf "$d/fake"; run_pack "$1" "$d" "$d/pk2" "${SEATS2[@]}"; refused "$d" 'absolute or contains' && echo ok
+}
+case_patch_default() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mv "$d/pk/a.diff" "$d/pk/a.patch"; (cd "$d/pk" && sha256sum a.patch QUESTIONS.md NOTE.md > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; grep -q 'a.patch' "$d/fake/args.log" 2>/dev/null && echo ok
+}
+case_family_fixed() { # the family belongs to the seat, not to --seat-model
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family xai --seat-model grok=kimi-code/k3
+  [ "$(jq_eval "$d/out/run.json" 'j.seats.grok.state+","+j.seats.grok.family')" = excluded_family,xai ] && echo ok
+}
+case_kimi_excluded() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family moonshot
+  [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.kimi.status+","+j.seat_states.kimi.family')" = excluded_family,moonshot ] && ! grep -q 'kimi-code/k3' "$d/fake/calls.log" && echo ok
+}
+case_family_unknown() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family nosuchfamily; local rc1; rc1="$(cat "$d/rc")"
+  run_jury "$1" "$d" kimi yes --implementer-family claude; [ "$rc1$(cat "$d/rc")" = 20 ] && echo ok
+}
+case_merge_family_mismatch() {
+  local d="$TEST_TMP/$2" a b; a="$d/a"; b="$d/b"; mkdir -p "$a/seats" "$b/seats"
+  printf '%s\n' '{"implementer_family":"xai","seats":{}}' > "$a/run.json"; printf '%s\n' '{"implementer_family":"anthropic","seats":{}}' > "$b/run.json"
+  env -i PATH="/usr/bin:/bin" "$NODE" "$1" merge --out "$d/out" "$a" "$b" > "$d/stdout" 2> "$d/stderr" < /dev/null; [ "$?" = 2 ] && grep -q 'disagree on implementer_family' "$d/stderr" && echo ok
+}
+case_merge_excluded() { # a run.json written elsewhere cannot make the implementer's own family count as valid
+  local d="$TEST_TMP/$2" a; a="$d/a"; mkdir -p "$a/seats"
+  printf '%s\n' '{"implementer_family":"xai","seats":{"grok":{"state":"dispatched","qualified":true,"family":"anthropic"},"glm":{"state":"dispatched","qualified":true},"minimax":{"state":"dispatched","qualified":false}}}' > "$a/run.json"
+  for n in grok glm minimax; do printf '%s\n' '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"none"}' > "$a/seats/$n.json"; done
+  env -i PATH="/usr/bin:/bin" "$NODE" "$1" merge --out "$d/out" "$a" > "$d/stdout" 2>&1 < /dev/null
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.seat_states.grok.status+","+j.valid_seat_count+","+j.seat_states.grok.family')" = excluded_family,2,xai ] && echo ok
+}
+
+ANS='ANSWER Q%s | conclusion=%s | basis=%s | counterexample=%s'
+answer_seat() { # answer_seat <fake-dir> <file> <verdict> <findings text with \n escapes>
+  printf '{"status":"reviewed","verdict":"%s","findings":"%s"}\n' "$3" "$4" > "$1/$2"
+}
+case_answers_full() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 a2; a1="$(printf "$ANS" 1 no a.js:3 none-because-x)"; a2="$(printf "$ANS" 2 yes a.js:9 none-because-y)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$a2"; answer_seat "$d/fake" kimi-code_k3.json SHIP-AS-IS "none\n$a1\n$a2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(cat "$d/rc")" = 0 ] && [ "$(jq_eval "$m" 'j.questions.join()+"|"+Object.keys(j.answers["1"]).join()+"|"+j.answers["2"].kimi.basis+"|"+j.missing_answers.length')" = "1,2|grok,kimi|a.js:9|0" ] \
+    && [ "$(jq_eval "$d/out/seats/grok.json" 'j.answers.length')" = 2 ] && [ "$(jq_eval "$m" 'Object.keys(j.unparsed_finding_lines).length')" = 0 ] \
+    && grep -q 'ANSWER Q<n> | conclusion=' "$d/out/spec.txt" && grep -q '^Q2 second question' "$d/out/spec.txt" && grep -q -- "--spec-file $d/out/spec.txt" "$d/fake/args.log" \
+    && bash "$REPO_ROOT/scripts/check-blind-evidence.sh" --payload "$d/out/spec.txt" > /dev/null 2>&1 && echo ok
+}
+case_answers_missing() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 a2; a1="$(printf "$ANS" 1 no a.js:3 none-because-x)"; a2="$(printf "$ANS" 2 yes a.js:9 none-because-y)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$a2"; answer_seat "$d/fake" kimi-code_k3.json SHIP-AS-IS "none\n$a1"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'JSON.stringify(j.missing_answers)+","+j.round_valid')" = '[{"seat":"kimi","questions":["2"]}],true' ] && [ "$(cat "$d/rc")" = 0 ] && echo ok
+}
+case_answers_blank() { # an answer with an empty field is not a valid answer
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 a2 b2; a1="$(printf "$ANS" 1 no a.js:3 none-because-x)"; a2="$(printf "$ANS" 2 yes a.js:9 none-because-y)"; b2="$(printf "$ANS" 2 yes a.js:9 '')"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$a2"; answer_seat "$d/fake" kimi-code_k3.json SHIP-AS-IS "none\n$a1\n$b2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(jq_eval "$d/out/merged.json" 'JSON.stringify(j.missing_answers)')" = '[{"seat":"kimi","questions":["2"]}]' ] && echo ok
+}
+proof_seat() { # proof_seat <fake-dir> <file> <findings> <no_finding_proof>: a seat whose answers sit after the findings text
+  "$NODE" -e 'process.stdout.write(JSON.stringify({status:"reviewed",verdict:"SHIP-AS-IS",findings:process.argv[1],no_finding_proof:process.argv[2]})+"\n")' "$3" "$4" > "$1/$2"
+}
+case_answers_proof() { # the shape a real grok-4.7 run produced: findings none, every ANSWER on ONE line inside no_finding_proof
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local p='checked=a.diff; evidence=x; conclusion=ok ANSWER Q1 | conclusion=PASS | basis=a.js:3-9; b.js:1 | counterexample=none: unchanged ANSWER Q2 | conclusion=FAIL | basis=a.js:9 | counterexample=none: the | pipe is inside'
+  proof_seat "$d/fake" grok-4.7.json none "$p"; proof_seat "$d/fake" kimi-code_k3.json none "$p"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.missing_answers.length+","+j.answers["1"].grok.conclusion+","+j.answers["1"].grok.basis+","+j.answers["2"].kimi.conclusion+","+j.answers["2"].kimi.counterexample')" = "0,PASS,a.js:3-9; b.js:1,FAIL,none: the | pipe is inside" ] \
+    && [ "$(jq_eval "$d/out/seats/grok.json" 'j.answers.length')" = 2 ] && echo ok
+}
+case_answers_placeholder() { # the format request echoed back (conclusion=<your answer>) is not an answer
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 a2; a1="$(printf "$ANS" 1 no a.js:3 none-because-x)"; a2="$(printf "$ANS" 2 yes a.js:9 none-because-y)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$a2"
+  proof_seat "$d/fake" kimi-code_k3.json none "checked=x; evidence=y; conclusion=z ANSWER Q1 | conclusion=no | basis=a.js:3 | counterexample=none: x ANSWER Q2 | conclusion=<your answer> | basis=<file:line, one or more> | counterexample=<a concrete counterexample>"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(jq_eval "$d/out/merged.json" 'JSON.stringify(j.missing_answers)')" = '[{"seat":"kimi","questions":["2"]}]' ] && echo ok
+}
+case_answers_duplicate() { # the same question twice: the first one stands, the repeat is recorded
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 b1 a2; a1="$(printf "$ANS" 1 first a.js:3 none-x)"; b1="$(printf "$ANS" 1 second a.js:4 none-y)"; a2="$(printf "$ANS" 2 yes a.js:9 none-z)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n$b1\n$a2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.answers["1"].grok.conclusion+","+JSON.stringify(j.seat_states.grok.duplicate_answers)')" = 'first,["1"]' ] \
+    && [ "$(jq_eval "$d/out/seats/grok.json" 'JSON.stringify(j.duplicate_answers)+","+j.answers.length')" = '["1"],2' ] && echo ok
+}
+case_answers_quoted() { # a finding line quoting an answer string is not an answer; the real ANSWER line on the next line is
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local q1 r1 a2; q1="$(printf "$ANS" 1 PASS a.js:3 none-quoted)"; r1="$(printf "$ANS" 1 FAIL a.js:4 none-real)"; a2="$(printf "$ANS" 2 yes a.js:9 none-z)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n[x] MUST-FIX fixture used $q1\n$r1\n$a2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.answers["1"].grok.conclusion+","+JSON.stringify(j.seat_states.grok.duplicate_answers||[])')" = 'FAIL,[]' ] \
+    && [ "$(jq_eval "$d/out/seats/grok.json" 'JSON.stringify(j.duplicate_answers)')" = '[]' ] && echo ok
+}
+case_answers_quoted_missing() { # a finding line quoting ANSWER Q2 does not answer Q2
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/fake"
+  local a1 q2; a1="$(printf "$ANS" 1 no a.js:3 none-x)"; q2="$(printf "$ANS" 2 yes a.js:9 none-quoted)"
+  answer_seat "$d/fake" grok-4.7.json SHIP-AS-IS "none\n$a1\n[x] MUST-FIX fixture used $q2"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(jq_eval "$d/out/merged.json" 'JSON.stringify(j.missing_answers.filter(x=>x.seat==="grok"))')" = '[{"seat":"grok","questions":["2"]}]' ] && echo ok
+}
+case_numbered_questions() { # "1." and "2)" question lines count, a number inside a sentence does not
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; printf 'intro\n1. first?\n2) second?\n70 of 71 receipts fail\n' > "$d/pk/QUESTIONS.md"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; [ "$(jq_eval "$d/out/merged.json" 'j.questions.join()')" = "1,2" ] && echo ok
+}
+case_skipped() {
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; head -c 350000 /dev/zero | tr '\0' 'x' > "$d/pk/big.txt"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md big.txt > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(jq_eval "$d/out/run.json" 'j.skipped_files[0].path+","+j.skipped_files[0].bytes+","+/context cap/.test(j.skipped_files[0].reason)')" = "big.txt,350000,true" ] \
+    && [ "$(head -n1 "$d/out/context.txt")" = "以下檔案未附（大小或排除）：big.txt" ] && [ "$(jq_eval "$d/out/merged.json" 'j.skipped_files.map(x=>x.path).join()')" = big.txt ] && echo ok
+}
+
+case_ctx_exclude() { # an excluded file is not in the context and is in skipped_files with reason excluded
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/pk/sub"; echo SECRET-RESULT-BODY > "$d/pk/sub/x.RESULT-rev2.json"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md sub/x.RESULT-rev2.json > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}" --context-exclude '**/*.RESULT-rev2.json'
+  ! grep -q SECRET-RESULT-BODY "$d/out/context.txt" && grep -q 'NOTE.md' "$d/out/context.txt" \
+    && [ "$(jq_eval "$d/out/run.json" 'j.skipped_files.map(x=>x.path+":"+x.reason).join()')" = "sub/x.RESULT-rev2.json:excluded" ] \
+    && [ "$(head -n1 "$d/out/context.txt")" = "以下檔案未附（大小或排除）：sub/x.RESULT-rev2.json" ] && echo ok
+}
+case_ctx_exclude_diff() { # a glob that matches the diff is refused with rc 2 and nothing is dispatched
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}" --context-exclude '*.diff'; refused "$d" 'matches the diff' && echo ok
+}
+case_ctx_tail() { # the answer format is repeated as the last section of the context
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(grep -c '^=====' "$d/out/context.txt" | tail -n1)" -ge 2 ] && [ "$(grep '^=====' "$d/out/context.txt" | tail -n1)" = "===== Answer format, repeated =====" ] \
+    && [ "$(tail -n1 "$d/out/context.txt" | cut -c1-31)" = "Keep each ANSWER line under 600" ] && grep -q 'Answer every question (Q1, Q2)' "$d/out/context.txt" && echo ok
+}
+
+check case_symlink_file symlinkfile "s/if (st.isSymbolicLink() || (!st.isDirectory() && !st.isFile())) die(/if (false) die(/"
+check case_symlink_dir symlinkdir "s/if (st.isSymbolicLink() || (!st.isDirectory() && !st.isFile())) die(/if (false) die(/"
+check case_symlink_diff symlinkdiff "s/if (st.isSymbolicLink() || (!st.isDirectory() && !st.isFile())) die(/if (false) die(/"
+check case_diff_dotdot diffdotdot "s/if (!rp.startsWith(rootReal + path.sep)) die(/if (false) die(/"
+check case_tar_bad tarbad "s/if (n && badTarName(n)) die(/if (false) die(/"
+check case_tar_link tarlink "s/if (\/^\[lh\]\/.test(l)) die(/if (false) die(/"
+check case_manifest_missing manifestmissing "s/if (!files.includes(sums)) die(/if (false) die(/"
+check case_manifest_extra manifestextra "s/if (extra.length || missing.length) die(/if (false) die(/"
+check case_manifest_absent manifestabsent "s/if (extra.length || missing.length) die(/if (false) die(/"
+check case_manifest_dotdot manifestdotdot "s/ || p.split('\/').includes('..')) die(/) die(/"
+check case_patch_default patchdefault "s/ || f.endsWith('.patch')//"
+check case_family_fixed familyfixed "s/const family = SEATS\[n\].family;/const family = s.model.startsWith('kimi') ? 'moonshot' : SEATS[n].family;/"
+check case_kimi_excluded kimiexcluded "s/const family = SEATS\[n\].family;/const family = 'none';/"
+check case_family_unknown familyunknown "s/if (!KNOWN_FAMILIES.has(o\['implementer-family'\])) die(/if (false) die(/"
+check case_merge_family_mismatch mergemismatch "s/if (run.implementer_family !== implFamily) die(/if (false) die(/"
+check case_merge_excluded mergeexcluded "s/if (st.family === implFamily) status = 'excluded_family';/if (false) status = 'excluded_family';/"
+check case_answers_full answersfull "s/s.answers = pa.answers;/s.answers = [];/"
+check case_answers_missing answersmissing "s/if (miss.length) missingAnswers.push(/if (false) missingAnswers.push(/"
+check case_answers_blank answersblank "s/if (!conclusion || !basis || !counterexample || /if (false || /"
+check case_answers_proof answersproof "s/texts.map((t) => String(t || ''))/texts.slice(0, 1).map((t) => String(t || ''))/"
+check case_answers_placeholder answersplaceholder "s/ || \\/^<\\[^>\\]\\*>\\$\\/\\.test(conclusion)//"
+check case_answers_duplicate answersduplicate "s/if (seen.has(m\\[1\\])) {/if (false) {/"
+check case_answers_quoted answersquoted "s/filter((l) => l.trim().startsWith('ANSWER Q'))/filter((l) => l.includes('ANSWER Q'))/"
+check case_answers_quoted_missing answersquotedmissing "s/filter((l) => l.trim().startsWith('ANSWER Q'))/filter((l) => l.includes('ANSWER Q'))/"
+check case_numbered_questions numbered "s/const id = m && (m\[1\] || m\[2\]);/const id = m && m[1];/"
+check case_skipped skipped "s/if (skipped.length) {/if (false) {/"
+check case_skipped skippedmerged "s/skipped_files: skippedFiles,/skipped_files: [],/"
+check case_ctx_exclude ctxexclude "s/if (isExcluded(rel)) {/if (false) {/"
+check case_ctx_exclude_diff ctxexcludediff "s/if (p && isExcluded(/if (false \&\& isExcluded(/"
+check case_ctx_tail ctxtail "s/fs.writeFileSync(ctx, text + tail);/fs.writeFileSync(ctx, text);/"
+
+# 8d53f188: the real dispatch-review.sh parsing section (stub runner, no model) keeps SHIP-AS-IS and the ANSWER lines
+# when the block is SHIP-AS-IS + FINDINGS: none + ANSWER lines + NO-FINDING-PROOF.
+cat > "$TEST_TMP/answer-runner.sh" <<'STUB'
+#!/usr/bin/env bash
+prompt=""; i=1
+while [ "$i" -le "$#" ]; do
+  arg="${!i}"
+  if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then ni=$((i+1)); na="${!ni}"; if [ -n "$na" ] && [ -f "$na" ]; then prompt="$(cat "$na")"; else prompt="$na"; fi; break; fi
+  i=$((i+1))
+done
+[ -z "$prompt" ] && prompt="$(cat)"
+begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -z "$begin" ] || [ -z "$end" ] && exit 0
+printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nANSWER Q1 | conclusion=PASS | basis=x.js:1 | counterexample=none: unchanged\nANSWER Q2 | conclusion=FAIL | basis=x.js:2 | counterexample=none: guarded\nNO-FINDING-PROOF: checked=fixture diff and acceptance contract; evidence=changed assignment is present in captured diff; conclusion=specified assignment change has no blocking failure\n%s\n' "$begin" "$end"
+STUB
+chmod +x "$TEST_TMP/answer-runner.sh"
+printf 'diff --git a/x.js b/x.js\n--- a/x.js\n+++ b/x.js\n@@ -1 +1 @@\n-const a = 1\n+const a = 2\n' > "$TEST_TMP/dr.diff"
+echo 'Review the diff against the spec.' > "$TEST_TMP/dr-spec.txt"
+bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner codex --model gpt-test --diff-file "$TEST_TMP/dr.diff" --spec-file "$TEST_TMP/dr-spec.txt" \
+  --bin "$TEST_TMP/answer-runner.sh" > "$TEST_TMP/dr-out.json" 2> "$TEST_TMP/dr-err.txt" < /dev/null
+assert_exit_code "$?" "0" "dispatch-review with ANSWER lines: rc 0"
+assert_eq "$("$NODE" -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const a=j.findings.split("\n").filter(l=>/^ANSWER Q\d \|/.test(l));process.stdout.write(j.verdict+","+j.status+","+a.length+","+(j.no_finding_proof||"").startsWith("checked="))' "$TEST_TMP/dr-out.json")" "SHIP-AS-IS,reviewed,2,true" "dispatch-review keeps SHIP-AS-IS, both ANSWER lines and the proof"
+
+# ---- merge keeps each run's recorded qualified verdict; budget-exhausted retry; --seat-max-tokens ----
+cat > "$TEST_TMP/norecord-scorecard.js" <<'FAKE'
+console.log(JSON.stringify({ admission_status: 'no_record' }));
+FAKE
+case_merge_recorded() {
+  local d="$TEST_TMP/$2" a; a="$d/a"; mkdir -p "$a/seats"
+  printf '%s\n' '{"implementer_family":"x","seats":{"grok":{"state":"dispatched","qualified":true,"family":"xai","model":"grok-4.7","runner":"grok","effort":"low"},"kimi":{"state":"dispatched","family":"moonshot","model":"kimi-code/k3","runner":"kimi","effort":"high"}}}' > "$a/run.json"
+  printf '%s\n' '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}' > "$a/seats/grok.json"
+  cp "$a/seats/grok.json" "$a/seats/kimi.json"
+  env -i PATH="/usr/bin:/bin" "$NODE" "$1" merge --out "$d/out" --scorecard-bin "$TEST_TMP/norecord-scorecard.js" "$a" > "$d/stdout" 2>&1 < /dev/null
+  local m="$d/out/merged.json"
+  [ "$(jq_eval "$m" 'j.qualified_seats.join()')" = grok ] && [ "$(jq_eval "$m" 'j.advisory_seats.join()')" = kimi ] \
+    && [ "$(jq_eval "$m" 'j.seat_states.grok.qualified_source+","+j.seat_states.kimi.qualified_source')" = "run,missing" ] && echo ok
+}
+check case_merge_recorded mergerecorded "s|qualified: st0.qualified === true, qualified_source: recorded ? 'run' : 'missing'|qualified: isQualified({ ...SEATS[n], model: st.model, effort: st.effort }, process.argv[process.argv.indexOf('--scorecard-bin') + 1]), qualified_source: 'run'|"
+check case_merge_recorded mergemissing "s/qualified: st0.qualified === true,/qualified: st0.qualified !== false,/"
+
+# fake dispatch: the first glm call answers $FAKE_FIRST (a JSON line), later ones a clean SHIP-AS-IS; every argv is logged.
+cat > "$TEST_TMP/retry-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "$*" >> "$FAKE_DIR/args.log"
+case "$*" in *"--endpoint glm"*) ;; *) printf '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}\n'; exit 0 ;; esac
+n=$(cat "$FAKE_DIR/glm.count" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$FAKE_DIR/glm.count"
+if [ "$n" = 1 ]; then printf '%s\n' "$FAKE_FIRST"; exit 1; fi
+printf '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"FINDINGS: none"}\n'
+FAKE
+chmod +x "$TEST_TMP/retry-dispatch.sh"
+run_glm() { # run_glm <script> <dir> <first-result JSON> extra args...
+  local script="$1" dir="$2" first="$3"; shift 3; mkdir -p "$dir/fake" "$dir/home"
+  FAKE_FIRST="$first" env -i PATH="$STUBS:/usr/bin:/bin" HOME="$dir/home" AUTOPILOT_ENDPOINTS_ENV="$dir/none.env" FAKE_DIR="$dir/fake" FAKE_FIRST="$first" \
+    AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid AUTOPILOT_ENDPOINT_GLM_TOKEN="${GLM_TOKEN:-FAKE-glm}" \
+    "$NODE" "$script" run --pack "$TEST_TMP/pack.txt" --seats glm --implementer-family anthropic --dispatch-bin "$TEST_TMP/retry-dispatch.sh" \
+    --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$dir/out" "$@" > "$dir/stdout" 2> "$dir/stderr" < /dev/null
+  echo $? > "$dir/rc"
+}
+BUDGET_JSON='{"runner":"anthropic-compatible","model":"glm-5.3","status":"no_verdict","verdict":null,"findings":"","error":"output_budget_exhausted: reviewer spent the whole output budget on thinking"}'
+case_retry_budget() {
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON"
+  local s="$d/out/seats/glm.json"
+  [ "$(jq_eval "$s" 'j.status+","+j.attempts.length+","+j.attempts[0].max_tokens+","+j.attempts[1].max_tokens+","+j.attempts[0].error.slice(0,23)')" = "reviewed,2,65536,131072,output_budget_exhausted" ] \
+    && [ "$(sed -n 1p "$d/fake/args.log" | grep -c -- '--max-tokens 65536')" = 1 ] \
+    && [ "$(sed -n 2p "$d/fake/args.log" | grep -c -- '--max-tokens 131072')" = 1 ] \
+    && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.glm.status')" = valid ] && echo ok
+}
+check case_retry_budget retrybudget "s/ || !budgetExhausted(first)) return/ || true) return/"
+case_retry_other() {
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" '{"status":"no_verdict","verdict":null,"findings":"","error":"http 500 from endpoint"}'
+  [ "$(cat "$d/fake/glm.count")" = 1 ] && [ "$(jq_eval "$d/out/seats/glm.json" 'String(j.attempts)')" = undefined ] \
+    && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.glm.status')" = invalid ] && echo ok
+}
+check case_retry_other retryother "s/ || !budgetExhausted(first)) return/ || false) return/"
+case_retry_quoted() { # a reviewed result whose findings quote the word is not a budget failure: one call, one attempt, the result kept
+  local d="$TEST_TMP/$2"
+  run_glm "$1" "$d" '{"status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"FINDINGS:\n🟠 [q] MUST-FIX the log says output_budget_exhausted here","no_finding_proof":"output_budget_exhausted"}'
+  [ "$(cat "$d/fake/glm.count")" = 1 ] && [ "$(jq_eval "$d/out/seats/glm.json" 'String(j.attempts)+","+j.verdict')" = undefined,FIX-THEN-SHIP ] \
+    && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.glm.status')" = valid ] && echo ok
+}
+check case_retry_quoted retryquoted "s/return j.status === 'no_verdict' && String(j.error || '').startsWith('output_budget_exhausted');/return String(r.out).includes('output_budget_exhausted');/"
+# an effort-aware scorecard: GLM-5.3 is a qualified reviewer at effort high only
+cat > "$TEST_TMP/effort-scorecard.js" <<'FAKE'
+const a = process.argv; const v = (k) => a[a.indexOf(k) + 1];
+console.log(JSON.stringify({ admission_status: (v('--engine') === 'GLM-5.3' && v('--effort') === 'high') ? 'qualified' : 'no_record' }));
+FAKE
+case_retry_ceiling() { # already at 200000: effort goes high -> medium, max_tokens stays; the qualified verdict follows the effort that answered
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=200000 --scorecard-bin "$TEST_TMP/effort-scorecard.js"
+  [ "$(jq_eval "$d/out/seats/glm.json" 'j.attempts.map(a=>a.max_tokens+"/"+a.effort).join()')" = "200000/high,200000/medium" ] \
+    && sed -n 2p "$d/fake/args.log" | grep -q -- '--effort medium' \
+    && [ "$(jq_eval "$d/out/run.json" 'j.seats.glm.effort+","+j.seats.glm.answered_effort+","+j.seats.glm.qualified+","+j.seats.glm.qualified_at_requested')" = "high,medium,false,true" ] \
+    && [ "$(jq_eval "$d/out/merged.json" 'const s=j.seat_states.glm; s.effort+","+s.answered_effort+","+s.qualified+","+s.qualified_at_requested+","+j.advisory_seats.join()')" = "high,medium,false,true,glm" ] && echo ok
+}
+check case_retry_ceiling retryceilingeffort "s/state\[r.name\].qualified = isQualified({ ...seatTable\[r.name\], effort: answered }, scorecardBin);/void 0;/"
+check case_retry_ceiling retryceilingmerge "s/answered_effort: s.answered_effort, qualified_at_requested: s.qualified_at_requested, reason: s.reason,/reason: s.reason,/"
+check case_retry_ceiling retryceiling "s/const cur = seat.max_tokens || DEFAULT_RUNNER_MAX_TOKENS;/const cur = 1;/"
+case_seat_max_tokens() {
+  local d="$TEST_TMP/$2" rc1 rc2; run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=12345
+  sed -n 1p "$d/fake/args.log" | grep -q -- '--max-tokens 12345' && ! sed -n 1p "$d/fake/args.log" | grep -q -- '--max-tokens 65536' || return
+  sed -n 2p "$d/fake/args.log" | grep -q -- '--max-tokens 24690' || return
+  run_glm "$1" "$d.b" "$BUDGET_JSON" --seat-max-tokens grok=5; rc1="$(cat "$d.b/rc")"
+  run_glm "$1" "$d.c" "$BUDGET_JSON" --seat-max-tokens glm=200001; rc2="$(cat "$d.c/rc")"
+  [ "$rc1$rc2" = 22 ] && echo ok
+}
+check case_seat_max_tokens seatmaxtokens "s/if (seat.max_tokens) args.push('--max-tokens', String(seat.max_tokens));/void 0;/"
+
+# ---- scorecard engine identity (engine != model) and the redacted stderr log ----
+case_engine() {
+  local d="$TEST_TMP/$2" ok=1
+  run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=200000   # default seat: engine GLM-5.3, wire model glm-5.3
+  [ "$(jq_eval "$d/out/run.json" 'j.seats.glm.qualified+","+j.seats.glm.engine+","+j.seats.glm.model')" = "true,GLM-5.3,glm-5.3" ] && sed -n 1p "$d/fake/args.log" | grep -q -- '--model glm-5.3' || return
+  run_glm "$1" "$d.b" "$BUDGET_JSON" --seat-model glm=GLM-5.3   # --seat-model alone: engine follows the model
+  [ "$(jq_eval "$d.b/out/run.json" 'j.seats.glm.qualified+","+j.seats.glm.engine')" = "true,GLM-5.3" ] || return
+  run_glm "$1" "$d.c" "$BUDGET_JSON" --seat-model glm=zzz --seat-engine glm=GLM-5.3   # --seat-engine pins the lookup only
+  [ "$(jq_eval "$d.c/out/run.json" 'j.seats.glm.qualified+","+j.seats.glm.engine+","+j.seats.glm.model')" = "true,GLM-5.3,zzz" ] || return
+  run_glm "$1" "$d.d" "$BUDGET_JSON" --seat-model glm=zzz
+  [ "$(jq_eval "$d.d/out/run.json" 'j.seats.glm.qualified+","+j.seats.glm.engine')" = "false,zzz" ] && echo ok
+}
+check case_engine engine "s/'--engine', seat.engine,/'--engine', seat.model,/"
+check case_engine engineflag "s/\['seat-engine', 'engine'\]/['seat-engine', 'engine_ignored']/"
+
+cat > "$TEST_TMP/stderr-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "transport failed: POST https://glm.example.invalid/anthropic/v1/messages Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789ABCD sk-FAKEkey123 hex=0123456789abcdef0123456789abcdef0123" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/stderr-dispatch.sh"
+case_stderr_log() {
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/stderr-dispatch.sh"
+  local lg="$d/out/seats/glm.stderr.log"
+  [ -f "$lg" ] && [ "$(stat -c %a "$lg")" = 644 ] && [ "$(jq_eval "$d/out/seats/glm.json" 'j.stderr_log')" = "$lg" ] \
+    && grep -q 'Bearer \[redacted\]' "$lg" && grep -q 'https://glm.example.invalid/anthropic/v1/messages' "$lg" \
+    && ! grep -q 'abcdefghijklmnopqrstuvwxyz' "$lg" && ! grep -q 'FAKEkey123' "$lg" && ! grep -q '0123456789abcdef0123456789abcdef' "$lg" && echo ok
+}
+check case_stderr_log stderrlog "s/function redactStderr(t) {/function redactStderr(t) { return String(t);/"
+cat > "$TEST_TMP/glmkey-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "POST https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages x-api-key: 0123456789abcdef0123456789abcdef.ABCDEFGHIJKLMNOP" >&2
+echo "retrying with key 0123456789abcdef0123456789abcdef.QRSTUVWXYZabcdef now" >&2
+echo "headers: x-api-key: shortkey77 Authorization: Basic basicsecretx" >&2
+echo "leak: $AUTOPILOT_ENDPOINT_GLM_TOKEN end" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/glmkey-dispatch.sh"
+glmkey_run() { local d="$TEST_TMP/$2"; GLM_TOKEN=envtok7Qz run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/glmkey-dispatch.sh"; }
+case_redact_glmkey() { # the dot and the 16 characters after it of a GLM key do not reach the 0644 log
+  local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q 'ABCDEFGHIJKLMNOP' "$lg" && ! grep -q 'QRSTUVWXYZabcdef' "$lg" && ! grep -q '0123456789abcdef' "$lg" && grep -q 'x-api-key: \[redacted\]' "$lg" && echo ok
+}
+check case_redact_glmkey redactglmkey "s|replace(/\[A-Za-z0-9+_=.-\]{32,}/g|replace(/[A-Za-z0-9+_=-]{32,}/g|"
+case_redact_header() { # the whole value after x-api-key / Authorization goes, however short
+  local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q 'shortkey77' "$lg" && ! grep -q 'basicsecretx' "$lg" && echo ok
+}
+check case_redact_header redactxapikey "s/(x-api-key/(x-api-keyZ/"
+check case_redact_header redactauthz "s/(authorization/(authorizationZ/"
+case_redact_url() { # a URL with a long dotted host survives the long-string rule
+  local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"
+  grep -q 'https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages' "$d/out/seats/glm.stderr.log" && echo ok
+}
+check case_redact_url redacturl "s/^const URL_RE = \/https/const URL_RE = \/zzzhttps/"
+check case_redact_url redacturlhost "s/\[^\/?#\]\*\/\.exec(v)/{0}\/.exec(v)/"
+cat > "$TEST_TMP/urlkey-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "GET https://h.example.invalid/v1?key=0123456789abcdef0123456789abcdef done" >&2
+echo "GET https://h.example.invalid/v1?api_key=sk-abc&x=1 done" >&2
+echo "GET https://h.example.invalid/v1?token=short1 done" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/urlkey-dispatch.sh"
+urlkey_run() { local d="$TEST_TMP/$2"; GLM_TOKEN=envtok7Qz run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/urlkey-dispatch.sh"; }
+case_redact_url_query_hex() { # a 32-hex query value is masked, the host stays
+  local d="$TEST_TMP/$2"; urlkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q '0123456789abcdef' "$lg" && grep -q 'https://h.example.invalid/v1?key=\[redacted\]' "$lg" && echo ok
+}
+check case_redact_url_query_hex redacturlhex "s/=> redactUrl(urls\[Number(i)\])/=> urls[Number(i)]/"
+case_redact_url_query_short() { # a short api_key value is masked whatever its length
+  local d="$TEST_TMP/$2"; urlkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q 'sk-abc' "$lg" && ! grep -q 'short1' "$lg" && grep -q 'api_key=\[redacted\]&x=1' "$lg" && echo ok
+}
+check case_redact_url_query_short redacturlshort "s/(secretParam(n) ? p + n/(false ? p + n/"
+check case_redact_url_query_short redacturlshortall "s/=> redactUrl(urls\[Number(i)\])/=> urls[Number(i)]/"
+cat > "$TEST_TMP/urlclass-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "A https://user1:pw9short@h.example.invalid/v1 done" >&2
+echo "B https://h.example.invalid/cb#access_token=frag2short done" >&2
+echo "C https://h.example.invalid/v1?ap%69_key=enc3short&x=1 done" >&2
+echo "D https://h.example.invalid/v1?password=pass4short&x=1 done" >&2
+echo "E https://h.example.invalid/v1?API-Key=case5short&Client_Secret=dash6short done" >&2
+echo "F https://h.example.invalid/p/AAAAAAAAAAAAAAAA%2BBBBBBBBBBBBBBBBB/z done" >&2
+echo '{"x-api-key":"jsn7short","authorization":"jsn8short","password":"jsn9short"}' >&2
+echo "G connect api_key=plain10short password=plain11short" >&2
+echo "H Authorization hdr Basic dXNlcjpwYXNzMTI= end" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/urlclass-dispatch.sh"
+urlclass_log() { local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/urlclass-dispatch.sh"; echo "$d/out/seats/glm.stderr.log"; }
+case_redact_userinfo() { # user:password@ in a URL goes, the host stays
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'pw9short' "$lg" && ! grep -q 'user1' "$lg" && grep -q 'https://\[redacted\]@h.example.invalid/v1' "$lg" && echo ok
+}
+check case_redact_userinfo redactuserinfo 's/const v = u.replace(.*/const v = u;/'
+case_redact_fragment() { # a secret-named fragment parameter goes
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'frag2short' "$lg" && grep -q 'cb#access_token=\[redacted\]' "$lg" && echo ok
+}
+check case_redact_fragment redactfragment "s/\[?&#;\]/[?\\&]/"
+case_redact_encoded_name() { # a percent-encoded parameter name is decoded before the compare
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'enc3short' "$lg" && grep -q 'ap%69_key=\[redacted\]&x=1' "$lg" && echo ok
+}
+check case_redact_encoded_name redactencname "s/try { n = decodeURIComponent(name); }/try { n = name; }/"
+case_redact_password() { # password= with a short value, in a URL and in plain text
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'pass4short' "$lg" && ! grep -q 'plain11short' "$lg" && ! grep -q 'plain10short' "$lg" && echo ok
+}
+check case_redact_password redactpwurl "s/'password', //"
+check case_redact_password redactpwtext 's/key|password|/key|/'
+check case_redact_password redactapikeytext 's/(?<!x-)api\[-_\]?key|/zzz|/'
+case_redact_param_case() { # parameter names compare case-insensitively with _ and - the same
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'case5short' "$lg" && ! grep -q 'dash6short' "$lg" && echo ok
+}
+check case_redact_param_case redactlower "s/n.toLowerCase().replace/n.replace/"
+check case_redact_param_case redactdash "s/.replace(\/_\/g, '-')//"
+case_redact_pct_run() { # a long secret that carries %-escapes is one run
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'BBBBBBBBBBBBBBBBB' "$lg" && grep -q '/p/\[redacted\]/z' "$lg" && echo ok
+}
+check case_redact_pct_run redactpctrun "s/\[A-Za-z0-9+_=%-\]{32,}/[A-Za-z0-9+_=-]{32,}/"
+case_redact_json_key() { # JSON-quoted x-api-key / authorization / password values go, however short
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'jsn7short' "$lg" && ! grep -q 'jsn8short' "$lg" && ! grep -q 'jsn9short' "$lg" && echo ok
+}
+check case_redact_json_key redactjsonxapi 's/(x-api-key[^\\]*\\s\*/(x-api-key\\s*/'
+check case_redact_json_key redactjsonauthz 's/(authorization[^\\]*\\s\*/(authorization\\s*/'
+check case_redact_json_key redactjsonpw '/\\b((?:/s/\[.\{2\}\]?\\s\*/\\s*/'
+case_redact_basic() { # a bare Basic <base64> with no Authorization name before it
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'dXNlcjpwYXNzMTI' "$lg" && echo ok
+}
+check case_redact_basic redactbasic 's/\.replace(\/(\\bBasic.*$//'
+case_redact_env() { # a token held in the process env is removed by its literal value, whatever it looks like
+  local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q 'envtok7Qz' "$lg" && grep -q 'leak: \[redacted\] end' "$lg" && echo ok
+}
+check case_redact_env redactenv "s/for (const v of secretEnvValues()) s = s.split(v).join('\[redacted\]');/void 0;/"
+
+cat > "$TEST_TMP/urledge-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "I https://h.example.invalid/#/cb?token=tok12short done" >&2
+echo "J https://h.example.invalid/a;r=1?key=key13short done" >&2
+echo "K https://h.example.invalid/a;b?key=key14short done" >&2
+echo "L https://u:p@ss15@h.example.invalid/v1 done" >&2
+echo "M cwd PWD=/home/work/keep16 now" >&2
+echo "N login pwd=pwd17short now" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/urledge-dispatch.sh"
+urledge_log() { local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/urledge-dispatch.sh"; echo "$d/out/seats/glm.stderr.log"; }
+case_redact_frag_query() { # a ?token= after a fragment path goes
+  local lg; lg="$(urledge_log "$1" "$2")"
+  ! grep -q 'tok12short' "$lg" && grep -q 'cb?token=\[redacted\]' "$lg" && echo ok
+}
+check case_redact_frag_query redactfragquery_name 's/\[^=?&#;\/\]\*/[^=\&#;]*/'
+case_redact_semi_query() { # a ?key= after a ;param goes, with and without =
+  local lg; lg="$(urledge_log "$1" "$2")"
+  ! grep -q 'key13short' "$lg" && ! grep -q 'key14short' "$lg" && echo ok
+}
+check case_redact_semi_query redactsemiquery_name 's/\[^=?&#;\/\]\*/[^=\&#;]*/'
+check case_redact_semi_query redactsemiquery_val 's/=(\[^?&#;\]\*)/=([^\&#;]*)/'
+case_redact_userinfo_at() { # a password holding @ goes to the last @
+  local lg; lg="$(urledge_log "$1" "$2")"
+  ! grep -q 'ss15' "$lg" && grep -q 'https://\[redacted\]@h.example.invalid/v1' "$lg" && echo ok
+}
+check case_redact_userinfo_at redactuserinfoat 's/\[^\/?#\]\*@\//[^\/?#@]*@\//'
+case_redact_pwd_path() { # PWD=/path (a cwd) is kept, pwd=short is masked
+  local lg; lg="$(urledge_log "$1" "$2")"
+  grep -q 'PWD=/home/work/keep16' "$lg" && ! grep -q 'pwd17short' "$lg" && grep -q 'pwd=\[redacted\]' "$lg" && echo ok
+}
+check case_redact_pwd_path redactpwdpath "s/val.startsWith('\/')/false/"
+check case_redact_pwd_path redactpwdshort "s/pre + '\[redacted\]'/m/"
+
+# ---- SHA256SUMS as the manifest ----
+case_sums_ok() { # SHA256SUMS wins when both exist; FILES.sha256 then is an ordinary (even wrong) file
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; rm "$d/pk/FILES.sha256"; echo 'stale list' > "$d/pk/FILES.sha256"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md FILES.sha256 > SHA256SUMS)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; [ "$(cat "$d/rc")" = 0 ] && grep -q 'stale list' "$d/out/context.txt" && ! grep -q 'stale list' "$d/out/spec.txt" && echo ok
+}
+check case_sums_ok sumsok "s/const sums = files.includes('SHA256SUMS') ? 'SHA256SUMS' : 'FILES.sha256';/const sums = 'FILES.sha256';/"
+case_sums_extra() { # a file SHA256SUMS does not list refuses the pack
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md FILES.sha256 > SHA256SUMS); echo unlisted > "$d/pk/EXTRA.md"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md EXTRA.md > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'SHA256SUMS does not match the file set (not listed: EXTRA.md' && echo ok
+}
+check case_sums_extra sumsextra "s/const sums = files.includes('SHA256SUMS') ? 'SHA256SUMS' : 'FILES.sha256';/const sums = 'FILES.sha256';/"
+check case_sums_extra sumsextrachk "s/if (extra.length || missing.length) die(/if (false) die(/"
+
+# the fixed seat families agree with familyOfEngine() for each seat's default model
+"$NODE" -e '
+const { familyOfEngine } = require(process.argv[1] + "/scripts/lib/stage-write");
+const src = require("fs").readFileSync(process.argv[1] + "/scripts/review-jury.js", "utf8");
+const bad = [];
+for (const m of src.matchAll(/^  (\w+): \{[^}]*model: \x27([^\x27]+)\x27[^}]*family: \x27(\w+)\x27 \}/gm)) if (familyOfEngine(m[2]) !== m[3]) bad.push(m[1]);
+process.exit(bad.length || !src.includes("family: \x27xai\x27") ? 1 : 0);' "$REPO_ROOT"
+assert_exit_code "$?" "0" "seat families agree with familyOfEngine"
+
+finalize_test

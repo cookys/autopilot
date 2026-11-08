@@ -373,7 +373,6 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (batch !== undefined && batch.ans[key] !== undefined) { // answered: stays in place, greyed (dim theme text only), shows the chosen answer, no Button and no field so it takes no focus
       out.push(...ui.cardTitle(u, ui.stateOf('task', 'PENDING'), num + '. ' + batch.q[key], undefined, { fact: F, sent: true, grey: true }))
       out.push(...ui.cardRow(u, t('decide.k_answer'), batch.ans[key], { fact: F, subtle: true }))
-      if (d !== null && d.id !== null && dv.sent[d.id] === undefined && dv.failed?.[d.id] !== undefined) out.push(...ui.cardRow(u, t('decide.k_failed'), dv.failed[d.id], { fact: F })) // answered but the claim was refused: not sent, and why
       out.push(ui.blank())
       return
     }
@@ -394,7 +393,6 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
       out.push(...ui.cardRow(u, t('decide.k_advice'), what, { fact: F })) // the option name on the first row, the reason on its own rows below
       if (d.why !== null) out.push(...ui.cardRow(u, '', d.why, { fact: F }))
     }
-    if (!sent && id !== null && dv.failed?.[id] !== undefined) out.push(...ui.cardRow(u, t('decide.k_failed'), dv.failed[id], { fact: F })) // the claim was refused: this card was not sent, and why
     if (!sent) {
       if (id !== null && dv.inputs && !dialog) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))
       else if (dialog) out.push(...ui.detail(u, t('decide.in_dialog'), { fact: F }))

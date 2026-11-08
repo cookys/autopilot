@@ -1619,7 +1619,7 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 // decision id; `inputs` says whether the surface draws text fields (a phone does not). The reply is one machine-readable prompt: the head line, then one line per
 // answered question `<id>｜<first 30 characters of the question> → <answer>[｜補充：<note>]`, or `→ 都不選｜補充：<note>` when the owner picked none of the options. These strings are a wire format the model reads back, so they are not
 // in the locale tables and do not change with the language. ----
-export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; failed?: Record<string, string>; clean?: Record<string, U.CleanResult> }
+export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult> }
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }
 export type DecideView = DecideState & { inputs: boolean; batch?: import('./decidebatch').DecideBatch }
 export const DECIDE_REPLY_HEAD = '[待決回覆]'
@@ -1653,23 +1653,13 @@ export function recommendedIndex(d: LiveDecision): number | null {
   return part >= 0 ? part : null
 }
 // the answer line of one question, or null when nothing is answered (an option question needs a pick or a non-empty note, a free one needs text)
-// `answerId` (F4): the id the fleet courier returned when this card's answer was claimed. It is the LAST `｜` field of the line, which is where hooks/advisory-relay.js reads it
-// (scripts/lib/decide-line.js parseDecideLine); a `｜` inside the id would move the field, but fleet ids are alphanumeric and the hook only accepts [0-9A-Za-z]{20,40}.
-export function decideLine(d: LiveDecision, st: DecideState, answerId?: string | null): string | null {
+export function decideLine(d: LiveDecision, st: DecideState): string | null {
   if (d.id === null || decideDialog(d)) return null
   const note = decideNote(d, st)
   const pick = decidePick(d, st)
   const notePart = note === '' ? '' : DECIDE_NOTE_MARK + wire(note)
   const answer = d.options.length === 0 ? wire(note) : pick === null ? (note === '' ? '' : DECIDE_NONE + notePart) : wire(d.options[pick].label) + notePart
-  return answer === '' ? null : d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' ' + answer + (answerId === undefined || answerId === null || answerId === '' ? '' : '｜' + answerId)
-}
-// what `fleet decision claim` is given for this card: the picked option's label, or the typed text (a free card, or an option card where none was picked and a note was typed).
-// Both are the same strings decideLine writes into the line (before `wire`), because the hook compares the line's answer with what the courier stored.
-export type ClaimAnswer = { option: string } | { freeText: string }
-export function decideAnswer(d: LiveDecision, st: DecideState): ClaimAnswer | null {
-  if (decideLine(d, st) === null) return null
-  const pick = decidePick(d, st)
-  return d.options.length > 0 && pick !== null ? { option: d.options[pick].label } : { freeText: decideNote(d, st) }
+  return answer === '' ? null : d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' ' + answer
 }
 // the reply to send now: every open question that has an answer, in list order; null when there is none
 export function decideReply(list: readonly LiveDecision[], st: DecideState): { text: string; ids: string[] } | null {

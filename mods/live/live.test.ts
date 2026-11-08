@@ -5657,18 +5657,6 @@ for (const surface of SURFACES) {
 }
 
 // ---- the 待決 tab, mounted: option Buttons, note fields, the send Button, the sent state, a phone without Input. The pure half is decide.test.ts. ----
-// the send step claims every answered card through scripts/decision-claim.js ($.process.run); the default reply is the no-courier one (ok, no answer_id: today's line), a test sets `stdout` to say more
-const NO_COURIER = JSON.stringify({ ok: true, answer_id: null, reason: null }) + '\n'
-const claimHandle = (on: any): { stdout: string; ran: string[][] } => {
-  const h = { stdout: NO_COURIER, ran: [] as string[][] }
-  on('process.run', (_$: any, e: any) => {
-    const argv = e.argv as string[]
-    if (!argv.some(x => x.endsWith('scripts/decision-claim.js'))) return { value: { exitCode: 1, stdout: '', stderr: 'fleet: not here' } }
-    h.ran.push(argv)
-    return { value: { exitCode: 0, stdout: h.stdout, stderr: '' } }
-  })
-  return h
-}
 const DQ1 = { id: 'd-4290499d', question: 'P5 殘留分頁要不要把已清掉的也列出來', background: '殘留分頁現在只列要人處理的。', options: [{ label: 'OK', description: '照現況' }, { label: '完整顯示', description: '全列出來' }], recommendation: 'OK', blocks: '下一個派工' }
 const DQ2 = { id: 'd-c24ecfd9', question: 'U6 要不要把建議也寫進回覆', options: [{ label: '要', description: '' }, { label: '不要', description: '' }] }
 const DQ3 = { id: 'd-0000free', question: '這個分支要叫什麼名字？', options: [] }
@@ -5679,7 +5667,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     const submits: { text: string; origin: unknown }[] = []
     on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
-    return { w, files, submits, claim: claimHandle(on) }
+    return { w, files, submits }
   }
   const decideRows = async ($: any) => (await paneParts($, surface, 'decide')).texts
   const act = async ($: any, ...keys: string[]) => {
@@ -6526,7 +6514,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     const submits: { text: string; origin: unknown }[] = []
     on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
-    return { w, submits, claim: claimHandle(on) }
+    return { w, submits }
   }
   const mountD = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-d', props: { ...BAND_PROPS, maxRows: 8, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
   const rowsD = async ($: any, press: string[] = []) => {
@@ -6581,43 +6569,6 @@ for (const surface of SURFACES) {
     await rowsD($, ['submit'])
     expect(submits.length).toBe(1)
     expect(submits[0].text).toContain('d-4290499d')
-  })
-
-  // F4 panel claim (PM go 2026-11-07): the send button runs scripts/decision-claim.js through $.process.run (mocked here) BEFORE the prompt goes
-  const CLAIM_AID = 'a1B2c3D4e5F6g7H8i9J0kLmN'
-  test('F4 send: the pick is claimed by decision-claim.js first; a claimed card is sent with the answer_id as the last field and then greyed (' + surface + ')', async ($, on) => {
-    const { submits, claim } = decideBand(on)
-    claim.stdout = JSON.stringify({ ok: true, answer_id: CLAIM_AID, reason: null }) + '\n'
-    await start($, surface)
-    await rowsD($, ['tab:decide', 'opt:d-4290499d:1'])
-    await rowsD($, ['submit'])
-    expect(claim.ran.length).toBe(1)
-    expect(claim.ran[0][0]).toBe('node')
-    expect(claim.ran[0].slice(2)).toEqual(['d-4290499d', '--option', '完整顯示'])
-    expect(submits.length).toBe(1)
-    expect(submits[0].text.split('\n')[1].endsWith('｜' + CLAIM_AID)).toBe(true)
-    const texts = (await paneParts($, surface, 'decide')).texts
-    expect(texts.some(x => x.includes('已答') && x.includes('完整顯示')), 'the answer still shows').toBe(true)
-    expect(texts.some(x => x.startsWith('○ 1.')), 'the card is greyed (○)').toBe(true)
-    const after = await rowsD($)
-    expect(after.keys.filter(k => k.startsWith('opt:d-4290499d')), 'a sent card has no option Buttons').toEqual([])
-    expect(after.keys, 'nothing is left to send: the send Button is gone').not.toContain('submit')
-  })
-  test('F4 send: a claim that fails sends nothing, does not mark the card sent, and the pane says why; garbage from the script is a failed claim (' + surface + ')', async ($, on) => {
-    const { submits, claim } = decideBand(on)
-    claim.stdout = JSON.stringify({ ok: false, answer_id: null, reason: 'card closed' }) + '\n'
-    await start($, surface)
-    await rowsD($, ['tab:decide', 'opt:d-4290499d:1'])
-    await rowsD($, ['submit'])
-    expect(claim.ran.length).toBe(1)
-    expect(submits.length).toBe(0)
-    const texts = (await paneParts($, surface, 'decide')).texts
-    expect(texts.join('|')).toContain('card closed')
-    expect((await rowsD($)).keys, 'the card is still unsent: the send Button stays').toContain('submit')
-    claim.stdout = 'Traceback'
-    await rowsD($, ['submit'])
-    expect(claim.ran.length).toBe(2)
-    expect(submits.length, 'output that is not the script JSON: nothing sent').toBe(0)
   })
 
   test('E1 待決: with nothing to answer the tab says so on one line (' + surface + ')', async ($, on) => {
@@ -6958,7 +6909,6 @@ for (const surface of SURFACES) {
     const sent: string[] = []
     shellWorld(on)
     on('prompt.submit', ($$: any, e: any) => { sent.push(e.text); return { text: e.text } })
-    claimHandle(on)
     await start($, surface)
     await drawShell($, 160, ['tab:decide'])
     await drawShell($, 160, ['opt:d-4290499d:0'])

@@ -67,7 +67,7 @@ MODEL="$(idv identity)"; ENGINE="$(idv engine)"; RUNNER="$(idv runner)"; EFFORT=
 [ "$MODEL" = "$SERVED" ] || { say "identity model $MODEL != served id $SERVED"; fin 2; }
 PROVIDER_CMD="node $REPO/scripts/qualification-review-provider.js"; MODEL_VERSION="$MODEL"; VERSION_SOURCE=operator-asserted
 # chat: provider from the reviewed qrpthink tip (b3a62e643, g1 SHIP-AS-IS), the only build that sends chat_template_kwargs.
-QRPT=/home/team/.tmp/claude-1001/-home-team-projects-autopilot/3a4aeabb-3dc9-4071-9a4c-507d9ea37ec2/scratchpad/work/qrpschema
+QRPT="${QRPT:-$(git rev-parse --show-toplevel)}"
 if [ "$TP" = chat ]; then
   [ "$(git -C "$QRPT" rev-parse HEAD)" = 1a5cbebb73c3e67f9abcc9af5d8ca1efb6470b8b ] || { say "qrpschema worktree not at reviewed tip"; fin 2; }
   PROVIDER_CMD="node $QRPT/scripts/qualification-review-provider.js"; HPROTO=chat_completions; HTHINK=enabled

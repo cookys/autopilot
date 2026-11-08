@@ -7,20 +7,20 @@ Sections 1 to the end were written in advance (dry-run only, see `dry-results.tx
 
 | lane | endpoint name | URL | served id (verbatim `--model`) | max_model_len | parsers | window |
 |---|---|---|---|---|---|---|
-| qwen | `qwen_local` | `http://192.168.101.21:8001` | `Qwen3.8-27B-QUASAR-NVFP4` | 262144 | tool `qwen3_coder`, reasoning `qwen3` | ready about 05:30Z |
-| glm | `glm_local` | `http://192.168.101.25:8000` | `GLM-5.3-Flash-NVFP4` | 1048576 | tool parser **unconfirmed**, reasoning parser unknown | 06:30-09:00Z only |
+| qwen | `qwen_local` | `http://<private-ip>:8001` | `Qwen3.8-27B-QUASAR-NVFP4` | 262144 | tool `qwen3_coder`, reasoning `qwen3` | ready about 05:30Z |
+| glm | `glm_local` | `http://<private-ip>:8000` | `GLM-5.3-Flash-NVFP4` | 1048576 | tool parser **unconfirmed**, reasoning parser unknown | 06:30-09:00Z only |
 
 Both vLLM; `/v1/messages` (Anthropic, tool_use) and `/v1/chat/completions`; no auth in the trial period; overload or unhealthy
 answers 503 with Retry-After. Checkpoint revision and vLLM build are not recorded yet: fill them in here before the first row is
-recorded (the seat identity hashes the model token, not the weights). Endpoints are defined in `~/.autopilot/endpoints.env`
+recorded (the seat identity hashes the model token, not the weights). Endpoint addresses are redacted per leak-guard; the real values live in the host endpoints config (`endpoints.env`). Endpoints are defined in `~/.autopilot/endpoints.env`
 (keys `AUTOPILOT_ENDPOINT_{QWEN,GLM}_LOCAL_{URL,TOKEN,TRANSPORT}`, token placeholder, transport `plaintext-private`, mode 600; not in the repo).
 Until the endpointenv lane merges, `resolve-endpoint.sh` does not read that file by itself: always
 `source scripts/load-endpoints-env.sh && autopilot_load_endpoints_env` first (every cell does).
 
 ## Health check (run before each cell; 200 expected)
 
-    curl -s -o /dev/null -w '%{http_code}' http://192.168.101.21:8001/v1/models
-    curl -s -o /dev/null -w '%{http_code}' http://192.168.101.25:8000/v1/models
+    curl -s -o /dev/null -w '%{http_code}' http://<private-ip>:8001/v1/models
+    curl -s -o /dev/null -w '%{http_code}' http://<private-ip>:8000/v1/models
 
 503 = overloaded or unhealthy: wait for Retry-After, do not start a cell. A non-200 live ping also makes the cell exit rc=2 before any case is sent.
 
@@ -139,4 +139,4 @@ fpc = false_pass_critical。
 
 這些列的 `raw/` 原始串流（每個 cell 約 140 KB）沒有放進證據包；判定只需要 `emit-row.json`、`stdout.json`、`run.log`、`rc`、`record-out.json`。`qrp-lenient.js`（來源已刪除）與 `*.bak.*` 備份檔也沒有帶。
 
-`cell-local-think.sh`、`cell-local-rf.sh`、`cell-local-rf-formal.sh` 是照原樣保存的施測腳本，檔頭的「QRP_MAX_TOKENS 65536」與「chat 無法加 chat_template_kwargs、rc=2」是較早的描述，實際預設為腳本內的 `${THINK_MAX_TOKENS:-32768}`，chat 路徑也能開考；為保持證據一致不改腳本。重跑腳本會覆寫 `out/` 下同名目錄，重跑要另開輸出目錄（照失敗列只能附加的規則）。
+`cell-local-think.sh`、`cell-local-rf.sh`、`cell-local-rf-formal.sh` 是照原樣保存的施測腳本，保存的腳本與 log 已遮蔽家目錄路徑與內網 IP，QRPT 改為預設 repo 根目錄，其他內容不變；檔頭的「QRP_MAX_TOKENS 65536」與「chat 無法加 chat_template_kwargs、rc=2」是較早的描述，實際預設為腳本內的 `${THINK_MAX_TOKENS:-32768}`，chat 路徑也能開考；為保持證據一致不改腳本。重跑腳本會覆寫 `out/` 下同名目錄，重跑要另開輸出目錄（照失敗列只能附加的規則）。

@@ -2586,6 +2586,9 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     'messages with thinking sends no temperature');
   equal(sendTo(msgReply, 'application/json', msg).body.temperature, 0,
     'messages without thinking keeps temperature 0');
+  const msgOff = sendTo(msgReply, 'application/json', { ...msg, QRP_HTTP_THINKING: 'disabled' }).body;
+  equal(msgOff.temperature, 0, 'messages with thinking explicitly disabled keeps temperature 0');
+  equal(json(msgOff.thinking), json({ type: 'disabled' }), 'messages with thinking disabled still sends thinking.type=disabled');
   const chat = { QRP_HTTP_PROTOCOL: 'chat_completions' };
   check(!('temperature' in sendTo(chatOk, 'text/event-stream', { ...chat, QRP_HTTP_THINKING: 'enabled' }).body),
     'chat with thinking enabled sends no temperature');
@@ -2606,6 +2609,18 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   check(!/raise QRP_MAX_TOKENS/.test(capped.child.stderr),
     'runaway reasoning does not advise raising QRP_MAX_TOKENS');
 
+  const cappedRc = sendTo(sse({ choices: [{ delta: { reasoning_content: '))))))' }, finish_reason: null }] },
+    { choices: [{ delta: {}, finish_reason: 'length' }] }), 'text/event-stream',
+  { ...chat, QRP_HTTP_THINKING: 'enabled' });
+  check(/reasoning ran to the cap with no message content/.test(cappedRc.child.stderr)
+    && /reasoning_chars=6/.test(cappedRc.child.stderr),
+  'a reasoning_content-only length-capped stream gets the runaway-reasoning diagnosis');
+  const dual = sendTo(sse({ choices: [{ delta: { reasoning: '((((', reasoning_content: '((((' }, finish_reason: null }] },
+    { choices: [{ delta: {}, finish_reason: 'length' }] }), 'text/event-stream',
+  { ...chat, QRP_HTTP_THINKING: 'enabled' });
+  check(/reasoning_chars=4\b/.test(dual.child.stderr),
+    'a delta with both reasoning fields counts its characters once');
+
   const both = sendTo(sse({ choices: [{ delta: { reasoning: 'thinking...' }, finish_reason: null }] },
     { choices: [{ delta: { content: REVIEWER_MODEL_OUTPUT }, finish_reason: null }] },
     { choices: [{ delta: {}, finish_reason: 'stop' }] }), 'text/event-stream', chat);
@@ -2613,5 +2628,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 613) throw new Error(`qualification-review-provider: expected exactly 613 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 617) throw new Error(`qualification-review-provider: expected exactly 617 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

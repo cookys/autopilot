@@ -937,7 +937,8 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
         model,
         max_tokens: maxTokens,
         // Thinking on: no temperature 0 (Anthropic thinking rejects it; Qwen3 greedy degenerates).
-        ...(thinking ? {} : { temperature: 0 }),
+        // 'disabled' is an explicit off: the body keeps temperature 0.
+        ...(thinking && thinking !== 'disabled' ? {} : { temperature: 0 }),
         system: systemPrompt,
         messages: [{
           role: 'user',
@@ -1035,8 +1036,12 @@ function assembleChatStream(raw) {
     const delta = choice.delta || choice.message || {};
     if (typeof delta.content === 'string') content += delta.content;
     // vLLM puts the trace in delta.reasoning, others in delta.reasoning_content.
+    // A delta carrying both counts once: the first non-empty field.
     for (const key of ['reasoning', 'reasoning_content']) {
-      if (typeof delta[key] === 'string') reasoningChars += delta[key].length;
+      if (typeof delta[key] === 'string' && delta[key].length > 0) {
+        reasoningChars += delta[key].length;
+        break;
+      }
     }
   }
   return { content, reasoningChars, finish, resolvedModel, completionTokens, usage };

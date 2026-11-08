@@ -247,10 +247,10 @@ function secretParam(name) {
   return SECRET_PARAMS.has(n.toLowerCase().replace(/_/g, '-'));
 }
 function redactUrl(u) {
-  const v = u.replace(/^(https?:\/\/)[^/?#@]*@/, '$1[redacted]@');
+  const v = u.replace(/^(https?:\/\/)[^/?#]*@/, '$1[redacted]@');
   const host = /^https?:\/\/[^/?#]*/.exec(v)[0];
   return host + v.slice(host.length)
-    .replace(/([?&#;])([^=&#;]*)=([^&#;]*)/g, (m, p, n, val) => (secretParam(n) ? p + n + '=[redacted]' : m))
+    .replace(/([?&#;])([^=?&#;/]*)=([^?&#;]*)/g, (m, p, n, val) => (secretParam(n) ? p + n + '=[redacted]' : m))
     .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
     .replace(/[A-Za-z0-9+_=%-]{32,}/g, '[redacted]');
 }
@@ -262,7 +262,7 @@ function redactStderr(t) {
   s = s
     .replace(/(x-api-key["']?\s*[:=]\s*["']?)[^\s"']+/gi, '$1[redacted]')
     .replace(/(authorization["']?\s*[:=]\s*["']?(?:(?:Bearer|Basic)\s+)?)[^\s"']+/gi, '$1[redacted]')
-    .replace(/\b((?:(?<!x-)api[-_]?key|password|passwd|pwd|(?:client[-_])?secret|(?:access|refresh|auth|id)[-_]token)["']?\s*[:=]\s*["']?)[^\s"',&;}]+/gi, '$1[redacted]')
+    .replace(/\b((?:(?<!x-)api[-_]?key|password|passwd|pwd|(?:client[-_])?secret|(?:access|refresh|auth|id)[-_]token)["']?\s*[:=]\s*["']?)([^\s"',&;}]+)/gi, (m, pre, val) => (/^pwd\b/i.test(pre) && val.startsWith('/') ? m : pre + '[redacted]'))
     .replace(/(Bearer\s+)\S+/gi, '$1[redacted]')
     .replace(/(\bBasic\s+)(?=[A-Za-z0-9+/]*[\d=+/])[A-Za-z0-9+/]{8,}={0,2}/g, '$1[redacted]')
     .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')

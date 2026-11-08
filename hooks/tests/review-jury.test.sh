@@ -614,6 +614,42 @@ case_redact_env() { # a token held in the process env is removed by its literal 
 }
 check case_redact_env redactenv "s/for (const v of secretEnvValues()) s = s.split(v).join('\[redacted\]');/void 0;/"
 
+cat > "$TEST_TMP/urledge-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "I https://h.example.invalid/#/cb?token=tok12short done" >&2
+echo "J https://h.example.invalid/a;r=1?key=key13short done" >&2
+echo "K https://h.example.invalid/a;b?key=key14short done" >&2
+echo "L https://u:p@ss15@h.example.invalid/v1 done" >&2
+echo "M cwd PWD=/home/work/keep16 now" >&2
+echo "N login pwd=pwd17short now" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/urledge-dispatch.sh"
+urledge_log() { local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/urledge-dispatch.sh"; echo "$d/out/seats/glm.stderr.log"; }
+case_redact_frag_query() { # a ?token= after a fragment path goes
+  local lg; lg="$(urledge_log "$1" "$2")"
+  ! grep -q 'tok12short' "$lg" && grep -q 'cb?token=\[redacted\]' "$lg" && echo ok
+}
+check case_redact_frag_query redactfragquery_name 's/\[^=?&#;\/\]\*/[^=\&#;]*/'
+case_redact_semi_query() { # a ?key= after a ;param goes, with and without =
+  local lg; lg="$(urledge_log "$1" "$2")"
+  ! grep -q 'key13short' "$lg" && ! grep -q 'key14short' "$lg" && echo ok
+}
+check case_redact_semi_query redactsemiquery_name 's/\[^=?&#;\/\]\*/[^=\&#;]*/'
+check case_redact_semi_query redactsemiquery_val 's/=(\[^?&#;\]\*)/=([^\&#;]*)/'
+case_redact_userinfo_at() { # a password holding @ goes to the last @
+  local lg; lg="$(urledge_log "$1" "$2")"
+  ! grep -q 'ss15' "$lg" && grep -q 'https://\[redacted\]@h.example.invalid/v1' "$lg" && echo ok
+}
+check case_redact_userinfo_at redactuserinfoat 's/\[^\/?#\]\*@\//[^\/?#@]*@\//'
+case_redact_pwd_path() { # PWD=/path (a cwd) is kept, pwd=short is masked
+  local lg; lg="$(urledge_log "$1" "$2")"
+  grep -q 'PWD=/home/work/keep16' "$lg" && ! grep -q 'pwd17short' "$lg" && grep -q 'pwd=\[redacted\]' "$lg" && echo ok
+}
+check case_redact_pwd_path redactpwdpath "s/val.startsWith('\/')/false/"
+check case_redact_pwd_path redactpwdshort "s/pre + '\[redacted\]'/m/"
+
 # ---- SHA256SUMS as the manifest ----
 case_sums_ok() { # SHA256SUMS wins when both exist; FILES.sha256 then is an ordinary (even wrong) file
   local d="$TEST_TMP/$2"; mkpack "$d/pk"; rm "$d/pk/FILES.sha256"; echo 'stale list' > "$d/pk/FILES.sha256"

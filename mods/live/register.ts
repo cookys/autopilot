@@ -63,7 +63,7 @@ import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, decideDialog, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -1239,9 +1239,16 @@ export function registerLive(on: Parameters<Register>[0]): void {
               redraw()
             })
           }
-          const note = optN === 0 ? t(cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
+          // 附註／其他回答 (an option card) and 打字回答 (a typed one): the button puts the reply line in the prompt box with `$.prompt.fill` (never a submit); the owner types the rest and presses Enter.
+          // The fill is the first thing the press does (nothing awaited before it). A dialog's card (ask_user_question) is answered in its dialog: no button.
+          const fillText = decideFillText(cur, st)
+          const fill = fillText === null ? null : {
+            label: t(optN === 0 ? 'shell.fill_type' : 'shell.fill_note'),
+            onPress: () => { void $.prompt.fill({ text: fillText, mode: 'replace' }).then(out => { if (!out.isFilled) $.ui.toast(t('shell.fill_refused', { why: out.refusal ?? '-' })) }) },
+          }
+          const note = fill !== null ? null : optN === 0 ? t(cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
           main = cardMain(el, {
-            key: cardKey(cur), question: cur.question, background: cur.background, note, bgRows: plan.geo.tier >= 160 ? 2 : 1, width: mainCols - 1, onPress: pickPress,
+            key: cardKey(cur), question: cur.question, background: cur.background, note, fill, bgRows: plan.geo.tier >= 160 ? 2 : 1, width: mainCols - 1, onPress: pickPress,
             options: optN === 0 || cur.id === null ? [] : cur.options.map((o, k) => ({ label: o.label, description: o.description, picked: decidePick(cur, st) === k, recommended: cur.recommendation === o.label, key: optKey(cur.id as string, k) })),
           }, t)
           left = cardRows(cards, decideCursor, plan.geo.left)

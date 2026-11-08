@@ -763,6 +763,30 @@ sed_mutant "$HOOKS_DIR/advisory-relay.js" "$NG_MUT/hooks/advisory-relay.js" 's/i
 NG_OUT="$(HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" GIT_CEILING_DIRECTORIES="$TEST_TMP" node "$NG_MUT/hooks/advisory-relay.js" 2>/dev/null <<< "$NG_PAYLOAD")"
 assert_eq "" "$NG_OUT" "mutant (report removed): silent, as before"
 
+# bandinput: the band's 附註／其他回答 button fills the prompt box and the OWNER presses Enter, so the prompt is the pane's reply line with the owner's note and with NO answer_id
+# (no claim ran). RED control: without the [待決回覆] head on line 1 nothing closes (the LATER/LEAD cases above); here the typed line is the mods/live/model.ts decideFillText text + a note.
+FILL_REPO="$TEST_TMP/fill-repo"
+mkdir -p "$FILL_REPO"
+git -C "$FILL_REPO" init -q
+FILL_ID="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
+  const r = require(process.argv[1]).openDecision({ cwd: process.argv[2], question: "P5 殘留分頁要不要把已清掉的也列出來" });
+  process.stdout.write(r.id);' "$REPO_ROOT/scripts/open-decision.js" "$FILL_REPO")"
+fill_show() { env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node "$REPO_ROOT/scripts/open-decision.js" show --cwd "$FILL_REPO" --json; }
+assert_contains "$(fill_show)" "$FILL_ID" "fill card seeded"
+FILL_PROMPT="$(printf '[待決回覆]\n%s｜P5 殘留分頁要不要把已清掉的也列出來 → 完整顯示｜補充：先做 A 再做 B' "$FILL_ID")"
+# a host whose courier speaks `fleet decision`: the typed line has no answer_id, so it is NOT acted on and the card stays open (the pane's own send carries the id of a claim it ran)
+FILL_FLEET="$TEST_TMP/fill-fleet"
+printf '#!/bin/sh\nprintf "usage: fleet <cmd>\\n  fleet decision claim|verify\\n"\nexit 1\n' > "$FILL_FLEET"
+chmod +x "$FILL_FLEET"
+AUTOPILOT_FLEET_BIN="$FILL_FLEET" run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-fill-courier",cwd:process.argv[1],prompt:process.argv[2]}))' "$FILL_REPO" "$FILL_PROMPT")"
+assert_eq 0 "$__RUN_EXIT" "typed fill line, courier host: exit 0"
+assert_contains "$(fill_show)" "$FILL_ID" "typed fill line, courier host: card stays open (no answer_id, unverified)"
+assert_contains "$__RUN_STDOUT" "unverified [待決回覆]" "typed fill line, courier host: says it was not verified"
+# a host with no courier: the typed line closes the card exactly as the pane's line does
+run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-fill-nocourier",cwd:process.argv[1],prompt:process.argv[2]}))' "$FILL_REPO" "$FILL_PROMPT")"
+assert_eq 0 "$__RUN_EXIT" "typed fill line, no courier: exit 0"
+assert_not_contains "$(fill_show || true)" "$FILL_ID" "typed fill line, no courier: card closed"
+
 # hooks.json timeout covers the worst [待決回覆] case: probe 5 s + 2 cards x (2 verifies x 15 s) + 5 s margin = 70 s
 RELAY_TIMEOUT="$(node -e 'const h=require(process.argv[1]);let t=null;for(const g of h.hooks.UserPromptSubmit)for(const x of g.hooks)if(/advisory-relay\.js/.test(x.command))t=x.timeout;process.stdout.write(String(t))' "$REPO_ROOT/hooks/hooks.json")"
 [ "$RELAY_TIMEOUT" -ge 70 ] 2>/dev/null && assert_eq ok ok "advisory-relay hook timeout >= 70 s" || assert_eq ">=70" "$RELAY_TIMEOUT" "advisory-relay hook timeout >= 70 s"

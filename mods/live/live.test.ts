@@ -7184,6 +7184,87 @@ for (const surface of SURFACES) {
     expect(d.rows[11]).toContain('送出 0 張')
   })
 
+  // bandinput: a note, an "other" answer and a typed answer from the band. The button fills the prompt box (prompt.fill, never prompt.submit); the owner types and presses Enter.
+  const fillWorld = (on: any, extra: Tree = {}) => {
+    const fills: { text: string; mode: unknown }[] = []
+    const submits: string[] = []
+    shellWorld(on, extra)
+    on('prompt.fill', ($$: any, e: any) => { fills.push({ text: e.text, mode: e.mode }); return { isFilled: true } })
+    on('prompt.submit', ($$: any, e: any) => { submits.push(e.text); return { text: e.text } })
+    return { fills, submits }
+  }
+  const OPT_FILL = '[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 完整顯示｜補充：'
+  test('bandinput: an option card has a 附註／其他回答 Button under its options and a typed card has 打字回答 in place of the grey line, at 80, 100 and 160 columns, each within the width and in 12 rows (' + surface + ')', async ($, on) => {
+    fillWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    for (const cols of [80, 100, 160]) {
+      const d = await drawShell($, cols)
+      expect(d.rows.length, 'rows at ' + cols).toBe(12)
+      expect(d.buttons, 'option card at ' + cols).toContain('fill')
+      const at = d.rows.findIndex(r => r.includes('附註／其他回答'))
+      expect(at, 'the button is drawn at ' + cols).toBeGreaterThan(1)
+      expect(at, 'under the last option').toBeGreaterThan(d.rows.findIndex(r => r.includes('完整顯示')))
+      if (cols === 100) console.log('RENDER-BEGIN option-card-100 (' + surface + ')\n' + d.rows.join('\n') + '\nRENDER-END')
+      for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+    }
+    await drawShell($, 100, ['next', 'next'])
+    for (const cols of [80, 100, 160]) {
+      const d = await drawShell($, cols)
+      expect(d.rows[1], 'the typed card').toContain('第 3 張，共 3 張')
+      expect(d.buttons, 'typed card at ' + cols).toContain('fill')
+      expect(d.rows.some(r => r.includes('打字回答')), 'the 打字回答 Button at ' + cols).toBe(true)
+      expect(d.rows.some(r => r.includes('這題請在對話裡回答')), 'the grey line is gone at ' + cols).toBe(false)
+      if (cols === 100) console.log('RENDER-BEGIN typed-card-100 (' + surface + ')\n' + d.rows.join('\n') + '\nRENDER-END')
+      for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+    }
+  })
+  test('bandinput: pressing the button fills the prompt box with the pane\'s reply line up to the note (the picked label, or 都不選; a typed card ends after the arrow) and submits nothing (' + surface + ')', async ($, on) => {
+    const w = fillWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    await drawShell($, 160, ['opt:d-4290499d:1', 'fill'])
+    expect(w.fills).toEqual([{ text: OPT_FILL, mode: 'replace' }])
+    await drawShell($, 160, ['next', 'fill']) // card 2, nothing picked
+    expect(w.fills[1].text).toBe('[待決回覆]\nd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 都不選｜補充：')
+    await drawShell($, 160, ['next', 'fill']) // the typed card
+    expect(w.fills[2].text).toBe('[待決回覆]\nd-0000free｜這個分支要叫什麼名字？ → ')
+    expect(w.fills.length).toBe(3)
+    expect(w.submits, 'the band never submits for the owner').toEqual([])
+  })
+  test('bandinput: the Button has no hotkey and no hotkey is on two Buttons; the digits stay 1-6 options, 0 send, 7 8 9 the quick row (' + surface + ')', async ($, on) => {
+    fillWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    for (const press of [[], ['next', 'next']]) {
+      const d = await drawShell($, 160, press)
+      expect(d.hot['fill'], 'no hotkey on the fill Button').toBeUndefined()
+      const keys = Object.values(d.hot)
+      expect(new Set(keys).size, 'no hotkey twice: ' + keys.join(',')).toBe(keys.length)
+      expect(d.hot['send']).toBe('0')
+      expect(d.hot['prev']).toBe('7')
+      expect(d.hot['next']).toBe('8')
+      expect(d.hot['next-menu']).toBe('9')
+    }
+  })
+  test('bandinput: a card of five options (the most the six rows hold with the question) keeps all five and the Button (in front of the question: no row is left under the options); a dialog card (ask_user_question) has no Button (' + surface + ')', async ($, on) => {
+    const six = { id: 'd-0005opts', question: '五選一', options: ['a', 'b', 'c', 'd', 'e'].map(l => ({ label: 'opt' + l, description: '' })) }
+    const dlg = { id: 'd-0000dlg0', question: '對話框的題', options: [{ label: 'yes', description: '' }], origin: 'ask_user_question' }
+    fillWorld(on, { [W_MODEL]: j(model({ needs_decision: true, decisions: [six, dlg] })) })
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    for (const cols of [80, 100, 160]) {
+      const d = await drawShell($, cols)
+      expect(d.rows.length).toBe(12)
+      for (const l of 'abcde') expect(d.rows.some(r => r.includes('opt' + l)), 'option ' + l + ' at ' + cols).toBe(true)
+      expect(d.buttons).toContain('fill')
+      expect(d.rows.some(r => r.includes('附註／其他回答')), 'the label at ' + cols).toBe(true)
+      for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+    }
+    const next = await drawShell($, 160, ['next'])
+    expect(next.rows[1]).toContain('第 2 張，共 2 張')
+    expect(next.buttons, 'a dialog card is answered in its dialog').not.toContain('fill')
+  })
   test('O4 shell v7: the question, the options, the quick row\'s four slots and the progress row sit at the same row and column at every tier (design §2) (' + surface + ')', async ($, on) => {
     shellWorld(on)
     await start($, surface)

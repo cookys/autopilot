@@ -125,7 +125,7 @@ if (opts.expectWrapperSubject) {
 // -z: paths are NUL-terminated raw bytes. Newline-delimited output quotes or mangles a
 // legal path containing a tab, newline or non-UTF-8 byte, and an added ignored path with
 // such a name would evade the check (review, 2026-09-13).
-const dt = git(['diff-tree', '-r', '-z', '--no-commit-id', '--no-renames', baseOid, headOid]);
+const dt = git(['diff-tree', '-r', '-z', '--ignore-submodules=none', '--no-commit-id', '--no-renames', baseOid, headOid]);
 if (dt.status !== 0) {
   out.error = `git diff-tree failed (${dt.status}): ${dt.stderr.trim()}`;
   emit(3);

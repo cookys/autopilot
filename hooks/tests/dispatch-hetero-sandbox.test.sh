@@ -20,8 +20,8 @@
 #            core.hooksPath=/dev/null, so a worker-planted post-commit never runs (control: plain git does).
 #   reuse  : --reuse-worktree takes its expected gitfile from the main repo's registry; a retained worktree whose
 #            gitfile was repointed is refused before any git runs (control: an untouched one is reused).
-#   gitlink: a gitlink added outside the output paths is not hidden from the rail's BASE..HEAD diff (no --ignore-submodules
-#            on tree-to-tree diffs; the rail's files_changed counts a committed or staged gitlink).
+#   gitlink: a gitlink added outside the output paths is not hidden from the rail's BASE..HEAD diff (every boundary diff carries --ignore-submodules=none, so
+#            a .gitmodules `ignore = all` cannot hide it; status keeps =dirty; files_changed counts a committed or staged gitlink).
 #   no bwrap / bwrap cannot start: fail closed (precondition_failed, no worker, no worktree).
 # Seam: a stub `claude` on PATH, no real model, no GPU. Own temp dirs.
 . "$(dirname "$0")/lib.sh"
@@ -101,7 +101,7 @@ run_case() {
   [ "$write_parent" = 1 ] && tgt="$PARENT_TARGET"
   rm -f "$PARENT_TARGET"
   RC=0
-  OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+  OUT="$(cd "${RUN_REPO:-$SBX}" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
       STUB_PARENT_TARGET="$tgt" PATH="$BINDIR:$PATH" \
       "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
       --prompt-file "$PROMPT" --context-window off --branch "$branch" \
@@ -313,8 +313,46 @@ for glmode in commit stage; do
   eq "2" "$(printf '%s' "$OUT" | result_json | jfield files_changed)" "gitlink($glmode): the rail's own diff counts the gitlink (sandbox-edit.txt + forbidden/gl)"
 done
 unset STUB_GITLINK_ADD
-eq "0" "$(grep -c -e '--ignore-submodules=all' "$REPO_ROOT/scripts/dispatch-hetero.sh" || true)" "gitlink: dispatch-hetero.sh has no --ignore-submodules=all (BASE..HEAD and status calls must see gitlinks)"
-eq "0" "$(grep -E 'diff .*--ignore-submodules' "$REPO_ROOT/scripts/dispatch-hetero.sh" | wc -l | tr -d ' ')" "gitlink: no commit-to-commit diff in the rail carries --ignore-submodules"
+# g4: `submodule.<name>.ignore` in .gitmodules (the worktree copy is worker-writable) and in config is honoured by a
+# diff that carries no --ignore-submodules flag. With ignore=all on the path, a committed or staged gitlink change is
+# invisible to a plain diff; `--ignore-submodules=none` shows it. The control proves the scan below is not vacuous.
+GM="$TEST_TMP/gitmodules-ctl"; mkdir -p "$GM"; $GIT -C "$GM" init -q
+printf '[submodule "gl"]\n\tpath = forbidden/gl\n\turl = ./nowhere\n\tignore = all\n' > "$GM/.gitmodules"
+$GIT -C "$GM" add .gitmodules; $GIT -C "$GM" commit -q -m base
+GM_BASE="$(git -C "$GM" rev-parse HEAD)"
+git -C "$GM" update-index --add --cacheinfo "160000,$GM_BASE,forbidden/gl"
+eq "" "$(git -C "$GM" diff --cached --name-only)" "g4 control: .gitmodules ignore=all hides a staged gitlink from a plain diff --cached"
+eq "forbidden/gl" "$(git -C "$GM" diff --cached --ignore-submodules=none --name-only)" "g4 control: --ignore-submodules=none shows the staged gitlink"
+eq "forbidden/gl" "$(git -C "$GM" status --porcelain --ignore-submodules=dirty | awk '{print $2}')" "g4 control: status --ignore-submodules=dirty (the rail's DIRTY / reuse form) still lists the staged gitlink under ignore=all"
+$GIT -C "$GM" commit -q -m gl
+eq "" "$(git -C "$GM" diff --name-only "$GM_BASE..HEAD")" "g4 control: .gitmodules ignore=all hides a committed gitlink from a plain BASE..HEAD diff"
+eq "forbidden/gl" "$(git -C "$GM" diff --ignore-submodules=none --name-only "$GM_BASE..HEAD")" "g4 control: --ignore-submodules=none shows the committed gitlink"
+# static: every boundary diff the rail makes (its own, and the staged/range diffs of check-disjointness.sh) carries =none
+for f in dispatch-hetero.sh check-disjointness.sh; do
+  nodiff="$(grep -E '(git|_wt_git)\b.*\bdiff\b' "$REPO_ROOT/scripts/$f" | grep -vE '^\s*#' | grep -v -e '--ignore-submodules=none' | grep -c 'name-only\|shortstat\|--cached' || true)"
+  eq "0" "$nodiff" "g4 static: every name-only/shortstat/--cached diff in scripts/$f carries --ignore-submodules=none"
+  eq "0" "$(grep -c -e '--ignore-submodules=all' "$REPO_ROOT/scripts/$f" || true)" "g4 static: scripts/$f has no --ignore-submodules=all"
+done
+eq "2" "$(grep -c -e '_wt_git diff --ignore-submodules=none' "$REPO_ROOT/scripts/dispatch-hetero.sh" || true)" "g4 static: dispatch-hetero.sh makes exactly two diffs (shortstat, name-only), both with =none"
+eq "4" "$(grep -c -e 'diff --cached --ignore-submodules=none\|diff --ignore-submodules=none --name-only' "$REPO_ROOT/scripts/check-disjointness.sh" || true)" "g4 static: check-disjointness.sh makes four diffs (staged, range, parent, empty-tree), all with =none"
+eq "0" "$(grep -E "'diff-tree'" "$REPO_ROOT/scripts/check-hands-commit.js" | grep -vc -e '--ignore-submodules=none' || true)" "g4 static: check-hands-commit.js's diff-tree carries --ignore-submodules=none (diff-tree honours ignore=all too)"
+eq "0" "$(grep -E 'status .*--ignore-submodules' "$REPO_ROOT/scripts/dispatch-hetero.sh" | grep -vc -e '--ignore-submodules=dirty' || true)" "g4 static: every rail status carries --ignore-submodules=dirty"
+# behavioural: .gitmodules (committed in the base) says ignore=all for forbidden/gl; the worker adds the gitlink
+GMR="$TEST_TMP/gm-repo"; mkdir -p "$GMR"; $GIT -C "$GMR" init -q
+printf '[submodule "gl"]\n\tpath = forbidden/gl\n\turl = ./nowhere\n\tignore = all\n' > "$GMR/.gitmodules"
+$GIT -C "$GMR" add .gitmodules; $GIT -C "$GMR" commit -q -m base
+export RUN_REPO="$GMR"
+for glmode in commit stage; do
+  export STUB_GITLINK_ADD="$glmode"
+  run_case none 0 --worktree-parent "$WTPARENT"
+  eq '"boundary_rejected"' "$(status_of)" "g4 ignore=all($glmode): the content gate still rejects the gitlink (rc=$RC)"
+  case "$(printf '%s' "$OUT" | result_json | jfield error)" in
+    *forbidden/gl*) eq 0 0 "g4 ignore=all($glmode): the error names forbidden/gl" ;;
+    *) fail "g4 ignore=all($glmode): error text: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
+  esac
+  eq "2" "$(printf '%s' "$OUT" | result_json | jfield files_changed)" "g4 ignore=all($glmode): files_changed counts the gitlink (sandbox-edit.txt + forbidden/gl)"
+done
+unset STUB_GITLINK_ADD RUN_REPO
 
 # ---- bwrap unavailable -> fail closed
 NOBW="$TEST_TMP/nobwrap-bin"; mkdir -p "$NOBW"

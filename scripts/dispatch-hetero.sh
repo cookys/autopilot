@@ -4755,7 +4755,7 @@ HEAD_SHA="$(_wt_git rev-parse HEAD)"
 DIRTY="$(_wt_git status --porcelain --ignore-submodules=dirty)"
   FILES=0; INS=0; DEL=0
   if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
-  SHORTSTAT="$(_wt_git diff --shortstat "$BASE_SHA..$HEAD_SHA")"
+  SHORTSTAT="$(_wt_git diff --ignore-submodules=none --shortstat "$BASE_SHA..$HEAD_SHA")"
   FILES="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ file' | grep -o '[0-9]\+' || echo 0)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
@@ -5073,7 +5073,7 @@ run_strict_boundary_postcheck() {
   # Collect exact changed paths once for output-path role checks.
   while IFS= read -r temp_path; do
     [ -n "$temp_path" ] && changed_paths+=("$temp_path")
-  done < <(_wt_git diff --name-only "$BASE_SHA..$HEAD_SHA")
+  done < <(_wt_git diff --ignore-submodules=none --name-only "$BASE_SHA..$HEAD_SHA")
 
   for temp_path in "${changed_paths[@]}"; do
     changed_set["$temp_path"]=1

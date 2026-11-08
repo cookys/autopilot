@@ -5725,6 +5725,7 @@ const claimHandle = (on: any): { stdout: string; hang: boolean; ran: string[][];
 }
 const DQ1 = { id: 'd-4290499d', question: 'P5 殘留分頁要不要把已清掉的也列出來', background: '殘留分頁現在只列要人處理的。', options: [{ label: 'OK', description: '照現況' }, { label: '完整顯示', description: '全列出來' }], recommendation: 'OK', blocks: '下一個派工' }
 const DQ2 = { id: 'd-c24ecfd9', question: 'U6 要不要把建議也寫進回覆', options: [{ label: '要', description: '' }, { label: '不要', description: '' }] }
+const DQ5 = { id: 'd-5optcard', question: '五個選項的卡要選哪一個', options: [1, 2, 3, 4, 5].map(n => ({ label: '選項' + n, description: '' })) }
 const DQ3 = { id: 'd-0000free', question: '這個分支要叫什麼名字？', options: [] }
 for (const surface of SURFACES) {
   const decideWorld = (on: any, decisions: object[] = [DQ1, DQ2, DQ3]) => {
@@ -7626,6 +7627,21 @@ for (const surface of SURFACES) {
     expect(again.rows.some(r => r.includes('◆') && r.includes('OK')), 'the pick is still OK').toBe(true)
     const fixed = await drawShell($, 160, ['fix'])
     expect(NO_OPT(fixed.buttons).length, '改答案 opens the card again').toBeGreaterThan(2)
+  })
+  test('bandsent: a sent card of five options (inline state line, no row under the options) still offers 改答案, within the width; at 80, 100 and 160 columns (' + surface + ')', async ($, on) => {
+    const w = sendWorld(on).w
+    w.files[W_MODEL] = j(model({ needs_decision: true, decisions: [DQ5] }))
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    await drawShell($, 160, ['opt:d-5optcard:0'])
+    await drawShell($, 160, ['send'])
+    await w.clock.advance(10_000)
+    for (const cols of [80, 100, 160]) {
+      const d = await drawShell($, cols)
+      expect(d.rows.some(r => r.includes('已送出，等處理')), 'the sent mark at ' + cols).toBe(true)
+      expect(d.buttons, 'a sent five-option card can be corrected at ' + cols).toContain('fix')
+      for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
+    }
   })
   test('bandsent: a card in its undo window says 即將送出，可撤回, has no option Button, and the quick row takes it back; at 80, 100 and 160 columns (' + surface + ')', async ($, on) => {
     sendWorld(on)

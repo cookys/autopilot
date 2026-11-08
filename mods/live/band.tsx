@@ -273,12 +273,13 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   const rows: unknown[] = []
   // the fill button sits in the row under the options; a card of five or six options leaves no such row, so there it stands in front of the question (the button wins over the second background row and never over an option)
   // the state line (meta, dim) takes the same row and the same fallback: under the options when a row is left, else in front of the question
+  // inline with a state line: the lead is `meta · [ fix ] · `, so the question is cut to what is left of the row (the line must not outgrow the window)
   const inline = (v.fill !== null || v.meta !== null) && 1 + v.options.length + 1 > MAIN_CONTENT_ROWS
   const fillBtn = v.fill === null ? null : BarButton(el, 'fill', v.fill.label, v.fill.onPress)
   const fixBtn = v.fix === null ? null : BarButton(el, 'fix', v.fix.label, v.fix.onPress)
   const metaText = v.meta === null ? null : <Text key="meta" {...dimProps()} wrap="truncate">{v.meta}</Text>
-  const lead = inline ? (fillBtn !== null ? fillBtn : metaText === null ? null : <Text key="metai" {...dimProps()}>{v.meta + ' · '}</Text>) : null
-  rows.push(<Box key="q"><Text>{' '}</Text>{lead !== null ? <Box key="fi">{lead}{fillBtn !== null ? <Text>{' '}</Text> : <Text>{''}</Text>}</Box> : <Text key="fi">{''}</Text>}<Text {...(v.grey ? dimProps() : {})} wrap="truncate">{v.question}</Text></Box>)
+  const lead = inline ? (fillBtn !== null ? fillBtn : metaText === null ? null : <Box key="metai"><Text {...dimProps()}>{v.meta + ' · '}</Text>{fixBtn === null ? <Text key="nfi">{''}</Text> : <Box key="fxi">{fixBtn}<Text>{' · '}</Text></Box>}</Box>) : null
+  rows.push(<Box key="q"><Text>{' '}</Text>{lead !== null ? <Box key="fi">{lead}{fillBtn !== null ? <Text>{' '}</Text> : <Text>{''}</Text>}</Box> : <Text key="fi">{''}</Text>}<Text {...(v.grey ? dimProps() : {})} wrap="truncate">{inline && fillBtn === null && metaText !== null ? chunkText(v.question, Math.max(4, v.width - 3 - displayWidth(v.meta ?? '') - 3 - (v.fix === null ? 0 : displayWidth(v.fix.label) + 4 + 3)), 1)[0] ?? '' : v.question}</Text></Box>)
   // the background area is two rows at every tier (one line of text when narrow, two from 160, the second row blank otherwise), so the options sit on the same rows everywhere; it
   // gives rows back only when the options would not fit
   const tail = inline ? 0 : v.fill !== null || v.meta !== null || v.note !== null ? 1 : 0

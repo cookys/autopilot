@@ -45,6 +45,38 @@ in the repo file as before, or left out to follow this file.
 
 Every roster change adds a block here: date, reason, who ruled.
 
+**2026-11-08.** Review-seat wiring for three families (PM fleet 01M6W6QAVQ and 01M6W6S85M, part A). The
+ladders are DERIVED, not listed: `scripts/resolve-dispatch-topology.js` builds `reviewer_ladder` and
+`plan_review_panel` from scorecard rows that are qualified for the role, whose runner is installed (an HTTP
+runner: whose endpoint env is set). So "registering" a seat means (a) the right runner and endpoint wiring
+below and (b) a qualified row for that exact `engine + runner + effort`. Ids are written as the roster and
+the shipped defaults write them; no aliases.
+
+* GLM-5.3: runner `cc-shim`, endpoint `glm`, effort high (the terminal-panel seat above). Env names:
+  `AUTOPILOT_ENDPOINT_GLM_URL`, `AUTOPILOT_ENDPOINT_GLM_TOKEN` (optional `AUTOPILOT_ENDPOINT_GLM_TRANSPORT`).
+  `dispatch-author.sh` / `dispatch-review.sh` export them to the `claude` child as `ANTHROPIC_BASE_URL` and
+  `ANTHROPIC_AUTH_TOKEN`; nothing else is set by hand. Shipped reviewer rows are on runner
+  `anthropic-compatible` (HTTP, same endpoint, effort low and high, qualified); a `cc-shim` reviewer row is
+  not shipped, only the implementer one, so the cc-shim reviewer seat needs its own exam or an adopted row.
+* MiniMax-M3.1-Flash: runner `cc-shim`, endpoint `minimax`. Env names: `AUTOPILOT_ENDPOINT_MINIMAX_URL`,
+  `AUTOPILOT_ENDPOINT_MINIMAX_TOKEN`, or the provider-native pair `AUTOPILOT_MINIMAX_BASE_URL` (optional) and
+  `MINIMAX_API_KEY` (`resolve-endpoint.sh` order). Shipped rows: implementer qualified; the reviewer rows for
+  `MiniMax-M3.1-Flash-Preview` FAILED, and there is no reviewer row for `MiniMax-M3.1-Flash`, so it enters
+  `reviewer_ladder` only after a reviewer exam passes.
+* kimi-code/k3.1-pro: runner `kimi`, no endpoint, no env var. The binary is `kimi` on PATH, else
+  `~/.kimi-code/bin/kimi` (`scripts/lib/runner-fallback-bin.sh`). Shipped rows: consult, discuss, owner,
+  implementer and verification_author qualified; `kimi-code-k3` and `kimi-k2.8-preview` are the reviewer-
+  qualified kimi ids, `kimi-code/k3.1-pro` has no reviewer row yet. `kimi` is now panel-eligible, so its
+  consult row joins `plan_review_panel` as a non-chair seat today, and its reviewer row would join the
+  `reviewer_ladder` the same way.
+* opencode: runner `opencode`, ids `opencode-go/<model>`, no endpoint. It stays OUT of `plan_review_panel`
+  because `dispatch-author.sh` (the plan-review transport) has no opencode branch.
+* Runner binaries: `codex` and `agy` under `~/.local/bin`, `grok` under `~/.grok/bin` (and `~/.local/bin`) are
+  found after PATH misses; PATH, and so a test sentinel dir, always wins.
+* Plan-review fallback: a seat with no fallbacks gets up to two from the topology (a family no primary seat
+  uses, never the implementer's runner). A missing runner binary now counts as the seat being unavailable, so
+  that fallback takes over instead of the panel ending on a precondition.
+
 **2026-11-06.** The roster became the single source, and its values are the seats running now.
 Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
 

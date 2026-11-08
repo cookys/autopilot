@@ -5335,6 +5335,20 @@
       "summary": "Set to \"0\" to stop the SessionStart refresh of the seat price cache (either this or prices_fetch: false switches it off)."
     },
     {
+      "name": "AUTOPILOT_RUNNER_HOME_FALLBACK",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": [
+        "scripts/lib/runner-fallback-bin.sh",
+        "scripts/lib/runner-binary.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop the lookup of a runner binary under HOME (codex and agy in ~/.local/bin, grok in ~/.grok/bin, kimi in ~/.kimi-code/bin) when PATH does not hold it; PATH is always searched first. Unset, it is off under node --test (NODE_TEST_CONTEXT set); an explicit on wins. The shell test lib sets it off so a test that drops a runner from PATH never reaches a real one."
+    },
+    {
       "name": "AUTOPILOT_PRICES_CACHE_DIR",
       "kind": "env",
       "audience": "user",

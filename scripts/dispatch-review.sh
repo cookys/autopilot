@@ -243,6 +243,7 @@ fi
 # agy_print_timeout — a bare-number --timeout must reach agy as "<n>s" (agy rejects a unitless duration).
 # shellcheck source=lib/agy-timeout.sh
 . "$_REVIEW_SELF_DIR/lib/agy-timeout.sh" || { echo "dispatch-review.sh: required lib unreadable: $_REVIEW_SELF_DIR/lib/agy-timeout.sh" >&2; exit 2; }
+. "$_REVIEW_SELF_DIR/lib/runner-fallback-bin.sh" || { echo "dispatch-review.sh: required lib unreadable: $_REVIEW_SELF_DIR/lib/runner-fallback-bin.sh" >&2; exit 2; }
 
 ROLE_KIT_DIR=""   # --role-kit (lib/role-kit.sh)
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; IDLE_TIMEOUT="${AUTOPILOT_REVIEW_IDLE_TIMEOUT:-}"; IDLE_MARKER=""; IDLE_WRAP=(); BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
@@ -1370,7 +1371,7 @@ _acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/
 # --- dispatch (read-only) ---
 declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_REVIEW_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
 if [[ "$RUNNER" = "codex" ]]; then
-  CODEX_BIN="${BIN:-codex}"
+  CODEX_BIN="$(runner_bin_fallback "${BIN:-codex}")"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
   # READ-ONLY sandbox: a reviewer never writes/execs, and the diff is untrusted (injection).
   # codex stdout is delivered normally under a pipe. Capture files are normally created
@@ -1429,7 +1430,7 @@ if [[ "$RUNNER" = "codex" ]]; then
   fi
   PARSE_INPUT="$CODEX_OUT"
 elif [[ "$RUNNER" = "grok" ]]; then
-  GROK_BIN="${BIN:-grok}"
+  GROK_BIN="$(runner_bin_fallback "${BIN:-grok}")"
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN"
   # READ-ONLY by construction (the diff is untrusted): run in a SCRATCH cwd (never the
   # repo), NO --always-approve (so it cannot auto-run/edit — Spike-verified that a pure
@@ -2042,7 +2043,7 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
     emit_no_verdict "anthropic-compatible transport exited non-zero (rc=$ANTHROPIC_RC) — fail-closed, raw output not parsed"
   fi
 else
-  AGY_BIN="${BIN:-agy}"
+  AGY_BIN="$(runner_bin_fallback "${BIN:-agy}")"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   [ "$BLIND_RUNNER_CLEANROOM" -eq 1 ] || command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy reviewer requires bwrap filesystem/process isolation"

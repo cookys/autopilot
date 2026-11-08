@@ -298,7 +298,11 @@ NODE
 assert_eq "codex" "$NORMALIZED_RUNNER" "Case 7: codex-cli normalized to codex in output"
 
 # -----------------------------------------------------------------------------
-# Case 8: runner kimi eligible for reviewer_ladder but NOT plan_review_panel
+# Case 8: runner kimi is eligible for reviewer_ladder AND plan_review_panel (PM go 2026-11-08:
+# dispatch-author.sh drives kimi, and the Kimi 3.1 Pro seat must be able to join the panel).
+# This overturns the older Case 8, which pinned kimi OUT of the panel: the operator named kimi as a usable
+# review family on 2026-11-08 (PM ruling, fleet 01M6W8F08E). The premise is unchanged: with no qualified
+# reviewer row for a kimi seat nothing enters the panel (see the Case 8 and 8b negative controls).
 # -----------------------------------------------------------------------------
 rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
 # Create fake kimi binary
@@ -329,7 +333,75 @@ const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
 process.stdout.write(String(topo.plan_review_panel.length));
 NODE
 )"
-assert_eq "0" "$KIMI_IN_PANEL" "Case 8: kimi is not in panel-eligible runner list so panel is empty"
+assert_eq "1" "$KIMI_IN_PANEL" "Case 8: kimi is in the panel-eligible runner list so the panel holds the kimi seat"
+
+# Negative control: the previous eligibility list (no kimi) must put the panel back to empty.
+mkdir -p "$TEST_TMP/mut-nokimi/scripts"
+for f in "$REPO_ROOT"/scripts/*; do
+  [ "$(basename "$f")" = resolve-dispatch-topology.js ] || ln -s "$f" "$TEST_TMP/mut-nokimi/scripts/$(basename "$f")"
+done
+sed_mutant "$SCRIPT" "$TEST_TMP/mut-nokimi/scripts/resolve-dispatch-topology.js" "/^  'kimi',\$/d" || fail "Case 8 NC: mutant not built"
+rm -f "$TOPOLOGY_OUT"
+node "$TEST_TMP/mut-nokimi/scripts/resolve-dispatch-topology.js" --json --role reviewer,plan_reviewer --out "$TOPOLOGY_OUT" >/dev/null 2>&1
+KIMI_IN_PANEL_NC="$(node - "$TOPOLOGY_OUT" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(String(topo.plan_review_panel.length));
+NODE
+)"
+assert_eq "0" "$KIMI_IN_PANEL_NC" "Case 8 NC: without kimi in PANEL_ELIGIBLE_RUNNERS the panel is empty again"
+
+# -----------------------------------------------------------------------------
+# Case 8b (same operator decision as Case 8, 2026-11-08; no qualified row means no panel seat): GLM-5.3, MiniMax-M3.1-Flash and kimi-code/k3.1-pro (PM 01M6W6QAVQ part A) all reach BOTH
+# reviewer_ladder and plan_review_panel when their reviewer rows are qualified: ids verbatim, runner
+# cc-shim for the first two (endpoints glm and minimax from the env), runner kimi for the third.
+# -----------------------------------------------------------------------------
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+cat > "$FAKE_BIN_DIR/claude" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf '2.1.0 (Claude Code)\n'
+  exit 0
+fi
+exit 0
+STUB
+chmod +x "$FAKE_BIN_DIR/claude"
+write_scorecard_row "GLM-5.3" "cc-shim" "high" 10.0 "qualified" 801 "reviewer"
+write_scorecard_row "MiniMax-M3.1-Flash" "cc-shim" "high" 11.0 "qualified" 802 "reviewer"
+write_scorecard_row "kimi-code/k3.1-pro" "kimi" "high" 12.0 "qualified" 803 "reviewer"
+
+three_seat_topology() { # <out> [extra env assignments are inherited]
+  AUTOPILOT_ENDPOINT_GLM_URL="https://glm.invalid/anthropic" AUTOPILOT_ENDPOINT_GLM_TOKEN="FAKE-glm" \
+  AUTOPILOT_ENDPOINT_MINIMAX_URL="https://minimax.invalid/anthropic" AUTOPILOT_ENDPOINT_MINIMAX_TOKEN="FAKE-minimax" \
+    node "${SCRIPT_UNDER_TEST:-$SCRIPT}" --json --role reviewer,plan_reviewer --out "$1" >/dev/null 2>&1
+}
+seat_summary() { # <topology file> <key> -> "engine@runner/family/endpoint" joined by commas, sorted
+  node - "$1" "$2" <<'NODE'
+const topo = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+process.stdout.write((topo[process.argv[3]] || []).map((s) => `${s.engine}@${s.runner}/${s.family}/${s.endpoint || ''}`).sort().join(','));
+NODE
+}
+three_seat_topology "$TOPOLOGY_OUT"
+WANT_SEATS="GLM-5.3@cc-shim/zhipu/glm,MiniMax-M3.1-Flash@cc-shim/minimax/minimax,kimi-code/k3.1-pro@kimi/moonshot/"
+assert_eq "$WANT_SEATS" "$(seat_summary "$TOPOLOGY_OUT" reviewer_ladder)" "Case 8b: reviewer_ladder holds all three seats with runner, family and endpoint"
+assert_eq "$WANT_SEATS" "$(seat_summary "$TOPOLOGY_OUT" plan_review_panel)" "Case 8b: plan_review_panel holds all three seats (three distinct families)"
+
+# Negative control: drop the kimi row => the kimi seat leaves both lists (the assertion is sensitive to it)
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "GLM-5.3" "cc-shim" "high" 10.0 "qualified" 801 "reviewer"
+write_scorecard_row "MiniMax-M3.1-Flash" "cc-shim" "high" 11.0 "qualified" 802 "reviewer"
+three_seat_topology "$TOPOLOGY_OUT"
+assert_not_contains "$(seat_summary "$TOPOLOGY_OUT" reviewer_ladder)" "kimi-code/k3.1-pro" "Case 8b NC: without its qualified row the kimi seat is not in reviewer_ladder"
+assert_not_contains "$(seat_summary "$TOPOLOGY_OUT" plan_review_panel)" "kimi-code/k3.1-pro" "Case 8b NC: nor in plan_review_panel"
+
+# Negative control: the panel needs kimi to be panel-eligible (mutant without it keeps kimi out of the panel only)
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
+write_scorecard_row "GLM-5.3" "cc-shim" "high" 10.0 "qualified" 801 "reviewer"
+write_scorecard_row "MiniMax-M3.1-Flash" "cc-shim" "high" 11.0 "qualified" 802 "reviewer"
+write_scorecard_row "kimi-code/k3.1-pro" "kimi" "high" 12.0 "qualified" 803 "reviewer"
+SCRIPT_UNDER_TEST="$TEST_TMP/mut-nokimi/scripts/resolve-dispatch-topology.js" three_seat_topology "$TOPOLOGY_OUT"
+assert_contains "$(seat_summary "$TOPOLOGY_OUT" reviewer_ladder)" "kimi-code/k3.1-pro" "Case 8b NC: without panel eligibility the kimi seat is still in reviewer_ladder"
+assert_not_contains "$(seat_summary "$TOPOLOGY_OUT" plan_review_panel)" "kimi-code/k3.1-pro" "Case 8b NC: but the panel loses it"
+rm -f "$FAKE_BIN_DIR/claude"
 
 # -----------------------------------------------------------------------------
 # Case 9: --exclude-seats removes seat from every list and panel

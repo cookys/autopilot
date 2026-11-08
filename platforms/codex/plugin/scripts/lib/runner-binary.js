@@ -66,7 +66,16 @@ const RUNNER_VERSION_BINARY = Object.freeze({
 // than the one dispatch actually runs. Ownership of the general fallback CHAIN stays with
 // the dispatchers (they also honor an explicit --bin, which this module has no input for);
 // what lives here is only the version-probe mirror of it.
+//
+// The same table also covers the team-account layout where `codex` and `agy` live in
+// ~/.local/bin and `grok` in ~/.grok/bin (also ~/.local/bin), none of which a normal session
+// PATH holds. PATH is always searched first, so a fixture or sentinel dir on PATH still wins.
+// scripts/lib/runner-fallback-bin.sh is the bash mirror; hooks/tests/runner-fallback-bin.test.sh
+// keeps the two equal.
 const RUNNER_BINARY_FALLBACK_PATHS = Object.freeze({
+  codex: ['.local/bin/codex'],
+  agy: ['.local/bin/agy'],
+  grok: ['.grok/bin/grok', '.local/bin/grok'],
   kimi: ['.kimi-code/bin/kimi'],
 });
 
@@ -167,6 +176,18 @@ function knownRunners() {
   return Object.keys(RUNNER_VERSION_BINARY).sort();
 }
 
+/**
+ * The HOME directory a runner fallback lookup may use, or '' when the lookup is off.
+ * AUTOPILOT_RUNNER_HOME_FALLBACK=off turns it off; an unset knob is off under `node --test`
+ * (NODE_TEST_CONTEXT is set there), so a directly run *.test.js never reaches a real runner under
+ * HOME. An explicit =on wins (the fallback's own tests use it with a fixture HOME).
+ */
+function runnerFallbackHome() {
+  const knob = process.env.AUTOPILOT_RUNNER_HOME_FALLBACK;
+  const off = knob === 'off' || (!knob && Boolean(process.env.NODE_TEST_CONTEXT));
+  return off ? '' : (process.env.HOME || '');
+}
+
 /** Absolute path of `binary` on PATH (or a runner's well-known fallback), else null. */
 function resolveBinaryPath(binary, runner) {
   if (binary.includes(path.sep)) {
@@ -183,7 +204,8 @@ function resolveBinaryPath(binary, runner) {
       if (fs.statSync(candidate).isFile()) return candidate;
     } catch { /* keep scanning */ }
   }
-  const home = process.env.HOME || '';
+  // Knob off (or unset under node --test): PATH only, tests must never reach a real runner under HOME.
+  const home = runnerFallbackHome();
   for (const rel of (RUNNER_BINARY_FALLBACK_PATHS[runner] || [])) {
     if (!home) break;
     const candidate = path.join(home, rel);
@@ -418,6 +440,8 @@ module.exports = {
   versionBinaryFor,
   knownRunners,
   resolveBinaryPath,
+  runnerFallbackHome,
+  RUNNER_BINARY_FALLBACK_PATHS,
   stripVersionControlChars,
   sanitizeVersionToken,
   versionLineRefusalReason,

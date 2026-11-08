@@ -1383,12 +1383,19 @@ function dispatchSeat(
       ? canonicalFile(authorEnvelope.raw_log, 'dispatch-author raw_log')
       : path.join(tempDir, 'missing.raw');
     const raw = fs.existsSync(rawPath) ? fs.readFileSync(rawPath) : Buffer.alloc(0);
-    const policyRefuse = authorStatus === 'precondition_failed'
+    // The runner's own binary is absent (codex/agy/grok/kimi `<runner> binary not found: ...`): that is
+    // the SEAT being unavailable, exactly like a quota or a dead pipe, and a fallback seat of another
+    // family heals it. Classifying it as a policy precondition made reviewSeat break out of the attempt
+    // loop, so a missing codex ended the panel without ever trying the topology fallbacks.
+    const runnerAbsent = authorStatus === 'precondition_failed'
+      && typeof authorError === 'string'
+      && /\bbinary not found\b/.test(authorError);
+    const policyRefuse = !runnerAbsent && (authorStatus === 'precondition_failed'
       || (Boolean(authorStatus)
         && authorStatus !== 'authored'
         && Boolean(authorError)
         && raw.length === 0
-        && run.status === 2);
+        && run.status === 2));
     const success = run.status === 0
       && authorEnvelope
       && authorEnvelope.status === 'authored'
@@ -1410,6 +1417,7 @@ function dispatchSeat(
       },
       outcomeHints: {
         preconditionFailed: policyRefuse,
+        unavailable: runnerAbsent,
       },
       privateRawReference: raw.length > 0 ? {
         kind: 'private-file',

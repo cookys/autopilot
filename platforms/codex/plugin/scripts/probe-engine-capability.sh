@@ -8,6 +8,8 @@ STATE_CLI="$SELF_DIR/engine-capability-state.js"
 # dispatch-tree 3b rule 3: the probe's `claude -p` children get this process's write target as the parent id.
 # shellcheck source=lib/repo-identity.sh
 [ -r "$SELF_DIR/lib/repo-identity.sh" ] && . "$SELF_DIR/lib/repo-identity.sh" || true
+# shellcheck source=lib/runner-fallback-bin.sh
+. "$SELF_DIR/lib/runner-fallback-bin.sh"
 # dispatch-tree 3d: no probe invocation mints a child id (no manifest, no --session-id), so an inherited AUTOPILOT_CHILD_SESSION_ID must not reach any runner,
 # the --version calls included; this runs before the first runner invocation.
 unset AUTOPILOT_CHILD_SESSION_ID
@@ -179,20 +181,23 @@ RUNNER_VERSION="unknown"
 BINARY_FOUND=0
 case "$RUNNER" in
   codex)
-    if command -v codex >/dev/null 2>&1; then
+    if _fb="$(runner_bin_fallback codex)"; command -v "$_fb" >/dev/null 2>&1; then
       BINARY_FOUND=1
+      case "$_fb" in /*) PATH="$PATH:$(dirname "$_fb")" ;; esac
       RUNNER_VERSION="$(codex --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
   agy)
-    if command -v agy >/dev/null 2>&1; then
+    if _fb="$(runner_bin_fallback agy)"; command -v "$_fb" >/dev/null 2>&1; then
       BINARY_FOUND=1
+      case "$_fb" in /*) PATH="$PATH:$(dirname "$_fb")" ;; esac
       RUNNER_VERSION="$(agy --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
   grok)
-    if command -v grok >/dev/null 2>&1; then
+    if _fb="$(runner_bin_fallback grok)"; command -v "$_fb" >/dev/null 2>&1; then
       BINARY_FOUND=1
+      case "$_fb" in /*) PATH="$PATH:$(dirname "$_fb")" ;; esac
       RUNNER_VERSION="$(grok --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
@@ -231,10 +236,9 @@ case "$RUNNER" in
     # resolution order exactly (PATH, then the well-known install path) — a probe
     # that resolves the binary differently from the dispatcher would report on a
     # different tool than the one dispatch actually runs.
-    if command -v kimi >/dev/null 2>&1; then
-      KIMI_BIN="$(command -v kimi)"
-    elif [ -x "$HOME/.kimi-code/bin/kimi" ]; then
-      KIMI_BIN="$HOME/.kimi-code/bin/kimi"
+    _fb="$(runner_bin_fallback kimi)"
+    if command -v "$_fb" >/dev/null 2>&1; then
+      KIMI_BIN="$(command -v "$_fb")"
     else
       KIMI_BIN=""
     fi

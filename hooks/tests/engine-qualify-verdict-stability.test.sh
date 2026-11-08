@@ -3596,6 +3596,10 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
       ['  const expiresAt = new Date(\n    Date.parse(issuedAt) + options.expiresDays * 86_400_000,\n  ).toISOString();\n', ''],
       ['    expires_at: expiresAt,\n', ''],
       ['    expires: expiresAt.slice(0, 10),\n', ''],
+      // 2026-11-09: a retake chains to the latest row of the same EXAM (not the same full identity),
+      // so a failed retake on a newer plugin build is stored instead of refused as unbound.
+      ['  const identityHash = sha256(canonicalJson(identity));\n  const previous = latestExactEvidence(\n    existingRows,\n    role,\n    scopeHash,\n    identityHash,\n  );\n',
+        '  const previous = latestExamEvidence(\n    existingRows,\n    role,\n    scopeHash,\n    examIdentityHashOf(identity),\n  );\n'],
     ],
   };
   const expectedBody = (name, baseText) => {

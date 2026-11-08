@@ -57,13 +57,23 @@ function viewOf(e, nowMs, liveBase) {
   const options = (Array.isArray(e.options) ? e.options : []).filter((o) => o && typeof o === 'object' && typeof o.label === 'string' && o.label)
     .map((o) => ({ label: o.label, description: typeof o.description === 'string' ? o.description : '' }));
   return {
-    id: e.id, question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
+    id: e.id, title: str(e.title), question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
     blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
     orphaned: sessionGone(e, liveBase), origin: str(e.origin),
     status: cardState(e),
     answer: str(e.answer), awaiting_operator: str(e.awaiting_operator), executor: str(e.executor), asker: str(e.asker), pending_dispatch_at: str(e.pending_dispatch_at),
   };
+}
+
+// The card's short title: an explicit `title` (written by scripts/open-decision.js --title) wins verbatim; otherwise derive one from
+// the question — newline runs to single spaces, the trailing （共 N 題） dropped — capped at 20 code points: Array.from counts an emoji
+// (a surrogate pair) as 1, and a unit count would split it at the cut.
+function cardTitle(entry) {
+  if (entry && typeof entry.title === 'string' && entry.title !== '') return entry.title;
+  const q = (entry && typeof entry.question === 'string' ? entry.question : '').replace(/[\r\n]+/g, ' ').trim().replace(/（共\s*\d+\s*題）$/, '').trim();
+  if (Array.from(q).length <= 20) return q;
+  return Array.from(q).slice(0, 20).join('') + '…';
 }
 
 // Every scope file of the project counts (the unbound one and every root's), not only the watcher scope's own: a session whose root
@@ -104,4 +114,4 @@ function hasOpenDecision({ identity, key, nowMs = Date.now() }) {
   return readDecision({ commonDir, key, identity, nowMs, liveBase: null }) !== null;
 }
 
-module.exports = { readDecision, hasOpenDecision, decisionFile, sessionGone, STALE_MS };
+module.exports = { readDecision, hasOpenDecision, decisionFile, sessionGone, cardTitle, STALE_MS };

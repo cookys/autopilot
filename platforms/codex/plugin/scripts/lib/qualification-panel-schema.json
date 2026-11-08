@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "qualification reviewer panel result",
+  "description": "Shape accepted by parsePanelResult (scripts/engine-qualify.js). Relaxed vs the judge, which stays authoritative: pass-with-findings / fail-without-findings, witness byte cap (16 KiB), witness node cap (256) and depth cap (8), TOKEN-pattern object keys inside args/expectation.value, environment variable names (pattern + forbidden list), and string length 4096 are not expressible in this schema subset and are still enforced by the judge.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "findings"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["pass", "fail"] },
+    "findings": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "token": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$" },
+    "json_value": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "type": "number" },
+        { "type": "string", "maxLength": 4096 },
+        { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/json_value" } },
+        { "type": "object", "maxProperties": 32, "additionalProperties": { "$ref": "#/$defs/json_value" } }
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "severity", "file", "line", "witness"],
+      "properties": {
+        "rule_id": { "$ref": "#/$defs/token" },
+        "severity": { "type": "string", "enum": ["critical", "major", "minor", "suggestion"] },
+        "file": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^/]" },
+        "line": { "type": "integer", "minimum": 1 },
+        "witness": { "$ref": "#/$defs/witness" }
+      }
+    },
+    "witness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "export_path", "args", "environment", "expectation"],
+      "properties": {
+        "protocol": { "type": "string", "enum": ["behavioral-call-v1"] },
+        "export_path": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/token" } },
+        "args": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/json_value" } },
+        "environment": {
+          "type": "object",
+          "maxProperties": 8,
+          "additionalProperties": { "type": "string", "maxLength": 4096 }
+        },
+        "expectation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "enum": ["throws"] } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "value"],
+              "properties": {
+                "kind": { "type": "string", "enum": ["returns"] },
+                "value": { "$ref": "#/$defs/json_value" }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

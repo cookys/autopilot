@@ -1919,6 +1919,139 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     }
   }
 
+  // ── QRP_HTTP_RESPONSE_FORMAT=json_schema (chat_completions only) ─────────────
+  const PANEL_SCHEMA_FILE = path.join(__dirname, 'lib', 'qualification-panel-schema.json');
+  const sendChatFormat = (env, request = reviewerRequest()) => {
+    if (fs.existsSync(reqFile)) fs.rmSync(reqFile);
+    const stub = startRespStub({
+      model: 'fake-model-exact',
+      choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: REVIEWER_MODEL_OUTPUT } }],
+    });
+    const { child } = runProvider({
+      request,
+      env: {
+        QRP_HTTP_PROTOCOL: 'chat_completions',
+        QRP_BASE_URL: `http://127.0.0.1:${stub.port}`, QRP_AUTH_TOKEN: 'stub-token',
+        QRP_OPENCODE_SESSION: 'ses_chat', QRP_MAX_TOKENS: '32', ...env,
+      },
+    });
+    stub.proc.kill();
+    return { child, body: fs.existsSync(reqFile) ? JSON.parse(fs.readFileSync(reqFile, 'utf8')).body : null };
+  };
+  {
+    const panelSchema = JSON.parse(fs.readFileSync(PANEL_SCHEMA_FILE, 'utf8'));
+    // json_schema on the wire; strict; same schema as the file the gpu lane receives.
+    const on = sendChatFormat({ QRP_HTTP_RESPONSE_FORMAT: 'json_schema' });
+    equal(on.child.status, 0, 'chat completions with QRP_HTTP_RESPONSE_FORMAT=json_schema succeeds');
+    equal(on.body.response_format.type, 'json_schema', 'response_format.type is json_schema');
+    equal(on.body.response_format.json_schema.strict, true, 'response_format is strict');
+    equal(typeof on.body.response_format.json_schema.name, 'string', 'response_format carries a schema name');
+    equal(JSON.stringify(on.body.response_format.json_schema.schema), JSON.stringify(panelSchema),
+      'the wire schema is exactly scripts/lib/qualification-panel-schema.json');
+    check(!('include_reasoning' in on.body), 'json_schema body never carries include_reasoning');
+    for (const off of ['off', '', 'unset']) {
+      const r = sendChatFormat(off === 'unset' ? {} : { QRP_HTTP_RESPONSE_FORMAT: off });
+      equal(r.child.status, 0, `chat completions with QRP_HTTP_RESPONSE_FORMAT=${off || '(empty)'} succeeds`);
+      check(!('response_format' in r.body), `QRP_HTTP_RESPONSE_FORMAT=${off || '(empty)'} sends no response_format`);
+    }
+    // include_reasoning is never sent, with thinking too.
+    const think = sendChatFormat({ QRP_HTTP_THINKING: 'enabled', QRP_HTTP_RESPONSE_FORMAT: 'json_schema', QRP_MAX_TOKENS: '65536' });
+    check(!('include_reasoning' in think.body), 'thinking + json_schema body never carries include_reasoning');
+    check(!/below 65536/.test(think.child.stderr), 'QRP_MAX_TOKENS=65536 with thinking + json_schema prints no warning');
+    // gpu-lead rule (a): thinking + json_schema + small budget warns on stderr, does not block.
+    const warn = sendChatFormat({ QRP_HTTP_THINKING: 'enabled', QRP_HTTP_RESPONSE_FORMAT: 'json_schema', QRP_MAX_TOKENS: '32768' });
+    equal(warn.child.status, 0, 'thinking + json_schema + QRP_MAX_TOKENS=32768 still runs');
+    check(/warning: .*QRP_MAX_TOKENS=32768 is below 65536/.test(warn.child.stderr), 'thinking + json_schema + QRP_MAX_TOKENS<65536 warns on stderr');
+    const noWarn = sendChatFormat({ QRP_HTTP_RESPONSE_FORMAT: 'json_schema', QRP_MAX_TOKENS: '32768' });
+    check(!/below 65536/.test(noWarn.child.stderr), 'json_schema without thinking does not warn');
+    // Unsupported combinations are refused before any request.
+    for (const [env, re, label] of [
+      [{ QRP_HTTP_PROTOCOL: 'messages', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /applies to the chat_completions protocol only \(got protocol: messages\)/, 'messages protocol'],
+      [{ QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /applies to the chat_completions protocol only \(got protocol: responses\)/, 'responses protocol'],
+      [{ QRP_HTTP_RESPONSE_FORMAT: 'bogus' }, /must be one of json_schema\|off \(got: bogus\)/, 'unknown value'],
+      [{ QRP_PROMPT_MODE: 'brain', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /reviewer only \(got: brain\)/, 'non-reviewer prompt mode'],
+      [{ QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /applies to QRP_TRANSPORT=http only/, 'cli transport'],
+    ]) {
+      const r = sendChatFormat(env);
+      equal(r.child.status, 1, `QRP_HTTP_RESPONSE_FORMAT refused: ${label} (exit 1)`);
+      check(re.test(r.child.stderr), `QRP_HTTP_RESPONSE_FORMAT refused: ${label} (message)`);
+      equal(r.body, null, `QRP_HTTP_RESPONSE_FORMAT refused: ${label} sends no request`);
+    }
+    // Schema file vs the judge: a legal panel reply passes, broken ones do not.
+    const resolveRef = (node) => (node.$ref ? node.$ref.slice(2).split('/').reduce((n, k) => n[k], panelSchema) : node);
+    const errs = (node0, v, where) => {
+      const node = resolveRef(node0);
+      if (node.anyOf) return node.anyOf.some((alt) => errs(alt, v, where) === null) ? null : `${where}: no anyOf branch matches`;
+      const type = v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v;
+      const okType = !node.type || node.type === type
+        || (node.type === 'integer' && type === 'number' && Number.isInteger(v))
+        || (node.type === 'number' && type === 'number');
+      if (!okType) return `${where}: want ${node.type}`;
+      if (node.enum && !node.enum.includes(v)) return `${where}: not in enum`;
+      if (typeof v === 'string') {
+        if (node.minLength !== undefined && v.length < node.minLength) return `${where}: too short`;
+        if (node.maxLength !== undefined && v.length > node.maxLength) return `${where}: too long`;
+        if (node.pattern && !new RegExp(node.pattern, 'u').test(v)) return `${where}: pattern`;
+      }
+      if (typeof v === 'number' && node.minimum !== undefined && v < node.minimum) return `${where}: below minimum`;
+      if (Array.isArray(v)) {
+        if (node.maxItems !== undefined && v.length > node.maxItems) return `${where}: too many items`;
+        for (let i = 0; i < v.length; i += 1) {
+          const e = node.items ? errs(node.items, v[i], `${where}[${i}]`) : null;
+          if (e) return e;
+        }
+      }
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const keys = Object.keys(v);
+        if (node.maxProperties !== undefined && keys.length > node.maxProperties) return `${where}: too many properties`;
+        for (const req of node.required || []) if (!keys.includes(req)) return `${where}: missing ${req}`;
+        for (const key of keys) {
+          const sub = (node.properties || {})[key];
+          let e = null;
+          if (sub) e = errs(sub, v[key], `${where}.${key}`);
+          else if (node.additionalProperties === false) e = `${where}: extra key ${key}`;
+          else if (node.additionalProperties) e = errs(node.additionalProperties, v[key], `${where}.${key}`);
+          if (e) return e;
+        }
+      }
+      return null;
+    };
+    const { parsePanelResult } = require('./engine-qualify');
+    const legal = JSON.parse(REVIEWER_MODEL_OUTPUT);
+    const legalReturns = JSON.parse(REVIEWER_MODEL_OUTPUT);
+    legalReturns.findings[0].witness.args = [1, 'x', null, { a: [true, 2.5] }];
+    legalReturns.findings[0].witness.environment = { TZ: 'UTC' };
+    legalReturns.findings[0].witness.expectation = { kind: 'returns', value: { total: 73668 } };
+    for (const [label, doc] of [['throws', legal], ['returns', legalReturns], ['pass', { verdict: 'pass', findings: [] }]]) {
+      equal(errs(panelSchema, doc, '$'), null, `schema accepts a legal ${label} panel reply`);
+      equal(parsePanelResult(JSON.stringify(doc)).verdict, doc.verdict, `the judge also accepts the legal ${label} panel reply the schema accepts`);
+    }
+    const clone = (mutate) => { const d = JSON.parse(REVIEWER_MODEL_OUTPUT); mutate(d); return d; };
+    const rejected = [
+      ['missing finding field (line)', clone((d) => { delete d.findings[0].line; })],
+      ['missing witness', clone((d) => { delete d.findings[0].witness; })],
+      ['bad verdict', clone((d) => { d.verdict = 'maybe'; })],
+      ['extra top-level key', clone((d) => { d.note = 'x'; })],
+      ['bad severity', clone((d) => { d.findings[0].severity = 'blocker'; })],
+      ['absolute file', clone((d) => { d.findings[0].file = '/etc/passwd'; })],
+      ['line 0', clone((d) => { d.findings[0].line = 0; })],
+      ['wrong witness protocol', clone((d) => { d.findings[0].witness.protocol = 'v2'; })],
+      ['returns without value', clone((d) => { d.findings[0].witness.expectation = { kind: 'returns' }; })],
+      ['too many findings', clone((d) => { d.findings = Array.from({ length: 9 }, () => d.findings[0]); })],
+    ];
+    for (const [label, doc] of rejected) {
+      check(errs(panelSchema, doc, '$') !== null, `schema rejects: ${label}`);
+    }
+    // The observed failure: brackets that do not pair. Not JSON, so no schema can accept it and the judge rejects it.
+    const broken = REVIEWER_MODEL_OUTPUT.replace(/\}\}\]\}$/u, '}]}]');
+    let parses = true;
+    try { JSON.parse(broken); } catch { parses = false; }
+    check(!parses, 'a bracket-mismatched panel reply is not parseable JSON');
+    let judgeThrew = false;
+    try { parsePanelResult(broken); } catch { judgeThrew = true; }
+    check(judgeThrew, 'the judge rejects the bracket-mismatched panel reply');
+  }
+
   const sseServerFile = path.join(tempRoot, 'stub-chat-sse.js');
   const ssePortFile = path.join(tempRoot, 'stub-chat-sse-port');
   fs.writeFileSync(sseServerFile, `
@@ -2388,5 +2521,5 @@ process.stdout.write(JSON.stringify({ type: 'text', part: { text: '{"verdict":"p
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 547) throw new Error(`qualification-review-provider: expected exactly 547 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 597) throw new Error(`qualification-review-provider: expected exactly 597 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

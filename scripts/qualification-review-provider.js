@@ -175,6 +175,14 @@
  *                   refused rather than ignored. A thinking reply carries `thinking`
  *                   blocks; only `text` blocks are ever read as the answer. Thinking
  *                   spends QRP_MAX_TOKENS: raise it. List it in --provider-env.
+ *   QRP_HTTP_RESPONSE_FORMAT http, chat_completions + QRP_PROMPT_MODE=reviewer only: `json_schema`
+ *                   adds body `response_format: {type: "json_schema", json_schema: {name,
+ *                   schema, strict: true}}` with scripts/lib/qualification-panel-schema.json
+ *                   (the panel result shape parsePanelResult accepts; vLLM constrains the
+ *                   answer after `</think>`). Unset/empty/`off` sends nothing; any other
+ *                   value/protocol/mode is refused. With QRP_HTTP_THINKING=enabled and
+ *                   QRP_MAX_TOKENS < 65536 a stderr warning is printed (not blocked). The
+ *                   body never carries include_reasoning. List it in --provider-env.
  *   QRP_PROMPT_MODE reviewer | brain | va | consult | discuss | foreman | lead (default reviewer)
  *   QRP_TIMEOUT_MS  per-case transport timeout (default 180000)
  *   QRP_AGY_RETRY_DELAYS_MS  agy transient-error retry backoff, `N` or `N,M` ms
@@ -786,6 +794,27 @@ const HTTP_THINKING_WIRE_VALUES_BY_PROTOCOL = Object.freeze({
   messages: Object.freeze(['adaptive', 'disabled']),
   chat_completions: Object.freeze(['enabled']),
 });
+// QRP_HTTP_RESPONSE_FORMAT -> 'json_schema' (chat_completions + reviewer prompt mode only) or ''.
+// The schema is scripts/lib/qualification-panel-schema.json, derived from parsePanelResult
+// (scripts/engine-qualify.js); vLLM applies it with a grammar backend after `</think>`.
+function httpResponseFormat(raw, protocol, promptMode) {
+  const mode = String(raw || '').trim();
+  if (!mode || mode === 'off') return '';
+  if (mode !== 'json_schema') {
+    throw new Error(`QRP_HTTP_RESPONSE_FORMAT must be one of json_schema|off (got: ${mode})`);
+  }
+  if (protocol !== 'chat_completions') {
+    throw new Error(`QRP_HTTP_RESPONSE_FORMAT=json_schema applies to the chat_completions protocol only (got protocol: ${protocol})`);
+  }
+  if (promptMode !== 'reviewer') {
+    throw new Error(`QRP_HTTP_RESPONSE_FORMAT=json_schema carries the reviewer panel schema and applies to QRP_PROMPT_MODE=reviewer only (got: ${promptMode})`);
+  }
+  return mode;
+}
+function panelResponseFormat() {
+  const schema = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'lib', 'qualification-panel-schema.json'), 'utf8'));
+  return { type: 'json_schema', json_schema: { name: 'qualification_panel_result', schema, strict: true } };
+}
 function httpThinkingMode(raw, protocol) {
   const mode = String(raw || '').trim();
   if (!mode || mode === 'default') return '';
@@ -1026,7 +1055,7 @@ function chatContentOrThrow(text, observed, finish) {
 //
 // Effort: QRP_HTTP_EFFORT, when set, rides as the OpenAI-compatible top-level
 // `reasoning_effort` field (same vocabulary as the Responses path).
-async function callChatCompletions(baseUrl, token, model, maxTokens, systemPrompt, userMessage, effort, thinking) {
+async function callChatCompletions(baseUrl, token, model, maxTokens, systemPrompt, userMessage, effort, thinking, responseFormat) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -1046,6 +1075,8 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
         stream: true,
         ...(effort ? { reasoning_effort: effort } : {}),
         ...(thinking === 'enabled' ? { chat_template_kwargs: { enable_thinking: true } } : {}),
+        // Never `include_reasoning`: the trace is only recorded as observed, never requested.
+        ...(responseFormat === 'json_schema' ? { response_format: panelResponseFormat() } : {}),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -2021,6 +2052,19 @@ async function main() {
   } catch (error) {
     fail(error.message);
   }
+  const httpResponseFormatRaw = process.env.QRP_HTTP_RESPONSE_FORMAT || '';
+  if (httpResponseFormatRaw && transport !== 'http') {
+    fail('QRP_HTTP_RESPONSE_FORMAT applies to QRP_TRANSPORT=http only');
+  }
+  let httpResponseFormatMode = '';
+  try {
+    httpResponseFormatMode = httpResponseFormat(httpResponseFormatRaw, httpProtocolForEffort, promptMode);
+  } catch (error) {
+    fail(error.message);
+  }
+  if (httpResponseFormatMode && httpThinking === 'enabled' && maxTokens < 65536) {
+    process.stderr.write(`qualification-review-provider: warning: QRP_HTTP_THINKING=enabled with QRP_HTTP_RESPONSE_FORMAT=json_schema spends QRP_MAX_TOKENS on the thinking block before the grammar-constrained answer; QRP_MAX_TOKENS=${maxTokens} is below 65536\n`);
+  }
   const cliEffort = process.env.QRP_CLI_EFFORT || '';
   if (cliEffort && !/^[a-z]+$/u.test(cliEffort)) {
     // Interpolated into a TOML string for codex -c; keep the value inert.
@@ -2172,7 +2216,7 @@ async function main() {
         : httpProtocol === 'chat_completions'
           ? callChatCompletions
           : callModel;
-      result = await call(baseUrl, token, model, maxTokens, systemPrompt, userMessage, httpEffort, httpThinking);
+      result = await call(baseUrl, token, model, maxTokens, systemPrompt, userMessage, httpEffort, httpThinking, httpResponseFormatMode);
     }
   } catch (error) {
     fail(`model call failed: ${error.message}`);

@@ -90,7 +90,7 @@ Reviewer/author dry runs end rc=1 by design (the fake provider cannot answer; ar
 ### 正式列（可作為資格依據）
 
 qwen reviewer：模型 `Qwen3.8-27B-QUASAR-NVFP4`，runner `anthropic-compatible`，effort `default`，endpoint `qwen_local`，
-chat thinking 協定（`THINK_PROTOCOL=chat`，`response_format=json_schema`），server 預設取樣 1.0 / 0.95 / 20，
+chat thinking 協定（`THINK_PROTOCOL=chat`，`response_format=json_schema`），server 預設取樣（1.0 / 0.95 / 20，來源不是 `out/`：這三個值未記錄在 `out/` 檔案中，出處是 develop 已合併的 qrpsamp，commit 11eb18a29，provider 開 thinking 時不再送 temperature 0，改用 server 的預設取樣），
 autopilot develop `046f7fcde4974f45491f5be31b661974fd9ce6f2`，cell 目錄 `out/qwen-reviewer-think-rf-formal/`（腳本 `cell-local-rf-formal.sh`）。
 
 | 項目 | 值（皆已與 `out/qwen-reviewer-think-rf-formal/emit-row.json` 逐項核對） |
@@ -133,8 +133,10 @@ fpc = false_pass_critical。
 | cell | 為什麼作廢 |
 |---|---|
 | qwen-implementer-r1-effort-high-adminfault | 施測錯誤：cc-shim 會轉送 effort，`high` 讓 qwen_local 回 HTTP 500（該 endpoint 接受 xhigh、medium、low），24 題全數 contract_violations，0/24 不代表模型能力。改用 medium 重考得 24/24（qwen-implementer）。 |
-| qwen-reviewer-think-pingcheck-wrongfield | rc=3：live ping 顯示 thinking 沒有開（`thinking_content_present=false`，目錄名記為 wrongfield：ping 的判斷欄位有誤），依 gpu-lead 規則不開考，沒有送任何題目，沒有 emit-row。 |
+| qwen-reviewer-think-pingcheck-wrongfield | rc=3：live ping（status=200、finish=stop、output_tokens=28）的判定是 `thinking_protocol=chat thinking_content_present=false`，run.log 記「thinking not on in the ping (gpu-lead rule 01M6WSEJFR): not sitting the exam」，沒有送任何題目，沒有 emit-row。這個 cell 沒有留下能說明 ping 為何判成 false 的檔案，git 歷史也找不到對應的提交，所以不寫原因；之後的 think / rf / formal 取代它。 |
 | qwen-reviewer-think-r1-budget32k | thinking 重考的早期嘗試（QRP_MAX_TOKENS 32k），`transport_fail` 列（沒有可判定的結果），之後的 think / rf / formal 取代它。 |
 | dry-* | `DRY_RUN=1` 只驗參數層，沒有網路；reviewer 與 author 的 dry 列依設計是 `transport_fail`（假 provider 答不出來）。 |
 
 這些列的 `raw/` 原始串流（每個 cell 約 140 KB）沒有放進證據包；判定只需要 `emit-row.json`、`stdout.json`、`run.log`、`rc`、`record-out.json`。`qrp-lenient.js`（來源已刪除）與 `*.bak.*` 備份檔也沒有帶。
+
+`cell-local-think.sh`、`cell-local-rf.sh`、`cell-local-rf-formal.sh` 是照原樣保存的施測腳本，檔頭的「QRP_MAX_TOKENS 65536」與「chat 無法加 chat_template_kwargs、rc=2」是較早的描述，實際預設為腳本內的 `${THINK_MAX_TOKENS:-32768}`，chat 路徑也能開考；為保持證據一致不改腳本。重跑腳本會覆寫 `out/` 下同名目錄，重跑要另開輸出目錄（照失敗列只能附加的規則）。

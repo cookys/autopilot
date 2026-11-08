@@ -12,6 +12,14 @@
 #            - sandbox ON : the gitfile is read-only, the rewrite fails, the command never runs.
 #            - sandbox OFF: the rewrite lands, the rail's own check refuses to run git (boundary_rejected,
 #              worktree_gitfile_tampered), the command never runs.
+#   nested : a worker that builds a nested git repo inside the worktree (its config names filter.x.clean and
+#            core.fsmonitor commands) must not get them run by the rail's add -A / status.
+#            Both sandbox ON and OFF: boundary_rejected, worktree_nested_repo, the command never runs.
+#            Positive control: the same tree under a plain unguarded `git status` does run it.
+#   hooksPath: a relative core.hooksPath resolves inside the writable worktree; the rail's git runs with
+#            core.hooksPath=/dev/null, so a worker-planted post-commit never runs (control: plain git does).
+#   reuse  : --reuse-worktree takes its expected gitfile from the main repo's registry; a retained worktree whose
+#            gitfile was repointed is refused before any git runs (control: an untouched one is reused).
 #   no bwrap / bwrap cannot start: fail closed (precondition_failed, no worker, no worktree).
 # Seam: a stub `claude` on PATH, no real model, no GPU. Own temp dirs.
 . "$(dirname "$0")/lib.sh"
@@ -50,7 +58,7 @@ BINDIR="$TEST_TMP/bin"; mkdir -p "$BINDIR"
 cat > "$BINDIR/claude" <<'EOS'
 #!/usr/bin/env bash
 cat >/dev/null
-echo edited > sandbox-edit.txt
+echo edited >> sandbox-edit.txt
 if [ -n "${STUB_PARENT_TARGET:-}" ]; then
   echo leaked > "$STUB_PARENT_TARGET"
 fi
@@ -61,6 +69,17 @@ if [ -n "${STUB_GITFILE_ATTACK:-}" ]; then
     && git -C evil config core.bare false \
     && git -C evil config core.fsmonitor "$STUB_PWN_HOOK" \
     && printf 'gitdir: %s/evil\n' "$PWD" > .git; } || echo "gitfile attack failed: $?" >&2
+fi
+if [ -n "${STUB_NESTED_ATTACK:-}" ]; then
+  # a nested repo with a committed file; config naming commands is set AFTER the worker's own git calls
+  # (so the worker never runs them itself), then the tracked file is modified
+  mkdir nested && { cd nested && git init -q && echo x > f.txt && echo '* filter=x' > .gitattributes \
+    && git add -A && git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m n \
+    && git config filter.x.clean "$STUB_PWN_HOOK" && git config core.fsmonitor "$STUB_PWN_HOOK" \
+    && echo y >> f.txt && cd ..; } || echo "nested attack failed: $?" >&2
+fi
+if [ -n "${STUB_HOOKSPATH_ATTACK:-}" ]; then
+  mkdir -p hk && printf '#!/bin/sh\necho pwned > "%s"\n' "$STUB_PWN_FILE" > hk/post-commit && chmod +x hk/post-commit
 fi
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOS
@@ -175,6 +194,96 @@ case "$(printf '%s' "$OUT" | result_json | jfield error)" in
   *) fail "gitfile(off): error text: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
 esac
 unset STUB_GITFILE_ATTACK STUB_PWN_HOOK
+
+# ---- gitfile positive control: with no guard, a plain `git -C <dir> status` DOES run the hostile core.fsmonitor
+CTL="$TEST_TMP/ctl-repo"; cp -r "$SBX" "$CTL"
+rm -f "$PWN_FILE"
+git -C "$CTL" config core.fsmonitor "$PWN_HOOK"
+git -C "$CTL" status --porcelain >/dev/null 2>&1 || true
+eq "yes" "$([ -e "$PWN_FILE" ] && echo yes || echo no)" "gitfile control: an unguarded git status runs the hostile core.fsmonitor (so the cases above are not vacuous)"
+rm -f "$PWN_FILE"
+
+# ---- nested repo attack: the worker builds a nested repo inside the worktree; its config names commands
+export STUB_NESTED_ATTACK=1 STUB_PWN_HOOK="$PWN_HOOK"
+for sbxmode in bwrap off; do
+  rm -f "$PWN_FILE"
+  run_case "$sbxmode" 0 --worktree-parent "$WTPARENT"
+  eq "no" "$([ -e "$PWN_FILE" ] && echo yes || echo no)" "nested($sbxmode): the nested repo's filter/fsmonitor command never ran (file written outside: $([ -e "$PWN_FILE" ] && echo YES || echo no))"
+  eq '"boundary_rejected"' "$(status_of)" "nested($sbxmode): the round is not committed, status boundary_rejected (rc=$RC)"
+  case "$(printf '%s' "$OUT" | result_json | jfield error)" in
+    *worktree_nested_repo*) eq 0 0 "nested($sbxmode): the result JSON error names worktree_nested_repo" ;;
+    *) fail "nested($sbxmode): error text: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
+  esac
+done
+unset STUB_NESTED_ATTACK
+# positive control: the same nested tree under plain git (add -A, then status) does run the nested config
+NCTL="$TEST_TMP/nested-ctl"; mkdir -p "$NCTL"; $GIT -C "$NCTL" init -q; $GIT -C "$NCTL" commit -q --allow-empty -m b
+mkdir "$NCTL/nested"
+( cd "$NCTL/nested" && $GIT init -q && echo x > f.txt && echo '* filter=x' > .gitattributes && $GIT add -A && $GIT commit -q -m n \
+  && git config filter.x.clean "$PWN_HOOK" && git config core.fsmonitor "$PWN_HOOK" && echo y >> f.txt )
+rm -f "$PWN_FILE"
+git -C "$NCTL" add -A >/dev/null 2>&1 || true
+git -C "$NCTL" status --porcelain >/dev/null 2>&1 || true
+eq "yes" "$([ -e "$PWN_FILE" ] && echo yes || echo no)" "nested control: unguarded add -A + status really runs the nested repo's command"
+rm -f "$PWN_FILE"
+
+# ---- hooksPath: a relative core.hooksPath resolves inside the worktree; a worker-planted post-commit must not run
+export STUB_HOOKSPATH_ATTACK=1 STUB_PWN_FILE="$PWN_FILE"
+git -C "$SBX" config core.hooksPath hk
+run_case bwrap 0 --worktree-parent "$WTPARENT"
+eq "no" "$([ -e "$PWN_FILE" ] && echo yes || echo no)" "hooksPath(on): the worker-planted post-commit never ran (file written outside: $([ -e "$PWN_FILE" ] && echo YES || echo no))"
+eq '"committed"' "$(status_of)" "hooksPath(on): the wrapper commit still lands (rc=$RC)"
+# positive control: plain git commit with the same relative core.hooksPath does run it
+HCTL="$TEST_TMP/hooks-ctl"; mkdir -p "$HCTL/hk"; $GIT -C "$HCTL" init -q; git -C "$HCTL" config core.hooksPath hk
+printf '#!/bin/sh\necho pwned > "%s"\n' "$PWN_FILE" > "$HCTL/hk/post-commit"; chmod +x "$HCTL/hk/post-commit"
+rm -f "$PWN_FILE"
+echo a > "$HCTL/a"; git -C "$HCTL" add a; $GIT -C "$HCTL" commit -q -m a >/dev/null 2>&1 || true
+eq "yes" "$([ -e "$PWN_FILE" ] && echo yes || echo no)" "hooksPath control: a plain commit really runs a post-commit found through a relative core.hooksPath"
+git -C "$SBX" config --unset core.hooksPath
+unset STUB_HOOKSPATH_ATTACK STUB_PWN_FILE STUB_PWN_HOOK
+rm -f "$PWN_FILE"
+
+# ---- --reuse-worktree: the expected gitfile comes from the main repo's registry, not from the retained tree
+instance_of() {
+  node - "$1" <<'NODE'
+const crypto = require('crypto'); const fs = require('fs'); const path = require('path');
+const worktree = path.resolve(process.argv[2]);
+const stat = fs.statSync(worktree, { bigint: true });
+process.stdout.write(crypto.createHash('sha256').update(JSON.stringify({
+  birthtime_ns: stat.birthtimeNs.toString(), device: stat.dev.toString(), inode: stat.ino.toString(), schema: 1, worktree,
+})).digest('hex'));
+NODE
+}
+RB="feat/sbx-reuse-$RANDOM"; export AUTOPILOT_WORKTREE_ROOT_RUN_ID="sbx-reuse-root"
+RETAIN="$(( $(date +%s) + 3600 ))"
+run_case none 0 --branch "$RB" --worktree-parent "$WTPARENT" --keep-worktree --retain-owner sbx-reuse-root --retain-reason reuse-test --retain-until "$RETAIN"
+eq '"committed"' "$(status_of)" "reuse: the first round commits and retains the worktree (rc=$RC, stderr: $(tail -c 300 "$TEST_TMP/stderr"))"
+RWT="$(printf '%s' "$OUT" | result_json | jfield worktree | tr -d '"')"
+RCOMMIT="$(printf '%s' "$OUT" | result_json | jfield commit | tr -d '"')"
+reuse_run() {
+  run_case none 0 --branch "$RB" --base "$(git -C "$RWT" rev-parse HEAD 2>/dev/null || echo "$RCOMMIT")" --keep-worktree --reuse-worktree "$RWT" \
+    --expected-worktree-instance "$(instance_of "$RWT")" --retain-owner sbx-reuse-root --retain-reason reuse-test --retain-until "$RETAIN"
+}
+# control: an untouched retained worktree is reused (the registry-derived gitfile matches)
+reuse_run
+eq '"committed"' "$(status_of)" "reuse control: an untouched retained worktree is reused and commits (rc=$RC, stderr: $(tail -c 300 "$TEST_TMP/stderr"))"
+RCOMMIT="$(printf '%s' "$OUT" | result_json | jfield commit | tr -d '"')"
+# attack: the retained gitfile now points at a copy of the main git dir whose config names a command
+rm -f "$PWN_FILE"
+EVIL="$TEST_TMP/evil-reuse"; cp -r "$SBX/.git" "$EVIL"
+git -C "$EVIL" config core.bare false; git -C "$EVIL" config core.fsmonitor "$PWN_HOOK"
+git -C "$EVIL" symbolic-ref HEAD "refs/heads/$RB"
+cp "$RWT/.git" "$TEST_TMP/gitfile.orig"; printf 'gitdir: %s\n' "$EVIL" > "$RWT/.git"
+reuse_run
+eq "no" "$([ -e "$PWN_FILE" ] && echo yes || echo no)" "reuse(tampered): the hostile core.fsmonitor never ran (file written outside: $([ -e "$PWN_FILE" ] && echo YES || echo no))"
+eq '"precondition_failed"' "$(status_of)" "reuse(tampered): the reuse is refused (rc=$RC)"
+case "$(printf '%s' "$OUT" | result_json | jfield error)" in
+  *worktree_gitfile_tampered*) eq 0 0 "reuse(tampered): the error names worktree_gitfile_tampered" ;;
+  *) fail "reuse(tampered): error text: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
+esac
+cp "$TEST_TMP/gitfile.orig" "$RWT/.git"
+unset AUTOPILOT_WORKTREE_ROOT_RUN_ID
+rm -f "$PWN_FILE"
 
 # ---- bwrap unavailable -> fail closed
 NOBW="$TEST_TMP/nobwrap-bin"; mkdir -p "$NOBW"

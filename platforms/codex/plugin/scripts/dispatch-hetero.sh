@@ -67,7 +67,8 @@
 #                                              #   `sandbox: {mode, writable, denied_writes}`. Default off.
 #                                              #   The worktree's `.git` gitfile is bound read-only; the rail also
 #                                              #   checks it is unchanged before any git against the worktree
-#                                              #   (else boundary_rejected, worktree_gitfile_tampered), sandbox or not.
+#                                              #   (else boundary_rejected, worktree_gitfile_tampered), sandbox or not; any nested `.git` below the
+#                                              #   worktree root is refused too (worktree_nested_repo), and the rail's git runs with fsmonitor and hooksPath off.
 #                                              #   references/hetero-dispatch.md § Write sandbox.
 #       [--worktree-parent <abs dir>]          # place the new worktree under this directory instead of
 #                                              #   <main checkout>/.claude/worktrees (required with --sandbox bwrap
@@ -1838,10 +1839,34 @@ wt_gitfile_check() {
     WT_GITFILE_ERROR="worktree_gitfile_tampered: $WT/.git content changed since the worktree was created (it pointed elsewhere); no git was run against the worktree, round discarded, worktree retained"
     return 1
   fi
+  # A nested repo (any `.git` entry below the worktree root) carries its own config, hooks and attributes;
+  # `git add -A` would record it as a gitlink and a later status would recurse into it and run them.
+  _wt_nested="$(find "$WT" -mindepth 2 -name .git -print -quit 2>/dev/null)"
+  if [ -n "$_wt_nested" ]; then
+    WT_GITFILE_ERROR="worktree_nested_repo: a nested repository ($_wt_nested) exists inside the worktree; no git was run against the worktree, round discarded, worktree retained"
+    return 1
+  fi
   return 0
 }
-# _wt_git: git against $WT with the config-driven command hook off (core.fsmonitor can name any command).
-_wt_git() { git -C "$WT" -c core.fsmonitor=false "$@"; }
+# wt_record_gitfile_from_registry <path>: for --reuse-worktree, the expected gitfile is what the main repo's
+# own registry says (<common>/worktrees/<name>/gitdir names this worktree's .git), never the file as the
+# previous round left it. Sets WT_GITFILE_EXPECTED; 1 when the worktree is not registered that way.
+wt_record_gitfile_from_registry() {
+  local d
+  for d in "$_wt_common_dir"/worktrees/*/; do
+    d="${d%/}"
+    [ -f "$d/gitdir" ] || continue
+    if [ "$(cat "$d/gitdir" 2>/dev/null)" = "$1/.git" ]; then
+      WT_GITFILE_EXPECTED="gitdir: $d"
+      return 0
+    fi
+  done
+  return 1
+}
+# _wt_git: git against $WT with the config-driven command hooks off: core.fsmonitor can name any command and a
+# relative core.hooksPath resolves inside the writable worktree. The rail's wrapper commit never relied on a
+# hook (it already passes --no-verify, and its boundary gates are rail code, not git hooks).
+_wt_git() { git -C "$WT" -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
 # sandbox_json: the `sandbox` object for the result JSON and the manifest.
 sandbox_json() {
   local denied="\"unknown\"" tmp="${SANDBOX_TMP_PATH:-<per-dispatch scratch dir>}"
@@ -3296,11 +3321,14 @@ NODE
     || die_precondition "retained worktree filesystem instance changed"
   _wt_is_registered_path "$_wt_repo_root" "$WT"
   [ "$?" -eq 0 ] || die_precondition "retained worktree is not registered"
-  [ "$(git -C "$WT" symbolic-ref --quiet --short HEAD 2>/dev/null || true)" = "$BRANCH" ] \
+  wt_record_gitfile_from_registry "$WT" \
+    || die_precondition "retained worktree is not registered with a gitdir pointing at it"
+  wt_gitfile_check || die_precondition "retained worktree refused: $WT_GITFILE_ERROR"
+  [ "$(_wt_git symbolic-ref --quiet --short HEAD 2>/dev/null || true)" = "$BRANCH" ] \
     || die_precondition "retained worktree branch does not match --branch"
-  [ "$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)" = "$BASE_SHA" ] \
+  [ "$(_wt_git rev-parse HEAD 2>/dev/null || true)" = "$BASE_SHA" ] \
     || die_precondition "retained worktree HEAD does not match --base"
-  [ -z "$(git -C "$WT" status --porcelain 2>/dev/null)" ] \
+  [ -z "$(_wt_git status --porcelain --ignore-submodules=all 2>/dev/null)" ] \
     || die_precondition "retained worktree is dirty"
   _wt_read_schema2_marker "$WT/.autopilot-worktree" \
     || die_precondition "retained worktree marker is invalid"
@@ -3548,7 +3576,7 @@ _wt_creation_test_checkpoint after-verification
 # The gitfile `$WT/.git` is a pointer the rail's own git calls follow. Record it now; wt_gitfile_check
 # (below) refuses to run any git against $WT once it differs (a worker that repointed it at a dir with
 # a hostile config would otherwise get its core.fsmonitor / hooks run by the rail, outside the sandbox).
-WT_GITFILE_EXPECTED="$(cat "$WT/.git" 2>/dev/null)"
+[ -n "$WT_GITFILE_EXPECTED" ] || WT_GITFILE_EXPECTED="$(cat "$WT/.git" 2>/dev/null)"
 [ -n "$WT_PENDING_RECORD" ] && rm -f -- "$WT_PENDING_RECORD"
 WT_PENDING_RECORD=""
 [ -n "$WT_BUDGET_LOCK_FD" ] && exec {WT_BUDGET_LOCK_FD}>&-
@@ -3981,7 +4009,7 @@ _supervise_commit_quiet() {
     head="$(_wt_git rev-parse HEAD 2>/dev/null || true)"
     if [ -z "$head" ] || [ "$head" = "$BASE_SHA" ] \
        || ! _wt_git merge-base --is-ancestor "$BASE_SHA" "$head" 2>/dev/null \
-       || [ -n "$(_wt_git status --porcelain 2>/dev/null)" ]; then since=-1; continue; fi
+       || [ -n "$(_wt_git status --porcelain --ignore-submodules=all 2>/dev/null)" ]; then since=-1; continue; fi
     [ "$since" -ge 0 ] || since=$SECONDS
     [ $((SECONDS - since)) -ge "$quiet" ] || continue
     COMMIT_QUIET_ENDED=1
@@ -4704,7 +4732,7 @@ if ! wt_gitfile_check; then
   return 0
 fi
 if [ "$(_wt_git rev-parse HEAD)" = "$BASE_SHA" ] \
-   && [ -n "$(_wt_git status --porcelain)" ]; then
+   && [ -n "$(_wt_git status --porcelain --ignore-submodules=all)" ]; then
   _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"; [ "$IS_KIMI" -eq 1 ] && _runner_label="kimi"; [ "$IS_CNATIVE" -eq 1 ] && _runner_label="claude-native"
   _wt_git add -A
   if ! run_strict_staged_precheck; then
@@ -4724,10 +4752,10 @@ fi
 
 # --- verify by artifacts, never by self-report ---
 HEAD_SHA="$(_wt_git rev-parse HEAD)"
-DIRTY="$(_wt_git status --porcelain)"
+DIRTY="$(_wt_git status --porcelain --ignore-submodules=all)"
   FILES=0; INS=0; DEL=0
   if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
-  SHORTSTAT="$(_wt_git diff --shortstat "$BASE_SHA..$HEAD_SHA")"
+  SHORTSTAT="$(_wt_git diff --ignore-submodules=all --shortstat "$BASE_SHA..$HEAD_SHA")"
   FILES="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ file' | grep -o '[0-9]\+' || echo 0)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
@@ -5045,7 +5073,7 @@ run_strict_boundary_postcheck() {
   # Collect exact changed paths once for output-path role checks.
   while IFS= read -r temp_path; do
     [ -n "$temp_path" ] && changed_paths+=("$temp_path")
-  done < <(_wt_git diff --name-only "$BASE_SHA..$HEAD_SHA")
+  done < <(_wt_git diff --ignore-submodules=all --name-only "$BASE_SHA..$HEAD_SHA")
 
   for temp_path in "${changed_paths[@]}"; do
     changed_set["$temp_path"]=1

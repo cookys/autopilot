@@ -185,6 +185,12 @@ assert_eq "0" "$EXIT" "mixed-punctuation no-finding proof is accepted"
 # still accepts the run; pin that the battery remains green.
 OUT="$(STUB_MODE=ship_doubled_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "doubled-separator no-finding proof is accepted"
+OUT="$(STUB_MODE=ship_fullwidth_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "full-width (；，。) separated no-finding proof is accepted"
+OUT="$(STUB_MODE=ship_fullwidth_empty "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "empty fields behind full-width separators still fail"
+assert_contains "$OUT" "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields" \
+  "empty full-width fields use the battery shape message"
 OUT="$(STUB_MODE=ship_pipe_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "pipe-separated proof is a shape failure"
 assert_contains "$OUT" "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields" \

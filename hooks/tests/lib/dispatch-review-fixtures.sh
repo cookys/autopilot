@@ -185,6 +185,20 @@ case "$MODE" in
     echo "NO-FINDING-PROOF: checked=neutral-arm control flow;; evidence=the gated block encloses every new read and write;; conclusion=both gates fully enclose their new control flow"
     echo "$END"
     ;;
+  ship_fullwidth_sep)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow；evidence=the gated block encloses every new read and write，conclusion=both gates fully enclose their new control flow。"
+    echo "$END"
+    ;;
+  ship_fullwidth_empty)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=；evidence=；conclusion=both gates fully enclose their new control flow"
+    echo "$END"
+    ;;
   ship_pipe_sep)
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"

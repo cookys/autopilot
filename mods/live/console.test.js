@@ -144,3 +144,19 @@ test('consoleModeOf: true only for the exact program object', () => {
     ['top level a number', '123'],
   ]) assert.equal(C.consoleModeOf(text), false, label)
 })
+
+test('C1 fix: parseCard keeps only ids of the decision card form d-<8 hex>; any other id drops the card (trust boundary)', () => {
+  const raw = RAW('normal.json')
+  const good = raw.cards.length
+  assert.ok(good >= 3)
+  for (const bad of ['x-evil', 'd-aa01', 'd-0123456G', 'd-012345678', 'D-01234567', 'd-01234567\n', 'd-01234567 rm -rf', '']) {
+    const copy = JSON.parse(JSON.stringify(raw))
+    copy.cards[0].id = bad
+    const got = C.parseConsole(JSON.stringify(copy))
+    assert.equal(got.cards.length, good - 1, JSON.stringify(bad) + ': dropped')
+    assert.ok(!got.cards.some(c => c.id === bad), JSON.stringify(bad) + ': not kept')
+  }
+  const ok = JSON.parse(JSON.stringify(raw))
+  ok.cards[0].id = 'd-0123abcd'
+  assert.equal(C.parseConsole(JSON.stringify(ok)).cards.length, good, 'a well-formed id is kept')
+})

@@ -117,7 +117,7 @@
  "brief": "待決 4 張，例外 6 件：B 池重置前用完、遊戲線一件工作遺失、復原線成員離線。",
  "items": [
   {
-   "id": "card:d-fx000003",
+   "id": "card:d-fe000003",
    "kind": "card",
    "severity": 6,
    "state": "need_you",
@@ -128,7 +128,7 @@
    "since_ms": 1794199640000,
    "line_id": "gpu",
    "host": null,
-   "link": "/i/card:d-fx000003",
+   "link": "/i/card:d-fe000003",
    "answerable_by": [
     "cli",
     "app"
@@ -156,7 +156,7 @@
  ],
  "cards": [
   {
-   "id": "d-fx000003",
+   "id": "d-fe000003",
    "question": "GPU 線：雲端 B 池快用完，3 個評估改派本地模型？",
    "background": "B 池週額度預估明早前用完；本地模型有 2 格空槽。",
    "options": [

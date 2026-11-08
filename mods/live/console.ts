@@ -44,12 +44,14 @@ function parseItem(v: Obj): ConsoleItem | null {
   }
 }
 
+const CARD_ID = /^d-[0-9a-f]{8}$/
 function parseCard(v: Obj): ConsoleCard | null {
   const id = s(v.id)
   const question = s(v.question)
   const status = s(v.status)
   const opened_at_ms = n(v.opened_at_ms)
   if (id === null || question === null || status === null || opened_at_ms === null) return null
+  if (!CARD_ID.test(id)) return null // the id reaches the prompt box (a fill: press) and the shell; only the decision card id form crosses the trust boundary
   const executor_display: unknown = v.executor_display
   if (executor_display !== null && typeof executor_display !== 'string') return null
   return { id, question, status: status as ConsoleCard['status'], opened_at_ms, executor_display }

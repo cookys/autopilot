@@ -242,6 +242,7 @@ async function consoleTick($: EngineInterface): Promise<void> {
     consoleCwd = cwd
     consoleReadMs = nowMs
     changed = on !== consoleOn
+    if (on && !consoleOn && barTab !== 'forge') barTab = null // the strip turns to the console tabs: a band tab left open would keep its body under a 指揮 highlight
     consoleOn = on
   }
   const snap = consoleOn ? await consoleSource($) : null

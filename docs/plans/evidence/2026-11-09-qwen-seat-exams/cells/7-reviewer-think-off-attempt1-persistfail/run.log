@@ -1,0 +1,6 @@
+2026-11-09T05:04:50+08:00 gate: GO present, PAUSE absent, /v1/models=200
+2026-11-09T05:04:51+08:00 ping evidence: {"path":"/v1/messages","anthropic_version":"2023-06-01","model":"Qwen3.8-27B-QUASAR-NVFP4","max_tokens":32768,"temperature":0,"output_config":"<absent>","thinking":{"type":"disabled"},"system_chars":5517,"user_chars":165} exit=0 live_ping status=200 model=Qwen3.8-27B-QUASAR-NVFP4 stop=end_turn output_tokens=3 blocks=text thinking_protocol=messages thinking_switch=disabled thinking_content_present=false 
+2026-11-09T05:04:51+08:00 provider=node $S/land/scripts/qualification-review-provider.js protocol=messages thinking=disabled rf=none (not available for this role/protocol: provider restriction) max_tokens=32768 cap_s=3000
+2026-11-09T05:04:51+08:00 role=reviewer think=off START runner=anthropic-compatible model=Qwen3.8-27B-QUASAR-NVFP4 model_version=Qwen3.8-27B-QUASAR-NVFP4 version_source=runtime effort=default(none sent) endpoint=qwen_local dry=0 identity: prompt=3cbe203c5958 sem=0afb67489771 con=8b46dca18341 harness=engine-qualify-93987cb5
+2026-11-09T05:06:00+08:00 role=reviewer think=off END rc=2
+rc=2

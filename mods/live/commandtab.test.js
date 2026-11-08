@@ -63,7 +63,7 @@ test('queue: the held card is a full card (options), the others are plain rows; 
   const body = rows(v, 'body')
   assert.ok(body.some(r => r.includes('准合併')), 'the held card shows its options')
   assert.ok(body.some(r => r.includes('評測機第二槽插電') && r.includes('等你做完')), 'waiting_step row says what it waits for')
-  assert.ok(body.some(r => r.includes('語音線轉述') && r.includes('待你確認')), 'relayed_unconfirmed row')
+  assert.ok(body.some(r => r.includes('確認語音線的轉述答案') && r.includes('待你確認')), 'relayed_unconfirmed row')
   const press = v.body.flatMap(l => (l.segs ?? []).map(s => s.press)).filter(p => p !== undefined)
   assert.ok(press.includes(V.FILL_PRESS + 'd-fx000002'), 'the report press carries fill:<id>: ' + press.join(','))
   assert.equal(body.filter(r => r.includes('d-fx000001')).length, 0, 'no raw id drawn on a card row')

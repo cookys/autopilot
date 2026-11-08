@@ -71,10 +71,10 @@ function exceptionRows(u: UiCtx, con: ConsoleSnapshot, now: number): PaneLine[] 
 }
 
 // a console card the host's own pending store does not hold: one plain row (a waiting_step card also gets its report button)
-function plainCardRows(u: UiCtx, c: ConsoleCard, now: number): PaneLine[] {
+function plainCardRows(u: UiCtx, c: ConsoleCard, now: number, itemTitle: string | undefined): PaneLine[] {
   const t = u.t
   const age = { text: ageText(t, now - c.opened_at_ms), fmt: 'ago' as const }
-  const title = cardTitleOf({ question: c.question })
+  const title = itemTitle ?? cardTitleOf({ question: c.question }) // the feed's own title for the card (KR8: the same title in every frontend); the question only when the feed has no item for it
   if (c.status === 'open') return [ui.item(u, ui.stateOf('console', 'PENDING'), title, [age], { fact: F, word: false })]
   const why = c.status === 'waiting_step' ? 'console.command.waiting_step' : c.status === 'relayed_unconfirmed' ? 'console.command.relayed' : 'console.command.awaiting'
   const row = ui.item(u, ui.stateOf('console', 'NEED_YOU'), title, [t(why), age], { fact: F, word: false })
@@ -130,7 +130,10 @@ export function commandView(con: ConsoleSnapshot, live: LiveSnapshot | null, ctx
       rows.push(...lines.filter(l => l.bar !== true))
       bar = lines.filter(l => l.bar === true)
     }
-    for (const c of con.cards) if (!heldIds.has(c.id)) rows.push(...plainCardRows(u, c, now))
+    // the feed's `items` order (severity) is the order in every frontend (KR8): the cards follow their `card:<id>` item's place, a card with no item goes last
+    const cardItems = con.items.filter(i => i.kind === 'card')
+    const place = (c: ConsoleCard): number => { const k = cardItems.findIndex(i => i.id === 'card:' + c.id); return k === -1 ? cardItems.length : k }
+    for (const c of [...con.cards].sort((a, b) => place(a) - place(b))) if (!heldIds.has(c.id)) rows.push(...plainCardRows(u, c, now, cardItems.find(i => i.id === 'card:' + c.id)?.title))
     body.push(...(rows.length === 0 ? [ui.empty(t('console.command.queue_none'), F)] : rows))
   }
   return { body, bar: [...bar, ui.rowOf(u, [dimWord(t('console.command.hint'))], { fact: C }), ageRow(u, con, now)] }

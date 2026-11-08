@@ -3458,6 +3458,36 @@ test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there 
   expect(self.includes('無來源')).toBe(false)
   expect(ran.some(a => a.startsWith('fleet console'))).toBe(false) // nothing is fetched for the console pages
 })
+// C1 U8 (KR2, KR5): in the console mode the refresh path (ticks, a pane redraw on every tab) starts no runner and writes no file. KR2: no process.run argv names an LLM runner
+// (claude, codex, gemini, opencode, agy, grok, kimi, the engine or a dispatch script); `fleet` reads are the feed, not a runner. KR5: no fs.write at all (the allow-list is empty:
+// `panel_open_at_ms` is $.state, not a file). The two predicates are shown red on a planted call first (the negative control), so a matcher that never matches cannot pass.
+const RUNNER_ARGV = /(^|[\s/])(claude|codex|gemini|opencode|agy|grok|kimi)(\s|$)|dispatch-[a-z-]+\.sh|autopilot(\.js)?\s+engine|engine\s+(implement|review)/
+const FS_WRITE_ALLOWED: string[] = []
+const unexpectedWrites = (writes: string[]) => writes.filter(p => !FS_WRITE_ALLOWED.includes(p))
+test('C1 U8 KR2 + KR5: the console mode refresh (ticks and a redraw of every page) spawns no runner and writes no file (terminal)', async ($, on) => {
+  const ran: string[] = []
+  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } })
+  const w = world(on, consoleFiles())
+  // negative controls: the predicates are red on a planted runner call and a planted write
+  expect(['claude -p hi', 'node scripts/dispatch-review.sh x', 'node bin/autopilot.js engine implement-review'].every(a => RUNNER_ARGV.test(a))).toBe(true)
+  expect(RUNNER_ARGV.test('fleet console --json')).toBe(false)
+  expect(unexpectedWrites(['/x/y.json'])).toEqual(['/x/y.json'])
+  await start($, 'terminal')
+  for (let i = 0; i < 6; i++) await w.clock.advance(5_000) // six refresh ticks
+  const mount = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 120, rows: 40, isFullscreen: true } })
+  for (const tab of ['command', 'team', 'quota', 'hosts', 'self']) {
+    const first = await mount()
+    await first.press({ key: tab })
+    await first.unmount()
+    const pane = await mount()
+    await pane.drawn()
+    await pane.unmount()
+    await w.clock.advance(5_000)
+  }
+  console.log('console refresh process.run calls: ' + ran.length + (ran.length > 0 ? ' [' + ran.join(' | ') + ']' : '') + ' | fs.write calls: ' + w.writes.length)
+  expect(ran.filter(a => RUNNER_ARGV.test(a))).toEqual([])
+  expect(unexpectedWrites(w.writes)).toEqual([])
+})
 test('G33a review g1: the heartbeat is stat-checked and bounded: a link, a non-file, a size over 4 KiB in UTF-8 bytes (CJK under it in length) or a read error is no heartbeat, and the tick goes on (terminal)', { plugins: [G33_READER] }, async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())

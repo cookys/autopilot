@@ -1,7 +1,7 @@
 // mods/live/fleet.test.ts — the Fleet tab's data, pure half (fleet.ts): parsing the hub's task tree, the stuck rules, the lane grouping and the feed's TTL.
 // The mounted half (the tab drawn from a mocked `fleet tasks --tree --json`) is in live.test.ts ("G23 Fleet tab"). Run through `bash mods/live/run-tests.sh`.
 import { test, expect } from 'claude-code/testing'
-import { FLEET_ARGV, FLEET_MAX_BYTES, FLEET_TITLE_MAX, capTitle, fleetLanes, fleetSummary, fleetView, makeFleetFeed, utf8Bytes, OPEN_UNACCEPTED_MS, parseFleetTasks, QUIET_MS, stuckOf, taskTitle, ulidMs } from './fleet'
+import { FLEET_ARGV, FLEET_MAX_BYTES, FLEET_TITLE_MAX, capTitle, fleetLanes, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes, OPEN_UNACCEPTED_MS, parseFleetTasks, QUIET_MS, stuckOf, taskTitle, ulidMs } from './fleet'
 import type { FleetRow, FleetTask } from './fleet'
 import { stateOf } from './ui'
 
@@ -229,4 +229,52 @@ test('capTitle: at most FLEET_TITLE_MAX characters (CJK counts one each), ending
 test('fleetView feeds fleetSummary unchanged (the register.ts path): a fresh feed with no run yet publishes no time and no lanes', () => {
   const s = fleetSummary(fleetView(makeFleetFeed(), NOW), drawn)
   expect(s).toEqual({ v: 1, fetchedMs: null, error: null, capped: 0, totals: { needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }, lanes: [], topStuck: null })
+})
+
+// ---- fleetcards 1: othersView (the PM host's mirror and to-do files, read only) ----
+const ISO = (ms: number) => new Date(ms).toISOString()
+const mirrorOf = (cards: Record<string, unknown>, extra: Record<string, unknown> = {}) => JSON.stringify({ schema: 'autopilot.fleet-card-mirror/1', synced_at: ISO(NOW - 30_000), last_error: null, cards, closed: { 'd-0000000c': { at: ISO(NOW - 1000), state: 'closed', member: 'm' } }, ...extra })
+const goodCard = (id: string, over: Record<string, unknown> = {}) => ({ card_id: id, question: 'Q?', state: 'open', opened_at: ISO(NOW - 60_000), member: 'proj--claude', courier: 'host-b', namespace: 'ns-a', session: 'S1', ...over })
+
+test('othersView: a good card is listed with the session to answer in; a bad one is skipped and counted, not shown', () => {
+  const v = othersView(mirrorOf({
+    'd-0000000a': goodCard('d-0000000a'),
+    'd-0000000b': goodCard('d-0000000b', { question: '   ' }), // empty question
+    'd-0000000d': goodCard('d-0000000d', { courier: 'bad host' }), // not an address part
+    'd-0000000e': goodCard('d-0000000f'), // key and card_id differ
+    'x-1': goodCard('x-1'), // bad id
+    'd-00000011': goodCard('d-00000011', { namespace: undefined }), // no namespace
+    'd-00000010': goodCard('d-00000010', { opened_at: 'yesterday' }),
+  }), null, NOW)
+  expect(v.cards.map(c => c.id)).toEqual(['d-0000000a'])
+  expect(v.cards[0].where).toBe('ns-a/host-b/proj--claude@S1')
+  expect(v.skipped).toBe(6)
+})
+test('othersView: a file that cannot be read is an error, never an empty table; a missing file is "not present"', () => {
+  expect(othersView('not json', null, NOW).unreadable).toBe('not JSON')
+  expect(othersView(JSON.stringify({ schema: 'other/1', cards: {}, closed: {} }), null, NOW).unreadable).toBe('not a card mirror')
+  expect(othersView('x'.repeat(1_100_000), null, NOW).unreadable).toContain('over')
+  const none = othersView(null, null, NOW)
+  expect(none.present).toBe(false)
+  expect(none.unreadable).toBe(null)
+})
+test('othersView: stale is strictly over five minutes (boundary pair) and a never-synced mirror is stale', () => {
+  expect(othersView(mirrorOf({}, { synced_at: ISO(NOW - 300_000) }), null, NOW).stale).toBe(false)
+  expect(othersView(mirrorOf({}, { synced_at: ISO(NOW - 300_001) }), null, NOW).stale).toBe(true)
+  expect(othersView(mirrorOf({}, { synced_at: null }), null, NOW).stale).toBe(true)
+})
+test('othersView: the to-do list is reconciled by card id against open and closed cards; an unknown id is not reconciled; a bad item is skipped; a bad file is an error', () => {
+  const todo = JSON.stringify({ items: [
+    { card_id: 'd-0000000a', step: 's1', owner_session: 'o', since: ISO(NOW - 1000), due: null },
+    { card_id: 'd-0000000c', step: 's2', owner_session: 'o', since: ISO(NOW - 1000) },
+    { card_id: 'd-000000ff', step: 's3', owner_session: 'o', since: ISO(NOW - 1000), due: ISO(NOW + 1000) },
+    { card_id: 'd-00000011', step: '', owner_session: 'o', since: ISO(NOW - 1000) },
+    { card_id: 'd-00000012', step: 's5', owner_session: 'o', since: ISO(NOW - 1000), due: 'soon' },
+  ] })
+  const v = othersView(mirrorOf({ 'd-0000000a': goodCard('d-0000000a') }), todo, NOW)
+  expect(v.todo.map(t => [t.id, t.reconciled])).toEqual([['d-0000000a', true], ['d-0000000c', true], ['d-000000ff', false]])
+  expect(v.todoSkipped).toBe(2)
+  expect(v.todo[2].dueMs).toBe(NOW + 1000)
+  expect(othersView(mirrorOf({}), 'oops', NOW).todoError).toBe('not JSON')
+  expect(othersView(mirrorOf({}), '{}', NOW).todoError).toBe('no items list')
 })

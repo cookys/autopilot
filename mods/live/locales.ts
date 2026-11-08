@@ -391,7 +391,23 @@ export const EN: Record<string, string> = {
   "shell.to_send": "{n} to send",
   "shell.bg": "Why",
   "shell.tip_short": "Esc returns the keys",
-  "shell.tip_full": "ctrl+x tab takes the keys · Esc returns them"
+  "shell.tip_full": "ctrl+x tab takes the keys · Esc returns them",
+  "label.fleet_others": "other hosts",
+  "fleet.others_nosync": "no mirror yet: run scripts/fleet-card-mirror.js sync on the PM host",
+  "fleet.others_unreadable": "card mirror unusable: {error}",
+  "fleet.others_stale": "mirror is stale (last good sync over 5 minutes ago)",
+  "fleet.others_error": "last sync failed: {error}",
+  "fleet.others_skipped": "{n} mirror card(s) skipped (bad shape)",
+  "fleet.others_none": "no card open on other hosts",
+  "fleet.others_card": "{id} {q}",
+  "fleet.others_answer": "answer in {where}",
+  "fleet.todo_error": "to-do file unusable: {error}",
+  "fleet.todo_skipped": "{n} to-do item(s) skipped (bad shape)",
+  "fleet.todo_item": "{id} {step}",
+  "fleet.todo_owner": "{owner} · since {ago}",
+  "fleet.todo_due": "due in {ago}",
+  "fleet.todo_overdue": "overdue by {ago}",
+  "fleet.todo_unreconciled": "not reconciled: no such card in the mirror"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -783,5 +799,21 @@ export const ZH_TW: Record<string, string> = {
   "shell.to_send": "待送 {n} 張",
   "shell.bg": "背景",
   "shell.tip_short": "Esc 還給輸入框",
-  "shell.tip_full": "ctrl+x tab 拿鍵盤 · Esc 還給輸入框"
+  "shell.tip_full": "ctrl+x tab 拿鍵盤 · Esc 還給輸入框",
+  "label.fleet_others": "其他主機的卡",
+  "fleet.others_nosync": "還沒有鏡像檔：到 PM 主機跑 scripts/fleet-card-mirror.js sync",
+  "fleet.others_unreadable": "卡片鏡像無法使用：{error}",
+  "fleet.others_stale": "鏡像已過期（上次成功同步超過 5 分鐘）",
+  "fleet.others_error": "最近一次同步失敗：{error}",
+  "fleet.others_skipped": "略過 {n} 筆格式不合的卡",
+  "fleet.others_none": "其他主機沒有開著的卡",
+  "fleet.others_card": "{id} {q}",
+  "fleet.others_answer": "到 {where} 回答",
+  "fleet.todo_error": "待辦檔無法使用：{error}",
+  "fleet.todo_skipped": "略過 {n} 筆格式不合的待辦",
+  "fleet.todo_item": "{id} {step}",
+  "fleet.todo_owner": "{owner} · 自 {ago}前",
+  "fleet.todo_due": "{ago}後到期",
+  "fleet.todo_overdue": "已逾期 {ago}",
+  "fleet.todo_unreconciled": "未對帳：鏡像裡沒有這張卡"
 }

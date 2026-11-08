@@ -50,7 +50,7 @@ import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
-import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, utf8Bytes } from './fleet'
+import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BarTabId } from './tabs'
 import { MAIN_CONTENT_ROWS, SHELL_ROWS, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
@@ -137,7 +137,18 @@ async function fleetFor($: EngineInterface): Promise<FleetView | null> {
   const nowMs = await $.clock.now()
   fleetShownMs = nowMs
   kickFleet($, nowMs)
-  return fleetView(fleetFeed, nowMs)
+  return fleetView(fleetFeed, nowMs, await readOthers($, nowMs))
+}
+// The other hosts' cards: two files the PM host keeps in its state dir (scripts/fleet-card-mirror.js; AUTOPILOT_CARD_MIRROR_DIR, else XDG_STATE_HOME or HOME/.local/state, then autopilot/).
+// Read only, while the Fleet tab is drawn; nothing is run and nothing is written.
+async function readOthers($: EngineInterface, nowMs: number): Promise<ReturnType<typeof othersView>> {
+  const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '') // $.env.get takes a literal name at every call site (the mod loader refuses a variable)
+  const over = text(await $.env.get('AUTOPILOT_CARD_MIRROR_DIR').catch(() => undefined))
+  const xdg = text(await $.env.get('XDG_STATE_HOME').catch(() => undefined))
+  const home = text(await $.env.get('HOME').catch(() => undefined))
+  const dir = over !== '' ? over : xdg !== '' ? xdg.replace(/\/$/, '') + '/autopilot' : home !== '' ? home.replace(/\/$/, '') + '/.local/state/autopilot' : null
+  if (dir === null) return othersView(null, null, nowMs)
+  return othersView(await readText($, dir.replace(/\/$/, '') + '/fleet-card-mirror.json'), await readText($, dir.replace(/\/$/, '') + '/fleet-card-todo.json'), nowMs)
 }
 // one tick of the shared timer: the Fleet fetch rides along (never awaited, its failure dropped) and the tick returns refresh's promise, as before G23, rather than
 // dropping it (review g1). Nothing awaits that promise today: the engine's `$.clock.every` ignores what its callback returns and the test kit's `clock.advance`

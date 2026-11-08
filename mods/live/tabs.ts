@@ -8,7 +8,7 @@ import * as U from './ui'
 import { cellWidth, displayWidth, isStale, stateOf } from './ui'
 import { residueTally } from './model'
 import type { NeedsHumanEntry } from './model'
-import type { FleetLane, FleetTask, FleetView } from './fleet'
+import type { FleetLane, FleetTask, FleetView, OthersView } from './fleet'
 import { cardKey } from './decidebatch'
 import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
@@ -981,9 +981,39 @@ function fleetLanesLines(u: UiCtx, ctx: PaneCtx, f: FleetView | null): PaneLine[
   }
   return out
 }
+// The other hosts' cards (fleetcards phase 1): read-only rows from the PM host's mirror file, each naming the session to answer in, then the PM's to-do list reconciled by
+// card id. Nothing here answers or claims a card; the section is not part of the 待決 count.
+function fleetOthers(u: UiCtx, o: OthersView | null): PaneLine[] {
+  const t = u.t
+  const F = 'fleet.others' as const
+  const T = 'fleet.todo' as const
+  const warn = ui.stateOf('fleetTask', { state: 'open', stuck: true })
+  const needYou = ui.stateOf('verdict', 'DECIDE')
+  if (o === null || !o.present) return [ui.kv(u, t('label.fleet_others'), [ui.absent(t('fleet.others_nosync'))], { fact: F })]
+  if (o.unreadable !== null) return [ui.item(u, warn, t('fleet.others_unreadable', { error: o.unreadable }), undefined, { fact: F, word: false })]
+  const age = o.syncedMs === null ? ui.absent(t('fleet.never')) : ui.fmtd('ago', ui.ago(Math.max(0, o.nowMs - o.syncedMs), t), F)
+  const out: PaneLine[] = [ui.kv(u, t('label.fleet_others'), [age], { fact: F })]
+  if (o.stale) out.push(ui.item(u, warn, t('fleet.others_stale'), undefined, { fact: F, word: false }))
+  if (o.lastError !== null) out.push(ui.item(u, warn, t('fleet.others_error', { error: o.lastError }), undefined, { fact: F, word: false }))
+  if (o.skipped > 0) out.push(...ui.detail(u, t('fleet.others_skipped', { n: o.skipped }), { fact: F }))
+  if (o.cards.length === 0) out.push(ui.empty(t('fleet.others_none'), F))
+  for (const c of o.cards) {
+    out.push(ui.item(u, needYou, t('fleet.others_card', { id: c.id, q: c.question }), undefined, { fact: F, word: false }))
+    out.push(...ui.detail(u, t('fleet.others_answer', { where: c.where }), { fact: F }))
+  }
+  if (o.todoError !== null) out.push(ui.item(u, warn, t('fleet.todo_error', { error: o.todoError }), undefined, { fact: T, word: false }))
+  if (o.todoSkipped > 0) out.push(...ui.detail(u, t('fleet.todo_skipped', { n: o.todoSkipped }), { fact: T }))
+  for (const r of o.todo) {
+    out.push(ui.item(u, r.reconciled ? needYou : warn, t('fleet.todo_item', { id: r.id, step: r.step }), undefined, { fact: T, word: false }))
+    out.push(...ui.detail(u, t('fleet.todo_owner', { owner: r.owner, ago: ui.ago(Math.max(0, o.nowMs - r.sinceMs), t) }), { fact: T }))
+    if (r.dueMs !== null) out.push(...ui.detail(u, r.dueMs >= o.nowMs ? t('fleet.todo_due', { ago: ui.ago(r.dueMs - o.nowMs, t) }) : t('fleet.todo_overdue', { ago: ui.ago(o.nowMs - r.dueMs, t) }), { fact: T }))
+    if (!r.reconciled) out.push(...ui.detail(u, t('fleet.todo_unreconciled'), { fact: T }))
+  }
+  return out
+}
 function fleetTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   const u = uiCtxOf(ctx)
   const f = ctx.fleet ?? null
-  return U.sections('fleet', { source: fleetSource(u, f), cards: fleetCards(u, snap), lanes: fleetLanesLines(u, ctx, f) })
+  return U.sections('fleet', { source: fleetSource(u, f), cards: fleetCards(u, snap), others: fleetOthers(u, f?.others ?? null), lanes: fleetLanesLines(u, ctx, f) })
 }
 export const fleetTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(fleetTabLinesRaw(snap, ctx), ctx.cols)

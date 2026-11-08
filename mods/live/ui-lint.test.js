@@ -647,3 +647,31 @@ test('L10 control: a glyph glued to a count is reported, the helper form and a t
   assert.deepEqual(L10("const t = GT.round + ui.CHIP_MARK + 'R' + n"), [])
   assert.deepEqual(L10("const t = 'cache ' + v + ' ' + GS.need_you"), [])
 })
+
+// L11: the mod loader refuses a $.env.get whose first argument is not a string literal ("$.env.get takes a literal name as its first argument"), and the whole mod then fails to load.
+// Every source under mods/ is scanned; the control plants a variable name into the real live/register.ts (a mutant of the shipped source) and the rule must go red.
+const L11_RE = /\$\s*\??\.\s*env\s*\??\.\s*get\s*(?:\?\.)?\s*\((?!\s*(['"])[A-Za-z0-9_]*\1\s*[,)])/
+const L11 = src => src.split('\n').flatMap((l, i) => (!/^\s*\/\//.test(l) && L11_RE.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : [])) // raw lines: code() would also drop the regex literals in register.ts
+test('L11: every $.env.get under mods/ names its variable with a string literal', () => {
+  assert.ok(modSources().includes('live/register.ts'))
+  assert.deepEqual(scanMods(L11), [])
+})
+test('L11 control: a variable, a template and a call as the first argument are reported; a literal is not', () => {
+  for (const bad of ['await $.env.get(k)', 'await $.env.get(`HOME`)', "await $.env.get(name('HOME'))", 'await $.env?.get(k)', 'await $?.env.get(k)', 'await $.env.get?.(k)', 'await $.env.get (k)']) assert.ok(L11(bad).length > 0, bad)
+  for (const ok of ["await $.env.get('HOME').catch(() => undefined)", "await $.env.get( 'HOME' )", 'await $.env.get("X_Y")']) assert.deepEqual(L11(ok), [], ok)
+  const real = readMod('live/register.ts')
+  const mutant = real.replace("$.env.get('AUTOPILOT_CARD_MIRROR_DIR')", '$.env.get(k)')
+  assert.notEqual(mutant, real, 'the mutant applied')
+  assert.equal(L11(mutant).length, 1, 'the real register.ts with one call turned back into a variable goes red')
+})
+test('L11 control: the previous pattern (whitespace outside the lookahead, no optional chaining) is caught in both directions', () => {
+  const oldSrc = L11_RE.source.replace(/^.*?\(\?!/, '\\$\\.env\\.get\\(\\s*(?!').replace('(?!\\s*(', '(?!(')
+  assert.notEqual(oldSrc, L11_RE.source, 'the mutant applied')
+  const oldRe = new RegExp(oldSrc)
+  assert.ok(oldRe.test("$.env.get( 'HOME')"), 'old pattern falsely reports a legal literal (red where it must be green)')
+  assert.ok(!L11_RE.test("$.env.get( 'HOME')"))
+  for (const miss of ['$.env?.get(k)', '$?.env.get(k)', '$.env.get?.(k)', '$.env.get (k)']) {
+    assert.ok(!oldRe.test(miss), 'old pattern misses ' + miss + ' (green where it must be red)')
+    assert.ok(L11_RE.test(miss), miss)
+  }
+})

@@ -431,6 +431,8 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e
 // -U<n>, --unified=<n>; git accepts abbreviated long options, so a blacklist is bypassed by --ext / --textc / --open / --outp).
 // Roundtable window B (2026-10-19): ONE more use, in mods/roundtable/register.ts, `$.process.run(argv, ...)` whose argv is node + scripts/roundtable-window.js + send + -- before the room and body. The script is the same send as window A. A second use, another file, or a different argv is an offender.
 const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
+// PM ruling 2026-11-07 (panel claim, F4): the send step may run ONE more script through the same exec path, from its own list: scripts/decision-claim.js (wraps `fleet decision claim`, prints JSON). The two lists are checked apart.
+const ALLOWED_CLAIM_SCRIPTS = ['scripts/decision-claim.js']
 // every way to reach the `process` member of `$`: `$.process`, `$?.process`, `$['process']`, `$["process"]`, `$[`process`]`, and a destructuring `const { process } = $` / `const { process: p } = $`.
 // Counting the ACCESS, not the `.run` call, is what makes an alias (`const p = $.process; p.run(...)`, `const { run } = $.process`) show up: the access is still there.
 const PROCESS_ACCESS = [/\$\s*\??\.\s*process\b/g, /\$\s*\[\s*['"`]process['"`]\s*\]/g, /\{[^}]*\bprocess\b[^}]*\}\s*=\s*\$(?![\w$])/g]
@@ -464,9 +466,11 @@ function processRunOffenders(src, where) {
   const out = []
   if (uses.length !== 1) out.push('$.process reached ' + uses.length + ' times, one allowed')
   if (!/\$\.process\.run\(argv,/.test(src)) out.push('the one use is not `$.process.run(argv, ...)`')
-  const m = /export const CLEAN_SCRIPTS = \[([^\]]*)\]/.exec(src)
-  const names = m === null ? null : [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1])
-  if (names === null || names.length !== ALLOWED_CLEAN_SCRIPTS.length || names.some((n, i) => n !== ALLOWED_CLEAN_SCRIPTS[i])) out.push('CLEAN_SCRIPTS is not exactly the two allowed scripts')
+  const listOf = name => { const m = new RegExp('export const ' + name + ' = \\[([^\\]]*)\\]').exec(src); return m === null ? null : [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]) }
+  const clean = listOf('CLEAN_SCRIPTS')
+  if (clean === null || clean.length !== ALLOWED_CLEAN_SCRIPTS.length || clean.some((n, i) => n !== ALLOWED_CLEAN_SCRIPTS[i])) out.push('CLEAN_SCRIPTS is not exactly the two allowed scripts')
+  const claim = listOf('CLAIM_SCRIPTS')
+  if (claim === null || claim.length !== ALLOWED_CLAIM_SCRIPTS.length || claim.some((n, i) => n !== ALLOWED_CLAIM_SCRIPTS[i])) out.push('CLAIM_SCRIPTS is not exactly the one allowed script')
   return out
 }
 // THE rule (main net): the whole word `process` appears in the code of mods/ (comments stripped, string literals KEPT) exactly as often as the one allowed use,
@@ -493,7 +497,7 @@ test('process allowlist, word count, controls: an alias, a helper argument, a ne
   assert.equal(processWords(code('const processing = 1; // a process')).length, 0, 'a longer identifier and a comment are not counted')
 })
 test('process allowlist controls: an alias, a destructuring, a bracket access, another file, a second use and a changed script list are each reported (negative controls)', () => {
-  const list = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\n"
+  const list = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\nexport const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const\n"
   const ok = list + 'const r = await $.process.run(argv, { timeoutMs: 1 })'
   assert.deepEqual(processRunOffenders(code(ok), true), [])
   assert.equal(processRunOffenders(code('await $.process.run(argv, {})'), false).length, 1)
@@ -507,6 +511,12 @@ test('process allowlist controls: an alias, a destructuring, a bracket access, a
   assert.ok(processRunOffenders(code(list + "const p = $['process']; p.run(argv, {})"), true).length > 0, 'the only access is not the allowed call')
   assert.equal(processRunOffenders(code(list.replace(']', ", 'scripts/other.js']") + 'await $.process.run(argv, {})'), true).length, 1)
   assert.equal(processRunOffenders(code(list.replace("'scripts/prune-plugin-cache.js'", '') + 'await $.process.run(argv, {})'), true).length, 1)
+  // the two lists are checked apart: a script added to EITHER one, or a missing CLAIM_SCRIPTS, fails the lint (negative controls)
+  assert.deepEqual(processRunOffenders(code(ok), true), [], 'exactly two clean scripts and one claim script pass')
+  assert.deepEqual(processRunOffenders(code(ok.replace("'scripts/prune-plugin-cache.js']", "'scripts/prune-plugin-cache.js', 'scripts/other.js']")), true), ['CLEAN_SCRIPTS is not exactly the two allowed scripts'], 'a third clean script')
+  assert.deepEqual(processRunOffenders(code(ok.replace("['scripts/decision-claim.js']", "['scripts/decision-claim.js', 'scripts/other.js']")), true), ['CLAIM_SCRIPTS is not exactly the one allowed script'], 'a second claim script')
+  assert.deepEqual(processRunOffenders(code(ok.replace("['scripts/decision-claim.js']", "['scripts/other.js']")), true), ['CLAIM_SCRIPTS is not exactly the one allowed script'], 'a different claim script')
+  assert.deepEqual(processRunOffenders(code(ok.replace(/export const CLAIM_SCRIPTS[^\n]*\n/, '')), true), ['CLAIM_SCRIPTS is not exactly the one allowed script'], 'no claim list')
 })
 test('process allowlist, roundtable: the one send argv includes -- before the room; a missing --, a second use, another script and a missing send are each reported (negative controls)', () => {
   const ok = "const argv = ['node', root + '/scripts/roundtable-window.js', 'send', '--', room, body]\nconst ran = await $.process.run(argv, { timeoutMs: 1 })\n"

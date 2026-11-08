@@ -19,7 +19,7 @@ export type { PaneTab } from './model'
 
 // What the 待決 tab's controls call: a press on an option or the send Button (by its `press` id), and an edit of a note field (by the field's key). `state` is the
 // owner's picks and notes as the host holds them; `inputs` is whether the surface draws text fields.
-export type DecideActs = { state: DecideState; batch?: DecideBatch; inputs: boolean; onPress: (id: string) => void; onNote: (key: string, value: string) => void; onKeep: (key: string, value: string) => void }
+export type DecideActs = { state: DecideState; batch?: DecideBatch; now?: number; inputs: boolean; onPress: (id: string) => void; onNote: (key: string, value: string) => void; onKeep: (key: string, value: string) => void }
 
 type El = (props: any) => any
 
@@ -53,7 +53,7 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
 export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null, win: ScrollModel | null = null, fleet: FleetView | null = null) {
   const { Box, Text, Link, Button, Input } = el
   const cols = paneWidth(bodyColumns)
-  const ctx = { t, cols, expanded, folded, fleet, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), inputs: decide.inputs && Input !== undefined } }) }
+  const ctx = { t, cols, expanded, folded, fleet, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), ...(decide.now === undefined ? {} : { now: decide.now }), inputs: decide.inputs && Input !== undefined } }) }
   const segsOf = (l: PaneLine): Seg[] => l.segs ?? [{ text: l.text }]
   const drawn = (l: PaneLine) => segsOf(l).map((x, j) => <Text key={'g' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)
   // a line with no segments is the blank (drawn as a one-cell Text: an empty Text takes no row); every other line is a row of segments

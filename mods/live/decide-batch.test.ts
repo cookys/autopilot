@@ -33,8 +33,9 @@ class Session {
   view(): DecideView { return { ...this.st, inputs: this.inputs, batch: this.batch } }
   lines(): PaneLine[] { return decideTabLines(snapOf(this.pending), { t: zh, cols: 76, expanded: new Set(), folded: new Set(), decide: this.view() }).filter(l => l.bar !== true) }
   texts(): string[] { return this.lines().map(l => l.text.trimEnd()) }
+  // pick option k AND send it: since the undo window work a pick alone only selects (the card stays open); a card is answered, greyed in place, once it was sent
   answer(id: string, k = 0): { focus: string; offset: number } {
-    this.st = { ...this.st, picks: { ...this.st.picks, [id]: k } }
+    this.st = { ...this.st, picks: { ...this.st.picks, [id]: k }, sent: { ...this.st.sent, [id]: 1 } }
     this.sync()
     const plan = answerPlan({ lines: this.lines(), batch: this.batch, pending: this.pending, st: this.st, answered: id, offset: this.offset, room: this.room })
     this.offset = plan.offset
@@ -126,8 +127,8 @@ test('DECIDE batch (4) an answered card stays, greyed, shows the chosen answer, 
   const t = s.texts()
   const i = t.findIndex(x => x.includes('1. Fake question 1'))
   expect(t[i + 1], 'the chosen answer is shown on the card').toContain('Beta')
-  const presses = s.lines().slice(i, i + 3).flatMap(l => l.segs ?? []).filter(x => x.press !== undefined)
-  expect(presses, 'no pressable option and no field on an answered card').toEqual([])
+  const presses = s.lines().slice(i, i + 4).flatMap(l => l.segs ?? []).filter(x => x.press !== undefined).map(x => x.press)
+  expect(presses, 'no pressable option and no field on an answered card, only 改答案 (the pane lets a sent answer be corrected)').toEqual(['fix:d-fake0'])
   expect(s.lines().some(l => l.field?.key === 'note:d-fake0')).toBe(false)
   expect(s.lines().some(l => l.field?.key === 'note:d-fake1')).toBe(true)
   // the batch closes (nothing pending): the answered cards go, and the next batch counts from 1 again

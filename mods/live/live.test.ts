@@ -5708,6 +5708,21 @@ for (const surface of SURFACES) {
 }
 
 // ---- the 待決 tab, mounted: option Buttons, note fields, the send Button, the sent state, a phone without Input. The pure half is decide.test.ts. ----
+// the undo window starts a claim through scripts/decision-claim.js ($.process.run) in the background; the default reply is the no-courier one (ok, no answer_id: a line without an id), a test sets `stdout`
+// to say more, or `hang` so the claim never settles. `limits` collects the process limit each claim was given.
+const NO_COURIER = JSON.stringify({ ok: true, answer_id: null, reason: null }) + '\n'
+const claimHandle = (on: any): { stdout: string; hang: boolean; ran: string[][]; limits: unknown[] } => {
+  const h = { stdout: NO_COURIER, hang: false, ran: [] as string[][], limits: [] as unknown[] }
+  on('process.run', async (_$: any, e: any) => {
+    const argv = e.argv as string[]
+    if (!argv.some(x => x.endsWith('scripts/decision-claim.js'))) return { value: { exitCode: 1, stdout: '', stderr: 'fleet: not here' } }
+    h.ran.push(argv)
+    h.limits.push(e.init?.timeoutMs)
+    if (h.hang) await new Promise(() => undefined)
+    return { value: { exitCode: 0, stdout: h.stdout, stderr: '' } }
+  })
+  return h
+}
 const DQ1 = { id: 'd-4290499d', question: 'P5 殘留分頁要不要把已清掉的也列出來', background: '殘留分頁現在只列要人處理的。', options: [{ label: 'OK', description: '照現況' }, { label: '完整顯示', description: '全列出來' }], recommendation: 'OK', blocks: '下一個派工' }
 const DQ2 = { id: 'd-c24ecfd9', question: 'U6 要不要把建議也寫進回覆', options: [{ label: '要', description: '' }, { label: '不要', description: '' }] }
 const DQ3 = { id: 'd-0000free', question: '這個分支要叫什麼名字？', options: [] }
@@ -5718,7 +5733,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     const submits: { text: string; origin: unknown }[] = []
     on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
-    return { w, files, submits }
+    return { w, files, submits, claim: claimHandle(on) }
   }
   const decideRows = async ($: any) => (await paneParts($, surface, 'decide')).texts
   const act = async ($: any, ...keys: string[]) => {
@@ -5751,31 +5766,38 @@ for (const surface of SURFACES) {
     expect(rows.findIndex(r => r === ' '), 'the first blank closes the first card, after its note field').toBeGreaterThan(rows.findIndex(r => r.startsWith('  補充')))
   })
 
-  test('DECIDE mounted: a press answers the card (greyed, shows the answer, loses its Buttons and field), a pick survives the pane being drawn again, and the send Button appears (' + surface + ')', async ($, on) => {
-    decideWorld(on)
+  test('DECIDE mounted: an option press only SELECTS: the card stays open with its Buttons and field, nothing is sent, and the pick can be changed (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
     await start($, surface)
     await act($, 'opt:d-4290499d:1')
-    const rows = await decideRows($)
-    expect(rows[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來')
-    expect(rows).toContain('  已答      完整顯示')
-    expect(rows).toContain('  選項      [ ] 要') // the next card is still open
+    let rows = await decideRows($)
+    expect(rows[1]).toBe('▲ 1. P5 殘留分頁要不要把已清掉的也列出來')
+    expect(rows).toContain('            [x] 完整顯示')
+    expect(rows.some(r => r.startsWith('  已答')), 'the card is not greyed or reduced to an answer line').toBe(false)
     expect(rows[rows.length - 1]).toBe('  [ 送出（已答 1/3） ]  答案會貼進這個對話送出')
+    expect(submits.length, 'a press sends nothing').toBe(0)
     const keys = await keysOf($, 'Button')
     expect(keys).toContain('submit')
-    expect(keys.filter(k => k.startsWith('opt:d-4290499d')), 'an answered card takes no focus: no option Button').toEqual([])
-    expect(keys).toContain('opt:d-c24ecfd9:0')
+    expect(keys, 'the other option is still pressable').toContain('opt:d-4290499d:0')
+    expect(await keysOf($, 'Input'), 'the note field stays').toContain('note:d-4290499d')
+    await act($, 'opt:d-4290499d:0') // change the pick before sending
+    rows = await decideRows($)
+    expect(rows).toContain('  選項      [x] ★ OK')
+    expect(rows).toContain('            [ ] 完整顯示')
   })
 
   test('DECIDE mounted: send submits ONE prompt with the answered questions only, not as the user; the cards then read sent and lose their Buttons until the id leaves the file (' + surface + ')', async ($, on) => {
     const { w, files, submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
-    await pane.input({ key: 'note:d-c24ecfd9', text: '要，但只寫一句', kind: 'change' }) // a note is typed BEFORE the pick: the pick answers the card and takes its field away
+    await pane.input({ key: 'note:d-c24ecfd9', text: '要，但只寫一句', kind: 'change' })
     await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
     await pane.press({ key: 'opt:d-4290499d:0' })
     await pane.press({ key: 'opt:d-c24ecfd9:1' })
     await pane.press({ key: 'submit' })
     await pane.unmount()
+    expect(submits.length, 'inside the undo window nothing is sent').toBe(0)
+    await w.clock.advance(10_000) // the window ends: the send runs
     expect(submits.length).toBe(1)
     expect(submits[0].text).toBe([
       '[待決回覆]',
@@ -5801,11 +5823,12 @@ for (const surface of SURFACES) {
     expect(after[1]).toContain('目前沒有待你回答的問題')
   })
 
-  test('DECIDE mounted: answering card 2 of 4 greys it in place; the other cards keep their numbers and Buttons (' + surface + ')', async ($, on) => {
+  test('DECIDE mounted: sending card 2 of 4 greys it in place; the other cards keep their numbers and Buttons (' + surface + ')', async ($, on) => {
     const four = [1, 2, 3, 4].map(n => ({ id: 'd-fake000' + n, question: '第 ' + n + ' 個假問題', options: [{ label: 'A', description: '' }, { label: 'B', description: '' }] }))
-    decideWorld(on, four)
+    const { w } = decideWorld(on, four)
     await start($, surface)
-    await act($, 'opt:d-fake0002:1')
+    await act($, 'opt:d-fake0002:1', 'submit')
+    await w.clock.advance(10_000)
     const rows = await decideRows($)
     expect(rows.filter(l => /^\S+ \d+\. /u.test(l)).map(l => l.replace(/^\S+ /u, '')), 'numbers stay 1-4 and the answered card stays').toEqual(['1. 第 1 個假問題', '2. 第 2 個假問題', '3. 第 3 個假問題', '4. 第 4 個假問題'])
     expect(rows).toContain('  已答      B')
@@ -5815,10 +5838,12 @@ for (const surface of SURFACES) {
   })
 
   test('DECIDE mounted: a question that is still open can be answered after another was sent; only the new answer goes in the second prompt (' + surface + ')', async ($, on) => {
-    const { submits } = decideWorld(on)
+    const { w, submits } = decideWorld(on)
     await start($, surface)
     await act($, 'opt:d-4290499d:0', 'submit')
+    await w.clock.advance(10_000)
     await act($, 'opt:d-c24ecfd9:0', 'submit')
+    await w.clock.advance(10_000)
     expect(submits.map(s => s.text)).toEqual([
       '[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK',
       '[待決回覆]\nd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 要',
@@ -5845,23 +5870,53 @@ for (const surface of SURFACES) {
   })
 
   test('DECIDE mounted: two presses on send at the same moment submit ONE prompt (' + surface + ')', async ($, on) => {
-    const { submits } = decideWorld(on)
+    const { w, submits } = decideWorld(on)
     await start($, surface)
     const a = await paneOn($, surface, 'decide')
     await a.press({ key: 'opt:d-4290499d:0' })
     await Promise.all([a.press({ key: 'submit' }), a.press({ key: 'submit' })]) // a double click: both presses run before either has written its marks
     await a.unmount()
+    await w.clock.advance(10_000)
     expect(submits.length).toBe(1)
     expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK')
   })
 
+  test('claim in the window: a claim that never settles does not hold the send or the tick: sent after 10 s without an answer_id, and a later card still goes (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideWorld(on)
+    claim.hang = true
+    await start($, surface)
+    await act($, 'opt:d-4290499d:1', 'submit')
+    await w.clock.advance(10_000)
+    expect(submits.length, 'sent although the claim never returned').toBe(1)
+    expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 完整顯示')
+    await act($, 'opt:d-c24ecfd9:0', 'submit')
+    await w.clock.advance(10_000)
+    expect(submits.length, 'the tick still runs: the next card goes out too').toBe(2)
+  })
+
+  test('claim in the window: a failed claim, garbage from the script, and no courier all send the line as it was, without an id (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideWorld(on)
+    await start($, surface)
+    const outs = [JSON.stringify({ ok: false, answer_id: null, reason: 'card closed' }) + '\n', 'Traceback', NO_COURIER]
+    for (const [n, stdout] of outs.entries()) {
+      claim.stdout = stdout
+      if (n < 2) await act($, 'opt:' + ['d-4290499d', 'd-c24ecfd9'][n] + ':0', 'submit')
+      else { const pane = await paneOn($, surface, 'decide'); await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' }); await pane.press({ key: 'submit' }); await pane.unmount() }
+      await w.clock.advance(10_000)
+    }
+    expect(claim.ran.length).toBe(3)
+    expect(submits.length).toBe(3)
+    for (const x of submits) expect(x.text.split('\n')[1]).not.toMatch(/｜[0-9A-Za-z]{20,40}$/)
+  })
+
   test('DECIDE mounted: a note with no option picked submits that question as 都不選 (' + surface + ')', async ($, on) => {
-    const { submits } = decideWorld(on)
+    const { w, submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
     await pane.input({ key: 'note:d-4290499d', text: '自己寫', kind: 'change' })
     await pane.press({ key: 'submit' })
     await pane.unmount()
+    await w.clock.advance(10_000)
     expect(submits.length).toBe(1)
     expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 都不選｜補充：自己寫')
   })
@@ -5885,7 +5940,7 @@ for (const surface of SURFACES) {
   })
 
   test('DECIDE mounted: the send Button sends the note that Enter kept, once (' + surface + ')', async ($, on) => {
-    const { submits } = decideWorld(on)
+    const { w, submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
     await pane.input({ key: 'note:d-4290499d', text: '先寫著', kind: 'change' })
@@ -5894,6 +5949,7 @@ for (const surface of SURFACES) {
     await pane.press({ key: 'opt:d-4290499d:0' })
     await pane.press({ key: 'submit' })
     await pane.unmount()
+    await w.clock.advance(10_000)
     expect(submits.length).toBe(1)
     expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK｜補充：先寫著')
   })
@@ -6037,7 +6093,7 @@ for (const surface of SURFACES) {
     await phone.press({ key: 'opt:d-4290499d:0' })
     await phone.unmount()
     const again = await mountPhone()
-    expect(rowsOf((await again.drawn()) as Node)).toContain('  已答      OK')
+    expect(rowsOf((await again.drawn()) as Node)).toContain('  選項      [x] ★ OK') // a press selects
     await again.unmount()
   })
 }
@@ -6597,7 +6653,7 @@ for (const surface of SURFACES) {
     const w = world(on, files)
     const submits: { text: string; origin: unknown }[] = []
     on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
-    return { w, submits }
+    return { w, submits, claim: claimHandle(on) }
   }
   const mountD = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-d', props: { ...BAND_PROPS, maxRows: 8, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
   const rowsD = async ($: any, press: string[] = []) => {
@@ -6642,16 +6698,134 @@ for (const surface of SURFACES) {
   })
 
   test('E1 待決: a pick on the band is the pane\'s pick (one state), and the send Button sends ONE prompt (' + surface + ')', async ($, on) => {
-    const { submits } = decideBand(on)
+    const { w, submits } = decideBand(on)
     await start($, surface)
     const d = await rowsD($, ['tab:decide', 'opt:d-4290499d:1'])
     expect(d.rows.map(textD).some(r => r.includes('[x] 完整顯示'))).toBe(true)
     expect(d.keys).toContain('submit')
     expect(d.rows.map(textD).some(r => r.includes('[ ] ★ OK'))).toBe(true)
-    expect((await paneParts($, surface, 'decide')).texts).toContain('  已答      完整顯示') // the pane greys an answered card
+    expect((await paneParts($, surface, 'decide')).texts).toContain('            [x] 完整顯示') // the pane shows the pick selected, not greyed
     await rowsD($, ['submit'])
+    expect(submits.length, 'inside the undo window nothing is sent').toBe(0)
+    await w.clock.advance(10_000)
     expect(submits.length).toBe(1)
     expect(submits[0].text).toContain('d-4290499d')
+  })
+
+  test('undo window: send keeps the card on the pane with 撤回 (seconds left); undo inside the window sends nothing and keeps the pick; the window ending sends once (' + surface + ')', async ($, on) => {
+    const { w, submits } = decideBand(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(3000)
+    let texts = (await paneParts($, surface, 'decide')).texts
+    expect(texts.some(x => x.includes('撤回（剩 7 秒）')), texts.join('|')).toBe(true)
+    expect(submits.length).toBe(0)
+    await rowsD($, ['undo:d-4290499d'])
+    await w.clock.advance(20_000)
+    expect(submits.length, 'undone: nothing sent').toBe(0)
+    texts = (await paneParts($, surface, 'decide')).texts
+    expect(texts).toContain('            [x] 完整顯示') // the pick is kept
+    await rowsD($, ['submit'])
+    await w.clock.advance(10_000)
+    expect(submits.length, 'the window ended: sent once').toBe(1)
+    await w.clock.advance(10_000)
+    expect(submits.length).toBe(1)
+  })
+
+  test('undo window survives /clear: send, a new session starts, the window ending still sends once (' + surface + ')', async ($, on) => {
+    const { w, submits } = decideBand(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(2000)
+    await start($, surface) // /clear: a new session.start while the hold is still pending
+    expect(submits.length).toBe(0)
+    await w.clock.advance(10_000)
+    expect(submits.length, 'sent by the new session\'s timer').toBe(1)
+    await w.clock.advance(10_000)
+    expect(submits.length).toBe(1)
+  })
+
+  test('undo window survives /clear: send, a new session starts, undo, the window passes: nothing is sent (' + surface + ')', async ($, on) => {
+    const { w, submits } = decideBand(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(2000)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'undo:d-4290499d']) // the new session opens no tab: open 待決 again
+    await w.clock.advance(20_000)
+    expect(submits.length).toBe(0)
+  })
+
+  test('correction: a sent card keeps a 改答案 button; it reopens the card, and the next send (after its own window) is one [待決回覆·更正] line  (' + surface + ')', async ($, on) => {
+    const { w, submits } = decideBand(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(10_000)
+    expect(submits.length).toBe(1)
+    expect((await rowsD($)).keys).toContain('fix:d-4290499d')
+    await rowsD($, ['fix:d-4290499d', 'opt:d-4290499d:0', 'submit'])
+    await w.clock.advance(10_000)
+    expect(submits.length).toBe(2)
+    expect(submits[1].text).toBe('[待決回覆·更正] d-4290499d → OK')
+  })
+
+  test('send never waits on the session: a prompt that never settles still leaves the card sent (greyed, with 改答案), not stuck sending (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [DQ1, DQ2, DQ3] }))
+    const w = world(on, files)
+    let asked = 0
+    on('prompt.submit', async () => { asked++; await new Promise(() => undefined); return { text: '' } }) // the session never answers
+    claimHandle(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(10_000)
+    expect(asked).toBe(1)
+    const keys = (await rowsD($)).keys
+    expect(keys, 'the card is sent: its 改答案 button is there').toContain('fix:d-4290499d')
+    expect(keys.filter(k => k.startsWith('opt:d-4290499d')), 'and it takes no option Button').toEqual([])
+  })
+
+  // F4 claim in the undo window (PM rule 2026-11-08): started in the background when send is pressed, never awaited by the send, used only if it has already returned an answer_id when the window ends
+  const CLAIM_AID = 'a1B2c3D4e5F6g7H8i9J0kLmN'
+  test('claim in the window: send starts decision-claim.js at once (8 s limit, inside the 10 s window); a claim that returned an answer_id when the window ends is the last field of the line (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideBand(on)
+    claim.stdout = JSON.stringify({ ok: true, answer_id: CLAIM_AID, reason: null }) + '\n'
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    expect(claim.ran.length, 'started inside the window, before anything is sent').toBe(1)
+    expect(claim.ran[0][0]).toBe('node')
+    expect(claim.ran[0].slice(2)).toEqual(['d-4290499d', '--option', '完整顯示'])
+    expect(claim.limits).toEqual([8000])
+    expect(submits.length).toBe(0)
+    await w.clock.advance(10_000)
+    expect(submits.length).toBe(1)
+    expect(submits[0].text.split('\n')[1].endsWith('｜' + CLAIM_AID)).toBe(true)
+  })
+  test('claim in the window: undo throws the claim result away: nothing is sent, and the next send uses its own new claim, not the old id (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideBand(on)
+    claim.stdout = JSON.stringify({ ok: true, answer_id: 'OLDoldOLDoldOLDoldOLDold', reason: null }) + '\n'
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await rowsD($, ['undo:d-4290499d'])
+    await w.clock.advance(20_000)
+    expect(submits.length, 'undone: nothing sent').toBe(0)
+    claim.stdout = NO_COURIER // the second claim gets no id
+    await rowsD($, ['submit'])
+    await w.clock.advance(10_000)
+    expect(claim.ran.length, 'a new claim per send').toBe(2)
+    expect(submits.length).toBe(1)
+    expect(submits[0].text, 'the id of the undone claim is not used').not.toContain('OLDold')
+  })
+  test('claim in the window: a correction is never claimed (' + surface + ')', async ($, on) => {
+    const { w, submits, claim } = decideBand(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(10_000)
+    expect(claim.ran.length).toBe(1)
+    await rowsD($, ['fix:d-4290499d', 'opt:d-4290499d:0', 'submit'])
+    await w.clock.advance(10_000)
+    expect(submits[1].text).toBe('[待決回覆·更正] d-4290499d → OK')
+    expect(claim.ran.length, 'no second claim for a correction').toBe(1)
   })
 
   test('E1 待決: with nothing to answer the tab says so on one line (' + surface + ')', async ($, on) => {
@@ -6954,15 +7128,15 @@ for (const surface of SURFACES) {
     expect(d.rows[10]).toContain(' 1/1 ─')
   })
 
-  test('O4 shell v7: a pick marks the card ◆ with its answer, moves to the next card, and the progress row names the last answer; 160 and wider add 待送 N 張 (' + surface + ')', async ($, on) => {
+  test('O4 shell v7: a pick marks the card ◆ with its answer, stays on the card, and the progress row names the last answer; 160 and wider add 待送 N 張 (' + surface + ')', async ($, on) => {
     shellWorld(on)
     await start($, surface)
     await drawShell($, 160, ['tab:decide'])
     const d = await drawShell($, 160, ['opt:d-4290499d:1'])
-    expect(d.rows[1]).toContain('第 2 張，共 3 張')
+    expect(d.rows[1], 'a pick only selects: the card view stays').toContain('第 1 張，共 3 張')
     const left = d.rows.slice(2, 10).map(r => r.slice(1, 30))
-    expect(left.some(r => r.includes('◆ P5') && r.includes('完整顯示'))).toBe(true)
-    expect(left.some(r => r.includes('◐ U6'))).toBe(true)
+    expect(left.some(r => r.includes('◐ P5') && r.includes('完整顯示')), 'the card under the cursor shows its draft answer').toBe(true)
+    expect(left.some(r => r.includes('○ U6'))).toBe(true)
     expect(d.rows[9]).toContain('▰▱▱ 1/3')
     expect(d.rows[9]).toContain('◆ 上一張 P5')
     expect(d.rows[9]).toContain('→ 完整顯示')
@@ -6990,12 +7164,16 @@ for (const surface of SURFACES) {
 
   test('O4 shell v7: 送出 sends the answered cards and the progress row then says 已送出 N 張 in place of the last card (' + surface + ')', async ($, on) => {
     const sent: string[] = []
-    shellWorld(on)
+    const w = shellWorld(on)
     on('prompt.submit', ($$: any, e: any) => { sent.push(e.text); return { text: e.text } })
+    claimHandle(on)
     await start($, surface)
     await drawShell($, 160, ['tab:decide'])
     await drawShell($, 160, ['opt:d-4290499d:0'])
-    const d = await drawShell($, 160, ['send'])
+    await drawShell($, 160, ['send'])
+    expect(sent.length, 'inside the undo window nothing is sent').toBe(0)
+    await w.clock.advance(10_000)
+    const d = await drawShell($, 160)
     expect(sent.length).toBe(1)
     expect(sent[0]).toContain('d-4290499d')
     expect(sent[0]).toContain('→ OK')

@@ -145,7 +145,7 @@ test('DECIDE sent: a question already sent says so, draws its options without Bu
   // all sent: nothing left to send
   const all = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ sent: { 'd-4290499d': 5, 'd-c24ecfd9': 5, 'd-0000free': 5 } })))
   expect(all[all.length - 1].text.trim()).toBe('[ 全部已送出，等處理 ]')
-  expect(pressIds(all)).toEqual([])
+  expect(pressIds(all), 'a sent card offers only 改答案').toEqual(['fix:d-4290499d', 'fix:d-c24ecfd9', 'fix:d-0000free'])
 })
 
 test('DECIDE phone: with no text field a question without options says to answer in the conversation, and no field line is made at all', () => {

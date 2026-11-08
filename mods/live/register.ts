@@ -41,8 +41,10 @@ import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
-import { NO_BATCH, answerPlan, answerOf, batchSync, cardKey, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
+import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
+import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
+import type { ClaimCard, UndoDeps } from './decideundo'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
 
 import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand, usageDraw } from './band'
@@ -61,7 +63,7 @@ import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, decideDialog, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, decideDialog, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -808,7 +810,8 @@ async function refresh($: EngineInterface): Promise<void> {
   }
 }
 
-// A press on the 待決 tab: `pick:<id>:<k>` chooses option k of question id (pressing the chosen one again unchooses it), `submit` sends every answered question.
+// A press on the 待決 tab: `pick:<id>:<k>` only SELECTS option k of question id (pressing the chosen one again unselects it; nothing is sent and the card stays editable), `submit` starts the
+// undo window for every answered question (DECIDE_UNDO_MS, then the send), `undo:<id>` takes a card back out of it, `fix:<id>` reopens a sent card to correct its answer.
 async function decidePress($: EngineInterface, id: string): Promise<void> {
   // a pressed file path (ui.ts linkSegs, the background tail): the viewer window has to open in THIS turn, before any await (mods/viewer/show.ts openWindow)
   if (id.startsWith(SHOW_PRESS)) {
@@ -821,14 +824,10 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
     if (m !== null) {
       const k = Number(m[2])
       decideFocus = optKey(m[1], k)
-      await update($, DECIDE, s => {
-        const picks = { ...s.picks }
-        if (picks[m[1]] === k) delete picks[m[1]]
-        else picks[m[1]] = k
-        return { ...s, picks }
-      })
-      await decideAnswered($, m[1])
-    } else if (id === 'submit') await sendDecide($)
+      await update($, DECIDE, s => applyPick(s, m[1], k))
+    } else if (id === 'submit') await holdDecide($)
+    else if (id.startsWith('undo:')) await undoDecide($, id.slice(5))
+    else if (id.startsWith('fix:')) await reopen(undoDeps($), id.slice(4))
     else if (id.startsWith('clean:')) await cleanPress($, id)
   } catch (_e) {
     // a press never takes the session down
@@ -840,7 +839,17 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
 // dirty or unintegrated worktree is never touched) and `prune-plugin-cache.js --version <v>` (a plain version directory, no live pid, not the loaded copy). The arguments come only
 // from the CURRENT clearable lists of the snapshot, so a stale or forged id runs nothing. Owner ruling 2026-10-16 (d-7a7ee75c): no confirmation dialog.
 export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const
+// The undo window's claim (F4) is the one other script the pane runs, from its own list: it only wraps `fleet decision claim` and prints JSON (PM ruling 2026-11-07).
+export const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const
 type CleanRun = (argv: string[]) => Promise<{ exitCode: number; stdout: string }>
+// the one exec path for both lists: argv is node + a whitelisted script (ui-lint.test.js pins this); the only place `$.process` is used
+async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[number] | (typeof CLAIM_SCRIPTS)[number], args: string[], run?: CleanRun, timeoutMs = 120_000): Promise<string> {
+  const allowed: readonly string[] = [...CLEAN_SCRIPTS, ...CLAIM_SCRIPTS]
+  if (!allowed.includes(script)) throw new Error('script not allowed')
+  const argv = ['node', $.plugin.root + '/' + script, ...args]
+  const r = run === undefined ? await $.process.run(argv, { timeoutMs }) : await run(argv)
+  return r.stdout
+}
 let cleaning = false
 // the common git dir of the checkout a path belongs to: the first `.git` met walking up (a directory holds HEAD, a gitfile names the gitdir); null when there is none (a directory that is gone)
 async function commonDirAt($: EngineInterface, start: string): Promise<string | null> {
@@ -861,13 +870,7 @@ async function commonDirAt($: EngineInterface, start: string): Promise<string | 
 type CleanNote = { ok: boolean; note: string }
 export async function cleanPress($: EngineInterface, id: string, run?: CleanRun): Promise<void> {
   if (cleaning || snapshot === null) return
-  // the only place `$.process` is used: argv is node + a whitelisted script (ui-lint.test.js pins this)
-  const exec = async (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => {
-    if (!CLEAN_SCRIPTS.includes(script)) throw new Error('script not allowed')
-    const argv = ['node', $.plugin.root + '/' + script, ...args]
-    const r = run === undefined ? await $.process.run(argv, { timeoutMs: 120_000 }) : await run(argv)
-    return r.stdout
-  }
+  const exec = (script: (typeof CLEAN_SCRIPTS)[number], args: string[]): Promise<string> => execScript($, script, args, run)
   // the same list the 全部清掉 count is drawn from (model.ts cleanTargets): what is clearable now and was not already reported on
   const left = cleanTargets(snapshot.detail, (await read($, DECIDE)).clean ?? {})
   const asked = id === 'clean:all' ? left.worktrees.map(e => e.target) : left.worktrees.map(e => e.target).filter(x => 'clean:' + x === id)
@@ -929,26 +932,58 @@ async function cleanWorktrees($: EngineInterface, asked: string[], exec: (script
   }
 }
 
-// One prompt carries every answered question that was not sent yet. The questions are marked sent BEFORE the prompt goes, so a second press cannot send them twice;
-// a prompt the session refuses takes the marks back. The prompt starts a turn once the session is idle: it is not awaited here.
-// The guard is a module flag taken before the first await: two presses landing together (a double click) both run this function before either has written its marks.
-let sending = false
-async function sendDecide($: EngineInterface): Promise<void> {
-  if (sending) return
-  sending = true
+// Send (decideundo.ts): a press on send starts the undo window of every answered card (DECIDE_UNDO_MS); the 1 s timer below redraws the countdown and, when a window ends, calls
+// sendDecide. Nothing on this path awaits the network or a courier. The clock is the engine's ($.clock), so a test advances time instead of waiting.
+const DECIDE_TICK_MS = 1000
+// How one card's answer is claimed with the fleet courier (F4), in the background of its undo window: `scripts/decision-claim.js` (CLAIM_SCRIPTS) prints {ok, answer_id, reason}. Its process limit is
+// below the window (DECIDE_UNDO_MS 10 s), so a stuck courier is abandoned inside it; the send never waits for it either way. Injectable (`setClaimCard`) so a test needs no process.
+const CLAIM_MS = 8000
+let claimCard: ClaimCard | null = null
+export function setClaimCard(fn: ClaimCard | null): void { claimCard = fn }
+const claimWith = ($: EngineInterface): ClaimCard => async (card, answer) => {
+  const args = [card.id, ...('option' in answer ? ['--option', answer.option] : ['--free-text', answer.freeText])]
+  let j: unknown
+  try { j = JSON.parse((await execScript($, CLAIM_SCRIPTS[0], args, undefined, CLAIM_MS)).trim().split('\n').pop() ?? '') } catch (_e) { return { ok: false, answer_id: null, reason: 'claim failed' } }
+  const r = j as { ok?: unknown; answer_id?: unknown; reason?: unknown } | null
+  if (r === null || typeof r !== 'object' || typeof r.ok !== 'boolean') return { ok: false, answer_id: null, reason: 'claim failed' }
+  return { ok: r.ok, answer_id: typeof r.answer_id === 'string' && r.answer_id !== '' ? r.answer_id : null, reason: typeof r.reason === 'string' ? r.reason : null }
+}
+let holdTimer: { cancel: () => void } | undefined
+const undoDeps = ($: EngineInterface): UndoDeps => ({
+  now: () => $.clock.now(),
+  read: () => read($, DECIDE),
+  update: fn => update($, DECIDE, fn),
+  pool: st => actionable(snapshot === null ? [] : snapshot.pending, decideBatch, st),
+  claim: claimCard ?? claimWith($),
+})
+async function stopHoldTimerIfIdle($: EngineInterface): Promise<void> {
+  if (holdTimer !== undefined && Object.keys((await read($, DECIDE)).hold ?? {}).length === 0) { holdTimer.cancel(); holdTimer = undefined }
+}
+function startHoldTimer($: EngineInterface): void {
+  if (holdTimer === undefined) holdTimer = $.clock.every(DECIDE_TICK_MS, () => { void holdTick($).catch(() => undefined) }) // a bad tick must never take the session down
+}
+async function holdDecide($: EngineInterface): Promise<void> {
+  if ((await holdSend(undoDeps($))).length > 0) startHoldTimer($)
+}
+async function undoDecide($: EngineInterface, id: string): Promise<void> {
+  await undoHold(undoDeps($), id)
+  await stopHoldTimerIfIdle($)
+}
+let ticking = false // a clock jump fires many ticks at once: one runs, the rest are skipped (the next 1 s tick sees any change)
+async function holdTick($: EngineInterface): Promise<void> {
+  if (ticking) return
+  ticking = true
   try {
-    const reply = decideReply(snapshot === null ? [] : snapshot.pending, await read($, DECIDE))
-    if (reply === null) return
-    const at = await $.clock.now()
-    await update($, DECIDE, s => ({ ...s, sent: { ...s.sent, ...Object.fromEntries(reply.ids.map(i => [i, at])) } }))
-    const typed = submitSuccessor(snapshot === null ? [] : snapshot.pending, reply.ids)
-    if (typed !== null) await decideAnswered($, typed) // a typed-only card is answered by sending it: the focus goes to its successor even though the send button is gone
-    $.prompt.submit({ text: reply.text }).catch(async () => {
-      await update($, DECIDE, s => { const sent = { ...s.sent }; for (const i of reply.ids) delete sent[i]; return { ...s, sent } })
-    })
-  } finally {
-    sending = false
-  }
+    const r = await tickHold(undoDeps($), ids => sendDecide($, ids))
+    if (r.idle) await stopHoldTimerIfIdle($)
+    await $.ui.invalidate('ui.render') // awaited so the caller's catch owns a refused redraw
+  } finally { ticking = false }
+}
+// The one prompt.submit of the mod (ui-lint allowlist): the window of `only` ended, so its answers go out (decideundo.ts sendNow). The prompt starts a turn once the session is idle: it is not awaited.
+async function sendDecide($: EngineInterface, only: ReadonlySet<string>): Promise<void> {
+  const ids = await sendNow({ ...undoDeps($), post: text => $.prompt.submit({ text }) }, only)
+  const typed = submitSuccessor(snapshot === null ? [] : snapshot.pending, ids)
+  if (typed !== null) await decideAnswered($, typed) // a typed-only card is answered by sending it: the focus goes to its successor even though the send button is gone
 }
 
 // An edit of a note field (`note:<id>`).
@@ -973,12 +1008,13 @@ async function decideKeep($: EngineInterface, key: string, value: string): Promi
 // Forget the picks and notes of questions that left the list, and sent marks a day old. Writes only when something is dropped (a write redraws the pane).
 async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: boolean, nowMs: number): Promise<void> {
   const st: DecideState = await read($, DECIDE)
-  const gone = (id: string): boolean => !listed.has(id) && (st.sent[id] !== undefined ? nowMs - st.sent[id] > DECIDE_KEEP_MS : ok)
-  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent)])
+  const busy = (id: string): boolean => st.hold?.[id] !== undefined || (st.fixing?.[id] !== undefined && nowMs - st.fixing[id] <= DECIDE_KEEP_MS) // in an undo window, or reopened to correct: its pick and note are still wanted
+  const gone = (id: string): boolean => !listed.has(id) && !busy(id) && (st.sent[id] !== undefined ? nowMs - st.sent[id] > DECIDE_KEEP_MS : ok)
+  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent), ...Object.keys(st.hold ?? {}), ...Object.keys(st.fixing ?? {})])
   const drop = [...ids].filter(gone)
   if (drop.length === 0) return
   const keep = <V,>(o: Record<string, V>): Record<string, V> => Object.fromEntries(Object.entries(o).filter(([id]) => !drop.includes(id)))
-  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent) }))
+  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent), hold: keep(s.hold ?? {}), fixing: keep(s.fixing ?? {}) }))
 }
 
 // the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs
@@ -1014,6 +1050,9 @@ export async function startLive($: EngineInterface): Promise<void> {
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
+  holdTimer?.cancel() // the undo-window timer holds the previous session's engine handle: this session starts its own
+  holdTimer = undefined
+  if (Object.keys((await read($, DECIDE)).hold ?? {}).length > 0) startHoldTimer($) // a send still inside its window when /clear came: the new session takes it over (an expired one goes out on the first tick)
   if (timer === undefined) timer = $.clock.every(TICK_MS, () => liveTick($))
   await refresh($)
 }
@@ -1030,6 +1069,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
     if (e.reason !== 'clear' && timer !== undefined) {
       timer.cancel()
       timer = undefined
+    }
+    if (e.reason !== 'clear' && holdTimer !== undefined) {
+      holdTimer.cancel()
+      holdTimer = undefined
     }
     return next(e)
   })
@@ -1165,7 +1208,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       // ux-v7: the 待決 tab is a card view. One card in the main window (decideCursor), the card list on the left, the progress row and the four quick slots under it.
       const st = active === 'decide' ? await read($, DECIDE) : null
       const pending = active === 'decide' ? snapshot.pending : []
-      const cards: Card[] = st === null ? [] : pending.map(d => ({ id: cardKey(d), name: d.question, answer: answerOf(d, st), sent: d.id !== null && st.sent[d.id] !== undefined }))
+      const cards: Card[] = st === null ? [] : pending.map(d => ({ id: cardKey(d), name: d.question, answer: draftOf(d, st), sent: d.id !== null && st.sent[d.id] !== undefined && !decideFixing(d, st) }))
       decideCursor = cards.length === 0 ? 0 : Math.max(0, Math.min(cards.length - 1, decideCursor))
       const cur = pending[decideCursor]
       const optN = cur === undefined || cur.id === null || decideDialog(cur) ? 0 : cur.options.length
@@ -1190,9 +1233,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const pickPress = (k: number) => {
             if (cur.id === null) return
             const id = cur.id
-            void decidePress($, 'pick:' + id + ':' + k).then(async () => {
+            void decidePress($, 'pick:' + id + ':' + k).then(async () => { // a press only selects: the card stays where it is, so the pick can still be changed before send
               const now = await read($, DECIDE)
-              if (now.picks[id] === k) { decideLastId = id; decideCursor = Math.min(cards.length - 1, decideCursor + 1) }
+              if (now.picks[id] === k) decideLastId = id
               redraw()
             })
           }
@@ -1206,9 +1249,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const lastCard = cards.find(c => c.id === decideLastId)
           const prog = progressSegs({ cards, last: lastCard === undefined || lastCard.answer === null || lastCard.sent ? null : { name: lastCard.name, answer: lastCard.answer }, wide: plan.geo.tier >= 160, width: mainCols - 1, t })
           progress = progressRow(el, prog)
-          const sendN = cards.filter(c => !c.sent && c.answer !== null).length
+          const sendN = pending.filter(d => decideOpen(d, st) && !decideHeld(d, st) && decideLine(d, st) !== null).length
+          const holds = Object.values(st.hold ?? {})
           quick = cardQuick(el, t, {
-            sendN, tip: t(plan.geo.tier === 80 ? 'shell.tip_short' : 'shell.tip_full'),
+            sendN, ...(holds.length === 0 ? {} : { undo: { secs: Math.max(0, Math.ceil((Math.max(...holds) - nowMs) / 1000)), onUndo: () => { void Promise.all(Object.keys(st.hold ?? {}).map(i => undoDecide($, i))).then(redraw) } } }), tip: t(plan.geo.tier === 80 ? 'shell.tip_short' : 'shell.tip_full'),
             onSend: () => { void decidePress($, 'submit').then(redraw) },
             onPrev: () => { decideCursor = Math.max(0, decideCursor - 1); redraw() },
             onNext: () => { decideCursor = Math.min(cards.length - 1, decideCursor + 1); redraw() },
@@ -1265,7 +1309,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($))))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($))))
 
   // The 待決 tab draws its own scrolling window (scroll.tsx), so the person's scroll keys there move the mod's offset and never reach the engine; every other tab keeps the engine's own
   // scrolling (`next(e)`).

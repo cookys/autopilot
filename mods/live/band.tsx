@@ -295,7 +295,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
 
 // the quick row of the 待決 card view: `0: 送出 N 張 │ 7: 上一張 │ 8: 下一張 │ 9: 下一個選單   tip`. The slots have fixed widths (15, 12, 12, 16), so the four labels sit at the same
 // columns at every tier; only the tip's length changes.
-export type CardQuick = { sendN: number; tip: string; onSend: () => void; onPrev: () => void; onNext: () => void; onMenu: () => void }
+export type CardQuick = { sendN: number; undo?: { secs: number; onUndo: () => void }; tip: string; onSend: () => void; onPrev: () => void; onNext: () => void; onMenu: () => void }
 export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQuick): unknown[] {
   const { Box, Text, Button } = el
   const slot = (key: string, hotkey: string, label: string, width: number, press: () => void, sep: boolean) => (
@@ -305,7 +305,7 @@ export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQ
     </Box>
   )
   return [
-    slot('send', '0', t('shell.send', { n: q.sendN }), 15, q.onSend, true),
+    q.undo === undefined ? slot('send', '0', t('shell.send', { n: q.sendN }), 15, q.onSend, true) : slot('undo', '0', t('shell.undo', { n: q.undo.secs }), 15, q.undo.onUndo, true), // inside the undo window the slot takes the send back
     slot('prev', '7', t('shell.prev'), 12, q.onPrev, true),
     slot('next', '8', t('shell.next'), 12, q.onNext, true),
     slot('next-menu', '9', t('shell.next_menu'), 16, q.onMenu, false),

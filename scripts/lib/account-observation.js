@@ -674,11 +674,56 @@ function removeLocalRefusal(liveDir, provider, alias, opts) {
   }
 }
 
+// claimAttempt(liveDir, provider, alias, opts) -> { ok: true, claimed: true } | { ok: true, claimed: false, reason: 'too_soon' | 'busy' } | { ok: false, code, reason? }
+// The attempt stamp for a rate-limited provider query: `<alias>.attempt` beside the mirror file holds one integer, the epoch
+// seconds of the last attempt, never a token. Under the SAME per-alias lock as writeLocalRow it reads the stamp, judges
+// max(stamp, opts.lastObservedAt) against opts.minIntervalS on opts.nowMs, and when allowed writes the new stamp before
+// returning, so failed attempts count and two concurrent callers cannot both claim. The lock is released on return (the
+// query itself runs unlocked). Lock wait uses acquireLock (opts.waitMs, sleep, now); no lock is `busy`.
+function claimAttempt(liveDir, provider, alias, opts) {
+  const o = opts || {};
+  if (typeof liveDir !== 'string' || !path.isAbsolute(liveDir)) return { ok: false, code: 'live_dir_refused' };
+  let dir;
+  try { dir = mirrorDir(liveDir, provider); checkNames(liveDir, provider, alias); } catch (_) { return bad('names'); }
+  if (!Number.isFinite(o.nowMs) || !Number.isFinite(o.minIntervalS)) return bad('claim_args');
+  const made = ensurePrivateDir(dir);
+  if (!made.ok) return { ok: false, code: 'dir_refused', reason: made.reason };
+  const file = path.join(dir, `${alias}.attempt`);
+  let held;
+  try { held = acquireLock(path.join(dir, `${alias}.oslock`), o); } catch (e) {
+    const m = /^(lock_unreadable:[A-Z0-9_]+|lock_helper)$/.exec(e && e.message);
+    return { ok: false, code: 'write_failed', reason: m ? m[0] : 'lock_helper' };
+  }
+  if (!held) return { ok: true, claimed: false, reason: 'busy' };
+  let tmp = null;
+  try {
+    let last = Number.isFinite(o.lastObservedAt) ? o.lastObservedAt : null;
+    const cur = readSmallFile(file, 64);
+    if (cur.text !== undefined) {
+      const n = /^\d{1,12}$/.test(cur.text.trim()) ? Number(cur.text.trim()) : null; // junk counts as no stamp
+      if (n !== null && (last === null || n > last)) last = n;
+    }
+    const nowS = o.nowMs / 1000;
+    if (last !== null && nowS - last < o.minIntervalS) return { ok: true, claimed: false, reason: 'too_soon' };
+    tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
+    const fd = fs.openSync(tmp, 'wx', 0o600);
+    try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, `${Math.floor(nowS)}\n`); } finally { fs.closeSync(fd); }
+    fs.renameSync(tmp, file);
+    tmp = null;
+    return { ok: true, claimed: true };
+  } catch (_) {
+    return { ok: false, code: 'write_failed' };
+  } finally {
+    if (tmp) { try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ } }
+    releaseLock(held);
+  }
+}
+
 module.exports = {
   SCHEMA, VIEW_SCHEMA, NAMESPACE_SCHEMA,
   EPOCH_MAX_S, CLAMP_MAX,
   WINDOW_KINDS, WINDOW_SOURCES, UNITS, VISIBILITY, TOKEN_STATES, REFUSAL_REASONS, RECORD_SOURCES, LOCAL_COURIER,
   clampUtilization, buildRecord, validateRecord, hasMsKey, TOKEN_SHAPES, TOKEN_PREFIX_SHAPES,
   mirrorDir, mirrorPath, namespacePath, liveDirOrNull,
-  parseView, readView, readNamespaceBinding, writeLocalRow, removeLocalRefusal,
+  parseView, readView, readNamespaceBinding, writeLocalRow, removeLocalRefusal, claimAttempt,
 };

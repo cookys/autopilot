@@ -25,8 +25,9 @@
 //     (ASSUMED, unconfirmed; the closed record schema has no field for it, so the result object carries `assumed: true`); percentage is ASSUMED 0..100 used; nextResetTime is epoch ms or s. Other types ignored.
 // Every utilization goes through observation.clampUtilization (the single clamp boundary): 1..1.5 clamps to 1, anything
 // outside is rejected, so a value in the wrong unit never gets in. Window source is `probe`, observed_at is the
-// request completion time in seconds, an elapsed window is dropped. Rate limit: a mirror row observed less than 900 s
-// ago skips the request and returns `too_soon` (the fetch is not called).
+// request completion time in seconds, an elapsed window is dropped. Rate limit: the newer of the last ATTEMPT
+// (a token-free `<alias>.attempt` stamp, written before the request, failures included) and the mirror row's observed_at,
+// less than 900 s ago, skips the request and returns `too_soon` (the fetch is not called); a held lock gives `too_soon` too.
 //
 // Token: read from the environment the caller passes, the same names scripts/resolve-endpoint.sh uses
 // (AUTOPILOT_ENDPOINT_<NAME>_TOKEN; for minimax also the provider-native MINIMAX_API_KEY). This file opens no secret file.
@@ -35,7 +36,7 @@
 const observation = require('./lib/account-observation');
 const { resolveLiveDir } = require('./lib/live-state-dir');
 
-const TIMEOUT_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 10000;
 const MIN_INTERVAL_S = 900; // one query per provider/alias per 15 minutes
 const MS_THRESHOLD = 1e11; // observation's EPOCH_MAX_S: above it a value is milliseconds
 
@@ -129,7 +130,7 @@ function tokenOf(spec, env) {
   return null;
 }
 
-// o: { alias, env, fetch, nowMs (function), liveDir, hostRole }. Never throws; the result carries no token.
+// o: { alias, env, fetch, nowMs (function), liveDir, hostRole, timeoutMs (test seam) }. Never throws; the result carries no token.
 async function syncProvider(provider, o) {
   const opts = o || {};
   const alias = typeof opts.alias === 'string' && opts.alias !== '' ? opts.alias : provider;
@@ -147,14 +148,18 @@ async function syncProvider(provider, o) {
     // Rate limit (PM): at most one query per provider/alias per 15 minutes, judged from the mirror's own observed_at.
     const lastAt = lastObservedAt(liveDir, provider, alias);
     const startMs = typeof opts.nowMs === 'function' ? opts.nowMs() : Date.now();
-    if (lastAt !== null && startMs / 1000 - lastAt < MIN_INTERVAL_S) return out(false, 'too_soon');
+    // The gate counts ATTEMPTS: claimAttempt stamps the attempt (no token) under the per-alias lock before any request,
+    // so a failing endpoint or a missing mirror row cannot turn a poller into one query per call.
+    const claim = observation.claimAttempt(liveDir, provider, alias, { nowMs: startMs, minIntervalS: MIN_INTERVAL_S, lastObservedAt: lastAt });
+    if (!claim.ok) return out(false, typeof claim.code === 'string' ? claim.code : 'write_failed');
+    if (!claim.claimed) return out(false, 'too_soon');
     const doFetch = opts.fetch || globalThis.fetch;
     let res;
     try {
       res = await doFetch(spec.url, {
         method: 'GET',
         headers: { Authorization: spec.bearer ? `Bearer ${token}` : token, Accept: 'application/json' },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(Number.isFinite(opts.timeoutMs) && opts.timeoutMs > 0 ? opts.timeoutMs : DEFAULT_TIMEOUT_MS),
       });
     } catch (_) { return out(false, 'request_failed'); }
     const nowMs = typeof opts.nowMs === 'function' ? opts.nowMs() : Date.now();
@@ -195,7 +200,7 @@ async function main(argv, env) {
   return 1;
 }
 
-module.exports = { MIN_INTERVAL_S, syncProvider, convertMinimax, convertGlm, PROVIDERS, TIMEOUT_MS };
+module.exports = { MIN_INTERVAL_S, syncProvider, convertMinimax, convertGlm, PROVIDERS, TIMEOUT_MS: DEFAULT_TIMEOUT_MS };
 
 if (require.main === module) {
   main(process.argv.slice(2), process.env).then((c) => { process.exitCode = c; });

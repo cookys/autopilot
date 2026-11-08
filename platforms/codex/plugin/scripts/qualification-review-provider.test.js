@@ -2026,6 +2026,18 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
       equal(errs(panelSchema, doc, '$'), null, `schema accepts a legal ${label} panel reply`);
       equal(parsePanelResult(JSON.stringify(doc)).verdict, doc.verdict, `the judge also accepts the legal ${label} panel reply the schema accepts`);
     }
+    // Pattern rule: search and whole-string (xgrammar) readings must agree, so every pattern is ^...$.
+    {
+      const patterns = [];
+      JSON.stringify(panelSchema, (k, v) => { if (k === 'pattern' && typeof v === 'string') patterns.push(v); return v; });
+      check(patterns.length > 0, 'schema scan finds patterns');
+      equal(JSON.stringify(patterns.filter((p) => !(p.startsWith('^') && p.endsWith('$')))), '[]',
+        'every schema pattern starts with ^ and ends with $ (search == whole-string match)');
+      const filePat = panelSchema.$defs.finding.properties.file.pattern;
+      const both = (s) => new RegExp(filePat, 'u').test(s) && new RegExp(`^(?:${filePat})$`, 'u').test(s);
+      check(both('src/generated/a.cjs') && both('s'), 'finding.file accepts a multi-char relative path under search and whole-string readings');
+      check(!new RegExp(filePat, 'u').test('/etc/x') && !new RegExp(`^(?:${filePat})$`, 'u').test('/etc/x'), 'finding.file rejects an absolute path under both readings');
+    }
     const clone = (mutate) => { const d = JSON.parse(REVIEWER_MODEL_OUTPUT); mutate(d); return d; };
     const rejected = [
       ['missing finding field (line)', clone((d) => { delete d.findings[0].line; })],
@@ -2521,5 +2533,5 @@ process.stdout.write(JSON.stringify({ type: 'text', part: { text: '{"verdict":"p
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 597) throw new Error(`qualification-review-provider: expected exactly 597 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 601) throw new Error(`qualification-review-provider: expected exactly 601 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

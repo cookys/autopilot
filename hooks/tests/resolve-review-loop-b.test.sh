@@ -210,9 +210,12 @@ ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')
 assert_eq "$ACTUAL_KEYS" "$EXPECTED_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 # Negative control: the cloud-fallback knobs this fixture strips must change the key list when present.
 CF_NC="$TEST_TMP/cf-nc.md"; cp "$AMBIENT_NO_BRAIN" "$CF_NC"
-printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' >> "$CF_NC"
+# The rung must be a family no reviewer seat uses, or the resolver refuses the config (exit 3, no output).
+printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: grok-4.6/low@grok\n' >> "$CF_NC"
 CF_KEYS="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CF_NC" bash "$SCRIPT" --auto-domain HEAD..HEAD | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_neq "$CF_KEYS" "$EXPECTED_KEYS" "negative control: a cloud-fallback rung config changes the key list"
+assert_neq "" "$CF_KEYS" "negative control output is not empty"
+assert_contains "$CF_KEYS" '"cloud_fallback_rung":' "negative control: the cloud-fallback config surfaces cloud_fallback_rung"
 
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"

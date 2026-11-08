@@ -170,6 +170,33 @@ main_checkout_describe_delta() {
   printf '%s' "${out:-no component differs (digest differs only through an unmeasured race)}"
 }
 
+# main_checkout_wt_symlink_leaks <worktree> → one `path -> target` per symlink inside the worktree
+# whose resolved target lies inside the guarded main checkout (BL-0416: a worktree's
+# client/node_modules linked to the main checkout's node_modules lets any tool write through it,
+# vite's node_modules/.vite-temp for one). The main checkout's own linked worktrees
+# (.claude/worktrees) and the worktree itself are not leaks. Used only to explain a rejection
+# (never to excuse one): the verdict stays the digest compare.
+main_checkout_wt_symlink_leaks() {
+  local wt="$1" main="$MAIN_CHECKOUT" lnk tgt out="" n=0
+  [ -n "$wt" ] && [ -d "$wt" ] && [ -n "$main" ] || return 0
+  # readlink -m resolves symlink components and drops a trailing slash, so "$wt"/* and
+  # "$main"/* compare against the same form the symlink targets are resolved to.
+  wt="$(readlink -m -- "$wt")"; wt="${wt%/}"
+  main="$(readlink -m -- "$main")"; main="${main%/}"
+  while IFS= read -r -d '' lnk; do
+    tgt="$(readlink -m -- "$lnk" 2>/dev/null)" || continue
+    case "$tgt" in
+      "$wt"/*|"$wt"|"$main/.claude/worktrees"/*) continue ;;
+      "$main"/*|"$main") ;;
+      *) continue ;;
+    esac
+    n=$((n+1))
+    [ "$n" -le 5 ] && out="${out:+$out; }${lnk#"$wt"/} -> $tgt"
+  done < <(find "$wt" -xdev -path "$wt/.git" -prune -o -type l '(' -lname '/*' -o -lname '*..*' ')' -print0 2>/dev/null)
+  [ "$n" -gt 5 ] && out="$out; (+$((n-5)) more)"
+  printf '%s' "$out"
+}
+
 # --- sibling-namespace validators (308 BACKLOG #46) -------------------------------------
 # Shared so dispatch-foreman.sh's own --sibling-ref-prefix / --sibling-path-prefix (added for
 # two concurrent foremen on one repo) validate identically to dispatch-hetero.sh's long-standing

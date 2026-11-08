@@ -4537,7 +4537,7 @@ HANDS_BOUNDARY_CODE=""
 # skip exactly the incident.
 check_main_checkout_boundary() {
   HANDS_BOUNDARY_ERROR=""; HANDS_BOUNDARY_CODE=""
-  local after after_parts delta
+  local after after_parts delta leaks
   after_parts="$(MAIN_CHECKOUT_FP_MODE=parts main_checkout_fingerprint)"
   after="$(main_checkout_parts_digest "$after_parts")"
   case "${MAIN_CHECKOUT_BEFORE}${after}" in *UNVERIFIABLE-*)
@@ -4548,7 +4548,9 @@ check_main_checkout_boundary() {
   if [ "$after" != "$MAIN_CHECKOUT_BEFORE" ]; then
     HANDS_BOUNDARY_CODE="main_checkout_mutated"
     delta="$(main_checkout_describe_delta "${MAIN_CHECKOUT_BEFORE_PARTS:-}" "$after_parts")"
+    leaks="$(main_checkout_wt_symlink_leaks "$WT")"
     HANDS_BOUNDARY_ERROR="boundary_rejected: main checkout mutated during the round under ${MAIN_CHECKOUT:-?} (${delta}; before=${MAIN_CHECKOUT_BEFORE:0:12} after=${after:0:12}); the rail cannot attribute the change, so the round is discarded with the worktree retained — re-dispatch once the main checkout is quiescent"
+    [ -z "$leaks" ] || HANDS_BOUNDARY_ERROR="${HANDS_BOUNDARY_ERROR}. Likely cause: the worktree holds symlink(s) into the main checkout (${leaks}); a write through one lands in the main checkout (BL-0416: vite's node_modules/.vite-temp). Remove the symlink and install dependencies inside the worktree"
     return 1
   fi
   return 0
@@ -5474,7 +5476,7 @@ dispatch_detached_run() {
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
-      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta check_main_checkout_boundary run_hands_content_gate \
+      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

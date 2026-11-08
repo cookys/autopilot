@@ -23,6 +23,7 @@ mkdir -p "$SBX"
 git -C "$SBX" init -q -b develop
 git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 BASE_FULL="$(git -C "$SBX" rev-parse HEAD)"
+printf 'node_modules/\ncl/\n' >> "$SBX/.git/info/exclude"; mkdir -p "$SBX/node_modules"; echo x > "$SBX/node_modules/keep.txt"
 PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
 
@@ -43,6 +44,9 @@ cat > "$STUB" <<'EOS'
 echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
 case "${MUTATE:-none}" in
   develop) git -C "$MAIN_SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "main moved" ;;
+  symlink) mkdir -p cl; ln -s "$MAIN_SBX/node_modules" cl/node_modules
+           mkdir -p cl/node_modules/.vite-temp; echo cfg > cl/node_modules/.vite-temp/vitest.config.js ;;
+  insidelink) mkdir -p cl/node_modules; ln -s ../ok.txt cl/inside-link ;;
   other) git -C "$MAIN_SBX" branch unrelated-branch "$(git -C "$MAIN_SBX" rev-parse HEAD)" ;;
 esac
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
@@ -71,9 +75,47 @@ assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "neg control (
 assert_contains "$OUT" "refs/heads/develop ${DEV_BEFORE:0:12} -> ${DEV_AFTER:0:12}" "…and the rejection names refs/heads/develop with before and after sha"
 assert_contains "$OUT" "HEAD ${DEV_BEFORE:0:12} -> ${DEV_AFTER:0:12}" "…and HEAD with before and after sha"
 
+# BL-0416 (revival.3d): a worktree symlink into the main checkout's node_modules; the runner (vitest/vite)
+# writes node_modules/.vite-temp through it. The stat walk covers ignored files, so this is a mutation.
+OUT="$(run hetero/day-look/g symlink)"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "symlink write into main node_modules/.vite-temp is still a mutation"
+assert_contains "$OUT" 'component walk changed' "…and the delta names the stat walk (an ignored/untracked file), no ref moved"
+assert_contains "$OUT" 'Likely cause: the worktree holds symlink(s) into the main checkout (cl/node_modules -> ' "…and the message names the worktree symlink that points into the main checkout"
+assert_file_exists "$SBX/node_modules/.vite-temp/vitest.config.js" "…the write really landed in the main checkout (not excused, not reverted)"
+rm -f "$SBX/node_modules/.vite-temp/vitest.config.js"
+
+OUT="$(run hetero/day-look/h insidelink)"
+assert_contains "$OUT" '"status": "committed"' "neg control (c): a symlink that stays inside the worktree is no mutation and no leak"
+
+OUT="$(run hetero/day-look/i develop)"
+assert_not_contains "$OUT" 'Likely cause: the worktree holds symlink' "neg control (d): a plain develop move with no symlink gets no symlink attribution"
+
 LEDGER="$TEST_TMP/ledger/ledger.jsonl"; mkdir -p "$TEST_TMP/ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER" >/dev/null
 OUT="$(DISPATCH_QUIET=1 run hetero/day-look/f none --ledger "$LEDGER" --run-id fp1 --stage implement)"
 assert_contains "$OUT" 'committed' "detached run: own ref alone is fine too"
 assert_not_contains "$OUT" 'main_checkout_mutated' "…detached, no mutation"
+# BL-0416 explainer, direct unit cases for main_checkout_wt_symlink_leaks: path normalisation.
+LIBSRC="$REPO_ROOT/scripts/lib/main-checkout-boundary.sh"
+leaks() { # <lib> <main> <worktree arg>
+  ( MAIN_CHECKOUT="$2"; . "$1" >/dev/null 2>&1; main_checkout_wt_symlink_leaks "$3" ) 2>&1
+}
+LK="$TEST_TMP/leaks"; mkdir -p "$LK/repo/node_modules" "$LK/repo-sibling/node_modules" "$LK/repo/wt/inner"
+ln -s "$LK/repo-sibling/node_modules" "$LK/repo/wt/sib-link"
+ln -s "$LK/repo/wt/inner" "$LK/repo/wt/self-link"
+ln -s "$LK/repo/node_modules" "$LK/repo/wt/main-link"
+OUT="$(leaks "$LIBSRC" "$LK/repo" "$LK/repo/wt")"
+assert_not_contains "$OUT" 'sib-link' "sibling dir X/repo-sibling is not inside main checkout X/repo"
+assert_contains "$OUT" 'main-link -> ' "…while a symlink into the real main checkout is still listed"
+sed_mutant "$LIBSRC" "$TEST_TMP/mut-sibling.sh" 's|"$main"/\*|"$main"*|'
+OUT="$(leaks "$TEST_TMP/mut-sibling.sh" "$LK/repo" "$LK/repo/wt")"
+assert_contains "$OUT" 'sib-link' "neg control (sibling): prefix match without the slash lists the sibling"
+
+OUT="$(leaks "$LIBSRC" "$LK/repo" "$LK/repo/wt/")"
+assert_not_contains "$OUT" 'self-link' "trailing slash on the worktree arg: a symlink inside the worktree is no leak"
+assert_contains "$OUT" 'main-link -> ' "…and a symlink into main is still listed"
+sed_mutant "$LIBSRC" "$TEST_TMP/mut-slash.sh" '/^  wt="\$(readlink -m/d'
+OUT="$(leaks "$TEST_TMP/mut-slash.sh" "$LK/repo" "$LK/repo/wt/")"
+assert_contains "$OUT" 'self-link' "neg control (trailing slash): without normalisation the in-worktree symlink is wrongly listed"
+
 finalize_test

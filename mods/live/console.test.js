@@ -126,10 +126,10 @@ test('c0 leak: the raw lead address and the host key planted in console-full.jso
 test('leak: the raw lead address and the host ip planted in leak.json never reach the parsed result', () => {
   const raw = RAW('leak.json')
   assert.equal(raw.lines[0].lead, 'nsx/hostx/fake-lead--claude', 'the fixture plants the raw address')
-  assert.equal(raw.items.some(i => i.host_ip === '10.9.8.7'), true, 'the fixture plants the host ip')
+  assert.equal(raw.items.some(i => i.host_ip === '192.0.2.7'), true, 'the fixture plants the host ip')
   const out = JSON.stringify(PARSE('leak.json'))
   assert.ok(!out.includes('fake-lead'), 'the member address leaked into the result')
-  assert.ok(!out.includes('10.9.8.7'), 'the host ip leaked into the result')
+  assert.ok(!out.includes('192.0.2.7'), 'the host ip leaked into the result')
 })
 
 test('consoleModeOf: true only for the exact program object', () => {

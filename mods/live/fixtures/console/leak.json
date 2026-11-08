@@ -18,7 +18,7 @@
     { "id": "d-aa01", "kind": "card", "severity": 1, "state": "open", "needs_operator": true, "title": "Restore plan", "text": "Approve the restore plan for the fake lane.", "since_ms": 1749999900000, "line_id": "line-restore" },
     { "id": "d-aa02", "kind": "card", "severity": 1, "state": "waiting_step", "needs_operator": false, "title": "Step T2", "text": "Waiting for step T2 to finish.", "since_ms": 1749999800000, "line_id": "line-restore" },
     { "id": "d-aa03", "kind": "card", "severity": 0, "state": "relayed", "needs_operator": false, "title": "Relayed", "text": "Answer relayed, not confirmed yet.", "since_ms": 1749999700000, "line_id": null },
-    { "id": "x-t3", "kind": "exception", "severity": 2, "state": "T3-stalled", "needs_operator": true, "title": "T3 stalled", "text": "Step T3 has not advanced; escalated to the console.", "since_ms": 1749999600000, "line_id": "line-restore", "host_ip": "10.9.8.7" },
+    { "id": "x-t3", "kind": "exception", "severity": 2, "state": "T3-stalled", "needs_operator": true, "title": "T3 stalled", "text": "Step T3 has not advanced; escalated to the console.", "since_ms": 1749999600000, "line_id": "line-restore", "host_ip": "192.0.2.7" },
     { "id": "x-t7", "kind": "exception", "severity": 1, "state": "T7", "needs_operator": false, "title": "T7 failing", "text": "The test line reports T7; no operator action needed.", "since_ms": 1749999500000, "line_id": "line-test" }
   ],
   "cards": [

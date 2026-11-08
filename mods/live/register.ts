@@ -224,16 +224,14 @@ let decideCursor = 0 // the card the O4 shell's main window shows (an index into
 let decideLastId: string | null = null // the card answered last from the shell (the progress row names it)
 // ---- the operator-console mode (plan §3.1; consoletabs.ts): on only where the session's repo has .claude/console.json = {"schema":"autopilot.console/1","mode":"program"} (findConsoleMode). Off, every line
 // below that reads these is skipped and the band and the pane are what they were. ONE navigation state (consoleTab) for the band's tabs and the pane's: pressing either sets it, both draw it.
-// The snapshot comes from an injectable source (setConsoleSource); until the real `fleet console --json` runner lands (C2) the source answers null = no source, and nothing is spawned. ----
-export type ConsoleSource = ($: EngineInterface) => Promise<ConsoleSnapshot | null>
+// The snapshot comes from consoleSource (a top-level function declaration: the mod loader follows `$` only into declared functions, so it cannot be a swappable variable); until the real `fleet console --json` runner lands (C2) it answers null = no source, and nothing is spawned. ----
 let consoleOn = false
 let consoleTab: ConsoleTab = 'command'
 let consoleSnap: ConsoleSnapshot | null = null
 let consoleCwd: string | null = null // the cwd the mode was last read for; a different cwd (a new session in another repo) reads it again at the next tick
 let consoleReadMs = -Infinity
 const CONSOLE_MODE_EVERY_MS = 10_000 // the config file is read again at most this often
-let consoleSource: ConsoleSource = async () => null
-export function setConsoleSource(fn: ConsoleSource | null): void { consoleSource = fn === null ? async () => null : fn }
+async function consoleSource(_$: EngineInterface): Promise<ConsoleSnapshot | null> { return null }
 async function consoleTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   const cwd = await $.session.cwd()

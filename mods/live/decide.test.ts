@@ -3,6 +3,7 @@
 // Run through `bash mods/live/run-tests.sh` (a wrapper plugin named `autopilot`); the new assertions here were red on the tree before the tab existed.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
+import { cardTitleOf } from './cardtitle'
 import { DECIDE_NONE, DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideFillText, decideLine, decideReply, recommendedIndex } from './model'
 import { wrapLines } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
@@ -87,12 +88,17 @@ test('DECIDE title: the question is bold default text, wraps from column 2 and i
   const q = '這個題目非常長所以一行放不下它必須換行而且續行要從第二欄開始不能再用角落符號把整題重複一次'
   const ls = decideTabLines(snapOf([dec('d-long', q, { options: [OPT('甲'), OPT('乙')] })]), ctxOf(zh, 40, view()))
   const titles = ls.filter(l => l.kind === 'item')
-  expect(titles.length).toBeGreaterThanOrEqual(3)
+  const short = cardTitleOf({ question: q }) // a card without an explicit title: the heading is the short title (20 code points and …), the full question stays on the card under 題目
+  expect(short).not.toBe(q)
+  expect(titles.length).toBeGreaterThanOrEqual(2)
   expect(titles[0].text.startsWith('▲ 1. ')).toBe(true)
   for (const l of titles.slice(1)) expect(l.text.startsWith('  ') && !l.text.startsWith('   ')).toBe(true) // continuation lines start at column 2
-  expect(titles.map(l => l.text.slice(2)).join('').replace('1. ', '')).toBe(q) // the whole question once, in order
+  expect(titles.map(l => l.text.slice(2)).join('').replace('1. ', '')).toBe(short) // the whole short title once, in order
   expect(ls.some(l => l.text.includes(ui.GLYPHS.structure.detail)), 'no └ copy of the question').toBe(false)
-  expect(ls.filter(l => l.text.includes('這個題目非常長')).length).toBe(1)
+  const qrows = ls.filter(l => l.kind !== 'item' && l.text.includes('這個題目非常長'))
+  expect(qrows.length, 'the full question is on the card once, in its 題目 row').toBe(1)
+  expect(qrows[0].text.startsWith('  ' + zh('decide.k_question'))).toBe(true)
+  expect(ls.filter(l => l.text.includes('這個題目非常長')).length).toBe(2) // the heading's prefix and the 題目 row: no third copy
   for (const l of titles) for (const s of (l.segs ?? []).filter(x => x.role === 'title')) { expect(s.bold).toBe(true); expect(s.color).toBeUndefined(); expect(ui.boldUseOf(l, s)).toBe('question title') }
   expect(titles[0].segs?.find(s => s.role === 'glyph')?.color).toBe(ui.PALETTE.attention)
   expect(titles[0].segs?.find(s => s.role === 'glyph')?.bold).toBeUndefined()

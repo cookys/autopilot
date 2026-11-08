@@ -12,7 +12,7 @@ import type { FleetLane, FleetTask, FleetView, OthersView } from './fleet'
 import { actionable, cardKey } from './decidebatch'
 import { consoleBarStrip, consoleStrip } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
-import { cardNameOf } from './cardtitle'
+import { cardTitleOf } from './cardtitle'
 import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, DECIDE_UNDO_MS, decideDialog, decideFixing, decideHeld, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
@@ -392,8 +392,8 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     const sent = id !== null && dv.sent[id] !== undefined && !fixing
     const locked = sent || held // no option Button and no field: the answer is waiting out its undo window, or already went
     const meta = held ? t('decide.held') : sent ? t('decide.sent') : fixing ? t('decide.fixing') : undefined
-    out.push(...ui.cardTitle(u, locked ? sentState : needYou, num + '. ' + cardNameOf(d) + staleSuffix(d, t), meta, { fact: F, sent: locked }))
-    if (cardNameOf(d) !== d.question) out.push(...ui.cardParaRows(u, t('decide.k_question'), ui.cardParas(d.question), { fact: F })) // the heading is the short title: the full question stays on the card
+    out.push(...ui.cardTitle(u, locked ? sentState : needYou, num + '. ' + cardTitleOf(d) + staleSuffix(d, t), meta, { fact: F, sent: locked }))
+    if (cardTitleOf(d) !== d.question) out.push(...ui.cardParaRows(u, t('decide.k_question'), ui.cardParas(d.question), { fact: F })) // the heading is the short title: the full question stays on the card
     if (d.background !== null) out.push(...ui.cardParaRows(u, t('decide.k_background'), ui.cardParas(d.background), { fact: F, subtle: true }))
     if (d.blocks !== null) out.push(...ui.cardRow(u, t('decide.k_blocks'), d.blocks, { fact: F }))
     const pick = decidePick(d, dv)
@@ -1019,7 +1019,7 @@ function fleetOthers(u: UiCtx, o: OthersView | null): PaneLine[] {
   if (o.skipped > 0) out.push(...ui.detail(u, t('fleet.others_skipped', { n: o.skipped }), { fact: F }))
   if (o.cards.length === 0) out.push(ui.empty(t('fleet.others_none'), F))
   for (const c of o.cards) {
-    out.push(ui.item(u, needYou, t('fleet.others_card', { id: c.id, q: cardNameOf(c) }), undefined, { fact: F, word: false }))
+    out.push(ui.item(u, needYou, t('fleet.others_card', { id: c.id, q: cardTitleOf(c) }), undefined, { fact: F, word: false }))
     out.push(...ui.detail(u, t('fleet.others_answer', { where: c.where }), { fact: F }))
   }
   if (o.todoError !== null) out.push(ui.item(u, warn, t('fleet.todo_error', { error: o.todoError }), undefined, { fact: T, word: false }))

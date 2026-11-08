@@ -50,6 +50,10 @@
 # `--list` JSON (deliberately SLIMMER — a discovery summary, NOT the full object): an
 #        ARRAY of only-ready endpoints, each {name, base_url, transport_security, source}.
 #        Never token values.
+# CREDENTIAL FILE FALLBACK: a var not set in the process env is filled from
+#        ${AUTOPILOT_ENDPOINTS_ENV:-$HOME/.autopilot/endpoints.env} (strict: regular file, not a
+#        symlink, owned by the current uid, mode exactly 0600; keys AUTOPILOT_ENDPOINT_<NAME>_URL|TOKEN
+#        only; never sourced). A rejected file reads nothing and prints only the reason on stderr.
 # Exit: 0 ready · 1 not-ready · 2 usage error. Fail-closed.
 
 set -uo pipefail
@@ -65,7 +69,7 @@ set +x
 ENV_NAME_RE='^[A-Za-z_][A-Za-z0-9_]*$'
 NAME_RE='^[A-Za-z0-9_]+$'
 
-usage() { sed -n '2,52p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; }
+usage() { sed -n '2,57p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; }
 
 # shellcheck source=lib/json-emit.sh
 . "$(dirname "$0")/lib/json-emit.sh"
@@ -205,6 +209,43 @@ is_url_safe() {
   return 1
 }
 
+# endpoints_file_fallback — when run standalone (not under a dispatcher that already sourced
+# load-endpoints-env.sh) fill AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN} gaps from
+# ${AUTOPILOT_ENDPOINTS_ENV:-$HOME/.autopilot/endpoints.env}. Strict by design: the file must be
+# a regular non-symlink file owned by the current uid with mode exactly 0600, otherwise NOTHING is
+# read and one reason line (never content) goes to stderr. Line-parsed, never sourced/evaled; only
+# `[export ]KEY=VALUE` with KEY matching the pattern below; a var already SET in the process wins.
+ENDPOINT_KEY_RE='^AUTOPILOT_ENDPOINT_[A-Z0-9_]+_(URL|TOKEN)$'
+endpoints_file_fallback() {
+  local f="${AUTOPILOT_ENDPOINTS_ENV:-${HOME:-}/.autopilot/endpoints.env}"
+  if [ -L "$f" ]; then printf 'resolve-endpoint: endpoints.env is a symlink, refusing\n' >&2; return 1; fi
+  [ -e "$f" ] || return 0
+  if [ ! -f "$f" ]; then printf 'resolve-endpoint: endpoints.env is not a regular file, refusing\n' >&2; return 1; fi
+  local owner mode
+  owner="$(stat -c '%u' "$f" 2>/dev/null || true)"
+  if [ -z "$owner" ] || [ "$owner" != "$(id -u)" ]; then
+    printf 'resolve-endpoint: endpoints.env not owned by the current user, refusing\n' >&2; return 1
+  fi
+  mode="$(stat -c '%a' "$f" 2>/dev/null || true)"
+  if [ "$mode" != "600" ]; then
+    printf 'resolve-endpoint: endpoints.env mode %04d, expected 0600, refusing\n' "$((10#${mode:-0}))" >&2; return 1
+  fi
+  local line key val
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    case "$line" in export\ *) line="${line#export }"; line="${line#"${line%%[![:space:]]*}"}" ;; esac
+    case "$line" in *=*) ;; *) continue ;; esac
+    key="${line%%=*}"; val="${line#*=}"
+    [[ "$key" =~ $ENDPOINT_KEY_RE ]] || continue
+    if [ "${#val}" -ge 2 ] && { [ "${val:0:1}${val: -1}" = '""' ] || [ "${val:0:1}${val: -1}" = "''" ]; }; then
+      val="${val:1:${#val}-2}"
+    fi
+    [ -n "${!key+x}" ] && continue
+    export "$key=$val"
+  done < "$f"
+  return 0
+}
+
 resolve_single() {
   local raw="$1"
   local name_lc="${raw,,}"
@@ -305,6 +346,8 @@ fi
 if [ "$LIST" -eq 0 ] && [ -z "$NAME" ]; then
   printf 'usage: resolve-endpoint.sh <name> | --list | --help\n' >&2; exit 2
 fi
+
+endpoints_file_fallback || true
 
 if [ -n "$NAME" ]; then
   if ! [[ "$NAME" =~ $NAME_RE ]]; then

@@ -217,7 +217,7 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `qualification_outbox.transport` (config.json) | How `qualification-send-queue.js flush` sends: `off` (nothing is sent) or `git` (bot branch and pull request in the registry clone; the owner merges, and the merge is the ack). | `off` |  |
 | `qualification_outbox.registry_repo` (config.json) | Path of the dedicated bot clone of the registry repo (llm-playground) that the git transport uses. Required when transport is `git`. | unset |  |
 | `qualification_outbox.workspace` (config.json) | Registry workspace (`benchmarks/qualification/<workspace>`) that the outbox sends into. | `cookys` |  |
-| `AUTOPILOT_ENDPOINTS_ENV` | Path of the endpoints env file (mode 600) that load-endpoints-env.sh reads. | `~/.autopilot/endpoints.env` |  |
+| `AUTOPILOT_ENDPOINTS_ENV` | Path of the endpoints env file (mode 600) that load-endpoints-env.sh and resolve-endpoint.sh read. | `~/.autopilot/endpoints.env` |  |
 | `AUTOPILOT_ENDPOINT_<NAME>_URL` | Per-endpoint settings loaded from the endpoints env file: AUTOPILOT_ENDPOINT_`<NAME>`_URL and AUTOPILOT_ENDPOINT_`<NAME>`_TOKEN. An HTTP seat appears in the topology only when its URL is set. | unset |  |
 | `AUTOPILOT_MINIMAX_BASE_URL` | Base URL for the provider-native MiniMax endpoint. | unset |  |
 

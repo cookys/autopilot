@@ -23,6 +23,7 @@ mkdir -p "$SBX"
 git -C "$SBX" init -q -b develop
 git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 BASE_FULL="$(git -C "$SBX" rev-parse HEAD)"
+printf 'node_modules/\ncl/\n' >> "$SBX/.git/info/exclude"; mkdir -p "$SBX/node_modules"; echo x > "$SBX/node_modules/keep.txt"
 PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
 
@@ -43,6 +44,9 @@ cat > "$STUB" <<'EOS'
 echo ok > ok.txt; git add ok.txt; git -c user.email=t@t -c user.name=t commit -q -m "hands"
 case "${MUTATE:-none}" in
   develop) git -C "$MAIN_SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m "main moved" ;;
+  symlink) mkdir -p cl; ln -s "$MAIN_SBX/node_modules" cl/node_modules
+           mkdir -p cl/node_modules/.vite-temp; echo cfg > cl/node_modules/.vite-temp/vitest.config.js ;;
+  insidelink) mkdir -p cl/node_modules; ln -s ../ok.txt cl/inside-link ;;
   other) git -C "$MAIN_SBX" branch unrelated-branch "$(git -C "$MAIN_SBX" rev-parse HEAD)" ;;
 esac
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
@@ -70,6 +74,21 @@ DEV_AFTER="$(git -C "$SBX" rev-parse refs/heads/develop)"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "neg control (a): develop/HEAD moving is still a mutation"
 assert_contains "$OUT" "refs/heads/develop ${DEV_BEFORE:0:12} -> ${DEV_AFTER:0:12}" "…and the rejection names refs/heads/develop with before and after sha"
 assert_contains "$OUT" "HEAD ${DEV_BEFORE:0:12} -> ${DEV_AFTER:0:12}" "…and HEAD with before and after sha"
+
+# BL-0416 (revival.3d): a worktree symlink into the main checkout's node_modules; the runner (vitest/vite)
+# writes node_modules/.vite-temp through it. The stat walk covers ignored files, so this is a mutation.
+OUT="$(run hetero/day-look/g symlink)"
+assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "symlink write into main node_modules/.vite-temp is still a mutation"
+assert_contains "$OUT" 'component walk changed' "…and the delta names the stat walk (an ignored/untracked file), no ref moved"
+assert_contains "$OUT" 'Likely cause: the worktree holds symlink(s) into the main checkout (cl/node_modules -> ' "…and the message names the worktree symlink that points into the main checkout"
+assert_file_exists "$SBX/node_modules/.vite-temp/vitest.config.js" "…the write really landed in the main checkout (not excused, not reverted)"
+rm -f "$SBX/node_modules/.vite-temp/vitest.config.js"
+
+OUT="$(run hetero/day-look/h insidelink)"
+assert_contains "$OUT" '"status": "committed"' "neg control (c): a symlink that stays inside the worktree is no mutation and no leak"
+
+OUT="$(run hetero/day-look/i develop)"
+assert_not_contains "$OUT" 'Likely cause: the worktree holds symlink' "neg control (d): a plain develop move with no symlink gets no symlink attribution"
 
 LEDGER="$TEST_TMP/ledger/ledger.jsonl"; mkdir -p "$TEST_TMP/ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER" >/dev/null

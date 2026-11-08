@@ -51,12 +51,30 @@ qualify_stage_credential() {
   return 0
 }
 
+# qualify_stage_identity <staged> <real>: identity/config files (installation id, device id, config.toml).
+# Same source-sha stamp as qualify_stage_credential (<staged>.source.sha256): the staged copy is refreshed only when
+# the real file changed since it was staged (or the copy has no stamp), so a change the exam makes to the staged copy
+# survives until the source itself changes. A missing real file leaves the staged copy untouched.
 qualify_stage_identity() {
   local staged_file=${1-}
   local real_file=${2-}
+  local real_sha="" staged_sha="" had_stamp=0
 
-  if [ ! -f "$staged_file" ] && [ -f "$real_file" ]; then
-    cp -- "$real_file" "$staged_file" || true
+  [ -f "$real_file" ] || return 0
+
+  real_sha="$(sha256sum -- "$real_file" | awk '{print $1}')"
+  if [ -f "${staged_file}.source.sha256" ]; then
+    had_stamp=1
+    staged_sha="$(cat "${staged_file}.source.sha256")"
+  fi
+
+  if [ -f "$staged_file" ] && [ "$had_stamp" = 0 ] && ! cmp -s -- "$staged_file" "$real_file"; then
+    echo "qualify: staged identity file has no source stamp and differs from the real file, refreshed from source: $staged_file" >&2
+  fi
+
+  if [ ! -f "$staged_file" ] || [ "$staged_sha" != "$real_sha" ]; then
+    cp -- "$real_file" "$staged_file" || return 0
+    echo "$real_sha" >"${staged_file}.source.sha256"
   fi
 
   return 0

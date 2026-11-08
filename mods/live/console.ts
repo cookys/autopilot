@@ -4,15 +4,17 @@
 // and consoleModeOf are pure functions of their input string; every number they return comes from the feed, and nothing is stored.
 // Syntax is erasable (types plus plain functions only, no imports), so `node` strips the types and imports this file directly.
 // Trust boundary: parseConsole never throws — it returns null for a broken or foreign snapshot and drops any item, card, line or issue
-// with a wrong-typed required field. It copies only the declared fields, so an extra field holding a raw member address or a host ip is
+// with a wrong-typed required field. Nullable fields stay null when absent: an unassigned line's lead_display, a no_source source's
+// at_ms, an item's to_console; counts get quota_risk 0 and summary.quota_worst null when absent. It copies only the declared fields,
+// so an extra field holding a raw member address or a host ip is
 // never carried into the result (fixtures/console/leak.json plants both; console.test.js pins their absence from the parse result).
 
 export type ConsoleSourceState = 'ok' | 'stale' | 'expired' | 'no_source'
-export type ConsoleItem = { id: string; kind: 'card' | 'exception' | 'hint' | 'quota'; severity: number; state: string; needs_operator: boolean; title: string; text: string; since_ms: number; line_id: string | null }
+export type ConsoleItem = { id: string; kind: 'card' | 'exception' | 'hint' | 'quota'; severity: number; state: string; needs_operator: boolean; title: string; text: string; since_ms: number; line_id: string | null; to_console: boolean | null; answerable_by: string[] }
 export type ConsoleCard = { id: string; question: string; status: 'open' | 'awaiting_operator_action' | 'waiting_step' | 'relayed_unconfirmed'; opened_at_ms: number; executor_display: string | null }
 export type ConsoleIssue = { rule: string; state: string; subject: string; since_ms: number; to_console: boolean }
-export type ConsoleLine = { line_id: string; label: string; lead_display: string; issues: ConsoleIssue[] }
-export type ConsoleSnapshot = { generated_at_ms: number; sources: Record<string, { at_ms: number; state: ConsoleSourceState }>; counts: { decisions: number; exceptions: number; tabs: Record<string, [string, number][]>; summary: { lines: Record<string, number>; hosts: Record<string, number>; hints: number } }; items: ConsoleItem[]; cards: ConsoleCard[]; lines: ConsoleLine[] }
+export type ConsoleLine = { line_id: string; label: string; lead_display: string | null; issues: ConsoleIssue[] }
+export type ConsoleSnapshot = { generated_at_ms: number; sources: Record<string, { at_ms: number | null; state: ConsoleSourceState }>; counts: { decisions: number; exceptions: number; quota_risk: number; tabs: Record<string, [string, number][]>; summary: { lines: Record<string, number>; hosts: Record<string, number>; hints: number; quota_worst: string | null } }; items: ConsoleItem[]; cards: ConsoleCard[]; lines: ConsoleLine[] }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -33,7 +35,13 @@ function parseItem(v: Obj): ConsoleItem | null {
   if (id === null || kind === null || severity === null || state === null || needs_operator === null || title === null || text === null || since_ms === null) return null
   const line_id: unknown = v.line_id
   if (line_id !== null && typeof line_id !== 'string') return null
-  return { id, kind: kind as ConsoleItem['kind'], severity, state, needs_operator, title, text, since_ms, line_id }
+  const answerable_by: unknown = v.answerable_by
+  if (answerable_by !== undefined && !Array.isArray(answerable_by)) return null
+  return {
+    id, kind: kind as ConsoleItem['kind'], severity, state, needs_operator, title, text, since_ms, line_id,
+    to_console: b(v.to_console),
+    answerable_by: Array.isArray(answerable_by) ? answerable_by.filter((x): x is string => typeof x === 'string') : [],
+  }
 }
 
 function parseCard(v: Obj): ConsoleCard | null {
@@ -60,18 +68,18 @@ function parseIssue(v: Obj): ConsoleIssue | null {
 function parseLine(v: Obj): ConsoleLine | null {
   const line_id = s(v.line_id)
   const label = s(v.label)
+  if (line_id === null || label === null) return null
   const lead_display = s(v.lead_display)
-  if (line_id === null || label === null || lead_display === null) return null
   const issues = Array.isArray(v.issues) ? v.issues.map(x => (isObj(x) ? parseIssue(x) : null)).filter((x): x is ConsoleIssue => x !== null) : []
   return { line_id, label, lead_display, issues }
 }
 
-function parseSource(v: unknown): { at_ms: number; state: ConsoleSourceState } | null {
+// a source is kept whenever its state is one of the four states; at_ms is absent on a no_source entry, so it is nullable
+function parseSource(v: unknown): { at_ms: number | null; state: ConsoleSourceState } | null {
   if (!isObj(v)) return null
-  const at_ms = n(v.at_ms)
   const state = s(v.state)
-  if (at_ms === null || state === null) return null
-  return { at_ms, state: state as ConsoleSourceState }
+  if (state === null || !(['ok', 'stale', 'expired', 'no_source'] as string[]).includes(state)) return null
+  return { at_ms: n(v.at_ms), state: state as ConsoleSourceState }
 }
 
 function parseCountMap(v: unknown): Record<string, number> {
@@ -99,8 +107,9 @@ function parseCounts(v: Obj): ConsoleSnapshot['counts'] {
   return {
     decisions: n(v.decisions) ?? 0,
     exceptions: n(v.exceptions) ?? 0,
+    quota_risk: n(v.quota_risk) ?? 0,
     tabs: parseTabs(v.tabs),
-    summary: { lines: parseCountMap(sum.lines), hosts: parseCountMap(sum.hosts), hints: hints ?? 0 },
+    summary: { lines: parseCountMap(sum.lines), hosts: parseCountMap(sum.hosts), hints: hints ?? 0, quota_worst: s(sum.quota_worst) },
   }
 }
 

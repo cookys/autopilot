@@ -1,0 +1,432 @@
+{
+ "schema": "fleet.console/1",
+ "generated_at_ms": 1794200000000,
+ "cursor": "1794200000000",
+ "since": null,
+ "filter": {
+  "line": "gpu",
+  "lead": null,
+  "host": null
+ },
+ "sources": {
+  "tasks": {
+   "at_ms": 1794199980000,
+   "state": "ok",
+   "coverage": "9/24"
+  },
+  "stuck": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "peers": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "hosts": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "goals": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "cards": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "card_mirror": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "quota_now": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "quota_forecast": {
+   "state": "no_source"
+  },
+  "slots": {
+   "state": "no_source"
+  },
+  "metrics": {
+   "state": "no_source"
+  },
+  "changes": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  }
+ },
+ "counts": {
+  "decisions": 4,
+  "exceptions": 6,
+  "quota_risk": 2,
+  "tabs": {
+   "指揮": [
+    [
+     "need_you",
+     4
+    ],
+    [
+     "failed",
+     3
+    ]
+   ],
+   "團隊": [
+    [
+     "failed",
+     2
+    ],
+    [
+     "stalled",
+     4
+    ]
+   ],
+   "額度": [
+    [
+     "failed",
+     1
+    ],
+    [
+     "findings",
+     2
+    ]
+   ],
+   "主機": [
+    [
+     "stalled",
+     1
+    ]
+   ]
+  },
+  "summary": {
+   "lines": {
+    "running": 2,
+    "waiting": 1,
+    "stalled": 3
+   },
+   "hosts": {
+    "online": 2,
+    "total": 3,
+    "gpu_busy": 5,
+    "gpu_total": 7
+   },
+   "quota_worst": "pool-b",
+   "hints": 2
+  }
+ },
+ "brief": "待決 4 張，例外 6 件：B 池重置前用完、遊戲線一件工作遺失、復原線成員離線。",
+ "items": [
+  {
+   "id": "card:d-fx000003",
+   "kind": "card",
+   "severity": 6,
+   "state": "need_you",
+   "needs_operator": true,
+   "title": "GPU 線：雲端 B 池快用完…",
+   "text": "GPU 線：雲端 B 池快用完，3 個評估改派本地模型？",
+   "facts": {},
+   "since_ms": 1794199640000,
+   "line_id": "gpu",
+   "host": null,
+   "link": "/i/card:d-fx000003",
+   "answerable_by": [
+    "cli",
+    "app"
+   ]
+  },
+  {
+   "id": "hint:I1:ee285f81f51d2c67",
+   "kind": "hint",
+   "severity": 16,
+   "state": "findings",
+   "needs_operator": false,
+   "title": "GPU lead 證據時間少",
+   "text": "GPU lead 派出的 9 件進行中只有 2 件設了證據時間，已 2 天",
+   "facts": {
+    "total": 9,
+    "with_due": 2,
+    "days": 2
+   },
+   "since_ms": 1794027200000,
+   "line_id": "gpu",
+   "host": null,
+   "link": "/i/hint:I1:ee285f81f51d2c67",
+   "answerable_by": []
+  }
+ ],
+ "cards": [
+  {
+   "id": "d-fx000003",
+   "question": "GPU 線：雲端 B 池快用完，3 個評估改派本地模型？",
+   "background": "B 池週額度預估明早前用完；本地模型有 2 格空槽。",
+   "options": [
+    {
+     "label": "改派本地",
+     "recommended": true
+    },
+    {
+     "label": "等重置",
+     "recommended": false
+    },
+    {
+     "label": "改用 A 池",
+     "recommended": false
+    }
+   ],
+   "status": "awaiting_operator_action",
+   "opened_at_ms": 1794199640000,
+   "executor_display": "gpu-lead · Claude (fx-host-a)"
+  }
+ ],
+ "lines": [
+  {
+   "line_id": "gpu",
+   "label": "GPU 線",
+   "state": "running",
+   "lead": "fx-ns/fx-courier-a/leak-probe--claude",
+   "lead_display": "gpu-lead · Claude (fx-host-a)",
+   "goal": {
+    "end": "三個本地模型可團隊使用",
+    "now": "qwen 正式開給團隊",
+    "next": "GLM 上線",
+    "later": "DeepSeek 擺位",
+    "read_at_ms": 1794189200000,
+    "sha": "1dd664b0ac4004f2"
+   },
+   "milestone_due_ms": 1794459200000,
+   "tasks": {
+    "running": 3,
+    "waiting": 1,
+    "open": 0
+   },
+   "next_evidence_due_ms": 1794205400000,
+   "last_evidence_at_ms": 1794197600000,
+   "issues": []
+  }
+ ],
+ "hosts": [],
+ "quota": {
+  "source_schema": "codeforge.fleet-quota/1",
+  "source_generated_at_ms": 1794199940000,
+  "use_target": 0.85,
+  "accounts": [
+   {
+    "alias": "pool-b-main",
+    "provider": "claude",
+    "hosts": [
+     "fx-host-a"
+    ],
+    "observed_at_ms": 1794199460000,
+    "age_s": 540,
+    "state": "ok",
+    "weekly": {
+     "pct": 0.91,
+     "resets_at": 1794383600,
+     "projected": 1.04,
+     "warn": "short",
+     "exhaust_at": 1794250400
+    },
+    "five_hour": {
+     "pct": 0.4,
+     "resets_at": 1794210800
+    }
+   },
+   {
+    "alias": "pool-b-spare",
+    "provider": "claude",
+    "hosts": [
+     "fx-host-b",
+     "fx-host-c"
+    ],
+    "observed_at_ms": 1794197600000,
+    "age_s": 2400,
+    "state": "ok",
+    "weekly": {
+     "pct": 0.88,
+     "resets_at": 1794383600,
+     "projected": 1.01,
+     "warn": "short",
+     "exhaust_at": 1794272000
+    },
+    "five_hour": null
+   },
+   {
+    "alias": "pool-a-team",
+    "provider": "claude",
+    "hosts": [
+     "fx-host-a"
+    ],
+    "observed_at_ms": 1794199820000,
+    "age_s": 180,
+    "state": "ok",
+    "weekly": {
+     "pct": 0.48,
+     "resets_at": 1794344000,
+     "projected": 0.62,
+     "warn": "waste",
+     "exhaust_at": null
+    },
+    "five_hour": {
+     "pct": 0.93,
+     "resets_at": 1794202520
+    }
+   },
+   {
+    "alias": "pool-a-new",
+    "provider": "claude",
+    "hosts": [
+     "fx-host-d"
+    ],
+    "observed_at_ms": 1794199700000,
+    "age_s": 300,
+    "state": "ok",
+    "weekly": {
+     "pct": 0.02,
+     "resets_at": 1794797600,
+     "projected": null,
+     "warn": null,
+     "exhaust_at": null
+    },
+    "five_hour": {
+     "pct": 0.02,
+     "resets_at": 1794214400
+    }
+   },
+   {
+    "alias": "pool-c-reset",
+    "provider": "codex",
+    "hosts": [
+     "fx-host-a"
+    ],
+    "observed_at_ms": 1794192800000,
+    "age_s": 7200,
+    "state": "stale",
+    "weekly": null,
+    "five_hour": null
+   },
+   {
+    "alias": "pool-c-old",
+    "provider": "claude",
+    "hosts": [
+     "fx-host-e"
+    ],
+    "observed_at_ms": 1794174800000,
+    "age_s": 25200,
+    "state": "expired",
+    "weekly": null,
+    "five_hour": null
+   },
+   {
+    "alias": "pool-d-none",
+    "provider": "grok",
+    "hosts": [],
+    "observed_at_ms": null,
+    "age_s": null,
+    "state": "no_source",
+    "weekly": null,
+    "five_hour": null
+   }
+  ],
+  "pools": [
+   {
+    "pool": "pool-b",
+    "provider": "claude",
+    "pool_state": "run_out",
+    "members": [
+     "pool-b-main",
+     "pool-b-spare"
+    ],
+    "top_lines": [
+     {
+      "line_id": "recovery",
+      "share": 0.52
+     }
+    ]
+   },
+   {
+    "pool": "pool-a",
+    "provider": "claude",
+    "pool_state": "under",
+    "members": [
+     "pool-a-team",
+     "pool-a-new"
+    ],
+    "top_lines": [
+     {
+      "line_id": "gpu",
+      "share": 0.41
+     }
+    ]
+   },
+   {
+    "pool": "pool-c",
+    "provider": "claude",
+    "pool_state": "no_source",
+    "members": [
+     "pool-c-old"
+    ],
+    "top_lines": []
+   },
+   {
+    "pool": "pool-c-codex",
+    "provider": "codex",
+    "pool_state": "no_source",
+    "members": [
+     "pool-c-reset"
+    ],
+    "top_lines": []
+   },
+   {
+    "pool": "pool-d",
+    "provider": "grok",
+    "pool_state": "no_source",
+    "members": [
+     "pool-d-none"
+    ],
+    "top_lines": []
+   }
+  ]
+ },
+ "health": {
+  "hints": [
+   {
+    "id": "hint:I1:ee285f81f51d2c67",
+    "kind": "hint",
+    "severity": 16,
+    "state": "findings",
+    "needs_operator": false,
+    "title": "GPU lead 證據時間少",
+    "text": "GPU lead 派出的 9 件進行中只有 2 件設了證據時間，已 2 天",
+    "facts": {
+     "total": 9,
+     "with_due": 2,
+     "days": 2
+    },
+    "since_ms": 1794027200000,
+    "line_id": "gpu",
+    "host": null,
+    "link": "/i/hint:I1:ee285f81f51d2c67",
+    "answerable_by": []
+   },
+   {
+    "id": "hint:I7:8934303dc131d111",
+    "kind": "hint",
+    "severity": 17,
+    "state": "findings",
+    "needs_operator": false,
+    "title": "A 池週額度會剩",
+    "text": "雲端 A 池週額度預估重置時只用到 62%，已 6 小時",
+    "facts": {
+     "projected": 62,
+     "hours": 6
+    },
+    "since_ms": 1794178400000,
+    "line_id": null,
+    "host": null,
+    "link": "/i/hint:I7:8934303dc131d111",
+    "answerable_by": []
+   }
+  ],
+  "metrics": []
+ }
+}

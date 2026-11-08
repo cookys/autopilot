@@ -1,0 +1,101 @@
+{
+ "schema": "fleet.console/1",
+ "generated_at_ms": 1794200000000,
+ "cursor": "1794200000000",
+ "since": null,
+ "filter": {
+  "line": null,
+  "lead": null,
+  "host": null
+ },
+ "sources": {
+  "tasks": {
+   "at_ms": 1794199980000,
+   "state": "ok",
+   "coverage": "9/24"
+  },
+  "stuck": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "peers": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "hosts": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "goals": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "cards": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "card_mirror": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "quota_now": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  },
+  "quota_forecast": {
+   "state": "no_source"
+  },
+  "slots": {
+   "state": "no_source"
+  },
+  "metrics": {
+   "state": "no_source"
+  },
+  "changes": {
+   "at_ms": 1794199980000,
+   "state": "ok"
+  }
+ },
+ "counts": {
+  "decisions": 0,
+  "exceptions": 0,
+  "quota_risk": 0,
+  "tabs": {
+   "指揮": [],
+   "團隊": [],
+   "額度": [],
+   "主機": []
+  },
+  "summary": {
+   "lines": {
+    "running": 0,
+    "waiting": 0,
+    "stalled": 0
+   },
+   "hosts": {
+    "online": 0,
+    "total": 0,
+    "gpu_busy": 0,
+    "gpu_total": 0
+   },
+   "quota_worst": null,
+   "hints": 0
+  }
+ },
+ "brief": "沒有待決，沒有例外。",
+ "items": [],
+ "cards": [],
+ "lines": [],
+ "hosts": [],
+ "quota": {
+  "source_schema": "codeforge.fleet-quota/1",
+  "source_generated_at_ms": 1794199940000,
+  "use_target": 0.85,
+  "accounts": [],
+  "pools": []
+ },
+ "health": {
+  "hints": [],
+  "metrics": []
+ }
+}

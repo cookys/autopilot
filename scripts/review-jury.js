@@ -35,8 +35,11 @@
 // is refused before extraction, and --diff / the questions file must resolve inside the pack. A directory or tar pack needs
 // FILES.sha256, its entries must be relative without "..", and its list must equal the pack's file set exactly (then sha256sum -c).
 // A single file passed as --pack needs no FILES.sha256. --diff default = the one top-level *.diff or *.patch.
-// QUESTIONS.md becomes --spec-file; other small text files become one --pack-file context, capped at 300 KB. Files left out
-// (binary or over the cap) are listed first in the context ("以下檔案因大小未附：...") and as skipped_files in run.json and merged.json.
+// QUESTIONS.md becomes --spec-file; other small text files become one --pack-file context, capped at 300 KB (--context-max <bytes>
+// overrides). --context-exclude <glob> (repeatable; relative to the pack root, * and **) leaves matching files out; a glob that
+// matches the diff or QUESTIONS.md is refused (rc 2). Files left out (binary, excluded or over the cap) are listed first in the
+// context ("以下檔案未附（大小或排除）：...") and as skipped_files in run.json and merged.json. In question mode the answer-format
+// request is repeated as the last section of the context, after everything else, and counted against the cap.
 // Question mode: when QUESTIONS.md has lines starting Q<n> (or `<n>.` / `<n>)`), an answer-format request is appended to the spec (<out>/spec.txt) and each
 // seat must write one `ANSWER Q<n> | conclusion=.. | basis=<file:line> | counterexample=..` line per question inside FINDINGS (the lines
 // dispatch-review keeps). They are parsed into the seat file's answers[]; merged.json lists answers by question and missing_answers
@@ -86,8 +89,8 @@ function die(msg) {
 
 function parseArgs(argv) {
   const o = { _: [] };
-  const takes = new Set(['pack', 'implementer-family', 'out', 'methodology', 'spec-file', 'seats', 'timeout', 'dispatch-bin', 'scorecard-bin', 'diff', 'questions']);
-  const repeat = new Set(['seat-model', 'seat-effort']);
+  const takes = new Set(['pack', 'implementer-family', 'out', 'methodology', 'spec-file', 'seats', 'timeout', 'dispatch-bin', 'scorecard-bin', 'diff', 'questions', 'context-max']);
+  const repeat = new Set(['seat-model', 'seat-effort', 'context-exclude']);
   for (const k of repeat) takes.add(k);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -188,6 +191,17 @@ function insideRoot(rootReal, p, what) {
   if (!lst(p).isFile()) die(`pack refused: ${what} is not a regular file: ${p}`);
   const rp = fs.realpathSync(p);
   if (!rp.startsWith(rootReal + path.sep)) die(`pack refused: ${what} resolves outside the pack: ${p}`);
+}
+
+// --context-exclude glob: matched against the path relative to the pack root. "**" matches any characters including "/"
+// ("**/" also matches no directory at all), "*" matches anything but "/", every other character is literal.
+function globToRegExp(g) {
+  let re = '';
+  for (let i = 0; i < g.length; i++) {
+    if (g.startsWith('**/', i)) { re += '(?:.*/)?'; i += 2; } else if (g.startsWith('**', i)) { re += '.*'; i += 1; } else if (g[i] === '*') re += '[^/]*';
+    else re += g[i].replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp('^' + re + '$');
 }
 
 function badTarName(n) { return n.startsWith('/') || n.split('/').includes('..'); }
@@ -307,6 +321,15 @@ function resolvePack(o) {
       fs.writeFileSync(spec, fs.readFileSync(qf, 'utf8') + answerFormat(questions));
     }
   }
+  const cmax = o['context-max'] === undefined ? CONTEXT_CAP : Number(o['context-max']);
+  if (!Number.isInteger(cmax) || cmax <= 0) die(`--context-max needs a positive integer byte count, got ${o['context-max']}`);
+  const excludes = (o['context-exclude'] || []).map(globToRegExp);
+  const isExcluded = (rel) => excludes.some((r) => r.test(rel));
+  for (const [what, p] of [['the diff', diff], ['the questions file', hasQf ? qf : null]]) {
+    if (p && isExcluded(path.relative(root, p))) die(`--context-exclude matches ${what} (${path.relative(root, p)}); the diff and QUESTIONS are always sent and are not part of the context, so exclude only other files`);
+  }
+  const tail = questions.length ? `\n===== Answer format, repeated =====${answerFormat(questions)}` : '';
+  const budget = cmax - Buffer.byteLength(tail);
   const ordered = files.map((f) => path.join(root, f));
   ordered.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
   let text = ''; const skipped = [];
@@ -314,16 +337,17 @@ function resolvePack(o) {
     if (f === diff || f === qf || f === sums) continue;
     const buf = fs.readFileSync(f);
     const rel = path.relative(root, f);
+    if (isExcluded(rel)) { skipped.push({ path: rel, bytes: buf.length, reason: 'excluded' }); continue; }
     if (buf.includes(0)) { skipped.push({ path: rel, bytes: buf.length, reason: 'binary' }); continue; }
-    if (Buffer.byteLength(text) + buf.length > CONTEXT_CAP) { skipped.push({ path: rel, bytes: buf.length, reason: `over the ${CONTEXT_CAP} byte context cap` }); continue; }
+    if (Buffer.byteLength(text) + buf.length > budget) { skipped.push({ path: rel, bytes: buf.length, reason: `over the ${cmax} byte context cap` }); continue; }
     text += `\n===== ${rel} =====\n${buf.toString('utf8')}\n`;
   }
   if (skipped.length) {
-    text = `以下檔案因大小未附：${skipped.map((s) => s.path).join('、')}\n${text}`;
-    text += `\n===== skipped (binary or over the ${CONTEXT_CAP} byte context cap) =====\n${skipped.map((s) => `${s.path} (${s.bytes} bytes, ${s.reason})`).join('\n')}\n`;
+    text = `以下檔案未附（大小或排除）：${skipped.map((s) => s.path).join('、')}\n${text}`;
+    text += `\n===== skipped (binary, excluded or over the ${cmax} byte context cap) =====\n${skipped.map((s) => `${s.path} (${s.bytes} bytes, ${s.reason})`).join('\n')}\n`;
   }
   const ctx = path.join(o.out, 'context.txt');
-  fs.writeFileSync(ctx, text);
+  fs.writeFileSync(ctx, text + tail);
   return { diff, spec, ctx, questions, skipped };
 }
 

@@ -309,7 +309,25 @@ case_skipped() {
   (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md big.txt > FILES.sha256)
   run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
   [ "$(jq_eval "$d/out/run.json" 'j.skipped_files[0].path+","+j.skipped_files[0].bytes+","+/context cap/.test(j.skipped_files[0].reason)')" = "big.txt,350000,true" ] \
-    && [ "$(head -n1 "$d/out/context.txt")" = "以下檔案因大小未附：big.txt" ] && [ "$(jq_eval "$d/out/merged.json" 'j.skipped_files.map(x=>x.path).join()')" = big.txt ] && echo ok
+    && [ "$(head -n1 "$d/out/context.txt")" = "以下檔案未附（大小或排除）：big.txt" ] && [ "$(jq_eval "$d/out/merged.json" 'j.skipped_files.map(x=>x.path).join()')" = big.txt ] && echo ok
+}
+
+case_ctx_exclude() { # an excluded file is not in the context and is in skipped_files with reason excluded
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; mkdir -p "$d/pk/sub"; echo SECRET-RESULT-BODY > "$d/pk/sub/x.RESULT-rev2.json"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md sub/x.RESULT-rev2.json > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}" --context-exclude '**/*.RESULT-rev2.json'
+  ! grep -q SECRET-RESULT-BODY "$d/out/context.txt" && grep -q 'NOTE.md' "$d/out/context.txt" \
+    && [ "$(jq_eval "$d/out/run.json" 'j.skipped_files.map(x=>x.path+":"+x.reason).join()')" = "sub/x.RESULT-rev2.json:excluded" ] \
+    && [ "$(head -n1 "$d/out/context.txt")" = "以下檔案未附（大小或排除）：sub/x.RESULT-rev2.json" ] && echo ok
+}
+case_ctx_exclude_diff() { # a glob that matches the diff is refused with rc 2 and nothing is dispatched
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}" --context-exclude '*.diff'; refused "$d" 'matches the diff' && echo ok
+}
+case_ctx_tail() { # the answer format is repeated as the last section of the context
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"
+  [ "$(grep -c '^=====' "$d/out/context.txt" | tail -n1)" -ge 2 ] && [ "$(grep '^=====' "$d/out/context.txt" | tail -n1)" = "===== Answer format, repeated =====" ] \
+    && [ "$(tail -n1 "$d/out/context.txt" | cut -c1-31)" = "Keep each ANSWER line under 600" ] && grep -q 'Answer every question (Q1, Q2)' "$d/out/context.txt" && echo ok
 }
 
 check case_symlink_file symlinkfile "s/if (st.isSymbolicLink() || (!st.isDirectory() && !st.isFile())) die(/if (false) die(/"
@@ -339,6 +357,9 @@ check case_answers_quoted_missing answersquotedmissing "s/filter((l) => l.trim()
 check case_numbered_questions numbered "s/const id = m && (m\[1\] || m\[2\]);/const id = m && m[1];/"
 check case_skipped skipped "s/if (skipped.length) {/if (false) {/"
 check case_skipped skippedmerged "s/skipped_files: skippedFiles,/skipped_files: [],/"
+check case_ctx_exclude ctxexclude "s/if (isExcluded(rel)) {/if (false) {/"
+check case_ctx_exclude_diff ctxexcludediff "s/if (p && isExcluded(/if (false \&\& isExcluded(/"
+check case_ctx_tail ctxtail "s/fs.writeFileSync(ctx, text + tail);/fs.writeFileSync(ctx, text);/"
 
 # 8d53f188: the real dispatch-review.sh parsing section (stub runner, no model) keeps SHIP-AS-IS and the ANSWER lines
 # when the block is SHIP-AS-IS + FINDINGS: none + ANSWER lines + NO-FINDING-PROOF.

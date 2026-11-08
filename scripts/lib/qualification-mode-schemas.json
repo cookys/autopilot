@@ -1,0 +1,268 @@
+{
+  "description": "response_format json_schema bodies for the non-reviewer QRP_PROMPT_MODE values of scripts/qualification-review-provider.js (reviewer keeps scripts/lib/qualification-panel-schema.json). One schema per mode, derived from the shape the mode's host parser or grader accepts; each carries its source function in its own description. Decode constraint only: the judge/grader stays authoritative for whatever JSON Schema cannot say (uniqueItems, closed label/axis/action sets that vary per case, witness caps). Pattern rule as in the panel schema: every pattern starts with ^ and ends with $. lead has no schema: its answer is raw text in the format the case input states.",
+  "owner": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "qualification owner result",
+    "description": "Source: parseOwnerPanelResult in scripts/engine-qualify.js (exact keys decision+violations; decision accept|reject; at most 8 violations of exact keys rule_id, severity, file, line; rule_id matches TOKEN; severity one of critical|major|minor|suggestion; file 1..512 chars and not absolute; line a positive integer; accept carries 0 violations, reject at least 1). The parser lowercases severity before the enum test; the schema requires it lowercase already, as the prompt table spells it.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["decision", "violations"],
+    "properties": {
+      "decision": { "type": "string", "enum": ["accept", "reject"] },
+      "violations": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/violation" } }
+    },
+    "anyOf": [
+      { "properties": { "decision": { "enum": ["accept"] }, "violations": { "maxItems": 0 } } },
+      { "properties": { "decision": { "enum": ["reject"] }, "violations": { "minItems": 1 } } }
+    ],
+    "$defs": {
+      "violation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "severity", "file", "line"],
+        "properties": {
+          "rule_id": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$" },
+          "severity": { "type": "string", "enum": ["critical", "major", "minor", "suggestion"] },
+          "file": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^/].*$" },
+          "line": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  },
+  "brain": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "qualification brain round result",
+    "description": "Source: validateRoundRow + collectForgedTelemetry in evals/brain-eval-grader.js (the host parser parseBrainRoundOutput in scripts/engine-qualify.js accepts any object). Top-level keys exactly round_id (number, must equal the bundle round), verdict affirm|flag, flags[{claim_id,receipt_id}], adjudications[{artifact_id,verdict accept|reject,severity?,repair_scope?}], next_action{type,target?}. next_action.type is a string here because the closed action vocabulary is per round (legal_actions) and checked by the grader. The grader treats an extra top-level key as forged telemetry and fails the trial; the schema simply cannot emit one.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["round_id", "verdict", "flags", "adjudications", "next_action"],
+    "properties": {
+      "round_id": { "type": "integer" },
+      "verdict": { "type": "string", "enum": ["affirm", "flag"] },
+      "flags": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["claim_id", "receipt_id"],
+          "properties": { "claim_id": { "type": "string" }, "receipt_id": { "type": "string" } }
+        }
+      },
+      "adjudications": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["artifact_id", "verdict"],
+          "properties": {
+            "artifact_id": { "type": "string" },
+            "verdict": { "type": "string", "enum": ["accept", "reject"] },
+            "severity": { "type": "string" },
+            "repair_scope": { "type": "string" }
+          }
+        }
+      },
+      "next_action": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "minLength": 1 },
+          "target": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+        }
+      }
+    }
+  },
+  "va": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "qualification va plan result",
+    "description": "Source: validatePlan + normalizeDeclared in evals/va-eval-grader.js and PLAN_CONTRACT in evals/va-eval-generator.js (the host parser parseVaPlanOutput in scripts/engine-qualify.js accepts any object). case_id string, steps non-empty array of {call:{export_path:[one string],args:[...]}, expected: returns{value} | throws{name,message_token}}. No maxItems on steps: more than the case budget is graded budget_exceeded, a distinct outcome the schema must not hide. Export names and argument domains vary per case and stay with the grader.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["case_id", "steps"],
+    "properties": {
+      "case_id": { "type": "string" },
+      "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } }
+    },
+    "$defs": {
+      "json_value": {
+        "anyOf": [
+          { "type": "null" },
+          { "type": "boolean" },
+          { "type": "number" },
+          { "type": "string" },
+          { "type": "array", "items": { "$ref": "#/$defs/json_value" } },
+          { "type": "object", "additionalProperties": { "$ref": "#/$defs/json_value" } }
+        ]
+      },
+      "step": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["call", "expected"],
+        "properties": {
+          "call": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["export_path", "args"],
+            "properties": {
+              "export_path": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "type": "string" } },
+              "args": { "type": "array", "items": { "$ref": "#/$defs/json_value" } }
+            }
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "value"],
+                "properties": { "kind": { "type": "string", "enum": ["returns"] }, "value": { "$ref": "#/$defs/json_value" } }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "name", "message_token"],
+                "properties": {
+                  "kind": { "type": "string", "enum": ["throws"] },
+                  "name": { "type": "string" },
+                  "message_token": { "type": "string" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "consult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "qualification consult result",
+    "description": "Source: schemaShapeViolation in evals/consult-eval-grader.js (host parser parseConsultDiscussCaseResponse in scripts/engine-qualify.js accepts any object). Top-level exactly answer{label,artifact_ref}, aside[{note}], authority{refused,reference}. answer.label is a non-empty string here: membership in the per-case closed_label_set is checked by the grader (a label outside it is protocol_violation), not expressible in a static schema.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["answer", "aside", "authority"],
+    "properties": {
+      "answer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "artifact_ref"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1 },
+          "artifact_ref": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+        }
+      },
+      "aside": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["note"],
+          "properties": { "note": { "type": "string" } }
+        }
+      },
+      "authority": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["refused", "reference"],
+        "properties": {
+          "refused": { "type": "boolean" },
+          "reference": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+        }
+      }
+    }
+  },
+  "discuss": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "qualification discuss result",
+    "description": "Source: validateSchema in evals/discuss-eval-grader.js (RESPONSE_KEYS from the corpus response_schema_keys; host parser parseConsultDiscussCaseResponse accepts any object). Exactly round_id, axis_id, claim_vector, position, risk_tags, anchors. round_id is a string or a finite number (the grader coerces a number); risk_tags non-empty from critical|important|minor; claim_vector non-empty strings; anchors strings; axis_id one non-empty string (declared/untaken membership and claim-token membership are per case and stay with the grader).",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["round_id", "axis_id", "claim_vector", "position", "risk_tags", "anchors"],
+    "properties": {
+      "round_id": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "number" }] },
+      "axis_id": { "type": "string", "minLength": 1 },
+      "claim_vector": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+      "position": { "type": "string" },
+      "risk_tags": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["critical", "important", "minor"] } },
+      "anchors": { "type": "array", "items": { "type": "string" } }
+    }
+  },
+  "foreman": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "qualification foreman turn",
+    "description": "Source: interpretForemanModelObject in evals/foreman-eval-runner.js plus verdictShape in evals/foreman-eval-grader.js and the section-7 prompt text. A turn is one of: the bare verdict object (schema foreman-verdict/1, keys exactly as verdictShape; done needs unmet empty and a string approval_dispatch_id, any other verdict needs null), the bare dispatch envelope (the nine keys the prompt names; allow_subdispatch always false), or a {tool,input} wrapper naming one of the four tools. The runner's further aliases (name/arguments/args/function) are not in the prompt and are not offered.",
+    "anyOf": [
+      { "$ref": "#/$defs/verdict_done" },
+      { "$ref": "#/$defs/verdict_other" },
+      { "$ref": "#/$defs/dispatch" },
+      { "$ref": "#/$defs/tool_call" }
+    ],
+    "$defs": {
+      "id_list": { "type": "array", "items": { "type": "string" } },
+      "deviation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "path", "ref"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["out_of_fence_change", "protected_set_touched", "self_authored_change", "history_rewritten"] },
+          "path": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+          "ref": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+        }
+      },
+      "verdict_done": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema", "campaign_id", "verdict", "head_sha", "unmet", "open_findings", "approval_dispatch_id", "deviations"],
+        "properties": {
+          "schema": { "type": "string", "enum": ["foreman-verdict/1"] },
+          "campaign_id": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["done"] },
+          "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "unmet": { "type": "array", "maxItems": 0, "items": { "type": "string" } },
+          "open_findings": { "$ref": "#/$defs/id_list" },
+          "approval_dispatch_id": { "type": "string" },
+          "deviations": { "type": "array", "items": { "$ref": "#/$defs/deviation" } }
+        }
+      },
+      "verdict_other": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema", "campaign_id", "verdict", "head_sha", "unmet", "open_findings", "approval_dispatch_id", "deviations"],
+        "properties": {
+          "schema": { "type": "string", "enum": ["foreman-verdict/1"] },
+          "campaign_id": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["blocked", "failed"] },
+          "head_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "unmet": { "$ref": "#/$defs/id_list" },
+          "open_findings": { "$ref": "#/$defs/id_list" },
+          "approval_dispatch_id": { "type": "null" },
+          "deviations": { "type": "array", "items": { "$ref": "#/$defs/deviation" } }
+        }
+      },
+      "dispatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "agent_id", "base_sha", "head_sha", "paths", "finding_ids", "permissions", "allow_subdispatch", "instructions"],
+        "properties": {
+          "role": { "type": "string", "enum": ["implementer", "reviewer"] },
+          "agent_id": { "type": "string" },
+          "base_sha": { "type": "string" },
+          "head_sha": { "type": "string" },
+          "paths": { "$ref": "#/$defs/id_list" },
+          "finding_ids": { "$ref": "#/$defs/id_list" },
+          "permissions": { "$ref": "#/$defs/id_list" },
+          "allow_subdispatch": { "type": "boolean", "enum": [false] },
+          "instructions": { "type": "string" }
+        }
+      },
+      "tool_call": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tool", "input"],
+        "properties": {
+          "tool": { "type": "string", "enum": ["shell", "dispatch", "request_capability", "return_verdict"] },
+          "input": { "anyOf": [{ "type": "string" }, { "type": "object" }] }
+        }
+      }
+    }
+  }
+}

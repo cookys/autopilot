@@ -1969,7 +1969,7 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
       [{ QRP_HTTP_PROTOCOL: 'messages', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /applies to the chat_completions protocol only \(got protocol: messages\)/, 'messages protocol'],
       [{ QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /applies to the chat_completions protocol only \(got protocol: responses\)/, 'responses protocol'],
       [{ QRP_HTTP_RESPONSE_FORMAT: 'bogus' }, /must be one of json_schema\|off \(got: bogus\)/, 'unknown value'],
-      [{ QRP_PROMPT_MODE: 'brain', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /reviewer only \(got: brain\)/, 'non-reviewer prompt mode'],
+      [{ QRP_PROMPT_MODE: 'sonnet-dreams', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /QRP_PROMPT_MODE must be/, 'unknown prompt mode'],
       [{ QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, /applies to QRP_TRANSPORT=http only/, 'cli transport'],
     ]) {
       const r = sendChatFormat(env);
@@ -2062,6 +2062,186 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     let judgeThrew = false;
     try { parsePanelResult(broken); } catch { judgeThrew = true; }
     check(judgeThrew, 'the judge rejects the bracket-mismatched panel reply');
+  }
+
+  // ── QRP_HTTP_RESPONSE_FORMAT=json_schema for every JSON-answer prompt mode ────
+  // Each mode sends its own schema from scripts/lib/qualification-mode-schemas.json; reviewer keeps the panel schema.
+  {
+    const MODE_SCHEMA_FILE = path.join(__dirname, 'lib', 'qualification-mode-schemas.json');
+    const modeSchemas = JSON.parse(fs.readFileSync(MODE_SCHEMA_FILE, 'utf8'));
+    const panelSchema = JSON.parse(fs.readFileSync(PANEL_SCHEMA_FILE, 'utf8'));
+    const SHA = 'a'.repeat(40);
+    const brainLegal = JSON.parse(BRAIN_MODEL_OUTPUT);
+    const modes = {
+      owner: {
+        role: 'owner',
+        content: 'diff --git a/s.json b/s.json\n--- a/s.json\n+++ b/s.json\n@@ -1 +1 @@\n-{}\n+{}\n',
+        legal: [
+          { decision: 'reject', violations: [{ rule_id: 'intent-preservation', severity: 'critical', file: 's.json', line: 1 }] },
+          { decision: 'accept', violations: [] },
+        ],
+        bad: [
+          ['accept carrying a violation', { decision: 'accept', violations: [{ rule_id: 'x', severity: 'minor', file: 's.json', line: 1 }] }],
+          ['reject without a violation', { decision: 'reject', violations: [] }],
+          ['absolute file', { decision: 'reject', violations: [{ rule_id: 'x', severity: 'minor', file: '/s.json', line: 1 }] }],
+          ['extra key', { decision: 'accept', violations: [], note: 'x' }],
+        ],
+      },
+      brain: {
+        role: 'owner',
+        content: BRAIN_BUNDLE,
+        legal: [brainLegal],
+        bad: [
+          ['extra top-level key (forged telemetry)', { ...brainLegal, tokens: 5 }],
+          ['verdict outside enum', { ...brainLegal, verdict: 'maybe' }],
+          ['next_action missing', { round_id: 3, verdict: 'affirm', flags: [], adjudications: [] }],
+        ],
+      },
+      va: {
+        role: 'verification_author',
+        content: JSON.stringify({ case_id: 'c', rendered_spec: [] }),
+        legal: [
+          { case_id: 'c', steps: [{ call: { export_path: ['f'], args: [1, 'a'] }, expected: { kind: 'returns', value: { a: [1] } } }] },
+          { case_id: 'c', steps: [{ call: { export_path: ['f'], args: [] }, expected: { kind: 'throws', name: 'RangeError', message_token: 'tok' } }] },
+        ],
+        bad: [
+          ['empty steps', { case_id: 'c', steps: [] }],
+          ['throws without name', { case_id: 'c', steps: [{ call: { export_path: ['f'], args: [] }, expected: { kind: 'throws' } }] }],
+          ['two export names', { case_id: 'c', steps: [{ call: { export_path: ['f', 'g'], args: [] }, expected: { kind: 'returns', value: 1 } }] }],
+        ],
+      },
+      consult: {
+        role: 'consult',
+        content: JSON.stringify({ question: 'q', bundle: {} }),
+        legal: [
+          { answer: { label: 'answer:x', artifact_ref: null }, aside: [], authority: { refused: false, reference: null } },
+        ],
+        bad: [
+          ['label as array', { answer: { label: ['a', 'b'], artifact_ref: null }, aside: [], authority: { refused: false, reference: null } }],
+          ['extra top-level key', { answer: { label: 'a', artifact_ref: null }, aside: [], authority: { refused: false, reference: null }, verdict: 'ship' }],
+          ['refused not boolean', { answer: { label: 'a', artifact_ref: null }, aside: [], authority: { refused: 'no', reference: null } }],
+        ],
+      },
+      discuss: {
+        role: 'discuss',
+        content: JSON.stringify({ transcript: [], bundle: {} }),
+        legal: [
+          { round_id: 'r4', axis_id: 'ax', claim_vector: ['t'], position: 'p', risk_tags: ['minor'], anchors: [] },
+          { round_id: 4, axis_id: 'ax', claim_vector: ['t'], position: 'p', risk_tags: ['critical', 'minor'], anchors: ['a1'] },
+        ],
+        bad: [
+          ['four-tier risk vocabulary', { round_id: 'r4', axis_id: 'ax', claim_vector: ['t'], position: 'p', risk_tags: ['Major'], anchors: [] }],
+          ['empty claim_vector', { round_id: 'r4', axis_id: 'ax', claim_vector: [], position: 'p', risk_tags: ['minor'], anchors: [] }],
+          ['axis_id as array', { round_id: 'r4', axis_id: ['ax'], claim_vector: ['t'], position: 'p', risk_tags: ['minor'], anchors: [] }],
+        ],
+      },
+      foreman: {
+        role: 'foreman',
+        content: JSON.stringify({ campaign_id: 'c1' }),
+        legal: [
+          { schema: 'foreman-verdict/1', campaign_id: 'c1', verdict: 'done', head_sha: SHA, unmet: [], open_findings: [], approval_dispatch_id: 'd1', deviations: [] },
+          { schema: 'foreman-verdict/1', campaign_id: 'c1', verdict: 'blocked', head_sha: SHA, unmet: ['R1'], open_findings: [], approval_dispatch_id: null, deviations: [{ kind: 'out_of_fence_change', path: 'a', ref: null }] },
+          { role: 'reviewer', agent_id: 'ag', base_sha: SHA, head_sha: SHA, paths: ['a'], finding_ids: [], permissions: [], allow_subdispatch: false, instructions: 'go' },
+          { tool: 'shell', input: { cmd: 'git status' } },
+        ],
+        bad: [
+          ['done with null approval', { schema: 'foreman-verdict/1', campaign_id: 'c1', verdict: 'done', head_sha: SHA, unmet: [], open_findings: [], approval_dispatch_id: null, deviations: [] }],
+          ['blocked with an approval', { schema: 'foreman-verdict/1', campaign_id: 'c1', verdict: 'blocked', head_sha: SHA, unmet: [], open_findings: [], approval_dispatch_id: 'd1', deviations: [] }],
+          ['verdict with an invented key', { schema: 'foreman-verdict/1', campaign_id: 'c1', verdict: 'failed', head_sha: SHA, unmet: [], open_findings: [], approval_dispatch_id: null, deviations: [], note: 'x' }],
+          ['short head_sha', { schema: 'foreman-verdict/1', campaign_id: 'c1', verdict: 'failed', head_sha: 'abc', unmet: [], open_findings: [], approval_dispatch_id: null, deviations: [] }],
+          ['dispatch allowing subdispatch', { role: 'reviewer', agent_id: 'ag', base_sha: SHA, head_sha: SHA, paths: [], finding_ids: [], permissions: [], allow_subdispatch: true, instructions: 'go' }],
+        ],
+      },
+    };
+    // Minimal JSON-Schema reading of exactly the keywords the mode schemas use.
+    const validate = (root, node0, v, where) => {
+      const node = node0.$ref ? node0.$ref.slice(2).split('/').reduce((n, k) => n[k], root) : node0;
+      if (node.anyOf && !node.anyOf.some((alt) => validate(root, alt, v, where) === null)) return `${where}: no anyOf branch matches`;
+      const type = v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v;
+      if (node.type && !(node.type === type || (node.type === 'integer' && type === 'number' && Number.isInteger(v)))) return `${where}: want ${node.type}`;
+      if (node.enum && !node.enum.includes(v)) return `${where}: not in enum`;
+      if (typeof v === 'string') {
+        if (node.minLength !== undefined && v.length < node.minLength) return `${where}: too short`;
+        if (node.maxLength !== undefined && v.length > node.maxLength) return `${where}: too long`;
+        if (node.pattern && !new RegExp(node.pattern, 'u').test(v)) return `${where}: pattern`;
+      }
+      if (typeof v === 'number' && node.minimum !== undefined && v < node.minimum) return `${where}: below minimum`;
+      if (Array.isArray(v)) {
+        if (node.minItems !== undefined && v.length < node.minItems) return `${where}: too few items`;
+        if (node.maxItems !== undefined && v.length > node.maxItems) return `${where}: too many items`;
+        for (let i = 0; i < v.length; i += 1) {
+          const e = node.items ? validate(root, node.items, v[i], `${where}[${i}]`) : null;
+          if (e) return e;
+        }
+      }
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const keys = Object.keys(v);
+        for (const req of node.required || []) if (!keys.includes(req)) return `${where}: missing ${req}`;
+        for (const key of keys) {
+          const sub = (node.properties || {})[key];
+          let e = null;
+          if (sub) e = validate(root, sub, v[key], `${where}.${key}`);
+          else if (node.additionalProperties === false) e = `${where}: extra key ${key}`;
+          else if (node.additionalProperties) e = validate(root, node.additionalProperties, v[key], `${where}.${key}`);
+          if (e) return e;
+        }
+      }
+      return null;
+    };
+    const wire = {};
+    for (const [mode, spec] of Object.entries(modes)) {
+      const request = { schema_version: 1, request_id: `req-rf-${mode}`, role: spec.role, payload: { format: 'case_content', content: spec.content } };
+      const on = sendChatFormat({ QRP_PROMPT_MODE: mode, QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, request);
+      equal(on.child.status, 0, `${mode}: chat completions with json_schema succeeds (stderr: ${on.child.stderr})`);
+      const sent = on.body && on.body.response_format;
+      equal(sent && sent.type, 'json_schema', `${mode}: response_format.type is json_schema`);
+      equal(sent && sent.json_schema.strict, true, `${mode}: response_format is strict`);
+      equal(sent && sent.json_schema.name, `qualification_${mode}_result`, `${mode}: response_format carries its own schema name`);
+      equal(JSON.stringify(sent && sent.json_schema.schema), JSON.stringify(modeSchemas[mode]),
+        `${mode}: the wire schema is exactly its entry in scripts/lib/qualification-mode-schemas.json`);
+      wire[mode] = sent.json_schema.schema;
+      check(JSON.stringify(wire[mode]) !== JSON.stringify(panelSchema), `${mode}: the wire schema is not the reviewer panel schema`);
+      for (const [i, doc] of spec.legal.entries()) {
+        equal(validate(wire[mode], wire[mode], doc, '$'), null, `${mode}: the sent schema accepts legal answer ${i + 1}`);
+      }
+      for (const [label, doc] of spec.bad) {
+        check(validate(wire[mode], wire[mode], doc, '$') !== null, `${mode}: the sent schema rejects: ${label}`);
+      }
+      check(validate(wire[mode], wire[mode], JSON.parse(REVIEWER_MODEL_OUTPUT), '$') !== null, `${mode}: the sent schema rejects a reviewer panel answer`);
+      // Off: no response_format, and the rest of the body is byte-identical to the on body.
+      const off = sendChatFormat({ QRP_PROMPT_MODE: mode }, request);
+      equal(off.child.status, 0, `${mode}: without QRP_HTTP_RESPONSE_FORMAT it still succeeds`);
+      check(!('response_format' in off.body), `${mode}: without QRP_HTTP_RESPONSE_FORMAT no response_format is sent`);
+      const { response_format: dropped, ...rest } = on.body;
+      equal(JSON.stringify(rest), JSON.stringify(off.body), `${mode}: json_schema on adds response_format and changes nothing else in the body`);
+      // Unsupported protocols still refuse before any request.
+      for (const protocol of ['messages', 'responses']) {
+        const r = sendChatFormat({ QRP_PROMPT_MODE: mode, QRP_HTTP_PROTOCOL: protocol, QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, request);
+        equal(r.child.status, 1, `${mode}: json_schema on the ${protocol} protocol exits 1`);
+        check(/applies to the chat_completions protocol only/.test(r.child.stderr), `${mode}: ${protocol} refusal names the protocol rule`);
+        equal(r.body, null, `${mode}: ${protocol} refusal sends no request`);
+      }
+    }
+    const names = Object.keys(wire);
+    for (let i = 0; i < names.length; i += 1) {
+      for (let j = i + 1; j < names.length; j += 1) {
+        check(JSON.stringify(wire[names[i]]) !== JSON.stringify(wire[names[j]]), `${names[i]} and ${names[j]} carry different schemas`);
+      }
+    }
+    // lead answers raw text: no schema exists, so the knob refuses.
+    const leadRequest = { schema_version: 1, request_id: 'req-rf-lead', role: 'lead', payload: { format: 'case_content', content: 'x' } };
+    const lead = sendChatFormat({ QRP_PROMPT_MODE: 'lead', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, leadRequest);
+    equal(lead.child.status, 1, 'lead: json_schema is refused (exit 1)');
+    check(/does not apply to QRP_PROMPT_MODE=lead/.test(lead.child.stderr), 'lead: refusal names the prompt mode');
+    equal(lead.body, null, 'lead: refusal sends no request');
+    // Judge cross-check for owner: what the schema accepts the owner parser accepts, and the reverse for the bad cases.
+    const { parseOwnerPanelResult } = require('./engine-qualify');
+    for (const doc of modes.owner.legal) equal(parseOwnerPanelResult(JSON.stringify(doc)).decision, doc.decision, 'owner: the parser also accepts the legal answer the schema accepts');
+    for (const [label, doc] of modes.owner.bad) {
+      let threw = false;
+      try { parseOwnerPanelResult(JSON.stringify(doc)); } catch { threw = true; }
+      check(threw, `owner: the parser also rejects: ${label}`);
+    }
   }
 
   const sseServerFile = path.join(tempRoot, 'stub-chat-sse.js');
@@ -2628,5 +2808,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 617) throw new Error(`qualification-review-provider: expected exactly 617 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 770) throw new Error(`qualification-review-provider: expected exactly 770 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

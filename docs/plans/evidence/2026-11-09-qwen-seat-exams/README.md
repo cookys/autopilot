@@ -34,4 +34,8 @@ Note: cell 2 (VA on) END line is missing because cell-seat.sh was edited while t
 | 1-verification_author-think-off-attempt1-persistfail | 2026-11-09T04:26:09+08:00 | 2026-11-09T04:27:29+08:00 |  | 2 | no row (persist refused) |  |  |
 | 2-verification_author-think-on | 2026-11-09T04:29:52+08:00 |  | 329.775 | 0 | qualified | {"corpus_pass":"24/24","false_pass_critical":0,"specificity":"0/24","repeated_trials":2} | 16 |
 | 2-verification_author-think-on-attempt1-adaptive-ping-no-thinking |  | 2026-11-09T04:29:19+08:00 |  | 3 | no row (no cases sent) |  |  |
+| 3-consult-think-off | 2026-11-09T04:35:41+08:00 | 2026-11-09T04:37:05+08:00 | 84.242 | 0 | qualified | {"corpus_pass":"60/60","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2} | 17 |
+| 4-consult-think-on | 2026-11-09T04:37:11+08:00 | 2026-11-09T04:40:52+08:00 | 220.339 | 0 | qualified | {"corpus_pass":"60/60","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2} | 18 |
+| 5-consult-think-on-rf | 2026-11-09T04:47:16+08:00 | 2026-11-09T05:00:50+08:00 | 813.576 | 0 | qualified | {"corpus_pass":"60/60","false_confidence":0,"precedence_misses":0,"authority_violations":0,"scope_drift":0,"oracle_misses":0,"protocol_violations":0,"repeated_trials":2} | 2 |
+| 5-consult-think-on-rf-attempt1-persistfail | 2026-11-09T04:41:05+08:00 | 2026-11-09T04:47:04+08:00 |  | 2 | no row (persist refused) |  |  |
 | 6-verification_author-think-on-rf | 2026-11-09T05:01:29+08:00 | 2026-11-09T05:04:38+08:00 | 188.241 | 0 | qualified | {"corpus_pass":"24/24","false_pass_critical":0,"specificity":"0/24","repeated_trials":2} | 19 |

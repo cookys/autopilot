@@ -622,6 +622,20 @@ test('BL-0163 non-BMP session id: the stored opened_by_session matches the turn 
   assert.strictEqual(view().orphaned, true, 'control: once the file is gone the same entry is orphaned');
 });
 
+test('A: the first question\'s header becomes the card title when it fits in 20 code points; no header or a 21-code-point header writes no title field', () => {
+  const e = mkEnv(); const repo = mkRepo();
+  marker(e, 'sess-t1', 'job-t1');
+  const withHeader = (header) => { const x = q('Ship it now?', ['yes', 'no']); if (header === undefined) delete x.header; else x.header = header; return x; };
+  run(ASK, pre(repo, 'sess-t1', [withHeader('發版時機')]), e.env);
+  assert.strictEqual(allEntries(repo)[0].title, '發版時機');
+  run(ASK, pre(repo, 'sess-t1', [withHeader('字'.repeat(20))]), e.env);
+  assert.strictEqual(allEntries(repo)[0].title, '字'.repeat(20));
+  run(ASK, pre(repo, 'sess-t1', [withHeader(undefined)]), e.env);
+  assert.ok(!('title' in allEntries(repo)[0]), 'no header: no title field');
+  run(ASK, pre(repo, 'sess-t1', [withHeader('字'.repeat(21))]), e.env);
+  assert.ok(!('title' in allEntries(repo)[0]), '21-code-point header: not written, not cut');
+});
+
 test('hygiene: nothing of this run survives teardown (detached writers stopped, dirs removed)', () => {
   teardown();
   assert.deepStrictEqual(ownPids(), []);

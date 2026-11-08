@@ -241,7 +241,7 @@ export const OTHERS_MIRROR_SCHEMA = 'autopilot.fleet-card-mirror/1'
 export const OTHERS_STALE_MS = 5 * 60_000
 export const OTHERS_MAX_BYTES = 1_000_000
 export const OTHERS_MAX_ROWS = 200
-export type OtherCard = { id: string; question: string; where: string; openedMs: number }
+export type OtherCard = { id: string; question: string; title: string | null; where: string; openedMs: number }
 export type TodoRow = { id: string; step: string; owner: string; sinceMs: number; dueMs: number | null; reconciled: boolean }
 export type OthersView = {
   present: boolean // false: no mirror file yet
@@ -289,7 +289,7 @@ export function othersView(mirrorText: string | null, todoText: string | null, n
           if (c === null || !CARD_ID_RE.test(id) || c.card_id !== id || !goodText(c.question, 300) || typeof c.namespace !== 'string' || !NAME_RE.test(c.namespace) || typeof c.courier !== 'string' || !NAME_RE.test(c.courier) || typeof c.member !== 'string' || !NAME_RE.test(c.member)
             || !(c.session === null || (typeof c.session === 'string' && SESSION_RE.test(c.session))) || openedMs === null) { base.skipped++; continue }
           if (base.cards.length >= OTHERS_MAX_ROWS) { base.skipped++; continue }
-          base.cards.push({ id, question: c.question as string, where: c.namespace + '/' + c.courier + '/' + c.member + (typeof c.session === 'string' ? '@' + c.session : ''), openedMs })
+          base.cards.push({ id, question: c.question as string, title: goodText(c.title, 80) && Array.from(c.title).length <= 20 ? c.title : null, where: c.namespace + '/' + c.courier + '/' + c.member + (typeof c.session === 'string' ? '@' + c.session : ''), openedMs })
         }
         base.cards.sort((a, b) => a.openedMs - b.openedMs)
       }

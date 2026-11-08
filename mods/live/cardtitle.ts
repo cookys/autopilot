@@ -1,0 +1,9 @@
+// mods/live/cardtitle.ts — the card's short title as the live mod draws it. SAME RULE as cardTitle() in src/status/decision-input.js
+// (a mod cannot require src/ JS): an explicit non-empty title wins verbatim; else the question with newline runs turned into spaces, the
+// trailing （共 N 題） dropped, cut to 20 code points plus the ellipsis. mods/live/cardtitle.test.js loads both and compares the same inputs.
+export const cardTitleOf = (d: { title?: string | null; question?: string | null }): string => {
+  if (typeof d.title === 'string' && d.title !== '') return d.title
+  const q = (typeof d.question === 'string' ? d.question : '').replace(/[\r\n]+/g, ' ').trim().replace(/（共\s*\d+\s*題）$/, '').trim()
+  if (Array.from(q).length <= 20) return q
+  return Array.from(q).slice(0, 20).join('') + '…'
+}

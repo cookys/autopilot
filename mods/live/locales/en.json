@@ -297,6 +297,7 @@
   "legend.action": "pressable: a button or option you can press (purple); dim means nothing to press yet",
   "nodata.auto": "no automatic cleanup record published",
   "decide.title": "Waiting for you",
+  "decide.k_question": "Question",
   "decide.k_background": "Context",
   "decide.k_blocks": "Blocks",
   "decide.k_options": "Options",

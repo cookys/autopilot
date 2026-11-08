@@ -297,6 +297,7 @@
   "legend.action": "紫色＝可以按（按鈕或選項）；淡色＝現在還不能按",
   "nodata.auto": "沒有發布自動清理紀錄",
   "decide.title": "待你回答",
+  "decide.k_question": "題目",
   "decide.k_background": "背景",
   "decide.k_blocks": "卡住",
   "decide.k_options": "選項",

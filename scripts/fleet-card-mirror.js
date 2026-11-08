@@ -88,7 +88,7 @@ function fold(m, msg, nowMs) {
     if (tomb) return 'duplicate';
     if (owner) return sameSender(owner, from) ? 'duplicate' : 'reject:card id held by another sender';
     if (Object.keys(m.cards).length >= MAX_CARDS) return 'reject:mirror full';
-    m.cards[n.card_id] = { card_id: n.card_id, question: n.question, state: n.state, opened_at: n.at, member: from.member, courier: from.courier, namespace: from.namespace, session: from.session, message_id: msg.message_id || null };
+    m.cards[n.card_id] = { card_id: n.card_id, question: n.question, ...(typeof n.title === 'string' ? { title: n.title } : {}), state: n.state, opened_at: n.at, member: from.member, courier: from.courier, namespace: from.namespace, session: from.session, message_id: msg.message_id || null };
     return 'accepted';
   }
   // close

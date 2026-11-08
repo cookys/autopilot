@@ -4897,10 +4897,15 @@ class AutopilotEngine {
         // The held worktree of the dead first attempt still has `input.branch` checked out, so the
         // retreat gets its own branch cut from the original base, and its own ledger identity
         // (stage suffix, plus a run id bound to the original in the log row) outside campaigns.
-        const fallbackBranch = `${input.branch}-cloudfb`;
-        const fallbackStage = `${normalizeImplementationStage(input.implementationStage)}-cloudfb`;
+        // Each repair round that retreats gets its own names (`-cloudfb-r<round>`): the earlier
+        // round's fallback worktree is kept for review, so reusing its branch would be refused by git.
+        const fbRound = Number.isSafeInteger(input.implementationRound) && input.implementationRound > 1
+          ? input.implementationRound : 1;
+        const fbSuffix = fbRound > 1 ? `-cloudfb-r${fbRound}` : '-cloudfb';
+        const fallbackBranch = `${String(input.branch).replace(/-cloudfb(-r\d+)?$/, '')}${fbSuffix}`;
+        const fallbackStage = `${normalizeImplementationStage(input.implementationStage)}${fbSuffix}`;
         const fallbackRunId = input.runId && input.ledger && !input.campaignContractFile
-          ? `${input.runId}-cloudfb` : input.runId;
+          ? `${input.runId}${fbSuffix}` : input.runId;
         ledger.push(this.ledgerEntry('engine_unavailable_policy', 'cloud-fallback', this.now(), {
           policy: engineUnavailable.policy,
           error_class: engineUnavailable.error_class,

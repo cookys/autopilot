@@ -126,6 +126,42 @@ sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$T/scripts/dispatch-hetero.s
 classify_all "$T/scripts" mutC
 [ "$CAP_429" != "0" ] || fail "mutant C (override skipped) must write a capability row for a throttled endpoint"
 
+# --- 1a. the CLI's bare "Connection error." and other transport wordings ---------------------------
+conn_all() {
+  local sdir="$1" tag="$2" j
+  j="$(hetero "$sdir" "$(stub_claude 'API Error: Connection error.' null)" "feat/${tag}-conn" --endpoint gpu1)"
+  CE_CONN="$(eu_class "$j")"
+  j="$(hetero "$sdir" "$(stub_claude 'API Error: the upstream did not answer properly' null)" "feat/${tag}-generic" --endpoint gpu1)"
+  CE_GENERIC="$(eu_class "$j")"
+  j="$(hetero "$sdir" "$(stub_claude 'API Error: 401 invalid x-api-key' 401)" "feat/${tag}-401" --endpoint gpu1)"
+  CE_401="$(eu_class "$j")"
+  j="$(hetero "$sdir" "$(stub_claude 'API Error: 404 model not found' null)" "feat/${tag}-404" --endpoint gpu1)"
+  CE_404="$(eu_class "$j")"
+}
+conn_all "$REPO_ROOT/scripts" cegood
+assert_eq "endpoint_unreachable" "$CE_CONN" "bare 'API Error: Connection error.' is endpoint_unreachable"
+assert_eq "endpoint_unreachable" "$CE_GENERIC" "an API error with no 4xx and no auth/quota wording is endpoint_unreachable"
+case "$CE_401" in endpoint_*) fail "401 must stay auth_failed, never retreat (got $CE_401)" ;; esac
+case "$CE_404" in endpoint_*) fail "a 4xx other than auth must not retreat (got $CE_404)" ;; esac
+T="$(mk_tree mutCE1)"
+sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$T/scripts/dispatch-hetero.sh.1" \
+  's/fetch failed|connection error|/fetch failed|/'
+sed_mutant "$T/scripts/dispatch-hetero.sh.1" "$T/scripts/dispatch-hetero.sh" \
+  's/^  if \[ -n "\$_txt" \] \&\& ! printf/  if false \&\& ! printf/'
+chmod +x "$T/scripts/dispatch-hetero.sh"
+conn_all "$T/scripts" cemut1
+[ "$CE_CONN" != "endpoint_unreachable" ] || fail "mutant CE1 (no pattern, no generic branch) must leave 'Connection error.' unclassified"
+T="$(mk_tree mutCE2)"
+sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$T/scripts/dispatch-hetero.sh" \
+  's/^  if \[ -n "\$_txt" \] \&\& ! printf/  if false \&\& ! printf/'
+conn_all "$T/scripts" cemut2
+[ "$CE_GENERIC" != "endpoint_unreachable" ] || fail "mutant CE2 (no generic api-error branch) must leave the unknown wording unclassified"
+T="$(mk_tree mutCE3)"
+sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$T/scripts/dispatch-hetero.sh" \
+  's/(api error|http|status)\[: =(\]{0,4}4\[0-9\]\[0-9\](\[^0-9\]|\$)'"'"'; then$/(zzz)'"'"'; then/'
+conn_all "$T/scripts" cemut3
+case "$CE_404" in endpoint_unreachable) ;; *) fail "mutant CE3 (no 4xx exclusion) must turn a 404 into endpoint_unreachable (got $CE_404)" ;; esac
+
 # --- 1b. no blacklist: 503 then a healthy dispatch, local is tried first both times ---------------
 seq_run() {
   local sdir="$1" tag="$2" calls
@@ -342,7 +378,7 @@ assert_contains "$I_GOOD" "family=openai cross_family_satisfied=false" "fallback
 assert_contains "$I_GOOD" "row=run-id-1|run-id-1-cloudfb|impl-branch-cloudfb" "log row binds the fallback run id to the original"
 T="$(mk_tree mutI1)"
 sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
-  's/? `${input.runId}-cloudfb` : input.runId;/? input.runId : input.runId;/'
+  's/? `${input.runId}${fbSuffix}` : input.runId;/? input.runId : input.runId;/'
 case "$(ident_case "$T" mutI1)" in *"run-id-1-cloudfb|implement-cloudfb"*) fail "mutant I1 (shared run id) must change the fallback run id" ;; esac
 T="$(mk_tree mutI2)"
 sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
@@ -408,7 +444,7 @@ assert_contains "$R_GOOD" "on_branch=1" "real rail: the stub runner committed on
 assert_contains "$R_GOOD" "first_wt_kept=yes" "real rail: the first attempt's worktree is still held"
 T="$(mk_tree mutI3)"
 sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
-  's/const fallbackBranch = `${input.branch}-cloudfb`;/const fallbackBranch = input.branch;/'
+  's/^        const fallbackBranch = .*$/        const fallbackBranch = input.branch;/'
 R_MUT="$(real_case "$T" mutI3)"
 case "$R_MUT" in *"status=committed"*) fail "mutant I3 (same branch) must collide with the kept worktree" ;; esac
 
@@ -457,5 +493,174 @@ sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$T/scripts/dispatch-hetero.s
 worker_noise "$T/scripts" noisemut
 [ "$WN_CLASS" = "endpoint_unreachable" ] || fail "mutant C3 (scan the whole log) must misclassify the worker output as endpoint_unreachable (got $WN_CLASS)"
 
+
+# --- 8. repair rounds after a retreat: the second round must not reuse the held -cloudfb branch ------
+# Round 1: endpoint dies -> retreat commits on <branch>-cloudfb. The reviewer asks for a fix; round 2
+# tries the endpoint again (by design), it dies again, and the second retreat must pick a branch git
+# accepts and keep the repair on top of round 1's work.
+LOOP_REPO="$TEST_TMP/loop-repo"
+mkdir -p "$LOOP_REPO/.claude" "$LOOP_REPO/src"
+git -C "$LOOP_REPO" init -q -b main
+git -C "$LOOP_REPO" config user.email "loop@example.invalid"
+git -C "$LOOP_REPO" config user.name "Loop Test"
+write_mission_governance "$LOOP_REPO/.claude/owner-kernel-governance.json" shadow
+printf 'seed\n' > "$LOOP_REPO/src/out.txt"
+printf '.autopilot/\n' > "$LOOP_REPO/.gitignore"
+git -C "$LOOP_REPO" add .
+git -C "$LOOP_REPO" commit -qm base
+cat > "$TEST_TMP/loop-suite.js" <<'NODE'
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [root, repo, promptFile, tmp, mode] = process.argv.slice(2);
+const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8' }).trim();
+const base = git('rev-parse', 'HEAD');
+const common = fs.realpathSync(path.resolve(repo, git('rev-parse', '--git-common-dir')));
+const arg = (a, f) => a[a.indexOf(f) + 1];
+const seats = [{ role: 'qc', runner: 'cc-shim', model: 'claude-opus-4-6', effort: 'high', endpoint: null, family: 'anthropic' }];
+const roster = {
+  reviewer_engine: seats[0].model, reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_qualified: true,
+  implementer_engine: 'GLM-5.3', implementer_effort: 'high', implementer_runner: 'cc-shim',
+  implementer_endpoint: 'gpu1', implementer_family: 'zhipu', on_engine_unavailable: 'cloud-fallback',
+  cloud_fallback_rung: { engine: 'gpt-5.6-sol', effort: 'high', runner: 'codex' },
+  loop_max_rounds: 3, loop_convergence_verdict: 'SHIP-AS-IS', min_panel_size: 1, in_rail_review: 'single',
+  qc_panel_seats_complete: true, qc_panel_seats: seats, override_admitted_seats: ['qc_panel[0]'],
+};
+function finding(id) {
+  return {
+    id, claim: 'src/out.txt needs a repair', severity: '\u{1F7E0}', source: 'product_review',
+    evidence: { digest: 'e'.repeat(64), classification: 'actionable', kind: 'trace',
+      trace_chain: ['contract.vertical_acceptance[0]'], confirmed_by: 'operator' },
+    disposition: { disposition: 'must-fix-now', acceptance_id: 'vertical_acceptance[0]', deferral_harm: 'unfixed acceptance remains' },
+    adjudication_authority: { authority: 'depth-0', actor_id: 'operator', review_digest: 'd'.repeat(64) },
+  };
+}
+// Real commits so the review range can be checked: c1 = round 1 retreat, c2 = round 2 retreat.
+const wt = path.join(tmp, `loop-${mode}-wt`);
+git('worktree', 'add', '-q', '-b', `feat/loop-${mode}-seed`, wt, base);
+const commitIn = (n) => {
+  fs.writeFileSync(path.join(wt, 'src', 'out.txt'), `${mode}-${n}\n`);
+  execFileSync('git', ['-C', wt, 'add', 'src/out.txt']);
+  execFileSync('git', ['-C', wt, 'commit', '-qm', `${mode}-${n}`]);
+  return execFileSync('git', ['-C', wt, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+};
+const c1 = commitIn(1);
+const c2 = commitIn(2);
+const tree = (c) => execFileSync('git', ['-C', wt, 'rev-parse', `${c}^{tree}`], { encoding: 'utf8' }).trim();
+const branch = `feat/loop-${mode}`;
+const calls = [];
+const reviewCalls = [];
+let committed = 0;
+const deps = {
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:04.000Z',
+  implementationDispatcher(args) {
+    const b = arg(args, '--branch');
+    const onEndpoint = args.includes('--endpoint');
+    calls.push({ branch: b, endpoint: onEndpoint, base: arg(args, '--base'), reuse: args.includes('--reuse-worktree') });
+    if (onEndpoint) {
+      return { error: null, status: 1, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { status: 'engine_unavailable', runner: 'cc-shim', model: 'GLM-5.3', commit: null, base: arg(args, '--base'),
+          branch: b, files_changed: 0, insertions: 0, deletions: 0, worktree: wt, agent_log: null,
+          error: 'engine unavailable (endpoint_unreachable): worker exited non-zero; worktree kept' } };
+    }
+    committed += 1;
+    const commit = committed === 1 ? c1 : c2;
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: { status: 'committed', runner: 'codex', model: 'gpt-5.6-sol', branch: b, base: arg(args, '--base'),
+        commit, tree_sha: tree(commit), files_changed: 1, insertions: 1, deletions: 0, worktree: wt,
+        worktree_reused: false, agent_log: '/tmp/impl-log', error: null, contained: true, containment: 'plain',
+        dispatcher_called: true, model_calls: 1, go: 'GO', boundary: 'ok', acceptance: 'ok' } };
+  },
+  reviewDispatcher(args) {
+    reviewCalls.push(args);
+    const fix = reviewCalls.length === 1;
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+      result: { runner: 'cc-shim', model: 'claude-opus-4-6', status: 'reviewed',
+        verdict: fix ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS',
+        findings: fix ? '\u{1F7E0} [loop-1] src/out.txt needs a repair' : '', raw_log: '/tmp/review-log', error: null } };
+  },
+  diffProvider() { return promptFile; },
+};
+const loopInput = { legacyUnmanaged: true, noVerifyFirst: true };
+const engine = new AutopilotEngine(deps);
+const out = engine.runImplementationReviewLoop({
+  promptFile, branch, base, roster, extraImplementationArgs: ['--endpoint', 'gpu1'], ...loopInput,
+});
+const names = calls.map((c) => `${c.branch}${c.endpoint ? '@ep' : '@cloud'}`);
+console.log(`${mode}_status=${out.status} rounds=${out.rounds}`);
+console.log(`${mode}_reason=${String(out.reason || '').slice(0, 300)}`);
+console.log(`${mode}_calls=${names.join(',')}`);
+const retreats = calls.filter((c) => !c.endpoint).map((c) => c.branch);
+console.log(`${mode}_distinct_retreat_branches=${new Set(retreats).size === retreats.length && retreats.length === 2}`);
+const second = calls.filter((c) => !c.endpoint)[1];
+console.log(`${mode}_round2_base_is_round1_tip=${Boolean(second) && second.base === c1}`);
+const lastReview = reviewCalls[reviewCalls.length - 1] || [];
+console.log(`${mode}_review_count=${reviewCalls.length} last_review_branch=${lastReview.includes('--branch') ? arg(lastReview, '--branch') : 'n/a'}`);
+NODE
+loop_case() {
+  (cd "$LOOP_REPO" && ENGINE_CAPABILITY_DIR="$TEST_TMP/loop-cap-$3" node "$TEST_TMP/loop-suite.js" "$1" "$LOOP_REPO" "$PROMPT" "$TEST_TMP" "$2" 2>&1 < /dev/null)
+}
+mkdir -p "$TEST_TMP/loop-cap-legacy" "$TEST_TMP/loop-cap-mutm"
+L_LEG="$(loop_case "$REPO_ROOT" legacy legacy)"
+assert_contains "$L_LEG" "legacy_status=converged" "legacy loop: retreat, repair round, second retreat -> converged"
+assert_contains "$L_LEG" "legacy_distinct_retreat_branches=true" "legacy loop: the two retreats use different branches"
+assert_contains "$L_LEG" "legacy_round2_base_is_round1_tip=true" "legacy loop: the second retreat is cut from round 1's retreat tip, so the repair sits on round 1's work"
+
+# Unit level: a round-2 retreat whose input branch is already a -cloudfb branch gets a round-suffixed one.
+cat > "$TEST_TMP/ident2-case.js" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [root, capDir] = process.argv.slice(2);
+const prompt = path.join(capDir, 'prompt.txt');
+fs.writeFileSync(prompt, 'implementer prompt');
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const calls = [];
+const base = '1111111111111111111111111111111111111111';
+const engine = new AutopilotEngine({
+  clock: () => 1782864000000,
+  implementationDispatcher(args) {
+    calls.push(args);
+    const first = calls.length === 1;
+    const result = first
+      ? { status: 'engine_unavailable', runner: 'cc-shim', model: 'GLM-5.3', commit: null, base, branch: 'impl-branch-cloudfb',
+          files_changed: 0, insertions: 0, deletions: 0, worktree: '/tmp/wt', agent_log: '/tmp/l',
+          error: 'engine unavailable (endpoint_unreachable): worker exited non-zero; worktree kept' }
+      : { status: 'committed', runner: 'codex', model: 'gpt-5.6-sol', branch: args[args.indexOf('--branch') + 1], base,
+          commit: '2222222222222222222222222222222222222222', files_changed: 1, insertions: 1, deletions: 0,
+          worktree: '/tmp/wt2', agent_log: '/tmp/l', error: null };
+    return { error: null, status: first ? 1 : 0, signal: null, stdout: '', stderr: '', parseError: null, result };
+  },
+});
+const out = engine.implementTask({
+  promptFile: prompt, branch: 'impl-branch-cloudfb', base, runId: 'run-id-1', implementationRound: 2,
+  ledger: path.join(capDir, 'ledger.jsonl'), extraImplementationArgs: ['--endpoint', 'gpu1'],
+  roster: {
+    implementer_engine: 'GLM-5.3', implementer_effort: 'high', implementer_runner: 'cc-shim',
+    implementer_endpoint: 'gpu1', implementer_family: 'zhipu', on_engine_unavailable: 'cloud-fallback',
+    cross_family_required: true, cross_family_satisfied: true,
+    qc_panel: [{ model: 'gpt-5.6-sol', family: 'openai' }],
+    cloud_fallback_rung: { engine: 'gpt-5.6-sol', effort: 'high', runner: 'codex' },
+  },
+});
+const arg = (a, f) => a[a.indexOf(f) + 1];
+console.log(`round2_branch=${arg(calls[1] || [], '--branch')} status=${out.status}`);
+console.log(`round2_ids=${arg(calls[1] || [], '--run-id')}|${arg(calls[1] || [], '--stage')}`);
+NODE
+ident2_case() { local cap="$TEST_TMP/i2cap-$2"; mkdir -p "$cap"; ENGINE_CAPABILITY_DIR="$cap" node "$TEST_TMP/ident2-case.js" "$1" "$cap" 2>&1 < /dev/null; }
+I2_GOOD="$(ident2_case "$REPO_ROOT" good)"
+assert_contains "$I2_GOOD" "round2_branch=impl-branch-cloudfb-r2 status=committed" "round-2 retreat: round-suffixed branch, original name stripped of the held -cloudfb"
+assert_contains "$I2_GOOD" "round2_ids=run-id-1-cloudfb-r2|implement-cloudfb-r2" "round-2 retreat: its own run id and stage"
+T="$(mk_tree mutL2)"
+sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
+  "s/const fbSuffix = fbRound > 1 ? \`-cloudfb-r\${fbRound}\` : '-cloudfb';/const fbSuffix = '-cloudfb';/"
+case "$(ident2_case "$T" mutL2)" in *"impl-branch-cloudfb-r2"*) fail "mutant L2 (no round in the retreat name) must reuse the held branch name" ;; esac
+T="$(mk_tree mutL3)"
+sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
+  's/replace(\/-cloudfb(-r\\d+)?\$\/, ..)/replace(\/-nomatch$\/, "")/'
+case "$(ident2_case "$T" mutL3)" in *"round2_branch=impl-branch-cloudfb-r2 "*) fail "mutant L3 (no strip) must stack -cloudfb suffixes" ;; esac
 
 finalize_test

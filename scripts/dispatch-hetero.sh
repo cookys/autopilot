@@ -4406,7 +4406,15 @@ NODE
   if printf '%s' "$_txt" | grep -Eq '(api error|http|status)[: =(]{0,4}(429|503)([^0-9]|$)|too many requests|service unavailable|retry-after'; then
     printf 'endpoint_busy'; return 0
   fi
-  if printf '%s' "$_txt" | grep -Eq 'econnrefused|connection refused|econnreset|connection reset|enotfound|getaddrinfo|name resolution|etimedout|timed out|read timeout|connect timeout|unable to connect|fetch failed|(api error|http|status)[: =(]{0,4}5[0-9][0-9]([^0-9]|$)'; then
+  if printf '%s' "$_txt" | grep -Eq 'econnrefused|connection refused|econnreset|connection reset|enotfound|getaddrinfo|name resolution|etimedout|timed out|read timeout|connect timeout|unable to connect|fetch failed|connection error|(api error|http|status)[: =(]{0,4}5[0-9][0-9]([^0-9]|$)'; then
+    printf 'endpoint_unreachable'; return 0
+  fi
+  # The structured source confirmed an API error (`_txt` is only ever filled from one), it names no
+  # 4xx status and is not auth/quota (returned above): the request never got a usable answer from
+  # the endpoint, so it is unreachable. This catches the CLI's bare "API Error: Connection error."
+  # and its other transport wordings. A 4xx (bad request, not found, ...) stays unclassified.
+  case "${PROVIDER_ERROR_STATUS:-}" in 4[0-9][0-9]) return 0 ;; esac
+  if [ -n "$_txt" ] && ! printf '%s' "$_txt" | grep -Eq '(api error|http|status)[: =(]{0,4}4[0-9][0-9]([^0-9]|$)'; then
     printf 'endpoint_unreachable'; return 0
   fi
   return 0

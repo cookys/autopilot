@@ -30,6 +30,14 @@ Scope: applies to a session that dispatched or coordinates other members. A stuc
 2. Unblock: answer the prompt or question, free the resource, or start the ready next item. If an engine switch is the fix, route it through `scripts/resolve-dispatch.sh`.
 3. Reply to the member, then record the finding; escalate to the lead's own lead once, with a recommendation, only when the lead cannot unblock it.
 
+## Pick the executor
+
+The lead keeps three things: judgment, checking the key facts, and irreversible actions. Mechanical or read-only work goes to a light- or standard-tier executor (`hands`, or `fast-worker` / `implementer`) or a cheaper engine seat; do it yourself only when it is one or two tool calls. Spread the load by what quota each account and engine has left. The tier names the role; the model comes from `scripts/resolve-dispatch.sh` and `references/model-routing.md`, never from this file.
+
+- grep or file-by-file comparison: light tier (`hands` role).
+- Edit files to a template, run a fixed check: standard tier (`fast-worker` / `implementer` role).
+- Judge a result, merge, push: the lead.
+
 ## Work orders
 
 - Every dispatch lists N, N+1 and N+2 with each one's entry condition and an evidence time, so the chain runs without a round trip.

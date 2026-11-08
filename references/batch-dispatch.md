@@ -147,11 +147,16 @@ Each round's dispatch note (the lead's own record, one row per unit) carries the
 |--------|---------|
 | unit id / scope / base | as in the units file above |
 | evidence time | the **latest** moment the lead looks back to confirm the work is still moving. It is not a start time and not a delivery time: inputs ready means start now, done means hand over now. |
+| Engine | `tier (resolved by resolve-dispatch)`: light or standard, see below. Never a model name. The brief header (`Engine:`) records the resolved model name; this column records the tier. |
 | N+1, N+2 and entry condition | the next two units behind this one, and what must be true for each to enter (inputs ready, preflight passed, inside the go scope). |
 
 - When a unit finishes and N+1 is already ready and inside the go scope, start it at once and report one line. Finished with a ready next unit left idle is a **stall**.
 - A fixed clock time is allowed only for a real external constraint, and the row says which one: `（外部限制：...）` or `reason:` on the same or the next line. `scripts/check-fixed-times.js` fails a template that writes one without it.
 - The lead goes back and checks on its own when the evidence time passes or a unit sits idle; it does not wait for a notification. While a hand is running, the longest gap between checks is 30 minutes (PM rule).
+
+### Pick the executor (Engine column)
+
+The **Engine** column holds a tier, resolved to a model by `scripts/resolve-dispatch.sh` and `references/model-routing.md`. Default for mechanical or read-only work: light tier (`hands` role) for grep and file-by-file comparison, standard tier (`fast-worker` / `implementer` role) for editing to a template or running a fixed check; a cheaper engine seat also qualifies. Under claude-native, light and standard resolve to haiku and sonnet; on another engine seat they resolve to that seat's models. The lead keeps judgment, checking the key facts and irreversible actions (merge, push), and does a task itself only when it is one or two tool calls. Spread units across accounts and engines by the quota each has left (operator 2026-11-08).
 
 ## Scope cut (deliberately NOT built)
 

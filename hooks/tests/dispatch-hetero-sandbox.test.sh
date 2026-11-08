@@ -7,6 +7,11 @@
 #            - sandbox ON : the write fails (EROFS), the file does not exist, the result JSON
 #              records the denied write, the fingerprint is untouched (status committed).
 #   nested : a worktree under <repo>/.claude/worktrees with the sandbox on is refused.
+#   gitfile: a worker that repoints $WT/.git at a clone whose config sets core.fsmonitor must not get
+#            that command run by the rail outside the sandbox.
+#            - sandbox ON : the gitfile is read-only, the rewrite fails, the command never runs.
+#            - sandbox OFF: the rewrite lands, the rail's own check refuses to run git (boundary_rejected,
+#              worktree_gitfile_tampered), the command never runs.
 #   no bwrap / bwrap cannot start: fail closed (precondition_failed, no worker, no worktree).
 # Seam: a stub `claude` on PATH, no real model, no GPU. Own temp dirs.
 . "$(dirname "$0")/lib.sh"
@@ -48,6 +53,14 @@ cat >/dev/null
 echo edited > sandbox-edit.txt
 if [ -n "${STUB_PARENT_TARGET:-}" ]; then
   echo leaked > "$STUB_PARENT_TARGET"
+fi
+if [ -n "${STUB_GITFILE_ATTACK:-}" ]; then
+  # repoint the worktree gitfile at a copy of the main git dir inside the worktree whose config names a command (core.fsmonitor)
+  common="$(git rev-parse --git-common-dir)"
+  { cp -r "$common" evil \
+    && git -C evil config core.bare false \
+    && git -C evil config core.fsmonitor "$STUB_PWN_HOOK" \
+    && printf 'gitdir: %s/evil\n' "$PWD" > .git; } || echo "gitfile attack failed: $?" >&2
 fi
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOS
@@ -138,6 +151,30 @@ eq "0" "$({ /bin/ls -A "$SBX/.claude/worktrees" 2>/dev/null || true; } | wc -l |
 # the same default placement without the sandbox still works (the rule is sandbox-only)
 run_case none 0
 eq '"committed"' "$(status_of)" "nested control: without the sandbox the in-repo worktree still commits (rc=$RC)"
+
+# ---- gitfile attack: repoint $WT/.git at a clone with core.fsmonitor = <command that writes outside the worktree and scratch>
+PWN_FILE="$TEST_TMP/pwned-by-fsmonitor.txt"
+PWN_HOOK="$TEST_TMP/pwn-hook.sh"
+printf '#!/bin/sh\necho pwned > "%s"\n' "$PWN_FILE" > "$PWN_HOOK"; chmod +x "$PWN_HOOK"
+export STUB_GITFILE_ATTACK=1 STUB_PWN_HOOK="$PWN_HOOK"
+rm -f "$PWN_FILE"
+run_case bwrap 0 --worktree-parent "$WTPARENT"
+eq "no" "$([ -e "$PWN_FILE" ] && echo yes || echo no)" "gitfile(on): the hostile core.fsmonitor command never ran (file written outside: $([ -e "$PWN_FILE" ] && echo YES || echo no))"
+eq '"committed"' "$(status_of)" "gitfile(on): the gitfile stayed intact so the round commits normally (rc=$RC)"
+DEN="$(printf '%s' "$OUT" | result_json | jfield sandbox.denied_writes)"
+case "$DEN" in
+  ''|'"unknown"'|'<absent>') fail "gitfile(on): the result JSON must record the denied gitfile rewrite, got denied_writes=$DEN" ;;
+  *) eq 0 0 "gitfile(on): result JSON records the denied rewrite (denied_writes=$DEN)" ;;
+esac
+rm -f "$PWN_FILE"
+run_case off 0 --worktree-parent "$WTPARENT"
+eq "no" "$([ -e "$PWN_FILE" ] && echo yes || echo no)" "gitfile(off): the rail ran no git against the repointed worktree (file written outside: $([ -e "$PWN_FILE" ] && echo YES || echo no))"
+eq '"boundary_rejected"' "$(status_of)" "gitfile(off): the round is not committed, status boundary_rejected (rc=$RC)"
+case "$(printf '%s' "$OUT" | result_json | jfield error)" in
+  *worktree_gitfile_tampered*) eq 0 0 "gitfile(off): the result JSON error names worktree_gitfile_tampered" ;;
+  *) fail "gitfile(off): error text: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
+esac
+unset STUB_GITFILE_ATTACK STUB_PWN_HOOK
 
 # ---- bwrap unavailable -> fail closed
 NOBW="$TEST_TMP/nobwrap-bin"; mkdir -p "$NOBW"

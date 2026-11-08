@@ -447,7 +447,7 @@ function resolveBinaryPath(binaryName, runner) {
       // next
     }
   }
-  const home = process.env.HOME || '';
+  const home = process.env.AUTOPILOT_RUNNER_HOME_FALLBACK === 'off' ? '' : (process.env.HOME || '');
   // Same per-runner table the version probe uses (codex/agy under ~/.local/bin, grok under
   // ~/.grok/bin, kimi under ~/.kimi-code/bin): PATH was searched first, so it still wins.
   for (const rel of (RUNNER_BINARY_FALLBACK_PATHS[runner] || [])) {

@@ -257,6 +257,10 @@ export ENGINE_CAPABILITY_DIR="$HOOK_ENGINE_CAPABILITY_DIR"
 export ENGINE_SCORECARD_DIR="$HOOK_ENGINE_SCORECARD_DIR"
 # Hook tests never start the SessionStart price refresh (it would reach the network).
 export AUTOPILOT_PRICES_FETCH=0
+# A test that removes a runner from PATH on purpose must not fall back to the real ~/.local/bin/codex (or
+# agy, grok, kimi) and spend money: the HOME lookup of scripts/lib/runner-fallback-bin.sh and runner-binary.js
+# is off here. Only runner-fallback-bin.test.sh turns it on, with a fixture HOME.
+export AUTOPILOT_RUNNER_HOME_FALLBACK=off
 # ...and never read the operator's real price cache: it would make ladder order depend on the host.
 export AUTOPILOT_PRICES_CACHE_DIR="$TEST_TMP/prices-cache"
 

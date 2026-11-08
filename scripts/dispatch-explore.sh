@@ -96,7 +96,8 @@ done
 # would emit invalid JSON a caller's parser chokes on — decorrelated review, gpt-5.5).
 # shellcheck source=lib/json-emit.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/json-emit.sh"
-. "$_EXPLORE_SELF_DIR/lib/runner-fallback-bin.sh"
+# shellcheck source=lib/runner-fallback-bin.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/runner-fallback-bin.sh"
 # shellcheck source=lib/agy-timeout.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-timeout.sh"
 

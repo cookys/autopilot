@@ -13,6 +13,9 @@
 # dispatch-author.sh, and the matching case goes red.
 # Hermetic: HOME is an empty fixture home, the runners are shell stubs, PATH holds no real runner.
 . "$(dirname "$0")/lib.sh"
+# lib.sh exports AUTOPILOT_RUNNER_HOME_FALLBACK=off for every suite so a runner removed from PATH is never
+# found at the real home. This is the one suite that tests the HOME lookup, always against a fixture HOME.
+export AUTOPILOT_RUNNER_HOME_FALLBACK=on
 
 LIBSH="$REPO_ROOT/scripts/lib/runner-fallback-bin.sh"
 LIBJS="$REPO_ROOT/scripts/lib/runner-binary.js"
@@ -71,15 +74,6 @@ assert_eq "$FX/home/.local/bin/codex" "$(HOME="$FX/home" PATH="$BASE_PATH" node 
 assert_eq "$FX/sentinel/codex" "$(HOME="$FX/home" PATH="$FX/sentinel:$BASE_PATH" node -e "$JS_RESOLVE" "$LIBJS" codex)" "(c) a sentinel dir first on PATH wins over the fallback"
 
 # (d) topology installed-runner detection uses the same table
-write_row() {
-  node - "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$1" "$2" <<'NODE'
-const fs = require('fs');
-const [file, engine, runner] = process.argv.slice(2);
-fs.appendFileSync(file, JSON.stringify({ engine, runner, family: 'x', role: 'reviewer', model_version: '1.0',
-  version_source: 'runtime', corpus_version: '1.0', harness_version: '1.0', runner_version: '1.0.0',
-  prompt_config_hash: '0'.repeat(64), event_id: 1, effort: 'high', status: 'qualified' }) + '\n');
-NODE
-}
 TOPO_OUT="$TEST_TMP/topo.json"
 HOME="$FX/home" PATH="$BASE_PATH" node "$REPO_ROOT/scripts/resolve-dispatch-topology.js" --json --role reviewer --out "$TOPO_OUT" >/dev/null 2>&1
 INSTALLED="$(node -e 'const t=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); const i=t.runners_installed||{}; process.stdout.write(["codex","agy","grok"].map(r=>r+":"+(i[r]?"yes":"no")).join(","));' "$TOPO_OUT" 2>/dev/null)"
@@ -129,6 +123,7 @@ OUT_NC1="$(run_author "$M_CALL" "$FX/home" "$BASE_PATH")"
 assert_contains "$OUT_NC1" "codex binary not found" "(NC1) without the fallback call dispatch-author.sh refuses again"
 
 M_KIMI="$(mkmut nokimipath dispatch-author.sh 's|^  case "$KIMI_BIN" in /\*) PATH="$PATH:$(dirname "$KIMI_BIN")" ;; esac$|  :|')"
+[ -n "$M_KIMI" ] || fail "(NC4) mutant dispatch-author.sh was not built"
 : > "$CALLS"
 HOME="$FX/home" PATH="$BASE_PATH" DISPATCH_QUIET=1 DISPATCH_DETACH=0 bash "$M_KIMI" --runner kimi --model kimi-code/k3.1-pro --effort high \
   --prompt-file "$PROMPT" --timeout 20s </dev/null >/dev/null 2>&1
@@ -139,5 +134,33 @@ assert_eq "null" "$(HOME="$FX/home" PATH="$BASE_PATH" node -e "const m = require
 
 M_SH="$(mkmut nosh lib/runner-fallback-bin.sh 's|    codex) rels=".local/bin/codex" ;;|    codex) rels="" ;;|')"
 assert_eq "codex" "$(HOME="$FX/home" PATH="$BASE_PATH" bash -c '. "$1"; runner_bin_fallback codex' _ "$M_SH")" "(NC3) without the codex table entry the bash resolver keeps the bare name"
+
+# (f) the test lib turns the HOME lookup off: with a fake codex only under a fixture HOME and none on PATH,
+# nothing resolves it. A suite that drops a runner from PATH on purpose must never reach the real one.
+PROBE_LIB="$FX/probe-lib.sh"
+cat > "$PROBE_LIB" <<'PROBE'
+#!/usr/bin/env bash
+# usage: probe-lib.sh <tree root holding hooks/tests/lib.sh> <fixture home> <path> <scripts/lib dir>
+. "$1/hooks/tests/lib.sh"
+export HOME="$2" PATH="$3"
+. "$4/runner-fallback-bin.sh"
+printf 'bash=%s\n' "$(runner_bin_fallback codex)"
+printf 'js=%s\n' "$(node -e "const m=require(process.argv[1]);process.stdout.write(String(m.resolveBinaryPath('codex','codex')))" "$4/runner-binary.js")"
+PROBE
+OUT_F="$(env -u AUTOPILOT_RUNNER_HOME_FALLBACK bash "$PROBE_LIB" "$REPO_ROOT" "$FX/home" "$BASE_PATH" "$REPO_ROOT/scripts/lib" </dev/null)"
+assert_contains "$OUT_F" "bash=codex" "(f) under the test lib the bash fallback does not use the fixture HOME/.local/bin/codex"
+assert_contains "$OUT_F" "js=null" "(f) under the test lib the JS resolver does not use it either"
+assert_eq "codex" "$(AUTOPILOT_RUNNER_HOME_FALLBACK=off run_fb "$BASE_PATH" codex)" "(f) AUTOPILOT_RUNNER_HOME_FALLBACK=off keeps the bare name even with the fixture file present"
+assert_eq "null" "$(AUTOPILOT_RUNNER_HOME_FALLBACK=off HOME="$FX/home" PATH="$BASE_PATH" node -e "$JS_RESOLVE" "$LIBJS" codex)" "(f) =off makes the JS resolver find nothing"
+
+# (NC5) default flipped to on in a copy of lib.sh: the fixture codex is found again, so (f) would go red.
+MUT_LIBTREE="$TEST_TMP/mut-libdefault"
+mkdir -p "$MUT_LIBTREE/hooks/tests"
+ln -s "$REPO_ROOT/scripts" "$MUT_LIBTREE/scripts"
+ln -s "$REPO_ROOT/src" "$MUT_LIBTREE/src"
+sed_mutant "$REPO_ROOT/hooks/tests/lib.sh" "$MUT_LIBTREE/hooks/tests/lib.sh" 's|^export AUTOPILOT_RUNNER_HOME_FALLBACK=off$|export AUTOPILOT_RUNNER_HOME_FALLBACK=on|' || fail "(NC5) lib.sh mutant was not built"
+OUT_NC5="$(env -u AUTOPILOT_RUNNER_HOME_FALLBACK bash "$PROBE_LIB" "$MUT_LIBTREE" "$FX/home" "$BASE_PATH" "$REPO_ROOT/scripts/lib" </dev/null)"
+assert_contains "$OUT_NC5" "bash=$FX/home/.local/bin/codex" "(NC5) with the lib default flipped to on the bash fallback reaches the fixture codex"
+assert_contains "$OUT_NC5" "js=$FX/home/.local/bin/codex" "(NC5) and so does the JS resolver"
 
 finalize_test

@@ -299,7 +299,10 @@ assert_eq "codex" "$NORMALIZED_RUNNER" "Case 7: codex-cli normalized to codex in
 
 # -----------------------------------------------------------------------------
 # Case 8: runner kimi is eligible for reviewer_ladder AND plan_review_panel (PM go 2026-11-08:
-# dispatch-author.sh drives kimi, and the Kimi 3.1 Pro seat must be able to join the panel)
+# dispatch-author.sh drives kimi, and the Kimi 3.1 Pro seat must be able to join the panel).
+# This overturns the older Case 8, which pinned kimi OUT of the panel: the operator named kimi as a usable
+# review family on 2026-11-08 (PM ruling, fleet 01M6W8F08E). The premise is unchanged: with no qualified
+# reviewer row for a kimi seat nothing enters the panel (see the Case 8 and 8b negative controls).
 # -----------------------------------------------------------------------------
 rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl" "$TOPOLOGY_OUT"
 # Create fake kimi binary
@@ -348,7 +351,7 @@ NODE
 assert_eq "0" "$KIMI_IN_PANEL_NC" "Case 8 NC: without kimi in PANEL_ELIGIBLE_RUNNERS the panel is empty again"
 
 # -----------------------------------------------------------------------------
-# Case 8b: GLM-5.3, MiniMax-M3.1-Flash and kimi-code/k3.1-pro (PM 01M6W6QAVQ part A) all reach BOTH
+# Case 8b (same operator decision as Case 8, 2026-11-08; no qualified row means no panel seat): GLM-5.3, MiniMax-M3.1-Flash and kimi-code/k3.1-pro (PM 01M6W6QAVQ part A) all reach BOTH
 # reviewer_ladder and plan_review_panel when their reviewer rows are qualified: ids verbatim, runner
 # cc-shim for the first two (endpoints glm and minimax from the env), runner kimi for the third.
 # -----------------------------------------------------------------------------

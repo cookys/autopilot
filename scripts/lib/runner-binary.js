@@ -192,7 +192,8 @@ function resolveBinaryPath(binary, runner) {
       if (fs.statSync(candidate).isFile()) return candidate;
     } catch { /* keep scanning */ }
   }
-  const home = process.env.HOME || '';
+  // AUTOPILOT_RUNNER_HOME_FALLBACK=off: PATH only (tests must never reach a real runner under HOME).
+  const home = process.env.AUTOPILOT_RUNNER_HOME_FALLBACK === 'off' ? '' : (process.env.HOME || '');
   for (const rel of (RUNNER_BINARY_FALLBACK_PATHS[runner] || [])) {
     if (!home) break;
     const candidate = path.join(home, rel);

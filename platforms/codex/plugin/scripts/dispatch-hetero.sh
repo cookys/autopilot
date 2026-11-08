@@ -52,6 +52,23 @@
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
 #                                              #   into ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env
 #                                              #   still used when omitted (byte-identical)
+#       [--sandbox off|bwrap]                  # cc-shim only (any other runner is refused). bwrap: the worker
+#                                              #   runs inside bubblewrap with `/` read-only, so a write outside
+#                                              #   the worker's own directories fails BEFORE it lands (EROFS) instead of
+#                                              #   being found afterwards by the main-checkout fingerprint (which still
+#                                              #   runs, second layer). Writable, and nothing else: (1) the worktree,
+#                                              #   (2) this dispatch's own scratch dir (TMPDIR, the throwaway
+#                                              #   CLAUDE_CONFIG_DIR, the result envelope; made and removed per run),
+#                                              #   (3) /dev and /proc as bwrap's minimal device/proc mounts. The real
+#                                              #   ~/.claude and ~/.claude.json are masked, never writable. Network as
+#                                              #   before. Fails closed: no bwrap, bwrap cannot start, or the worktree
+#                                              #   sits inside any repo's working tree => precondition_failed, never a
+#                                              #   silent run without the sandbox. Result JSON + manifest carry
+#                                              #   `sandbox: {mode, writable, denied_writes}`. Default off.
+#                                              #   references/hetero-dispatch.md § Write sandbox.
+#       [--worktree-parent <abs dir>]          # place the new worktree under this directory instead of
+#                                              #   <main checkout>/.claude/worktrees (required with --sandbox bwrap
+#                                              #   unless --reuse-worktree: the default place is inside the repo)
 #       [--context-window off|warn|block]      # pre-dispatch context-window gate (default:
 #                                              #   block; also AUTOPILOT_CONTEXT_WINDOW_GATE).
 #                                              #   Over budget ⇒ fail closed BEFORE the runner
@@ -328,6 +345,11 @@ SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
+SANDBOX="off"          # --sandbox off|bwrap (cc-shim only)
+SANDBOX_TMP=""         # bwrap: this dispatch's own writable scratch dir (made by the cc-shim arm, removed after the worker)
+SANDBOX_ARGV=()        # bwrap: the argv prefix run_worker puts in front of the worker
+SANDBOX_DENIED="unknown"  # bwrap: EROFS lines seen in the worker output, else unknown
+WORKTREE_PARENT=""     # --worktree-parent: directory the new worktree is created under
 PROVIDER_ERROR_RUNNER=""
 PROVIDER_ERROR_STATUS=""
 PROVIDER_ERROR_FIELD=""
@@ -506,6 +528,7 @@ cleanup() {
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
   [ -n "${CNATIVE_CONFIG_DIR:-}" ] && rm -rf "$CNATIVE_CONFIG_DIR"
+  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
@@ -994,7 +1017,9 @@ NODE
   [ -n "${PROBE_JSON:-}" ] && probe_fields=", \"probe\": $PROBE_JSON"
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s }\n' \
+  local sandbox_fields=""
+  [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json)"
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -1005,7 +1030,7 @@ NODE
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields"
 }
 
 check_session_mode_gate() {
@@ -1722,6 +1747,84 @@ die_precondition() {
   exit 2
 }
 
+# --- write sandbox (--sandbox bwrap; cc-shim only) -------------------------------------------
+# Why: a local worker wrote outside its worktree three times (into the main checkout) and the
+# main-checkout fingerprint only sees that AFTER the write. bwrap makes `/` read-only for the
+# worker so the write fails first; the fingerprint stays as the second layer.
+# Writable inside, and nothing else (this list is mirrored in references/hetero-dispatch.md):
+#   1. the worktree ($WT)
+#   2. this dispatch's own scratch dir ($SANDBOX_TMP: TMPDIR, the throwaway CLAUDE_CONFIG_DIR,
+#      XDG_CACHE_HOME, the result envelope). Made per run, removed per run. Never the real
+#      ~/.claude: that directory (and ~/.claude.json) is masked read-only.
+#   3. /dev and /proc, bwrap's minimal device and proc mounts.
+# The worktree's git admin dir lives under the main checkout and stays read-only: the worker
+# is edit-only and the rail (outside the sandbox) does the commit. Network is untouched.
+SANDBOX_PREFLIGHT_ERROR=""
+SANDBOX_WT_PATH=""     # the worktree path kept for the result/manifest (WT is cleared when the worktree is reaped)
+SANDBOX_TMP_PATH=""    # the scratch dir path kept for the result/manifest after SANDBOX_TMP is removed
+sandbox_preflight() {
+  SANDBOX_PREFLIGHT_ERROR=""
+  if ! command -v bwrap >/dev/null 2>&1; then
+    SANDBOX_PREFLIGHT_ERROR="--sandbox bwrap requested but bwrap is not on PATH; refusing to run without the sandbox (no silent downgrade)"
+    return 1
+  fi
+  if ! bwrap --ro-bind / / --dev /dev --proc /proc true >/dev/null 2>&1; then
+    SANDBOX_PREFLIGHT_ERROR="--sandbox bwrap requested but bwrap cannot start here (user namespaces blocked?); refusing to run without the sandbox (no silent downgrade)"
+    return 1
+  fi
+  return 0
+}
+# sandbox_nested_repo <path>: prints the nearest PROPER ancestor directory that holds a .git entry
+# (a repo's working tree, main checkout or linked worktree alike) and returns 0; returns 1 when
+# no ancestor is inside any repo. Strict on purpose: the independent clone the sandbox wants is
+# a worktree that sits OUTSIDE every repo's working tree.
+sandbox_nested_repo() {
+  local d
+  d="$(dirname "$1")"
+  while [ -n "$d" ]; do
+    if [ -e "$d/.git" ]; then printf '%s' "$d"; return 0; fi
+    [ "$d" = "/" ] && break
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+# sandbox_setup: make the per-dispatch scratch dir and the bwrap argv prefix (SANDBOX_ARGV).
+sandbox_setup() {
+  SANDBOX_TMP="$(mktemp -d -t dispatch-hetero-sandbox-XXXXXX)" || return 1
+  SANDBOX_TMP="$(realpath "$SANDBOX_TMP")" || return 1
+  SANDBOX_TMP_PATH="$SANDBOX_TMP"
+  SANDBOX_WT_PATH="$WT"
+  mkdir -p "$SANDBOX_TMP/tmp" "$SANDBOX_TMP/claude-config" "$SANDBOX_TMP/cache" "$SANDBOX_TMP/empty" || return 1
+  SANDBOX_ARGV=(bwrap --die-with-parent --ro-bind / / --dev /dev --proc /proc
+    --bind "$WT" "$WT" --bind "$SANDBOX_TMP" "$SANDBOX_TMP")
+  [ -d "${HOME:-/nonexistent}/.claude" ] && SANDBOX_ARGV+=(--ro-bind "$SANDBOX_TMP/empty" "$HOME/.claude")
+  [ -f "${HOME:-/nonexistent}/.claude.json" ] && SANDBOX_ARGV+=(--ro-bind /dev/null "$HOME/.claude.json")
+  SANDBOX_ARGV+=(--setenv TMPDIR "$SANDBOX_TMP/tmp" --setenv CLAUDE_CONFIG_DIR "$SANDBOX_TMP/claude-config"
+    --setenv XDG_CACHE_HOME "$SANDBOX_TMP/cache" --chdir "$WT" --)
+  return 0
+}
+sandbox_teardown() {
+  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
+  SANDBOX_TMP=""
+  SANDBOX_ARGV=()
+}
+# sandbox_count_denied: EROFS lines the worker's own output shows. A count is only what the output
+# reveals (a worker can swallow the error), so no sighting reports "unknown", never 0.
+sandbox_count_denied() {
+  local n=0
+  SANDBOX_DENIED="unknown"
+  [ -n "${LOG:-}" ] && [ -f "$LOG" ] && n="$(grep -ciE 'read-only file system|EROFS' "$LOG" 2>/dev/null || true)"
+  [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ] && SANDBOX_DENIED="$n"
+  return 0
+}
+# sandbox_json: the `sandbox` object for the result JSON and the manifest.
+sandbox_json() {
+  local denied="\"unknown\"" tmp="${SANDBOX_TMP_PATH:-<per-dispatch scratch dir>}"
+  [[ "${SANDBOX_DENIED:-}" =~ ^[0-9]+$ ]] && denied="$SANDBOX_DENIED"
+  printf '{"mode":"bwrap","writable":["%s","%s"],"denied_writes":%s}' \
+    "$(_flat_json_escape "${SANDBOX_WT_PATH:-${WT:-}}")" "$(_flat_json_escape "$tmp")" "$denied"
+}
+
 # The endpoint pre-probe (scripts/lib/endpoint-probe.sh) found the local endpoint down or busy BEFORE any
 # worker or worktree was opened. Same result the post-hoc classifier gives a dead worker
 # (status engine_unavailable, "engine unavailable (<class>)"), so the engine applies on_engine_unavailable
@@ -1876,6 +1979,7 @@ write_manifest() {
   fi
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
+  [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
   local mf_timeout_secs="" mf_timeout_source="default" mf_timeout_enforced="false"
   mf_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   [ -n "$mf_timeout_secs" ] || mf_timeout_secs="null"
@@ -1921,6 +2025,8 @@ while [ $# -gt 0 ]; do
     --effort) EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
+    --sandbox) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--sandbox requires off|bwrap"; SANDBOX="$2"; shift 2 ;;
+    --worktree-parent) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--worktree-parent requires a non-empty directory path"; WORKTREE_PARENT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --gate-rules) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--gate-rules requires a non-empty file path"; GATE_RULES_FILE="$2"; shift 2 ;;
@@ -2186,6 +2292,18 @@ set_runner_flags() {
     [ -f "$GATE_RULES_FILE" ] && [ -r "$GATE_RULES_FILE" ] || die_precondition "--gate-rules file not readable: $GATE_RULES_FILE"
     GATE_RULES_FILE="$(cd "$(dirname "$GATE_RULES_FILE")" && pwd -P)/$(basename "$GATE_RULES_FILE")"
     [[ "${CHILD_SESSION_ID:-}" =~ ^[A-Za-z0-9-]{1,128}$ ]] || die_precondition "--gate-rules: could not mint a fresh session id; refusing to dispatch"
+  fi
+  case "$SANDBOX" in
+    off) ;;
+    bwrap)
+      [ "$IS_CCSHIM" -eq 1 ] || die_precondition "--sandbox bwrap applies only to --runner cc-shim (got runner: $RUNNER)"
+      sandbox_preflight || die_precondition "$SANDBOX_PREFLIGHT_ERROR"
+      ;;
+    *) die_precondition "--sandbox must be off or bwrap (got: $SANDBOX)" ;;
+  esac
+  if [ -n "$WORKTREE_PARENT" ]; then
+    case "$WORKTREE_PARENT" in /*) ;; *) die_precondition "--worktree-parent must be an absolute path (got: $WORKTREE_PARENT)" ;; esac
+    [ -d "$WORKTREE_PARENT" ] || die_precondition "--worktree-parent is not an existing directory: $WORKTREE_PARENT"
   fi
   if [ -n "${ROLE_KIT_DIR:-}" ]; then
     # Refused, never ignored: a kit the runner cannot carry would make the manifest claim a role it did not get.
@@ -3176,9 +3294,16 @@ else
   # Under <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its fallback).
   _wt_template="$(node "$SELF_DIR/resolve-repo-placement.js" worktree --prefix hetero --slug "$BRANCH" --from "$_wt_repo_root")" \
     || die_precondition "cannot resolve worktree placement"
+  if [ -n "$WORKTREE_PARENT" ]; then
+    _wt_template="$(realpath "$WORKTREE_PARENT")/$(basename "$_wt_template")"
+  fi
   WT="$(mktemp -u -d "$_wt_template")"
   WT="$(realpath -m "$WT" 2>/dev/null)" \
     || die_precondition "cannot canonicalize planned worktree path"
+fi
+
+if [ "$SANDBOX" = "bwrap" ] && _sbx_nested="$(sandbox_nested_repo "$WT")"; then
+  die_precondition "--sandbox bwrap refused: the worktree $WT sits inside the working tree of a repo ($_sbx_nested). The sandbox needs the worktree outside every repo (independent clone, not a nested .claude/worktrees); pass --worktree-parent <dir outside any repo> or --reuse-worktree <such a path>"
 fi
 
 _wt_prepare_common_excludes() {
@@ -3452,6 +3577,7 @@ abort_dispatch() {
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
   [ -n "${CNATIVE_CONFIG_DIR:-}" ] && rm -rf "$CNATIVE_CONFIG_DIR"
+  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
@@ -3903,6 +4029,11 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   if declare -F child_session_env_setup >/dev/null 2>&1; then child_session_env_setup "$SELF_DIR"; else CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u AUTOPILOT_CHILD_SESSION_ID); CHILD_SESSION_PARENT=""; fi
   # 3d: only the cc-shim claude child gets the C the rail minted for it (after every -u in the env argv); every other runner has C removed above.
   CHILD_SESSION_CLAUDE_ENV=(); if ( [ "${IS_CCSHIM:-0}" -eq 1 ] || [ "${IS_CNATIVE:-0}" -eq 1 ] ) && [ -n "${CHILD_SESSION_ID:-}" ]; then CHILD_SESSION_CLAUDE_ENV=("AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"); fi
+  # --sandbox bwrap: the whole worker argv runs inside the sandbox (SANDBOX_ARGV built by the cc-shim arm).
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then echo "sandbox: no bwrap argv; worker not started" >"$LOG"; AGENT_EXIT=1; return 0; fi
+    set -- "${SANDBOX_ARGV[@]}" "$@"
+  fi
   WORKER_TIMED_OUT=0
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
@@ -4010,12 +4141,20 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # Harness-owned envelope: claude's JSON stdout never shares the worker log.
   # The result string (or the raw bytes if it does not parse) is appended to
   # LOG so classify-error and other log consumers still see the old plain text.
-  CCSHIM_ENVELOPE="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    # The inner shell opens the envelope for writing, so it must live in the one writable scratch dir.
+    SANDBOX_FAIL=0
+    sandbox_setup || { echo "sandbox: could not set up the bwrap scratch dir; worker not started" > "$LOG"; sandbox_teardown; AGENT_EXIT=1; SANDBOX_FAIL=1; }
+    CCSHIM_ENVELOPE="$(mktemp "${SANDBOX_TMP:-${TMPDIR:-/tmp}}/dispatch-hetero-ccshim-envelope-XXXXXX")"
+  else
+    CCSHIM_ENVELOPE="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
+  fi
   # --gate-rules (BL-0306 P2): arm the per-turn gate for this one hand, before it starts. The id was minted
   # fresh above; arm runs gate-verify --check first and writes nothing for a bad list, in which case the
   # worker is not started. GATE_ARGV stays empty without the flag, so the claude argv is unchanged.
   GATE_ARGV=()
   GATE_RUN_OK=1
+  [ "${SANDBOX_FAIL:-0}" -eq 1 ] && GATE_RUN_OK=0   # fail closed: no sandbox, no worker
   if [ -n "${GATE_RULES_FILE:-}" ]; then
     _gate_ttl="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
     GATE_SETTINGS_FILE="$(mktemp -t dispatch-hetero-gate-settings-XXXXXX)"
@@ -4086,6 +4225,14 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   GATE_SETTINGS_FILE=""
+  if [ "${SANDBOX:-off}" = "bwrap" ] && [ -n "${SANDBOX_TMP:-}" ]; then
+    # The envelope was written inside the per-dispatch scratch dir; the usage/classify readers want it
+    # outside, so move it out before the scratch dir goes.
+    if [ -f "$CCSHIM_ENVELOPE" ]; then
+      _sbx_env_out="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
+      mv -f "$CCSHIM_ENVELOPE" "$_sbx_env_out" && CCSHIM_ENVELOPE="$_sbx_env_out"
+    fi
+  fi
   if [ -f "$CCSHIM_ENVELOPE" ]; then
     # One JSON object → result text (is_error with an empty result uses the
     # error message). Anything else, including a second JSON document, is the
@@ -4131,6 +4278,10 @@ fs.appendFileSync(logPath, out);
 NODE
   fi
   rm -f "$CCSHIM_PROMPT_FILE"
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    sandbox_count_denied   # after the result text is in LOG
+    sandbox_teardown
+  fi
 elif [ "$IS_GROK" -eq 1 ]; then
   # grok (xAI Grok Build CLI; models grok-4.5 (ex-grok-build) / grok-composer-2.5-fast). Unlike agy,
   # grok `-p` HONORS --cwd (verified Spike 2026-06-29: grok-composer-2.5-fast and
@@ -5605,12 +5756,14 @@ dispatch_detached_run() {
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_FAIL WORKTREE_PARENT 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
+    declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_json 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \

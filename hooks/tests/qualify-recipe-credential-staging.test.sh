@@ -15,8 +15,8 @@
 # reseeded by sha256 stamp comparison (mismatch => reseed), and `plan` mode
 # refuses (non-zero exit, "staged credential drift: <file>") instead of
 # silently proceeding on drift. Identity/config files (installation ids,
-# device ids) keep the original absence-only behavior via
-# qualify_stage_identity.
+# device ids) go through qualify_stage_identity, which refreshes the staged copy
+# only when the real file changed (own stamp; see qualify-stage-identity.test.sh).
 #
 # This test exercises the lib directly against a temp HOME (no real
 # credentials ever touched), then asserts every one of the 14 recipe run.sh
@@ -141,17 +141,17 @@ else
   bad "execute mode: did not repair the unstamped legacy copy"
 fi
 
-# -------------------------------------------------- identity (absence-only)
+# ------------------------------------------- identity (refresh on source change)
 IDSTAGED="$WORK/staged/identity.txt"
 IDREAL="$WORK/identity-real.txt"
 echo "id-v1" >"$IDREAL"
 qualify_stage_identity "$IDSTAGED" "$IDREAL"
 echo "id-v2-rotated" >"$IDREAL"
 qualify_stage_identity "$IDSTAGED" "$IDREAL"
-if [ "$(cat "$IDSTAGED")" = "id-v1" ]; then
-  ok "identity file: absence-only behavior preserved (not reseeded on change)"
+if [ "$(cat "$IDSTAGED")" = "id-v2-rotated" ]; then
+  ok "identity file: reseeded when the real file changed (source-sha stamp)"
 else
-  bad "identity file: unexpectedly reseeded — absence-only contract broken"
+  bad "identity file: stale staged copy kept after the real file changed"
 fi
 
 # ============================================================ recipe audit

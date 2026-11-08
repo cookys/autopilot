@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # cell.sh <minimax31>
-# One reviewer administration at effort=max (label = endpoint default; http path sends no effort). Never records to the scorecard; the operator records
+# One reviewer administration at effort=max (http lanes send QRP_HTTP_EFFORT=max since 2026-11-08; earlier this file sent none). Never records to the scorecard; the operator records
 # emit-row.json by hand (record.sh) after reading the result.
 # Run detached: setsid nohup bash cell.sh <lane> > /dev/null 2>&1 &   ; wait for 'rc=' in out/<lane>/run.log
 # DRY_RUN=1: parameter-layer check only — fake provider, scratch --store, no network, no staging, no spend.
@@ -10,6 +10,7 @@ case "$LANE" in minimax31) ;; *) echo "bad lane" >&2; exit 2;; esac
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../../.." && pwd)"
 DRY="${DRY_RUN:-0}"
+EFFORT=max   # one value for both the --effort label and the wire (QRP_HTTP_EFFORT, http lanes)
 D="$HERE/out/$LANE"; [ "$DRY" = 1 ] && D="$HERE/out/dry-$LANE"
 mkdir -p "$D/raw"
 LOG="$D/run.log"
@@ -75,17 +76,21 @@ else
   fi
   PENV=(--provider-env QRP_BASE_URL --provider-env QRP_AUTH_TOKEN --provider-env QRP_MODEL
         --provider-env QRP_PROVIDER --provider-env QRP_PROMPT_MODE --provider-env QRP_TIMEOUT_MS --provider-env QRP_MAX_TOKENS)
+  # 2026-11-08: QRP_HTTP_EFFORT was missing here, so the provider sent no effort while the row was labelled
+  # --effort max (WARNING, effort_check=mismatch). Now listed in --provider-env and exported below.
+  PENV+=(--provider-env QRP_HTTP_EFFORT)
 fi
 [ "$DRY" = 1 ] && extra_flags+=(--store "$D/dry-store.jsonl")
 
 say "lane=$LANE START model=$MODEL model_version=$MODEL_VERSION version_source=$VERSION_SOURCE dry=$DRY"
 ( export QRP_MAX_TOKENS=32768 QRP_TIMEOUT_MS=570000 QRP_PROMPT_MODE=reviewer QRP_MODEL="$MODEL" QRP_PROVIDER="$PROVIDER"
+  case "$LANE" in minimax31) export QRP_HTTP_EFFORT="$EFFORT";; esac
   if [ "$LANE" = kimi ]; then export QRP_TRANSPORT=cli QRP_CLI_KIND=kimi QRP_CLI_HOME="${STAGING_HOME:-/nonexistent}"; fi
   if [ "$LANE" = qwen ]; then export QRP_TRANSPORT=cli QRP_CLI_KIND=qoderclicn QRP_CLI_EFFORT=high QRP_CLI_HOME="${STAGING_HOME:-/nonexistent}"; fi
   timeout 18000 bash "$REPO/scripts/engine-qualify.sh" reviewer \
     --engine "$ENGINE" --model "$MODEL" --model-version "$MODEL_VERSION" \
     --runner "$RUNNER" --runner-version "$(idv runner_version)" --family "$FAMILY" \
-    --harness-version "$(idv harness_version)" --effort max \
+    --harness-version "$(idv harness_version)" --effort "$EFFORT" \
     --prompt-config-hash "$(idv prompt_config_hash)" \
     --semantic-fingerprint "$(idv semantic_fingerprint)" \
     --containment-fingerprint "$(idv containment_fingerprint)" \

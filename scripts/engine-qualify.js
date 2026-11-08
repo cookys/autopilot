@@ -260,7 +260,13 @@ const HELP = `Usage:
     [--provider-env <name>] [--remote-timeout-ms <n>]
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--store <path>] [--emit-row]
-    [--seat-file <json>] [--emit-record]
+    [--seat-file <json>] [--emit-record] [--allow-effort-mismatch]
+
+  --effort is only a label. Before any provider call the label is compared with the effort the
+  provider is told to send (QRP_HTTP_EFFORT / QRP_CLI_EFFORT, counted when passed via --provider-env /
+  --panel-env). A mismatch exits 2 with no exam and no spend; --allow-effort-mismatch runs it anyway
+  and marks the emitted row effort_check_override=true (effort_check stays mismatch). An effort that
+  cannot be observed (custom panel command, no QRP_* variable) is never blocked.
 
   With --seat-file, identity fields that were not passed as flags are derived
   before any exam write (a flag always wins):
@@ -559,6 +565,7 @@ function parseArgs(argv) {
     store: null,
     emitRow: false,
     emitRecord: false,
+    allowEffortMismatch: false,
     seatFile: null,
     plan: false,
     execute: false,
@@ -619,6 +626,10 @@ function parseArgs(argv) {
     }
     if (arg === '--emit-row') {
       options.emitRow = true;
+      continue;
+    }
+    if (arg === '--allow-effort-mismatch') {
+      options.allowEffortMismatch = true;
       continue;
     }
     if (arg === '--emit-record') {
@@ -6032,9 +6043,11 @@ function createSessionRoleCapabilityVerifier(runResult, expectedRequest) {
 
 // The row printed by --emit-row. A null row (instrument_error path) stays null: attaching
 // effort_check would fabricate a row made of nothing else. Unverifiable checks add no field.
-function buildEmittedRow(row, effortCheck) {
+function buildEmittedRow(row, effortCheck, effortOverride = false) {
   if (row === null || row === undefined || effortCheck.status === 'unverifiable') return row;
-  return { ...row, effort_check: effortCheck };
+  const marked = { ...row, effort_check: effortCheck };
+  if (effortOverride && effortCheck.status === 'mismatch') marked.effort_check_override = true;
+  return marked;
 }
 
 // recordIdV1 hashes row.corpus_version (what buildV2Record copies onto
@@ -6371,6 +6384,23 @@ function main() {
     headlessScratchParent = path.join(path.resolve(expandTilde(options.store)), 'scratch');
   }
   assertSeatCorpusMatchesExam(options);
+  // BL-0166, PM ruling 2026-11-08 (was advisory-only): compare the --effort label with the effort the
+  // provider is told to send BEFORE any provider call. A mismatch means the row would record a tier that
+  // never ran, so it stops here (rc=2, no exam, no spend) unless --allow-effort-mismatch is passed.
+  // An unobservable provider effort ('unverifiable') is never blocked.
+  const effortCheck = checkEffortLabel({
+    label: options.effort,
+    listedEnvNames: [...(options.providerEnvironment || []), ...(options.panelEnvironment || [])],
+    env: process.env,
+  });
+  if (effortCheck.status === 'mismatch') {
+    const note = `engine-qualify: effort label '${effortCheck.label}' does not match the effort sent (${effortCheck.sent}): ${effortCheck.reason}`;
+    if (!options.allowEffortMismatch) {
+      process.stderr.write(`${note}; refusing to run (no provider call made). Fix the label or the provider-env, or pass --allow-effort-mismatch\n`);
+      process.exit(2);
+    }
+    process.stderr.write(`engine-qualify: WARNING ${note}; running because --allow-effort-mismatch was passed; an emitted row is marked effort_check=mismatch and effort_check_override=true\n`);
+  }
   let runResult;
   try {
     runResult = runQualification(options);
@@ -6395,16 +6425,6 @@ function main() {
     authority_status: 'untrusted_telemetry',
   };
   delete verdict.qualified;
-  // BL-0166: compare the --effort label with the effort the provider was told to send. Advisory
-  // only (never blocks); a row is marked only when the provider's effort is observable.
-  const effortCheck = checkEffortLabel({
-    label: options.effort,
-    listedEnvNames: [...(options.providerEnvironment || []), ...(options.panelEnvironment || [])],
-    env: process.env,
-  });
-  if (effortCheck.status === 'mismatch') {
-    process.stderr.write(`engine-qualify: WARNING effort label '${effortCheck.label}' does not match the effort sent (${effortCheck.sent}): ${effortCheck.reason}; an emitted row is marked effort_check=mismatch\n`);
-  }
   const exitCode = headless ? headlessOutcome(runResult) : (runResult.qualified ? 0 : 1);
   if (options.emitRecord) {
     process.stderr.write(`${JSON.stringify(verdict)}\n`);
@@ -6413,7 +6433,7 @@ function main() {
     process.exit(exitCode);
   }
   if (options.emitRow) {
-    process.stdout.write(`${JSON.stringify(buildEmittedRow(runResult.row, effortCheck))}\n`);
+    process.stdout.write(`${JSON.stringify(buildEmittedRow(runResult.row, effortCheck, options.allowEffortMismatch))}\n`);
     process.stderr.write(`${JSON.stringify(verdict)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(verdict)}\n`);

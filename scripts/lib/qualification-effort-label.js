@@ -7,8 +7,10 @@
 // while the provider reads QRP_HTTP_EFFORT (http) or QRP_CLI_EFFORT (cli), and only if the name
 // is passed through `--provider-env` / `--panel-env` (the case broker scrubs everything else).
 // Nothing compared the two, so a forgotten env var recorded a tier that never ran (13 rows,
-// 2026-10-14). This module is pure: advisory by design (the caller warns and marks the row; it
-// never blocks the exam), and silent about custom panel commands it knows nothing about.
+// 2026-10-14). This module is pure (it reads only its arguments, so it can run before any provider
+// call) and silent about custom panel commands it knows nothing about. Since the PM ruling of
+// 2026-11-08 the caller (engine-qualify.js) refuses to run on a `mismatch` unless
+// --allow-effort-mismatch is passed; `unverifiable` is never blocked.
 
 const { grokEffortClamp } = require('./grok-effort');
 

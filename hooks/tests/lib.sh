@@ -266,6 +266,9 @@ export AUTOPILOT_PRICES_FETCH=0
 export AUTOPILOT_RUNNER_HOME_FALLBACK=off
 # ...and never read the operator's real price cache: it would make ladder order depend on the host.
 export AUTOPILOT_PRICES_CACHE_DIR="$TEST_TMP/prices-cache"
+# Existing tests point --endpoint at dead 127.0.0.1 ports with a stub runner; the pre-dispatch /models probe
+# (scripts/lib/endpoint-probe.sh) is off here. Only endpoint-preprobe.test.sh turns it on, against fake servers.
+export AUTOPILOT_ENDPOINT_PREPROBE=off
 
 # scrub_session_env -- drop every session-identity variable a launching Claude Code session or
 # foreman leaks into the test process. Rails resolve their child's parent id from this chain

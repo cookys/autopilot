@@ -961,9 +961,11 @@ emit() { # status commit files ins del worktree error
   if [[ "${OUTCOME_ZERO_DIFF_RECEIPT_DIGEST:-}" =~ ^[0-9a-f]{64}$ ]]; then
     zero_diff_receipt_json="\"$OUTCOME_ZERO_DIFF_RECEIPT_DIGEST\""
   fi
+  local probe_fields=""
+  [ -n "${PROBE_JSON:-}" ] && probe_fields=", \"probe\": $PROBE_JSON"
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -974,7 +976,7 @@ emit() { # status commit files ins del worktree error
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields"
 }
 
 check_session_mode_gate() {
@@ -1685,6 +1687,22 @@ die_precondition() {
   exit 2
 }
 
+# The endpoint pre-probe (scripts/lib/endpoint-probe.sh) found the local endpoint down or busy BEFORE any
+# worker or worktree was opened. Same result the post-hoc classifier gives a dead worker
+# (status engine_unavailable, "engine unavailable (<class>)"), so the engine applies on_engine_unavailable
+# (ask / cloud-fallback) unchanged. Exit 1 like every engine_unavailable. dispatcher_called stays true (the
+# engine rejects dispatcher_called:false on a non-committed result before it reads engine_unavailable);
+# model_calls 0 and resources_created 0 say that no worker ran.
+die_probe_unavailable() {
+  local run_id_json="null"
+  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
+  printf '{ "status": "engine_unavailable", "runner": "cc-shim", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "probe": %s }\n' \
+    "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
+    "$PROBE_CLASS" "$(_flat_json_escape "$ENDPOINT")" "$(_flat_json_escape "$PROBE_REASON")" \
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$PROBE_JSON"
+  exit 1
+}
+
 die_dev_flow_admission() {
   printf '{ "status": "blocked", "phase": "dev_flow_admission", "rejection_code": "DEV_FLOW_ADMISSION_REQUIRED_OR_STALE", "reason": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "resources_created": 0 }\n' \
     "$(_flat_json_escape "$1")"
@@ -2384,6 +2402,20 @@ if [ -n "$ENDPOINT" ]; then
       echo "dispatch-hetero: --endpoint '$ENDPOINT' is PLAINTEXT to a private-range address ($_ep_url) — bearer and prompts travel unencrypted on this LAN (AUTOPILOT_ENDPOINT_*_TRANSPORT=plaintext-private)" >&2 ;;
   esac
   unset _ep_json _ep_url _ep_tokenv
+  # Pre-probe: GET <base>/models (2 s total) before a worker or worktree exists. A down or busy
+  # endpoint becomes engine_unavailable at once and the engine's on_engine_unavailable policy decides;
+  # nothing is recorded about the endpoint, so the next dispatch probes it afresh.
+  # shellcheck source=lib/endpoint-probe.sh
+  . "$SELF_DIR/lib/endpoint-probe.sh"
+  endpoint_preprobe "$ENDPOINT" "$MODEL"
+  case "$PROBE_DECISION" in
+    unreachable|busy)
+      echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (status ${PROBE_STATUS:-none}, ${PROBE_MS:-0} ms, ${PROBE_REASON}); no worker started" >&2
+      die_probe_unavailable ;;
+    ok) echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ok (status ${PROBE_STATUS}, ${PROBE_MS} ms); served by local endpoint ${ENDPOINT}" >&2 ;;
+    "") ;;
+    *) echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (${PROBE_REASON}); dispatching to local endpoint ${ENDPOINT}" >&2 ;;
+  esac
 fi
 # Heads-up on stderr ONLY (stdout carries the JSON contract): the implementer run below can
 # take many minutes. Under Claude Code's Bash tool the 120s default timeout will SIGTERM it

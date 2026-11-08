@@ -38,6 +38,15 @@
 #                       defect in the caller's own payload, pre-transport and zero-spend; burning
 #                       budget there would hide the bug the refusal exists to surface.
 #
+# ENDPOINT PRE-PROBE (lib/endpoint-probe.sh): when the consult seat carries an endpoint, one
+#   GET <base>/models (2 s total, skipped for TLS vendor endpoints; AUTOPILOT_ENDPOINT_PREPROBE=off
+#   disables) runs before the question is sent. Down, busy (429/503) or the model missing from the
+#   list follows on_engine_unavailable from the resolved roster: `cloud-fallback` re-targets the
+#   dispatch ONCE to cloud_fallback_rung (no endpoint) and appends a cloud-fallbacks.jsonl row;
+#   `ask` and the other policies stop with status engine_unavailable, exit 5. Nothing has been sent
+#   when the probe fails, so a retreat never re-sends a request that already started. Output gains
+#   `probe` and `served_by` (the endpoint name, or the cloud rung) when a probe ran.
+#
 # SWITCH SEMANTICS (two-knob matrix, plan §3): this rail is live when
 #   consult_dispatch resolves to `on` (explicit tuple) OR `auto` with a resolved
 #   seat tuple (resolve-review-loop.sh expanded it from topology, or fell back
@@ -70,7 +79,7 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   { "role": "consult", "status": "advised|switch_off|qualification_failed|
-#       blind_evidence_violation|transport_failed|protocol_violation|verdict_rejected",
+#       blind_evidence_violation|transport_failed|protocol_violation|verdict_rejected|engine_unavailable",
 #     "engine": "...", "runner": "...", "effort": "...", "endpoint": "..."|null,
 #     "response": <frozen consult schema>|null, "error": "..."|null }
 #
@@ -79,13 +88,15 @@
 #   (resolve-review-loop.sh's own message is surfaced, never re-invented). 4 =
 #   blind-evidence preflight violation. 5 = transport/protocol failure
 #   (dispatch-author.sh non-authored result, malformed/non-schema response, or
-#   a verdict token in the response).
+#   a verdict token in the response, or the endpoint pre-probe failed with no cloud-fallback).
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/json-emit.sh
 . "$SCRIPT_DIR/lib/json-emit.sh"
+# shellcheck source=lib/endpoint-probe.sh
+. "$SCRIPT_DIR/lib/endpoint-probe.sh"
 
 QUESTION_FILE=""
 LADDER_RECEIPT=""
@@ -142,6 +153,16 @@ ladder_receipt() { # <reason-or-empty> [cause]
   rm -f "$err"
 }
 
+# One cloud-fallbacks.jsonl row per retreat (same store and writer as the engine's implementer
+# fallback), written when the consult ends so the row carries how it ended. Never changes the outcome.
+log_cloud_fallback() { # <final status>
+  printf '%s' "$FALLBACK_LOG_ROW" | node -e '
+let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+  const row = JSON.parse(s); row.outcome = process.argv[1]; row.ts = new Date().toISOString();
+  process.stdout.write(JSON.stringify(row));
+});' "$1" 2>/dev/null | node "$SCRIPT_DIR/engine-capability-state.js" cloud-fallback-log >/dev/null 2>&1 || true
+}
+
 emit() {
   local status="$1" engine="$2" runner="$3" effort="$4" endpoint="$5" response_json="$6" error="$7" exit_code="$8"
   local endpoint_json="null"
@@ -149,9 +170,14 @@ emit() {
   local error_json="null"
   [ -n "$error" ] && error_json="\"$(json_escape "$error")\""
   [ -z "$response_json" ] && response_json="null"
-  printf '{ "role": "consult", "status": "%s", "engine": "%s", "runner": "%s", "effort": "%s", "endpoint": %s, "response": %s, "error": %s }\n' \
+  local probe_fields=""
+  if [ -n "${PROBE_JSON:-}" ]; then
+    probe_fields=", \"probe\": $PROBE_JSON, \"served_by\": \"$(json_escape "${SERVED_BY:-}")\""
+  fi
+  [ -n "${FALLBACK_LOG_ROW:-}" ] && log_cloud_fallback "$status"
+  printf '{ "role": "consult", "status": "%s", "engine": "%s", "runner": "%s", "effort": "%s", "endpoint": %s, "response": %s, "error": %s%s }\n' \
     "$(json_escape "$status")" "$(json_escape "$engine")" "$(json_escape "$runner")" "$(json_escape "$effort")" \
-    "$endpoint_json" "$response_json" "$error_json"
+    "$endpoint_json" "$response_json" "$error_json" "$probe_fields"
   exit "$exit_code"
 }
 
@@ -277,6 +303,41 @@ fi
     echo
   done
 } > "$PROMPT_FILE"
+
+# ── 3b. Endpoint pre-probe (lib/endpoint-probe.sh). Runs BEFORE anything is sent, so a retreat to the
+# cloud seat can never re-send a request that already started. cloud-fallback re-targets once to the
+# resolved cloud_fallback_rung; every other policy stops (engine_unavailable) like `ask`.
+SERVED_BY=""
+FALLBACK_LOG_ROW=""
+if [ -n "$CONSULT_ENDPOINT" ]; then
+  [ -r "$SCRIPT_DIR/load-endpoints-env.sh" ] && . "$SCRIPT_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
+  endpoint_preprobe "$CONSULT_ENDPOINT" "$CONSULT_ENGINE"
+  SERVED_BY="$CONSULT_ENDPOINT"
+  case "$PROBE_DECISION" in
+    unreachable|busy)
+      echo "dispatch-consult: endpoint pre-probe ${CONSULT_ENDPOINT}: ${PROBE_DECISION} (status ${PROBE_STATUS:-none}, ${PROBE_MS:-0} ms, ${PROBE_REASON}); nothing sent" >&2
+      _on_unavail="$(json_field on_engine_unavailable)"
+      _rung="$(node -e '
+let j; try { j = JSON.parse(process.argv[1]).cloud_fallback_rung; } catch { process.exit(0); }
+if (j && typeof j === "object" && j.engine && j.effort && j.runner) process.stdout.write([j.engine, j.effort, j.runner].join("|"));
+' "$RESOLVED_JSON" 2>/dev/null)"
+      if [ "$_on_unavail" = "cloud-fallback" ] && [ -n "$_rung" ]; then
+        IFS='|' read -r _fb_engine _fb_effort _fb_runner <<< "$_rung"
+        FALLBACK_LOG_ROW="$(node -e '
+process.stdout.write(JSON.stringify({ run_id: null, from_runner: process.argv[1], from_endpoint: process.argv[2], error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: JSON.parse(process.argv[5]) }));
+' "$CONSULT_RUNNER" "$CONSULT_ENDPOINT" "$PROBE_CLASS" "${_fb_engine}/${_fb_effort}@${_fb_runner}" "$PROBE_JSON")"
+        echo "dispatch-consult: retreating once to cloud rung ${_fb_engine}/${_fb_effort}@${_fb_runner} (on_engine_unavailable: cloud-fallback)" >&2
+        CONSULT_ENGINE="$_fb_engine"; CONSULT_EFFORT="$_fb_effort"; CONSULT_RUNNER="$_fb_runner"; CONSULT_ENDPOINT=""
+        SERVED_BY="${_fb_engine}/${_fb_effort}@${_fb_runner}"
+      else
+        ladder_receipt "rail-failed" "engine_unavailable: ${PROBE_CLASS}"
+        emit "engine_unavailable" "$CONSULT_ENGINE" "$CONSULT_RUNNER" "$CONSULT_EFFORT" "$CONSULT_ENDPOINT" "" "engine unavailable (${PROBE_CLASS}): endpoint pre-probe ${CONSULT_ENDPOINT}: ${PROBE_REASON}; nothing sent (on_engine_unavailable: ${_on_unavail:-ask})" 5
+      fi ;;
+    ok) echo "dispatch-consult: endpoint pre-probe ${CONSULT_ENDPOINT}: ok (status ${PROBE_STATUS}, ${PROBE_MS} ms); served by local endpoint ${CONSULT_ENDPOINT}" >&2 ;;
+    "") ;;
+    *) echo "dispatch-consult: endpoint pre-probe ${CONSULT_ENDPOINT}: ${PROBE_DECISION} (${PROBE_REASON}); dispatching to local endpoint ${CONSULT_ENDPOINT}" >&2 ;;
+  esac
+fi
 
 # ── 4. Dispatch — the raw-prompt dispatch-author.sh rail. Tuple → argv:
 # consult_runner → --runner, consult_engine → --model, consult_effort →

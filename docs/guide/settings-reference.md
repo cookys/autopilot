@@ -206,6 +206,7 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_QUALIFICATION_OVERRIDE` | A matching, unexpired override that lets a dispatch use a seat whose qualification would otherwise refuse it. | unset |  |
 | `AUTOPILOT_STRIKE_ENFORCEMENT` | Strike-based requalification is enforced by default; set to "shadow" to opt out (strikes are then only recorded and `would_requalify` is projected). | enforce |  |
 | `AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE` | Set to "1" to let a dispatch whose --*-bin override is not the PATH binary write the real capability store. Otherwise the strike writer and passive capture skip that write unless ENGINE_CAPABILITY_DIR, ENGINE_CAPABILITY_FILE, or --store isolates it. | unset |  |
+| `AUTOPILOT_ENDPOINT_PREPROBE` | Set to `off` to skip the 2 s GET /models probe that dispatch-hetero and dispatch-consult make before using a local `--endpoint`. | `on` |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |
 | `AUTOPILOT_AUTHOR_KILL_GRACE_SECS` | Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30. | `30` |  |

@@ -2223,6 +2223,17 @@ function main() {
         error_class: input.error_class,
         to_rung: input.to_rung,
         outcome: input.outcome,
+        // The pre-dispatch endpoint probe that triggered the retreat (null when the death came
+        // from a worker), and the backend that answered last (the cloud rung; null when skipped).
+        probe: input.probe && typeof input.probe === 'object' && !Array.isArray(input.probe)
+          ? {
+            decision: str(input.probe.decision) ? input.probe.decision : null,
+            status: Number.isInteger(input.probe.status) ? input.probe.status : null,
+            ms: Number.isFinite(input.probe.ms) ? input.probe.ms : null,
+            reason: str(input.probe.reason) ? input.probe.reason : null,
+          }
+          : null,
+        served_by: str(input.served_by) ? input.served_by : null,
       };
       appendRow(file, written);
       return written;

@@ -98,6 +98,20 @@ DUMP
     --dispatch-bin "$d/argdump.sh" --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$d/out2" > /dev/null 2>&1 < /dev/null
   [ "$?" = 2 ] && echo ok
 }
+case_override() {
+  local d="$TEST_TMP/$2"; run_jury "$1" "$d" kimi yes --implementer-family anthropic \
+    --seat-model kimi=kimi-code/k3.1-pro --seat-effort kimi=medium --seat-model minimax=MiniMax-M3.1-Flash
+  grep -qx 'kimi-code/k3.1-pro' "$d/fake/calls.log" && grep -qx 'MiniMax-M3.1-Flash' "$d/fake/calls.log" \
+    && ! grep -q 'kimi-code/k3$' "$d/fake/calls.log" \
+    && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.kimi.model+","+j.seat_states.kimi.effort')" = "kimi-code/k3.1-pro,medium" ] \
+    && [ "$(jq_eval "$d/out/run.json" 'j.seats.minimax.model')" = MiniMax-M3.1-Flash ] && echo ok
+}
+case_override_bad() {
+  local d="$TEST_TMP/$2" rc1 rc2
+  run_jury "$1" "$d" kimi yes --implementer-family anthropic --seat-model nosuch=x; rc1="$(cat "$d/rc")"
+  run_jury "$1" "$d" kimi yes --implementer-family anthropic --seat-effort kimi; rc2="$(cat "$d/rc")"
+  [ "$rc1$rc2" = 22 ] && echo ok
+}
 
 check() { # check <case> <name> <sed command for the mutant>
   local c="$1" name="$2" sedcmd="$3"
@@ -110,6 +124,8 @@ check case_unavailable unavailable "s/if (!reach) {/if (false) {/"
 check case_one_valid onevalid "s/const MIN_VALID = 2;/const MIN_VALID = 1;/"
 check case_advisory advisory "s/qualified: isQualified(s, scorecardBin)/qualified: true/"
 check case_merge merge "s/for (const d of dirs) {/for (const d of dirs.slice(0, 1)) {/"
+check case_override override "s/eff\\[m\\[1\\]\\]\\[field\\] = m\\[2\\];/void 0;/"
+check case_override_bad overridebad "s/if (!eff\[m\[1\]\]) die(/if (false) die(/"
 
 check case_pack pack "s/if (r.status !== 0) die(\`pack refused/if (false) die(\`pack refused/"
 

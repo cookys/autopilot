@@ -10,8 +10,13 @@
 //   node scripts/review-jury.js run --pack <file> --implementer-family <family> --out <dir>
 //        [--diff <path in pack>] [--questions <path in pack>] [--methodology <file>] [--spec-file <file>] [--seats grok,kimi,glm,minimax]
 //        [--timeout 15m] [--dispatch-bin <path>] [--scorecard-bin <path>]
+//        [--seat-model <seat>=<model>]... [--seat-effort <seat>=<effort>]...
 //   node scripts/review-jury.js merge --out <dir> <run-dir> [<run-dir> ...]
 //
+// --seat-model / --seat-effort (repeatable) override the table below for one run, e.g.
+//        --seat-model kimi=kimi-code/k3.1-pro --seat-model minimax=MiniMax-M3.1-Flash. The overridden value is used for
+//        dispatch-review's --model/--effort and the seat-status lookup, and is what seats/<seat>.json, run.json and
+//        merged.json record. An unknown seat or a value that is not name=value is a usage error (rc 2).
 // run    Dispatches every seat that THIS account can reach, in parallel, each blind to the others,
 //        then merges its own output. A seat whose runner binary (grok, kimi) or endpoint (glm,
 //        minimax: resolve-endpoint.sh ready) is not found here is "unavailable" - not a failure.
@@ -69,16 +74,32 @@ function die(msg) {
 function parseArgs(argv) {
   const o = { _: [] };
   const takes = new Set(['pack', 'implementer-family', 'out', 'methodology', 'spec-file', 'seats', 'timeout', 'dispatch-bin', 'scorecard-bin', 'diff', 'questions']);
+  const repeat = new Set(['seat-model', 'seat-effort']);
+  for (const k of repeat) takes.add(k);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const k = a.slice(2);
       if (!takes.has(k)) die(`unknown flag ${a}`);
       if (i + 1 >= argv.length) die(`${a} needs a value`);
-      o[k] = argv[++i];
+      if (repeat.has(k)) (o[k] = o[k] || []).push(argv[++i]); else o[k] = argv[++i];
     } else o._.push(a);
   }
   return o;
+}
+
+// Effective seat table: SEATS with the per-run --seat-model / --seat-effort overrides applied.
+function applyOverrides(o) {
+  const eff = Object.fromEntries(Object.entries(SEATS).map(([n, s]) => [n, { ...s }]));
+  for (const [flag, field] of [['seat-model', 'model'], ['seat-effort', 'effort']]) {
+    for (const item of o[flag] || []) {
+      const m = item.match(/^([^=]+)=(.+)$/);
+      if (!m) die(`--${flag} needs <seat>=<value>, got ${item}`);
+      if (!eff[m[1]]) die(`--${flag}: unknown seat ${m[1]} (known: ${Object.keys(SEATS).join(', ')})`);
+      eff[m[1]][field] = m[2];
+    }
+  }
+  return eff;
 }
 
 function onPath(bin) {
@@ -186,6 +207,7 @@ async function cmdRun(o) {
   if (!fs.existsSync(o.pack)) die(`--pack not found: ${o.pack}`);
   fs.mkdirSync(o.out, { recursive: true });
   const pk = resolvePack(o);
+  const seatTable = applyOverrides(o);
   const names = (o.seats || Object.keys(SEATS).join(',')).split(',').map((s) => s.trim()).filter(Boolean);
   for (const n of names) if (!SEATS[n]) die(`unknown seat ${n} (known: ${Object.keys(SEATS).join(', ')})`);
   const scorecardBin = o['scorecard-bin'] || path.join(__dirname, 'engine-scorecard.js');
@@ -195,7 +217,7 @@ async function cmdRun(o) {
   const state = {};
   const todo = [];
   for (const n of names) {
-    const s = SEATS[n];
+    const s = seatTable[n];
     const family = familyOfEngine(s.model);
     const base = { runner: s.runner, model: s.model, effort: s.effort, family, qualified: isQualified(s, scorecardBin) };
     if (family === o['implementer-family']) { state[n] = { ...base, state: 'excluded_family' }; continue; }
@@ -204,11 +226,11 @@ async function cmdRun(o) {
     state[n] = { ...base, state: 'dispatched' };
     todo.push(n);
   }
-  const results = await Promise.all(todo.map((n) => dispatchSeat(n, SEATS[n], opts)));
+  const results = await Promise.all(todo.map((n) => dispatchSeat(n, seatTable[n], opts)));
   for (const r of results) {
     let body;
     try { JSON.parse(r.out); body = r.out; } catch {
-      body = `${JSON.stringify({ runner: SEATS[r.name].runner, model: SEATS[r.name].model, status: 'no_verdict', verdict: null, findings: '', error: `dispatch-review produced no JSON (rc=${r.rc}) ${r.err}`.trim() })}\n`;
+      body = `${JSON.stringify({ runner: seatTable[r.name].runner, model: seatTable[r.name].model, status: 'no_verdict', verdict: null, findings: '', error: `dispatch-review produced no JSON (rc=${r.rc}) ${r.err}`.trim() })}\n`;
     }
     fs.writeFileSync(path.join(o.out, 'seats', `${r.name}.json`), body);
     state[r.name].rc = r.rc;

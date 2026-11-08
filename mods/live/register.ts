@@ -142,10 +142,10 @@ async function fleetFor($: EngineInterface): Promise<FleetView | null> {
 // The other hosts' cards: two files the PM host keeps in its state dir (scripts/fleet-card-mirror.js; AUTOPILOT_CARD_MIRROR_DIR, else XDG_STATE_HOME or HOME/.local/state, then autopilot/).
 // Read only, while the Fleet tab is drawn; nothing is run and nothing is written.
 async function readOthers($: EngineInterface, nowMs: number): Promise<ReturnType<typeof othersView>> {
-  const get = async (k: string): Promise<string> => { const v = await $.env.get(k).catch(() => undefined); return typeof v === 'string' ? v.trim() : '' }
-  const over = await get('AUTOPILOT_CARD_MIRROR_DIR')
-  const xdg = await get('XDG_STATE_HOME')
-  const home = await get('HOME')
+  const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '') // $.env.get takes a literal name at every call site (the mod loader refuses a variable)
+  const over = text(await $.env.get('AUTOPILOT_CARD_MIRROR_DIR').catch(() => undefined))
+  const xdg = text(await $.env.get('XDG_STATE_HOME').catch(() => undefined))
+  const home = text(await $.env.get('HOME').catch(() => undefined))
   const dir = over !== '' ? over : xdg !== '' ? xdg.replace(/\/$/, '') + '/autopilot' : home !== '' ? home.replace(/\/$/, '') + '/.local/state/autopilot' : null
   if (dir === null) return othersView(null, null, nowMs)
   return othersView(await readText($, dir.replace(/\/$/, '') + '/fleet-card-mirror.json'), await readText($, dir.replace(/\/$/, '') + '/fleet-card-todo.json'), nowMs)

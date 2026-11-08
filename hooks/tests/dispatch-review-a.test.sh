@@ -191,6 +191,14 @@ OUT="$(STUB_MODE=ship_fullwidth_empty "$SCRIPT" --runner codex --model gpt-5.5 -
 assert_eq "1" "$EXIT" "empty fields behind full-width separators still fail"
 assert_contains "$OUT" "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields" \
   "empty full-width fields use the battery shape message"
+# A reviewer host may run with LC_ALL=C: pin the full-width folding and the
+# empty-field failure there too.
+OUT="$(LC_ALL=C STUB_MODE=ship_fullwidth_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "full-width (；，。) separated no-finding proof is accepted under LC_ALL=C"
+OUT="$(LC_ALL=C STUB_MODE=ship_fullwidth_empty "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "empty fields behind full-width separators still fail under LC_ALL=C"
+assert_contains "$OUT" "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields" \
+  "empty full-width fields use the battery shape message under LC_ALL=C"
 OUT="$(STUB_MODE=ship_pipe_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "pipe-separated proof is a shape failure"
 assert_contains "$OUT" "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields" \

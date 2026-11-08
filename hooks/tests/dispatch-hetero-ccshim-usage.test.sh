@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# dispatch-hetero cc-shim usage: the result JSON's "usage" for runner cc-shim is the
+# HARNESS-WRITTEN envelope's (the claude CLI's `--output-format json` stdout, captured by
+# dispatch-hetero.sh into $CCSHIM_ENVELOPE) `usage` object — four non-negative-integer
+# keys — read from a file the worker never sees, not worker self-report and not the
+# plain worker log (which carries no token counts). Seam: a stub `claude` on PATH whose
+# stdout IS the envelope; own temp dirs; no real claude is started.
+. "$(dirname "$0")/lib.sh"
+eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
+
+export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
+export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR"
+export AUTOPILOT_LIVE_DIR="$(mktemp -d -p /dev/shm autopilot-test-dhcu-XXXXXX)"
+trap 'rm -rf "$AUTOPILOT_LIVE_DIR"; cleanup_test_tmp' EXIT
+export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
+export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"; mkdir -p "$ENGINE_CAPABILITY_DIR"
+export DISPATCH_QUIET=1
+export TMPDIR="$TEST_TMP/tmp"; mkdir -p "$TMPDIR"   # the rails' mktemp scratch dirs land here, so leftovers are countable
+export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"; mkdir -p "$AUTOPILOT_DISPATCH_RUNS_DIR"
+export ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t"
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \
+  AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
+  CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID 2>/dev/null || true
+
+GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
+SBX="$TEST_TMP/repo"; mkdir -p "$SBX"; $GIT -C "$SBX" init -q; $GIT -C "$SBX" commit -q --allow-empty -m base
+PROMPT="$TEST_TMP/prompt.txt"; echo "say ok" > "$PROMPT"
+
+BINDIR="$TEST_TMP/bin"; mkdir -p "$BINDIR"
+# stub claude: it leaves one edit in the worktree (the rail's wrapper-commit then commits
+# it, so the run lands "committed"/exit 0 like a real cc-shim hand) and its stdout is the
+# harness envelope (claude --output-format json) — the case's envelope text, verbatim. The
+# prompt is read from stdin like the real CLI; the worker never sees its own stdout back.
+cat > "$BINDIR/claude" <<'EOS'
+#!/usr/bin/env bash
+cat >/dev/null
+echo edited > ccshim-usage-edit.txt
+printf '%s' "${CCSHIM_STUB_ENVELOPE:-ok}"
+EOS
+chmod +x "$BINDIR/claude"
+
+# run_case <envelope-text> -> sets OUT (the one-line result JSON printed to stdout) + RC
+run_case() {
+  local env_text="$1"
+  local branch="feat/ccshim-usage-$RANDOM$RANDOM"
+  RC=0
+  OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+      CCSHIM_STUB_ENVELOPE="$env_text" PATH="$BINDIR:$PATH" \
+      "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+      --prompt-file "$PROMPT" --context-window off --branch "$branch" 2>"$TEST_TMP/stderr")" || RC=$?
+}
+
+# result_json (stdin: the dispatch stdout) -> the one-line result JSON (the last parsable
+# line that is an object with a "status" key); exit 3 when there is none.
+result_json() {
+  node -e '
+const s = require("fs").readFileSync(0, "utf8");
+let best = "";
+for (const line of s.split("\n")) {
+  const t = line.trim();
+  if (!t.startsWith("{")) continue;
+  try { const o = JSON.parse(t); if (o && typeof o === "object" && !Array.isArray(o) && "status" in o) best = t; } catch {}
+}
+if (best === "") process.exit(3);
+process.stdout.write(best);
+'
+}
+# usage_field (stdin: the result JSON) -> compact JSON of .usage, or <null>
+usage_field() {
+  node -e '
+const o = JSON.parse(require("fs").readFileSync(0, "utf8"));
+process.stdout.write(o.usage === null ? "<null>" : JSON.stringify(o.usage));
+'
+}
+# usage_deep_eq (stdin: the result JSON) <expected-JSON>: exit 0 iff .usage has EXACTLY
+# the expected keys with exactly those values.
+usage_deep_eq() {
+  node -e '
+const s = require("fs").readFileSync(0, "utf8");
+const exp = JSON.parse(process.argv[1]);
+const u = JSON.parse(s).usage;
+const same = u && typeof u === "object" && !Array.isArray(u)
+  && Object.keys(u).length === Object.keys(exp).length
+  && Object.keys(exp).every((k) => u[k] === exp[k]);
+process.exit(same ? 0 : 1);
+' "$1"
+}
+# result_field (stdin: the result JSON) <field> -> the field's value as a string
+result_field() {
+  node -e '
+const o = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const v = o[process.argv[1]];
+process.stdout.write(v === null || v === undefined ? "<absent>" : String(v));
+' "$1"
+}
+
+EXP1='{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":0}'
+
+# case 1: a result envelope WITH usage -> the result JSON carries exactly that object.
+EN1='{"type":"result","is_error":false,"result":"ok","usage":{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":0}}'
+run_case "$EN1"
+assert_eq "$RC" "0" "case1: cc-shim run exits 0 (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+U1="$(printf '%s' "$OUT" | result_json | usage_field 2>/dev/null)" || U1="<no-result-json>"
+eq "cc-shim" "$(printf '%s' "$OUT" | result_json | result_field runner 2>/dev/null)" "case1: the run is the cc-shim runner"
+eq "$EXP1" "$U1" "case1: result usage is exactly the envelope usage object (got: $U1)"
+if printf '%s' "$OUT" | result_json | usage_deep_eq "$EXP1"; then
+  eq "0" "0" "case1: usage deep-equals the envelope object (exactly the four keys)"
+else
+  fail "case1: usage does not deep-equal $EXP1 (got: $U1)"
+fi
+
+# case 2: a result envelope WITHOUT a usage object -> usage stays null.
+EN2='{"type":"result","is_error":false,"result":"ok"}'
+run_case "$EN2"
+assert_eq "$RC" "0" "case2: cc-shim run exits 0"
+U2="$(printf '%s' "$OUT" | result_json | usage_field 2>/dev/null)" || U2="<no-result-json>"
+eq "<null>" "$U2" "case2: result without a usage object keeps usage null (got: $U2)"
+
+# case 3: the envelope is not JSON at all -> usage stays null.
+run_case 'this is not json at all'
+assert_eq "$RC" "0" "case3: cc-shim run exits 0"
+U3="$(printf '%s' "$OUT" | result_json | usage_field 2>/dev/null)" || U3="<no-result-json>"
+eq "<null>" "$U3" "case3: non-JSON envelope keeps usage null (got: $U3)"
+
+finalize_test

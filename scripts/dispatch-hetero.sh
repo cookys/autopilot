@@ -855,6 +855,35 @@ emit() { # status commit files ins del worktree error
        && [ "${IS_QODER:-0}" -eq 0 ] && [ "${IS_CURSOR:-0}" -eq 0 ] \
        && [ "${IS_OPENCODE:-0}" -eq 0 ] && [ "${IS_KIMI:-0}" -eq 0 ] && [ "${IS_CNATIVE:-0}" -eq 0 ]; then
       usage_json="${AGY_USAGE_JSON:-null}"
+    elif [ "${IS_CCSHIM:-0}" -eq 1 ]; then
+      # cc-shim: $LOG is plain text with no token counts. $CCSHIM_ENVELOPE is the
+      # harness-written envelope — the claude CLI's `--output-format json` stdout
+      # captured by THIS script, unreachable from the worker — so its `usage` is the
+      # CLI's own count, not worker self-report. Only ONE JSON object with
+      # type=="result" and an object `usage` yields a value (four keys, each a
+      # non-negative integer, 0 when missing or non-integer); no file, bad JSON, a
+      # second document, a wrong type or a missing usage object all keep it null.
+      usage_json="$(node - "${CCSHIM_ENVELOPE:-}" <<'NODE'
+const fs = require('fs');
+const p = process.argv[2];
+let raw;
+try { raw = fs.readFileSync(p, 'utf8'); } catch { console.log('null'); process.exit(0); }
+let doc;
+try { doc = JSON.parse(raw); } catch { console.log('null'); process.exit(0); }
+if (!doc || typeof doc !== 'object' || Array.isArray(doc) || doc.type !== 'result') {
+  console.log('null'); process.exit(0);
+}
+const u = doc.usage;
+if (!u || typeof u !== 'object' || Array.isArray(u)) { console.log('null'); process.exit(0); }
+const num = (k) => (Number.isInteger(u[k]) && u[k] >= 0 ? u[k] : 0);
+console.log(JSON.stringify({
+  input_tokens: num('input_tokens'),
+  output_tokens: num('output_tokens'),
+  cache_read_input_tokens: num('cache_read_input_tokens'),
+  cache_creation_input_tokens: num('cache_creation_input_tokens'),
+}));
+NODE
+)" || usage_json="null"
     else
       local log_format="plain"
       [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"

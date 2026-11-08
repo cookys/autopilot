@@ -52,7 +52,7 @@ function screen(n0: any, grow = 0): string[] {
 
 const t = makeT('zh-TW')
 const NOW = 1794200000000
-const HELD = { id: 'd-fx000001', title: null, question: '記憶線：測試綠了，合併到 develop 嗎？', background: 'fixture：--no-ff，測試在 tip 全綠。', options: [{ label: '准合併', description: '' }, { label: '再看 diff', description: '' }], recommendation: '准合併', why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 7200 }
+const HELD = { id: 'd-fe000001', title: null, question: '記憶線：測試綠了，合併到 develop 嗎？', background: 'fixture：--no-ff，測試在 tip 全綠。', options: [{ label: '准合併', description: '' }, { label: '再看 diff', description: '' }], recommendation: '准合併', why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 7200 }
 const LIVE = { band: {}, pending: [HELD], detail: { qc: null, residue: null, load_source: null } } as never
 const SNAP = parseConsole(JSON.stringify(full))
 

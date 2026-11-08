@@ -19,7 +19,7 @@ test.before(async () => {
 const FIX = name => fs.readFileSync(path.join(__dirname, 'fixtures', 'console', name), 'utf8')
 const FULL = () => C.parseConsole(FIX('c0/console-full.json'))
 const NOW = 1794200000000
-const HELD = { id: 'd-fx000001', title: null, question: '記憶線：測試綠了，合併到 develop 嗎？', background: 'fixture：--no-ff，測試在 tip 全綠。', options: [{ label: '准合併', description: '' }, { label: '再看 diff', description: '' }], recommendation: '准合併', why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 7200 }
+const HELD = { id: 'd-fe000001', title: null, question: '記憶線：測試綠了，合併到 develop 嗎？', background: 'fixture：--no-ff，測試在 tip 全綠。', options: [{ label: '准合併', description: '' }, { label: '再看 diff', description: '' }], recommendation: '准合併', why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 7200 }
 const LIVE = { pending: [HELD] }
 const rows = (v, which) => v[which].map(l => (l.segs === undefined ? l.text : l.segs.map(s => s.text).join('')))
 const view = (con, { cols = 120, locale = 'zh-TW', live = LIVE, folded } = {}) => V.commandView(con, live, { t: I.makeT(locale), cols, ...(folded === undefined ? {} : { folded }) }, NOW)
@@ -65,8 +65,8 @@ test('queue: the held card is a full card (options), the others are plain rows; 
   assert.ok(body.some(r => r.includes('評測機第二槽插電') && r.includes('等你做完')), 'waiting_step row says what it waits for')
   assert.ok(body.some(r => r.includes('確認語音線的轉述答案') && r.includes('待你確認')), 'relayed_unconfirmed row')
   const press = v.body.flatMap(l => (l.segs ?? []).map(s => s.press)).filter(p => p !== undefined)
-  assert.ok(press.includes(V.FILL_PRESS + 'd-fx000002'), 'the report press carries fill:<id>: ' + press.join(','))
-  assert.equal(body.filter(r => r.includes('d-fx000001')).length, 0, 'no raw id drawn on a card row')
+  assert.ok(press.includes(V.FILL_PRESS + 'd-fe000002'), 'the report press carries fill:<id>: ' + press.join(','))
+  assert.equal(body.filter(r => r.includes('d-fe000001')).length, 0, 'no raw id drawn on a card row')
 })
 
 test('queue count is counts.decisions, not a count of rows', () => {

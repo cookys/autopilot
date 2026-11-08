@@ -3431,6 +3431,29 @@ test('C1 U7 control: the same alive heartbeat without the console config still h
   expect(asks.length).toBeGreaterThan(0)
   expect(texts.at(-1)?.startsWith('FLEET')).toBe(true)
 })
+// C1 fix: a band tab that is open (barTab) when the console mode turns on must not stay: the strip is highlighted with the console tab, so the body under it has to be the console's too.
+test('C1 fix: a 待決 band tab left open when console.json appears is closed; the band body is the one a fresh console-mode band draws (terminal)', async ($, on) => {
+  g33Ran(on)
+  const files = richWorld()
+  const w = world(on, files)
+  await start($, 'terminal')
+  const bandTexts = async () => {
+    const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-c1fix', props: { ...BAND_PROPS, maxRows: 20 }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const out = walkTexts((await ui.drawn()) as Node).map(textOf)
+    await ui.unmount()
+    return out
+  }
+  const open = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-c1fix-p', props: { ...BAND_PROPS, maxRows: 20 }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  await open.press({ key: 'tab:decide' })
+  await open.unmount()
+  const before = await bandTexts()
+  files[CWD + '/.git/HEAD'] = 'ref: refs/heads/x\n'
+  files[CWD + '/.claude/console.json'] = CONSOLE_PROGRAM
+  await w.clock.advance(11_000) // the tick reads the mode: it turns on
+  const after = await bandTexts()
+  expect(after.length, 'the 待決 body (many rows) is gone').toBeLessThan(before.length)
+  expect(after.join(' ').includes('指揮')).toBe(true)
+})
 // C1 U6: the console pane's pages. The snapshot source answers null until C2, so team / quota / hosts say 無來源 (no table); 本席 folds this session's 現況, 派工 and 審查 under their names.
 test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there is no snapshot, and 本席 carries 現況 · 派工 · 審查 (terminal)', async ($, on) => {
   const ran: string[] = []

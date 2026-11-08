@@ -212,7 +212,7 @@
    "to_console": true
   },
   {
-   "id": "card:d-fx000003",
+   "id": "card:d-fe000003",
    "kind": "card",
    "severity": 6,
    "state": "need_you",
@@ -223,14 +223,14 @@
    "since_ms": 1794199640000,
    "line_id": "gpu",
    "host": null,
-   "link": "/i/card:d-fx000003",
+   "link": "/i/card:d-fe000003",
    "answerable_by": [
     "cli",
     "app"
    ]
   },
   {
-   "id": "card:d-fx000004",
+   "id": "card:d-fe000004",
    "kind": "card",
    "severity": 7,
    "state": "need_you",
@@ -241,14 +241,14 @@
    "since_ms": 1794197600000,
    "line_id": "voice",
    "host": null,
-   "link": "/i/card:d-fx000004",
+   "link": "/i/card:d-fe000004",
    "answerable_by": [
     "cli",
     "app"
    ]
   },
   {
-   "id": "card:d-fx000001",
+   "id": "card:d-fe000001",
    "kind": "card",
    "severity": 8,
    "state": "need_you",
@@ -259,14 +259,14 @@
    "since_ms": 1794192800000,
    "line_id": "memory",
    "host": null,
-   "link": "/i/card:d-fx000001",
+   "link": "/i/card:d-fe000001",
    "answerable_by": [
     "cli",
     "app"
    ]
   },
   {
-   "id": "card:d-fx000002",
+   "id": "card:d-fe000002",
    "kind": "card",
    "severity": 9,
    "state": "need_you",
@@ -279,7 +279,7 @@
    "since_ms": 1794135200000,
    "line_id": "bench",
    "host": null,
-   "link": "/i/card:d-fx000002",
+   "link": "/i/card:d-fe000002",
    "answerable_by": [
     "report"
    ]
@@ -433,7 +433,7 @@
  ],
  "cards": [
   {
-   "id": "d-fx000001",
+   "id": "d-fe000001",
    "question": "記憶線：測試綠了，合併到 develop 嗎？",
    "background": "fixture：--no-ff，測試在 tip 全綠。",
    "options": [
@@ -451,7 +451,7 @@
    "executor_display": "memory · Claude (fx-host-b)"
   },
   {
-   "id": "d-fx000002",
+   "id": "d-fe000002",
    "question": "評測機第二槽插電",
    "background": "你答「我來」；插好後回報。",
    "options": [
@@ -465,7 +465,7 @@
    "executor_display": "bench · Claude (fx-host-c)"
   },
   {
-   "id": "d-fx000003",
+   "id": "d-fe000003",
    "question": "GPU 線：雲端 B 池快用完，3 個評估改派本地模型？",
    "background": "B 池週額度預估明早前用完；本地模型有 2 格空槽。",
    "options": [
@@ -487,7 +487,7 @@
    "executor_display": "gpu-lead · Claude (fx-host-a)"
   },
   {
-   "id": "d-fx000004",
+   "id": "d-fe000004",
    "question": "語音線轉述：你在語音 session 說「先停推播」，確認嗎？",
    "background": "lane 轉述的答案，等你一鍵確認。",
    "options": [

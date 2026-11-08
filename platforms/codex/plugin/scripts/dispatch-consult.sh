@@ -175,9 +175,27 @@ emit() {
     probe_fields=", \"probe\": $PROBE_JSON, \"served_by\": \"$(json_escape "${SERVED_BY:-}")\""
   fi
   [ -n "${FALLBACK_LOG_ROW:-}" ] && log_cloud_fallback "$status"
-  printf '{ "role": "consult", "status": "%s", "engine": "%s", "runner": "%s", "effort": "%s", "endpoint": %s, "response": %s, "error": %s%s }\n' \
+  local _cs_json
+  _cs_json="$(printf '{ "role": "consult", "status": "%s", "engine": "%s", "runner": "%s", "effort": "%s", "endpoint": %s, "response": %s, "error": %s%s }' \
     "$(json_escape "$status")" "$(json_escape "$engine")" "$(json_escape "$runner")" "$(json_escape "$effort")" \
-    "$endpoint_json" "$response_json" "$error_json" "$probe_fields"
+    "$endpoint_json" "$response_json" "$error_json" "$probe_fields")"
+  printf '%s\n' "$_cs_json"
+  # dispatch_usage/1 ledger row: only for a run that reached the transport (dispatch-author.sh is told not to write its own).
+  # After a cloud-fallback the row names the REQUESTED seat and records the served seat and the fallback.
+  if [ "${AUTHOR_INVOKED:-0}" -eq 1 ]; then
+    local -a _cs_args=(--from-result - --role consult --run-id "$CONSULT_RUN_ID" --parent-run-id "${AUTOPILOT_PARENT_RUN_ID:-}" \
+      --root-run-id "${AUTOPILOT_ROOT_RUN_ID:-}" --wall-secs "$SECONDS" --endpoint "$endpoint")
+    if [ -n "${CONSULT_ORIG_RUNNER:-}" ]; then
+      _cs_args=(--from-result - --role consult --run-id "$CONSULT_RUN_ID" --parent-run-id "${AUTOPILOT_PARENT_RUN_ID:-}" \
+        --root-run-id "${AUTOPILOT_ROOT_RUN_ID:-}" --wall-secs "$SECONDS" \
+        --runner "$CONSULT_ORIG_RUNNER" --model "$CONSULT_ORIG_ENGINE" --endpoint "$CONSULT_ORIG_ENDPOINT" \
+        --served-runner "$runner" --served-model "$engine" --served-endpoint "$endpoint" \
+        --fallbacks-json "$(printf '[{"runner":"%s","model":"%s","endpoint":%s,"reason":"%s"}]' "$(json_escape "$CONSULT_ORIG_RUNNER")" \
+          "$(json_escape "$CONSULT_ORIG_ENGINE")" "$([ -n "$CONSULT_ORIG_ENDPOINT" ] && printf '"%s"' "$(json_escape "$CONSULT_ORIG_ENDPOINT")" || printf null)" \
+          "$(json_escape "${PROBE_CLASS:-unavailable}")")")
+    fi
+    printf '%s' "$_cs_json" | node "$SCRIPT_DIR/lib/dispatch-usage.js" append "${_cs_args[@]}" || true
+  fi
   exit "$exit_code"
 }
 
@@ -309,6 +327,9 @@ fi
 # resolved cloud_fallback_rung; every other policy stops (engine_unavailable) like `ask`.
 SERVED_BY=""
 FALLBACK_LOG_ROW=""
+AUTHOR_INVOKED=0
+CONSULT_ORIG_RUNNER=""; CONSULT_ORIG_ENGINE=""; CONSULT_ORIG_ENDPOINT=""
+CONSULT_RUN_ID="consult-$(date +%s)-$$"
 if [ -n "$CONSULT_ENDPOINT" ]; then
   [ -r "$SCRIPT_DIR/load-endpoints-env.sh" ] && . "$SCRIPT_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
   endpoint_preprobe "$CONSULT_ENDPOINT" "$CONSULT_ENGINE"
@@ -327,6 +348,7 @@ if (j && typeof j === "object" && j.engine && j.effort && j.runner) process.stdo
 process.stdout.write(JSON.stringify({ run_id: null, from_runner: process.argv[1], from_endpoint: process.argv[2], error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: JSON.parse(process.argv[5]) }));
 ' "$CONSULT_RUNNER" "$CONSULT_ENDPOINT" "$PROBE_CLASS" "${_fb_engine}/${_fb_effort}@${_fb_runner}" "$PROBE_JSON")"
         echo "dispatch-consult: retreating once to cloud rung ${_fb_engine}/${_fb_effort}@${_fb_runner} (on_engine_unavailable: cloud-fallback)" >&2
+        CONSULT_ORIG_RUNNER="$CONSULT_RUNNER"; CONSULT_ORIG_ENGINE="$CONSULT_ENGINE"; CONSULT_ORIG_ENDPOINT="$CONSULT_ENDPOINT"
         CONSULT_ENGINE="$_fb_engine"; CONSULT_EFFORT="$_fb_effort"; CONSULT_RUNNER="$_fb_runner"; CONSULT_ENDPOINT=""
         SERVED_BY="${_fb_engine}/${_fb_effort}@${_fb_runner}"
       else
@@ -346,7 +368,8 @@ declare -a AUTHOR_ARGS=(--runner "$CONSULT_RUNNER" --model "$CONSULT_ENGINE" --e
 [ -n "$CONSULT_ENDPOINT" ] && AUTHOR_ARGS+=(--endpoint "$CONSULT_ENDPOINT")
 
 AUTHOR_ERR="$CONSULT_TMP/author.err"
-AUTHOR_OUT="$("$AUTHOR_BIN" "${AUTHOR_ARGS[@]}" 2>"$AUTHOR_ERR")"
+AUTHOR_INVOKED=1
+AUTHOR_OUT="$(AUTOPILOT_DISPATCH_USAGE=off "$AUTHOR_BIN" "${AUTHOR_ARGS[@]}" 2>"$AUTHOR_ERR")"
 AUTHOR_RC=$?
 [ -s "$AUTHOR_ERR" ] && cat "$AUTHOR_ERR" >&2
 rm -f "$AUTHOR_ERR" "$PROMPT_FILE"

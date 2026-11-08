@@ -514,10 +514,21 @@ emit_result() {
   local verification_author_json
   verification_author_json="$(emit_verification_author)"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && extra_fields="${extra_fields:-}, \"role_kit\": $ROLE_KIT_JSON"
-  printf '{ "runner": "%s", "model": "%s", "status": "%s", "raw_log": %s, "error": %s, "selection_source": "%s", "selection_path": %s, "verification_author": %s%s }\n' \
+  local _au_json
+  _au_json="$(printf '{ "runner": "%s", "model": "%s", "status": "%s", "raw_log": %s, "error": %s, "selection_source": "%s", "selection_path": %s, "verification_author": %s%s }' \
     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$status")" \
     "$raw_log_json" "$error_json" "$(json_escape "$SELECTION_SOURCE")" "$selection_path_json" \
-    "$verification_author_json" "$extra_fields"
+    "$verification_author_json" "$extra_fields")"
+  printf '%s\n' "$_au_json"
+  # dispatch_usage/1 ledger row (never affects the result or the exit code; lib/dispatch-usage.js). A run that was
+  # refused before any model call (precondition_failed) has no run and writes no row.
+  if [ "$status" != "precondition_failed" ] && [ -n "${AUTHOR_STARTED_EPOCH:-}" ]; then
+    local _au_role="${AUTOPILOT_DISPATCH_ROLE:-author}"
+    printf '%s' "$_au_json" | node "$(cd "$(dirname "$0")" && pwd)/lib/dispatch-usage.js" append --from-result - --role "$_au_role" \
+      --run-id "${AUTHOR_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
+      --started-at "${AUTHOR_STARTED_EPOCH:-}" --endpoint "${ENDPOINT:-}" \
+      --provider-session-id "${CHILD_SESSION_ID:-}" || true
+  fi
   exit "$exit_code"
 }
 

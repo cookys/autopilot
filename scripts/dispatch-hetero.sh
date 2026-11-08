@@ -994,7 +994,8 @@ NODE
   [ -n "${PROBE_JSON:-}" ] && probe_fields=", \"probe\": $PROBE_JSON"
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s }\n' \
+  local _emit_json
+  _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -1005,7 +1006,13 @@ NODE
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields")"
+  printf '%s\n' "$_emit_json"
+  # dispatch_usage/1 ledger row (never affects the result or the exit code; see lib/dispatch-usage.js).
+  printf '%s' "$_emit_json" | node "$SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-implementer}" \
+    --run-id "${DISPATCH_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
+    --started-at "${DISPATCH_STARTED_EPOCH:-}" --endpoint "${ENDPOINT:-}" \
+    --provider-session-id "${PROVIDER_SESSION_ID:-${CHILD_SESSION_ID:-}}" || true
 }
 
 check_session_mode_gate() {

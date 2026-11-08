@@ -975,6 +975,14 @@ nv_stderr_tail() {
   # multibyte character; the last sed drops the stranded continuation bytes so the JSON stays UTF-8.
 }
 
+# dispatch_usage/1 ledger row for this review run (never affects the result or the exit code; lib/dispatch-usage.js).
+record_dispatch_usage() {
+  printf '%s' "$1" | node "$_REVIEW_SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-reviewer}" \
+    --run-id "${REVIEW_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
+    --started-at "${REVIEW_STARTED_EPOCH:-}" --endpoint "${ENDPOINT:-}" \
+    --provider-session-id "${CHILD_SESSION_ID:-}" || true
+}
+
 emit_no_verdict() {
   local reason="$1" format_reject_json="" nv_json="" nv_tail=""
   if [ -n "${NV_RC:-}" ]; then
@@ -996,8 +1004,11 @@ emit_no_verdict() {
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && nv_json="$nv_json, \"role_kit\": $ROLE_KIT_JSON"
   passive_capture "no_verdict"
   salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
-  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s%s }\n' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json" "$nv_json"
+  local _rv_json
+  _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s%s }' \
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json" "$nv_json")"
+  printf '%s\n' "$_rv_json"
+  record_dispatch_usage "$_rv_json"
   exit 1
 }
 
@@ -2326,9 +2337,11 @@ if [ "$VERDICT" = "SHIP-AS-IS" ]; then
   NO_FINDING_PROOF="$BATTERY_PROOF"
 fi
 
-printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s, "frame_closed_by": "%s"%s }\n' \
+_rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s, "frame_closed_by": "%s"%s }' \
   "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" \
   "$([ -n "$NO_FINDING_PROOF" ] && printf '"%s"' "$(json_escape "$NO_FINDING_PROOF")" || printf 'null')" \
   "$(json_escape "$RAW_LOG")" "$REVIEW_USAGE_JSON" "$(json_escape "$FRAME_CLOSED_BY")" \
-  "$([ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && printf ', "role_kit": %s' "$ROLE_KIT_JSON")"
+  "$([ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && printf ', "role_kit": %s' "$ROLE_KIT_JSON")")"
+printf '%s\n' "$_rv_json"
+record_dispatch_usage "$_rv_json"
 exit 0

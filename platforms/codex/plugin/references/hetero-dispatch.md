@@ -784,6 +784,33 @@ Direction: [`project/plans/2026-11-05-rolekit-direction.md`](../project/plans/20
 - **kimi on `dispatch-author.sh` only.** `--runner kimi --role-kit <dir>` turns the kit into a kimi custom agent: the rail writes `<rail temp dir>/agent.md` (frontmatter `name: rk-<kit dir name>`, `description`, `tools: [<list>]`, then the exact bytes of `role.md`; the layout `evals/rolekit/compile-kit.js --runner kimi` documents, pinned byte for byte by `hooks/tests/role-kit-kimi.test.sh`) and appends `--agent-file <path>` to the kimi argv; the dir is removed when the rail exits. Everything else about the kimi arm is unchanged (cwd, env, effort variable, containment). The kit is validated before any spawn with the same refusals as above, plus: a kit with `plugin/` is refused (a custom kimi agent reads neither skills nor `AGENTS.md`, so the method must be in `role.md`), and `role.md` is capped at 4096 bytes here. `tools` maps to the agent's `tools: [...]` allowlist (the spike on kimi-code 2.3.0 saw exactly `[Read, Grep]`); `none` becomes `tools: []`, which that spike did NOT exercise for this layout, so verify it with a real run before relying on it. The kimi CLI must list `--agent-file` in `--help`, else the run fails closed before spawning. The result JSON `role_kit` object additionally carries `agent_file_sha256`. `dispatch-review.sh` and `dispatch-hetero.sh` still refuse kimi with `role-kit unsupported for runner kimi`. Not changed: `dispatch-author.sh --bin` is still not forwarded to the kimi shim (the shim finds `kimi` on PATH, as before).
 - **Not covered.** Whether the model follows the card; codex, agy and opencode have no equivalent (no `--tools` flag, different prompt channels). Validation: [`scripts/lib/role-kit.js`](../scripts/lib/role-kit.js), argv glue: [`scripts/lib/role-kit.sh`](../scripts/lib/role-kit.sh), test: `hooks/tests/role-kit-rails.test.sh`.
 
+## Dispatch usage ledger (`dispatch_usage/1`) — one row per finished dispatch
+
+`scripts/lib/dispatch-usage.js` appends one JSON row per finished model dispatch to `dispatch-usage-YYYYMM.jsonl` (UTC month of `ended_at`) in the live dir (`resolveLiveDir`, `$AUTOPILOT_LIVE_DIR` in tests). The write is one O_APPEND `write` at mode 0600; the writer never throws and never changes a rail's result or exit code, a failure only prints `dispatch-usage: warn: ...`. `AUTOPILOT_DISPATCH_USAGE=off` skips the write. An unknown value is `null`, never `0` and never an estimate. A second row for the same `run_id` replaces the first for the reader (last row wins).
+
+| Field | Meaning |
+|-------|---------|
+| `schema` | `dispatch_usage/1` |
+| `run_id`, `parent_run_id`, `root_run_id` | the rail's run id and its lineage (`AUTOPILOT_PARENT_RUN_ID` / `AUTOPILOT_ROOT_RUN_ID`) |
+| `started_at`, `ended_at` | epoch seconds, integers |
+| `courier`, `os_user`, `host` | `fleet whoami` courier (`<ns>/<courier>`, null when unavailable), the OS user and host the rail ran on |
+| `requester` | `{member, session_id, lane}` from `AUTOPILOT_REQUESTER_MEMBER`, `CLAUDE_CODE_SESSION_ID`, `AUTOPILOT_DISPATCH_LANE` |
+| `upstream` | `{task_id, message_id}` from `AUTOPILOT_UPSTREAM_TASK_ID` / `AUTOPILOT_UPSTREAM_MESSAGE_ID` |
+| `role`, `runner`, `model` | `AUTOPILOT_DISPATCH_ROLE` (default implementer / reviewer / author / consult per rail), the requested seat |
+| `account` | see below; null when unknown |
+| `served_by`, `fallbacks` | the seat that answered (defaults to the requested seat) and each retreat (the consult cloud-fallback) |
+| `usage` | `{input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, reasoning_tokens}`, each an integer or null |
+| `usage_source` | `provider_response` when the rail's result carried usage, else `none` |
+| `status`, `wall_secs`, `timed_out`, `error_category` | copied from the rail's result |
+| `provider_session_id` | see below |
+| `branch`, `base`, `commit` | hetero only |
+
+**Account.** A named endpoint on a private address (`plaintext_private`) is `local:<courier name>`; another named endpoint is the endpoint name; `claude`, `claude-native` and `cc-shim` without an endpoint are `claude:<alias>` and `codex` is `codex:<alias>`, the alias read from `AUTOPILOT_ACCOUNT`. The claude alias is chosen inside `claude-account.js run`, which the rail cannot see, so the account is null unless `AUTOPILOT_ACCOUNT` is set; it is never guessed.
+
+**provider_session_id.** For claude-family runners it is `CHILD_SESSION_ID`, the id `child_session_mint` generates and the rail passes as `--session-id`; it is handed to the writer by flag, not read from the result JSON, because the hetero result field `provider_session_id` carries only the grok id. A row that claims usage for a claude-family runner without it is refused (`claude_family_missing_provider_session_id`).
+
+**Wired.** `dispatch-hetero.sh` (all engine implementer runs, including cc-shim and the cloud-fallback retreat), `dispatch-review.sh` (all engine review runs), `dispatch-author.sh` (also plan review, role `plan-review`, and the readiness live probe), `dispatch-consult.sh` (one row for the run; it turns the ledger off for the author transport it calls). **Not wired** (no row, no estimate): `dispatch-explore.sh`, `dispatch-foreman.sh`, `dispatch-discuss.js`, `dispatch-anthropic-review.js`, `dispatch-local-openai.js`, `dispatch-author-kimi.js`, `dispatch-experience-critic.sh`, and the qualification provider's direct HTTP calls (`qualification-review-provider.js`). The hetero cc-shim `usage` object still writes 0 for a key missing from the envelope; the row copies it as given. The author result carries no usage, so its rows say `usage_source: none`. Tests: `scripts/lib/dispatch-usage.test.js` (writer, account mapping), `hooks/tests/dispatch-usage-ledger.test.sh` (one row per rail with a fake runner, switch-off controls).
+
 ## Wired engines (runners) — how to pick one
 
 `--runner` (or `implementer_runner`/`reviewer_runner` in `.claude/review-loop-config.md`):

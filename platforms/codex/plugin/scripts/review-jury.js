@@ -21,7 +21,7 @@
 //        string sent to the runner. --seat-model changes the model AND, unless --seat-engine <seat>=<engine> is also given, the engine
 //        (so --seat-model kimi=kimi-code/k3.1-pro looks up engine kimi-code/k3.1-pro). --seat-engine alone changes only the lookup.
 // Each dispatched seat's stderr is kept in <out>/seats/<seat>.stderr.log (mode 0644; seat JSON field stderr_log) after the secret
-//        filter: Bearer <x>, sk-<x> and any run of >= 32 base64/hex/dot characters, the whole value after x-api-key / Authorization and the literal values of the endpoint token env vars become [redacted]; URLs stay. A retried seat's log holds both attempts.
+//        filter: Bearer <x>, sk-<x> and any run of >= 32 base64/hex/dot characters, the whole value after x-api-key / Authorization and the literal values of the endpoint token env vars become [redacted]; URLs stay (userinfo goes, secret-named query/fragment parameters go). A retried seat's log holds both attempts.
 // --seat-max-tokens <seat>=<n> (repeatable) is passed to dispatch-review's --max-tokens (1..200000, anthropic-compatible seats only:
 //        glm, minimax; any other seat is a usage error). A seat whose result says output_budget_exhausted (the reviewer spent the whole
 //        output budget on thinking) is dispatched once more: max_tokens doubled (capped at 200000); when it is already 200000, effort
@@ -236,14 +236,23 @@ const URL_RE = /https?:\/\/[^\s"'<>]+/g;
 function secretEnvValues() {
   return Object.entries(process.env).filter(([k, v]) => v && (/^AUTOPILOT_ENDPOINT_.+_TOKEN$/.test(k) || k === 'ANTHROPIC_AUTH_TOKEN' || k === 'MINIMAX_API_KEY')).map(([, v]) => v);
 }
-// A URL keeps its scheme and host as written; the path, query and fragment get the sk- and long-string rules (no dot, so file names survive),
-// and the value of a key/api_key/apikey/token/access_token/auth query parameter goes whatever its length.
+// A URL keeps its scheme and host as written, after its userinfo (user:password@) became [redacted]; the path, query and fragment get the sk- and
+// long-string rules (no dot, so file names survive), and the value of a secret-named parameter (after ? & # or ;) goes whatever its length. The
+// name is percent-decoded (raw when that fails), compared case-insensitively, with _ and - the same.
+const SECRET_PARAMS = new Set(['key', 'api-key', 'apikey', 'x-api-key', 'token', 'access-token', 'refresh-token', 'id-token', 'auth-token', 'auth', 'authorization',
+  'password', 'passwd', 'pwd', 'secret', 'client-secret', 'session', 'sessionid', 'sig', 'signature']);
+function secretParam(name) {
+  let n = name;
+  try { n = decodeURIComponent(name); } catch { /* keep the raw name */ }
+  return SECRET_PARAMS.has(n.toLowerCase().replace(/_/g, '-'));
+}
 function redactUrl(u) {
-  const host = /^https?:\/\/[^/?#]*/.exec(u)[0];
-  return host + u.slice(host.length)
-    .replace(/([?&](?:key|api_key|apikey|token|access_token|auth)=)[^&#]*/gi, '$1[redacted]')
+  const v = u.replace(/^(https?:\/\/)[^/?#@]*@/, '$1[redacted]@');
+  const host = /^https?:\/\/[^/?#]*/.exec(v)[0];
+  return host + v.slice(host.length)
+    .replace(/([?&#;])([^=&#;]*)=([^&#;]*)/g, (m, p, n, val) => (secretParam(n) ? p + n + '=[redacted]' : m))
     .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
-    .replace(/[A-Za-z0-9+_=-]{32,}/g, '[redacted]');
+    .replace(/[A-Za-z0-9+_=%-]{32,}/g, '[redacted]');
 }
 function redactStderr(t) {
   let s = String(t);
@@ -251,9 +260,11 @@ function redactStderr(t) {
   const urls = [];
   s = s.replace(URL_RE, (u) => { urls.push(u); return `\u0000URL${urls.length - 1}\u0000`; });
   s = s
-    .replace(/(x-api-key\s*[:=]\s*)\S+/gi, '$1[redacted]')
-    .replace(/(authorization\s*[:=]\s*(?:(?:Bearer|Basic)\s+)?)\S+/gi, '$1[redacted]')
+    .replace(/(x-api-key["']?\s*[:=]\s*["']?)[^\s"']+/gi, '$1[redacted]')
+    .replace(/(authorization["']?\s*[:=]\s*["']?(?:(?:Bearer|Basic)\s+)?)[^\s"']+/gi, '$1[redacted]')
+    .replace(/\b((?:(?<!x-)api[-_]?key|password|passwd|pwd|(?:client[-_])?secret|(?:access|refresh|auth|id)[-_]token)["']?\s*[:=]\s*["']?)[^\s"',&;}]+/gi, '$1[redacted]')
     .replace(/(Bearer\s+)\S+/gi, '$1[redacted]')
+    .replace(/(\bBasic\s+)(?=[A-Za-z0-9+/]*[\d=+/])[A-Za-z0-9+/]{8,}={0,2}/g, '$1[redacted]')
     .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
     .replace(/[A-Za-z0-9+_=.-]{32,}/g, '[redacted]');
   return s.replace(/\u0000URL(\d+)\u0000/g, (_, i) => redactUrl(urls[Number(i)]));

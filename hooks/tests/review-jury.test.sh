@@ -114,10 +114,10 @@ case_override_bad() {
   [ "$rc1$rc2" = 22 ] && echo ok
 }
 
-check() { # check <case> <name> <sed command for the mutant>
-  local c="$1" name="$2" sedcmd="$3"
+check() { # check <case> <name> <sed command for the mutant> [more sed commands, one per argument]
+  local c="$1" name="$2"
   assert_eq "$("$c" "$JURY" "${name}_real")" ok "$name holds on the real script"
-  sed_mutant "$JURY" "$MUT" "$sedcmd" || return
+  sed_mutant "$JURY" "$MUT" "${@:3}" || return
   assert_neq "$("$c" "$MUT" "${name}_mut")" ok "$name goes red on the mutant"
 }
 check case_family family "s/if (family === o\['implementer-family'\])/if (false)/"
@@ -502,7 +502,7 @@ cat > "$TEST_TMP/glmkey-dispatch.sh" <<'FAKE'
 #!/bin/sh
 echo "POST https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages x-api-key: 0123456789abcdef0123456789abcdef.ABCDEFGHIJKLMNOP" >&2
 echo "retrying with key 0123456789abcdef0123456789abcdef.QRSTUVWXYZabcdef now" >&2
-echo "headers: x-api-key: shortkey77 Authorization: Basic basicsecret9" >&2
+echo "headers: x-api-key: shortkey77 Authorization: Basic basicsecretx" >&2
 echo "leak: $AUTOPILOT_ENDPOINT_GLM_TOKEN end" >&2
 printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
 exit 1
@@ -516,7 +516,7 @@ case_redact_glmkey() { # the dot and the 16 characters after it of a GLM key do 
 check case_redact_glmkey redactglmkey "s|replace(/\[A-Za-z0-9+_=.-\]{32,}/g|replace(/[A-Za-z0-9+_=-]{32,}/g|"
 case_redact_header() { # the whole value after x-api-key / Authorization goes, however short
   local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
-  ! grep -q 'shortkey77' "$lg" && ! grep -q 'basicsecret9' "$lg" && echo ok
+  ! grep -q 'shortkey77' "$lg" && ! grep -q 'basicsecretx' "$lg" && echo ok
 }
 check case_redact_header redactxapikey "s/(x-api-key/(x-api-keyZ/"
 check case_redact_header redactauthz "s/(authorization/(authorizationZ/"
@@ -525,7 +525,7 @@ case_redact_url() { # a URL with a long dotted host survives the long-string rul
   grep -q 'https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages' "$d/out/seats/glm.stderr.log" && echo ok
 }
 check case_redact_url redacturl "s/^const URL_RE = \/https/const URL_RE = \/zzzhttps/"
-check case_redact_url redacturlhost "s/\[^\/?#\]\*\/\.exec(u)/{0}\/.exec(u)/"
+check case_redact_url redacturlhost "s/\[^\/?#\]\*\/\.exec(v)/{0}\/.exec(v)/"
 cat > "$TEST_TMP/urlkey-dispatch.sh" <<'FAKE'
 #!/bin/sh
 echo "GET https://h.example.invalid/v1?key=0123456789abcdef0123456789abcdef done" >&2
@@ -545,8 +545,69 @@ case_redact_url_query_short() { # a short api_key value is masked whatever its l
   local d="$TEST_TMP/$2"; urlkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
   ! grep -q 'sk-abc' "$lg" && ! grep -q 'short1' "$lg" && grep -q 'api_key=\[redacted\]&x=1' "$lg" && echo ok
 }
-check case_redact_url_query_short redacturlshort "s/(?:key|api_key|apikey|token|access_token|auth)=/(?:zzkey)=/"
+check case_redact_url_query_short redacturlshort "s/(secretParam(n) ? p + n/(false ? p + n/"
 check case_redact_url_query_short redacturlshortall "s/=> redactUrl(urls\[Number(i)\])/=> urls[Number(i)]/"
+cat > "$TEST_TMP/urlclass-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "A https://user1:pw9short@h.example.invalid/v1 done" >&2
+echo "B https://h.example.invalid/cb#access_token=frag2short done" >&2
+echo "C https://h.example.invalid/v1?ap%69_key=enc3short&x=1 done" >&2
+echo "D https://h.example.invalid/v1?password=pass4short&x=1 done" >&2
+echo "E https://h.example.invalid/v1?API-Key=case5short&Client_Secret=dash6short done" >&2
+echo "F https://h.example.invalid/p/AAAAAAAAAAAAAAAA%2BBBBBBBBBBBBBBBBB/z done" >&2
+echo '{"x-api-key":"jsn7short","authorization":"jsn8short","password":"jsn9short"}' >&2
+echo "G connect api_key=plain10short password=plain11short" >&2
+echo "H Authorization hdr Basic dXNlcjpwYXNzMTI= end" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/urlclass-dispatch.sh"
+urlclass_log() { local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/urlclass-dispatch.sh"; echo "$d/out/seats/glm.stderr.log"; }
+case_redact_userinfo() { # user:password@ in a URL goes, the host stays
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'pw9short' "$lg" && ! grep -q 'user1' "$lg" && grep -q 'https://\[redacted\]@h.example.invalid/v1' "$lg" && echo ok
+}
+check case_redact_userinfo redactuserinfo 's/const v = u.replace(.*/const v = u;/'
+case_redact_fragment() { # a secret-named fragment parameter goes
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'frag2short' "$lg" && grep -q 'cb#access_token=\[redacted\]' "$lg" && echo ok
+}
+check case_redact_fragment redactfragment "s/\[?&#;\]/[?\\&]/"
+case_redact_encoded_name() { # a percent-encoded parameter name is decoded before the compare
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'enc3short' "$lg" && grep -q 'ap%69_key=\[redacted\]&x=1' "$lg" && echo ok
+}
+check case_redact_encoded_name redactencname "s/try { n = decodeURIComponent(name); }/try { n = name; }/"
+case_redact_password() { # password= with a short value, in a URL and in plain text
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'pass4short' "$lg" && ! grep -q 'plain11short' "$lg" && ! grep -q 'plain10short' "$lg" && echo ok
+}
+check case_redact_password redactpwurl "s/'password', //"
+check case_redact_password redactpwtext 's/key|password|/key|/'
+check case_redact_password redactapikeytext 's/(?<!x-)api\[-_\]?key|/zzz|/'
+case_redact_param_case() { # parameter names compare case-insensitively with _ and - the same
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'case5short' "$lg" && ! grep -q 'dash6short' "$lg" && echo ok
+}
+check case_redact_param_case redactlower "s/n.toLowerCase().replace/n.replace/"
+check case_redact_param_case redactdash "s/.replace(\/_\/g, '-')//"
+case_redact_pct_run() { # a long secret that carries %-escapes is one run
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'BBBBBBBBBBBBBBBBB' "$lg" && grep -q '/p/\[redacted\]/z' "$lg" && echo ok
+}
+check case_redact_pct_run redactpctrun "s/\[A-Za-z0-9+_=%-\]{32,}/[A-Za-z0-9+_=-]{32,}/"
+case_redact_json_key() { # JSON-quoted x-api-key / authorization / password values go, however short
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'jsn7short' "$lg" && ! grep -q 'jsn8short' "$lg" && ! grep -q 'jsn9short' "$lg" && echo ok
+}
+check case_redact_json_key redactjsonxapi 's/(x-api-key[^\\]*\\s\*/(x-api-key\\s*/'
+check case_redact_json_key redactjsonauthz 's/(authorization[^\\]*\\s\*/(authorization\\s*/'
+check case_redact_json_key redactjsonpw '/\\b((?:/s/\[.\{2\}\]?\\s\*/\\s*/'
+case_redact_basic() { # a bare Basic <base64> with no Authorization name before it
+  local lg; lg="$(urlclass_log "$1" "$2")"
+  ! grep -q 'dXNlcjpwYXNzMTI' "$lg" && echo ok
+}
+check case_redact_basic redactbasic 's/\.replace(\/(\\bBasic.*$//'
 case_redact_env() { # a token held in the process env is removed by its literal value, whatever it looks like
   local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
   ! grep -q 'envtok7Qz' "$lg" && grep -q 'leak: \[redacted\] end' "$lg" && echo ok

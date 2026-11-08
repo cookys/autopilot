@@ -39,7 +39,7 @@ const cmp = (a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i += 1
 const zhipu = [...new Set(defaults.defaults.filter((r) => r.administration.family === 'zhipu').map((r) => r.administration.engine))];
 const newestZhipu = zhipu.sort((a, b) => cmp(versionKey(b), versionKey(a)))[0];
 const expected = {
-  openai: (roster.match(/^- reviewer_fallback_preference:\s*(\S+)\s*$/m) || [])[1],
+  openai: (roster.match(/^- reviewer_fallback_preference:\s*(?:.*,\s*)?(\S+)\s*$/m) || [])[1],
   xai: calibrated.find((m) => /^grok-/.test(m)),
   minimax: calibrated.find((m) => /^MiniMax-M3$/.test(m)),
   zhipu: newestZhipu,

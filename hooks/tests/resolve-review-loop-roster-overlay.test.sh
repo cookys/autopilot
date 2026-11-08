@@ -34,8 +34,11 @@ for k in reviewer_engine reviewer_effort reviewer_runner reviewer_endpoint \
          qc_panel min_panel_size qc_panel_aggregation consult_engine discuss_engine; do
   assert_eq "$(printf '%s' "$ROSTER_JSON" | jget "$k")" "$(printf '%s' "$STUB_JSON" | jget "$k")" "stub follows the roster for $k"
 done
-assert_eq "GLM-5.3" "$(printf '%s' "$STUB_JSON" | jget reviewer_engine)" "roster loop reviewer is GLM-5.3"
-assert_eq "cc-shim" "$(printf '%s' "$STUB_JSON" | jget reviewer_runner)" "roster loop reviewer runner is cc-shim"
+assert_eq "Qwen3.8-27B-QUASAR-NVFP4" "$(printf '%s' "$STUB_JSON" | jget reviewer_engine)" "roster loop reviewer is the local qwen"
+assert_eq "anthropic-compatible" "$(printf '%s' "$STUB_JSON" | jget reviewer_runner)" "roster loop reviewer runner is anthropic-compatible"
+assert_eq "default" "$(printf '%s' "$STUB_JSON" | jget reviewer_effort)" "roster loop reviewer effort is default"
+assert_eq "qwen_local" "$(printf '%s' "$STUB_JSON" | jget reviewer_endpoint)" "roster loop reviewer endpoint is qwen_local"
+assert_eq '["GLM-5.3","gpt-6.1-sol"]' "$(printf '%s' "$STUB_JSON" | jget reviewer_fallback_preference)" "reviewer fallback order is GLM then cloud"
 assert_eq "Qwen3.8-Max" "$(printf '%s' "$STUB_JSON" | jget verification_author_engine)" "roster VA seat is Qwen3.8-Max"
 assert_eq '["gpt-6-astra","gpt-6.1-sol","gemini-4-argon-high","GLM-5.3"]' "$(printf '%s' "$STUB_JSON" | jget qc_panel)" "roster qc panel"
 assert_eq "[]" "$(printf '%s' "$STUB_JSON" | jget roster_overrides)" "no override declared -> roster_overrides is empty"
@@ -55,7 +58,7 @@ OVR_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$OVR" bash "$SCRIPT" 2>/dev/null)"; rc=
 assert_eq "0" "$rc" "one override group resolves"
 assert_eq "grok-4.7" "$(printf '%s' "$OVR_JSON" | jget implementer_engine)" "override group comes from the repo (engine)"
 assert_eq "grok" "$(printf '%s' "$OVR_JSON" | jget implementer_runner)" "override group comes from the repo (runner)"
-assert_eq "GLM-5.3" "$(printf '%s' "$OVR_JSON" | jget reviewer_engine)" "other group (reviewer) still from the roster"
+assert_eq "Qwen3.8-27B-QUASAR-NVFP4" "$(printf '%s' "$OVR_JSON" | jget reviewer_engine)" "other group (reviewer) still from the roster"
 assert_eq "$(printf '%s' "$ROSTER_JSON" | jget qc_panel)" "$(printf '%s' "$OVR_JSON" | jget qc_panel)" "other group (qc_panel) still from the roster"
 assert_eq "7" "$(printf '%s' "$OVR_JSON" | jget loop_max_rounds)" "non-seat knob written in the repo file wins"
 assert_eq '[{"group":"implementer","until":"2099-01-01","reason":"trial of another implementer","expired":false}]' "$(printf '%s' "$OVR_JSON" | jget roster_overrides)" "roster_overrides lists the declared group"

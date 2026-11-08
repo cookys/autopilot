@@ -155,11 +155,13 @@ const problems = [];
 // qc_panel / qc_panel_seats moved on purpose after the pre-D6 pin (three seats: gpt-6.1-sol at low, claude-opus-5-5,
 // gemini-4-argon-high; now four seats: gpt-6-astra low, gpt-6.1-sol high, gemini-4-argon-high, GLM-5.3 via glm): they are not compared with the old output but
 // asserted against the exact new values below (same values resolve-review-loop-b pins).
-const INTENTIONAL_DEFAULT_MOVE = new Set(['qc_panel', 'qc_panel_seats']);
+// reviewer_effort moved on purpose (2026-11-09, the roster loop reviewer is the local qwen at effort `default`,
+// a value the frozen resolver does not accept): asserted against the exact new value, not the old output.
+const INTENTIONAL_DEFAULT_MOVE = new Set(['qc_panel', 'qc_panel_seats', 'reviewer_effort']);
 for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
   if (INTENTIONAL_DEFAULT_MOVE.has(key)) {
-    const want = key === 'qc_panel'
+    const want = key === 'reviewer_effort' ? 'default' : key === 'qc_panel'
       ? ['gpt-6-astra', 'gpt-6.1-sol', 'gemini-4-argon-high', 'GLM-5.3']
       : [{role:'qc',runner:'codex',model:'gpt-6-astra',effort:'low',endpoint:null,family:'openai'},
          {role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'medium',endpoint:null,family:'openai'},

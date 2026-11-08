@@ -45,6 +45,25 @@ in the repo file as before, or left out to follow this file.
 
 Every roster change adds a block here: date, reason, who ruled.
 
+**2026-11-09.** The loop reviewer seat moves from GLM-5.3 to the local qwen. Ruled by the PM (fleet 01M6XM5Y).
+
+* New loop reviewer: `Qwen3.8-27B-QUASAR-NVFP4`, runner `anthropic-compatible` (HTTP), endpoint `qwen_local`
+  (the same local server as the implementer canary), effort `default`. This is exactly the qualified row the
+  exam recorded: scorecard event_id 15, evidence_id
+  `45d2727dc900272c80eb31524b388426fb84778ed03aa485cc1dfd07e7359ef7`, reviewer corpus 42/42, 0 critical
+  false pass, specificity 0/38 false alarms, thinking plus json_schema, 2 repeated trials.
+* Fallback order when the family check rejects the seat (it shares the implementer's family during the
+  canary): `reviewer_fallback_preference` is now `GLM-5.3, gpt-6.1-sol`, so GLM is tried first and the cloud
+  seat last. The family-conflict fallback only takes ladder rows on the runners `codex|agy|grok|claude-native`,
+  and a `cc-shim` GLM row is not one of them, so in practice the cloud seat is the one that runs.
+* "GLM as an extra seat while online" has no mechanism today: there is one loop reviewer seat, and
+  `reviewer_ladder` is a substitute list, not a second parallel vote. The only multi-seat review is the
+  terminal `qc_panel` (which already holds GLM-5.3). Not invented here; a follow-up would add a loop-level
+  extra seat that joins only when its endpoint answers the `/models` probe.
+* Known gap: `resolve-dispatch-topology.js` maps an HTTP seat to an endpoint by runner name or by a substring
+  of the engine id, so `qwen_local` never matches `Qwen3.8-27B-QUASAR-NVFP4`; the qwen reviewer row does not
+  appear in the derived `reviewer_ladder`. The primary seat is declared above and does not depend on it.
+
 **2026-11-08.** Review-seat wiring for three families (PM fleet 01M6W6QAVQ and 01M6W6S85M, part A). The
 ladders are DERIVED, not listed: `scripts/resolve-dispatch-topology.js` builds `reviewer_ladder` and
 `plan_review_panel` from scorecard rows that are qualified for the role, whose runner is installed (an HTTP
@@ -84,7 +103,7 @@ Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
   (agy, high) and GLM-5.3 (cc-shim, endpoint glm, high). Runner and effort per seat come from the
   four-seat command in daily use (`collect-gen-55.sh`: sol medium, GLM high, astra low, argon high).
   `min_panel_size` stays 3 as before.
-* The loop reviewer is GLM-5.3 on cc-shim (endpoint glm, high) with fallback preference gpt-6.1-sol,
+* The loop reviewer was GLM-5.3 on cc-shim (endpoint glm, high; replaced on 2026-11-09, see above) with fallback preference gpt-6.1-sol,
   which is the state of autopilot's own config after commit 3859a85b4 dropped MiniMax-M3.
 * The verification author is Qwen3.8-Max on qoderclicn, high: the seat autopilot's own config gives
   strict /l5 today.
@@ -92,10 +111,10 @@ Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
 
 ## Settings
 
-- reviewer_engine: GLM-5.3
-- reviewer_effort: high
-- reviewer_runner: cc-shim
-- reviewer_endpoint: glm
+- reviewer_engine: Qwen3.8-27B-QUASAR-NVFP4
+- reviewer_effort: default
+- reviewer_runner: anthropic-compatible
+- reviewer_endpoint: qwen_local
 - reviewer_limitation:
 - reviewer_limitation_required: false
 - reviewer_engine_low_risk:
@@ -115,8 +134,8 @@ Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
 - cloud_fallback_rung:
 - on_family_conflict: fallback
 - review_fresh_context: on
-- reviewer_fallback_preference: gpt-6.1-sol
-- reviewer_fallback_preference_low_risk: gpt-6.1-sol
+- reviewer_fallback_preference: GLM-5.3, gpt-6.1-sol
+- reviewer_fallback_preference_low_risk: GLM-5.3, gpt-6.1-sol
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on

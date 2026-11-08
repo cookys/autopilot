@@ -52,6 +52,27 @@
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
 #                                              #   into ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env
 #                                              #   still used when omitted (byte-identical)
+#       [--sandbox off|bwrap]                  # cc-shim only (any other runner is refused). bwrap: the worker
+#                                              #   runs inside bubblewrap with `/` read-only, so a write outside
+#                                              #   the worker's own directories fails BEFORE it lands (EROFS) instead of
+#                                              #   being found afterwards by the main-checkout fingerprint (which still
+#                                              #   runs, second layer). Writable, and nothing else: (1) the worktree,
+#                                              #   (2) this dispatch's own scratch dir (TMPDIR, the throwaway
+#                                              #   CLAUDE_CONFIG_DIR, the result envelope; made and removed per run),
+#                                              #   (3) /dev and /proc as bwrap's minimal device/proc mounts. The real
+#                                              #   ~/.claude and ~/.claude.json are masked, never writable. Network as
+#                                              #   before. Fails closed: no bwrap, bwrap cannot start, or the worktree
+#                                              #   sits inside any repo's working tree => precondition_failed, never a
+#                                              #   silent run without the sandbox. Result JSON + manifest carry
+#                                              #   `sandbox: {mode, writable, denied_writes}`. Default off.
+#                                              #   The worktree's `.git` gitfile is bound read-only; the rail also
+#                                              #   checks it is unchanged before any git against the worktree
+#                                              #   (else boundary_rejected, worktree_gitfile_tampered), sandbox or not; any nested `.git` below the
+#                                              #   worktree root is refused too (worktree_nested_repo), and the rail's git runs with fsmonitor and hooksPath off.
+#                                              #   references/hetero-dispatch.md § Write sandbox.
+#       [--worktree-parent <abs dir>]          # place the new worktree under this directory instead of
+#                                              #   <main checkout>/.claude/worktrees (required with --sandbox bwrap
+#                                              #   unless --reuse-worktree: the default place is inside the repo)
 #       [--context-window off|warn|block]      # pre-dispatch context-window gate (default:
 #                                              #   block; also AUTOPILOT_CONTEXT_WINDOW_GATE).
 #                                              #   Over budget ⇒ fail closed BEFORE the runner
@@ -328,6 +349,11 @@ SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
+SANDBOX="off"          # --sandbox off|bwrap (cc-shim only)
+SANDBOX_TMP=""         # bwrap: this dispatch's own writable scratch dir (made by the cc-shim arm, removed after the worker)
+SANDBOX_ARGV=()        # bwrap: the argv prefix run_worker puts in front of the worker
+SANDBOX_DENIED="unknown"  # bwrap: EROFS lines seen in the worker output, else unknown
+WORKTREE_PARENT=""     # --worktree-parent: directory the new worktree is created under
 PROVIDER_ERROR_RUNNER=""
 PROVIDER_ERROR_STATUS=""
 PROVIDER_ERROR_FIELD=""
@@ -506,6 +532,7 @@ cleanup() {
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
   [ -n "${CNATIVE_CONFIG_DIR:-}" ] && rm -rf "$CNATIVE_CONFIG_DIR"
+  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
@@ -994,7 +1021,9 @@ NODE
   [ -n "${PROBE_JSON:-}" ] && probe_fields=", \"probe\": $PROBE_JSON"
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s }\n' \
+  local sandbox_fields=""
+  [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json)"
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -1005,7 +1034,7 @@ NODE
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields"
 }
 
 check_session_mode_gate() {
@@ -1722,6 +1751,130 @@ die_precondition() {
   exit 2
 }
 
+# --- write sandbox (--sandbox bwrap; cc-shim only) -------------------------------------------
+# Why: a local worker wrote outside its worktree three times (into the main checkout) and the
+# main-checkout fingerprint only sees that AFTER the write. bwrap makes `/` read-only for the
+# worker so the write fails first; the fingerprint stays as the second layer.
+# Writable inside, and nothing else (this list is mirrored in references/hetero-dispatch.md):
+#   1. the worktree ($WT)
+#   2. this dispatch's own scratch dir ($SANDBOX_TMP: TMPDIR, the throwaway CLAUDE_CONFIG_DIR,
+#      XDG_CACHE_HOME, the result envelope). Made per run, removed per run. Never the real
+#      ~/.claude: that directory (and ~/.claude.json) is masked read-only.
+#   3. /dev and /proc, bwrap's minimal device and proc mounts.
+# The worktree's git admin dir lives under the main checkout and stays read-only: the worker
+# is edit-only and the rail (outside the sandbox) does the commit. Network is untouched.
+SANDBOX_PREFLIGHT_ERROR=""
+SANDBOX_WT_PATH=""     # the worktree path kept for the result/manifest (WT is cleared when the worktree is reaped)
+SANDBOX_TMP_PATH=""    # the scratch dir path kept for the result/manifest after SANDBOX_TMP is removed
+sandbox_preflight() {
+  SANDBOX_PREFLIGHT_ERROR=""
+  if ! command -v bwrap >/dev/null 2>&1; then
+    SANDBOX_PREFLIGHT_ERROR="--sandbox bwrap requested but bwrap is not on PATH; refusing to run without the sandbox (no silent downgrade)"
+    return 1
+  fi
+  if ! bwrap --ro-bind / / --dev /dev --proc /proc true >/dev/null 2>&1; then
+    SANDBOX_PREFLIGHT_ERROR="--sandbox bwrap requested but bwrap cannot start here (user namespaces blocked?); refusing to run without the sandbox (no silent downgrade)"
+    return 1
+  fi
+  return 0
+}
+# sandbox_nested_repo <path>: prints the nearest PROPER ancestor directory that holds a .git entry
+# (a repo's working tree, main checkout or linked worktree alike) and returns 0; returns 1 when
+# no ancestor is inside any repo. Strict on purpose: the independent clone the sandbox wants is
+# a worktree that sits OUTSIDE every repo's working tree.
+sandbox_nested_repo() {
+  local d
+  d="$(dirname "$1")"
+  while [ -n "$d" ]; do
+    if [ -e "$d/.git" ]; then printf '%s' "$d"; return 0; fi
+    [ "$d" = "/" ] && break
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+# sandbox_setup: make the per-dispatch scratch dir and the bwrap argv prefix (SANDBOX_ARGV).
+sandbox_setup() {
+  SANDBOX_TMP="$(mktemp -d -t dispatch-hetero-sandbox-XXXXXX)" || return 1
+  SANDBOX_TMP="$(realpath "$SANDBOX_TMP")" || return 1
+  SANDBOX_TMP_PATH="$SANDBOX_TMP"
+  SANDBOX_WT_PATH="$WT"
+  mkdir -p "$SANDBOX_TMP/tmp" "$SANDBOX_TMP/claude-config" "$SANDBOX_TMP/cache" "$SANDBOX_TMP/empty" || return 1
+  SANDBOX_ARGV=(bwrap --die-with-parent --ro-bind / / --dev /dev --proc /proc
+    --bind "$WT" "$WT" --bind "$SANDBOX_TMP" "$SANDBOX_TMP")
+  # The gitfile stays read-only inside the sandbox: a writable pointer would let the worker aim the rail's own git at a hostile config.
+  [ -f "$WT/.git" ] && SANDBOX_ARGV+=(--ro-bind "$WT/.git" "$WT/.git")
+  [ -d "${HOME:-/nonexistent}/.claude" ] && SANDBOX_ARGV+=(--ro-bind "$SANDBOX_TMP/empty" "$HOME/.claude")
+  [ -f "${HOME:-/nonexistent}/.claude.json" ] && SANDBOX_ARGV+=(--ro-bind /dev/null "$HOME/.claude.json")
+  SANDBOX_ARGV+=(--setenv TMPDIR "$SANDBOX_TMP/tmp" --setenv CLAUDE_CONFIG_DIR "$SANDBOX_TMP/claude-config"
+    --setenv XDG_CACHE_HOME "$SANDBOX_TMP/cache" --chdir "$WT" --)
+  return 0
+}
+sandbox_teardown() {
+  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
+  SANDBOX_TMP=""
+  SANDBOX_ARGV=()
+}
+# sandbox_count_denied: EROFS lines the worker's own output shows. A count is only what the output
+# reveals (a worker can swallow the error), so no sighting reports "unknown", never 0.
+sandbox_count_denied() {
+  local n=0
+  SANDBOX_DENIED="unknown"
+  [ -n "${LOG:-}" ] && [ -f "$LOG" ] && n="$(grep -ciE 'read-only file system|EROFS' "$LOG" 2>/dev/null || true)"
+  [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ] && SANDBOX_DENIED="$n"
+  return 0
+}
+# wt_gitfile_check: 0 when $WT/.git is still the regular file recorded at worktree creation. Anything else
+# (symlink, directory, other content) sets WT_GITFILE_ERROR and returns 1; the caller must then run no git
+# against $WT. Independent of --sandbox: it is the rail-side half of the gitfile guard.
+WT_GITFILE_EXPECTED=""
+WT_GITFILE_ERROR=""
+wt_gitfile_check() {
+  [ -z "${WT_GITFILE_ERROR:-}" ] || return 1
+  [ -n "${WT_GITFILE_EXPECTED:-}" ] || return 0
+  if [ -L "$WT/.git" ] || [ ! -f "$WT/.git" ]; then
+    WT_GITFILE_ERROR="worktree_gitfile_tampered: $WT/.git is no longer a regular file (symlink, directory or removed); no git was run against the worktree, round discarded, worktree retained"
+    return 1
+  fi
+  if [ "$(cat "$WT/.git" 2>/dev/null)" != "$WT_GITFILE_EXPECTED" ]; then
+    WT_GITFILE_ERROR="worktree_gitfile_tampered: $WT/.git content changed since the worktree was created (it pointed elsewhere); no git was run against the worktree, round discarded, worktree retained"
+    return 1
+  fi
+  # A nested repo (any `.git` entry below the worktree root) carries its own config, hooks and attributes;
+  # `git add -A` would record it as a gitlink and a later status would recurse into it and run them.
+  _wt_nested="$(find "$WT" -mindepth 2 -name .git -print -quit 2>/dev/null)"
+  if [ -n "$_wt_nested" ]; then
+    WT_GITFILE_ERROR="worktree_nested_repo: a nested repository ($_wt_nested) exists inside the worktree; no git was run against the worktree, round discarded, worktree retained"
+    return 1
+  fi
+  return 0
+}
+# wt_record_gitfile_from_registry <path>: for --reuse-worktree, the expected gitfile is what the main repo's
+# own registry says (<common>/worktrees/<name>/gitdir names this worktree's .git), never the file as the
+# previous round left it. Sets WT_GITFILE_EXPECTED; 1 when the worktree is not registered that way.
+wt_record_gitfile_from_registry() {
+  local d
+  for d in "$_wt_common_dir"/worktrees/*/; do
+    d="${d%/}"
+    [ -f "$d/gitdir" ] || continue
+    if [ "$(cat "$d/gitdir" 2>/dev/null)" = "$1/.git" ]; then
+      WT_GITFILE_EXPECTED="gitdir: $d"
+      return 0
+    fi
+  done
+  return 1
+}
+# _wt_git: git against $WT with the config-driven command hooks off: core.fsmonitor can name any command and a
+# relative core.hooksPath resolves inside the writable worktree. The rail's wrapper commit never relied on a
+# hook (it already passes --no-verify, and its boundary gates are rail code, not git hooks).
+_wt_git() { git -C "$WT" -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
+# sandbox_json: the `sandbox` object for the result JSON and the manifest.
+sandbox_json() {
+  local denied="\"unknown\"" tmp="${SANDBOX_TMP_PATH:-<per-dispatch scratch dir>}"
+  [[ "${SANDBOX_DENIED:-}" =~ ^[0-9]+$ ]] && denied="$SANDBOX_DENIED"
+  printf '{"mode":"bwrap","writable":["%s","%s"],"denied_writes":%s}' \
+    "$(_flat_json_escape "${SANDBOX_WT_PATH:-${WT:-}}")" "$(_flat_json_escape "$tmp")" "$denied"
+}
+
 # The endpoint pre-probe (scripts/lib/endpoint-probe.sh) found the local endpoint down or busy BEFORE any
 # worker or worktree was opened. Same result the post-hoc classifier gives a dead worker
 # (status engine_unavailable, "engine unavailable (<class>)"), so the engine applies on_engine_unavailable
@@ -1876,6 +2029,7 @@ write_manifest() {
   fi
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
+  [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
   local mf_timeout_secs="" mf_timeout_source="default" mf_timeout_enforced="false"
   mf_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   [ -n "$mf_timeout_secs" ] || mf_timeout_secs="null"
@@ -1921,6 +2075,8 @@ while [ $# -gt 0 ]; do
     --effort) EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
+    --sandbox) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--sandbox requires off|bwrap"; SANDBOX="$2"; shift 2 ;;
+    --worktree-parent) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--worktree-parent requires a non-empty directory path"; WORKTREE_PARENT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --gate-rules) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--gate-rules requires a non-empty file path"; GATE_RULES_FILE="$2"; shift 2 ;;
@@ -2186,6 +2342,18 @@ set_runner_flags() {
     [ -f "$GATE_RULES_FILE" ] && [ -r "$GATE_RULES_FILE" ] || die_precondition "--gate-rules file not readable: $GATE_RULES_FILE"
     GATE_RULES_FILE="$(cd "$(dirname "$GATE_RULES_FILE")" && pwd -P)/$(basename "$GATE_RULES_FILE")"
     [[ "${CHILD_SESSION_ID:-}" =~ ^[A-Za-z0-9-]{1,128}$ ]] || die_precondition "--gate-rules: could not mint a fresh session id; refusing to dispatch"
+  fi
+  case "$SANDBOX" in
+    off) ;;
+    bwrap)
+      [ "$IS_CCSHIM" -eq 1 ] || die_precondition "--sandbox bwrap applies only to --runner cc-shim (got runner: $RUNNER)"
+      sandbox_preflight || die_precondition "$SANDBOX_PREFLIGHT_ERROR"
+      ;;
+    *) die_precondition "--sandbox must be off or bwrap (got: $SANDBOX)" ;;
+  esac
+  if [ -n "$WORKTREE_PARENT" ]; then
+    case "$WORKTREE_PARENT" in /*) ;; *) die_precondition "--worktree-parent must be an absolute path (got: $WORKTREE_PARENT)" ;; esac
+    [ -d "$WORKTREE_PARENT" ] || die_precondition "--worktree-parent is not an existing directory: $WORKTREE_PARENT"
   fi
   if [ -n "${ROLE_KIT_DIR:-}" ]; then
     # Refused, never ignored: a kit the runner cannot carry would make the manifest claim a role it did not get.
@@ -3153,11 +3321,14 @@ NODE
     || die_precondition "retained worktree filesystem instance changed"
   _wt_is_registered_path "$_wt_repo_root" "$WT"
   [ "$?" -eq 0 ] || die_precondition "retained worktree is not registered"
-  [ "$(git -C "$WT" symbolic-ref --quiet --short HEAD 2>/dev/null || true)" = "$BRANCH" ] \
+  wt_record_gitfile_from_registry "$WT" \
+    || die_precondition "retained worktree is not registered with a gitdir pointing at it"
+  wt_gitfile_check || die_precondition "retained worktree refused: $WT_GITFILE_ERROR"
+  [ "$(_wt_git symbolic-ref --quiet --short HEAD 2>/dev/null || true)" = "$BRANCH" ] \
     || die_precondition "retained worktree branch does not match --branch"
-  [ "$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)" = "$BASE_SHA" ] \
+  [ "$(_wt_git rev-parse HEAD 2>/dev/null || true)" = "$BASE_SHA" ] \
     || die_precondition "retained worktree HEAD does not match --base"
-  [ -z "$(git -C "$WT" status --porcelain 2>/dev/null)" ] \
+  [ -z "$(_wt_git status --porcelain --ignore-submodules=all 2>/dev/null)" ] \
     || die_precondition "retained worktree is dirty"
   _wt_read_schema2_marker "$WT/.autopilot-worktree" \
     || die_precondition "retained worktree marker is invalid"
@@ -3176,9 +3347,16 @@ else
   # Under <main checkout>/.claude/worktrees/ (resolve-repo-placement.js; temp dir on its fallback).
   _wt_template="$(node "$SELF_DIR/resolve-repo-placement.js" worktree --prefix hetero --slug "$BRANCH" --from "$_wt_repo_root")" \
     || die_precondition "cannot resolve worktree placement"
+  if [ -n "$WORKTREE_PARENT" ]; then
+    _wt_template="$(realpath "$WORKTREE_PARENT")/$(basename "$_wt_template")"
+  fi
   WT="$(mktemp -u -d "$_wt_template")"
   WT="$(realpath -m "$WT" 2>/dev/null)" \
     || die_precondition "cannot canonicalize planned worktree path"
+fi
+
+if [ "$SANDBOX" = "bwrap" ] && _sbx_nested="$(sandbox_nested_repo "$WT")"; then
+  die_precondition "--sandbox bwrap refused: the worktree $WT sits inside the working tree of a repo ($_sbx_nested). The sandbox needs the worktree outside every repo (independent clone, not a nested .claude/worktrees); pass --worktree-parent <dir outside any repo> or --reuse-worktree <such a path>"
 fi
 
 _wt_prepare_common_excludes() {
@@ -3395,6 +3573,10 @@ if ! _wt_read_schema2_marker "$WT/.autopilot-worktree" \
   _wt_lock_fail "worktree ownership marker verification failed"
 fi
 _wt_creation_test_checkpoint after-verification
+# The gitfile `$WT/.git` is a pointer the rail's own git calls follow. Record it now; wt_gitfile_check
+# (below) refuses to run any git against $WT once it differs (a worker that repointed it at a dir with
+# a hostile config would otherwise get its core.fsmonitor / hooks run by the rail, outside the sandbox).
+[ -n "$WT_GITFILE_EXPECTED" ] || WT_GITFILE_EXPECTED="$(cat "$WT/.git" 2>/dev/null)"
 [ -n "$WT_PENDING_RECORD" ] && rm -f -- "$WT_PENDING_RECORD"
 WT_PENDING_RECORD=""
 [ -n "$WT_BUDGET_LOCK_FD" ] && exec {WT_BUDGET_LOCK_FD}>&-
@@ -3452,6 +3634,7 @@ abort_dispatch() {
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
   [ -n "${CNATIVE_CONFIG_DIR:-}" ] && rm -rf "$CNATIVE_CONFIG_DIR"
+  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
@@ -3460,7 +3643,7 @@ abort_dispatch() {
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ]; then
     local abort_tip
-    abort_tip="$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)"
+    abort_tip=""; wt_gitfile_check && abort_tip="$(_wt_git rev-parse HEAD 2>/dev/null || true)"
     if [ -n "${WT_LOCK_FD:-}" ]; then
       exec {WT_LOCK_FD}>&- || true
       WT_LOCK_FD=""
@@ -3822,10 +4005,11 @@ _supervise_commit_quiet() {
     size="$(stat -c %s "$LOG" 2>/dev/null || echo 0)"
     if [ "$size" != "$last_size" ]; then last_size="$size"; since=-1; continue; fi
     if _worker_has_busy_descendant "$rp"; then since=-1; continue; fi
-    head="$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)"
+    wt_gitfile_check || { since=-1; continue; }
+    head="$(_wt_git rev-parse HEAD 2>/dev/null || true)"
     if [ -z "$head" ] || [ "$head" = "$BASE_SHA" ] \
-       || ! git -C "$WT" merge-base --is-ancestor "$BASE_SHA" "$head" 2>/dev/null \
-       || [ -n "$(git -C "$WT" status --porcelain 2>/dev/null)" ]; then since=-1; continue; fi
+       || ! _wt_git merge-base --is-ancestor "$BASE_SHA" "$head" 2>/dev/null \
+       || [ -n "$(_wt_git status --porcelain --ignore-submodules=all 2>/dev/null)" ]; then since=-1; continue; fi
     [ "$since" -ge 0 ] || since=$SECONDS
     [ $((SECONDS - since)) -ge "$quiet" ] || continue
     COMMIT_QUIET_ENDED=1
@@ -3903,6 +4087,11 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   if declare -F child_session_env_setup >/dev/null 2>&1; then child_session_env_setup "$SELF_DIR"; else CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u AUTOPILOT_CHILD_SESSION_ID); CHILD_SESSION_PARENT=""; fi
   # 3d: only the cc-shim claude child gets the C the rail minted for it (after every -u in the env argv); every other runner has C removed above.
   CHILD_SESSION_CLAUDE_ENV=(); if ( [ "${IS_CCSHIM:-0}" -eq 1 ] || [ "${IS_CNATIVE:-0}" -eq 1 ] ) && [ -n "${CHILD_SESSION_ID:-}" ]; then CHILD_SESSION_CLAUDE_ENV=("AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"); fi
+  # --sandbox bwrap: the whole worker argv runs inside the sandbox (SANDBOX_ARGV built by the cc-shim arm).
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then echo "sandbox: no bwrap argv; worker not started" >"$LOG"; AGENT_EXIT=1; return 0; fi
+    set -- "${SANDBOX_ARGV[@]}" "$@"
+  fi
   WORKER_TIMED_OUT=0
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
@@ -4010,12 +4199,20 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # Harness-owned envelope: claude's JSON stdout never shares the worker log.
   # The result string (or the raw bytes if it does not parse) is appended to
   # LOG so classify-error and other log consumers still see the old plain text.
-  CCSHIM_ENVELOPE="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    # The inner shell opens the envelope for writing, so it must live in the one writable scratch dir.
+    SANDBOX_FAIL=0
+    sandbox_setup || { echo "sandbox: could not set up the bwrap scratch dir; worker not started" > "$LOG"; sandbox_teardown; AGENT_EXIT=1; SANDBOX_FAIL=1; }
+    CCSHIM_ENVELOPE="$(mktemp "${SANDBOX_TMP:-${TMPDIR:-/tmp}}/dispatch-hetero-ccshim-envelope-XXXXXX")"
+  else
+    CCSHIM_ENVELOPE="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
+  fi
   # --gate-rules (BL-0306 P2): arm the per-turn gate for this one hand, before it starts. The id was minted
   # fresh above; arm runs gate-verify --check first and writes nothing for a bad list, in which case the
   # worker is not started. GATE_ARGV stays empty without the flag, so the claude argv is unchanged.
   GATE_ARGV=()
   GATE_RUN_OK=1
+  [ "${SANDBOX_FAIL:-0}" -eq 1 ] && GATE_RUN_OK=0   # fail closed: no sandbox, no worker
   if [ -n "${GATE_RULES_FILE:-}" ]; then
     _gate_ttl="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
     GATE_SETTINGS_FILE="$(mktemp -t dispatch-hetero-gate-settings-XXXXXX)"
@@ -4086,6 +4283,14 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   GATE_SETTINGS_FILE=""
+  if [ "${SANDBOX:-off}" = "bwrap" ] && [ -n "${SANDBOX_TMP:-}" ]; then
+    # The envelope was written inside the per-dispatch scratch dir; the usage/classify readers want it
+    # outside, so move it out before the scratch dir goes.
+    if [ -f "$CCSHIM_ENVELOPE" ]; then
+      _sbx_env_out="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
+      mv -f "$CCSHIM_ENVELOPE" "$_sbx_env_out" && CCSHIM_ENVELOPE="$_sbx_env_out"
+    fi
+  fi
   if [ -f "$CCSHIM_ENVELOPE" ]; then
     # One JSON object → result text (is_error with an empty result uses the
     # error message). Anything else, including a second JSON document, is the
@@ -4131,6 +4336,10 @@ fs.appendFileSync(logPath, out);
 NODE
   fi
   rm -f "$CCSHIM_PROMPT_FILE"
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    sandbox_count_denied   # after the result text is in LOG
+    sandbox_teardown
+  fi
 elif [ "$IS_GROK" -eq 1 ]; then
   # grok (xAI Grok Build CLI; models grok-4.5 (ex-grok-build) / grok-composer-2.5-fast). Unlike agy,
   # grok `-p` HONORS --cwd (verified Spike 2026-06-29: grok-composer-2.5-fast and
@@ -4517,31 +4726,36 @@ compute_artifacts() {
 # tree dirty AND can `exit 1` to ABORT the commit — silently swallowing legitimately-correct
 # edits as a false `dirty`/`no_op`. The edit-only path has no build-artifact cleanup, so it
 # must not trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
-if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
-   && [ -n "$(git -C "$WT" status --porcelain)" ]; then
+if ! wt_gitfile_check; then
+  # Fail closed: the gitfile was repointed, so no git runs against $WT; classify_outcome reports it.
+  HEAD_SHA="$BASE_SHA"; DIRTY=""; FILES=0; INS=0; DEL=0
+  return 0
+fi
+if [ "$(_wt_git rev-parse HEAD)" = "$BASE_SHA" ] \
+   && [ -n "$(_wt_git status --porcelain --ignore-submodules=all)" ]; then
   _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"; [ "$IS_KIMI" -eq 1 ] && _runner_label="kimi"; [ "$IS_CNATIVE" -eq 1 ] && _runner_label="claude-native"
-  git -C "$WT" add -A
+  _wt_git add -A
   if ! run_strict_staged_precheck; then
     # Staged manifest violation: leave the worktree staged for in-place repair;
     # classify_outcome surfaces boundary_rejected on the equality branch.
     :
   else
   _identity_args=()
-  if ! git -C "$WT" var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
-     || ! git -C "$WT" var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
+  if ! _wt_git var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
+     || ! _wt_git var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
     _identity_args=(-c user.email=autopilot@example.invalid -c user.name=Autopilot)
   fi
-  git -C "$WT" -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1 \
+  _wt_git -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1 \
     && WRAPPER_COMMITTED=1   # capture path taken: the content gate may assert the wrapper subject
   fi
 fi
 
 # --- verify by artifacts, never by self-report ---
-HEAD_SHA="$(git -C "$WT" rev-parse HEAD)"
-DIRTY="$(git -C "$WT" status --porcelain)"
+HEAD_SHA="$(_wt_git rev-parse HEAD)"
+DIRTY="$(_wt_git status --porcelain --ignore-submodules=all)"
   FILES=0; INS=0; DEL=0
   if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
-  SHORTSTAT="$(git -C "$WT" diff --shortstat "$BASE_SHA..$HEAD_SHA")"
+  SHORTSTAT="$(_wt_git diff --ignore-submodules=all --shortstat "$BASE_SHA..$HEAD_SHA")"
   FILES="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ file' | grep -o '[0-9]\+' || echo 0)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
@@ -4859,7 +5073,7 @@ run_strict_boundary_postcheck() {
   # Collect exact changed paths once for output-path role checks.
   while IFS= read -r temp_path; do
     [ -n "$temp_path" ] && changed_paths+=("$temp_path")
-  done < <(git -C "$WT" diff --name-only "$BASE_SHA..$HEAD_SHA")
+  done < <(_wt_git diff --ignore-submodules=all --name-only "$BASE_SHA..$HEAD_SHA")
 
   for temp_path in "${changed_paths[@]}"; do
     changed_set["$temp_path"]=1
@@ -5256,7 +5470,10 @@ classify_outcome() {
   # Once, before any branch reads CLASSIFIED_ERROR. Worker exit is already
   # gated inside capture_structured_provider_error (non-zero only, never text).
   _prefer_structured_classified_error
-  if ! check_main_checkout_boundary; then
+  if ! wt_gitfile_check; then
+    OUTCOME_STATUS="boundary_rejected"
+    OUTCOME_ERR="boundary_rejected: $WT_GITFILE_ERROR"; OUTCOME_EXIT=1
+  elif ! check_main_checkout_boundary; then
     passive_capture "boundary_rejected"
     OUTCOME_STATUS="boundary_rejected"
     OUTCOME_COMMIT=""; [ "$HEAD_SHA" != "$BASE_SHA" ] && OUTCOME_COMMIT="$HEAD_SHA"
@@ -5605,12 +5822,16 @@ dispatch_detached_run() {
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
+    declare -p WT_GITFILE_EXPECTED WT_GITFILE_ERROR 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_FAIL WORKTREE_PARENT 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
+    declare -f wt_gitfile_check _wt_git 2>/dev/null || true
+    declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_json 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \

@@ -80,7 +80,7 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/advisory-relay.js",
-            "timeout": 10
+            "timeout": 70
           }
         ]
       }

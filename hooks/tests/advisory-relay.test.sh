@@ -13,6 +13,10 @@ LIVE_DIR="$(mktemp -d /dev/shm/ap-adv-live-XXXXXX 2>/dev/null || mktemp -d "$TES
 chmod 700 "$LIVE_DIR"
 export AUTOPILOT_LIVE_DIR="$LIVE_DIR"
 unset AUTOPILOT_ADVISORY_RELAY
+# The decide-reply path probes the fleet courier (hooks/advisory-relay.js F4 verify-before-act). A host whose real `fleet` speaks
+# `fleet decision` would send every prompt below through verify and leave its cards open as "unverified" (12 FAILs on such a host,
+# none on one without). This suite is the no-courier path, so name a binary that cannot exist.
+export AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet"
 
 queue_path() {
   node -e '
@@ -471,7 +475,9 @@ assert_contains "$SHOW3" "$DEC_C" "leading text closes nothing"
 MISS="$(printf '[待決回覆]\nd-00000000｜沒有這張 → 略\n')"
 run_hook advisory-relay.js "$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-decide-miss",cwd:process.argv[1],prompt:process.argv[2]}))' "$DEC_REPO" "$MISS")"
 assert_eq 0 "$__RUN_EXIT" "unknown id: exit 0"
-assert_eq "" "$__RUN_STDOUT" "unknown id: no stdout"
+assert_contains "$__RUN_STDOUT" '"systemMessage"' "unknown id: says so on stdout, not silent"
+assert_contains "$__RUN_STDOUT" "no open card d-00000000" "unknown id: names the id"
+assert_contains "$__RUN_STDERR" "no open card d-00000000" "unknown id: stderr names the id"
 SHOW4="$(dec_show)"
 assert_contains "$SHOW4" "$DEC_C" "unknown id leaves real cards"
 
@@ -704,5 +710,65 @@ assert_contains "$__RUN_STDERR" "timed out waiting for ${MULTI_B_BASE} lock" "tw
 assert_contains "$__RUN_STDERR" "; " "two failing scopes: errors are joined with semicolon-space"
 MULTI_AFTER="$(MULTI_SHOW || true)"
 assert_contains "$MULTI_AFTER" "$MULTI_B" "two failing scopes: card stays open"
+
+# RED at d2de40a84: a [待決回覆] id found in no scope file closed nothing and said nothing (unknown id / other project / not a git repo);
+# hooks.json gave the hook 10 s although probe 5 s + 2 verifies of 15 s per card can take 35 s.
+# Card opened under root A, the receiving session runs with root B: the hook walks every scope file of the project, so it still closes.
+RB_REPO="$TEST_TMP/dec-rootab"
+mkdir -p "$RB_REPO"
+git -C "$RB_REPO" init -q
+RB_ID="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
+  const { openDecision } = require(process.argv[1]);
+  const r = openDecision({ cwd: process.argv[2], root: "job-root-a", question: "root A card?" });
+  if (r.status !== "ok") process.exit(2);
+  process.stdout.write(r.id);' "$REPO_ROOT/scripts/open-decision.js" "$RB_REPO")"
+RB_PROMPT="$(printf '[待決回覆]\n%s｜root A card → 甲\n' "$RB_ID")"
+RB_PAYLOAD="$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-rootb",cwd:process.argv[1],prompt:process.argv[2]}))' "$RB_REPO" "$RB_PROMPT")"
+rb_show() { env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node "$REPO_ROOT/scripts/open-decision.js" show --cwd "$RB_REPO" --root-run-id job-root-a --json; }
+assert_contains "$(rb_show)" "$RB_ID" "root A card is open before the reply"
+AUTOPILOT_ROOT_RUN_ID=job-root-b run_hook advisory-relay.js "$RB_PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "root A card, session root B: exit 0"
+assert_eq "" "$__RUN_STDOUT" "root A card, session root B: nothing to report"
+assert_not_contains "$(rb_show || true)" "$RB_ID" "root A card, session root B: closed"
+# mutant: the hook looks only at the unbound scope file (as if it derived the file from the session root) -> card stays open, NOT silent
+RB_MUT="$TEST_TMP/rbmut"
+mkdir -p "$RB_MUT/hooks"
+ln -s "$REPO_ROOT/scripts" "$RB_MUT/scripts"
+ln -s "$REPO_ROOT/src" "$RB_MUT/src"
+for f in "$REPO_ROOT"/hooks/*.js; do [ "$(basename "$f")" = advisory-relay.js ] || ln -s "$f" "$RB_MUT/hooks/$(basename "$f")"; done
+sed_mutant "$HOOKS_DIR/advisory-relay.js" "$RB_MUT/hooks/advisory-relay.js" 's/files = projectScopeFiles(payload.cwd);/files = projectScopeFiles(payload.cwd).filter((f) => !f.includes("--"));/'
+RB_ID2="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
+  const { openDecision } = require(process.argv[1]);
+  const r = openDecision({ cwd: process.argv[2], root: "job-root-a", question: "root A again?" });
+  process.stdout.write(r.id);' "$REPO_ROOT/scripts/open-decision.js" "$RB_REPO")"
+RB_PAYLOAD2="$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-rootb2",cwd:process.argv[1],prompt:"[待決回覆]\n"+process.argv[2]+"｜x → y\n"}))' "$RB_REPO" "$RB_ID2")"
+RB_OUT="$(HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" AUTOPILOT_ROOT_RUN_ID=job-root-b node "$RB_MUT/hooks/advisory-relay.js" 2>/dev/null <<< "$RB_PAYLOAD2")"
+assert_contains "$(rb_show)" "$RB_ID2" "mutant (unbound scope only): root A card stays open"
+assert_contains "$RB_OUT" "no open card $RB_ID2" "mutant (unbound scope only): the miss is reported, not silent"
+
+# Not a git repo: no scope files at all. The hook says so.
+NG_DIR="$TEST_TMP/not-a-repo"
+mkdir -p "$NG_DIR"
+NG_PAYLOAD="$(node -e 'process.stdout.write(JSON.stringify({session_id:"adv-nogit",cwd:process.argv[1],prompt:"[待決回覆]\nd-12345678｜x → y\n"}))' "$NG_DIR")"
+GIT_CEILING_DIRECTORIES="$TEST_TMP" run_hook advisory-relay.js "$NG_PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "not a git repo: exit 0"
+assert_contains "$__RUN_STDOUT" "no decision scope file exists for cwd" "not a git repo: systemMessage says there is no decision store"
+# negative control: without the report the output is empty (the old behaviour)
+NG_MUT="$TEST_TMP/ngmut"
+mkdir -p "$NG_MUT/hooks"
+ln -s "$REPO_ROOT/scripts" "$NG_MUT/scripts"
+ln -s "$REPO_ROOT/src" "$NG_MUT/src"
+for f in "$REPO_ROOT"/hooks/*.js; do [ "$(basename "$f")" = advisory-relay.js ] || ln -s "$f" "$NG_MUT/hooks/$(basename "$f")"; done
+sed_mutant "$HOOKS_DIR/advisory-relay.js" "$NG_MUT/hooks/advisory-relay.js" 's/if (notFound.length > 0) {/if (false) {/'
+NG_OUT="$(HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" GIT_CEILING_DIRECTORIES="$TEST_TMP" node "$NG_MUT/hooks/advisory-relay.js" 2>/dev/null <<< "$NG_PAYLOAD")"
+assert_eq "" "$NG_OUT" "mutant (report removed): silent, as before"
+
+# hooks.json timeout covers the worst [待決回覆] case: probe 5 s + 2 cards x (2 verifies x 15 s) + 5 s margin = 70 s
+RELAY_TIMEOUT="$(node -e 'const h=require(process.argv[1]);let t=null;for(const g of h.hooks.UserPromptSubmit)for(const x of g.hooks)if(/advisory-relay\.js/.test(x.command))t=x.timeout;process.stdout.write(String(t))' "$REPO_ROOT/hooks/hooks.json")"
+[ "$RELAY_TIMEOUT" -ge 70 ] 2>/dev/null && assert_eq ok ok "advisory-relay hook timeout >= 70 s" || assert_eq ">=70" "$RELAY_TIMEOUT" "advisory-relay hook timeout >= 70 s"
+HJ_MUT="$TEST_TMP/hooks-mut.json"
+sed_mutant "$REPO_ROOT/hooks/hooks.json" "$HJ_MUT" "$(( $(grep -n 'advisory-relay\.js' "$REPO_ROOT/hooks/hooks.json" | head -1 | cut -d: -f1) + 1 ))s/\"timeout\": 70/\"timeout\": 10/"
+HJ_T="$(node -e 'const h=require(process.argv[1]);let t=null;for(const g of h.hooks.UserPromptSubmit)for(const x of g.hooks)if(/advisory-relay\.js/.test(x.command))t=x.timeout;process.stdout.write(String(t))' "$HJ_MUT")"
+assert_eq 10 "$HJ_T" "mutant (timeout 10) is read back as 10, which the >= 70 check rejects"
 
 finalize_test

@@ -38,9 +38,9 @@ assert_eq "Qwen3.8-27B-QUASAR-NVFP4" "$(printf '%s' "$STUB_JSON" | jget reviewer
 assert_eq "anthropic-compatible" "$(printf '%s' "$STUB_JSON" | jget reviewer_runner)" "roster loop reviewer runner is anthropic-compatible"
 assert_eq "default" "$(printf '%s' "$STUB_JSON" | jget reviewer_effort)" "roster loop reviewer effort is default"
 assert_eq "qwen_local" "$(printf '%s' "$STUB_JSON" | jget reviewer_endpoint)" "roster loop reviewer endpoint is qwen_local"
-assert_eq '["GLM-5.3","gpt-6.1-sol"]' "$(printf '%s' "$STUB_JSON" | jget reviewer_fallback_preference)" "reviewer fallback order is GLM then cloud"
+assert_eq '["gpt-6.1-sol"]' "$(printf '%s' "$STUB_JSON" | jget reviewer_fallback_preference)" "reviewer fallback is the cloud seat alone"
 assert_eq "Qwen3.8-Max" "$(printf '%s' "$STUB_JSON" | jget verification_author_engine)" "roster VA seat is Qwen3.8-Max"
-assert_eq '["gpt-6-astra","gpt-6.1-sol","gemini-4-argon-high","GLM-5.3"]' "$(printf '%s' "$STUB_JSON" | jget qc_panel)" "roster qc panel"
+assert_eq '["gpt-6-astra","gpt-6.1-sol","gemini-4-argon-high"]' "$(printf '%s' "$STUB_JSON" | jget qc_panel)" "roster qc panel"
 assert_eq "[]" "$(printf '%s' "$STUB_JSON" | jget roster_overrides)" "no override declared -> roster_overrides is empty"
 assert_eq "$STUB" "$(printf '%s' "$STUB_JSON" | jget config_path)" "config_path still names the repo file"
 

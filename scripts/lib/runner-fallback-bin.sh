@@ -12,7 +12,7 @@
 #     fixture dir placed first on PATH is what runs, never the real runner);
 #   - only when PATH misses does it look at the fixed per-runner locations below under $HOME and
 #     return the first executable regular file, as an absolute path;
-#   - AUTOPILOT_RUNNER_HOME_FALLBACK=off turns the HOME lookup off (default on): a test that removes a
+#   - AUTOPILOT_RUNNER_HOME_FALLBACK=off turns the HOME lookup off (default on, but off when unset under node --test): a test that removes a
 #     runner from PATH on purpose must not find the real ~/.local/bin/codex and spend money. The shell
 #     suite lib (hooks/tests/lib.sh) exports off; only runner-fallback-bin.test.sh turns it on, with a fixture HOME;
 #   - otherwise it returns the name unchanged and the caller's own `command -v` refuses as before.
@@ -38,7 +38,10 @@ runner_bin_fallback() {
     kimi)  rels=".kimi-code/bin/kimi" ;;
     *)     rels="" ;;
   esac
-  if [ "${AUTOPILOT_RUNNER_HOME_FALLBACK:-on}" != "off" ] && [ -n "${HOME:-}" ]; then
+  # Same rule as runnerFallbackHome() in runner-binary.js: off when =off, or when unset under node --test.
+  local knob="${AUTOPILOT_RUNNER_HOME_FALLBACK:-}"
+  [ -z "$knob" ] && [ -n "${NODE_TEST_CONTEXT:-}" ] && knob=off
+  if [ "$knob" != "off" ] && [ -n "${HOME:-}" ]; then
     for rel in $rels; do
       if [ -f "$HOME/$rel" ] && [ -x "$HOME/$rel" ]; then
         printf '%s' "$HOME/$rel"

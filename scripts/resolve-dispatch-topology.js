@@ -36,7 +36,7 @@ const path = require('path');
 const os = require('os');
 const { configPath } = require('./lib/config-path.js');
 const { normalizeEffort } = require('./lib/effort-scale.js');
-const { RUNNER_BINARY_FALLBACK_PATHS } = require('./lib/runner-binary.js');
+const { RUNNER_BINARY_FALLBACK_PATHS, runnerFallbackHome } = require('./lib/runner-binary.js');
 const { spawnSync } = require('child_process');
 
 const RUNNER_TOKENS = Object.freeze([
@@ -447,7 +447,7 @@ function resolveBinaryPath(binaryName, runner) {
       // next
     }
   }
-  const home = process.env.AUTOPILOT_RUNNER_HOME_FALLBACK === 'off' ? '' : (process.env.HOME || '');
+  const home = runnerFallbackHome();
   // Same per-runner table the version probe uses (codex/agy under ~/.local/bin, grok under
   // ~/.grok/bin, kimi under ~/.kimi-code/bin): PATH was searched first, so it still wins.
   for (const rel of (RUNNER_BINARY_FALLBACK_PATHS[runner] || [])) {

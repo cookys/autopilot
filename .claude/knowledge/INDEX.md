@@ -8,6 +8,7 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-11-09 | debug | 為一次性例外寫的腳本不能拿去跑常態 phase：11-06 的 Claude-only 審查例外腳本被沿用到每個 phase，11-07 起同家族席位審同家族 diff 無警告收斂；現在 finalize／checker 強制跨家族席位，唯一出口是帶來源的 `--same-family-exception` | [debug-patterns.md](debug-patterns.md) |
 | 2026-10-11 | debug | Claude Code 自動更新會刪舊版本，測驗釘版只連結過去會壞；整個複製到 `~/.autopilot/claude-pin/<版本>/claude` | [debug-patterns.md](debug-patterns.md) |
 | 2026-10-10 | debug | Codex bwrap workspace-write 沙盒在可寫根目錄（含 /tmp）留下空的 `.git` 等掛載點，讓 worktree 檢查誤判；`.git` 要含 HEAD 或 `gitdir:` 才算倉庫 | [debug-patterns.md](debug-patterns.md) |
 | 2026-09-29 | debug | worktree 身分寫穿的第二條路徑：git 在 worktree 跑 hook 時會 export `GIT_DIR`，測試在暫存目錄 `git init`+裸 `git config` 會寫進主 clone 共用的 config（631 個 Test User commit），v2.36.103 在 run.sh/lib.sh unset 並加 drift guard | [debug-patterns.md](debug-patterns.md) |
@@ -26,7 +27,6 @@
 | [architecture.md](architecture.md) | Review repair authority、peer/Heto 分界與 fallback panel 資格 |
 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) | Git refs / dispatch branch lifecycle 的 race-safe enumeration、ack publication、prepared restore、worktree lifetime lock 與 reviewer probe patterns |
 | [debug-patterns.md](debug-patterns.md) | 診斷技巧與假死 pattern：CLI option 相容性、529 silent-retry 分層診斷、worktree config 寫穿身分污染 |
-| ⚠️ `claude-code-plugin-dogfood-lessons.md`（**遺失**：2026-05-14 寫成並登錄，但從未 commit 進本 repo；2026-07-16 doc-sync 發現時鏡像 repo 不在此機。若他機還有請補回並 commit。這是 `references/knowledge-routing.md` §4「不 commit 就等於沒寫」的前例） | Claude Code plugin/hook 開發 5 大 pattern（catalog drift / cross-cwd state / prose fragility / review loop / dogfood trade-off）|
 
 ## 跨 repo mirror
 

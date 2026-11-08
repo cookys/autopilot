@@ -1,4 +1,4 @@
-<!-- last-verified: 2026-08-23 -->
+<!-- last-verified: 2026-11-09 -->
 # Debug Patterns
 
 ## Kimi non-interactive prompt cannot be combined with interactive plan mode
@@ -59,3 +59,10 @@
 **Date**: 2026-10-11 | **Context**: stage-graph eval runner 釘版
 **Problem**: Claude Code 自動更新會刪掉 `~/.local/share/claude/versions/` 底下的舊版本；釘版如果只是指向那裡的連結，舊版被刪後連結就壞掉，測驗會被判無效。
 **Solution**: 把要釘的版本整個複製到 `~/.autopilot/claude-pin/<版本>/claude`，PATH 用 `~/.autopilot/claude-pin/bin`（見 `evals/skill-onoff/prereg/stage-graph.amend-4-runner-pin.json`）。
+
+## 為一次性例外寫的腳本不能拿去跑常態 phase
+**Date**: 2026-11-09 | **Context**: 2026-11-07 起多個 code-review 世代只有 Claude 席位（claude-opus-5-5@claude-native）審 Claude 寫的 diff，一路收斂、沒有任何警告
+**Problem**: 11-06 PM 核准一次「兩個小修正只用 Claude 席位審」的例外，臨時腳本寫死單一 Claude 席位、`AUTOPILOT_MIN_REVIEWED_SEATS=1`、`--allow-seat-gap`。之後每個 phase 都沿用同一支腳本。`hetero-review-loop.js finalize` 和 `check-phase-review-receipt.js` 當時都不看席位 family，所以門全綠，同家族審查的盲點沒被擋。
+**Solution**: 例外腳本用完即棄，要再用就重新取得授權；不要把 `--allow-seat-gap`、降低席位下限這類旋鈕寫成預設。機制面已補：collect 第 1 世代要 `--implementer-engine`，finalize 與 checker 都從 ledger 重推「至少一個 reviewed 席位 family 不同於實作者」，唯一出口是 `--same-family-exception "<d-xxxxxxxx 或 fleet 訊息 ULID>: <理由>"`，記在 chain 內，沒有環境變數能關（`scripts/lib/review-family-gate.js`）。
+**Failed attempts**: 只信腳本名稱「這支跑過一次沒事」；把放寬的旋鈕當作無害的預設。
+**Related**: `skills/dev-flow/references/hetero-loops.md` 合併閘門一節，`hooks/tests/hetero-review-loop.test.sh` 的 cross-family 案例。

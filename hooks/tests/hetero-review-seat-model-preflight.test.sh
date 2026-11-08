@@ -47,7 +47,7 @@ chmod +x "$SCRATCH_REPO/scripts/dispatch-review.sh"
 export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh"
 
 collect() { # <phase> <seats> [loop script]
-  SPY_FILE="$TEST_TMP/spy-$1" node "${3:-$LOOP}" collect --repo-root "$SCRATCH_REPO" --ledger "$TEST_TMP/ledger" \
+  SPY_FILE="$TEST_TMP/spy-$1" node "${3:-$LOOP}" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$TEST_TMP/ledger" \
     --phase "$1" --generation 1 --branch work --phase-base "$BASE" --seats "$2" 2>&1
 }
 

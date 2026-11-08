@@ -30,7 +30,7 @@ fs.writeFileSync(path.join(gd, 'findings.json'), JSON.stringify({ findings: [] }
 fs.writeFileSync(path.join(gd, 'dispositions.json'), JSON.stringify({ findings: [] }));
 fs.writeFileSync(path.join(gd, 'seat-s0.json'), JSON.stringify({ status: 'reviewed', verdict: 'SHIP-AS-IS', findings: '', no_finding_proof: 'checked=all; evidence=clean diff; conclusion=safe' }));
 const h = (f) => sha(fs.readFileSync(path.join(gd, f)));
-const entry = { generation: 1, base, head, status: 'finalized', seats: [{ id: 's0', status: 'reviewed' }],
+const entry = { generation: 1, base, head, status: 'finalized', implementer_engine: 'claude-sonnet-5', seats: [{ id: 's0', status: 'reviewed', engine: 'gpt-5' }],
   dispositions_sha256: h('dispositions.json'), findings_sha256: h('findings.json'), seat_artifact_sha256: { s0: h('seat-s0.json') } };
 fs.writeFileSync(path.join(ledger, `review-${phase}`, 'chain.json'), JSON.stringify([entry]));
 fs.writeFileSync(path.join(ledger, `receipt-${phase}.json`), JSON.stringify({ kind: 'review', phase, branch: 'work', phase_base_sha: base,

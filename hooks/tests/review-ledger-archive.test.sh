@@ -71,7 +71,7 @@ make_ledger() {
     "generation": 1,
     "base": "aaa",
     "head": "bbb",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending",
     "collected_at": "$ts"
   }
@@ -99,7 +99,7 @@ make_real_ledger() {
     "generation": 1,
     "base": "aaa",
     "head": "bbb",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "reviewed_seats": ["s0"],
     "total_seats": 1,
     "reviewed_seats_count": 1,

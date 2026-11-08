@@ -40,7 +40,7 @@ fin_case() { # <phase> <severity> <disposition-entry-json-fields> -> runs finali
   local p="$1" sev="$2" fields="$3"
   mkdir -p "$LEDGER/review-$p/g1"
   cat > "$LEDGER/review-$p/chain.json" <<EOF
-[ { "generation": 1, "base": "base_$p", "head": "head_$p", "seats": ["s0"], "status": "pending" } ]
+[ { "generation": 1, "base": "base_$p", "head": "head_$p", "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }], "status": "pending" } ]
 EOF
   echo "{ \"base\": \"base_$p\", \"head\": \"head_$p\" }" > "$LEDGER/review-$p/g1/range.json"
   echo "{ \"findings\": [ { \"id\": \"fm\", \"severity\": \"$sev\", \"seat\": \"s0\", \"text\": \"Unchecked return in write.js\" } ] }" > "$LEDGER/review-$p/g1/findings.json"
@@ -115,7 +115,7 @@ rc_gen() { # <phase> <gen> <base> <head> <diffsha> <findings-json-array> <disp-j
   local dsha fsha ssha
   ssha=$(sha_of "$LEDGER/review-$p/g$g/seat-s0.json")
   dsha=$(sha_of "$LEDGER/review-$p/g$g/dispositions.json"); fsha=$(sha_of "$LEDGER/review-$p/g$g/findings.json")
-  echo "{ \"generation\": $g, \"base\": \"$b\", \"head\": \"$h\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"seat_artifact_sha256\": { \"s0\": \"$ssha\" }, \"finalized_at\": \"$AT\"${mk:+, \"disposition_schema\": $mk}, \"dispositions_sha256\": \"$dsha\", \"findings_sha256\": \"$fsha\" }"
+  echo "{ \"generation\": $g, \"base\": \"$b\", \"head\": \"$h\", \"status\": \"finalized\", \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }], \"seat_artifact_sha256\": { \"s0\": \"$ssha\" }, \"finalized_at\": \"$AT\"${mk:+, \"disposition_schema\": $mk}, \"dispositions_sha256\": \"$dsha\", \"findings_sha256\": \"$fsha\" }"
 }
 rc_write() { # <phase> <verdict> <open-json> <chain-entries comma-joined>
   local p="$1" v="$2" o="$3" ch="$4"
@@ -194,8 +194,8 @@ d2_case() { # <phase> <gen1-dispositions-json-array> -> D2_OUT D2_RC; receipt ve
   echo '{ "findings": [] }' > "$L2/review-$p/g2/findings.json"
   echo "{ \"schema_version\": 1, \"phase\": \"$p\", \"generation\": 2, \"findings\": [] }" > "$TEST_TMP/disp_$p.json"
   cat > "$L2/review-$p/chain.json" <<EOF
-[ { "generation": 1, "base": "$PHASE_BASE", "head": "$GEN1_HEAD", "seats": ["s0"], "status": "finalized", "finalized_at": "$AT", "disposition_schema": 2, "dispositions_path": "review-$p/g1/dispositions.json" },
-  { "generation": 2, "base": "$GEN1_HEAD", "head": "$GEN2_HEAD", "seats": ["s0"], "status": "pending" } ]
+[ { "generation": 1, "base": "$PHASE_BASE", "head": "$GEN1_HEAD", "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }], "status": "finalized", "finalized_at": "$AT", "disposition_schema": 2, "dispositions_path": "review-$p/g1/dispositions.json" },
+  { "generation": 2, "base": "$GEN1_HEAD", "head": "$GEN2_HEAD", "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }], "status": "pending" } ]
 EOF
   D2_OUT=$(node "$LOOP" finalize --repo-root "$SCRATCH_REPO" --ledger "$L2" --phase "$p" --generation 2 --dispositions "$TEST_TMP/disp_$p.json" 2>&1); D2_RC=$?
   D2_VERDICT=$(cat "$L2/receipt-$p.json" 2>/dev/null)
@@ -231,7 +231,7 @@ fs.writeFileSync(path.join(gd, 'findings.json'), JSON.stringify({ findings }));
 fs.writeFileSync(path.join(gd, 'dispositions.json'), JSON.stringify({ findings: disp, resolutions: [] }));
 fs.writeFileSync(path.join(gd, 'seat-s0.json'), JSON.stringify({ status: 'reviewed', verdict: 'SHIP-AS-IS', findings: '', no_finding_proof: 'checked=all; evidence=clean diff; conclusion=safe' }));
 const h = (f) => sha(fs.readFileSync(path.join(gd, f)));
-const entry = { generation: 1, base, head, status: 'finalized', seats: [{ id: 's0', status: 'reviewed' }], finalized_at: '2026-11-07T00:00:00.000Z', disposition_schema: 2,
+const entry = { generation: 1, base, head, status: 'finalized', implementer_engine: 'claude-sonnet-5', seats: [{ id: 's0', status: 'reviewed', engine: 'gpt-5' }], finalized_at: '2026-11-07T00:00:00.000Z', disposition_schema: 2,
   dispositions_sha256: h('dispositions.json'), findings_sha256: h('findings.json'), seat_artifact_sha256: { s0: h('seat-s0.json') }, ...(packet ? { packet } : {}) };
 fs.writeFileSync(path.join(ledger, `review-${phase}`, 'chain.json'), JSON.stringify([entry]));
 fs.writeFileSync(path.join(ledger, `receipt-${phase}.json`), JSON.stringify({ kind: 'review', phase, branch: 'work', phase_base_sha: base,

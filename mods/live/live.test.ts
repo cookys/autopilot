@@ -7597,7 +7597,7 @@ for (const surface of SURFACES) {
     claimHandle(on)
     return { w, sent }
   }
-  const listDim = (tree: Node, needle: string): boolean[] => walkTexts(tree).filter(x => textOf(x).includes(needle) && textOf(x).includes('…')).map(x => x.props?.dimColor === true) // the left list row: the only Text with the name cut by …
+  const listDim = (tree: Node, needle: string, full: string): boolean[] => walkTexts(tree).filter(x => textOf(x).includes(needle) && !textOf(x).includes(full)).map(x => x.props?.dimColor === true) // the left list row's name: the Text with the needle that is not the whole question (the main window has that)
   const NO_OPT = (buttons: string[]) => buttons.filter(b => b.startsWith('opt:d-4290499d') || b === 'fill')
   test('bandsent: a sent card says 已送出，等處理, its options and 附註 Button are gone, the question and the list row are grey, and 改答案 is offered; at 80, 100 and 160 columns (' + surface + ')', async ($, on) => {
     const { w } = sendWorld(on)
@@ -7616,7 +7616,8 @@ for (const surface of SURFACES) {
       expect(Object.keys(d.hot).filter(k => k.startsWith('opt:d-4290499d')), 'no option hotkey at ' + cols).toEqual([])
       expect(d.buttons, 'a sent card can be corrected').toContain('fix')
       expect(dimOf(d.tree, 'P5 殘留').some(x => x), 'the sent card is grey at ' + cols).toBe(true)
-      expect(listDim(d.tree, 'P5 殘留').some(x => x), 'its list row is grey at ' + cols).toBe(true)
+      expect(listDim(d.tree, 'P5 殘留', '列出來').length, 'the list row is found').toBeGreaterThan(0)
+      expect(listDim(d.tree, 'P5 殘留', '列出來').some(x => x), 'its list row is grey at ' + cols).toBe(true)
       expect(d.rows.some(r => r.includes('OK') && r.includes('★')), 'the options are still shown as text at ' + cols).toBe(true)
       if (cols === 100) console.log('RENDER-BEGIN sent-100 (' + surface + ')\n' + d.rows.join('\n') + '\nRENDER-END')
       for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
@@ -7661,7 +7662,8 @@ for (const surface of SURFACES) {
       expect(d.rows.some(r => r.includes('已在別處回答')), 'the elsewhere mark at ' + cols).toBe(true)
       expect(d.rows.some(r => r.includes('U6 要不要把建議也寫進回覆')), 'the question is kept at ' + cols).toBe(true)
       expect(dimOf(d.tree, 'U6 要不要把建議也寫進回覆').some(x => x), 'the closed card is grey at ' + cols).toBe(true)
-      expect(listDim(d.tree, 'U6 要不要').some(x => x), 'its list row is grey at ' + cols).toBe(true)
+      expect(listDim(d.tree, 'U6 要不要', '寫進回覆').length, 'the list row is found').toBeGreaterThan(0)
+      expect(listDim(d.tree, 'U6 要不要', '寫進回覆').some(x => x), 'its list row is grey at ' + cols).toBe(true)
       expect(d.buttons.filter(b => b.startsWith('opt:d-c24ecfd9') || b === 'fill'), 'no Button on the closed card at ' + cols).toEqual([])
       if (cols === 100) console.log('RENDER-BEGIN elsewhere-100 (' + surface + ')\n' + d.rows.join('\n') + '\nRENDER-END')
       for (const r of d.rows) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)

@@ -63,3 +63,15 @@ test('mods/live/cardtitle.ts applies the same rule as cardTitle() in src/status/
   ];
   for (const c of cases) assert.equal(cardTitleOf(c), cardTitle(c), JSON.stringify(c));
 });
+
+test('a control character in a title: ask-decision drops the header, cardTitle ignores a stored title that has one, the mod copy agrees', async () => {
+  const { questionFrom } = require('./ask-decision.js');
+  const ask = (header) => questionFrom({ questions: [{ question: '要不要發版？', header, options: [] }] });
+  assert.equal(ask('發版時機').title, '發版時機');
+  for (const bad of ['發版\n時機', '發版\u001b[31m', '發版\u2028時機']) {
+    assert.equal('title' in ask(bad), false, 'header with a control character writes no title: ' + JSON.stringify(bad));
+    assert.equal(cardTitle({ title: bad, question: '要不要發版？' }), '要不要發版？', 'cardTitle derives from the question: ' + JSON.stringify(bad));
+  }
+  const { cardTitleOf } = await import(path.join(__dirname, '..', 'mods', 'live', 'cardtitle.ts'));
+  for (const bad of ['發版\n時機', '發版\u001b[31m', '發版\u2028時機']) assert.equal(cardTitleOf({ title: bad, question: '要不要發版？' }), cardTitle({ title: bad, question: '要不要發版？' }));
+});

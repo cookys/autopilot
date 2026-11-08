@@ -133,8 +133,8 @@ export function commandView(con: ConsoleSnapshot, live: LiveSnapshot | null, ctx
     // the feed's `items` order (severity) is the order in every frontend (KR8): the cards follow their `card:<id>` item's place, a card with no item goes last
     const cardItems = con.items.filter(i => i.kind === 'card')
     const place = (c: ConsoleCard): number => { const k = cardItems.findIndex(i => i.id === 'card:' + c.id); return k === -1 ? cardItems.length : k }
-    for (const c of [...con.cards].sort((a, b) => place(a) - place(b))) if (!heldIds.has(c.id)) rows.push(...plainCardRows(u, c, now, cardItems.find(i => i.id === 'card:' + c.id)?.title))
-    body.push(...(rows.length === 0 ? [ui.empty(t('console.command.queue_none'), F)] : rows))
+    for (const c of [...(con.cards ?? [])].sort((a, b) => place(a) - place(b))) if (!heldIds.has(c.id)) rows.push(...plainCardRows(u, c, now, cardItems.find(i => i.id === 'card:' + c.id)?.title))
+    body.push(...(rows.length === 0 ? [ui.empty(t(con.cards === null ? 'console.command.no_source' : 'console.command.queue_none'), F)] : rows))
   }
   return { body, bar: [...bar, ui.rowOf(u, [dimWord(t('console.command.hint'))], { fact: C }), ageRow(u, con, now)] }
 }

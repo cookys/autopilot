@@ -34,6 +34,7 @@ function decisionFile(commonDir, key, root) {
 }
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v : null);
+const TITLE_CONTROL = require('../../scripts/lib/card-notice.js').CONTROL;
 
 const ASK_ORIGIN = 'ask_user_question';
 
@@ -57,7 +58,7 @@ function viewOf(e, nowMs, liveBase) {
   const options = (Array.isArray(e.options) ? e.options : []).filter((o) => o && typeof o === 'object' && typeof o.label === 'string' && o.label)
     .map((o) => ({ label: o.label, description: typeof o.description === 'string' ? o.description : '' }));
   return {
-    id: e.id, title: str(e.title), question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
+    id: e.id, title: str(e.title) && !TITLE_CONTROL.test(str(e.title)) ? str(e.title) : null, question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
     blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
     orphaned: sessionGone(e, liveBase), origin: str(e.origin),
@@ -70,7 +71,7 @@ function viewOf(e, nowMs, liveBase) {
 // the question — newline runs to single spaces, the trailing （共 N 題） dropped — capped at 20 code points: Array.from counts an emoji
 // (a surrogate pair) as 1, and a unit count would split it at the cut.
 function cardTitle(entry) {
-  if (entry && typeof entry.title === 'string' && entry.title !== '') return entry.title;
+  if (entry && typeof entry.title === 'string' && entry.title !== '' && !TITLE_CONTROL.test(entry.title)) return entry.title;
   const q = (entry && typeof entry.question === 'string' ? entry.question : '').replace(/[\r\n]+/g, ' ').trim().replace(/（共\s*\d+\s*題）$/, '').trim();
   if (Array.from(q).length <= 20) return q;
   return Array.from(q).slice(0, 20).join('') + '…';

@@ -93,4 +93,4 @@ function notify(event, fields) {
   }
 }
 
-module.exports = { PREFIX, QUESTION_MAX, TITLE_MAX, STATES, encode, parse, parseFrom, notify };
+module.exports = { PREFIX, QUESTION_MAX, TITLE_MAX, CONTROL, STATES, encode, parse, parseFrom, notify };

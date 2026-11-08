@@ -105,6 +105,20 @@ test('empty fixture: the queue and the exceptions say there is nothing, not a bl
   assert.ok(body.includes('目前沒有要你處理的例外') && body.includes('目前沒有待你回答的問題'), body)
 })
 
+test('cards missing says 無來源 in the queue; an empty cards array says there is no open question', () => {
+  const raw = JSON.parse(FIX('c0/console-full.json'))
+  delete raw.cards
+  const missing = C.parseConsole(JSON.stringify(raw))
+  assert.equal(missing.cards, null, 'a missing cards key is null')
+  const body = rows(view(missing, { live: null }), 'body').join('\n')
+  assert.ok(body.includes('無來源') && !body.includes('目前沒有待你回答的問題'), body)
+  raw.cards = []
+  const empty = C.parseConsole(JSON.stringify(raw))
+  assert.deepEqual(empty.cards, [])
+  const body2 = rows(view(empty, { live: null }), 'body').join('\n')
+  assert.ok(body2.includes('目前沒有待你回答的問題'), body2)
+})
+
 test('folding: a folded exceptions section hides its rows and keeps its header', () => {
   const v = view(FULL(), { folded: new Set([V.COMMAND_EXC_ID]) })
   const body = rows(v, 'body').join('\n')

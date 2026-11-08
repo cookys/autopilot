@@ -551,7 +551,7 @@ function main(argv) {
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   const bad = ['answer', 'awaiting-operator', 'from', 'all', 'apply', 'dispatched'].find((n) => ex[n] !== undefined);
   if (bad) return usage(`--${bad} is not an open argument`);
-  if (ex.title !== undefined && (!ex.title.trim() || Array.from(ex.title).length > TITLE_MAX)) { process.stderr.write(`open-decision: refused: --title must be non-empty and at most ${TITLE_MAX} characters (got ${Array.from(ex.title).length}); it is never cut for you; nothing written\n`); return 2; }
+  if (ex.title !== undefined && (!ex.title.trim() || Array.from(ex.title).length > TITLE_MAX || require('./lib/card-notice.js').CONTROL.test(ex.title))) { process.stderr.write(`open-decision: refused: --title must be non-empty, free of control characters, and at most ${TITLE_MAX} characters (got ${Array.from(ex.title).length}); it is never cut for you; nothing written\n`); return 2; }
   for (const k of ['executor', 'asker']) if (ex[k] !== undefined && !require('./lib/fleet-decision.js').isAddress(ex[k])) return usage(`--${k} "${ex[k]}" is not an address (namespace/courier/member)`);
   const options = args.option.length ? parseOptions(args.option) : null;
   if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');

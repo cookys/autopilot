@@ -60,7 +60,7 @@ function questionFrom(input) {
   const header = first && typeof first.header === 'string' ? first.header.trim() : '';
   return {
     // an AskUserQuestion header is the card's short title when it fits (<= 20 code points); a longer one is NOT cut, cardTitle derives one from the question
-    ...(header && Array.from(header).length <= 20 ? { title: header } : {}),
+    ...(header && Array.from(header).length <= 20 && !require('../scripts/lib/card-notice.js').CONTROL.test(header) ? { title: header } : {}),
     question: qs.length > 1 ? `${text}（共 ${qs.length} 題）` : text,
     options: labels.length >= 2 ? labels : null,
   };

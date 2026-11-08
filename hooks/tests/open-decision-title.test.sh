@@ -46,6 +46,23 @@ od "$OD" --title "$T21"; assert_eq "$RC" 2 "--title of 21 characters: exit 2"; a
 assert_eq "$(store | md5sum)" "$BEFORE" "21: the store file is byte-identical"
 od "$OD" --title ""; assert_eq "$RC" 2 "--title empty: exit 2"
 assert_eq "$(store | md5sum)" "$BEFORE" "empty title: the store file is byte-identical"
+# a control character (newline, ESC, U+2028) is refused like a length error: the PM mirror would reject the whole notice ("bad title"), the pane would draw it raw
+BEFORE="$(store | md5sum)"
+for BAD in $'發版\n時機' $'發版\033[31m' $'發版\xe2\x80\xa8時機'; do
+  SENT="$(wc -l < "$STUB/calls.log")"
+  od "$OD" --title "$BAD"; assert_eq "$RC" 2 "--title with a control character: exit 2"; assert_contains "$ERR" "control characters" "control title: reason named"; assert_eq "$OUT" "" "control title: no id printed"
+  assert_eq "$(store | md5sum)" "$BEFORE" "control title: the store file is byte-identical"
+  assert_eq "$(wc -l < "$STUB/calls.log")" "$SENT" "control title: no notice sent"
+done
+# reader side: an entry already holding a control-character title (old data, hand-written store) is read as having no title, so cardTitle derives one from the question
+CARD="$(find "$R/.git/autopilot/decisions" -name '*.json' | head -1)"
+node -e 'const fs=require("fs");const f=process.argv[1];const v=JSON.parse(fs.readFileSync(f,"utf8"));for(const d of v.decisions){if(d.id===process.argv[2])d.title="發版\n時機"}fs.writeFileSync(f,JSON.stringify(v))' "$CARD" "$ID20"
+READ="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e '
+const path=require("path");const {scopeFromCwd}=require(path.join(process.env.REPO_ROOT,"src/status/project-key"));
+const sc=scopeFromCwd(process.env.R);const di=require(path.join(process.env.REPO_ROOT,"src/status/decision-input"));
+const rd=di.readDecision({commonDir:require(path.join(process.env.REPO_ROOT,"src/status/scope-key")).commonDirOf(sc.repo_identity),key:sc.project_key,identity:sc.repo_identity,nowMs:Date.now(),liveBase:null});
+const d=rd.value.find(x=>x.id===process.argv[1]);process.stdout.write(JSON.stringify({title:d.title,shown:di.cardTitle(d)}))' "$ID20")"
+assert_eq "$READ" '{"title":null,"shown":"Q?"}' "reader: a stored control-character title is dropped, the title shown is derived from the question"
 # the mirror keeps the title (new notice) and still takes the old notice
 FROM="example/host-b/proj--claude@FAKE-sess-1"
 node -e 'const fs=require("fs");const from=process.argv[1];const ms=fs.readFileSync(process.argv[2],"utf8").split("\n").filter(Boolean).map(JSON.parse).filter(c=>c.args[0]==="send").map((c,i)=>({message_id:"01FAKE"+String(i+1).padStart(6,"0"),from,kind:"chat",content:c.args[2]}));fs.writeFileSync(process.argv[3],JSON.stringify({member:"pm--claude",truncated:false,messages:ms}))' "$FROM" "$STUB/calls.log" "$STUB/recent.json"
@@ -59,4 +76,10 @@ for f in "$S"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
 rm "$MUT/scripts/open-decision.js"
 sed_mutant "$S/open-decision.js" "$MUT/scripts/open-decision.js" "s/ || Array.from(ex.title).length > TITLE_MAX//"
 od "$MUT/scripts/open-decision.js" --title "$T21"; assert_eq "$RC" 0 "mutant (length check removed): the 21-character title is accepted, so the refusal check above would be red"
+# negative control: the control-character check removed -> a newline title is written
+rm -rf "$MUT"; mkdir -p "$MUT"; ln -s "$REPO_ROOT/src" "$MUT/src"; mkdir -p "$MUT/scripts"
+for f in "$S"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
+rm "$MUT/scripts/open-decision.js"
+sed_mutant "$S/open-decision.js" "$MUT/scripts/open-decision.js" "s/ || require('.\/lib\/card-notice.js').CONTROL.test(ex.title)//"
+od "$MUT/scripts/open-decision.js" --title $'發版\n時機'; assert_eq "$RC" 0 "mutant (control check removed): the newline title is accepted, so the refusal check above would be red"
 finalize_test

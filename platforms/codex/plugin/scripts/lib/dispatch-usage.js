@@ -9,6 +9,7 @@
 //   node scripts/lib/dispatch-usage.js append --from-result <result.json|-> --role <role> [flags]
 //
 //   --run-id --parent-run-id --root-run-id --started-at <epoch> --ended-at <epoch> --wall-secs <n>
+//   --usage-json '<object>'      (raw usage with missing keys null; preferred over the result's usage, which a rail may have zero-filled)
 //   --provider-session-id <id>   (claude-family runners: the child Claude session id, NOT in the result JSON)
 //   --endpoint <name>            (named endpoint the run was sent to)   --runner/--model override the result's
 //   --served-runner --served-model --served-endpoint --fallbacks-json '[{runner,model,endpoint,reason}]'
@@ -134,7 +135,7 @@ function normalizeRow(i) {
     served_by: {
       runner: str(served.runner) || runner,
       model: str(served.model) || model,
-      account: str(served.account) || account,
+      account: str(served.runner) ? str(served.account) : (str(served.account) || account),
     },
     fallbacks: normalizeFallbacks(x.fallbacks),
     usage,
@@ -210,7 +211,7 @@ function rowFromResult(result, ctx) {
         : null,
     },
     fallbacks: c.fallbacks,
-    usage: r.usage,
+    usage: c.usage_json !== undefined && c.usage_json !== null ? c.usage_json : r.usage,
     usage_source: c.usage_source,
     status: str(r.status),
     wall_secs: c.wall_secs !== undefined && c.wall_secs !== null ? c.wall_secs : r.wall_secs,
@@ -309,6 +310,8 @@ function runAppend(args, env, nowSecs) {
   const servedEndpoint = str(args.served_endpoint);
   let fallbacks = null;
   if (args.fallbacks_json) { try { fallbacks = JSON.parse(args.fallbacks_json); } catch (_) { return { ok: false, error: 'fallbacks_not_json' }; } }
+  let usageJson = null;
+  if (args.usage_json) { try { usageJson = JSON.parse(args.usage_json); } catch (_) { return { ok: false, error: 'usage_json_not_json' }; } }
   const courier = courierFromFleet(env);
   const ctx = {
     role: args.role, run_id: str(args.run_id), parent_run_id: str(args.parent_run_id), root_run_id: str(args.root_run_id),
@@ -320,7 +323,7 @@ function runAppend(args, env, nowSecs) {
     servedEndpointLocal: servedEndpoint ? endpointIsLocal(servedEndpoint, env) : false,
     fallbacks: fallbacks === null ? null : fallbacks.map((f) => ({ ...f, endpointLocal: f && f.endpoint ? endpointIsLocal(f.endpoint, env) : false, courier })),
     provider_session_id: str(args.provider_session_id),
-    usage_source: str(args.usage_source),
+    usage_source: str(args.usage_source), usage_json: usageJson,
     courier, os_user: os.userInfo().username, host: os.hostname(),
     requester_member: str(args.requester_member) || str(env.AUTOPILOT_REQUESTER_MEMBER),
     requester_session_id: str(env.CLAUDE_CODE_SESSION_ID),
@@ -328,6 +331,7 @@ function runAppend(args, env, nowSecs) {
     upstream_task_id: str(args.upstream_task_id) || str(env.AUTOPILOT_UPSTREAM_TASK_ID),
     upstream_message_id: str(args.upstream_message_id) || str(env.AUTOPILOT_UPSTREAM_MESSAGE_ID),
     claudeAlias: str(env.AUTOPILOT_ACCOUNT),
+    codexAlias: str(env.AUTOPILOT_ACCOUNT),
   };
   return appendRow(normalizeRow(rowFromResult(result, ctx)), { env });
 }

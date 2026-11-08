@@ -1299,7 +1299,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           let seen = whole.keyed.map(x => x.k)
           if (split) { const sc = cardSplit(el, t, { top: whole.rows, strip: whole.strip, room, cells: plan.geo.main, model, onPage: page }); main = sc.rows; seen = whole.keyed.filter(x => x.at === null || (x.at >= sc.from && x.at < sc.to)).map(x => x.k) }
           else { fixedWindow(whole.rows.length, room, model); main = whole.rows }
-          const hint = curLocked || seen.length === 0 ? '' : seen.every((k, i) => k === i) ? t('shell.hint_pick', { n: seen.length }) : t('shell.hint_pick_some')
+          const hint = curLocked || seen.length === 0 ? '' : seen.every((k, i) => k === i) && (seen.length > 1 || optN === 1) ? t('shell.hint_pick', { n: seen.length }) : t('shell.hint_pick_some')
           if (hint !== (optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '')) { const again = shellPlan({ ...planInp, footMain: hint, bodyRows: plan.bodyRows }); if (again !== null) plan = again }
           left = cardRows(cards, decideCursor, plan.geo.left, plan.bodyRows)
           onLeft = (id: string) => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { decideCursor = i; redraw() } }

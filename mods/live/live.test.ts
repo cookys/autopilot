@@ -7844,7 +7844,7 @@ for (const surface of SURFACES) {
     for (let i = 0; i < 40; i++) {
       const ks = d.buttons.filter(b => b.startsWith('opt:d-lay00006:')).map(b => Number(b.split(':')[2])).sort()
       ks.forEach(k => shown.add(String(k)))
-      const contiguous = ks.every((k, j) => k === j)
+      const contiguous = ks.length > 1 && ks.every((k, j) => k === j) // one shown option of several gets the range-less hint, not `1-1`
       if (ks.length === 0) expect(hintOf(d.raw), 'no option on the screen: no hint, step ' + i).not.toMatch(/按 1|1-|1–|Press/)
       else if (contiguous) expect(hintOf(d.raw), 'hint matches the ' + ks.length + ' options drawn, step ' + i).toContain(String(ks.length))
       else expect(hintOf(d.raw), 'not 1-n when the shown options are ' + ks.join(',') + ', step ' + i).not.toMatch(/1-\d|1–\d/)

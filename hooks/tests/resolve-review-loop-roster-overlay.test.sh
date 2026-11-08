@@ -58,7 +58,7 @@ OVR_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$OVR" bash "$SCRIPT" 2>/dev/null)"; rc=
 assert_eq "0" "$rc" "one override group resolves"
 assert_eq "grok-4.7" "$(printf '%s' "$OVR_JSON" | jget implementer_engine)" "override group comes from the repo (engine)"
 assert_eq "grok" "$(printf '%s' "$OVR_JSON" | jget implementer_runner)" "override group comes from the repo (runner)"
-assert_eq "GLM-5.3" "$(printf '%s' "$OVR_JSON" | jget reviewer_engine)" "other group (reviewer) still from the roster"
+assert_eq "Qwen3.8-27B-QUASAR-NVFP4" "$(printf '%s' "$OVR_JSON" | jget reviewer_engine)" "other group (reviewer) still from the roster"
 assert_eq "$(printf '%s' "$ROSTER_JSON" | jget qc_panel)" "$(printf '%s' "$OVR_JSON" | jget qc_panel)" "other group (qc_panel) still from the roster"
 assert_eq "7" "$(printf '%s' "$OVR_JSON" | jget loop_max_rounds)" "non-seat knob written in the repo file wins"
 assert_eq '[{"group":"implementer","until":"2099-01-01","reason":"trial of another implementer","expired":false}]' "$(printf '%s' "$OVR_JSON" | jget roster_overrides)" "roster_overrides lists the declared group"

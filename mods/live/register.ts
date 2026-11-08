@@ -1235,7 +1235,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         columns, t, menuTitle: leftTitle(cards.length > 0 ? 'cards' : 'tabs', (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(), t),
         mainTitle: cards.length > 0 ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
         room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes, awaiting: (snapshot.awaiting ?? []).length,
-        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}),
+        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}), // the card view re-plans with the hint of the options it actually draws
         ...(cardMode ? { noRight: true } : {}),
       }
       const plan0 = shellPlan(planInp)
@@ -1295,8 +1295,12 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const model = bandModel('decide')
           if (model.key !== curKey) { model.key = curKey; model.offset = 0 }
           const page = (by: number) => { model.offset = Math.max(0, Math.min(model.max, model.offset + by * Math.max(1, model.room))); redraw() }
-          if (split) main = cardSplit(el, t, { top: whole.rows, strip: whole.strip, room, cells: plan.geo.main, model, onPage: page })
+          // the hint names only the options whose Button is in the tree: all of them when drawn whole or in the strip, else those in the window (a Button off the tree has no hotkey)
+          let seen = whole.keyed.map(x => x.k)
+          if (split) { const sc = cardSplit(el, t, { top: whole.rows, strip: whole.strip, room, cells: plan.geo.main, model, onPage: page }); main = sc.rows; seen = whole.keyed.filter(x => x.at === null || (x.at >= sc.from && x.at < sc.to)).map(x => x.k) }
           else { fixedWindow(whole.rows.length, room, model); main = whole.rows }
+          const hint = curLocked || seen.length === 0 ? '' : seen.every((k, i) => k === i) ? t('shell.hint_pick', { n: seen.length }) : t('shell.hint_pick_some')
+          if (hint !== (optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '')) { const again = shellPlan({ ...planInp, footMain: hint, bodyRows: plan.bodyRows }); if (again !== null) plan = again }
           left = cardRows(cards, decideCursor, plan.geo.left, plan.bodyRows)
           onLeft = (id: string) => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { decideCursor = i; redraw() } }
           const lastCard = cards.find(c => c.id === decideLastId)

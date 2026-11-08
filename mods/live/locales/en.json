@@ -384,6 +384,7 @@
   "shell.room_none": "no messages yet",
   "shell.main_title": "Card {n} of {total}",
   "shell.hint_pick": "Press 1-{n} to choose, the next card follows",
+  "shell.hint_pick_some": "Press the number of a shown option to choose, the next card follows",
   "shell.awaiting": "Your step {n}",
   "shell.send": "Send {n}",
   "shell.more_up": "{n} more lines above",

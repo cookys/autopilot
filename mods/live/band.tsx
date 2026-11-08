@@ -297,10 +297,11 @@ function paraRows(text: string, first: number, rest: number): { row: string; ind
   }
   return out
 }
-export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): { rows: unknown[]; strip: unknown[] } {
+export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): { rows: unknown[]; strip: unknown[]; keyed: { k: number; at: number | null }[] } {
   const { Box, Text, Button } = el
   const rows: unknown[] = []
   const strip: unknown[] = []
+  const keyed: { k: number; at: number | null }[] = [] // the options that have a hotkey Button: `at` is the row of `rows` it sits in, null when it stands in the strip
   const optTo = v.split ? strip : rows
   const w = Math.max(8, v.width)
   const dim = (on: boolean) => (on ? dimProps() : {})
@@ -332,6 +333,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
       ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + head}</Text>
       : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
     const star = o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>
+    if (hasKey) keyed.push({ k, at: v.split ? null : rows.length })
     optTo.push(
       <Box key={'o' + k}>
         <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>
@@ -352,13 +354,13 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   if (v.notAuthorized !== null) block('na', keys[2], v.notAuthorized, false)
   if (fillBtn !== null) optTo.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
   if (v.meta === null && v.note !== null) line('note', v.note, true)
-  return { rows, strip }
+  return { rows, strip, keyed }
 }
 
 // a card taller than the frame (§12.10, owner d-60e13bd4): `top` scrolls in `room - strip rows - 1 rule - 1 page row` rows with a scrollbar column at its right edge, then one rule, then the fixed `strip`
 // (the options, the fill Button, the page Buttons). The strip never moves with the scroll. `cells` is the main window's width. Returns exactly `room` rows when the strip fits; a strip taller than `room`
 // leaves the window one row and the rest is cut by the shell (reported, not hidden: no layout of its own is invented).
-export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top: unknown[]; strip: unknown[]; room: number; cells: number; model: ScrollModel; onPage: (by: number) => void }): unknown[] {
+export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top: unknown[]; strip: unknown[]; room: number; cells: number; model: ScrollModel; onPage: (by: number) => void }): { rows: unknown[]; from: number; to: number } {
   const { Box, Text } = el
   const fixed = 1 + o.strip.length // the rule and the strip
   const fits = o.top.length <= o.room - fixed
@@ -375,7 +377,7 @@ export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top
   rows.push(<Text key="rule" color={PALETTE.structure}>{GLYPHS.structure.rule.repeat(Math.max(1, o.cells - 1))}</Text>)
   rows.push(...o.strip)
   if (win.hint) rows.push(scrollHint(el, t, win.above, win.below, () => o.onPage(-1), () => o.onPage(1)))
-  return rows
+  return { rows, from: win.offset, to: win.offset + win.rows } // [from, to): the rows of `top` the window shows
 }
 
 // the quick row of the 待決 card view: `0: 送出 N 張 │ 7: 上一張 │ 8: 下一張 │ 9: 下一個選單   tip`. The slots have fixed widths (15, 12, 12, 16), so the four labels sit at the same

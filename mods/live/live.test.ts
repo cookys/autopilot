@@ -7832,14 +7832,54 @@ for (const surface of SURFACES) {
     expect(mainCells(d.raw, 100), 'the rows moved').not.toEqual(mainCells(top.raw, 100))
     if (surface === 'terminal') console.log('RENDER-BEGIN layout2-bottom-100\n' + d.raw.join('\n') + '\nRENDER-END')
   })
-  test('bandlayout: a six-option card hints 1-6 in the bottom frame, as every option is drawn (' + surface + ')', async ($, on) => {
+  test('bandlayout: the bottom-frame hint names the options whose Button is on the screen: 1-6 when all six are, the range-less hint when the window shows only some of them, at every scroll position (' + surface + ')', async ($, on) => {
     layWorld(on, [LONGCARD])
     await start($, surface)
     await drawShell($, 160, ['tab:decide'], 12)
-    for (const maxRows of [12, 60]) {
-      const d = await drawShell($, 100, [], maxRows)
-      expect(d.raw.join('\n'), 'hint at ' + maxRows).toMatch(/1-6|1–6/)
+    const hintOf = (raw: string[]): string => raw[raw.length - 3] ?? ''
+    const full = await drawShell($, 100, [], 60)
+    expect(hintOf(full.raw), 'every option drawn: 1-6').toMatch(/1-6|1–6/)
+    let d = await drawShell($, 100, [], 12)
+    const shown = new Set<string>()
+    for (let i = 0; i < 40; i++) {
+      const ks = d.buttons.filter(b => b.startsWith('opt:d-lay00006:')).map(b => Number(b.split(':')[2])).sort()
+      ks.forEach(k => shown.add(String(k)))
+      const contiguous = ks.every((k, j) => k === j)
+      if (ks.length === 0) expect(hintOf(d.raw), 'no option on the screen: no hint, step ' + i).not.toMatch(/按 1|1-|1–|Press/)
+      else if (contiguous) expect(hintOf(d.raw), 'hint matches the ' + ks.length + ' options drawn, step ' + i).toContain(String(ks.length))
+      else expect(hintOf(d.raw), 'not 1-n when the shown options are ' + ks.join(',') + ', step ' + i).not.toMatch(/1-\d|1–\d/)
+      if (ks.length > 0 && ks.length < 6) expect(hintOf(d.raw), 'a hint of fewer options than six never says 1-6, step ' + i).not.toMatch(/1-6|1–6/)
+      if (!d.buttons.includes('scroll:down')) break
+      d = await drawShell($, 100, ['scroll:down'], 12)
     }
+    expect(shown.size, 'the walk met at least one option Button').toBeGreaterThan(0)
+  })
+  test('bandlayout: scrolled through at 12 rows, every line of a card is complete and none is wider than the main window less the scrollbar cell, so the scrollbar column clips nothing (' + surface + ')', async ($, on) => {
+    layWorld(on, [LAYCARD, DQ2])
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'], 12)
+    let d = await drawShell($, 100, [], 12)
+    const seen: string[] = []
+    let widest = 0
+    // the main window's inner width: the bottom frame's stretch between the junction and the corner
+    const bottom = d.raw[d.raw.length - 3] ?? ''
+    const inner = displayWidth((bottom.split('┴')[1] ?? '').slice(0, -1))
+    for (let i = 0; i < 60; i++) {
+      const main = mainCells(d.raw, 100)
+      const top = main.slice(0, main.findIndex(r => /^─+$/.test(r.trim())))
+      const text = top.map(r => r.replace(/[█│]$/, '').trimEnd()) // the last cell of a window row is the scrollbar
+      seen.push(...text)
+      for (const r of text) widest = Math.max(widest, displayWidth(r))
+      if (!d.buttons.includes('scroll:down')) break
+      d = await drawShell($, 100, ['scroll:down'], 12)
+    }
+    const all = squash(seen)
+    expect(all, 'the whole background after paging through').toContain(LONG_BG)
+    expect(all, 'the option description').toContain(LAY_DESC)
+    expect(all, 'the other option description').toContain('乙案說明')
+    expect(inner, 'the window width was read').toBeGreaterThan(40)
+    expect(widest, 'a full line is drawn (width ' + widest + ' of ' + inner + ')').toBeGreaterThanOrEqual(inner - 3)
+    expect(widest, 'no line is wider than the window less the scrollbar cell (' + widest + ' of ' + inner + ')').toBeLessThanOrEqual(inner - 1)
   })
   test('bandlayout: the 待決 tab has no roundtable or usage column (one window beside the card list), and the other tabs keep theirs (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
     layWorld(on, [LAYCARD, DQ2])

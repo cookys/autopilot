@@ -321,6 +321,102 @@ sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-
 M_BOTH="$(engine_case "$T" both-unreach mutG-x)"
 case "$M_BOTH" in *calls=2*) fail "mutant G (unbounded retreat) must dispatch more than twice" ;; esac
 
+# --- 3b. admitted campaign: cloud-fallback behaves as ask (PM ruling 2026-11-08) ---------------------
+CAMP="$TEST_TMP/camp"
+mkdir -p "$CAMP/repo"
+git -C "$CAMP/repo" init -q -b develop
+git -C "$CAMP/repo" config user.email "t@t"
+git -C "$CAMP/repo" config user.name "t"
+printf 'x\n' > "$CAMP/repo/README.md"
+printf '.autopilot/\n' > "$CAMP/repo/.gitignore"
+git -C "$CAMP/repo" add .
+git -C "$CAMP/repo" commit -q -m base
+CAMP_BASE="$(git -C "$CAMP/repo" rev-parse HEAD)"
+CAMP_COMMON="$(realpath "$CAMP/repo/$(git -C "$CAMP/repo" rev-parse --git-common-dir)")"
+cat > "$CAMP/c.json" <<EOF2
+{"schema_version":1,"ticket":"cf-skip","profile":"poc","mission_grant_ref":null,"repo_identity":"git-common-dir:$CAMP_COMMON","base_sha":"$CAMP_BASE","branch":"impl/cf-skip","vertical_acceptance":["x"],"allowed_path_prefixes":["src/"],"max_changed_files":4,"baseline_churn":10,"max_growth_ratio":1.5,"max_extra_churn":5,"max_repair_generations":2,"max_wall_seconds":120,"verify_cmd":"true","rubric_ids":["R1"]}
+EOF2
+node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal --contract "$CAMP/c.json" --repo "$CAMP/repo" \
+  --mission-mode off --out "$CAMP/c.seal.json" > /dev/null < /dev/null
+assert_exit_code "$?" "0" "campaign fixture contract seals"
+cat > "$TEST_TMP/camp-case.js" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const [root, camp, capDir, mode] = process.argv.slice(2);
+const { AutopilotEngine, campaignIdFor } = require(path.join(root, 'src', 'engine'));
+const repo = path.join(camp, 'repo');
+const bytes = fs.readFileSync(path.join(camp, 'c.json'));
+const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+const c = JSON.parse(bytes);
+const prompt = path.join(capDir, 'prompt.txt');
+fs.writeFileSync(prompt, 'implementer prompt');
+const calls = [];
+const engine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => 1782864000000,
+  implementationDispatcher(args) {
+    calls.push(args);
+    if (calls.length > 5) throw new Error('runaway retreat');
+    const result = calls.length === 1
+      ? { status: 'engine_unavailable', runner: 'cc-shim', model: 'local-model', commit: null, base: c.base_sha, branch: 'x',
+          files_changed: 0, insertions: 0, deletions: 0, worktree: '/tmp/wt', agent_log: '/tmp/l',
+          error: 'engine unavailable (endpoint_unreachable): worker exited non-zero (agent exit 1); worktree kept' }
+      : { status: 'committed', runner: 'codex', model: 'gpt-5.6-sol', branch: 'x', base: c.base_sha,
+          commit: '2222222222222222222222222222222222222222', files_changed: 1, insertions: 1, deletions: 0,
+          worktree: null, agent_log: '/tmp/l', error: null };
+    return { error: null, status: result.status === 'committed' ? 0 : 1, signal: null, stdout: '', stderr: '', parseError: null, result };
+  },
+});
+const roster = {
+  implementer_engine: 'local-model', implementer_effort: 'high', implementer_runner: 'cc-shim',
+  implementer_endpoint: 'gpu1', on_engine_unavailable: 'cloud-fallback',
+  cloud_fallback_rung: { engine: 'gpt-5.6-sol', effort: 'high', runner: 'codex' },
+};
+const base = {
+  promptFile: prompt, base: c.base_sha, implementationRound: 1, extraImplementationArgs: ['--endpoint', 'gpu1'], roster,
+};
+const out = mode === 'campaign'
+  ? engine.implementTask({
+    ...base, branch: c.branch, runId: campaignIdFor(c.repo_identity, c.ticket, digest),
+    implementationStage: 'campaign-implementation',
+    campaignContractFile: path.join(camp, 'c.json'), campaignContractDigest: digest,
+    campaignSealFile: path.join(camp, 'c.seal.json'), implementationOptions: { cwd: repo, env: {} },
+  })
+  : engine.implementTask({ ...base, branch: 'impl-branch', runId: 'run-cf-1' });
+const eu = out.engine_unavailable || null;
+const logFile = path.join(capDir, 'cloud-fallbacks.jsonl');
+const rows = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+console.log(`calls=${calls.length}`);
+console.log(`status=${out.status}`);
+console.log(`eu=${eu ? `${eu.action}/${eu.error_class}/skipped=${eu.cloud_fallback_skipped || 'none'}` : 'null'}`);
+console.log(`reason=${eu && eu.reason ? eu.reason : 'none'}`);
+console.log(`log_rows=${rows.length} outcome=${rows[0] ? rows[0].outcome : 'none'} error_class=${rows[0] ? rows[0].error_class : 'none'}`);
+NODE
+camp_case() {
+  local root="$1" mode="$2" cap="$TEST_TMP/ccap-$3"
+  mkdir -p "$cap"
+  ENGINE_CAPABILITY_DIR="$cap" node "$TEST_TMP/camp-case.js" "$root" "$CAMP" "$cap" "$mode" 2>&1 < /dev/null
+}
+C_CAMP="$(camp_case "$REPO_ROOT" campaign good-c)"
+C_PLAIN="$(camp_case "$REPO_ROOT" plain good-p)"
+assert_contains "$C_CAMP" "calls=1" "campaign: endpoint_unreachable is not re-dispatched"
+assert_contains "$C_CAMP" "eu=escalate/endpoint_unreachable/skipped=campaign" "campaign: escalate directive carries cloud_fallback_skipped"
+assert_contains "$C_CAMP" "reason=cloud-fallback is not used inside a campaign (PM ruling 2026-11-08); escalating" "campaign: reason names the ruling"
+assert_contains "$C_CAMP" "log_rows=1 outcome=skipped_campaign error_class=endpoint_unreachable" "campaign: one skipped_campaign log row with the real error class"
+assert_contains "$C_PLAIN" "calls=2" "non-campaign: the same death still retreats to the cloud (regression)"
+assert_contains "$C_PLAIN" "log_rows=1 outcome=committed" "non-campaign: the retreat is logged as before"
+T="$(mk_tree mutC1)"
+sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
+  's/const campaignSkip = Boolean(campaignAuthority)/const campaignSkip = false \&\& Boolean(campaignAuthority)/'
+M_CAMP="$(camp_case "$T" campaign mutC1-c)"
+case "$M_CAMP" in *calls=1*) fail "mutant C1 (campaign skip off) must dispatch the campaign unit more than once" ;; esac
+T="$(mk_tree mutC2)"
+sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
+  's/const campaignSkip = Boolean(campaignAuthority)/const campaignSkip = true/'
+M_PLAIN="$(camp_case "$T" plain mutC2-p)"
+case "$M_PLAIN" in *calls=2*) fail "mutant C2 (skip everywhere) must stop the non-campaign retreat" ;; esac
+
 # --- 4. ledger identity and family fields (fake dispatcher) -----------------------------------------
 cat > "$TEST_TMP/ident-case.js" <<'NODE'
 const fs = require('fs');

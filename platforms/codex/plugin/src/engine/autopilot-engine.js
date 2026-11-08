@@ -4858,14 +4858,40 @@ class AutopilotEngine {
           ledger,
         };
       }
-      const engineUnavailable = parsed
+      let engineUnavailable = parsed
         ? resolveEngineUnavailableDirective(roster, parsed.status, parsed.error)
         : null;
+      // PM ruling 2026-11-08: inside an admitted campaign cloud-fallback behaves as ask. The sealed
+      // contract binds contract.branch, so a retreat branch would block fail-closed anyway.
+      const campaignSkip = Boolean(campaignAuthority)
+        && engineUnavailable && engineUnavailable.action === 'cloud-fallback';
+      if (campaignSkip) {
+        recordCloudFallback({
+          ts: String(this.now()),
+          run_id: input.runId || null,
+          fallback_run_id: null,
+          from_runner: parsed && parsed.runner ? parsed.runner : implementationArgsRunner(implementationArgs),
+          from_endpoint: endpointFromImplementationArgs(input.extraImplementationArgs)
+            || (typeof roster.implementer_endpoint === 'string' && roster.implementer_endpoint) || null,
+          error_class: engineUnavailable.error_class,
+          to_rung: `${engineUnavailable.cloud_fallback_rung.engine}/${engineUnavailable.cloud_fallback_rung.effort}@${engineUnavailable.cloud_fallback_rung.runner}`,
+          branch: null,
+          outcome: 'skipped_campaign',
+        });
+        const { cloud_fallback_rung: _skippedRung, ...skippedDirective } = engineUnavailable;
+        engineUnavailable = {
+          ...skippedDirective,
+          action: 'escalate',
+          cloud_fallback_skipped: 'campaign',
+          reason: 'cloud-fallback is not used inside a campaign (PM ruling 2026-11-08); escalating',
+        };
+      }
       if (engineUnavailable) {
         ledger.push(this.ledgerEntry('engine_unavailable_policy', engineUnavailable.action, this.now(), {
           policy: engineUnavailable.policy,
           error_class: engineUnavailable.error_class,
           dispatch_status: engineUnavailable.dispatch_status,
+          ...(campaignSkip ? { cloud_fallback_skipped: 'campaign' } : {}),
         }));
       }
       if (engineUnavailable && engineUnavailable.action === 'cloud-fallback') {

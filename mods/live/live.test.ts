@@ -165,6 +165,7 @@ type World = {
   cwdReal: { value: string }
   stats: Record<string, { size: number; mtimeMs: number }> // $.fs.stat of a file (a background command's output); any other path stats as a directory
   toasts: string[]
+  invalidates: number // ui.invalidate calls the mod made
   panes: string[]
   opens: { id: string; title?: string; focus?: true; closeOnEscape?: true }[]
   panesThrow: boolean // $.ui.panes() rejects (the engine cannot list panes)
@@ -194,7 +195,7 @@ let TURN_AT = 0
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
   barLocale = locale ?? 'zh-TW'
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], invalidates: 0, panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
@@ -254,7 +255,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
     return { turnId: e.turnId, index: e.index, answer: 'ab', toolUses: [], stopReason: 'end_turn', ...(f.badTools === true ? { serverToolUses: [null] as never } : {}), usage: { input_tokens: 10, output_tokens: f.tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: f.model ?? 'claude-opus-5-5' } } as const
   })
   on('command.register', (_$, e) => ({ value: { command: e.name } })) // the live mod registers /live-pane at session start
-  on('ui.invalidate', () => ({ value: undefined }))
+  on('ui.invalidate', () => { w.invalidates += 1; return { value: undefined } })
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.open', async ($, e) => {
     w.order.push('open')
@@ -5818,17 +5819,15 @@ for (const surface of SURFACES) {
   // The host clears an Input's field when Enter submits it (roundtable/register.ts keepDraft). A note is only SENT by the send Button, so Enter in a note field must not lose
   // the text: the mod keeps it and asks for a redraw, which draws the field with the kept text again.
   test('DECIDE mounted: Enter in a note field keeps the draft: it is still the field value, a redraw is asked, and nothing is sent (' + surface + ')', async ($, on) => {
-    const { submits } = decideWorld(on)
-    let redraws = 0
-    on('ui.invalidate', () => { redraws += 1; return { value: undefined } })
+    const { w, submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
     await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
-    const before = redraws
+    const before = w.invalidates
     await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'submit' }) // Enter
     await pane.unmount()
     expect(submits.length, 'Enter never sends').toBe(0)
-    expect(redraws - before, 'Enter asks for one redraw so the host\'s cleared field is drawn with the draft again').toBe(1)
+    expect(w.invalidates - before, 'Enter asks for one redraw so the host\'s cleared field is drawn with the draft again').toBe(1)
     const p2 = await paneOn($, surface, 'decide')
     const f = ((await p2.findAll({ type: 'Input' })) as Drawn[]).find(n => n.props?.key === 'note:d-0000free')
     await p2.unmount()

@@ -39,6 +39,7 @@ const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js prune [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js classify-error [--string <text>] [--file <path>] [--exit-code <code>]
   node scripts/engine-capability-state.js strike --identity-file <path> --source <fuse|conformance_audit> --receipt-ref <token> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js cloud-fallback-log [--file <path>] [--store <path>]
   node scripts/engine-capability-state.js brain-status --identity-file <path> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js strike-seat --engine <token> --runner <token> --role <token> [--effort <effort>] [--seat-kind brain] --class ordinary_strike|critical_reexam_trigger [--predicate-id <id>] --cause-class engine_output|runner_delivery|ambiguous --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js invalidate-strike --engine <token> --runner <token> --role <token> [--effort <effort>] [--seat-kind brain] --invalidates-event-id <int> --proof-artifact-sha256 <64hex> --proof-detector-id <token> --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
@@ -1938,6 +1939,7 @@ function parseCommandLineArgs(argv) {
     ['prune', new Set(['now', 'store'])],
     ['classify-error', new Set(['string', 'file', 'exit-code'])],
     ['strike', new Set(['identity-file', 'source', 'receipt-ref', 'now', 'store'])],
+    ['cloud-fallback-log', new Set(['file', 'store'])],
     ['brain-status', new Set(['identity-file', 'now', 'store'])],
     ['strike-seat', new Set([
       'engine', 'runner', 'role', 'effort', 'seat-kind', 'class', 'predicate-id', 'cause-class', 'writer',
@@ -2181,6 +2183,48 @@ function main() {
       failValidation(`strike ledger: ${error.message}`);
     }
     process.stdout.write(`${JSON.stringify({ schema_version: 1, artifact_type: 'brain_seat_strike', ...row })}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'cloud-fallback-log') {
+    // One JSONL row per cloud fallback (on_engine_unavailable: cloud-fallback): the engine
+    // re-dispatched a local-endpoint implementer to cloud_fallback_rung. Append-only, same store
+    // dir and lock as strikes.jsonl. This is a log, never read back as endpoint health.
+    const rawInput = options.file ? fs.readFileSync(options.file, 'utf8') : fs.readFileSync(0, 'utf8');
+    let input;
+    try {
+      input = JSON.parse(rawInput);
+    } catch (error) {
+      failValidation(`cloud-fallback-log input: invalid JSON (${error.message})`);
+    }
+    const str = (v) => typeof v === 'string' && v.length > 0;
+    if (!input || typeof input !== 'object' || Array.isArray(input)
+        || !str(input.ts) || Number.isNaN(Date.parse(input.ts))
+        || !str(input.from_runner) || !str(input.error_class)
+        || !str(input.to_rung) || !str(input.outcome)
+        || !(input.run_id === null || str(input.run_id))
+        || !(input.from_endpoint === null || str(input.from_endpoint))) {
+      failValidation('cloud-fallback-log requires ts, run_id, from_runner, from_endpoint, error_class, to_rung, outcome');
+    }
+    const config = resolveStoreConfig(options);
+    enforceTestRunGuard(config, 'cloud-fallback-log');
+    const file = path.join(config.storeDir, 'cloud-fallbacks.jsonl');
+    const row = withWriteLock({ storeDir: config.storeDir, lockFile: config.lockFile, name: 'cloud fallbacks' }, () => {
+      ensureDir(config.storeDir);
+      const written = {
+        schema_version: 1,
+        ts: input.ts,
+        run_id: input.run_id,
+        from_runner: input.from_runner,
+        from_endpoint: input.from_endpoint,
+        error_class: input.error_class,
+        to_rung: input.to_rung,
+        outcome: input.outcome,
+      };
+      appendRow(file, written);
+      return written;
+    });
+    process.stdout.write(`${JSON.stringify(row)}\n`);
     process.exit(0);
   }
 

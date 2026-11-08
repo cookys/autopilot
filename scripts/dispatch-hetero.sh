@@ -4367,7 +4367,42 @@ NODE
   PROVIDER_ERROR_FIELD="$(printf '%s\n' "$_parsed" | sed -n '3p')"
 }
 
+# endpoint-backed runs only (--endpoint given): split a local/self-hosted endpoint's death into
+# endpoint_busy (HTTP 429 or 503: the throttling proxy in front of the server shedding load) and
+# endpoint_unreachable (connection refused/reset, DNS, connect/read timeout, any other 5xx).
+# Prints the class, or nothing when this is not an endpoint run or the log names neither.
+# auth_failed / quota_exhausted keep their meaning (escalate). Pure function of THIS run's log and
+# structured status: no state is read or written, so one bad dispatch never marks the endpoint down
+# for the next one. Cloud runners (no --endpoint) never reach the patterns, so their
+# rate_limited/overloaded classification is byte-identical.
+_endpoint_error_class() {
+  [ -n "${ENDPOINT:-}" ] || return 0
+  case "${CLASSIFIED_ERROR:-}" in auth_failed|quota_exhausted) return 0 ;; esac
+  local _txt=""
+  if [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
+    _txt="$(tr '[:upper:]' '[:lower:]' < "$LOG" 2>/dev/null | tail -c 20000)"
+  fi
+  case "${PROVIDER_ERROR_STATUS:-}" in
+    429|503) printf 'endpoint_busy'; return 0 ;;
+  esac
+  if printf '%s' "$_txt" | grep -Eq '(api error|http|status)[: =(]{0,4}(429|503)([^0-9]|$)|too many requests|service unavailable|retry-after'; then
+    printf 'endpoint_busy'; return 0
+  fi
+  if printf '%s' "$_txt" | grep -Eq 'econnrefused|connection refused|econnreset|connection reset|enotfound|getaddrinfo|name resolution|etimedout|timed out|read timeout|connect timeout|unable to connect|fetch failed|(api error|http|status)[: =(]{0,4}5[0-9][0-9]([^0-9]|$)'; then
+    printf 'endpoint_unreachable'; return 0
+  fi
+  if [ "${CLASSIFIED_ERROR:-}" = "network_failed" ]; then
+    printf 'endpoint_unreachable'; return 0
+  fi
+  return 0
+}
+
 _prefer_structured_classified_error() {
+  case "${CLASSIFIED_ERROR:-}" in endpoint_busy|endpoint_unreachable) return 0 ;; esac
+  if [ -n "${ENDPOINT:-}" ]; then
+    local _epc; _epc="$(_endpoint_error_class)"
+    if [ -n "$_epc" ]; then CLASSIFIED_ERROR="$_epc"; return 0; fi
+  fi
   case "${PROVIDER_ERROR_STATUS:-}" in
     429) CLASSIFIED_ERROR="rate_limited" ;;
     503|529) CLASSIFIED_ERROR="overloaded" ;;
@@ -4879,7 +4914,7 @@ passive_capture() {
   # Structured class was derived once before this call. Text classification
   # still runs for the quota side effect, then the structured class is put back
   # so a later branch cannot decide from prose.
-  local _structured_class=""
+  local _structured_class="" _ep_class=""
   case "${PROVIDER_ERROR_STATUS:-}" in
     429|503|529|402) _structured_class="${CLASSIFIED_ERROR:-}" ;;
   esac
@@ -4887,6 +4922,10 @@ passive_capture() {
   if { [ "$status" = "no_op" ] || [ "$status" = "question_suspected" ] || [ "$status" = "failure" ] || [ "$status" = "dirty" ] || [ "$status" = "no_verdict" ]; } && [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
     # Classify once, outside the recording subshell, so classify_outcome can reuse the result.
     CLASSIFIED_ERROR="$("$SELF_DIR/engine-capability-state.js" classify-error --file "$LOG" --exit-code "${AGENT_EXIT:-0}" 2>/dev/null)" || CLASSIFIED_ERROR=""
+    # Endpoint runs: the endpoint_* class replaces rate_limited/overloaded/network_failed BEFORE the
+    # quota-recording branch below, so a throttled or down local endpoint writes no capability row.
+    _ep_class="$(_endpoint_error_class)"
+    if [ -n "$_ep_class" ]; then CLASSIFIED_ERROR="$_ep_class"; _structured_class=""; fi
     if [ "$CLASSIFIED_ERROR" = "quota_exhausted" ] || [ "$CLASSIFIED_ERROR" = "rate_limited" ]; then
       if declare -F _capability_write_suppress_now >/dev/null 2>&1 && _capability_write_suppress_now; then
         write_manifest 2>/dev/null || true
@@ -4946,7 +4985,7 @@ passive_capture() {
 # True when classify-error named a known engine-unavailability signal (not network/unknown).
 _is_engine_unavailable() {
   case "${1:-}" in
-    quota_exhausted|rate_limited|auth_failed|overloaded) return 0 ;;
+    quota_exhausted|rate_limited|auth_failed|overloaded|endpoint_busy|endpoint_unreachable) return 0 ;;
     *) return 1 ;;
   esac
 }

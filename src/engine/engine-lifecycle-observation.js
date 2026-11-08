@@ -36,6 +36,7 @@ const OBSERVABLE_ENGINE_STATUSES = new Set([
   'blocked',
   'branch_update_blocked',
   'classified',
+  'cloud-fallback',
   'committed',
   'dirty',
   'engine_unavailable',

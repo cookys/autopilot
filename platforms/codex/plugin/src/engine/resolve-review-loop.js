@@ -291,6 +291,14 @@ function validateReviewLoopConfig(value) {
   );
   assertField(value, 'min_panel_size', (v) => Number.isInteger(v) && v >= 1, 'an integer >= 1');
   assertOneOf(value, 'on_engine_unavailable', schemaEnum('on_engine_unavailable'));
+  if (Object.prototype.hasOwnProperty.call(value, 'cloud_fallback_rung')) {
+    const rung = value.cloud_fallback_rung;
+    if (!rung || typeof rung !== 'object' || Array.isArray(rung)
+        || !nonEmptyString(rung.engine) || !nonEmptyString(rung.effort)
+        || !nonEmptyString(rung.runner)) {
+      throw new Error('review-loop output JSON field cloud_fallback_rung must be {engine, effort, runner}');
+    }
+  }
   for (const field of ['reviewer_fallback_preference', 'reviewer_fallback_preference_low_risk']) {
     assertField(value, field, Array.isArray, 'an array');
     for (const member of value[field]) {
@@ -372,7 +380,7 @@ function validateReviewLoopConfig(value) {
 
 function looksLikeReviewLoopConfig(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  return [...REVIEW_LOOP_FIELDS, 'reviewer_qualified', 'fallback_ladder', 'verify_first'].some((field) =>
+  return [...REVIEW_LOOP_FIELDS, 'reviewer_qualified', 'fallback_ladder', 'cloud_fallback_rung', 'verify_first'].some((field) =>
     Object.prototype.hasOwnProperty.call(value, field),
   );
 }

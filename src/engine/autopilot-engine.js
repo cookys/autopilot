@@ -713,10 +713,29 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   const raw = roster && typeof roster.on_engine_unavailable === 'string'
     ? roster.on_engine_unavailable
     : null;
-  const policy = (raw === 'ask' || raw === 'solo-fallback' || raw === 'wait-reset') ? raw : 'ask';
+  const policy = (raw === 'ask' || raw === 'solo-fallback' || raw === 'wait-reset' || raw === 'cloud-fallback')
+    ? raw : 'ask';
   let action = 'escalate';
   if (dispatchStatus === 'engine_unavailable') {
     const errorClass = parseEngineUnavailableClass(errorText);
+    // cloud-fallback: a local endpoint that is busy (429/503) or unreachable is retried ONCE on
+    // roster.cloud_fallback_rung. Every other class (auth, quota, cloud capacity) escalates as
+    // under ask, and so does a death of the fallback attempt itself (cloud_fallback_attempted).
+    if (policy === 'cloud-fallback') {
+      const rung = roster && roster.cloud_fallback_rung;
+      const endpointClass = errorClass === 'endpoint_busy' || errorClass === 'endpoint_unreachable';
+      const attempted = Boolean(roster && roster.cloud_fallback_attempted);
+      if (endpointClass && !attempted && rung && typeof rung === 'object') {
+        return {
+          policy, action: 'cloud-fallback', error_class: errorClass, dispatch_status: dispatchStatus,
+          cloud_fallback_rung: rung,
+        };
+      }
+      return {
+        policy, action: 'escalate', error_class: errorClass, dispatch_status: dispatchStatus,
+        ...(attempted ? { cloud_fallback_exhausted: true } : {}),
+      };
+    }
     // Waiting only helps capacity-shaped deaths; auth (and unparseable classes) cannot
     // recover on a timer — escalate regardless of policy.
     const waitable = errorClass === 'quota_exhausted' || errorClass === 'rate_limited' || errorClass === 'overloaded';
@@ -732,6 +751,47 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
     action = 'solo-fallback';
   }
   return { policy, action, error_class: null, dispatch_status: dispatchStatus };
+}
+
+// --endpoint on an implementer dispatch comes from the caller's extraImplementationArgs (the
+// builder does not reserve it). The cloud fallback must read it for the log and drop it, or the
+// cloud rung would be sent to the local endpoint again.
+function endpointFromImplementationArgs(args) {
+  if (!Array.isArray(args)) return null;
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === '--endpoint' && typeof args[i + 1] === 'string') return args[i + 1];
+    if (typeof args[i] === 'string' && args[i].startsWith('--endpoint=')) return args[i].slice('--endpoint='.length);
+  }
+  return null;
+}
+
+function stripEndpointImplementationArgs(args) {
+  if (!Array.isArray(args)) return args;
+  const out = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === '--endpoint') { i += 1; continue; }
+    if (typeof args[i] === 'string' && args[i].startsWith('--endpoint=')) continue;
+    out.push(args[i]);
+  }
+  return out;
+}
+
+function implementationArgsRunner(args) {
+  const i = Array.isArray(args) ? args.indexOf('--runner') : -1;
+  return i >= 0 ? args[i + 1] : 'unknown';
+}
+
+// One JSONL row per cloud fallback, via the capability-store CLI (same dir/lock as strikes.jsonl).
+// A log write failure never changes the dispatch outcome.
+function recordCloudFallback(row) {
+  try {
+    spawnSync(process.execPath, [
+      path.join(__dirname, '..', '..', 'scripts', 'engine-capability-state.js'),
+      'cloud-fallback-log',
+    ], { input: JSON.stringify(row), encoding: 'utf8', timeout: 30000 });
+  } catch (_error) {
+    // log only
+  }
 }
 
 function validateReviewRoster(roster, options = {}) {
@@ -4807,6 +4867,52 @@ class AutopilotEngine {
           error_class: engineUnavailable.error_class,
           dispatch_status: engineUnavailable.dispatch_status,
         }));
+      }
+      if (engineUnavailable && engineUnavailable.action === 'cloud-fallback') {
+        const rung = engineUnavailable.cloud_fallback_rung;
+        const fromEndpoint = endpointFromImplementationArgs(input.extraImplementationArgs)
+          || (typeof roster.implementer_endpoint === 'string' && roster.implementer_endpoint) || null;
+        const toRung = `${rung.engine}/${rung.effort}@${rung.runner}`;
+        const fallbackRoster = {
+          ...roster,
+          implementer_engine: rung.engine,
+          implementer_effort: rung.effort,
+          implementer_runner: rung.runner,
+          implementer_endpoint: '',
+          implementer_ladder: [],
+          cloud_fallback_attempted: true,
+        };
+        delete fallbackRoster.implementer_ladder_rung;
+        ledger.push(this.ledgerEntry('engine_unavailable_policy', 'cloud-fallback', this.now(), {
+          policy: engineUnavailable.policy,
+          error_class: engineUnavailable.error_class,
+          dispatch_status: engineUnavailable.dispatch_status,
+          to_rung: toRung,
+        }));
+        const fallback = this.implementTask({
+          ...input,
+          roster: fallbackRoster,
+          extraImplementationArgs: stripEndpointImplementationArgs(input.extraImplementationArgs),
+        });
+        recordCloudFallback({
+          ts: String(this.now()),
+          run_id: input.runId || null,
+          from_runner: parsed && parsed.runner ? parsed.runner : implementationArgsRunner(implementationArgs),
+          from_endpoint: fromEndpoint,
+          error_class: engineUnavailable.error_class,
+          to_rung: toRung,
+          outcome: fallback && fallback.status ? String(fallback.status) : 'unknown',
+        });
+        return {
+          ...fallback,
+          cloud_fallback: {
+            from_endpoint: fromEndpoint,
+            error_class: engineUnavailable.error_class,
+            to_rung: toRung,
+            first_attempt: parsed,
+          },
+          ledger: [...ledger, ...(fallback.ledger || [])],
+        };
       }
       return {
         status: 'blocked',

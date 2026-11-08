@@ -40,3 +40,21 @@ no tool surface — it is not an implementer rail) and `src/engine/local-deploym
 TLS-outside-loopback rule, no live callers). Forwarding a reasoning effort to a cc-shim
 endpoint is not implemented: the exam's `effort` label is nominal for every cc-shim seat.
 
+## When the local server is busy or down: fall back to a cloud rung
+
+A local endpoint is the one seat that can vanish (server restart, thermal throttle, the rate-limit
+proxy in front of it answering 429/503). Set, in the project's `review-loop-config.md`:
+
+```
+- on_engine_unavailable: cloud-fallback
+- cloud_fallback_rung: gpt-5.6-sol/high@codex
+```
+
+`dispatch-hetero.sh` classifies a death on a run that carries `--endpoint` as `endpoint_busy`
+(429/503) or `endpoint_unreachable` (refused, reset, DNS, timeout, other 5xx); `engine
+implement-review` then re-dispatches that unit ONCE to the cloud rung (no `--endpoint`) and appends
+a row to `cloud-fallbacks.jsonl` in the capability store dir (`ts, run_id, from_runner,
+from_endpoint, error_class, to_rung, outcome`). The next dispatch tries the local endpoint again:
+no endpoint is blacklisted. If the cloud rung also dies unavailable the run stops and asks. The
+rung's runner must be a cloud runner (`codex|agy|grok|cursor|kimi|qoderclicn`); the default
+stays `ask`.

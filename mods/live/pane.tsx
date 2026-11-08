@@ -19,7 +19,7 @@ export type { PaneTab } from './model'
 
 // What the 待決 tab's controls call: a press on an option or the send Button (by its `press` id), and an edit of a note field (by the field's key). `state` is the
 // owner's picks and notes as the host holds them; `inputs` is whether the surface draws text fields.
-export type DecideActs = { state: DecideState; batch?: DecideBatch; inputs: boolean; onPress: (id: string) => void; onNote: (key: string, value: string) => void }
+export type DecideActs = { state: DecideState; batch?: DecideBatch; inputs: boolean; onPress: (id: string) => void; onNote: (key: string, value: string) => void; onKeep: (key: string, value: string) => void }
 
 type El = (props: any) => any
 
@@ -85,7 +85,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
     return (
       <Box key={k + 'f' + i}>
         {l.segs === undefined ? null : l.segs.map((s, j) => <Text key={'g' + j} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)}
-        {Input === undefined || decide === null ? null : <Input key={f.key} placeholder={f.placeholder} value={f.value} onInput={(v: string) => decide.onNote(f.key, v)} onSubmit={(v: string) => decide.onNote(f.key, v)} />}
+        {Input === undefined || decide === null ? null : <Input key={f.key} placeholder={f.placeholder} value={f.value} onInput={(v: string) => decide.onNote(f.key, v)} onSubmit={(v: string) => decide.onKeep(f.key, v)} />}
       </Box>
     )
   }

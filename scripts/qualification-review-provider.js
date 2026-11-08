@@ -163,11 +163,15 @@
  *                   Unset/empty/`default` sends nothing on every protocol. Valid with
  *                   the http transport ONLY: combined with QRP_TRANSPORT=cli it is
  *                   rejected (cli uses QRP_CLI_EFFORT). List it in --provider-env.
- *   QRP_HTTP_THINKING http, messages ONLY: optional thinking switch. `adaptive` ->
+ *   QRP_HTTP_THINKING http, messages or chat_completions: optional thinking switch.
+ *                   chat_completions accepts `enabled` only -> body
+ *                   `chat_template_kwargs: {enable_thinking: true}` (vLLM; the trace
+ *                   arrives in reasoning_content, never in content, and is only
+ *                   recorded as observed). Messages: `adaptive` ->
  *                   body `thinking: {type: "adaptive"}` (MiniMax-M3 does not think on
  *                   this protocol unless asked), `disabled` -> `{type: "disabled"}`
  *                   (MiniMax-M3.1 answers 400 to it). Unset/empty/`default` sends
- *                   nothing. Any other value, or any other protocol/transport, is
+ *                   nothing. Any other value/protocol combination, or transport, is
  *                   refused rather than ignored. A thinking reply carries `thinking`
  *                   blocks; only `text` blocks are ever read as the answer. Thinking
  *                   spends QRP_MAX_TOKENS: raise it. List it in --provider-env.
@@ -775,16 +779,22 @@ const HTTP_EFFORT_WIRE_VALUES = Object.freeze(['none', 'minimal', 'low', 'medium
 // The messages protocol carries it as `output_config.effort`; both vendors that
 // accept it (MiniMax M3.1-Flash-Preview, Z.ai GLM-5.3) define `max`.
 const { MESSAGES_EFFORT_WIRE_VALUES } = require('./lib/effort-scale');
-// QRP_HTTP_THINKING (messages only) -> `thinking: {type}`, or '' for "send nothing".
-const HTTP_THINKING_WIRE_VALUES = Object.freeze(['adaptive', 'disabled']);
+// QRP_HTTP_THINKING -> the wire value, or '' for "send nothing". messages carries
+// `thinking: {type}` (adaptive|disabled); chat_completions carries the vLLM template
+// switch `chat_template_kwargs: {enable_thinking: true}` (enabled). responses has none.
+const HTTP_THINKING_WIRE_VALUES_BY_PROTOCOL = Object.freeze({
+  messages: Object.freeze(['adaptive', 'disabled']),
+  chat_completions: Object.freeze(['enabled']),
+});
 function httpThinkingMode(raw, protocol) {
   const mode = String(raw || '').trim();
   if (!mode || mode === 'default') return '';
-  if (protocol !== 'messages') {
-    throw new Error(`QRP_HTTP_THINKING applies to the messages protocol only (got protocol: ${protocol})`);
+  const allowed = HTTP_THINKING_WIRE_VALUES_BY_PROTOCOL[protocol];
+  if (!allowed) {
+    throw new Error(`QRP_HTTP_THINKING applies to the messages and chat_completions protocols only (got protocol: ${protocol})`);
   }
-  if (!HTTP_THINKING_WIRE_VALUES.includes(mode)) {
-    throw new Error(`QRP_HTTP_THINKING must be one of ${HTTP_THINKING_WIRE_VALUES.join('|')} or default (got: ${mode})`);
+  if (!allowed.includes(mode)) {
+    throw new Error(`QRP_HTTP_THINKING must be one of ${allowed.join('|')} or default on the ${protocol} protocol (got: ${mode})`);
   }
   return mode;
 }
@@ -1016,7 +1026,7 @@ function chatContentOrThrow(text, observed, finish) {
 //
 // Effort: QRP_HTTP_EFFORT, when set, rides as the OpenAI-compatible top-level
 // `reasoning_effort` field (same vocabulary as the Responses path).
-async function callChatCompletions(baseUrl, token, model, maxTokens, systemPrompt, userMessage, effort) {
+async function callChatCompletions(baseUrl, token, model, maxTokens, systemPrompt, userMessage, effort, thinking) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -1035,6 +1045,7 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
         temperature: 0,
         stream: true,
         ...(effort ? { reasoning_effort: effort } : {}),
+        ...(thinking === 'enabled' ? { chat_template_kwargs: { enable_thinking: true } } : {}),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },

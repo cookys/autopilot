@@ -1893,6 +1893,31 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
     equal(JSON.parse(fs.readFileSync(reqFile, 'utf8')).body.reasoning_effort, 'high',
       'QRP_HTTP_EFFORT=high sends reasoning_effort=high on chat completions');
   }
+  for (const [thinking, wantKwargs] of [['enabled', true], ['default', false], ['', false]]) {
+    const chatThink = startRespStub({
+      model: 'fake-model-exact',
+      choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: REVIEWER_MODEL_OUTPUT } }],
+    });
+    const { child } = runProvider({
+      request: reviewerRequest(),
+      env: {
+        QRP_HTTP_PROTOCOL: 'chat_completions', QRP_HTTP_THINKING: thinking,
+        QRP_BASE_URL: `http://127.0.0.1:${chatThink.port}`, QRP_AUTH_TOKEN: 'stub-token',
+        QRP_OPENCODE_SESSION: 'ses_chat', QRP_MAX_TOKENS: '32',
+      },
+    });
+    chatThink.proc.kill();
+    equal(child.status, 0, `chat completions with QRP_HTTP_THINKING=${thinking || '(empty)'} succeeds`);
+    const sentBody = JSON.parse(fs.readFileSync(reqFile, 'utf8')).body;
+    if (wantKwargs) {
+      equal(JSON.stringify(sentBody.chat_template_kwargs), JSON.stringify({ enable_thinking: true }),
+        'QRP_HTTP_THINKING=enabled sends chat_template_kwargs.enable_thinking=true on chat completions');
+      check(!('thinking' in sentBody), 'chat completions never sends the messages-style thinking field');
+    } else {
+      check(!('chat_template_kwargs' in sentBody),
+        `QRP_HTTP_THINKING=${thinking || '(empty)'} sends no chat_template_kwargs on chat completions`);
+    }
+  }
 
   const sseServerFile = path.join(tempRoot, 'stub-chat-sse.js');
   const ssePortFile = path.join(tempRoot, 'stub-chat-sse-port');
@@ -2075,9 +2100,12 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   }
   // (7) thinking refusals: bad value, wrong protocol, cli transport.
   for (const [env, re, label] of [
-    [{ QRP_HTTP_THINKING: 'enabled' }, /QRP_HTTP_THINKING must be one of adaptive\|disabled/, 'unknown value'],
-    [{ QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_THINKING: 'adaptive' }, /applies to the messages protocol only/, 'responses protocol'],
-    [{ QRP_HTTP_PROTOCOL: 'chat_completions', QRP_HTTP_THINKING: 'disabled' }, /applies to the messages protocol only/, 'chat_completions protocol'],
+    [{ QRP_HTTP_THINKING: 'enabled' }, /QRP_HTTP_THINKING must be one of adaptive\|disabled/, 'enabled on messages'],
+    [{ QRP_HTTP_THINKING: 'bogus' }, /QRP_HTTP_THINKING must be one of adaptive\|disabled/, 'unknown value'],
+    [{ QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_THINKING: 'adaptive' }, /applies to the messages and chat_completions protocols only/, 'responses protocol'],
+    [{ QRP_HTTP_PROTOCOL: 'responses', QRP_HTTP_THINKING: 'enabled' }, /applies to the messages and chat_completions protocols only/, 'enabled on responses'],
+    [{ QRP_HTTP_PROTOCOL: 'chat_completions', QRP_HTTP_THINKING: 'disabled' }, /must be one of enabled or default on the chat_completions/, 'disabled on chat_completions'],
+    [{ QRP_HTTP_PROTOCOL: 'chat_completions', QRP_HTTP_THINKING: 'adaptive' }, /must be one of enabled or default on the chat_completions/, 'adaptive on chat_completions'],
     [{ QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_HTTP_THINKING: 'adaptive' }, /applies to QRP_TRANSPORT=http only/, 'cli transport'],
   ]) {
     const { child, seen } = sendMessages(env);
@@ -2360,5 +2388,5 @@ process.stdout.write(JSON.stringify({ type: 'text', part: { text: '{"verdict":"p
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 531) throw new Error(`qualification-review-provider: expected exactly 531 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 547) throw new Error(`qualification-review-provider: expected exactly 547 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

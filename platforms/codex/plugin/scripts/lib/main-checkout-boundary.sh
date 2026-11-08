@@ -177,13 +177,17 @@ main_checkout_describe_delta() {
 # (.claude/worktrees) and the worktree itself are not leaks. Used only to explain a rejection
 # (never to excuse one): the verdict stays the digest compare.
 main_checkout_wt_symlink_leaks() {
-  local wt="$1" lnk tgt out="" n=0
-  [ -n "$wt" ] && [ -d "$wt" ] && [ -n "$MAIN_CHECKOUT" ] || return 0
+  local wt="$1" main="$MAIN_CHECKOUT" lnk tgt out="" n=0
+  [ -n "$wt" ] && [ -d "$wt" ] && [ -n "$main" ] || return 0
+  # readlink -m resolves symlink components and drops a trailing slash, so "$wt"/* and
+  # "$main"/* compare against the same form the symlink targets are resolved to.
+  wt="$(readlink -m -- "$wt")"; wt="${wt%/}"
+  main="$(readlink -m -- "$main")"; main="${main%/}"
   while IFS= read -r -d '' lnk; do
     tgt="$(readlink -m -- "$lnk" 2>/dev/null)" || continue
     case "$tgt" in
-      "$wt"/*|"$wt"|"$MAIN_CHECKOUT/.claude/worktrees"/*) continue ;;
-      "$MAIN_CHECKOUT"/*|"$MAIN_CHECKOUT") ;;
+      "$wt"/*|"$wt"|"$main/.claude/worktrees"/*) continue ;;
+      "$main"/*|"$main") ;;
       *) continue ;;
     esac
     n=$((n+1))

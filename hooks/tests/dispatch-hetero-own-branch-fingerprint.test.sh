@@ -95,4 +95,27 @@ bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER" >/dev/null
 OUT="$(DISPATCH_QUIET=1 run hetero/day-look/f none --ledger "$LEDGER" --run-id fp1 --stage implement)"
 assert_contains "$OUT" 'committed' "detached run: own ref alone is fine too"
 assert_not_contains "$OUT" 'main_checkout_mutated' "…detached, no mutation"
+# BL-0416 explainer, direct unit cases for main_checkout_wt_symlink_leaks: path normalisation.
+LIBSRC="$REPO_ROOT/scripts/lib/main-checkout-boundary.sh"
+leaks() { # <lib> <main> <worktree arg>
+  ( MAIN_CHECKOUT="$2"; . "$1" >/dev/null 2>&1; main_checkout_wt_symlink_leaks "$3" ) 2>&1
+}
+LK="$TEST_TMP/leaks"; mkdir -p "$LK/repo/node_modules" "$LK/repo-sibling/node_modules" "$LK/repo/wt/inner"
+ln -s "$LK/repo-sibling/node_modules" "$LK/repo/wt/sib-link"
+ln -s "$LK/repo/wt/inner" "$LK/repo/wt/self-link"
+ln -s "$LK/repo/node_modules" "$LK/repo/wt/main-link"
+OUT="$(leaks "$LIBSRC" "$LK/repo" "$LK/repo/wt")"
+assert_not_contains "$OUT" 'sib-link' "sibling dir X/repo-sibling is not inside main checkout X/repo"
+assert_contains "$OUT" 'main-link -> ' "…while a symlink into the real main checkout is still listed"
+sed_mutant "$LIBSRC" "$TEST_TMP/mut-sibling.sh" 's|"$main"/\*|"$main"*|'
+OUT="$(leaks "$TEST_TMP/mut-sibling.sh" "$LK/repo" "$LK/repo/wt")"
+assert_contains "$OUT" 'sib-link' "neg control (sibling): prefix match without the slash lists the sibling"
+
+OUT="$(leaks "$LIBSRC" "$LK/repo" "$LK/repo/wt/")"
+assert_not_contains "$OUT" 'self-link' "trailing slash on the worktree arg: a symlink inside the worktree is no leak"
+assert_contains "$OUT" 'main-link -> ' "…and a symlink into main is still listed"
+sed_mutant "$LIBSRC" "$TEST_TMP/mut-slash.sh" '/^  wt="\$(readlink -m/d'
+OUT="$(leaks "$TEST_TMP/mut-slash.sh" "$LK/repo" "$LK/repo/wt/")"
+assert_contains "$OUT" 'self-link' "neg control (trailing slash): without normalisation the in-worktree symlink is wrongly listed"
+
 finalize_test

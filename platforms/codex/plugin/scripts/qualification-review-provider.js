@@ -166,7 +166,7 @@
  *   QRP_HTTP_THINKING http, messages or chat_completions: optional thinking switch.
  *                   chat_completions accepts `enabled` only -> body
  *                   `chat_template_kwargs: {enable_thinking: true}` (vLLM; the trace
- *                   arrives in reasoning_content, never in content, and is only
+ *                   arrives in reasoning/reasoning_content, never in content, and is only
  *                   recorded as observed). Messages: `adaptive` ->
  *                   body `thinking: {type: "adaptive"}` (MiniMax-M3 does not think on
  *                   this protocol unless asked), `disabled` -> `{type: "disabled"}`
@@ -864,7 +864,8 @@ async function callResponses(baseUrl, token, model, maxTokens, systemPrompt, use
       body: JSON.stringify({
         model,
         max_output_tokens: maxTokens,
-        temperature: 0,
+        // Reasoning on: no temperature 0 (Qwen3 thinking + greedy degenerates into endless repeats).
+        ...(effort ? {} : { temperature: 0 }),
         instructions: systemPrompt,
         input: userMessage,
         ...(effort ? { reasoning: { effort } } : {}),
@@ -935,7 +936,9 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
-        temperature: 0,
+        // Thinking on: no temperature 0 (Anthropic thinking rejects it; Qwen3 greedy degenerates).
+        // 'disabled' is an explicit off: the body keeps temperature 0.
+        ...(thinking && thinking !== 'disabled' ? {} : { temperature: 0 }),
         system: systemPrompt,
         messages: [{
           role: 'user',
@@ -997,7 +1000,7 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
 // stream is how a long think keeps the socket alive.
 function assembleChatStream(raw) {
   let content = '';
-  let reasoning = false;
+  let reasoningChars = 0;
   let finish = null;
   let resolvedModel = null;
   let completionTokens = null;
@@ -1017,8 +1020,8 @@ function assembleChatStream(raw) {
     if (chunk.usage && chunk.usage.completion_tokens != null) {
       completionTokens = chunk.usage.completion_tokens;
     }
-    // Present only when the server emits a final usage chunk (stream_options is
-    // not requested); otherwise usage stays null, never estimated.
+    // Present only when the server emits a final usage chunk (requested via
+    // stream_options.include_usage; some servers ignore it); otherwise usage stays null, never estimated.
     if (chunk.usage && typeof chunk.usage === 'object') {
       usage = {
         input_tokens: chunk.usage.prompt_tokens,
@@ -1032,13 +1035,27 @@ function assembleChatStream(raw) {
     if (choice.finish_reason) finish = choice.finish_reason;
     const delta = choice.delta || choice.message || {};
     if (typeof delta.content === 'string') content += delta.content;
-    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) reasoning = true;
+    // vLLM puts the trace in delta.reasoning, others in delta.reasoning_content.
+    // A delta carrying both counts once: the first non-empty field.
+    for (const key of ['reasoning', 'reasoning_content']) {
+      if (typeof delta[key] === 'string' && delta[key].length > 0) {
+        reasoningChars += delta[key].length;
+        break;
+      }
+    }
   }
-  return { content, reasoning, finish, resolvedModel, completionTokens, usage };
+  return { content, reasoningChars, finish, resolvedModel, completionTokens, usage };
 }
 
-function chatContentOrThrow(text, observed, finish) {
+function chatContentOrThrow(text, observed, finish, reasoningChars = 0, usage = null) {
   if (text) return text;
+  if ((finish === 'length' || finish === 'max_tokens') && reasoningChars > 0) {
+    // Diagnosis only: raising the cap does not help a trace that never stops.
+    const usageText = usage ? ` usage=${JSON.stringify(usage)}` : '';
+    throw new Error(
+      `reasoning ran to the cap with no message content (reasoning_chars=${reasoningChars}${usageText}; ${observed})`,
+    );
+  }
   if (finish === 'length' || finish === 'max_tokens') {
     throw new Error(
       `completion budget exhausted before any message content (${observed}); raise QRP_MAX_TOKENS`,
@@ -1071,8 +1088,10 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
-        temperature: 0,
+        // Thinking/reasoning on: no temperature 0 (Qwen3 thinking + greedy degenerates into endless repeats).
+        ...(thinking === 'enabled' || effort ? {} : { temperature: 0 }),
         stream: true,
+        stream_options: { include_usage: true },
         ...(effort ? { reasoning_effort: effort } : {}),
         ...(thinking === 'enabled' ? { chat_template_kwargs: { enable_thinking: true } } : {}),
         // Never `include_reasoning`: the trace is only recorded as observed, never requested.
@@ -1098,10 +1117,10 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
         `completion_tokens=${assembled.completionTokens ?? 'unknown'}`,
         `max_tokens=${maxTokens}`,
         `content_len=${assembled.content.length}`,
-        `reasoning_content=${assembled.reasoning ? 'present' : 'absent'}`,
+        `reasoning_content=${assembled.reasoningChars > 0 ? 'present' : 'absent'}`,
       ].join(' ');
       return {
-        text: chatContentOrThrow(assembled.content, observed, assembled.finish),
+        text: chatContentOrThrow(assembled.content, observed, assembled.finish, assembled.reasoningChars, assembled.usage),
         resolvedModel: assembled.resolvedModel || model,
         usage: assembled.usage,
       };

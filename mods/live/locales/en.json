@@ -115,11 +115,6 @@
   "console.tab.hosts": "Hosts",
   "console.tab.self": "This seat",
   "console.no_source": "No console source yet",
-  "console.stub.command": "Command page: summary, exceptions and the open questions (coming)",
-  "console.stub.team": "Team page: improvement hints and one row per line (coming)",
-  "console.stub.quota": "Quota page: one block per account pool (coming)",
-  "console.stub.hosts": "Hosts page: the GPU pipeline and one row per host (coming)",
-  "console.stub.self": "This-seat page: this session's status, dispatches, reviews and spend (coming)",
   "console.command.sum_lines": "Lines",
   "console.command.sum_hosts": "Hosts",
   "console.command.sum_online": "online",
@@ -463,5 +458,15 @@
   "fleet.todo_owner": "{owner} · since {ago}",
   "fleet.todo_due": "due in {ago}",
   "fleet.todo_overdue": "overdue by {ago}",
-  "fleet.todo_unreconciled": "not reconciled: no such card in the mirror"
+  "fleet.todo_unreconciled": "not reconciled: no such card in the mirror",
+  "console.page.no_source": "No source",
+  "console.page.expired": "Expired",
+  "console.team.summary": "Team: running {running}, waiting {waiting}, stalled {stalled}",
+  "console.team.none": "No lane right now",
+  "console.quota.summary": "Quota: {risk} at risk",
+  "console.quota.summary_worst": "Quota: {risk} at risk, worst pool {worst}",
+  "console.hosts.summary": "Hosts: online {online}/{total}, GPU busy {busy}/{gpu}",
+  "console.self.now": "Now",
+  "console.self.dispatch": "Dispatch",
+  "console.self.review": "Review"
 }

@@ -30,6 +30,8 @@ node --test "$here/console.test.js"
 node --test "$here/consolestrip.test.js"
 # the console 指揮 page builder (commandtab.ts: summary, exceptions, queue, data age; the to_console negative control; the mirror card; the 120 / 80 / 20 widths)
 node --test "$here/commandtab.test.js"
+# the console pane's team / quota / hosts skeleton pages (consolepages.ts): 無來源 for a missing source, the red light with the fixture's lines deleted
+node --test "$here/consolepages.test.js"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

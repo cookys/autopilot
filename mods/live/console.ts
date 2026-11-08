@@ -14,7 +14,7 @@ export type ConsoleItem = { id: string; kind: 'card' | 'exception' | 'hint' | 'q
 export type ConsoleCard = { id: string; question: string; status: 'open' | 'awaiting_operator_action' | 'waiting_step' | 'relayed_unconfirmed'; opened_at_ms: number; executor_display: string | null }
 export type ConsoleIssue = { rule: string; state: string; subject: string; since_ms: number; to_console: boolean }
 export type ConsoleLine = { line_id: string; label: string; lead_display: string | null; issues: ConsoleIssue[] }
-export type ConsoleSnapshot = { generated_at_ms: number; sources: Record<string, { at_ms: number | null; state: ConsoleSourceState }>; counts: { decisions: number; exceptions: number; quota_risk: number; tabs: Record<string, [string, number][]>; summary: { lines: Record<string, number>; hosts: Record<string, number>; hints: number; quota_worst: string | null } }; items: ConsoleItem[]; cards: ConsoleCard[]; lines: ConsoleLine[] }
+export type ConsoleSnapshot = { generated_at_ms: number; sources: Record<string, { at_ms: number | null; state: ConsoleSourceState }>; counts: { decisions: number; exceptions: number; quota_risk: number; tabs: Record<string, [string, number][]>; summary: { lines: Record<string, number>; hosts: Record<string, number>; hints: number; quota_worst: string | null } }; items: ConsoleItem[]; cards: ConsoleCard[]; lines: ConsoleLine[] | null }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -128,7 +128,7 @@ export function parseConsole(text: string): ConsoleSnapshot | null {
   const sources: ConsoleSnapshot['sources'] = {}
   for (const [k, val] of Object.entries(sourcesIn)) { const src = parseSource(val); if (src !== null) sources[k] = src }
   const cardsIn = Array.isArray(raw.cards) ? raw.cards : []
-  const linesIn = Array.isArray(raw.lines) ? raw.lines : []
+  const linesIn = Array.isArray(raw.lines) ? raw.lines : null // null = the key is missing (no source); [] = the feed says there is no lane
   const generated_at_ms = n(raw.generated_at_ms)
   return {
     generated_at_ms: generated_at_ms ?? 0,
@@ -136,7 +136,7 @@ export function parseConsole(text: string): ConsoleSnapshot | null {
     counts: parseCounts(counts),
     items: itemsIn.map(v => (isObj(v) ? parseItem(v) : null)).filter((x): x is ConsoleItem => x !== null),
     cards: cardsIn.map(v => (isObj(v) ? parseCard(v) : null)).filter((x): x is ConsoleCard => x !== null),
-    lines: linesIn.map(v => (isObj(v) ? parseLine(v) : null)).filter((x): x is ConsoleLine => x !== null),
+    lines: linesIn === null ? null : linesIn.map(v => (isObj(v) ? parseLine(v) : null)).filter((x): x is ConsoleLine => x !== null),
   }
 }
 

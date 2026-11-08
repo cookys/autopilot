@@ -95,7 +95,7 @@ test('the action area keeps its screen row while the window scrolls', () => {
   }
 })
 
-test('the other pages still draw their skeleton line under the strip', () => {
+test('the team page draws its summary line under the strip', () => {
   const lines = draw(120, 30, newScroll(), 'team')
-  expect(lines.some(l => l.includes(t('console.stub.team')))).toBe(true)
+  expect(lines.some(l => l.includes(t('console.team.summary', { running: 0, waiting: 0, stalled: 0 }).split(/[：:]/)[0]))).toBe(true)
 })

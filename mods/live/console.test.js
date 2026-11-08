@@ -45,7 +45,7 @@ test('good fixtures: each parses to a snapshot, keeps every item and card, and t
     assert.equal(got.cards.length, raw.cards.length, name + ': cards kept')
     assert.deepEqual(got.counts, expectedCounts(raw), name + ': counts')
   }
-  assert.deepEqual(PARSE('no-source.json').lines, [], 'no lines key means no lines')
+  assert.equal(PARSE('no-source.json').lines, null, 'no lines key is null (no source), not an empty list')
 })
 
 test('null cases: a foreign schema, non-JSON text, empty text, a missing counts, a non-object counts and non-array items never throw, all null', () => {

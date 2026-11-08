@@ -5815,6 +5815,40 @@ for (const surface of SURFACES) {
     expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 都不選｜補充：自己寫')
   })
 
+  // The host clears an Input's field when Enter submits it (roundtable/register.ts keepDraft). A note is only SENT by the send Button, so Enter in a note field must not lose
+  // the text: the mod keeps it and asks for a redraw, which draws the field with the kept text again.
+  test('DECIDE mounted: Enter in a note field keeps the draft: it is still the field value, a redraw is asked, and nothing is sent (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
+    let redraws = 0
+    on('ui.invalidate', () => { redraws += 1; return { value: undefined } })
+    await start($, surface)
+    const pane = await paneOn($, surface, 'decide')
+    await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
+    const before = redraws
+    await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'submit' }) // Enter
+    await pane.unmount()
+    expect(submits.length, 'Enter never sends').toBe(0)
+    expect(redraws - before, 'Enter asks for one redraw so the host\'s cleared field is drawn with the draft again').toBe(1)
+    const p2 = await paneOn($, surface, 'decide')
+    const f = ((await p2.findAll({ type: 'Input' })) as Drawn[]).find(n => n.props?.key === 'note:d-0000free')
+    await p2.unmount()
+    expect(f?.props?.value).toBe('叫 main')
+  })
+
+  test('DECIDE mounted: the send Button sends the note that Enter kept, once (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
+    await start($, surface)
+    const pane = await paneOn($, surface, 'decide')
+    await pane.input({ key: 'note:d-4290499d', text: '先寫著', kind: 'change' })
+    await pane.input({ key: 'note:d-4290499d', text: '先寫著', kind: 'submit' }) // Enter by accident
+    expect(submits.length).toBe(0)
+    await pane.press({ key: 'opt:d-4290499d:0' })
+    await pane.press({ key: 'submit' })
+    await pane.unmount()
+    expect(submits.length).toBe(1)
+    expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK｜補充：先寫著')
+  })
+
   test('DECIDE mounted: a question whose model.json entry has origin ask_user_question is left to its own dialog: no pick Button, no field, not counted (' + surface + ')', async ($, on) => {
     decideWorld(on, [DQ1, { ...DQ2, origin: 'ask_user_question' }]) // the origin travels model.json -> job model -> pane, nothing is put into a view by hand
     await start($, surface)

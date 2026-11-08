@@ -722,9 +722,9 @@ fi
 
 ON_ENGINE_UNAVAILABLE="$(read_field "$CONFIG" on_engine_unavailable "$DEF_ON_ENGINE_UNAVAILABLE")"
 case "$ON_ENGINE_UNAVAILABLE" in
-  ask|solo-fallback|wait-reset) ;;
+  ask|solo-fallback|wait-reset|cloud-fallback) ;;
   *)
-    echo "resolve-review-loop: ignoring invalid on_engine_unavailable (must be ask|solo-fallback|wait-reset): $ON_ENGINE_UNAVAILABLE" >&2
+    echo "resolve-review-loop: ignoring invalid on_engine_unavailable (must be ask|solo-fallback|wait-reset|cloud-fallback): $ON_ENGINE_UNAVAILABLE" >&2
     ON_ENGINE_UNAVAILABLE="$DEF_ON_ENGINE_UNAVAILABLE"
     ;;
 esac
@@ -1025,6 +1025,34 @@ elif [[ -n "$IMPL_LADDER_RAW" ]]; then
   done
   IMPL_LADDER_JSON+="]"
   [[ "$_ladder_first" -eq 1 ]] && IMPL_LADDER_JSON="[]"
+fi
+
+# Optional cloud_fallback_rung: ONE engine/effort@runner rung the engine re-dispatches to when a
+# local-endpoint implementer dies endpoint_unreachable/endpoint_busy under
+# on_engine_unavailable: cloud-fallback. The runner must be a cloud runner: endpoint-backed
+# (cc-shim, anthropic-compatible) and local-capable (pi, opencode) runners are refused, so the
+# fallback can never land on the thing it is falling back from. Emitted only when set.
+CLOUD_FALLBACK_RUNGS_RAW="$(read_field "$CONFIG" cloud_fallback_rung "")"
+CLOUD_FALLBACK_RUNG_JSON=""
+if [[ -n "$CLOUD_FALLBACK_RUNGS_RAW" ]]; then
+  if [[ ! "$CLOUD_FALLBACK_RUNGS_RAW" =~ ^([^@[:space:]]+)/([^/@[:space:]]+)@([^/@[:space:]]+)$ ]]; then
+    echo "resolve-review-loop: invalid cloud_fallback_rung (expected engine/effort@runner): ${CLOUD_FALLBACK_RUNGS_RAW}" >&2
+    exit 3
+  fi
+  _cfe="${BASH_REMATCH[1]}"; _cff="${BASH_REMATCH[2]}"; _cfr="${BASH_REMATCH[3]}"
+  case "$_cff" in
+    default|low|medium|high|xhigh|max) ;;
+    *) echo "resolve-review-loop: invalid cloud_fallback_rung effort (must be default|low|medium|high|xhigh|max): ${CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
+  esac
+  case "$_cfr" in
+    codex|agy|grok|cursor|kimi|qoderclicn) ;;
+    *) echo "resolve-review-loop: invalid cloud_fallback_rung runner (must be a cloud runner: codex|agy|grok|cursor|kimi|qoderclicn; cc-shim, anthropic-compatible and other local-endpoint runners are refused): ${CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
+  esac
+  CLOUD_FALLBACK_RUNG_JSON="{\"engine\": \"$(json_escape "$_cfe")\", \"effort\": \"${_cff}\", \"runner\": \"${_cfr}\"}"
+fi
+if [[ "$ON_ENGINE_UNAVAILABLE" == "cloud-fallback" && -z "$CLOUD_FALLBACK_RUNG_JSON" ]]; then
+  echo "resolve-review-loop: on_engine_unavailable: cloud-fallback requires cloud_fallback_rung (engine/effort@runner)" >&2
+  exit 3
 fi
 
 PLAN_REVIEW_RESOLVED_FROM=""
@@ -1614,6 +1642,36 @@ if [[ "$CROSS_FAMILY_REQUIRED" == "true" && "$CROSS_FAMILY_SATISFIED" == "false"
     printf 'resolve-review-loop: %s — cross-family: qc_panel spans %d distinct famil(y/ies), %d required. Add more diverse panel members.\n' "$_cross_severity" "$_distinct_count" "$REQUIRED_REVIEW_FAMILIES" >&2
   else
     printf 'resolve-review-loop: %s — cross-family: qc_panel shares the implementer family (%s); no cross-family decorrelation. Add a panel member from a different vendor.\n' "$_cross_severity" "$IMPL_FAMILY" >&2
+  fi
+fi
+
+# cloud_fallback_rung family check: the rung becomes the implementer when the engine retreats, so it
+# gets the same decorrelation test as implementer_engine. Reviewer families = the reviewer seat plus
+# the qc_panel. Conflict when the rung's family is the reviewer seat's family, or when the known
+# reviewer families other than the rung's are fewer than required_review_families. A single rung has
+# no ladder to walk, so on_family_conflict (fallback or block) has nothing to substitute: either way
+# the conflict exits 3 (fail-closed) and the operator picks a rung from another family.
+if [[ -n "$CLOUD_FALLBACK_RUNG_JSON" ]]; then
+  _cf_family="$(family_of "$_cfe")"
+  _cf_others=""
+  _cf_other_count=0
+  for _m in "$REV_ENGINE" "${QC_PANEL[@]}"; do
+    _mf="$(family_of "$_m")"
+    [[ "$_mf" == "unknown" || "$_mf" == "$_cf_family" ]] && continue
+    if [[ " $_cf_others " != *" $_mf "* ]]; then
+      _cf_others="$_cf_others $_mf"
+      _cf_other_count=$((_cf_other_count + 1))
+    fi
+  done
+  _cf_conflict=""
+  if [[ "$_cf_family" != "unknown" && "$_cf_family" == "$REV_FAMILY" ]]; then
+    _cf_conflict="shares the reviewer seat family (${_cf_family})"
+  elif [[ "$_cf_other_count" -lt "$REQUIRED_REVIEW_FAMILIES" ]]; then
+    _cf_conflict="leaves ${_cf_other_count} reviewer famil(y/ies) other than ${_cf_family}, ${REQUIRED_REVIEW_FAMILIES} required"
+  fi
+  if [[ -n "$_cf_conflict" ]]; then
+    echo "resolve-review-loop: cloud_fallback_rung ${CLOUD_FALLBACK_RUNGS_RAW} ${_cf_conflict} (on_family_conflict: ${ON_FAMILY_CONFLICT}); pick a rung from another family" >&2
+    exit 3
   fi
 fi
 
@@ -2805,6 +2863,7 @@ if [[ -n "$FIELD" ]]; then
     implementer_effort) printf '%s\n' "$IMPL_EFFORT" ;;
     implementer_runner) printf '%s\n' "$IMPL_RUNNER" ;;
     implementer_ladder) printf '%s\n' "$IMPL_LADDER_JSON" ;;
+    cloud_fallback_rung) printf '%s\n' "$CLOUD_FALLBACK_RUNG_JSON" ;;
     reviewer_endpoint) printf '%s\n' "$REV_ENDPOINT" ;;
     reviewer_family) printf '%s\n' "$REV_FAMILY" ;;
     implementer_endpoint) printf '%s\n' "$IMPL_ENDPOINT" ;;
@@ -2990,6 +3049,11 @@ PLAN_ARGS=(
 if [[ "$DENSITY_SOURCE" != "off" ]]; then
   FMT_SUFFIX=", \"capability_tier\": \"%s\", \"density_scaled\": %s, \"density_source\": \"%s\", \"verify_first\": %s }\n"
   ARGS_SUFFIX=("$CAPABILITY_TIER" "$DENSITY_SCALED" "$DENSITY_SOURCE" "$VERIFY_FIRST")
+fi
+
+if [[ -n "$CLOUD_FALLBACK_RUNG_JSON" ]]; then
+  FMT_SUFFIX=", \"cloud_fallback_rung\": %s${FMT_SUFFIX}"
+  ARGS_SUFFIX=("$CLOUD_FALLBACK_RUNG_JSON" "${ARGS_SUFFIX[@]}")
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then

@@ -740,6 +740,68 @@ assert_exit_code "$FIN2E_RC" "0" "case 2e (fin): suppression phrase only inside 
 assert_contains "$(cat "$LEDGER/review-p_fin2e/g1/hands-brief.md")" "Controller notes:" "case 2e (fin): brief carries the controller notes heading"
 assert_contains "$(cat "$LEDGER/review-p_fin2e/g1/hands-brief.md")" "Fix the null dereference in parser.js." "case 2e (fin): brief carries the notes text"
 
+# Case 2i/2j (finalize): the redispatch linter scans controller-written lines only.
+# (a) a leaky word (round2) inside reviewer finding text must not fail finalize;
+# (b) the same word inside --controller-notes must still fail. Each has a mutant.
+for FIN2X in p_fin2i p_fin2j p_fin2k p_fin2l; do
+  mkdir -p "$LEDGER/review-$FIN2X/g1"
+  cat << EOF2 > "$LEDGER/review-$FIN2X/chain.json"
+[
+  { "generation": 1, "base": "base2x", "head": "head2x", "seats": ["s0"], "status": "pending" }
+]
+EOF2
+  cat << EOF2 > "$LEDGER/review-$FIN2X/g1/range.json"
+{ "base": "base2x", "head": "head2x" }
+EOF2
+  cat << EOF2 > "$TEST_TMP/disp_$FIN2X.json"
+{
+  "schema_version": 1,
+  "phase": "$FIN2X",
+  "generation": 1,
+  "findings": [ { "id": "f_slug", "disposition": "verified", "rationale": "confirmed issue" } ]
+}
+EOF2
+done
+for FIN2X in p_fin2i p_fin2k; do
+cat << 'EOF2' > "$LEDGER/review-$FIN2X/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_slug", "severity": "Critical", "seat": "s0", "text": "Slug cloudfb-branch-round2-collision shows two branches share one name." }
+  ]
+}
+EOF2
+done
+for FIN2X in p_fin2j p_fin2l; do
+cat << 'EOF2' > "$LEDGER/review-$FIN2X/g1/findings.json"
+{
+  "findings": [
+    { "id": "f_slug", "severity": "Critical", "seat": "s0", "text": "Null dereference in parser.js." }
+  ]
+}
+EOF2
+done
+echo 'Fix the cloudfb-branch-round2-collision case.' > "$TEST_TMP/controller-notes-round2.txt"
+
+FIN2I_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2i --generation 1 --branch work --dispositions "$TEST_TMP/disp_p_fin2i.json" 2>&1); FIN2I_RC=$?
+assert_exit_code "$FIN2I_RC" "0" "case 2i (fin): round2 only inside reviewer finding text exits 0"
+assert_contains "$(cat "$LEDGER/review-p_fin2i/g1/hands-brief.md")" "round2-collision" "case 2i (fin): brief still carries the verbatim finding text"
+
+FIN2J_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2j --generation 1 --branch work --dispositions "$TEST_TMP/disp_p_fin2j.json" --controller-notes "$TEST_TMP/controller-notes-round2.txt" 2>&1); FIN2J_RC=$?
+assert_exit_code "$FIN2J_RC" "1" "case 2j (fin): round2 inside controller notes makes finalize exit 1"
+assert_contains "$FIN2J_OUT" "ERROR: check-redispatch-prompt.sh" "case 2j (fin): ERROR names check-redispatch-prompt.sh"
+
+# Mutants: (a) scan the whole brief again; (b) ignore the redispatch verdict.
+[ -e "$TEST_TMP/project-config-template" ] || ln -s "$REPO_ROOT/project-config-template" "$TEST_TMP/project-config-template"  # the roster lives beside the copied scripts dir
+FIN2M_A="$TEST_TMP/scripts-mut-scan-brief"; rm -rf "$FIN2M_A"; cp -a "$(dirname "$SCRIPT")" "$FIN2M_A"
+sed_mutant "$SCRIPT" "$FIN2M_A/hetero-review-loop.js" "s/'check-redispatch-prompt.sh', \[controllerPath\]/'check-redispatch-prompt.sh', [briefPath]/" || fail "mutation setup failed (2i)"
+FIN2MA_OUT=$(node "$FIN2M_A/hetero-review-loop.js" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2k --generation 1 --branch work --dispositions "$TEST_TMP/disp_p_fin2k.json" 2>&1); FIN2MA_RC=$?
+assert_exit_code "$FIN2MA_RC" "1" "case 2i (mutation): scanning the whole brief fails on reviewer round2 text (red)"
+assert_contains "$FIN2MA_OUT" "ERROR: check-redispatch-prompt.sh" "case 2i (mutation): the failure is the redispatch linter, not an already-finalized phase"
+FIN2M_B="$TEST_TMP/scripts-mut-ignore-verdict"; rm -rf "$FIN2M_B"; cp -a "$(dirname "$SCRIPT")" "$FIN2M_B"
+sed_mutant "$SCRIPT" "$FIN2M_B/hetero-review-loop.js" 's/if (checkRes.status !== 0) {/if (false) {/' || fail "mutation setup failed (2j)"
+FIN2MB_OUT=$(node "$FIN2M_B/hetero-review-loop.js" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin2l --generation 1 --branch work --dispositions "$TEST_TMP/disp_p_fin2l.json" --controller-notes "$TEST_TMP/controller-notes-round2.txt" 2>&1); FIN2MB_RC=$?
+assert_exit_code "$FIN2MB_RC" "0" "case 2j (mutation): ignoring the redispatch verdict lets controller round2 through (red)"
+
 # Case 2f (finalize): a verified finding whose seat string is a suppression phrase
 # must not be fed to the linter. Id and seat stay in the brief.
 mkdir -p "$LEDGER/review-p_fin2f/g1"

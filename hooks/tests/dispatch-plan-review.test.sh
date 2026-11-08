@@ -1570,6 +1570,7 @@ import sys,re
 p=sys.argv[1]; s=open(p).read()
 s=re.sub(r'^- implementer_runner:.*$','- implementer_runner: codex',s,flags=re.M)
 s=re.sub(r'^- implementer_engine:.*$','- implementer_engine: gpt-5.6-sol',s,flags=re.M)
+s=re.sub(r'^- allow_same_runner_dual_seat:.*\n?','',s,flags=re.M)
 open(p,'w').write(s)
 PY2
 DUAL_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DUAL_CFG" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
@@ -1586,7 +1587,8 @@ DUAL_OUT2="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DUAL_CFG" AUTOPILOT_TEST_ALLOW_PLAN_R
   --runner cc-shim --model MiniMax-M3 --effort high \
   --deep-runner agy --deep-model gemini-3.8-flash-medium --deep-effort high 2>&1)"
 assert_not_contains "$DUAL_OUT2" "implementer's own runner" "legacy CLI: a different runner is not refused by the guard"
-# the live config does not carry the key at all (default off); append it rather than sed it
+# the copy above has the key removed (the repo config may set it on); append it for the lift cases
+# (DUAL_OUT3 below is the negative control: with the key on, the refusal must disappear)
 printf '\n- allow_same_runner_dual_seat: on\n' >> "$DUAL_CFG"
 DUAL_OUT3="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DUAL_CFG" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
   node "$SCRIPT" --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \

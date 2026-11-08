@@ -178,6 +178,7 @@ AMBIENT_NO_BRAIN="$TEST_TMP/ambient-config-no-brain.md"
 # which is what "ambient" was always meant to mean here.
 if [ -f "$REPO_ROOT/.claude/review-loop-config.md" ]; then
   grep -v -e 'brain_seat_identity_file' -e '^- implementer_' -e '^- override:' \
+    -e '^- on_engine_unavailable:' -e '^- cloud_fallback_rung:' \
     "$REPO_ROOT/.claude/review-loop-config.md" > "$AMBIENT_NO_BRAIN"
 else
   : > "$AMBIENT_NO_BRAIN"
@@ -207,6 +208,11 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"implementer_ladder":"ladder_start_rung_judgment":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"in_rail_review":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"review_packet_deny_extra":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_review_resolved_from":"plan_review_same_family_as_depth0":"hetero_review":"hetero_review_resolved_from":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":"consult_engine":"consult_effort":"consult_runner":"consult_endpoint":"discuss_engine":"discuss_effort":"discuss_runner":"discuss_endpoint":"consult_dispatch":"consult_resolved_from":"discuss_dispatch":"unknown_escalation":"unknown_budget_u1":"unknown_budget_u2":"unknown_budget_u3":"unknown_resolved_from":"allow_same_runner_dual_seat":"same_runner_dual_seat":"override_admitted_seats":"review_fresh_context":"roster_overrides":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$ACTUAL_KEYS" "$EXPECTED_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
+# Negative control: the cloud-fallback knobs this fixture strips must change the key list when present.
+CF_NC="$TEST_TMP/cf-nc.md"; cp "$AMBIENT_NO_BRAIN" "$CF_NC"
+printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' >> "$CF_NC"
+CF_KEYS="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CF_NC" bash "$SCRIPT" --auto-domain HEAD..HEAD | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
+assert_neq "$CF_KEYS" "$EXPECTED_KEYS" "negative control: a cloud-fallback rung config changes the key list"
 
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"

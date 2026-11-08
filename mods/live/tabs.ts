@@ -428,6 +428,8 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   else out.push(...ui.asBar(ui.actionRow(u, t('decide.submit', { n: answered, total: open.length }), { fact: F, note: t('decide.submit_note'), ...(answered > 0 ? { press: 'submit' } : {}) })))
   return out
 }
+// the 指揮 page's queue (commandtab.ts): the same cards as the 待決 tab, built from the live snapshot, header line first
+export const consoleDecideCards = (snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] => wrapLines(decideCards(uiCtxOf(ctx), ctx, snap), ctx.cols)
 function decideLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   if (snap.band === null) return [] // a non-ok snapshot: the header line is the state text, there is no body
   return U.sections('decide', { cards: decideCards(uiCtxOf(ctx), ctx, snap) })

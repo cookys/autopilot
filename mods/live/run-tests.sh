@@ -28,6 +28,8 @@ node --test "$here/shell.test.js"
 node --test "$here/console.test.js"
 # the console tab strip (consoletabs.ts: five tabs, badges, the 120 / 80 / 20 column forms), the console.json mode finder, and the golden that pins the non-console strips byte for byte
 node --test "$here/consolestrip.test.js"
+# the console 指揮 page builder (commandtab.ts: summary, exceptions, queue, data age; the to_console negative control; the mirror card; the 120 / 80 / 20 widths)
+node --test "$here/commandtab.test.js"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

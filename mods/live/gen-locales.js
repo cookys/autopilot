@@ -17,9 +17,9 @@ const fs = require('fs');
 const path = require('path');
 
 const dir = __dirname;
-const SOURCES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'speedview.ts', 'register.ts', 'i18n.ts', 'shell.ts', 'consoletabs.ts'];
+const SOURCES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'speedview.ts', 'register.ts', 'i18n.ts', 'shell.ts', 'consoletabs.ts', 'commandtab.ts'];
 // ids the code builds from a prefix (`t('tab.' + id)`, `'stage.' + node`, ...): an en id under one of these is considered used
-const DYNAMIC_PREFIXES = ['ui.state.', 'tab.', 'console.tab.', 'console.stub.', 'stage.', 'legend.', 'residue.why.', 'verdict.', 'spend.mode_', 'reason.permission', 'reason.question'];
+const DYNAMIC_PREFIXES = ['ui.state.', 'tab.', 'console.tab.', 'console.stub.', 'console.command.src.', 'stage.', 'legend.', 'residue.why.', 'verdict.', 'spend.mode_', 'reason.permission', 'reason.question'];
 const KEY_COLUMN_CELLS = 12;
 
 function readJson(file) {

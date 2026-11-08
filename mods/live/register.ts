@@ -59,12 +59,13 @@ import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
-import type { BarTabId } from './tabs'
+import type { BarTabId, ScrollView } from './tabs'
 import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane } from './pane'
+import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
@@ -248,13 +249,35 @@ async function consoleTick($: EngineInterface): Promise<void> {
   if (changed) void $.ui.invalidate('ui.render')
 }
 const consoleNav = (): ConsoleNav => ({ snap: consoleSnap, tab: consoleTab })
-// the console pane (pane.tsx consolePane): the same navigation state as the band; it reads no Fleet feed and no decision file, so nothing is fetched while it is drawn
-const consolePaneOf = ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0] & { props: { bodyColumns: number | null } }) =>
-  Pane($.ui.resolve(e), snapshot, 'now', () => {}, tr, e.props.bodyColumns, () => {}, new Set(), () => {}, new Set(), null, null, null, null, {
+// the console pane (pane.tsx consolePane): the same navigation state as the band. The 指揮 page answers cards through the same decide wiring as the 待決 tab (decideState, decideBatch,
+// decidePress); a `fill:` press (a waiting_step card's report button) only puts the report line in the prompt box with `$.prompt.fill`, it never submits.
+const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0] & { props: { bodyColumns: number | null; scroll?: ScrollView | null } }) => {
+  decideCols = paneWidth(e.props.bodyColumns)
+  decideInputs = inputsFor(e.surface)
+  await decideRepair($, await read($, DECIDE))
+  decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }
+  const now = await $.clock.now()
+  return Pane($.ui.resolve(e), snapshot, 'now', () => {}, tr, e.props.bodyColumns, () => {}, new Set(), () => {}, folded, null, null, null, null, {
     nav: consoleNav(),
     onTab: (tab: ConsoleTab) => { consoleTab = tab; $.ui.invalidate('ui.render'); void ringToNext($) },
     onNext: () => { consoleTab = nextConsoleTab(consoleTab); $.ui.invalidate('ui.render') },
+    live: snapshot,
+    now,
+    scroll: e.props.scroll ?? null,
+    win: decideScroll,
+    folded,
+    onToggle: (id: string) => { if (!folded.delete(id)) folded.add(id); $.ui.invalidate('ui.render') },
+    decide: {
+      state: decideState, batch: decideBatch, now, inputs: decideInputs,
+      onPress: (id: string) => {
+        if (id.startsWith(FILL_PRESS)) void $.prompt.fill({ text: tr('console.command.fill', { id: id.slice(FILL_PRESS.length) }), mode: 'replace' }).then(out => { if (!out.isFilled) $.ui.toast(tr('console.command.fill_refused')) })
+        else void decidePress($, id)
+      },
+      onNote: (key: string, value: string) => { void decideNote($, key, value) },
+      onKeep: (key: string, value: string) => { void decideKeep($, key, value) },
+    },
   })
+}
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript

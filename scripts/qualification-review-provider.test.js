@@ -2532,6 +2532,86 @@ process.stdout.write(JSON.stringify({ type: 'text', part: { text: '{"verdict":"p
     'a tool attempt under a tools-forbidden prompt is tagged tool_forbidden');
 }
 
+// ── qrpsamp: thinking/reasoning on -> no temperature 0; chat stream usage + reasoning diagnosis ──
+{
+  const { spawn, execFileSync } = require('child_process');
+  const sFile = path.join(tempRoot, 'stub-qrpsamp.js');
+  const sPort = path.join(tempRoot, 'stub-qrpsamp-port');
+  const sReq = path.join(tempRoot, 'stub-qrpsamp-request.json');
+  fs.writeFileSync(sFile, `
+const http = require('http');
+const fs = require('fs');
+const server = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (c) => { body += c; });
+  req.on('end', () => {
+    fs.writeFileSync(process.env.STUB_REQ_FILE, JSON.stringify({ url: req.url, raw: body }));
+    res.writeHead(200, { 'content-type': process.env.STUB_CT });
+    res.end(process.env.STUB_RAW);
+  });
+});
+server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE, String(server.address().port)));
+`);
+  const sendTo = (raw, contentType, env) => {
+    for (const f of [sPort, sReq]) if (fs.existsSync(f)) fs.rmSync(f);
+    const proc = spawn(process.execPath, [sFile], {
+      env: { ...process.env, STUB_RAW: raw, STUB_CT: contentType, STUB_PORT_FILE: sPort, STUB_REQ_FILE: sReq },
+      stdio: 'ignore',
+    });
+    for (let i = 0; i < 100 && !fs.existsSync(sPort); i += 1) {
+      try { execFileSync('sleep', ['0.05']); } catch { /* keep polling */ }
+    }
+    const port = fs.readFileSync(sPort, 'utf8').trim();
+    const { child } = runProvider({
+      request: reviewerRequest(),
+      env: { QRP_BASE_URL: `http://127.0.0.1:${port}`, QRP_AUTH_TOKEN: 'stub-token', ...env },
+    });
+    proc.kill();
+    return { child, body: JSON.parse(JSON.parse(fs.readFileSync(sReq, 'utf8')).raw) };
+  };
+  const json = (v) => JSON.stringify(v);
+  const respReply = json({ model: 'm', status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: REVIEWER_MODEL_OUTPUT }] }] });
+  const msgReply = json({ model: 'm', stop_reason: 'end_turn', content: [{ type: 'text', text: REVIEWER_MODEL_OUTPUT }] });
+  const sse = (...chunks) => chunks.map((c) => `data: ${json(c)}\n\n`).join('') + 'data: [DONE]\n';
+  const chatOk = sse({ choices: [{ delta: { content: REVIEWER_MODEL_OUTPUT }, finish_reason: null }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] });
+
+  const resp = { QRP_HTTP_PROTOCOL: 'responses' };
+  check(!('temperature' in sendTo(respReply, 'application/json', { ...resp, QRP_HTTP_EFFORT: 'low' }).body),
+    'responses with reasoning effort sends no temperature');
+  equal(sendTo(respReply, 'application/json', resp).body.temperature, 0,
+    'responses without reasoning keeps temperature 0');
+  const msg = { QRP_HTTP_PROTOCOL: 'messages' };
+  check(!('temperature' in sendTo(msgReply, 'application/json', { ...msg, QRP_HTTP_THINKING: 'adaptive' }).body),
+    'messages with thinking sends no temperature');
+  equal(sendTo(msgReply, 'application/json', msg).body.temperature, 0,
+    'messages without thinking keeps temperature 0');
+  const chat = { QRP_HTTP_PROTOCOL: 'chat_completions' };
+  check(!('temperature' in sendTo(chatOk, 'text/event-stream', { ...chat, QRP_HTTP_THINKING: 'enabled' }).body),
+    'chat with thinking enabled sends no temperature');
+  check(!('temperature' in sendTo(chatOk, 'text/event-stream', { ...chat, QRP_HTTP_EFFORT: 'low' }).body),
+    'chat with reasoning_effort sends no temperature');
+  const chatPlain = sendTo(chatOk, 'text/event-stream', chat);
+  equal(chatPlain.body.temperature, 0, 'chat without thinking keeps temperature 0');
+  equal(chatPlain.body.stream_options, { include_usage: true },
+    'chat stream asks for a final usage chunk');
+
+  const capped = sendTo(sse({ choices: [{ delta: { reasoning: '((((' }, finish_reason: null }] },
+    { choices: [{ delta: {}, finish_reason: 'length' }] }), 'text/event-stream',
+  { ...chat, QRP_HTTP_THINKING: 'enabled' });
+  equal(capped.child.status, 1, 'a reasoning-only length-capped chat stream fails closed');
+  check(/reasoning ran to the cap with no message content/.test(capped.child.stderr)
+    && /reasoning_chars=4/.test(capped.child.stderr),
+  'the diagnosis names runaway reasoning and its size');
+  check(!/raise QRP_MAX_TOKENS/.test(capped.child.stderr),
+    'runaway reasoning does not advise raising QRP_MAX_TOKENS');
+
+  const both = sendTo(sse({ choices: [{ delta: { reasoning: 'thinking...' }, finish_reason: null }] },
+    { choices: [{ delta: { content: REVIEWER_MODEL_OUTPUT }, finish_reason: null }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] }), 'text/event-stream', chat);
+  equal(both.child.status, 0, 'delta.reasoning followed by content still parses the answer');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 601) throw new Error(`qualification-review-provider: expected exactly 601 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 613) throw new Error(`qualification-review-provider: expected exactly 613 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

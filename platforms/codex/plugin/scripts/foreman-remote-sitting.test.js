@@ -172,9 +172,9 @@ async function main() {
   const hash = 'a'.repeat(64);
   const hashB = 'b'.repeat(64);
   const hashC = 'c'.repeat(64);
-  const env = { ...process.env, QRP_TRANSPORT: 'http', QRP_PROMPT_MODE: 'foreman', QRP_BASE_URL: baseUrl, QRP_AUTH_TOKEN: 'stub-token', QRP_MODEL: 'foreman-stub', QRP_PROVIDER: 'foreman-stub' };
+  const env = { ...process.env, QRP_TRANSPORT: 'http', QRP_PROMPT_MODE: 'foreman', QRP_BASE_URL: baseUrl, QRP_AUTH_TOKEN: 'stub-token', QRP_MODEL: 'foreman-stub', QRP_PROVIDER: 'foreman-stub', QRP_HTTP_EFFORT: 'low' };
   delete env.AUTOPILOT_QUALIFY_SEED;
-  const providerEnv = ['QRP_TRANSPORT', 'QRP_PROMPT_MODE', 'QRP_BASE_URL', 'QRP_AUTH_TOKEN', 'QRP_MODEL', 'QRP_PROVIDER'];
+  const providerEnv = ['QRP_TRANSPORT', 'QRP_PROMPT_MODE', 'QRP_BASE_URL', 'QRP_AUTH_TOKEN', 'QRP_MODEL', 'QRP_PROVIDER', 'QRP_HTTP_EFFORT'];
   const args = [
     'scripts/engine-qualify.js', 'foreman',
     '--engine', 'foreman-stub',

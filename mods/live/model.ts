@@ -1673,6 +1673,15 @@ export function decideLine(d: LiveDecision, st: DecideState, answerId?: string |
   const answer = d.options.length === 0 ? wire(note) : pick === null ? (note === '' ? '' : DECIDE_NONE + notePart) : wire(d.options[pick].label) + notePart
   return answer === '' ? null : d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' ' + answer + (answerId === undefined || answerId === null || answerId === '' ? '' : '｜' + answerId)
 }
+// what the band's 附註／其他回答 button puts in the prompt box (`$.prompt.fill`, never a submit): the head line, then the answer line of this card up to the point where the owner types on.
+// An option card ends in `｜補充：` after the picked label (`都不選` when none is picked); a free-text card ends after the arrow. The text before the cursor is byte-for-byte what decideLine writes
+// for the same card, so the owner pressing Enter sends a line the relay reads like the pane's own. Null: the card has no id or belongs to a dialog (nothing to answer from here).
+export function decideFillText(d: LiveDecision, st: DecideState): string | null {
+  if (d.id === null || decideDialog(d)) return null
+  const pick = decidePick(d, st)
+  const head = d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' '
+  return DECIDE_REPLY_HEAD + '\n' + (d.options.length === 0 ? head : head + (pick === null ? DECIDE_NONE : wire(d.options[pick].label)) + DECIDE_NOTE_MARK)
+}
 // what `fleet decision claim` is given for this card: the picked option's label, or the typed text (a free card, or an option card where none was picked and a note was typed).
 // Both are the same strings decideLine writes into the line (before `wire`), because the hook compares the line's answer with what the courier stored.
 export type ClaimAnswer = { option: string } | { freeText: string }

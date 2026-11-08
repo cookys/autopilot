@@ -3,7 +3,7 @@
 // Run through `bash mods/live/run-tests.sh` (a wrapper plugin named `autopilot`); the new assertions here were red on the tree before the tab existed.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideLine, decideReply, recommendedIndex } from './model'
+import { DECIDE_NONE, DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideFillText, decideLine, decideReply, recommendedIndex } from './model'
 import { wrapLines } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
 import { decideBandPlan, decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
@@ -749,4 +749,29 @@ test('cardwrap r4b: wrapLines on one long choice row (prefix 16, label with word
     expect(out[at].trim(), loc + ': the URL has a row of its own').toBe(tail)
     expect(out.join('').replace(/ /g, ''), loc).toBe(text.replace(/ /g, ''))
   }
+})
+
+// bandinput: the text the band's 附註／其他回答 / 打字回答 button puts in the prompt box is the pane's own reply line up to where the owner types on
+test('bandinput fill text: head line, then the line decideLine writes for the same card with a sentinel note, cut before the sentinel (option card, picked / none picked; typed card; long and ｜ questions)', () => {
+  const SENT = 'ZZSENTINEL'
+  const longQ = dec('d-00aa11bb', '這是一個很長很長的問題，它超過三十個字所以會被截斷，而且裡面有 ｜ 全形直線', { options: [OPT('甲'), OPT('含｜線的選項')] })
+  const cases: [string, LiveDecision, DecideView][] = [
+    ['picked', THREE[0], view({ picks: { 'd-4290499d': 1 } })],
+    ['none picked', THREE[1], view()],
+    ['typed', THREE[2], view()],
+    ['long question, ｜ in the label', longQ, view({ picks: { 'd-00aa11bb': 1 } })],
+  ]
+  for (const [name, d, v] of cases) {
+    const fill = decideFillText(d, v) as string
+    const line = decideLine(d, { ...v, notes: { [d.id as string]: SENT } }) as string
+    expect(fill.split('\n')[0], name + ': head').toBe(DECIDE_REPLY_HEAD)
+    expect(fill.split('\n').length, name + ': two lines').toBe(2)
+    expect(fill.split('\n')[1] + SENT, name + ': the same line as the pane sends, minus what the owner types').toBe(line)
+  }
+  expect(decideFillText(THREE[1], view()), 'no pick: 都不選｜補充：').toBe(DECIDE_REPLY_HEAD + '\nd-c24ecfd9｜U6 要不要把建議也寫進回覆 → ' + DECIDE_NONE + '｜補充：')
+  expect(decideFillText(THREE[2], view()), 'typed card ends after the arrow').toBe(DECIDE_REPLY_HEAD + '\nd-0000free｜這個分支要叫什麼名字？ → ')
+})
+test('bandinput fill text: a card with no id and a dialog card (ask_user_question) have none', () => {
+  expect(decideFillText(dec(null, 'no id', { options: [OPT('a')] }), view())).toBeNull()
+  expect(decideFillText(dec('d-11112222', 'dialog', { options: [OPT('a')], origin: 'ask_user_question' }), view())).toBeNull()
 })

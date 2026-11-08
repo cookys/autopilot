@@ -137,7 +137,7 @@ export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSna
 }
 
 // the 待決 tab's compact form: the first open question's title and its options, then the send row the pane's own builder made (the same lines, the same press ids: a press is
-// decidePress, so a pick or a send here is the one the pane makes). No notes (a text field is the pane's); the rest of the questions are the pane's too.
+// decidePress, so a pick or a send here is the one the pane makes). This compact form (the tab-row layout, for a host that gives fewer than 12 rows) has no note and no typed answer: those are the card view's 附註／其他回答 and 打字回答 buttons (`cardMain`, O4 shell) and the pane's text fields; the rest of the questions are the pane's too.
 // The rows come from `decideBandPlan` (tabs.ts): wrapped, never cut; a pointer row for what the pane alone shows; `maxRows` is the room under the bar and rule (rows - 2).
 export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, state: DecideState, columns: number, t: T, onPress: (id: string) => void, maxRows?: number): unknown[] {
   const { Box, Text, Button } = el
@@ -234,13 +234,14 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
   return rows
 }
 
-// ---- the card view (ux-v7): the main window of the 待決 tab shows ONE card: its question, its background (dim, one row, two from 160), its options as hotkey Buttons 1..6 ----
+// ---- the card view (ux-v7): the main window of the 待決 tab shows ONE card: its question, its background (dim, one row, two from 160), its options as hotkey Buttons 1..6; under the options one Button (no hotkey: 0-9 are all taken) fills the prompt box with the reply line so the owner types a note or a free answer there and presses Enter ----
 export type CardView = {
   key: string
   question: string
   background: string | null
   options: { label: string; description: string; picked: boolean; recommended: boolean; key: string }[]
-  note: string | null // a card the band cannot answer (typed or in a dialog): one dim line instead of options
+  note: string | null // a card the band cannot answer (typed or in a dialog) and has no way to fill: one dim line instead of options
+  fill: { label: string; onPress: () => void } | null // the button that puts the reply line in the prompt box (`$.prompt.fill`): an option card's 附註／其他回答, a typed card's 打字回答; null where the surface has no prompt box or the card is a dialog's
   bgRows: number
   width: number // the main window's inner width less the pad
   onPress: (k: number) => void
@@ -266,10 +267,14 @@ const OPT_LABEL_COLS = 10
 export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): unknown[] {
   const { Box, Text, Button } = el
   const rows: unknown[] = []
-  rows.push(<Box key="q"><Text>{' '}</Text><Text wrap="truncate">{v.question}</Text></Box>)
+  // the fill button sits in the row under the options; a card of five or six options leaves no such row, so there it stands in front of the question (the button wins over the second background row and never over an option)
+  const inline = v.fill !== null && 1 + v.options.length + 1 > MAIN_CONTENT_ROWS
+  const fillBtn = v.fill === null ? null : BarButton(el, 'fill', v.fill.label, v.fill.onPress)
+  rows.push(<Box key="q"><Text>{' '}</Text>{inline ? <Box key="fi">{fillBtn}<Text>{' '}</Text></Box> : <Text key="fi">{''}</Text>}<Text wrap="truncate">{v.question}</Text></Box>)
   // the background area is two rows at every tier (one line of text when narrow, two from 160, the second row blank otherwise), so the options sit on the same rows everywhere; it
   // gives rows back only when the options would not fit
-  const area = Math.max(0, Math.min(2, MAIN_CONTENT_ROWS - 1 - v.options.length - (v.note === null ? 0 : 1)))
+  const tail = inline ? 0 : v.fill !== null || v.note !== null ? 1 : 0
+  const area = Math.max(0, Math.min(2, MAIN_CONTENT_ROWS - 1 - v.options.length - tail))
   const bg = v.background === null ? [] : chunkText(v.background, v.width - 6, Math.min(v.bgRows, area))
   for (let i = 0; i < area; i++) {
     const line = bg[i]
@@ -289,7 +294,8 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
       </Box>,
     )
   })
-  if (v.note !== null) rows.push(<Box key="note"><Text>{' '}</Text><Text {...dimProps()} wrap="truncate">{v.note}</Text></Box>)
+  if (v.fill !== null) { if (!inline) rows.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>) }
+  else if (v.note !== null) rows.push(<Box key="note"><Text>{' '}</Text><Text {...dimProps()} wrap="truncate">{v.note}</Text></Box>)
   return rows.slice(0, MAIN_CONTENT_ROWS)
 }
 

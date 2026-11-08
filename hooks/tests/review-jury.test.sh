@@ -166,7 +166,7 @@ case_diff_dotdot() { # --diff ../x resolves outside the pack
 }
 case_tar_bad() {
   local d="$TEST_TMP/$2"; mkpack "$d/pk"; (cd "$d/pk" && tar --transform 's,^\./,../,' -cf "$d/dots.tar" .)
-  tar -tf "$d/dots.tar" | grep -q '^\.\./' || return
+  tar -tf "$d/dots.tar" | grep '^\.\./' > /dev/null || return
   run_pack "$1" "$d" "$d/dots.tar" "${SEATS2[@]}"; refused "$d" 'absolute or ".." name' || return
   [ ! -e "$d/a.diff" ] || return
   rm -f "$d/dots.tar"; tar -cPf "$d/abs.tar" "$d/pk/a.diff"

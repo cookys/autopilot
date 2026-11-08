@@ -18,15 +18,15 @@ The left column is 26 wide at every tier. The main window starts at the same col
 
 A right column with nothing to show is not drawn and its width goes to the roundtable, so there is no hole. At 200 with no full usage table the roundtable takes both. At 240 the same rule applies to the usage column (no `usage_full`) and the fleet column (no lanes and no memory).
 
-## 2. The 12 rows
+## 2. The rows (bandlayout, guideline §13: the operation area is the last two rows, the content grows upward)
 
-1. menu row (the tab strip)
-2. top frame
-3-10. eight body rows (`BODY_ROWS = 8`). In the main window the first six (`MAIN_CONTENT_ROWS`) are content, the seventh is the divider `├───┤` and the eighth is the progress row. The progress row is inside the frame, not under it.
-11. bottom frame, with a foot title right-aligned in the left window (the card position, `3/8`) and in the main window (the one-line hint)
-12. quick row
+From the top: top frame, body rows, bottom frame (with a foot title right-aligned in the left window, the card position `3/8`, and in the main window the one-line hint), **menu row (the tab strip), quick row**. The menu row and the quick row are always the bottom two rows; only the body above them grows.
 
-The outer frame uses rounded corners `╭ ╮ ╰ ╯` because `└` already means "sub-item" in the pane. The divider joins the frame with `├` and `┤` at the main window's edges. Colour: the main window's lines are `here`, the other windows' `idle`, dividers `structure`; text colour only, no background, no inverse, no bold.
+- Every tab except 待決 keeps the 12 rows: eight body rows (`BODY_ROWS = 8`), the first six (`MAIN_CONTENT_ROWS`) content, the seventh the divider `├───┤`, the eighth the progress row (inside the frame, not under it).
+- The 待決 tab is the card view. It has **no right-hand columns** (`shellGeometry(.., noRight)`, shell.ts): the roundtable and the usage have their own tabs and are drawn there as before, so only this tab lost them; the main window takes every cell the band allows. The body is `N + 2` rows, `N = clamp(card rows, 6, rows - 6)`, so a long card grows the frame upward (total `N + 6 <= maxRows`) and the menu row and quick row stay at the bottom.
+- The card (`cardMain`, band.tsx) is shown whole: the question, 背景, each option on its own row with its description wrapped and indented 4 under it (the recommended option carries the recommend glyph), 建議 with its why, 不授權, then the note / typed-answer button. Nothing is cut with `…`. A sent or closed card puts its state line and the 改答案 button right under the question.
+- A card taller than the frame is shown through a top-anchored window (`topWindow`, scrollmath.ts): a hint row first (`還有 N 行`, with `scroll:up` / `scroll:down` Buttons, one page each), then the rows. The offset is kept per tab (`bandScroll` in register.ts) and reset when the card changes; leaving a tab and coming back shows the same rows. The mouse wheel and PgUp/PgDn arrive as `ui.scroll` on the AbovePrompt component; the engine raises it only when the tree is taller than the window, which is why a windowed card has one blank spare row under the quick row.
+- The scroll machinery is mods/live's own (`scrollmath.ts`, as the viewer and the pane use). codeforge's `pane-view.ts` (52ee3d2) was read but not copied: the repos are separate and live already has the same math.
 
 ## 3. Roundtable summary and `✦ N`
 

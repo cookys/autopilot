@@ -7005,12 +7005,15 @@ for (const surface of SURFACES) {
     const buttons = found.map(b => b.props?.key as string)
     const hot: Record<string, string> = Object.fromEntries(found.filter(b => typeof b.props?.hotkey === 'string').map(b => [b.props?.key as string, b.props?.hotkey as string]))
     await ui.unmount()
-    const raw = ((tree.children || []) as Node[]).map(rowStr)
+    const full = ((tree.children || []) as Node[]).map(rowStr)
+    const spare = full.length > 1 && full[full.length - 1].trim() === '' // the blank row after the quick row that lets the engine raise ui.scroll (register.ts stackRows)
+    const raw = full
+    const core = spare ? full.slice(0, -1) : full
     // bandlayout: the shell stands as `top frame, body rows, bottom frame, menu row, quick row` (the menu row and the quick row are the bottom two rows). `rows` keeps the older order (menu row first)
     // so a test that counts rows from the top reads what it always read; `raw` is the drawn order.
-    const shell = raw.length >= 4 && raw[0].startsWith('\u256d')
-    const rows = shell ? [raw[raw.length - 2], ...raw.slice(0, raw.length - 2), raw[raw.length - 1]] : raw
-    return { tree, rows, raw, buttons, hot }
+    const shell = core.length >= 4 && core[0].startsWith('\u256d')
+    const rows = shell ? [core[core.length - 2], ...core.slice(0, core.length - 2), core[core.length - 1]] : core
+    return { tree, rows, raw, spare, buttons, hot }
   }
   // the width of the last window of the top frame row (the text after the last ┬, less the closing corner)
   const lastWindow = (top: string): number => displayWidth(top.slice(top.lastIndexOf('┬') + 1)) - 1
@@ -7831,6 +7834,10 @@ for (const surface of SURFACES) {
     if (surface === 'terminal') console.log('RENDER-BEGIN layout-back-100\n' + back.raw.join('\n') + '\nRENDER-END')
     const next = await drawShell($, 100, ['next'], 12)
     expect(next.raw[0], 'another card').toContain('第 2 張')
+    if (surface === 'terminal') console.log('RENDER-BEGIN layout-short-100\n' + next.raw.join('\n') + '\nRENDER-END')
+    const typed = await drawShell($, 100, ['next'], 12)
+    if (surface === 'terminal') console.log('RENDER-BEGIN layout-typed-100\n' + typed.raw.join('\n') + '\nRENDER-END')
+    await drawShell($, 100, ['prev'], 12)
     const first = await drawShell($, 100, ['prev'], 12)
     expect(mainCells(first.raw, 100), 'a card read again starts at its top').toEqual(mainCells(top.raw, 100))
   })

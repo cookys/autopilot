@@ -7816,6 +7816,41 @@ for (const surface of SURFACES) {
       if (surface === 'terminal' && cols === 100) console.log('RENDER-BEGIN layout2-long-100\n' + d.raw.join('\n') + '\nRENDER-END')
     }
   })
+  test('bandpolish: a long card name in the left list wraps and is drawn whole, with no … and the pick mark on its first row only, at 80 and 120 columns (' + surface + ')', async ($, on) => {
+    const LONGQ = '長卡：要不要現在合併整批變更並且順便把舊的分支也一起刪掉'
+    layWorld(on, [{ ...LAYCARD, question: LONGQ }, DQ2])
+    await start($, surface)
+    await drawShell($, 100, ['tab:decide'], 60)
+    for (const cols of [80, 120]) {
+      const d = await drawShell($, cols, [], 60)
+      const left = bodyOf(d.raw).map(r => (r.split('│')[1] ?? '').trimEnd())
+      expect(left.join('').replace(/\s+/g, ''), 'the whole name at ' + cols).toContain(LONGQ.replace(/\s+/g, ''))
+      expect(left.join('').includes('…'), 'no ellipsis in the list at ' + cols).toBe(false)
+      const mine = left.filter(r => r.startsWith('◐'))
+      expect(mine.length, 'one pick mark for the card at ' + cols).toBe(1)
+    }
+  })
+  test('bandpolish: the page Buttons are drawn like 附註／其他回答: a `[ … ]` frame and the action theme key, no dim colour, one Button per direction (' + surface + ')', async ($, on) => {
+    layWorld(on, [LAYCARD, DQ2])
+    await start($, surface)
+    await drawShell($, 100, ['tab:decide'], 12)
+    await drawShell($, 100, ['scroll:down'], 12)
+    const d = await drawShell($, 100, [], 12)
+    const walk = (n: Node | string, out: Node[]): Node[] => { if (typeof n !== 'string') { out.push(n); for (const c of n.children || []) walk(c as Node | string, out) } return out }
+    const all = walk(d.tree, [])
+    const textUnder = (key: string): Node => {
+      const b = all.find(n => n.type === 'Button' && n.props?.key === key) as Node
+      return walk(b, []).find(n => n.type === 'Text') as Node
+    }
+    const fill = textUnder('fill')
+    for (const k of ['scroll:up', 'scroll:down']) {
+      const tx = textUnder(k)
+      expect(rowStr(tx), k + ' has the [ ] frame').toMatch(/^\[ .+ \]$/)
+      expect(tx.props?.color, k + ' uses the same theme key as 附註／其他回答').toBe(fill.props?.color)
+      expect(tx.props?.dimColor, k + ' is not dim').not.toBe(true)
+      expect(tx.props?.inverse, k + ' has no inverse').toBeFalsy()
+    }
+  })
   test('bandlayout: scrolling to the bottom and back moves the rows and the thumb, never the fixed strip; the last line of the card shows at the bottom (' + surface + ')', async ($, on) => {
     layWorld(on, [LAYCARD, DQ2])
     await start($, surface)

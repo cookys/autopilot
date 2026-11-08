@@ -415,7 +415,7 @@ chmod +x "$TEST_TMP/retry-dispatch.sh"
 run_glm() { # run_glm <script> <dir> <first-result JSON> extra args...
   local script="$1" dir="$2" first="$3"; shift 3; mkdir -p "$dir/fake" "$dir/home"
   FAKE_FIRST="$first" env -i PATH="$STUBS:/usr/bin:/bin" HOME="$dir/home" AUTOPILOT_ENDPOINTS_ENV="$dir/none.env" FAKE_DIR="$dir/fake" FAKE_FIRST="$first" \
-    AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid AUTOPILOT_ENDPOINT_GLM_TOKEN=FAKE-glm \
+    AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid AUTOPILOT_ENDPOINT_GLM_TOKEN="${GLM_TOKEN:-FAKE-glm}" \
     "$NODE" "$script" run --pack "$TEST_TMP/pack.txt" --seats glm --implementer-family anthropic --dispatch-bin "$TEST_TMP/retry-dispatch.sh" \
     --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$dir/out" "$@" > "$dir/stdout" 2> "$dir/stderr" < /dev/null
   echo $? > "$dir/rc"
@@ -429,18 +429,34 @@ case_retry_budget() {
     && [ "$(sed -n 2p "$d/fake/args.log" | grep -c -- '--max-tokens 131072')" = 1 ] \
     && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.glm.status')" = valid ] && echo ok
 }
-check case_retry_budget retrybudget "s/ || !String(first.out).includes('output_budget_exhausted')) return/ || true) return/"
+check case_retry_budget retrybudget "s/ || !budgetExhausted(first)) return/ || true) return/"
 case_retry_other() {
   local d="$TEST_TMP/$2"; run_glm "$1" "$d" '{"status":"no_verdict","verdict":null,"findings":"","error":"http 500 from endpoint"}'
   [ "$(cat "$d/fake/glm.count")" = 1 ] && [ "$(jq_eval "$d/out/seats/glm.json" 'String(j.attempts)')" = undefined ] \
     && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.glm.status')" = invalid ] && echo ok
 }
-check case_retry_other retryother "s/ || !String(first.out).includes('output_budget_exhausted')) return/ || false) return/"
-case_retry_ceiling() { # already at 200000: effort goes high -> medium, max_tokens stays
-  local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=200000
-  [ "$(jq_eval "$d/out/seats/glm.json" 'j.attempts.map(a=>a.max_tokens+"/"+a.effort).join()')" = "200000/high,200000/medium" ] \
-    && sed -n 2p "$d/fake/args.log" | grep -q -- '--effort medium' && echo ok
+check case_retry_other retryother "s/ || !budgetExhausted(first)) return/ || false) return/"
+case_retry_quoted() { # a reviewed result whose findings quote the word is not a budget failure: one call, one attempt, the result kept
+  local d="$TEST_TMP/$2"
+  run_glm "$1" "$d" '{"status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"FINDINGS:\n🟠 [q] MUST-FIX the log says output_budget_exhausted here","no_finding_proof":"output_budget_exhausted"}'
+  [ "$(cat "$d/fake/glm.count")" = 1 ] && [ "$(jq_eval "$d/out/seats/glm.json" 'String(j.attempts)+","+j.verdict')" = undefined,FIX-THEN-SHIP ] \
+    && [ "$(jq_eval "$d/out/merged.json" 'j.seat_states.glm.status')" = valid ] && echo ok
 }
+check case_retry_quoted retryquoted "s/return j.status === 'no_verdict' && String(j.error || '').startsWith('output_budget_exhausted');/return String(r.out).includes('output_budget_exhausted');/"
+# an effort-aware scorecard: GLM-5.3 is a qualified reviewer at effort high only
+cat > "$TEST_TMP/effort-scorecard.js" <<'FAKE'
+const a = process.argv; const v = (k) => a[a.indexOf(k) + 1];
+console.log(JSON.stringify({ admission_status: (v('--engine') === 'GLM-5.3' && v('--effort') === 'high') ? 'qualified' : 'no_record' }));
+FAKE
+case_retry_ceiling() { # already at 200000: effort goes high -> medium, max_tokens stays; the qualified verdict follows the effort that answered
+  local d="$TEST_TMP/$2"; run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=200000 --scorecard-bin "$TEST_TMP/effort-scorecard.js"
+  [ "$(jq_eval "$d/out/seats/glm.json" 'j.attempts.map(a=>a.max_tokens+"/"+a.effort).join()')" = "200000/high,200000/medium" ] \
+    && sed -n 2p "$d/fake/args.log" | grep -q -- '--effort medium' \
+    && [ "$(jq_eval "$d/out/run.json" 'j.seats.glm.effort+","+j.seats.glm.answered_effort+","+j.seats.glm.qualified+","+j.seats.glm.qualified_at_requested')" = "high,medium,false,true" ] \
+    && [ "$(jq_eval "$d/out/merged.json" 'const s=j.seat_states.glm; s.effort+","+s.answered_effort+","+s.qualified+","+s.qualified_at_requested+","+j.advisory_seats.join()')" = "high,medium,false,true,glm" ] && echo ok
+}
+check case_retry_ceiling retryceilingeffort "s/state\[r.name\].qualified = isQualified({ ...seatTable\[r.name\], effort: answered }, scorecardBin);/void 0;/"
+check case_retry_ceiling retryceilingmerge "s/answered_effort: s.answered_effort, qualified_at_requested: s.qualified_at_requested, reason: s.reason,/reason: s.reason,/"
 check case_retry_ceiling retryceiling "s/const cur = seat.max_tokens || DEFAULT_RUNNER_MAX_TOKENS;/const cur = 1;/"
 case_seat_max_tokens() {
   local d="$TEST_TMP/$2" rc1 rc2; run_glm "$1" "$d" "$BUDGET_JSON" --seat-max-tokens glm=12345
@@ -482,6 +498,53 @@ case_stderr_log() {
     && ! grep -q 'abcdefghijklmnopqrstuvwxyz' "$lg" && ! grep -q 'FAKEkey123' "$lg" && ! grep -q '0123456789abcdef0123456789abcdef' "$lg" && echo ok
 }
 check case_stderr_log stderrlog "s/function redactStderr(t) {/function redactStderr(t) { return String(t);/"
+cat > "$TEST_TMP/glmkey-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "POST https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages x-api-key: 0123456789abcdef0123456789abcdef.ABCDEFGHIJKLMNOP" >&2
+echo "retrying with key 0123456789abcdef0123456789abcdef.QRSTUVWXYZabcdef now" >&2
+echo "headers: x-api-key: shortkey77 Authorization: Basic basicsecret9" >&2
+echo "leak: $AUTOPILOT_ENDPOINT_GLM_TOKEN end" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/glmkey-dispatch.sh"
+glmkey_run() { local d="$TEST_TMP/$2"; GLM_TOKEN=envtok7Qz run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/glmkey-dispatch.sh"; }
+case_redact_glmkey() { # the dot and the 16 characters after it of a GLM key do not reach the 0644 log
+  local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q 'ABCDEFGHIJKLMNOP' "$lg" && ! grep -q 'QRSTUVWXYZabcdef' "$lg" && ! grep -q '0123456789abcdef' "$lg" && grep -q 'x-api-key: \[redacted\]' "$lg" && echo ok
+}
+check case_redact_glmkey redactglmkey "s|replace(/\[A-Za-z0-9+_=.-\]{32,}/g|replace(/[A-Za-z0-9+_=-]{32,}/g|"
+case_redact_header() { # the whole value after x-api-key / Authorization goes, however short
+  local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q 'shortkey77' "$lg" && ! grep -q 'basicsecret9' "$lg" && echo ok
+}
+check case_redact_header redactxapikey "s/(x-api-key/(x-api-keyZ/"
+check case_redact_header redactauthz "s/(authorization/(authorizationZ/"
+case_redact_url() { # a URL with a long dotted host survives the long-string rule
+  local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"
+  grep -q 'https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages' "$d/out/seats/glm.stderr.log" && echo ok
+}
+check case_redact_url redacturl "s/^const URL_RE = \/https/const URL_RE = \/zzzhttps/"
+case_redact_env() { # a token held in the process env is removed by its literal value, whatever it looks like
+  local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q 'envtok7Qz' "$lg" && grep -q 'leak: \[redacted\] end' "$lg" && echo ok
+}
+check case_redact_env redactenv "s/for (const v of secretEnvValues()) s = s.split(v).join('\[redacted\]');/void 0;/"
+
+# ---- SHA256SUMS as the manifest ----
+case_sums_ok() { # SHA256SUMS wins when both exist; FILES.sha256 then is an ordinary (even wrong) file
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; rm "$d/pk/FILES.sha256"; echo 'stale list' > "$d/pk/FILES.sha256"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md FILES.sha256 > SHA256SUMS)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; [ "$(cat "$d/rc")" = 0 ] && grep -q 'stale list' "$d/out/context.txt" && ! grep -q 'stale list' "$d/out/spec.txt" && echo ok
+}
+check case_sums_ok sumsok "s/const sums = files.includes('SHA256SUMS') ? 'SHA256SUMS' : 'FILES.sha256';/const sums = 'FILES.sha256';/"
+case_sums_extra() { # a file SHA256SUMS does not list refuses the pack
+  local d="$TEST_TMP/$2"; mkpack "$d/pk"; (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md FILES.sha256 > SHA256SUMS); echo unlisted > "$d/pk/EXTRA.md"
+  (cd "$d/pk" && sha256sum a.diff QUESTIONS.md NOTE.md EXTRA.md > FILES.sha256)
+  run_pack "$1" "$d" "$d/pk" "${SEATS2[@]}"; refused "$d" 'SHA256SUMS does not match the file set (not listed: EXTRA.md' && echo ok
+}
+check case_sums_extra sumsextra "s/const sums = files.includes('SHA256SUMS') ? 'SHA256SUMS' : 'FILES.sha256';/const sums = 'FILES.sha256';/"
+check case_sums_extra sumsextrachk "s/if (extra.length || missing.length) die(/if (false) die(/"
 
 # the fixed seat families agree with familyOfEngine() for each seat's default model
 "$NODE" -e '

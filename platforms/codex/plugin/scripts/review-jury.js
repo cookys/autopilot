@@ -21,7 +21,7 @@
 //        string sent to the runner. --seat-model changes the model AND, unless --seat-engine <seat>=<engine> is also given, the engine
 //        (so --seat-model kimi=kimi-code/k3.1-pro looks up engine kimi-code/k3.1-pro). --seat-engine alone changes only the lookup.
 // Each dispatched seat's stderr is kept in <out>/seats/<seat>.stderr.log (mode 0644; seat JSON field stderr_log) after the secret
-//        filter: Bearer <x>, sk-<x> and any run of >= 32 base64/hex characters become [redacted]; URLs stay. A retried seat's log holds both attempts.
+//        filter: Bearer <x>, sk-<x> and any run of >= 32 base64/hex/dot characters, the whole value after x-api-key / Authorization and the literal values of the endpoint token env vars become [redacted]; URLs stay. A retried seat's log holds both attempts.
 // --seat-max-tokens <seat>=<n> (repeatable) is passed to dispatch-review's --max-tokens (1..200000, anthropic-compatible seats only:
 //        glm, minimax; any other seat is a usage error). A seat whose result says output_budget_exhausted (the reviewer spent the whole
 //        output budget on thinking) is dispatched once more: max_tokens doubled (capped at 200000); when it is already 200000, effort
@@ -43,7 +43,7 @@
 // --pack may also be a review-pack directory or .tar/.tar.xz. Pack content is untrusted: every path is checked by lstat,
 // a symlink or special file anywhere in the pack refuses it (rc 2), a tar with an absolute or ".." member (or a link member)
 // is refused before extraction, and --diff / the questions file must resolve inside the pack. A directory or tar pack needs
-// FILES.sha256, its entries must be relative without "..", and its list must equal the pack's file set exactly (then sha256sum -c).
+// FILES.sha256 (or SHA256SUMS, preferred when both exist), its entries must be relative without "..", and its list must equal the pack's file set exactly (then sha256sum -c).
 // A single file passed as --pack needs no FILES.sha256. --diff default = the one top-level *.diff or *.patch.
 // QUESTIONS.md becomes --spec-file; other small text files become one --pack-file context, capped at 300 KB (--context-max <bytes>
 // overrides). --context-exclude <glob> (repeatable; relative to the pack root, * and **) leaves matching files out; a glob that
@@ -202,6 +202,11 @@ function dispatchSeat(name, seat, opts) {
   });
 }
 
+// True only for a parsed result {status: no_verdict, error: output_budget_exhausted...}; a reviewed result that merely quotes the word, or unparsable output, is not.
+function budgetExhausted(r) {
+  try { const j = JSON.parse(r.out); return j.status === 'no_verdict' && String(j.error || '').startsWith('output_budget_exhausted'); } catch { return false; }
+}
+
 // One dispatch; when the result says output_budget_exhausted (anthropic-compatible seats), one more with a larger
 // output budget or, at the ceiling, one effort step lower. No other error is retried. Returns the last result plus attempts[].
 async function dispatchWithRetry(name, seat, opts) {
@@ -212,7 +217,7 @@ async function dispatchWithRetry(name, seat, opts) {
   };
   const first = await dispatchSeat(name, seat, opts);
   const attempts = [note(1, seat, first)];
-  if (seat.runner !== 'anthropic-compatible' || !String(first.out).includes('output_budget_exhausted')) return { ...first, attempts };
+  if (seat.runner !== 'anthropic-compatible' || !budgetExhausted(first)) return { ...first, attempts };
   const firstErr = first.err;
   const next = { ...seat };
   const cur = seat.max_tokens || DEFAULT_RUNNER_MAX_TOKENS;
@@ -224,13 +229,25 @@ async function dispatchWithRetry(name, seat, opts) {
   return { ...second, err: `--- attempt 1 ---\n${firstErr}\n--- attempt 2 ---\n${second.err}`, attempts };
 }
 
-// Seat stderr is kept for diagnosis, so anything token-shaped goes first: Bearer <x>, sk-<x>, and any run of >= 32 base64/hex characters.
-// URLs are left alone (their parts are shorter than 32 characters or contain '.', ':' or '/').
+// Seat stderr is kept for diagnosis, so anything token-shaped goes first: the literal values of the endpoint token env vars this process
+// holds (AUTOPILOT_ENDPOINT_*_TOKEN, ANTHROPIC_AUTH_TOKEN, MINIMAX_API_KEY), the whole value after x-api-key / Authorization, Bearer <x>, sk-<x>,
+// and any run of >= 32 base64/hex/dot characters (a GLM key is <32 hex>.<16 chars>). URLs are set aside first and put back after.
+const URL_RE = /https?:\/\/[^\s"'<>]+/g;
+function secretEnvValues() {
+  return Object.entries(process.env).filter(([k, v]) => v && (/^AUTOPILOT_ENDPOINT_.+_TOKEN$/.test(k) || k === 'ANTHROPIC_AUTH_TOKEN' || k === 'MINIMAX_API_KEY')).map(([, v]) => v);
+}
 function redactStderr(t) {
-  return String(t)
+  let s = String(t);
+  for (const v of secretEnvValues()) s = s.split(v).join('[redacted]');
+  const urls = [];
+  s = s.replace(URL_RE, (u) => { urls.push(u); return `\u0000URL${urls.length - 1}\u0000`; });
+  s = s
+    .replace(/(x-api-key\s*[:=]\s*)\S+/gi, '$1[redacted]')
+    .replace(/(authorization\s*[:=]\s*(?:(?:Bearer|Basic)\s+)?)\S+/gi, '$1[redacted]')
     .replace(/(Bearer\s+)\S+/gi, '$1[redacted]')
     .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
-    .replace(/[A-Za-z0-9+_=-]{32,}/g, '[redacted]');
+    .replace(/[A-Za-z0-9+_=.-]{32,}/g, '[redacted]');
+  return s.replace(/\u0000URL(\d+)\u0000/g, (_, i) => urls[Number(i)]);
 }
 
 const CONTEXT_CAP = 300 * 1024;
@@ -274,25 +291,27 @@ function globToRegExp(g) {
 
 function badTarName(n) { return n.startsWith('/') || n.split('/').includes('..'); }
 
-// FILES.sha256 is mandatory for a directory or tar pack and must cover exactly the files that are there.
+// FILES.sha256 (or SHA256SUMS, which wins when both exist; FILES.sha256 is then an ordinary file) is mandatory for a directory or tar pack
+// and must cover exactly the files that are there. Returns the manifest's name.
 function checkManifest(root, files) {
-  const sums = 'FILES.sha256';
-  if (!files.includes(sums)) die('pack refused: FILES.sha256 is missing');
+  const sums = files.includes('SHA256SUMS') ? 'SHA256SUMS' : 'FILES.sha256';
+  if (!files.includes(sums)) die('pack refused: FILES.sha256 is missing (SHA256SUMS is not there either)');
   const listed = new Set();
   for (const line of fs.readFileSync(path.join(root, sums), 'utf8').split('\n')) {
     if (!line.trim()) continue;
     const m = line.match(/^([0-9a-fA-F]{64}) [ *](.+)$/);
-    if (!m) die(`pack refused: malformed FILES.sha256 line: ${line.slice(0, 80)}`);
+    if (!m) die(`pack refused: malformed ${sums} line: ${line.slice(0, 80)}`);
     const p = m[2];
-    if (p.startsWith('/') || p.startsWith('\\') || p.split('/').includes('..')) die(`pack refused: FILES.sha256 entry is absolute or contains "..": ${p}`);
+    if (p.startsWith('/') || p.startsWith('\\') || p.split('/').includes('..')) die(`pack refused: ${sums} entry is absolute or contains "..": ${p}`);
     listed.add(path.posix.normalize(p));
   }
   const actual = new Set(files.filter((f) => f !== sums));
   const extra = [...actual].filter((f) => !listed.has(f));
   const missing = [...listed].filter((f) => !actual.has(f));
-  if (extra.length || missing.length) die(`pack refused: FILES.sha256 does not match the file set (not listed: ${extra.slice(0, 5).join(', ') || '-'}; listed but absent: ${missing.slice(0, 5).join(', ') || '-'})`);
+  if (extra.length || missing.length) die(`pack refused: ${sums} does not match the file set (not listed: ${extra.slice(0, 5).join(', ') || '-'}; listed but absent: ${missing.slice(0, 5).join(', ') || '-'})`);
   const r = spawnSync('sha256sum', ['-c', '--quiet', sums], { cwd: root, encoding: 'utf8' });
-  if (r.status !== 0) die(`pack refused: FILES.sha256 does not match (${(r.stdout + r.stderr).trim().split('\n').slice(0, 3).join('; ')})`);
+  if (r.status !== 0) die(`pack refused: ${sums} does not match (${(r.stdout + r.stderr).trim().split('\n').slice(0, 3).join('; ')})`);
+  return sums;
 }
 
 const ANSWER_LINE_RE = /^ANSWER\s+Q\d+\s*\|/;
@@ -366,8 +385,7 @@ function resolvePack(o) {
   } else if (!st.isDirectory()) die(`pack refused: ${root} is neither a file nor a directory`);
   const rootReal = fs.realpathSync(root);
   const files = walkTree(root);
-  checkManifest(root, files);
-  const sums = path.join(root, 'FILES.sha256');
+  const sums = path.join(root, checkManifest(root, files));
   const top = files.filter((f) => !f.includes('/'));
   let diff = o.diff ? path.join(root, o.diff) : null;
   if (!diff) {
@@ -460,6 +478,12 @@ async function cmdRun(o) {
     j.stderr_log = logPath;
     fs.writeFileSync(path.join(o.out, 'seats', `${r.name}.json`), `${JSON.stringify(j)}\n`);
     state[r.name].rc = r.rc;
+    const answered = r.attempts[r.attempts.length - 1].effort;
+    if (answered !== state[r.name].effort) {
+      state[r.name].answered_effort = answered;
+      state[r.name].qualified_at_requested = state[r.name].qualified;
+      state[r.name].qualified = isQualified({ ...seatTable[r.name], effort: answered }, scorecardBin);
+    }
   }
   writeJson(path.join(o.out, 'run.json'), { implementer_family: o['implementer-family'], questions: pk.questions, skipped_files: pk.skipped, seats: state });
   return mergeDirs([o.out], o.out);
@@ -511,7 +535,7 @@ function mergeDirs(dirs, outDir) {
       if (prev && (prev.status === 'valid' || status !== 'valid')) continue;
       // The verdict recorded by the run is taken as is; merge never asks a scorecard (the merging account's store may differ).
       const recorded = typeof st0.qualified === 'boolean';
-      seats[n] = { status, verdict, qualified: st0.qualified === true, qualified_source: recorded ? 'run' : 'missing', family: st.family, runner: st.runner, engine: st.engine, model: st.model, effort: st.effort, reason: st.reason || error || undefined, from: d, findingsText, proofText };
+      seats[n] = { status, verdict, qualified: st0.qualified === true, qualified_source: recorded ? 'run' : 'missing', family: st.family, runner: st.runner, engine: st.engine, model: st.model, effort: st.effort, answered_effort: st.answered_effort, qualified_at_requested: st.qualified_at_requested, reason: st.reason || error || undefined, from: d, findingsText, proofText };
     }
   }
   const byId = new Map();
@@ -549,7 +573,7 @@ function mergeDirs(dirs, outDir) {
     min_valid_seats: MIN_VALID,
     qualified_seats: valid.filter((n) => seats[n].qualified),
     advisory_seats: valid.filter((n) => !seats[n].qualified),
-    seat_states: Object.fromEntries(Object.entries(seats).map(([n, s]) => [n, { status: s.status, verdict: s.verdict, qualified: s.qualified, qualified_source: s.qualified_source, family: s.family, runner: s.runner, engine: s.engine, model: s.model, effort: s.effort, reason: s.reason, from: s.from, duplicate_answers: s.duplicate_answers }])),
+    seat_states: Object.fromEntries(Object.entries(seats).map(([n, s]) => [n, { status: s.status, verdict: s.verdict, qualified: s.qualified, qualified_source: s.qualified_source, family: s.family, runner: s.runner, engine: s.engine, model: s.model, effort: s.effort, answered_effort: s.answered_effort, qualified_at_requested: s.qualified_at_requested, reason: s.reason, from: s.from, duplicate_answers: s.duplicate_answers }])),
     findings,
     questions,
     answers,

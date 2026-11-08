@@ -24,6 +24,15 @@ node --test "$here/gen-locales.test.js"
 node --test "$here/ui-lint.test.js"
 # the O4 shell planner (tiers, geometry, the forge-stats panel reader, the right-hand columns): pure, imports the real shell.ts
 node --test "$here/shell.test.js"
+# the operator-console snapshot (the fleet.console/1 trust-boundary parser, the console.json mode reader, fictional fixtures): pure, imports the real console.ts
+node --test "$here/console.test.js"
+# the console tab strip (consoletabs.ts: five tabs, badges, the 120 / 80 / 20 column forms), the console.json mode finder, and the golden that pins the non-console strips byte for byte
+node --test "$here/consolestrip.test.js"
+# the console 指揮 page builder (commandtab.ts: summary, exceptions, queue, data age; the to_console negative control; the mirror card; the 120 / 80 / 20 widths)
+node --test "$here/commandtab.test.js"
+# the console pane's team / quota / hosts skeleton pages (consolepages.ts): 無來源 for a missing source, the red light with the fixture's lines deleted
+node --test "$here/consolepages.test.js"
+# console.test.ts (C1 U8: KR8 order and counts, the leak red light) is picked up by `claude plugin test` below with the other *.test.ts files
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

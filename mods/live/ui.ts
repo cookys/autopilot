@@ -272,7 +272,7 @@ for (const id of STATE_IDS) STATED_OBJS[id] = Object.freeze({ id }) as unknown a
 const stated = (id: StateId): Stated => STATED_OBJS[id]
 export const isStated = (v: unknown): v is Stated => typeof v === 'object' && v !== null && Object.values(STATED_OBJS).includes(v as Stated)
 
-export type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource' | 'attention' | 'residueGroup' | 'cleanup' | 'fleetTask'
+export type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource' | 'attention' | 'residueGroup' | 'cleanup' | 'fleetTask' | 'console'
 export type RunSubject = { rc: number | null; final_status: string | null; stall: boolean; fresh: boolean; starting?: boolean } // `starting`: never probed yet, but inside the freshness bound since launch
 export type SeatSubject = { kind: 'code' | 'plan'; verdict: string | null; status: string | null }
 export type RoundSubject = { stale: boolean; converged: boolean; seats: readonly Stated[] }
@@ -283,7 +283,7 @@ export type CleanupSubject = { errors: number; done: number }
 export type FleetTaskSubject = { state: string; stuck: boolean } // a fleet hub task row (fleet.ts): the hub's state word and whether a stuck rule fired
 export type Subject = {
   verdict: string; run: RunSubject; seat: SeatSubject; round: RoundSubject; gate: string; qc: string; background: BackgroundSubject; task: string
-  loadSource: LoadSourceSubject; attention: AttentionSubject; residueGroup: string; cleanup: CleanupSubject; fleetTask: FleetTaskSubject
+  loadSource: LoadSourceSubject; attention: AttentionSubject; residueGroup: string; cleanup: CleanupSubject; fleetTask: FleetTaskSubject; console: string
 }
 
 // token normalisation, once: trim, upper-case; a prefix class (`NEEDS*`, `CACHE:*`) is one atom
@@ -336,6 +336,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
   attention: a => (a.source === null ? 'acceptance' : 'from:' + a.source.id),
   residueGroup: c => norm(c).toLowerCase(),
   cleanup: c => (c.errors > 0 ? 'errors' : c.done > 0 ? 'done' : 'nothing'),
+  console: s => norm(s), // the operator-console feed's own state word (fleet.console/1 items[].state, counts.summary.lines keys)
   fleetTask: f => (f.stuck && !['FAILED', 'LOST', 'BLOCKED_HUMAN'].includes(norm(f.state)) ? 'STUCK' : norm(f.state)),
 }
 const ATTENTION_FROM = Object.fromEntries(STATE_IDS.map(id => ['from:' + id, id])) as Record<string, StateId>
@@ -356,6 +357,7 @@ export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   attention: { acceptance: 'need_you', ...ATTENTION_FROM },
   residueGroup: { dirty: 'need_you', 'clean-integrated': 'done', 'clean-unintegrated': 'need_you', 'unintegrated-branch': 'need_you', 'missing-dir': 'done', live: 'running', unverifiable: 'unknown' }, // a 'clean' class (RESIDUE_KINDS) is drawn as a neutral row, never as a mark
   cleanup: { errors: 'failed', done: 'done', nothing: 'skipped' },
+  console: { NEED_YOU: 'need_you', FAILED: 'failed', STALLED: 'stalled', FINDINGS: 'findings', RUNNING: 'running', WAITING: 'waiting', PENDING: 'pending' },
   // the fleet hub's task states (fleet.ts); a stuck rule (open an hour unaccepted, a seat quiet four hours, the hub's own suspect) is `stalled`. A word the hub adds later is `unknown`.
   fleetTask: {
     OPEN: 'pending', TASK_ACCEPTED: 'pending', ACCEPTED: 'pending', RUNNING: 'running', IN_PROGRESS: 'running', WAITING: 'waiting', RESULT_REPORTED: 'findings',
@@ -744,6 +746,17 @@ export function buttonRow(u: Ctx, label: string, o: { press: string; fact: FactI
   return lineOf('choice', [sg('  '), sg(cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2)), { role: 'act', color: PALETTE.action, press: o.press })], { fact: o.fact })
 }
 // lines meant for a scrolling window's fixed action strip (§12.10): pane.tsx draws them under the rule, not among the scrolling rows
+// one free-form row of fragments (the console page's summary and data-age lines): cut from the right so it never passes `cols - 1`
+export function rowOf(u: Ctx, frags: readonly Frag[], o: { fact: FactId }): PaneLine {
+  const segs = segsOf(...frags)
+  let over = segs.reduce((w, x) => w + displayWidth(x.text), 0) - (u.cols - 1)
+  while (over > 0 && segs.length > 0) {
+    const last = segs[segs.length - 1]
+    const w = displayWidth(last.text)
+    if (w <= over) { segs.pop(); over -= w } else { segs[segs.length - 1] = { ...last, text: cutProse(last.text, w - over) }; over = 0 }
+  }
+  return lineOf('detail', segs, { fact: o.fact })
+}
 export const asBar = (ls: PaneLine[]): PaneLine[] => ls.map(l => carry(l, { ...l, bar: true as const }))
 export const resultRow = (u: Ctx, text: string, fact: FactId): PaneLine[] => detail(u, text, { fact })
 // a labelled text field: the key at column 2, the Input at column 12 (drawn by pane.tsx; a surface without Input never gets this line: the card says to answer in the conversation)

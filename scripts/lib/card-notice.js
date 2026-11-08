@@ -2,7 +2,10 @@
 /**
  * card-notice.js — the one-line fleet message a card open/close sends to the program PM, and the strict parser of it (fleetcards phase 1).
  *
- *   AUTOPILOT-CARD/1 {"event":"open"|"close","card_id":"d-xxxxxxxx","question":"...","state":"...","at":"<ISO>","session":"<id>"|null}
+ *   AUTOPILOT-CARD/1 {"event":"open"|"close","card_id":"d-xxxxxxxx","question":"...","state":"...","at":"<ISO>","session":"<id>"|null[,"title":"<=20 chars"]}
+ *
+ * `title` is optional (only an `open` of a card that has one carries it); both key sets parse. ROLLOUT ORDER: upgrade the PM host first (its mirror parses
+ * both), then the sending hosts: an old PM mirror refuses a notice that carries `title` whole (strict key set), so a new sender before a new PM loses those opens.
  *
  * Signing: run inside a Claude session, the shell `fleet send` carries that session in `from` (namespace/courier/member@session); run outside one (cron, say)
  * there is no session, and the panel shows the session as unknown.
@@ -26,6 +29,8 @@ const QUESTION_MAX = 300;
 const STATES = ['open', 'awaiting_operator_action', 'pending_dispatch', 'closed'];
 const EVENTS = ['open', 'close'];
 const KEYS = ['at', 'card_id', 'event', 'question', 'session', 'state'];
+const KEYS_TITLED = ['at', 'card_id', 'event', 'question', 'session', 'state', 'title'];
+const TITLE_MAX = 20;
 const CARD_ID = /^d-[0-9a-f]{8}$/;
 const SESSION = /^[A-Za-z0-9_-]{1,64}$/;
 const FROM = /^([A-Za-z0-9][A-Za-z0-9._-]{0,63})\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})(?:@([A-Za-z0-9_-]{1,64}))?$/;
@@ -40,8 +45,9 @@ function clean(q) {
   return s.length > QUESTION_MAX ? `${s.slice(0, QUESTION_MAX - 1)}…` : s;
 }
 
-function encode(event, { card_id, question, state, at, session }) {
+function encode(event, { card_id, question, state, at, session, title }) {
   const body = { at: at || new Date().toISOString(), card_id, event, question: clean(question), session: session || null, state };
+  if (typeof title === 'string' && title !== '') body.title = title;
   return `${PREFIX}${JSON.stringify(body)}`;
 }
 
@@ -53,7 +59,9 @@ function parse(content) {
   try { o = JSON.parse(json); } catch (_e) { return { ok: false, reason: 'not JSON' }; }
   if (!o || typeof o !== 'object' || Array.isArray(o)) return { ok: false, reason: 'not an object' };
   const keys = Object.keys(o).sort();
-  if (keys.length !== KEYS.length || keys.some((k, i) => k !== KEYS[i])) return { ok: false, reason: 'keys differ from the contract' };
+  const want = keys.includes('title') ? KEYS_TITLED : KEYS;
+  if (keys.length !== want.length || keys.some((k, i) => k !== want[i])) return { ok: false, reason: 'keys differ from the contract' };
+  if (keys.includes('title') && (typeof o.title !== 'string' || !o.title.trim() || Array.from(o.title).length > TITLE_MAX || CONTROL.test(o.title))) return { ok: false, reason: 'bad title' };
   if (!EVENTS.includes(o.event)) return { ok: false, reason: 'bad event' };
   if (typeof o.card_id !== 'string' || !CARD_ID.test(o.card_id)) return { ok: false, reason: 'bad card_id' };
   if (typeof o.question !== 'string' || !o.question.trim() || o.question.length > QUESTION_MAX || CONTROL.test(o.question)) return { ok: false, reason: 'bad question' };
@@ -85,4 +93,4 @@ function notify(event, fields) {
   }
 }
 
-module.exports = { PREFIX, QUESTION_MAX, STATES, encode, parse, parseFrom, notify };
+module.exports = { PREFIX, QUESTION_MAX, TITLE_MAX, CONTROL, STATES, encode, parse, parseFrom, notify };

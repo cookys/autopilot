@@ -57,7 +57,10 @@ function questionFrom(input) {
       : { label: o && typeof o.label === 'string' ? o.label : '', description: o && typeof o.description === 'string' ? o.description : '' }))
       .map((o) => ({ label: o.label.trim(), description: o.description.trim() })).filter((o) => o.label)
     : [];
+  const header = first && typeof first.header === 'string' ? first.header.trim() : '';
   return {
+    // an AskUserQuestion header is the card's short title when it fits (<= 20 code points); a longer one is NOT cut, cardTitle derives one from the question
+    ...(header && Array.from(header).length <= 20 && !require('../scripts/lib/card-notice.js').CONTROL.test(header) ? { title: header } : {}),
     question: qs.length > 1 ? `${text}（共 ${qs.length} 題）` : text,
     options: labels.length >= 2 ? labels : null,
   };
@@ -80,7 +83,7 @@ function onPreToolUse(p) {
   let turnTracked = false;
   try { const tf = L.sessionFile(p, 'turn'); turnTracked = !!tf && require('fs').existsSync(tf); } catch { /* unknown: not tracked */ }
   const r = openDecision({
-    cwd: p.cwd, root: markerRoot(p.session_id), session, question: q.question, options: q.options,
+    cwd: p.cwd, root: markerRoot(p.session_id), session, question: q.question, options: q.options, title: q.title,
     source: SOURCE_TEXT, origin: SOURCE, turn_tracked: turnTracked,
   });
   if (r.status !== 'ok') { L.failOpen('ask-decision', new Error(r.message)); return; }

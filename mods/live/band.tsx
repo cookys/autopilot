@@ -14,6 +14,7 @@ import { fixedWindow, thumbOf } from './scrollmath'
 import type { ScrollModel } from './scrollmath'
 import type { ForgeSegment } from './ui'
 import { barRule, barStrip, decideBandPlan } from './tabs'
+import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
 import type { BarStrip, BarTabId } from './tabs'
@@ -96,14 +97,14 @@ export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot 
 
 // ---- layout E1: the band row is the indicator on the left and the tabs on the right; an open tab draws its content under a rule ----
 
-export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; onTab: (id: BarTabId) => void }
+export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; onTab: (id: BarTabId | ConsoleTab) => void }
 
 // the row, and the column its tabs start in (the rule under it is built from that)
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null): { node: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null): { node: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
   const fb = forge === null ? null : forgeBar(forge)
-  const strip = barStrip(snap, t, active, fb === null ? null : GLYPHS.structure.speed, usage)
+  const strip = barStrip(snap, t, active, fb === null ? null : GLYPHS.structure.speed, usage, con)
   const forgeW = fb === null ? 0 : fb.width
   // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab
   const more = moreTo !== null
@@ -127,7 +128,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
 }
 
 // the rule under the bar
-export function BarRule(el: { Box: El; Text: El }, strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | null) {
+export function BarRule(el: { Box: El; Text: El }, strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | ConsoleTab | null) {
   const { Box, Text } = el
   return <Box>{barRule(strip, columns, tabsAt, active).map((s, i) => <Text key={'r' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)}</Box>
 }

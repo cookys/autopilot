@@ -7,6 +7,7 @@
  *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
+ *                                       [--title <short card title, <= 20 characters>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
  *   node scripts/open-decision.js open ... [--executor <address>] [--asker <address>]  (who carries out the answer / who asked: stored on the card)
  *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn; the card is KEPT, status closed)
@@ -105,7 +106,7 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
   process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
-    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id>\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       (open also takes --executor <address> --asker <address>)\n');
+    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id>\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       (open also takes --executor <address> --asker <address> --title <short title, <= 20 characters>)\n');
   return 2;
 }
 
@@ -301,6 +302,7 @@ function showText(entries, { all = false } = {}) {
   for (const st of ['awaiting_operator_action', 'pending_dispatch', ...(all ? ['closed'] : [])]) if (n(st)) out.push(`${st}: ${n(st)}`);
   entries.forEach((e, i) => {
     out.push('', `[${i + 1}] ${e.id}  ${e.question}`);
+    if (e.title) out.push(`    title: ${e.title}`);
     if (e.status && e.status !== 'open') out.push(`    status: ${e.status}`);
     if (e.awaiting_operator) out.push(`    awaiting_operator: ${e.awaiting_operator}`);
     if (e.answer) out.push(`    answer: ${e.answer}`);
@@ -326,6 +328,7 @@ function showText(entries, { all = false } = {}) {
 // --target is lifted out before parse(): the flag set of parse() is pinned byte-for-byte by the frozen ask stub of the
 // d0gate-v2 evaluation (hooks/tests/skill-onoff-d0gate-v2.test.sh), which must not change.
 const KINDS = ['decide', 'go'];
+const TITLE_MAX = 20; // code points (Array.from), same unit as cardTitle
 // --kind is lifted out the same way (same frozen-stub reason): { rest, kind } | { error }.
 function takeKind(argv) {
   const i = argv.indexOf('--kind');
@@ -344,8 +347,8 @@ function takeFreeText(argv) {
 }
 
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
-// -> { rest, extra: { answer, executor, asker, 'awaiting-operator', from, dispatched, all, apply } } | { error }
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'dispatched'];
+// -> { rest, extra: { answer, executor, asker, 'awaiting-operator', from, dispatched, title, all, apply } } | { error }
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'dispatched', 'title'];
 const EXTRA_SWITCH = ['all', 'apply'];
 function takeExtra(argv) {
   const rest = [];
@@ -548,6 +551,7 @@ function main(argv) {
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   const bad = ['answer', 'awaiting-operator', 'from', 'all', 'apply', 'dispatched'].find((n) => ex[n] !== undefined);
   if (bad) return usage(`--${bad} is not an open argument`);
+  if (ex.title !== undefined && (!ex.title.trim() || Array.from(ex.title).length > TITLE_MAX || require('./lib/card-notice.js').CONTROL.test(ex.title))) { process.stderr.write(`open-decision: refused: --title must be non-empty, free of control characters, and at most ${TITLE_MAX} characters (got ${Array.from(ex.title).length}); it is never cut for you; nothing written\n`); return 2; }
   for (const k of ['executor', 'asker']) if (ex[k] !== undefined && !require('./lib/fleet-decision.js').isAddress(ex[k])) return usage(`--${k} "${ex[k]}" is not an address (namespace/courier/member)`);
   const options = args.option.length ? parseOptions(args.option) : null;
   if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');
@@ -561,7 +565,7 @@ function main(argv) {
   if (gate.warning) process.stderr.write(`open-decision: warning: ${gate.warning}\n`);
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
-    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker,
+    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker, title: ex.title,
   });
   if (r.status === 'ok' && !root) {
     // The card is in the unbound scope. Every panel of the project lists it (src/status/decision-input.js reads all scope files), so this is
@@ -569,7 +573,7 @@ function main(argv) {
     process.stderr.write(`open-decision: note: card ${r.id} written to the UNBOUND scope (${sess.why || 'no root'}); scope_key=${r.scope_key} file=${r.file}; every panel of this project lists unbound cards too, and --root-run-id <id> would bind it to one session root\n`);
   }
   if (r.status === 'ok') {
-    notifyPm('open', { card_id: r.id, question: args.question, state: 'open' });
+    notifyPm('open', { card_id: r.id, question: args.question, state: 'open', ...(ex.title !== undefined ? { title: ex.title } : {}) });
     process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`);
     // A card written is not a card seen: make sure a watcher publishes it. The card stays written and its id printed either way.
     const vis = require('../src/status/card-visibility').ensureCardVisible({ cwd: path.resolve(args.cwd || process.cwd()), sessionId: sess.session || '', env: process.env });
@@ -587,7 +591,7 @@ function main(argv) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker, title }) {
   const sf = scopeFile(cwd, root);
   if (!sf) return { status: 'error', message: 'not inside a git repository' };
   const entry = {
@@ -601,6 +605,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
   };
   if (text(executor)) entry.executor = executor.trim(); // who executes the answer / who asked: close --answer puts them in the dispatch JSON (BL cardtrail)
   if (text(asker)) entry.asker = asker.trim();
+  if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
   if (origin) entry.origin = origin;
   if (turn_tracked === true) entry.turn_tracked = true; // the asker's turn file existed at open time (hooks/ask-decision.js): only then is its absence later evidence the session ended

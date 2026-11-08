@@ -52,7 +52,7 @@ export type LiveGateRow = {
 
 // one open owner question (autopilot.decision/2 entry, as the job model carries it): the full context the owner needs to answer without scrolling back
 export type LiveDecision = {
-  id: string | null; question: string; background: string | null; options: { label: string; description: string }[]
+  id: string | null; title: string | null; question: string; background: string | null; options: { label: string; description: string }[]
   recommendation: string | null; why: string | null; blocks: string | null; not_authorized: string | null; source: string | null; opened_at: string | null
   stale: boolean; age_s: number | null
   origin: string | null // `ask_user_question`: hooks/ask-decision.js opened it, the asker's own dialog answers it (the pane never does)
@@ -984,6 +984,7 @@ export function readJobModel(text: string | null): JobModel | null {
   const optText = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
   const decisions: LiveDecision[] = (Array.isArray(m.decisions) ? m.decisions : []).filter(isObject).filter(d => typeof d.question === 'string' && d.question !== '').map(d => ({
     id: optText(d.id),
+    title: optText(d.title),
     question: d.question as string,
     background: optText(d.background),
     options: (Array.isArray(d.options) ? d.options : []).filter(isObject).map(o => ({

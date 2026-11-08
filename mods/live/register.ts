@@ -41,11 +41,16 @@ import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
+import { cardTitleOf } from './cardtitle'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
 import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
 import type { ClaimCard, UndoDeps } from './decideundo'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
+import { findConsoleMode } from './console'
+import type { ConsoleSnapshot } from './console'
+import { consoleSlotTab, nextConsoleTab } from './consoletabs'
+import type { ConsoleNav, ConsoleTab } from './consoletabs'
 
 import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
@@ -54,12 +59,13 @@ import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
-import type { BarTabId } from './tabs'
+import type { BarTabId, ScrollView } from './tabs'
 import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane } from './pane'
+import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
@@ -161,6 +167,7 @@ export function liveTick($: EngineInterface): Promise<void> {
 }
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
+  await consoleTick($).catch(() => undefined) // the console mode and its snapshot (below); the tick is the only place either is read
   // fetch while someone looks: the Fleet tab was drawn in the last FLEET_SHOWN_MS, or forge-stats' band (which reads the summary) is drawn in this session
   const forge = await forgeBand($, nowMs)
   forgeSummaryRow = forge.summaryRow
@@ -216,6 +223,61 @@ async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
 }
 let decideCursor = 0 // the card the O4 shell's main window shows (an index into the band's batch, bandBatch: the pending cards and the ones closed elsewhere; clamped at every draw)
 let decideLastId: string | null = null // the card answered last from the shell (the progress row names it)
+// ---- the operator-console mode (plan §3.1; consoletabs.ts): on only where the session's repo has .claude/console.json = {"schema":"autopilot.console/1","mode":"program"} (findConsoleMode). Off, every line
+// below that reads these is skipped and the band and the pane are what they were. ONE navigation state (consoleTab) for the band's tabs and the pane's: pressing either sets it, both draw it.
+// The snapshot comes from consoleSource (a top-level function declaration: the mod loader follows `$` only into declared functions, so it cannot be a swappable variable); until the real `fleet console --json` runner lands (C2) it answers null = no source, and nothing is spawned. ----
+let consoleOn = false
+let consoleTab: ConsoleTab = 'command'
+let consoleSnap: ConsoleSnapshot | null = null
+let consoleCwd: string | null = null // the cwd the mode was last read for; a different cwd (a new session in another repo) reads it again at the next tick
+let consoleReadMs = -Infinity
+const CONSOLE_MODE_EVERY_MS = 10_000 // the config file is read again at most this often
+async function consoleSource(_$: EngineInterface): Promise<ConsoleSnapshot | null> { return null }
+async function consoleTick($: EngineInterface): Promise<void> {
+  const nowMs = await $.clock.now()
+  const cwd = await $.session.cwd()
+  let changed = false
+  if (cwd !== consoleCwd || nowMs - consoleReadMs >= CONSOLE_MODE_EVERY_MS) {
+    const on = await findConsoleMode(cwd, p => readText($, p))
+    consoleCwd = cwd
+    consoleReadMs = nowMs
+    changed = on !== consoleOn
+    consoleOn = on
+  }
+  const snap = consoleOn ? await consoleSource($) : null
+  if (snap !== consoleSnap) { consoleSnap = snap; changed = true }
+  if (changed) void $.ui.invalidate('ui.render')
+}
+const consoleNav = (): ConsoleNav => ({ snap: consoleSnap, tab: consoleTab })
+// the console pane (pane.tsx consolePane): the same navigation state as the band. The 指揮 page answers cards through the same decide wiring as the 待決 tab (decideState, decideBatch,
+// decidePress); a `fill:` press (a waiting_step card's report button) only puts the report line in the prompt box with `$.prompt.fill`, it never submits.
+const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0] & { props: { bodyColumns: number | null; scroll?: ScrollView | null } }) => {
+  decideCols = paneWidth(e.props.bodyColumns)
+  decideInputs = inputsFor(e.surface)
+  await decideRepair($, await read($, DECIDE))
+  decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }
+  const now = await $.clock.now()
+  return Pane($.ui.resolve(e), snapshot, 'now', () => {}, tr, e.props.bodyColumns, () => {}, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, null, null, null, null, {
+    nav: consoleNav(),
+    onTab: (tab: ConsoleTab) => { consoleTab = tab; $.ui.invalidate('ui.render'); void ringToNext($) },
+    onNext: () => { consoleTab = nextConsoleTab(consoleTab); $.ui.invalidate('ui.render') },
+    live: snapshot,
+    now,
+    scroll: e.props.scroll ?? null,
+    win: decideScroll,
+    folded,
+    onToggle: (id: string) => { if (!folded.delete(id)) folded.add(id); $.ui.invalidate('ui.render') },
+    decide: {
+      state: decideState, batch: decideBatch, now, inputs: decideInputs,
+      onPress: (id: string) => {
+        if (id.startsWith(FILL_PRESS)) void $.prompt.fill({ text: tr('console.command.fill', { id: id.slice(FILL_PRESS.length) }), mode: 'replace' }).then(out => { if (!out.isFilled) $.ui.toast(tr('console.command.fill_refused')) })
+        else void decidePress($, id)
+      },
+      onNote: (key: string, value: string) => { void decideNote($, key, value) },
+      onKeep: (key: string, value: string) => { void decideKeep($, key, value) },
+    },
+  })
+}
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript
@@ -1117,6 +1179,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
     // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.
     const info = async () => {
+      if (consoleOn) return consoleInfo()
       const seq = ++pressSeq
       const prev = decided
       const nextOf = nextTab
@@ -1155,10 +1218,22 @@ export function registerLive(on: Parameters<Register>[0]): void {
         if (seq === pressSeq) decided = null
       }
     }
-    const slot = (id: SlotId) => openOn(slotTab(id), slotUnfolds(id))
-    // a tab of the band row: the open tab is a memory state; pressing it again closes it
-    const onTab = (id: BarTabId) => {
-      barTab = barTab === id ? null : id
+    // the console mode's two presses: the same navigation state (consoleTab) for the ⓘ, the slots, the band's tabs and the pane's tabs; the pane opens on it
+    const consoleOpen = async (tab: ConsoleTab) => {
+      consoleTab = tab
+      $.ui.invalidate('ui.render')
+      await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
+    }
+    const consoleInfo = async () => {
+      let isOpen = false
+      try { isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ }
+      await consoleOpen(isOpen ? nextConsoleTab(consoleTab) : 'command')
+    }
+    const slot = (id: SlotId) => (consoleOn ? consoleOpen(consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id)))
+    // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a console tab only sets the shared tab (the forge tab keeps this behaviour)
+    const onTab = (id: BarTabId | ConsoleTab) => {
+      if (consoleOn && id !== 'forge') { void consoleOpen(id as ConsoleTab); return }
+      barTab = barTab === id ? null : (id as BarTabId)
       $.ui.invalidate('ui.render')
     }
     for (const m of Object.values(bandScroll)) m.framed = false // a draw that does not frame its window hands the scroll to the engine
@@ -1179,8 +1254,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const steps = validSteps(await read($, STEPS))
     // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest (at most FORGE_LABEL_MAX)
     const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
-    const usageOn = usageTabFits(columns, t, GLYPHS.structure.speed)
-    const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn).width - 1 - 2)
+    const con = consoleOn ? { ...consoleNav(), cols: columns } : null // the console mode's band strip (consoletabs.ts), null = the tabs the band always had
+    const usageOn = con !== null || usageTabFits(columns, t, GLYPHS.structure.speed) // no 用量 tab in the console mode, so it is never hidden behind the `›`
+    const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn, con).width - 1 - 2)
     // forgeMore: something was timed but the band has no room for the label (its smallest form) and its tab; the strip then ends in a dim `›` Button (key 'more') that opens the forge view, so the keyboard still reaches it
     let forgeMore = false
     if (rows >= 1) {
@@ -1196,7 +1272,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const hidden: BarTabId[] = [...(usageOn ? [] : ['usage' as const]), ...(forgeMore ? ['forge' as const] : [])]
     const at = active === null ? -1 : hidden.indexOf(active)
     const moreTo: BarTabId | null = hidden.length === 0 ? null : at < 0 ? hidden[0] : (hidden[at + 1] ?? active)
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con)
     const open = (tab: PaneTab) => { void openOn(tab) }
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
@@ -1222,8 +1298,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const live = entries.flatMap(e => (e.d === null ? [] : [e.d]))
       const sentOf = (d: LiveDecision): boolean => d.id !== null && st !== null && st.sent[d.id] !== undefined && !decideFixing(d, st)
       const cards: Card[] = st === null ? [] : entries.map(({ key, d }) => d === null
-        ? { id: key, name: bandBatch.q[key], answer: bandBatch.ans[key] ?? null, sent: false, grey: true, gone: true }
-        : { id: key, name: d.question, answer: draftOf(d, st), sent: sentOf(d), grey: sentOf(d) })
+        ? { id: key, name: cardTitleOf({ title: bandBatch.card[key]?.title ?? null, question: bandBatch.q[key] }), answer: bandBatch.ans[key] ?? null, sent: false, grey: true, gone: true }
+        : { id: key, name: cardTitleOf(d), answer: draftOf(d, st), sent: sentOf(d), grey: sentOf(d) })
       decideCursor = cards.length === 0 ? 0 : Math.max(0, Math.min(cards.length - 1, decideCursor))
       const cur = entries[decideCursor]?.d ?? undefined
       const curKey = entries[decideCursor]?.key
@@ -1358,7 +1434,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
     if (active !== 'forge' && rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
     // No tab open, a second row to spare and a forge-stats that draws the summary row (its heartbeat says so): that row goes to the mod below (PM G33a, TUI guideline
     // §1.1 rule 3). A mod that passes it on (the engine's own element comes back) leaves the band one row high, never a blank row.
-    if (active === null && rows >= 2 && forgeSummaryRow) {
+    // The console mode never hands it over: its second row is not forge-stats' summary (that line is the fleet counts, which the tab badges already say; plan §3.1), so `next(e)` is not called here.
+    if (active === null && rows >= 2 && forgeSummaryRow && !consoleOn) {
       const answer = await lower(1, columns)
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') return stackBand(el, bar.node, [answer])
     }
@@ -1372,7 +1449,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($))))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => consoleOn ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($))))
 
   // The 待決 tab draws its own scrolling window (scroll.tsx), so the person's scroll keys there move the mod's offset and never reach the engine; every other tab keeps the engine's own
   // scrolling (`next(e)`).

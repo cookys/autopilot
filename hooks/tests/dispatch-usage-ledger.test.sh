@@ -41,7 +41,11 @@ cat > "$BINDIR/claude" <<'EOS'
 cat >/dev/null
 printf '%s\n' "$@" > "${CLAUDE_STUB_ARGV:?}"
 echo edited > ledger-edit.txt
-printf '%s' '{"type":"result","is_error":false,"result":"ok","usage":{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":3}}'
+if [ -n "${STUB_NOCACHE:-}" ]; then
+  printf '%s' '{"type":"result","is_error":false,"result":"ok","usage":{"input_tokens":120,"output_tokens":45}}'
+else
+  printf '%s' '{"type":"result","is_error":false,"result":"ok","usage":{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":3}}'
+fi
 EOS
 chmod +x "$BINDIR/claude"
 HARGV="$TEST_TMP/hetero-claude-argv.txt"
@@ -75,6 +79,13 @@ assert_contains "$CHILD_SID" "-" "hetero: the stub claude was given --session-id
 eq "$CHILD_SID" "$(row_get 1 r.provider_session_id)" "hetero: provider_session_id is the child Claude session id passed as --session-id"
 assert_not_contains "$(rows)" "FAKE-ledger-token-must-not-leak" "hetero: no token in the ledger"
 assert_not_contains "$(rows)" "agent_log" "hetero: result-only fields are not copied"
+
+# envelope without the cache keys: the ledger says null (unknown), the result JSON keeps its 0 (unchanged contract)
+reset_rows
+run_hetero env STUB_NOCACHE=1
+eq "0" "$RC" "hetero nocache: exit 0"
+assert_eq '{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":null,"cache_creation_input_tokens":null,"reasoning_tokens":null}' "$(row_get 1 r.usage)" "hetero nocache: missing cache keys are null in the ledger, never 0"
+assert_contains "$OUT" '"cache_read_input_tokens":0' "hetero nocache: the result JSON usage is unchanged (0-filled)"
 
 # negative control: the same run with the switch off writes nothing and still exits 0
 reset_rows

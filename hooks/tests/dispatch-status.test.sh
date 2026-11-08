@@ -370,4 +370,15 @@ assert_contains "$OUT" '"status": "committed"' "manifest-off: dispatch unaffecte
 assert_eq "$(ls "$RUNS_DIR2" 2>/dev/null | wc -l | tr -d ' ')" "0" "manifest-off: no manifest written"
 git -C "$SBX" branch -D t/obs-off >/dev/null 2>&1
 
+# unknown is null, never 0: opencode / pi-rpc steps that omit a key leave that key null in the usage line
+NZ="$TEST_TMP/nullzero"; mkdir -p "$NZ"
+printf '%s\n' '{"type":"step_finish","part":{"tokens":{"total":9,"input":5,"output":4}}}' > "$NZ/oc.jsonl"
+OUT="$(node "$STATUS_JS" --log "$NZ/oc.jsonl" --usage-only --format jsonl-opencode)"
+assert_contains "$OUT" '"cache_read_tokens":null' "usage-only opencode: absent cache.read is null, not 0"
+assert_contains "$OUT" '"input_tokens":5' "usage-only opencode: reported input kept"
+printf '%s\n' '{"type":"message_end","message":{"usage":{"input":5,"output":4}}}' > "$NZ/pi.jsonl"
+OUT="$(node "$STATUS_JS" --log "$NZ/pi.jsonl" --usage-only --format pi-rpc)"
+assert_contains "$OUT" '"cache_read_tokens":null' "usage-only pi-rpc: absent cacheRead is null, not 0"
+assert_contains "$OUT" '"total_tokens":9' "usage-only pi-rpc: total from reported input+output"
+
 finalize_test

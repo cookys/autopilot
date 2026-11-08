@@ -177,3 +177,15 @@ test('CLI: appends one row, exit 0 even when it cannot write, off switch writes 
   assert.strictEqual(missing.status, 0);
   assert.match(missing.stderr, /dispatch-usage: warn/);
 });
+
+test('usage_json (raw, missing keys null) wins over the result usage a rail zero-filled', () => {
+  const zeroFilled = { input_tokens: 120, output_tokens: 45, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  const raw = { input_tokens: 120, output_tokens: 45, cache_read_input_tokens: null, cache_creation_input_tokens: null };
+  const row = rowOf({ runner: 'cc-shim', model: 'm', status: 'ok', run_id: 'r1', usage: zeroFilled }, { usage_json: raw });
+  assert.strictEqual(row.usage.cache_read_input_tokens, null);
+  assert.strictEqual(row.usage.cache_creation_input_tokens, null);
+  assert.strictEqual(row.usage.input_tokens, 120);
+  // without usage_json the result usage is used as before
+  const plain = rowOf({ runner: 'cc-shim', model: 'm', status: 'ok', run_id: 'r1', usage: zeroFilled }, {});
+  assert.strictEqual(plain.usage.cache_read_input_tokens, 0);
+});

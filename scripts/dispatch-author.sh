@@ -524,7 +524,7 @@ emit_result() {
   # refused before any model call (precondition_failed) has no run and writes no row.
   if [ "$status" != "precondition_failed" ] && [ -n "${AUTHOR_STARTED_EPOCH:-}" ]; then
     local _au_role="${AUTOPILOT_DISPATCH_ROLE:-author}"
-    printf '%s' "$_au_json" | node "$(cd "$(dirname "$0")" && pwd)/lib/dispatch-usage.js" append --from-result - --role "$_au_role" \
+    printf '%s' "$_au_json" | node "$_AUTHOR_SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "$_au_role" \
       --run-id "${AUTHOR_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
       --started-at "${AUTHOR_STARTED_EPOCH:-}" --endpoint "${ENDPOINT:-}" \
       --provider-session-id "${CHILD_SESSION_ID:-}" || true

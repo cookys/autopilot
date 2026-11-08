@@ -236,6 +236,15 @@ const URL_RE = /https?:\/\/[^\s"'<>]+/g;
 function secretEnvValues() {
   return Object.entries(process.env).filter(([k, v]) => v && (/^AUTOPILOT_ENDPOINT_.+_TOKEN$/.test(k) || k === 'ANTHROPIC_AUTH_TOKEN' || k === 'MINIMAX_API_KEY')).map(([, v]) => v);
 }
+// A URL keeps its scheme and host as written; the path, query and fragment get the sk- and long-string rules (no dot, so file names survive),
+// and the value of a key/api_key/apikey/token/access_token/auth query parameter goes whatever its length.
+function redactUrl(u) {
+  const host = /^https?:\/\/[^/?#]*/.exec(u)[0];
+  return host + u.slice(host.length)
+    .replace(/([?&](?:key|api_key|apikey|token|access_token|auth)=)[^&#]*/gi, '$1[redacted]')
+    .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(/[A-Za-z0-9+_=-]{32,}/g, '[redacted]');
+}
 function redactStderr(t) {
   let s = String(t);
   for (const v of secretEnvValues()) s = s.split(v).join('[redacted]');
@@ -247,7 +256,7 @@ function redactStderr(t) {
     .replace(/(Bearer\s+)\S+/gi, '$1[redacted]')
     .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
     .replace(/[A-Za-z0-9+_=.-]{32,}/g, '[redacted]');
-  return s.replace(/\u0000URL(\d+)\u0000/g, (_, i) => urls[Number(i)]);
+  return s.replace(/\u0000URL(\d+)\u0000/g, (_, i) => redactUrl(urls[Number(i)]));
 }
 
 const CONTEXT_CAP = 300 * 1024;

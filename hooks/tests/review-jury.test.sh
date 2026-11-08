@@ -525,6 +525,28 @@ case_redact_url() { # a URL with a long dotted host survives the long-string rul
   grep -q 'https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages' "$d/out/seats/glm.stderr.log" && echo ok
 }
 check case_redact_url redacturl "s/^const URL_RE = \/https/const URL_RE = \/zzzhttps/"
+check case_redact_url redacturlhost "s/\[^\/?#\]\*\/\.exec(u)/{0}\/.exec(u)/"
+cat > "$TEST_TMP/urlkey-dispatch.sh" <<'FAKE'
+#!/bin/sh
+echo "GET https://h.example.invalid/v1?key=0123456789abcdef0123456789abcdef done" >&2
+echo "GET https://h.example.invalid/v1?api_key=sk-abc&x=1 done" >&2
+echo "GET https://h.example.invalid/v1?token=short1 done" >&2
+printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
+exit 1
+FAKE
+chmod +x "$TEST_TMP/urlkey-dispatch.sh"
+urlkey_run() { local d="$TEST_TMP/$2"; GLM_TOKEN=envtok7Qz run_glm "$1" "$d" "$BUDGET_JSON" --dispatch-bin "$TEST_TMP/urlkey-dispatch.sh"; }
+case_redact_url_query_hex() { # a 32-hex query value is masked, the host stays
+  local d="$TEST_TMP/$2"; urlkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q '0123456789abcdef' "$lg" && grep -q 'https://h.example.invalid/v1?key=\[redacted\]' "$lg" && echo ok
+}
+check case_redact_url_query_hex redacturlhex "s/=> redactUrl(urls\[Number(i)\])/=> urls[Number(i)]/"
+case_redact_url_query_short() { # a short api_key value is masked whatever its length
+  local d="$TEST_TMP/$2"; urlkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
+  ! grep -q 'sk-abc' "$lg" && ! grep -q 'short1' "$lg" && grep -q 'api_key=\[redacted\]&x=1' "$lg" && echo ok
+}
+check case_redact_url_query_short redacturlshort "s/(?:key|api_key|apikey|token|access_token|auth)=/(?:zzkey)=/"
+check case_redact_url_query_short redacturlshortall "s/=> redactUrl(urls\[Number(i)\])/=> urls[Number(i)]/"
 case_redact_env() { # a token held in the process env is removed by its literal value, whatever it looks like
   local d="$TEST_TMP/$2"; glmkey_run "$1" "$2"; local lg="$d/out/seats/glm.stderr.log"
   ! grep -q 'envtok7Qz' "$lg" && grep -q 'leak: \[redacted\] end' "$lg" && echo ok

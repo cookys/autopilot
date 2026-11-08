@@ -1656,7 +1656,7 @@ NODE
   esac
 }
 
-die_precondition() {
+current_runner_name() {
   # agy is the DEFAULT rail — it has no IS_AGY flag, it is the else-case. So "no IS_*
   # set" is ambiguous between "agy was selected" and "resolution has not happened yet".
   # RUNNER_RESOLVED disambiguates: only trust the else-case "agy" once set_runner_flags
@@ -1677,6 +1677,12 @@ die_precondition() {
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
   fi
+  printf '%s' "$runner"
+}
+
+die_precondition() {
+  local runner
+  runner="$(current_runner_name)"
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
@@ -1696,8 +1702,9 @@ die_precondition() {
 die_probe_unavailable() {
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
-  printf '{ "status": "engine_unavailable", "runner": "cc-shim", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "probe": %s }\n' \
-    "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
+  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "probe": %s }\n' \
+    "$(current_runner_name)" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$([ "${CONTAINED:-0}" -eq 1 ] && echo true || echo false)" \
+    "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$PROBE_CLASS" "$(_flat_json_escape "$ENDPOINT")" "$(_flat_json_escape "$PROBE_REASON")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$PROBE_JSON"
   exit 1

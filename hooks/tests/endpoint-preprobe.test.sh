@@ -37,7 +37,6 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ object: 'list', data: [{ id }] }));
 });
 server.listen(0, '127.0.0.1', () => fs.writeFileSync(portFile, String(server.address().port)));
-setTimeout(() => process.exit(0), 170000).unref();
 NODE
 MODE_FILE="$TEST_TMP/srv.mode"; PORT_FILE="$TEST_TMP/srv.port"; HITS_FILE="$TEST_TMP/srv.hits"
 printf 'ok' > "$MODE_FILE"; : > "$HITS_FILE"
@@ -101,7 +100,13 @@ const [root, firstFile, policy, capDir] = process.argv.slice(2);
 const prompt = path.join(capDir, 'prompt.txt');
 fs.writeFileSync(prompt, 'implementer prompt');
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
-const first = JSON.parse(fs.readFileSync(firstFile, 'utf8'));
+// The first dispatch is dispatch-hetero's REAL stdout through the REAL runner parse (no double in between).
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer.js'));
+let first = null;
+let firstParseError = null;
+try { first = parseImplementationOutput(fs.readFileSync(firstFile, 'utf8')); } catch (e) { firstParseError = e; }
+console.log(`parse=${firstParseError ? 'error:' + firstParseError.message : 'ok'}`);
+console.log(`parsed_status=${first ? first.status : 'null'}`);
 const calls = [];
 const committed = {
   status: 'committed', runner: 'codex', model: 'gpt-5.6-sol', branch: 'impl-branch',
@@ -113,6 +118,9 @@ const engine = new AutopilotEngine({
   implementationDispatcher(args) {
     calls.push(args);
     if (calls.length > 5) throw new Error('runaway retreat');
+    if (calls.length === 1 && firstParseError) {
+      return { error: null, status: 1, signal: null, stdout: '', stderr: '', parseError: firstParseError, result: null };
+    }
     const result = calls.length === 1 ? first : committed;
     return { error: null, status: result.status === 'committed' ? 0 : 1, signal: null, stdout: '', stderr: '', parseError: null, result };
   },
@@ -248,6 +256,8 @@ assert_eq "engine_unavailable" "$R_A_STATUS" "(a) closed port: dispatch-hetero a
 assert_contains "$R_A_ERR" "engine unavailable (endpoint_unreachable)" "(a) closed port: class is endpoint_unreachable"
 assert_eq "unreachable" "$R_A_PROBE" "(a) the result carries the probe"
 assert_eq "no" "$R_A_WORKER" "(a) no worker was started"
+assert_contains "$R_A_ENG" "parse=ok" "(a) the real runner parse accepts the probe-failure result"
+assert_contains "$R_A_ENG" "parsed_status=engine_unavailable" "(a) the parsed result is engine_unavailable"
 assert_contains "$R_A_ENG" "calls=2" "(a) the engine retreats once"
 assert_contains "$R_A_ENG" "status=committed" "(a) the cloud double's result is the run result"
 assert_contains "$R_A_ENG" "second_runner=codex second_endpoint=false" "(a) the retreat goes to the cloud rung without --endpoint"
@@ -351,5 +361,16 @@ sed_mutant "$REPO_ROOT/scripts/engine-capability-state.js" "$T/scripts/engine-ca
   's/^        served_by: str(input.served_by) ? input.served_by : null,$/        served_by: null,/'
 N7_ENG="$(engine_run "$T" "$TEST_TMP/first-good-dead.json" cloud-fallback mutN7)"
 case "$N7_ENG" in *"served_by=gpt-5.6-sol/high@codex"*) fail "mutant N7 (writer drops served_by) must be visible in the log row" ;; esac
+
+# N8: the probe-failure result carries an empty containment -> the real runner parse rejects it
+T="$(mk_tree mutN8)"
+sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$T/scripts/dispatch-hetero.sh" \
+  's/"\$(_flat_json_escape "\$MODEL")" "\$CONTAINMENT" "\$(\[/"$(_flat_json_escape "$MODEL")" "" "$([/'
+use_endpoint "$DEAD_PORT"
+st="$(stub_claude)"; N8_J="$(hetero "$T/scripts" "$st" "feat/mutN8-dead")"
+printf '%s' "$N8_J" > "$TEST_TMP/first-mutN8-dead.json"
+N8_ENG="$(engine_run "$T" "$TEST_TMP/first-mutN8-dead.json" cloud-fallback mutN8)"
+case "$N8_ENG" in *"parse=ok"*) fail "mutant N8 (empty containment in the probe result) must be rejected by the real parse" ;; esac
+case "$N8_ENG" in *"calls=2"*) fail "mutant N8 must not retreat to the cloud (the parse error blocks)" ;; esac
 
 finalize_test

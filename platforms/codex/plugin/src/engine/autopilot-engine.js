@@ -4873,34 +4873,66 @@ class AutopilotEngine {
         const fromEndpoint = endpointFromImplementationArgs(input.extraImplementationArgs)
           || (typeof roster.implementer_endpoint === 'string' && roster.implementer_endpoint) || null;
         const toRung = `${rung.engine}/${rung.effort}@${rung.runner}`;
+        const rungFamily = modelFamilyOfEngine(rung.engine);
         const fallbackRoster = {
           ...roster,
           implementer_engine: rung.engine,
           implementer_effort: rung.effort,
           implementer_runner: rung.runner,
           implementer_endpoint: '',
+          implementer_family: rungFamily,
           implementer_ladder: [],
           cloud_fallback_attempted: true,
         };
         delete fallbackRoster.implementer_ladder_rung;
+        if (typeof roster.fallback_ladder_implementer_family === 'string') {
+          fallbackRoster.fallback_ladder_implementer_family = rungFamily;
+        }
+        if (typeof roster.cross_family_satisfied === 'boolean') {
+          fallbackRoster.cross_family_satisfied = terminalPanelCrossFamilySatisfied(
+            fallbackRoster,
+            Array.isArray(roster.qc_panel) ? roster.qc_panel : [],
+          );
+        }
+        // The held worktree of the dead first attempt still has `input.branch` checked out, so the
+        // retreat gets its own branch cut from the original base, and its own ledger identity
+        // (stage suffix, plus a run id bound to the original in the log row) outside campaigns.
+        const fallbackBranch = `${input.branch}-cloudfb`;
+        const fallbackStage = `${normalizeImplementationStage(input.implementationStage)}-cloudfb`;
+        const fallbackRunId = input.runId && input.ledger && !input.campaignContractFile
+          ? `${input.runId}-cloudfb` : input.runId;
         ledger.push(this.ledgerEntry('engine_unavailable_policy', 'cloud-fallback', this.now(), {
           policy: engineUnavailable.policy,
           error_class: engineUnavailable.error_class,
           dispatch_status: engineUnavailable.dispatch_status,
           to_rung: toRung,
+          branch: fallbackBranch,
+          stage: fallbackStage,
         }));
         const fallback = this.implementTask({
           ...input,
+          branch: fallbackBranch,
+          base: input.base,
+          runId: fallbackRunId,
+          implementationStage: fallbackStage,
+          reuseWorktree: null,
+          resumeSessionId: null,
+          expectedWorktreeInstanceId: null,
           roster: fallbackRoster,
           extraImplementationArgs: stripEndpointImplementationArgs(input.extraImplementationArgs),
         });
+        const fallbackImpl = fallback && fallback.implementation ? fallback.implementation : null;
+        const fallbackBranchUsed = (fallbackImpl && fallbackImpl.branch) || fallbackBranch;
+        const fallbackWorktree = fallbackImpl && fallbackImpl.worktree ? fallbackImpl.worktree : null;
         recordCloudFallback({
           ts: String(this.now()),
           run_id: input.runId || null,
+          fallback_run_id: fallbackRunId || null,
           from_runner: parsed && parsed.runner ? parsed.runner : implementationArgsRunner(implementationArgs),
           from_endpoint: fromEndpoint,
           error_class: engineUnavailable.error_class,
           to_rung: toRung,
+          branch: fallbackBranchUsed,
           outcome: fallback && fallback.status ? String(fallback.status) : 'unknown',
         });
         return {
@@ -4909,6 +4941,10 @@ class AutopilotEngine {
             from_endpoint: fromEndpoint,
             error_class: engineUnavailable.error_class,
             to_rung: toRung,
+            branch: fallbackBranchUsed,
+            worktree: fallbackWorktree,
+            run_id: fallbackRunId || null,
+            parent_run_id: input.runId || null,
             first_attempt: parsed,
           },
           ledger: [...ledger, ...(fallback.ledger || [])],
@@ -8649,7 +8685,7 @@ class AutopilotEngine {
             sealedContract = campaignControl.contract;
           }
         }
-        const currentBranch = candidateImplementationRound === 1
+        let currentBranch = candidateImplementationRound === 1
           || !hasCampaignDispatchAuthority(sealedContract)
           ? branch
           : buildRepairBranchName({
@@ -8854,6 +8890,7 @@ class AutopilotEngine {
           },
         });
         ledger.push(...implementation.ledger);
+        if (implementation.cloud_fallback && implementation.cloud_fallback.branch) currentBranch = implementation.cloud_fallback.branch;
         implementationChain.push(implementation);
         if (implementation.status === 'no_op'
             && implementation.dispatcher_called === false
@@ -11735,7 +11772,7 @@ class AutopilotEngine {
           ledger,
         });
       }
-      const currentBranch = round === 1
+      let currentBranch = round === 1
         ? branch
         : buildRepairBranchName({
           branch,
@@ -11817,6 +11854,7 @@ class AutopilotEngine {
         });
       }
       ledger.push(...implementation.ledger);
+      if (implementation.cloud_fallback && implementation.cloud_fallback.branch) currentBranch = implementation.cloud_fallback.branch;
       implementationChain.push(implementation);
       if (lifecycleObservation) lifecycleObservation.observeImplementationResult(implementation, round);
       if (implementation.status !== 'committed') {

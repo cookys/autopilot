@@ -1645,6 +1645,36 @@ if [[ "$CROSS_FAMILY_REQUIRED" == "true" && "$CROSS_FAMILY_SATISFIED" == "false"
   fi
 fi
 
+# cloud_fallback_rung family check: the rung becomes the implementer when the engine retreats, so it
+# gets the same decorrelation test as implementer_engine. Reviewer families = the reviewer seat plus
+# the qc_panel. Conflict when the rung's family is the reviewer seat's family, or when the known
+# reviewer families other than the rung's are fewer than required_review_families. A single rung has
+# no ladder to walk, so on_family_conflict (fallback or block) has nothing to substitute: either way
+# the conflict exits 3 (fail-closed) and the operator picks a rung from another family.
+if [[ -n "$CLOUD_FALLBACK_RUNG_JSON" ]]; then
+  _cf_family="$(family_of "$_cfe")"
+  _cf_others=""
+  _cf_other_count=0
+  for _m in "$REV_ENGINE" "${QC_PANEL[@]}"; do
+    _mf="$(family_of "$_m")"
+    [[ "$_mf" == "unknown" || "$_mf" == "$_cf_family" ]] && continue
+    if [[ " $_cf_others " != *" $_mf "* ]]; then
+      _cf_others="$_cf_others $_mf"
+      _cf_other_count=$((_cf_other_count + 1))
+    fi
+  done
+  _cf_conflict=""
+  if [[ "$_cf_family" != "unknown" && "$_cf_family" == "$REV_FAMILY" ]]; then
+    _cf_conflict="shares the reviewer seat family (${_cf_family})"
+  elif [[ "$_cf_other_count" -lt "$REQUIRED_REVIEW_FAMILIES" ]]; then
+    _cf_conflict="leaves ${_cf_other_count} reviewer famil(y/ies) other than ${_cf_family}, ${REQUIRED_REVIEW_FAMILIES} required"
+  fi
+  if [[ -n "$_cf_conflict" ]]; then
+    echo "resolve-review-loop: cloud_fallback_rung ${CLOUD_FALLBACK_RUNGS_RAW} ${_cf_conflict} (on_family_conflict: ${ON_FAMILY_CONFLICT}); pick a rung from another family" >&2
+    exit 3
+  fi
+fi
+
 # --enforce (opt-in hard gate; default emits data exit-0 like the resolve-* siblings).
 # The resolver normally REPORTS and the caller (depth-0 loop / pre-push) ENFORCES. With
 # --enforce, a caller can use the resolver itself AS the gate: exit 3 when the policy says

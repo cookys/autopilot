@@ -4378,10 +4378,28 @@ NODE
 _endpoint_error_class() {
   [ -n "${ENDPOINT:-}" ] || return 0
   case "${CLASSIFIED_ERROR:-}" in auth_failed|quota_exhausted) return 0 ;; esac
+  # Structured sources only (never the worker's own output): the cc-shim envelope's result text
+  # when it is an api_error result, and lines the claude CLI itself prints starting "API Error".
   local _txt=""
-  if [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
-    _txt="$(tr '[:upper:]' '[:lower:]' < "$LOG" 2>/dev/null | tail -c 20000)"
-  fi
+  _txt="$(node - "${LOG:-}" "${CCSHIM_ENVELOPE:-}" <<'NODE' 2>/dev/null | tr '[:upper:]' '[:lower:]'
+const fs = require('fs');
+const out = [];
+try {
+  const obj = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)
+      && obj.type === 'result' && obj.is_error === true && obj.terminal_reason === 'api_error') {
+    for (const k of ['result', 'error', 'message', 'error_message']) {
+      if (typeof obj[k] === 'string') out.push(obj[k]);
+    }
+  }
+} catch { /* no envelope */ }
+try {
+  const log = fs.readFileSync(process.argv[2], 'utf8').slice(-20000);
+  for (const line of log.split('\n')) if (/^API Error/.test(line)) out.push(line);
+} catch { /* no log */ }
+process.stdout.write(out.join('\n'));
+NODE
+)" || _txt=""
   case "${PROVIDER_ERROR_STATUS:-}" in
     429|503) printf 'endpoint_busy'; return 0 ;;
   esac
@@ -4389,9 +4407,6 @@ _endpoint_error_class() {
     printf 'endpoint_busy'; return 0
   fi
   if printf '%s' "$_txt" | grep -Eq 'econnrefused|connection refused|econnreset|connection reset|enotfound|getaddrinfo|name resolution|etimedout|timed out|read timeout|connect timeout|unable to connect|fetch failed|(api error|http|status)[: =(]{0,4}5[0-9][0-9]([^0-9]|$)'; then
-    printf 'endpoint_unreachable'; return 0
-  fi
-  if [ "${CLASSIFIED_ERROR:-}" = "network_failed" ]; then
     printf 'endpoint_unreachable'; return 0
   fi
   return 0

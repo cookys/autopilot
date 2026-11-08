@@ -2215,6 +2215,9 @@ function main() {
         schema_version: 1,
         ts: input.ts,
         run_id: input.run_id,
+        // The retreat runs under its own run id (bound here to run_id) on its own branch.
+        fallback_run_id: str(input.fallback_run_id) ? input.fallback_run_id : null,
+        branch: str(input.branch) ? input.branch : null,
         from_runner: input.from_runner,
         from_endpoint: input.from_endpoint,
         error_class: input.error_class,

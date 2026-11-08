@@ -285,4 +285,177 @@ sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-
 M_BOTH="$(engine_case "$T" both-unreach mutG-x)"
 case "$M_BOTH" in *calls=2*) fail "mutant G (unbounded retreat) must dispatch more than twice" ;; esac
 
+# --- 4. ledger identity and family fields (fake dispatcher) -----------------------------------------
+cat > "$TEST_TMP/ident-case.js" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const capDir = process.argv[3];
+const prompt = path.join(capDir, 'prompt.txt');
+fs.writeFileSync(prompt, 'implementer prompt');
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const calls = [];
+const base = '1111111111111111111111111111111111111111';
+const engine = new AutopilotEngine({
+  clock: () => 1782864000000,
+  implementationDispatcher(args) {
+    calls.push(args);
+    const first = calls.length === 1;
+    const result = first
+      ? { status: 'engine_unavailable', runner: 'cc-shim', model: 'GLM-5.3', commit: null, base,
+          branch: 'impl-branch', files_changed: 0, insertions: 0, deletions: 0, worktree: '/tmp/wt',
+          agent_log: '/tmp/l', error: 'engine unavailable (endpoint_unreachable): worker exited non-zero; worktree kept' }
+      : { status: 'committed', runner: 'codex', model: 'gpt-5.6-sol', branch: args[args.indexOf('--branch') + 1], base,
+          commit: '2222222222222222222222222222222222222222', files_changed: 1, insertions: 1, deletions: 0,
+          worktree: '/tmp/wt2', agent_log: '/tmp/l', error: null };
+    return { error: null, status: first ? 1 : 0, signal: null, stdout: '', stderr: '', parseError: null, result };
+  },
+});
+const out = engine.implementTask({
+  promptFile: prompt, branch: 'impl-branch', base, runId: 'run-id-1', implementationRound: 1,
+  ledger: path.join(capDir, 'ledger.jsonl'), extraImplementationArgs: ['--endpoint', 'gpu1'],
+  roster: {
+    implementer_engine: 'GLM-5.3', implementer_effort: 'high', implementer_runner: 'cc-shim',
+    implementer_endpoint: 'gpu1', implementer_family: 'zhipu', on_engine_unavailable: 'cloud-fallback',
+    cross_family_required: true, cross_family_satisfied: true,
+    qc_panel: [{ model: 'gpt-5.6-sol', family: 'openai' }],
+    cloud_fallback_rung: { engine: 'gpt-5.6-sol', effort: 'high', runner: 'codex' },
+  },
+});
+const arg = (a, f) => a[a.indexOf(f) + 1];
+const a1 = calls[0] || [];
+const a2 = calls[1] || [];
+console.log(`ids=${arg(a1, '--run-id')}|${arg(a1, '--stage')}>${arg(a2, '--run-id')}|${arg(a2, '--stage')}`);
+console.log(`branches=${arg(a1, '--branch')}>${arg(a2, '--branch')} bases=${arg(a1, '--base')}>${arg(a2, '--base')}`);
+console.log(`result_branch=${out.cloud_fallback && out.cloud_fallback.branch} parent=${out.cloud_fallback && out.cloud_fallback.parent_run_id}`);
+console.log(`family=${out.roster.implementer_family} cross_family_satisfied=${out.roster.cross_family_satisfied}`);
+const f = path.join(capDir, 'cloud-fallbacks.jsonl');
+const row = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8').trim().split('\n')[0]) : {};
+console.log(`row=${row.run_id}|${row.fallback_run_id}|${row.branch}`);
+NODE
+ident_case() { local cap="$TEST_TMP/icap-$2"; mkdir -p "$cap"; ENGINE_CAPABILITY_DIR="$cap" node "$TEST_TMP/ident-case.js" "$1" "$cap" 2>&1 < /dev/null; }
+I_GOOD="$(ident_case "$REPO_ROOT" good)"
+assert_contains "$I_GOOD" "ids=run-id-1|implement>run-id-1-cloudfb|implement-cloudfb" "fallback gets its own run id and stage suffix"
+assert_contains "$I_GOOD" "branches=impl-branch>impl-branch-cloudfb bases=1111111111111111111111111111111111111111>1111111111111111111111111111111111111111" "fallback branch is -cloudfb off the original base"
+assert_contains "$I_GOOD" "result_branch=impl-branch-cloudfb parent=run-id-1" "result carries the branch actually used and the parent run id"
+assert_contains "$I_GOOD" "family=openai cross_family_satisfied=false" "fallback roster takes the rung's family and recomputes cross_family_satisfied"
+assert_contains "$I_GOOD" "row=run-id-1|run-id-1-cloudfb|impl-branch-cloudfb" "log row binds the fallback run id to the original"
+T="$(mk_tree mutI1)"
+sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
+  's/? `${input.runId}-cloudfb` : input.runId;/? input.runId : input.runId;/'
+case "$(ident_case "$T" mutI1)" in *"run-id-1-cloudfb|implement-cloudfb"*) fail "mutant I1 (shared run id) must change the fallback run id" ;; esac
+T="$(mk_tree mutI2)"
+sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
+  '/^          implementer_family: rungFamily,$/d'
+case "$(ident_case "$T" mutI2)" in *"family=openai"*) fail "mutant I2 (stale implementer_family) must keep the old family" ;; esac
+
+# --- 5. real dispatch-hetero + stub runners: the retreat must not collide with the kept worktree ---
+cat > "$TEST_TMP/real-case.js" <<'NODE'
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [root, sbx, bindir, capDir, promptFile] = process.argv.slice(2);
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const base = execFileSync('git', ['-C', sbx, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const engine = new AutopilotEngine({ cwd: sbx });
+const out = engine.implementTask({
+  promptFile, branch: 'feat/cf-real', base, cwd: sbx, extraImplementationArgs: ['--endpoint', 'gpu1'],
+  implementationOptions: { cwd: sbx, env: {
+    ...process.env, PATH: `${bindir}:${process.env.PATH}`, ENGINE_CAPABILITY_DIR: capDir,
+    ANTHROPIC_BASE_URL: 'http://127.0.0.1:9', ANTHROPIC_AUTH_TOKEN: 'FAKE-token-not-real',
+    CODEX_HOME: path.join(capDir, 'codex-home'),
+  } },
+  roster: {
+    implementer_engine: 'GLM-5.3', implementer_effort: 'high', implementer_runner: 'cc-shim',
+    implementer_endpoint: 'gpu1', on_engine_unavailable: 'cloud-fallback',
+    cloud_fallback_rung: { engine: 'gpt-5.3-codex-spark', effort: 'high', runner: 'codex' },
+  },
+});
+const git = (...a) => { try { return execFileSync('git', ['-C', sbx, ...a], { encoding: 'utf8' }).trim(); } catch { return 'GITFAIL'; } };
+const impl = out.implementation || {};
+console.log(`status=${out.status}`);
+console.log(`branch=${out.cloud_fallback ? out.cloud_fallback.branch : 'none'}`);
+console.log(`on_branch=${git('rev-list', '--count', `${base}..feat/cf-real-cloudfb`)}`);
+console.log(`first_wt_kept=${/feat\/cf-real\]/.test(git('worktree', 'list')) ? 'yes' : 'no'}`);
+console.log(`impl_status=${impl.status}`);
+NODE
+mkdir -p "$TEST_TMP/real-bin" "$TEST_TMP/real-cap/codex-home"
+printf '{}\n' > "$TEST_TMP/real-cap/codex-home/auth.json"
+cat > "$TEST_TMP/real-bin/claude" <<'EOF'
+#!/usr/bin/env bash
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:true,api_error_status:null,terminal_reason:"api_error",result:"API Error: Unable to connect to API (ECONNREFUSED)"})+"\n")'
+exit 1
+EOF
+cat > "$TEST_TMP/real-bin/codex" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *"exec --help"*) printf -- '--dangerously-bypass-approvals-and-sandbox\n--dangerously-bypass-hook-trust\n'; exit 0 ;;
+  *"--version"*)   echo "codex-cli 9.9.9 (test stub)"; exit 0 ;;
+esac
+touch cloud_fallback_edit.txt
+EOF
+chmod +x "$TEST_TMP/real-bin/claude" "$TEST_TMP/real-bin/codex"
+real_case() {
+  local root="$1" sbx="$TEST_TMP/real-repo-$2"
+  mkdir -p "$sbx"
+  git -C "$sbx" init -q -b develop; git -C "$sbx" config user.email t@t; git -C "$sbx" config user.name t
+  git -C "$sbx" commit -q --allow-empty -m base
+  (cd "$sbx" && node "$TEST_TMP/real-case.js" "$root" "$sbx" "$TEST_TMP/real-bin" "$TEST_TMP/real-cap" "$PROMPT" 2>&1 < /dev/null)
+}
+R_GOOD="$(real_case "$REPO_ROOT" good)"
+assert_contains "$R_GOOD" "status=committed" "real rail: the cloud retreat commits"
+assert_contains "$R_GOOD" "branch=feat/cf-real-cloudfb" "real rail: result names the -cloudfb branch"
+assert_contains "$R_GOOD" "on_branch=1" "real rail: the stub runner committed on the -cloudfb branch"
+assert_contains "$R_GOOD" "first_wt_kept=yes" "real rail: the first attempt's worktree is still held"
+T="$(mk_tree mutI3)"
+sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
+  's/const fallbackBranch = `${input.branch}-cloudfb`;/const fallbackBranch = input.branch;/'
+R_MUT="$(real_case "$T" mutI3)"
+case "$R_MUT" in *"status=committed"*) fail "mutant I3 (same branch) must collide with the kept worktree" ;; esac
+
+# --- 6. cloud rung family check in the resolver -----------------------------------------------------
+printf -- '- override: reviewer | until 2099-01-01 | family check test\n- reviewer_engine: gpt-5.6-sol\n- reviewer_effort: high\n- reviewer_runner: codex\n- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.3-codex-spark/high@codex\n' > "$TEST_TMP/cfg-samefam.md"
+printf -- '- override: reviewer | until 2099-01-01 | family check test\n- reviewer_engine: gpt-5.6-sol\n- reviewer_effort: high\n- reviewer_runner: codex\n- on_engine_unavailable: cloud-fallback\n- on_family_conflict: fallback\n- cloud_fallback_rung: gpt-5.3-codex-spark/high@codex\n' > "$TEST_TMP/cfg-samefam-fb.md"
+printf -- '- override: reviewer | until 2099-01-01 | family check test\n- reviewer_engine: gpt-5.6-sol\n- reviewer_effort: high\n- reviewer_runner: codex\n- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gemini-4-argon-high/high@agy\n' > "$TEST_TMP/cfg-diffam.md"
+family_all() {
+  local root="$1"
+  FAM_SAME="$(res "$root" "$TEST_TMP/cfg-samefam.md" --field cloud_fallback_rung >/dev/null; echo "rc=$?")"
+  FAM_SAME_FB="$(res "$root" "$TEST_TMP/cfg-samefam-fb.md" --field cloud_fallback_rung >/dev/null; echo "rc=$?")"
+  FAM_DIFF="$(res "$root" "$TEST_TMP/cfg-diffam.md" --field cloud_fallback_rung >/dev/null; echo "rc=$?")"
+}
+family_all "$REPO_ROOT"
+assert_contains "$FAM_SAME" "rc=3" "a rung in the reviewer seat's family exits 3"
+assert_contains "$FAM_SAME_FB" "rc=3" "on_family_conflict: fallback has no ladder to walk for a single rung, still exits 3"
+assert_contains "$FAM_DIFF" "rc=0" "a rung from another family than the reviewer passes"
+T="$(mk_tree mutF2)"
+sed_mutant "$REPO_ROOT/scripts/resolve-review-loop.sh" "$T/scripts/resolve-review-loop.sh" \
+  's/^  if \[\[ -n "\$_cf_conflict" \]\]; then$/  if false; then/'
+family_all "$T"
+case "$FAM_SAME" in *rc=3*) fail "mutant F2 (no family check) must let the same-family rung through" ;; esac
+
+# --- 7. classification reads structured sources only ------------------------------------------------
+stub_claude_plain() {
+  STUB_N=$((STUB_N + 1))
+  local p="$TEST_TMP/claude-$STUB_N"
+  cat > "$p" <<EOF
+#!/usr/bin/env bash
+node -e 'process.stdout.write(JSON.stringify({type:"result",is_error:false,subtype:"success",result:"running tests\nconnect ECONNREFUSED 127.0.0.1:5432\ntimed out waiting for db\n1 failing"})+"\n")'
+exit 1
+EOF
+  chmod +x "$p"
+  printf '%s' "$p"
+}
+worker_noise() {
+  local sdir="$1" tag="$2"
+  WN_J="$(hetero "$sdir" "$(stub_claude_plain)" "feat/${tag}-noise" --endpoint gpu1)"
+  WN_CLASS="$(eu_class "$WN_J")"
+}
+worker_noise "$REPO_ROOT/scripts" noisegood
+case "$WN_CLASS" in endpoint_*) fail "worker test output with ECONNREFUSED must not be an endpoint class (got $WN_CLASS)" ;; esac
+T="$(mk_tree mutC3)"
+sed_mutant "$REPO_ROOT/scripts/dispatch-hetero.sh" "$T/scripts/dispatch-hetero.sh" \
+  's|^  for (const line of log.split(.\\n.)) if (/^API Error/.test(line)) out.push(line);$|  for (const line of log.split("\\n")) out.push(line);|'
+worker_noise "$T/scripts" noisemut
+[ "$WN_CLASS" = "endpoint_unreachable" ] || fail "mutant C3 (scan the whole log) must misclassify the worker output as endpoint_unreachable (got $WN_CLASS)"
+
+
 finalize_test

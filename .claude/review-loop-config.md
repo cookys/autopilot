@@ -13,7 +13,7 @@
 - implementer_endpoint: qwen_local
 - on_engine_unavailable: cloud-fallback
 - cloud_fallback_rung: grok-4.6/low@grok
-<!-- cc-shim also seats the GLM loop reviewer, but the two seats point at different local servers (qwen_local vs glm): different vendors, auth and prompt layers. -->
+<!-- the loop reviewer is the roster qwen on anthropic-compatible (endpoint qwen_local); the implementer here is cc-shim on the same endpoint, so the two seats share a server and a family (the family check falls back to a cross-family reviewer). -->
 - allow_same_runner_dual_seat: on
 
 - on_family_conflict: fallback

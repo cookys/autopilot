@@ -135,7 +135,7 @@ function normalizeRow(i) {
     served_by: {
       runner: str(served.runner) || runner,
       model: str(served.model) || model,
-      account: str(served.account) || account,
+      account: str(served.runner) ? str(served.account) : (str(served.account) || account),
     },
     fallbacks: normalizeFallbacks(x.fallbacks),
     usage,
@@ -331,6 +331,7 @@ function runAppend(args, env, nowSecs) {
     upstream_task_id: str(args.upstream_task_id) || str(env.AUTOPILOT_UPSTREAM_TASK_ID),
     upstream_message_id: str(args.upstream_message_id) || str(env.AUTOPILOT_UPSTREAM_MESSAGE_ID),
     claudeAlias: str(env.AUTOPILOT_ACCOUNT),
+    codexAlias: str(env.AUTOPILOT_ACCOUNT),
   };
   return appendRow(normalizeRow(rowFromResult(result, ctx)), { env });
 }

@@ -189,3 +189,28 @@ test('usage_json (raw, missing keys null) wins over the result usage a rail zero
   const plain = rowOf({ runner: 'cc-shim', model: 'm', status: 'ok', run_id: 'r1', usage: zeroFilled }, {});
   assert.strictEqual(plain.usage.cache_read_input_tokens, 0);
 });
+
+test('runAppend: codex run with AUTOPILOT_ACCOUNT and no endpoint gets codex:<alias>', () => {
+  const dir = mk();
+  const live = path.join(dir, 'live');
+  fs.mkdirSync(live, { mode: 0o700 });
+  const resFile = path.join(dir, 'res.json');
+  fs.writeFileSync(resFile, JSON.stringify({ runner: 'codex', model: 'm', status: 'committed', run_id: 'rc1' }));
+  const bin = path.join(dir, 'fleet');
+  fs.writeFileSync(bin, '#!/bin/sh\nprintf "address: a/b/c\\nnamespace: nsx\\ncourier: cx\\n"\n', { mode: 0o755 });
+  const env = Object.assign({}, process.env, { AUTOPILOT_LIVE_DIR: live, FLEET_BIN: bin, AUTOPILOT_ACCOUNT: 'work' });
+  delete env.AUTOPILOT_DISPATCH_USAGE;
+  const cli = path.join(__dirname, 'dispatch-usage.js');
+  const r = spawnSync(process.execPath, [cli, 'append', '--from-result', resFile, '--role', 'implementer', '--ended-at', '1793000000'], { env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const row = JSON.parse(fs.readFileSync(path.join(live, 'dispatch-usage-202610.jsonl'), 'utf8').trim());
+  assert.strictEqual(row.account, 'codex:work');
+});
+
+test('served_by.account: null from the rail stays null when a served runner is set; absent served_by defaults to the seat', () => {
+  // consult cloud fallback from an endpoint seat (glm) to claude with no alias
+  const r = U.normalizeRow({ run_id: 'r', role: 'implementer', runner: 'cc-shim', model: 'm', account: 'glm', served_by: { runner: 'claude', model: 'm2', account: null } });
+  assert.deepStrictEqual(r.served_by, { runner: 'claude', model: 'm2', account: null });
+  const d = U.normalizeRow({ run_id: 'r', role: 'implementer', runner: 'cc-shim', model: 'm', account: 'glm' });
+  assert.deepStrictEqual(d.served_by, { runner: 'cc-shim', model: 'm', account: 'glm' });
+});

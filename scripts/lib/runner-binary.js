@@ -66,7 +66,16 @@ const RUNNER_VERSION_BINARY = Object.freeze({
 // than the one dispatch actually runs. Ownership of the general fallback CHAIN stays with
 // the dispatchers (they also honor an explicit --bin, which this module has no input for);
 // what lives here is only the version-probe mirror of it.
+//
+// The same table also covers the team-account layout where `codex` and `agy` live in
+// ~/.local/bin and `grok` in ~/.grok/bin (also ~/.local/bin), none of which a normal session
+// PATH holds. PATH is always searched first, so a fixture or sentinel dir on PATH still wins.
+// scripts/lib/runner-fallback-bin.sh is the bash mirror; hooks/tests/runner-fallback-bin.test.sh
+// keeps the two equal.
 const RUNNER_BINARY_FALLBACK_PATHS = Object.freeze({
+  codex: ['.local/bin/codex'],
+  agy: ['.local/bin/agy'],
+  grok: ['.grok/bin/grok', '.local/bin/grok'],
   kimi: ['.kimi-code/bin/kimi'],
 });
 
@@ -418,6 +427,7 @@ module.exports = {
   versionBinaryFor,
   knownRunners,
   resolveBinaryPath,
+  RUNNER_BINARY_FALLBACK_PATHS,
   stripVersionControlChars,
   sanitizeVersionToken,
   versionLineRefusalReason,

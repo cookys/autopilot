@@ -538,6 +538,8 @@ usage() { sed -n '2,76p' "$0" | sed 's/^# \{0,1\}//'; }
 . "$SELF_DIR/lib/agy-model-alias.sh"
 # shellcheck source=lib/agy-timeout.sh
 . "$SELF_DIR/lib/agy-timeout.sh"
+# shellcheck source=lib/runner-fallback-bin.sh
+. "$SELF_DIR/lib/runner-fallback-bin.sh"
 
 # agy_edit_only_directive <worktree> — the harness directive prepended to every agy task
 # prompt. A FUNCTION, not an inline string, because the argv-ceiling guard has to measure the
@@ -2316,6 +2318,7 @@ fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
    && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
+  AGY_BIN="$(runner_bin_fallback "$AGY_BIN")"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   validate_d2_agy_claims
 fi
@@ -2389,6 +2392,7 @@ fi
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: ${RUNNER}/${MODEL} (effort=${EFFORT}) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs." >&2
 
 if [ "$IS_CODEX" -eq 1 ]; then
+  CODEX_BIN="$(runner_bin_fallback "$CODEX_BIN")"
   # A path-form --codex-bin (contains /) is feature-detected here in the CALLER cwd but
   # exec'd by the worker AFTER `cd "$WT"` — a RELATIVE path would resolve to a different
   # binary (or fail) inside the worktree. Absolutize it first (POSIX cd/pwd, not realpath)
@@ -2431,6 +2435,7 @@ elif [ "$IS_PI" -eq 1 ]; then
   _pi_models_json="${PI_MODELS_JSON:-$HOME/.pi/agent/models.json}"
   [ -r "$_pi_models_json" ] || die_precondition "pi models.json not readable: $_pi_models_json"
 elif [ "$IS_GROK" -eq 1 ]; then
+  GROK_BIN="$(runner_bin_fallback "$GROK_BIN")"
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN (install xAI Grok Build CLI or pass --grok-bin)"
 elif [ "$IS_QODER" -eq 1 ]; then
   command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (install Qoder CLI CN or pass --qoder-bin)"
@@ -2464,6 +2469,7 @@ elif [ "$IS_CNATIVE" -eq 1 ]; then
     *) die_precondition "claude-native refused: the account registry exists but is not usable, or its env-check output is unrecognised (node scripts/claude-account.js env-check --any); nothing was spawned" ;;
   esac
 else
+  AGY_BIN="$(runner_bin_fallback "$AGY_BIN")"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
 fi
 

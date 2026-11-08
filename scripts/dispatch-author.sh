@@ -126,6 +126,7 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-model-alias.sh"
 # shellcheck source=lib/agy-timeout.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-timeout.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/runner-fallback-bin.sh"
 
 # Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
 # inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
@@ -938,7 +939,7 @@ fi
 
 
 if [ "$RUNNER" = "agy" ]; then
-  AGY_BIN="${BIN:-agy}"
+  AGY_BIN="$(runner_bin_fallback "${BIN:-agy}")"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   # `|| die` in the PARENT — the resolver never dies inside `$( )` (a die there would be
   # captured into MODEL instead of exiting).
@@ -949,8 +950,11 @@ if [ "$RUNNER" = "agy" ]; then
 fi
 
 if [ "$RUNNER" = "kimi" ]; then
-  KIMI_BIN="${BIN:-kimi}"
+  KIMI_BIN="$(runner_bin_fallback "${BIN:-kimi}")"
   command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN"
+  # The adapter (src/runners/kimi.js) spawns `kimi` by name. When the fallback found it off PATH
+  # (~/.kimi-code/bin), append that one directory so the adapter finds the same binary this check did.
+  case "$KIMI_BIN" in /*) PATH="$PATH:$(dirname "$KIMI_BIN")" ;; esac
   KIMI_JS="$(cd "$(dirname "$0")" && pwd)/dispatch-author-kimi.js"
   [[ -r "$KIMI_JS" ]] || die_precondition "dispatch-author-kimi.js not found beside dispatch-author.sh"
 fi
@@ -1269,7 +1273,7 @@ RUNNER_ERR_FILE="$(mktemp -t dispatch-author-runner-err-XXXXXX)"
 declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_AUTHOR_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
 
 if [[ "$RUNNER" = "codex" ]]; then
-  CODEX_BIN="${BIN:-codex}"
+  CODEX_BIN="$(runner_bin_fallback "${BIN:-codex}")"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
   # Honest timeout parse BEFORE any runner start: unparseable → precondition,
   # never a silent 300s default inside the transport.
@@ -1304,7 +1308,7 @@ if [[ "$RUNNER" = "codex" ]]; then
     "${REPO_ROOT:-}"
   set -e
 elif [[ "$RUNNER" = "grok" ]]; then
-  GROK_BIN="${BIN:-grok}"
+  GROK_BIN="$(runner_bin_fallback "${BIN:-grok}")"
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN"
   # Read-only by construction: scratch cwd, no --always-approve, no web, no editor.
   GROK_CWD="$(mktemp -d -t dispatch-author-grokcwd-XXXXXX)"

@@ -96,6 +96,7 @@ done
 # would emit invalid JSON a caller's parser chokes on — decorrelated review, gpt-5.5).
 # shellcheck source=lib/json-emit.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/json-emit.sh"
+. "$_EXPLORE_SELF_DIR/lib/runner-fallback-bin.sh"
 # shellcheck source=lib/agy-timeout.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-timeout.sh"
 
@@ -174,7 +175,7 @@ STATE_PRE="$(repo_state)"
 # --- dispatch ---
 SANDBOX_MODE="n/a"
 if [[ "$RUNNER" = "codex" ]]; then
-  CODEX_BIN="${BIN:-codex}"
+  CODEX_BIN="$(runner_bin_fallback "${BIN:-codex}")"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
   # codex must shell-read files. The read-only sandbox needs bubblewrap; without it the
   # sandbox fails before file access and codex silently guesses. Detect and adapt.
@@ -189,7 +190,7 @@ if [[ "$RUNNER" = "codex" ]]; then
       "$CODEX_BIN" exec --model "$MODEL" "${SANDBOX_ARGS[@]}" --skip-git-repo-check -C "$REPO" \
       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_BUILT" > "$RAW_LOG" 2>/dev/null
 else
-  AGY_BIN="${BIN:-agy}"
+  AGY_BIN="$(runner_bin_fallback "${BIN:-agy}")"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   # agy -p drops stdout under a non-TTY pipe (#76/#408) → capture through a pseudo-TTY.
   # Correct arg order: prompt RIGHT AFTER -p, --model LAST (a --model wedged before the

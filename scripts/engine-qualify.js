@@ -13,6 +13,7 @@ const { spawnSync } = require('child_process');
 const {
   BRAIN_CONSTRUCT_SCOPE,
   compileCapabilityEvidence,
+  examIdentityHashOf,
   evaluateCapabilityEvidence,
   verifyEvaluationCorpus,
 } = require('../src/engine/capability-evidence');
@@ -2414,16 +2415,33 @@ function appendQualifierEvidence(config, evidence) {
   return appendEvidenceRecord(config, evidence, QUALIFIER_PRODUCER);
 }
 
-function latestExactEvidence(rows, role, scopeHash, identityHash) {
+// Same grouping the evaluator uses: role + scope + EXAM identity (harness/runner version is
+// environment, not exam). A retake on a newer plugin build must chain to the earlier row, or a
+// failed retake lands as restrictive evidence unbound to the active qualification and is refused.
+function latestExamEvidence(rows, role, scopeHash, examIdentityHash) {
   return rows.filter((row) => (
     row.evidence.role === role
     && row.evidence.scope_hash === scopeHash
-    && row.evidence.identity_hash === identityHash
+    && examIdentityHashOf(row.evidence.identity) === examIdentityHash
   )).sort((left, right) => {
     const observed = Date.parse(right.evidence.observed_at)
       - Date.parse(left.evidence.observed_at);
     return observed || right.event_id - left.event_id;
   })[0] || null;
+}
+
+function priorExamEvidenceId(storeOption, role, scope, identity) {
+  const storeConfig = resolveEvidenceStore(storeOption);
+  let rows;
+  try {
+    rows = readTelemetryEvidenceRows(storeConfig.evidenceFile);
+  } catch (error) {
+    throw new Error(`capability evidence store failed closed: ${error.message}`);
+  }
+  const previous = latestExamEvidence(
+    rows, role, sha256(canonicalJson(scope)), examIdentityHashOf(identity),
+  );
+  return previous ? previous.evidence.evidence_id : null;
 }
 
 function deepFreeze(value) {
@@ -2953,7 +2971,7 @@ function runVaQualification(options) {
     methodology,
     trials,
     revocation: null,
-    supersedes: null,
+    supersedes: priorExamEvidenceId(options.store, 'verification_author', scope, identity),
   });
   const storeConfig = resolveEvidenceStore(options.store);
   let evidenceStoreRecord;
@@ -3331,8 +3349,9 @@ function runBrainQualification(options) {
     throw new Error(`capability evidence store failed closed: ${error.message}`);
   }
   const scopeHash = sha256(canonicalJson(scope));
-  const identityHash = sha256(canonicalJson(identity));
-  const previous = latestExactEvidence(existingRows, 'owner', scopeHash, identityHash);
+  const previous = latestExamEvidence(
+    existingRows, 'owner', scopeHash, examIdentityHashOf(identity),
+  );
   const evidence = compileCapabilityEvidence({
     schema_version: 1,
     source: 'internal_eval',
@@ -3820,7 +3839,7 @@ function runImplQualification(options) {
       methodology,
       trials,
       revocation: null,
-      supersedes: null,
+      supersedes: priorExamEvidenceId(options.store, 'implementer', scope, identity),
     });
     const storeConfig = resolveEvidenceStore(options.store);
     try {
@@ -5385,7 +5404,7 @@ function runConsultDiscussQualification(options) {
       methodology,
       trials,
       revocation: null,
-      supersedes: null,
+      supersedes: priorExamEvidenceId(options.store, role, scope, identity),
     });
     qualificationAssetSeals.assertSealedEvidenceBinding(role, evidence);
     const storeConfig = resolveEvidenceStore(options.store);
@@ -5805,12 +5824,11 @@ function runQualification(options) {
     throw new Error(`capability evidence store failed closed: ${error.message}`);
   }
   const scopeHash = sha256(canonicalJson(scope));
-  const identityHash = sha256(canonicalJson(identity));
-  const previous = latestExactEvidence(
+  const previous = latestExamEvidence(
     existingRows,
     role,
     scopeHash,
-    identityHash,
+    examIdentityHashOf(identity),
   );
   const methodology = role === 'owner' ? {
     kind: 'role_eval',
@@ -6836,6 +6854,7 @@ function classifyQualificationOutcome(input) {
 if (require.main === module) main();
 
 module.exports = {
+  priorExamEvidenceId,
   parsePanelResult,
   rawRowsText,
   buildEmittedRow,

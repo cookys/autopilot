@@ -1809,6 +1809,16 @@ function sameEvidenceGroup(left, right) {
     && left.identity_hash === right.identity_hash;
 }
 
+// A lineage link (`supersedes`) joins records of the same EXAM: evaluation matches by exam identity
+// (harness/runner version is only a warning), so a retake on a newer plugin build is the same
+// exam's next observation and must be able to point at the earlier qualification. A revocation
+// still targets its exact qualification (sameEvidenceGroup).
+function sameExamGroup(left, right) {
+  return left.role === right.role
+    && left.scope_hash === right.scope_hash
+    && examIdentityHashOf(left.identity) === examIdentityHashOf(right.identity);
+}
+
 // `isolated`: the records are one record lifted out of a ledger (a scorecard row's embedded
 // evidence), not a ledger. Its `supersedes` / revocation target cannot be in that set, so an
 // unresolved reference there is unverifiable rather than invalid and is skipped; every check whose
@@ -1834,7 +1844,7 @@ function validateEvidenceLifecycle(records, { isolated = false } = {}) {
           'UNRESOLVED_EVIDENCE_REFERENCE',
         );
       }
-      if (!sameEvidenceGroup(record, target)
+      if (!sameExamGroup(record, target)
           || Date.parse(target.observed_at) > Date.parse(record.observed_at)) {
         evidenceError(
           `capability evidence ${record.evidence_id} has an invalid supersedes target`,
@@ -2643,6 +2653,7 @@ module.exports = {
   capabilityEvidenceProducerHash,
   compileCapabilityEvidence,
   evaluateCapabilityEvidence,
+  examIdentityHashOf,
   normalizeCapabilityEvidenceReceipt,
   normalizeIdentity,
   normalizeScope,

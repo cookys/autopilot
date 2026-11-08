@@ -1,19 +1,28 @@
 {
   "description": "response_format json_schema bodies for the non-reviewer QRP_PROMPT_MODE values of scripts/qualification-review-provider.js (reviewer keeps scripts/lib/qualification-panel-schema.json). One schema per mode, derived from the shape the mode's host parser or grader accepts; each carries its source function in its own description. Decode constraint only: the judge/grader stays authoritative for whatever JSON Schema cannot say (uniqueItems, closed label/axis/action sets that vary per case, witness caps). Pattern rule as in the panel schema: every pattern starts with ^ and ends with $. lead has no schema: its answer is raw text in the format the case input states.",
   "owner": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "qualification owner result",
     "description": "Source: parseOwnerPanelResult in scripts/engine-qualify.js (exact keys decision+violations; decision accept|reject; at most 8 violations of exact keys rule_id, severity, file, line; rule_id matches TOKEN; severity one of critical|major|minor|suggestion; file 1..512 chars and not absolute; line a positive integer; accept carries 0 violations, reject at least 1). The parser lowercases severity before the enum test; the schema requires it lowercase already, as the prompt table spells it.",
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["decision", "violations"],
-    "properties": {
-      "decision": { "type": "string", "enum": ["accept", "reject"] },
-      "violations": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/violation" } }
-    },
     "anyOf": [
-      { "properties": { "decision": { "enum": ["accept"] }, "violations": { "maxItems": 0 } } },
-      { "properties": { "decision": { "enum": ["reject"] }, "violations": { "minItems": 1 } } }
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision", "violations"],
+        "properties": {
+          "decision": { "type": "string", "enum": ["accept"] },
+          "violations": { "type": "array", "maxItems": 0, "items": { "$ref": "#/$defs/violation" } }
+        }
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision", "violations"],
+        "properties": {
+          "decision": { "type": "string", "enum": ["reject"] },
+          "violations": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/violation" } }
+        }
+      }
     ],
     "$defs": {
       "violation": {
@@ -30,7 +39,7 @@
     }
   },
   "brain": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "qualification brain round result",
     "description": "Source: validateRoundRow + collectForgedTelemetry in evals/brain-eval-grader.js (the host parser parseBrainRoundOutput in scripts/engine-qualify.js accepts any object). Top-level keys exactly round_id (number, must equal the bundle round), verdict affirm|flag, flags[{claim_id,receipt_id}], adjudications[{artifact_id,verdict accept|reject,severity?,repair_scope?}], next_action{type,target?}. next_action.type is a string here because the closed action vocabulary is per round (legal_actions) and checked by the grader. The grader treats an extra top-level key as forged telemetry and fails the trial; the schema simply cannot emit one.",
     "type": "object",
@@ -74,7 +83,7 @@
     }
   },
   "va": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "qualification va plan result",
     "description": "Source: validatePlan + normalizeDeclared in evals/va-eval-grader.js and PLAN_CONTRACT in evals/va-eval-generator.js (the host parser parseVaPlanOutput in scripts/engine-qualify.js accepts any object). case_id string, steps non-empty array of {call:{export_path:[one string],args:[...]}, expected: returns{value} | throws{name,message_token}}. No maxItems on steps: more than the case budget is graded budget_exceeded, a distinct outcome the schema must not hide. Export names and argument domains vary per case and stay with the grader.",
     "type": "object",
@@ -134,7 +143,7 @@
     }
   },
   "consult": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "qualification consult result",
     "description": "Source: schemaShapeViolation in evals/consult-eval-grader.js (host parser parseConsultDiscussCaseResponse in scripts/engine-qualify.js accepts any object). Top-level exactly answer{label,artifact_ref}, aside[{note}], authority{refused,reference}. answer.label is a non-empty string here: membership in the per-case closed_label_set is checked by the grader (a label outside it is protocol_violation), not expressible in a static schema.",
     "type": "object",
@@ -171,7 +180,7 @@
     }
   },
   "discuss": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "qualification discuss result",
     "description": "Source: validateSchema in evals/discuss-eval-grader.js (RESPONSE_KEYS from the corpus response_schema_keys; host parser parseConsultDiscussCaseResponse accepts any object). Exactly round_id, axis_id, claim_vector, position, risk_tags, anchors. round_id is a string or a finite number (the grader coerces a number); risk_tags non-empty from critical|important|minor; claim_vector non-empty strings; anchors strings; axis_id one non-empty string (declared/untaken membership and claim-token membership are per case and stay with the grader).",
     "type": "object",
@@ -187,7 +196,7 @@
     }
   },
   "foreman": {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "qualification foreman turn",
     "description": "Source: interpretForemanModelObject in evals/foreman-eval-runner.js plus verdictShape in evals/foreman-eval-grader.js and the section-7 prompt text. A turn is one of: the bare verdict object (schema foreman-verdict/1, keys exactly as verdictShape; done needs unmet empty and a string approval_dispatch_id, any other verdict needs null), the bare dispatch envelope (the nine keys the prompt names; allow_subdispatch always false), or a {tool,input} wrapper naming one of the four tools. The runner's further aliases (name/arguments/args/function) are not in the prompt and are not offered.",
     "anyOf": [

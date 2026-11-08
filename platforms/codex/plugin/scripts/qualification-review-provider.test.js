@@ -2228,6 +2228,59 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
         check(JSON.stringify(wire[names[i]]) !== JSON.stringify(wire[names[j]]), `${names[i]} and ${names[j]} carry different schemas`);
       }
     }
+    // Grammar backends (xgrammar, vLLM) honour only the anyOf/oneOf branches when a combinator sits beside
+    // other constraints, so a sibling type/required/properties is silently dropped from decoding. Every
+    // combinator in the mode schemas must therefore stand alone (only annotations and $defs beside it).
+    {
+      const ANNOTATION_KEYS = new Set(['$schema', '$id', '$comment', 'title', 'description', '$defs', 'definitions']);
+      const COMBINATORS = ['anyOf', 'oneOf', 'allOf'];
+      const combinatorBesideConstraints = (node, where, found) => {
+        if (!node || typeof node !== 'object') return found;
+        if (Array.isArray(node)) { node.forEach((n, i) => combinatorBesideConstraints(n, `${where}[${i}]`, found)); return found; }
+        const keys = Object.keys(node);
+        if (keys.some((k) => COMBINATORS.includes(k)) && keys.some((k) => !COMBINATORS.includes(k) && !ANNOTATION_KEYS.has(k))) found.push(where);
+        for (const k of keys) {
+          const child = node[k];
+          if (['properties', '$defs', 'definitions'].includes(k)) {
+            for (const [name, sub] of Object.entries(child)) combinatorBesideConstraints(sub, `${where}.${k}.${name}`, found);
+          } else if (['items', 'additionalProperties', ...COMBINATORS].includes(k)) {
+            combinatorBesideConstraints(child, `${where}.${k}`, found);
+          }
+        }
+        return found;
+      };
+      for (const [mode, schema] of Object.entries(modeSchemas)) {
+        if (mode === 'description') continue;
+        equal(JSON.stringify(combinatorBesideConstraints(schema, mode, [])), '[]',
+          `${mode}: no anyOf/oneOf/allOf sits beside sibling constraints`);
+      }
+      // owner: each branch is self-contained and, by a plain required-field check, rejects {} and {decision:"reject"}.
+      const ownerBranches = modeSchemas.owner.anyOf;
+      check(Array.isArray(ownerBranches) && ownerBranches.length === 2, 'owner: top-level anyOf has the accept and reject branches');
+      const plainRejects = (branch, doc) => !(branch.type === 'object' && branch.required.every((k) => Object.prototype.hasOwnProperty.call(doc, k)));
+      for (const [i, branch] of ownerBranches.entries()) {
+        equal(branch.type, 'object', `owner branch ${i + 1}: has its own type`);
+        equal(branch.additionalProperties, false, `owner branch ${i + 1}: closes additionalProperties`);
+        check(branch.required.includes('decision') && branch.required.includes('violations'), `owner branch ${i + 1}: requires decision and violations`);
+        check(plainRejects(branch, {}), `owner branch ${i + 1}: {} fails its required fields`);
+        check(plainRejects(branch, { decision: 'reject' }), `owner branch ${i + 1}: {"decision":"reject"} fails its required fields`);
+      }
+      const wireOwner = wire.owner;
+      check(validate(wireOwner, wireOwner, {}, '$') !== null, 'owner: the sent schema rejects {}');
+      check(validate(wireOwner, wireOwner, { decision: 'reject' }, '$') !== null, 'owner: the sent schema rejects {"decision":"reject"}');
+      // $schema dialect matches the $defs keyword the mode schemas use.
+      for (const [mode, schema] of Object.entries(modeSchemas)) {
+        if (mode === 'description') continue;
+        equal(schema.$schema, 'https://json-schema.org/draft/2020-12/schema', `${mode}: $schema is the dialect that defines $defs`);
+      }
+      // Every JSON-answer prompt mode (all valid QRP_PROMPT_MODE values except reviewer and lead) has a mode schema.
+      const providerSource = fs.readFileSync(path.join(__dirname, 'qualification-review-provider.js'), 'utf8');
+      const validModes = providerSource.match(/if \(!\[((?:'[a-z]+',?\s*)+)\]\.includes\(promptMode\)\)/u);
+      check(validModes, 'the provider declares its valid QRP_PROMPT_MODE list');
+      const schemaModes = [...validModes[1].matchAll(/'([a-z]+)'/gu)].map((m) => m[1]).filter((m) => m !== 'reviewer' && m !== 'lead').sort();
+      equal(JSON.stringify(schemaModes), JSON.stringify(Object.keys(modeSchemas).filter((k) => k !== 'description').sort()),
+        'valid QRP_PROMPT_MODE values (minus reviewer and lead) equal the mode-schemas keys');
+    }
     // lead answers raw text: no schema exists, so the knob refuses.
     const leadRequest = { schema_version: 1, request_id: 'req-rf-lead', role: 'lead', payload: { format: 'case_content', content: 'x' } };
     const lead = sendChatFormat({ QRP_PROMPT_MODE: 'lead', QRP_HTTP_RESPONSE_FORMAT: 'json_schema' }, leadRequest);
@@ -2808,5 +2861,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 770) throw new Error(`qualification-review-provider: expected exactly 770 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 797) throw new Error(`qualification-review-provider: expected exactly 797 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

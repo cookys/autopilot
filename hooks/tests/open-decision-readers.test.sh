@@ -101,10 +101,10 @@ assert_eq "$HAS" "false,1,false" "all closed: hasOpenDecision false, the scope f
 
 # NC-R: a reader that was not updated shows the closed card again, and this test sees it
 mkrepo "$R"; OPEN="$(mk "Q-OPEN?")"; CLOSED="$(mk "Q-CLOSED?")"; node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" --answer c >/dev/null; export OPEN CLOSED
-mkdir -p "$TEST_TMP/sabotaged"; cp "$REPO_ROOT"/src/status/scope-key.js "$REPO_ROOT"/src/status/decision-input.js "$TEST_TMP/sabotaged/"
-sed -i '/if (isClosedEntry(e)) return null;/d' "$TEST_TMP/sabotaged/decision-input.js"
-grep -q "isClosedEntry(e)) return null" "$TEST_TMP/sabotaged/decision-input.js" && fail "sabotage did not apply"
-BAD="$(SRC="$TEST_TMP/sabotaged" node "$TEST_TMP/ask.js" | grep '^decision-input:')"
+SAB="$TEST_TMP/sabotaged-root"; mkdir -p "$SAB/src/status" "$SAB/scripts/lib"; cp "$REPO_ROOT"/src/status/scope-key.js "$REPO_ROOT"/src/status/decision-input.js "$SAB/src/status/"; cp "$REPO_ROOT"/scripts/lib/card-notice.js "$SAB/scripts/lib/" # decision-input.js requires ../../scripts/lib/card-notice.js
+sed -i '/if (isClosedEntry(e)) return null;/d' "$SAB/src/status/decision-input.js"
+grep -q "isClosedEntry(e)) return null" "$SAB/src/status/decision-input.js" && fail "sabotage did not apply"
+BAD="$(SRC="$SAB/src/status" node "$TEST_TMP/ask.js" | grep '^decision-input:')"
 assert_contains "$BAD" "$CLOSED=" "NC-R: the un-updated reader lists the closed card again (the assertion above would FAIL on it)"
 GOOD="$(node "$TEST_TMP/ask.js" | grep '^decision-input:')"
 assert_not_contains "$GOOD" "$CLOSED=" "NC-R: the real reader does not"

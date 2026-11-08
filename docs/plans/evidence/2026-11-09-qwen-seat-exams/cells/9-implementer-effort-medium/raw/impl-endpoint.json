@@ -1,0 +1,4 @@
+{
+  "name": "qwen_local",
+  "transport_security": "plaintext_private"
+}

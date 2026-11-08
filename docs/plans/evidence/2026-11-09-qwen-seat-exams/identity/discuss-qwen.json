@@ -1,0 +1,19 @@
+{
+  "identity": "Qwen3.8-27B-QUASAR-NVFP4",
+  "engine": "Qwen3.8-27B-QUASAR-NVFP4",
+  "family": "alibaba",
+  "runner": "anthropic-compatible",
+  "runner_version": "node-direct-http-fetch",
+  "harness_version": "engine-qualify-93987cb5",
+  "effort": "default",
+  "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+  "semantic_fingerprint": "831db5726d807013d0e58cdcb2df656916b0979400a91a14e191d73ed46ad86e",
+  "containment_fingerprint": "5fd0ff93cc01ef4abcefc68225d30aee9acf1b51ddc069eee9c671b1cbad98eb",
+  "_invented": [],
+  "_semantic_surface": null,
+  "_containment_surface": {
+    "kind": "discuss-containment-surface-v1",
+    "exam_transport": "qualification-case-broker-networkless-bwrap",
+    "credential_isolation": "broker-env-allowlist-http-token"
+  }
+}

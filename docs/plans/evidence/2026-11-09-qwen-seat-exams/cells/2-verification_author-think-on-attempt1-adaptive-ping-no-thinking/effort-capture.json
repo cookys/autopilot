@@ -1,0 +1,22 @@
+{
+  "requested": {
+    "model": "Qwen3.8-27B-QUASAR-NVFP4",
+    "effort": "default",
+    "thinking": "adaptive"
+  },
+  "provider_exit": 0,
+  "provider_stderr": "",
+  "first_request": {
+    "path": "/v1/messages",
+    "anthropic_version": "2023-06-01",
+    "model": "Qwen3.8-27B-QUASAR-NVFP4",
+    "max_tokens": 32768,
+    "output_config": "<absent>",
+    "thinking": {
+      "type": "adaptive"
+    },
+    "system_chars": 5517,
+    "user_chars": 165
+  },
+  "requests_seen": 1
+}

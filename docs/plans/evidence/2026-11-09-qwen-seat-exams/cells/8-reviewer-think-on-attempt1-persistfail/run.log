@@ -1,0 +1,6 @@
+2026-11-09T05:07:27+08:00 gate: GO present, PAUSE absent, /v1/models=200
+2026-11-09T05:07:27+08:00 ping evidence: capture skipped: chat protocol not expressible by the capture server live_ping status=200 model=Qwen3.8-27B-QUASAR-NVFP4 stop= output_tokens=24 finish=stop thinking_protocol=chat thinking_switch=enabled thinking_content_present=true 
+2026-11-09T05:07:27+08:00 provider=node $S/qrpt/scripts/qualification-review-provider.js protocol=chat_completions thinking=enabled rf=json_schema max_tokens=32768 cap_s=3000
+2026-11-09T05:07:28+08:00 role=reviewer think=on START runner=anthropic-compatible model=Qwen3.8-27B-QUASAR-NVFP4 model_version=Qwen3.8-27B-QUASAR-NVFP4 version_source=runtime effort=default(none sent) endpoint=qwen_local dry=0 identity: prompt=3cbe203c5958 sem=0afb67489771 con=8b46dca18341 harness=engine-qualify-93987cb5
+2026-11-09T05:15:19+08:00 role=reviewer think=on END rc=2
+rc=2

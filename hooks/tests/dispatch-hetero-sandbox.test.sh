@@ -20,6 +20,8 @@
 #            core.hooksPath=/dev/null, so a worker-planted post-commit never runs (control: plain git does).
 #   reuse  : --reuse-worktree takes its expected gitfile from the main repo's registry; a retained worktree whose
 #            gitfile was repointed is refused before any git runs (control: an untouched one is reused).
+#   gitlink: a gitlink added outside the output paths is not hidden from the rail's BASE..HEAD diff (no --ignore-submodules
+#            on tree-to-tree diffs; the rail's files_changed counts a committed or staged gitlink).
 #   no bwrap / bwrap cannot start: fail closed (precondition_failed, no worker, no worktree).
 # Seam: a stub `claude` on PATH, no real model, no GPU. Own temp dirs.
 . "$(dirname "$0")/lib.sh"
@@ -77,6 +79,12 @@ if [ -n "${STUB_NESTED_ATTACK:-}" ]; then
     && git add -A && git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m n \
     && git config filter.x.clean "$STUB_PWN_HOOK" && git config core.fsmonitor "$STUB_PWN_HOOK" \
     && echo y >> f.txt && cd ..; } || echo "nested attack failed: $?" >&2
+fi
+if [ -n "${STUB_GITLINK_ADD:-}" ]; then
+  # a gitlink (mode 160000) outside any output path; STUB_GITLINK_ADD=commit also commits it from inside the worker
+  mkdir -p forbidden/gl; git add sandbox-edit.txt   # an empty directory, like an uninitialised submodule
+  git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),forbidden/gl"
+  [ "$STUB_GITLINK_ADD" != commit ] || git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m gl
 fi
 if [ -n "${STUB_HOOKSPATH_ATTACK:-}" ]; then
   mkdir -p hk && printf '#!/bin/sh\necho pwned > "%s"\n' "$STUB_PWN_FILE" > hk/post-commit && chmod +x hk/post-commit
@@ -284,6 +292,29 @@ esac
 cp "$TEST_TMP/gitfile.orig" "$RWT/.git"
 unset AUTOPILOT_WORKTREE_ROOT_RUN_ID
 rm -f "$PWN_FILE"
+
+# ---- gitlink: a mode-160000 entry added at a path outside the output paths must show in the BASE..HEAD diff the
+# rail reads (changed_paths / SHORTSTAT). `--ignore-submodules=all` hides it, so no rail diff may carry that flag.
+GL="$TEST_TMP/gitlink-ctl"; mkdir -p "$GL"; $GIT -C "$GL" init -q; $GIT -C "$GL" commit -q --allow-empty -m b
+GL_BASE="$(git -C "$GL" rev-parse HEAD)"
+git -C "$GL" update-index --add --cacheinfo "160000,$GL_BASE,forbidden/gl"; $GIT -C "$GL" commit -q -m gl
+eq "forbidden/gl" "$(git -C "$GL" diff --name-only "$GL_BASE..HEAD")" "gitlink control: a plain tree-to-tree diff lists the gitlink path"
+eq "" "$(git -C "$GL" diff --ignore-submodules=all --name-only "$GL_BASE..HEAD")" "gitlink control: --ignore-submodules=all really hides it (so the scan below is not vacuous)"
+eq "forbidden/gl" "$(git -C "$GL" diff --ignore-submodules=dirty --name-only "$GL_BASE..HEAD")" "gitlink control: dirty keeps a committed gitlink visible"
+# behavioural: the rail's own diff/status see a gitlink the worker added (committed by the worker, or only staged)
+for glmode in commit stage; do
+  export STUB_GITLINK_ADD="$glmode"
+  run_case none 0 --worktree-parent "$WTPARENT"
+  eq '"boundary_rejected"' "$(status_of)" "gitlink($glmode): the content gate rejects the gitlink (rc=$RC)"
+  case "$(printf '%s' "$OUT" | result_json | jfield error)" in
+    *forbidden/gl*) eq 0 0 "gitlink($glmode): the error names forbidden/gl" ;;
+    *) fail "gitlink($glmode): error text: $(printf '%s' "$OUT" | result_json | jfield error)" ;;
+  esac
+  eq "2" "$(printf '%s' "$OUT" | result_json | jfield files_changed)" "gitlink($glmode): the rail's own diff counts the gitlink (sandbox-edit.txt + forbidden/gl)"
+done
+unset STUB_GITLINK_ADD
+eq "0" "$(grep -c -e '--ignore-submodules=all' "$REPO_ROOT/scripts/dispatch-hetero.sh" || true)" "gitlink: dispatch-hetero.sh has no --ignore-submodules=all (BASE..HEAD and status calls must see gitlinks)"
+eq "0" "$(grep -E 'diff .*--ignore-submodules' "$REPO_ROOT/scripts/dispatch-hetero.sh" | wc -l | tr -d ' ')" "gitlink: no commit-to-commit diff in the rail carries --ignore-submodules"
 
 # ---- bwrap unavailable -> fail closed
 NOBW="$TEST_TMP/nobwrap-bin"; mkdir -p "$NOBW"

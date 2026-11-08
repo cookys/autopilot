@@ -3328,7 +3328,7 @@ NODE
     || die_precondition "retained worktree branch does not match --branch"
   [ "$(_wt_git rev-parse HEAD 2>/dev/null || true)" = "$BASE_SHA" ] \
     || die_precondition "retained worktree HEAD does not match --base"
-  [ -z "$(_wt_git status --porcelain --ignore-submodules=all 2>/dev/null)" ] \
+  [ -z "$(_wt_git status --porcelain --ignore-submodules=dirty 2>/dev/null)" ] \
     || die_precondition "retained worktree is dirty"
   _wt_read_schema2_marker "$WT/.autopilot-worktree" \
     || die_precondition "retained worktree marker is invalid"
@@ -4009,7 +4009,7 @@ _supervise_commit_quiet() {
     head="$(_wt_git rev-parse HEAD 2>/dev/null || true)"
     if [ -z "$head" ] || [ "$head" = "$BASE_SHA" ] \
        || ! _wt_git merge-base --is-ancestor "$BASE_SHA" "$head" 2>/dev/null \
-       || [ -n "$(_wt_git status --porcelain --ignore-submodules=all 2>/dev/null)" ]; then since=-1; continue; fi
+       || [ -n "$(_wt_git status --porcelain --ignore-submodules=dirty 2>/dev/null)" ]; then since=-1; continue; fi
     [ "$since" -ge 0 ] || since=$SECONDS
     [ $((SECONDS - since)) -ge "$quiet" ] || continue
     COMMIT_QUIET_ENDED=1
@@ -4732,7 +4732,7 @@ if ! wt_gitfile_check; then
   return 0
 fi
 if [ "$(_wt_git rev-parse HEAD)" = "$BASE_SHA" ] \
-   && [ -n "$(_wt_git status --porcelain --ignore-submodules=all)" ]; then
+   && [ -n "$(_wt_git status --porcelain --ignore-submodules=dirty)" ]; then
   _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"; [ "$IS_KIMI" -eq 1 ] && _runner_label="kimi"; [ "$IS_CNATIVE" -eq 1 ] && _runner_label="claude-native"
   _wt_git add -A
   if ! run_strict_staged_precheck; then
@@ -4752,10 +4752,10 @@ fi
 
 # --- verify by artifacts, never by self-report ---
 HEAD_SHA="$(_wt_git rev-parse HEAD)"
-DIRTY="$(_wt_git status --porcelain --ignore-submodules=all)"
+DIRTY="$(_wt_git status --porcelain --ignore-submodules=dirty)"
   FILES=0; INS=0; DEL=0
   if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
-  SHORTSTAT="$(_wt_git diff --ignore-submodules=all --shortstat "$BASE_SHA..$HEAD_SHA")"
+  SHORTSTAT="$(_wt_git diff --shortstat "$BASE_SHA..$HEAD_SHA")"
   FILES="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ file' | grep -o '[0-9]\+' || echo 0)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
@@ -5073,7 +5073,7 @@ run_strict_boundary_postcheck() {
   # Collect exact changed paths once for output-path role checks.
   while IFS= read -r temp_path; do
     [ -n "$temp_path" ] && changed_paths+=("$temp_path")
-  done < <(_wt_git diff --ignore-submodules=all --name-only "$BASE_SHA..$HEAD_SHA")
+  done < <(_wt_git diff --name-only "$BASE_SHA..$HEAD_SHA")
 
   for temp_path in "${changed_paths[@]}"; do
     changed_set["$temp_path"]=1

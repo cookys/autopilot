@@ -1,0 +1,10 @@
+# dry-all.sh results, 2026-11-08 (DRY_RUN=1: fake provider, scratch store, no network). Fresh ENGINE_CAPABILITY_DIR/AUTOPILOT_ACCOUNTS_DIR.
+cell-qwen-author dry-rc=1   (transport_fail on the nonexistent dry provider: all argv accepted, qualifier reached the case broker)
+cell-qwen-consult dry-rc=0  (--plan)
+cell-qwen-implementer dry-rc=0 (argv printed)
+cell-qwen-reviewer dry-rc=1 (same expected transport_fail; effort_check={status:match,label:default,sent:default})
+cell-glm-author dry-rc=1
+cell-glm-consult dry-rc=0
+cell-glm-implementer dry-rc=0
+cell-glm-reviewer dry-rc=1  (effort_check match)
+no "mismatch" string in any stderr/stdout.

@@ -1,0 +1,4 @@
+2026-11-09T01:40:49+08:00 provider=node /nonexistent-dry-run-provider.js protocol=messages thinking=adaptive
+2026-11-09T01:40:49+08:00 lane=qwen role=reviewer START runner=anthropic-compatible model=Qwen3.8-27B-QUASAR-NVFP4 model_version=Qwen3.8-27B-QUASAR-NVFP4 version_source=operator-asserted effort=default(none sent) thinking=messages endpoint=qwen_local dry=1
+2026-11-09T01:40:54+08:00 lane=qwen role=reviewer END rc=1
+rc=1

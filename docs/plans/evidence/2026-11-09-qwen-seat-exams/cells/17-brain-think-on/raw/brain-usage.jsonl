@@ -1,0 +1,2 @@
+{"schema_version":1,"role":"brain","unit":"trial","trial_id":"trial_d8b69bceb53c","case_id":"trial_d8b69bceb53c","wall_s":425.164,"input_tokens":37802,"output_tokens":75763,"reasoning_tokens":null,"total_tokens":113565,"solved":false,"usage_source":"provider","rounds":12}
+{"schema_version":1,"role":"brain","unit":"trial","trial_id":"trial_c89e7143cb3f","case_id":"trial_c89e7143cb3f","wall_s":250.688,"input_tokens":37845,"output_tokens":48420,"reasoning_tokens":null,"total_tokens":86265,"solved":false,"usage_source":"provider","rounds":12}

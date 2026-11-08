@@ -16,6 +16,9 @@
 const ARROW = ' → ';
 const NONE = '都不選';
 const NOTE_MARK = '補充：';
+// A correction of an answer that was already sent (the pane's 改答案): ONE line, `[待決回覆·更正] <id> → <answer>[｜補充：<note>]`. The producer is mods/live/model.ts decideCorrectionLine.
+// It has no excerpt and no answer id: the courier takes one claim per card, so a correction is never claimed or verified.
+const CORRECTION_HEAD = '[待決回覆\u00b7更正]';
 const flat = (s) => String(s).replace(/\s+/g, ' ').trim();
 const wire = (s) => flat(s).replace(/｜/g, '|');
 function excerptOf(q) { const cs = [...flat(q)]; return cs.length <= 30 ? cs.join('') : `${cs.slice(0, 30).join('')}…`; }
@@ -48,4 +51,19 @@ function lineSaysAnswer(line, stored, question) {
   return answer === NONE && p.note.slice(NOTE_MARK.length).trim() === wire(ft) ? { ok: true } : { ok: false, reason: 'answer' };
 }
 
-module.exports = { parseDecideLine, lineSaysAnswer, excerptOf, wire };
+// -> { id, answer, note (string|null) } | null. Strict: the whole prompt is this one line (a multi-line prompt is not a correction), the id is a ledger card id, the arrow is the first ` → `.
+function parseCorrectionLine(prompt) {
+  const text = String(prompt);
+  if (text.includes('\n') || !text.startsWith(`${CORRECTION_HEAD} `)) return null;
+  const rest = text.slice(CORRECTION_HEAD.length + 1);
+  const m = /^(d-[0-9a-f]{8}) \u2192 (.+)$/.exec(rest);
+  if (!m) return null;
+  const f = m[2].split('｜');
+  if (f.length > 2) return null;
+  if (f.length === 2 && !f[1].startsWith(NOTE_MARK)) return null;
+  const answer = f[0].trim();
+  if (!answer) return null;
+  return { id: m[1], answer, note: f.length === 2 ? f[1].slice(NOTE_MARK.length).trim() : null };
+}
+
+module.exports = { parseDecideLine, lineSaysAnswer, parseCorrectionLine, CORRECTION_HEAD, excerptOf, wire };

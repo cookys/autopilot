@@ -1619,10 +1619,16 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 // decision id; `inputs` says whether the surface draws text fields (a phone does not). The reply is one machine-readable prompt: the head line, then one line per
 // answered question `<id>｜<first 30 characters of the question> → <answer>[｜補充：<note>]`, or `→ 都不選｜補充：<note>` when the owner picked none of the options. These strings are a wire format the model reads back, so they are not
 // in the locale tables and do not change with the language. ----
-export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult> }
+// `hold`: cards the owner pressed send on that still sit in the undo window (id -> the clock time the window ends); nothing is claimed or sent until then.
+// `fixing`: sent cards the owner reopened with 改答案 (id -> the clock time it was reopened); their next send is a correction line, not a first answer.
+export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult>; hold?: Record<string, number>; fixing?: Record<string, number> }
+// the undo window between pressing send and the send (operator, 2026-11-08): the card stays on the pane and shows 撤回 with the seconds left
+export const DECIDE_UNDO_MS = 10_000
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }
-export type DecideView = DecideState & { inputs: boolean; batch?: import('./decidebatch').DecideBatch }
+export type DecideView = DecideState & { inputs: boolean; batch?: import('./decidebatch').DecideBatch; now?: number } // now: the clock time of this draw, for the seconds left in an undo window
 export const DECIDE_REPLY_HEAD = '[待決回覆]'
+// the first line of a correction of an answer that was already sent (scripts/lib/decide-line.js parseCorrectionLine reads it; hooks/advisory-relay.js records it on the card)
+export const DECIDE_FIX_HEAD = '[待決回覆\u00b7更正]'
 const DECIDE_ARROW = '\u2192' // written as an escape: it is wire text the model parses, never a glyph the pane draws (ui-lint L2 keeps drawn glyphs in GLYPHS)
 // wire text the model on the receiving end reads as "owner picked none of the options and wrote their own answer in the note"
 export const DECIDE_NONE = '都不選'
@@ -1633,7 +1639,11 @@ const excerptOf = (q: string): string => { const cs = [...flat(q)]; return cs.le
 // a question the dialog of the asking session answers itself: the pane shows it but never answers it (a second answer would be a duplicate)
 export const decideDialog = (d: LiveDecision): boolean => d.origin === 'ask_user_question'
 // a question the owner can answer from the pane: it has an id, the pane is the way to answer it, and it was not sent yet
-export const decideOpen = (d: LiveDecision, st: DecideState): boolean => d.id !== null && !decideDialog(d) && st.sent[d.id] === undefined
+export const decideOpen = (d: LiveDecision, st: DecideState): boolean => d.id !== null && !decideDialog(d) && (st.sent[d.id] === undefined || st.fixing?.[d.id] !== undefined)
+// a card whose send was pressed and whose undo window is still running
+export const decideHeld = (d: LiveDecision, st: DecideState): boolean => d.id !== null && st.hold?.[d.id] !== undefined
+// a sent card the owner reopened to correct
+export const decideFixing = (d: LiveDecision, st: DecideState): boolean => d.id !== null && st.fixing?.[d.id] !== undefined
 // the picked option of a question (an index that is still one of its options), else null
 export const decidePick = (d: LiveDecision, st: DecideState): number | null => {
   const k = d.id === null ? undefined : st.picks[d.id]
@@ -1661,9 +1671,18 @@ export function decideLine(d: LiveDecision, st: DecideState): string | null {
   const answer = d.options.length === 0 ? wire(note) : pick === null ? (note === '' ? '' : DECIDE_NONE + notePart) : wire(d.options[pick].label) + notePart
   return answer === '' ? null : d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' ' + answer
 }
-// the reply to send now: every open question that has an answer, in list order; null when there is none
+// the correction line of a reopened card: `[待決回覆·更正] <id> → <answer>[｜補充：<note>]`; no excerpt, no answer id (the courier takes one claim per card, so a correction is not claimed)
+export function decideCorrectionLine(d: LiveDecision, st: DecideState): string | null {
+  if (decideLine(d, st) === null || d.id === null) return null
+  const note = decideNote(d, st)
+  const pick = decidePick(d, st)
+  const notePart = note === '' ? '' : DECIDE_NOTE_MARK + wire(note)
+  const answer = d.options.length === 0 ? wire(note) : pick === null ? DECIDE_NONE + notePart : wire(d.options[pick].label) + notePart
+  return DECIDE_FIX_HEAD + ' ' + d.id + ' ' + DECIDE_ARROW + ' ' + answer
+}
+// the reply to send now: every open question that has an answer, in list order; null when there is none. A reopened card is not here: it goes out as its own correction line.
 export function decideReply(list: readonly LiveDecision[], st: DecideState): { text: string; ids: string[] } | null {
-  const rows = list.filter(d => decideOpen(d, st)).flatMap(d => { const line = decideLine(d, st); return line === null ? [] : [{ id: d.id as string, line }] })
+  const rows = list.filter(d => decideOpen(d, st) && !decideFixing(d, st)).flatMap(d => { const line = decideLine(d, st); return line === null ? [] : [{ id: d.id as string, line }] })
   return rows.length === 0 ? null : { text: [DECIDE_REPLY_HEAD, ...rows.map(r => r.line)].join('\n'), ids: rows.map(r => r.id) }
 }
 export const DEFAULT_PANE_COLS = 76

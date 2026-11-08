@@ -626,7 +626,7 @@ function patchDecision(file, id, patch, { isOurs, any } = {}) {
       const entries = readFile(file, { all: true });
       const hit = entries.find((e) => e.id === id && (any || isOpenEntry(e)));
       if (!hit || (isOurs && !isOurs(hit))) return { status: 'absent' };
-      const next = { ...hit, ...patch };
+      const next = { ...hit, ...(typeof patch === 'function' ? patch(hit) : patch) }; // a function patch sees the stored entry under the lock (appending to an array field)
       const v = JSON.parse(fs.readFileSync(file, 'utf8'));
       writeEntries({ file, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, entries.map((e) => (e === hit ? next : e)));
       return { status: 'updated', entry: next };
@@ -634,6 +634,12 @@ function patchDecision(file, id, patch, { isOurs, any } = {}) {
   } catch (error) {
     return error && error.code === 'ENOENT' ? { status: 'absent' } : { status: 'error', message: error.message };
   }
+}
+
+// Record a correction of an answer on the entry `id` (any state: the card is normally closed already). Appends to `answer_corrections`; status, closed_at and answer are NOT touched,
+// so a correction can neither close nor reopen a card. -> { status: 'updated'|'absent'|'error' }.
+function recordCorrection(file, id, correction) {
+  return patchDecision(file, id, (hit) => ({ answer_corrections: [...(Array.isArray(hit.answer_corrections) ? hit.answer_corrections : []), correction] }), { any: true });
 }
 
 // Close the entry `id` of the scope `file`: patchDecision with status closed + closed_at (+ `answer` when given). Library callers (hooks)
@@ -738,4 +744,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };

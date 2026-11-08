@@ -1,8 +1,8 @@
 // mods/live/decidebatch.ts — the 待決 tab across several answers in a row: one batch of cards with stable numbers, answered cards that stay (greyed), stable focus keys, and the
 // focus / scroll plan after an answer. Pure: the shell (register.ts) holds the batch and applies the plan through the host's focus call and its own scroll model.
 //
-// A batch is the run of cards from the first pending question until nothing is pending (or the view is opened again). A card is ANSWERED once an option is picked or it was sent; it then
-// stays where it is, greyed, with the chosen answer, and takes no focus. A card that only wants a typed reply is answered when sent (typing must not move the focus mid-word).
+// A batch is the run of cards from the first pending question until nothing is pending (or the view is opened again). A card is ANSWERED once it was SENT (an option press only selects:
+// the owner can still change the pick and the note until send); it then stays where it is, greyed, with the answer and a 改答案 button, and takes no focus. A reopened (fixing) card is open again.
 import { decideDialog, decidePick } from './model'
 import { GLYPHS } from './ui'
 import type { DecideState, LiveDecision, PaneLine } from './model'
@@ -13,8 +13,9 @@ export type DecideBatch = {
   next: number
   q: Record<string, string> // the question text, kept so an answered card can still be drawn after it left the list
   ans: Record<string, string> // the answer shown on an answered card
+  card: Record<string, LiveDecision> // the card as last listed, so a sent card that the session already closed can still be reopened to correct
 }
-export const NO_BATCH: DecideBatch = { order: [], num: {}, next: 1, q: {}, ans: {} }
+export const NO_BATCH: DecideBatch = { order: [], num: {}, next: 1, q: {}, ans: {}, card: {} }
 export const SUBMIT_KEY = 'submit'
 
 // the element key of an option Button: the card id and the option number, never a position in a list that shrinks
@@ -24,14 +25,16 @@ export const cardKey = (d: LiveDecision): string => d.id ?? 'q:' + d.question
 
 // the answer an answered card shows, or null while the card is still open (or cannot be answered here)
 export function answerOf(d: LiveDecision, st: DecideState): string | null {
+  if (d.id === null || decideDialog(d) || st.sent[d.id] === undefined || st.fixing?.[d.id] !== undefined) return null
+  return draftOf(d, st) ?? GLYPHS.state.done
+}
+// what the owner has chosen or typed so far (sent or not), or null when nothing yet: the picked option's label, else the typed text
+export function draftOf(d: LiveDecision, st: DecideState): string | null {
   if (d.id === null || decideDialog(d)) return null
   const pick = decidePick(d, st)
   if (pick !== null) return d.options[pick].label
-  if (st.sent[d.id] !== undefined) {
-    const note = (st.notes[d.id] ?? '').replace(/\s+/g, ' ').trim()
-    return note === '' ? GLYPHS.state.done : note
-  }
-  return null
+  const note = (st.notes[d.id] ?? '').replace(/\s+/g, ' ').trim()
+  return note === '' ? null : note
 }
 
 // the batch after the list or the picks changed. Nothing pending closes it.
@@ -39,19 +42,31 @@ export function answerOf(d: LiveDecision, st: DecideState): string | null {
 // (the shell passes t('decide.elsewhere')). The question text is kept in the batch, so the data to keep it is always there; keeping it avoids a reflow under the owner's eyes.
 export function batchSync(prev: DecideBatch, pending: readonly LiveDecision[], st: DecideState, elsewhere: string): DecideBatch {
   if (pending.length === 0) return NO_BATCH
-  const b: DecideBatch = { order: [...prev.order], num: { ...prev.num }, next: prev.next, q: { ...prev.q }, ans: { ...prev.ans } }
+  const b: DecideBatch = { order: [...prev.order], num: { ...prev.num }, next: prev.next, q: { ...prev.q }, ans: { ...prev.ans }, card: { ...prev.card } }
   const here = new Set<string>()
   for (const d of pending) {
     const k = cardKey(d)
     here.add(k)
     if (b.num[k] === undefined) { b.num[k] = b.next++; b.order.push(k) }
     b.q[k] = d.question
+    b.card[k] = d
     const a = answerOf(d, st)
     if (a === null) delete b.ans[k]
     else b.ans[k] = a
   }
-  for (const k of b.order) if (!here.has(k) && b.ans[k] === undefined) b.ans[k] = elsewhere // left the list unanswered here: closed elsewhere, stays greyed until the batch closes
+  for (const k of b.order) {
+    if (here.has(k)) continue
+    const gone = b.card[k]
+    if (gone !== undefined && gone.id !== null && st.fixing?.[gone.id] !== undefined) delete b.ans[k] // closed by the session after it was sent, reopened here to correct: open again
+    else if (b.ans[k] === undefined) b.ans[k] = elsewhere // left the list unanswered here: closed elsewhere, stays greyed until the batch closes
+  }
   return b
+}
+// the cards the pane can still act on: the pending list, plus a card the session already closed that the owner reopened to correct (kept in the batch)
+export function actionable(pending: readonly LiveDecision[], batch: DecideBatch, st: DecideState): LiveDecision[] {
+  const listed = new Set(pending.map(cardKey))
+  const back = batch.order.filter(k => !listed.has(k)).flatMap(k => { const c = batch.card[k]; return c !== undefined && c.id !== null && st.fixing?.[c.id] !== undefined ? [c] : [] })
+  return [...pending, ...back]
 }
 
 // the line index of an element key in the card lines: `opt:<id>:<k>` is the Button of that option, `note:<id>` its field; -1 when it is not drawn (the send row is in the fixed bar)

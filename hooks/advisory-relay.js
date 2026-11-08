@@ -14,6 +14,7 @@
  * their opt-outs are AUTOPILOT_AWAITING_OWNER / AUTOPILOT_RUNS_WATCH_AUTOSTART=0. Their failures never
  * change this hook's output. A live-panel answer whose first line is [待決回覆] closes the named
  * decision cards here too (opt-out AUTOPILOT_DECIDE_REPLY_CLOSE=off); that step is also fail-open.
+ * A one-line `[待決回覆·更正]` prompt (the pane's 改答案) closes nothing: it appends the new answer to the card's answer_corrections and says it was not courier-verified.
  */
 
 'use strict';
@@ -116,6 +117,30 @@ function closeDecideReply(payload) {
   }
 }
 
+// A correction of an answer the pane already sent: the whole prompt is ONE `[待決回覆·更正] <id> → <answer>[｜補充：<note>]` line (scripts/lib/decide-line.js parseCorrectionLine).
+// The card was closed by the first answer, so this never closes or reopens anything: it only appends {at, answer, note, verified:false} to the card's `answer_corrections`
+// and says so in a systemMessage. It is NOT verified: `fleet decision claim` takes one claim per card (a second answers "already answered"), so the line carries no answer id and the
+// courier cannot confirm it; the message says that. Opt-out: AUTOPILOT_DECIDE_REPLY_CLOSE=off (the same knob as the first-answer close).
+function recordCorrection(payload) {
+  if (process.env.AUTOPILOT_DECIDE_REPLY_CLOSE === 'off') return;
+  const prompt = payload && payload.prompt;
+  if (typeof prompt !== 'string') return;
+  const c = require('../scripts/lib/decide-line.js').parseCorrectionLine(prompt);
+  if (!c) return;
+  let recorded = false;
+  try {
+    const { projectScopeFiles, recordCorrection: record } = require('../scripts/open-decision.js');
+    for (const file of projectScopeFiles(payload.cwd, { all: true })) { // all: the card is normally closed already
+      const r = record(file, c.id, { at: new Date().toISOString(), answer: c.answer, note: c.note, verified: false });
+      if (r && r.status === 'updated') { recorded = true; break; }
+    }
+  } catch (e) {
+    process.stderr.write(`advisory-relay: correction record fail-open: ${e && e.message ? e.message : e}\n`);
+  }
+  const note = `更正：${c.id} 新答案 ${c.answer}${c.note ? `（補充：${c.note}）` : ''}；已在執行的 lane 需停下或改做。未經 courier 核實${recorded ? '' : '；找不到這張卡，沒有記到卡上'}。`;
+  sysMsg = sysMsg ? `${sysMsg}\n${note}` : note;
+}
+
 // BL-0336: the autostart's failure sentence (watcher could not start / live dir unusable) is the only thing this host adds to
 // stdout besides the advisory blob; it travels as a systemMessage, in the same JSON object when both exist.
 let sysMsg = null;
@@ -139,6 +164,11 @@ try {
     if (payload && typeof payload === 'object') closeDecideReply(payload);
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
+  }
+  try {
+    if (payload && typeof payload === 'object') recordCorrection(payload);
+  } catch (e) {
+    process.stderr.write(`advisory-relay: correction record fail-open: ${e && e.message ? e.message : e}\n`);
   }
   if (process.env.AUTOPILOT_ADVISORY_RELAY === 'off') bye();
   const sid = payload && payload.session_id;

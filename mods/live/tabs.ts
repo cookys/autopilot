@@ -9,8 +9,8 @@ import { cellWidth, displayWidth, isStale, stateOf } from './ui'
 import { residueTally } from './model'
 import type { NeedsHumanEntry } from './model'
 import type { FleetLane, FleetTask, FleetView, OthersView } from './fleet'
-import { cardKey } from './decidebatch'
-import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
+import { actionable, cardKey } from './decidebatch'
+import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, DECIDE_UNDO_MS, decideDialog, decideFixing, decideHeld, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
@@ -356,14 +356,14 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
   const F = 'decide.cards' as const
-  const list = snap.pending
   const id0 = 'sec:decide.cards'
+  const dv = ctx.decide ?? { ...NO_DECIDE, inputs: false }
+  const list = dv.batch === undefined ? snap.pending : actionable(snap.pending, dv.batch, dv)
   const open0 = U.sectionOpen(ctx.folded, id0)
   const needYou = ui.stateOf('verdict', 'DECIDE')
   if (list.length === 0) return [ui.header(u, t('decide.title'), { id: id0, open: open0 }), ...(open0 ? [ui.empty(t('decide.none'), F)] : [])]
   const head = ui.header(u, t('decide.title'), { id: id0, open: open0 }, { right: ui.countChip(u, needYou, list.length, F), fact: F })
   if (!open0) return [head]
-  const dv = ctx.decide ?? { ...NO_DECIDE, inputs: false }
   const sentState = ui.stateOf('task', 'PENDING') // a question already sent: not yet closed by the session
   const out: PaneLine[] = [head]
   const batch = dv.batch
@@ -373,27 +373,38 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (batch !== undefined && batch.ans[key] !== undefined) { // answered: stays in place, greyed (dim theme text only), shows the chosen answer, no Button and no field so it takes no focus
       out.push(...ui.cardTitle(u, ui.stateOf('task', 'PENDING'), num + '. ' + batch.q[key], undefined, { fact: F, sent: true, grey: true }))
       out.push(...ui.cardRow(u, t('decide.k_answer'), batch.ans[key], { fact: F, subtle: true }))
+      const was = d ?? batch.card[key]
+      if (was !== undefined && was.id !== null && !decideDialog(was) && dv.sent[was.id] !== undefined) out.push(ui.buttonRow(u, t('decide.fix'), { press: 'fix:' + was.id, fact: F })) // sent from here: it can still be corrected
       out.push(ui.blank())
       return
     }
     if (d === null) return
     const id = d.id
-    const sent = id !== null && dv.sent[id] !== undefined
-    out.push(...ui.cardTitle(u, sent ? sentState : needYou, num + '. ' + d.question + staleSuffix(d, t), sent ? t('decide.sent') : undefined, { fact: F, sent }))
+    const fixing = decideFixing(d, dv)
+    const held = decideHeld(d, dv)
+    const sent = id !== null && dv.sent[id] !== undefined && !fixing
+    const locked = sent || held // no option Button and no field: the answer is waiting out its undo window, or already went
+    const meta = held ? t('decide.held') : sent ? t('decide.sent') : fixing ? t('decide.fixing') : undefined
+    out.push(...ui.cardTitle(u, locked ? sentState : needYou, num + '. ' + d.question + staleSuffix(d, t), meta, { fact: F, sent: locked }))
     if (d.background !== null) out.push(...ui.cardParaRows(u, t('decide.k_background'), ui.cardParas(d.background), { fact: F, subtle: true }))
     if (d.blocks !== null) out.push(...ui.cardRow(u, t('decide.k_blocks'), d.blocks, { fact: F }))
     const pick = decidePick(d, dv)
     const rec = recommendedIndex(d)
     const dialog = decideDialog(d)
     if (d.options.length > 0) {
-      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(sent || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F, descriptions: d.options.map(o => o.description) })) // every option shows its description under it
+      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(locked || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F, descriptions: d.options.map(o => o.description) })) // every option shows its description under it
     }
     if (d.recommendation !== null) { // the recommended option's own label when it matches one, else the recommendation as written; the reason goes on the row below it
       const what = rec === null ? d.recommendation : d.options[rec].label
       out.push(...ui.cardRow(u, t('decide.k_advice'), what, { fact: F })) // the option name on the first row, the reason on its own rows below
       if (d.why !== null) out.push(...ui.cardRow(u, '', d.why, { fact: F }))
     }
-    if (!sent) {
+    if (held && id !== null) {
+      const left = Math.max(0, Math.ceil(((dv.hold?.[id] ?? 0) - (dv.now ?? (dv.hold?.[id] ?? 0) - DECIDE_UNDO_MS)) / 1000))
+      out.push(ui.buttonRow(u, t('decide.undo', { n: left }), { press: 'undo:' + id, fact: F }))
+    }
+    if (sent && id !== null && !dialog) out.push(ui.buttonRow(u, t('decide.fix'), { press: 'fix:' + id, fact: F })) // sent from here, no batch (the band): it can still be corrected
+    if (!locked) {
       if (id !== null && dv.inputs && !dialog) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))
       else if (dialog) out.push(...ui.detail(u, t('decide.in_dialog'), { fact: F }))
       else if (d.options.length === 0 || id === null) out.push(...ui.detail(u, t('decide.in_chat'), { fact: F }))
@@ -402,7 +413,7 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   })
   const mine = list.filter(d => d.id !== null && !decideDialog(d)) // a question with no id, or one the asker's dialog answers, cannot be answered from here: it only says so
   const open = mine.filter(d => decideOpen(d, dv))
-  const answered = open.filter(d => decideLine(d, dv) !== null).length
+  const answered = open.filter(d => !decideHeld(d, dv) && decideLine(d, dv) !== null).length
   if (mine.length === 0) return out.slice(0, -1) // no send row: drop the blank that closed the last card
   // the send row(s) are tagged `bar`: pane.tsx draws them in the fixed action strip under the scrolling cards (§12.10), not among the cards
   if (open.length === 0) out.push(...ui.asBar(ui.actionRow(u, t('decide.sent_all'), { fact: F })))

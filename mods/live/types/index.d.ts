@@ -3,12 +3,16 @@
 //   picks  decision id -> index of the chosen option
 //   notes  decision id -> the text typed in its note / reply field
 //   sent   decision id -> clock ms the answer was submitted (the card says "sent" until the id leaves the decisions file)
+//   hold   decision id -> clock ms its undo window ends (send pressed, nothing sent yet)
+//   fixing decision id -> clock ms a sent card was reopened with 改答案 to correct
 //   clean  residue worktree path -> what the 殘留 tab's cleanup button reported (ok, or the reason it was kept)
 // mods/live/model.ts `DecideState` is the same shape; keep the two equal.
 export type LiveDecideState = {
   picks: Record<string, number>
   notes: Record<string, string>
   sent: Record<string, number>
+  hold?: Record<string, number>
+  fixing?: Record<string, number>
   clean?: Record<string, { ok: boolean; note: string }>
 }
 

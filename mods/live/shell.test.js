@@ -361,18 +361,35 @@ test('v7: card list: ◐ the current card, ◆ an answered one, ○ an open one;
   assert.equal(glyph(3).color, ui.PALETTE.idle)
 })
 
-test('v7: card list: a long name is cut with …, the answer stays whole; more cards than rows scroll so the current one is shown', () => {
-  const long = [{ id: 'x', name: 'a very long card name that cannot fit', answer: 'ok', sent: false }]
-  const r = S.cardRows(long, 0, 26)[0]
-  assert.equal(width(r.segs), 26)
-  assert.ok(segText(r.segs).includes('…'))
-  assert.ok(segText(r.segs).trimEnd().endsWith(' ok'))
+test('v7: card list: a long name wraps in the column (never cut, no …), the mark and the answer stay on the first row; more cards than rows scroll so the current one is shown', () => {
+  const name = 'a very long card name that cannot fit'
+  const long = [{ id: 'x', name, answer: 'ok', sent: false }]
+  const rs = S.cardRows(long, 0, 26)
+  assert.ok(rs.length > 1, 'wrapped to more than one row')
+  for (const r of rs) { assert.equal(width(r.segs), 26); assert.ok(!segText(r.segs).includes('…')) }
+  assert.ok(segText(rs[0].segs).startsWith('◐ ') && segText(rs[0].segs).trimEnd().endsWith(' ok'))
+  for (const r of rs.slice(1)) assert.ok(segText(r.segs).startsWith('  ') && !/[◐◆○]/.test(segText(r.segs)), 'continuation: no mark, hangs under the name')
+  assert.equal(rs.map(r => segText(r.segs).slice(2).replace(/ ok\s*$/, '').trim()).join(' '), name, 'the rows put back the whole name')
   const many = Array.from({ length: 12 }, (_, i) => ({ id: 'k' + i, name: 'card ' + i, answer: null, sent: false }))
   for (const cur of [0, 5, 11]) {
     const rows = S.cardRows(many, cur, 26)
     assert.equal(rows.length, S.BODY_ROWS)
     assert.ok(rows.some(x => x.key === 'card:k' + cur && segText(x.segs).startsWith('◐')), 'cursor ' + cur)
   }
+})
+
+test('polish: card list: Chinese long names at the 26-wide column (80 and 120 columns share it) come back whole, row by row, and a wrapped current card stays in the window', () => {
+  const zh = '長卡：要不要現在合併整批變更並且順便刪掉舊的分支'
+  const cards = [{ id: 'a', name: zh, answer: null, sent: false }, ...Array.from({ length: 9 }, (_, i) => ({ id: 'k' + i, name: '短卡 ' + i, answer: null, sent: false }))]
+  for (const cursor of [0, 5, 9]) {
+    const rows = S.cardRows(cards, cursor, 26)
+    assert.equal(rows.length, S.BODY_ROWS)
+    assert.ok(rows.some(r => r.key === 'card:' + cards[cursor].id), 'cursor ' + cursor)
+    for (const r of rows) { assert.equal(width(r.segs), 26); assert.ok(!segText(r.segs).includes('…')) }
+  }
+  const top = S.cardRows(cards, 0, 26).filter(r => r.id === 'a')
+  assert.ok(top.length >= 2)
+  assert.equal(top.map(r => segText(r.segs).slice(2).trim()).join(''), zh, 'the rows put back the whole name')
 })
 
 test('v7: progress: one cell per card (sent done, picked action, open idle), then picked/total, then the last answered card', () => {

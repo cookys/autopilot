@@ -36,19 +36,20 @@ export function stackRows(el: { Box: El }, rows: unknown[]) {
   return <Box flexDirection="column">{rows}</Box>
 }
 
-// the scroll hint row of a window that holds more than it shows (guideline §13.3): `↑ 還有 N 行 · ↓ 還有 M 行`, each half a Button that moves the window a page (a click, or Tab and Enter, reach what
+// the scroll hint row of a window that holds more than it shows (guideline §13.3): `↑ 還有 N 行 · ↓ 還有 M 行`, each half a `[ … ]` Button (BarButton's look) that moves the window a page (a click, or Tab and Enter, reach what
 // the wheel and the scroll keys also do), a half with nothing in that direction is not drawn
 export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: number, below: number, onUp: () => void, onDown: () => void): unknown {
   const { Box, Text, Button } = el
   const half = (k: string, text: string, press: () => void) => {
-    const draw = <Text key="t" {...dimProps()} wrap="truncate">{text}</Text>
+    const label = '[ ' + text + ' ]' // the same look as BarButton: the action colour and the [ ] frame, so it reads as a Button
+    const draw = <Text key="t" {...drawSeg(actionSeg(label))} wrap="truncate">{label}</Text>
     return Button === undefined ? <Box key={k}>{draw}</Box> : <Button key={k} plain onPress={press}>{draw}</Button>
   }
   return (
     <Box key="scrollhint">
       <Text>{' '}</Text>
       {above > 0 ? half('scroll:up', t('shell.more_up', { n: above }), onUp) : <Text key="nu">{''}</Text>}
-      {above > 0 && below > 0 ? <Text key="sep" {...dimProps()}>{' · '}</Text> : <Text key="ns">{''}</Text>}
+      {above > 0 && below > 0 ? <Text key="sep">{' '}</Text> : <Text key="ns">{''}</Text>}
       {below > 0 ? half('scroll:down', t('shell.more_down', { n: below }), onDown) : <Text key="nd">{''}</Text>}
     </Box>
   )

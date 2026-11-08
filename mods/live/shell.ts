@@ -4,7 +4,7 @@
 // Colours: only PALETTE roles (ui.ts) as text colour; no background, no inverse, no bold. One colour, one meaning: main window `here`, other windows `idle`, dividers `structure`.
 
 import type { Seg } from './model.ts'
-import { GLYPHS, PALETTE, displayWidth } from './ui.ts'
+import { GLYPHS, PALETTE, displayWidth, wrapPlain } from './ui.ts'
 
 // ---- tiers (contract 1.1): written on bodyColumns, the width the band is handed. Not derived from the terminal width. The tab row's own 160/120/80 table (model.ts layoutBand) is
 // another thing: neither refers to the other. ----
@@ -345,25 +345,34 @@ export const QUICK_SEP: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', colo
 // ---- the card list (ux-v7): the left column of the 待決 tab, one row per question; and the progress row inside the main window ----
 // `grey`: an answered card (sent, or closed elsewhere) stays in its place with dim text, as the pane greys it; `gone`: the session or the CLI closed it, so it has no draft and its glyph is idle
 export type Card = { id: string; name: string; answer: string | null; sent: boolean; grey?: boolean; gone?: boolean }
-// the visible window of `count` rows around the cursor
-function window(n: number, cursor: number, count: number): number {
-  return Math.max(0, Math.min(n - count, cursor - Math.floor(count / 2)))
-}
-// ◐ the card in the main window (here), ◆ an answered one (action; done when it was sent), ○ an open one; the answer is right-aligned with one empty cell at the end
+// ◐ the card in the main window (here), ◆ an answered one (action; done when it was sent), ○ an open one; the answer is right-aligned with one empty cell at the end.
+// A name is never cut (§12: the 待決 tab's text is not truncated): it wraps inside the column, the mark stays on the first row and a continuation row hangs under the name. The answer sits on the first row.
+// The window is over rows: it keeps the whole current card in view (its first row when the card is taller than the window), centred as far as the list allows.
 export function cardRows(cards: readonly Card[], cursor: number, inner: number, rows: number = BODY_ROWS): { id: string; key: string; segs: Seg[] }[] {
-  const from = window(cards.length, cursor, rows)
-  return cards.slice(from, from + rows).map((c, k) => {
-    const here = from + k === cursor
+  const all: { id: string; key: string; segs: Seg[] }[] = []
+  let at = 0
+  let span = 1
+  cards.forEach((c, n) => {
+    const here = n === cursor
     const answered = c.sent || c.answer !== null
     const glyph: Seg = here ? { text: GLYPHS.chart.here, color: PALETTE.here } : c.gone === true ? { text: GLYPHS.structure.decisions, color: PALETTE.idle } : answered ? { text: GLYPHS.structure.decisions, color: c.sent ? PALETTE.done : PALETTE.action } : { text: GLYPHS.state.pending, color: PALETTE.idle }
     const usable = inner - 1
     const answer = c.answer === null ? '' : clipSegs([{ text: c.answer }], Math.max(1, Math.min(displayWidth(c.answer), Math.floor(usable / 2))))[0]?.text ?? ''
     const answerW = answer === '' ? 0 : displayWidth(answer) + 1
-    const name = clipSegs([{ text: c.name, ...(here ? { color: PALETTE.here } : {}), ...(c.grey === true ? { dim: true } : {}) }], Math.max(1, usable - 2 - answerW))
-    const used = 2 + segWidth(name) + answerW
-    const segs: Seg[] = [glyph, { text: ' ' }, ...name, { text: sp(usable - used) + (answer === '' ? '' : ' ' + answer), ...(answer === '' ? {} : { color: PALETTE.idle, ...(c.grey === true ? { dim: true } : {}) }) }]
-    return { id: c.id, key: 'card:' + c.id, segs: padSegs(segs, inner) }
+    const style = { ...(here ? { color: PALETTE.here } : {}), ...(c.grey === true ? { dim: true } : {}) }
+    const pieces = wrapPlain(c.name, Math.max(1, usable - 2 - answerW), Math.max(1, usable - 2))
+    if (pieces.length === 0) pieces.push('')
+    if (n === cursor) { at = all.length; span = Math.max(1, pieces.length) }
+    pieces.forEach((piece, i) => {
+      const name: Seg[] = [{ text: piece, ...style }]
+      const tail = i === 0 ? answerW : 0
+      const used = 2 + segWidth(name) + tail
+      const segs: Seg[] = [i === 0 ? glyph : { text: ' ' }, { text: ' ' }, ...name, { text: sp(usable - used) + (i === 0 && answer !== '' ? ' ' + answer : ''), ...(i === 0 && answer !== '' ? { color: PALETTE.idle, ...(c.grey === true ? { dim: true } : {}) } : {}) }]
+      all.push({ id: c.id, key: i === 0 ? 'card:' + c.id : 'card:' + c.id + '#' + i, segs: padSegs(segs, inner) })
+    })
   })
+  const from = span >= rows ? at : Math.max(0, Math.min(all.length - rows, at - Math.floor((rows - span + 1) / 2)))
+  return all.slice(from, from + rows)
 }
 
 // `▰▰▱▱▱▱▱▱ 2/8  ◆ 上一張 name → answer` (ux-v7 G3): one cell per card, sent done, picked action, open idle. After a send with nothing waiting the tail says `✓ 已送出 N 張`. `wide` adds `· 待送 N 張`

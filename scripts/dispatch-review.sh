@@ -868,6 +868,11 @@ validate_review_block() {
     # are accepted (v2.36.57 + quantifier); all three labels must still appear
     # IN ORDER. Normalized-empty captures are SHAPE failures before the
     # unchanged tautology blacklist.
+    # Full-width/CJK separators (； ， 。 、 U+3000) are folded to ASCII first (zh-TW reviewers), by
+    # literal substitution so it does not depend on a UTF-8 locale.
+    BATTERY_PROOF="${BATTERY_PROOF//；/;}"; BATTERY_PROOF="${BATTERY_PROOF//，/,}"
+    BATTERY_PROOF="${BATTERY_PROOF//。/.}"; BATTERY_PROOF="${BATTERY_PROOF//、/,}"
+    BATTERY_PROOF="${BATTERY_PROOF//　/ }"
     if [[ ! "$BATTERY_PROOF" =~ ^checked=(.+)[[:space:]\;,.]+evidence=(.+)[[:space:]\;,.]+conclusion=(.+)$ ]]; then
       BATTERY_FAIL_REASON="NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"; return 1
     fi

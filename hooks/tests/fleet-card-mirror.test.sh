@@ -103,7 +103,7 @@ assert_eq "$(cardcount)" 1 "replay: still one card"
 node -e 'const fs=require("fs");const f=process.argv[1];const m=JSON.parse(fs.readFileSync(f));m.messages=m.messages.map(x=>({...x,message_id:"01FAKE9"+x.message_id.slice(7)}));fs.writeFileSync(f,JSON.stringify(m))' "$STUB/recent.json"
 R3="$(ing)"; assert_contains "$R3" '"duplicate":1' "re-sent open (new message id): duplicate"; assert_eq "$(cardcount)" 1 "re-send: still one card"
 # negative control: dedup removed -> a second copy would be added under another sender... check by mutant that drops the owner/duplicate return
-mk_mut fleet-card-mirror.js "s/return owner.member === from.member && owner.courier === from.courier ? 'duplicate' : 'reject:card id held by another sender';/delete m.cards[n.card_id];/" && {
+mk_mut fleet-card-mirror.js "s/return sameSender(owner, from) ? 'duplicate' : 'reject:card id held by another sender';/delete m.cards[n.card_id];/" && {
   ( export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut"; mkdir -p "$AUTOPILOT_CARD_MIRROR_DIR"; cp "$TEST_TMP/mirror/fleet-card-mirror.json" "$AUTOPILOT_CARD_MIRROR_DIR/"
     node -e 'const fs=require("fs");const f=process.argv[1];const m=JSON.parse(fs.readFileSync(f));m.cursor=null;fs.writeFileSync(f,JSON.stringify(m))' "$AUTOPILOT_CARD_MIRROR_DIR/fleet-card-mirror.json"
     node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > "$TEST_TMP/mutout" 2>&1 ); assert_contains "$(cat "$TEST_TMP/mutout")" '"accepted":1' "dedup mutant: the re-sent open is accepted again, so the duplicate check above would be red"; }
@@ -146,8 +146,11 @@ mkmsgs "$CASES"; RV="$(ing)"
 assert_contains "$RV" '"accepted":0' "validation: nothing forged accepted"
 assert_contains "$RV" '"rejected":11' "validation: eleven malformed notices rejected (plain chat ignored)"
 assert_eq "$(cardcount)" 0 "validation: mirror empty"
-# negative control: state validation removed -> the unknown state gets in
-mk_mut lib/card-notice.js "/bad state/d" && ( export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut3"; node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > "$TEST_TMP/mutout3" 2>&1 ); assert_contains "$(cat "$TEST_TMP/mutout3")" '"accepted":1' "state-validation mutant: an unknown state is accepted, so the rejection above would be red"
+# negative control: state validation removed -> the unknown state gets in (an owner's close with an unknown state: the real tree rejects it)
+node -e 'const n=require(process.argv[1]);require("fs").writeFileSync(process.argv[2],JSON.stringify({truncated:false,messages:[
+ {message_id:"01ST0000001",from:"cookys/hostb/proj--claude@S1",kind:"chat",content:n.encode("open",{card_id:"d-00000030",question:"q",state:"open",session:"S1"})},
+ {message_id:"01ST0000002",from:"cookys/hostb/proj--claude@S1",kind:"chat",content:"AUTOPILOT-CARD/1 "+JSON.stringify({at:new Date().toISOString(),card_id:"d-00000030",event:"close",question:"q",session:"S1",state:"weird"})}]}))' "$S/lib/card-notice.js" "$STUB/recent.json"
+mk_mut lib/card-notice.js "/bad state/d" && ( export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut3"; node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > "$TEST_TMP/mutout3" 2>&1 ); assert_contains "$(cat "$TEST_TMP/mutout3")" '"accepted":2' "state-validation mutant: an unknown state is accepted, so the rejection above would be red"
 # a close from a sender that did not open it is refused
 rm -rf "$AUTOPILOT_CARD_MIRROR_DIR"
 node -e 'const n=require(process.argv[1]);const fs=require("fs");fs.writeFileSync(process.argv[3],JSON.stringify({truncated:false,messages:[
@@ -155,6 +158,21 @@ node -e 'const n=require(process.argv[1]);const fs=require("fs");fs.writeFileSyn
  {message_id:"01OWN000002",from:"cookys/hostc/evil--claude@S9",kind:"chat",content:n.encode("close",{card_id:"d-0000000c",question:"mine",state:"closed",session:"S9"})}]}))' "$S/lib/card-notice.js" x "$STUB/recent.json"
 RC1="$(ing)"; assert_contains "$RC1" '"rejected":1' "a close by another sender is rejected"; assert_eq "$(cardcount)" 1 "the card stays open"
 mk_mut fleet-card-mirror.js "/close from a sender that did not open the card/d" && ( export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut4"; node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > /dev/null 2>&1; node "$MUT/scripts/fleet-card-mirror.js" view --json < /dev/null | node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0,"utf8")).cards.length))' > "$TEST_TMP/mutcount4" ); assert_eq "$(cat "$TEST_TMP/mutcount4")" 0 "owner-check mutant: a stranger clears the card, so the check above would be red"
+# a close from the same courier and member name in ANOTHER namespace is another sender: refused, the card stays open
+rm -rf "$AUTOPILOT_CARD_MIRROR_DIR"
+node -e 'const n=require(process.argv[1]);require("fs").writeFileSync(process.argv[2],JSON.stringify({truncated:false,messages:[
+ {message_id:"01NS0000001",from:"nsa/hostb/proj--claude@S1",kind:"chat",content:n.encode("open",{card_id:"d-0000000f",question:"mine",state:"open",session:"S1"})},
+ {message_id:"01NS0000002",from:"nsb/hostb/proj--claude@S1",kind:"chat",content:n.encode("close",{card_id:"d-0000000f",question:"mine",state:"closed",session:"S1"})}]}))' "$S/lib/card-notice.js" "$STUB/recent.json"
+RNS="$(ing)"; assert_contains "$RNS" '"rejected":1' "a close from the same member name in another namespace is rejected"; assert_eq "$(cardcount)" 1 "other namespace: the card stays open"
+node "$S/fleet-card-mirror.js" view --json < /dev/null | grep -q '"namespace":"nsa"' && assert_eq 1 1 "mirror: the card records the namespace of its opener" || fail "mirror: namespace missing"
+mk_mut fleet-card-mirror.js "s/card.namespace === from.namespace \&\& //" && ( export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut6"; node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > /dev/null 2>&1; node "$MUT/scripts/fleet-card-mirror.js" view --json < /dev/null | node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0,"utf8")).cards.length))' > "$TEST_TMP/mutcount6" ); assert_eq "$(cat "$TEST_TMP/mutcount6")" 0 "namespace mutant: the other namespace clears the card, so the check above would be red"
+# a close for a card whose open this mirror never saw leaves no tombstone: the real owner's later open still lands
+rm -rf "$AUTOPILOT_CARD_MIRROR_DIR"
+node -e 'const n=require(process.argv[1]);require("fs").writeFileSync(process.argv[2],JSON.stringify({truncated:false,messages:[
+ {message_id:"01PR0000001",from:"nsb/hostc/evil--claude@S9",kind:"chat",content:n.encode("close",{card_id:"d-00000020",question:"x",state:"closed",session:"S9"})},
+ {message_id:"01PR0000002",from:"nsa/hostb/proj--claude@S1",kind:"chat",content:n.encode("open",{card_id:"d-00000020",question:"real",state:"open",session:"S1"})}]}))' "$S/lib/card-notice.js" "$STUB/recent.json"
+RPR="$(ing)"; assert_contains "$RPR" '"rejected":1' "a close of a card never seen open is rejected"; assert_contains "$RPR" '"accepted":1' "the real open after the stranger's close is accepted"; assert_eq "$(cardcount)" 1 "no pre-close: the card is open"
+mk_mut fleet-card-mirror.js "s#^  if (!owner) return tomb.*#  if (tomb \&\& !owner) return 'duplicate';#" && ( export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut7"; node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > /dev/null 2>&1; node "$MUT/scripts/fleet-card-mirror.js" view --json < /dev/null | node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0,"utf8")).cards.length))' > "$TEST_TMP/mutcount7" ); assert_eq "$(cat "$TEST_TMP/mutcount7")" 0 "pre-close mutant (tombstone written): the real open is then a duplicate, so the check above would be red"
 
 # ---- 5. sync failure keeps the old table; 6. stale boundary ----
 rm -rf "$AUTOPILOT_CARD_MIRROR_DIR"

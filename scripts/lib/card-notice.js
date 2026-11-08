@@ -4,6 +4,9 @@
  *
  *   AUTOPILOT-CARD/1 {"event":"open"|"close","card_id":"d-xxxxxxxx","question":"...","state":"...","at":"<ISO>","session":"<id>"|null}
  *
+ * Signing: run inside a Claude session, the shell `fleet send` carries that session in `from` (namespace/courier/member@session); run outside one (cron, say)
+ * there is no session, and the panel shows the session as unknown.
+ *
  * One line: the fixed prefix, one space, one JSON object, nothing after it. The session that opened the card is NOT taken from the body: the shell
  * `fleet send` inside a Claude session signs as that session (courier-attested `from`, namespace/courier/member@session), and the receiver reads the
  * session from `from`. `session` in the body is only a cross-check against a forged sender.

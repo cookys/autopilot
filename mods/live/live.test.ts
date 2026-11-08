@@ -3268,7 +3268,7 @@ const FC_DIR = '/fc-state'
 const fcMirror = (over: Record<string, unknown> = {}) => JSON.stringify({
   schema: 'autopilot.fleet-card-mirror/1', synced_at: new Date(NOW_FRESH - 60_000).toISOString(), last_error: null, cursor: null, truncated: false, rejects: [],
   closed: { 'd-00000a02': { at: new Date(NOW_FRESH - 600_000).toISOString(), state: 'awaiting_operator_action', member: 'proj--claude' } },
-  cards: { 'd-00000a01': { card_id: 'd-00000a01', question: 'Which DNS record?', state: 'open', opened_at: new Date(NOW_FRESH - 3_600_000).toISOString(), member: 'proj--claude', courier: 'host-b', session: 'FAKE-sess-9', message_id: null } },
+  cards: { 'd-00000a01': { card_id: 'd-00000a01', question: 'Which DNS record?', state: 'open', opened_at: new Date(NOW_FRESH - 3_600_000).toISOString(), member: 'proj--claude', courier: 'host-b', namespace: 'ns-a', session: 'FAKE-sess-9', message_id: null } },
   ...over,
 })
 const fcTodo = JSON.stringify({ items: [
@@ -3288,7 +3288,7 @@ test('fleetcards: the Fleet tab lists the other hosts\' cards with the session t
   const at = (needle: string) => texts.findIndex(t => t.includes(needle))
   expect(at('other hosts')).toBeGreaterThan(0)
   expect(texts[at('d-00000a01 Which DNS record?')]).toContain('▲')
-  expect(texts[at('d-00000a01 Which DNS record?') + 1]).toContain('answer in host-b/proj--claude@FAKE-sess-9')
+  expect(texts[at('d-00000a01 Which DNS record?') + 1]).toContain('answer in ns-a/host-b/proj--claude@FAKE-sess-9')
   expect(texts[at('d-00000a02 change the DNS record')]).not.toContain('⊘') // answered: the mirror remembers it, reconciled
   expect(texts[at('d-00000a99 nobody has this card')]).toContain('⊘')
   expect(at('not reconciled')).toBeGreaterThan(at('d-00000a99'))

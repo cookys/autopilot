@@ -286,10 +286,10 @@ export function othersView(mirrorText: string | null, todoText: string | null, n
           known.add(id)
           const c = isObj(raw) ? raw : null
           const openedMs = c === null ? null : isoMs(c.opened_at)
-          if (c === null || !CARD_ID_RE.test(id) || c.card_id !== id || !goodText(c.question, 300) || typeof c.courier !== 'string' || !NAME_RE.test(c.courier) || typeof c.member !== 'string' || !NAME_RE.test(c.member)
+          if (c === null || !CARD_ID_RE.test(id) || c.card_id !== id || !goodText(c.question, 300) || typeof c.namespace !== 'string' || !NAME_RE.test(c.namespace) || typeof c.courier !== 'string' || !NAME_RE.test(c.courier) || typeof c.member !== 'string' || !NAME_RE.test(c.member)
             || !(c.session === null || (typeof c.session === 'string' && SESSION_RE.test(c.session))) || openedMs === null) { base.skipped++; continue }
           if (base.cards.length >= OTHERS_MAX_ROWS) { base.skipped++; continue }
-          base.cards.push({ id, question: c.question as string, where: c.courier + '/' + c.member + (typeof c.session === 'string' ? '@' + c.session : ''), openedMs })
+          base.cards.push({ id, question: c.question as string, where: c.namespace + '/' + c.courier + '/' + c.member + (typeof c.session === 'string' ? '@' + c.session : ''), openedMs })
         }
         base.cards.sort((a, b) => a.openedMs - b.openedMs)
       }

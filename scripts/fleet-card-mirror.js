@@ -15,7 +15,7 @@
  *
  * Trust: every message is peer input. One is folded only when `content` is exactly `AUTOPILOT-CARD/1 <json>` with the contract's keys and shapes
  * (scripts/lib/card-notice.js parse), `from` is a well-formed address, and the body's `session` (when both sides carry one) equals the session in `from`.
- * The owner of a card is the `from` member that opened it; only that member can close it. The session shown is the one in `from`, never the body's.
+ * The owner of a card is the `from` (namespace, courier, member) that opened it; only that member can close it. The session shown is the one in `from`, never the body's.
  * A card id seen again is a no-op (dedup by card_id); a closed id is remembered (`closed`, 14 days) so a replayed open cannot bring it back.
  * Read-only toward fleet: it only calls `fleet recent`; no claim, no answer, no send. A failed sync keeps the old data and records `last_error`.
  * Stale: more than 5 minutes since the last good sync. Node built-ins only.
@@ -38,6 +38,8 @@ const CARD_ID = /^d-[0-9a-f]{8}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const CONTROL = /[\u0000-\u001f\u007f\u2028\u2029]/;
 const MEMBER = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+// The sender that opened a card: namespace, courier and member must all match (a same-named member in another namespace is someone else).
+const sameSender = (card, from) => card.namespace === from.namespace && card.courier === from.courier && card.member === from.member;
 
 const stateDir = () => process.env.AUTOPILOT_CARD_MIRROR_DIR || path.join(process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state'), 'autopilot');
 const mirrorFile = () => path.join(stateDir(), 'fleet-card-mirror.json');
@@ -84,14 +86,14 @@ function fold(m, msg, nowMs) {
   const tomb = m.closed[n.card_id];
   if (n.event === 'open') {
     if (tomb) return 'duplicate';
-    if (owner) return owner.member === from.member && owner.courier === from.courier ? 'duplicate' : 'reject:card id held by another sender';
+    if (owner) return sameSender(owner, from) ? 'duplicate' : 'reject:card id held by another sender';
     if (Object.keys(m.cards).length >= MAX_CARDS) return 'reject:mirror full';
-    m.cards[n.card_id] = { card_id: n.card_id, question: n.question, state: n.state, opened_at: n.at, member: from.member, courier: from.courier, session: from.session, message_id: msg.message_id || null };
+    m.cards[n.card_id] = { card_id: n.card_id, question: n.question, state: n.state, opened_at: n.at, member: from.member, courier: from.courier, namespace: from.namespace, session: from.session, message_id: msg.message_id || null };
     return 'accepted';
   }
   // close
-  if (owner && (owner.member !== from.member || owner.courier !== from.courier)) return 'reject:close from a sender that did not open the card';
-  if (tomb && !owner) return 'duplicate';
+  if (owner && !sameSender(owner, from)) return 'reject:close from a sender that did not open the card';
+  if (!owner) return tomb ? 'duplicate' : 'reject:close for a card this mirror never saw open'; // no owner known: no tombstone, a stranger cannot pre-close a card
   delete m.cards[n.card_id];
   m.closed[n.card_id] = { at: n.at, state: n.state, member: from.member };
   return 'accepted';

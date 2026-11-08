@@ -234,7 +234,7 @@ test('fleetView feeds fleetSummary unchanged (the register.ts path): a fresh fee
 // ---- fleetcards 1: othersView (the PM host's mirror and to-do files, read only) ----
 const ISO = (ms: number) => new Date(ms).toISOString()
 const mirrorOf = (cards: Record<string, unknown>, extra: Record<string, unknown> = {}) => JSON.stringify({ schema: 'autopilot.fleet-card-mirror/1', synced_at: ISO(NOW - 30_000), last_error: null, cards, closed: { 'd-0000000c': { at: ISO(NOW - 1000), state: 'closed', member: 'm' } }, ...extra })
-const goodCard = (id: string, over: Record<string, unknown> = {}) => ({ card_id: id, question: 'Q?', state: 'open', opened_at: ISO(NOW - 60_000), member: 'proj--claude', courier: 'host-b', session: 'S1', ...over })
+const goodCard = (id: string, over: Record<string, unknown> = {}) => ({ card_id: id, question: 'Q?', state: 'open', opened_at: ISO(NOW - 60_000), member: 'proj--claude', courier: 'host-b', namespace: 'ns-a', session: 'S1', ...over })
 
 test('othersView: a good card is listed with the session to answer in; a bad one is skipped and counted, not shown', () => {
   const v = othersView(mirrorOf({
@@ -243,11 +243,12 @@ test('othersView: a good card is listed with the session to answer in; a bad one
     'd-0000000d': goodCard('d-0000000d', { courier: 'bad host' }), // not an address part
     'd-0000000e': goodCard('d-0000000f'), // key and card_id differ
     'x-1': goodCard('x-1'), // bad id
+    'd-00000011': goodCard('d-00000011', { namespace: undefined }), // no namespace
     'd-00000010': goodCard('d-00000010', { opened_at: 'yesterday' }),
   }), null, NOW)
   expect(v.cards.map(c => c.id)).toEqual(['d-0000000a'])
-  expect(v.cards[0].where).toBe('host-b/proj--claude@S1')
-  expect(v.skipped).toBe(5)
+  expect(v.cards[0].where).toBe('ns-a/host-b/proj--claude@S1')
+  expect(v.skipped).toBe(6)
 })
 test('othersView: a file that cannot be read is an error, never an empty table; a missing file is "not present"', () => {
   expect(othersView('not json', null, NOW).unreadable).toBe('not JSON')

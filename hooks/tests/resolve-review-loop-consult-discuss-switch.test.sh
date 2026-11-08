@@ -162,11 +162,10 @@ for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
   if (INTENTIONAL_DEFAULT_MOVE.has(key)) {
     const want = key === 'reviewer_effort' ? 'default' : key === 'qc_panel'
-      ? ['gpt-6-astra', 'gpt-6.1-sol', 'gemini-4-argon-high', 'GLM-5.3']
+      ? ['gpt-6-astra', 'gpt-6.1-sol', 'gemini-4-argon-high']
       : [{role:'qc',runner:'codex',model:'gpt-6-astra',effort:'low',endpoint:null,family:'openai'},
          {role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'medium',endpoint:null,family:'openai'},
-         {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'},
-         {role:'qc',runner:'cc-shim',model:'GLM-5.3',effort:'high',endpoint:'glm',family:'zhipu'}];
+         {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'}];
     if (JSON.stringify(newJson[key]) !== JSON.stringify(want)) problems.push(`new-value-drift:${key}`);
     continue;
   }

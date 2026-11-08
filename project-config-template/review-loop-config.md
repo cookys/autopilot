@@ -45,6 +45,12 @@ in the repo file as before, or left out to follow this file.
 
 Every roster change adds a block here: date, reason, who ruled.
 
+**2026-11-09 (later).** GLM-5.3 comes off every review seat. Ruled by the PM (fleet 01M6YNHCJ5).
+
+* Reason: GLM-5.3 has no qualified reviewer record (`engine-scorecard seat-status --engine GLM-5.3 --runner cc-shim --role reviewer --effort high` gives `admission_status no_record`), and gpu-lead reports it failed the reviewer exam.
+* Terminal `qc_panel` is now gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high (three seats, still meets `min_panel_size` 3). `reviewer_fallback_preference` and its low-risk twin are `gpt-6.1-sol` alone.
+* The `glm` endpoint and GLM as implementer or other non-review role are unchanged.
+
 **2026-11-09.** The loop reviewer seat moves from GLM-5.3 to the local qwen. Ruled by the PM (fleet 01M6XM5Y).
 
 * New loop reviewer: `Qwen3.8-27B-QUASAR-NVFP4`, runner `anthropic-compatible` (HTTP), endpoint `qwen_local`
@@ -134,16 +140,16 @@ Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
 - cloud_fallback_rung:
 - on_family_conflict: fallback
 - review_fresh_context: on
-- reviewer_fallback_preference: GLM-5.3, gpt-6.1-sol
-- reviewer_fallback_preference_low_risk: GLM-5.3, gpt-6.1-sol
+- reviewer_fallback_preference: gpt-6.1-sol
+- reviewer_fallback_preference_low_risk: gpt-6.1-sol
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
-- qc_panel: gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high, GLM-5.3
-- qc_panel_runners: codex, codex, agy, cc-shim
-- qc_panel_efforts: low, medium, high, high
-- qc_panel_endpoints: @none, @none, @none, glm
+- qc_panel: gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high
+- qc_panel_runners: codex, codex, agy
+- qc_panel_efforts: low, medium, high
+- qc_panel_endpoints: @none, @none, @none
 - review_packet_deny_extra:
 - qc_panel_aggregation: union-on-verified-critical
 <!-- in_rail_review: auto|single|panel. auto uses the sealed panel as the in-loop review station when the QC panel is complete. -->
@@ -286,7 +292,7 @@ Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
-| `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high, GLM-5.3`) |
+| `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high`) |
 | `qc_panel_runners` / `qc_panel_efforts` / `qc_panel_endpoints` | positional exact-tuple metadata for readiness. All three lists must align 1:1 with `qc_panel`; endpoint `@none` means literal null. Missing/invalid/misaligned metadata leaves legacy review dispatch unchanged but makes `qc_panel_seats_complete=false`, so readiness fails closed instead of guessing | comma lists; reviewer runner allowlist, effort `low\|medium\|high\|xhigh\|max`, endpoint `@none` or `[A-Za-z0-9_]` |
 | `review_packet_deny_extra` | additional packet deny-list patterns, composed with the eight shipped defaults (`DEFAULT_PACKET_DENY_LIST`). Additive only — extras cannot remove a default. Grammar is `normalizeDenyList`: relative `/`-joined globs; `**` whole-segment; `*` inside a segment. Invalid element fails closed. Visible in `MANIFEST.json` `deny_list` / `packet_hash` | comma list (default empty) |
 | `exclude_allowlist` | consumer-declared pathspec(s) that widen `scripts/lib/exclude-allowlist.js`'s hardcoded `EXCLUDE_ALLOWLIST` for `--exclude` on generated/vendor paths, one per row. Each row is checked by `isAcceptedConsumerRow`: no source extension (`.js\|.ts\|.py\|.sh\|.md`), no glob character except a literal trailing `/**`, and at least one `/` — a code directory such as `src/**` is refused, not widened | one or more `- exclude_allowlist: <pathspec>` rows (repeatable), or absent |

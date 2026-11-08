@@ -959,8 +959,11 @@ const undoDeps = ($: EngineInterface): UndoDeps => ({
 async function stopHoldTimerIfIdle($: EngineInterface): Promise<void> {
   if (holdTimer !== undefined && Object.keys((await read($, DECIDE)).hold ?? {}).length === 0) { holdTimer.cancel(); holdTimer = undefined }
 }
+function startHoldTimer($: EngineInterface): void {
+  if (holdTimer === undefined) holdTimer = $.clock.every(DECIDE_TICK_MS, () => { void holdTick($).catch(() => undefined) }) // a bad tick must never take the session down
+}
 async function holdDecide($: EngineInterface): Promise<void> {
-  if ((await holdSend(undoDeps($))).length > 0 && holdTimer === undefined) holdTimer = $.clock.every(DECIDE_TICK_MS, () => { void holdTick($).catch(() => undefined) }) // a bad tick must never take the session down
+  if ((await holdSend(undoDeps($))).length > 0) startHoldTimer($)
 }
 async function undoDecide($: EngineInterface, id: string): Promise<void> {
   await undoHold(undoDeps($), id)
@@ -1047,8 +1050,9 @@ export async function startLive($: EngineInterface): Promise<void> {
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
-  holdTimer?.cancel() // the undo-window timer holds the previous session's engine handle: a new session starts its own when a send is pressed
+  holdTimer?.cancel() // the undo-window timer holds the previous session's engine handle: this session starts its own
   holdTimer = undefined
+  if (Object.keys((await read($, DECIDE)).hold ?? {}).length > 0) startHoldTimer($) // a send still inside its window when /clear came: the new session takes it over (an expired one goes out on the first tick)
   if (timer === undefined) timer = $.clock.every(TICK_MS, () => liveTick($))
   await refresh($)
 }

@@ -6732,6 +6732,30 @@ for (const surface of SURFACES) {
     expect(submits.length).toBe(1)
   })
 
+  test('undo window survives /clear: send, a new session starts, the window ending still sends once (' + surface + ')', async ($, on) => {
+    const { w, submits } = decideBand(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(2000)
+    await start($, surface) // /clear: a new session.start while the hold is still pending
+    expect(submits.length).toBe(0)
+    await w.clock.advance(10_000)
+    expect(submits.length, 'sent by the new session\'s timer').toBe(1)
+    await w.clock.advance(10_000)
+    expect(submits.length).toBe(1)
+  })
+
+  test('undo window survives /clear: send, a new session starts, undo, the window passes: nothing is sent (' + surface + ')', async ($, on) => {
+    const { w, submits } = decideBand(on)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'opt:d-4290499d:1', 'submit'])
+    await w.clock.advance(2000)
+    await start($, surface)
+    await rowsD($, ['tab:decide', 'undo:d-4290499d']) // the new session opens no tab: open 待決 again
+    await w.clock.advance(20_000)
+    expect(submits.length).toBe(0)
+  })
+
   test('correction: a sent card keeps a 改答案 button; it reopens the card, and the next send (after its own window) is one [待決回覆·更正] line  (' + surface + ')', async ($, on) => {
     const { w, submits } = decideBand(on)
     await start($, surface)

@@ -1,0 +1,5 @@
+2026-11-09T04:29:44+08:00 gate: GO present, PAUSE absent, /v1/models=200
+2026-11-09T04:29:52+08:00 ping evidence: capture skipped: chat protocol not expressible by the capture server live_ping status=200 model=Qwen3.8-27B-QUASAR-NVFP4 stop= output_tokens=28 finish=stop thinking_protocol=chat thinking_switch=enabled thinking_content_present=true 
+2026-11-09T04:29:52+08:00 provider=node $S/land/scripts/qualification-review-provider.js protocol=chat_completions thinking=enabled rf=none (not available for this role/protocol: provider restriction) max_tokens=32768 cap_s=1800
+2026-11-09T04:29:52+08:00 role=verification_author think=on START runner=anthropic-compatible model=Qwen3.8-27B-QUASAR-NVFP4 model_version=Qwen3.8-27B-QUASAR-NVFP4 version_source=runtime effort=default(none sent) endpoint=qwen_local dry=0 identity: prompt=99d8c8386b23 sem=b8cdd7ebf060 con=6e8145249308 harness=engine-qualify-93987cb5
+2026-11-09T04:35:34+08:00 NOTE: cell-seat.sh was edited while this cell ran (bash reads scripts incrementally), so the script's tail did not run; emit-row.json copy and rc=0 (engine verdict qualified) were written by hand by the foreman. run.log has no END line.

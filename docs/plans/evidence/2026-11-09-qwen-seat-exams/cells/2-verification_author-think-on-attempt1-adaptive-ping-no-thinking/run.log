@@ -1,0 +1,5 @@
+2026-11-09T04:29:18+08:00 gate: GO present, PAUSE absent, /v1/models=200
+2026-11-09T04:29:19+08:00 ping evidence: {"path":"/v1/messages","anthropic_version":"2023-06-01","model":"Qwen3.8-27B-QUASAR-NVFP4","max_tokens":32768,"output_config":"<absent>","thinking":{"type":"adaptive"},"system_chars":5517,"user_chars":165} exit=0 live_ping status=200 model=Qwen3.8-27B-QUASAR-NVFP4 stop=end_turn output_tokens=3 blocks=text thinking_protocol=messages thinking_switch=adaptive thinking_content_present=false 
+2026-11-09T04:29:19+08:00 thinking not on in the ping (gpu-lead rule 01M6WSEJFR): not sitting the exam
+2026-11-09T04:29:19+08:00 role=verification_author think=on END rc=3
+rc=3

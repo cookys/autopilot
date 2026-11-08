@@ -4877,6 +4877,8 @@ class AutopilotEngine {
           to_rung: `${engineUnavailable.cloud_fallback_rung.engine}/${engineUnavailable.cloud_fallback_rung.effort}@${engineUnavailable.cloud_fallback_rung.runner}`,
           branch: null,
           outcome: 'skipped_campaign',
+          probe: parsed && parsed.probe ? parsed.probe : null,
+          served_by: null,
         });
         const { cloud_fallback_rung: _skippedRung, ...skippedDirective } = engineUnavailable;
         engineUnavailable = {
@@ -4965,6 +4967,8 @@ class AutopilotEngine {
           to_rung: toRung,
           branch: fallbackBranchUsed,
           outcome: fallback && fallback.status ? String(fallback.status) : 'unknown',
+          probe: parsed && parsed.probe ? parsed.probe : null,
+          served_by: toRung,
         });
         return {
           ...fallback,

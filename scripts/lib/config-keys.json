@@ -4052,6 +4052,19 @@
       "summary": "Use this file instead of ~/.autopilot/config.json as the operator config."
     },
     {
+      "name": "AUTOPILOT_ENDPOINT_PREPROBE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": [
+        "scripts/lib/endpoint-probe.sh"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to off to skip the 2 s GET /models probe that dispatch-hetero and dispatch-consult make before using a local --endpoint."
+    },
+    {
       "name": "AUTOPILOT_CONSULT_TIMEOUT",
       "kind": "env",
       "audience": "user",

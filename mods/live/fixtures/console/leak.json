@@ -1,0 +1,33 @@
+{
+  "schema": "fleet.console/1",
+  "generated_at_ms": 1750000000000,
+  "sources": {
+    "cards": { "at_ms": 1750000000000, "state": "ok" },
+    "tasks": { "at_ms": 1750000000000, "state": "ok" },
+    "slots": { "at_ms": 1750000000000, "state": "ok" },
+    "quota_now": { "at_ms": 1750000000000, "state": "ok" },
+    "hosts": { "at_ms": 1750000000000, "state": "ok" }
+  },
+  "counts": {
+    "decisions": 3,
+    "exceptions": 2,
+    "tabs": {},
+    "summary": { "lines": { "line-restore": 3, "line-test": 1 }, "hosts": {}, "hints": 0 }
+  },
+  "items": [
+    { "id": "d-aa01", "kind": "card", "severity": 1, "state": "open", "needs_operator": true, "title": "Restore plan", "text": "Approve the restore plan for the fake lane.", "since_ms": 1749999900000, "line_id": "line-restore" },
+    { "id": "d-aa02", "kind": "card", "severity": 1, "state": "waiting_step", "needs_operator": false, "title": "Step T2", "text": "Waiting for step T2 to finish.", "since_ms": 1749999800000, "line_id": "line-restore" },
+    { "id": "d-aa03", "kind": "card", "severity": 0, "state": "relayed", "needs_operator": false, "title": "Relayed", "text": "Answer relayed, not confirmed yet.", "since_ms": 1749999700000, "line_id": null },
+    { "id": "x-t3", "kind": "exception", "severity": 2, "state": "T3-stalled", "needs_operator": true, "title": "T3 stalled", "text": "Step T3 has not advanced; escalated to the console.", "since_ms": 1749999600000, "line_id": "line-restore", "host_ip": "10.9.8.7" },
+    { "id": "x-t7", "kind": "exception", "severity": 1, "state": "T7", "needs_operator": false, "title": "T7 failing", "text": "The test line reports T7; no operator action needed.", "since_ms": 1749999500000, "line_id": "line-test" }
+  ],
+  "cards": [
+    { "id": "d-aa01", "question": "Approve the restore plan?", "status": "open", "opened_at_ms": 1749999900000, "executor_display": "restore lane / fake seat" },
+    { "id": "d-aa02", "question": "Confirm that step T2 is done?", "status": "waiting_step", "opened_at_ms": 1749999800000, "executor_display": null },
+    { "id": "d-aa03", "question": "Relay the answer back to the lane?", "status": "relayed_unconfirmed", "opened_at_ms": 1749999700000, "executor_display": "test lane / fake seat" }
+  ],
+  "lines": [
+    { "line_id": "line-restore", "label": "復原線", "lead_display": "lead-a", "lead": "nsx/hostx/fake-lead--claude", "issues": [ { "rule": "T3", "state": "stalled", "subject": "restore step", "since_ms": 1749999600000, "to_console": true } ] },
+    { "line_id": "line-test", "label": "測試線", "lead_display": "lead-b", "issues": [ { "rule": "T7", "state": "failing", "subject": "test suite", "since_ms": 1749999500000, "to_console": false } ] }
+  ]
+}

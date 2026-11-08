@@ -1,0 +1,15 @@
+{
+  "schema": "fleet.console/1",
+  "generated_at_ms": 1750000100000,
+  "sources": {
+    "cards": { "at_ms": 1750000100000, "state": "ok" },
+    "tasks": { "at_ms": 1750000100000, "state": "ok" },
+    "slots": { "at_ms": 1750000100000, "state": "ok" },
+    "quota_now": { "at_ms": 1750000100000, "state": "ok" },
+    "hosts": { "at_ms": 1750000100000, "state": "ok" }
+  },
+  "counts": { "decisions": 0, "exceptions": 0, "tabs": {}, "summary": { "lines": {}, "hosts": {}, "hints": 0 } },
+  "items": [],
+  "cards": [],
+  "lines": []
+}

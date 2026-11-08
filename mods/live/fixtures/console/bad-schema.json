@@ -1,0 +1,9 @@
+{
+  "schema": "fleet.console/0",
+  "generated_at_ms": 1750000400000,
+  "sources": {},
+  "counts": { "decisions": 0, "exceptions": 0, "tabs": {}, "summary": { "lines": {}, "hosts": {}, "hints": 0 } },
+  "items": [],
+  "cards": [],
+  "lines": []
+}

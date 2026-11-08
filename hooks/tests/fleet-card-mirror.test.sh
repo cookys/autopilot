@@ -134,6 +134,7 @@ console.log(JSON.stringify([
  {from:f,content:body({"question":"  "})},
  {from:f,content:body({"state":"weird"})},
  {from:f,content:body({"event":"close","state":"open"})},
+ {from:f,content:body({})},
  {from:f,content:body({"event":"close","state":"weird"})},
  {from:"not an address",content:body({})},
  {from:f,content:body({})+"\nmore"},
@@ -143,14 +144,14 @@ console.log(JSON.stringify([
  {from:f,content:" AUTOPILOT-CARD/1 {}"}
 ]))')"
 mkmsgs "$CASES"; RV="$(ing)"
-assert_contains "$RV" '"accepted":0' "validation: nothing forged accepted"
+assert_contains "$RV" '"accepted":1' "validation: only the one valid open is accepted (the owner's, for the bad-state close below)"
 assert_contains "$RV" '"rejected":11' "validation: eleven malformed notices rejected (plain chat ignored)"
-assert_eq "$(cardcount)" 0 "validation: mirror empty"
-# negative control: state validation removed -> the unknown state gets in (an owner's close with an unknown state: the real tree rejects it)
-node -e 'const n=require(process.argv[1]);require("fs").writeFileSync(process.argv[2],JSON.stringify({truncated:false,messages:[
- {message_id:"01ST0000001",from:"cookys/hostb/proj--claude@S1",kind:"chat",content:n.encode("open",{card_id:"d-00000030",question:"q",state:"open",session:"S1"})},
- {message_id:"01ST0000002",from:"cookys/hostb/proj--claude@S1",kind:"chat",content:"AUTOPILOT-CARD/1 "+JSON.stringify({at:new Date().toISOString(),card_id:"d-00000030",event:"close",question:"q",session:"S1",state:"weird"})}]}))' "$S/lib/card-notice.js" "$STUB/recent.json"
-mk_mut lib/card-notice.js "/bad state/d" && ( export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut3"; node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > "$TEST_TMP/mutout3" 2>&1 ); assert_contains "$(cat "$TEST_TMP/mutout3")" '"accepted":2' "state-validation mutant: an unknown state is accepted, so the rejection above would be red"
+assert_eq "$(cardcount)" 1 "validation: mirror holds only the valid open"
+reasons() { node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(m.rejects.map(r=>r.reason).join("|"))' "$1/fleet-card-mirror.json"; }
+BADSTATE="$(reasons "$AUTOPILOT_CARD_MIRROR_DIR" | tr '|' '\n' | grep -c '^bad state$' | tr -d ' ')"
+assert_eq "$BADSTATE" 2 "validation: both unknown-state notices (the open, and the OWNER's close of the card it opened) are rejected for the state"
+# negative control: state validation removed -> the owner's close with an unknown state gets in (same fixture, cases above)
+mk_mut lib/card-notice.js "/bad state/d" && ( export AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut3"; node "$MUT/scripts/fleet-card-mirror.js" ingest --json < /dev/null > "$TEST_TMP/mutout3" 2>&1; node "$MUT/scripts/fleet-card-mirror.js" view --json < /dev/null | node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0,"utf8")).cards.length))' > "$TEST_TMP/mutcount3" ); assert_contains "$(cat "$TEST_TMP/mutout3")" '"accepted":2' "state-validation mutant: the unknown-state close is accepted (accepted 2), so the assertions above would be red"; assert_eq "$(cat "$TEST_TMP/mutcount3")" 0 "state-validation mutant: the owner's card is closed by the unknown state"
 # a close from a sender that did not open it is refused
 rm -rf "$AUTOPILOT_CARD_MIRROR_DIR"
 node -e 'const n=require(process.argv[1]);const fs=require("fs");fs.writeFileSync(process.argv[3],JSON.stringify({truncated:false,messages:[

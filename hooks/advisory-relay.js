@@ -14,6 +14,11 @@
  * their opt-outs are AUTOPILOT_AWAITING_OWNER / AUTOPILOT_RUNS_WATCH_AUTOSTART=0. Their failures never
  * change this hook's output. A live-panel answer whose first line is [待決回覆] closes the named
  * decision cards here too (opt-out AUTOPILOT_DECIDE_REPLY_CLOSE=off); that step is also fail-open.
+ * An id found in no scope file of the project is reported (systemMessage + stderr), never skipped silently.
+ *
+ * hooks.json timeout (70 s) is the worst case of the [待決回覆] path, from scripts/lib/fleet-decision.js: probe() 5 s, then per card
+ * verify() = two `fleet decision verify` calls of up to 15 s each = 30 s; 5 + 2 cards x 30 + 5 s margin for awaiting-owner = 70 s.
+ * The old 10 s killed the hook, silently, after a single slow verify. Typical cost is milliseconds.
  */
 
 'use strict';
@@ -66,6 +71,7 @@ function closeDecideReply(payload) {
   let probeState = 'unsupported';
   try { const m = require('../scripts/lib/fleet-decision.js'); probeState = m.probe(); if (probeState === 'supported') fd = m; } catch (_e) { probeState = 'probe_error'; }
   const unverified = [];
+  const notFound = [];
   for (const id of ids) {
     if (probeState === 'probe_error') { unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
     if (fd) {
@@ -108,6 +114,15 @@ function closeDecideReply(payload) {
     if (!closed && failures.length > 0) {
       process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${failures.join('; ')}\n`);
     }
+    if (!closed && failures.length === 0) notFound.push(id);
+  }
+  if (notFound.length > 0) {
+    const where = files.length === 0
+      ? `no decision scope file exists for cwd ${payload.cwd || process.cwd()} (not inside a git repo, or no card was ever opened in this project)`
+      : `${files.length} scope file(s) of this project were searched`;
+    const note = `[待決回覆] no open card ${notFound.join(', ')} in this session's project: ${where}. Nothing was closed; the card may belong to another project or already be closed. Tell the owner.`;
+    process.stderr.write(`advisory-relay: ${note}\n`);
+    sysMsg = sysMsg ? `${sysMsg}\n${note}` : note;
   }
   if (unverified.length > 0) {
     const note = `unverified [待決回覆]: ${unverified.join(', ')}; the courier did not confirm these answers, so they are NOT acted on and their cards stay open. Tell the owner.`;

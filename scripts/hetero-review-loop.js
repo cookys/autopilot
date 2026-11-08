@@ -1825,20 +1825,16 @@ async function handleFinalize(flags) {
     const checkScript = process.env.AUTOPILOT_CHECK_REDISPATCH_PROMPT_SCRIPT
       || path.join(__dirname, 'check-redispatch-prompt.sh');
 
-    const checkRes = runPromptCheck(checkScript, 'check-redispatch-prompt.sh', [briefPath]);
-
-    if (checkRes.status !== 0) {
-      console.error(`ERROR: check-redispatch-prompt.sh failed for ${briefPath}: ${checkRes.stderr || checkRes.stdout}`);
-      process.exit(1);
-    }
-
-    // Run scripts/check-dispatch-suppression.sh from __dirname (no env override; see blind-dispatch.md).
-    // Input is controller-written lines only, not the verbatim finding text.
+    // Both linters scan controller-written lines only (controllerPath). The
+    // verbatim reviewer finding text in the brief is not scanned: the controller
+    // cannot edit it, so a leaky word in a reviewer slug must not fail finalize.
     const suppressionScript = path.join(__dirname, 'check-dispatch-suppression.sh');
     const controllerPath = path.join(gDir, `.hands-brief-controller-${process.pid}.txt`);
+    let checkRes;
     let suppressionRes;
     try {
       writeFileSyncAtomic(controllerPath, controllerText);
+      checkRes = runPromptCheck(checkScript, 'check-redispatch-prompt.sh', [controllerPath]);
       suppressionRes = spawnSync(suppressionScript, [controllerPath], {
         encoding: 'utf8',
         cwd: repoRoot || process.cwd(),
@@ -1848,6 +1844,11 @@ async function handleFinalize(flags) {
       try {
         if (fs.existsSync(controllerPath)) fs.unlinkSync(controllerPath);
       } catch (_e) {}
+    }
+
+    if (checkRes.status !== 0) {
+      console.error(`ERROR: check-redispatch-prompt.sh failed for the controller-written lines of ${briefPath}: ${checkRes.stderr || checkRes.stdout}`);
+      process.exit(1);
     }
 
     if (suppressionRes && suppressionRes.error) {

@@ -304,6 +304,8 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   const fillBtn = v.fill === null ? null : BarButton(el, 'fill', v.fill.label, v.fill.onPress)
   const fixBtn = v.fix === null ? null : BarButton(el, 'fix', v.fix.label, v.fix.onPress)
   wrapPlain(v.question, w, w).forEach((r, i) => line('q' + i, r, v.grey))
+  // the state line of a sent or closed card (and its 改答案 Button) sits right under the question, so a window that shows only the top of a tall card still shows it
+  if (v.meta !== null) rows.push(<Box key="metar"><Text>{' '}</Text><Text key="meta" {...dimProps()} wrap="truncate">{v.meta}</Text>{fixBtn === null ? <Text key="nf">{''}</Text> : <Box key="fx"><Text>{'  '}</Text>{fixBtn}</Box>}</Box>)
   // a keyed block (背景, 建議, 不授權): the key at column 1, the value from column KEY; a continuation row hangs under the value
   const keys = [t('shell.bg'), t('decide.k_advice'), t('decide.k_not_authorized')]
   const KEY = Math.max(...keys.map(displayWidth)) + 2
@@ -336,8 +338,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   }
   if (v.notAuthorized !== null) block('na', keys[2], v.notAuthorized, false)
   if (fillBtn !== null) rows.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
-  if (v.meta !== null) rows.push(<Box key="metar"><Text>{' '}</Text><Text key="meta" {...dimProps()} wrap="truncate">{v.meta}</Text>{fixBtn === null ? <Text key="nf">{''}</Text> : <Box key="fx"><Text>{'  '}</Text>{fixBtn}</Box>}</Box>)
-  else if (v.note !== null) line('note', v.note, true)
+  if (v.meta === null && v.note !== null) line('note', v.note, true)
   return rows
 }
 

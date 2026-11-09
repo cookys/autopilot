@@ -221,6 +221,10 @@ function backlogReply(repo, input, opts) {
   if (i < 0) throw new RecordError('no_reply_field', `${input.id} has no Reply line (not a peer row)`);
   const cr = loc.lines[i].endsWith('\r') ? '\r' : '';
   loc.lines[i] = `- **Reply**: ${reply}${cr}`;
+  // the updated row must still fit the row cap (a row carrying a Reply is a reporter row)
+  const rowBytes = rules.byteLen(loc.lines.slice(loc.start, loc.end).join('\n'));
+  const rowCap = rules.effectiveCap(cfg, 'row');
+  if (rowBytes > rowCap) throw new RuleViolationError([{ code: 'cap_exceeded', title: fields.Title || '', field: 'row', detail: `${rowBytes} > ${rowCap}` }]);
   writeAtomic(backlogAbs, loc.lines.join('\n'));
   return { id: input.id, paths_written: [rel(repo, backlogAbs)], info_lines: [] };
 }

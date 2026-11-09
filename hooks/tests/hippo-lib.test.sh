@@ -34,6 +34,19 @@ if GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$TEST_
   eq 1 1 "pre-flight accepts a core.hooksPath inside the temp tree"
 else fail "pre-flight rejected an inside core.hooksPath"; fi
 
+# a config file INSIDE the temp tree (the sandbox global gitconfig) that points hooksPath OUTSIDE it: the origin is inside, the value is not
+R_PF2="$(hs_mkrepo preflight2)"
+git config --file "$GIT_CONFIG_GLOBAL" core.hooksPath /nonexistent-outside-hooks
+if hs_preflight "$R_PF2" 2>/dev/null; then fail "pre-flight accepted an in-tree config file whose hooksPath value is outside the temp tree"
+else eq 1 1 "pre-flight rejects a hooksPath value outside the temp tree even when the config file is inside it"; fi
+git config --file "$GIT_CONFIG_GLOBAL" --unset core.hooksPath
+git -C "$R_PF2" config core.hooksPath "$TEST_TMP/hooks"
+hs_preflight "$R_PF2" 2>/dev/null && eq 1 1 "pre-flight accepts a local hooksPath value inside the temp tree" || fail "pre-flight rejected a local inside hooksPath"
+git -C "$R_PF2" config core.hooksPath ../../../outside-rel
+if hs_preflight "$R_PF2" 2>/dev/null; then fail "pre-flight accepted a relative hooksPath that resolves outside the temp tree"
+else eq 1 1 "pre-flight rejects a relative hooksPath that resolves outside the temp tree"; fi
+git -C "$R_PF2" config --unset core.hooksPath
+
 # --- detect: the four states
 R_FILES="$(hs_mkrepo files)"
 D="$(detect_json "$R_FILES")"
@@ -117,6 +130,30 @@ HIPPO_BIN=/nonexistent/hippo node "$DRV" spool "$R_ST" "$TEST_TMP/s1.json" backl
 sh -c 'echo $$' > "$(spool_dir "$R_ST")/.lock"
 node "$LIB" flush --target "$R_ST" 2>/dev/null; eq 0 "$?" "flush: stale-pid lock recovered"
 eq 1 "$(key_count "$R_ST" ccccccccccccccc1)" "flush: stale-lock run replayed the entry"
+
+# --- an empty lock file (the window between create and pid write) is a HELD lock, never a dead one
+R_EL="$(hs_mkrepo emptylock store)"
+mkplan "$TEST_TMP/e1.json" eeeeeeeeeeeeeee1 empty1
+HIPPO_BIN=/nonexistent/hippo node "$DRV" spool "$R_EL" "$TEST_TMP/e1.json" backlog-new >/dev/null
+: > "$(spool_dir "$R_EL")/.lock"
+node "$LIB" flush --target "$R_EL" --lock-timeout-ms 400 2>/dev/null; eq 5 "$?" "flush: empty lock file is held -> times out with exit 5"
+eq 1 "$(spool_count "$R_EL")" "flush: entry not replayed under an empty lock"
+eq 0 "$(test -e "$(spool_dir "$R_EL")/.lock" && wc -c < "$(spool_dir "$R_EL")/.lock" | tr -d ' ' || echo 0)" "flush: the empty lock file was not removed or rewritten"
+printf 'junk' > "$(spool_dir "$R_EL")/.lock"
+node "$LIB" flush --target "$R_EL" --lock-timeout-ms 400 2>/dev/null; eq 5 "$?" "flush: non-numeric lock content is held -> exit 5"
+rm -f "$(spool_dir "$R_EL")/.lock"
+node "$LIB" flush --target "$R_EL" 2>/dev/null; eq 0 "$?" "flush: replays once the lock is gone"
+eq 0 "$(find "$(spool_dir "$R_EL")" -name '.lock*' | wc -l | tr -d ' ')" "flush: no lock files left behind"
+
+# --- two flushes started together over 3 entries: both exit 0, exactly 3 records (the listing is read under the lock)
+R_TF="$(hs_mkrepo twoflush store)"
+for n in 1 2 3; do mkplan "$TEST_TMP/t$n.json" "dddddddddddddd$n$n" "tf$n"; HIPPO_BIN=/nonexistent/hippo node "$DRV" spool "$R_TF" "$TEST_TMP/t$n.json" backlog-new >/dev/null; done
+node "$LIB" flush --target "$R_TF" 2>/dev/null & Q1=$!
+node "$LIB" flush --target "$R_TF" 2>/dev/null & Q2=$!
+wait "$Q1"; QC1=$?; wait "$Q2"; QC2=$?
+eq "0 0" "$QC1 $QC2" "two flushes: both exit 0"
+eq 3 "$(H "$R_TF" list --history | jf 'd.data.records.length')" "two flushes: exactly 3 records"
+eq 0 "$(spool_count "$R_TF")" "two flushes: spool empty"
 
 # --- worktree / branch filter: an entry spooled in worktree A is not replayed from worktree B (or another branch of A)
 R_WA="$(hs_mkrepo wa store)"

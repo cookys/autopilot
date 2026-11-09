@@ -61,16 +61,19 @@ hs_exit_check() {
 
 # hs_preflight <repo>: C6 pre-flight. Reads git config the way a fixture commit would see it.
 hs_preflight() {
-  local repo="$1" top real origin
+  local repo="$1" top real val tmp
   top="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || return 1
   real="$(cd "$repo" && pwd -P)"
   [ "$top" = "$real" ] || { echo "preflight: toplevel $top != $real" >&2; return 1; }
-  origin="$(git -C "$repo" config --show-origin core.hooksPath 2>/dev/null || true)"
-  [ -z "$origin" ] && return 0
-  case "$origin" in
-    *"$(cd "$TEST_TMP" && pwd -P)"/*|*"$TEST_TMP"/*) return 0 ;;
+  val="$(git -C "$repo" config --get core.hooksPath 2>/dev/null || true)"
+  [ -z "$val" ] && return 0
+  case "$val" in /*) ;; *) val="$real/$val" ;; esac   # a relative hooksPath is resolved from the worktree top
+  val="$(realpath -m "$val")"
+  tmp="$(cd "$TEST_TMP" && pwd -P)"
+  case "$val" in
+    "$tmp"/*) return 0 ;;
   esac
-  echo "preflight: core.hooksPath comes from outside the temp tree: $origin" >&2
+  echo "preflight: core.hooksPath value $val is outside the temp tree" >&2
   return 1
 }
 

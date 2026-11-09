@@ -29,6 +29,10 @@ const ok = (v, m) => { n += 1; assert.ok(v, m); };
 const eq = (a, b, m) => { n += 1; assert.deepStrictEqual(a, b, m); };
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-contain-test-'));
+// The rails append a dispatch_usage row per run: into this temp ledger dir, never the real live dir.
+const LIVE = path.join(tmp, 'live');
+fs.mkdirSync(LIVE, { recursive: true, mode: 0o700 });
+process.env.AUTOPILOT_LIVE_DIR = LIVE;
 const emptyDir = fs.mkdtempSync(path.join(tmp, 'empty-'));
 const good = () => ({
   args: oc.lockedArgs({ model: 'p/m', dir: emptyDir }),
@@ -141,7 +145,7 @@ function runProvider(extraEnv) {
     input: `${JSON.stringify({ schema_version: 1, request_id: 'r', role: 'reviewer', payload: { format: 'case_content', content: 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n' } })}\n`,
     encoding: 'utf8', timeout: 30000,
     env: {
-      PATH: process.env.PATH, HOME: tmp, TMPDIR: tmp, PWD: process.cwd(), QRP_PROVIDER: 'oc', QRP_MODEL: 'opencode-go/x',
+      PATH: process.env.PATH, HOME: tmp, TMPDIR: tmp, PWD: process.cwd(), AUTOPILOT_LIVE_DIR: LIVE, QRP_PROVIDER: 'oc', QRP_MODEL: 'opencode-go/x',
       QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'opencode', QRP_CLI_BIN: stub, STUB_CAPTURE: capture,
       // hostile ambient values must be overridden, not inherited
       OPENCODE_CONFIG_CONTENT: JSON.stringify({ permission: 'allow' }),

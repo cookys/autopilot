@@ -251,6 +251,11 @@ test('a commit that edits runner config is an integrity violation', () => {
 // ── (a) dirty-worktree on the real rail; (b) live-rail smoke + two red controls ──
 const DISPATCH = path.join(__dirname, 'dispatch-hetero.sh');
 
+function liveDir() {
+  const d = path.join(tempRoot, 'live');
+  fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+  return d;
+}
 function writeFakeGrok(dest, mode) {
   const body = `#!/bin/bash
 set -u
@@ -348,6 +353,7 @@ function liveRail(mode) {
       AUTOPILOT_STRIKE_WRITER: 'off',
       AUTOPILOT_DISPATCH_MANIFEST: '0',
       ENGINE_CAPABILITY_DIR: cap,
+      AUTOPILOT_LIVE_DIR: liveDir(), // the rail appends a dispatch_usage row: into the temp ledger, never the real one
       GIT_CONFIG_GLOBAL: '/dev/null',
       GIT_CONFIG_NOSYSTEM: '1',
     },

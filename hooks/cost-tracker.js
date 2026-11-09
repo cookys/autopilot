@@ -156,7 +156,7 @@ try {
 
   const cwd = input.cwd || process.cwd();
   // account: the hash alias scripts/lib/account-alias.js gives this session's runner (never the email or the uuid).
-  const account = claudeAccount(process.env);
+  const account = claudeAccount();
   const rows = [...deltas, ...subDeltas].map((d) => JSON.stringify({
     ts,
     session,

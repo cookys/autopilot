@@ -8,6 +8,7 @@
 
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
+require('./test-reaper.js').installReaper(); // no child outlives this file: reaped on exit and on TERM/INT/HUP
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');

@@ -20,6 +20,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+require('./lib/test-reaper.js').installReaper(); // no child outlives this file: reaped on exit and on TERM/INT/HUP
 const { createWatcher } = require('../src/status/runs-watch');
 const { scopeFromCwd } = require('../src/status/project-key');
 

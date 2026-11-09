@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # hooks/tests/backlog-reconcile.test.sh - `check-backlog-entries.js --hippo --reconcile` against the REAL hippo binary (plan
 # 2026-11-02-oc-a3-writers-use-hippo, A3.4 step 1, the --reconcile rule): every backlog row Id and ADR file number needs a record with
-# that provenance value, else backlog_unimported. Needs HIPPO_BIN (hippo >= 0.2.2); prints SKIPPED and exits 0 without it.
+# that provenance value, else backlog_unimported. Needs a hippo >= 0.2.2 (HIPPO_BIN, else hippo on PATH); prints SKIPPED and exits 0 without it.
 # Repos are temp repos under a sandbox HOME (hooks/tests/lib/hippo-sandbox.sh, C6).
 # Red-checks: docs/plans/evidence/2026-11-02-oc-a3-writers-use-hippo/a3.4-reconcile/.
 . "$(dirname "$0")/lib.sh"
-if [ -z "${HIPPO_BIN:-}" ]; then echo "SKIPPED: HIPPO_BIN unset"; exit 0; fi
+HIPPO_BIN="${HIPPO_BIN:-$(command -v hippo 2>/dev/null)}"
+if [ -z "$HIPPO_BIN" ]; then echo "SKIPPED: no hippo (HIPPO_BIN unset, none on PATH)"; exit 0; fi
+export HIPPO_BIN
 HIPPO_BIN="$(command -v "$HIPPO_BIN")" || fail "HIPPO_BIN is not executable"
 export HIPPO_BIN
 . "$(dirname "$0")/lib/hippo-sandbox.sh"

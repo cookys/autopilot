@@ -2,10 +2,12 @@
 # hooks/tests/hippo-lib.test.sh - scripts/lib/hippo.js against the REAL hippo binary (plan 2026-11-02-oc-a3-writers-use-hippo,
 # A3.1 step 1): the four store states, the plugin-dir refusal, the write spool and its flush (lock, worktree/branch filter),
 # the idempotent step runner under fault injection, the leak_ok / refusal contract, flush in state `files`.
-# Needs HIPPO_BIN (path to a hippo >= 0.2.2); prints SKIPPED and exits 0 without it. Every repo is a temp repo under a sandbox
+# Needs a hippo >= 0.2.2 (HIPPO_BIN, else hippo on PATH); prints SKIPPED and exits 0 without it. Every repo is a temp repo under a sandbox
 # HOME (hooks/tests/lib/hippo-sandbox.sh, C6). Red-checks: docs/plans/evidence/2026-11-02-oc-a3-writers-use-hippo/a3.1-lib/.
 . "$(dirname "$0")/lib.sh"
-if [ -z "${HIPPO_BIN:-}" ]; then echo "SKIPPED: HIPPO_BIN unset"; exit 0; fi
+HIPPO_BIN="${HIPPO_BIN:-$(command -v hippo 2>/dev/null)}"
+if [ -z "$HIPPO_BIN" ]; then echo "SKIPPED: no hippo (HIPPO_BIN unset, none on PATH)"; exit 0; fi
+export HIPPO_BIN
 HIPPO_BIN="$(command -v "$HIPPO_BIN")" || fail "HIPPO_BIN is not executable"
 export HIPPO_BIN
 . "$(dirname "$0")/lib/hippo-sandbox.sh"

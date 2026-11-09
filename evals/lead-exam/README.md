@@ -43,6 +43,11 @@ Design and approval: the lead exam design note (PM approved 2026-11-06). Not a c
    (repeatable) drops an item whose own flaw is not the examinee's: it scores nothing, its hard fails do not count, and
    the total and the item's category are scaled back to full marks (`score * max / (max - voided points)`); thresholds
    are unchanged. The report lists `voided_items: [{id, reason_flag}]` and `score_before_rescale`.
+8. The second judge can also be a report another grade.js wrote on another account: `--second-judge-report <path>`
+   (excludes `--second-judge-kind`). Refused (exit 2) unless the seed is the same, every run here has its examinee in
+   the report (`run_sha256` when the report has one, else name + model + `run_wall_ms`, because older reports keep no
+   outputs hash) and the judge family differs. A `judge_void` report counts as a void second judge; a report without
+   `judge_detail` is read without it. The report's scores are taken as written (no `--void-item` rescale of them).
 
 Known limit: the examinee has no tools, so the exam under-measures real verification ability; it measures
 whether the stated evidence and rules are used correctly.

@@ -169,3 +169,85 @@ test('--void-item with an unknown id is refused (API and CLI)', async () => {
   assert.match(r.stderr, /no such item/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// ---- --second-judge-report ----------------------------------------------------
+// A report an earlier grade.js wrote elsewhere (made here by a stub judge, then given the old shape: no judge_detail,
+// no run_sha256), used as the second judge.
+async function oldStyleReport(o) {
+  const rep = await gradeExam({ items, seed: SEED, runs: o.runs || [gold()], rand: () => 0.5, judgeKind: o.kind || 'agy', judge: o.judge || plain() });
+  rep.judge = { kind: o.kind || 'agy', model: 'm', stub: false };
+  rep.examinees.forEach((e) => {
+    // the old grade.js counted a judge-only hard fail straight into `all`
+    e.hard_fails.all = Array.from(new Set([...e.hard_fails.all, ...e.unconfirmed_judge_hard_fails.map((u) => u.hf)])).sort();
+    delete e.unconfirmed_judge_hard_fails; delete e.judge_detail; delete e.run_sha256; e.run_wall_ms = null;
+  });
+  return rep;
+}
+const viaReport = (report, o) => grade({ judgeKind: 'codex', secondJudgeKind: undefined, secondReport: report, ...o });
+
+test('report as second judge, both judges flag: counted, matched by name+model+run_wall_ms', async () => {
+  const rep = await viaReport(await oldStyleReport({ judge: forcing('HF7', 6) }), { judge: forcing('HF7', 6) });
+  const e = rep.examinees[0];
+  assert.deepStrictEqual(e.hard_fails.all, ['HF7']);
+  assert.strictEqual(e.pass_provisional, false);
+  assert.strictEqual(rep.second_judge.source, 'report');
+  assert.strictEqual(rep.second_judge.matched_by, 'name+model+run_wall_ms');
+  assert.strictEqual(rep.second_judge.kind, 'agy');
+  assert.strictEqual(e.second_judge.total, e.total);
+  assert.strictEqual(e.judge_detail.second, undefined, 'an old report without judge_detail is skipped, not an error');
+});
+
+test('report as second judge, only one side flags: unconfirmed', async () => {
+  const a = await viaReport(await oldStyleReport({}), { judge: forcing('HF7', 6) });
+  assert.deepStrictEqual(a.examinees[0].hard_fails.all, []);
+  assert.strictEqual(a.examinees[0].unconfirmed_judge_hard_fails[0].flagged_by, 'first');
+  const b = await viaReport(await oldStyleReport({ judge: forcing('HF7', 6) }), { judge: plain() });
+  assert.deepStrictEqual(b.examinees[0].hard_fails.all, []);
+  assert.strictEqual(b.examinees[0].unconfirmed_judge_hard_fails[0].flagged_by, 'second');
+});
+
+test('report as second judge: a new-format report matches by run_sha256', async () => {
+  const r = await gradeExam({ items, seed: SEED, runs: [gold()], rand: () => 0.5, judgeKind: 'agy', judge: plain() });
+  r.judge = { kind: 'agy', model: 'm', stub: false };
+  const ok = await viaReport(r, { judge: plain() });
+  assert.strictEqual(ok.second_judge.matched_by, 'run_sha256');
+  r.examinees[0].run_sha256 = 'f'.repeat(64);
+  await assert.rejects(viaReport(r, { judge: plain() }), /outputs sha256/);
+});
+
+test('report as second judge, void report: same as a void second judge (provisional)', async () => {
+  const r = await oldStyleReport({ judge: forcing('HF7', 6, { ignoreTamper: true }) });
+  assert.strictEqual(r.status, 'judge_void');
+  const rep = await viaReport(r, { judge: forcing('HF7', 6) });
+  const e = rep.examinees[0];
+  assert.strictEqual(rep.second_judge.status, 'judge_void');
+  assert.deepStrictEqual(e.hard_fails.all, []);
+  assert.strictEqual(e.pass_provisional, true);
+  assert.match(e.pass_provisional_reason, /void/);
+});
+
+test('report as second judge: different seed, run mismatch and same family are refused', async () => {
+  const r = await oldStyleReport({});
+  await assert.rejects(viaReport({ ...r, seed: 'other' }, { judge: plain() }), /seed/);
+  const wall = JSON.parse(JSON.stringify(r)); wall.examinees[0].run_wall_ms = 123;
+  await assert.rejects(viaReport(wall, { judge: plain() }), /differs/);
+  const nm = JSON.parse(JSON.stringify(r)); nm.examinees[0].name = 'someone-else';
+  await assert.rejects(viaReport(nm, { judge: plain() }), /no examinee named/);
+  const fam = await oldStyleReport({ kind: 'codex' });
+  await assert.rejects(viaReport(fam, { judge: plain() }), /different family/);
+});
+
+test('--second-judge-report CLI: exit 2 on mismatch and on use with --second-judge-kind; reads the real void report', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dualjudge-'));
+  const runFile = path.join(dir, 'run.json');
+  fs.writeFileSync(runFile, JSON.stringify({ ...gold(), seed: SEED }));
+  const repFile = path.join(dir, 'rep.json');
+  fs.writeFileSync(repFile, JSON.stringify({ schema: 'lead-exam-report/1', seed: 'other', judge: { kind: 'agy' }, examinees: [] }));
+  const g = path.join(__dirname, '..', 'grade.js');
+  const run = (args) => spawnSync(process.execPath, [g, '--run', runFile, '--dry-run', ...args], { encoding: 'utf8', input: '', timeout: 30000 });
+  let r = run(['--second-judge-report', repFile]);
+  assert.strictEqual(r.status, 2); assert.match(r.stderr, /seed/);
+  r = run(['--second-judge-report', repFile, '--second-judge-kind', 'agy']);
+  assert.strictEqual(r.status, 2); assert.match(r.stderr, /excludes/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

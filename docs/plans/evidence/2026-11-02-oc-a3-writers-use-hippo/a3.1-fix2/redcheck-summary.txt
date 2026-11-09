@@ -1,0 +1,108 @@
+## F1 restore dead-owner takeover of .lock.reclaim (rename then unlink)
+suite: hippo-lib
+FAIL [hippo-lib] flush: dead .lock + dead .lock.reclaim -> exit 5: expected '5', got '0'
+FAIL [hippo-lib] flush: the timeout message names .lock.reclaim: '.lock.reclaim' not found in output
+FAIL [hippo-lib] flush: the timeout message says when to remove it: 'only if no flush is running' not found in output
+FAIL [hippo-lib] flush: the dead .lock is untouched: expected '1540351', got ''
+FAIL [hippo-lib] flush: the dead .lock.reclaim is untouched: expected '1540352', got ''
+FAIL [hippo-lib] flush: entry not replayed behind a .lock.reclaim: expected '1', got '0'
+FAIL [hippo-lib] flush: dead .lock + live .lock.reclaim -> exit 5: expected '5', got '0'
+FAIL [hippo-lib] flush: the dead .lock is untouched (live reclaim): expected '1540351', got ''
+FAIL [hippo-lib] 112 passed, 8 failed
+      - flush: dead .lock + dead .lock.reclaim -> exit 5: expected '5', got '0'
+      - flush: the timeout message names .lock.reclaim: '.lock.reclaim' not found in output
+      - flush: the timeout message says when to remove it: 'only if no flush is running' not found in output
+
+## F2a decision supersede ULID check moved back into plan()
+suite: project-record
+FAIL [project-record] validate-before-flush: decision supersede with a non-ULID does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: decision supersede with a non-ULID creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: adr supersede with a non-ULID does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: adr supersede with a non-ULID creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: handoff new with a bad area does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: handoff new with a bad area creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: handoff new with an untitled child file does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: handoff new with an untitled child file creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist creates no record: expected '0', got '1'
+FAIL [project-record] 240 passed, 10 failed
+      - validate-before-flush: decision supersede with a non-ULID does not flush either: expected '1', got '0'
+
+## F2b adr supersede ULID check removed from validate (plan check restored)
+suite: project-record
+FAIL [project-record] validate-before-flush: adr supersede with a non-ULID does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: adr supersede with a non-ULID creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: handoff new with a bad area does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: handoff new with a bad area creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: handoff new with an untitled child file does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: handoff new with an untitled child file creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist creates no record: expected '0', got '1'
+FAIL [project-record] 242 passed, 8 failed
+      - validate-before-flush: adr supersede with a non-ULID does not flush either: expected '1', got '0'
+      - validate-before-flush: adr supersede with a non-ULID creates no record: expected '0', got '1'
+      - validate-before-flush: handoff new with a bad area does not flush either: expected '1', got '0'
+
+## F2c handoff new area + child title checks moved back into plan()
+suite: project-record
+FAIL [project-record] validate-before-flush: handoff new with a bad area does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: handoff new with a bad area creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: handoff new with an untitled child file does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: handoff new with an untitled child file creates no record: expected '0', got '1'
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist creates no record: expected '0', got '1'
+FAIL [project-record] 244 passed, 6 failed
+      - validate-before-flush: handoff new with a bad area does not flush either: expected '1', got '0'
+      - validate-before-flush: handoff new with a bad area creates no record: expected '0', got '1'
+      - validate-before-flush: handoff new with an untitled child file does not flush either: expected '1', got '0'
+      - validate-before-flush: handoff new with an untitled child file creates no record: expected '0', got '1'
+      - validate-before-flush: backlog close with a commit that does not exist does not flush either: expected '1', got '0'
+
+## F2d backlog close commit check moved back into plan()
+suite: project-record
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist -> exit 3: expected '3', got '4'
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: backlog close with a commit that does not exist creates no record: expected '0', got '1'
+FAIL [project-record] 247 passed, 3 failed
+      - validate-before-flush: backlog close with a commit that does not exist -> exit 3: expected '3', got '4'
+      - validate-before-flush: backlog close with a commit that does not exist does not flush either: expected '1', got '0'
+      - validate-before-flush: backlog close with a commit that does not exist creates no record: expected '0', got '1'
+
+## F3 remove both the GIT_TEMPLATE_DIR unset and --template=
+suite: hippo-lib
+FAIL [hippo-lib] an inherited GIT_TEMPLATE_DIR hook does not run in hs_mkrepo: /tmp/ap-tpl-Czf7SO/sentinel exists but should not
+FAIL [hippo-lib] 119 passed, 1 failed
+      - an inherited GIT_TEMPLATE_DIR hook does not run in hs_mkrepo: /tmp/ap-tpl-Czf7SO/sentinel exists but should not
+
+## F3b remove only the GIT_TEMPLATE_DIR unset (--template= kept)
+suite: hippo-lib
+(NO FAILURE - mutation not caught)
+
+## F3c remove only --template= (unset kept)
+suite: hippo-lib
+(NO FAILURE - mutation not caught)
+
+## F4 flusher deletes the lock on timeout
+suite: hippo-lib
+FAIL [hippo-lib] flush: the empty lock file was not removed: /tmp/autopilot-test-hippo-lib-Fla2kr/hs/emptylock/.git/autopilot/hippo-spool/.lock does not exist
+FAIL [hippo-lib] flush: the empty lock file was not rewritten: expected '0', got ''
+FAIL [hippo-lib] flush: the junk lock file was not removed: /tmp/autopilot-test-hippo-lib-Fla2kr/hs/emptylock/.git/autopilot/hippo-spool/.lock does not exist
+FAIL [hippo-lib] flush: the junk lock file was not rewritten: expected 'junk', got ''
+FAIL [hippo-lib] 116 passed, 4 failed
+      - flush: the empty lock file was not removed: /tmp/autopilot-test-hippo-lib-Fla2kr/hs/emptylock/.git/autopilot/hippo-spool/.lock does not exist
+      - flush: the empty lock file was not rewritten: expected '0', got ''
+      - flush: the junk lock file was not removed: /tmp/autopilot-test-hippo-lib-Fla2kr/hs/emptylock/.git/autopilot/hippo-spool/.lock does not exist
+      - flush: the junk lock file was not rewritten: expected 'junk', got ''
+
+## F5 the live parity run does not close the replaced row
+suite: project-record
+FAIL [project-record] parity: show --json equal except id/created/updated/provenance/key tag (closed kept as a set/unset flag): expected '{
+FAIL [project-record] 249 passed, 1 failed
+      - parity: show --json equal except id/created/updated/provenance/key tag (closed kept as a set/unset flag): expected '{
+
+## Notes
+- F2a: the first failing assertion is the decision-supersede one; the later items fail as a cascade because the mutated
+  run flushes (and so consumes) the spooled entry that the next item expects to find.
+- F3b / F3c: removing only the GIT_TEMPLATE_DIR unset, or only `--template=`, is NOT caught by the test: each one alone
+  keeps the sentinel absent (the unset makes git use its built-in template, `--template=` ignores the variable). The
+  test fails only when both are removed; the two are kept as belt and braces.

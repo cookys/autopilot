@@ -265,12 +265,14 @@ const pre = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const a = pre.argv;
 const id = rec.raw.evidence.identity;
 const scope = rec.raw.evidence.scope;
+const eq = require(process.argv[3]);
 const checks = [
   [rec.raw.runner_version, a["runner-version"], "runner_version"],
   [rec.raw.family, a.family, "family"],
   [rec.raw.harness_version, a["harness-version"], "harness_version"],
   [id.semantic_fingerprint, a["semantic-fingerprint"], "semantic"],
-  [id.containment_fingerprint, a["containment-fingerprint"], "containment"],
+  // examsandbox: a cc-shim implementer exam records sha256(canonical{containment, sandbox tag}); the preview argv stays the raw input.
+  [id.containment_fingerprint, rec.raw.runner === "cc-shim" ? eq.implSandboxedContainment(a["containment-fingerprint"]) : a["containment-fingerprint"], "containment"],
   [scope.task_classes.join(","), a["task-class"].join(","), "task-class"],
   [scope.domains.join(","), a.domain.join(","), "domain"],
   [scope.languages.join(","), a.language.join(","), "language"],
@@ -279,7 +281,7 @@ const checks = [
 for (const [got, exp, name] of checks) {
   if (got !== exp) { console.error(name + " record=" + got + " preview=" + exp); process.exit(1); }
 }
-' "$OUT_A" "$PRE_E"
+' "$OUT_A" "$PRE_E" "$EQJS"
 assert_eq "$?" "0" "seat-preview parameters equal the administered record"
 
 # --- (g) vendor tokens beat the generic "flash" class ---

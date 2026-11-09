@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co and the account's global git config so fixture git cannot write into the launching repo or run its hooks
 // G37 L12 / P6: the total test over every wired claude caller (plan 6 N9, 5.9, 7). Tempdir only, FAKE- tokens, Node shim only;
 // nothing here reads a real ~/.claude, a credentials file or ~/.config/autopilot (every env sets AUTOPILOT_ACCOUNTS_DIR).
 //

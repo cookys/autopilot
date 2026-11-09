@@ -5,6 +5,7 @@
 _ts_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../../scripts/lib/test-identity.sh
 . "$_ts_self/../../../scripts/lib/test-identity.sh"
+. "$_ts_self/../../../scripts/lib/test-git-env.sh"
 
 _ts_write_filtered_config_z() {
   local root="$1" dest="$2"

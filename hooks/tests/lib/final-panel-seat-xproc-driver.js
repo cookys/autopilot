@@ -1,4 +1,5 @@
 'use strict';
+require('../../../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co and the account's global git config so fixture git cannot write into the launching repo or run its hooks
 // Driver for hooks/tests/final-panel-seat-resume-xproc.test.sh: ONE campaign process per
 // invocation, so a run and its `--resume` are separate OS processes. The review batch
 // dispatcher is the REAL one (real packet build, real fanout) with the dispatch-review.sh

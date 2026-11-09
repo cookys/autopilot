@@ -400,6 +400,26 @@ function endpointNotConfigured(name) {
   }
 }
 
+// Quota status the account's capability store holds for this exact seat tuple (runner, model,
+// effort, endpoint), as maintained by dispatch-review.sh passive capture and by operator
+// `engine-capability-state.js record`. Returns the reset_at of an unexpired `exhausted` row,
+// else null; any other state (available, limited, unknown, no row, read error) leaves the
+// seat to dispatch.
+function seatQuotaExhausted(seat) {
+  const args = [path.join(__dirname, 'engine-capability-state.js'), 'current',
+    '--runner', seat.runner, '--model', seat.engine, '--role', 'reviewer',
+    '--endpoint', seat.endpoint || '@none'];
+  if (seat.effort) args.push('--effort', seat.effort);
+  const res = spawnSync(process.execPath, args, { encoding: 'utf8' });
+  if (res.status !== 0) return null;
+  try {
+    const q = JSON.parse(res.stdout).capability.quota;
+    return q && q.status === 'exhausted' ? { reset_at: q.reset_at || null } : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 function resolveSeats(seatsArg, repoRoot) {
   if (seatsArg) {
     const specs = seatsArg.split(',').map((s) => s.trim()).filter(Boolean);
@@ -994,8 +1014,17 @@ async function handleCollect(flags) {
     }
     return true;
   });
+  // A seat whose quota is recorded exhausted (unexpired) would only come back no_verdict and turn
+  // the generation into a seat gap: skip it with the reason instead, like an unconfigured endpoint.
+  seats = seats.filter((seat) => {
+    const q = seatQuotaExhausted(seat);
+    if (!q) return true;
+    skippedSeats.push({ id: seat.id, engine: seat.engine, runner: seat.runner, status: 'skipped', reason: 'quota_exhausted', ...(q.reset_at ? { reset_at: q.reset_at } : {}) });
+    console.error(`INFO: seat ${seat.id} (${seat.engine}@${seat.runner}) skipped: quota recorded exhausted${q.reset_at ? ` until ${q.reset_at}` : ''} (quota_exhausted)`);
+    return false;
+  });
   if (!seats.length) {
-    console.error('ERROR: every seat was skipped (endpoint_not_configured); nothing to review');
+    console.error('ERROR: every seat was skipped (endpoint_not_configured / quota_exhausted); nothing to review');
     process.exit(1);
   }
 

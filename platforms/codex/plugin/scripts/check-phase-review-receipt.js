@@ -553,6 +553,10 @@ function validateModeB(flags) {
   // artifact records a sourced same_family_exception written by dispatch-plan-review.js --same-family-exception.
   {
     const reviewed = Array.isArray(planArtifact.reviewer_verdicts) ? planArtifact.reviewer_verdicts : [];
+    if (reviewed.some((v) => familyGate.isConsultResult(v))) {
+      console.error('Cross-family rule: plan-artifact reviewer_verdicts holds a consult result (role consult / same_family_opinion), not a review: a consult opinion is advice and never counts as a reviewed seat');
+      process.exit(1);
+    }
     const fam = familyGate.evaluatePlan(reviewed);
     if (!fam.cross_family) {
       if (planArtifact.same_family_exception === undefined) {

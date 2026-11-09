@@ -62,9 +62,8 @@ function recordedImplementerEngines(chain) {
 
 function seatFamily(seat) {
   if (!seat || typeof seat !== 'object') return 'unknown';
-  const derived = familyOfEngine(seat.engine);
-  if (derived !== 'unknown') return derived;
-  return typeof seat.family === 'string' && seat.family ? seat.family : 'unknown';
+  // Derived from the engine only: a stored `family` label is self-declared and never counts.
+  return familyOfEngine(seat.engine);
 }
 
 /**
@@ -86,7 +85,7 @@ function evaluate(chain, entry, reviewedIds) {
   const implFamilies = [...new Set(impl.families)].sort();
   const seats = Array.isArray(entry && entry.seats) ? entry.seats : [];
   const reviewedFamilies = seats
-    .filter((s) => s && typeof s === 'object' && reviewedIds.has(s.id))
+    .filter((s) => s && typeof s === 'object' && reviewedIds.has(s.id) && !isConsultResult(s))
     .map(seatFamily);
   const seatFamilies = [...new Set(reviewedFamilies)].sort();
   const cross = reviewedFamilies.some((f) => f !== 'unknown' && !implFamilies.includes(f));
@@ -96,7 +95,7 @@ function evaluate(chain, entry, reviewedIds) {
 // ---- plan review (same rule, different ledger) ------------------------------------------------------------
 // The plan-review verdict READY (and the plan-mode receipt check) needs at least one REVIEWED seat whose model
 // family is not the depth-0 / author family. Depth-0 here is Claude (anthropic); an unknown family never counts
-// as "other". Family is derived from the seat's model/runner (the declared manifest family is only a last resort),
+// as "other". Family is derived from the seat's model/runner (a declared manifest family never counts),
 // never stored: dispatch-plan-review.js writes runner+model on each reviewer_verdicts entry and
 // check-phase-review-receipt.js Mode B re-derives from those same bytes.
 const DEPTH0_FAMILY = 'anthropic';
@@ -107,17 +106,14 @@ function planSeatFamily(seat) {
     const derived = familyOfEngine(field);
     if (derived !== 'unknown') return derived;
   }
-  const declared = typeof seat.family === 'string' ? seat.family : '';
-  if (declared && !declared.startsWith('legacy-')) {
-    const viaName = familyOfEngine(declared);
-    return viaName !== 'unknown' ? viaName : declared;
-  }
+  // A stored/declared `family` label is self-declared and never counts: unresolved runner/model -> unknown.
   return 'unknown';
 }
 
 /** @param reviewedSeats seats that really reviewed ({runner, model, family}) */
 function evaluatePlan(reviewedSeats) {
-  const fams = (reviewedSeats || []).map(planSeatFamily);
+  // A consult result is advice, never a review seat, whichever caller hands it in.
+  const fams = (reviewedSeats || []).filter((s) => !isConsultResult(s)).map(planSeatFamily);
   return {
     cross_family: fams.some((f) => f !== 'unknown' && f !== DEPTH0_FAMILY),
     seat_families: [...new Set(fams)].sort(),

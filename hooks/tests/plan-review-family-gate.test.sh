@@ -138,4 +138,50 @@ process.stdout.write(JSON.stringify([g.isConsultResult(consult), g.isConsultResu
   "$REPO_ROOT/scripts/lib/review-family-gate.js" "$C_OUT" >"$TEST_TMP/isconsult.json"
 assert_eq "$(cat "$TEST_TMP/isconsult.json")" "[true,true,false]" "consult result is never a review seat; a real review seat is not flagged"
 
+# 5. Declared family and consult entries are not seats (review findings 1 and 2)
+DECLARED="$(node -e '
+const a = JSON.parse(process.argv[1]);
+a.reviewer_verdicts = [{ seat_id: "s1", family: "openai", verdict: "READY" }];
+process.stdout.write(JSON.stringify(a));' "$CLAUDE_ONLY_ARTIFACT")"
+RC_OUT="$(check_artifact declared "$DECLARED")"; RC=$?
+assert_exit_code "$RC" "1" "seat with only a declared family 'openai' (no runner/model): receipt check fails"
+assert_contains "$RC_OUT" "Cross-family rule" "declared family: failure names the rule"
+
+CONSULTED="$(node -e '
+const a = JSON.parse(process.argv[1]);
+a.reviewer_verdicts.push({ seat_id: "c1", runner: "codex", model: "gpt-fixture", role: "consult", verdict: "READY" });
+process.stdout.write(JSON.stringify(a));' "$CLAUDE_ONLY_ARTIFACT")"
+RC_OUT="$(check_artifact consulted "$CONSULTED")"; RC=$?
+assert_exit_code "$RC" "1" "Claude-only artifact plus a codex consult entry (role consult): receipt check fails"
+CONSULTED2="$(node -e '
+const a = JSON.parse(process.argv[1]);
+a.reviewer_verdicts.push({ seat_id: "c1", runner: "codex", model: "gpt-fixture", same_family_opinion: true, verdict: "READY" });
+process.stdout.write(JSON.stringify(a));' "$CLAUDE_ONLY_ARTIFACT")"
+RC_OUT="$(check_artifact consulted2 "$CONSULTED2")"; RC=$?
+assert_exit_code "$RC" "1" "Claude-only artifact plus a codex consult entry (same_family_opinion): receipt check fails"
+
+# manifest seat with an unresolvable runner/model plus a family label cannot make the plan READY
+node -e '
+const g = require(process.argv[1]);
+const r1 = g.evaluatePlan([{ runner: "mystery-runner", model: "mystery-model", family: "openai" }]);
+const r2 = g.evaluatePlan([{ runner: "claude-native", model: "claude-fixture-1" }, { runner: "codex", model: "gpt-fixture", role: "consult" }]);
+const r3 = g.evaluatePlan([{ runner: "codex", model: "gpt-fixture", same_family_opinion: true }]);
+process.stdout.write(JSON.stringify([r1.cross_family, r2.cross_family, r3.cross_family, r1.seat_families]));' \
+  "$REPO_ROOT/scripts/lib/review-family-gate.js" >"$TEST_TMP/evalplan.json"
+assert_eq "$(cat "$TEST_TMP/evalplan.json")" '[false,false,false,["unknown"]]' "evaluatePlan: unresolvable runner/model + family label is unknown; consult entries are not counted"
+
+# code-review evaluate path: a consult entry and a declared family are not counted
+node -e '
+const g = require(process.argv[1]);
+const chain = [{ generation: 1, implementer_engine: "sonnet" }];
+const entry = { generation: 1, seats: [
+  { id: "a", engine: "sonnet" },
+  { id: "c", engine: "gpt-5.6", role: "consult" },
+  { id: "d", engine: "gpt-5.6", same_family_opinion: true },
+  { id: "e", engine: "mystery-engine", family: "openai" } ] };
+const r = g.evaluate(chain, entry, new Set(["a", "c", "d", "e"]));
+process.stdout.write(JSON.stringify([r.cross_family, r.seat_families]));' \
+  "$REPO_ROOT/scripts/lib/review-family-gate.js" >"$TEST_TMP/evalcode.json"
+assert_eq "$(cat "$TEST_TMP/evalcode.json")" '[false,["anthropic","unknown"]]' "evaluate: consult entries and declared-family labels are not counted as cross-family seats"
+
 finalize_test

@@ -1,0 +1,9 @@
+# a3.1 fix3 red-check: hippo-mode backlog reply row cap counts tag-held fields (Reporter, Effort, Trigger-Type)
+# mutation: scripts/project-record.js restored to the pre-fix reply plan (only Origin restored from tags)
+# suite: hooks/tests/project-record.test.sh
+FAIL [project-record] hippo: a reply that overflows the row cap only through the tag-held fields -> exit 3: expected '3', got '0'
+FAIL [project-record] hippo: the tag-field overflow names the rule: 'cap_exceeded' not found in output
+FAIL [project-record] 250 passed, 2 failed
+      - hippo: a reply that overflows the row cap only through the tag-held fields -> exit 3: expected '3', got '0'
+      - hippo: the tag-field overflow names the rule: 'cap_exceeded' not found in output
+# restored: suite green

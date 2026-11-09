@@ -130,6 +130,16 @@ BODY_BEFORE="$(H "$R_H" show "$BLP" | jf d.data.record.body)"
 pr --target "$R_H" backlog reply "$BLP" --reply "$BIGREPLY"; eq 3 "$RC" "hippo: a reply that overflows the row cap -> exit 3"
 assert_contains "$ERR" "cap_exceeded" "hippo: the overflow names the rule"
 eq "$BODY_BEFORE" "$(H "$R_H" show "$BLP" | jf d.data.record.body)" "hippo: an oversize reply leaves the record body unchanged"
+# the row cap counts the tag-held fields (Reporter, Effort, Trigger-Type) too: a reply sized so the full row is exactly
+# one byte over the cap must be refused, though the same row without those three tag fields would fit
+EDGEREPLY="$(node -e '
+  const r=require(process.argv[1]); const cap=r.effectiveCap({}, "row");
+  const base={Title:"Peer row",Id:"BL-0000",Status:"open",Since:"2026-11-09",Origin:"peer",Reporter:"cuda",Report:"2026-11-09 fleet",Problem:"P.",Impact:"I.",Trigger:"asked","Trigger-Type":"peer",Effort:"S",Source:"PEER-REPORTED cuda 2026-11-09"};
+  const mk=(n)=>"2026-11-09 "+"x".repeat(n);
+  let n=0; while (r.byteLen(r.renderRow(Object.assign({},base,{Reply:mk(n)})))<=cap) n++;
+  process.stdout.write(mk(n));' "$REPO_ROOT/scripts/lib/backlog-rules.js")"
+pr --target "$R_H" backlog reply "$BLP" --reply "$EDGEREPLY"; eq 3 "$RC" "hippo: a reply that overflows the row cap only through the tag-held fields -> exit 3"
+assert_contains "$ERR" "cap_exceeded" "hippo: the tag-field overflow names the rule"
 SHA="$(git -C "$R_H" rev-parse HEAD)"
 pr --target "$R_H" backlog close "$BLP" done --commit HEAD --by "$BL1"; eq 0 "$RC" "hippo: backlog close with --commit and --by"
 eq done "$(H "$R_H" show "$BLP" | jf d.data.record.status)" "hippo: closed done"

@@ -303,8 +303,11 @@ H['backlog reply'] = {
     const lines = String(rec.body).split('\n').map((l) => (/^- \*\*Reply\*\*:/.test(l) ? `- **Reply**: ${p.reply}` : l));
     // the row this record renders to, with the new Reply, against the same row cap the rules enforce for new rows
     const fields = Object.assign({ Title: rec.title, Id: 'BL-0000', Status: 'open' }, b, { Reply: p.reply });
-    const origin = tagValue(rec.tags, 'origin:');
-    if (origin) fields.Origin = origin;
+    // Origin, Reporter, Effort and Trigger-Type live in tags, not body bullets (hippo spec 15.4)
+    for (const [f, pre] of [['Origin', 'origin:'], ['Reporter', 'reporter:'], ['Effort', 'effort:'], ['Trigger-Type', 'trigger:']]) {
+      const tv = tagValue(rec.tags, pre);
+      if (tv) fields[f] = tv;
+    }
     const rowBytes = rules.byteLen(rules.renderRow(fields));
     const rowCap = rules.effectiveCap(rf.gateConfig(repo), 'row');
     if (rowBytes > rowCap) throw new rules.RuleViolationError([{ code: 'cap_exceeded', title: rec.title, field: 'row', detail: `${rowBytes} > ${rowCap}` }]);

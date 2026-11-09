@@ -1,15 +1,20 @@
 # Review-Loop Config — autopilot (self-hosting)
 
 > Follows the roster (`project-config-template/review-loop-config.md`) for every seat (loop reviewer,
-> verification author, qc panel); the one override block below keeps the grok implementer (the local qwen implementer is stopped since 2026-11-09).
+> verification author, qc panel); the one override block below seats the local qwen implementer for the 2026-11-08 canary.
 > Seat history before 2026-11-06 is in git; roster changes are logged in the template's changelog. Consumed by `scripts/resolve-review-loop.sh` (precedence slot 3).
 
 ## Settings
 
-- override: implementer | until 2026-11-20 | grok-4.7/low@grok restored 2026-11-09: qwen implementer write dispatches stopped after out-of-worktree writes; resume conditions in PM fleet 01M6YFRHBV (restore the qwen block from commit 3c471a733 when they are met).
-- implementer_engine: grok-4.7
-- implementer_effort: low
-- implementer_runner: grok
+- override: implementer | until 2026-11-20 | canary 2026-11-08: local qwen implementer, cloud fallback to grok (PM fleet 01M6XM5Y/01M6XM8W). Stop and restore grok-4.7/low@grok on >3 fallbacks in 1 h or 2 consecutive qwen outputs rejected by review. Qwen write dispatches go only through `--sandbox bwrap` and `--worktree-parent` (PM fleet 01M6YJ6YWJ).
+- implementer_engine: Qwen3.8-27B-QUASAR-NVFP4
+- implementer_effort: medium
+- implementer_runner: cc-shim
+- implementer_endpoint: qwen_local
+- on_engine_unavailable: cloud-fallback
+- cloud_fallback_rung: grok-4.6/low@grok
+<!-- the loop reviewer is the roster qwen on anthropic-compatible (endpoint qwen_local); the implementer here is cc-shim on the same endpoint, so the two seats share a server and a family (the family check falls back to a cross-family reviewer). -->
+- allow_same_runner_dual_seat: on
 
 - on_family_conflict: fallback
 

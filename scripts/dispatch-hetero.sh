@@ -2445,6 +2445,13 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+# Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
+# changes the exit code. A ../ counts only at a word start ( ../x, (../x, "../x), not a/../b.
+_DOTDOT_RE='(^|[][:space:]("'"'"'=,<])\.\./[^][:space:]()"'"'"'<>,;]+'
+_DOTDOT_TOKEN="$({ grep -oE "$_DOTDOT_RE" "$PROMPT_FILE" 2>/dev/null || true; } | head -n 1 | sed -E 's/^[^.]*//')"
+if [ -n "$_DOTDOT_TOKEN" ]; then
+  echo "dispatch-hetero: warn: brief has a ../ path outside the worktree: $_DOTDOT_TOKEN" >&2
+fi
 if [ "$KEEP" -eq 1 ]; then
   [[ "$RETENTION_OWNER" =~ ^[A-Za-z0-9._-]+$ ]] \
     || die_precondition "--keep-worktree requires --retain-owner matching [A-Za-z0-9._-]+"

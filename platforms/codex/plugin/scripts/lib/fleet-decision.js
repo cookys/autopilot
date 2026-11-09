@@ -110,7 +110,7 @@ function verify(cardId, answerId, text) {
 }
 
 // An address must look like namespace/courier/member (or courier/member). open-decision.js checks --executor/--asker/backfill addresses with it; it
-// sends nothing itself (PM ruling 01M6RV0Y02: `close --answer` prints the dispatch JSON and the caller sends it).
+// sends nothing itself (PM ruling 01M6RV0Y02, overridden for panel answers by PM 01M6ZXJYTQ (2026-11-09): `close --answer` prints the dispatch JSON and the caller sends it).
 const ADDRESS = /^[A-Za-z0-9][A-Za-z0-9._@:-]*(\/[A-Za-z0-9][A-Za-z0-9._@:-]*){1,2}$/;
 
 module.exports = { probe, supportsRecent, claim, verify, verifyOnce, contentSha256, isAddress: (a) => typeof a === 'string' && ADDRESS.test(a) };

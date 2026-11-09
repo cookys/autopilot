@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # BL cardtrail: `open-decision.js close` keeps the card (status closed, closed_at, answer), `show --id` finds a closed card, `list` hides closed ones
-# unless --all. `close --answer --executor` sends NOTHING (PM ruling 01M6RV0Y02): it prints one JSON (the executor's dispatch + the asker's fyi, the
+# unless --all. `close --answer --executor` sends NOTHING (PM ruling 01M6RV0Y02, overridden for panel answers by PM 01M6ZXJYTQ, 2026-11-09): it prints one JSON (the executor's dispatch + the asker's fyi, the
 # answer verbatim) and parks the card in pending_dispatch; `close --dispatched <task_id>` then closes it. A step only the operator can do goes to
 # awaiting_operator_action (`done` ends it, plain `close` is refused). `backfill` is a dry run unless --apply and takes a status per line.
 # Negative controls (each shown red before green in the lane logs):
@@ -28,7 +28,9 @@ R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q 
 D="$R/.git/autopilot/decisions"
 EXEC="ns/cc/exec--claude"; ASK="ns/cc/asker--claude"
 od() { OUT="$(node "$OD" "$@" --cwd "$R" --root-run-id rt 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
-opencard() { OUT="$(node "$OD" open --cwd "$R" --root-run-id rt --question "$1" --free-text --not-authorized irreversible "${@:2}" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+# open refuses a card without --executor (PM 01M6ZXJYTQ), so opencard names one; a card with NO executor can only come from the library (hooks/ask-decision.js), libcard
+libcard() { OUT="$(node -e 'const r=require(process.argv[1]).openDecision({cwd:process.argv[2],root:"rt",session:null,question:process.argv[3],options:null,not_authorized:"irreversible"});process.stdout.write(r.id)' "$OD" "$R" "$1" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+opencard() { OUT="$(node "$OD" open --executor "$EXEC" --cwd "$R" --root-run-id rt --question "$1" --free-text --not-authorized irreversible "${@:2}" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 field() { node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const e=v.decisions.find(d=>d.id===process.argv[2]);const x=e?e[process.argv[3]]:undefined;process.stdout.write(x===undefined?"<undef>":String(x))' "$(ls "$D"/*.json | head -1)" "$1" "$2"; }
 
 # 1. open stores executor + asker; close --answer --executor prints JSON, sends nothing, parks the card
@@ -66,10 +68,10 @@ od show --id d-nope; assert_eq "$RC" 1 "show --id of an unknown card: exit 1"
 od close --id d-nope --dispatched t1; assert_eq "$RC" 2 "--dispatched on an unknown card: refused"
 
 # 2. executor given at close; none anywhere -> warning, direct close
-opencard "Q2?"; C2="$OUT"
+libcard "Q2?"; C2="$OUT"
 od close --id "$C2" --answer "no executor here"; assert_eq "$RC" 0 "no executor anywhere: still closes, exit 0"
 assert_contains "$OUT" "沒有 executor，不會派工" "warns there is no executor"; assert_eq "$(field "$C2" status)" "closed" "no executor: card closed directly"
-opencard "Q3?"; C3="$OUT"
+libcard "Q3?"; C3="$OUT"
 od close --id "$C3" --answer "x" --executor "$EXEC"; assert_eq "$RC" 0 "executor given at close: exit 0"
 assert_eq "$(pj dispatch.to)" "$EXEC" "close --executor: dispatch JSON"; assert_eq "$(pj fyi)" "null" "no asker -> fyi null"; assert_eq "$(field "$C3" status)" "pending_dispatch" "executor given at close: pending_dispatch"
 od close --id "$C3" --dispatched t3 >/dev/null; od close --id "$C3" --dispatched t4; assert_eq "$RC" 2 "second --dispatched refused"
@@ -84,7 +86,7 @@ assert_eq "$(field "$C5" status)" "awaiting_operator_action" "status awaiting_op
 assert_eq "$(field "$C5" executor)" "$EXEC" "executor recorded on the awaiting card"
 od list; assert_contains "$OUT" "$C5" "list shows an awaiting card (it is not closed)"; assert_contains "$OUT" "status: awaiting_operator_action" "list marks the status"
 assert_contains "$OUT" "open decisions: 0" "an awaiting card is not counted as an open decision"; assert_contains "$OUT" "awaiting_operator_action: 1" "its own count"
-opencard "Q5b?"; C5B="$OUT"; od close --id "$C5B" --answer "do it" --awaiting-operator "step b"; assert_eq "$RC" 0 "awaiting without executor: exit 0"; assert_contains "$OUT" "awaiting_operator_action $C5B" "awaiting (no executor) says so"
+libcard "Q5b?"; C5B="$OUT"; od close --id "$C5B" --answer "do it" --awaiting-operator "step b"; assert_eq "$RC" 0 "awaiting without executor: exit 0"; assert_contains "$OUT" "awaiting_operator_action $C5B" "awaiting (no executor) says so"
 assert_eq "$(cat "$STUBLOG")" "" "awaiting path sent nothing either"
 od close --id "$C5"; assert_eq "$RC" 2 "plain close of an awaiting card is refused"; assert_contains "$ERR" "done --id" "refusal points at done"
 od close --id "$C5" --dispatched t1; assert_eq "$RC" 2 "--dispatched on an awaiting card: refused"

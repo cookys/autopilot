@@ -590,7 +590,7 @@ test('AWAITING (現況): a card line shows " -> <step>" when it has one, and nev
   }
 })
 
-// ---- pending_dispatch (BL cardtrail, PM ruling 01M6RV0Y02): answered, the caller has not confirmed the dispatch. Its own row, not 待決 ----
+// ---- pending_dispatch (BL cardtrail, PM ruling 01M6RV0Y02, overridden for panel answers by PM 01M6ZXJYTQ 2026-11-09): answered, the caller has not confirmed the dispatch. Its own row, not 待決 ----
 test('DISPATCHING (現況): a pending_dispatch card is its own 要你處理 row (not a 待決 row, no press target); none -> no such row', () => {
   const pd = [{ id: 'd-7', question: 'sync the rules?', answer: 'yes', awaiting_operator: null, executor: 'ns/cc/exec--claude', asker: null }]
   for (const [loc, t] of LOCALES) {

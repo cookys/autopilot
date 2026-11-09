@@ -736,7 +736,7 @@ mkdir -p "$RB_MUT/hooks"
 ln -s "$REPO_ROOT/scripts" "$RB_MUT/scripts"
 ln -s "$REPO_ROOT/src" "$RB_MUT/src"
 for f in "$REPO_ROOT"/hooks/*.js; do [ "$(basename "$f")" = advisory-relay.js ] || ln -s "$f" "$RB_MUT/hooks/$(basename "$f")"; done
-sed_mutant "$HOOKS_DIR/advisory-relay.js" "$RB_MUT/hooks/advisory-relay.js" 's/files = projectScopeFiles(payload.cwd);/files = projectScopeFiles(payload.cwd).filter((f) => !f.includes("--"));/'
+sed_mutant "$HOOKS_DIR/advisory-relay.js" "$RB_MUT/hooks/advisory-relay.js" 's/files = projectScopeFiles(payload.cwd, { all: true });/files = projectScopeFiles(payload.cwd, { all: true }).filter((f) => !f.includes("--"));/'
 RB_ID2="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_ROOT_RUN_ID node -e '
   const { openDecision } = require(process.argv[1]);
   const r = openDecision({ cwd: process.argv[2], root: "job-root-a", question: "root A again?" });

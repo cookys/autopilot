@@ -43,7 +43,7 @@ export AUTOPILOT_RENDER_TASK_STATUS_BIN="$SB/task-bin.sh"
 export AUTOPILOT_REVIEW_RETAIN_MS=999999999
 
 # ---- A. open-decision.js helper (decision/2) --------------------------------------------------------------
-odo() { (cd "$REPO" && wenv "$NODE" "$OD" "$@" 2> "$SB/od.err" < /dev/null); }
+odo() { local a=("$@"); [ "${1:-}" = open ] && a=(open --executor ns/cc/exec--claude "${@:2}"); (cd "$REPO" && wenv "$NODE" "$OD" "${a[@]}" 2> "$SB/od.err" < /dev/null); }
 # jf <file> <js expr over v>: print an expression of the parsed JSON file
 jf() { node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(eval(process.argv[2])))' "$1" "$2"; }
 COMMON="$REPO/.git"

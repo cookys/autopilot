@@ -220,7 +220,7 @@ test('A: a hand-opened entry (open-decision.js, no origin) is never overwritten 
   const e = mkEnv(); const repo = mkRepo();
   marker(e, 'sess-a7', 'job-a7');
   const env = { ...e.env, AUTOPILOT_SESSION_ID: 'sess-a7' };
-  const r = spawnSync('node', [OPEN, 'open', '--not-authorized', 'irreversible', '--question', 'By hand', '--option', 'one', '--option', 'two', '--cwd', repo], { encoding: 'utf8', env });
+  const r = spawnSync('node', [OPEN, 'open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--question', 'By hand', '--option', 'one', '--option', 'two', '--cwd', repo], { encoding: 'utf8', env });
   assert.strictEqual(r.status, 0, r.stderr);
   const hand = allEntries(repo);
   assert.strictEqual(hand.length, 1);
@@ -238,7 +238,7 @@ test('A: the same session adds an entry by hand next to the hook\'s -> the close
   marker(e, 'sess-a8', 'job-a8');
   run(ASK, pre(repo, 'sess-a8', [q('Hook first?', ['a', 'b'])]), e.env);
   const env = { ...e.env, AUTOPILOT_SESSION_ID: 'sess-a8' };
-  const r = spawnSync('node', [OPEN, 'open', '--not-authorized', 'irreversible', '--free-text', '--question', 'Then by hand', '--cwd', repo], { encoding: 'utf8', env });
+  const r = spawnSync('node', [OPEN, 'open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'Then by hand', '--cwd', repo], { encoding: 'utf8', env });
   assert.strictEqual(r.status, 0, r.stderr);
   const both = allEntries(repo);
   assert.strictEqual(both.length, 2);
@@ -503,7 +503,7 @@ test('BL-0163 isOurs: a pointer that names an entry the session did not open (a 
   marker(e, 'sess-g1', 'job-g'); marker(e, 'sess-g2', 'job-g');
   run(ASK, pre(repo, 'sess-g1', [q('G1 asks?', ['a', 'b'])]), e.env);
   run(ASK, pre(repo, 'sess-g2', [q('G2 asks?', ['a', 'b'])]), e.env);
-  const r = spawnSync('node', [OPEN, 'open', '--not-authorized', 'irreversible', '--free-text', '--question', 'By hand', '--cwd', repo, '--root-run-id', 'job-g'], { encoding: 'utf8', env: { ...e.env, AUTOPILOT_SESSION_ID: 'sess-g1' } });
+  const r = spawnSync('node', [OPEN, 'open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'By hand', '--cwd', repo, '--root-run-id', 'job-g'], { encoding: 'utf8', env: { ...e.env, AUTOPILOT_SESSION_ID: 'sess-g1' } });
   assert.strictEqual(r.status, 0, r.stderr);
   const before = allEntries(repo);
   assert.strictEqual(before.length, 3);
@@ -538,7 +538,7 @@ test('BL-0163 close on a repo that never opened a decision creates no decisions/
   const { closeDecisionById } = require(OPEN);
   assert.strictEqual(closeDecisionById(path.join(common, 'decisions', 'nope.json'), 'd-1').status, 'absent');
   assert.ok(!fs.existsSync(path.join(common, 'decisions')), 'nor by the library call');
-  const o = spawnSync('node', [OPEN, 'open', '--not-authorized', 'irreversible', '--free-text', '--question', 'Later?', '--cwd', repo], { encoding: 'utf8', env: e.env });
+  const o = spawnSync('node', [OPEN, 'open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'Later?', '--cwd', repo], { encoding: 'utf8', env: e.env });
   assert.strictEqual(o.status, 0, o.stderr);
   assert.strictEqual(allEntries(repo).length, 1);
 });
@@ -550,7 +550,7 @@ test('BL-0163 orphan: a hook-opened question whose asker left no turn file is or
   turn('sess-o1'); turn('sess-o2'); // both askers have a turn file when they open: their entries are turn_tracked
   run(ASK, pre(repo, 'sess-o1', [q('Alive asks?', ['a', 'b'])]), e.env);
   run(ASK, pre(repo, 'sess-o2', [q('Dead asks?', ['a', 'b'])]), e.env);
-  const hand = spawnSync('node', [OPEN, 'open', '--not-authorized', 'irreversible', '--free-text', '--question', 'By hand', '--cwd', repo, '--root-run-id', 'job-o'], { encoding: 'utf8', env: { ...e.env, AUTOPILOT_SESSION_ID: 'sess-o3' } });
+  const hand = spawnSync('node', [OPEN, 'open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'By hand', '--cwd', repo, '--root-run-id', 'job-o'], { encoding: 'utf8', env: { ...e.env, AUTOPILOT_SESSION_ID: 'sess-o3' } });
   assert.strictEqual(hand.status, 0, hand.stderr);
   fs.rmSync(path.join(e.live, 'turn', 'sess-o2.json')); // sess-o1 stays alive; sess-o2's turn file is gone (it ended); the hand-opening sess-o3 never had one
   const { scopeFromCwd } = require(path.join(ROOT, 'src', 'status', 'project-key.js'));

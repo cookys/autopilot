@@ -48,7 +48,7 @@ cenv() {
 }
 open_card() { # open_card <name> <question> [extra env as VAR=val...] ; stdout id, stderr -> $SB/err, rc in OPEN_RC
   local n="$1" q="$2"; shift 2
-  OPEN_OUT="$(cenv "$n" "$@" node "$OD" open --cwd "$R" --question "$q" --option a::x --option b::y --not-authorized irreversible 2>"$SB/err")"; OPEN_RC=$?
+  OPEN_OUT="$(cenv "$n" "$@" node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --question "$q" --option a::x --option b::y --not-authorized irreversible 2>"$SB/err")"; OPEN_RC=$?
 }
 # the pane's reader on the newest model.json of job <job> in <home>: prints "needs_decision:id,id"
 pane_cards() { # pane_cards <name> <job>
@@ -93,13 +93,13 @@ assert_eq "true:$ID2" "$(wait_cards s2 "$ROOT2" "true:$ID2")" "S2 the pane's rea
 # ---- S4: isolated environment on the shared live dir ----
 newrepo s4
 OUT4="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR HOME="$SB/s4/home" CLAUDE_CONFIG_DIR="$SB/s4/claude" XDG_RUNTIME_DIR="$SB/s4/xdg" \
-  AUTOPILOT_SESSION_MODE_DIR="$SB/s4/home/.autopilot/session-mode" AUTOPILOT_RUNS_WATCH_AUTOSTART= node "$OD" open --cwd "$R" --question "Q-S4?" --option a::x --option b::y --not-authorized irreversible 2>"$SB/err4")"; RC4=$?
+  AUTOPILOT_SESSION_MODE_DIR="$SB/s4/home/.autopilot/session-mode" AUTOPILOT_RUNS_WATCH_AUTOSTART= node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --question "Q-S4?" --option a::x --option b::y --not-authorized irreversible 2>"$SB/err4")"; RC4=$?
 assert_eq "5" "$RC4" "S4 isolated environment: exit 5"
 assert_contains "$OUT4" "d-" "S4 the id is still printed on stdout"
 assert_contains "$(cat "$SB/err4")" "will NOT appear in any live panel" "S4 stderr says the card will not show"
 assert_contains "$(cat "$SB/err4")" "AUTOPILOT_LIVE_DIR" "S4 stderr says what to do"
 assert_contains "$(env HOME="$SB/s4/home" node "$OD" show --cwd "$R")" "Q-S4?" "S4 the card is written anyway"
-OUT4B="$(env HOME="$SB/s4/home" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 node "$OD" open --cwd "$R" --question "Q-S4b?" --option a::x --option b::y --not-authorized irreversible 2>/dev/null)"; assert_eq "0" "$?" "S4 autostart switched off: exit 0 (the owner's / a test's explicit switch)"
+OUT4B="$(env HOME="$SB/s4/home" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --question "Q-S4b?" --option a::x --option b::y --not-authorized irreversible 2>/dev/null)"; assert_eq "0" "$?" "S4 autostart switched off: exit 0 (the owner's / a test's explicit switch)"
 
 # ---- S5: a watcher started by hand without --render holds the lock; open replaces it ----
 envpid() { node -e 'try{const e=JSON.parse(require("fs").readFileSync(process.argv[1]));if(e.writer&&e.writer.pid)process.stdout.write(String(e.writer.pid))}catch(_){}' "$LIVE/runs/$1.json"; }

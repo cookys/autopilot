@@ -19,6 +19,8 @@
  *
  * hooks.json timeout (70 s) is the worst case of the [待決回覆] path, from scripts/lib/fleet-decision.js: probe() 5 s, then per card
  * verify() = two `fleet decision verify` calls of up to 15 s each = 30 s; 5 + 2 cards x 30 + 5 s margin for awaiting-owner = 70 s.
+ * The send step is bounded separately: every answered card is verified and parked first, then sent in order under one deadline (AUTOPILOT_RELAY_SEND_BUDGET_MS,
+ * default 45 s from the hook's start; per send min(20 s, remaining)); cards not sent in time stay pending_dispatch with dispatch_error hook_budget.
  * The old 10 s killed the hook, silently, after a single slow verify. Typical cost is milliseconds.
  */
 
@@ -38,6 +40,7 @@ function closeDecideReply(payload) {
   if (typeof prompt !== 'string') return;
   const lines = prompt.split(/\r?\n/);
   if (lines[0] !== DECIDE_REPLY_HEAD) return;
+  const hookStart = Date.now();
   const ids = [];
   const seen = new Set();
   const idLine = new Map();
@@ -52,15 +55,19 @@ function closeDecideReply(payload) {
   let closeDecisionById;
   let projectScopeFiles;
   let readEntries;
+  let parkAnswer;
+  let sendParked;
+  let parkUndelivered;
+  let receiptLine;
   try {
-    ({ closeDecisionById, projectScopeFiles, readEntries } = require('../scripts/open-decision.js'));
+    ({ closeDecisionById, projectScopeFiles, readEntries, parkAnswer, sendParked, receiptLine, parkUndelivered } = require('../scripts/open-decision.js'));
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
   }
   let files;
   try {
-    files = projectScopeFiles(payload.cwd);
+    files = projectScopeFiles(payload.cwd, { all: true }); // all: a card parked in pending_dispatch takes a later answer too
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
@@ -71,22 +78,56 @@ function closeDecideReply(payload) {
   let fd = null;
   let probeState = 'unsupported';
   try { const m = require('../scripts/lib/fleet-decision.js'); probeState = m.probe(); if (probeState === 'supported') fd = m; } catch (_e) { probeState = 'probe_error'; }
+  const toSend = []; // parked answers, sent in order after every card is verified and parked
   const unverified = [];
   const notFound = [];
+  const delivery = new Map(); // id -> the verified answer of a card that has an executor: the program delivers it (PM 01M6ZXJYTQ), nothing closes it directly
+  // A card with an executor never closes unless its answer was delivered: when the answer cannot be delivered it is parked in pending_dispatch with dispatch_error = reason.
+  const parkExecutorCard = (id, reason) => {
+    for (const file of files) {
+      let r;
+      try { r = parkUndelivered(file, id, reason); } catch (_e) { continue; }
+      if (r.status === 'parked' || r.status === 'error') {
+        const line = `[答覆未送達] ${id} → ${r.executor}: ${r.status === 'parked' ? reason : r.error}（卡片留在 pending_dispatch，沒有關閉）`;
+        ctxLines.push(line); process.stderr.write(`advisory-relay: ${line}\n`);
+        return true;
+      }
+      if (r.status === 'no_executor') return false;
+    }
+    return false;
+  };
   for (const id of ids) {
-    if (probeState === 'probe_error') { unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
+    if (probeState === 'probe_error') { if (!parkExecutorCard(id, 'probe_error')) unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
     if (fd) {
       const line = idLine.get(id);
       const aid = line.split('｜').pop().trim();
       const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, line) : { ok: false, outcome: 'unverified' };
-      if (!v.ok) { unverified.push(`${id} (${v.outcome})`); continue; }
+      if (!v.ok) { if (!parkExecutorCard(id, `verify_failed (${v.outcome})`)) unverified.push(`${id} (${v.outcome})`); continue; }
       // the verified STORED answer is the only authority: the line's own text must say that same answer
       // strict, field-wise (scripts/lib/decide-line.js): the question comes from the ledger card, the answer must EQUAL the stored one
       let question = null;
-      try { for (const f of files) { const e = readEntries(f).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
+      try { for (const f of files) { const e = readEntries(f, { all: true }).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
       const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
-      if (!bound.ok) { unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
+      if (!bound.ok) { if (parkExecutorCard(id, 'content_mismatch')) continue; unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
+      delivery.set(id, { answer: v.answer, answer_id: aid });
     }
+    if (delivery.has(id)) {
+      // a card with an executor: park the verified answer now (every answered card first), send later in order under one deadline
+      let handled = false;
+      for (const file of files) {
+        let hit;
+        try { hit = readEntries(file, { all: true }).find((e) => e.id === id); } catch (_e) { hit = null; }
+        if (!hit || !hit.executor) continue;
+        const r = parkAnswer(file, id, delivery.get(id));
+        if (r.status === 'absent' || r.status === 'not_parked') continue;
+        handled = true;
+        if (r.status === 'error') { const line = receiptLine({ status: 'failed', id, executor: r.executor, error: r.error, attempts: 1 }); ctxLines.push(line); process.stderr.write(`advisory-relay: ${line}\n`); break; }
+        toSend.push({ file, id });
+        break;
+      }
+      if (handled) continue;
+    }
+    if (!fd && parkExecutorCard(id, 'no_courier')) continue;
     // closeDecisionById locks before it looks up the id, so a locked scope file
     // returns status error even when this card is not in it. Keep every error
     // and keep walking; a later scope file may still hold the card. One line is
@@ -116,6 +157,17 @@ function closeDecideReply(payload) {
       process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${failures.join('; ')}\n`);
     }
     if (!closed && failures.length === 0) notFound.push(id);
+  }
+  // Send phase: one absolute deadline for the whole hook (hooks.json allows 70 s; the default budget is 45 s, measured from the hook's start), passed to every sendParked:
+  // each send gets min(20 s, remaining), and a send needs 5 s left, else the card stays pending_dispatch with dispatch_error hook_budget for `redeliver`.
+  const budget = Number(process.env.AUTOPILOT_RELAY_SEND_BUDGET_MS) > 0 ? Number(process.env.AUTOPILOT_RELAY_SEND_BUDGET_MS) : 45000;
+  const deadline = hookStart + budget;
+  for (const { file, id } of toSend) {
+    const r = sendParked(file, id, undefined, { deadline });
+    const ok = r.status === 'sent' || r.status === 'already' || r.status === 'in_flight';
+    const line = receiptLine(ok ? r : { ...r, status: 'failed', error: r.error || r.status, attempts: r.attempts || 1 });
+    ctxLines.push(line);
+    if (!ok) process.stderr.write(`advisory-relay: ${line}\n`);
   }
   if (notFound.length > 0) {
     const where = files.length === 0
@@ -159,8 +211,12 @@ function recordCorrection(payload) {
 // BL-0336: the autostart's failure sentence (watcher could not start / live dir unusable) is the only thing this host adds to
 // stdout besides the advisory blob; it travels as a systemMessage, in the same JSON object when both exist.
 let sysMsg = null;
+const ctxLines = []; // receipt lines of delivered panel answers: the model of this (PM) session reads them
 function bye() {
-  try { if (sysMsg) fs.writeSync(1, JSON.stringify({ systemMessage: sysMsg })); } catch { /* fail-open */ }
+  try {
+    if (ctxLines.length) fs.writeSync(1, JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: ctxLines.join('\n') }, ...(sysMsg ? { systemMessage: sysMsg } : {}) }));
+    else if (sysMsg) fs.writeSync(1, JSON.stringify({ systemMessage: sysMsg }));
+  } catch { /* fail-open */ }
   process.exit(0);
 }
 
@@ -240,7 +296,7 @@ try {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: texts.join('\n'),
+        additionalContext: [...ctxLines.splice(0), ...texts].join('\n'),
       },
       ...(sysMsg ? { systemMessage: sysMsg } : {}),
     }));

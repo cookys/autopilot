@@ -112,7 +112,7 @@ run_case rnone env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-f
 run_case hbig env -C "$TEST_TMP/sbx-hbig" "$HETERO" --branch t/hbig --prompt-file "$BIG" --agy-bin "$(mk_stub hbig AGY_STUB_CAPTURE=1 AGY_STUB_TAIL=$BIG_BYTES)" --model gemini-3.7-flash-high --runner agy
 run_case herr env -C "$TEST_TMP/sbx-herr" "$HETERO" --branch t/herr --prompt-file "$SMALL" --agy-bin "$(mk_stub herr AGY_STUB_RESULT=error AGY_STUB_ERROR_TEXT=zz-hetero-boom)" --model gemini-3.7-flash-high --runner agy
 run_case hnone env -C "$TEST_TMP/sbx-hnone" "$HETERO" --branch t/hnone --prompt-file "$SMALL" --agy-bin "$(mk_stub hnone AGY_STUB_RESULT=none)" --model gemini-3.7-flash-high --runner agy
-run_case loop env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$WRAP" node "$LOOP" collect \
+run_case loop env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$WRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \
   --repo-root "$LS" --ledger "$TEST_TMP/loop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$LOOP_BASE" \
   --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
 # --- BL-0021 fail-closed ceiling: the stdin wall (~175-200 KB on this deployment) is silent, so a
@@ -130,7 +130,7 @@ printf '#!/usr/bin/env bash\nout="$(%q "$@" --bin %q)"; rc=$?\nprintf "%%s\\n" "
 run_case aover env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$OVER" --bin "$(mk_stub aover AGY_STUB_CAPTURE=1)"
 run_case rover env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$OVERDIFF" --bin "$(mk_stub rover AGY_STUB_CAPTURE=1)"
 run_case hover env -C "$TEST_TMP/sbx-hover" "$HETERO" --branch t/hover --prompt-file "$OVER" --agy-bin "$(mk_stub hover AGY_STUB_CAPTURE=1)" --model gemini-3.7-flash-high --runner agy
-run_case oloop env -C "$OS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$OWRAP" node "$LOOP" collect \
+run_case oloop env -C "$OS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$OWRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \
   --repo-root "$OS" --ledger "$TEST_TMP/oloop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$OLOOP_BASE" \
   --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
 # override: raising the limit lets the same prompt through
@@ -150,7 +150,7 @@ run_case hemp env -C "$TEST_TMP/sbx-hemp" "$HETERO" --branch t/hemp --prompt-fil
 run_case htrk env -C "$TEST_TMP/sbx-htrk" "$HETERO" --branch t/htrk --prompt-file "$SMALL" --agy-bin "$(mk_stub htrk AGY_STUB_INPUT_TOKENS=97652)" --model gemini-3.7-flash-high --runner agy
 RWRAP="$TEST_TMP/review-wrap-trk.sh"
 printf '#!/usr/bin/env bash\nout="$(%q "$@" --bin %q)"; rc=$?\nprintf "%%s\\n" "$out" >> %q\nprintf "%%s\\n" "$out"\nexit $rc\n' "$REVIEW" "$(mk_stub ltrk AGY_STUB_INPUT_TOKENS=97652)" "$R/ltrkseat.out" > "$RWRAP"; chmod +x "$RWRAP"
-run_case ltrk env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$RWRAP" node "$LOOP" collect \
+run_case ltrk env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$RWRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \
   --repo-root "$LS" --ledger "$TEST_TMP/rloop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$LOOP_BASE" \
   --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
 wait

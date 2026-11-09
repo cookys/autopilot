@@ -16,6 +16,7 @@ const deriveReceiptState = require('./lib/review-chain-derive');
 const { majorDispositionError, downgradeMisuseError } = deriveReceiptState;
 const { isSafeSeatId } = require('./lib/seat-id-guard');
 const { stageWrite, familyOfEngine } = require('./lib/stage-write');
+const familyGate = require('./lib/review-family-gate');
 const { invalidSeatModels } = require('./lib/seat-model-id');
 
 function assertSafeSeatId(id) {
@@ -223,6 +224,9 @@ Collect flags:
   --branch <b>          Target git branch
   --phase-base <sha>    Base commit sha (required for generation 1)
   --seats <specs>       Comma-separated list of seats (engine/effort@runner[:endpoint])
+  --implementer-engine <id[,id]>  Engine(s) that wrote the diff. Required at generation 1 (recorded in the
+                        chain; a later generation reads it back). Its family must be known. finalize
+                        will not return SHIP-AS-IS unless a reviewed seat is of another family.
   --spec-file <file>    Task specification file to pass to reviewer
   --exclude <specs>     Comma-separated git pathspecs to exclude from diff
   --expect-range <r>    full | delta | <base>..<head>: the range the reviewers are expected to cover.
@@ -266,6 +270,13 @@ Finalize flags:
                         pass --allow-unresolved --reason "<text>" to leave them open on purpose; the
                         receipt then records unresolved_allowed { reason, ids }.
   --reason <text>       Required, non-empty, with --allow-unresolved (refused without it).
+  --same-family-exception "<source>: <reason>"
+                        Cross-family rule: SHIP-AS-IS needs a reviewed seat whose family differs from the
+                        implementer's (capability_warnings no_cross_family_seat otherwise, verdict
+                        FIX-THEN-SHIP). Only this flag lifts it, and only with a source: a decision card
+                        id (d-xxxxxxxx) or a fleet message id (26-char ULID). Recorded in the chain
+                        entry; the checker accepts only that recorded form. No env var or other flag
+                        (--allow-seat-gap, AUTOPILOT_MIN_REVIEWED_SEATS) skips it.
 
 Opt-out flags:
   --knob <knob>         Review knob to opt out (plan_review|hetero_review)
@@ -817,6 +828,30 @@ async function handleCollect(flags) {
     process.exit(1);
   }
 
+  // Implementer family (cross-family rule): required at generation 1, read back from the chain later.
+  // Resolved before any directory or seat dispatch so a refusal consumes no generation.
+  const recordedImpl = familyGate.recordedImplementerEngines(chain);
+  const flagImpl = typeof flags['implementer-engine'] === 'string' ? flags['implementer-engine'].trim() : '';
+  if (flags['implementer-engine'] !== undefined && !flagImpl) {
+    console.error('ERROR: --implementer-engine needs an engine id (comma-separated for several)');
+    process.exit(2);
+  }
+  if (!flagImpl && recordedImpl.length === 0) {
+    console.error(`ERROR: --implementer-engine <id> is required${generation === 1 ? ' for generation 1' : ' (the chain records none)'}: name the engine that wrote the diff, so finalize can require a reviewer of another family`);
+    process.exit(2);
+  }
+  const implFlagInfo = familyGate.familiesOfImplementer(flagImpl);
+  if (implFlagInfo.unknown.length > 0) {
+    console.error(`ERROR: --implementer-engine ${implFlagInfo.unknown.join(', ')} maps to no known model family; use the real engine/model id`);
+    process.exit(2);
+  }
+  if (flagImpl && recordedImpl.length > 0
+      && [...new Set(implFlagInfo.engines)].sort().join(',') !== [...recordedImpl].sort().join(',')) {
+    console.error(`ERROR: --implementer-engine '${flagImpl}' differs from the implementer recorded in the chain ('${recordedImpl.join(',')}'); the implementer is fixed at generation 1`);
+    process.exit(2);
+  }
+  const implementerEngine = recordedImpl.length > 0 ? recordedImpl.join(',') : implFlagInfo.engines.join(',');
+
   let base = '';
   // BL-0389: opt-in --full-range at generation > 1 reviews chain[0].base..head instead of the delta.
   let fullRange = false;
@@ -1128,7 +1163,8 @@ async function handleCollect(flags) {
   }
   function saveChainEntryLocked(entryIn) {
     // BL-0389: additive, only when --full-range was used (absent = delta, the default)
-    const newEntry = fullRange ? { ...entryIn, range_mode: 'full' } : entryIn;
+    const withRange = fullRange ? { ...entryIn, range_mode: 'full' } : entryIn;
+    const newEntry = { ...withRange, implementer_engine: implementerEngine };
     let currentChain = [];
     if (fs.existsSync(chainPath)) {
       try {
@@ -1319,6 +1355,8 @@ async function handleCollect(flags) {
   const seatRecords = seatResults.map((res) => ({
     id: res.seat.id,
     status: res.status === 'reviewed' ? 'reviewed' : 'no_verdict',
+    engine: res.seat.engine,
+    family: res.seat.family || familyOfEngine(res.seat.engine),
   }));
   const reviewedSeatsCount = seatResults.filter((r) => r.status === 'reviewed').length;
   const totalSeatsCount = seatResults.length;
@@ -1484,6 +1522,16 @@ async function handleFinalize(flags) {
   if (!flags['allow-unresolved'] && flags.reason !== undefined) {
     console.error('ERROR: --reason is only meaningful with --allow-unresolved; nothing was written');
     process.exit(1);
+  }
+  // --same-family-exception: source + reason validated before any write.
+  let sameFamilyException;
+  if (flags['same-family-exception'] !== undefined) {
+    const parsed = familyGate.parseException(flags['same-family-exception']);
+    if (parsed.error) {
+      console.error(`ERROR: --same-family-exception ${parsed.error}; nothing was written`);
+      process.exit(1);
+    }
+    sameFamilyException = { source: parsed.source, reason: parsed.reason };
   }
   const allowedPendingStatuses = new Set(['pending', 'pending-with-gap']);
   if (!allowedPendingStatuses.has(targetChainEntry.status)) {
@@ -1716,7 +1764,7 @@ async function handleFinalize(flags) {
     console.error(`ERROR: Resolution '${u.id}' (generation ${u.generation}) names no open verified finding of an earlier generation`);
     process.exit(1);
   }
-  const verdict = derived.verdict;
+  let verdict = derived.verdict;
   const openFindings = derived.open_findings || derived.openFindings;
 
   // BL-0384: a converged verdict (no verified Critical or Major) can still carry verified Minor findings
@@ -1736,11 +1784,30 @@ async function handleFinalize(flags) {
       }
     }
   }
+  // Cross-family rule: a converged generation needs a reviewed seat of a family other than the implementer's.
+  // Without one the verdict is not SHIP-AS-IS (FIX-THEN-SHIP, no hands-brief: nothing to fix) and the
+  // generation record carries a capability_warnings entry. Only a sourced --same-family-exception lifts it.
+  let familyWarnings;
+  if (verdict === 'SHIP-AS-IS') {
+    const reviewedIds = new Set((targetChainEntry.seats || []).filter((s) => s && typeof s === 'object' && s.status === 'reviewed').map((s) => s.id));
+    const fam = familyGate.evaluate(chain, targetChainEntry, reviewedIds);
+    if (!fam.ok) {
+      console.error(`ERROR: ${fam.error}; nothing was written`);
+      process.exit(1);
+    }
+    if (!fam.cross_family) {
+      familyWarnings = [familyGate.warningFor(fam)];
+      if (!sameFamilyException) {
+        verdict = 'FIX-THEN-SHIP';
+        console.error(`WARN: no_cross_family_seat: reviewed seat families [${fam.seat_families.join(', ')}] include none other than the implementer's [${fam.implementer_families.join(', ')}]; verdict is FIX-THEN-SHIP, not SHIP-AS-IS. Collect another generation with a seat of a different family, or pass --same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>".`);
+      }
+    }
+  }
   writeFileSyncAtomic(snapshotAbsPath, dispRawBytes);
 
   // If FIX-THEN-SHIP, write hands-brief.md and run check-redispatch-prompt.sh
   const briefPath = path.join(gDir, 'hands-brief.md');
-  if (verdict === 'FIX-THEN-SHIP') {
+  if (verdict === 'FIX-THEN-SHIP' && !(familyWarnings && !sameFamilyException)) {
     let engineLine = 'Engine: sonnet@claude-native effort=high';
     const topologyPath = process.env.AUTOPILOT_TOPOLOGY_FILE || path.join(process.env.HOME || '', '.autopilot', 'topology.json');
     if (fs.existsSync(topologyPath)) {
@@ -1883,6 +1950,8 @@ async function handleFinalize(flags) {
   targetChainEntry.disposition_schema = deriveReceiptState.DISPOSITION_SCHEMA;
   targetChainEntry.dispositions_path = snapshotRelPath;
   targetChainEntry.dispositions_sha256 = dispSha256;
+  if (familyWarnings) targetChainEntry.capability_warnings = familyWarnings;
+  if (sameFamilyException) targetChainEntry.same_family_exception = sameFamilyException;
   if (!targetChainEntry.findings_sha256 && fs.existsSync(findingsPath)) {
     targetChainEntry.findings_sha256 = crypto.createHash('sha256').update(fs.readFileSync(findingsPath)).digest('hex');
   }
@@ -2166,9 +2235,25 @@ async function handleRefinalize(flags) {
     writeFileSyncAtomic(addendumPath, addBytes);
     receipt.resolutions_addendum = { path: addendumRelPath(phase), sha256: sha(Buffer.from(addBytes, 'utf8')) };
   }
+  // Cross-family rule, same as finalize: the recorded exception (never a flag here) is the only way past it.
+  let refVerdict = derived.verdict;
+  if (refVerdict === 'SHIP-AS-IS') {
+    const reviewedIds = new Set((last.seats || []).filter((s) => s && typeof s === 'object' && s.status === 'reviewed').map((s) => s.id));
+    const fam = familyGate.evaluate(chain, last, reviewedIds);
+    if (!fam.ok) {
+      console.error(`ERROR: ${fam.error}; nothing was written`);
+      process.exit(1);
+    }
+    if (!fam.cross_family) {
+      last.capability_warnings = [familyGate.warningFor(fam)];
+      if (!familyGate.validRecordedException(last.same_family_exception)) refVerdict = 'FIX-THEN-SHIP';
+    } else {
+      delete last.capability_warnings;
+    }
+  }
   writeFileSyncAtomic(chainPath, JSON.stringify(chain, null, 2) + '\n');
   receipt.chain = chain;
-  receipt.verdict = derived.verdict;
+  receipt.verdict = refVerdict;
   receipt.open_findings = derived.open_findings;
   // unresolved_allowed is derived output too: re-derive its id set from the new open set (an addendum may have closed some).
   if (receipt.unresolved_allowed !== undefined) {
@@ -2181,7 +2266,7 @@ async function handleRefinalize(flags) {
   if (receipt.closed_findings !== undefined) receipt.closed_findings = derived.closed_findings;
   receipt.written_at = new Date().toISOString();
   writeFileSyncAtomic(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
-  console.log(JSON.stringify({ phase, generation, verdict: derived.verdict, open_findings_count: derived.open_findings.length, refinalized: true }, null, 2));
+  console.log(JSON.stringify({ phase, generation, verdict: refVerdict, open_findings_count: derived.open_findings.length, refinalized: true }, null, 2));
   process.exit(0);
 }
 

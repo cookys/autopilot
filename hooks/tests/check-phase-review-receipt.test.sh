@@ -123,7 +123,7 @@ cat << EOF > "$LEDGER/review-p1/chain.json"
     "base": "$PHASE_BASE",
     "head": "$GEN1_HEAD",
     "status": "finalized",
-    "seats": [{ "id": "s0", "status": "reviewed" }],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "dispositions_sha256": "$P1_DISP_SHA",
     "findings_sha256": "$P1_FINDINGS_SHA",
     "seat_artifact_sha256": { "s0": "$P1_SEAT_S0_SHA" }
@@ -141,7 +141,7 @@ write_receipt_json "p1" "{
       \"base\": \"$PHASE_BASE\",
       \"head\": \"$GEN1_HEAD\",
       \"status\": \"finalized\",
-      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }],
       \"dispositions_sha256\": \"$P1_DISP_SHA\",
       \"findings_sha256\": \"$P1_FINDINGS_SHA\",
       \"seat_artifact_sha256\": { \"s0\": \"$P1_SEAT_S0_SHA\" }
@@ -167,7 +167,7 @@ cat << EOF > "$LEDGER/review-p1/chain.json"
     "base": "$PHASE_BASE",
     "head": "$GEN1_HEAD",
     "status": "finalized",
-    "seats": [{ "id": "s0", "status": "reviewed" }],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "dispositions_sha256": "$P1_DISP_SHA",
     "findings_sha256": "$P1_FINDINGS_SHA",
     "seat_artifact_sha256": {}
@@ -185,7 +185,7 @@ write_receipt_json "p1" "{
       \"base\": \"$PHASE_BASE\",
       \"head\": \"$GEN1_HEAD\",
       \"status\": \"finalized\",
-      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }],
       \"dispositions_sha256\": \"$P1_DISP_SHA\",
       \"findings_sha256\": \"$P1_FINDINGS_SHA\",
       \"seat_artifact_sha256\": {}
@@ -207,7 +207,7 @@ cat << EOF > "$LEDGER/review-p1/chain.json"
     "base": "$PHASE_BASE",
     "head": "$GEN1_HEAD",
     "status": "finalized",
-    "seats": [{ "id": "s0", "status": "reviewed" }],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "dispositions_sha256": "$P1_DISP_SHA",
     "findings_sha256": "$P1_FINDINGS_SHA",
     "seat_artifact_sha256": { "s0": "$P1_SEAT_S0_SHA" }
@@ -225,7 +225,7 @@ write_receipt_json "p1" "{
       \"base\": \"$PHASE_BASE\",
       \"head\": \"$GEN1_HEAD\",
       \"status\": \"finalized\",
-      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }],
       \"dispositions_sha256\": \"$P1_DISP_SHA\",
       \"findings_sha256\": \"$P1_FINDINGS_SHA\",
       \"seat_artifact_sha256\": { \"s0\": \"$P1_SEAT_S0_SHA\" }
@@ -250,7 +250,7 @@ write_receipt_json "p1" "{
       \"base\": \"$PHASE_BASE\",
       \"head\": \"$GEN1_HEAD\",
       \"status\": \"finalized\",
-      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }],
       \"dispositions_sha256\": \"$P1_DISP_SHA\",
       \"findings_sha256\": \"$P1_FINDINGS_SHA\",
       \"seat_artifact_sha256\": { \"s0\": \"$P1_SEAT_S0_SHA\" }
@@ -276,7 +276,7 @@ write_receipt_json "p1" "{
       \"base\": \"$PHASE_BASE\",
       \"head\": \"$GEN1_HEAD\",
       \"status\": \"finalized\",
-      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }],
       \"dispositions_sha256\": \"$P1_DISP_SHA\",
       \"findings_sha256\": \"$P1_FINDINGS_SHA\",
       \"seat_artifact_sha256\": { \"s0\": \"$P1_SEAT_S0_SHA\" }
@@ -724,7 +724,7 @@ C11Q_OUT=$(node "$SCRIPT" --plan-artifact "$PLAN_ARTIFACT_11Q" --dispositions "$
 assert_exit_code "$C11Q_RC" "1" "case 11q negative: candidate_blocker=false disposed as rejected with blank rationale exits 1"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 12. End-to-end case using hetero-review-loop.js collect and finalize
+# 12. End-to-end case using hetero-review-loop.js collect --implementer-engine claude-sonnet-5 and finalize
 # ─────────────────────────────────────────────────────────────────────────────
 HETERO_SCRIPT="$REPO_ROOT/scripts/hetero-review-loop.js"
 mkdir -p "$SCRATCH_REPO/scripts"
@@ -762,14 +762,14 @@ unset STUB_SEAT_RESPONSE
 E2E_PHASE="p_e2e"
 mkdir -p "$LEDGER"
 
-COLLECT_OUT=$(node "$HETERO_SCRIPT" collect \
+COLLECT_OUT=$(node "$HETERO_SCRIPT" collect --implementer-engine claude-sonnet-5 \
   --repo-root "$SCRATCH_REPO" \
   --ledger "$LEDGER" \
   --phase "$E2E_PHASE" \
   --generation 1 \
   --branch work \
   --phase-base "$PHASE_BASE" \
-  --seats "m1/low@codex,m2/med@agy" 2>&1); COLLECT_RC=$?
+  --seats "gpt-m1/low@codex,kimi-m2/med@agy" 2>&1); COLLECT_RC=$?
 assert_exit_code "$COLLECT_RC" "0" "e2e: collect exits 0"
 
 # Inspect findings.json to get finding id
@@ -879,7 +879,7 @@ cat << EOF > "$LEDGER/review-$EXCL_PHASE/chain.json"
     "base": "$GEN1_HEAD",
     "head": "$EXCL_TEST_HEAD",
     "status": "finalized",
-    "seats": [{ "id": "s0", "status": "reviewed" }],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "dispositions_sha256": "$EXCL_DISP_SHA",
     "findings_sha256": "$EXCL_FINDINGS_SHA",
     "seat_artifact_sha256": { "s0": "$EXCL_SEAT_S0_SHA" }
@@ -897,7 +897,7 @@ write_receipt_json "$EXCL_PHASE" "{
       \"base\": \"$GEN1_HEAD\",
       \"head\": \"$EXCL_TEST_HEAD\",
       \"status\": \"finalized\",
-      \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }],
+      \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }],
       \"dispositions_sha256\": \"$EXCL_DISP_SHA\",
       \"findings_sha256\": \"$EXCL_FINDINGS_SHA\",
       \"seat_artifact_sha256\": { \"s0\": \"$EXCL_SEAT_S0_SHA\" }
@@ -972,7 +972,7 @@ MS_CHAIN="[
     \"base\": \"$GEN1_HEAD\",
     \"head\": \"$MS_HEAD\",
     \"status\": \"finalized\",
-    \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }, { \"id\": \"s1\", \"status\": \"reviewed\" }],
+    \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }, { \"id\": \"s1\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }],
     \"dispositions_sha256\": \"$MS_DISP_SHA\",
     \"findings_sha256\": \"$MS_FINDINGS_SHA\",
     \"seat_artifact_sha256\": { \"s0\": \"$MS_SEAT_S0_SHA\", \"s1\": \"$MS_SEAT_S1_SHA\" }
@@ -1012,7 +1012,7 @@ PAB_DISP_SHA=$(write_gen_artifacts "pab" "2")
 PAB_FINDINGS_SHA=$(node -e "const crypto=require('crypto'), fs=require('fs'); process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-pab/g2/findings.json")
 PAB_SEAT_SHA=$(write_seat_artifact "pab" "2" "s0")
 PAB_G1_ABORTED="{ \"generation\": 1, \"base\": \"$PHASE_BASE\", \"status\": \"aborted\" }"
-PAB_G2_FINAL="{ \"generation\": 2, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } }"
+PAB_G2_FINAL="{ \"generation\": 2, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } }"
 write_pab() { # <chain-json-array>
   printf '%s\n' "$1" > "$LEDGER/review-pab/chain.json"
   write_receipt_json "pab" "{ \"kind\": \"review\", \"phase\": \"pab\", \"branch\": \"work\", \"phase_base_sha\": \"$PHASE_BASE\", \"chain\": $1, \"verdict\": \"SHIP-AS-IS\", \"open_findings\": [], \"resolved_from\": \"test\", \"written_at\": \"2026-09-05T00:00:00Z\" }"
@@ -1022,7 +1022,7 @@ C15_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-ba
 assert_exit_code "$C15_RC" "0" "case 15: aborted g1 + finalized g2 (same base) exits 0"
 
 # 15a negative: the aborted generation is the LAST entry — an abort never stands in for a review.
-PAB_G1_FINAL="{ \"generation\": 1, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } }"
+PAB_G1_FINAL="{ \"generation\": 1, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } }"
 cp "$LEDGER/review-pab/g2/findings.json" "$LEDGER/review-pab/g2/dispositions.json" "$LEDGER/review-pab/g2/seat-s0.json" "$LEDGER/review-pab/g1/"
 write_pab "[ $PAB_G1_FINAL, { \"generation\": 2, \"base\": \"$PAB_HEAD\", \"status\": \"aborted\" } ]"
 C15A_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15A_RC=$?
@@ -1043,7 +1043,7 @@ assert_exit_code "$C15B2_RC" "1" "case 15b': aborted entry with an empty-string 
 
 # 15c negative: the generation after the abort does not continue from the aborted base
 # (an abort must not be usable to skip the diff between the phase base and a moved head).
-write_pab "[ $PAB_G1_ABORTED, { \"generation\": 2, \"base\": \"$PAB_HEAD\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } } ]"
+write_pab "[ $PAB_G1_ABORTED, { \"generation\": 2, \"base\": \"$PAB_HEAD\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }], \"dispositions_sha256\": \"$PAB_DISP_SHA\", \"findings_sha256\": \"$PAB_FINDINGS_SHA\", \"seat_artifact_sha256\": { \"s0\": \"$PAB_SEAT_SHA\" } } ]"
 C15C_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15C_RC=$?
 assert_exit_code "$C15C_RC" "1" "case 15c: successor not continuing from the aborted base exits 1"
 assert_contains "$C15C_OUT" "Chain broken at generation 2" "case 15c: refusal is the continuity check"
@@ -1121,7 +1121,7 @@ write_range_json "pab3" "2" "$PAB_HEAD" "$GEN3_HEAD" "$DIFF_SHA_23"
 write_range_json "pab3" "3" "$PAB_HEAD" "$GEN3_HEAD" "$DIFF_SHA_23"
 P3_D1=$(write_gen_artifacts "pab3" "1"); P3_F1=$(node -e "const c=require('crypto'),f=require('fs');process.stdout.write(c.createHash('sha256').update(f.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-pab3/g1/findings.json"); P3_S1=$(write_seat_artifact "pab3" "1" "s0")
 P3_D3=$(write_gen_artifacts "pab3" "3"); P3_F3=$(node -e "const c=require('crypto'),f=require('fs');process.stdout.write(c.createHash('sha256').update(f.readFileSync(process.argv[1])).digest('hex'))" "$LEDGER/review-pab3/g3/findings.json"); P3_S3=$(write_seat_artifact "pab3" "3" "s0")
-PAB3_CHAIN="[ { \"generation\": 1, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$P3_D1\", \"findings_sha256\": \"$P3_F1\", \"seat_artifact_sha256\": { \"s0\": \"$P3_S1\" } }, { \"generation\": 2, \"base\": \"$PAB_HEAD\", \"status\": \"aborted\", \"reason\": \"parse_failed\" }, { \"generation\": 3, \"base\": \"$PAB_HEAD\", \"head\": \"$GEN3_HEAD\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"dispositions_sha256\": \"$P3_D3\", \"findings_sha256\": \"$P3_F3\", \"seat_artifact_sha256\": { \"s0\": \"$P3_S3\" } } ]"
+PAB3_CHAIN="[ { \"generation\": 1, \"base\": \"$PHASE_BASE\", \"head\": \"$PAB_HEAD\", \"status\": \"finalized\", \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }], \"dispositions_sha256\": \"$P3_D1\", \"findings_sha256\": \"$P3_F1\", \"seat_artifact_sha256\": { \"s0\": \"$P3_S1\" } }, { \"generation\": 2, \"base\": \"$PAB_HEAD\", \"status\": \"aborted\", \"reason\": \"parse_failed\" }, { \"generation\": 3, \"base\": \"$PAB_HEAD\", \"head\": \"$GEN3_HEAD\", \"status\": \"finalized\", \"implementer_engine\": \"claude-sonnet-5\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\", \"engine\": \"gpt-5\" }], \"dispositions_sha256\": \"$P3_D3\", \"findings_sha256\": \"$P3_F3\", \"seat_artifact_sha256\": { \"s0\": \"$P3_S3\" } } ]"
 printf '%s\n' "$PAB3_CHAIN" > "$LEDGER/review-pab3/chain.json"
 write_receipt_json "pab3" "{ \"kind\": \"review\", \"phase\": \"pab3\", \"branch\": \"work\", \"phase_base_sha\": \"$PHASE_BASE\", \"chain\": $PAB3_CHAIN, \"verdict\": \"SHIP-AS-IS\", \"open_findings\": [], \"resolved_from\": \"test\", \"written_at\": \"2026-09-05T00:00:00Z\" }"
 C15F_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab3 --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15F_RC=$?
@@ -1153,7 +1153,7 @@ RR2_CLEAN='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_f
 rr2_collect() { # <ledger> <phase> <gen> [extra flags]
   local l="$1" ph="$2" g="$3"; shift 3
   if [ "$g" = 1 ]; then git -C "$RR2_REPO" branch -q -f w2 "$RR2_H1"; export STUB_SEAT_RESPONSE="$RR2_G1RESP"; else git -C "$RR2_REPO" branch -q -f w2 "$RR2_H2"; export STUB_SEAT_RESPONSE="$RR2_CLEAN"; fi
-  node "$HETERO_SCRIPT" collect --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --phase-base "$RR2_B" --seats "m1/low@codex" "$@" 2>&1
+  node "$HETERO_SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --phase-base "$RR2_B" --seats "gpt-m1/low@codex" "$@" 2>&1
 }
 rr2_finalize() { # <ledger> <phase> <gen>
   local l="$1" ph="$2" g="$3" disp="$TEST_TMP/rr2_disp_${2}_${3}.json"

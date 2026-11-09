@@ -34,6 +34,7 @@ const { majorDispositionError, downgradeMisuseError, enforcedBySchema } = derive
 
 const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
 const reviewPackets = require('./lib/review-packets');
+const familyGate = require('./lib/review-family-gate');
 const LAYOUT = require('./lib/repo-layout.js');
 // Plans sit where the layout registry puts them (docs/plans at bootstrap, project/plans from P1) when the repo is this one,
 // and under the docs/plans convention in any other repo (LAYOUT.pathFor decides per repo root).
@@ -121,6 +122,10 @@ Flags:
 Merge gate: always run on the tip. Below the generation cap a product-code delta after the last reviewed
 head needs one more single-seat delta review (so the receipt itself passes on the tip); at the cap use
 --post-head-ledger together with the PM ruling.
+
+Cross-family rule (Mode A, no flag or env var turns it off): the converged generation needs a reviewed seat
+whose model family differs from the implementer's, both re-derived from the ledger. The one exception is a
+same_family_exception recorded by hetero-review-loop.js finalize --same-family-exception "<source>: <reason>".
 
 Chain rules (Mode A): every chain entry must be 'finalized' except an 'aborted' one (hetero-review-loop
 wrote it when the branch moved during collection, a seat's findings failed to parse, or a seat gap
@@ -817,6 +822,8 @@ function validateModeA(flags, opts = {}) {
 
     const findingsByGeneration = new Map();
     const dispositionsByGeneration = new Map();
+    // Seat ids whose sha-verified seat artifact says reviewed, per generation (cross-family rule input).
+    const reviewedSeatIdsByGen = new Map();
 
     // Continuity is tracked against the last FINALIZED head, not the previous entry: an aborted
     // generation has no head (nothing advanced) and the loop continues the next generation from
@@ -1067,6 +1074,8 @@ function validateModeA(flags, opts = {}) {
       }
 
       let reviewedCount = 0;
+      const reviewedIdSet = new Set();
+      reviewedSeatIdsByGen.set(entry.generation, reviewedIdSet);
       for (const seatId of entrySeatIds) {
         const expectedSha = entry.seat_artifact_sha256[seatId];
         const seatFile = path.join(gDir, `seat-${seatId}.json`);
@@ -1090,6 +1099,7 @@ function validateModeA(flags, opts = {}) {
         }
         if (seatContent && seatContent.status === 'reviewed') {
           reviewedCount++;
+          reviewedIdSet.add(seatId);
         }
       }
 
@@ -1357,6 +1367,29 @@ function validateModeA(flags, opts = {}) {
     if (receipt.verdict !== 'SHIP-AS-IS' || derivedState.verdict !== 'SHIP-AS-IS') {
       console.error(`Receipt verdict is not SHIP-AS-IS or re-derived verdict mismatch (receipt: '${receipt.verdict}', re-derived: '${derivedState.verdict}')`);
       process.exit(1);
+    }
+
+    // Cross-family rule (ADR-0001: re-derived from the ledger, never from the receipt's say-so): the converged
+    // (last) generation needs a reviewed seat whose family differs from the implementer's. Only an exception
+    // recorded by finalize --same-family-exception "<source>: <reason>" (decision card / fleet message id)
+    // lifts it; AUTOPILOT_MIN_REVIEWED_SEATS and --allow-seat-gap do not.
+    {
+      const lastGate = chain[chain.length - 1];
+      const fam = familyGate.evaluate(chain, lastGate, reviewedSeatIdsByGen.get(lastGate.generation) || new Set());
+      if (!fam.ok) {
+        console.error(`Cross-family rule: ${fam.error}`);
+        process.exit(1);
+      }
+      if (!fam.cross_family) {
+        if (lastGate.same_family_exception === undefined) {
+          console.error(`Cross-family rule: generation ${lastGate.generation} has no reviewed seat of a family other than the implementer's (reviewed seat families [${fam.seat_families.join(', ')}], implementer families [${fam.implementer_families.join(', ')}]); review it with a seat of another family, or finalize with --same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>"`);
+          process.exit(1);
+        }
+        if (!familyGate.validRecordedException(lastGate.same_family_exception)) {
+          console.error(`Cross-family rule: same_family_exception on generation ${lastGate.generation} is malformed (needs source = decision card id d-xxxxxxxx or fleet message id ULID, and a non-empty reason)`);
+          process.exit(1);
+        }
+      }
     }
 
     // Item 8 / d2-open-findings-drift: the shared format requires verified Major/Minor findings

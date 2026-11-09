@@ -101,12 +101,12 @@ assert_contains "$HELP_OUT" "Usage:" "case 1: --help outputs usage instructions"
 assert_contains "$HELP_OUT" "--exclude" "case 1: --help documents --exclude flag"
 
 # Case 2: generation 1 without --phase-base exits 2
-C2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work 2>&1); C2_RC=$?
+C2_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work 2>&1); C2_RC=$?
 assert_exit_code "$C2_RC" "2" "case 2: gen 1 without --phase-base exits 2"
 
 # Case 3: generation 1 with three seats all reviewed exits 0, writes range.json, diff.txt, findings.json, chain.json
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-C3_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy,m3/high@grok" 2>&1); C3_RC=$?
+C3_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex,kimi-m2/med@agy,glm-m3/high@grok" 2>&1); C3_RC=$?
 assert_exit_code "$C3_RC" "0" "case 3: exits 0 on 3 reviewed seats"
 assert_file_exists "$LEDGER/review-p1/g1/range.json" "case 3: range.json exists"
 assert_file_exists "$LEDGER/review-p1/g1/diff.txt" "case 3: diff.txt exists"
@@ -127,7 +127,7 @@ assert_eq "$(node -e 'const j=JSON.parse(process.argv[1]); console.log([j.schema
 
 # Case 4: a seat with findings text containing one Critical and one Major produces two entries with distinct ids
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Critical: SQL injection vulnerability\nDetailed description here.\n\nMajor: Unhandled promise rejection\nMore details."}'
-C4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C4_RC=$?
+C4_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); C4_RC=$?
 assert_exit_code "$C4_RC" "0" "case 4: exits 0"
 FINDINGS_C4=$(cat "$LEDGER/review-p4/g1/findings.json")
 assert_contains "$FINDINGS_C4" '"severity": "Critical"' "case 4: has Critical finding"
@@ -145,7 +145,7 @@ assert_eq "$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv
 export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 export STUB_RESPONSE_s1='{"status": "no_verdict"}'
 unset STUB_SEAT_RESPONSE
-C5_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" 2>&1); C5_RC=$?
+C5_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex,kimi-m2/med@agy" 2>&1); C5_RC=$?
 assert_exit_code "$C5_RC" "1" "case 5: exits 1 on gap without --allow-seat-gap"
 assert_file_exists "$LEDGER/review-p5/g1/range.json" "case 5: range.json written before exit"
 assert_file_exists "$LEDGER/review-p5/g1/seat-s1.json" "case 5: seat-s1.json written"
@@ -155,7 +155,7 @@ assert_file_absent "$LEDGER/review-p5/g1/findings.json" "case 5: findings.json n
 # Case 5i (BL-0293): an idle-killed seat (dispatch-review: no_verdict, error seat_idle_timeout) is an ordinary
 # seat gap: generation aborted as seat_gap, the swap-the-seat re-collect path, and the code survives in the artifact.
 export STUB_RESPONSE_s1='{"status": "no_verdict", "verdict": null, "findings": "", "error": "seat_idle_timeout: no output growth for 600s — seat killed, partial output not parsed"}'
-C5I_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5i --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" 2>&1); C5I_RC=$?
+C5I_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p5i --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex,kimi-m2/med@agy" 2>&1); C5I_RC=$?
 assert_exit_code "$C5I_RC" "1" "case 5i: idle-killed seat fails the generation without --allow-seat-gap"
 assert_contains "$(cat "$LEDGER/review-p5i/chain.json")" '"reason": "seat_gap"' "case 5i: recorded as seat_gap"
 assert_contains "$(cat "$LEDGER/review-p5i/g1/seat-s1.json")" 'seat_idle_timeout' "case 5i: idle reason kept in the seat artifact"
@@ -163,7 +163,7 @@ assert_contains "$(cat "$LEDGER/review-p5i/g1/seat-s1.json")" 'seat_idle_timeout
 # Case 6: same as (5) but with --allow-seat-gap AND a receipt floor the surviving seat count
 # satisfies (AUTOPILOT_MIN_REVIEWED_SEATS=1, the same knob the checker honours) exits 0 and
 # chain.json has pending-with-gap; the WARN names the floor for the checker.
-C6_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=1 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap 2>&1); C6_RC=$?
+C6_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=1 node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex,kimi-m2/med@agy" --allow-seat-gap 2>&1); C6_RC=$?
 assert_exit_code "$C6_RC" "0" "case 6: exits 0 with --allow-seat-gap at/above the floor"
 assert_file_exists "$LEDGER/review-p6/chain.json" "case 6: chain.json written"
 assert_contains "$(cat "$LEDGER/review-p6/chain.json")" '"status": "pending-with-gap"' "case 6: status is pending-with-gap"
@@ -172,7 +172,7 @@ assert_contains "$C6_OUT" "receipt floor is 1 (AUTOPILOT_MIN_REVIEWED_SEATS)" "c
 # Case 6b (v2.36.5, <host> plan 066): the SAME gap with the DEFAULT floor (all seats) is not
 # written as a pending entry the checker would refuse forever — it is recorded aborted
 # (seat_gap_below_min), exit 1, and the message names counts, floor and the remedy.
-C6B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap 2>&1); C6B_RC=$?
+C6B_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex,kimi-m2/med@agy" --allow-seat-gap 2>&1); C6B_RC=$?
 assert_exit_code "$C6B_RC" "1" "case 6b: gap below the default floor exits 1"
 C6B_CHAIN=$(cat "$LEDGER/review-p6b/chain.json")
 assert_contains "$C6B_CHAIN" '"status": "aborted"' "case 6b: generation recorded aborted, not pending-with-gap"
@@ -185,13 +185,13 @@ assert_contains "$C6B_OUT" "Collect generation 2 from the same base" "case 6b: m
 # full-seat result then finalizes normally — the abort never blocks the phase.
 export STUB_SEAT_RESPONSE_SAVE="${STUB_SEAT_RESPONSE:-}"
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-C6B2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6b --generation 2 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C6B2_RC=$?
+C6B2_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6b --generation 2 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); C6B2_RC=$?
 assert_exit_code "$C6B2_RC" "0" "case 6b': generation 2 collects from the aborted generation's base"
 assert_contains "$(cat "$LEDGER/review-p6b/chain.json")" '"generation": 2' "case 6b': generation 2 entry appended"
 export STUB_SEAT_RESPONSE="$STUB_SEAT_RESPONSE_SAVE"
 # 6c: a garbage floor is refused BEFORE any generation directory or seat exists (review 🟠: a
 # post-dispatch refusal left g1/ populated with no chain entry — a wedged phase).
-C6C_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=zero node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6c --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap 2>&1); C6C_RC=$?
+C6C_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=zero node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6c --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex,kimi-m2/med@agy" --allow-seat-gap 2>&1); C6C_RC=$?
 assert_exit_code "$C6C_RC" "1" "case 6c: garbage AUTOPILOT_MIN_REVIEWED_SEATS refused"
 assert_contains "$C6C_OUT" "canonical positive integer" "case 6c: refusal names the grammar"
 assert_file_absent "$LEDGER/review-p6c/g1" "case 6c: no generation directory was created (no seat spent, phase not wedged)"
@@ -199,13 +199,13 @@ assert_file_absent "$LEDGER/review-p6c/chain.json" "case 6c: no chain entry writ
 
 # 6d (review 🟠): the floor applies WITHOUT a gap too — every seat reviewed but the configured
 # floor exceeds the seat count ⇒ aborted, never a pending entry the checker refuses forever.
-C6D_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=3 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6d --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C6D_RC=$?
+C6D_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=3 node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6d --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); C6D_RC=$?
 assert_exit_code "$C6D_RC" "1" "case 6d: 1 of 1 reviewed but floor 3 ⇒ exit 1"
 assert_contains "$(cat "$LEDGER/review-p6d/chain.json")" '"reason": "seat_gap_below_min"' "case 6d: recorded aborted even with no gap"
 assert_contains "$C6D_OUT" "only 1 of 1 seats reviewed, below the receipt floor of 3 (AUTOPILOT_MIN_REVIEWED_SEATS)" "case 6d: message names counts and source"
 
 # 6e (review 🟡): the checker's alias spellings are honoured on collect too
-C6E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6e --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap --min-seats 1 2>&1); C6E_RC=$?
+C6E_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6e --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex,kimi-m2/med@agy" --allow-seat-gap --min-seats 1 2>&1); C6E_RC=$?
 assert_exit_code "$C6E_RC" "0" "case 6e: --min-seats 1 (checker alias) accepted on collect"
 assert_contains "$(cat "$LEDGER/review-p6e/chain.json")" '"status": "pending-with-gap"' "case 6e: alias floor satisfied ⇒ pending-with-gap"
 assert_contains "$C6E_OUT" "receipt floor is 1 (--min-seats)" "case 6e: WARN names the alias as the source"
@@ -223,7 +223,7 @@ cat << SEED_EOF > "$LEDGER/review-p7/chain.json"
     "generation": 1,
     "base": "$SEED_BASE",
     "head": "$SEED_HEAD",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -231,7 +231,7 @@ SEED_EOF
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 unset STUB_RESPONSE_s0
 unset STUB_RESPONSE_s1
-C7NEG_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C7NEG_RC=$?
+C7NEG_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1); C7NEG_RC=$?
 assert_exit_code "$C7NEG_RC" "1" "case 7 negative: gen 2 refused when gen 1 is pending (not finalized), even under phase literally named p7"
 assert_contains "$C7NEG_OUT" "is not finalized" "case 7 negative: refusal message names the not-finalized predecessor"
 assert_file_absent "$LEDGER/review-p7/g2" "case 7 negative: no g2 directory created on refusal"
@@ -244,12 +244,12 @@ cat << SEED_EOF > "$LEDGER/review-p7/chain.json"
     "generation": 1,
     "base": "$SEED_BASE",
     "head": "$SEED_HEAD",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "finalized"
   }
 ]
 SEED_EOF
-C7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C7_RC=$?
+C7_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p7 --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1); C7_RC=$?
 assert_exit_code "$C7_RC" "0" "case 7: exits 0 for gen 2"
 RANGE_BASE=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).base);' "$LEDGER/review-p7/g2/range.json")
 assert_eq "$RANGE_BASE" "$SEED_HEAD" "case 7: range.json base matches seeded head X"
@@ -257,13 +257,13 @@ assert_eq "$RANGE_BASE" "$SEED_HEAD" "case 7: range.json base matches seeded hea
 # Case 8: generation 2 with chain.json missing generation-1 entry exits 1
 mkdir -p "$LEDGER/review-p8"
 echo "[]" > "$LEDGER/review-p8/chain.json"
-C8_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p8 --generation 2 --branch work --seats "m1/low@codex" 2>&1); C8_RC=$?
+C8_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p8 --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1); C8_RC=$?
 assert_exit_code "$C8_RC" "1" "case 8: exits 1 when gen 1 entry missing"
 
 # Case 9: simulate head moving between snapshot and seat-return
 export REPO_FOR_TEST="$SCRATCH_REPO"
 export SIMULATE_HEAD_MOVE=1
-C9_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p9 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); C9_RC=$?
+C9_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p9 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); C9_RC=$?
 assert_exit_code "$C9_RC" "1" "case 9: exits 1 on head change"
 assert_file_absent "$LEDGER/review-p9/g1/findings.json" "case 9: no findings.json written"
 assert_contains "$(cat "$LEDGER/review-p9/chain.json")" '"status": "aborted"' "case 9: chain.json recorded aborted entry"
@@ -272,7 +272,7 @@ unset REPO_FOR_TEST
 
 # Case 10: seats resolved via resolver stub (no --seats flag)
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop.sh"
-C10_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10 --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10_RC=$?
+C10_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10 --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10_RC=$?
 assert_exit_code "$C10_RC" "0" "case 10: exits 0 with resolver stub"
 assert_file_exists "$LEDGER/review-p10/chain.json" "case 10: chain.json exists"
 assert_contains "$(cat "$LEDGER/review-p10/chain.json")" '"seats": [' "case 10: chain.json has seats"
@@ -298,7 +298,7 @@ chmod +x "$TEST_TMP/bin/resolve-review-loop-10a.sh"
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10a.sh"
 export LOG_DISPATCH_ARGS="$TEST_TMP/dispatch_10a.log"
 rm -f "$LOG_DISPATCH_ARGS"
-C10A_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10a --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10A_RC=$?
+C10A_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10a --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10A_RC=$?
 assert_exit_code "$C10A_RC" "0" "case 10a: exits 0 with qc_panel_seats"
 assert_file_exists "$LEDGER/review-p10a/g1/seat-s0.json" "case 10a: seat-s0.json exists"
 assert_file_exists "$LEDGER/review-p10a/g1/seat-s1.json" "case 10a: seat-s1.json exists"
@@ -343,7 +343,7 @@ EOF
 RESOLVE_10B_EOF
 chmod +x "$TEST_TMP/bin/resolve-review-loop-10b.sh"
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10b.sh"
-C10B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10b --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10B_RC=$?
+C10B_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10b --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10B_RC=$?
 assert_exit_code "$C10B_RC" "2" "case 10b: exits 2 when qc_panel_seats_complete is false"
 assert_contains "$C10B_OUT" "Resolved qc panel is incomplete" "case 10b: stderr mentions resolved qc panel is incomplete"
 assert_file_absent "$LEDGER/review-p10b/g1/seat-s0.json" "case 10b: no seat-s0 artifact file created"
@@ -365,7 +365,7 @@ EOF
 RESOLVE_10C_EOF
 chmod +x "$TEST_TMP/bin/resolve-review-loop-10c.sh"
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10c.sh"
-C10C_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10c --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10C_RC=$?
+C10C_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10c --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10C_RC=$?
 assert_exit_code "$C10C_RC" "2" "case 10c: exits 2 when seat has empty runner"
 assert_contains "$C10C_OUT" "Seat s1 missing runner" "case 10c: stderr names seat index and missing field"
 assert_file_absent "$LEDGER/review-p10c/g1/seat-s0.json" "case 10c: no seat-s0 artifact file created"
@@ -403,7 +403,7 @@ export LOG_DISPATCH_ARGS="$TEST_TMP/dispatch_10d.log"
 rm -f "$LOG_DISPATCH_ARGS"
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-C10D_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_10D" --ledger "$LEDGER" --phase p10d --generation 1 --branch work --phase-base "$BASE_10D" 2>&1); C10D_RC=$?
+C10D_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_10D" --ledger "$LEDGER" --phase p10d --generation 1 --branch work --phase-base "$BASE_10D" 2>&1); C10D_RC=$?
 assert_exit_code "$C10D_RC" "0" "case 10d: exits 0 with real resolver"
 assert_file_exists "$LEDGER/review-p10d/g1/seat-s0.json" "case 10d: seat-s0.json exists"
 assert_file_exists "$LEDGER/review-p10d/g1/seat-s1.json" "case 10d: seat-s1.json exists"
@@ -431,7 +431,7 @@ exit 2
 RESOLVE_10E_EOF
 chmod +x "$TEST_TMP/bin/resolve-review-loop-10e.sh"
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10e.sh"
-C10E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10e --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10E_RC=$?
+C10E_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10e --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10E_RC=$?
 assert_exit_code "$C10E_RC" "2" "case 10e: collect exits 2 when resolver exits 2"
 assert_contains "$C10E_OUT" "custom resolver error failure" "case 10e: stderr prints message from resolver stub"
 assert_file_absent "$LEDGER/review-p10e/chain.json" "case 10e: no chain.json written"
@@ -469,7 +469,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin1/chain.json"
     "generation": 1,
     "base": "base111",
     "head": "head111",
-    "seats": ["s0", "s1", "s2"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }, { "id": "s1", "status": "reviewed", "engine": "gpt-5" }, { "id": "s2", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -515,7 +515,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin2/chain.json"
     "generation": 1,
     "base": "base222",
     "head": "head222",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -568,7 +568,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin2b/chain.json"
     "generation": 1,
     "base": "base22b",
     "head": "head22b",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -610,7 +610,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin2c/chain.json"
     "generation": 1,
     "base": "base22c",
     "head": "head22c",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -660,7 +660,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin2d/chain.json"
     "generation": 1,
     "base": "base22d",
     "head": "head22d",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -706,7 +706,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin2e/chain.json"
     "generation": 1,
     "base": "base22e",
     "head": "head22e",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -747,7 +747,7 @@ for FIN2X in p_fin2i p_fin2j p_fin2k p_fin2l; do
   mkdir -p "$LEDGER/review-$FIN2X/g1"
   cat << EOF2 > "$LEDGER/review-$FIN2X/chain.json"
 [
-  { "generation": 1, "base": "base2x", "head": "head2x", "seats": ["s0"], "status": "pending" }
+  { "generation": 1, "base": "base2x", "head": "head2x", "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }], "status": "pending" }
 ]
 EOF2
   cat << EOF2 > "$LEDGER/review-$FIN2X/g1/range.json"
@@ -811,7 +811,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin2f/chain.json"
     "generation": 1,
     "base": "base22f",
     "head": "head22f",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -859,7 +859,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin2g/chain.json"
     "generation": 1,
     "base": "base22g",
     "head": "head22g",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -901,7 +901,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin2h/chain.json"
     "generation": 1,
     "base": "base22h",
     "head": "head22h",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -944,7 +944,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin3/chain.json"
     "generation": 1,
     "base": "base222",
     "head": "head222",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -973,7 +973,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin4/chain.json"
     "generation": 1,
     "base": "base444",
     "head": "head444",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -1015,7 +1015,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin5/chain.json"
     "generation": 1,
     "base": "base555",
     "head": "head555",
-    "seats": ["s0", "s1"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }, { "id": "s1", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -1056,7 +1056,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin6/chain.json"
     "generation": 1,
     "base": "base666",
     "head": "head666",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -1094,7 +1094,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin7/chain.json"
     "generation": 1,
     "base": "sha_base1",
     "head": "sha_head1",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -1147,7 +1147,7 @@ node -e '
   const fs = require("fs");
   const p = process.argv[1];
   const chain = JSON.parse(fs.readFileSync(p, "utf8"));
-  chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", seats: ["s0"], status: "pending" });
+  chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", implementer_engine: "claude-sonnet-5", seats: [{ id: "s0", status: "reviewed", engine: "gpt-5" }], status: "pending" });
   fs.writeFileSync(p, JSON.stringify(chain, null, 2) + "\n");
 ' "$LEDGER/review-p_fin7/chain.json"
 
@@ -1175,7 +1175,7 @@ assert_contains "$CHAIN_P7" '"finding_g1_crit"' "case 7 (fin): closed finding id
 # Case 7x (BL-0032): same flow, but gen 2 does NOT resolve finding_g1_crit explicitly -> absence closes nothing
 mkdir -p "$LEDGER/review-p_fin7x"
 cp -r "$LEDGER/review-p_fin7/g1" "$LEDGER/review-p_fin7x/g1"
-printf '[\n  { "generation": 1, "base": "sha_base1", "head": "sha_head1", "seats": ["s0"], "status": "pending" }\n]\n' > "$LEDGER/review-p_fin7x/chain.json"
+printf '[\n  { "generation": 1, "base": "sha_base1", "head": "sha_head1", "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }], "status": "pending" }\n]\n' > "$LEDGER/review-p_fin7x/chain.json"
 rm -f "$LEDGER/review-p_fin7x/g1/dispositions.json" "$LEDGER/review-p_fin7x/g1/hands-brief.md"
 node -e '
   const fs = require("fs"); const [src, dst, phase, gen, withRes] = process.argv.slice(1);
@@ -1190,7 +1190,7 @@ cp "$LEDGER/review-p_fin7/g2/findings.json" "$LEDGER/review-p_fin7x/g2/findings.
 node -e '
   const fs = require("fs"); const p = process.argv[1];
   const chain = JSON.parse(fs.readFileSync(p, "utf8"));
-  chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", seats: ["s0"], status: "pending" });
+  chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", implementer_engine: "claude-sonnet-5", seats: [{ id: "s0", status: "reviewed", engine: "gpt-5" }], status: "pending" });
   fs.writeFileSync(p, JSON.stringify(chain, null, 2) + "\n");
 ' "$LEDGER/review-p_fin7x/chain.json"
 node -e '
@@ -1243,7 +1243,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin7a/chain.json"
     "generation": 1,
     "base": "sha_base7a",
     "head": "sha_head7a",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -1283,7 +1283,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin7b/chain.json"
     "generation": 1,
     "base": "sha_base7b",
     "head": "sha_head7b",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -1324,7 +1324,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin7c/chain.json"
     "generation": 1,
     "base": "sha_base7c",
     "head": "sha_head7c",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "finalized"
   }
 ]
@@ -1364,7 +1364,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin7d/chain.json"
     "generation": 1,
     "base": "sha_base7d",
     "head": "sha_head7d",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -1412,7 +1412,7 @@ cat << 'EOF' > "$LEDGER/review-p_fin7e/chain.json"
     "generation": 1,
     "base": "sha_base7e",
     "head": "sha_head7e",
-    "seats": ["s0"],
+    "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }],
     "status": "pending"
   }
 ]
@@ -1517,7 +1517,7 @@ Naming nit reported via glyph followed by bracket
 EOF
 )
 export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: process.argv[1]}));' "$T1_FINDINGS_TEXT")"
-T1_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T1_RC=$?
+T1_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T1_RC=$?
 assert_exit_code "$T1_RC" "0" "test 1: exits 0 when parsing all four line shapes"
 T1_FINDINGS_FILE="$LEDGER/review-p_test1/g1/findings.json"
 assert_file_exists "$T1_FINDINGS_FILE" "test 1: findings.json exists"
@@ -1529,7 +1529,7 @@ assert_eq "$T1_SEVS" "Critical,Major,Minor,Suggestion" "test 1: extracted severi
 
 # Test 2: non-empty unparseable findings text must fail closed (status 1, aborted with parse_failed, no findings.json)
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Some unparseable free text that does not match any severity pattern at all."}'
-T2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2_RC=$?
+T2_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T2_RC=$?
 assert_exit_code "$T2_RC" "1" "test 2: exits 1 when findings text is unparseable"
 assert_file_absent "$LEDGER/review-p_test2/g1/findings.json" "test 2: findings.json must not be written"
 assert_file_exists "$LEDGER/review-p_test2/chain.json" "test 2: chain.json exists"
@@ -1547,7 +1547,7 @@ Real critical from the same seat
 EOF2
 )
 export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: process.argv[1]}));' "$T2G_FINDINGS_TEXT")"
-T2G_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2g --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2G_RC=$?
+T2G_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2g --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T2G_RC=$?
 assert_exit_code "$T2G_RC" "0" "test 2g: unrecognised severity symbol does not abort the round"
 T2G_FILE="$LEDGER/review-p_test2g/g1/findings.json"
 assert_file_exists "$T2G_FILE" "test 2g: findings.json written"
@@ -1561,7 +1561,7 @@ assert_contains "$T2G_OUT" "outside the four-level vocabulary" "test 2g: stderr 
 # Test 2h: the reported incident shape: the seat's ONLY finding is headed by the green circle. Before the
 # fix this aborted the whole round (rc=1, parse_failed, no findings.json); now the round succeeds.
 export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: "\u{1F7E2} [glm-9] only finding, green circle\nbody line"}));')"
-T2H_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2h --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2H_RC=$?
+T2H_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2h --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T2H_RC=$?
 assert_exit_code "$T2H_RC" "0" "test 2h: a seat whose only finding uses an unrecognised symbol does not abort the round"
 T2H_SUMMARY=$(node -e '
   const f = JSON.parse(fs.readFileSync(process.argv[1])).findings;
@@ -1573,7 +1573,7 @@ assert_eq "$T2H_SUMMARY" "1|Major|true|$(node -e 'process.stdout.write("\u{1F7E2
 # collecting the SAME generation number again must be refused (generation numbers are never
 # reused, including aborted ones) and must NOT delete/recreate that directory.
 assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted generation's range.json exists before re-collect"
-T2D_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2D_RC=$?
+T2D_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T2D_RC=$?
 assert_exit_code "$T2D_RC" "1" "test 2d: re-collecting the same generation after an abort is refused"
 assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted generation's range.json still present after refused re-collect (not deleted)"
 
@@ -1583,7 +1583,7 @@ assert_file_exists "$LEDGER/review-p_test2/g1/range.json" "test 2d: aborted gene
 # aborted chain.json entry itself stays in place, referenced alongside the new generation's entry.
 T2E_G1_RANGE_BEFORE=$(cat "$LEDGER/review-p_test2/g1/range.json")
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-T2E_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 2 --branch work --seats "m1/low@codex" 2>&1); T2E_RC=$?
+T2E_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2 --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1); T2E_RC=$?
 assert_exit_code "$T2E_RC" "0" "test 2e: collecting the next generation number after an abort is accepted"
 assert_file_exists "$LEDGER/review-p_test2/g2/findings.json" "test 2e: fresh g2 directory has findings.json"
 T2E_G1_RANGE_AFTER=$(cat "$LEDGER/review-p_test2/g1/range.json")
@@ -1635,7 +1635,7 @@ assert_contains "$T2H_OUT" "aborted" "test 2h: the refusal names the aborted gen
 
 # Test 2b: SHIP-AS-IS with findings "none" and non-empty no_finding_proof succeeds with 0 findings and pending status
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-T2B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2B_RC=$?
+T2B_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T2B_RC=$?
 assert_exit_code "$T2B_RC" "0" "test 2b: exits 0 for SHIP-AS-IS with proof"
 assert_file_exists "$LEDGER/review-p_test2b/g1/findings.json" "test 2b: findings.json written"
 assert_contains "$(cat "$LEDGER/review-p_test2b/g1/findings.json")" '"findings": []' "test 2b: findings array is empty"
@@ -1644,7 +1644,7 @@ assert_contains "$T2B_OUT" '"proof_present": true' "test 2b: summary records pro
 
 # Test 2c: SHIP-AS-IS with findings "none" and empty no_finding_proof treated as no_verdict (gap)
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": ""}'
-T2C_OUT_NOGAP=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c_nogap --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2C_RC_NOGAP=$?
+T2C_OUT_NOGAP=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c_nogap --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T2C_RC_NOGAP=$?
 assert_exit_code "$T2C_RC_NOGAP" "1" "test 2c: exits 1 when SHIP-AS-IS lacks proof and gap not allowed"
 assert_contains "$T2C_OUT_NOGAP" "Review seat gap detected on seat(s): s0" "test 2c: gap detected on unproven seat"
 # Backlog: a seat gap without --allow-seat-gap must record the generation aborted, not strand it
@@ -1652,11 +1652,11 @@ assert_contains "$T2C_OUT_NOGAP" "Review seat gap detected on seat(s): s0" "test
 assert_file_exists "$LEDGER/review-p_test2c_nogap/chain.json" "test 2c: gap without --allow-seat-gap still writes a chain entry"
 assert_contains "$(cat "$LEDGER/review-p_test2c_nogap/chain.json")" '"reason": "seat_gap"' "test 2c: chain entry recorded aborted (seat_gap)"
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-T2C_G2_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c_nogap --generation 2 --branch work --seats "m1/low@codex" 2>&1); T2C_G2_RC=$?
+T2C_G2_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c_nogap --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1); T2C_G2_RC=$?
 assert_exit_code "$T2C_G2_RC" "0" "test 2c: generation 2 collects after the gap-aborted generation 1 (was: Contiguous chain broken)"
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": ""}'
 
-T2C_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --allow-seat-gap 2>&1); T2C_RC=$?
+T2C_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2c --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" --allow-seat-gap 2>&1); T2C_RC=$?
 # v2.36.5: 0 of 1 seats reviewed is below any floor — the generation is recorded aborted
 # (seat_gap_below_min), never a pending entry the checker would refuse forever.
 assert_exit_code "$T2C_RC" "1" "test 2c: 0 of 1 reviewed with --allow-seat-gap is below the floor ⇒ exit 1"
@@ -1665,10 +1665,10 @@ assert_file_exists "$LEDGER/review-p_test2c/g1/seat-s0.json" "test 2c: the unpro
 
 # Test 3: chain immutability: run collect once (pending), run again for same generation -> exits 1 without modifying entry
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-T3_OUT1=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC1=$?
+T3_OUT1=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T3_RC1=$?
 assert_exit_code "$T3_RC1" "0" "test 3: first collect exits 0"
 T3_CHAIN_BEFORE=$(cat "$LEDGER/review-p_test3/chain.json")
-T3_OUT2=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T3_RC2=$?
+T3_OUT2=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T3_RC2=$?
 assert_exit_code "$T3_RC2" "1" "test 3: second collect for same generation exits 1"
 T3_CHAIN_AFTER=$(cat "$LEDGER/review-p_test3/chain.json")
 assert_eq "$T3_CHAIN_BEFORE" "$T3_CHAIN_AFTER" "test 3: chain.json unchanged on refused rerun"
@@ -1688,7 +1688,7 @@ cat << 'EOF' > "$LEDGER/review-p_test4/chain.json"
 ]
 EOF
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-T4_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T4_RC=$?
+T4_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test4 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T4_RC=$?
 assert_exit_code "$T4_RC" "1" "test 4: collect refuses to reuse generation 1 while an aborted entry for it exists"
 T4_CHAIN_LEN=$(node -e 'console.log(JSON.parse(fs.readFileSync(process.argv[1])).length);' "$LEDGER/review-p_test4/chain.json")
 assert_eq "$T4_CHAIN_LEN" "1" "test 4: chain still has exactly 1 entry (untouched, not replaced)"
@@ -1698,13 +1698,13 @@ assert_eq "$T4_STATUS" "aborted" "test 4: existing entry status is unchanged (st
 # Test 5: malformed chain.json (not valid JSON or wrong top-level shape) exits 1 and file left unchanged
 mkdir -p "$LEDGER/review-p_test5a"
 echo "this is not json {[" > "$LEDGER/review-p_test5a/chain.json"
-T5A_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test5a --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T5A_RC=$?
+T5A_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test5a --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T5A_RC=$?
 assert_exit_code "$T5A_RC" "1" "test 5a: exits 1 on invalid JSON chain.json"
 assert_eq "$(cat "$LEDGER/review-p_test5a/chain.json")" "this is not json {[" "test 5a: malformed file left unchanged"
 
 mkdir -p "$LEDGER/review-p_test5b"
 echo '{"not": "an array"}' > "$LEDGER/review-p_test5b/chain.json"
-T5B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test5b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T5B_RC=$?
+T5B_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test5b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T5B_RC=$?
 assert_exit_code "$T5B_RC" "1" "test 5b: exits 1 on non-array chain.json"
 assert_eq "$(cat "$LEDGER/review-p_test5b/chain.json")" '{"not": "an array"}' "test 5b: non-array file left unchanged"
 
@@ -1731,7 +1731,7 @@ echo '{"status": "reviewed", "verdict": "SHIP-AS-IS", "driver_dir_dispatcher": t
 exit 0
 EOF
 chmod +x "$TEST6_DRIVER_DIR/dispatch-review.sh"
-T6_OUT=$(node "$TEST6_DRIVER_DIR/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test6 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T6_RC=$?
+T6_OUT=$(node "$TEST6_DRIVER_DIR/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test6 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T6_RC=$?
 assert_exit_code "$T6_RC" "0" "test 6: collect exits 0 using driver-directory dispatcher"
 T6_SEAT_OUTPUT=$(cat "$LEDGER/review-p_test6/g1/seat-s0.json")
 assert_contains "$T6_SEAT_OUTPUT" '"driver_dir_dispatcher": true' "test 6: executed dispatcher from driver script directory"
@@ -1748,7 +1748,7 @@ EOF
 chmod +x "$TEST7_STUB"
 export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$TEST7_STUB"
 # Run with --allow-seat-gap so collect doesn't abort early due to gap, allowing us to inspect seat JSON
-T7_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test7 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" --allow-seat-gap 2>&1); T7_RC=$?
+T7_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test7 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" --allow-seat-gap 2>&1); T7_RC=$?
 # v2.36.5: 0 of 1 reviewed ⇒ aborted (seat_gap_below_min), exit 1; the seat artifact is still written first.
 assert_exit_code "$T7_RC" "1" "test 7: 0 of 1 reviewed is below the floor ⇒ aborted, exit 1"
 assert_contains "$(cat "$LEDGER/review-p_test7/chain.json")" '"reason": "seat_gap_below_min"' "test 7: aborted entry recorded"
@@ -1780,7 +1780,7 @@ EXCL_BASE=$(git -C "$EXCL_REPO" rev-parse HEAD~1)
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 
 # Collect with --exclude generated/**
-T8_OUT=$(node "$SCRIPT" collect --repo-root "$EXCL_REPO" --ledger "$LEDGER" --phase p_test8_excl --generation 1 --branch work --phase-base "$EXCL_BASE" --seats "m1/low@codex" --exclude "generated/**" 2>&1); T8_RC=$?
+T8_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$EXCL_REPO" --ledger "$LEDGER" --phase p_test8_excl --generation 1 --branch work --phase-base "$EXCL_BASE" --seats "gpt-m1/low@codex" --exclude "generated/**" 2>&1); T8_RC=$?
 assert_exit_code "$T8_RC" "0" "test 8: collect with --exclude exits 0"
 T8_DIFF=$(cat "$LEDGER/review-p_test8_excl/g1/diff.txt")
 assert_contains "$T8_DIFF" "normal.txt" "test 8: normal.txt present in diff.txt"
@@ -1791,7 +1791,7 @@ assert_contains "$T8_RANGE" '"generated/**"' "test 8: range.json lists excluded 
 assert_contains "$T8_RANGE" '"diff_bytes":' "test 8: range.json has diff_bytes"
 
 # Test 9: collect without --exclude includes both paths, and range.json excluded is []
-T9_OUT=$(node "$SCRIPT" collect --repo-root "$EXCL_REPO" --ledger "$LEDGER" --phase p_test9_noexcl --generation 1 --branch work --phase-base "$EXCL_BASE" --seats "m1/low@codex" 2>&1); T9_RC=$?
+T9_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$EXCL_REPO" --ledger "$LEDGER" --phase p_test9_noexcl --generation 1 --branch work --phase-base "$EXCL_BASE" --seats "gpt-m1/low@codex" 2>&1); T9_RC=$?
 assert_exit_code "$T9_RC" "0" "test 9: collect without --exclude exits 0"
 T9_DIFF=$(cat "$LEDGER/review-p_test9_noexcl/g1/diff.txt")
 assert_contains "$T9_DIFF" "normal.txt" "test 9: normal.txt present in diff.txt"
@@ -1820,7 +1820,7 @@ mkdir -p "$LARGE_REPO"
 LARGE_BASE=$(git -C "$LARGE_REPO" rev-parse HEAD~1)
 export STUB_RESPONSE_s0='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "none", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
-T10_OUT=$(node "$SCRIPT" collect --repo-root "$LARGE_REPO" --ledger "$LEDGER" --phase p_test10_warn --generation 1 --branch work --phase-base "$LARGE_BASE" --seats "m1/low@codex" 2>&1); T10_RC=$?
+T10_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$LARGE_REPO" --ledger "$LEDGER" --phase p_test10_warn --generation 1 --branch work --phase-base "$LARGE_BASE" --seats "gpt-m1/low@codex" 2>&1); T10_RC=$?
 assert_exit_code "$T10_RC" "0" "test 10: large diff collect exits 0 (does not block)"
 assert_contains "$T10_OUT" "WARNING: Diff size" "test 10: diff size warning printed"
 assert_contains "$T10_OUT" "exceeds 400000 bytes" "test 10: diff size warning names threshold"
@@ -1830,18 +1830,18 @@ assert_contains "$T10_OUT" "--exclude" "test 10: diff size warning suggests --ex
 # 11a: a fresh lock held by someone else makes collect wait, then fail loudly -- never write around it
 mkdir -p "$LEDGER/review-p_lock"
 mkdir "$LEDGER/review-p_lock/chain.json.lock"
-T11A_OUT=$(AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS=400 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_lock --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T11A_RC=$?
+T11A_OUT=$(AUTOPILOT_CHAIN_LOCK_TIMEOUT_MS=400 node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_lock --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T11A_RC=$?
 assert_exit_code "$T11A_RC" "1" "test 11a: collect exits 1 while another holder owns the chain lock"
 assert_contains "$T11A_OUT" "another collect/finalize holds it" "test 11a: timeout message names the lock"
 assert_file_absent "$LEDGER/review-p_lock/chain.json" "test 11a: nothing written around the held lock"
 # 11b: a stale lock (crashed holder) is broken and the collect proceeds
 mkdir -p "$LEDGER/review-p_stale"; mkdir "$LEDGER/review-p_stale/chain.json.lock"; sleep 0.05
-T11B_OUT=$(AUTOPILOT_CHAIN_LOCK_STALE_MS=1 node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_stale --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T11B_RC=$?
+T11B_OUT=$(AUTOPILOT_CHAIN_LOCK_STALE_MS=1 node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_stale --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); T11B_RC=$?
 assert_exit_code "$T11B_RC" "0" "test 11b: stale lock is broken, collect succeeds"
 assert_file_absent "$LEDGER/review-p_stale/chain.json.lock" "test 11b: lock released after the write"
 # 11c: concurrent collects of the same phase/generation never leave a corrupt chain or a stuck lock
 for i in 1 2 3 4; do
-  node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_race --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" >/dev/null 2>&1 &
+  node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_race --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" >/dev/null 2>&1 &
 done
 wait
 assert_eq "$(node -e 'const c=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(Array.isArray(c)&&c.length===1&&c[0].generation===1)' "$LEDGER/review-p_race/chain.json")" "true" "test 11c: concurrent collects leave one valid generation-1 entry"
@@ -1931,7 +1931,7 @@ export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "find
 
 pk_collect() { # <ledger> <packets-file> <packet> [extra flags...]
   local led="$1" pf="$2" id="$3"; shift 3
-  node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$led" --packets "$pf" --packet "$id" --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" "$@" 2>&1
+  node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$led" --packets "$pf" --packet "$id" --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" "$@" 2>&1
 }
 pk_finalize() { # <ledger> <packets-file> <packet> [generation]
   echo "{ \"schema_version\": 1, \"phase\": \"ps-$3\", \"generation\": ${4:-1}, \"findings\": [] }" > "$TEST_TMP/pk_disp.json"
@@ -2004,7 +2004,7 @@ assert_contains "$PK_OUT" "missing: 'd/e.txt'" "packet P3: the refusal names the
 assert_file_absent "$TEST_TMP/pk_ledger_m/review-pm-P1/g1" "packet P3: nothing was collected"
 PK_M=$(pk_mutant cover hetero-review-loop.js "if (coverProblems.length > 0) {" "if (false) {") || fail "mutation setup failed (P3)"
 rm -rf "$TEST_TMP/pk_ledger_m2"
-PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_m2" --packets "$TEST_TMP/pk_missing.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_m2" --packets "$TEST_TMP/pk_missing.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet P3 (mutation): without the cover check collect accepts the gap"
 
 # P3b: the same gap in a HAND-BUILT ledger (the writer bypassed): P1+P2 copied from the good run, packet sha
@@ -2072,7 +2072,7 @@ assert_contains "$PK_OUT" "overlap: 'c.txt' is in both packet 'P1' and packet 'P
 PK_OUT=$(pk_check "$CHK" "$PK_LEDGER" "$TEST_TMP/pk_overlap.json"); PK_RC=$?
 assert_exit_code "$PK_RC" "1" "packet P4: the set check refuses an overlapping packets file"
 PK_M=$(pk_mutant overlap lib/review-packets.js "if (owner.has(p)) errors.push(" "if (false) errors.push(") || fail "mutation setup failed (P4)"
-PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_o2" --packets "$TEST_TMP/pk_overlap.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_o2" --packets "$TEST_TMP/pk_overlap.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet P4 (mutation): without the overlap check collect accepts the overlap"
 
 # P4b: a packet lists a file that is not in the range
@@ -2114,10 +2114,10 @@ assert_exit_code "$PK_RC" "2" "packet P6: --exclude together with --packets is r
 assert_contains "$PK_OUT" "never leaves one out" "packet P6: the refusal says packets never leave a path out"
 assert_file_absent "$TEST_TMP/pk_ledger_x/review-ps-P1" "packet P6: nothing was collected"
 PK_M=$(pk_mutant excl hetero-review-loop.js "if (flags.exclude !== undefined) {" "if (false) {") || fail "mutation setup failed (P6)"
-PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_x2" --packets "$TEST_TMP/pk_packets.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" --exclude "generated/**" 2>&1); PK_RC=$?
+PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_x2" --packets "$TEST_TMP/pk_packets.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" --exclude "generated/**" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet P6 (mutation): without the guard the exclusion rides along with a packet"
 # ...a source path is still not excludable even without packets (allowlist untouched)
-PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_y" --phase py --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" --exclude "d/b.txt" 2>&1); PK_RC=$?
+PK_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_y" --phase py --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" --exclude "d/b.txt" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "1" "packet P6: the exclude allowlist still refuses a non-allowlisted path"
 # ...and a packet generation that carries exclusions in a hand-built ledger is refused by the checker
 PK_EXCL="$TEST_TMP/pk_excl"; rm -rf "$PK_EXCL"; cp -r "$PK_LEDGER" "$PK_EXCL"
@@ -2134,7 +2134,7 @@ assert_exit_code "$PK_RC" "0" "packet P6b (mutation): without the rule a packet 
 
 # P9: without --packets nothing changes: no packet record anywhere, whole-range receipt still passes Mode A
 UN_LEDGER="$TEST_TMP/pk_unchanged"; mkdir -p "$UN_LEDGER"
-PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$UN_LEDGER" --phase whole --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+PK_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$UN_LEDGER" --phase whole --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet P9: collect without packet flags exits 0"
 echo '{ "schema_version": 1, "phase": "whole", "generation": 1, "findings": [] }' > "$TEST_TMP/pk_disp_whole.json"
 node "$SCRIPT" finalize --repo-root "$PK_REPO" --ledger "$UN_LEDGER" --phase whole --generation 1 --branch work --dispositions "$TEST_TMP/pk_disp_whole.json" > /dev/null 2>&1
@@ -2146,11 +2146,11 @@ PK_OUT=$(node "$CHK" --repo-root "$PK_REPO" --ledger "$UN_LEDGER" --phase whole 
 assert_exit_code "$PK_RC" "0" "packet P9: Mode A passes the whole-range receipt unchanged"
 PK_M=$(pk_mutant plain hetero-review-loop.js "if (packetRecord) rangeJson.packet = packetRecord;" "rangeJson.packet = packetRecord;") || fail "mutation setup failed (P9)"
 rm -rf "$TEST_TMP/pk_unchanged2"; mkdir -p "$TEST_TMP/pk_unchanged2"
-AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_unchanged2" --phase whole --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" > /dev/null 2>&1
+AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_unchanged2" --phase whole --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" > /dev/null 2>&1
 assert_contains "$(cat "$TEST_TMP/pk_unchanged2/review-whole/g1/range.json")" '"packet"' "packet P9 (mutation): a collect that always writes a packet key is caught by the no-packet-key assertion"
 
 # P10: flag misuse
-PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_z" --packets "$TEST_TMP/pk_packets.json" --generation 1 --branch work --phase-base "$PK_BASE" 2>&1); PK_RC=$?
+PK_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger_z" --packets "$TEST_TMP/pk_packets.json" --generation 1 --branch work --phase-base "$PK_BASE" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "2" "packet P10: --packets without --packet exits 2"
 PK_OUT=$(pk_collect "$TEST_TMP/pk_ledger_z" "$TEST_TMP/pk_packets.json" NOPE); PK_RC=$?
 assert_exit_code "$PK_RC" "2" "packet P10: unknown packet id exits 2"
@@ -2166,10 +2166,10 @@ PK_M=$(pk_mutant stale check-phase-review-receipt.js "if (own.has(n)) problems.p
 PK_OUT=$(pk_check "$PK_M/scripts/check-phase-review-receipt.js" "$PK_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet P7 (mutation): without the staleness rule the set passes over an unreviewed change"
 # P7b: re-reviewing only the touched packet (generation 2) brings the set back; an untouched packet cannot be re-collected
-PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PK_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P1 --generation 2 --branch work --seats "m1/low@codex" 2>&1); PK_RC=$?
+PK_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$PK_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P1 --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "1" "packet P7b: collecting a later generation for a packet nothing changed in is refused"
 assert_contains "$PK_OUT" "nothing in packet 'P1' changed" "packet P7b: says why"
-PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PK_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "m1/low@codex" 2>&1); PK_RC=$?
+PK_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$PK_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "gpt-m1/low@codex" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet P7b: generation 2 of the touched packet collects"
 PK_OUT=$(pk_finalize "$PK_LEDGER" "$TEST_TMP/pk_packets.json" P3 2); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet P7b: generation 2 finalizes"
@@ -2182,7 +2182,7 @@ cat << 'EOF' > "$TEST_TMP/pk_packets_alt.json"
   "packets": { "P1": ["a.txt"], "P2": ["d/b.txt"], "P3": ["c.txt", "d/e.txt", "generated/g.txt"] } }
 EOF
 rm -rf "$PK_LEDGER5/review-ps-P1"
-PK_OUT=$(node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PK_LEDGER5" --packets "$TEST_TMP/pk_packets_alt.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+PK_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$PK_LEDGER5" --packets "$TEST_TMP/pk_packets_alt.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "1" "packet P8: a second collect with different packets bytes for the same set is refused"
 assert_contains "$PK_OUT" "frozen once its first packet is collected" "packet P8: says why"
 
@@ -2231,7 +2231,7 @@ PX1B_LEDGER="$TEST_TMP/px1b_ledger"; mkdir -p "$PX1B_LEDGER"
 px_fin "$PX1B_LEDGER" P1; px_fin "$PX1B_LEDGER" P3
 (cd "$PK_REPO" && echo "between" >> d/e.txt && git add d/e.txt && git commit -q -m "between")
 px_fin "$PX1B_LEDGER" P2
-node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PX1B_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "m1/low@codex" > /dev/null 2>&1
+node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$PX1B_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "gpt-m1/low@codex" > /dev/null 2>&1
 pk_finalize "$PX1B_LEDGER" "$TEST_TMP/pk_packets.json" P3 2 > /dev/null
 PK_OUT=$(pk_check "$CHK" "$PX1B_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet Q1b: a packet first reviewed at a later head over untouched own paths passes the set"
@@ -2269,7 +2269,7 @@ PX1E_LEDGER="$TEST_TMP/px1e_ledger"; mkdir -p "$PX1E_LEDGER"
 px_fin "$PX1E_LEDGER" P2; px_fin "$PX1E_LEDGER" P3
 (cd "$PK_REPO" && echo "between" >> d/e.txt && git add d/e.txt && git commit -q -m "between")
 px_fin "$PX1E_LEDGER" P1
-node "$SCRIPT" collect --repo-root "$PK_REPO" --ledger "$PX1E_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "m1/low@codex" > /dev/null 2>&1
+node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$PX1E_LEDGER" --packets "$TEST_TMP/pk_packets.json" --packet P3 --generation 2 --branch work --seats "gpt-m1/low@codex" > /dev/null 2>&1
 pk_finalize "$PX1E_LEDGER" "$TEST_TMP/pk_packets.json" P3 2 > /dev/null
 PK_OUT=$(pk_check "$CHK" "$PX1E_LEDGER" "$TEST_TMP/pk_packets.json"); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet Q1e: the earliest first head is h1 whatever the packet-id order, so a later-reviewed first packet passes"
@@ -2324,7 +2324,7 @@ assert_exit_code "$PK_RC" "0" "packet Q4 (mutation): without the guard the lone 
 PK_REPO="$PK_REPO_MAIN"; PK_BASE="$PK_BASE_MAIN"
 rm -rf "$TEST_TMP/pk_ledger5m"; cp -r "$PK_LEDGER5" "$TEST_TMP/pk_ledger5m"; rm -rf "$TEST_TMP/pk_ledger5m/review-ps-P1"
 PK_M=$(pk_mutant pin hetero-review-loop.js "if (pinned !== packetCtx.sha256) {" "if (false) {") || fail "mutation setup failed (Q5)"
-PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger5m" --packets "$TEST_TMP/pk_packets_alt.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "m1/low@codex" 2>&1); PK_RC=$?
+PK_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh" node "$PK_M/scripts/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 --repo-root "$PK_REPO" --ledger "$TEST_TMP/pk_ledger5m" --packets "$TEST_TMP/pk_packets_alt.json" --packet P1 --generation 1 --branch work --phase-base "$PK_BASE" --seats "gpt-m1/low@codex" 2>&1); PK_RC=$?
 assert_exit_code "$PK_RC" "0" "packet Q5 (mutation): without the pin check a changed packets file is accepted into the same set"
 
 # Q6: an exit inside a try/catch of the member check must reach the set check unchanged (no swallowed or doubled error)
@@ -2354,7 +2354,7 @@ FCEOF
 }
 fc_finalize() { # $1 = phase, $2 = resolver, $3 = script
   mkdir -p "$LEDGER/review-$1/g1"
-  printf '[{"generation":1,"base":"b1","head":"h1","seats":["s0"],"status":"pending"}]\n' > "$LEDGER/review-$1/chain.json"
+  printf '[{"generation":1,"base":"b1","head":"h1","implementer_engine":"claude-sonnet-5","seats":[{"id":"s0","status":"reviewed","engine":"gpt-5"}],"status":"pending"}]\n' > "$LEDGER/review-$1/chain.json"
   printf '{"base":"b1","head":"h1"}\n' > "$LEDGER/review-$1/g1/range.json"
   printf '{"findings":[{"id":"f1","severity":"Minor","seat":"s0","text":"x"}]}\n' > "$LEDGER/review-$1/g1/findings.json"
   printf '{"schema_version":1,"phase":"%s","generation":1,"findings":[{"id":"f1","disposition":"refuted","rationale":"not a bug"}]}\n' "$1" > "$TEST_TMP/disp_$1.json"
@@ -2377,7 +2377,7 @@ assert_not_contains "$(cat "$LEDGER/receipt-p_fc_mut.json")" 'review_fresh_conte
 unset STUB_RESPONSE_s0 STUB_RESPONSE_s1
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 ER_HEAD=$(git -C "$SCRATCH_REPO" rev-parse work)
-ER_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er --generation 1 --branch work --phase-base "$ER_HEAD" --seats "m1/low@codex" 2>&1); ER_RC=$?
+ER_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er --generation 1 --branch work --phase-base "$ER_HEAD" --seats "gpt-m1/low@codex" 2>&1); ER_RC=$?
 assert_exit_code "$ER_RC" "1" "empty-range: base == head is refused"
 assert_contains "$ER_OUT" "empty review range" "empty-range: the refusal names the empty range"
 assert_file_absent "$LEDGER/review-p_er/g1" "empty-range: no generation directory is left behind"
@@ -2386,14 +2386,14 @@ ER_X="$TEST_TMP/er_excl_repo"; mkdir -p "$ER_X/generated"
 ( cd "$ER_X" && git init -q && git config user.email "test@example.com" && git config user.name "Test User" && echo a > generated/g.txt && git add . && git commit -q -m b \
   && git checkout -q -b work && echo b >> generated/g.txt && git commit -q -am w )
 ER_XB=$(git -C "$ER_X" rev-parse HEAD~1)
-ER2_OUT=$(node "$SCRIPT" collect --repo-root "$ER_X" --ledger "$LEDGER" --phase p_er2 --generation 1 --branch work --phase-base "$ER_XB" --exclude "generated/**" --seats "m1/low@codex" 2>&1); ER2_RC=$?
+ER2_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$ER_X" --ledger "$LEDGER" --phase p_er2 --generation 1 --branch work --phase-base "$ER_XB" --exclude "generated/**" --seats "gpt-m1/low@codex" 2>&1); ER2_RC=$?
 assert_exit_code "$ER2_RC" "1" "empty-range: a range whose every changed path is excluded is refused"
 assert_contains "$ER2_OUT" "empty review range" "empty-range: excluded-everything names the empty range"
 assert_file_absent "$LEDGER/review-p_er2/g1" "empty-range: excluded-everything leaves no generation directory"
-ER3_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); ER3_RC=$?
+ER3_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); ER3_RC=$?
 assert_exit_code "$ER3_RC" "0" "empty-range: a non-empty range is still collected"
 ER_M=$(pk_mutant erange hetero-review-loop.js "if (diffBytes === 0) {" "if (false) {") || fail "mutation setup failed (empty-range)"
-ER4_OUT=$(node "$ER_M/scripts/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er4 --generation 1 --branch work --phase-base "$ER_HEAD" --seats "m1/low@codex" 2>&1); ER4_RC=$?
+ER4_OUT=$(node "$ER_M/scripts/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er4 --generation 1 --branch work --phase-base "$ER_HEAD" --seats "gpt-m1/low@codex" 2>&1); ER4_RC=$?
 assert_exit_code "$ER4_RC" "0" "empty-range (mutation): without the guard an empty range is collected again"
 
 # ─── events feed writer (operator console A1 E2): collected_at, finalized_at, ledger pointer ───
@@ -2406,7 +2406,7 @@ ev_stamp() { # <ledger> <phase> <field>: prints ok when chain entry 0 carries an
 }
 ev_collect() { # [node-script] <ledger> <phase>
   local script="$1" ledger="$2" phase="$3"
-  node "$script" collect --repo-root "$SCRATCH_REPO" --ledger "$ledger" --phase "$phase" --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1
+  node "$script" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$ledger" --phase "$phase" --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1
 }
 ev_finalize() { # <script> <ledger> <phase>
   echo "{ \"schema_version\": 1, \"phase\": \"$3\", \"generation\": 1, \"findings\": [] }" > "$TEST_TMP/ev_disp.json"
@@ -2435,7 +2435,7 @@ EV_ML3="$TEST_TMP/ev_ledger_m3"; ev_collect "$SCRIPT" "$EV_ML3" pevm3 >/dev/null
 assert_eq "$(ev_stamp "$EV_ML3" pevm3 finalized_at)" "missing" "events writer 3 (mutation): without the finalized_at writer the stamp is missing"
 
 # events writer 4: a relative --ledger is recorded as an absolute path
-EV_REL_OUT=$(cd "$TEST_TMP" && node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger --phase pevrel --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); EV_RC=$?
+EV_REL_OUT=$(cd "$TEST_TMP" && node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger --phase pevrel --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); EV_RC=$?
 assert_exit_code "$EV_RC" "0" "events writer: collect with a relative --ledger exits 0"
 assert_eq "$(grep -c -x -F -- "$TEST_TMP/ev_rel_ledger" "$EV_POINTER" 2>/dev/null)" "1" "events writer 4: a relative --ledger lands in the pointer file as an absolute path"
 assert_eq "$(grep -c -x -F -- "ev_rel_ledger" "$EV_POINTER" 2>/dev/null)" "0" "events writer 4: no bare relative line in the pointer file"
@@ -2443,7 +2443,7 @@ EV_M4=$(pk_mutant evrel hetero-review-loop.js 'const line = `${path.resolve(ledg
 # the collect handler also resolves --ledger before it reaches the writer, so the mutant removes that resolve too (the first match in the file is handleCollect)
 sed_mutate "$EV_M4/scripts/hetero-review-loop.js" 's/RELATIVE_LEDGER_ARG/ledgerDir/'
 sed_mutate "$EV_M4/scripts/hetero-review-loop.js" "0,/const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';/s//const ledgerDir = flags.ledger ? flags.ledger : '';/"
-(cd "$TEST_TMP" && node "$EV_M4/scripts/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger_m --phase pevrelm --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" >/dev/null 2>&1)
+(cd "$TEST_TMP" && node "$EV_M4/scripts/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger_m --phase pevrelm --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" >/dev/null 2>&1)
 assert_eq "$(grep -c -x -F -- "ev_rel_ledger_m" "$EV_POINTER" 2>/dev/null)" "1" "events writer 4 (mutation): without any resolve the pointer holds the bare relative path"
 
 # ─── BL-0384 / BL-0389 stage 1: review-record integrity warnings (no schema change) ───
@@ -2457,7 +2457,7 @@ rr_phase() {
   mkdir -p "$LEDGER/review-$ph/g1" "$LEDGER/review-$ph/g2"
   echo '{ "base": "sha_base1", "head": "sha_head1" }' > "$LEDGER/review-$ph/g1/range.json"
   echo '{ "findings": [ { "id": "rrmajor_g1", "severity": "Minor", "seat": "s0", "text": "Missing bounds check" } ] }' > "$LEDGER/review-$ph/g1/findings.json"
-  echo '[ { "generation": 1, "base": "sha_base1", "head": "sha_head1", "seats": ["s0"], "status": "pending" } ]' > "$LEDGER/review-$ph/chain.json"
+  echo '[ { "generation": 1, "base": "sha_base1", "head": "sha_head1", "implementer_engine": "claude-sonnet-5", "seats": [{ "id": "s0", "status": "reviewed", "engine": "gpt-5" }], "status": "pending" } ]' > "$LEDGER/review-$ph/chain.json"
   echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": 1, \"findings\": [ { \"id\": \"rrmajor_g1\", \"disposition\": \"verified\", \"rationale\": \"reproduced\" } ] }" > "$TEST_TMP/rr_${ph}_g1.json"
   node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase "$ph" --generation 1 --dispositions "$TEST_TMP/rr_${ph}_g1.json" >/dev/null 2>&1
   echo '{ "base": "sha_head1", "head": "sha_head2" }' > "$LEDGER/review-$ph/g2/range.json"
@@ -2465,7 +2465,7 @@ rr_phase() {
   node -e '
     const fs = require("fs"); const p = process.argv[1];
     const chain = JSON.parse(fs.readFileSync(p, "utf8"));
-    chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", seats: ["s0"], status: "pending" });
+    chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", implementer_engine: "claude-sonnet-5", seats: [{ id: "s0", status: "reviewed", engine: "gpt-5" }], status: "pending" });
     fs.writeFileSync(p, JSON.stringify(chain, null, 2) + "\n");
   ' "$LEDGER/review-$ph/chain.json"
   local res=''
@@ -2536,7 +2536,7 @@ printf 'Range: delta\n\nReview the delta.\n' > "$TEST_TMP/rr_spec_delta.txt"
 printf 'Review it.\n' > "$TEST_TMP/rr_spec_none.txt"
 rr_collect() { # <script> <ledger> <phase> <gen> <branch> <spec> [extra]
   local s="$1" l="$2" ph="$3" g="$4" br="$5" sp="$6"; shift 6
-  node "$s" collect --repo-root "$SCRATCH_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch "$br" --phase-base "$PHASE_BASE" --seats "m1/low@codex" --spec-file "$sp" "$@" 2>&1
+  node "$s" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch "$br" --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" --spec-file "$sp" "$@" 2>&1
 }
 rr_g1() { # <script> <ledger> <phase> <spec>
   rr_collect "$1" "$2" "$3" 1 work "$4" >/dev/null
@@ -2634,7 +2634,7 @@ RR2_CLEAN='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_f
 rr2_collect() { # <script> <ledger> <phase> <gen> [extra flags]; branch w2 is moved to the head of that generation
   local s="$1" l="$2" ph="$3" g="$4"; shift 4
   if [ "$g" = 1 ]; then git -C "$RR2_REPO" branch -q -f w2 "$RR2_H1"; export STUB_SEAT_RESPONSE="$RR2_G1RESP"; else git -C "$RR2_REPO" branch -q -f w2 "$RR2_H2"; export STUB_SEAT_RESPONSE="$RR2_CLEAN"; fi
-  node "$s" collect --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --phase-base "$RR2_B" --seats "m1/low@codex" "$@" 2>&1
+  node "$s" collect --implementer-engine claude-sonnet-5 --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --phase-base "$RR2_B" --seats "gpt-m1/low@codex" "$@" 2>&1
 }
 rr2_finalize() { # <script> <ledger> <phase> <gen>
   local s="$1" l="$2" ph="$3" g="$4" disp="$TEST_TMP/rr2_disp_${3}_${4}.json"
@@ -2681,7 +2681,7 @@ assert_not_contains "$(cat "$RR2_L/review-rr2a/g2/range.json")" "range_mode" "de
 assert_not_contains "$(cat "$RR2_L/review-rr2a/g1/range.json")" "range_mode" "default path: no range_mode in g1/range.json"
 assert_file_absent "$RR2_L/review-rr2a/resolutions-addendum.json" "default path: no addendum file"
 # red check: a writer that always stamps range_mode / the addendum is caught by the same assertions
-RR2_MD=$(pk_mutant rr2dflt hetero-review-loop.js "const newEntry = fullRange ? { ...entryIn, range_mode: 'full' } : entryIn;" "const newEntry = { ...entryIn, range_mode: 'full' };") || fail "mutation setup failed (rr2 default)"
+RR2_MD=$(pk_mutant rr2dflt hetero-review-loop.js "const withRange = fullRange ? { ...entryIn, range_mode: 'full' } : entryIn;" "const withRange = { ...entryIn, range_mode: 'full' };") || fail "mutation setup failed (rr2 default)"
 sed_mutate "$RR2_MD/scripts/hetero-review-loop.js" "s/    \.\.\.(fullRange ? { range_mode: 'full' } : {}),/    range_mode: 'full',/"
 RR2_L0="$TEST_TMP/rr2_ledger_dflt"; mkdir -p "$RR2_L0"
 rr2_collect "$RR2_MD/scripts/hetero-review-loop.js" "$RR2_L0" rr2dflt 1 >/dev/null
@@ -2802,7 +2802,7 @@ assert_exit_code "$RREM_RC" "0" "empty addendum (mutation): without the check a 
 RR2_LA="$TEST_TMP/rr2_ledger_abort"; mkdir -p "$RR2_LA"
 rr2_collect "$SCRIPT" "$RR2_LA" rr2ab 1 >/dev/null; rr2_finalize "$SCRIPT" "$RR2_LA" rr2ab 1 >/dev/null
 git -C "$RR2_REPO" branch -q -f w2 "$RR2_H2"
-STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "zzz nothing parseable here"}' node "$SCRIPT" collect --repo-root "$RR2_REPO" --ledger "$RR2_LA" --phase rr2ab --generation 2 --branch w2 --phase-base "$RR2_B" --seats "m1/low@codex" --full-range >/dev/null 2>&1
+STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "zzz nothing parseable here"}' node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$RR2_REPO" --ledger "$RR2_LA" --phase rr2ab --generation 2 --branch w2 --phase-base "$RR2_B" --seats "gpt-m1/low@codex" --full-range >/dev/null 2>&1
 assert_contains "$(cat "$RR2_LA/review-rr2ab/chain.json")" '"status": "aborted"' "full-range inherit: generation 2 aborted"
 assert_contains "$(cat "$RR2_LA/review-rr2ab/chain.json")" '"range_mode": "full"' "full-range inherit: the aborted entry records range_mode full"
 rr2_collect "$SCRIPT" "$RR2_LA" rr2ab 3 >/dev/null; rr2_finalize "$SCRIPT" "$RR2_LA" rr2ab 3 >/dev/null
@@ -2824,7 +2824,7 @@ assert_exit_code "$RR8C_RC" "0" "R8: the checker accepts a full-range generation
 # only the generation that asked for it is stamped
 assert_eq "$(grep -c range_mode "$RR2_L/review-rr2full/chain.json")" "1" "R8: generation 1 carries no range_mode"
 # --full-range at generation 1 is a usage error
-RR8G1_OUT=$(node "$SCRIPT" collect --repo-root "$RR2_REPO" --ledger "$TEST_TMP/rr2_ledger_g1x" --phase g1x --generation 1 --branch w2 --phase-base "$RR2_B" --seats "m1/low@codex" --full-range 2>&1); RR8G1_RC=$?
+RR8G1_OUT=$(node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$RR2_REPO" --ledger "$TEST_TMP/rr2_ledger_g1x" --phase g1x --generation 1 --branch w2 --phase-base "$RR2_B" --seats "gpt-m1/low@codex" --full-range 2>&1); RR8G1_RC=$?
 assert_exit_code "$RR8G1_RC" "2" "R8: --full-range at generation 1 exits 2"
 # checker negative control: without the range_mode branch the same ledger is "Chain broken"
 RR2_MR=$(pk_mutant rr2m_rm check-phase-review-receipt.js "(entry.range_mode === 'full' && i > 0) ? expectedBaseSha : expectedEntryBase" "expectedEntryBase") || fail "mutation setup failed (rr2 range_mode)"
@@ -2844,5 +2844,115 @@ rr2_collect "$SCRIPT" "$RR2_LW" rr2w 1 >/dev/null; rr2_finalize "$SCRIPT" "$RR2_
 RR7M_OUT=$(rr2_collect "$RR2_MW/scripts/hetero-review-loop.js" "$RR2_LW" rr2w 2 --phase-base "$RR2_ROOT0")
 assert_not_contains "$RR7M_OUT" "--phase-base ignored" "R7 (mutation): without the warning the flag is ignored silently"
 
+
+# ─── cross-family rule (famgate) ───
+# A converged generation needs a reviewed seat whose family differs from the implementer's. Root cause of the
+# 2026-11-07 incident: Claude-only seats on Claude-written diffs converged because nothing looked at families
+# and a reused one-off script set AUTOPILOT_MIN_REVIEWED_SEATS=1 plus --allow-seat-gap.
+FG_L="$TEST_TMP/fg_ledger"; mkdir -p "$FG_L"
+FG_CHECKER="$REPO_ROOT/scripts/check-phase-review-receipt.js"
+unset STUB_SEAT_RESPONSE STUB_SEAT_ID
+export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_REPO/scripts/dispatch-review.sh"
+FG_CLAUDE_SEAT="claude-opus-5-5/low@claude-native"
+fg_collect() { # <phase> <implementer|-> <seats> [extra collect flags]
+  local ph="$1" impl="$2" seats="$3"; shift 3
+  local implargs=(); [ "$impl" != "-" ] && implargs=(--implementer-engine "$impl")
+  FG_COLLECT_OUT=$(node "$SCRIPT" collect "${implargs[@]}" --repo-root "$SCRATCH_REPO" --ledger "$FG_L" --phase "$ph" --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "$seats" "$@" 2>&1); FG_COLLECT_RC=$?
+}
+fg_finalize_check() { # <phase> [extra finalize flags]
+  local ph="$1"; shift
+  printf '{"schema_version":1,"phase":"%s","generation":1,"findings":[]}\n' "$ph" > "$TEST_TMP/fg_disp_$ph.json"
+  FG_FIN_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$FG_L" --phase "$ph" --generation 1 --branch work --dispositions "$TEST_TMP/fg_disp_$ph.json" "$@" 2>&1); FG_FIN_RC=$?
+  FG_CHK_OUT=$(node "$FG_CHECKER" --repo-root "$SCRATCH_REPO" --ledger "$FG_L" --phase "$ph" --branch work --phase-base "$PHASE_BASE" 2>&1); FG_CHK_RC=$?
+}
+fg_verdict() { node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).verdict)}catch(e){console.log("none")}' "$FG_L/receipt-$1.json"; }
+fg_check() { node "$FG_CHECKER" --repo-root "$SCRATCH_REPO" --ledger "$FG_L" --phase "$1" --branch work --phase-base "$PHASE_BASE" "${@:2}" 2>&1; }
+fg_mutate() { # <phase> <js body over c (chain array) and r (receipt)>: edit chain.json and the receipt's copy together
+  node -e 'const fs=require("fs");const d=process.argv[1],ph=process.argv[2];const cp=d+"/review-"+ph+"/chain.json",rp=d+"/receipt-"+ph+".json";const c=JSON.parse(fs.readFileSync(cp,"utf8"));const r=JSON.parse(fs.readFileSync(rp,"utf8"));eval(process.argv[3]);r.chain=c;fs.writeFileSync(cp,JSON.stringify(c,null,2)+"\n");fs.writeFileSync(rp,JSON.stringify(r,null,2)+"\n")' "$FG_L" "$1" "$2"
+}
+
+# F1: Claude implementer + only Claude seats -> not SHIP-AS-IS, capability warning, checker red
+fg_collect fg1 claude-sonnet-5 "$FG_CLAUDE_SEAT"
+assert_exit_code "$FG_COLLECT_RC" "0" "famgate F1: collect with a Claude implementer and a Claude seat runs"
+fg_finalize_check fg1
+assert_exit_code "$FG_FIN_RC" "0" "famgate F1: finalize completes"
+assert_eq "$(fg_verdict fg1)" "FIX-THEN-SHIP" "famgate F1: Claude implementer + only Claude seats is not SHIP-AS-IS"
+assert_contains "$(cat "$FG_L/review-fg1/chain.json")" '"code": "no_cross_family_seat"' "famgate F1: the generation record carries capability_warnings no_cross_family_seat"
+assert_contains "$(cat "$FG_L/review-fg1/chain.json")" '"implementer_families": [' "famgate F1: ... naming the implementer family"
+assert_contains "$FG_FIN_OUT" "FIX-THEN-SHIP" "famgate F1: finalize says so"
+assert_file_absent "$FG_L/review-fg1/g1/hands-brief.md" "famgate F1: no hands-brief (nothing to fix)"
+assert_exit_code "$FG_CHK_RC" "1" "famgate F1: the checker is red"
+
+# F2: the env floor and --allow-seat-gap keep their meaning and do not skip the family check
+AUTOPILOT_MIN_REVIEWED_SEATS=1 fg_collect fg2 claude-sonnet-5 "$FG_CLAUDE_SEAT" --allow-seat-gap
+AUTOPILOT_MIN_REVIEWED_SEATS=1 fg_finalize_check fg2
+assert_eq "$(fg_verdict fg2)" "FIX-THEN-SHIP" "famgate F2: AUTOPILOT_MIN_REVIEWED_SEATS=1 + --allow-seat-gap still not SHIP-AS-IS"
+assert_exit_code "$FG_CHK_RC" "1" "famgate F2: ... and the checker is still red"
+# the checker alone, on a receipt forged to SHIP-AS-IS with the same Claude-only chain
+fg_mutate fg2 'r.verdict="SHIP-AS-IS"'
+FG_FORGE_OUT=$(AUTOPILOT_MIN_REVIEWED_SEATS=1 fg_check fg2 --min-reviewed-seats 1); FG_FORGE_RC=$?
+assert_exit_code "$FG_FORGE_RC" "1" "famgate F2: a receipt forged to SHIP-AS-IS is still red with the env floor and --min-reviewed-seats 1"
+assert_contains "$FG_FORGE_OUT" "Cross-family rule" "famgate F2: ... for the cross-family reason"
+
+# F3: the exception needs a valid source; without one finalize refuses and the receipt is red
+fg_collect fg3a claude-sonnet-5 "$FG_CLAUDE_SEAT"
+fg_finalize_check fg3a --same-family-exception "just because"
+assert_exit_code "$FG_FIN_RC" "1" "famgate F3: exception without a source is refused"
+assert_contains "$FG_FIN_OUT" "same-family-exception" "famgate F3: ... naming the flag"
+assert_file_absent "$FG_L/receipt-fg3a.json" "famgate F3: ... and nothing was written"
+assert_exit_code "$FG_CHK_RC" "1" "famgate F3: ... and the checker is red"
+fg_finalize_check fg3a --same-family-exception "d-123: bad id"
+assert_exit_code "$FG_FIN_RC" "1" "famgate F3: malformed decision card id is refused"
+fg_finalize_check fg3a --same-family-exception "d-6b183bd3:"
+assert_exit_code "$FG_FIN_RC" "1" "famgate F3: a source with no reason is refused"
+fg_finalize_check fg3a --same-family-exception "01M6YP06MWABCDEFGHJKMNPQ: wrong length ULID"
+assert_exit_code "$FG_FIN_RC" "1" "famgate F3: a 24-char ULID is refused"
+fg_finalize_check fg3a --same-family-exception "01M6YP06MWIIIIIIIIIIIIIIII: letter I is not Crockford"
+assert_exit_code "$FG_FIN_RC" "1" "famgate F3: a 26-char string outside Crockford base32 is refused"
+fg_finalize_check fg3a --same-family-exception
+assert_exit_code "$FG_FIN_RC" "1" "famgate F3: the bare flag is refused"
+assert_file_absent "$FG_L/receipt-fg3a.json" "famgate F3: no refused attempt wrote a receipt"
+
+# F4: a valid source passes and is recorded; the checker accepts only that recorded form
+fg_finalize_check fg3a --same-family-exception "d-6b183bd3: PM-approved Claude-only review of two tiny fixes"
+assert_exit_code "$FG_FIN_RC" "0" "famgate F4: decision card source finalizes"
+assert_eq "$(fg_verdict fg3a)" "SHIP-AS-IS" "famgate F4: verdict is SHIP-AS-IS under the exception"
+assert_contains "$(cat "$FG_L/review-fg3a/chain.json")" '"same_family_exception": {' "famgate F4: the exception is recorded in the chain"
+assert_contains "$(cat "$FG_L/review-fg3a/chain.json")" '"source": "d-6b183bd3"' "famgate F4: ... with its source"
+assert_contains "$(cat "$FG_L/review-fg3a/chain.json")" '"code": "no_cross_family_seat"' "famgate F4: ... and the warning stays on record"
+assert_exit_code "$FG_CHK_RC" "0" "famgate F4: the checker accepts the recorded exception"
+fg_mutate fg3a 'c[c.length-1].same_family_exception.source="whatever"'
+fg_check fg3a >/dev/null; FG_BADX_RC=$?
+assert_exit_code "$FG_BADX_RC" "1" "famgate F4: a recorded exception with a malformed source is red"
+fg_mutate fg3a 'c[c.length-1].same_family_exception={source:"d-6b183bd3",reason:"  "}'
+fg_check fg3a >/dev/null; FG_BADR_RC=$?
+assert_exit_code "$FG_BADR_RC" "1" "famgate F4: a recorded exception with an empty reason is red"
+fg_collect fg4b claude-sonnet-5 "$FG_CLAUDE_SEAT"
+fg_finalize_check fg4b --same-family-exception "01M6YP06MWABCDEFGHJKMNPQRS: operator waiver relayed by fleet"
+assert_exit_code "$FG_FIN_RC" "0" "famgate F4: a fleet message id (ULID) source finalizes"
+assert_exit_code "$FG_CHK_RC" "0" "famgate F4: ... and the checker accepts it"
+
+# F5: one non-Claude reviewed seat is enough, no exception needed
+fg_collect fg5 claude-sonnet-5 "$FG_CLAUDE_SEAT,gpt-5/low@codex"
+fg_finalize_check fg5
+assert_eq "$(fg_verdict fg5)" "SHIP-AS-IS" "famgate F5: one non-Claude reviewed seat -> SHIP-AS-IS"
+assert_not_contains "$(cat "$FG_L/review-fg5/chain.json")" "capability_warnings" "famgate F5: no capability warning"
+assert_exit_code "$FG_CHK_RC" "0" "famgate F5: the checker is green"
+fg_mutate fg5 'c[c.length-1].seats[1].engine="claude-opus-5-5"'
+fg_check fg5 >/dev/null; FG_F5M_RC=$?
+assert_exit_code "$FG_F5M_RC" "1" "famgate F5 (negative control): turning the only cross-family seat into a Claude seat turns the checker red"
+
+# F6: the implementer family is required and must be known; a chain without one cannot be evaluated
+fg_collect fg6a - "$FG_CLAUDE_SEAT,gpt-5/low@codex"
+assert_exit_code "$FG_COLLECT_RC" "2" "famgate F6: collect without --implementer-engine is an error"
+assert_contains "$FG_COLLECT_OUT" "--implementer-engine" "famgate F6: ... naming the flag"
+assert_file_absent "$FG_L/review-fg6a/g1" "famgate F6: ... before any generation directory exists"
+fg_collect fg6b mystery-model "$FG_CLAUDE_SEAT,gpt-5/low@codex"
+assert_exit_code "$FG_COLLECT_RC" "2" "famgate F6: an implementer engine of unknown family is an error"
+fg_collect fg6c claude-sonnet-5 "gpt-5/low@codex"
+fg_finalize_check fg6c
+fg_mutate fg6c 'for (const e of c) delete e.implementer_engine'
+fg_check fg6c >/dev/null; FG_F6_RC=$?
+assert_exit_code "$FG_F6_RC" "1" "famgate F6: a chain that records no implementer is red, not silently allowed"
 
 finalize_test

@@ -77,10 +77,10 @@ STUB_EOF
   unset STUB_SEAT_RESPONSE || true
 
   local COLLECT_OUT COLLECT_RC
-  COLLECT_OUT=$(node "$HETERO" collect \
+  COLLECT_OUT=$(node "$HETERO" collect --implementer-engine claude-sonnet-5 \
     --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r34 --generation 1 \
     --branch work --phase-base "$PHASE_BASE" \
-    --seats "m1/low@codex,m2/med@agy,m3/high@grok" \
+    --seats "gpt-m1/low@codex,kimi-m2/med@agy,glm-m3/high@grok" \
     --allow-seat-gap --min-reviewed-seats 2 2>&1); COLLECT_RC=$?
   assert_exit_code "$COLLECT_RC" "0" "r34: 3-seat collect with 2 reviewed + gap at floor 2 exits 0"
 
@@ -155,10 +155,10 @@ STUB_EOF
   unset STUB_SEAT_RESPONSE || true
 
   local COLLECT_OUT COLLECT_RC
-  COLLECT_OUT=$(node "$HETERO" collect \
+  COLLECT_OUT=$(node "$HETERO" collect --implementer-engine claude-sonnet-5 \
     --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r35 --generation 1 \
     --branch work --phase-base "$PHASE_BASE" \
-    --seats "m1/low@codex,m2/med@agy,m3/high@grok" 2>&1); COLLECT_RC=$?
+    --seats "gpt-m1/low@codex,kimi-m2/med@agy,glm-m3/high@grok" 2>&1); COLLECT_RC=$?
   assert_exit_code "$COLLECT_RC" "0" "r35: collect with Critical+Major+Minor findings exits 0"
 
   node -e '
@@ -282,10 +282,10 @@ STUB_EOF
   unset STUB_SEAT_RESPONSE || true
 
   local COLLECT_OUT COLLECT_RC
-  COLLECT_OUT=$(node "$HETERO" collect \
+  COLLECT_OUT=$(node "$HETERO" collect --implementer-engine claude-sonnet-5 \
     --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r38 --generation 1 \
     --branch work --phase-base "$PHASE_BASE" \
-    --seats "m1/low@codex" \
+    --seats "gpt-m1/low@codex" \
     --min-reviewed-seats 1 2>&1); COLLECT_RC=$?
   assert_exit_code "$COLLECT_RC" "0" "r38: collect at H1 exits 0"
 
@@ -450,6 +450,7 @@ assert_r47_hetero_review_loop_j() {
   cp "$REPO_ROOT/scripts/lib/review-packets.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/lib/stage-write.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/lib/seat-model-id.js" "$DRIVER_DIR/lib/"
+  cp "$REPO_ROOT/scripts/lib/review-family-gate.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$DRIVER_DIR/check-redispatch-prompt.sh"
   chmod +x "$DRIVER_DIR/check-redispatch-prompt.sh"
 
@@ -485,10 +486,10 @@ STUB_EOF
   unset AUTOPILOT_DISPATCH_REVIEW_SCRIPT STUB_SEAT_ID || true
 
   local COLLECT_OUT COLLECT_RC
-  COLLECT_OUT=$(node "$DRIVER_DIR/hetero-review-loop.js" collect \
+  COLLECT_OUT=$(node "$DRIVER_DIR/hetero-review-loop.js" collect --implementer-engine claude-sonnet-5 \
     --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_r47 --generation 1 \
     --branch work --phase-base "$PHASE_BASE" \
-    --seats "m1/low@codex" \
+    --seats "gpt-m1/low@codex" \
     --min-reviewed-seats 1 2>&1); COLLECT_RC=$?
   assert_exit_code "$COLLECT_RC" "0" "r47: collect via default __dirname dispatcher exits 0"
   assert_file_exists "$ENV_CAPTURE" "r47: stub captured child env"
@@ -620,10 +621,10 @@ STUB_EOF
   unset STUB_SEAT_RESPONSE || true
 
   local OK_OUT OK_RC
-  OK_OUT=$(node "$HETERO" collect \
+  OK_OUT=$(node "$HETERO" collect --implementer-engine claude-sonnet-5 \
     --repo-root "$SCRATCH_OK" --ledger "$LEDGER_OK" --phase p_r136_ok --generation 1 \
     --branch work --phase-base "$PHASE_BASE_OK" \
-    --seats "m1/low@codex" --min-reviewed-seats 1 \
+    --seats "gpt-m1/low@codex" --min-reviewed-seats 1 \
     --exclude "benchmarks/matrix/**" 2>&1); OK_RC=$?
   assert_exit_code "$OK_RC" "0" "r136: collect --exclude benchmarks/matrix/** accepted"
   assert_contains "$(cat "$LEDGER_OK/review-p_r136_ok/g1/range.json")" '"benchmarks/matrix/**"' \
@@ -631,10 +632,10 @@ STUB_EOF
 
   export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$SCRATCH_BAD/scripts/dispatch-review.sh"
   local BAD_OUT BAD_RC
-  BAD_OUT=$(node "$HETERO" collect \
+  BAD_OUT=$(node "$HETERO" collect --implementer-engine claude-sonnet-5 \
     --repo-root "$SCRATCH_BAD" --ledger "$LEDGER_BAD" --phase p_r136_bad --generation 1 \
     --branch work --phase-base "$PHASE_BASE_BAD" \
-    --seats "m1/low@codex" --min-reviewed-seats 1 \
+    --seats "gpt-m1/low@codex" --min-reviewed-seats 1 \
     --exclude "src/**" 2>&1); BAD_RC=$?
   assert_exit_code "$BAD_RC" "1" "r136: collect --exclude src/** refused"
   assert_contains "$BAD_OUT" "ERROR: Exclude pathspec 'src/**' is not permitted by allowlist" \
@@ -690,10 +691,10 @@ STUB_EOF
   unset STUB_SEAT_RESPONSE || true
 
   local OUT RC
-  OUT=$(node "$HETERO" collect \
+  OUT=$(node "$HETERO" collect --implementer-engine claude-sonnet-5 \
     --repo-root "$SCRATCH" --ledger "$LEDGER" --phase p_r137 --generation 1 \
     --branch work --phase-base "$PHASE_BASE" \
-    --seats "m1/low@agy,m2/low@codex" --min-reviewed-seats 1 2>&1); RC=$?
+    --seats "gpt-m1/low@agy,kimi-m2/low@codex" --min-reviewed-seats 1 2>&1); RC=$?
   # agy now takes the prompt on stdin (stream-json): an oversized agy seat is no longer refused
   # up-front — collect proceeds and dispatches every seat.
   assert_exit_code "$RC" "0" "r137: oversized agy estimate no longer refuses collect (stdin transport)"

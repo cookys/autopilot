@@ -153,8 +153,8 @@ unset STUB_SEAT_RESPONSE STUB_RESPONSE_s0 STUB_RESPONSE_s1
 
 collect() { # <phase> <loop script>
   rm -rf "$TEST_TMP/counts-$1"; mkdir -p "$TEST_TMP/counts-$1"
-  STUB_COUNT_DIR="$TEST_TMP/counts-$1" node "${2:-$LOOP}" collect --repo-root "$SCRATCH_REPO" --ledger "$TEST_TMP/ledger" \
-    --phase "$1" --generation 1 --branch work --phase-base "$BASE" --seats "m1/low@codex,m2/med@agy" 2>&1
+  STUB_COUNT_DIR="$TEST_TMP/counts-$1" node "${2:-$LOOP}" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$TEST_TMP/ledger" \
+    --phase "$1" --generation 1 --branch work --phase-base "$BASE" --seats "gpt-m1/low@codex,kimi-m2/med@agy" 2>&1
 }
 
 # T1: s1 breaks format once, then answers properly -> round survives, only s1 re-asked.

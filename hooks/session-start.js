@@ -675,6 +675,15 @@ function run() {
       if (hint) updateNotice = updateNotice ? `${updateNotice}\n\n${hint}` : hint;
     } catch { /* advisory only */ }
 
+    // Any source, any record-store state: a non-empty hippo spool means writes are waiting. One short line plus the count.
+    try {
+      const n = require('../scripts/lib/hippo.js').spoolList(cwd).length;
+      if (n > 0) {
+        const line = `record store: ${n} spooled write(s) waiting; run \`node scripts/project-record.js flush\``;
+        updateNotice = updateNotice ? `${updateNotice}\n\n${line}` : line;
+      }
+    } catch { /* advisory only: not a repo, no spool */ }
+
     // Any source: t2 + gap must fit under window - 33000, else compaction comes before the T2 handoff reminder (with auto-compact set T2 never asks to stop). One line, no changes made.
     // BL-0205: model ids for context_budget.per_model, in priority order: the payload's own, then the
     // statusline live file's model.id and the context-budget hook's remembered one for this session.

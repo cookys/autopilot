@@ -1,0 +1,13 @@
+# red-check fault-after-create: lib/hippo.js: remove fault(after-create)
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] fault after-create: exit 70: expected '70', got '0'
+FAIL [project-record] fault after-create: exit 70: expected '70', got '0'
+FAIL [project-record] fault after-create: exit 70: expected '70', got '0'
+FAIL [project-record] 217 passed, 3 failed
+      - fault after-create: exit 70: expected '70', got '0'
+      - fault after-create: exit 70: expected '70', got '0'
+      - fault after-create: exit 70: expected '70', got '0'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

@@ -1,0 +1,13 @@
+# red-check plugin-dir: lib/hippo.js: detect no longer refuses the plugin dir
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] plugin install dir as --target -> exit 2: expected '2', got '1'
+FAIL [project-record] plugin-dir refusal is named: 'plugin's own install directory' not found in output
+FAIL [project-record] plugin install dir as cwd -> exit 2: expected '2', got '1'
+FAIL [project-record] 217 passed, 3 failed
+      - plugin install dir as --target -> exit 2: expected '2', got '1'
+      - plugin-dir refusal is named: 'plugin's own install directory' not found in output
+      - plugin install dir as cwd -> exit 2: expected '2', got '1'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

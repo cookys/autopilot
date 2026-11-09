@@ -180,13 +180,15 @@ async function oldStyleReport(o) {
     // the old grade.js counted a judge-only hard fail straight into `all`
     e.hard_fails.all = Array.from(new Set([...e.hard_fails.all, ...e.unconfirmed_judge_hard_fails.map((u) => u.hf)])).sort();
     delete e.unconfirmed_judge_hard_fails; delete e.judge_detail; delete e.run_sha256; e.run_wall_ms = null;
+    if (!o.keepPairs) delete e.hard_fails.judge_pairs; // the oldest shape: no item data at all
   });
   return rep;
 }
 const viaReport = (report, o) => grade({ judgeKind: 'codex', secondJudgeKind: undefined, secondReport: report, ...o });
 
 test('report as second judge, both judges flag: counted, matched by name+model+run_wall_ms', async () => {
-  const rep = await viaReport(await oldStyleReport({ judge: forcing('HF7', 6) }), { judge: forcing('HF7', 6) });
+  // keepPairs: this test relied on the old wildcard (an item-less report matched by hf alone); now it needs item data
+  const rep = await viaReport(await oldStyleReport({ judge: forcing('HF7', 6), keepPairs: true }), { judge: forcing('HF7', 6) });
   const e = rep.examinees[0];
   assert.deepStrictEqual(e.hard_fails.all, ['HF7']);
   assert.strictEqual(e.pass_provisional, false);
@@ -257,10 +259,12 @@ test('unconfirmed hard fail names its item when the judge reported it in another
   // HF8 is defined on E1 (round 5); this judge reports it in round 4, which holds N1..N3
   const a = await grade({ judge: forcing('HF8', 4), secondJudge: plain() });
   assert.deepStrictEqual(a.examinees[0].unconfirmed_judge_hard_fails, [{ item: 'E1', hf: 'HF8', flagged_by: 'first' }]);
-  // a report-sourced second judge carries ids only, no round
-  const r = await oldStyleReport({ judge: forcing('HF8', 4) });
+  // a report-sourced second judge with item data keeps its item; one without (oldest shape) is unresolved
+  const r = await oldStyleReport({ judge: forcing('HF8', 4), keepPairs: true });
   const b = await viaReport(r, { judge: plain() });
   assert.deepStrictEqual(b.examinees[0].unconfirmed_judge_hard_fails, [{ item: 'E1', hf: 'HF8', flagged_by: 'second' }]);
+  const old = await viaReport(await oldStyleReport({ judge: forcing('HF8', 4) }), { judge: plain() });
+  assert.deepStrictEqual(old.examinees[0].unconfirmed_judge_hard_fails, [{ item: null, hf: 'HF8', flagged_by: 'second' }]);
 });
 
 // ---- review g1 fixes ---------------------------------------------------------------
@@ -273,6 +277,23 @@ test('confirmation intersects (item, hf) pairs: the same hf on different items d
     { item: 'R', hf: 'HF1', flagged_by: 'first' }, { item: 'A1', hf: 'HF1', flagged_by: 'second' }]);
   const same = await grade({ judge: forcing('HF1', 6), secondJudge: forcing('HF1', 6) });
   assert.deepStrictEqual(same.examinees[0].hard_fails.all, ['HF1']);
+});
+
+// ---- review g2 fixes ---------------------------------------------------------------
+test('report as second judge: same hf on different items does not confirm; same item confirms; no item data does not', async () => {
+  // HF1 is defined on D2 and E2; the report's judge flagged it in round 1 (item A1), this judge in round 6 (item R)
+  const diff = await viaReport(await oldStyleReport({ judge: forcing('HF1', 1), keepPairs: true }), { judge: forcing('HF1', 6) });
+  assert.deepStrictEqual(diff.examinees[0].hard_fails.all, []);
+  assert.deepStrictEqual(diff.examinees[0].unconfirmed_judge_hard_fails, [
+    { item: 'R', hf: 'HF1', flagged_by: 'first' }, { item: 'A1', hf: 'HF1', flagged_by: 'second' }]);
+  const same = await viaReport(await oldStyleReport({ judge: forcing('HF1', 6), keepPairs: true }), { judge: forcing('HF1', 6) });
+  assert.deepStrictEqual(same.examinees[0].hard_fails.all, ['HF1']);
+  assert.deepStrictEqual(same.examinees[0].hard_fails.judge_pairs, [{ item: 'R', hf: 'HF1' }]);
+  assert.strictEqual(same.examinees[0].pass_provisional, false);
+  const old = await viaReport(await oldStyleReport({ judge: forcing('HF1', 6) }), { judge: forcing('HF1', 6) });
+  assert.deepStrictEqual(old.examinees[0].hard_fails.all, []);
+  assert.strictEqual(old.examinees[0].pass_provisional, true);
+  assert.match(old.examinees[0].pass_provisional_reason, /no item data/);
 });
 
 test('a second judge with a transport failure or a void round confirms nothing and the grade is provisional', async () => {

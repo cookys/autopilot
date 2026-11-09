@@ -59,10 +59,14 @@ function secondFromReport(report, runs, seed, firstKind) {
     incomplete: matched.some(({ e }) => e.complete === false),
     tamperPass: !!(report.controls && report.controls.tamper && report.controls.tamper.caught),
     status: report.status, roundStatus: (report.controls && report.controls.rounds) || {}, calls: [],
-    // judge-only standing hard fails: what the report counted beyond the mechanical layer
-    judgeHf: matched.map(({ e }) => Array.from(new Set([
-      ...e.hard_fails.all, ...(e.unconfirmed_judge_hard_fails || []).filter((u) => u.flagged_by === 'first').map((u) => u.hf),
-    ])).filter((id) => !e.hard_fails.mechanical.includes(id)).map((id) => ({ id, round: undefined, quote: '' }))),
+    // judge-only standing hard fails with their item: the report's own hard_fails.judge_pairs; a report without it
+    // (older grade.js) has no item data, so every id it flags is an unresolved pair (item null) that confirms nothing
+    judgeHf: matched.map(({ e }) => (Array.isArray(e.hard_fails.judge_pairs)
+      ? e.hard_fails.judge_pairs.map((p) => ({ id: p.hf, round: undefined, item: p.item === undefined ? null : p.item, quote: '' }))
+      : Array.from(new Set([
+        ...e.hard_fails.all, ...(e.unconfirmed_judge_hard_fails || []).filter((u) => u.flagged_by === 'first').map((u) => u.hf),
+      ])).filter((id) => !e.hard_fails.mechanical.includes(id)).map((id) => ({ id, round: undefined, item: null, quote: '' })))),
+    noItemData: matched.map(({ e }) => !Array.isArray(e.hard_fails.judge_pairs)),
     scores: matched.map(({ e }) => ({ total: e.total, complete: e.complete, categories: e.categories, categories_ok: e.categories_ok })),
     detail: matched.map(({ e }) => e.judge_detail && e.judge_detail.first ? e.judge_detail.first : null),
     matchedBy: matched[0] ? matched[0].by : null,
@@ -205,7 +209,9 @@ async function gradeExam(opts) {
       const msgs = Array.from(new Set(hf.mech.map((c) => c.msg)));
       return msgs.length === 1 ? msgs[0] : null;
     };
-    const notVoided = (h) => !voidMsgs.has(hfItemOf(h.id, h.round)) && !voidIds.includes(hfItemOf(h.id, h.round));
+    // a report-sourced entry carries its item (null when the report held none); a live judge's is derived from its round
+    const itemOfHf = (h) => (h.item !== undefined ? h.item : hfItemOf(h.id, h.round));
+    const notVoided = (h) => !voidMsgs.has(itemOfHf(h)) && !voidIds.includes(itemOfHf(h));
     const standing = Array.from(new Set(judged.filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round) && notVoided(h)).map((h) => h.id))).sort();
     const overruled = jh.filter((id) => !standing.includes(id) && !mechHf.includes(id));
     const disagree = [];
@@ -219,16 +225,16 @@ async function gradeExam(opts) {
     const pairsOf = (hfs) => {
       const seen = new Map();
       hfs.filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round) && notVoided(h)).forEach((h) => {
-        const item = hfItemOf(h.id, h.round);
-        seen.set(`${item}|${h.id}`, { item, hf: h.id, noRound: h.round === undefined });
+        const item = itemOfHf(h);
+        seen.set(`${item}|${h.id}`, { item, hf: h.id });
       });
       return Array.from(seen.values()).filter((p) => !mechHf.includes(p.hf));
     };
     // judge-only standing hard fails as (item, hf) pairs; a pair confirms only against the same hf on the same item
-    // (a report-sourced entry with no round resolves no item and matches by hf alone)
+    // (an unresolved item, null, never matches)
     const pairs1 = pairsOf(judged);
     const pairs2 = P2 && !p2Void ? pairsOf(P2.judgeHf[i]) : [];
-    const same = (p, q) => p.hf === q.hf && (p.item === q.item || p.noRound || q.noRound || p.item === null || q.item === null);
+    const same = (p, q) => p.hf === q.hf && p.item !== null && q.item !== null && p.item === q.item;
     const confirmed = Array.from(new Set(pairs1.filter((p) => pairs2.some((q) => same(p, q))).map((p) => p.hf)));
     const unconfirmed = [
       ...pairs1.filter((p) => !pairs2.some((q) => same(p, q))).map((p) => ({ item: p.item, hf: p.hf, flagged_by: 'first' })),
@@ -238,6 +244,7 @@ async function gradeExam(opts) {
     let provisional = null;
     if (!P2) provisional = 'no second judge: judge-only hard fails are unconfirmed';
     else if (p2Void) provisional = `second judge void (${p2Reason}): judge-only hard fails are unconfirmed`;
+    else if (P2.fromReport && P2.noItemData[i] && (pairs1.length || pairs2.length)) provisional = 'second judge report holds no item data (hard_fails.judge_pairs): nothing it flags confirms, judge-only hard fails are unconfirmed';
     const red = [];
     (e.run.rounds || []).forEach((rr) => { if (rr.timed_out) red.push(`round ${rr.round} timed out, counted blank`); else if (rr.error) red.push(`round ${rr.round} failed: ${rr.error}`); });
     if (unconfirmed.length) red.push('judge-only hard fails not confirmed by a second judge, not counted: PM spot-check');
@@ -259,7 +266,7 @@ async function gradeExam(opts) {
       run_sha256: runSha(e.run),
       name: e.run.name, model: e.run.model, total: sc.total, complete: sc.complete,
       categories: sc.categories, categories_ok: sc.categories_ok,
-      hard_fails: { mechanical: mechHf, judge: jh, all: hardFails, disagree },
+      hard_fails: { mechanical: mechHf, judge: jh, all: hardFails, disagree, judge_pairs: pairs1.map((p) => ({ item: p.item, hf: p.hf })) },
       unconfirmed_judge_hard_fails: unconfirmed,
       scores_from: 'first_judge',
       pass_provisional: provisional !== null,

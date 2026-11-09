@@ -1,0 +1,13 @@
+{
+ "fn": "adrSupersede",
+ "input": {
+  "title": "Pick another store",
+  "context": "Changed.",
+  "decision": "Hippo.",
+  "consequences": "More parts.",
+  "old": "ADR-0001"
+ },
+ "opts": {
+  "adrDir": "docs/dev/adr"
+ }
+}

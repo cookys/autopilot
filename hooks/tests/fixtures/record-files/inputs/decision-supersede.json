@@ -1,0 +1,11 @@
+{
+ "fn": "decisionSupersede",
+ "input": {
+  "title": "Use hippo",
+  "rationale": "Later.",
+  "old": "dec-abc123def456"
+ },
+ "opts": {
+  "ledger": "@TMP@/ledger.jsonl"
+ }
+}

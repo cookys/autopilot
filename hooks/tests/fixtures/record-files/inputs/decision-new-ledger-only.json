@@ -1,0 +1,11 @@
+{
+ "fn": "decisionNew",
+ "input": {
+  "title": "Use files",
+  "rationale": "Because.",
+  "area": "tooling"
+ },
+ "opts": {
+  "ledger": "@TMP@/ledger.jsonl"
+ }
+}

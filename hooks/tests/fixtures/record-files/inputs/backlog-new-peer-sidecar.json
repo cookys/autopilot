@@ -1,0 +1,17 @@
+{
+ "fn": "backlogNew",
+ "input": {
+  "title": "Peer asks for more",
+  "origin": "peer",
+  "reporter": "cuda",
+  "report": "2026-11-08 fleet",
+  "problem": "P",
+  "impact": "I",
+  "trigger": "when asked",
+  "triggerType": "peer",
+  "effort": "M",
+  "source": "PEER-REPORTED cuda 2026-11-08",
+  "sidecar": "Details of the ask.\n",
+  "slug": "peer-asks"
+ }
+}

@@ -711,6 +711,7 @@ MUTD="$TEST_TMP/mig-mut/scripts"
 mkdir -p "$MUTD" "$TEST_TMP/mig-mut/references"
 cp "$GATE" "$MUTD/"
 mkdir -p "$MUTD/lib" && cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$MUTD/lib/"
+cp "$REPO_ROOT/scripts/lib/backlog-rules.js" "$MUTD/lib/"
 cp "$REPO_ROOT/references/stage-graph.json" "$TEST_TMP/mig-mut/references/"
 sed 's/      if (!seen.has(t)) seen.set(t, date);/      seen.set(t, date);/' "$MIG" > "$MUTD/mig-since.js"
 if cmp -s "$MIG" "$MUTD/mig-since.js"; then fail "Since mutation did not apply"; fi

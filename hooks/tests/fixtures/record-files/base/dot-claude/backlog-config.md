@@ -1,0 +1,2 @@
+style: heading
+mode: block

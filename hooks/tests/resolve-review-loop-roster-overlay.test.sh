@@ -63,6 +63,16 @@ assert_eq "$(printf '%s' "$ROSTER_JSON" | jget qc_panel)" "$(printf '%s' "$OVR_J
 assert_eq "7" "$(printf '%s' "$OVR_JSON" | jget loop_max_rounds)" "non-seat knob written in the repo file wins"
 assert_eq '[{"group":"implementer","until":"2099-01-01","reason":"trial of another implementer","expired":false}]' "$(printf '%s' "$OVR_JSON" | jget roster_overrides)" "roster_overrides lists the declared group"
 
+# 3d. dated VA override (PM 01M6Z8P87Y): argon@agy while the date holds; an expired block still applies
+# (TTL warns, never blocks), so qoderclicn returns only when the block is deleted (the stub case above).
+for _d in 2099-01-01 2000-01-01; do
+  printf -- '- override: verification_author | until %s | qodercn out of quota\n- verification_author_present: true\n- verification_author_engine: gemini-4-argon-high\n- verification_author_runner: agy\n- verification_author_effort: high\n- verification_author_endpoint:\n' "$_d" > "$TEST_TMP/va-$_d.md"
+  VA_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/va-$_d.md" bash "$SCRIPT" 2>/dev/null)"
+  assert_eq "gemini-4-argon-high@agy" "$(printf '%s' "$VA_JSON" | jget verification_author_engine)@$(printf '%s' "$VA_JSON" | jget verification_author_runner)" "VA override until $_d resolves to argon@agy"
+done
+REPO_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$REPO_ROOT/.claude/review-loop-config.md" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "gemini-4-argon-high@agy" "$(printf '%s' "$REPO_JSON" | jget verification_author_engine)@$(printf '%s' "$REPO_JSON" | jget verification_author_runner)" "autopilot's own config seats the VA on argon@agy until qodercn resets"
+
 # 3b. an incomplete override group is refused.
 INC="$TEST_TMP/incomplete.md"
 printf -- '- override: implementer | until 2099-01-01 | x\n- implementer_engine: grok-4.7\n' > "$INC"

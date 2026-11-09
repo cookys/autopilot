@@ -1,7 +1,7 @@
 # Review-Loop Config — autopilot (self-hosting)
 
 > Follows the roster (`project-config-template/review-loop-config.md`) for every seat (loop reviewer,
-> verification author, qc panel); the one override block below keeps the grok implementer (the local qwen implementer is stopped since 2026-11-09).
+> verification author, qc panel); the one override block below keeps the grok implementer (the local qwen implementer is stopped since 2026-11-09) and the argon VA seat while qodercn is out of quota (until 2026-11-21).
 > Seat history before 2026-11-06 is in git; roster changes are logged in the template's changelog. Consumed by `scripts/resolve-review-loop.sh` (precedence slot 3).
 
 ## Settings
@@ -10,6 +10,13 @@
 - implementer_engine: grok-4.7
 - implementer_effort: low
 - implementer_runner: grok
+
+- override: verification_author | until 2026-11-21 | PM 01M6Z8P87Y: qodercn quota is out until 2026-11-21 so the VA seat is gemini-4-argon-high@agy (google, a different family from the grok implementer). If the implementer is moved to agy, switch this block to gpt-6.1-sol@codex (medium) by hand: neither the resolver nor dispatch-author re-routes a same-family VA, dispatch-author.sh:694 dies instead. An expired override still applies (roster-overlay.js TTL only warns), so on 2026-11-21 delete this block to return to Qwen3.8-Max@qoderclicn.
+- verification_author_present: true
+- verification_author_engine: gemini-4-argon-high
+- verification_author_runner: agy
+- verification_author_effort: high
+- verification_author_endpoint:
 
 - on_family_conflict: fallback
 

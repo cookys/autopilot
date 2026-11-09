@@ -65,7 +65,7 @@ assert_eq "$(sends)" 1 "send-keys failure: one attempt, no retry"
 assert_contains "$(cat "$JOURNAL")" "outcome=send_failed" "journal says send_failed"
 assert_not_contains "$(cat "$JOURNAL")" "accepted" "failed send is not logged accepted"
 
-for args in '--timeout ""' '--interval 0' '--timeout 0' '--interval x' '--timeout'; do
+for args in '--timeout ""' '--interval 0' '--timeout 0' '--interval x' '--timeout' '--timeout 08' '--timeout 010' '--interval 08'; do
   : > "$SENDS"; eval "FIXTURE=$TEST_TMP/dev.txt bash \"$SCRIPT\" --pane lane:0.0 $args" </dev/null >/dev/null 2>&1; rc=$?
   assert_exit_code "$rc" 2 "bad args [$args]: usage exit 2"
   assert_eq "$(sends)" 0 "bad args [$args]: no key"

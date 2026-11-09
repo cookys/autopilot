@@ -33,7 +33,7 @@ log_line() {
   echo "accept-dev-channel-prompt: $line" >&2
 }
 
-pos_int() { case "$1" in ""|*[!0-9]*) return 1 ;; esac; [ "$1" -gt 0 ]; }
+pos_int() { case "$1" in ""|0*|*[!0-9]*) return 1 ;; esac; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --pane|--timeout|--interval)

@@ -1,0 +1,7 @@
+{
+ "fn": "backlogClose",
+ "input": {
+  "id": "BL-0003",
+  "how": "cancelled"
+ }
+}

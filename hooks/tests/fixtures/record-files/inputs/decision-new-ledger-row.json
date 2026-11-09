@@ -1,0 +1,8 @@
+{
+ "fn": "decisionNew",
+ "input": {
+  "title": "Use files",
+  "rationale": "Because.",
+  "ledgerRow": "dec-abc123def456"
+ }
+}

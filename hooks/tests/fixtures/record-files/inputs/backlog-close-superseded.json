@@ -1,0 +1,8 @@
+{
+ "fn": "backlogClose",
+ "input": {
+  "id": "BL-0005",
+  "how": "superseded",
+  "by": "BL-0001"
+ }
+}

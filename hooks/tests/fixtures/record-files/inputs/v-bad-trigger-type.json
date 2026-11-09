@@ -1,0 +1,13 @@
+{
+ "fn": "backlogNew",
+ "input": {
+  "title": "Bad type",
+  "origin": "self",
+  "problem": "P",
+  "impact": "I",
+  "trigger": "when X",
+  "triggerType": "weekly",
+  "effort": "S",
+  "source": "self 2026-11-09"
+ }
+}

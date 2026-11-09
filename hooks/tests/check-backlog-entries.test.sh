@@ -241,6 +241,7 @@ assert_eq "$rc" "0" "--self-test exits 0"
 
 mkdir -p "$TEST_TMP/mutroot/scripts/lib" "$TEST_TMP/mutroot/references"
 cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$TEST_TMP/mutroot/scripts/lib/"   # the mutants load the layout registry beside them
+cp "$REPO_ROOT/scripts/lib/backlog-rules.js" "$TEST_TMP/mutroot/scripts/lib/"   # the extracted field/peer rules the gate requires
 cp "$REPO_ROOT/references/stage-graph.json" "$TEST_TMP/mutroot/references/"
 mut="$TEST_TMP/mutroot/scripts/check-mut.js"
 sed_mutant "$GATE" "$mut" "s/Status: 'pending'/Status: 'open'/"
@@ -541,10 +542,17 @@ assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "table opt-in: required Origin
 TC_ORIGIN_PEER_DIR="$d"
 
 # --- mutation proofs: each rule's test goes red when the rule is removed from the gate.
+# The rule code lives in scripts/lib/backlog-rules.js (shared with the writer), the parsing in the gate: the expression is applied to
+# both copies, in a tree of its own per mutant, and must bite in at least one.
 mutate() { # <name> <sed expr> -> path of a mutated gate copy (fails the test if sed did not bite)
-  local m="$TEST_TMP/mutroot/scripts/check-$1.js"
+  local d="$TEST_TMP/mutroot/m-$1" m
+  mkdir -p "$d/scripts/lib" "$d/references"
+  cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$d/scripts/lib/"
+  cp "$REPO_ROOT/references/stage-graph.json" "$d/references/"
+  m="$d/scripts/check-$1.js"
   sed "$2" "$GATE" > "$m"
-  if cmp -s "$GATE" "$m"; then fail "mutation $1 did not apply (pattern drifted)"; fi
+  sed "$2" "$REPO_ROOT/scripts/lib/backlog-rules.js" > "$d/scripts/lib/backlog-rules.js"
+  if cmp -s "$GATE" "$m" && cmp -s "$REPO_ROOT/scripts/lib/backlog-rules.js" "$d/scripts/lib/backlog-rules.js"; then fail "mutation $1 did not apply (pattern drifted)"; fi
   echo "$m"
 }
 m="$(mutate r1 's/const lb = legacyBytes(entry);/const lb = byteLen(entry.text);/')"

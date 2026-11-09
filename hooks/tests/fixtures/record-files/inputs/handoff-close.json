@@ -1,0 +1,13 @@
+{
+ "fn": "handoffClose",
+ "input": {
+  "path": "docs/projects/demo/HANDOFF.md"
+ },
+ "pre": {
+  "fn": "handoffNew",
+  "input": {
+   "project": "demo",
+   "body": "## 目標\nShip the demo.\n\n## 現況\nHalf done.\n\n## 下一步\n1. Finish it.\n\n## 驗證方式\nRun the suite.\n\n## Read-order\n- README.md\n"
+  }
+ }
+}

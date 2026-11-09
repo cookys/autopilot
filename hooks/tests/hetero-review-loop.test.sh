@@ -296,6 +296,7 @@ EOF
 RESOLVE_10A_EOF
 chmod +x "$TEST_TMP/bin/resolve-review-loop-10a.sh"
 export AUTOPILOT_REVIEW_LOOP_RESOLVER="$TEST_TMP/bin/resolve-review-loop-10a.sh"
+export AUTOPILOT_ENDPOINT_GLM_URL="https://fake.invalid/glm" AUTOPILOT_ENDPOINT_GLM_TOKEN="fake-not-a-token"
 export LOG_DISPATCH_ARGS="$TEST_TMP/dispatch_10a.log"
 rm -f "$LOG_DISPATCH_ARGS"
 C10A_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p10a --generation 1 --branch work --phase-base "$PHASE_BASE" 2>&1); C10A_RC=$?
@@ -325,7 +326,7 @@ assert_contains "$S2_LINE" "--runner runner-c --model model-c --effort high" "ca
 assert_contains "$S2_LINE" "--endpoint custom-ep" "case 10a: s2 has endpoint custom-ep"
 
 unset LOG_DISPATCH_ARGS
-unset AUTOPILOT_REVIEW_LOOP_RESOLVER
+unset AUTOPILOT_REVIEW_LOOP_RESOLVER AUTOPILOT_ENDPOINT_GLM_URL AUTOPILOT_ENDPOINT_GLM_TOKEN
 
 # Case 10b: resolver stub returning qc_panel_seats_complete false exits 2 and prints stderr
 cat << 'RESOLVE_10B_EOF' > "$TEST_TMP/bin/resolve-review-loop-10b.sh"
@@ -400,6 +401,7 @@ CFG_10D_EOF
 
 BASE_10D=$(git -C "$SCRATCH_10D" rev-parse HEAD~1)
 export LOG_DISPATCH_ARGS="$TEST_TMP/dispatch_10d.log"
+export AUTOPILOT_ENDPOINT_CUSTOM_EP_URL="https://fake.invalid/c" AUTOPILOT_ENDPOINT_CUSTOM_EP_TOKEN="fake-not-a-token" AUTOPILOT_ENDPOINT_MINIMAX_URL="https://fake.invalid/m" AUTOPILOT_ENDPOINT_MINIMAX_TOKEN="fake-not-a-token"
 rm -f "$LOG_DISPATCH_ARGS"
 unset AUTOPILOT_REVIEW_LOOP_RESOLVER
 export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
@@ -420,6 +422,7 @@ assert_contains "$S1_DISP_10D" "--endpoint custom_ep" "case 10d: s1 dispatched w
 S2_DISP_10D=$(grep "^SEAT:s2 " "$LOG_DISPATCH_ARGS")
 assert_contains "$S2_DISP_10D" "--runner cc-shim" "case 10d: s2 dispatched with cc-shim runner"
 assert_contains "$S2_DISP_10D" "--endpoint minimax" "case 10d: s2 dispatched with minimax"
+unset AUTOPILOT_ENDPOINT_CUSTOM_EP_URL AUTOPILOT_ENDPOINT_CUSTOM_EP_TOKEN AUTOPILOT_ENDPOINT_MINIMAX_URL AUTOPILOT_ENDPOINT_MINIMAX_TOKEN
 
 unset LOG_DISPATCH_ARGS
 

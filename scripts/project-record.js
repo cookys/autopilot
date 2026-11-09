@@ -271,25 +271,43 @@ H['backlog new'] = {
   },
 };
 
+function replySyntax(reply) {
+  const bad = [];
+  if (!reply || /[\r\n]/.test(reply)) bad.push({ code: 'bad_reply', title: '', field: 'Reply', detail: `${reply || '(empty)'} (one line: none|unknown|<YYYY-MM-DD> <msg id or pointer>)` });
+  else for (const part of rules.splitMulti(reply)) if (!rules.replyOk(part)) bad.push({ code: 'bad_reply', title: '', field: 'Reply', detail: `${part} (expected none|unknown|<YYYY-MM-DD> <msg id or pointer>)` });
+  if (bad.length) throw new rules.RuleViolationError(bad);
+}
+
 H['backlog reply'] = {
   needsRead: true,
   parse(f, pos) {
     const parts = [need(f.reply, 'reply')].concat(pos.slice(1));
     return { id: pos[0], reply: parts.join(' ').trim() };
   },
+  validate(repo, p, state) { // parse-level checks only: nothing here reads the record
+    if (state !== 'files') ulidArg(p.id, 'backlog reply');
+    replySyntax(p.reply);
+    return null;
+  },
   files(repo, p) { return rf.backlogReply(repo, { id: p.id, reply: p.reply }, { clock }); },
   plan(repo, p, key) {
     const rec = showRecord(repo, ulidArg(p.id, 'backlog reply'));
     const b = bullets(rec.body);
+    replySyntax(p.reply);
     const bad = [];
-    if (!p.reply || /[\r\n]/.test(p.reply)) bad.push({ code: 'bad_reply', title: '', field: 'Reply', detail: `${p.reply || '(empty)'} (one line: none|unknown|<YYYY-MM-DD> <msg id or pointer>)` });
-    else for (const part of rules.splitMulti(p.reply)) if (!rules.replyOk(part)) bad.push({ code: 'bad_reply', title: '', field: 'Reply', detail: `${part} (expected none|unknown|<YYYY-MM-DD> <msg id or pointer>)` });
-    if (!bad.length && tagValue(rec.tags, 'origin:') === 'peer' && rules.splitMulti(p.reply).length !== rules.splitMulti(b.Report).length) {
+    if (tagValue(rec.tags, 'origin:') === 'peer' && rules.splitMulti(p.reply).length !== rules.splitMulti(b.Report).length) {
       bad.push({ code: 'peer_field_missing', title: rec.title, field: 'Reply', detail: `Report has ${rules.splitMulti(b.Report).length} part(s), Reply ${rules.splitMulti(p.reply).length}; one ${rules.MULTI_SEP}-separated value per reporter` });
     }
     if (bad.length) throw new rules.RuleViolationError(bad);
     if (b.Reply === undefined) throw new rf.RecordError('no_reply_field', `${rec.id} has no Reply line (not a peer record)`);
     const lines = String(rec.body).split('\n').map((l) => (/^- \*\*Reply\*\*:/.test(l) ? `- **Reply**: ${p.reply}` : l));
+    // the row this record renders to, with the new Reply, against the same row cap the rules enforce for new rows
+    const fields = Object.assign({ Title: rec.title, Id: 'BL-0000', Status: 'open' }, b, { Reply: p.reply });
+    const origin = tagValue(rec.tags, 'origin:');
+    if (origin) fields.Origin = origin;
+    const rowBytes = rules.byteLen(rules.renderRow(fields));
+    const rowCap = rules.effectiveCap(rf.gateConfig(repo), 'row');
+    if (rowBytes > rowCap) throw new rules.RuleViolationError([{ code: 'cap_exceeded', title: rec.title, field: 'row', detail: `${rowBytes} > ${rowCap}` }]);
     return { key, steps: [{ op: 'edit', id: rec.id, body: lines.join('\n') }] };
   },
 };
@@ -302,8 +320,12 @@ H['backlog close'] = {
     return { id: pos[0], how, by: f.by, commit: f.commit };
   },
   files(repo, p) { return rf.backlogClose(repo, { id: p.id, how: p.how, by: p.by, commit: p.commit }, { clock }); },
-  plan(repo, p, key) {
+  validate(repo, p, state) { // before any hippo call
     if (p.how === 'superseded' && (p.by === undefined || p.by.trim() === '')) throw new rf.RecordError('missing_by', 'close superseded needs --by <ref>');
+    if (state !== 'files') ulidArg(p.id, 'backlog close');
+    return null;
+  },
+  plan(repo, p, key) {
     const rec = showRecord(repo, ulidArg(p.id, 'backlog close'));
     const b = bullets(rec.body);
     rules.assertPeerClosable({ Title: rec.title, Origin: tagValue(rec.tags, 'origin:') || '', Report: b.Report, Reply: b.Reply });
@@ -464,6 +486,7 @@ H['handoff new'] = {
 H['handoff close'] = {
   parse: (f, pos) => ({ id: pos[0] }),
   files: (repo, p) => rf.handoffClose(repo, { path: p.id }, { clock }),
+  validate(repo, p, state) { if (state !== 'files') ulidArg(p.id, 'handoff close'); return null; },
   plan: (repo, p, key) => ({ key, steps: [{ op: 'close', id: ulidArg(p.id, 'handoff close'), status: 'done' }] }),
 };
 
@@ -502,9 +525,9 @@ function hippoMode(g, cmd, handler, p, det) {
   const state = det.state;
   err(`record store: ${state} (${det.reason})`);
   for (const l of det.problems) err(l);
-  if (state !== 'spool') hippo.flush(repo); // replays this worktree's spooled writes first
-  const v = handler.validate ? handler.validate(repo, p, state) : null;
+  const v = handler.validate ? handler.validate(repo, p, state) : null; // before any hippo call or file write
   if (v) for (const w of v.warnings) err(fmtWarn(w));
+  if (state !== 'spool') hippo.flush(repo); // replays this worktree's spooled writes first
   const key = g.key || (handler.key && handler.key(p)) || crypto.randomBytes(8).toString('hex');
   if (state === 'spool' && handler.needsRead) {
     throw new HippoError(`${cmd} reads the existing record before it writes, so it cannot be spooled: ${det.reason}; retry once hippo works`, 5, 'environment');

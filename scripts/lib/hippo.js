@@ -130,11 +130,20 @@ function spoolWrite(repo, { subcommand, plan, key }) {
   return { file, entry };
 }
 
-function spoolList(repo) {
+function spoolNames(repo) {
   const dir = spoolDir(repoRoot(repo));
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((f) => /^[0-9a-f]{16}\.json$/.test(f)).sort()
-    .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+  return fs.readdirSync(dir).filter((f) => /^[0-9a-f]{16}\.json$/.test(f)).sort();
+}
+
+// Reads every entry; an entry that vanished between the listing and the read is skipped.
+function spoolList(repo) {
+  const dir = spoolDir(repoRoot(repo));
+  const out = [];
+  for (const f of spoolNames(repo)) {
+    try { out.push(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  }
+  return out;
 }
 
 function sleepMs(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
@@ -143,27 +152,63 @@ function pidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
 
-// Exclusive O_EXCL lockfile holding our pid. Stale pid (process gone) -> remove and retake. Live holder -> wait, then HippoError exit 5.
+// Publish a lock file atomically with its content: write the pid to a unique temp file, then link() it into place
+// (EEXIST when held). Returns true when taken.
+function tryPublish(lock) {
+  const tmp = `${lock}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  fs.writeFileSync(tmp, String(process.pid), { flag: 'wx' });
+  try {
+    fs.linkSync(tmp, lock);
+    return true;
+  } catch (e) {
+    if (e.code === 'EEXIST') return false;
+    throw e;
+  } finally { try { fs.unlinkSync(tmp); } catch { /* gone */ } }
+}
+
+// Owner pid of a lock file: a positive integer, or null when the file is gone, or NaN when its content is not a pid
+// (such a lock is held, never dead).
+function lockOwner(lock) {
+  let txt;
+  try { txt = fs.readFileSync(lock, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+  return /^[1-9][0-9]*\s*$/.test(txt) ? parseInt(txt, 10) : NaN;
+}
+
+function releaseIfOwned(lock) {
+  if (lockOwner(lock) === process.pid) { try { fs.unlinkSync(lock); } catch { /* gone */ } }
+}
+
+// Remove a dead-owner lock without letting two reclaimers delete each other's fresh lock: reclaims are serialized by
+// `<lock>.reclaim`, itself taken atomically; a dead-owner `.reclaim` is renamed to a unique name (one winner) then removed.
+function reclaimStale(lock, deadPid) {
+  const rl = `${lock}.reclaim`;
+  if (!tryPublish(rl)) {
+    const o = lockOwner(rl);
+    if (o !== null && !Number.isNaN(o) && !pidAlive(o)) {
+      const gone = `${rl}.dead.${process.pid}.${Math.random().toString(36).slice(2)}`;
+      try { fs.renameSync(rl, gone); fs.unlinkSync(gone); } catch { /* another reclaimer won */ }
+    }
+    return;
+  }
+  try {
+    if (lockOwner(lock) === deadPid) { try { fs.unlinkSync(lock); } catch { /* gone */ } }
+  } finally { releaseIfOwned(rl); }
+}
+
+// Atomically-published lockfile holding our pid. Dead-pid holder -> serialized reclaim and retake. Live or unreadable holder -> wait, then HippoError exit 5.
 function withLock(dir, fn, timeoutMs = 30000) {
   fs.mkdirSync(dir, { recursive: true });
   const lock = path.join(dir, '.lock');
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    try {
-      const fd = fs.openSync(lock, 'wx');
-      fs.writeSync(fd, String(process.pid));
-      fs.closeSync(fd);
-      break;
-    } catch (e) {
-      if (e.code !== 'EEXIST') throw e;
-      let pid = NaN;
-      try { pid = parseInt(fs.readFileSync(lock, 'utf8'), 10); } catch { continue; }
-      if (!pidAlive(pid)) { try { fs.unlinkSync(lock); } catch { /* raced */ } continue; }
-      if (Date.now() > deadline) throw new HippoError(`spool lock held by pid ${pid}`, 5, 'environment');
-      sleepMs(50);
-    }
+    if (tryPublish(lock)) break;
+    const pid = lockOwner(lock);
+    if (pid === null) continue;
+    if (!Number.isNaN(pid) && !pidAlive(pid)) { reclaimStale(lock, pid); continue; }
+    if (Date.now() > deadline) throw new HippoError(`spool lock held by ${Number.isNaN(pid) ? 'an unreadable owner' : 'pid ' + pid}`, 5, 'environment');
+    sleepMs(50);
   }
-  try { return fn(); } finally { try { fs.unlinkSync(lock); } catch { /* gone */ } }
+  try { return fn(); } finally { releaseIfOwned(lock); }
 }
 
 function fault(point) {
@@ -187,7 +232,7 @@ function flush(repo, opts = {}) {
     res.dropped.push(opts.drop);
     return res;
   }
-  const pending = spoolList(root);
+  const pending = spoolNames(root);
   if (det.state === 'files') {
     if (pending.length) { res.exit = 2; log(`${pending.length} spooled write(s) target a hippo store that no longer exists; see the rollback note`); }
     return res;
@@ -212,7 +257,7 @@ function flush(repo, opts = {}) {
         fs.writeFileSync(path.join(dir, `${e.key}.json`), JSON.stringify(e, null, 2) + '\n');
         if (res.exit === 0) res.exit = r.exit;
       }
-    });
+    }, opts.lockTimeoutMs);
   } catch (err) {
     if (!(err instanceof HippoError) || err.exit !== 5) throw err;
     res.exit = 5; log(`WARNING record store degraded: ${err.message}`);
@@ -321,9 +366,10 @@ function cli(argv) {
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a === '--json') opt.json = true;
-    else if (a === '--target' || a === '--drop') {
+    else if (a === '--target' || a === '--drop' || a === '--lock-timeout-ms') {
       if (rest[i + 1] === undefined) throw new HippoError(`${a} needs a value`);
       opt[a.slice(2)] = rest[++i];
+      if (a === '--lock-timeout-ms') opt.lockTimeoutMs = Number(opt['lock-timeout-ms']);
     } else throw new HippoError(`unknown argument: ${a}`);
   }
   if (cmd === 'detect') {
@@ -336,13 +382,13 @@ function cli(argv) {
     return 0;
   }
   if (cmd === 'flush') {
-    const r = flush(opt.target, { drop: opt.drop });
+    const r = flush(opt.target, { drop: opt.drop, lockTimeoutMs: opt.lockTimeoutMs });
     return r.exit;
   }
   throw new HippoError('usage: hippo.js detect [--target <dir>] [--json] | flush [--target <dir>] [--drop <key>]');
 }
 
-module.exports = { HippoError, detect, run, spoolDir, spoolWarning, spoolWrite, spoolList, flush, execute };
+module.exports = { withLock, HippoError, detect, run, spoolDir, spoolWarning, spoolWrite, spoolList, flush, execute };
 
 if (require.main === module) {
   try {

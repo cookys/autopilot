@@ -148,6 +148,7 @@ function normalizeRow(i) {
     branch: str(x.branch),
     base: str(x.base),
     commit: str(x.commit),
+    sandbox_blocked_writes: intOrNull(x.sandbox_blocked_writes),
   };
 }
 
@@ -221,6 +222,7 @@ function rowFromResult(result, ctx) {
     branch: r.branch,
     base: r.base,
     commit: r.commit,
+    sandbox_blocked_writes: r.sandbox_blocked_writes,
   };
 }
 

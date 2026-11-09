@@ -89,6 +89,12 @@ fi
 if [ -n "${STUB_HOOKSPATH_ATTACK:-}" ]; then
   mkdir -p hk && printf '#!/bin/sh\necho pwned > "%s"\n' "$STUB_PWN_FILE" > hk/post-commit && chmod +x hk/post-commit
 fi
+if [ -n "${STUB_TRANSCRIPT_EROFS:-}" ]; then
+  # a claude-style session transcript in the throwaway config dir: the raw tool error, never repeated on stderr or in the result text
+  mkdir -p "$CLAUDE_CONFIG_DIR/projects/p"
+  printf '%s\n' "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"is_error\":true,\"content\":\"EROFS: read-only file system, open '$STUB_TRANSCRIPT_EROFS'\"}]}}" \
+    "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t2\",\"content\":\"fine\"}]}}" > "$CLAUDE_CONFIG_DIR/projects/p/s.jsonl"
+fi
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOS
 chmod +x "$BINDIR/claude"
@@ -136,6 +142,8 @@ run_case bwrap 0 --worktree-parent "$WTPARENT"
 eq '"committed"' "$(status_of)" "green: in-worktree write under the sandbox commits (rc=$RC, stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
 eq '"bwrap"' "$(printf '%s' "$OUT" | result_json | jfield sandbox.mode)" "green: result JSON carries sandbox.mode"
 eq '"unknown"' "$(printf '%s' "$OUT" | result_json | jfield sandbox.denied_writes)" "green: no denied write seen is reported unknown, not 0"
+eq '0' "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_writes)" "green: a worker that writes only inside the worktree has sandbox_blocked_writes 0"
+eq '[]' "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_samples)" "green: no blocked-write sample paths"
 WT_G="$(printf '%s' "$OUT" | result_json | jfield sandbox.writable.0 | tr -d '"')"
 eq "$WTPARENT" "$(dirname "$WT_G")" "green: sandbox.writable[0] is the worktree, created under --worktree-parent (got: $WT_G)"
 
@@ -158,6 +166,17 @@ case "$DEN" in
   ''|'"unknown"'|'<absent>') fail "red(on): the result JSON must record the denied write, got denied_writes=$DEN" ;;
   *) eq 0 0 "red(on): result JSON records the denied write (denied_writes=$DEN)" ;;
 esac
+BLK="$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_writes)"
+case "$BLK" in
+  ''|0|'<absent>') fail "red(on): sandbox_blocked_writes must be >= 1, got $BLK" ;;
+  *) eq 0 0 "red(on): sandbox_blocked_writes=$BLK (>= 1), exit code unchanged (rc=$RC, status committed)" ;;
+esac
+case "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_samples)" in
+  *"$PARENT_TARGET"*) eq 0 0 "red(on): the sample path names the refused file" ;;
+  *) fail "red(on): samples do not name $PARENT_TARGET: $(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_samples)" ;;
+esac
+LEDGER_ROW="$(cat "$AUTOPILOT_LIVE_DIR"/dispatch-usage-*.jsonl 2>/dev/null | grep '"sandbox_blocked_writes":[1-9]' | head -1)"
+if [ -n "$LEDGER_ROW" ]; then eq 0 0 "red(on): the dispatch usage ledger row carries sandbox_blocked_writes"; else fail "red(on): no usage ledger row with sandbox_blocked_writes >= 1 under $AUTOPILOT_LIVE_DIR"; fi
 MF="$(grep -l '"sandbox"' "$AUTOPILOT_DISPATCH_RUNS_DIR"/*.manifest.json 2>/dev/null | head -1)"
 if [ -n "$MF" ] && grep -q '"mode":"bwrap"' "$MF"; then eq 0 0 "red(on): the run manifest carries the sandbox object"; else fail "red(on): no manifest with a sandbox object under $AUTOPILOT_DISPATCH_RUNS_DIR"; fi
 WLIST="$(printf '%s' "$OUT" | result_json | jfield sandbox.writable)"
@@ -166,6 +185,14 @@ case "$WLIST" in
   *) fail "red(on): writable is not the two-entry list: $WLIST" ;;
 esac
 eq "0" "$(/bin/ls -A "$TMPDIR" | grep -c 'dispatch-hetero-sandbox-')" "red(on): the per-dispatch scratch dir is removed after the run"
+
+# ---- transcript signal: the refused write appears only as a tool_result in the worker's session transcript
+export STUB_TRANSCRIPT_EROFS="/srv/never-writable/x.txt"
+run_case bwrap 0 --worktree-parent "$WTPARENT"
+eq '1' "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_writes)" "transcript: one EROFS tool_result counts as one blocked write (rc=$RC)"
+eq '["/srv/never-writable/x.txt"]' "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_samples)" "transcript: the sample is the path, nothing else"
+eq '"committed"' "$(status_of)" "transcript: the count does not change the status"
+unset STUB_TRANSCRIPT_EROFS
 
 # ---- nested worktree + sandbox -> refused (the default placement is <repo>/.claude/worktrees)
 run_case bwrap 0

@@ -4,21 +4,34 @@
 //                          process that descends from this one (found by walking /proc ppid links) plus every pid
 //                          passed to track(). Only this process's own descendants and tracked pids are ever signalled.
 //   track(child, ms, {group}) remember a spawned child (ChildProcess or pid) and SIGKILL it (and its process group when it
-//                          was spawned detached: {group:true}) after ms, so a hanging child cannot outlive the test by wall time.
+//                          was spawned detached: {group:true}) after ms (with its whole subtree), so a hanging child cannot outlive the test by wall time.
 //   killDescendants()      the reaper's body, callable by a test between cases.
 //   guard(promise, ms)     await a promise that drives in-process children (no handle on the pid): after ms the
-//                          descendants are killed so the promise settles instead of hanging.
+//                          untracked descendants are killed so the promise settles instead of hanging; pids held by
+//                          track() (and their subtrees) are left alone.
+// A signal is sent only after the pid's start time (/proc stat field 22) matches the one recorded at track/discovery.
 // Node built-ins only; Linux /proc (elsewhere the descendant walk finds nothing and tracked pids still work).
 const fs = require('fs');
 
-const tracked = new Set();
+const tracked = new Map(); // pid -> process start time recorded when tracked (identity against pid reuse)
 let installed = false;
+let readStat = (pid) => fs.readFileSync(`/proc/${pid}/stat`, 'utf8'); // replaceable by a test: setStatReader()
+
+function statFields(pid) { // fields 3.. of /proc/<pid>/stat as an array (index 1 = ppid, index 19 = starttime), null when gone
+  try {
+    const stat = readStat(pid);
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+  } catch (_) { return null; }
+}
 
 function ppidOf(pid) {
-  try {
-    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
-    return Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-  } catch (_) { return null; }
+  const f = statFields(pid);
+  return f ? Number(f[1]) : null;
+}
+
+function startOf(pid) { // process start time (field 22), null when the process is gone
+  const f = statFields(pid);
+  return f ? f[19] : null;
 }
 
 function descendants(root = process.pid) {
@@ -35,18 +48,35 @@ function descendants(root = process.pid) {
   return out;
 }
 
-function kill(pid, group) {
+// descendants of root as Map pid -> start time, taken at discovery
+function descendantStarts(root) {
+  const m = new Map();
+  for (const pid of descendants(root)) { const st = startOf(pid); if (st !== null) m.set(pid, st); }
+  return m;
+}
+
+// SIGKILL pid only when it is still the process recorded (same start time); a recycled or vanished pid is skipped.
+function kill(pid, start, group) {
   if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return;
+  if (start == null || startOf(pid) !== start) return;
   if (group) { try { process.kill(-pid, 'SIGKILL'); } catch (_) { /* gone */ } }
   try { process.kill(pid, 'SIGKILL'); } catch (_) { /* gone */ }
 }
 
+// kill a subtree: descendants first (deepest discovered last, so reverse order), then the roots themselves
+function killTree(rootPid, rootStart, group) {
+  const subtree = descendantStarts(rootPid);
+  for (const pid of [...subtree.keys()].reverse()) { kill(pid, subtree.get(pid), false); tracked.delete(pid); }
+  kill(rootPid, rootStart, group);
+  tracked.delete(rootPid);
+}
+
 function killDescendants() {
   for (let round = 0; round < 5; round += 1) {
-    const pids = descendants();
-    for (const pid of tracked) if (!pids.includes(pid)) pids.push(pid);
-    if (!pids.length) return;
-    for (const pid of pids) kill(pid, false);
+    const found = descendantStarts(process.pid);
+    for (const [pid, start] of tracked) found.set(pid, start); // the identity recorded at track() wins over the one seen now
+    if (!found.size) return;
+    for (const [pid, start] of found) kill(pid, start, false);
     tracked.clear(); // signalled once; a recycled pid must not be hit again
   }
 }
@@ -54,18 +84,33 @@ function killDescendants() {
 function track(child, ms, opts = {}) {
   const pid = typeof child === 'number' ? child : child && child.pid;
   if (!Number.isInteger(pid)) return child;
-  tracked.add(pid);
+  const start = startOf(pid);
+  if (start === null) return child; // already gone: nothing to reap, and nothing to signal later
+  tracked.set(pid, start);
   if (ms) {
-    const t = setTimeout(() => kill(pid, !!opts.group), ms); // opts.group: the child was spawned detached (own process group)
+    // opts.group: the child was spawned detached (own process group). The whole subtree dies, not only the pid:
+    // its grandchildren would otherwise be reparented to init and escape the reaper's walk.
+    const t = setTimeout(() => killTree(pid, start, !!opts.group), ms);
     t.unref();
     if (child && child.once) child.once('exit', () => { clearTimeout(t); tracked.delete(pid); });
   }
   return child;
 }
 
+// guard's timeout kills only descendants that no track() owner holds (a tracked pid and its subtree belong to another
+// caller and stay running and tracked), so concurrent tests do not kill each other's children.
 function guard(promise, ms) {
   let timer;
-  const timeout = new Promise((resolve) => { timer = setTimeout(() => { killDescendants(); resolve(); }, ms); timer.unref(); });
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      const others = new Set();
+      for (const pid of tracked.keys()) { others.add(pid); for (const d of descendants(pid)) others.add(d); }
+      const mine = descendantStarts(process.pid);
+      for (const pid of [...mine.keys()].reverse()) if (!others.has(pid)) kill(pid, mine.get(pid), false);
+      resolve();
+    }, ms);
+    timer.unref();
+  });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
@@ -78,4 +123,7 @@ function installReaper() {
   }
 }
 
-module.exports = { installReaper, track, guard, killDescendants, descendants };
+function setStatReader(fn) { readStat = fn || ((pid) => fs.readFileSync(`/proc/${pid}/stat`, 'utf8')); }
+function isTracked(pid) { return tracked.has(pid); }
+
+module.exports = { installReaper, track, guard, killDescendants, descendants, setStatReader, isTracked };

@@ -6,7 +6,7 @@
 
 TR="$TEST_TMP/transcript.jsonl"
 CFG="$TEST_TMP/cfg"; mkdir -p "$CFG"
-METRICS="$HOOK_HOME/.claude/metrics"
+METRICS="$CFG/metrics"
 LEDGER="$METRICS/costs.jsonl"
 FIX_EMAIL="cost-account-fixture@example.com"
 FIX_ORG="00000000-0000-4000-8000-0000000000bb"
@@ -39,6 +39,7 @@ $FIX_EMAIL")" "$(last_account)" "invalid AUTOPILOT_ACCOUNT falls through"
 
 # 3. no .claude.json: acct-<sha8(realpath config dir)>
 CFG2="$TEST_TMP/cfg2"; mkdir -p "$CFG2"
+LEDGER="$CFG2/metrics/costs.jsonl"
 turn t4 >> "$TR"
 CLAUDE_CONFIG_DIR="$CFG2" run_hook cost-tracker.js "$(payload ct-acct-1)"
 assert_eq "acct-$(sha8 "$(realpath "$CFG2")")" "$(last_account)" "missing .claude.json falls to the config dir hash"

@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * cost-tracker — Stop (default-on since v2.35.15; opt-in before)
- * Logs per-session token usage + estimated cost to ~/.claude/metrics/costs.jsonl.
+ * Logs per-session token usage + estimated cost to <CLAUDE_CONFIG_DIR or ~/.claude>/metrics/costs.jsonl.
  * Opt-out: set the env var AUTOPILOT_COST_TRACKER=false (settings.json `env` block works; there is no
  * `autopilot.costTracker` setting).
  *
  * The Stop hook fires once per assistant turn, but the 2.1.186 Stop payload has
  * NO usage field — so usage is summed from the transcript (`transcript_path` in
  * the payload). Because the transcript is cumulative and Stop fires per turn, a
- * per-session cursor (~/.claude/metrics/.cursors/<session>.json) tracks how many
+ * per-session cursor (<CLAUDE_CONFIG_DIR or ~/.claude>/metrics/.cursors/<session>.json) tracks how many
  * assistant turns were already logged, and only NEW turns are appended each Stop.
  * Summing every row in costs.jsonl then yields the true session cost with no
  * double-count. See cost-tracker-lib.js for the aggregation. One API response spans several
@@ -26,8 +26,7 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
-const { configPath } = require('../scripts/lib/config-path.js');
+const { configPath, metricsDirOf } = require('../scripts/lib/config-path.js');
 const { claudeAccount } = require('../scripts/lib/account-alias.js');
 const path = require('path');
 // default-on since v2.35.15 (was opt-in); opt out with AUTOPILOT_COST_TRACKER=false.
@@ -89,7 +88,7 @@ try {
   const turns = parseAssistantTurns(transcript);
   if (turns.length === 0) process.exit(0);
 
-  const metricsDir = path.join(os.homedir(), '.claude', 'metrics');
+  const metricsDir = metricsDirOf();
   const cursorDir = path.join(metricsDir, '.cursors');
   fs.mkdirSync(cursorDir, { recursive: true });
   const cursorFile = path.join(cursorDir, `${sanitizeSession(session)}.json`);

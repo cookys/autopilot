@@ -165,3 +165,19 @@ node scripts/claude-account.js set-default --restore <accounts-dir>/registry.jso
 - `node scripts/lane-reopen.js --pick --cwd <dir>` reopens a lane on the alias with the most headroom.
 - Adding an account later: repeat O1 to O4 for the new alias and add a row to `registry.json`. Disabling one: set `"enabled": false`.
 - Eight frozen evaluation runners are replay-only and keep using the logged-in credentials; see the `frozen_legacy` paragraph in the reference above.
+
+## Lane manifest
+
+Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) to reopen them the same way. There is no manifest file in the repo yet; this is the shape to record:
+
+| column | meaning |
+|--------|---------|
+| tmux window | window name of the lane |
+| cwd | working directory of the session |
+| profile | its `CLAUDE_CONFIG_DIR`; empty = the default `~/.claude` |
+| model | model the session was started with |
+| launch flags | flags only, never prompt text |
+| fleet seat | `<project>--claude`, stable per cwd; the `@sub` suffix changes on every restart, so it is not stored |
+
+- On reopen, close the old session first, then start the new one and confirm the address with `fleet whoami`. An unreleased old session makes the new one get a `-2` seat.
+- The fleet MCP server is registered in user scope, so a new profile has no fleet until it is started with `--mcp-config <shared file>`.

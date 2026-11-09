@@ -27,7 +27,7 @@ cat > "$STUB/fleet" <<'JS'
 const fs = require('fs'); const crypto = require('crypto');
 const D = process.env.STUB_DIR; const a = process.argv.slice(2);
 const mode = () => { try { return fs.readFileSync(D + '/mode', 'utf8').trim(); } catch { return 'ok'; } };
-if (a[0] === '--help') { process.stdout.write('fleet\n\nUSAGE:\n  fleet send x\n  fleet decision claim|verify|list <card_id>\n'); process.exit(1); }
+if (a[0] === '--help') { process.stdout.write(mode() === 'nocourier' ? 'fleet\n\nUSAGE:\n  fleet send x\n  fleet peers\n' : 'fleet\n\nUSAGE:\n  fleet send x\n  fleet decision claim|verify|list <card_id>\n'); process.exit(1); }
 if (a[0] === 'send') {
   fs.appendFileSync(D + '/sends.jsonl', JSON.stringify({ to: a[1], text: a[2], argc: a.length, as_cli: process.env.FLEET_AS_CLI === undefined ? null : process.env.FLEET_AS_CLI, fyi: process.env.FLEET_FYI === undefined ? null : process.env.FLEET_FYI }) + '\n');
   const m = mode();
@@ -131,4 +131,24 @@ C4="$(node -e 'process.stdout.write(require(process.argv[1]).openDecision({cwd:p
 AID4="$(claim "$C4" o A)"; RB="$(nsends)"
 hook "$(printf '[待決回覆]\n%s｜No exec lib? → A｜%s\n' "$C4" "$AID4")"
 assert_eq "$(cf "$C4" status)" closed "no executor: closed directly as before"; assert_eq "$(nsends)" "$RB" "no executor: nothing sent"
+# 5. an executor card whose answer cannot be delivered is never closed: no courier, and a verify failure -> pending_dispatch + dispatch_error naming the reason
+setmode nocourier; Q5="沒有 courier？"
+C5="$(mkcard "$Q5" --option "A::a" --option "B::b")"; RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$C5" "$Q5" "AAAAAAAAAAAAAAAAAAAAAAAAAA")"
+assert_eq "$(cf "$C5" status)" pending_dispatch "no courier + executor: parked in pending_dispatch, NOT closed"
+assert_eq "$(cf "$C5" dispatch_error)" no_courier "no courier + executor: dispatch_error names the reason"
+assert_eq "$(nsends)" "$RB" "no courier + executor: nothing sent"
+setmode ok
+OUT="$(node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$C5" 2>&1)"; assert_eq "$?" 0 "redeliver reports a card with no stored answer (exit 0)"
+assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" 1 "redeliver: one line for the skipped card"; assert_contains "$OUT" "[略過] $C5" "redeliver: the skipped card is named"
+assert_eq "$(cf "$C5" status)" pending_dispatch "redeliver leaves the skipped card parked"
+Q6="驗證失敗？"; C6="$(mkcard "$Q6" --option "A::a" --option "B::b")"; RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$C6" "$Q6" "BBBBBBBBBBBBBBBBBBBBBBBBBB")"
+assert_eq "$(cf "$C6" status)" pending_dispatch "verify failure + executor: parked, NOT closed"
+assert_contains "$(cf "$C6" dispatch_error)" verify_failed "verify failure + executor: dispatch_error names verify_failed"
+assert_eq "$(nsends)" "$RB" "verify failure + executor: nothing sent"
+# legacy close --answer on an executor card parks it too
+C7="$(mkcard "旧路徑？" --option "A::a" --option "B::b")"; node "$OD" close --cwd "$R" --root-run-id root-t --id "$C7" --answer "A" >/dev/null 2>&1
+assert_eq "$(cf "$C7" status)" pending_dispatch "legacy close --answer on an executor card: parked, not closed"
+
 finalize_test

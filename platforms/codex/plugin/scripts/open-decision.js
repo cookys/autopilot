@@ -738,7 +738,7 @@ function sendParked(file, id, sender = sendFleet) {
 function deliverAnswer(file, id, v, sender = sendFleet) {
   const c = readFile(file, { all: true }).find((e) => e.id === id);
   if (!c) return { status: 'absent', id };
-  if (isOpenEntry(c)) {
+  if (isOpenEntry(c) || (isPendingDispatchEntry(c) && !c.answer_id)) { // open, or parked earlier without a deliverable answer (no_courier / verify_failed)
     const a = v.answer;
     const option = nonEmpty(a.option);
     const ft = nonEmpty(a.free_text);
@@ -749,6 +749,18 @@ function deliverAnswer(file, id, v, sender = sendFleet) {
   return sendParked(file, id, sender);
 }
 
+// An executor card whose answer cannot be delivered (no courier, verify failed, ...) is never closed: it is parked in pending_dispatch with dispatch_error naming the reason.
+// -> { status: 'parked'|'no_executor'|'absent', id }. No answer_id is stored, so `redeliver` reports it and skips it.
+function parkUndelivered(file, id, reason) {
+  const c = readFile(file, { all: true }).find((e) => e.id === id);
+  if (!c) return { status: 'absent', id };
+  if (!c.executor || !isOpenEntry(c)) return { status: 'no_executor', id };
+  const now = new Date().toISOString();
+  const p = patchDecision(file, id, { status: 'pending_dispatch', pending_dispatch_at: now, dispatch_error: reason, last_dispatch_attempt_at: now });
+  if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
+  return { status: 'parked', id, executor: c.executor, error: reason };
+}
+
 // `redeliver [--id]`: every pending_dispatch card the program parked (answer_id present) and not yet sent. Prints one receipt line per card. Exit 0 all sent / nothing to do, 9 some failed.
 function redeliver(args, sender = sendFleet) {
   let failed = 0;
@@ -756,7 +768,12 @@ function redeliver(args, sender = sendFleet) {
   for (const file of projectScopeFiles(args.cwd, { all: true })) {
     for (const e of readFile(file, { all: true })) {
       if (args.id !== undefined && e.id !== args.id) continue;
-      if (!isPendingDispatchEntry(e) || !e.answer_id || e.dispatched_message_id) continue;
+      if (!isPendingDispatchEntry(e) || e.dispatched_message_id) continue;
+      if (!e.answer_id) {
+        n += 1;
+        process.stdout.write(`[略過] ${e.id} → ${e.executor || '(no executor)'}: no stored panel answer (answer_id), nothing to resend${e.dispatch_error ? `; dispatch_error: ${e.dispatch_error}` : ''}\n`);
+        continue;
+      }
       const r = sendParked(file, e.id, sender);
       n += 1;
       process.stdout.write(`${receiptLine(r)}\n`);
@@ -848,4 +865,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };

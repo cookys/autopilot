@@ -53,9 +53,10 @@ function closeDecideReply(payload) {
   let projectScopeFiles;
   let readEntries;
   let deliverAnswer;
+  let parkUndelivered;
   let receiptLine;
   try {
-    ({ closeDecisionById, projectScopeFiles, readEntries, deliverAnswer, receiptLine } = require('../scripts/open-decision.js'));
+    ({ closeDecisionById, projectScopeFiles, readEntries, deliverAnswer, receiptLine, parkUndelivered } = require('../scripts/open-decision.js'));
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
@@ -76,19 +77,33 @@ function closeDecideReply(payload) {
   const unverified = [];
   const notFound = [];
   const delivery = new Map(); // id -> the verified answer of a card that has an executor: the program delivers it (PM 01M6ZXJYTQ), nothing closes it directly
+  // A card with an executor never closes unless its answer was delivered: when the answer cannot be delivered it is parked in pending_dispatch with dispatch_error = reason.
+  const parkExecutorCard = (id, reason) => {
+    for (const file of files) {
+      let r;
+      try { r = parkUndelivered(file, id, reason); } catch (_e) { continue; }
+      if (r.status === 'parked' || r.status === 'error') {
+        const line = `[答覆未送達] ${id} → ${r.executor}: ${r.status === 'parked' ? reason : r.error}（卡片留在 pending_dispatch，沒有關閉）`;
+        ctxLines.push(line); process.stderr.write(`advisory-relay: ${line}\n`);
+        return true;
+      }
+      if (r.status === 'no_executor') return false;
+    }
+    return false;
+  };
   for (const id of ids) {
-    if (probeState === 'probe_error') { unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
+    if (probeState === 'probe_error') { if (!parkExecutorCard(id, 'probe_error')) unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
     if (fd) {
       const line = idLine.get(id);
       const aid = line.split('｜').pop().trim();
       const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, line) : { ok: false, outcome: 'unverified' };
-      if (!v.ok) { unverified.push(`${id} (${v.outcome})`); continue; }
+      if (!v.ok) { if (!parkExecutorCard(id, `verify_failed (${v.outcome})`)) unverified.push(`${id} (${v.outcome})`); continue; }
       // the verified STORED answer is the only authority: the line's own text must say that same answer
       // strict, field-wise (scripts/lib/decide-line.js): the question comes from the ledger card, the answer must EQUAL the stored one
       let question = null;
       try { for (const f of files) { const e = readEntries(f).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
       const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
-      if (!bound.ok) { unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
+      if (!bound.ok) { if (parkExecutorCard(id, 'content_mismatch')) continue; unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
       delivery.set(id, { answer: v.answer, answer_id: aid });
     }
     if (delivery.has(id)) {
@@ -107,6 +122,7 @@ function closeDecideReply(payload) {
       }
       if (sent) continue;
     }
+    if (!fd && parkExecutorCard(id, 'no_courier')) continue;
     // closeDecisionById locks before it looks up the id, so a locked scope file
     // returns status error even when this card is not in it. Keep every error
     // and keep walking; a later scope file may still hold the card. One line is

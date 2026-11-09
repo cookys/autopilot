@@ -99,10 +99,18 @@ reset; prof home 30; prof a 30; prof b 30
 expat() { printf '{"loggedIn":true,"loginExpiresAt":"%s"}' "$(node -e 'process.stdout.write(new Date(Date.parse(process.env.AUTOPILOT_NOW)-3600000*process.argv[1]).toISOString())' "$2")" > "$STUB/claude-$1.json"; }
 expat a 1; run; assert_contains "$(last)" "已過 0 天" "1h overdue: says 已過 0 天"
 reset; prof home 30; prof b 30; expat a 25; run; assert_contains "$(last)" "已過 1 天" "25h overdue: says 已過 1 天"
+# ---- 11. real home and an unsupported dir named home do not share a dedup key ----
+reset; prof home 5; prof a 30; prof b 30
+mkdir -p "$HOME/.claude-profiles/home"
+run; assert_eq "$(sends)" 2 "home collision: first run sends both"
+run; assert_eq "$(sends)" 2 "home collision: second run sends none"
+assert_contains "$(cat "$ST")" '"home"' "home collision: state keeps the home key"
+assert_contains "$(cat "$ST")" '"unsupported:home"' "home collision: state keeps the unsupported:home key"
+rm -rf "$HOME/.claude-profiles/home"
 # ---- negative controls ----
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT"
 mut() { sed_mutant "$PH" "$MUT/profile-health.js" "$1" || return 1; }
-mut "s/state.sent\[row.name\] === key/false/" && { reset; prof home 30; prof a 3; prof b 30; run "$MUT/profile-health.js"; run "$MUT/profile-health.js"; assert_eq "$(sends)" 2 "mutant (no dedup): sends twice, so the dedup check is real"; }
+mut "s/state.sent\[slot\] === key/false/" && { reset; prof home 30; prof a 3; prof b 30; run "$MUT/profile-health.js"; run "$MUT/profile-health.js"; assert_eq "$(sends)" 2 "mutant (no dedup): sends twice, so the dedup check is real"; }
 mut "s/if (r.status !== 0) {/if (false) {/" && { reset; prof home 30; prof a 3; prof b 30; touch "$STUB/send-fails"; run "$MUT/profile-health.js"; assert_contains "$(cat "$ST")" '"a"' "mutant (failed send recorded): state holds a, so the retry check is real"; }
 mut "s/<= THRESHOLD_DAYS/< 9/" && { reset; prof home 30; prof a 10; prof b 30; run "$MUT/profile-health.js"; assert_eq "$(sends)" 0 "mutant (threshold 9): no send at 10 days, so the 10-day check is real"; }
 mut "s/row.loggedIn = j.loggedIn === true;/row.loggedIn = j.loggedIn === true; row.email = j.email;/" && { reset; prof home 30; prof a 10; prof b 30; assert_contains "$(node "$MUT/profile-health.js" check --json < /dev/null)" "$SENT" "mutant (email read): sentinel appears, so the privacy check is real"; }

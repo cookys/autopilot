@@ -115,11 +115,12 @@ function notify(to) {
   for (const row of check()) {
     if (!['expiring', 'expired', 'logged_out', 'unsupported_name'].includes(row.status)) continue;
     const key = `${row.status}|${row.loginExpiresAt || 'none'}`;
-    if (state.sent[row.name] === key) { console.log(`${row.name}: ${row.status}, already notified`); continue; }
+    const slot = row.status === 'unsupported_name' ? `unsupported:${row.name}` : row.name;
+    if (state.sent[slot] === key) { console.log(`${row.name}: ${row.status}, already notified`); continue; }
     const env = { ...process.env }; delete env.FLEET_FYI;
     const r = spawnSync(process.env.AUTOPILOT_FLEET_BIN || 'fleet', ['send', to, message(row)], { stdio: ['ignore', 'ignore', 'ignore'], timeout: 30000, env });
     if (r.status !== 0) { failed++; console.log(`${row.name}: ${row.status}, send failed (will retry)`); continue; }
-    state.sent[row.name] = key;
+    state.sent[slot] = key;
     saveState(f, state);
     console.log(`${row.name}: ${row.status}, notified ${to}`);
   }

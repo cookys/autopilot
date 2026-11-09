@@ -519,6 +519,7 @@ assert_r131_plan_loop_freeze_dis() {
   "generation": 1,
   "plan_sha256": "$PLAN_SHA",
   "rubric_sha256": "$RUBRIC_SHA",
+  "reviewer_verdicts": [{ "seat_id": "s1", "runner": "codex", "model": "gpt-5.6", "verdict": "READY" }],
   "findings": [
     { "fingerprint": "$FP", "candidate_blocker": true, "disposition": null }
   ]

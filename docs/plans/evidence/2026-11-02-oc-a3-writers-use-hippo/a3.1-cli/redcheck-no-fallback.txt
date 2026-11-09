@@ -1,0 +1,131 @@
+# red-check no-fallback: hippo failure falls back to record-files.js (spool, exit-5, refusal paths)
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] red line (a): exactly one spool file: expected '1', got '0'
+FAIL [project-record] red line (a): degraded warning: 'WARNING record store degraded' not found in output
+FAIL [project-record] red line (a): BACKLOG.md and sidecars byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '7f553e8a1889fbfddbf5ef8ef18fabffa82728b9d3b6901f44e17f80aa362209  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+FAIL [project-record] red line (b): refusal printed: 'refused: exit 3 rule/invalid-value' not found in output
+FAIL [project-record] red line (b): BACKLOG.md and sidecars byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '7f553e8a1889fbfddbf5ef8ef18fabffa82728b9d3b6901f44e17f80aa362209  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+FAIL [project-record] red line (c): hippo exit 5 -> exit 0 (spooled): expected '0', got '3'
+FAIL [project-record] red line (c): exactly one spool file: expected '1', got '0'
+FAIL [project-record] red line (c): BACKLOG.md and sidecars byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '7f553e8a1889fbfddbf5ef8ef18fabffa82728b9d3b6901f44e17f80aa362209  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+FAIL [project-record] red line (d): BACKLOG.md and sidecars byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '9bef7ac4dda550dec50fb8af2199dd3863104ae7dbfe9104e49fe030bc465778  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+FAIL [project-record] red line: 'decision new --title D --rationale-file <tmp>/autopilot-test-project-record-8Jp5bX/why.md' leaves file-mode targets byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '9bef7ac4dda550dec50fb8af2199dd3863104ae7dbfe9104e49fe030bc465778  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+FAIL [project-record] red line: 'lesson new --title L --category build --body-file <tmp>/autopilot-test-project-record-8Jp5bX/lesson.md' leaves file-mode targets byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '9bef7ac4dda550dec50fb8af2199dd3863104ae7dbfe9104e49fe030bc465778  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+FAIL [project-record] red line: working tree changed outside .hippo
+FAIL [project-record] spool: 'handoff new --title H --area proj --body-file <tmp>/autopilot-test-project-record-8Jp5bX/handoff.md' -> exit 0: expected '0', got '1'
+FAIL [project-record] spool: four files, one per write: expected '4', got '0'
+FAIL [project-record] spool: refusals spool nothing: expected '4', got '0'
+FAIL [project-record] flush created the spooled lesson: expected '1', got '0'
+FAIL [project-record] before-spool-remove: write spooled: expected '1', got '0'
+FAIL [project-record] fault before-spool-remove: exit 70: expected '70', got '0'
+FAIL [project-record] before-spool-remove: spool entry still there: expected '1', got '0'
+FAIL [project-record] before-spool-remove: record already created: expected '1', got '0'
+FAIL [project-record] before-spool-remove: still exactly one record: expected '1', got '0'
+<anonymous_script>:1
+d.data.records[0].id
+                  ^
+
+TypeError: Cannot read properties of undefined (reading 'id')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:19)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] before-spool-remove: both edges: expected '2', got ''
+FAIL [project-record] handoff: fault before-spool-remove exit 70: expected '70', got '0'
+FAIL [project-record] handoff: before-spool-remove rerun ends with the exact set: expected '111', got '000'
+FAIL [project-record] decision supersede: fault before-spool-remove exit 70: expected '70', got '0'
+FAIL [project-record] decision supersede: one decision after the flush rerun: expected '1', got '0'
+FAIL [project-record] decision supersede: old closed after the flush rerun: expected 'superseded', got 'active'
+FAIL [project-record] refused child: exit 3: expected '3', got '1'
+FAIL [project-record] session-start (startup): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+FAIL [project-record] session-start (startup): one line: expected '1', got '0'
+FAIL [project-record] session-start (resume): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+FAIL [project-record] session-start (resume): one line: expected '1', got '0'
+FAIL [project-record] session-start (clear): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+FAIL [project-record] session-start (clear): one line: expected '1', got '0'
+FAIL [project-record] 186 passed, 34 failed
+      - red line (a): exactly one spool file: expected '1', got '0'
+      - red line (a): degraded warning: 'WARNING record store degraded' not found in output
+      - red line (a): BACKLOG.md and sidecars byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '7f553e8a1889fbfddbf5ef8ef18fabffa82728b9d3b6901f44e17f80aa362209  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+      - red line (b): refusal printed: 'refused: exit 3 rule/invalid-value' not found in output
+      - red line (b): BACKLOG.md and sidecars byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '7f553e8a1889fbfddbf5ef8ef18fabffa82728b9d3b6901f44e17f80aa362209  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+      - red line (c): hippo exit 5 -> exit 0 (spooled): expected '0', got '3'
+      - red line (c): exactly one spool file: expected '1', got '0'
+      - red line (c): BACKLOG.md and sidecars byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '7f553e8a1889fbfddbf5ef8ef18fabffa82728b9d3b6901f44e17f80aa362209  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+      - red line (d): BACKLOG.md and sidecars byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '9bef7ac4dda550dec50fb8af2199dd3863104ae7dbfe9104e49fe030bc465778  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+      - red line: 'decision new --title D --rationale-file <tmp>/autopilot-test-project-record-8Jp5bX/why.md' leaves file-mode targets byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '9bef7ac4dda550dec50fb8af2199dd3863104ae7dbfe9104e49fe030bc465778  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+      - red line: 'lesson new --title L --category build --body-file <tmp>/autopilot-test-project-record-8Jp5bX/lesson.md' leaves file-mode targets byte-identical: expected '908498e9c035b1d720ffb09ed329535c415f66b059d293989b92faa279fb72e4  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md', got '9bef7ac4dda550dec50fb8af2199dd3863104ae7dbfe9104e49fe030bc465778  docs/BACKLOG.md
+2aa49cf124ce97b95b5ab3a973a82dbfaba5477d13b52616b6f274f3adddecb2  docs/backlog/side-note.md'
+      - red line: working tree changed outside .hippo
+      - spool: 'handoff new --title H --area proj --body-file <tmp>/autopilot-test-project-record-8Jp5bX/handoff.md' -> exit 0: expected '0', got '1'
+      - spool: four files, one per write: expected '4', got '0'
+      - spool: refusals spool nothing: expected '4', got '0'
+      - flush created the spooled lesson: expected '1', got '0'
+      - before-spool-remove: write spooled: expected '1', got '0'
+      - fault before-spool-remove: exit 70: expected '70', got '0'
+      - before-spool-remove: spool entry still there: expected '1', got '0'
+      - before-spool-remove: record already created: expected '1', got '0'
+      - before-spool-remove: still exactly one record: expected '1', got '0'
+      - before-spool-remove: both edges: expected '2', got ''
+      - handoff: fault before-spool-remove exit 70: expected '70', got '0'
+      - handoff: before-spool-remove rerun ends with the exact set: expected '111', got '000'
+      - decision supersede: fault before-spool-remove exit 70: expected '70', got '0'
+      - decision supersede: one decision after the flush rerun: expected '1', got '0'
+      - decision supersede: old closed after the flush rerun: expected 'superseded', got 'active'
+      - refused child: exit 3: expected '3', got '1'
+      - session-start (startup): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+      - session-start (startup): one line: expected '1', got '0'
+      - session-start (resume): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+      - session-start (resume): one line: expected '1', got '0'
+      - session-start (clear): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+      - session-start (clear): one line: expected '1', got '0'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

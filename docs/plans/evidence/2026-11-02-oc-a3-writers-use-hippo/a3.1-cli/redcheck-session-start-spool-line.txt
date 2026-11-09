@@ -1,0 +1,19 @@
+# red-check session-start-spool-line: session-start.js: the spool line is never printed
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] session-start (startup): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+FAIL [project-record] session-start (startup): one line: expected '1', got '0'
+FAIL [project-record] session-start (resume): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+FAIL [project-record] session-start (resume): one line: expected '1', got '0'
+FAIL [project-record] session-start (clear): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+FAIL [project-record] session-start (clear): one line: expected '1', got '0'
+FAIL [project-record] 214 passed, 6 failed
+      - session-start (startup): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+      - session-start (startup): one line: expected '1', got '0'
+      - session-start (resume): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+      - session-start (resume): one line: expected '1', got '0'
+      - session-start (clear): spool line with the count: 'record store: 1 spooled write(s) waiting' not found in output
+      - session-start (clear): one line: expected '1', got '0'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

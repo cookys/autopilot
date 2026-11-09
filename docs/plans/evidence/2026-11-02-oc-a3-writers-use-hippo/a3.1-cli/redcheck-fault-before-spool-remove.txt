@@ -1,0 +1,15 @@
+# red-check fault-before-spool-remove: lib/hippo.js: remove fault(before-spool-remove)
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] fault before-spool-remove: exit 70: expected '70', got '0'
+FAIL [project-record] before-spool-remove: spool entry still there: expected '1', got '0'
+FAIL [project-record] handoff: fault before-spool-remove exit 70: expected '70', got '0'
+FAIL [project-record] decision supersede: fault before-spool-remove exit 70: expected '70', got '0'
+FAIL [project-record] 216 passed, 4 failed
+      - fault before-spool-remove: exit 70: expected '70', got '0'
+      - before-spool-remove: spool entry still there: expected '1', got '0'
+      - handoff: fault before-spool-remove exit 70: expected '70', got '0'
+      - decision supersede: fault before-spool-remove exit 70: expected '70', got '0'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

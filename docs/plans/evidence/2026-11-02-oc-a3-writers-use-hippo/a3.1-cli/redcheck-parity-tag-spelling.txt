@@ -1,0 +1,337 @@
+# red-check parity-tag-spelling: plan builder spells the origin tag orig:
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] hippo: tags: expected 'effort:s,origin:self,trigger:ready', got 'effort:s,orig:self,trigger:ready'
+FAIL [project-record] hippo: closing a peer row with no reply is refused (exit 3): expected '3', got '0'
+FAIL [project-record] parity: show --json equal except id/created/updated/closed/provenance/key tag: expected '{
+ "Dated owner row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Dated owner row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:l",
+   "origin:owner",
+   "trigger:date-2026-12-01"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Wait for the date.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-02\n- **Problem**: Wait for the date.\n- **Impact**: Late.\n- **Trigger**: on the date\n- **Source**: owner 2026-10-02\n- **Pointer**: none\n- **Context**: some context\n",
+  "conflicts": {}
+ },
+ "Peer row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Peer row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:s",
+   "origin:peer",
+   "reporter:cuda",
+   "trigger:peer"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: A peer asked.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-01\n- **Report**: 2026-10-01 fleet\n- **Reply**: none\n- **Problem**: A peer asked.\n- **Impact**: Blocked.\n- **Trigger**: when asked\n- **Source**: PEER-REPORTED cuda 2026-10-01\n- **Pointer**: none\n",
+  "conflicts": {}
+ },
+ "Replaced row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Replaced row",
+  "status": "cancelled",
+  "area": null,
+  "tags": [
+   "effort:m",
+   "origin:self",
+   "trigger:ready",
+   "urgent"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Replaced by another.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": false,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-05\n- **Problem**: Replaced by another.\n- **Impact**: None.\n- **Trigger**: now\n- **Source**: self 2026-10-05\n- **Pointer**: none\n",
+  "conflicts": {}
+ }
+}', got '{
+ "Dated owner row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Dated owner row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:l",
+   "orig:owner",
+   "trigger:date-2026-12-01"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Wait for the date.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-02\n- **Problem**: Wait for the date.\n- **Impact**: Late.\n- **Trigger**: on the date\n- **Source**: owner 2026-10-02\n- **Pointer**: none\n- **Context**: some context\n",
+  "conflicts": {}
+ },
+ "Peer row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Peer row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:s",
+   "orig:peer",
+   "reporter:cuda",
+   "trigger:peer"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: A peer asked.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-01\n- **Report**: 2026-10-01 fleet\n- **Reply**: none\n- **Problem**: A peer asked.\n- **Impact**: Blocked.\n- **Trigger**: when asked\n- **Source**: PEER-REPORTED cuda 2026-10-01\n- **Pointer**: none\n",
+  "conflicts": {}
+ },
+ "Replaced row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Replaced row",
+  "status": "cancelled",
+  "area": null,
+  "tags": [
+   "effort:m",
+   "orig:self",
+   "trigger:ready",
+   "urgent"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Replaced by another.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": false,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-05\n- **Problem**: Replaced by another.\n- **Impact**: None.\n- **Trigger**: now\n- **Source**: self 2026-10-05\n- **Pointer**: none\n",
+  "conflicts": {}
+ }
+}'
+10c10
+<    "origin:owner",
+---
+>    "orig:owner",
+35c35
+<    "origin:peer",
+---
+>    "orig:peer",
+61c61
+<    "origin:self",
+---
+>    "orig:self",
+FAIL [project-record] 217 passed, 3 failed
+      - hippo: tags: expected 'effort:s,origin:self,trigger:ready', got 'effort:s,orig:self,trigger:ready'
+      - hippo: closing a peer row with no reply is refused (exit 3): expected '3', got '0'
+      - parity: show --json equal except id/created/updated/closed/provenance/key tag: expected '{
+ "Dated owner row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Dated owner row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:l",
+   "origin:owner",
+   "trigger:date-2026-12-01"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Wait for the date.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-02\n- **Problem**: Wait for the date.\n- **Impact**: Late.\n- **Trigger**: on the date\n- **Source**: owner 2026-10-02\n- **Pointer**: none\n- **Context**: some context\n",
+  "conflicts": {}
+ },
+ "Peer row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Peer row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:s",
+   "origin:peer",
+   "reporter:cuda",
+   "trigger:peer"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: A peer asked.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-01\n- **Report**: 2026-10-01 fleet\n- **Reply**: none\n- **Problem**: A peer asked.\n- **Impact**: Blocked.\n- **Trigger**: when asked\n- **Source**: PEER-REPORTED cuda 2026-10-01\n- **Pointer**: none\n",
+  "conflicts": {}
+ },
+ "Replaced row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Replaced row",
+  "status": "cancelled",
+  "area": null,
+  "tags": [
+   "effort:m",
+   "origin:self",
+   "trigger:ready",
+   "urgent"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Replaced by another.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": false,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-05\n- **Problem**: Replaced by another.\n- **Impact**: None.\n- **Trigger**: now\n- **Source**: self 2026-10-05\n- **Pointer**: none\n",
+  "conflicts": {}
+ }
+}', got '{
+ "Dated owner row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Dated owner row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:l",
+   "orig:owner",
+   "trigger:date-2026-12-01"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Wait for the date.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-02\n- **Problem**: Wait for the date.\n- **Impact**: Late.\n- **Trigger**: on the date\n- **Source**: owner 2026-10-02\n- **Pointer**: none\n- **Context**: some context\n",
+  "conflicts": {}
+ },
+ "Peer row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Peer row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:s",
+   "orig:peer",
+   "reporter:cuda",
+   "trigger:peer"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: A peer asked.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-01\n- **Report**: 2026-10-01 fleet\n- **Reply**: none\n- **Problem**: A peer asked.\n- **Impact**: Blocked.\n- **Trigger**: when asked\n- **Source**: PEER-REPORTED cuda 2026-10-01\n- **Pointer**: none\n",
+  "conflicts": {}
+ },
+ "Replaced row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Replaced row",
+  "status": "cancelled",
+  "area": null,
+  "tags": [
+   "effort:m",
+   "orig:self",
+   "trigger:ready",
+   "urgent"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Replaced by another.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": false,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-05\n- **Problem**: Replaced by another.\n- **Impact**: None.\n- **Trigger**: now\n- **Source**: self 2026-10-05\n- **Pointer**: none\n",
+  "conflicts": {}
+ }
+}'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

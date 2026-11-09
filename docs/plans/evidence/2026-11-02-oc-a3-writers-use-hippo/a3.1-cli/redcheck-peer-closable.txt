@@ -1,0 +1,9 @@
+# red-check peer-closable: project-record.js: backlog close skips the peer-reply check
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] hippo: closing a peer row with no reply is refused (exit 3): expected '3', got '0'
+FAIL [project-record] 219 passed, 1 failed
+      - hippo: closing a peer row with no reply is refused (exit 3): expected '3', got '0'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

@@ -1,0 +1,18 @@
+# red-check stale-lock: mutate scripts/lib/hippo.js: 'if (!pidAlive(pid)) {' -> 'if (false) {'
+# exit 1
+FAIL [hippo-lib] flush: stale-pid lock recovered: expected '0', got '5'
+FAIL [hippo-lib] flush: stale-lock run replayed the entry: expected '1', got '0'
+FAIL [hippo-lib] flush --drop: exit 0: expected '0', got '5'
+FAIL [hippo-lib] flush --drop: entry removed: expected '0', got '2'
+FAIL [hippo-lib] fault before-spool-remove: rerun flush exits 0: expected '0', got '5'
+FAIL [hippo-lib] fault before-spool-remove: entry removed by the rerun: expected '0', got '1'
+FAIL [hippo-lib] 89 passed, 6 failed
+      - flush: stale-pid lock recovered: expected '0', got '5'
+      - flush: stale-lock run replayed the entry: expected '1', got '0'
+      - flush --drop: exit 0: expected '0', got '5'
+      - flush --drop: entry removed: expected '0', got '2'
+      - fault before-spool-remove: rerun flush exits 0: expected '0', got '5'
+      - fault before-spool-remove: entry removed by the rerun: expected '0', got '1'
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

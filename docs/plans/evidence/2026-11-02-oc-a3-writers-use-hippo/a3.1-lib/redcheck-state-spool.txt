@@ -1,0 +1,8 @@
+# red-check state-spool: mutate scripts/lib/hippo.js: "  out.state = 'spool';\n  out.reason = chk.exit === 5" -> "  out.state = 'hippo';\n  out.reason = chk.exit === 5"
+# exit 1
+FAIL [hippo-lib] detect: store + hippo exit 5 -> spool: expected 'spool', got 'hippo'
+FAIL [hippo-lib] 94 passed, 1 failed
+      - detect: store + hippo exit 5 -> spool: expected 'spool', got 'hippo'
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

@@ -1,0 +1,10 @@
+# red-check lock: mutate scripts/lib/hippo.js: "fs.openSync(lock, 'wx')" -> "fs.openSync(lock, 'w')"
+# exit 1
+FAIL [hippo-lib] concurrent flush: both exit 0: expected '0 0', got '1 0'
+FAIL [hippo-lib] concurrent flush: exactly one record for entry 1: expected '1', got '2'
+FAIL [hippo-lib] 93 passed, 2 failed
+      - concurrent flush: both exit 0: expected '0 0', got '1 0'
+      - concurrent flush: exactly one record for entry 1: expected '1', got '2'
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

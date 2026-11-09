@@ -1,0 +1,8 @@
+# red-check preflight-accepts-all: mutate hooks/tests/lib/hippo-sandbox.sh: 'case "$origin" in' -> 'return 0; case "$origin" in'
+# exit 1
+FAIL [hippo-lib] pre-flight accepted a core.hooksPath outside the temp tree
+FAIL [hippo-lib] 94 passed, 1 failed
+      - pre-flight accepted a core.hooksPath outside the temp tree
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

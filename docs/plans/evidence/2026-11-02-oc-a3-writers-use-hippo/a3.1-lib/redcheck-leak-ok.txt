@@ -1,0 +1,14 @@
+# red-check leak-ok: mutate scripts/lib/hippo.js: "r.error.rule === 'leak' && step.leak_ok" -> 'false'
+# exit 1
+FAIL [hippo-lib] leak_ok: leak refusal does not stop the run: expected '0', got '3'
+FAIL [hippo-lib] leak_ok: one warning recorded: expected '1', got '0'
+FAIL [hippo-lib] leak_ok: warning printed: 'WARNING' not found in output
+FAIL [hippo-lib] leak_ok: later close step still ran: expected 'done', got 'open'
+FAIL [hippo-lib] 91 passed, 4 failed
+      - leak_ok: leak refusal does not stop the run: expected '0', got '3'
+      - leak_ok: one warning recorded: expected '1', got '0'
+      - leak_ok: warning printed: 'WARNING' not found in output
+      - leak_ok: later close step still ran: expected 'done', got 'open'
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

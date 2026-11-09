@@ -1,0 +1,68 @@
+# red-check state-files: mutate scripts/lib/hippo.js: '  if (!fs.existsSync(toml)) return out;' -> '  /* mutated */'
+# exit 1
+<repo>/scripts/lib/hippo.js:351
+    if (!(e instanceof HippoError)) throw e;
+                                    ^
+
+Error: ENOENT: no such file or directory, open '<tmp>/hs/files/.hippo/repo.toml'
+    at Object.readFileSync (node:fs:483:20)
+    at detect (<repo>/scripts/lib/hippo.js:90:44)
+    at cli (<repo>/scripts/lib/hippo.js:330:15)
+    at Object.<anonymous> (<repo>/scripts/lib/hippo.js:349:24)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '<tmp>/hs/files/.hippo/repo.toml'
+}
+
+Node.js v24.22.1
+<anonymous_script>:2
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:14
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [hippo-lib] detect: no .hippo/repo.toml -> files: expected 'files', got ''
+<anonymous_script>:2
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:14
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [hippo-lib] detect: repo_root is the git toplevel: expected '<tmp>/hs/files', got ''
+FAIL [hippo-lib] flush in files state with a spool -> exit 2: expected '2', got '1'
+FAIL [hippo-lib] files-state flush names the count: '1 spooled write(s) target a hippo store that no longer exists; see the rollback note' not found in output
+FAIL [hippo-lib] flush in files state with an empty spool -> exit 0: expected '0', got '1'
+FAIL [hippo-lib] 90 passed, 5 failed
+      - detect: no .hippo/repo.toml -> files: expected 'files', got ''
+      - detect: repo_root is the git toplevel: expected '<tmp>/hs/files', got ''
+      - flush in files state with a spool -> exit 2: expected '2', got '1'
+      - files-state flush names the count: '1 spooled write(s) target a hippo store that no longer exists; see the rollback note' not found in output
+      - flush in files state with an empty spool -> exit 0: expected '0', got '1'
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

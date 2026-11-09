@@ -45,6 +45,8 @@ in the repo file as before, or left out to follow this file.
 
 Every roster change adds a block here: date, reason, who ruled.
 
+**2026-11-09 (re-qualified).** GLM-5.3 is back on the terminal `qc_panel` after gpt-6.1-sol, as runner `anthropic-compatible`, endpoint `glm`, effort high: re-qualified 2026-11-09 (cloud, anthropic-compatible, 42/42, event 357/524), back per PM 01M6YTKCKJ. `reviewer_fallback_preference` and its low-risk twin are `gpt-6.1-sol, GLM-5.3`. A seat whose endpoint has no URL and no token on the account is skipped with reason `endpoint_not_configured`, not counted as a gap.
+
 **2026-11-09 (later).** GLM-5.3 comes off every review seat. Ruled by the PM (fleet 01M6YNHCJ5).
 
 * Reason: GLM-5.3 has no qualified reviewer record (`engine-scorecard seat-status --engine GLM-5.3 --runner cc-shim --role reviewer --effort high` gives `admission_status no_record`), and gpu-lead reports it failed the reviewer exam.
@@ -140,16 +142,16 @@ Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
 - cloud_fallback_rung:
 - on_family_conflict: fallback
 - review_fresh_context: on
-- reviewer_fallback_preference: gpt-6.1-sol
-- reviewer_fallback_preference_low_risk: gpt-6.1-sol
+- reviewer_fallback_preference: gpt-6.1-sol, GLM-5.3
+- reviewer_fallback_preference_low_risk: gpt-6.1-sol, GLM-5.3
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
-- qc_panel: gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high
-- qc_panel_runners: codex, codex, agy
-- qc_panel_efforts: low, medium, high
-- qc_panel_endpoints: @none, @none, @none
+- qc_panel: gpt-6-astra, gpt-6.1-sol, GLM-5.3, gemini-4-argon-high
+- qc_panel_runners: codex, codex, anthropic-compatible, agy
+- qc_panel_efforts: low, medium, high, high
+- qc_panel_endpoints: @none, @none, glm, @none
 - review_packet_deny_extra:
 - qc_panel_aggregation: union-on-verified-critical
 <!-- in_rail_review: auto|single|panel. auto uses the sealed panel as the in-loop review station when the QC panel is complete. -->

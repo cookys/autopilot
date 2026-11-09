@@ -387,6 +387,19 @@ function parseSeatSpec(spec, id) {
   };
 }
 
+// True only when resolve-endpoint.sh reports the endpoint with no URL and no token at all.
+// Any other outcome (ready, half-configured, invalid name, resolver error) is left to dispatch.
+function endpointNotConfigured(name) {
+  const res = spawnSync(path.join(__dirname, 'resolve-endpoint.sh'), [name], { encoding: 'utf8' });
+  if (res.status !== 1) return false;
+  try {
+    const j = JSON.parse(res.stdout);
+    return j.ready === false && !j.token_present && !j.base_url;
+  } catch (_e) {
+    return false;
+  }
+}
+
 function resolveSeats(seatsArg, repoRoot) {
   if (seatsArg) {
     const specs = seatsArg.split(',').map((s) => s.trim()).filter(Boolean);
@@ -969,6 +982,23 @@ async function handleCollect(flags) {
     process.exit(1);
   }
 
+  // A seat whose named endpoint has neither a URL nor a token on this account is not a seat gap:
+  // it is skipped and recorded (reason endpoint_not_configured). A half-configured or configured
+  // endpoint that then fails at run time stays a normal seat failure.
+  const skippedSeats = [];
+  seats = seats.filter((seat) => {
+    if (seat.endpoint && endpointNotConfigured(seat.endpoint)) {
+      skippedSeats.push({ id: seat.id, engine: seat.engine, endpoint: seat.endpoint, status: 'skipped', reason: 'endpoint_not_configured' });
+      console.error(`INFO: seat ${seat.id} (${seat.engine}) skipped: endpoint '${seat.endpoint}' is not configured on this account (endpoint_not_configured)`);
+      return false;
+    }
+    return true;
+  });
+  if (!seats.length) {
+    console.error('ERROR: every seat was skipped (endpoint_not_configured); nothing to review');
+    process.exit(1);
+  }
+
   for (let idx = 0; idx < seats.length; idx++) {
     const seat = seats[idx];
     if (!seat.runner) {
@@ -1377,6 +1407,7 @@ async function handleCollect(flags) {
     full_range_sha256: fullRangeSha256,
     findings_sha256: findingsSha256,
     seat_artifact_sha256: seatArtifactSha256,
+    ...(skippedSeats.length ? { skipped_seats: skippedSeats } : {}),
     ...(packetRecord ? { packet: packetRecord } : {}),
     collected_at: new Date().toISOString(),
   }, { recordPointer: true });
@@ -1408,6 +1439,7 @@ async function handleCollect(flags) {
     findings_count: allFindings.length,
     status: genStatus,
     seat_summaries: seatSummaries,
+    ...(skippedSeats.length ? { skipped_seats: skippedSeats } : {}),
   };
   console.log(JSON.stringify(summary, null, 2));
   process.exit(0);

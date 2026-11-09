@@ -4,8 +4,8 @@
 //
 // A start row is appended when a dispatch starts (status "running", ended_at null, usage null) and one more row
 // per finished dispatch, to <live_dir>/dispatch-usage-YYYYMM.jsonl (live_dir is resolveLiveDir(), the same base
-// claude-account.js uses; YYYYMM is UTC, taken from ended_at, for a start row from started_at). Rows of the same
-// run_id are read by the consumer as "last row wins". Fleet only reads this file.
+// claude-account.js uses; YYYYMM is UTC, taken from started_at so every row of a run lands in one file, from ended_at only
+// when started_at is null). Rows of the same run_id are read by the consumer as "last row wins". Fleet only reads this file.
 // account on every row: lib/account-alias.js (claude family acct-<hash>, codex codex-<hash>, endpoint runners
 // local:<courier> or the endpoint name, other runners the runner name).
 //
@@ -246,7 +246,7 @@ function appendRow(row, opts) {
     if (bad) return { ok: false, error: bad };
     const o = opts || {};
     const base = o.dir || resolveLiveDir({ env: o.env || process.env, warn: () => {} }).base;
-    const file = path.join(base, ledgerFileName(row.ended_at !== null ? row.ended_at : row.started_at));
+    const file = path.join(base, ledgerFileName(row.started_at !== null ? row.started_at : row.ended_at));
     const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT, 0o600);
     try {
       const buf = Buffer.from(`${JSON.stringify(row)}\n`);

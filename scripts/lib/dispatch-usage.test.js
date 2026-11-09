@@ -326,3 +326,20 @@ test('sample fixture for the fleet reader: a start and a finished row per rail, 
     assert.notStrictEqual(last.get(rows[i].run_id).status, 'running');
   }
 });
+
+test('month split: a run starting in December and ending in January keeps every row in the start-month file', () => {
+  const dir = mk();
+  const startedAt = 1798761569; // 2026-12-31 23:59:29 UTC
+  const start = U.normalizeRow({ run_id: 'run-split', role: 'implementer', runner: 'grok', status: 'running', started_at: startedAt, ended_at: null });
+  const fin = rowOf({ runner: 'grok', model: 'm', status: 'committed', run_id: 'run-split' }, { run_id: 'run-split', ended_at: 1798761630, wall_secs: 61 });
+  assert.strictEqual(fin.started_at, startedAt);
+  const a = U.appendRow(start, { dir });
+  const b = U.appendRow(fin, { dir });
+  assert.ok(a.ok && b.ok, JSON.stringify([a, b]));
+  assert.strictEqual(path.basename(a.file), 'dispatch-usage-202612.jsonl');
+  assert.strictEqual(path.basename(b.file), 'dispatch-usage-202612.jsonl');
+  assert.deepStrictEqual(fs.readdirSync(dir), ['dispatch-usage-202612.jsonl']); // no 202701 file
+  const rows = fs.readFileSync(a.file, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.strictEqual(rows.length, 2);
+  assert.strictEqual(rows[rows.length - 1].status, 'committed'); // last row wins
+});

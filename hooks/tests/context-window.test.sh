@@ -253,6 +253,7 @@ cat > "$CW_CFG" <<'CFG'
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_effort: high
 - implementer_runner: codex
+- implementer_ladder:
 - allow_same_runner_dual_seat: on
 - verification_author_present: true
 - verification_author_engine: Gemini 3.5 Flash (High)
@@ -260,7 +261,7 @@ cat > "$CW_CFG" <<'CFG'
 - verification_author_effort: high
 CFG
 export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"
-RESOLVED="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 2000000 2> /dev/null)"
+RESOLVED="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh" --input-bytes 2000000 2> /dev/null)"
 FIELD_COUNT="$(printf '%s' "$RESOLVED" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(Object.keys(JSON.parse(s)).length))}catch{process.stdout.write("ERR")}})')"
 # The no-invented-fields pin derives from the schema's own top-level key order —
 # a literal count here rotted twice as fields landed (62 vs 64, pre-existing red
@@ -278,11 +279,11 @@ assert_not_contains "$RESOLVED" '"Flash seat' "space-containing model id is not 
 # Small input produces no window warnings at all (UNKNOWN_WINDOW must stay silent —
 # the verification-author seat above has no recorded window — else the default roster
 # emits constant noise). Same hermetic roster, so no brain/auto-knob advisory can mask it.
-RESOLVED_SMALL="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 10000 2> /dev/null)"
+RESOLVED_SMALL="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh" --input-bytes 10000 2> /dev/null)"
 assert_contains "$RESOLVED_SMALL" '"capability_warnings": []' "in-budget resolve emits no warnings"
 
 # Absent --input-bytes must leave the resolver byte-identical to before.
-RESOLVED_NONE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" 2> /dev/null)"
+RESOLVED_NONE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_CFG" bash "$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh" 2> /dev/null)"
 assert_contains "$RESOLVED_NONE" '"capability_warnings": []' "no --input-bytes ⇒ no window checks"
 
 finalize_test

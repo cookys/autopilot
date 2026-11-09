@@ -1452,6 +1452,7 @@ if (fs.existsSync(fixtureGovPath)) {
   }
 }
 fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
+  '- override: implementer | until 2099-01-01 | test fixture seat',
   '- implementer_engine: gpt-5.5',
   '- implementer_effort: high',
   '- implementer_runner: agy',

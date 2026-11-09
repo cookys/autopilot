@@ -12,6 +12,10 @@ STUBS_DIR="$TEST_TMP/stubs"
 CONTRACTS_DIR="$TEST_TMP/contracts"
 PROMPT_FILE="$TEST_TMP/prompt.txt"
 
+# None of these cases is about strikes. Each failing dispatch would otherwise append an ordinary_strike
+# to $CAPS/strikes.jsonl; at 3 strikes dispatch-contract.js refuses later cases with precondition_failed.
+# Suppress the writer (the documented debug hatch) so every case sees a clean strike store.
+export AUTOPILOT_STRIKE_WRITER=off
 mkdir -p "$MINI_REPO" "$SCORES" "$CAPS" "$SESSION_DIR_EMPTY" "$STUBS_DIR" "$CONTRACTS_DIR"
 printf 'Do the task.\n' > "$PROMPT_FILE"
 

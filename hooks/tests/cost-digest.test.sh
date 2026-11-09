@@ -8,8 +8,10 @@ mkdir -p "$FIXTURE_DIR"
 FIXTURE_FILE="$FIXTURE_DIR/costs.jsonl"
 
 TODAY_UTC="$(node -e 'process.stdout.write(new Date().toISOString().slice(0, 10))')"
-DAY1="2026-08-01"
-DAY2="2026-08-02"
+# Relative to today (UTC), computed with node: the digest window (--since 100) counts back from today,
+# so fixed calendar dates fall out of it as time passes.
+DAY1="$(node -e 'process.stdout.write(new Date(Date.now() - 20 * 864e5).toISOString().slice(0, 10))')"
+DAY2="$(node -e 'process.stdout.write(new Date(Date.now() - 19 * 864e5).toISOString().slice(0, 10))')"
 
 # Write synthetic ledger JSONL:
 # - 3 distinct UTC days: $DAY1, $DAY2, $TODAY_UTC

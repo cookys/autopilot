@@ -17,6 +17,8 @@
 // Lifetime: the watcher idle-exits after the idle window with nothing live. A session counts as live while a project marker is
 // unexpired, a tasks/attention file of the project was updated in the window, or an owner card of the project is still open
 // (<git-common-dir>/autopilot/decisions/); the owner reading a card fires no prompt and no tool call, so only the card says so.
+// Cards have no expiry, so an open card holds the watcher only while it is not an orphan (makeOrphanCheck: parent gone, or no
+// terminal and unread output); an orphaned watcher logs it once and idle-exits as if the card were not there.
 // A watcher does not outlive a plugin update (mods P1W WATCHVER): code-fingerprint.js fingerprints the modules at start and every tick
 // re-checks; on a content change the tick returns { exit: 'code_changed' } (log `code changed, exiting`) so the next autostart starts a current one.
 // --render (mods plan P1b B3): the same process also republishes the owner review page of every execution root
@@ -447,10 +449,42 @@ function sourceFingerprint({ env, key, identity, rows, dirs, startMs }) {
   ];
 }
 
+// Orphan check for the open-card clause. Returns a function: a reason string when the watcher is an orphan, '' when not.
+// Signals (Node built-ins + /proc): (1) the parent changed since start (process.ppid !== the start value; reparented to 1 or a
+// subreaper); (2) no controlling terminal (tty_nr in /proc/self/stat is 0) AND stdout is neither a tty nor a pipe/socket, i.e. nobody
+// reads its output (a detached hook watcher writes to the log file). Blind spots: a pipe whose reader is already dead still counts as
+// a consumer (EPIPE is not probed); a tty-less watcher under a live parent that pipes stdout is held; a start already
+// reparented (ppid 1 at start) never sees signal 1 and relies on signal 2. Probes are injectable for tests.
+function makeOrphanCheck({
+  startPpid = process.ppid, ppid = () => process.ppid, ctty = hasControllingTty, stdoutKind = stdoutKindOf,
+} = {}) {
+  return () => {
+    if (ppid() !== startPpid) return 'parent gone';
+    if (!ctty()) {
+      const kind = stdoutKind();
+      if (kind !== 'tty' && kind !== 'pipe') return 'no terminal, output unread';
+    }
+    return '';
+  };
+}
+function hasControllingTty() {
+  try {
+    const stat = fs.readFileSync('/proc/self/stat', 'utf8');
+    return Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[4]) !== 0;
+  } catch (_error) { return true; } // no /proc: cannot tell, do not call it an orphan
+}
+function stdoutKindOf() {
+  try {
+    if (process.stdout.isTTY) return 'tty';
+    const st = fs.fstatSync(1);
+    return st.isFIFO() || st.isSocket() ? 'pipe' : 'file';
+  } catch (_error) { return 'pipe'; }
+}
+
 function createWatcher({
   key, env = process.env, cwd = process.cwd(), collect, now = Date.now,
   interval = DEFAULT_INTERVAL_S, enrichCap = 8, pid = process.pid, idleExitS = null, render = null,
-  codeFingerprint = createCodeFingerprint(),
+  codeFingerprint = createCodeFingerprint(), isOrphaned = makeOrphanCheck(),
 }) {
   const live = liveBaseOf(env);
   const runsDir = path.join(live, 'runs');
@@ -877,8 +911,16 @@ function createWatcher({
     // Idle exit: N consecutive seconds with nothing confirmed live and nothing unknown, and no
     // unexpired session-mode marker of this project and no open owner card of it (a live session keeps the watcher up).
     const total = counts.get(null);
-    const sessionLive = markers.length > 0 || recentSessionFiles(env, key, nowMs, idleExitS || DEFAULT_IDLE_EXIT_S) > 0
-      || openDecisionCount(identity, key) > 0; // an open owner card: the owner is deciding, no prompt or tool call needed
+    // An open owner card (the owner is deciding, no prompt or tool call needed) holds the watcher only while it is not an orphan:
+    // cards have no expiry, so a card left open after the terminal and session are gone must not pin the process forever.
+    const otherLive = markers.length > 0 || recentSessionFiles(env, key, nowMs, idleExitS || DEFAULT_IDLE_EXIT_S) > 0;
+    let cardHolds = false;
+    if (!otherLive && openDecisionCount(identity, key) > 0) {
+      const orphan = isOrphaned();
+      if (orphan && !state.orphanLogged) { state.orphanLogged = true; log(`orphaned (${orphan}): an open owner card no longer holds the watcher`); }
+      cardHolds = !orphan;
+    }
+    const sessionLive = otherLive || cardHolds;
     if (sessionLive) {
       state.idleSince = null; // a live session holds the watcher open; the clock restarts when it ends
     } else if (total.confirmed_live === 0 && total.unknown === 0) {
@@ -1287,5 +1329,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  runWriter, lockPathOf, onPath, recentSessionFiles, openDecisionCount, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  runWriter, makeOrphanCheck, lockPathOf, onPath, recentSessionFiles, openDecisionCount, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

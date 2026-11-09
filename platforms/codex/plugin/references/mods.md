@@ -190,6 +190,7 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   spawning git (knob, config files, this session's marker), so a repo that is not opted in costs no process per prompt. The idle-exit also treats a session as live while
   `<live>/tasks/<sid>.json` or `<live>/attention/<sid>.json` of the project has `updated_at` inside the idle window;
   plain-session markers do not count as live sessions. SessionEnd does not stop the watcher; idle-exit does.
+  An open owner card also counts as live, but only while the watcher is not an orphan (parent changed since start, or no terminal and unread output); cards never expire, so an orphan idle-exits despite one.
 - A watcher launched from CC's Bash tool outlived `claude -p` (S5b). CC sandbox on, interactive `/exit`, and
   desktop are unverified.
 - Stop: `autopilot status runs --stop --project <key>` (checks `/proc/<pid>/cmdline` before signalling).

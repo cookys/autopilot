@@ -131,6 +131,27 @@ sh -c 'echo $$' > "$(spool_dir "$R_ST")/.lock"
 node "$LIB" flush --target "$R_ST" 2>/dev/null; eq 0 "$?" "flush: stale-pid lock recovered"
 eq 1 "$(key_count "$R_ST" ccccccccccccccc1)" "flush: stale-lock run replayed the entry"
 
+# --- a dead-owner `.lock` whose `.lock.reclaim` exists (dead or live owner) fails closed: exit 5 naming the file, nothing touched
+R_RC="$(hs_mkrepo reclaim store)"
+mkplan "$TEST_TMP/r1.json" abababababababa1 reclaim1
+HIPPO_BIN=/nonexistent/hippo node "$DRV" spool "$R_RC" "$TEST_TMP/r1.json" backlog-new >/dev/null
+SD_RC="$(spool_dir "$R_RC")"
+DEAD1="$(sh -c 'echo $$')"; DEAD2="$(sh -c 'echo $$')"
+printf '%s' "$DEAD1" > "$SD_RC/.lock"; printf '%s' "$DEAD2" > "$SD_RC/.lock.reclaim"
+node "$LIB" flush --target "$R_RC" --lock-timeout-ms 400 2>"$TEST_TMP/rc.err"; eq 5 "$?" "flush: dead .lock + dead .lock.reclaim -> exit 5"
+assert_contains "$(cat "$TEST_TMP/rc.err")" ".lock.reclaim" "flush: the timeout message names .lock.reclaim"
+assert_contains "$(cat "$TEST_TMP/rc.err")" "only if no flush is running" "flush: the timeout message says when to remove it"
+eq "$DEAD1" "$(cat "$SD_RC/.lock")" "flush: the dead .lock is untouched"
+eq "$DEAD2" "$(cat "$SD_RC/.lock.reclaim")" "flush: the dead .lock.reclaim is untouched"
+eq 1 "$(spool_count "$R_RC")" "flush: entry not replayed behind a .lock.reclaim"
+sleep 30 & SLP=$!
+printf '%s' "$SLP" > "$SD_RC/.lock.reclaim"
+node "$LIB" flush --target "$R_RC" --lock-timeout-ms 400 2>/dev/null; eq 5 "$?" "flush: dead .lock + live .lock.reclaim -> exit 5"
+kill "$SLP" 2>/dev/null; wait "$SLP" 2>/dev/null
+eq "$DEAD1" "$(cat "$SD_RC/.lock")" "flush: the dead .lock is untouched (live reclaim)"
+eq "$SLP" "$(cat "$SD_RC/.lock.reclaim")" "flush: the live .lock.reclaim is untouched"
+rm -f "$SD_RC/.lock" "$SD_RC/.lock.reclaim"
+
 # --- an empty lock file (the window between create and pid write) is a HELD lock, never a dead one
 R_EL="$(hs_mkrepo emptylock store)"
 mkplan "$TEST_TMP/e1.json" eeeeeeeeeeeeeee1 empty1
@@ -138,9 +159,12 @@ HIPPO_BIN=/nonexistent/hippo node "$DRV" spool "$R_EL" "$TEST_TMP/e1.json" backl
 : > "$(spool_dir "$R_EL")/.lock"
 node "$LIB" flush --target "$R_EL" --lock-timeout-ms 400 2>/dev/null; eq 5 "$?" "flush: empty lock file is held -> times out with exit 5"
 eq 1 "$(spool_count "$R_EL")" "flush: entry not replayed under an empty lock"
-eq 0 "$(test -e "$(spool_dir "$R_EL")/.lock" && wc -c < "$(spool_dir "$R_EL")/.lock" | tr -d ' ' || echo 0)" "flush: the empty lock file was not removed or rewritten"
+assert_file_exists "$(spool_dir "$R_EL")/.lock" "flush: the empty lock file was not removed"
+eq 0 "$(wc -c < "$(spool_dir "$R_EL")/.lock" | tr -d ' ')" "flush: the empty lock file was not rewritten"
 printf 'junk' > "$(spool_dir "$R_EL")/.lock"
 node "$LIB" flush --target "$R_EL" --lock-timeout-ms 400 2>/dev/null; eq 5 "$?" "flush: non-numeric lock content is held -> exit 5"
+assert_file_exists "$(spool_dir "$R_EL")/.lock" "flush: the junk lock file was not removed"
+eq junk "$(cat "$(spool_dir "$R_EL")/.lock")" "flush: the junk lock file was not rewritten"
 rm -f "$(spool_dir "$R_EL")/.lock"
 node "$LIB" flush --target "$R_EL" 2>/dev/null; eq 0 "$?" "flush: replays once the lock is gone"
 eq 0 "$(find "$(spool_dir "$R_EL")" -name '.lock*' | wc -l | tr -d ' ')" "flush: no lock files left behind"
@@ -293,6 +317,15 @@ assert_file_absent "$R_GONE/.hippo/repo.toml" "files-state flush creates no repo
 eq 1 "$(spool_count "$R_GONE")" "files-state flush keeps the entry"
 R_EMPTY="$(hs_mkrepo emptyfiles)"
 node "$LIB" flush --target "$R_EMPTY" 2>/dev/null; eq 0 "$?" "flush in files state with an empty spool -> exit 0"
+
+# --- the sandbox ignores an inherited GIT_TEMPLATE_DIR: a template hook must not run during hs_scrub_git_env + hs_mkrepo
+TPL_OWN="$(mktemp -d /tmp/ap-tpl-XXXXXX)"
+mkdir -p "$TPL_OWN/tpl/hooks"
+printf '#!/bin/sh\ntouch "%s/sentinel"\n' "$TPL_OWN" > "$TPL_OWN/tpl/hooks/post-commit"
+chmod +x "$TPL_OWN/tpl/hooks/post-commit"
+( export GIT_TEMPLATE_DIR="$TPL_OWN/tpl"; hs_scrub_git_env; hs_mkrepo tpl >/dev/null )
+assert_file_absent "$TPL_OWN/sentinel" "an inherited GIT_TEMPLATE_DIR hook does not run in hs_mkrepo"
+rm -rf "$TPL_OWN"
 
 hs_exit_check
 finalize_test

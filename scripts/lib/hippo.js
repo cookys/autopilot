@@ -179,20 +179,16 @@ function releaseIfOwned(lock) {
 }
 
 // Remove a dead-owner lock without letting two reclaimers delete each other's fresh lock: reclaims are serialized by
-// `<lock>.reclaim`, itself taken atomically; a dead-owner `.reclaim` is renamed to a unique name (one winner) then removed.
+// `<lock>.reclaim`, itself taken atomically. An existing `.reclaim` (any owner, dead or alive) is never taken over:
+// two processes cannot tell a dead file from a fresh one safely, so the caller waits and the timeout names the file.
+// Returns true when the dead lock was handled by us, false when `.reclaim` is held.
 function reclaimStale(lock, deadPid) {
   const rl = `${lock}.reclaim`;
-  if (!tryPublish(rl)) {
-    const o = lockOwner(rl);
-    if (o !== null && !Number.isNaN(o) && !pidAlive(o)) {
-      const gone = `${rl}.dead.${process.pid}.${Math.random().toString(36).slice(2)}`;
-      try { fs.renameSync(rl, gone); fs.unlinkSync(gone); } catch { /* another reclaimer won */ }
-    }
-    return;
-  }
+  if (!tryPublish(rl)) return false;
   try {
     if (lockOwner(lock) === deadPid) { try { fs.unlinkSync(lock); } catch { /* gone */ } }
   } finally { releaseIfOwned(rl); }
+  return true;
 }
 
 // Atomically-published lockfile holding our pid. Dead-pid holder -> serialized reclaim and retake. Live or unreadable holder -> wait, then HippoError exit 5.
@@ -204,8 +200,15 @@ function withLock(dir, fn, timeoutMs = 30000) {
     if (tryPublish(lock)) break;
     const pid = lockOwner(lock);
     if (pid === null) continue;
-    if (!Number.isNaN(pid) && !pidAlive(pid)) { reclaimStale(lock, pid); continue; }
-    if (Date.now() > deadline) throw new HippoError(`spool lock held by ${Number.isNaN(pid) ? 'an unreadable owner' : 'pid ' + pid}`, 5, 'environment');
+    let reclaimBlocked = false;
+    if (!Number.isNaN(pid) && !pidAlive(pid)) {
+      if (reclaimStale(lock, pid)) continue;
+      reclaimBlocked = true;
+    }
+    if (Date.now() > deadline) {
+      if (reclaimBlocked) throw new HippoError(`spool lock ${lock} is held by dead pid ${pid} and ${lock}.reclaim exists; remove ${lock}.reclaim only if no flush is running`, 5, 'environment');
+      throw new HippoError(`spool lock held by ${Number.isNaN(pid) ? 'an unreadable owner' : 'pid ' + pid}`, 5, 'environment');
+    }
     sleepMs(50);
   }
   try { return fn(); } finally { releaseIfOwned(lock); }

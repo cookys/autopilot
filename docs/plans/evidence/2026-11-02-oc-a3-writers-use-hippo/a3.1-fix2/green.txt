@@ -1,0 +1,19 @@
+== project-record
+PASS [project-record] 250 assertions
+== hippo-lib
+PASS [hippo-lib] 120 assertions
+== record-files
+PASS [record-files] 112 assertions
+== backlog-reconcile
+PASS [backlog-reconcile] 28 assertions
+== check-backlog-entries
+
+
+PASS [check-backlog-entries] 128 assertions
+
+== affected-suites (TMPDIR=/tmp; files: scripts/project-record.js scripts/lib/hippo.js hooks/tests/lib/hippo-sandbox.sh)
+summary: 467 run, 9 failed
+failed: hook-hosting.test.js, dispatch-detach.test.sh, dispatch-hetero.test.sh, test-suite-finalize-gate.test.sh (known base failures);
+        runs-watch-start.test.js (load only: passes alone, 4/4 on this branch);
+        external-lifecycle-witness.test.sh, post-tool-chain-differential.test.sh, suite-residue-reaper.test.sh,
+        scripts/session-mode-live-dir.test.js (fail alone on this branch AND on the base commit c56762d8b with the same rc: not caused by this change)

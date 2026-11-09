@@ -322,16 +322,17 @@ H['backlog close'] = {
   files(repo, p) { return rf.backlogClose(repo, { id: p.id, how: p.how, by: p.by, commit: p.commit }, { clock }); },
   validate(repo, p, state) { // before any hippo call
     if (p.how === 'superseded' && (p.by === undefined || p.by.trim() === '')) throw new rf.RecordError('missing_by', 'close superseded needs --by <ref>');
-    if (state !== 'files') ulidArg(p.id, 'backlog close');
-    return null;
+    if (state === 'files') return null;
+    ulidArg(p.id, 'backlog close');
+    return { warnings: [], commitSha: p.commit === undefined ? null : sha40(repo, p.commit) };
   },
-  plan(repo, p, key) {
+  plan(repo, p, key, v) {
     const rec = showRecord(repo, ulidArg(p.id, 'backlog close'));
     const b = bullets(rec.body);
     rules.assertPeerClosable({ Title: rec.title, Origin: tagValue(rec.tags, 'origin:') || '', Report: b.Report, Reply: b.Reply });
     const steps = [{ op: 'close', id: rec.id, status: p.how }];
     const info = [];
-    if (p.commit !== undefined) steps.push({ op: 'link', from: rec.id, rel: 'implemented_by', to: `git:${sha40(repo, p.commit)}`, leak_ok: false });
+    if (p.commit !== undefined) steps.push({ op: 'link', from: rec.id, rel: 'implemented_by', to: `git:${v.commitSha}`, leak_ok: false });
     if (p.by !== undefined) {
       if (ULID_RE.test(p.by)) steps.push({ op: 'link', from: rec.id, rel: 'relates_to', to: p.by, leak_ok: false });
       else info.push(`${p.how === 'superseded' ? 'superseded by' : 'closed with'} ${p.by.trim()}`);
@@ -364,7 +365,7 @@ function decisionPlan(kind, p, key, supersede) {
   for (const id of p.relates || []) steps.push({ op: 'link', from: 'root', rel: 'relates_to', to: id, leak_ok: false });
   for (const id of p.decides || []) steps.push({ op: 'link', from: id, rel: 'decided_by', to: 'root', leak_ok: false });
   if (supersede) {
-    steps.push({ op: 'link', from: 'root', rel: 'supersedes', to: ulidArg(p.old, `${kind} supersede`), leak_ok: false });
+    steps.push({ op: 'link', from: 'root', rel: 'supersedes', to: p.old, leak_ok: false }); // p.old was checked by validate
     steps.push({ op: 'close', id: p.old, status: 'superseded' });
   }
   return { key, steps };
@@ -384,6 +385,7 @@ H['decision supersede'] = {
   parse: (f, pos) => decisionParse(f, pos),
   key: decisionKey,
   files(repo, p) { return rf.decisionSupersede(repo, { old: p.old, title: p.title, rationale: p.rationale, ledgerRow: p.ledgerRow, area: p.area }, { clock }); },
+  validate(repo, p, state) { if (state !== 'files') ulidArg(p.old, 'decision supersede'); return null; },
   plan: (repo, p, key) => decisionPlan('decision', p, key, true),
 };
 
@@ -411,6 +413,7 @@ H['adr new'] = {
 H['adr supersede'] = {
   parse: (f, pos) => adrParse(f, pos),
   files: (repo, p) => rf.adrSupersede(repo, Object.assign({ old: p.old }, adrFilesInput(p)), { clock, adrDir: p.adrDir }),
+  validate(repo, p, state) { if (state !== 'files') ulidArg(p.old, 'adr supersede'); return null; },
   plan(repo, p, key) {
     const pl = decisionPlan('adr', p, key, true);
     pl.steps[0].argv[3] = p.status;
@@ -468,17 +471,24 @@ H['handoff new'] = {
     };
   },
   files(repo, p) { return rf.handoffNew(repo, { project: p.area, body: p.body, decisions: p.decisions, lessons: p.lessons }, { clock }); },
-  plan(repo, p, key) {
-    const area = areaOf(p.area, 'area');
+  validate(repo, p, state) { // parse-level checks of the hippo path (the files path validates in rf.handoffNew)
+    if (state === 'files') return null;
+    return {
+      warnings: [], area: areaOf(p.area, 'area'),
+      titles: { decision: p.decisions.map((t) => childTitle(t, 'decision-file')), lesson: p.lessons.map((t) => childTitle(t, 'lesson-file')) },
+    };
+  },
+  plan(repo, p, key, v) {
+    const area = v.area;
     const steps = [{ op: 'create', ref: 'root', kind: 'handoff-note', argv: ['--title', p.title, '--area', area, '--status', 'open'], body: `${p.body}\n`, key }];
     let n = 0;
-    const child = (kind, text, flag, extra) => {
+    const child = (kind, text, title, extra) => {
       n++;
-      steps.push({ op: 'create', ref: `c${n}`, kind, argv: ['--title', childTitle(text, flag), '--area', area].concat(extra), body: `${text}\n`, key: `${key}.${n}` });
+      steps.push({ op: 'create', ref: `c${n}`, kind, argv: ['--title', title, '--area', area].concat(extra), body: `${text}\n`, key: `${key}.${n}` });
       steps.push({ op: 'link', from: `c${n}`, rel: 'relates_to', to: 'root', leak_ok: false });
     };
-    for (const t of p.decisions) child('decision', t, 'decision-file', ['--status', 'active']);
-    for (const t of p.lessons) child('lesson', t, 'lesson-file', ['--status', 'active']);
+    p.decisions.forEach((t, i) => child('decision', t, v.titles.decision[i], ['--status', 'active']));
+    p.lessons.forEach((t, i) => child('lesson', t, v.titles.lesson[i], ['--status', 'active']));
     return { key, steps };
   },
 };

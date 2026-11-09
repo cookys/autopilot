@@ -19,7 +19,7 @@ _HS_SOURCED=1
 hs_scrub_git_env() {
   local v
   for v in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX \
-           GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT; do
+           GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_TEMPLATE_DIR; do
     unset "$v"
   done
   # shellcheck disable=SC2046
@@ -79,7 +79,7 @@ hs_preflight() {
 
 hs_mkrepo() {
   local name="$1" store="${2:-}" repo="$HS_ROOT/$1"
-  git init -q "$repo" || fail "hs_mkrepo: git init $name"
+  git init -q --template= "$repo" || fail "hs_mkrepo: git init $name"
   git -C "$repo" commit -q --allow-empty -m init || fail "hs_mkrepo: commit $name"
   hs_preflight "$repo" || fail "hs_mkrepo: pre-flight failed for $name"
   if [ "$store" = store ]; then

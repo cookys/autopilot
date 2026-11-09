@@ -273,6 +273,18 @@ pr --target "$R_VF" backlog reply 01ARZ3NDEKTSV4RRFFQ69G5FAV --reply garbage; eq
 eq 1 "$(spool_count "$R_VF")" "validate-before-flush: a malformed reply does not flush either"
 pr --target "$R_VF" backlog close 01ARZ3NDEKTSV4RRFFQ69G5FAV superseded; eq 1 "$RC" "validate-before-flush: close superseded without --by -> exit 1"
 eq 1 "$(spool_count "$R_VF")" "validate-before-flush: a bad close does not flush either"
+printf '# \n' > "$TEST_TMP/notitle.md"
+vf_refused() { # vf_refused <label> <expected exit> <args...>: a refused write keeps the spool entry and creates nothing
+  local label="$1" want="$2"; shift 2
+  pr --target "$R_VF" "$@"; eq "$want" "$RC" "validate-before-flush: $label -> exit $want"
+  eq 1 "$(spool_count "$R_VF")" "validate-before-flush: $label does not flush either"
+  eq "$VF_N" "$(all_count "$R_VF")" "validate-before-flush: $label creates no record"
+}
+vf_refused "decision supersede with a non-ULID" 2 decision supersede not-a-ulid --title "Sup" --rationale-file "$TEST_TMP/why.md"
+vf_refused "adr supersede with a non-ULID" 2 adr supersede not-a-ulid --title "Sup" --body-file "$TEST_TMP/why.md"
+vf_refused "handoff new with a bad area" 3 handoff new --title H --area "Bad Area" --body-file "$TEST_TMP/handoff.md"
+vf_refused "handoff new with an untitled child file" 3 handoff new --title H --area proj --body-file "$TEST_TMP/handoff.md" --lesson-file "$TEST_TMP/notitle.md"
+vf_refused "backlog close with a commit that does not exist" 3 backlog close 01ARZ3NDEKTSV4RRFFQ69G5FAV done --commit 0000000000000000000000000000000000000001
 
 pr --target "$R_SP" flush; eq 0 "$RC" "flush replays the spool"
 eq 0 "$(spool_count "$R_SP")" "flush empties the spool"
@@ -341,14 +353,15 @@ parity_dump() { # <repo>: per-title normalised show --json
     const lines=require("fs").readFileSync(0,"utf8").trim().split("\n").map(l=>JSON.parse(l).data.record);
     const out={};
     for (const r of lines) {
-      for (const k of ["id","short","created","updated","closed","provenance","history","relations","blocked_by"]) delete r[k];
+      r.closed=r.closed!==null;
+      for (const k of ["id","short","created","updated","provenance","history","relations","blocked_by"]) delete r[k];
       r.tags=r.tags.filter(t=>!t.startsWith("key:"));
       out[r.title]=r;
     }
     console.log(JSON.stringify(Object.fromEntries(Object.keys(out).sort().map(k=>[k,out[k]])),null,1));'
 }
 PX="$(parity_dump "$R_PX")"; PY="$(parity_dump "$R_PY")"
-eq "$PX" "$PY" "parity: show --json equal except id/created/updated/closed/provenance/key tag"
+eq "$PX" "$PY" "parity: show --json equal except id/created/updated/provenance/key tag (closed kept as a set/unset flag)"
 [ "$PX" = "$PY" ] || diff <(printf '%s\n' "$PX") <(printf '%s\n' "$PY") >&2
 
 # --- fault reruns

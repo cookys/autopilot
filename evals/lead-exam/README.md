@@ -33,6 +33,24 @@ Design and approval: the lead exam design note (PM approved 2026-11-06). Not a c
 5. The report lists, per examinee: per-item score, categories, hard fails (mechanical, judge, disagreements), pass
    flag (0 hard fails, total >= 80, every category >= 60%), red flags, and per call wall time and token counts
    (token counts are character estimates, marked as such).
+6. Dual judge: a hard fail flagged only by the judge (not by the mechanical layer) counts only when a second judge of
+   another family (`--second-judge-kind codex|agy`, `--second-judge-model`, optional `--second-judge-home`; same family
+   is refused) flags it too. One-judge-only flags are listed in `unconfirmed_judge_hard_fails: [{item, hf, flagged_by}]`
+   and do not count. Confirmation needs the same hf on the same item, both items resolved (an unresolved item, null,
+   confirms nothing). Each examinee's `hard_fails.judge_pairs: [{item, hf}]` records that judge's standing judge-only
+   hard fails, which is what a later grade reads when this report is the second judge. With no second judge, or a void one, the pass is `pass_provisional: true` with the reason.
+   Scores and categories stay the first judge's (`scores_from: "first_judge"`); the second judge's sit beside them.
+7. Review aids: the report keeps each judge's own per-criterion `hit` and verbatim `quote` (its stated reason) and
+   its hard fails with quotes, first and second judge, under each examinee's `judge_detail`. `--void-item <id>`
+   (repeatable) drops an item whose own flaw is not the examinee's: it scores nothing, its hard fails do not count, and
+   the total and the item's category are scaled back to full marks (`score * max / (max - voided points)`); thresholds
+   are unchanged. The report lists `voided_items: [{id, reason_flag}]` and `score_before_rescale`.
+8. The second judge can also be a report another grade.js wrote on another account: `--second-judge-report <path>`
+   (excludes `--second-judge-kind`). Refused (exit 2) unless the seed is the same, every run here has its examinee in
+   the report (`run_sha256` when the report has one, else name + model + `run_wall_ms`, because older reports keep no
+   outputs hash) and the judge family differs. A `judge_void` report counts as a void second judge; a report without
+   `judge_detail` is read without it, and one without `hard_fails.judge_pairs` (older grade.js) has no item data, so
+   nothing it flags confirms and the grade is provisional. The report's scores are taken as written (no `--void-item` rescale of them).
 
 Known limit: the examinee has no tools, so the exam under-measures real verification ability; it measures
 whether the stated evidence and rules are used correctly.

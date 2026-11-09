@@ -31,7 +31,7 @@ unset AUTOPILOT_ENDPOINT_GLM_URL AUTOPILOT_ENDPOINT_GLM_TOKEN ANTHROPIC_COMPATIB
 SEATS="m1/low@codex,m2/low@codex,m3/low@codex,glm-x/high@anthropic-compatible:glm"
 
 collect() { # phase
-  node "$SCRIPT" collect --repo-root "$R" --ledger "$TEST_TMP/ledger" --phase "$1" --generation 1 --branch work --phase-base "$BASE" --seats "$SEATS" 2>&1
+  node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$R" --ledger "$TEST_TMP/ledger" --phase "$1" --generation 1 --branch work --phase-base "$BASE" --seats "$SEATS" 2>&1
 }
 
 # 1. unconfigured glm endpoint: skipped, no gap, the other 3 count

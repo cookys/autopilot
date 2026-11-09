@@ -91,6 +91,15 @@
       "maxItems": 4,
       "items": { "type": "object" }
     },
+    "same_family_exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "reason"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
     "findings": { "type": "array", "items": { "type": "object" } },
     "backlog_candidates": { "type": "array", "items": { "type": "object" } },
     "accepted_blocker_count": { "type": "integer", "minimum": 0 },

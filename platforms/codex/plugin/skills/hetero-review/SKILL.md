@@ -37,7 +37,7 @@ Prose execution sequence for plan files (see [`references/plan-loop.md`](referen
 
 1. Scaffold the rubric: run `node scripts/plan-rubric-scaffold.js --plan <file>` unless a rubric already exists.
 2. Build the reviewer manifest by reading `bash scripts/resolve-review-loop.sh --field plan_reviewer_engine` and the matching `plan_reviewer_runner` / `plan_reviewer_effort` fields for the chair seat, and the `plan_deep_reviewer_*` fields for the deep seat, adding a third seat only when `bash scripts/resolve-review-loop.sh --field plan_review_resolved_from` prints topology and the topology's plan review panel has three seats.
-3. Run `node scripts/dispatch-plan-review.js` with a 20 minute timeout, generation 1 then at most one more generation.
+3. Run `node scripts/dispatch-plan-review.js` with a 20 minute timeout, generation 1 then at most one more generation. Same cross-family rule as the code loop: with no reviewed seat outside Claude's family (a chair that fell back to opus@claude-native, `same_family_as_depth0`) the verdict is CONDITIONAL (`no_cross_family_seat`), never READY, and step 5's receipt check fails; only `--same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>"` lifts it. A consult answer from a Claude-family seat is labelled `same_family_opinion` and is never a review seat.
 4. Depth-0 (the calling session, not this skill) writes a disposition per finding, either accept-and-fold or refute-with-rationale, and never defers a blocker.
 5. The loop freezes once `node scripts/check-phase-review-receipt.js --plan-artifact <file> --dispositions <file>` exits 0.
 6. Record the artifact paths in the project ledger.

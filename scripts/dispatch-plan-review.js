@@ -68,6 +68,7 @@ const {
 const { effortSeatTimeoutSeconds } = require('./lib/plan-review-timeout');
 const { createPanelManifest } = require('./lib/plan-review-panel');
 const { stageWrite } = require('./lib/stage-write');
+const familyGate = require('./lib/review-family-gate');
 const { loadContextFiles, renderContextBlock } = require('./lib/plan-review-context');
 const LAYOUT = require('./lib/repo-layout.js'); // work-record locations (plans dir, projects index) come from the registry
 
@@ -111,7 +112,8 @@ function usage() {
     --ticket <id> --session-id <id> --generation <1|2> \\
     --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
     [--context-file <repo-source-file>]... [--state-dir <dir>] [--now <ISO-8601>] \\
-    [--allow-unregistered] [--no-topology-fallbacks] [--expect-revision <git-rev>]
+    [--allow-unregistered] [--no-topology-fallbacks] [--expect-revision <git-rev>] \\
+    [--same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>"]
 
 --plan-file: a relative path resolves against --repo-root (never the cwd) and must stay inside
   it (an absolute path may point elsewhere but then carries no git provenance); a warning is printed if the cwd has a same-named file with different content. Artifacts
@@ -119,6 +121,12 @@ function usage() {
 
 --expect-revision: refuse to start (exit 2, 0 seats dispatched) unless the plan file's git blob
   sha equals that of <git-rev>:<plan path>; the message names both shas.
+
+Cross-family rule: READY needs at least one reviewed seat whose model family is not Claude's (the depth-0
+  family). Claude-only reviewed seats downgrade the verdict to CONDITIONAL (policy_reason
+  no_cross_family_seat, terminal) and check-phase-review-receipt.js Mode B fails. --same-family-exception
+  "<source>: <reason>" (source = decision card id or fleet message id; no source is refused) lifts it and is
+  recorded in the artifact. No environment variable lifts it.
 
 --allow-unregistered: skip the plan_unregistered refusal (the plan must have a
   docs/projects/INDEX.md row with Version "active") — for a scratch/consumer repo. Auto-
@@ -181,6 +189,7 @@ function parseArgs(argv) {
     ['--growth-warn-ratio', 'growthWarnRatio'],
     ['--growth-stop-ratio', 'growthStopRatio'],
     ['--now', 'now'],
+    ['--same-family-exception', 'sameFamilyExceptionRaw'],
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -225,6 +234,11 @@ function parseArgs(argv) {
   if (opts.growthWarnRatio > 1.25 || opts.growthStopRatio > 1.5
       || opts.growthWarnRatio >= opts.growthStopRatio) {
     throw new CliError('plan growth ratios exceed or contradict hard ceilings');
+  }
+  if (opts.sameFamilyExceptionRaw !== undefined) {
+    const parsed = familyGate.parseException(opts.sameFamilyExceptionRaw);
+    if (parsed.error) throw new CliError(`--same-family-exception ${parsed.error}`);
+    opts.sameFamilyException = { source: parsed.source, reason: parsed.reason };
   }
   opts.timeoutSeconds = parseTimeoutSeconds(opts.timeout);
   if (opts.timeoutSeconds > opts.maxWallSeconds) {
@@ -2384,6 +2398,22 @@ function main() {
         terminal = true;
         reason = 'nonblocking_conditional';
       }
+      // Cross-family rule (see lib/review-family-gate.js): a passing READY needs a reviewed seat outside
+      // Claude's family. Claude-only panels downgrade to the non-passing CONDITIONAL; only a sourced
+      // --same-family-exception keeps READY, and it is recorded in the artifact.
+      const famEval = familyGate.evaluatePlan(completedReviews);
+      let recordedException = null;
+      if (!famEval.cross_family) {
+        if (opts.sameFamilyException) {
+          recordedException = opts.sameFamilyException;
+        } else if (verdict === 'READY') {
+          verdict = 'CONDITIONAL';
+          terminal = true;
+          reason = 'no_cross_family_seat';
+          repairAuthorized = false;
+          process.stderr.write(`dispatch-plan-review: no_cross_family_seat: reviewed seat families [${famEval.seat_families.join(', ')}] include none other than ${famEval.depth0_family}; verdict is CONDITIONAL, not READY. Review with a seat of another family, or pass --same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>".\n`);
+        }
+      }
       artifact = {
         schema_version: 1,
         artifact_type: 'plan_review_artifact',
@@ -2409,8 +2439,11 @@ function main() {
           seat_id: seat.seat_id,
           target_id: seat.target_id,
           family: seat.family,
+          runner: seat.runner,
+          model: seat.model,
           verdict: seat.verdict,
         })),
+        ...(recordedException ? { same_family_exception: recordedException } : {}),
         findings,
         backlog_candidates: backlogCandidates(findings),
         accepted_blocker_count: accepted.length,

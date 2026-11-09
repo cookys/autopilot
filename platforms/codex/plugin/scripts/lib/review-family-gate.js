@@ -62,9 +62,8 @@ function recordedImplementerEngines(chain) {
 
 function seatFamily(seat) {
   if (!seat || typeof seat !== 'object') return 'unknown';
-  const derived = familyOfEngine(seat.engine);
-  if (derived !== 'unknown') return derived;
-  return typeof seat.family === 'string' && seat.family ? seat.family : 'unknown';
+  // Derived from the engine only: a stored `family` label is self-declared and never counts.
+  return familyOfEngine(seat.engine);
 }
 
 /**
@@ -86,11 +85,48 @@ function evaluate(chain, entry, reviewedIds) {
   const implFamilies = [...new Set(impl.families)].sort();
   const seats = Array.isArray(entry && entry.seats) ? entry.seats : [];
   const reviewedFamilies = seats
-    .filter((s) => s && typeof s === 'object' && reviewedIds.has(s.id))
+    .filter((s) => s && typeof s === 'object' && reviewedIds.has(s.id) && !isConsultResult(s))
     .map(seatFamily);
   const seatFamilies = [...new Set(reviewedFamilies)].sort();
   const cross = reviewedFamilies.some((f) => f !== 'unknown' && !implFamilies.includes(f));
   return { ok: true, cross_family: cross, seat_families: seatFamilies, implementer_families: implFamilies, implementer_engines: engines };
+}
+
+// ---- plan review (same rule, different ledger) ------------------------------------------------------------
+// The plan-review verdict READY (and the plan-mode receipt check) needs at least one REVIEWED seat whose model
+// family is not the depth-0 / author family. Depth-0 here is Claude (anthropic); an unknown family never counts
+// as "other". Family is derived from the seat's model/runner (a declared manifest family never counts),
+// never stored: dispatch-plan-review.js writes runner+model on each reviewer_verdicts entry and
+// check-phase-review-receipt.js Mode B re-derives from those same bytes.
+const DEPTH0_FAMILY = 'anthropic';
+
+function planSeatFamily(seat) {
+  if (!seat || typeof seat !== 'object') return 'unknown';
+  for (const field of [seat.model, seat.runner]) {
+    const derived = familyOfEngine(field);
+    if (derived !== 'unknown') return derived;
+  }
+  // A stored/declared `family` label is self-declared and never counts: unresolved runner/model -> unknown.
+  return 'unknown';
+}
+
+/** @param reviewedSeats seats that really reviewed ({runner, model, family}) */
+function evaluatePlan(reviewedSeats) {
+  // A consult result is advice, never a review seat, whichever caller hands it in.
+  const fams = (reviewedSeats || []).filter((s) => !isConsultResult(s)).map(planSeatFamily);
+  return {
+    cross_family: fams.some((f) => f !== 'unknown' && f !== DEPTH0_FAMILY),
+    seat_families: [...new Set(fams)].sort(),
+    depth0_family: DEPTH0_FAMILY,
+  };
+}
+
+// A consult result (scripts/dispatch-consult.sh: role "consult", same_family_opinion true when the consult seat is
+// Claude-family, incl. the claude-native fallback) is advice, never a review seat. check-phase-review-receipt.js Mode A
+// refuses a seat artifact that is one; a review seat artifact is `status: "reviewed"` from dispatch-review.sh, which a
+// consult result (status "advised") can never be.
+function isConsultResult(seat) {
+  return !!seat && typeof seat === 'object' && (seat.role === 'consult' || seat.same_family_opinion === true);
 }
 
 function warningFor(res) {
@@ -101,4 +137,4 @@ function warningFor(res) {
   };
 }
 
-module.exports = { parseException, validRecordedException, familiesOfImplementer, recordedImplementerEngines, seatFamily, evaluate, warningFor };
+module.exports = { isConsultResult, DEPTH0_FAMILY, planSeatFamily, evaluatePlan, parseException, validRecordedException, familiesOfImplementer, recordedImplementerEngines, seatFamily, evaluate, warningFor };

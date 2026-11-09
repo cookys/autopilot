@@ -95,6 +95,11 @@ if [ -n "${STUB_TRANSCRIPT_EROFS:-}" ]; then
   printf '%s\n' "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"is_error\":true,\"content\":\"EROFS: read-only file system, open '$STUB_TRANSCRIPT_EROFS'\"}]}}" \
     "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t2\",\"content\":\"fine\"}]}}" > "$CLAUDE_CONFIG_DIR/projects/p/s.jsonl"
 fi
+if [ -n "${STUB_TRANSCRIPT_SYMLINK:-}" ]; then
+  # a worker-planted symlink named like a transcript, pointing at a file outside the projects dir (another run's transcript)
+  mkdir -p "$CLAUDE_CONFIG_DIR/projects/p"
+  ln -s "$STUB_TRANSCRIPT_SYMLINK" "$CLAUDE_CONFIG_DIR/projects/p/evil.jsonl"
+fi
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOS
 chmod +x "$BINDIR/claude"
@@ -193,6 +198,15 @@ eq '1' "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_writes)" "tr
 eq '["/srv/never-writable/x.txt"]' "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_samples)" "transcript: the sample is the path, nothing else"
 eq '"committed"' "$(status_of)" "transcript: the count does not change the status"
 unset STUB_TRANSCRIPT_EROFS
+
+# ---- transcript symlink: a planted evil.jsonl symlink to another run's transcript is neither counted nor sampled
+OTHER_RUN="$TEST_TMP/other-run-transcript.jsonl"
+printf '%s\n' "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t9\",\"is_error\":true,\"content\":\"EROFS: read-only file system, open '/srv/other-run/secret.txt'\"}]}}" > "$OTHER_RUN"
+export STUB_TRANSCRIPT_SYMLINK="$OTHER_RUN"
+run_case bwrap 0 --worktree-parent "$WTPARENT"
+eq '0' "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_writes)" "transcript-symlink: a symlinked transcript is not counted (rc=$RC)"
+eq '[]' "$(printf '%s' "$OUT" | result_json | jfield sandbox_blocked_samples)" "transcript-symlink: its path is not sampled"
+unset STUB_TRANSCRIPT_SYMLINK
 
 # ---- nested worktree + sandbox -> refused (the default placement is <repo>/.claude/worktrees)
 run_case bwrap 0

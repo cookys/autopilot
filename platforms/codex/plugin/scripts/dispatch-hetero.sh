@@ -1869,13 +1869,15 @@ function texts(c) {
   if (Array.isArray(c)) return c.flatMap((x) => (typeof x === 'string' ? [x] : (x && typeof x.text === 'string' ? [x.text] : [])));
   return [];
 }
+let rootReal = null; try { rootReal = fs.realpathSync(process.argv[3]); } catch {}
 function walk(dir) {
   let ents; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
   for (const e of ents) {
     const f = path.join(dir, e.name);
     if (e.isDirectory()) walk(f);
-    else if (e.name.endsWith('.jsonl')) {
-      let raw; try { raw = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    else if (e.isFile() && e.name.endsWith('.jsonl')) {
+      // regular files only (a worker-planted symlink must not pull in another run's transcript), and the real path must stay under the projects dir
+      let raw; try { const rp = fs.realpathSync(f); if (!rootReal || !rp.startsWith(rootReal + path.sep)) continue; raw = fs.readFileSync(f, 'utf8'); } catch { continue; }
       for (const line of raw.split('\n')) {
         if (!line.includes('tool_result')) continue;
         let o; try { o = JSON.parse(line); } catch { continue; }

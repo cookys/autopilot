@@ -1,0 +1,20 @@
+# red-check key-lookup: mutate scripts/lib/hippo.js: '      if (recs.length) {' -> '      if (false) {'
+# exit 1
+FAIL [hippo-lib] runner: full rerun creates nothing: expected '1', got '2'
+FAIL [hippo-lib] runner: full rerun skips all 4 steps: expected '4', got '0'
+FAIL [hippo-lib] fault after-create: exactly one root after the rerun: expected '1', got '2'
+FAIL [hippo-lib] fault after-first-link: exactly one root after the rerun: expected '1', got '2'
+FAIL [hippo-lib] fault after-first-child: exactly one root after the rerun: expected '1', got '2'
+FAIL [hippo-lib] fault after-first-child: exactly one child after the rerun: expected '1', got '2'
+FAIL [hippo-lib] fault before-spool-remove: exactly one record: expected '1', got '2'
+FAIL [hippo-lib] 88 passed, 7 failed
+      - runner: full rerun creates nothing: expected '1', got '2'
+      - runner: full rerun skips all 4 steps: expected '4', got '0'
+      - fault after-create: exactly one root after the rerun: expected '1', got '2'
+      - fault after-first-link: exactly one root after the rerun: expected '1', got '2'
+      - fault after-first-child: exactly one root after the rerun: expected '1', got '2'
+      - fault after-first-child: exactly one child after the rerun: expected '1', got '2'
+      - fault before-spool-remove: exactly one record: expected '1', got '2'
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

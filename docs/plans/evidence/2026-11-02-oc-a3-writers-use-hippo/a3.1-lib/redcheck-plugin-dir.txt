@@ -1,0 +1,10 @@
+# red-check plugin-dir: mutate scripts/lib/hippo.js: '  if (root === fs.realpathSync(PLUGIN_ROOT)) throw' -> '  if (false) throw'
+# exit 1
+FAIL [hippo-lib] detect: plugin install directory -> exit 2: expected '2', got '0'
+FAIL [hippo-lib] detect: plugin-dir refusal names the reason: 'plugin's own install directory' not found in output
+FAIL [hippo-lib] 93 passed, 2 failed
+      - detect: plugin install directory -> exit 2: expected '2', got '0'
+      - detect: plugin-dir refusal names the reason: 'plugin's own install directory' not found in output
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

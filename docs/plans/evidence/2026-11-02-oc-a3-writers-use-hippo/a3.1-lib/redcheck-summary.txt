@@ -1,0 +1,66 @@
+state-files mutated exit=1 restored exit=0
+   FAIL [hippo-lib] detect: no .hippo/repo.toml -> files: expected 'files', got ''
+   FAIL [hippo-lib] detect: repo_root is the git toplevel: expected '<tmp>/hs/files', got ''
+   FAIL [hippo-lib] flush in files state with a spool -> exit 2: expected '2', got '1'
+   FAIL [hippo-lib] files-state flush names the count: '1 spooled write(s) target a hippo store that no longer exists; see the rollback note' not found in output
+   FAIL [hippo-lib] flush in files state with an empty spool -> exit 0: expected '0', got '1'
+   FAIL [hippo-lib] 90 passed, 5 failed
+state-hippo mutated exit=1 restored exit=0
+   FAIL [hippo-lib] detect: store + check exit 0 -> hippo: expected 'hippo', got 'spool'
+   FAIL [hippo-lib] detect: a subdirectory target resolves to the toplevel: expected 'hippo', got 'spool'
+   FAIL [hippo-lib] flush: with hippo -> exit 0: expected '0', got '5'
+   FAIL [hippo-lib] flush: first entry became a record: expected '1', got '0'
+   FAIL [hippo-lib] flush: second entry became a record: expected '1', got '0'
+   FAIL [hippo-lib] flush: 0 spool files after the replay: expected '0', got '2'
+state-hippo-problems mutated exit=1 restored exit=0
+   FAIL [hippo-lib] detect: store + check exit 3 -> hippo-problems: expected 'hippo-problems', got 'spool'
+   FAIL [hippo-lib] detect: problems carry check's offending-file line: 'problem: record-drift .hippo/records/01M702A5C10D97631V97NW8WR9.md' not found in output
+   FAIL [hippo-lib] 93 passed, 2 failed
+state-spool mutated exit=1 restored exit=0
+   FAIL [hippo-lib] detect: store + hippo exit 5 -> spool: expected 'spool', got 'hippo'
+   FAIL [hippo-lib] 94 passed, 1 failed
+plugin-dir mutated exit=1 restored exit=0
+   FAIL [hippo-lib] detect: plugin install directory -> exit 2: expected '2', got '0'
+   FAIL [hippo-lib] detect: plugin-dir refusal names the reason: 'plugin's own install directory' not found in output
+   FAIL [hippo-lib] 93 passed, 2 failed
+lock mutated exit=1 restored exit=0
+   FAIL [hippo-lib] concurrent flush: both exit 0: expected '0 0', got '1 0'
+   FAIL [hippo-lib] concurrent flush: exactly one record for entry 1: expected '1', got '2'
+   FAIL [hippo-lib] 93 passed, 2 failed
+worktree-branch-filter mutated exit=1 restored exit=0
+   FAIL [hippo-lib] worktree: A's entry still spooled after B's flush: expected '1', got '0'
+   FAIL [hippo-lib] worktree: B lists the foreign entry: 'another worktree or branch' not found in output
+   FAIL [hippo-lib] branch: same worktree, other branch -> not replayed: expected '0', got '1'
+   FAIL [hippo-lib] branch: entry still spooled: expected '1', got '0'
+   FAIL [hippo-lib] 91 passed, 4 failed
+key-lookup mutated exit=1 restored exit=0
+   FAIL [hippo-lib] runner: full rerun creates nothing: expected '1', got '2'
+   FAIL [hippo-lib] runner: full rerun skips all 4 steps: expected '4', got '0'
+   FAIL [hippo-lib] fault after-create: exactly one root after the rerun: expected '1', got '2'
+   FAIL [hippo-lib] fault after-first-link: exactly one root after the rerun: expected '1', got '2'
+   FAIL [hippo-lib] fault after-first-child: exactly one root after the rerun: expected '1', got '2'
+   FAIL [hippo-lib] fault after-first-child: exactly one child after the rerun: expected '1', got '2'
+edge-lookup mutated exit=1 restored exit=0
+   FAIL [hippo-lib] runner: full rerun skips all 4 steps: expected '4', got '2'
+   FAIL [hippo-lib] runner: full rerun adds no op: expected '1,1', got '2,2'
+   FAIL [hippo-lib] fault after-first-link: exactly the two edges, no duplicate op: expected '1,1', got '2,1'
+   FAIL [hippo-lib] 92 passed, 3 failed
+leak-ok mutated exit=1 restored exit=0
+   FAIL [hippo-lib] leak_ok: leak refusal does not stop the run: expected '0', got '3'
+   FAIL [hippo-lib] leak_ok: one warning recorded: expected '1', got '0'
+   FAIL [hippo-lib] leak_ok: warning printed: 'WARNING' not found in output
+   FAIL [hippo-lib] leak_ok: later close step still ran: expected 'done', got 'open'
+   FAIL [hippo-lib] 91 passed, 4 failed
+files-flush-exit2 mutated exit=1 restored exit=0
+   FAIL [hippo-lib] flush in files state with a spool -> exit 2: expected '2', got '0'
+   FAIL [hippo-lib] 94 passed, 1 failed
+preflight-accepts-all mutated exit=1 restored exit=0
+   FAIL [hippo-lib] pre-flight accepted a core.hooksPath outside the temp tree
+   FAIL [hippo-lib] 94 passed, 1 failed
+stale-lock mutated exit=1 restored exit=0
+   FAIL [hippo-lib] flush: stale-pid lock recovered: expected '0', got '5'
+   FAIL [hippo-lib] flush: stale-lock run replayed the entry: expected '1', got '0'
+   FAIL [hippo-lib] flush --drop: exit 0: expected '0', got '5'
+   FAIL [hippo-lib] flush --drop: entry removed: expected '0', got '2'
+   FAIL [hippo-lib] fault before-spool-remove: rerun flush exits 0: expected '0', got '5'
+   FAIL [hippo-lib] fault before-spool-remove: entry removed by the rerun: expected '0', got '1'

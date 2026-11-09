@@ -1,0 +1,8 @@
+# red-check files-flush-exit2: mutate scripts/lib/hippo.js: 'res.exit = 2; log(' -> 'res.exit = 0; log('
+# exit 1
+FAIL [hippo-lib] flush in files state with a spool -> exit 2: expected '2', got '0'
+FAIL [hippo-lib] 94 passed, 1 failed
+      - flush in files state with a spool -> exit 2: expected '2', got '0'
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

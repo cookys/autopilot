@@ -1,0 +1,14 @@
+# red-check worktree-branch-filter: mutate scripts/lib/hippo.js: 'if (e.worktree !== root || e.branch !== branch) {' -> 'if (false) {'
+# exit 1
+FAIL [hippo-lib] worktree: A's entry still spooled after B's flush: expected '1', got '0'
+FAIL [hippo-lib] worktree: B lists the foreign entry: 'another worktree or branch' not found in output
+FAIL [hippo-lib] branch: same worktree, other branch -> not replayed: expected '0', got '1'
+FAIL [hippo-lib] branch: entry still spooled: expected '1', got '0'
+FAIL [hippo-lib] 91 passed, 4 failed
+      - worktree: A's entry still spooled after B's flush: expected '1', got '0'
+      - worktree: B lists the foreign entry: 'another worktree or branch' not found in output
+      - branch: same worktree, other branch -> not replayed: expected '0', got '1'
+      - branch: entry still spooled: expected '1', got '0'
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

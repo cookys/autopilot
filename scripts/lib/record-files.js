@@ -496,4 +496,6 @@ module.exports = {
   lessonNew,
   handoffNew, handoffClose,
   CATEGORIES,
+  // shared with scripts/project-record.js so hippo mode validates exactly what files mode would write
+  gateConfig, parseHandoffBody, HANDOFF_SECTIONS,
 };

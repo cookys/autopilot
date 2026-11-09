@@ -79,6 +79,26 @@ run; CHECK="$(node "$PH" check < /dev/null 2>&1)$(node "$PH" check --json < /dev
 assert_not_contains "$OUT$ERR$CHECK$(cat "$ST")$(cat "$STUB/fleet.log")" "$SENT" "email sentinel never appears in stdout, stderr, state or fleet text"
 assert_not_contains "$OUT$CHECK$(cat "$ST")$(cat "$STUB/fleet.log")" "o-1" "orgId never appears"
 assert_eq "$(stat -c %a "$ST")" "600" "state file mode 0600"
+# ---- 9. directories with unsupported names are listed, never run, notified once each ----
+reset; prof home 30; prof a 30; prof b 30
+mkdir -p "$HOME/.claude-profiles/home" "$HOME/.claude-profiles/my profile" "$HOME/.claude-profiles/_x"
+CHK="$(node "$PH" check < /dev/null)"; CJ="$(node "$PH" check --json < /dev/null)"
+assert_eq "$(echo "$CHK" | grep -c 'unsupported_name')" 3 "unsupported names: three rows say unsupported_name in check"
+assert_contains "$CJ" '"name": "my profile"' "unsupported names: json lists my profile"
+assert_contains "$CJ" '"status": "unsupported_name"' "unsupported names: json status"
+assert_eq "$(grep -c -E '"key":"(my profile|_x)"' "$STUB/claude.log")" 0 "unsupported names: claude never ran for my profile or _x"
+assert_eq "$(grep -c '"key":"home"' "$STUB/claude.log")" 2 "unsupported names: claude ran only for the real home profile (two checks)"
+run; assert_eq "$(sends)" 3 "unsupported names: one send each"
+assert_contains "$(cat "$STUB/fleet.log")" 'my profile' "unsupported names: message carries the dir name"
+assert_contains "$(cat "$STUB/fleet.log")" '_x' "unsupported names: message carries _x"
+assert_not_contains "$(last)" "claude auth login" "unsupported names: no login command"
+run; assert_eq "$(sends)" 3 "unsupported names: second run sends none"
+rm -rf "$HOME/.claude-profiles/home" "$HOME/.claude-profiles/my profile" "$HOME/.claude-profiles/_x"
+# ---- 10. expired sentence counts whole overdue days ----
+reset; prof home 30; prof a 30; prof b 30
+expat() { printf '{"loggedIn":true,"loginExpiresAt":"%s"}' "$(node -e 'process.stdout.write(new Date(Date.parse(process.env.AUTOPILOT_NOW)-3600000*process.argv[1]).toISOString())' "$2")" > "$STUB/claude-$1.json"; }
+expat a 1; run; assert_contains "$(last)" "已過 0 天" "1h overdue: says 已過 0 天"
+reset; prof home 30; prof b 30; expat a 25; run; assert_contains "$(last)" "已過 1 天" "25h overdue: says 已過 1 天"
 # ---- negative controls ----
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT"
 mut() { sed_mutant "$PH" "$MUT/profile-health.js" "$1" || return 1; }

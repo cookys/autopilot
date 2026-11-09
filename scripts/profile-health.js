@@ -9,7 +9,7 @@
  * Profiles on this host: `home` (the default ~/.claude, no CLAUDE_CONFIG_DIR) plus each directory under ~/.claude-profiles/.
  * Per profile it runs `claude auth status --json` (CLAUDE_CONFIG_DIR set for non-home) and reads ONLY loggedIn, loginExpiresAt and
  * configDirectory; email, orgId, orgName and every other field are never printed, stored or sent.
- * status: ok (more than 10 days left) | expiring (10 days or less) | expired | logged_out | unknown (claude gave no readable answer; never notified).
+ * status: ok (more than 10 days left) | expiring (10 days or less) | expired | logged_out | unsupported_name (dir name fails letters/digits/._- or is `home`; claude is not run, notify asks for a rename) | unknown (claude gave no readable answer; never notified).
  * days_left = floor((loginExpiresAt - now) / 1 day), UTC.
  *
  * notify sends one `fleet send` per expiring / expired / logged_out profile, first line `[操作員決定]`: machine, OS account, profile,
@@ -38,11 +38,12 @@ function listProfiles() {
   const out = [{ name: 'home', dir: null, label: path.join(home, '.claude') }];
   let names = [];
   try { names = fs.readdirSync(path.join(home, '.claude-profiles'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort(); } catch (_e) { /* no profiles dir */ }
-  for (const n of names) if (NAME.test(n) && n !== 'home') out.push({ name: n, dir: path.join(home, '.claude-profiles', n), label: path.join(home, '.claude-profiles', n) });
+  for (const n of names) out.push({ name: n, dir: path.join(home, '.claude-profiles', n), label: path.join(home, '.claude-profiles', n), unsupported: !NAME.test(n) || n === 'home' });
   return out;
 }
 
 function readProfile(p, now) {
+  if (p.unsupported) return { name: p.name, config_dir: p.label, loggedIn: null, loginExpiresAt: null, days_left: null, status: 'unsupported_name' };
   const env = { ...process.env };
   for (const k of DROP_ENV) delete env[k];
   delete env.CLAUDE_CONFIG_DIR;
@@ -67,11 +68,18 @@ const check = () => { const now = nowMs(); return listProfiles().map((p) => read
 function taipei(iso) { return `${new Date(Date.parse(iso) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ')} +08`; }
 
 function message(row) {
+  if (row.status === 'unsupported_name') {
+    return [
+      '[操作員決定]',
+      `Claude profile 目錄名稱不受支援：機器 ${os.hostname()}，OS 帳號 ${os.userInfo().username}，目錄名 ${JSON.stringify(row.name)}。`,
+      '名稱只能用英文字母、數字、. _ -（開頭須為字母或數字，且不可叫 home）；請改名後才能檢查登入到期。',
+    ].join('\n');
+  }
   const prefix = row.name === 'home' ? '' : `CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/${row.name}" `;
   const when = row.status === 'logged_out'
     ? '狀態：已登出（沒有有效登入）'
     : row.status === 'expired'
-      ? `登入已於 ${taipei(row.loginExpiresAt)} 到期（已過 ${-row.days_left} 天）`
+      ? `登入已於 ${taipei(row.loginExpiresAt)} 到期（已過 ${Math.floor((nowMs() - Date.parse(row.loginExpiresAt)) / DAY)} 天）`
       : `登入到期時間：${taipei(row.loginExpiresAt)}（剩 ${row.days_left} 天）`;
   return [
     '[操作員決定]',
@@ -105,7 +113,7 @@ function notify(to) {
   const state = loadState(f);
   let failed = 0;
   for (const row of check()) {
-    if (!['expiring', 'expired', 'logged_out'].includes(row.status)) continue;
+    if (!['expiring', 'expired', 'logged_out', 'unsupported_name'].includes(row.status)) continue;
     const key = `${row.status}|${row.loginExpiresAt || 'none'}`;
     if (state.sent[row.name] === key) { console.log(`${row.name}: ${row.status}, already notified`); continue; }
     const env = { ...process.env }; delete env.FLEET_FYI;

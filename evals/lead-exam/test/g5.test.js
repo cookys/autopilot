@@ -112,8 +112,9 @@ test('mechanical wins on HF1 and HF7 too (judge-only in the round that holds D2 
   }
 });
 
-test('a hard fail the mechanical layer cannot decide keeps today\'s rule: HF7 on the round-6 summary still stands', async () => {
-  const rep = await grade(forcingJudge('HF7', 6));
+test('a hard fail the mechanical layer cannot decide stands when both judges flag it (HF7 on the round-6 summary)', async () => {
+  const rep = await gradeExam({ items, seed: SEED, runs: [gold()], judge: forcingJudge('HF7', 6), secondJudge: forcingJudge('HF7', 6),
+    judgeKind: 'codex', secondJudgeKind: 'agy', rand: () => 0.5 });
   const e = rep.examinees[0];
   assert.deepStrictEqual(e.hard_fails.all, ['HF7']);
   assert.strictEqual(e.pass, false);

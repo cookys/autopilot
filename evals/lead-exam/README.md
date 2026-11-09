@@ -33,6 +33,11 @@ Design and approval: the lead exam design note (PM approved 2026-11-06). Not a c
 5. The report lists, per examinee: per-item score, categories, hard fails (mechanical, judge, disagreements), pass
    flag (0 hard fails, total >= 80, every category >= 60%), red flags, and per call wall time and token counts
    (token counts are character estimates, marked as such).
+6. Dual judge: a hard fail flagged only by the judge (not by the mechanical layer) counts only when a second judge of
+   another family (`--second-judge-kind codex|agy`, `--second-judge-model`, optional `--second-judge-home`; same family
+   is refused) flags it too. One-judge-only flags are listed in `unconfirmed_judge_hard_fails: [{item, hf, flagged_by}]`
+   and do not count. With no second judge, or a void one, the pass is `pass_provisional: true` with the reason.
+   Scores and categories stay the first judge's (`scores_from: "first_judge"`); the second judge's sit beside them.
 
 Known limit: the examinee has no tools, so the exam under-measures real verification ability; it measures
 whether the stated evidence and rules are used correctly.

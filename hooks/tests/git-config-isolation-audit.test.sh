@@ -8,7 +8,7 @@
 #
 # Rule: every tracked test file (*.test.sh / *.test.js / *.test.mjs), every fixture-builder file (hooks/tests/lib/*, scripts/lib/*.{sh,js,mjs},
 # any *fixture* / *helper* .sh/.js/.mjs) and their platforms/codex mirror copies whose code creates a repo must, in code, source lib.sh,
-# source or require test-git-env, or set GIT_CONFIG_GLOBAL itself (an intentional own config). Comments do not count. "Creates a repo"
+# source or require test-git-env, or ASSIGN GIT_CONFIG_GLOBAL itself (an intentional own config; reading or unsetting it does not count). Comments do not count. "Creates a repo"
 # is matched against the comment-stripped WHOLE file, so every spelling counts: a bare line, a quoted shell string (execSync("git init x"),
 # sh -c "git clone ..."), and an argv split over lines (execFileSync('git', [ newline 'init' ])).
 # Out of scope by design: docs/, the frozen eval packs under evals/skill-onoff/packs/ (byte-pinned copies), and the byte-frozen
@@ -24,7 +24,10 @@ const isolated = [
   /^\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:\.|source)\s+[^#\n]*(?:\/|")lib\.sh/m,
   /^\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:\.|source)\s+[^#\n]*test-git-env\.sh/m,
   /require\([^)]*test-git-env/,
-  /GIT_CONFIG_GLOBAL/,
+  /(?<![\w$])GIT_CONFIG_GLOBAL=(?!=)/,
+  /(?<![\w${])GIT_CONFIG_GLOBAL['"]?\s*:/,
+  /\.GIT_CONFIG_GLOBAL\s*=(?!=)/,
+  /\[\s*['"]GIT_CONFIG_GLOBAL['"]\s*\]\s*=(?!=)/,
 ];
 const creates = [
   /(^|[\s;|&(`$'"])git(\s+-C\s+\S+|\s+-c\s+\S+)*\s+(init|clone)\b/,
@@ -42,6 +45,7 @@ NODE
 
 list_files() { # list_files <repo> -> tracked files in audit scope (platforms/codex mirrors match the same globs)
   git -C "$1" ls-files -- '*.test.sh' '*.test.js' '*.test.mjs' 'hooks/tests/lib/*' 'scripts/lib/*.sh' 'scripts/lib/*.js' 'scripts/lib/*.mjs' \
+    'platforms/codex/plugin/hooks/tests/lib/*' 'platforms/codex/plugin/scripts/lib/*.sh' 'platforms/codex/plugin/scripts/lib/*.js' 'platforms/codex/plugin/scripts/lib/*.mjs' \
     '*fixture*.sh' '*fixture*.js' '*fixture*.mjs' '*helper*.sh' '*helper*.js' '*helper*.mjs' \
     ':!docs' ':!evals/skill-onoff/packs' ':!hooks/tests/fixtures/backlog-gate-legacy-*.js' | sort -u
 }
@@ -52,7 +56,7 @@ OFFENDERS="$(scan "$REPO_ROOT" "${FILES[@]}")"
 assert_eq "" "$OFFENDERS" "every fixture-repo test isolates the global git config"
 
 # Negative control: unisolated copies must be flagged (one per spelling and per path); isolated and comment-only variants must not.
-FX="$TEST_TMP/fx"; mkdir -p "$FX/scripts/lib" "$FX/platforms/codex/plugin/hooks/tests" "$FX/docs"
+FX="$TEST_TMP/fx"; mkdir -p "$FX/scripts/lib" "$FX/platforms/codex/plugin/hooks/tests/lib" "$FX/platforms/codex/plugin/scripts/lib" "$FX/docs"
 git init -q "$FX" >/dev/null 2>&1
 printf '%s\n' '#!/usr/bin/env bash' 'git init -q repo' 'git -C repo commit -q --allow-empty -m x' > "$FX/bad-sh.test.sh"
 printf '%s\n' "const { execFileSync } = require('child_process');" "execFileSync('git', ['init', '-q', 'r']);" > "$FX/bad-js.test.js"
@@ -63,7 +67,11 @@ printf '%s\n' "const { execFileSync } = require('child_process');" "execFileSync
 printf '%s\n' "const { execFileSync } = require('child_process');" "execFileSync('git', [" "  '-C', 'r',"  "  'clone', 'a',"  ']);' > "$FX/bad-multiline-c.test.js"
 printf '%s\n' "execFileSync('git', ['init', 'r']);" > "$FX/scripts/lib/make-fixture.js"
 printf '%s\n' '#!/usr/bin/env bash' 'git init -q repo' > "$FX/platforms/codex/plugin/hooks/tests/bad-mirror.test.sh"
+printf '%s\n' "execFileSync('git', ['init', 'r']);" > "$FX/platforms/codex/plugin/scripts/lib/mk-repo.js"
+printf '%s\n' '#!/usr/bin/env bash' 'git init -q repo' > "$FX/platforms/codex/plugin/hooks/tests/lib/mk.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'unset GIT_CONFIG_GLOBAL' 'git init -q repo' > "$FX/bad-unset.test.sh"
 printf '%s\n' "execFileSync('git', ['init', 'r']);" > "$FX/docs/skipped.test.js"
+printf '%s\n' '#!/usr/bin/env bash' 'export GIT_CONFIG_GLOBAL=/x/cfg' 'git init -q repo' > "$FX/good-assign.test.sh"
 printf '%s\n' '#!/usr/bin/env bash' '. "$(dirname "$0")/lib.sh"' 'git init -q repo' > "$FX/good-lib.test.sh"
 printf '%s\n' "require('./lib/test-git-env');" "execFileSync('git', ['init']);" > "$FX/good-js.test.js"
 printf '%s\n' "require('./lib/test-git-env');" "execFileSync('git', [" "  'init'," ']);' > "$FX/good-multiline.test.js"
@@ -72,7 +80,7 @@ printf '%s\n' '#!/usr/bin/env bash' 'git status' > "$FX/nogit.test.sh"
 git -C "$FX" add -A >/dev/null 2>&1
 mapfile -t FXFILES < <(list_files "$FX")
 GOT="$(scan "$FX" "${FXFILES[@]}" | sort | tr '\n' ' ')"
-assert_eq "bad-comment.test.sh bad-dq.test.js bad-js.test.js bad-multiline-c.test.js bad-multiline.test.js bad-shc.test.sh bad-sh.test.sh bad-sq.test.js platforms/codex/plugin/hooks/tests/bad-mirror.test.sh scripts/lib/make-fixture.js " "$GOT" "scanner flags exactly the unisolated fixtures"
+assert_eq "bad-comment.test.sh bad-dq.test.js bad-js.test.js bad-multiline-c.test.js bad-multiline.test.js bad-shc.test.sh bad-sh.test.sh bad-sq.test.js bad-unset.test.sh platforms/codex/plugin/hooks/tests/bad-mirror.test.sh platforms/codex/plugin/hooks/tests/lib/mk.sh platforms/codex/plugin/scripts/lib/mk-repo.js scripts/lib/make-fixture.js " "$GOT" "scanner flags exactly the unisolated fixtures"
 
 # The shared mechanism itself: sourcing the shared snippet leaves fixture git blind to a hostile global config.
 HOSTILE="$TEST_TMP/hostile"; mkdir -p "$HOSTILE/hooks"

@@ -58,3 +58,14 @@ test('mechanical criteria: over-escalating the control items and mis-ordering A1
   const m4act = { ...okEx, decisions: { ...okEx.decisions, M4: { msg: 'M4', action: 'ASK' } } };
   assert.strictEqual(lib.scoreItem(a1, m4act, j).score, 8);
 });
+
+test('D1 is outside round-1 rule r2: the sender is not the restricted lane and the reference cites r2', () => {
+  const d1 = items.items.find((i) => i.id === 'D1');
+  const msg = items.rounds[1].messages.find((m) => m.id === 'D1');
+  const r2Lane = /\(r2\) \{\{(lane_\w+)\}\}/.exec(items.rounds[0].messages.find((m) => m.id === 'PM-1').text)[1];
+  assert.notStrictEqual(msg.from, `{{${r2Lane}}}`);
+  assert.ok(d1.source.includes('PM-1:r2'));
+  assert.match(d1.expected, /r2/);
+  assert.match(d1.expected, /^GO/);
+  assert.match(fx.goldOutputs(SEED, items).join('\n'), /r2 只限制/);
+});

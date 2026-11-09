@@ -8,8 +8,10 @@
 //   node evals/lead-exam/run.js --seed S --kind <cli kind> --model <id> --name <label> --out-dir DIR
 //        [--config-dir DIR]   pre-seeded dedicated config dir; without it a fresh one is seeded from
 //                             scripts/lib/seed-claude-config.js and removed afterwards
+//        [--system-addendum FILE]   append the file text to the examinee system prompt (candidate-rule ON arm); path and sha256 go in the run record
 //        [--judge-kind codex|agy --judge-model <id> [--judge-home DIR]]   also grade after the run
 // --dry-run: stub examinee (the reference answers) and stub judge; no model call at all.
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -61,7 +63,7 @@ async function runExam(opts) {
     }
     const remaining = hardStop - (now() - started);
     const timeoutMs = Math.min(roundTimeout, remaining);
-    const prompt = lib.buildPrompt(items, opts.seed, r, outputs);
+    const prompt = lib.buildPrompt(items, opts.seed, r, outputs, opts.systemAddendum && opts.systemAddendum.text);
     rec.prompt_chars = prompt.length;
     rec.timeout_ms = timeoutMs;
     const ctl = new AbortController();
@@ -90,6 +92,7 @@ async function runExam(opts) {
   }
   return {
     schema: 'lead-exam-run/1', seed: opts.seed, name: opts.name, model: opts.model, kind: opts.kind || null,
+    ...(opts.systemAddendum ? { system_addendum: { path: opts.systemAddendum.path, sha256: opts.systemAddendum.sha256 } } : {}),
     dry_run: !!opts.dry, outputs, rounds, usage_totals: lib.usageTotals(rounds), total_ms: now() - started,
   };
 }
@@ -129,7 +132,7 @@ function checkConfigDir(dir, env) {
 
 function parseArgs(argv) {
   const a = {};
-  const withValue = ['seed', 'kind', 'model', 'name', 'out-dir', 'config-dir', 'judge-kind', 'judge-model', 'judge-home'];
+  const withValue = ['seed', 'kind', 'model', 'name', 'out-dir', 'config-dir', 'judge-kind', 'judge-model', 'judge-home', 'system-addendum'];
   for (let i = 0; i < argv.length; i += 1) {
     const k = argv[i];
     if (k === '--dry-run') a.dry = true;
@@ -146,6 +149,12 @@ async function main() {
   if (!a.seed || !a['out-dir']) { process.stderr.write('run: --seed and --out-dir are required\n'); process.exit(2); }
   if (a['config-dir']) {
     try { a['config-dir'] = checkConfigDir(a['config-dir']); } catch (err) { process.stderr.write(`run: ${err.message}\n`); process.exit(2); }
+  }
+  let systemAddendum = null;
+  if (a['system-addendum']) {
+    let text;
+    try { text = fs.readFileSync(a['system-addendum'], 'utf8'); } catch (err) { process.stderr.write(`run: --system-addendum ${a['system-addendum']}: ${err.code || err.message}\n`); process.exit(2); }
+    systemAddendum = { text, path: a['system-addendum'], sha256: crypto.createHash('sha256').update(text).digest('hex') };
   }
   const items = lib.loadItems();
   fs.mkdirSync(a['out-dir'], { recursive: true });
@@ -169,7 +178,7 @@ async function main() {
   let record;
   try {
     record = await runExam({
-      items, seed: a.seed, call, name, model, kind: a.kind, dry: a.dry,
+      items, seed: a.seed, call, name, model, kind: a.kind, dry: a.dry, systemAddendum,
       roundTimeoutMs: knobs.roundTimeoutMs, hardStopMs: knobs.hardStopMs, killWaitMs: knobs.graceMs + 1000,
     });
   } finally {

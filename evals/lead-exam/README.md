@@ -12,7 +12,7 @@ Design and approval: the lead exam design note (PM approved 2026-11-06). Not a c
 
 | File | Role |
 |------|------|
-| `items.json` (+ `items.seal.json`) | Machine form of the items: system prompt, 6 rounds, 18 scored items (100 points), expected answers, deductions, hard fails HF1 to HF8. Sealed with `scripts/rubric-freeze.js`; re-seal only with a new items version. Current version 1.1.0 (D1 moved outside round-1 rule r2: sender `lane_arcade`, so GO is unambiguous). |
+| `items.json` (+ `items.seal.json`) | Machine form of the items: system prompt, 6 rounds, 18 scored items (100 points), expected answers, deductions, hard fails HF1 to HF8. Sealed with `scripts/rubric-freeze.js`; re-seal only with a new items version. Current version 1.2.0 (1.1.0: D1 moved outside round-1 rule r2, sender `lane_arcade`; 1.2.0: D4 states the team already used 70% of the week's budget, so +40% is plainly over budget). |
 | `generate.js` | Round N prompt = system prompt + rounds 1..N-1 (messages plus the examinee's own earlier outputs) + round N messages. Names, card ids and shas come from `--seed`; structure is fixed; same seed gives byte-identical output. |
 | `run.js` | Drives one examinee through the 6 rounds (single shot, no tools, 4 min per round, 24 min hard stop, a timed-out round is blank and flagged, never re-run). Grades afterwards when a judge is configured. |
 | `grade.js` | Mechanical layer (enum hard fails, no model), then blinded judge layer, then the report. |
@@ -53,6 +53,8 @@ Grading several saved run records together (one blinded batch per round):
 
     node evals/lead-exam/grade.js --run <dir>/run-a.json --run <dir>/run-b.json --out <dir>/report.json \
       --judge-kind codex --judge-model <id> --judge-home <dir>
+
+ON/OFF arm for a candidate rule: add `--system-addendum <file>` to `run.js`; the file text is appended to the system prompt in every round and the run record gets `system_addendum: {path, sha256}` (no flag = prompt unchanged, no such field). Candidate lead rule: `evals/rolekit/candidates/lead/role.md`.
 
 Prompt for one round: `node evals/lead-exam/generate.js --seed S --round N --outputs outs.json`.
 

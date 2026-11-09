@@ -9,6 +9,7 @@
  * Run: node --test hooks/permission-block.test.js
  */
 'use strict';
+require('../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co and the account's global git config so fixture git cannot write into the launching repo or run its hooks
 
 const test = require('node:test');
 const assert = require('node:assert');

@@ -1,4 +1,5 @@
 'use strict';
+require('../../../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co and the account's global git config so fixture git cannot write into the launching repo or run its hooks
 // Driver for hooks/tests/review-candidate.test.sh: ONE scenario per process, in a throwaway repo
 // under ctx.tmp (the ledger lives in that repo's own git common dir, never the real one).
 //   node review-candidate-driver.js <ctx.json>

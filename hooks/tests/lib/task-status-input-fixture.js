@@ -1,4 +1,5 @@
 'use strict';
+require('../../../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co and the account's global git config so fixture git cannot write into the launching repo or run its hooks
 
 // A managed campaign that really reached TERMINAL_READY, built with the shipped
 // writers (run-ledger.sh, appendCampaignEvent, runCampaignComposition,

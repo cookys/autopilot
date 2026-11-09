@@ -604,47 +604,67 @@ function validateSupersessionMarker(row) {
   }
 }
 
+// One evidence-store line -> validated wrapper, or throws Error('malformed capability evidence line N: ...').
+function parseEvidenceWrapperLine(line, index) {
+  let wrapper;
+  try {
+    wrapper = JSON.parse(line);
+  } catch (error) {
+    throw new Error(`malformed capability evidence line ${index + 1}: ${error.message}`);
+  }
+  if (!wrapper || typeof wrapper !== 'object' || Array.isArray(wrapper)
+      || toEventId(wrapper.event_id) === null
+      || typeof wrapper.producer !== 'string'
+      || typeof wrapper.transcript_hash !== 'string' || !wrapper.evidence) {
+    throw new Error(`malformed capability evidence line ${index + 1}: invalid wrapper`);
+  }
+  let evidence;
+  try {
+    evidence = compileCapabilityEvidence(wrapper.evidence);
+  } catch (error) {
+    throw new Error(`malformed capability evidence line ${index + 1}: ${error.message}`);
+  }
+  if (wrapper.transcript_hash !== capabilityEvidenceProducerHash(evidence, wrapper.producer)) {
+    throw new Error(`malformed capability evidence line ${index + 1}: producer mismatch`);
+  }
+  try {
+    validateEvidenceProducer(evidence, wrapper.producer);
+  } catch (error) {
+    throw new Error(
+      `malformed capability evidence line ${index + 1}: producer mismatch (${error.message})`,
+    );
+  }
+  return {
+    event_id: toEventId(wrapper.event_id),
+    producer: wrapper.producer,
+    transcript_hash: wrapper.transcript_hash,
+    evidence,
+  };
+}
+
 function readCapabilityEvidenceRows() {
-  const lines = readTextLines(CAPABILITY_EVIDENCE_FILE);
-  return lines.map((line, index) => {
-    let wrapper;
+  return readTextLines(CAPABILITY_EVIDENCE_FILE).map((line, index) => {
     try {
-      wrapper = JSON.parse(line);
+      return parseEvidenceWrapperLine(line, index);
     } catch (error) {
-      failValidation(`malformed capability evidence line ${index + 1}: ${error.message}`);
+      return failValidation(error.message);
     }
-    if (!wrapper || typeof wrapper !== 'object' || Array.isArray(wrapper)
-        || toEventId(wrapper.event_id) === null
-        || typeof wrapper.producer !== 'string'
-        || typeof wrapper.transcript_hash !== 'string' || !wrapper.evidence) {
-      failValidation(`malformed capability evidence line ${index + 1}: invalid wrapper`);
-    }
-    let evidence;
-    try {
-      evidence = compileCapabilityEvidence(wrapper.evidence);
-    } catch (error) {
-      failValidation(`malformed capability evidence line ${index + 1}: ${error.message}`);
-    }
-    if (wrapper.transcript_hash !== capabilityEvidenceProducerHash(
-      evidence,
-      wrapper.producer,
-    )) {
-      failValidation(`malformed capability evidence line ${index + 1}: producer mismatch`);
-    }
-    try {
-      validateEvidenceProducer(evidence, wrapper.producer);
-    } catch (error) {
-      failValidation(
-        `malformed capability evidence line ${index + 1}: producer mismatch (${error.message})`,
-      );
-    }
-    return {
-      event_id: toEventId(wrapper.event_id),
-      producer: wrapper.producer,
-      transcript_hash: wrapper.transcript_hash,
-      evidence,
-    };
   });
+}
+
+// Lenient reader for the default (non --require-evidence) seat-status path: a line that does not
+// validate is skipped, as the scorecard reader skips a malformed line there. The strict path
+// above refuses the whole read instead.
+function readCapabilityEvidenceRowsLenient() {
+  const rows = [];
+  readTextLines(CAPABILITY_EVIDENCE_FILE).forEach((line, index) => {
+    try {
+      rows.push(parseEvidenceWrapperLine(line, index));
+    } catch {
+      // skipped on purpose; see the comment above
+    }
+  });
+  return rows;
 }
 
 function verifyEvidenceStoreAnchor(row, capabilityRows) {
@@ -2110,6 +2130,41 @@ function applyFeedAdmission(projection, engine, runner, role, nowMs, effort, sto
   return fold.rows;
 }
 
+// The newest qualification exam for this seat identity (engine + runner + role + effort + seat kind)
+// in the evidence store decides, not only the newest PASS. A retake that ended failed/degraded is
+// persisted by engine-qualify as evidence (the scorecard record step is not run for a failed exam),
+// while findSeatBaseline skips every non-qualified scorecard row, so seat-status kept answering with
+// the older pass. Returns that newest exam when it is not qualified and was issued after the baseline
+// pass instant; otherwise null. Qualification never expires by time: only a newer exam of the SAME
+// seat identity demotes, and a later pass (newer evidence or a newer baseline) restores it.
+function newerFailedExam(engine, runner, role, effort, seatKind, baselineInstant, evidenceRows) {
+  let newest = null;
+  for (const wrapper of evidenceRows) {
+    const ev = wrapper.evidence;
+    if (normalizeCapabilityRole(ev.role, { allowLegacy: true }) !== role) continue;
+    const id = ev.identity;
+    if (normRunnerToken(id.runner) !== normRunnerToken(runner)) continue;
+    if (!sameEngine(id.identity, engine) && !sameEngine(id.model_alias, engine)) continue;
+    if (seatEffortOf({ effort: id.effort }) !== effort) continue;
+    if (seatKindOf({ evidence: ev }) !== seatKind) continue;
+    if (!newest || wrapper.event_id > newest.event_id) newest = wrapper;
+  }
+  if (!newest || newest.evidence.state === 'qualified') return null;
+  const issuedMs = Date.parse(newest.evidence.issued_at);
+  if (!Number.isFinite(issuedMs) || issuedMs <= baselineInstant) return null;
+  return {
+    evidence_event_id: newest.event_id,
+    state: newest.evidence.state,
+    issued_at: newest.evidence.issued_at,
+  };
+}
+
+function applyNewerFailedExam(projection, failedExam) {
+  if (!failedExam) return;
+  projection.admission_status = 'requalify_required';
+  projection.newer_failed_exam = failedExam;
+}
+
 // The ONLY admission authority (frozen contract §2.7.5). Computed fresh at
 // read time from the append-only stores — never mutates a stored row.
 // Optional `storeDir` selects the strikes.jsonl directory (defaults to
@@ -2148,6 +2203,9 @@ function computeSeatProjection(
         || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {
       projection.admission_status = 'requalify_required';
     }
+    applyNewerFailedExam(projection, newerFailedExam(
+      engine, runner, role, effort, seatKind, baseline.instantMs, readCapabilityEvidenceRowsLenient(),
+    ));
     // An ADOPTED OFFICIAL DEFAULT that has accumulated no-confidence must tell
     // the operator the way out, because the way out is different from a
     // self-qualified seat's: re-adopting the same default changes nothing (it
@@ -2543,7 +2601,7 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
   // readCapabilityEvidenceRows() is unconditionally fail-closed on malformed
   // lines / bad wrapper shape / producer mismatch already (no strict flag to
   // pass) — it is the strict path for that store by construction.
-  readCapabilityEvidenceRows();
+  const strictEvidenceRows = readCapabilityEvidenceRows();
 
   let best = null;
   for (const row of allRows) {
@@ -2624,6 +2682,9 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
         || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {
       projection.admission_status = 'requalify_required';
     }
+    applyNewerFailedExam(projection, newerFailedExam(
+      engine, runner, role, effort, 'default', best.instantMs, strictEvidenceRows,
+    ));
   }
 
   return {

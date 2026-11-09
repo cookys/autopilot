@@ -21,6 +21,16 @@ The only way a seat stops being admitted is strikes (below): N ordinary strikes 
 passing administration, or one critical trigger, makes it `requalify_required`, and a later
 passing fresh administration restores it. Nothing else reads a clock.
 
+The one other thing that withdraws standing is a **newer failed exam of the same seat**. A retake
+that ends `failed`/`degraded` is persisted by `engine-qualify` as qualification evidence (the
+scorecard `record` step is not run for it), and `seat-status` reads that evidence store: when the
+newest exam for the same engine + runner + role + effort (+ seat kind) is not `qualified` and was
+issued after the baseline pass, `admission_status` is `requalify_required` and the projection adds
+`newer_failed_exam {evidence_event_id, state, issued_at}`. It is not a strike and
+`AUTOPILOT_STRIKE_ENFORCEMENT=shadow` does not hide it. A failed exam of another effort, or one older
+than the pass, changes nothing; a later passing exam (recorded, or only in the evidence store)
+restores the seat.
+
 `hooks/tests/calendar-teeth-negative.test.sh` pins this: scorecard rows, the shipped official
 defaults, the evidence schema and the adopt / scorecard output carry no expiry field, and no
 admission or sampling path compares `now` against a qualification date. Its guarantee is exactly as

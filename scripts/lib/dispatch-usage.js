@@ -2,11 +2,15 @@
 
 // scripts/lib/dispatch-usage.js — the dispatch usage ledger writer (schema dispatch_usage/1).
 //
-// One row is appended per finished dispatch to <live_dir>/dispatch-usage-YYYYMM.jsonl (live_dir is
-// resolveLiveDir(), the same base claude-account.js uses; YYYYMM is UTC, taken from ended_at). A run that
-// writes a second row is read by the consumer as "last row wins". Fleet only reads this file.
+// A start row is appended when a dispatch starts (status "running", ended_at null, usage null) and one more row
+// per finished dispatch, to <live_dir>/dispatch-usage-YYYYMM.jsonl (live_dir is resolveLiveDir(), the same base
+// claude-account.js uses; YYYYMM is UTC, taken from started_at so every row of a run lands in one file, from ended_at only
+// when started_at is null). Rows of the same run_id are read by the consumer as "last row wins". Fleet only reads this file.
+// account on every row: lib/account-alias.js (claude family acct-<hash>, codex codex-<hash>, endpoint runners
+// local:<courier> or the endpoint name, other runners the runner name).
 //
 //   node scripts/lib/dispatch-usage.js append --from-result <result.json|-> --role <role> [flags]
+//   node scripts/lib/dispatch-usage.js start --role <role> --run-id <id> --runner <r> [--model <m>] [flags]
 //
 //   --run-id --parent-run-id --root-run-id --started-at <epoch> --ended-at <epoch> --wall-secs <n>
 //   --usage-json '<object>'      (raw usage with missing keys null; preferred over the result's usage, which a rail may have zero-filled)
@@ -28,6 +32,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { resolveLiveDir } = require('./live-state-dir');
+const { claudeAccount, codexAccount } = require('./account-alias');
 
 const SCHEMA = 'dispatch_usage/1';
 const ROLES = ['reviewer', 'implementer', 'consult', 'exam', 'author', 'plan-review', 'other'];
@@ -43,11 +48,11 @@ const str = (v) => (typeof v === 'string' && v.length > 0 ? v : null);
 const intOrNull = (v) => (isInt(v) ? v : null);
 
 // ---- account mapping -------------------------------------------------------------------------------------
-// accountFor({runner, endpoint, endpointLocal, courier, claudeAlias, codexAlias}) -> alias string or null.
+// accountFor({runner, endpoint, endpointLocal, courier, claudeAccount, codexAccount}) -> alias string or null.
 //   named endpoint on a private/loopback address  -> local:<courier name>   (courier "<ns>/<courier>"; unknown -> null)
 //   named endpoint elsewhere (glm, minimax, ...)  -> <endpoint name>
-//   claude family without an endpoint             -> claude:<alias>         (alias unknown -> null)
-//   codex                                         -> codex:<alias>          (alias unknown -> null)
+//   claude family without an endpoint             -> claudeAccount           (acct-<hash> or the AUTOPILOT_ACCOUNT value)
+//   codex                                         -> codexAccount            (codex-<hash>; no codex dir -> null)
 //   every other single-account runner             -> the runner name
 // Never a credential: only names go in.
 function accountFor(o) {
@@ -63,8 +68,8 @@ function accountFor(o) {
     return endpoint;
   }
   if (!runner) return null;
-  if (CLAUDE_FAMILY.includes(runner)) return str(x.claudeAlias) ? `claude:${x.claudeAlias}` : null;
-  if (runner === 'codex') return str(x.codexAlias) ? `codex:${x.codexAlias}` : null;
+  if (CLAUDE_FAMILY.includes(runner)) return str(x.claudeAccount);
+  if (runner === 'codex') return str(x.codexAccount);
   return runner;
 }
 
@@ -91,7 +96,7 @@ function normalizeFallbacks(list) {
     const g = f && typeof f === 'object' ? f : {};
     return {
       runner: str(g.runner), model: str(g.model),
-      account: str(g.account) || accountFor({ runner: g.runner, endpoint: g.endpoint, endpointLocal: g.endpointLocal, courier: g.courier }),
+      account: str(g.account) || accountFor({ runner: g.runner, endpoint: g.endpoint, endpointLocal: g.endpointLocal, courier: g.courier, claudeAccount: g.claudeAccount, codexAccount: g.codexAccount }),
       reason: str(g.reason),
     };
   });
@@ -159,7 +164,10 @@ function validateRow(row) {
   if (!str(row.run_id)) return 'run_id_missing';
   if (!ROLES.includes(row.role)) return 'bad_role';
   if (!str(row.runner)) return 'runner_missing';
-  if (!isInt(row.ended_at)) return 'ended_at_not_epoch_int';
+  if (row.status === 'running') {
+    if (row.ended_at !== null) return 'running_row_has_ended_at';
+    if (!isInt(row.started_at)) return 'running_row_needs_started_at';
+  } else if (!isInt(row.ended_at)) return 'ended_at_not_epoch_int';
   if (row.started_at !== null && !isInt(row.started_at)) return 'started_at_not_epoch_int';
   if (!USAGE_SOURCES.includes(row.usage_source)) return 'bad_usage_source';
   for (const k of USAGE_KEYS) {
@@ -203,18 +211,18 @@ function rowFromResult(result, ctx) {
     role: c.role,
     runner,
     model,
-    account: accountFor({ runner, endpoint, endpointLocal: c.endpointLocal, courier: c.courier, claudeAlias: c.claudeAlias, codexAlias: c.codexAlias }),
+    account: accountFor({ runner, endpoint, endpointLocal: c.endpointLocal, courier: c.courier, claudeAccount: c.claudeAccount, codexAccount: c.codexAccount }),
     served_by: {
       runner: str(c.served_runner),
       model: str(c.served_model),
       account: c.served_runner || c.served_endpoint
-        ? accountFor({ runner: c.served_runner || runner, endpoint: c.served_endpoint, endpointLocal: c.servedEndpointLocal, courier: c.courier, claudeAlias: c.claudeAlias, codexAlias: c.codexAlias })
+        ? accountFor({ runner: c.served_runner || runner, endpoint: c.served_endpoint, endpointLocal: c.servedEndpointLocal, courier: c.courier, claudeAccount: c.claudeAccount, codexAccount: c.codexAccount })
         : null,
     },
     fallbacks: c.fallbacks,
     usage: c.usage_json !== undefined && c.usage_json !== null ? c.usage_json : r.usage,
     usage_source: c.usage_source,
-    status: str(r.status),
+    status: str(c.status) || str(r.status),
     wall_secs: c.wall_secs !== undefined && c.wall_secs !== null ? c.wall_secs : r.wall_secs,
     timed_out: r.timed_out,
     error_category: r.error_category,
@@ -227,8 +235,8 @@ function rowFromResult(result, ctx) {
 }
 
 // ---- writing ---------------------------------------------------------------------------------------------
-function ledgerFileName(endedAt) {
-  const d = new Date(endedAt * 1000);
+function ledgerFileName(epoch) {
+  const d = new Date(epoch * 1000);
   const ym = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
   return `dispatch-usage-${ym}.jsonl`;
 }
@@ -240,7 +248,7 @@ function appendRow(row, opts) {
     if (bad) return { ok: false, error: bad };
     const o = opts || {};
     const base = o.dir || resolveLiveDir({ env: o.env || process.env, warn: () => {} }).base;
-    const file = path.join(base, ledgerFileName(row.ended_at));
+    const file = path.join(base, ledgerFileName(row.started_at !== null ? row.started_at : row.ended_at));
     const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT, 0o600);
     try {
       const buf = Buffer.from(`${JSON.stringify(row)}\n`);
@@ -301,10 +309,10 @@ function warn(msg) {
   try { fs.writeSync(2, `dispatch-usage: warn: ${msg}\n`); } catch (_) { /* nothing left to do */ }
 }
 
-function runAppend(args, env, nowSecs) {
+function runAppend(args, env, nowSecs, isStart) {
   if (env.AUTOPILOT_DISPATCH_USAGE === 'off') return { ok: true, skipped: true };
   let result = null;
-  if (args.from_result) {
+  if (!isStart && args.from_result) {
     const raw = args.from_result === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(args.from_result, 'utf8');
     try { result = JSON.parse(raw); } catch (_) { return { ok: false, error: 'result_not_json' }; }
   }
@@ -315,15 +323,18 @@ function runAppend(args, env, nowSecs) {
   let usageJson = null;
   if (args.usage_json) { try { usageJson = JSON.parse(args.usage_json); } catch (_) { return { ok: false, error: 'usage_json_not_json' }; } }
   const courier = courierFromFleet(env);
+  const ctx0 = { claudeAccount: claudeAccount(env), codexAccount: codexAccount(env) };
   const ctx = {
     role: args.role, run_id: str(args.run_id), parent_run_id: str(args.parent_run_id), root_run_id: str(args.root_run_id),
-    started_at: epochOrNull(args.started_at), ended_at: epochOrNull(args.ended_at) !== null ? epochOrNull(args.ended_at) : nowSecs,
+    status: isStart ? 'running' : null,
+    started_at: epochOrNull(args.started_at) !== null ? epochOrNull(args.started_at) : (isStart ? nowSecs : null),
+    ended_at: isStart ? null : (epochOrNull(args.ended_at) !== null ? epochOrNull(args.ended_at) : nowSecs),
     wall_secs: epochOrNull(args.wall_secs),
     runner: str(args.runner), model: str(args.model), endpoint,
     endpointLocal: endpoint ? endpointIsLocal(endpoint, env) : false,
     served_runner: str(args.served_runner), served_model: str(args.served_model), served_endpoint: servedEndpoint,
     servedEndpointLocal: servedEndpoint ? endpointIsLocal(servedEndpoint, env) : false,
-    fallbacks: fallbacks === null ? null : fallbacks.map((f) => ({ ...f, endpointLocal: f && f.endpoint ? endpointIsLocal(f.endpoint, env) : false, courier })),
+    fallbacks: fallbacks === null ? null : fallbacks.map((f) => ({ ...f, endpointLocal: f && f.endpoint ? endpointIsLocal(f.endpoint, env) : false, courier, claudeAccount: ctx0.claudeAccount, codexAccount: ctx0.codexAccount })),
     provider_session_id: str(args.provider_session_id),
     usage_source: str(args.usage_source), usage_json: usageJson,
     courier, os_user: os.userInfo().username, host: os.hostname(),
@@ -332,8 +343,7 @@ function runAppend(args, env, nowSecs) {
     lane: str(args.lane) || str(env.AUTOPILOT_DISPATCH_LANE),
     upstream_task_id: str(args.upstream_task_id) || str(env.AUTOPILOT_UPSTREAM_TASK_ID),
     upstream_message_id: str(args.upstream_message_id) || str(env.AUTOPILOT_UPSTREAM_MESSAGE_ID),
-    claudeAlias: str(env.AUTOPILOT_ACCOUNT),
-    codexAlias: str(env.AUTOPILOT_ACCOUNT),
+    ...ctx0,
   };
   return appendRow(normalizeRow(rowFromResult(result, ctx)), { env });
 }
@@ -341,8 +351,8 @@ function runAppend(args, env, nowSecs) {
 function main(argv, env) {
   try {
     const cmd = argv[0];
-    if (cmd !== 'append') { warn('usage: dispatch-usage.js append --from-result <file|-> --role <role> [flags]'); return 0; }
-    const r = runAppend(parseArgs(argv.slice(1)), env || process.env, Math.floor(Date.now() / 1000));
+    if (cmd !== 'append' && cmd !== 'start') { warn('usage: dispatch-usage.js append --from-result <file|-> --role <role> [flags] | start --role <role> --run-id <id> --runner <r> [flags]'); return 0; }
+    const r = runAppend(parseArgs(argv.slice(1)), env || process.env, Math.floor(Date.now() / 1000), cmd === 'start');
     if (!r.ok) warn(r.error);
   } catch (e) {
     warn(String(e && e.message || e).slice(0, 120));

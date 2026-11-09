@@ -293,7 +293,14 @@ done
 # a parsing caller reads as a transport failure rather than a precondition failure.
 # Falls back to raw interpolation only if json-emit.sh could not be sourced.
 _rv_esc() { if declare -F json_escape >/dev/null 2>&1; then json_escape "$(printf '%s' "${1:-}" | tr '\n' ' ')"; else printf '%s' "${1:-}"; fi; }
-die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null }\n' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")"; exit 2; }
+die_precondition() {
+  local _dp_json
+  _dp_json="$(printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null }' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")")"
+  printf '%s\n' "$_dp_json"
+  # A start row was written (the run got as far as the dispatch): close it so it does not stay "running" forever.
+  [ -n "${REVIEW_USAGE_STARTED:-}" ] && record_dispatch_usage "$_dp_json"
+  exit 2
+}
 
 D2_AGY_RESPONSE_CLAIM="cap-v1-e3b644661b8b04b75ff6402fb8465259b9fd50116f3bf0c65a2c6625aa354b3e"
 D2_AGY_USAGE_CLAIM="cap-v1-60b3c8d855d3cfb31c4ebf9cce62c4fc5c564f7b340abf2c75614e4cb269d64d"
@@ -976,6 +983,13 @@ nv_stderr_tail() {
 }
 
 # dispatch_usage/1 ledger row for this review run (never affects the result or the exit code; lib/dispatch-usage.js).
+record_dispatch_usage_start() {
+  REVIEW_USAGE_STARTED=1
+  node "$_REVIEW_SELF_DIR/lib/dispatch-usage.js" start --role "${AUTOPILOT_DISPATCH_ROLE:-reviewer}" \
+    --run-id "${REVIEW_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
+    --started-at "${REVIEW_STARTED_EPOCH:-}" --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-}" \
+    --provider-session-id "${CHILD_SESSION_ID:-}" || true
+}
 record_dispatch_usage() {
   printf '%s' "$1" | node "$_REVIEW_SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-reviewer}" \
     --run-id "${REVIEW_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
@@ -1386,6 +1400,7 @@ EOF
 _acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/dev/null; exit 143; }
 # --- dispatch (read-only) ---
 declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_REVIEW_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
+record_dispatch_usage_start   # dispatch_usage/1 start row; the finished row replaces it for the reader
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="$(runner_bin_fallback "${BIN:-codex}")"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"

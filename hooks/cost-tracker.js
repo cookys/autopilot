@@ -17,8 +17,8 @@
  *
  * Subagents: their turns are NOT in the main transcript; Claude Code writes them to
  * <transcript minus .jsonl>/subagents/agent-<id>.jsonl. Each Stop also reads those files (per-agent
- * cursor in cursor.agents) and appends rows with `sidechain:true` + `agent_id`; main rows are unchanged
- * (no new fields), so old and new rows coexist. scripts/cost-digest.js reads the flag (--by agent).
+ * cursor in cursor.agents) and appends rows with `sidechain:true` + `agent_id`; every row (main or sidechain) carries `account`
+ * (scripts/lib/account-alias.js hash, never the email or uuid); rows written before it have none. scripts/cost-digest.js reads the flag (--by agent).
  *
  * Fail-open: any error → exit 0, write nothing (a metrics hook must never block).
  */
@@ -28,6 +28,7 @@
 const fs = require('fs');
 const os = require('os');
 const { configPath } = require('../scripts/lib/config-path.js');
+const { claudeAccount } = require('../scripts/lib/account-alias.js');
 const path = require('path');
 // default-on since v2.35.15 (was opt-in); opt out with AUTOPILOT_COST_TRACKER=false.
 
@@ -154,9 +155,12 @@ try {
   if (deltas.length === 0 && subDeltas.length === 0) process.exit(0); // nothing new since last Stop
 
   const cwd = input.cwd || process.cwd();
+  // account: the hash alias scripts/lib/account-alias.js gives this session's runner (never the email or the uuid).
+  const account = claudeAccount(process.env);
   const rows = [...deltas, ...subDeltas].map((d) => JSON.stringify({
     ts,
     session,
+    account,
     model: d.model,
     ...(d.agentId ? { sidechain: true, agent_id: d.agentId } : {}),
     ...(d.agentId && d.parentAgentId ? { parent_agent_id: d.parentAgentId } : {}),

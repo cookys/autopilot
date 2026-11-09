@@ -2,7 +2,8 @@
 # dispatch_usage/1 ledger through the four model-calling rails (dispatch-hetero / -review / -author / -consult),
 # each driven with a fake runner. One finished dispatch = one row in <live_dir>/dispatch-usage-YYYYMM.jsonl;
 # the result JSON and the exit code are untouched; AUTOPILOT_DISPATCH_USAGE=off writes nothing; no token in the file.
-# Writer unit tests: scripts/lib/dispatch-usage.test.js.
+# Each rail writes a start row (status running, ended_at null) and then the finished row with the same run_id; rows()
+# below is the reader's view (last row per run_id), raw_rows() the file. Writer unit tests: scripts/lib/dispatch-usage.test.js.
 . "$(dirname "$0")/lib.sh"
 
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
@@ -22,12 +23,33 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPI
   AUTOPILOT_DISPATCH_USAGE CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID 2>/dev/null || true
 
 eq() { assert_eq "$2" "$1" "$3"; }
-rows() { cat "$AUTOPILOT_LIVE_DIR"/dispatch-usage-*.jsonl 2>/dev/null; }
+raw_rows() { cat "$AUTOPILOT_LIVE_DIR"/dispatch-usage-*.jsonl 2>/dev/null; }
+# rows = what the reader sees: the LAST row per run_id (a start row is replaced by the finished row), file order kept.
+rows() {
+  raw_rows | node -e '
+    const last = new Map();
+    for (const l of require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean)) { const r = JSON.parse(l); last.set(r.run_id, l); }
+    for (const l of last.values()) console.log(l);'
+}
 nrows() { rows | grep -c . || true; }
 # row_get <n> <js expression over r> -> value as a string ("null" for null)
 row_get() {
   rows | sed -n "${1}p" | node -e 'const r = JSON.parse(require("fs").readFileSync(0, "utf8")); const v = eval(process.argv[1]); process.stdout.write(v === null || v === undefined ? "null" : (typeof v === "object" ? JSON.stringify(v) : String(v)));' "$2"
 }
+# check_start <label>: the file holds exactly [start row, finished row] of ONE run_id; the start row is running with
+# ended_at/usage unknown, carries the same account as the finished row, and the finished row wins for the reader.
+check_start() {
+  local out
+  out="$(raw_rows | node -e '
+    const rs = require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean).map(JSON.parse);
+    const [a, b] = rs;
+    const ok = rs.length === 2 && a.run_id && a.run_id === b.run_id && a.status === "running" && a.ended_at === null && typeof a.started_at === "number"
+      && a.usage_source === "none" && Object.values(a.usage).every((v) => v === null) && b.status !== "running" && b.ended_at !== null && a.account === b.account
+      && a.runner === b.runner && a.role === b.role && a.requester.lane === b.requester.lane && a.upstream.task_id === b.upstream.task_id;
+    process.stdout.write(ok ? "ok" : "bad " + JSON.stringify(rs.map((r) => [r.run_id, r.status, r.ended_at, r.account])));')"
+  eq "ok" "$out" "$1: start row then finished row, same run_id and account, final wins"
+}
+
 reset_rows() { rm -f "$AUTOPILOT_LIVE_DIR"/dispatch-usage-*.jsonl; }
 
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
@@ -73,7 +95,8 @@ eq "committed" "$(row_get 1 r.status)" "hetero: status"
 eq "lane-test" "$(row_get 1 r.requester.lane)" "hetero: lane from env"
 eq "task-test" "$(row_get 1 r.upstream.task_id)" "hetero: upstream task from env"
 eq "null" "$(row_get 1 r.courier)" "hetero: courier null when fleet whoami fails"
-eq "null" "$(row_get 1 r.account)" "hetero: claude-family account unknown is null, not guessed"
+eq "acct-$(printf %s "$(realpath "$CLAUDE_CONFIG_DIR")" | sha256sum | cut -c1-8)" "$(row_get 1 r.account)" "hetero: claude-family account is the config-dir hash (no .claude.json fixture)"
+check_start "hetero"
 CHILD_SID="$(sed -n '/^--session-id$/{n;p;}' "$HARGV")"
 assert_contains "$CHILD_SID" "-" "hetero: the stub claude was given --session-id"
 eq "$CHILD_SID" "$(row_get 1 r.provider_session_id)" "hetero: provider_session_id is the child Claude session id passed as --session-id"
@@ -142,6 +165,7 @@ eq "none" "$(row_get 1 r.usage_source)" "author: the rail reports no usage, so n
 eq "null" "$(row_get 1 r.usage.input_tokens)" "author: unknown tokens are null, not 0"
 eq "null" "$(row_get 1 r.account)" "author: codex account alias unknown is null"
 eq "lane-test" "$(row_get 1 r.requester.lane)" "author: lane"
+check_start "author"
 reset_rows
 AUTOPILOT_DISPATCH_ROLE=plan-review "$REPO_ROOT/scripts/dispatch-author.sh" --runner codex --model gpt-5.5 --prompt-file "$APROMPT" --bin "$FAKE_RUNNER" >/dev/null 2>&1
 eq "plan-review" "$(row_get 1 r.role)" "author: a caller-stamped role (plan review) is the row's role"
@@ -188,6 +212,7 @@ eq "codex" "$(row_get 1 r.runner)" "review: runner"
 eq "gpt-test" "$(row_get 1 r.model)" "review: model"
 eq "reviewed" "$(row_get 1 r.status)" "review: status"
 eq "none" "$(row_get 1 r.usage_source)" "review: no usage reported, so none"
+check_start "review"
 reset_rows
 REVIEW_STUB_MODE=garbage bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner codex --model gpt-test --diff-file "$TEST_TMP/fixture.diff" --bin "$TEST_TMP/review-stub.sh" >/dev/null 2>&1
 eq "1" "$(nrows)" "review no_verdict: still one row"
@@ -237,6 +262,7 @@ eq "gpt-5.6" "$(row_get 1 r.model)" "consult: model (engine)"
 eq "advised" "$(row_get 1 r.status)" "consult: status"
 eq "nsx/cx" "$(row_get 1 r.courier)" "consult: courier from fleet whoami"
 eq "[]" "$(row_get 1 r.fallbacks)" "consult: no fallback"
+check_start "consult"
 # a refusal before the transport writes no row
 reset_rows
 REVIEW_LOOP_CONFIG_OVERRIDE="$ON_CFG" AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR" "$REPO_ROOT/scripts/dispatch-consult.sh" --question-file "$Q" --artifact "$TEST_TMP/nope" --dispatch-author-bin "$CBIN" >/dev/null 2>&1

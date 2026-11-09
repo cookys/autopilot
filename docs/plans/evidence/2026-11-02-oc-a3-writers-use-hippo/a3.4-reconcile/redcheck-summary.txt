@@ -1,0 +1,9 @@
+Red-check of hooks/tests/backlog-reconcile.test.sh (28 assertions), each mutation applied to scripts/check-backlog-entries.js in a
+temporary worktree of the commit, then reverted. Transcripts: green.txt, redcheck-1-compare.txt, redcheck-2-adr.txt.
+
+green (no mutation)                          28 passed, 0 failed
+1 reconcile comparison treats every id       FAIL "new row after import blocks: expected '1', got '0'" plus the BL-0004 / ADR-0002 /
+  as present (filter(... => false))          repair-hint / --adr-dir assertions (see redcheck-1-compare.txt)
+2 ADR ids not collected (drop the            5 failed: "reconcile checked 3 rows + 1 ADR: expected '4', got '3'", "names ADR-0002 and
+  `want.add(a)` loop)                        BL-0004, sorted", "printed repair command", "ADR-only hint", "--adr-dir is honoured";
+                                             the BL-0004 row-only negative control stays green, as it should

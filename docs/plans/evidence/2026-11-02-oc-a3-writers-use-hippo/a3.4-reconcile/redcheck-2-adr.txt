@@ -1,0 +1,14 @@
+# mutation 2: ADR ids are not collected
+-  for (const a of adrIds) want.add(a);
++  // mutated
+FAIL [backlog-reconcile] reconcile checked 3 rows + 1 ADR: expected '4', got '3'
+FAIL [backlog-reconcile] names ADR-0002 and BL-0004, sorted: expected '["ADR-0002","BL-0004"]', got '["BL-0004"]'
+FAIL [backlog-reconcile] printed repair command: expected 'hippo import --from autopilot-backlog BACKLOG.md --from adr-dir docs/dev/adr --only ADR-0002,BL-0004', got 'hippo import --from autopilot-backlog BACKLOG.md --only BL-0004'
+FAIL [backlog-reconcile] ADR-only hint: expected 'hippo import --from adr-dir docs/dev/adr --only ADR-0003', got 'null'
+FAIL [backlog-reconcile] --adr-dir is honoured: expected '["ADR-0007"]', got '[]'
+FAIL [backlog-reconcile] 23 passed, 5 failed
+      - reconcile checked 3 rows + 1 ADR: expected '4', got '3'
+      - names ADR-0002 and BL-0004, sorted: expected '["ADR-0002","BL-0004"]', got '["BL-0004"]'
+      - printed repair command: expected 'hippo import --from autopilot-backlog BACKLOG.md --from adr-dir docs/dev/adr --only ADR-0002,BL-0004', got 'hippo import --from autopilot-backlog BACKLOG.md --only BL-0004'
+      - ADR-only hint: expected 'hippo import --from adr-dir docs/dev/adr --only ADR-0003', got 'null'
+      - --adr-dir is honoured: expected '["ADR-0007"]', got '[]'

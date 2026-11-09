@@ -38,6 +38,11 @@ Design and approval: the lead exam design note (PM approved 2026-11-06). Not a c
    is refused) flags it too. One-judge-only flags are listed in `unconfirmed_judge_hard_fails: [{item, hf, flagged_by}]`
    and do not count. With no second judge, or a void one, the pass is `pass_provisional: true` with the reason.
    Scores and categories stay the first judge's (`scores_from: "first_judge"`); the second judge's sit beside them.
+7. Review aids: the report keeps each judge's own per-criterion `hit` and verbatim `quote` (its stated reason) and
+   its hard fails with quotes, first and second judge, under each examinee's `judge_detail`. `--void-item <id>`
+   (repeatable) drops an item whose own flaw is not the examinee's: it scores nothing, its hard fails do not count, and
+   the total and the item's category are scaled back to full marks (`score * max / (max - voided points)`); thresholds
+   are unchanged. The report lists `voided_items: [{id, reason_flag}]` and `score_before_rescale`.
 
 Known limit: the examinee has no tools, so the exam under-measures real verification ability; it measures
 whether the stated evidence and rules are used correctly.

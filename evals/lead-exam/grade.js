@@ -8,7 +8,8 @@
 //
 //   node evals/lead-exam/grade.js --run <run.json> [--run <run2.json> ...] --out report.json
 //        [--dry-run | --judge-kind codex --judge-model <id> [--judge-home DIR] [--judge-timeout-ms N]
-//         [--second-judge-kind codex|agy --second-judge-model <id> [--second-judge-home DIR]]]
+//         [--void-item <id> ...]
+//        [--second-judge-kind codex|agy --second-judge-model <id> [--second-judge-home DIR]]]
 const fs = require('fs');
 const lib = require('./lib');
 const fx = require('./fixtures');
@@ -48,6 +49,10 @@ async function judgeWithRetry(judge, req) {
 async function gradeExam(opts) {
   const items = opts.items || lib.loadItems();
   const seed = opts.seed;
+  const voidIds = Array.from(new Set(opts.voidItems || []));
+  voidIds.forEach((id) => { if (!items.items.some((it) => it.id === id)) throw new Error(`--void-item ${id}: no such item`); });
+  const voidMsgs = new Set(items.items.filter((it) => voidIds.includes(it.id)).map((it) => it.msg));
+  const itemsEff = { ...items, hard_fails: items.hard_fails.map((h) => ({ ...h, mech: h.mech.filter((c) => !voidMsgs.has(c.msg)) })) };
   if (opts.secondJudge) checkFamilies(opts.judgeKind, opts.secondJudgeKind);
   const rand = opts.rand || Math.random;
   const map = lib.deriveNames(items, seed);
@@ -103,7 +108,7 @@ async function gradeExam(opts) {
         const r = await callOne(round, examinees[i].blind[round - 1] || '', 'judge');
         if (!r) { failed.push(examinees[i].run.name); examineeVoid[i].push(round); continue; }
         Object.keys(r.e.items).forEach((id) => { judgeByExaminee[i][id] = { criteria: r.e.items[id].criteria, answered: r.e.items[id].answered }; });
-        r.e.hard_fails.forEach((h) => judgeHf[i].push({ id: h.id, round }));
+        r.e.hard_fails.forEach((h) => judgeHf[i].push({ id: h.id, round, quote: h.quote }));
       }
       roundStatus[round] = failed.length ? { status: 'void', reason: `judge reply invalid twice for: ${failed.join(', ')}` } : { status: 'ok' };
     }
@@ -114,30 +119,38 @@ async function gradeExam(opts) {
   const P2 = opts.secondJudge ? await runPass(opts.secondJudge) : null;
   const { calls, roundStatus, judgeByExaminee, judgeHf, examineeVoid, tamperPass, judgeVoid } = P1;
 
+  // the judge's own per-criterion hits with the verbatim quotes it gave as its reasons, and its hard fails with quotes
+  const detailOf = (byItem, hfs) => ({
+    items: Object.fromEntries(Object.keys(byItem).sort().map((id) => [id, { answered: byItem[id].answered, criteria: byItem[id].criteria }])),
+    hard_fails: hfs.map((h) => ({ id: h.id, round: h.round, quote: h.quote })),
+  });
   const results = examinees.map((e, i) => {
-    const mechHf = lib.mechHardFails(items, e.ex);
+    const mechHf = lib.mechHardFails(itemsEff, e.ex);
     const judged = judgeHf[i];
     const jh = Array.from(new Set(judged.map((h) => h.id))).sort();
     // the mechanical verdict wins for every hard fail it can decide in the round the judge reported it
-    const standing = Array.from(new Set(judged.filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round)).map((h) => h.id))).sort();
+    const hfItemOf = (id, round) => {
+      const hf = items.hard_fails.find((h) => h.id === id);
+      const m = hf.mech.map((c) => c.msg).find((msg) => lib.msgRounds(items)[msg] === round);
+      if (m) return m;
+      const inRound = items.items.filter((it) => it.round === round);
+      return inRound.length === 1 ? inRound[0].id : null;
+    };
+    const notVoided = (h) => !voidMsgs.has(hfItemOf(h.id, h.round)) && !voidIds.includes(hfItemOf(h.id, h.round));
+    const standing = Array.from(new Set(judged.filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round) && notVoided(h)).map((h) => h.id))).sort();
     const overruled = jh.filter((id) => !standing.includes(id) && !mechHf.includes(id));
     const disagree = [];
     const fullyJudged = examineeVoid[i].length === 0 && !judgeVoid && Object.values(roundStatus).every((s) => s.status === 'ok');
     mechHf.forEach((id) => { if (!jh.includes(id) && fullyJudged) disagree.push(`${id}: mechanical only`); });
     jh.forEach((id) => { if (!mechHf.includes(id)) disagree.push(`${id}: judge only${overruled.includes(id) ? ' (overruled by mechanical)' : ''}`); });
     // an item whose round is void has no judge data: scoreItem marks it void
-    const sc = lib.scoreExaminee(items, e.ex, judgeByExaminee[i]);
+    const scRaw = lib.scoreExaminee(items, e.ex, judgeByExaminee[i]);
+    const sc = voidIds.length ? lib.rescaleVoided(items, e.ex, judgeByExaminee[i], voidIds) : scRaw;
     // dual-judge rule: a hard fail only a judge flagged counts when a second judge of another family flags it too
     const standing2 = P2 && !P2.judgeVoid
-      ? Array.from(new Set(P2.judgeHf[i].filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round)).map((h) => h.id))).sort() : [];
+      ? Array.from(new Set(P2.judgeHf[i].filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round) && notVoided(h)).map((h) => h.id))).sort() : [];
     const mr = lib.msgRounds(items);
-    const itemOf = (id, round) => {
-      const hf = items.hard_fails.find((h) => h.id === id);
-      const m = hf.mech.map((c) => c.msg).find((msg) => mr[msg] === round);
-      if (m) return m;
-      const inRound = items.items.filter((it) => it.round === round);
-      return inRound.length === 1 ? inRound[0].id : null;
-    };
+    const itemOf = hfItemOf;
     const roundOf = (list, id) => (list.find((h) => h.id === id) || {}).round;
     const judgeOnly = Array.from(new Set([...standing, ...standing2])).filter((id) => !mechHf.includes(id)).sort();
     const confirmed = judgeOnly.filter((id) => standing.includes(id) && standing2.includes(id));
@@ -162,6 +175,11 @@ async function gradeExam(opts) {
       if (flag) leadCritical.flagged.push(id);
     });
     return {
+      ...(voidIds.length ? { score_before_rescale: { total: lib.scoreExaminee({ ...items, items: items.items.filter((it) => !voidIds.includes(it.id)) }, e.ex, judgeByExaminee[i]).total, note: 'voided items count 0, scale not restored' } } : {}),
+      judge_detail: {
+        first: detailOf(judgeByExaminee[i], judgeHf[i]),
+        ...(P2 ? { second: detailOf(P2.judgeByExaminee[i], P2.judgeHf[i]) } : {}),
+      },
       name: e.run.name, model: e.run.model, total: sc.total, complete: sc.complete,
       categories: sc.categories, categories_ok: sc.categories_ok,
       hard_fails: { mechanical: mechHf, judge: jh, all: hardFails, disagree },
@@ -169,7 +187,7 @@ async function gradeExam(opts) {
       scores_from: 'first_judge',
       pass_provisional: provisional !== null,
       ...(provisional ? { pass_provisional_reason: provisional } : {}),
-      ...(P2 ? { second_judge: { status: P2.judgeVoid ? 'judge_void' : 'ok', hard_fails: standing2, ...(P2.judgeVoid ? {} : (() => { const s2 = lib.scoreExaminee(items, e.ex, P2.judgeByExaminee[i]); return { total: s2.total, complete: s2.complete, categories: s2.categories, categories_ok: s2.categories_ok }; })()) } } : {}),
+      ...(P2 ? { second_judge: { status: P2.judgeVoid ? 'judge_void' : 'ok', hard_fails: standing2, ...(P2.judgeVoid ? {} : (() => { const s2 = voidIds.length ? lib.rescaleVoided(items, e.ex, P2.judgeByExaminee[i], voidIds) : lib.scoreExaminee(items, e.ex, P2.judgeByExaminee[i]); return { total: s2.total, complete: s2.complete, categories: s2.categories, categories_ok: s2.categories_ok }; })()) } } : {}),
       lead_critical: leadCritical,
       usage: e.run.usage_totals || (e.run.rounds ? lib.usageTotals(e.run.rounds) : null),
       pass: lib.passVerdict(items, sc, hardFails), items: sc.items,
@@ -192,6 +210,7 @@ async function gradeExam(opts) {
       rounds: roundStatus,
       x_mechanical_hard_fails: lib.mechHardFails(items, xEx),
     },
+    voided_items: voidIds.map((id) => ({ id, reason_flag: '--void-item' })),
     examinees: results,
     calls,
     totals: {
@@ -216,6 +235,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const k = argv[i];
     if (k === '--dry-run') a.dry = true;
+    else if (k === '--void-item' && argv[i + 1] !== undefined) { (a.voidItems = a.voidItems || []).push(argv[i + 1]); i += 1; }
     else if (['--run', '--out', '--seed', '--judge-kind', '--judge-model', '--judge-home', '--judge-timeout-ms', '--second-judge-kind', '--second-judge-model', '--second-judge-home'].includes(k) && argv[i + 1] !== undefined) {
       const v = argv[i + 1]; i += 1;
       if (k === '--run') a.runs.push(v); else a[k.slice(2)] = v;
@@ -250,7 +270,9 @@ async function main() {
     if (a['second-judge-home']) env2[sk === 'codex' ? 'CODEX_HOME' : 'QRP_CLI_HOME'] = a['second-judge-home'];
     secondJudge = providerJudge(sk, sm, Number(a['judge-timeout-ms'] || 720000), env2);
   }
-  const report = await gradeExam({ items, seed, runs, judge, judgeKind, judgeModel, stub: !!a.dry, secondJudge, secondJudgeKind: sk || null, secondJudgeModel: sm || null });
+  const unknownVoid = (a.voidItems || []).filter((id) => !items.items.some((it) => it.id === id));
+  if (unknownVoid.length) { process.stderr.write(`grade: --void-item names no such item: ${unknownVoid.join(', ')}\n`); process.exit(2); }
+  const report = await gradeExam({ items, seed, runs, judge, judgeKind, judgeModel, stub: !!a.dry, voidItems: a.voidItems, secondJudge, secondJudgeKind: sk || null, secondJudgeModel: sm || null });
   const text = `${JSON.stringify(report, null, 2)}\n`;
   if (a.out) fs.writeFileSync(a.out, text); else process.stdout.write(text);
 }

@@ -105,3 +105,67 @@ test('same-family second judge is refused (API and CLI)', async () => {
   assert.ok(!fs.existsSync(path.join(dir, 'r.json')));
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// ---- judge detail kept in the report --------------------------------------
+test('report keeps each judge\'s per-item criteria with their quotes and hard fails with quotes (first and second)', async () => {
+  const rep = await grade({ judge: forcing('HF7', 6), secondJudge: forcing('HF7', 6) });
+  const d = rep.examinees[0].judge_detail;
+  ['first', 'second'].forEach((w) => {
+    assert.ok(d[w].items.D1 && typeof d[w].items.D1.answered === 'boolean', `${w} items`);
+    const quoted = Object.values(d[w].items).flatMap((it) => Object.values(it.criteria)).filter((c) => c.hit);
+    assert.ok(quoted.length > 0 && quoted.every((c) => typeof c.quote === 'string' && c.quote.length > 0), `${w} hit criteria carry quotes`);
+    assert.strictEqual(d[w].hard_fails.length, 1);
+    assert.strictEqual(d[w].hard_fails[0].id, 'HF7');
+    assert.ok(d[w].hard_fails[0].quote.length > 0);
+  });
+});
+
+// ---- --void-item ------------------------------------------------------------
+const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
+const d3bad = () => ({ name: 'd3', model: 'stub', outputs: fx.mutateOutputs(SEED, items, 'D3', 'action', 'NO_GO') });
+
+test('no --void-item: result unchanged, no voided entries, no rescale block', async () => {
+  const rep = await grade({ runs: [d3bad()], judge: plain(), secondJudge: plain() });
+  assert.deepStrictEqual(rep.voided_items, []);
+  assert.strictEqual(rep.examinees[0].total, 96);
+  assert.strictEqual(rep.examinees[0].categories.B.score, 21);
+  assert.strictEqual(rep.examinees[0].score_before_rescale, undefined);
+});
+
+test('--void-item D1: score scaled back to 100 (total 92 * 100/96, B 17 * 25/21), thresholds unchanged', async () => {
+  const rep = await grade({ runs: [d3bad()], judge: plain(), secondJudge: plain(), voidItems: ['D1'] });
+  const e = rep.examinees[0];
+  assert.deepStrictEqual(rep.voided_items, [{ id: 'D1', reason_flag: '--void-item' }]);
+  assert.strictEqual(e.score_before_rescale.total, 92);
+  near(e.total, 92 * 100 / 96);
+  near(e.categories.B.score, 17 * 25 / 21);
+  assert.strictEqual(e.categories.B.raw, 17);
+  assert.strictEqual(e.items.find((x) => x.id === 'D1').voided, true);
+  assert.strictEqual(e.lead_critical.items.D1.flag, false);
+  assert.strictEqual(e.pass, true);
+  near(e.second_judge.total, 92 * 100 / 96);
+});
+
+test('--void-item: a hard fail of the voided item is not counted, one of another item still is', async () => {
+  const bad = { name: 'bad', model: 'stub', outputs: fx.mutateOutputs(SEED, items, 'D4', 'action', 'GO') };
+  const on = await grade({ runs: [bad], judge: plain(), secondJudge: plain() });
+  assert.deepStrictEqual(on.examinees[0].hard_fails.all, ['HF4']);
+  const off = await grade({ runs: [bad], judge: plain(), secondJudge: plain(), voidItems: ['D4'] });
+  assert.deepStrictEqual(off.examinees[0].hard_fails.all, []);
+  assert.deepStrictEqual(off.examinees[0].hard_fails.mechanical, []);
+  assert.strictEqual(off.examinees[0].pass, true);
+  const other = await grade({ runs: [bad], judge: plain(), secondJudge: plain(), voidItems: ['D1'] });
+  assert.deepStrictEqual(other.examinees[0].hard_fails.all, ['HF4']);
+  assert.strictEqual(other.examinees[0].pass, false);
+});
+
+test('--void-item with an unknown id is refused (API and CLI)', async () => {
+  await assert.rejects(grade({ judge: plain(), voidItems: ['ZZ'] }), /no such item/);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dualjudge-'));
+  const runFile = path.join(dir, 'run.json');
+  fs.writeFileSync(runFile, JSON.stringify({ ...gold(), seed: SEED }));
+  const r = spawnSync(process.execPath, [path.join(__dirname, '..', 'grade.js'), '--run', runFile, '--dry-run', '--void-item', 'ZZ'], { encoding: 'utf8', input: '', timeout: 20000 });
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /no such item/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

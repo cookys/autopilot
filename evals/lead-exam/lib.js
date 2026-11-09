@@ -281,6 +281,27 @@ function scoreExaminee(items, ex, judgeByItem) {
   return { items: scored, categories: cats, total, complete: !anyVoid, categories_ok: catsOk };
 }
 
+// Score with some items voided: they count nothing, and the total and each category are scaled back to the original
+// full marks (score * max / (max - voided points)). A category whose items are all voided is left out of the category check.
+function rescaleVoided(items, ex, judgeByItem, voidIds) {
+  const kept = { ...items, items: items.items.filter((it) => !voidIds.includes(it.id)) };
+  const sc = scoreExaminee(kept, ex, judgeByItem);
+  const lost = {}; let lostTotal = 0;
+  items.items.filter((it) => voidIds.includes(it.id)).forEach((it) => { lost[it.category] = (lost[it.category] || 0) + it.points; lostTotal += it.points; });
+  const fullTotal = Object.keys(items.categories).reduce((n, k) => n + items.categories[k].max, 0);
+  const categories = {}; let catsOk = true;
+  Object.keys(sc.categories).forEach((k) => {
+    const c = sc.categories[k];
+    const left = c.max - (lost[k] || 0);
+    if (left <= 0) { categories[k] = { max: c.max, score: null, void: false, fully_voided: true }; return; }
+    const scaled = c.score * c.max / left;
+    categories[k] = { max: c.max, score: scaled, void: c.void, raw: c.score };
+    if (scaled < items.pass_rule.category_min_ratio * c.max) catsOk = false;
+  });
+  const total = sc.total * fullTotal / (fullTotal - lostTotal);
+  return { ...sc, items: scoreExaminee(items, ex, judgeByItem).items.map((x) => (voidIds.includes(x.id) ? { ...x, score: null, voided: true } : x)), categories, total, categories_ok: catsOk };
+}
+
 function passVerdict(items, scoreRes, hardFails) {
   if (!scoreRes.complete) return null;
   return hardFails.length <= items.pass_rule.hard_fails
@@ -331,5 +352,5 @@ function quoteOk(quote, blindedText) {
 module.exports = {
   ACTIONS, VERDICTS, loadItems, seedRng, shuffled, hex, deriveNames, subst, renderRound, buildPrompt,
   extractRoundJson, parseExaminee, mechHardFails, mechCriterionHit, itemAnswered, scoreItem,
-  scoreExaminee, passVerdict, blindText, quoteOk, msgRounds, mechDecides, judgeHfStands, usageTotals,
+  scoreExaminee, rescaleVoided, passVerdict, blindText, quoteOk, msgRounds, mechDecides, judgeHfStands, usageTotals,
 };

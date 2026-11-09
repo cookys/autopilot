@@ -5967,6 +5967,11 @@ process.stdout.write("");
   fi
 fi
 
+# dispatch_usage/1 start row (status running; the finished row from emit replaces it for the reader; never affects the result).
+node "$SELF_DIR/lib/dispatch-usage.js" start --role "${AUTOPILOT_DISPATCH_ROLE:-implementer}" \
+  --run-id "${DISPATCH_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
+  --started-at "${DISPATCH_STARTED_EPOCH:-}" --runner "$(current_runner_name)" --model "${MODEL:-}" --endpoint "${ENDPOINT:-}" \
+  --provider-session-id "${PROVIDER_SESSION_ID:-${CHILD_SESSION_ID:-}}" || true
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: run_id=${DISPATCH_RUN_ID} manifest=${MANIFEST_FILE:-none} log=${LOG} (watch: scripts/dispatch-status.js --run ${DISPATCH_RUN_ID})" >&2
 if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${HAVE_SETSID:-0}" -eq 1 ]; then
   RESULTS_DIR="${LEDGER}.results"

@@ -522,7 +522,7 @@ emit_result() {
   printf '%s\n' "$_au_json"
   # dispatch_usage/1 ledger row (never affects the result or the exit code; lib/dispatch-usage.js). A run that was
   # refused before any model call (precondition_failed) has no run and writes no row.
-  if [ "$status" != "precondition_failed" ] && [ -n "${AUTHOR_STARTED_EPOCH:-}" ]; then
+  if [ -n "${AUTHOR_STARTED_EPOCH:-}" ] && { [ "$status" != "precondition_failed" ] || [ -n "${AUTHOR_USAGE_STARTED:-}" ]; }; then
     local _au_role="${AUTOPILOT_DISPATCH_ROLE:-author}"
     printf '%s' "$_au_json" | node "$_AUTHOR_SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "$_au_role" \
       --run-id "${AUTHOR_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
@@ -1282,6 +1282,16 @@ fi
 # instead of /dev/null; read only on failure, bounded + redacted, never salvaged as output.
 RUNNER_ERR_FILE="$(mktemp -t dispatch-author-runner-err-XXXXXX)"
 declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_AUTHOR_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
+
+# dispatch_usage/1 start row (status running; the finished row from emit_result replaces it for the reader). A
+# precondition_failed after this point still writes its finished row (emit_result checks AUTHOR_USAGE_STARTED).
+if [ "${AUTOPILOT_DISPATCH_USAGE:-}" != "off" ]; then
+  AUTHOR_USAGE_STARTED=1
+  node "$_AUTHOR_SELF_DIR/lib/dispatch-usage.js" start --role "${AUTOPILOT_DISPATCH_ROLE:-author}" \
+    --run-id "${AUTHOR_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
+    --started-at "${AUTHOR_STARTED_EPOCH:-}" --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-}" \
+    --provider-session-id "${CHILD_SESSION_ID:-}" || true
+fi
 
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="$(runner_bin_fallback "${BIN:-codex}")"

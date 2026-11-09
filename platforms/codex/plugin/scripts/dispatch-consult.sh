@@ -369,6 +369,11 @@ declare -a AUTHOR_ARGS=(--runner "$CONSULT_RUNNER" --model "$CONSULT_ENGINE" --e
 
 AUTHOR_ERR="$CONSULT_TMP/author.err"
 AUTHOR_INVOKED=1
+# dispatch_usage/1 start row (the child author rail is told not to write its own); the finished row from emit replaces it.
+_cs_start_runner="${CONSULT_ORIG_RUNNER:-$CONSULT_RUNNER}"; _cs_start_model="${CONSULT_ORIG_ENGINE:-$CONSULT_ENGINE}"
+_cs_start_endpoint="$CONSULT_ENDPOINT"; [ -n "$CONSULT_ORIG_RUNNER" ] && _cs_start_endpoint="$CONSULT_ORIG_ENDPOINT"
+node "$SCRIPT_DIR/lib/dispatch-usage.js" start --role consult --run-id "$CONSULT_RUN_ID" --parent-run-id "${AUTOPILOT_PARENT_RUN_ID:-}" \
+  --root-run-id "${AUTOPILOT_ROOT_RUN_ID:-}" --runner "$_cs_start_runner" --model "$_cs_start_model" --endpoint "$_cs_start_endpoint" || true
 AUTHOR_OUT="$(AUTOPILOT_DISPATCH_USAGE=off "$AUTHOR_BIN" "${AUTHOR_ARGS[@]}" 2>"$AUTHOR_ERR")"
 AUTHOR_RC=$?
 [ -s "$AUTHOR_ERR" ] && cat "$AUTHOR_ERR" >&2

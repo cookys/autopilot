@@ -78,7 +78,7 @@ test('role outside the enum folds to other', () => {
 
 test('append: month file name, one line per row, same run twice gives two rows (last wins for the reader)', () => {
   const dir = mk();
-  const r1 = rowOf({ runner: 'grok', model: 'm', status: 'running' });
+  const r1 = rowOf({ runner: 'grok', model: 'm', status: 'timed_out' });
   const r2 = rowOf({ runner: 'grok', model: 'm', status: 'committed', usage: { input_tokens: 9 } });
   const a = U.appendRow(r1, { dir });
   const b = U.appendRow(r2, { dir });
@@ -123,9 +123,9 @@ test('account mapping', () => {
   assert.strictEqual(A({ runner: 'cc-shim', endpoint: 'glm' }), 'glm');
   assert.strictEqual(A({ runner: 'cc-shim', endpoint: 'qwen_local', endpointLocal: true, courier: 'cookys/cuda' }), 'local:cuda');
   assert.strictEqual(A({ runner: 'cc-shim', endpoint: 'qwen_local', endpointLocal: true, courier: null }), null);
-  assert.strictEqual(A({ runner: 'claude-native', claudeAlias: 'a1' }), 'claude:a1');
+  assert.strictEqual(A({ runner: 'claude-native', claudeAccount: 'acct-93b0088a' }), 'acct-93b0088a');
   assert.strictEqual(A({ runner: 'claude-native' }), null);
-  assert.strictEqual(A({ runner: 'codex', codexAlias: 'c2' }), 'codex:c2');
+  assert.strictEqual(A({ runner: 'codex', codexAccount: 'codex-186293cb' }), 'codex-186293cb');
   assert.strictEqual(A({ runner: 'codex' }), null);
   assert.strictEqual(A({ runner: 'grok' }), 'grok');
   assert.strictEqual(A({}), null);
@@ -135,10 +135,10 @@ test('account mapping', () => {
 
 test('fallbacks and served_by from explicit values', () => {
   const r = U.normalizeRow(U.rowFromResult({ runner: 'cc-shim', model: 'want', status: 'ok' }, ctx({
-    endpoint: 'qwen_local', endpointLocal: true, served_runner: 'claude-native', served_model: 'got', claudeAlias: 'a1',
+    endpoint: 'qwen_local', endpointLocal: true, served_runner: 'claude-native', served_model: 'got', claudeAccount: 'acct-93b0088a',
     fallbacks: [{ runner: 'cc-shim', model: 'want', endpoint: 'qwen_local', endpointLocal: true, courier: 'n/cuda', reason: 'unreachable' }],
   })));
-  assert.deepStrictEqual(r.served_by, { runner: 'claude-native', model: 'got', account: 'claude:a1' });
+  assert.deepStrictEqual(r.served_by, { runner: 'claude-native', model: 'got', account: 'acct-93b0088a' });
   assert.deepStrictEqual(r.fallbacks, [{ runner: 'cc-shim', model: 'want', account: 'local:cuda', reason: 'unreachable' }]);
   assert.strictEqual(r.account, 'local:cour');
 });
@@ -190,7 +190,7 @@ test('usage_json (raw, missing keys null) wins over the result usage a rail zero
   assert.strictEqual(plain.usage.cache_read_input_tokens, 0);
 });
 
-test('runAppend: codex run with AUTOPILOT_ACCOUNT and no endpoint gets codex:<alias>', () => {
+test('runAppend: codex run gets codex-<hash of CODEX_HOME>, not AUTOPILOT_ACCOUNT', () => {
   const dir = mk();
   const live = path.join(dir, 'live');
   fs.mkdirSync(live, { mode: 0o700 });
@@ -198,13 +198,20 @@ test('runAppend: codex run with AUTOPILOT_ACCOUNT and no endpoint gets codex:<al
   fs.writeFileSync(resFile, JSON.stringify({ runner: 'codex', model: 'm', status: 'committed', run_id: 'rc1' }));
   const bin = path.join(dir, 'fleet');
   fs.writeFileSync(bin, '#!/bin/sh\nprintf "address: a/b/c\\nnamespace: nsx\\ncourier: cx\\n"\n', { mode: 0o755 });
-  const env = Object.assign({}, process.env, { AUTOPILOT_LIVE_DIR: live, FLEET_BIN: bin, AUTOPILOT_ACCOUNT: 'work' });
+  const env = Object.assign({}, process.env, { AUTOPILOT_LIVE_DIR: live, FLEET_BIN: bin, AUTOPILOT_ACCOUNT: 'work', HOME: dir, CODEX_HOME: path.join(dir, 'codexhome') });
+  fs.mkdirSync(path.join(dir, 'codexhome'));
   delete env.AUTOPILOT_DISPATCH_USAGE;
   const cli = path.join(__dirname, 'dispatch-usage.js');
   const r = spawnSync(process.execPath, [cli, 'append', '--from-result', resFile, '--role', 'implementer', '--ended-at', '1793000000'], { env, encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
   const row = JSON.parse(fs.readFileSync(path.join(live, 'dispatch-usage-202610.jsonl'), 'utf8').trim());
-  assert.strictEqual(row.account, 'codex:work');
+  assert.strictEqual(row.account, `codex-${require('./account-alias.js').sha8(fs.realpathSync(path.join(dir, 'codexhome')))}`);
+  // no codex dir: unknown, null
+  const none = spawnSync(process.execPath, [cli, 'append', '--from-result', resFile, '--role', 'implementer', '--run-id', 'rc2', '--ended-at', '1793000001'], { env: Object.assign({}, env, { CODEX_HOME: path.join(dir, 'absent') }), encoding: 'utf8' });
+  assert.strictEqual(none.status, 0, none.stderr);
+  const last = fs.readFileSync(path.join(live, 'dispatch-usage-202610.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).pop();
+  assert.strictEqual(last.run_id, 'rc2');
+  assert.strictEqual(last.account, null);
 });
 
 test('served_by.account: null from the rail stays null when a served runner is set; absent served_by defaults to the seat', () => {
@@ -213,4 +220,109 @@ test('served_by.account: null from the rail stays null when a served runner is s
   assert.deepStrictEqual(r.served_by, { runner: 'claude', model: 'm2', account: null });
   const d = U.normalizeRow({ run_id: 'r', role: 'implementer', runner: 'cc-shim', model: 'm', account: 'glm' });
   assert.deepStrictEqual(d.served_by, { runner: 'cc-shim', model: 'm', account: 'glm' });
+});
+
+// ---- start row -------------------------------------------------------------------------------------------
+const FIX_EMAIL = 'start-row-fixture@example.com';
+const FIX_ORG = '00000000-0000-4000-8000-0000000000aa';
+
+function startEnv(dir) {
+  const live = path.join(dir, 'live');
+  fs.mkdirSync(live, { mode: 0o700 });
+  const cfg = path.join(dir, 'cfg');
+  fs.mkdirSync(cfg);
+  fs.writeFileSync(path.join(cfg, '.claude.json'), JSON.stringify({ oauthAccount: { organizationUuid: FIX_ORG, emailAddress: FIX_EMAIL } }));
+  const env = Object.assign({}, process.env, { AUTOPILOT_LIVE_DIR: live, FLEET_BIN: '/bin/false', HOME: dir, CLAUDE_CONFIG_DIR: cfg });
+  delete env.AUTOPILOT_DISPATCH_USAGE;
+  delete env.AUTOPILOT_ACCOUNT;
+  return { live, cfg, env };
+}
+
+test('start then finished row: same run_id, start is running with unknown end and usage, the finished row wins, no email or uuid written', () => {
+  const dir = mk();
+  const { live, env } = startEnv(dir);
+  const cli = path.join(__dirname, 'dispatch-usage.js');
+  const s = spawnSync(process.execPath, [cli, 'start', '--role', 'implementer', '--run-id', 'run-s1', '--runner', 'claude-native', '--model', 'm',
+    '--started-at', '1793000000', '--provider-session-id', 'sess-1', '--upstream-task-id', 'task-9', '--requester-member', 'ns/cour/mem'], { env, encoding: 'utf8' });
+  assert.strictEqual(s.status, 0, s.stderr);
+  const resFile = path.join(dir, 'res.json');
+  fs.writeFileSync(resFile, JSON.stringify({ runner: 'claude-native', model: 'm', status: 'committed', run_id: 'run-s1', usage: { input_tokens: 3, output_tokens: 4 } }));
+  const f = spawnSync(process.execPath, [cli, 'append', '--from-result', resFile, '--role', 'implementer', '--started-at', '1793000000', '--ended-at', '1793000030', '--provider-session-id', 'sess-1'], { env, encoding: 'utf8' });
+  assert.strictEqual(f.status, 0, f.stderr);
+  const file = path.join(live, 'dispatch-usage-202610.jsonl');
+  const text = fs.readFileSync(file, 'utf8');
+  const rows = text.trim().split('\n').map(JSON.parse);
+  assert.strictEqual(rows.length, 2);
+  const [a, b] = rows;
+  assert.strictEqual(a.run_id, 'run-s1');
+  assert.strictEqual(a.status, 'running');
+  assert.strictEqual(a.ended_at, null);
+  assert.strictEqual(a.started_at, 1793000000);
+  assert.strictEqual(a.usage_source, 'none');
+  for (const k of U.USAGE_KEYS) assert.strictEqual(a.usage[k], null, k);
+  assert.strictEqual(a.provider_session_id, 'sess-1');
+  assert.strictEqual(a.upstream.task_id, 'task-9');
+  assert.strictEqual(a.requester.member, 'ns/cour/mem');
+  assert.match(a.account, /^acct-[0-9a-f]{8}$/);
+  assert.strictEqual(a.account, b.account);
+  assert.strictEqual(b.status, 'committed');
+  assert.strictEqual(b.run_id, a.run_id);
+  // the reader takes the last row per run_id: the finished row wins
+  const byRun = new Map();
+  for (const r of rows) byRun.set(r.run_id, r);
+  assert.strictEqual(byRun.get('run-s1').status, 'committed');
+  assert.ok(!text.includes(FIX_EMAIL) && !text.includes(FIX_ORG), 'neither the email nor the organization uuid is written');
+  // negative control: the scan can see them when they are present
+  assert.ok(`${text}${FIX_EMAIL}`.includes(FIX_EMAIL));
+});
+
+test('start row: month file from started_at, validation, off switch, CLI exit 0', () => {
+  assert.strictEqual(U.validateRow(U.normalizeRow({ run_id: 'r', role: 'implementer', runner: 'grok', status: 'running', started_at: 5, ended_at: null })), null);
+  assert.strictEqual(U.validateRow(U.normalizeRow({ run_id: 'r', role: 'implementer', runner: 'grok', status: 'running', ended_at: null })), 'running_row_needs_started_at');
+  assert.strictEqual(U.validateRow(U.normalizeRow({ run_id: 'r', role: 'implementer', runner: 'grok', status: 'running', started_at: 5, ended_at: 9 })), 'running_row_has_ended_at');
+  const dir = mk();
+  const { live, env } = startEnv(dir);
+  const cli = path.join(__dirname, 'dispatch-usage.js');
+  // 1798761599 = 2026-12-31 23:59:59 UTC: the start row lands in the December file
+  spawnSync(process.execPath, [cli, 'start', '--role', 'reviewer', '--run-id', 'r-dec', '--runner', 'grok', '--started-at', '1798761599'], { env, encoding: 'utf8' });
+  assert.deepStrictEqual(fs.readdirSync(live), ['dispatch-usage-202612.jsonl']);
+  const noRunner = spawnSync(process.execPath, [cli, 'start', '--role', 'reviewer', '--run-id', 'r-x'], { env, encoding: 'utf8' });
+  assert.strictEqual(noRunner.status, 0);
+  assert.match(noRunner.stderr, /warn: runner_missing/);
+  const off = spawnSync(process.execPath, [cli, 'start', '--role', 'reviewer', '--run-id', 'r-off', '--runner', 'grok', '--started-at', '1793000000'], { env: Object.assign({}, env, { AUTOPILOT_DISPATCH_USAGE: 'off' }), encoding: 'utf8' });
+  assert.strictEqual(off.status, 0);
+  assert.deepStrictEqual(fs.readdirSync(live), ['dispatch-usage-202612.jsonl']);
+});
+
+test('account in the ledger: invalid AUTOPILOT_ACCOUNT falls through, valid one is used as is, missing .claude.json falls to the config dir hash', () => {
+  const dir = mk();
+  const { live, cfg, env } = startEnv(dir);
+  const cli = path.join(__dirname, 'dispatch-usage.js');
+  const start = (id, e) => spawnSync(process.execPath, [cli, 'start', '--role', 'reviewer', '--run-id', id, '--runner', 'cc-shim', '--started-at', '1793000000'], { env: e, encoding: 'utf8' });
+  const acct = (id) => fs.readFileSync(path.join(live, 'dispatch-usage-202610.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).find((r) => r.run_id === id).account;
+  start('a1', Object.assign({}, env, { AUTOPILOT_ACCOUNT: 'ci-runner-2' }));
+  assert.strictEqual(acct('a1'), 'ci-runner-2');
+  start('a2', Object.assign({}, env, { AUTOPILOT_ACCOUNT: 'Ops@x' }));
+  assert.strictEqual(acct('a2'), `acct-${require('./account-alias.js').sha8(`${FIX_ORG}\n${FIX_EMAIL}`)}`);
+  fs.rmSync(path.join(cfg, '.claude.json'));
+  start('a3', env);
+  assert.strictEqual(acct('a3'), `acct-${require('./account-alias.js').sha8(fs.realpathSync(cfg))}`);
+});
+
+test('sample fixture for the fleet reader: a start and a finished row per rail, all valid, the finished row wins', () => {
+  const rows = fs.readFileSync(path.join(__dirname, 'fixtures', 'dispatch-usage-samples.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.strictEqual(rows.length, 8);
+  const last = new Map();
+  for (const r of rows) {
+    assert.strictEqual(U.validateRow(r), null, r.run_id);
+    last.set(r.run_id, r);
+  }
+  assert.strictEqual(last.size, 4);
+  for (let i = 0; i < rows.length; i += 2) {
+    assert.strictEqual(rows[i].status, 'running');
+    assert.strictEqual(rows[i].ended_at, null);
+    assert.strictEqual(rows[i].usage_source, 'none');
+    assert.strictEqual(rows[i + 1].run_id, rows[i].run_id);
+    assert.notStrictEqual(last.get(rows[i].run_id).status, 'running');
+  }
 });

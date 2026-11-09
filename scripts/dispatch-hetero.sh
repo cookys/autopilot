@@ -547,7 +547,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-usage() { sed -n '2,76p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR>1 { if ($0 !~ /^#/) exit; print }' "$0" | sed 's/^# \{0,1\}//'; }
 
 # shellcheck source=lib/json-emit.sh
 . "$SELF_DIR/lib/json-emit.sh"

@@ -77,6 +77,11 @@
       "reason": "never starts claude itself: it refuses unless claude-account.js env-check says the alias is usable, then runs scripts/dispatch-author.sh claude-native, whose spawn goes through claude-account.js run; the --bin wrapper it generates is exec'd only by that rail (under --dry-run it is a stub that never starts a binary)"
     },
     {
+      "file": "scripts/lib/dispatch-usage.js",
+      "status": "out_of_scope",
+      "reason": "writes dispatch_usage/1 ledger rows and never spawns a process; its only claude shape is the CLAUDE_FAMILY runner-name list (line 38) used as the transcript dedupe key"
+    },
+    {
       "file": "evals/rolekit/compile-kit.js",
       "status": "out_of_scope",
       "reason": "builds the claude argv and env for a role kit and returns them as data; it never spawns a process, and the rail that runs the argv goes through the account layer with a throwaway config dir"

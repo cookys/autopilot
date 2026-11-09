@@ -166,6 +166,10 @@ node scripts/claude-account.js set-default --restore <accounts-dir>/registry.jso
 - Adding an account later: repeat O1 to O4 for the new alias and add a row to `registry.json`. Disabling one: set `"enabled": false`.
 - Eight frozen evaluation runners are replay-only and keep using the logged-in credentials; see the `frozen_legacy` paragraph in the reference above.
 
+## Login expiry check
+
+`node scripts/profile-health.js check [--json]` lists every login profile on this host (`home` = `~/.claude`, plus each directory under `~/.claude-profiles/`) with `loginExpiresAt`, days left and a status (`ok`, `expiring` at 10 days or less, `expired`, `logged_out`, or `unsupported_name` for a directory whose name is not letters, digits and `._-` or is `home`: claude is not run for it and `notify` asks the operator to rename it). It reads only `loggedIn` and `loginExpiresAt` from `claude auth status --json`; the e-mail and organization are never printed or sent. `notify [--to <addr>]` sends the PM (default `cookys/aimax395/pm--claude`) one `[操作員決定]` message per profile that needs a login: machine, OS account, profile, expiry in Taipei time and the exact command (`claude auth login --claudeai`, prefixed with `CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/<name>"` for a non-home profile). It sends once per profile, expiry value and status (state in `$XDG_STATE_HOME/autopilot/profile-health.json`, mode 0600); a failed send is retried on the next run. Example daily systemd user units: [`examples/profile-health.service`](examples/profile-health.service) and [`examples/profile-health.timer`](examples/profile-health.timer); installing them is up to you.
+
 ## Lane manifest
 
 Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) to reopen them the same way. There is no manifest file in the repo yet; this is the shape to record:

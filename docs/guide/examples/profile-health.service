@@ -1,0 +1,8 @@
+# Example systemd user unit. Copy to ~/.config/systemd/user/, replace <repo> with the autopilot checkout, then
+#   systemctl --user daemon-reload && systemctl --user enable --now profile-health.timer
+[Unit]
+Description=Claude login profile health check (warns the PM 10 days before expiry)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env node <repo>/scripts/profile-health.js notify

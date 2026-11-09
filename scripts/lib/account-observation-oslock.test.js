@@ -21,6 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+require('./test-reaper.js').installReaper(); // no child outlives this file: reaped on exit and on TERM/INT/HUP
 const o = require('./account-observation');
 const { makeFixture } = require('./account-fixtures/shim-install');
 const { holdOsLock, installLeakCheck } = require('./account-fixtures/os-lock-holder');

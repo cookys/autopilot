@@ -15,6 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync, execFileSync } = require('child_process');
+require('./lib/test-reaper.js').installReaper(); // no child outlives this file: reaped on exit and on TERM/INT/HUP
 
 const CLI = path.join(__dirname, 'session-mode.js');
 const IDENT = 'git-common-dir:/tmp/some-repo/.git';

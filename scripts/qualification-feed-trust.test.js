@@ -35,6 +35,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
+require('./lib/test-reaper.js').installReaper(); // no child outlives this file: reaped on exit and on TERM/INT/HUP
 
 const REPO = path.resolve(__dirname, '..');
 const FIX = path.join(REPO, 'hooks', 'tests', 'fixtures', 'qualification-registry');

@@ -21,6 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+require('./lib/test-reaper.js').installReaper(); // no child outlives this file: reaped on exit and on TERM/INT/HUP
 const { makeFixture } = require('./lib/account-fixtures/shim-install.js');
 
 const REPO = path.resolve(__dirname, '..');
@@ -384,7 +385,11 @@ function orphanRun(tool, flags, kind, deaf, legacy, forkExtra) {
     // the claude-account.js wrapper only carries that path further down its own argv.
     const real = alive.filter((x) => x.argv.slice(0, 2).includes(bin));
     return { rc: r.status, alive, real };
-  } finally { fx.cleanup(); }
+  } finally {
+    // an assertion above may have thrown before the survivor sweep: sweep again, by the marker this run put on its claude argv
+    try { for (const x of claudeChildren(marker, fx.shim.binDir)) { try { process.kill(x.pid, 'SIGKILL'); } catch (_) { /* gone */ } } } catch (_) { /* listing failed: nothing to sweep */ }
+    fx.cleanup();
+  }
 }
 
 const HAVE_GNU = fs.existsSync('/usr/bin/gnutimeout');

@@ -463,6 +463,7 @@ test('G40-D1 token_state grammar: unknown needs a null token_state_at, ok and in
 // --- review round: token hygiene (A), clamp boundary (B), write safety (C) -----------------------------
 
 const { spawn, spawnSync } = require('child_process');
+require('./test-reaper.js').installReaper(); // no child outlives this file: reaped on exit and on TERM/INT/HUP
 const rawView = (fx) => JSON.parse(fs.readFileSync(o.mirrorPath(fx.liveDir, 'claude', 'a'), 'utf8'));
 const noWrite = (fx) => assert.strictEqual(fs.existsSync(path.join(fx.liveDir, 'quota')), false, 'nothing was made on disk');
 

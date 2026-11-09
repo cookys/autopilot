@@ -16,6 +16,7 @@ process.on('exit', () => { try { require('fs').rmSync(process.env.AUTOPILOT_FORE
 const assert = require('assert');
 const http = require('http');
 const { spawnSync } = require('child_process');
+require('./lib/test-reaper.js').installReaper(); // no child outlives this file: reaped on exit and on TERM/INT/HUP
 const path = require('path');
 const { runForemanQualification, createRemoteForeman } = require('../evals/foreman-eval-runner');
 

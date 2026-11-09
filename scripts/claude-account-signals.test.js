@@ -13,11 +13,18 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { makeFixture } = require('./lib/account-fixtures/shim-install.js');
 const { cli, EXIT, preflightExec } = require('./claude-account.js');
+const { installReaper, track, guard } = require('./lib/test-reaper.js');
+
+// Every child this file starts is bounded by a wall time and reaped on exit, failure, SIGINT/SIGTERM/SIGHUP
+// (a hung child once outlived its test for days: an exec-looping shebang script, 89% CPU, ppid 1).
+installReaper();
+const CHILD_WALL_MS = 60000; // longest legitimate child here: ~10s of waits
+const CLI_WALL_MS = 30000;
 
 const SCRIPTS = __dirname;
 const WRAPPER = path.join(SCRIPTS, 'claude-account.js');
 const REVIEW = path.join(SCRIPTS, 'dispatch-review.sh');
-const HAS_SETPRIV = process.platform === 'linux' && spawnSync('/usr/bin/setpriv', ['--pdeathsig', 'KILL', 'true'], { stdio: 'ignore' }).status === 0;
+const HAS_SETPRIV = process.platform === 'linux' && spawnSync('/usr/bin/setpriv', ['--pdeathsig', 'KILL', 'true'], { stdio: 'ignore', timeout: 10000, killSignal: 'SIGKILL' }).status === 0;
 const TIMEOUTS = [['uutils-timeout', 'timeout']];
 if (fs.existsSync('/usr/bin/gnutimeout')) TIMEOUTS.push(['gnu-timeout', '/usr/bin/gnutimeout']);
 
@@ -61,7 +68,7 @@ function world() {
   const launch = (cmd, args, extraEnv) => {
     const p = spawn(cmd, args, { env: Object.assign({}, env, extraEnv || {}), stdio: ['ignore', 'ignore', 'ignore'] });
     procs.push(p);
-    return p;
+    return track(p, CHILD_WALL_MS);
   };
   const cleanup = () => {
     // only pids this test recorded or spawned
@@ -180,7 +187,7 @@ test('c: TERM to dispatch-review.sh - the account path leaves no more orphans th
 // it must map to the same exit code a direct ENOENT spawn error gets (EXIT.CHILD_ERROR), for run and for exec.
 async function goCli(fx, args) {
   let err = '';
-  const code = await cli(args, { env: fx.env, realHome: fx.realHome, warn: () => {}, write: (fd, d) => { if (fd === 2) err += d.toString(); } });
+  const code = await guard(cli(args, { env: fx.env, realHome: fx.realHome, warn: () => {}, write: (fd, d) => { if (fd === 2) err += d.toString(); } }), CLI_WALL_MS);
   return { code, err };
 }
 test('d: missing or non-executable child binary maps to the spawn-failure exit code (run and exec)', async () => {
@@ -268,7 +275,7 @@ test('d3: child env without PATH resolves a bare name via /bin:/usr/bin, not onl
     const env = Object.assign({}, fx.env);
     delete env.PATH;
     let err = '';
-    const code = await cli(['run', '--alias', 'a', '--purpose', 'sig', '--', 'true'], { env, realHome: fx.realHome, warn: () => {}, write: (fd, d) => { if (fd === 2) err += d.toString(); } });
+    const code = await guard(cli(['run', '--alias', 'a', '--purpose', 'sig', '--', 'true'], { env, realHome: fx.realHome, warn: () => {}, write: (fd, d) => { if (fd === 2) err += d.toString(); } }), CLI_WALL_MS);
     assert.ok(!/child_spawn_failed/.test(err), `bare name must be found on the default path: ${err}`);
     assert.notStrictEqual(code, EXIT.CHILD_ERROR, err);
   } finally { fx.cleanup(); }

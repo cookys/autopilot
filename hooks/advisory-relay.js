@@ -30,7 +30,6 @@ const fs = require('fs');
 const path = require('path');
 
 const DECIDE_REPLY_HEAD = '[待決回覆]';
-const MIN_SEND_WINDOW_MS = 5000;
 const DECIDE_ID = /^d-[0-9a-f]{8}(?![0-9a-f])/;
 
 const storedText = (a) => (a && typeof a === 'object' ? JSON.stringify(a.option !== null && a.option !== undefined ? { option: a.option } : { free_text: a.free_text === undefined ? null : a.free_text }) : 'nothing');
@@ -58,11 +57,10 @@ function closeDecideReply(payload) {
   let readEntries;
   let parkAnswer;
   let sendParked;
-  let deferDelivery;
   let parkUndelivered;
   let receiptLine;
   try {
-    ({ closeDecisionById, projectScopeFiles, readEntries, parkAnswer, sendParked, deferDelivery, receiptLine, parkUndelivered } = require('../scripts/open-decision.js'));
+    ({ closeDecisionById, projectScopeFiles, readEntries, parkAnswer, sendParked, receiptLine, parkUndelivered } = require('../scripts/open-decision.js'));
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
@@ -160,14 +158,12 @@ function closeDecideReply(payload) {
     }
     if (!closed && failures.length === 0) notFound.push(id);
   }
-  // Send phase: one total deadline for the whole hook (hooks.json allows 70 s; the default budget is 45 s, measured from the hook's start). Each send gets
-  // min(20 s, remaining); a send needs MIN_SEND_WINDOW_MS left, else the card stays pending_dispatch with dispatch_error hook_budget for `redeliver`.
+  // Send phase: one absolute deadline for the whole hook (hooks.json allows 70 s; the default budget is 45 s, measured from the hook's start), passed to every sendParked:
+  // each send gets min(20 s, remaining), and a send needs 5 s left, else the card stays pending_dispatch with dispatch_error hook_budget for `redeliver`.
   const budget = Number(process.env.AUTOPILOT_RELAY_SEND_BUDGET_MS) > 0 ? Number(process.env.AUTOPILOT_RELAY_SEND_BUDGET_MS) : 45000;
+  const deadline = hookStart + budget;
   for (const { file, id } of toSend) {
-    const remaining = hookStart + budget - Date.now();
-    let r;
-    if (remaining < MIN_SEND_WINDOW_MS) r = deferDelivery(file, id, 'hook_budget');
-    else r = sendParked(file, id, undefined, { timeoutMs: Math.min(20000, remaining) });
+    const r = sendParked(file, id, undefined, { deadline });
     const ok = r.status === 'sent' || r.status === 'already' || r.status === 'in_flight';
     const line = receiptLine(ok ? r : { ...r, status: 'failed', error: r.error || r.status, attempts: r.attempts || 1 });
     ctxLines.push(line);

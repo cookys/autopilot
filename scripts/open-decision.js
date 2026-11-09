@@ -62,7 +62,7 @@
  * answer (answer_id, answer_option, answer_free_text, answer_digest), then runs the shell `fleet send <executor> <text>`, which inside a session signs as THAT session (never
  * `fleet dispatch`, which signs as fleet-cli; FLEET_AS_CLI and FLEET_FYI are stripped). Success: status closed + dispatched_message_id + dispatched_via "send"; one receipt line.
  * Failure (non-zero exit, output that is not {"ok":true,"message_id":...}): the card stays pending_dispatch with dispatch_error + dispatch_attempts, never closed.
- * `redeliver` retries those cards with the same function. A card with dispatched_message_id is never sent again. `close --answer` below is the older, caller-dispatches path.
+ * The card keeps every verified answer in `answers` (append-only, each with sent_message_id/sent_at); one message per answer, oldest unsent first, the card closes after the last. A replayed answer_id changes nothing. `redeliver` retries those cards with the same function. An answer with a sent_message_id is never sent again. `close --answer` below is the older, caller-dispatches path.
  * close --answer <text> [--executor A] [--asker B] (PM ruling 01M6RV0Y02, overridden for panel answers by PM 01M6ZXJYTQ (2026-11-09): this `close --answer` path sends no dispatch and no fyi; the one thing it sends is the card notice below): records the answer verbatim and
  * prints ONE JSON on stdout: { ok, id, status, answer, pending_dispatch_at, dispatch: { to, task }, fyi: { to, text } | null, then }. The CALLER dispatches
  * `dispatch.task` to `dispatch.to` (and sends `fyi.text` to `fyi.to`) with its own fleet tools, then runs `close --id <id> --dispatched <task_id>`.
@@ -742,96 +742,114 @@ const receiptLine = (r) => (r.status === 'in_flight'
   ? `[答覆已送達] ${r.id} → ${r.executor} message_id=${r.message_id}${r.status === 'already' ? '（先前已送，未重送）' : ''}`
   : `[答覆未送達] ${r.id} → ${r.executor}: ${r.error}（第 ${r.attempts} 次；卡片留在 pending_dispatch；重送：node scripts/open-decision.js redeliver --id ${r.id}）`);
 
-// Send the stored answer of a parked card. The send is claimed first, under the decision-file lock (dispatch_claim {pid, at}), so two callers never both send.
-// -> { status: 'sent'|'failed'|'already'|'in_flight'|'not_parked'|'absent'|'error', id, executor, message_id?, error?, attempts? }
-function sendParked(file, id, sender = sendFleet, { timeoutMs = SEND_TIMEOUT_MS } = {}) {
-  let won = null;
+// ---- Card answers (append-only). card.answers = [{ answer_id, answer, answer_option, answer_free_text, answer_digest, sent_message_id|null, sent_at|null }].
+// An entry is never edited except to stamp its own sent_message_id/sent_at, and never removed. The top-level answer / answer_id / ... fields mirror the LATEST entry for readers
+// (the panel, patrol); sending reads answers[] only. A card from before this shape (single answer fields, next_answer, sent_answers, dispatched_message_id) is read as answers[] here.
+function answersOf(h) {
+  if (Array.isArray(h.answers)) return h.answers;
+  const sentBefore = new Map((Array.isArray(h.sent_answers) ? h.sent_answers : []).map((s) => [s.answer_id, s]));
+  const out = [];
+  const add = (f, sentId, sentAt) => { if (!out.some((x) => x.answer_id === f.answer_id)) out.push({ answer_id: f.answer_id, answer: f.answer, answer_option: f.answer_option, answer_free_text: f.answer_free_text, answer_digest: f.answer_digest, sent_message_id: sentId || null, sent_at: sentAt || null }); };
+  for (const s of sentBefore.values()) add({ answer_id: s.answer_id }, s.message_id, s.at);
+  if (h.answer_id || h.dispatched_message_id) {
+    const s = sentBefore.get(h.answer_id);
+    add({ answer_id: h.answer_id || null, answer: h.answer, answer_option: h.answer_option, answer_free_text: h.answer_free_text, answer_digest: h.answer_digest }, h.dispatched_message_id || (s && s.message_id), h.dispatched_at || (s && s.at));
+  }
+  if (h.next_answer && h.next_answer.answer_id) add(h.next_answer);
+  return out;
+}
+// The patch that stores `a` as the card's answers[] (and drops the pre-array fields). Applied by every writer, so a card is migrated by its first write.
+const withAnswers = (a) => ({ answers: a, next_answer: undefined, sent_answers: undefined });
+const lastSent = (a) => [...a].reverse().find((x) => x.sent_message_id) || null;
+
+const MIN_SEND_WINDOW_MS = 5000; // less time than this left on the caller's deadline: no send is started
+const REDELIVER_BUDGET_MS = 90000; // `redeliver` gives each card this long from its start
+
+// Send every unsent answer of a parked card, oldest first, one message each, under one claim held across the whole loop (dispatch_claim {pid, at}, taken under the decision-file lock).
+// Another pid's live claim -> in_flight (the holder's loop sends whatever is appended meanwhile). The card closes only in the locked write that finds no unsent answer; that same
+// write drops the claim, so an answer appended meanwhile is either seen by that check or arrives after the release and its own sendParked sends it.
+// `deadline` is an absolute ms epoch. -> { status: 'sent'|'failed'|'deferred'|'already'|'in_flight'|'not_parked'|'absent'|'error', id, executor, message_id?, error?, attempts? }
+function sendParked(file, id, sender = sendFleet, { deadline = Date.now() + SEND_TIMEOUT_MS } = {}) {
   let seen = null;
+  let won = false;
   const cl = patchDecision(file, id, (h) => {
     seen = h;
-    if (h.dispatched_message_id) {
-      // the id is stored but the status patch never landed: finish the close here, no send
-      return isPendingDispatchEntry(h) ? { status: 'closed', closed_at: new Date().toISOString(), dispatch_error: undefined, dispatch_claim: undefined } : {};
-    }
-    if (!isPendingDispatchEntry(h) || !h.executor || !h.answer_id || claimLive(h.dispatch_claim, Date.now())) return {};
-    won = h;
-    return { dispatch_claim: { pid: process.pid, at: new Date().toISOString() } };
+    const a = answersOf(h);
+    if (!isPendingDispatchEntry(h) || !h.executor || a.length === 0) return {};
+    const k = h.dispatch_claim;
+    if (claimLive(k, Date.now()) && k.pid !== process.pid) return {};
+    won = true;
+    return { ...withAnswers(a), dispatch_claim: { pid: process.pid, at: new Date().toISOString() } };
   }, { any: true });
   if (cl.status === 'absent') return { status: 'absent', id };
   if (cl.status === 'error') return { status: 'error', id, error: cl.message };
   if (!won) {
-    if (seen.dispatched_message_id) return { status: 'already', id, executor: seen.executor, message_id: seen.dispatched_message_id };
-    if (!isPendingDispatchEntry(seen) || !seen.executor || !seen.answer_id) return { status: 'not_parked', id };
+    if (!isPendingDispatchEntry(seen)) return seen.dispatched_message_id && isClosedEntry(seen) ? { status: 'already', id, executor: seen.executor, message_id: seen.dispatched_message_id } : { status: 'not_parked', id };
+    if (!seen.executor || answersOf(seen).length === 0) return { status: 'not_parked', id };
     return { status: 'in_flight', id, executor: seen.executor };
   }
-  const c = won;
-  const r = sender(c.executor, deliveryText(c), timeoutMs);
-  const now = new Date().toISOString();
-  if (r.ok) {
-    // The message id is persisted first: it is what stops a second send, even when the status patch below fails.
-    // If the card now holds another answer (one queued as next_answer while this send was in flight, or one that replaced ours after the claim expired),
-    // this send is only recorded in sent_answers and the card stays pending_dispatch for the newer answer, which is sent next.
-    let more = false;
-    const p = patchDecision(file, id, (h) => {
-      const sent = [...(Array.isArray(h.sent_answers) ? h.sent_answers : []), { answer_id: c.answer_id, message_id: r.message_id, at: now }];
-      if (h.next_answer || h.answer_id !== c.answer_id) {
-        more = true;
-        return { ...(h.next_answer ? promoteNext(h.next_answer) : {}), sent_answers: sent, next_answer: undefined, dispatch_claim: undefined };
-      }
-      return { dispatched_message_id: r.message_id, dispatched_via: 'send', dispatched_at: now, sent_answers: sent, dispatch_claim: undefined };
+  let last = null;
+  for (;;) {
+    let next = null;
+    let card = null;
+    let allSent = false;
+    const pick = patchDecision(file, id, (h) => {
+      const a = answersOf(h);
+      next = a.find((x) => !x.sent_message_id) || null;
+      card = h;
+      if (next) return {};
+      allSent = true;
+      const l = lastSent(a);
+      return { status: 'closed', closed_at: new Date().toISOString(), dispatched_message_id: l.sent_message_id, dispatched_via: 'send', dispatched_at: l.sent_at || undefined, dispatch_error: undefined, dispatch_claim: undefined };
     }, { any: true });
-    if (p.status !== 'updated') return { status: 'error', id, executor: c.executor, error: `sent (${r.message_id}) but the card could not be marked: ${p.message || p.status}`, message_id: r.message_id };
-    if (more) return sendParked(file, id, sender, { timeoutMs });
-    const q = patchDecision(file, id, { status: 'closed', closed_at: now, dispatch_error: undefined }, { any: true });
-    if (q.status !== 'updated') return { status: 'error', id, executor: c.executor, error: `sent (${r.message_id}) but the card could not be marked: ${q.message || q.status}`, message_id: r.message_id };
-    return { status: 'sent', id, executor: c.executor, message_id: r.message_id };
+    if (pick.status !== 'updated') return { status: 'error', id, executor: seen.executor, error: `could not read or close the card: ${pick.message || pick.status}`, message_id: last ? last.sent_message_id : undefined };
+    if (allSent) { const l = last || lastSent(answersOf(card)); return { status: last ? 'sent' : 'already', id, executor: card.executor, message_id: l.sent_message_id }; }
+    const remaining = deadline - Date.now();
+    if (remaining < MIN_SEND_WINDOW_MS) {
+      const d = patchDecision(file, id, (h) => ({ dispatch_error: 'hook_budget', dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: new Date().toISOString(), dispatch_claim: undefined }), { any: true });
+      return { status: 'deferred', id, executor: card.executor, error: 'hook_budget', attempts: d.entry ? d.entry.dispatch_attempts : undefined };
+    }
+    const r = sender(card.executor, deliveryText({ ...card, ...next }), Math.min(SEND_TIMEOUT_MS, remaining));
+    const now = new Date().toISOString();
+    if (!r.ok) {
+      const p = patchDecision(file, id, (h) => ({ dispatch_error: r.error, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now, dispatch_claim: undefined }), { any: true });
+      return { status: 'failed', id, executor: card.executor, error: r.error, attempts: p.entry ? p.entry.dispatch_attempts : 1 };
+    }
+    // The message id is persisted before anything else; the claim is refreshed in the same write. If this write fails the card is not closed and the claim stays.
+    const p = patchDecision(file, id, (h) => ({ ...withAnswers(answersOf(h).map((x) => (x.answer_id === next.answer_id ? { ...x, sent_message_id: r.message_id, sent_at: now } : x))), dispatch_claim: { pid: process.pid, at: now } }), { any: true });
+    if (p.status !== 'updated') return { status: 'error', id, executor: card.executor, error: `sent (${r.message_id}) but the card could not be marked: ${p.message || p.status}`, message_id: r.message_id };
+    last = { sent_message_id: r.message_id };
   }
-  // not delivered: a queued newer answer replaces the failed one (nothing of it went out)
-  const p = patchDecision(file, id, (h) => ({ ...(h.next_answer ? promoteNext(h.next_answer) : {}), next_answer: undefined, dispatch_error: r.error, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now, dispatch_claim: undefined }), { any: true });
-  return { status: 'failed', id, executor: c.executor, error: r.error, attempts: p.entry ? p.entry.dispatch_attempts : 1 };
 }
 
-// The answer fields of a queued next_answer, ready to become the card's answer.
-const promoteNext = (n) => ({ answer: n.answer, answer_id: n.answer_id, answer_option: n.answer_option, answer_free_text: n.answer_free_text, answer_digest: n.answer_digest, dispatch_error: undefined });
-
-// Store the courier-verified answer `v` ({ answer: {option, free_text}, answer_id }) on an OPEN executor card, or on a pending_dispatch card that has no answer or a
-// different one (a later answer replaces the parked one), and park it in pending_dispatch. A card already sent (dispatched_message_id) is never touched.
-// -> { status: 'ok'|'absent'|'not_parked'|'error' }; not_parked = closed/awaiting without a message id: nothing to deliver.
+// Append the courier-verified answer `v` ({ answer: {option, free_text}, answer_id }) to an OPEN or pending_dispatch executor card and park it in pending_dispatch.
+// A replay (answer_id already in answers[], sent or not) changes nothing; an entry is never edited or removed. A closed card that was delivered is 'ok' (sendParked says 'already').
+// -> { status: 'ok'|'absent'|'not_parked'|'error' }; not_parked = closed/awaiting without a delivery: nothing to deliver.
 function parkAnswer(file, id, v) {
   const c = readFile(file, { all: true }).find((e) => e.id === id);
   if (!c) return { status: 'absent', id };
-  if (c.dispatched_message_id) return { status: 'ok', id, executor: c.executor };
-  const parkedSame = isPendingDispatchEntry(c) && (c.answer_id === v.answer_id || (c.next_answer && c.next_answer.answer_id === v.answer_id));
-  if (parkedSame) return { status: 'ok', id, executor: c.executor };
-  if (!isOpenEntry(c) && !isPendingDispatchEntry(c)) return { status: 'not_parked', id, executor: c.executor };
+  if (isClosedEntry(c) && c.dispatched_message_id) return { status: 'ok', id, executor: c.executor };
   const a = v.answer;
   const option = nonEmpty(a.option);
   const ft = nonEmpty(a.free_text);
   const now = new Date().toISOString();
-  const fields = { answer: option !== null ? option : ft, answer_id: v.answer_id, answer_option: option, answer_free_text: ft, answer_digest: answerDigest(a) };
+  const entry = { answer_id: v.answer_id, answer: option !== null ? option : ft, answer_option: option, answer_free_text: ft, answer_digest: answerDigest(a), sent_message_id: null, sent_at: null };
   const p = patchDecision(file, id, (h) => {
-    // a send of the stored answer is in flight: it must not be overwritten (it would be stamped as delivered and the card closed over an answer never sent);
-    // the newer answer is queued and sendParked sends it right after
-    if (isPendingDispatchEntry(h) && claimLive(h.dispatch_claim, Date.now())) return { next_answer: fields };
-    return { status: 'pending_dispatch', pending_dispatch_at: now, ...fields, dispatch_error: undefined };
-  }, { any: true, isOurs: (h) => !h.dispatched_message_id && (isOpenEntry(h) || isPendingDispatchEntry(h)) });
+    const cur = answersOf(h);
+    if (cur.some((x) => x.answer_id === v.answer_id)) return withAnswers(cur);
+    const { sent_message_id: _s, sent_at: _t, ...fields } = entry;
+    return { ...withAnswers([...cur, entry]), status: 'pending_dispatch', pending_dispatch_at: isPendingDispatchEntry(h) && h.pending_dispatch_at ? h.pending_dispatch_at : now, ...fields, dispatch_error: undefined };
+  }, { any: true, isOurs: (h) => isOpenEntry(h) || isPendingDispatchEntry(h) });
   if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
   if (p.status === 'absent') return { status: 'not_parked', id, executor: c.executor };
   return { status: 'ok', id, executor: c.executor };
 }
 
-// The CLI/library entry: park the answer, then send it. A card already parked with the same answer (a replayed prompt) is just sent again unless it carries a message id.
+// The CLI/library entry: park the answer, then send it (and any older unsent answer of the card).
 function deliverAnswer(file, id, v, sender = sendFleet, opts) {
   const k = parkAnswer(file, id, v);
   if (k.status === 'absent' || k.status === 'error') return k;
   return sendParked(file, id, sender, opts);
-}
-
-// A parked answer that was not sent because the caller's time budget ran out stays pending_dispatch; record why and count the attempt.
-function deferDelivery(file, id, reason) {
-  const now = new Date().toISOString();
-  const p = patchDecision(file, id, (h) => ({ dispatch_error: reason, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now }), { any: true, isOurs: (h) => isPendingDispatchEntry(h) && !h.dispatched_message_id });
-  return { status: p.status === 'updated' ? 'deferred' : p.status, id, error: reason, attempts: p.entry ? p.entry.dispatch_attempts : undefined };
 }
 
 // An executor card whose answer cannot be delivered (no courier, verify failed, ...) is never closed: it is parked in pending_dispatch with dispatch_error naming the reason.
@@ -839,9 +857,9 @@ function deferDelivery(file, id, reason) {
 function parkUndelivered(file, id, reason) {
   const c = readFile(file, { all: true }).find((e) => e.id === id);
   if (!c) return { status: 'absent', id };
-  if (!c.executor || !(isOpenEntry(c) || (isPendingDispatchEntry(c) && !c.dispatched_message_id))) return { status: 'no_executor', id };
+  if (!c.executor || !(isOpenEntry(c) || isPendingDispatchEntry(c))) return { status: 'no_executor', id };
   const now = new Date().toISOString();
-  const p = patchDecision(file, id, (h) => ({ status: 'pending_dispatch', pending_dispatch_at: h.pending_dispatch_at || now, dispatch_error: reason, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now }), { any: true, isOurs: (h) => !h.dispatched_message_id && (isOpenEntry(h) || isPendingDispatchEntry(h)) });
+  const p = patchDecision(file, id, (h) => ({ status: 'pending_dispatch', pending_dispatch_at: h.pending_dispatch_at || now, dispatch_error: reason, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now }), { any: true, isOurs: (h) => isOpenEntry(h) || isPendingDispatchEntry(h) });
   if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
   if (p.status === 'absent') return { status: 'no_executor', id };
   return { status: 'parked', id, executor: c.executor, error: reason, attempts: p.entry.dispatch_attempts };
@@ -855,12 +873,12 @@ function redeliver(args, sender = sendFleet) {
     for (const e of readFile(file, { all: true })) {
       if (args.id !== undefined && e.id !== args.id) continue;
       if (!isPendingDispatchEntry(e)) continue;
-      if (!e.answer_id && !e.dispatched_message_id) {
+      if (answersOf(e).length === 0) {
         n += 1;
         process.stdout.write(`[略過] ${e.id} → ${e.executor || '(no executor)'}: no stored panel answer (answer_id), nothing to resend${e.dispatch_error ? `; dispatch_error: ${e.dispatch_error}` : ''}\n`);
         continue;
       }
-      const r = sendParked(file, e.id, sender);
+      const r = sendParked(file, e.id, sender, { deadline: Date.now() + REDELIVER_BUDGET_MS });
       n += 1;
       process.stdout.write(`${receiptLine(r)}\n`);
       if (r.status !== 'sent' && r.status !== 'already' && r.status !== 'in_flight') failed += 1;
@@ -951,4 +969,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, parkAnswer, deferDelivery, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };

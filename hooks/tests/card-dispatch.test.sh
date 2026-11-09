@@ -36,7 +36,7 @@ if (a[0] === 'send') {
   if (m === 'garbage') { process.stdout.write('accepted, probably\n'); process.exit(0); }
   const n = fs.readFileSync(D + '/sends.jsonl', 'utf8').split('\n').filter(Boolean).length;
   process.stdout.write(JSON.stringify({ ok: true, member: a[1], message_id: '01MSGSTUB' + String(n).padStart(6, '0') }) + '\n');
-  if (m === 'late') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 6000); // the hub committed and printed the id, then the call hangs past the caller's timeout
+  if (m === 'late') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 12000); // the hub committed and printed the id, then the call hangs past the caller's timeout
   process.exit(0);
 }
 if (a[0] === 'dispatch') { fs.appendFileSync(D + '/dispatch.log', a.join(' ') + '\n'); process.exit(0); }
@@ -170,10 +170,11 @@ hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$C9" "$Q9" "$AID9A")"
 assert_eq "$(cf "$C9" status)" pending_dispatch "D stale: first send failed, card parked"
 setmode ok; AID9B="$(claim "$C9" o B)"; RB="$(nsends)"
 hook "$(printf '[待決回覆]\n%s｜%s → B｜%s\n' "$C9" "$Q9" "$AID9B")"
-assert_eq "$(( $(nsends) - RB ))" 1 "D stale: new answer sent once"
+assert_eq "$(( $(nsends) - RB ))" 2 "D stale: the unsent first answer and the new one are both sent (append-only, nothing dropped)"
+assert_contains "$(sendfield "$RB" text)" "answer_id: $AID9A" "D stale: the older unsent answer goes first"
 assert_contains "$(sendfield "$(( $(nsends) - 1 ))" text)" "answer_id: $AID9B" "D stale: delivery carries the NEW answer_id"
 assert_contains "$(sendfield "$(( $(nsends) - 1 ))" text)" "option: B — b" "D stale: delivery carries the NEW option"
-assert_eq "$(cf "$C9" answer)" B "D stale: stored answer replaced"; assert_eq "$(cf "$C9" status)" closed "D stale: closed after the send"
+assert_eq "$(cf "$C9" answer)" B "D stale: the card shows its latest answer"; assert_eq "$(cf "$C9" status)" closed "D stale: closed after the send"
 AID9C="$(claim "$C9" o C)"; RB="$(nsends)"
 hook "$(printf '[待決回覆]\n%s｜%s → C｜%s\n' "$C9" "$Q9" "$AID9C")"
 assert_eq "$(nsends)" "$RB" "D stale: a third answer after dispatch sends nothing"
@@ -248,7 +249,7 @@ assert_neq "$(cf "$CI" status)" closed "R2 id write fails: the card is NOT close
 # C: the send hangs past the timeout after the hub printed the id -> one send, id recorded, redeliver does not resend
 setmode fail4; QT="逾時？"; CT="$(mkcard "$QT" --option "A::a" --option "B::b")"; AT="$(claim "$CT" o A)"
 hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CT" "$QT" "$AT")"; setmode late; RB="$(nsends)"
-TR="$(node -e 'const o=require(process.argv[1]);const f=o.projectScopeFiles(process.argv[2],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===process.argv[3]));process.stdout.write(o.sendParked(f,process.argv[3],undefined,{timeoutMs:1500}).status)' "$OD" "$R" "$CT")"
+TR="$(node -e 'const o=require(process.argv[1]);const f=o.projectScopeFiles(process.argv[2],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===process.argv[3]));process.stdout.write(o.sendParked(f,process.argv[3],undefined,{deadline:Date.now()+6000}).status)' "$OD" "$R" "$CT")"
 assert_eq "$TR" sent "R3 timeout: a message id printed before the timeout counts as sent"
 assert_eq "$(( $(nsends) - RB ))" 1 "R3 timeout: one send"
 assert_neq "$(cf "$CT" dispatched_message_id)" "<undef>" "R3 timeout: message id recorded"
@@ -259,10 +260,123 @@ assert_eq "$(nsends)" "$RB" "R3 timeout: redeliver does not send again"
 # D: a message id is stored but the status is still pending_dispatch -> the next run closes the card with no new send
 setmode fail4; QD="殘留？"; CD="$(mkcard "$QD" --option "A::a" --option "B::b")"; AD="$(claim "$CD" o A)"
 hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CD" "$QD" "$AD")"; setmode ok
-node -e 'const o=require(process.argv[1]);const f=o.projectScopeFiles(process.argv[2],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===process.argv[3]));o.patchDecision(f,process.argv[3],{dispatched_message_id:"01MSGLEFT"},{any:true})' "$OD" "$R" "$CD"
+node -e 'const o=require(process.argv[1]);const f=o.projectScopeFiles(process.argv[2],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===process.argv[3]));o.patchDecision(f,process.argv[3],{dispatched_message_id:"01MSGLEFT",answers:undefined},{any:true})' "$OD" "$R" "$CD"
 assert_eq "$(cf "$CD" status)" pending_dispatch "R4 leftover: precondition, id stored and still pending_dispatch"
 RB="$(nsends)"; node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$CD" >/dev/null 2>&1
 assert_eq "$(nsends)" "$RB" "R4 leftover: no new send"
 assert_eq "$(cf "$CD" status)" closed "R4 leftover: the next run closes the card"
+
+# 13. card-answer redesign (review gen 3): answers[] is append-only, one claim held across the send loop. Scenarios run the library in a node child (scripts in $TEST_TMP).
+PRE='const o=require(process.argv[2]);const id=process.argv[4];const f=o.projectScopeFiles(process.argv[3],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===id));const ans=(opt,aid)=>({answer:{option:opt,free_text:null},answer_id:aid});const sleep=(ms)=>{const t=Date.now();while(Date.now()-t<ms){}};const ents=()=>o.readEntries(f,{all:true}).find((e)=>e.id===id);'
+scen() { printf '%s\n%s\n' "$PRE" "$(cat)" > "$TEST_TMP/scen.js"; node "$TEST_TMP/scen.js" "$OD" "$R" "$1"; }
+cards() { card "$1" | node -e 'process.stdout.write(JSON.stringify(JSON.parse(require("fs").readFileSync(0,"utf8")).decisions[0].answers.map((x)=>[x.answer_id,!!x.sent_message_id])))'; }
+setmode ok; rm -f "$STUB/sleepms"; QG="重送？"
+
+# (a) A sent, B in flight, a replay of A: A is not sent again, nothing replaced
+CGA="$(mkcard "$QG" --option "A::a" --option "B::b")"
+scen "$CGA" > "$TEST_TMP/o" <<'JS'
+const seq = [];
+const sender = (to, t) => {
+  seq.push(t.match(/answer_id: (\S+)/)[1]);
+  if (seq.length === 2) { const r = o.parkAnswer(f, id, ans('A', 'GA1')); seq.push('replayA:' + r.status + ':' + JSON.stringify(ents().answers.map((x) => x.answer_id))); }
+  return { ok: true, message_id: 'M' + seq.length };
+};
+o.parkAnswer(f, id, ans('A', 'GA1')); o.parkAnswer(f, id, ans('B', 'GA2'));
+const r = o.sendParked(f, id, sender, { deadline: Date.now() + 60000 });
+process.stdout.write(r.status + '|' + seq.join(','));
+JS
+assert_eq "$(cat "$TEST_TMP/o")" 'sent|GA1,GA2,replayA:ok:["GA1","GA2"]' "(a) replay of A while B is in flight: A once, B once, answers[] unchanged"
+assert_eq "$(cf "$CGA" status)" closed "(a) closed after the last send"; assert_eq "$(cards "$CGA")" '[["GA1",true],["GA2",true]]' "(a) both entries sent"
+scen "$CGA" > "$TEST_TMP/o" <<'JS'
+const r = o.parkAnswer(f, id, ans('A', 'GA1')); const s = o.sendParked(f, id, () => { throw new Error('must not send'); });
+process.stdout.write(r.status + s.status);
+JS
+assert_eq "$(cat "$TEST_TMP/o")" okalready "(a) replay after close: ok, already, no send"
+
+# (b) three queued answers, small budget: returns inside it, the rest stay pending_dispatch with hook_budget, a later redeliver sends them in order
+CGB="$(mkcard "$QG" --option "A::a" --option "B::b" --option "C::c")"; RB="$(nsends)"; printf 3000 > "$STUB/sleepms"
+T0="$(date +%s)"
+scen "$CGB" > "$TEST_TMP/o" <<'JS'
+o.parkAnswer(f, id, ans('A', 'GB1')); o.parkAnswer(f, id, ans('B', 'GB2')); o.parkAnswer(f, id, ans('C', 'GB3'));
+const r = o.sendParked(f, id, undefined, { deadline: Date.now() + 8000 });
+process.stdout.write(r.status + '|' + r.error);
+JS
+T1="$(date +%s)"
+assert_eq "$(cat "$TEST_TMP/o")" "deferred|hook_budget" "(b) budget runs out: deferred with hook_budget"
+assert_eq "$([ $((T1 - T0)) -le 8 ] && echo in_time || echo late)" in_time "(b) returned within the budget (took $((T1 - T0))s)"
+assert_eq "$(( $(nsends) - RB ))" 1 "(b) one send fitted the budget"
+assert_eq "$(cf "$CGB" status)" pending_dispatch "(b) card stays pending_dispatch"; assert_eq "$(cf "$CGB" dispatch_error)" hook_budget "(b) dispatch_error hook_budget"
+assert_eq "$(cf "$CGB" dispatch_claim)" "<undef>" "(b) claim dropped"
+rm -f "$STUB/sleepms"; node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$CGB" >/dev/null 2>&1
+assert_eq "$(( $(nsends) - RB ))" 3 "(b) redeliver sent the other two"
+assert_contains "$(sendfield "$(( RB + 1 ))" text)" "answer_id: GB2" "(b) B second"; assert_contains "$(sendfield "$(( RB + 2 ))" text)" "answer_id: GB3" "(b) C third"
+assert_eq "$(cf "$CGB" status)" closed "(b) closed after the last"
+
+# (c) the claim expires with A sent and B unsent, then C is parked: B then C are sent, card closed, nothing dropped
+CGC="$(mkcard "$QG" --option "A::a" --option "B::b" --option "C::c")"; RB="$(nsends)"
+scen "$CGC" > "$TEST_TMP/o" <<'JS'
+o.parkAnswer(f, id, ans('A', 'GC1')); o.parkAnswer(f, id, ans('B', 'GC2'));
+let n = 0;
+const r = o.sendParked(f, id, () => { n += 1; return n === 1 ? { ok: true, message_id: 'MC1' } : { ok: false, error: 'boom' }; }, { deadline: Date.now() + 60000 });
+o.patchDecision(f, id, { dispatch_claim: { pid: 99999999, at: new Date(Date.now() - 600000).toISOString() } }, { any: true });
+o.parkAnswer(f, id, ans('C', 'GC3'));
+process.stdout.write(r.status);
+JS
+assert_eq "$(cat "$TEST_TMP/o")" failed "(c) setup: B's send failed after A was sent"
+assert_eq "$(cards "$CGC")" '[["GC1",true],["GC2",false],["GC3",false]]' "(c) A sent, B and C unsent, nothing replaced"
+node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$CGC" >/dev/null 2>&1
+assert_eq "$(( $(nsends) - RB ))" 2 "(c) B and C sent, A not again"
+assert_contains "$(sendfield "$RB" text)" "answer_id: GC2" "(c) B first"; assert_contains "$(sendfield "$(( RB + 1 ))" text)" "answer_id: GC3" "(c) then C"
+assert_eq "$(cf "$CGC" status)" closed "(c) closed"; assert_eq "$(cards "$CGC")" '[["GC1",true],["GC2",true],["GC3",true]]' "(c) every entry sent"
+
+# (d) a second sender (redeliver, another pid) racing between loop iterations: in_flight, no double send
+CGD="$(mkcard "$QG" --option "A::a" --option "B::b")"; RB="$(nsends)"
+scen "$CGD" > "$TEST_TMP/o" <<'JS'
+const cp = require('child_process'); const out = []; let n = 0;
+const sender = (to, t) => {
+  n += 1;
+  if (n === 2) { const c = cp.spawnSync('node', [process.argv[2], 'redeliver', '--cwd', process.argv[3], '--root-run-id', 'root-t', '--id', id], { encoding: 'utf8', env: process.env }); out.push(c.stdout.trim()); }
+  return { ok: true, message_id: 'MD' + n };
+};
+o.parkAnswer(f, id, ans('A', 'GD1')); o.parkAnswer(f, id, ans('B', 'GD2'));
+const r = o.sendParked(f, id, sender, { deadline: Date.now() + 60000 });
+process.stdout.write(r.status + '|' + out.join('') + '|' + n);
+JS
+assert_contains "$(cat "$TEST_TMP/o")" "sent|[答覆送出中]" "(d) the racing redeliver saw the claim: in_flight"
+assert_eq "$(( $(nsends) - RB ))" 0 "(d) the racing redeliver sent nothing through the stub"
+assert_eq "$(cf "$CGD" status)" closed "(d) closed by the loop owner"; assert_eq "$(cards "$CGD")" '[["GD1",true],["GD2",true]]' "(d) both sent once"
+
+# (e) an answer arriving after the last sent id is written and before the closing check: sent, and the card closes only after it
+CGE="$(mkcard "$QG" --option "A::a" --option "B::b")"
+scen "$CGE" > "$TEST_TMP/o" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const rn = fs.renameSync; const ex = fs.existsSync; let wrote = false; let parked = false;
+const child = 'const o=require(process.argv[1]);process.stdout.write(o.parkAnswer(process.argv[2],process.argv[3],{answer:{option:"B",free_text:null},answer_id:"GE2"}).status)';
+fs.renameSync = (a, b) => { rn(a, b); if (fs.readFileSync(b, 'utf8').includes('"ME1"')) wrote = true; };
+// the lock is free between the id write and the next locked check (the first existsSync(f) after it): a second process parks B right there
+fs.existsSync = (p) => { if (wrote && !parked && p === f) { parked = true; fs.existsSync = ex; process.stdout.write('child:' + cp.spawnSync('node', ['-e', child, process.argv[2], f, id], { encoding: 'utf8' }).stdout + '|'); } return ex(p); };
+o.parkAnswer(f, id, ans('A', 'GE1'));
+const r = o.sendParked(f, id, (to, t) => ({ ok: true, message_id: /GE2/.test(t) ? 'ME2' : 'ME1' }), { deadline: Date.now() + 60000 });
+fs.renameSync = rn; fs.existsSync = ex;
+process.stdout.write(r.status);
+JS
+assert_eq "$(cat "$TEST_TMP/o")" "child:ok|sent" "(e) the second answer was parked at the closing edge and the loop sent"
+assert_eq "$(cards "$CGE")" '[["GE1",true],["GE2",true]]' "(e) the answer arriving at the closing edge is sent, not dropped"
+assert_eq "$(cf "$CGE" status)" closed "(e) card closed after it"; assert_eq "$(cf "$CGE" dispatch_claim)" "<undef>" "(e) claim released"
+
+# legacy cards: single answer fields / next_answer / id stored while pending_dispatch are read as answers[]
+CGL="$(mkcard "$QG" --option "A::a" --option "B::b")"; RB="$(nsends)"
+scen "$CGL" <<'JS' >/dev/null
+o.patchDecision(f, id, { status: 'pending_dispatch', pending_dispatch_at: '2026-11-09T00:00:00.000Z', answer: 'A', answer_id: 'GL1', answer_option: 'A', answer_free_text: null, answer_digest: 'd1', dispatched_message_id: 'MLEG', next_answer: { answer: 'B', answer_id: 'GL2', answer_option: 'B', answer_free_text: null, answer_digest: 'd2' } }, { any: true });
+JS
+node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$CGL" >/dev/null 2>&1
+assert_eq "$(( $(nsends) - RB ))" 1 "legacy: the sent answer is not resent, next_answer is sent once"
+assert_contains "$(sendfield "$RB" text)" "answer_id: GL2" "legacy: the queued next_answer went out"
+assert_eq "$(cf "$CGL" status)" closed "legacy: closed"; assert_eq "$(cards "$CGL")" '[["GL1",true],["GL2",true]]' "legacy: normalised into answers[]"
+CGM="$(mkcard "$QG" --option "A::a" --option "B::b")"; RB="$(nsends)"
+scen "$CGM" <<'JS' >/dev/null
+o.patchDecision(f, id, { status: 'pending_dispatch', answer: 'A', answer_id: 'GM1', answer_option: 'A', answer_free_text: null, answer_digest: 'd1', dispatched_message_id: 'MLEG2' }, { any: true });
+JS
+node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$CGM" >/dev/null 2>&1
+assert_eq "$(nsends)" "$RB" "legacy: every entry sent and pending_dispatch: closed without sending"; assert_eq "$(cf "$CGM" status)" closed "legacy: closed without a send"
 
 finalize_test

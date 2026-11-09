@@ -1,0 +1,11 @@
+# Example systemd user timer for profile-health.service (daily).
+[Unit]
+Description=Daily Claude login profile health check
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

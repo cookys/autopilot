@@ -1281,10 +1281,32 @@
       "audience": "internal",
       "class": "path_seam",
       "default": null,
-      "readers": ["scripts/lib/fleet-decision.js"],
+      "readers": ["scripts/lib/fleet-decision.js", "scripts/profile-health.js"],
       "doc": null,
       "relates": [],
-      "note": "Path of the fleet binary used by fleet-decision.js (default: fleet on PATH). Tests point it at a stub."
+      "note": "Path of the fleet binary used by fleet-decision.js and profile-health.js (default: fleet on PATH). Tests point it at a stub."
+    },
+    {
+      "name": "AUTOPILOT_CLAUDE_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/profile-health.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Path of the claude binary profile-health.js runs `auth status --json` with (default: claude on PATH). Tests point it at a stub."
+    },
+    {
+      "name": "AUTOPILOT_NOW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/profile-health.js"],
+      "doc": null,
+      "relates": [],
+      "note": "ISO time that replaces the clock in profile-health.js so tests get deterministic days-left."
     },
     {
       "name": "AUTOPILOT_CLAIM_RETRIES",

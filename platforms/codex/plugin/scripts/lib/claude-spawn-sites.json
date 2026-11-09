@@ -248,6 +248,11 @@
       "reason": "this gate: its own detection patterns contain the strings it looks for; it starts no claude"
     },
     {
+      "file": "scripts/profile-health.js",
+      "status": "out_of_scope",
+      "reason": "runs only `claude auth status --json` per profile (no model call, no token spend); reads loggedIn and loginExpiresAt only"
+    },
+    {
       "file": "scripts/accounts-onboard.sh",
       "status": "wired",
       "group": "account-layer",

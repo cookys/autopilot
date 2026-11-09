@@ -251,3 +251,14 @@ test('--second-judge-report CLI: exit 2 on mismatch and on use with --second-jud
   assert.strictEqual(r.status, 2); assert.match(r.stderr, /excludes/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// ---- item of an unconfirmed hard fail ------------------------------------------
+test('unconfirmed hard fail names its item when the judge reported it in another round, or with no round', async () => {
+  // HF8 is defined on E1 (round 5); this judge reports it in round 4, which holds N1..N3
+  const a = await grade({ judge: forcing('HF8', 4), secondJudge: plain() });
+  assert.deepStrictEqual(a.examinees[0].unconfirmed_judge_hard_fails, [{ item: 'E1', hf: 'HF8', flagged_by: 'first' }]);
+  // a report-sourced second judge carries ids only, no round
+  const r = await oldStyleReport({ judge: forcing('HF8', 4) });
+  const b = await viaReport(r, { judge: plain() });
+  assert.deepStrictEqual(b.examinees[0].unconfirmed_judge_hard_fails, [{ item: 'E1', hf: 'HF8', flagged_by: 'second' }]);
+});

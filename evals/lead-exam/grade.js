@@ -170,8 +170,12 @@ async function gradeExam(opts) {
       const hf = items.hard_fails.find((h) => h.id === id);
       const m = hf.mech.map((c) => c.msg).find((msg) => lib.msgRounds(items)[msg] === round);
       if (m) return m;
+      // the judge named the hard fail in a round that does not hold its item (or gave no round, as a report-sourced
+      // second judge does): a hard fail defined on one item belongs to that item
       const inRound = items.items.filter((it) => it.round === round);
-      return inRound.length === 1 ? inRound[0].id : null;
+      if (inRound.length === 1) return inRound[0].id;
+      const msgs = Array.from(new Set(hf.mech.map((c) => c.msg)));
+      return msgs.length === 1 ? msgs[0] : null;
     };
     const notVoided = (h) => !voidMsgs.has(hfItemOf(h.id, h.round)) && !voidIds.includes(hfItemOf(h.id, h.round));
     const standing = Array.from(new Set(judged.filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round) && notVoided(h)).map((h) => h.id))).sort();

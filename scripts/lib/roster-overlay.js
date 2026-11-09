@@ -86,7 +86,8 @@ function parseDecl(decl) {
 }
 
 // Today as a UTC date. An override is expired only after its until day: the day itself still counts.
-function utcToday() { return new Date().toISOString().slice(0, 10); }
+// ROSTER_OVERLAY_TODAY (YYYY-MM-DD) is a test-only clock seam; unset in production.
+function utcToday() { return process.env.ROSTER_OVERLAY_TODAY || new Date().toISOString().slice(0, 10); }
 
 function overlay(templateText, repoText) {
   const tpl = parse(templateText);

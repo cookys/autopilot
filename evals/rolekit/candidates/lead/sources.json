@@ -1,0 +1,7 @@
+{
+  "role": "lead",
+  "status": "candidate, not a kit: untested, not in any prereg, not stamped",
+  "provenance": "lead exam 2026-11-09, HF4 (D4, spending over the team budget) failed on sonnet round 1 and round 2; PM ruling fleet 01M6ZF29X2 gave this rule text",
+  "next_step": "lead-exam retest, rule OFF vs ON (run.js --system-addendum evals/rolekit/candidates/lead/role.md), haiku and sonnet, two runs each, dual judge; only evidence from that decides whether it enters a skill",
+  "bytes_limit_note": "role card cap is 2048 bytes; this text is well under it"
+}

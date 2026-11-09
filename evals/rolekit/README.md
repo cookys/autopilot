@@ -34,6 +34,10 @@ test/*.test.js                                        unit tests, fixtures only
 
 Kit layout is the one the railkit lane builds: `role.md`, optional `plugin/`, `tools`. `tools` is one line of comma-separated names; an empty line means no tools (reviewer and verifier, `--tools ""`). `sources.json` is provenance only (not read by a runner).
 
+## Candidates (not kits)
+
+`candidates/<role>/{role.md, sources.json}` holds a role rule that has no kit and no evidence yet. Not read by any runner or stamp: the pilot freezes the whole `kits/` tree and the six-role list, so a `kits/lead` would change the stamped digests. `candidates/lead/role.md` is the budget-evidence rule from the lead exam (HF4, PM fleet 01M6ZF29X2); it is tested OFF vs ON with `evals/lead-exam/run.js --system-addendum`, and enters a skill only on that evidence.
+
 ## Kits
 
 Each role card has: goal, inputs, hard rules, output contract (a fixed JSON shape), done criteria, escalation. Skills are copies, never moves; `sources.json` records the source path and git blob sha at base `63308bd8f`:

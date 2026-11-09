@@ -78,10 +78,12 @@ function renderRound(items, map, r) {
 }
 
 // prompt for round N = system prompt + rounds 1..N-1 (messages + this examinee's own output) + round N messages.
-function buildPrompt(items, seed, round, priorOutputs) {
+function buildPrompt(items, seed, round, priorOutputs, systemAddendum) {
   const map = deriveNames(items, seed);
   const outs = priorOutputs || [];
-  const parts = [subst(items.system_prompt, map)];
+  const sys = subst(items.system_prompt, map);
+  // optional ON arm of a candidate rule: appended to the system prompt only; absent or empty leaves the prompt unchanged
+  const parts = [systemAddendum ? `${sys}\n\n${systemAddendum}` : sys];
   for (let r = 1; r < round; r += 1) {
     if (typeof outs[r - 1] !== 'string') throw new Error(`lead-exam: missing output for round ${r}`);
     parts.push(renderRound(items, map, r));

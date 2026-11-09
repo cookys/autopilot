@@ -1,0 +1,13 @@
+## hooks/tests/project-record.test.sh
+PASS [project-record] 235 assertions
+## hooks/tests/hippo-lib.test.sh
+PASS [hippo-lib] 107 assertions
+## hooks/tests/record-files.test.sh
+PASS [record-files] 112 assertions
+## hooks/tests/backlog-reconcile.test.sh
+PASS [backlog-reconcile] 28 assertions
+
+## affected-suites (467 selected suites), checked up to 129 finished at the time of writing; the run was still going
+non-zero so far: hooks/hook-hosting.test.js, hooks/tests/dispatch-detach.test.sh (both also rc=1 on base f68590f25),
+hooks/tests/dispatch-hetero.test.sh (hit the runner's 100 s timeout; rc=124 on base too),
+hooks/runs-watch-start.test.js (rc=1 inside the loaded run; rc=0 when run alone on base and on this branch)

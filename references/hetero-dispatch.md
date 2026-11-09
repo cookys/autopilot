@@ -151,6 +151,17 @@ Other runners are unaffected (codex/grok take `--prompt-file`; cc-shim, qodercli
 `kimi` still has its own argv-only wall (`MAX_ARG_STRLEN`), as does the qualification-review provider's
 agy/kimi transport — see their own sections.
 
+### Cross-family rule for plan review (and consult labelling)
+
+`dispatch-plan-review.js` applies the code-review family gate (`scripts/lib/review-family-gate.js`): READY needs at
+least one reviewed seat whose model family is not Claude's (`plan_review auto` falling back to `opus/high@claude-native`
+therefore cannot reach READY). A Claude-only panel gets CONDITIONAL with `policy_reason: no_cross_family_seat`
+(terminal), and `check-phase-review-receipt.js --plan-artifact` fails. The only exception is
+`--same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>"`, recorded as `same_family_exception` in the artifact.
+`dispatch-consult.sh` may fall back to `sonnet/high@claude-native`, but a Claude-family consult result carries
+`same_family_opinion: true` (JSON, plus a 同家族意見 first stderr line) and is never counted as a review seat
+(`isConsultResult`; Mode A refuses such a seat artifact).
+
 ### Transport fallback for a frozen plan-review seat
 
 A seat in a `dispatch-plan-review.js` manifest may declare **`transport_fallback`** — a second pipe

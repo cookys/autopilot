@@ -93,6 +93,46 @@ function evaluate(chain, entry, reviewedIds) {
   return { ok: true, cross_family: cross, seat_families: seatFamilies, implementer_families: implFamilies, implementer_engines: engines };
 }
 
+// ---- plan review (same rule, different ledger) ------------------------------------------------------------
+// The plan-review verdict READY (and the plan-mode receipt check) needs at least one REVIEWED seat whose model
+// family is not the depth-0 / author family. Depth-0 here is Claude (anthropic); an unknown family never counts
+// as "other". Family is derived from the seat's model/runner (the declared manifest family is only a last resort),
+// never stored: dispatch-plan-review.js writes runner+model on each reviewer_verdicts entry and
+// check-phase-review-receipt.js Mode B re-derives from those same bytes.
+const DEPTH0_FAMILY = 'anthropic';
+
+function planSeatFamily(seat) {
+  if (!seat || typeof seat !== 'object') return 'unknown';
+  for (const field of [seat.model, seat.runner]) {
+    const derived = familyOfEngine(field);
+    if (derived !== 'unknown') return derived;
+  }
+  const declared = typeof seat.family === 'string' ? seat.family : '';
+  if (declared && !declared.startsWith('legacy-')) {
+    const viaName = familyOfEngine(declared);
+    return viaName !== 'unknown' ? viaName : declared;
+  }
+  return 'unknown';
+}
+
+/** @param reviewedSeats seats that really reviewed ({runner, model, family}) */
+function evaluatePlan(reviewedSeats) {
+  const fams = (reviewedSeats || []).map(planSeatFamily);
+  return {
+    cross_family: fams.some((f) => f !== 'unknown' && f !== DEPTH0_FAMILY),
+    seat_families: [...new Set(fams)].sort(),
+    depth0_family: DEPTH0_FAMILY,
+  };
+}
+
+// A consult result (scripts/dispatch-consult.sh: role "consult", same_family_opinion true when the consult seat is
+// Claude-family, incl. the claude-native fallback) is advice, never a review seat. check-phase-review-receipt.js Mode A
+// refuses a seat artifact that is one; a review seat artifact is `status: "reviewed"` from dispatch-review.sh, which a
+// consult result (status "advised") can never be.
+function isConsultResult(seat) {
+  return !!seat && typeof seat === 'object' && (seat.role === 'consult' || seat.same_family_opinion === true);
+}
+
 function warningFor(res) {
   return {
     code: 'no_cross_family_seat',
@@ -101,4 +141,4 @@ function warningFor(res) {
   };
 }
 
-module.exports = { parseException, validRecordedException, familiesOfImplementer, recordedImplementerEngines, seatFamily, evaluate, warningFor };
+module.exports = { isConsultResult, DEPTH0_FAMILY, planSeatFamily, evaluatePlan, parseException, validRecordedException, familiesOfImplementer, recordedImplementerEngines, seatFamily, evaluate, warningFor };

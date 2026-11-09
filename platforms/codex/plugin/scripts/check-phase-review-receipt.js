@@ -127,6 +127,10 @@ Cross-family rule (Mode A, no flag or env var turns it off): the converged gener
 whose model family differs from the implementer's, both re-derived from the ledger. The one exception is a
 same_family_exception recorded by hetero-review-loop.js finalize --same-family-exception "<source>: <reason>".
 
+Cross-family rule (Mode B, same): the plan-artifact's reviewer_verdicts (runner/model) need a reviewed seat whose
+family is not Claude's; the one exception is a same_family_exception recorded by dispatch-plan-review.js
+--same-family-exception "<source>: <reason>".
+
 Chain rules (Mode A): every chain entry must be 'finalized' except an 'aborted' one (hetero-review-loop
 wrote it when the branch moved during collection, a seat's findings failed to parse, or a seat gap
 left the generation without a usable review: reasons seat_gap, seat_gap_below_min). An aborted entry
@@ -542,6 +546,24 @@ function validateModeB(flags) {
       console.error(failMsg);
     }
     process.exit(1);
+  }
+
+  // Cross-family rule for plan review (same rule as Mode A, re-derived from the artifact's reviewer_verdicts
+  // runner/model, never from a stored family): at least one reviewed seat outside Claude's family, unless the
+  // artifact records a sourced same_family_exception written by dispatch-plan-review.js --same-family-exception.
+  {
+    const reviewed = Array.isArray(planArtifact.reviewer_verdicts) ? planArtifact.reviewer_verdicts : [];
+    const fam = familyGate.evaluatePlan(reviewed);
+    if (!fam.cross_family) {
+      if (planArtifact.same_family_exception === undefined) {
+        console.error(`Cross-family rule: plan-artifact has no reviewed seat of a family other than ${fam.depth0_family} (reviewed seat families [${fam.seat_families.join(', ')}]); review it with a seat of another family, or run dispatch-plan-review.js with --same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>"`);
+        process.exit(1);
+      }
+      if (!familyGate.validRecordedException(planArtifact.same_family_exception)) {
+        console.error('Cross-family rule: same_family_exception in plan-artifact is malformed (needs source = decision card id d-xxxxxxxx or fleet message id ULID, and a non-empty reason)');
+        process.exit(1);
+      }
+    }
   }
 
   process.exit(0);
@@ -1095,6 +1117,10 @@ function validateModeA(flags, opts = {}) {
         } catch (err) {
           if (err instanceof ExitSignal) throw err; // in-process set check: an exit inside a try must reach runModeAInProcess
           console.error(`Failed to parse seat artifact ${seatFile} for generation ${entry.generation}: ${err.message}`);
+          process.exit(1);
+        }
+        if (familyGate.isConsultResult(seatContent)) {
+          console.error(`Seat artifact ${seatFile} for generation ${entry.generation} is a consult result (role consult / same_family_opinion), not a review: a consult opinion is advice and never counts as a reviewed seat`);
           process.exit(1);
         }
         if (seatContent && seatContent.status === 'reviewed') {

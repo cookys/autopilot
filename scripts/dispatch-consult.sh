@@ -82,6 +82,10 @@
 #       blind_evidence_violation|transport_failed|protocol_violation|verdict_rejected|engine_unavailable",
 #     "engine": "...", "runner": "...", "effort": "...", "endpoint": "..."|null,
 #     "response": <frozen consult schema>|null, "error": "..."|null }
+#   plus leading "same_family_opinion": true|false and "opinion_label". true when the consult seat is
+#   Claude-family (incl. the claude-native fallback): the label (同家族意見) is also the first stderr line,
+#   and the result is advice from the author's own family, never a review seat (see
+#   lib/review-family-gate.js isConsultResult; check-phase-review-receipt.js refuses such a seat artifact).
 #
 # EXIT: 0 = advised. 2 = consult_dispatch off (usage-shaped refusal — no
 #   transport spawned). 3 = qualification/config gate refused the seat
@@ -163,6 +167,15 @@ let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
 });' "$1" 2>/dev/null | node "$SCRIPT_DIR/engine-capability-state.js" cloud-fallback-log >/dev/null 2>&1 || true
 }
 
+# model family of the consult seat, derived by the shared table (scripts/lib/stage-write.js familyOfEngine)
+consult_family() { # <engine> <runner>
+  node -e '
+const { familyOfEngine } = require(process.argv[1]);
+let f = familyOfEngine(process.argv[2]);
+if (f === "unknown") f = familyOfEngine(process.argv[3]);
+process.stdout.write(f);' "$SCRIPT_DIR/lib/stage-write.js" "$1" "$2" 2>/dev/null
+}
+
 emit() {
   local status="$1" engine="$2" runner="$3" effort="$4" endpoint="$5" response_json="$6" error="$7" exit_code="$8"
   local endpoint_json="null"
@@ -176,8 +189,16 @@ emit() {
   fi
   [ -n "${FALLBACK_LOG_ROW:-}" ] && log_cloud_fallback "$status"
   local _cs_json
-  _cs_json="$(printf '{ "role": "consult", "status": "%s", "engine": "%s", "runner": "%s", "effort": "%s", "endpoint": %s, "response": %s, "error": %s%s }' \
-    "$(json_escape "$status")" "$(json_escape "$engine")" "$(json_escape "$runner")" "$(json_escape "$effort")" \
+  # Same-family label: a Claude-family consult seat (incl. the claude-native fallback) is an opinion from the
+  # author's own family, never a review. The marker leads the object; the text label is the first stderr line.
+  local sf_json="false" sf_label=""
+  if [ "${CONSULT_RESOLVED_FROM:-}" = "native-fallback" ] || [ "$(consult_family "$engine" "$runner")" = "anthropic" ]; then
+    sf_json="true"
+    sf_label="同家族意見 (same_family_opinion): consult 席位屬 Claude 家族,結果僅供參考,不算審查席位"
+    printf '%s\n' "$sf_label" >&2
+  fi
+  _cs_json="$(printf '{ "same_family_opinion": %s, "opinion_label": "%s", "role": "consult", "status": "%s", "engine": "%s", "runner": "%s", "effort": "%s", "endpoint": %s, "response": %s, "error": %s%s }' \
+    "$sf_json" "$(json_escape "$sf_label")" "$(json_escape "$status")" "$(json_escape "$engine")" "$(json_escape "$runner")" "$(json_escape "$effort")" \
     "$endpoint_json" "$response_json" "$error_json" "$probe_fields")"
   printf '%s\n' "$_cs_json"
   # dispatch_usage/1 ledger row: only for a run that reached the transport (dispatch-author.sh is told not to write its own).

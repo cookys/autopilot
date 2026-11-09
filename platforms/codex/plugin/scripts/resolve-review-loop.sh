@@ -1189,7 +1189,7 @@ process.exit(1);
       if [[ "$_plan_missing_key" -eq 1 ]]; then
         _plan_warn="plan_review auto: stale topology cache is missing plan_review_panel — regenerate via scripts/resolve-dispatch-topology.js"
       else
-        _plan_warn="plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true"
+        _plan_warn="plan_review auto: no qualified plan-review seat on this host — falling back to opus/high@claude-native. The chair now shares the depth-0 family: an empty finding list from it is indistinguishable from a clean review, same_family_as_depth0=true. Rule (PM 01M6Z8D9YX): such a chair alone can never reach READY - dispatch-plan-review.js downgrades to CONDITIONAL (no_cross_family_seat) unless a reviewed seat is non-Claude or --same-family-exception names the approving card/message"
       fi
       CAP_WARNINGS_JSON="$(node -e '
 let a = [];

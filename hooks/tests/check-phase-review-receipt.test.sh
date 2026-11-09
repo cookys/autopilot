@@ -553,6 +553,7 @@ DISPOSITIONS_11="$TEST_TMP/disp11.json"
 cat << EOF > "$PLAN_ARTIFACT_11"
 {
   "artifact_type": "plan_review_artifact",
+  "reviewer_verdicts": [ { "seat_id": "architect", "runner": "codex", "model": "gpt-fixture", "family": "openai", "verdict": "READY" } ],
   "logical_plan_id": "test-plan-11",
   "generation": 1,
   "plan_sha256": "$PLAN11_SHA",
@@ -586,6 +587,7 @@ DISPOSITIONS_11P="$TEST_TMP/disp11p.json"
 cat << EOF > "$PLAN_ARTIFACT_11P"
 {
   "artifact_type": "plan_review_artifact",
+  "reviewer_verdicts": [ { "seat_id": "architect", "runner": "codex", "model": "gpt-fixture", "family": "openai", "verdict": "READY" } ],
   "logical_plan_id": "test-plan-11",
   "generation": 2,
   "plan_sha256": "$PLAN11_SHA",
@@ -673,6 +675,7 @@ DISPOSITIONS_11P="$TEST_TMP/disp11p.json"
 cat << EOF > "$PLAN_ARTIFACT_11P"
 {
   "artifact_type": "plan_review_artifact",
+  "reviewer_verdicts": [ { "seat_id": "architect", "runner": "codex", "model": "gpt-fixture", "family": "openai", "verdict": "READY" } ],
   "logical_plan_id": "test-plan-11p",
   "generation": 1,
   "plan_sha256": "$PLAN11P_SHA",
@@ -702,6 +705,7 @@ DISPOSITIONS_11Q="$TEST_TMP/disp11q.json"
 cat << EOF > "$PLAN_ARTIFACT_11Q"
 {
   "artifact_type": "plan_review_artifact",
+  "reviewer_verdicts": [ { "seat_id": "architect", "runner": "codex", "model": "gpt-fixture", "family": "openai", "verdict": "READY" } ],
   "logical_plan_id": "test-plan-11q",
   "generation": 1,
   "plan_sha256": "$PLAN11P_SHA",

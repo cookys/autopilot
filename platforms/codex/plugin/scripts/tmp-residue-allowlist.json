@@ -89,6 +89,11 @@
       "reason": "Child of workRoot (impl-qualify-live-, registered in scripts/lib/tmp-residue-registry.json), not a direct temp-root entry."
     },
     {
+      "file": "scripts/engine-qualify.js",
+      "match": "impl-wt-${caseSpec",
+      "reason": "Per-case --worktree-parent under workRoot (impl-qualify-live-, registered in scripts/lib/tmp-residue-registry.json), not a direct temp-root entry; examsandbox."
+    },
+    {
       "file": "scripts/lib/test-integrity-l1.py",
       "match": "prefix=\"autopilot-l1-\"",
       "reason": "Python allocation; the worktree root is removed with shutil.rmtree in the finally block of the same function."

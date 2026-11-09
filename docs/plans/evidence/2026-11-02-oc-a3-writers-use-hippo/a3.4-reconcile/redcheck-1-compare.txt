@@ -1,0 +1,59 @@
+# mutation 1: reconcile comparison treats every id as present
+-  const missing = [...want].filter((id) => !have.has(id)).sort();
++  const missing = [...want].filter((id) => false).sort();
+FAIL [backlog-reconcile] new row after import blocks: expected '1', got '0'
+<anonymous_script>:1
+d.violations[0].code
+                ^
+
+TypeError: Cannot read properties of undefined (reading 'code')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:17)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [backlog-reconcile] code is backlog_unimported: expected 'backlog_unimported', got ''
+<anonymous_script>:1
+d.violations[0].level
+                ^
+
+TypeError: Cannot read properties of undefined (reading 'level')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:17)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [backlog-reconcile] level is block: expected 'block', got ''
+FAIL [backlog-reconcile] names exactly BL-0004: expected '["BL-0004"]', got '[]'
+FAIL [backlog-reconcile] new ADR plus new row blocks: expected '1', got '0'
+FAIL [backlog-reconcile] names ADR-0002 and BL-0004, sorted: expected '["ADR-0002","BL-0004"]', got '[]'
+FAIL [backlog-reconcile] printed repair command: expected 'hippo import --from autopilot-backlog BACKLOG.md --from adr-dir docs/dev/adr --only ADR-0002,BL-0004', got 'null'
+hooks/tests/backlog-reconcile.test.sh: line 56: null: command not found
+FAIL [backlog-reconcile] repair command failed: null
+FAIL [backlog-reconcile] repair created only the named record (4 issues): expected '4', got '3'
+FAIL [backlog-reconcile] ADR-only hint: expected 'hippo import --from adr-dir docs/dev/adr --only ADR-0003', got 'null'
+FAIL [backlog-reconcile] --adr-dir is honoured: expected '["ADR-0007"]', got '[]'
+FAIL [backlog-reconcile] 18 passed, 11 failed
+      - new row after import blocks: expected '1', got '0'
+      - code is backlog_unimported: expected 'backlog_unimported', got ''
+      - level is block: expected 'block', got ''
+      - names exactly BL-0004: expected '["BL-0004"]', got '[]'
+      - new ADR plus new row blocks: expected '1', got '0'
+      - names ADR-0002 and BL-0004, sorted: expected '["ADR-0002","BL-0004"]', got '[]'
+      - printed repair command: expected 'hippo import --from autopilot-backlog BACKLOG.md --from adr-dir docs/dev/adr --only ADR-0002,BL-0004', got 'null'
+      - repair command failed: null
+      - repair created only the named record (4 issues): expected '4', got '3'
+      - ADR-only hint: expected 'hippo import --from adr-dir docs/dev/adr --only ADR-0003', got 'null'
+      - --adr-dir is honoured: expected '["ADR-0007"]', got '[]'

@@ -33,6 +33,10 @@
  *     pre-push mode: the file gate on <head>'s committed backlog, plus peer_report_lost over
  *     every commit in the range (base included) that touched the backlog.
  *
+ *   node scripts/check-backlog-entries.js --hippo --reconcile [--target <dir>] [--backlog <file>] [--adr-dir <dir>]
+ *     every backlog row Id (BL-NNNN) and ADR file number (ADR-NNNN) needs a hippo record with that provenance value, else
+ *     backlog_unimported (block). Exit 2 no store, 5 hippo unusable. The only `--hippo` rule so far.
+ *
  * Exit: 0 clean or warn · 1 block with new violations · 2 usage / unreadable / self-test fail
  */
 
@@ -91,7 +95,8 @@ function usage(code) {
   process.stderr.write(
     'Usage: node scripts/check-backlog-entries.js --backlog <file> ' +
     '[--config <file>] [--allowlist <file>] [--mode warn|block] ' +
-    '[--json] [--self-test] [--update-allowlist] [--range <base>..<head>]\n'
+    '[--json] [--self-test] [--update-allowlist] [--range <base>..<head>]\n' +
+    '       node scripts/check-backlog-entries.js --hippo --reconcile [--target <dir>] [--backlog <file>] [--adr-dir <dir>]\n'
   );
   process.exit(code);
 }
@@ -106,6 +111,10 @@ function parseArgs(argv) {
     selfTest: false,
     updateAllowlist: false,
     range: null,
+    hippo: false,
+    reconcile: false,
+    target: null,
+    adrDir: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -122,6 +131,10 @@ function parseArgs(argv) {
     else if (a === '--self-test') out.selfTest = true;
     else if (a === '--update-allowlist') out.updateAllowlist = true;
     else if (a === '--range') out.range = need();
+    else if (a === '--hippo') out.hippo = true;
+    else if (a === '--reconcile') out.reconcile = true;
+    else if (a === '--target') out.target = need();
+    else if (a === '--adr-dir') out.adrDir = need();
     else usage(2);
   }
   if (out.mode != null && out.mode !== 'warn' && out.mode !== 'block') usage(2);
@@ -1129,10 +1142,81 @@ function runSelfTest() {
   }
 }
 
+// --hippo --reconcile (plan A3.4 step 1, the `--reconcile` sentence only): every backlog row Id and every ADR file number of the
+// frozen files needs a record whose provenance value equals it (`BL-NNNN`, `ADR-NNNN`; any status, closed included).
+// Exit 2: no store / usage; 5: store present but hippo unusable. Never passes silently.
+function runReconcile(args) {
+  const hippo = require('./lib/hippo.js');
+  const die = (code, msg) => { process.stderr.write(`${msg}\n`); process.exit(code); };
+  const det = (() => {
+    try { return hippo.detect(args.target || process.cwd()); } catch (e) { return die(e.exit || 2, e.message); }
+  })();
+  const root = det.repo_root;
+  if (det.state === 'files') die(2, `no hippo store in ${root}`);
+  if (det.state !== 'hippo') die(5, `hippo unusable in ${root}: ${det.reason}`);
+  let backlogPath = args.backlog;
+  if (!backlogPath) {
+    const r = spawnSync('bash', [path.join(SCRIPT_DIR, 'resolve-project-paths.sh'), '--target', root, '--field', 'backlog'], { encoding: 'utf8' });
+    const v = (r.stdout || '').trim();
+    if (r.status !== 0 || !v || v === 'none') die(2, `cannot resolve the backlog file for ${root}; pass --backlog <file>`);
+    backlogPath = path.resolve(root, v);
+  }
+  backlogPath = path.resolve(backlogPath);
+  let text;
+  try { text = fs.readFileSync(backlogPath, 'utf8'); } catch (e) { return die(2, `unreadable backlog: ${e.message}`); }
+  const cfg = loadGateConfig(args, root);
+  const want = new Set();
+  for (const ent of collectEntries(text, cfg.style || 'heading', cfg)) {
+    const id = ent.id ? String(ent.id).trim().split(/\s+/)[0] : '';
+    if (BL_ID_RE.test(id)) want.add(id);
+  }
+  const adrDir = path.resolve(root, args.adrDir || 'docs/dev/adr');
+  const adrIds = new Set();
+  let adrNote = null;
+  if (fs.existsSync(adrDir) && fs.statSync(adrDir).isDirectory()) {
+    for (const f of fs.readdirSync(adrDir)) {
+      const m = /^(\d+)-.*\.md$/.exec(f);
+      if (m) adrIds.add(`ADR-${m[1]}`);
+    }
+  } else {
+    adrNote = `no ADR directory at ${path.relative(root, adrDir) || '.'}: ADR ids skipped`;
+    process.stderr.write(`info: ${adrNote}\n`);
+  }
+  for (const a of adrIds) want.add(a);
+  const ex = hippo.run(root, ['export']);
+  if (!ex.ok) die(5, `hippo export failed: ${ex.error && ex.error.message}`);
+  const have = new Set();
+  for (const r of ex.data.records) if (r.provenance && r.provenance.value) have.add(r.provenance.value);
+  const missing = [...want].filter((id) => !have.has(id)).sort();
+  const annotated = [];
+  let fix = null;
+  if (missing.length) {
+    const rel = (p) => path.relative(root, p) || '.';
+    const froms = [];
+    if (missing.some((i) => i.startsWith('BL-'))) froms.push(`--from autopilot-backlog ${rel(backlogPath)}`);
+    if (missing.some((i) => i.startsWith('ADR-'))) froms.push(`--from adr-dir ${rel(adrDir)}`);
+    fix = `hippo import ${froms.join(' ')} --only ${missing.join(',')}`;
+    annotated.push({ code: 'backlog_unimported', title: '', field: 'Id', level: 'block', allowed: false,
+      detail: `${missing.join(', ')} ${missing.length === 1 ? 'has' : 'have'} no record; from the repo root run: ${fix}` });
+  }
+  const report = buildReport(cfg, backlogPath, cfg.style || 'heading', want.size, byteLen(text), annotated);
+  report.reconcile = { checked: want.size, missing, fix, adr_note: adrNote };
+  process.stdout.write(JSON.stringify(report) + '\n');
+  process.exit(report.exit);
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.selfTest) {
     process.exit(runSelfTest());
+  }
+  if (args.hippo || args.reconcile) {
+    if (!args.hippo || args.range || args.updateAllowlist) usage(2);
+    if (!args.reconcile) {
+      process.stderr.write('--hippo: not implemented in this change: only --reconcile\n');
+      process.exit(2);
+    }
+    runReconcile(args);
   }
   if (!args.backlog) usage(2);
   if (args.range) {

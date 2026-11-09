@@ -35,7 +35,9 @@ if (a[0] === 'send') {
   if (m === 'fail4') { process.stderr.write('hub refused\n'); process.exit(4); }
   if (m === 'garbage') { process.stdout.write('accepted, probably\n'); process.exit(0); }
   const n = fs.readFileSync(D + '/sends.jsonl', 'utf8').split('\n').filter(Boolean).length;
-  process.stdout.write(JSON.stringify({ ok: true, member: a[1], message_id: '01MSGSTUB' + String(n).padStart(6, '0') }) + '\n'); process.exit(0);
+  process.stdout.write(JSON.stringify({ ok: true, member: a[1], message_id: '01MSGSTUB' + String(n).padStart(6, '0') }) + '\n');
+  if (m === 'late') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 6000); // the hub committed and printed the id, then the call hangs past the caller's timeout
+  process.exit(0);
 }
 if (a[0] === 'dispatch') { fs.appendFileSync(D + '/dispatch.log', a.join(' ') + '\n'); process.exit(0); }
 const [, sub, card] = a;
@@ -214,5 +216,53 @@ assert_eq "$([ $((T1 - T0)) -le 7 ] && echo in_time || echo late)" in_time "B bu
 assert_contains "$HOUT" "hook_budget" "B budget: the session is told about the deferred cards"
 rm -f "$STUB/sleepms"; RB="$(nsends)"
 node "$OD" redeliver --cwd "$R" --root-run-id root-t >"$TEST_TMP/o" 2>&1; assert_eq "$(( $(nsends) - RB ))" 2 "B budget: redeliver sends the two parked cards"
+
+# 12. review gen 2 (card answer dispatch state machine). A: answer B parked while the send of answer A is in flight -> both sent in order, closed after B, closed card holds B
+setmode ok; printf 3000 > "$STUB/sleepms"; QR="進行中？"
+CR1="$(mkcard "$QR" --option "A::a" --option "B::b")"; AR1A="$(claim "$CR1" o A)"; AR1B="$(claim "$CR1" o B)"; RB="$(nsends)"
+( hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CR1" "$QR" "$AR1A")" ) &
+PA=$!; sleep 1
+hook "$(printf '[待決回覆]\n%s｜%s → B｜%s\n' "$CR1" "$QR" "$AR1B")"
+assert_eq "$(cf "$CR1" status)" pending_dispatch "R1 mid-send: the card is NOT closed by the second hook while A is in flight"
+wait $PA
+assert_eq "$(( $(nsends) - RB ))" 2 "R1 mid-send: both answers sent"
+assert_contains "$(sendfield "$RB" text)" "answer_id: $AR1A" "R1 mid-send: A sent first"
+assert_contains "$(sendfield "$(( RB + 1 ))" text)" "answer_id: $AR1B" "R1 mid-send: B sent second"
+assert_eq "$(cf "$CR1" status)" closed "R1 mid-send: closed after the last send"
+assert_eq "$(cf "$CR1" answer_id)" "$AR1B" "R1 mid-send: the closed card's answer is B (the last one sent)"
+assert_neq "$(cf "$CR1" dispatched_message_id)" "<undef>" "R1 mid-send: message id of the last send recorded"
+rm -f "$STUB/sleepms"
+
+# B: persisting dispatched_message_id fails -> the card is not closed
+setmode ok; QI="寫入失敗？"; CI="$(mkcard "$QI" --option "A::a" --option "B::b")"; AI="$(claim "$CI" o A)"
+setmode fail4; hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CI" "$QI" "$AI")"; setmode ok
+IDR="$(node -e '
+const fs=require("fs");const o=require(process.argv[1]);const f=o.projectScopeFiles(process.argv[2],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===process.argv[3]));
+let writes=0;const rn=fs.renameSync;
+const sender=()=>{ fs.renameSync=(a,b)=>{ fs.renameSync=rn; throw new Error("disk full"); }; return {ok:true,message_id:"01MSGIDFAIL"}; }; // the first write after the send (the id patch) fails
+const r=o.sendParked(f,process.argv[3],sender);fs.renameSync=rn;process.stdout.write(r.status);
+' "$OD" "$R" "$CI")"
+assert_eq "$IDR" error "R2 id write fails: sendParked reports an error"
+assert_neq "$(cf "$CI" status)" closed "R2 id write fails: the card is NOT closed"
+
+# C: the send hangs past the timeout after the hub printed the id -> one send, id recorded, redeliver does not resend
+setmode fail4; QT="逾時？"; CT="$(mkcard "$QT" --option "A::a" --option "B::b")"; AT="$(claim "$CT" o A)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CT" "$QT" "$AT")"; setmode late; RB="$(nsends)"
+TR="$(node -e 'const o=require(process.argv[1]);const f=o.projectScopeFiles(process.argv[2],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===process.argv[3]));process.stdout.write(o.sendParked(f,process.argv[3],undefined,{timeoutMs:1500}).status)' "$OD" "$R" "$CT")"
+assert_eq "$TR" sent "R3 timeout: a message id printed before the timeout counts as sent"
+assert_eq "$(( $(nsends) - RB ))" 1 "R3 timeout: one send"
+assert_neq "$(cf "$CT" dispatched_message_id)" "<undef>" "R3 timeout: message id recorded"
+assert_eq "$(cf "$CT" status)" closed "R3 timeout: card closed"
+setmode ok; RB="$(nsends)"; node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$CT" >/dev/null 2>&1
+assert_eq "$(nsends)" "$RB" "R3 timeout: redeliver does not send again"
+
+# D: a message id is stored but the status is still pending_dispatch -> the next run closes the card with no new send
+setmode fail4; QD="殘留？"; CD="$(mkcard "$QD" --option "A::a" --option "B::b")"; AD="$(claim "$CD" o A)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CD" "$QD" "$AD")"; setmode ok
+node -e 'const o=require(process.argv[1]);const f=o.projectScopeFiles(process.argv[2],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===process.argv[3]));o.patchDecision(f,process.argv[3],{dispatched_message_id:"01MSGLEFT"},{any:true})' "$OD" "$R" "$CD"
+assert_eq "$(cf "$CD" status)" pending_dispatch "R4 leftover: precondition, id stored and still pending_dispatch"
+RB="$(nsends)"; node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$CD" >/dev/null 2>&1
+assert_eq "$(nsends)" "$RB" "R4 leftover: no new send"
+assert_eq "$(cf "$CD" status)" closed "R4 leftover: the next run closes the card"
 
 finalize_test

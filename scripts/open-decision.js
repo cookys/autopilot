@@ -697,12 +697,24 @@ function claimLive(cl, now) {
   return age < SEND_TIMEOUT_MS + CLAIM_MARGIN_MS || (Number.isInteger(cl.pid) && pidAlive(cl.pid) && age < CLAIM_PID_CAP_MS);
 }
 
+function parseSent(stdout) {
+  try {
+    const j = JSON.parse(String(stdout || '').trim());
+    return j && j.ok === true && typeof j.message_id === 'string' && j.message_id ? { ok: true, message_id: j.message_id } : null;
+  } catch (_e) { return null; }
+}
+
 function sendFleet(to, text, timeoutMs = SEND_TIMEOUT_MS) {
   const env = { ...process.env };
   delete env.FLEET_AS_CLI;
   delete env.FLEET_FYI; // the executor must act on this: not an FYI
   const r = spawnSync(process.env.AUTOPILOT_FLEET_BIN || 'fleet', ['send', to, text], { encoding: 'utf8', timeout: timeoutMs, env });
-  if (r.error) return { ok: false, error: r.error.code === 'ENOENT' ? 'no fleet binary' : r.error.message };
+  if (r.error) {
+    // a timeout can come after the hub committed the send: a message id already on stdout means it went out (a resend would duplicate it)
+    const sent = parseSent(r.stdout);
+    if (sent) return sent;
+    return { ok: false, error: r.error.code === 'ENOENT' ? 'no fleet binary' : r.error.message };
+  }
   if (r.status !== 0) return { ok: false, error: `fleet send exit ${r.status}: ${String(r.stderr || '').trim().split('\n')[0] || 'no output'}` };
   let j;
   try { j = JSON.parse(String(r.stdout).trim()); } catch (_e) { return { ok: false, error: 'fleet send exit 0 but stdout is not JSON' }; }
@@ -737,7 +749,11 @@ function sendParked(file, id, sender = sendFleet, { timeoutMs = SEND_TIMEOUT_MS 
   let seen = null;
   const cl = patchDecision(file, id, (h) => {
     seen = h;
-    if (h.dispatched_message_id || !isPendingDispatchEntry(h) || !h.executor || !h.answer_id || claimLive(h.dispatch_claim, Date.now())) return {};
+    if (h.dispatched_message_id) {
+      // the id is stored but the status patch never landed: finish the close here, no send
+      return isPendingDispatchEntry(h) ? { status: 'closed', closed_at: new Date().toISOString(), dispatch_error: undefined, dispatch_claim: undefined } : {};
+    }
+    if (!isPendingDispatchEntry(h) || !h.executor || !h.answer_id || claimLive(h.dispatch_claim, Date.now())) return {};
     won = h;
     return { dispatch_claim: { pid: process.pid, at: new Date().toISOString() } };
   }, { any: true });
@@ -752,16 +768,31 @@ function sendParked(file, id, sender = sendFleet, { timeoutMs = SEND_TIMEOUT_MS 
   const r = sender(c.executor, deliveryText(c), timeoutMs);
   const now = new Date().toISOString();
   if (r.ok) {
-    // the message id is persisted first: it is what stops a second send, even when the status patch below fails
-    const p = patchDecision(file, id, { dispatched_message_id: r.message_id, dispatched_via: 'send', dispatched_at: now, dispatch_claim: undefined }, { any: true });
+    // The message id is persisted first: it is what stops a second send, even when the status patch below fails.
+    // If the card now holds another answer (one queued as next_answer while this send was in flight, or one that replaced ours after the claim expired),
+    // this send is only recorded in sent_answers and the card stays pending_dispatch for the newer answer, which is sent next.
+    let more = false;
+    const p = patchDecision(file, id, (h) => {
+      const sent = [...(Array.isArray(h.sent_answers) ? h.sent_answers : []), { answer_id: c.answer_id, message_id: r.message_id, at: now }];
+      if (h.next_answer || h.answer_id !== c.answer_id) {
+        more = true;
+        return { ...(h.next_answer ? promoteNext(h.next_answer) : {}), sent_answers: sent, next_answer: undefined, dispatch_claim: undefined };
+      }
+      return { dispatched_message_id: r.message_id, dispatched_via: 'send', dispatched_at: now, sent_answers: sent, dispatch_claim: undefined };
+    }, { any: true });
+    if (p.status !== 'updated') return { status: 'error', id, executor: c.executor, error: `sent (${r.message_id}) but the card could not be marked: ${p.message || p.status}`, message_id: r.message_id };
+    if (more) return sendParked(file, id, sender, { timeoutMs });
     const q = patchDecision(file, id, { status: 'closed', closed_at: now, dispatch_error: undefined }, { any: true });
-    const bad = p.status === 'error' ? p : q.status === 'error' ? q : null;
-    if (bad) return { status: 'error', id, executor: c.executor, error: `sent (${r.message_id}) but the card could not be marked: ${bad.message}`, message_id: r.message_id };
+    if (q.status !== 'updated') return { status: 'error', id, executor: c.executor, error: `sent (${r.message_id}) but the card could not be marked: ${q.message || q.status}`, message_id: r.message_id };
     return { status: 'sent', id, executor: c.executor, message_id: r.message_id };
   }
-  const p = patchDecision(file, id, (h) => ({ dispatch_error: r.error, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now, dispatch_claim: undefined }), { any: true });
+  // not delivered: a queued newer answer replaces the failed one (nothing of it went out)
+  const p = patchDecision(file, id, (h) => ({ ...(h.next_answer ? promoteNext(h.next_answer) : {}), next_answer: undefined, dispatch_error: r.error, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now, dispatch_claim: undefined }), { any: true });
   return { status: 'failed', id, executor: c.executor, error: r.error, attempts: p.entry ? p.entry.dispatch_attempts : 1 };
 }
+
+// The answer fields of a queued next_answer, ready to become the card's answer.
+const promoteNext = (n) => ({ answer: n.answer, answer_id: n.answer_id, answer_option: n.answer_option, answer_free_text: n.answer_free_text, answer_digest: n.answer_digest, dispatch_error: undefined });
 
 // Store the courier-verified answer `v` ({ answer: {option, free_text}, answer_id }) on an OPEN executor card, or on a pending_dispatch card that has no answer or a
 // different one (a later answer replaces the parked one), and park it in pending_dispatch. A card already sent (dispatched_message_id) is never touched.
@@ -770,15 +801,20 @@ function parkAnswer(file, id, v) {
   const c = readFile(file, { all: true }).find((e) => e.id === id);
   if (!c) return { status: 'absent', id };
   if (c.dispatched_message_id) return { status: 'ok', id, executor: c.executor };
-  const parkedSame = isPendingDispatchEntry(c) && c.answer_id === v.answer_id;
+  const parkedSame = isPendingDispatchEntry(c) && (c.answer_id === v.answer_id || (c.next_answer && c.next_answer.answer_id === v.answer_id));
   if (parkedSame) return { status: 'ok', id, executor: c.executor };
   if (!isOpenEntry(c) && !isPendingDispatchEntry(c)) return { status: 'not_parked', id, executor: c.executor };
   const a = v.answer;
   const option = nonEmpty(a.option);
   const ft = nonEmpty(a.free_text);
   const now = new Date().toISOString();
-  const p = patchDecision(file, id, { status: 'pending_dispatch', pending_dispatch_at: now, answer: option !== null ? option : ft, answer_id: v.answer_id, answer_option: option, answer_free_text: ft, answer_digest: answerDigest(a), dispatch_error: undefined },
-    { any: true, isOurs: (h) => !h.dispatched_message_id && (isOpenEntry(h) || isPendingDispatchEntry(h)) });
+  const fields = { answer: option !== null ? option : ft, answer_id: v.answer_id, answer_option: option, answer_free_text: ft, answer_digest: answerDigest(a) };
+  const p = patchDecision(file, id, (h) => {
+    // a send of the stored answer is in flight: it must not be overwritten (it would be stamped as delivered and the card closed over an answer never sent);
+    // the newer answer is queued and sendParked sends it right after
+    if (isPendingDispatchEntry(h) && claimLive(h.dispatch_claim, Date.now())) return { next_answer: fields };
+    return { status: 'pending_dispatch', pending_dispatch_at: now, ...fields, dispatch_error: undefined };
+  }, { any: true, isOurs: (h) => !h.dispatched_message_id && (isOpenEntry(h) || isPendingDispatchEntry(h)) });
   if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
   if (p.status === 'absent') return { status: 'not_parked', id, executor: c.executor };
   return { status: 'ok', id, executor: c.executor };
@@ -818,8 +854,8 @@ function redeliver(args, sender = sendFleet) {
   for (const file of projectScopeFiles(args.cwd, { all: true })) {
     for (const e of readFile(file, { all: true })) {
       if (args.id !== undefined && e.id !== args.id) continue;
-      if (!isPendingDispatchEntry(e) || e.dispatched_message_id) continue;
-      if (!e.answer_id) {
+      if (!isPendingDispatchEntry(e)) continue;
+      if (!e.answer_id && !e.dispatched_message_id) {
         n += 1;
         process.stdout.write(`[略過] ${e.id} → ${e.executor || '(no executor)'}: no stored panel answer (answer_id), nothing to resend${e.dispatch_error ? `; dispatch_error: ${e.dispatch_error}` : ''}\n`);
         continue;

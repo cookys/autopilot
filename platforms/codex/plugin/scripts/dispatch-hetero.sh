@@ -1026,7 +1026,7 @@ NODE
   local role_kit_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
-  [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json)"
+  [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json), \"sandbox_blocked_writes\": ${SANDBOX_BLOCKED:-0}, \"sandbox_blocked_samples\": ${SANDBOX_BLOCKED_SAMPLES:-[]}"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
@@ -1833,6 +1833,77 @@ sandbox_count_denied() {
   SANDBOX_DENIED="unknown"
   [ -n "${LOG:-}" ] && [ -f "$LOG" ] && n="$(grep -ciE 'read-only file system|EROFS' "$LOG" 2>/dev/null || true)"
   [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt 0 ] && SANDBOX_DENIED="$n"
+  sandbox_count_blocked
+  return 0
+}
+# sandbox_count_blocked: SANDBOX_BLOCKED (integer, 0 = none seen) and SANDBOX_BLOCKED_SAMPLES (JSON array, at most
+# 3 absolute paths, never file contents). Two signals, the larger count wins (they can describe the same failures,
+# so they are not added): (1) tool_result blocks in the worker's own session transcripts under the throwaway
+# CLAUDE_CONFIG_DIR ($SANDBOX_TMP/claude-config/projects), which hold the raw tool error even when the model never
+# repeats it; (2) lines of the worker log with `Read-only file system` / EROFS. Blind spots: a count is of failed
+# tool results or log lines, not of syscalls; a write the worker never tried through a logged tool, or a runner that
+# writes no transcript, shows nothing; a model quoting the phrase in prose is a false positive. Observation only:
+# never touches the exit code or the status.
+sandbox_count_blocked() {
+  SANDBOX_BLOCKED=0
+  SANDBOX_BLOCKED_SAMPLES="[]"
+  local out
+  out="$(node - "${LOG:-}" "${SANDBOX_TMP:-}/claude-config/projects" <<'NODE' 2>/dev/null || true
+const fs = require('fs');
+const path = require('path');
+const RE = /read-only file system|EROFS/i;
+function samplePath(text) {
+  const m = /:\s*(\/[^\s:'"`]+):\s*Read-only/i.exec(text) || /['"`](\/[^'"`\s]+)['"`]/.exec(text) || /\s(\/[A-Za-z0-9_.\/-]+)/.exec(text);
+  return m ? m[1] : null;
+}
+let logN = 0; const logS = [];
+try {
+  for (const line of fs.readFileSync(process.argv[2], 'utf8').split('\n')) {
+    if (!RE.test(line)) continue;
+    logN += 1; const p = samplePath(line); if (p && !logS.includes(p)) logS.push(p);
+  }
+} catch {}
+let trN = 0; const trS = [];
+function texts(c) {
+  if (typeof c === 'string') return [c];
+  if (Array.isArray(c)) return c.flatMap((x) => (typeof x === 'string' ? [x] : (x && typeof x.text === 'string' ? [x.text] : [])));
+  return [];
+}
+let rootReal = null; try { rootReal = fs.realpathSync(process.argv[3]); } catch {}
+function walk(dir) {
+  let ents; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of ents) {
+    const f = path.join(dir, e.name);
+    if (e.isDirectory()) walk(f);
+    else if (e.isFile() && e.name.endsWith('.jsonl')) {
+      // regular files only (a worker-planted symlink must not pull in another run's transcript), and the real path must stay under the projects dir
+      let raw; try { const rp = fs.realpathSync(f); if (!rootReal || !rp.startsWith(rootReal + path.sep)) continue; raw = fs.readFileSync(f, 'utf8'); } catch { continue; }
+      for (const line of raw.split('\n')) {
+        if (!line.includes('tool_result')) continue;
+        let o; try { o = JSON.parse(line); } catch { continue; }
+        const blocks = o && o.message && Array.isArray(o.message.content) ? o.message.content : [];
+        for (const b of blocks) {
+          if (!b || b.type !== 'tool_result') continue;
+          const t = texts(b.content).join('\n');
+          if (!RE.test(t)) continue;
+          trN += 1; const p = samplePath(t); if (p && !trS.includes(p)) trS.push(p);
+        }
+      }
+    }
+  }
+}
+walk(process.argv[3]);
+const n = Math.max(logN, trN);
+const pool = trN >= logN ? trS.concat(logS) : logS.concat(trS);
+process.stdout.write(JSON.stringify({ n, samples: [...new Set(pool)].slice(0, 3) }));
+NODE
+)"
+  local n
+  n="$(printf '%s' "$out" | node -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(0,"utf8")).n))}catch{}' 2>/dev/null || true)"
+  if [[ "$n" =~ ^[0-9]+$ ]]; then
+    SANDBOX_BLOCKED="$n"
+    SANDBOX_BLOCKED_SAMPLES="$(printf '%s' "$out" | node -e 'process.stdout.write(JSON.stringify(JSON.parse(require("fs").readFileSync(0,"utf8")).samples))' 2>/dev/null || echo '[]')"
+  fi
   return 0
 }
 # wt_gitfile_check: 0 when $WT/.git is still the regular file recorded at worktree creation. Anything else
@@ -5842,7 +5913,7 @@ dispatch_detached_run() {
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
     declare -p WT_GITFILE_EXPECTED WT_GITFILE_ERROR 2>/dev/null || true
-    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_FAIL WORKTREE_PARENT 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
@@ -5850,7 +5921,7 @@ dispatch_detached_run() {
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f wt_gitfile_check _wt_git 2>/dev/null || true
-    declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_json 2>/dev/null || true
+    declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \

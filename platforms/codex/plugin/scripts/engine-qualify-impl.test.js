@@ -22,7 +22,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runImplQualification } = require('./engine-qualify');
+const { runImplQualification, implSandboxedContainment } = require('./engine-qualify');
+const { examIdentityHashOf } = require('../src/engine/capability-evidence');
 
 let assertions = 0;
 function check(value, message) { assertions += 1; assert.ok(value, message); }
@@ -54,6 +55,7 @@ const args = process.argv.slice(2);
 function opt(name) { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; }
 const branch = opt('--branch');
 const repo = process.cwd();
+try { fs.appendFileSync(${JSON.stringify(path.join(tempRoot, 'fake-argv.jsonl'))}, JSON.stringify(args) + '\\n'); } catch (e) {}
 
 // The production dispatch env is a constructed allowlist that scrubs AUTOPILOT_*
 // (correct — session/mission markers must never reach the candidate). The
@@ -85,7 +87,15 @@ const canary = process.env.QUALIFY_CANARY_TOKEN || '';
 // resolver's base_url (and not the ambient env) reached the dispatch.
 try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n'); } catch (e) {}
 
-function emit(o) { process.stdout.write(JSON.stringify(o) + '\\n'); }
+function emit(o) {
+  if (args.includes('--sandbox')) {
+    let n = 0;
+    try { n = Number(fs.readFileSync(${JSON.stringify(path.join(tempRoot, 'fake-blocked.txt'))}, 'utf8').trim()) || 0; } catch (e) {}
+    o.sandbox_blocked_writes = n;
+    o.sandbox_blocked_samples = n > 0 ? ['/outside/x.js'] : [];
+  }
+  process.stdout.write(JSON.stringify(o) + '\\n');
+}
 
 // no-op families: honest candidate makes NO commit.
 if (mode === 'honest' && target.reference_solution.expect_no_op) {
@@ -870,6 +880,70 @@ function runTrunc(mode, seed, truncate) {
   equal(ledger[0].dispatch_error_class, 'overloaded', 'error_category overloaded fills dispatch_error_class');
   check(cat.verdict.reason.includes('contract_violation') && !cat.verdict.reason.includes('engine_unavailable'),
     'error_category overloaded without provider_error stays contract_violation');
+}
+
+// ── exam under the production write sandbox ────────────────────────────────
+// cc-shim implementer cases dispatch with --sandbox bwrap --worktree-parent <per-case dir>; other
+// runners keep the unsandboxed exam. The sandbox is part of the identity (containment_fingerprint),
+// the per-case blocked-write count reaches row.quality, and a missing bwrap fails closed.
+{
+  const argvFile = path.join(tempRoot, 'fake-argv.jsonl');
+  const readArgv = () => fs.readFileSync(argvFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  fs.rmSync(argvFile, { force: true });
+  fs.writeFileSync(path.join(tempRoot, 'fake-blocked.txt'), '0');
+  const storeG = fs.mkdtempSync(path.join(tempRoot, 'store-grok-'));
+  const grokRun = run('honest', 'sbx-seed', storeG);
+  const grokArgv = readArgv();
+  check(grokArgv.length > 0, 'unsandboxed run dispatched');
+  check(grokArgv.every((a) => !a.includes('--sandbox') && !a.includes('--worktree-parent')),
+    'non-cc-shim runner: the exam passes neither --sandbox nor --worktree-parent');
+  check(!('sandbox_blocked_writes' in grokRun.row.quality), 'unsandboxed row has no sandbox_blocked_writes key');
+  equal(grokRun.evidence.identity.containment_fingerprint, digest('c'), 'unsandboxed identity carries the operator fingerprint');
+
+  fs.rmSync(argvFile, { force: true });
+  fs.writeFileSync(path.join(tempRoot, 'fake-blocked.txt'), '1');
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'sbx-seed');
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+  process.env.AUTOPILOT_QUALIFY_SEED = 'sbx-seed';
+  let sbx;
+  try {
+    sbx = runImplQualification({ ...baseOptions(fs.mkdtempSync(path.join(tempRoot, 'store-sbx-'))), runner: 'cc-shim', dispatchBin: path.join(tempRoot, 'disp.sh') });
+  } finally {
+    delete process.env.AUTOPILOT_QUALIFY_SEED;
+  }
+  const sbxArgv = readArgv();
+  equal(sbxArgv.length, grokArgv.length, 'sandboxed run dispatched the same number of cases');
+  const parents = sbxArgv.map((a) => {
+    const i = a.indexOf('--sandbox');
+    equal(a[i + 1], 'bwrap', 'every implementer case passes --sandbox bwrap');
+    const j = a.indexOf('--worktree-parent');
+    check(j >= 0 && path.isAbsolute(a[j + 1]), 'every implementer case passes an absolute --worktree-parent');
+    return a[j + 1];
+  });
+  equal(new Set(parents).size, parents.length, 'each case has its own worktree parent');
+  check(parents.every((d) => !fs.existsSync(d)), 'the per-case parents are removed with the work root');
+  equal(sbx.qualified, true, 'sandboxed honest candidate still qualifies (corpus and thresholds unchanged)');
+  equal(sbx.row.quality.sandbox_blocked_writes.total, sbxArgv.length, 'quality.sandbox_blocked_writes.total sums the per-case counts');
+  equal(sbx.row.quality.sandbox_blocked_writes.per_trial.map((t) => t.blocked_writes).reduce((a, b) => a + b, 0), sbxArgv.length,
+    'per-trial counts add up to the total');
+  equal(sbx.row.quality.sandbox_blocked_writes.per_trial.length, 2, 'one per-trial entry per trial');
+  // identity: the sandbox mode changes the identity hash
+  equal(sbx.evidence.identity.containment_fingerprint, implSandboxedContainment(digest('c')), 'sandboxed identity carries the sandbox-bound fingerprint');
+  check(sbx.evidence.identity.containment_fingerprint !== digest('c'), 'sandboxed fingerprint differs from the operator fingerprint');
+  const plainId = { ...sbx.evidence.identity, containment_fingerprint: digest('c') };
+  check(examIdentityHashOf(plainId) !== examIdentityHashOf(sbx.evidence.identity),
+    'identity hash differs between the unsandboxed and the sandboxed config');
+  // observation only: a blocked write never changes pass/fail
+  equal(sbx.row.quality.corpus_pass, '24/24', 'blocked writes do not change corpus_pass');
+
+  // bwrap missing -> the implementer exam fails closed, before any dispatch
+  fs.rmSync(argvFile, { force: true });
+  let missing = null;
+  try {
+    runImplQualification({ ...baseOptions(fs.mkdtempSync(path.join(tempRoot, 'store-nobwrap-'))), runner: 'cc-shim', dispatchBin: path.join(tempRoot, 'disp.sh'), testBwrapPath: path.join(tempRoot, 'no-such-bwrap') });
+  } catch (error) { missing = error; }
+  check(missing && /required implementer sandbox is unavailable/.test(missing.message), `bwrap missing fails closed: ${missing && missing.message}`);
+  check(!fs.existsSync(argvFile), 'bwrap missing: nothing was dispatched');
 }
 
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);

@@ -3526,6 +3526,48 @@ function implRunnerBinFlag(runner) {
   }
 }
 
+// The implementer exam runs under the same write sandbox as production write dispatches
+// (dispatch-hetero --sandbox bwrap --worktree-parent): the exam tests the conditions the seat
+// runs under. The rail applies the sandbox to cc-shim only (any other runner refuses it), so
+// other runners keep the unsandboxed exam and their identity unchanged.
+const IMPL_SANDBOX_TAG = 'impl-write-sandbox-bwrap-worktree-parent-v1';
+
+function implSandboxMode(runner) {
+  return runner === 'cc-shim' ? 'bwrap' : 'off';
+}
+
+// The sandbox mode is part of the exam identity through containment_fingerprint: the operator's
+// fingerprint stays an input, the identity carries sha256(canonical{containment_fingerprint, sandbox}).
+// An old unsandboxed record and a new sandboxed one therefore hash to different identity_hash.
+function implSandboxedContainment(containmentFingerprint) {
+  return byteHash(canonicalJson({
+    containment_fingerprint: containmentFingerprint,
+    exam_sandbox: IMPL_SANDBOX_TAG,
+  }));
+}
+
+// Fail closed before any case is materialized: no bwrap, no implementer exam.
+function verifyImplSandbox(binaryPath = BWRAP_PATH) {
+  let stat;
+  try {
+    stat = fs.lstatSync(binaryPath);
+  } catch {
+    throw new Error(`required implementer sandbox is unavailable: ${binaryPath}`);
+  }
+  if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o111) === 0) {
+    throw new Error(`required implementer sandbox is not an executable regular file: ${binaryPath}`);
+  }
+  const probe = spawnSync(binaryPath, ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', 'true'], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  if (probe.error || probe.status !== 0) {
+    throw new Error(`required implementer sandbox failed its probe: ${
+      probe.error ? probe.error.message : String(probe.stderr || '').trim()
+    }`);
+  }
+}
+
 // runImplQualification — live-rail implementer exam (plan 2026-08-22, R2
 // FROZEN). Deliberately does NOT use the case broker: candidate code runs in
 // its own dispatch-hetero worktree; the host only reads git artifacts and runs
@@ -3574,6 +3616,15 @@ function runImplQualification(options) {
     throw new Error(
       `implementer qualification requires exactly ${implGrader.CORPUS.budget.trials_per_administration} trials`,
     );
+  }
+  const sandboxMode = implSandboxMode(options.runner);
+  if (sandboxMode === 'bwrap') {
+    verifyImplSandbox(options.testBwrapPath || BWRAP_PATH);
+    options = {
+      ...options,
+      implSandbox: sandboxMode,
+      containmentFingerprint: implSandboxedContainment(options.containmentFingerprint),
+    };
   }
   if (options.endpoint) {
     options = { ...options, endpointBinding: resolveImplEndpoint(options.endpoint) };
@@ -3642,6 +3693,7 @@ function runImplQualification(options) {
   const ledger = [];
   const rawExchanges = [];
   const usageRecords = [];
+  const blockedByTrial = {};
 
   const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-qualify-live-'));
   let administrationOutcome = 'completed';
@@ -3678,6 +3730,10 @@ function runImplQualification(options) {
           caseSpec, options, dispatchTimeout, workRoot,
           canaryToken: administration.canary_token, budget, ledger, rawExchanges, usageRecords,
         });
+        if (Number.isInteger(observation.sandbox_blocked_writes)) {
+          const trialKey = `trial-${trial.trial_id}`;
+          blockedByTrial[trialKey] = (blockedByTrial[trialKey] || 0) + observation.sandbox_blocked_writes;
+        }
         if (observation.administration_abort) {
           administrationOutcome = observation.administration_abort;
           cases.push({ family: caseSpec.family, case_id: caseSpec.case_id, outcome: observation.outcome });
@@ -3921,6 +3977,18 @@ function runImplQualification(options) {
       contract_violations: folded.counts.contract_violations,
       oracle_misses: folded.counts.oracle_misses,
       repeated_trials: options.trials,
+      // Observation only, never an input to pass/fail: writes the sandbox refused (EROFS),
+      // counted by the rail from the worker's transcript and log. Present only when the exam
+      // ran sandboxed. A missing count for a case (rail gave none) is not counted as 0.
+      ...(options.implSandbox === 'bwrap' ? {
+        sandbox_blocked_writes: {
+          total: Object.values(blockedByTrial).reduce((n, v) => n + v, 0),
+          per_trial: trialResults.map((t) => ({
+            trial_id: t.trial_id,
+            blocked_writes: blockedByTrial[t.trial_id] || 0,
+          })),
+        },
+      } : {}),
     },
     capability_score: folded.passed / implExpectedTotal(),
     cost: usageFin.cost,
@@ -4204,6 +4272,12 @@ function runImplCase(context) {
       const flag = implRunnerBinFlag(options.runner);
       if (flag) argv.push(flag, options.runnerBin);
     }
+    if (options.implSandbox === 'bwrap') {
+      // Same flags production write dispatches use. The worktree must sit outside every repo
+      // (the exam repo is a repo), so each case gets its own parent under workRoot.
+      const worktreeParent = fs.mkdtempSync(path.join(workRoot, `impl-wt-${caseSpec.case_id}-`));
+      argv.push('--sandbox', 'bwrap', '--worktree-parent', worktreeParent);
+    }
     // Constructed allowlist env — NOT inherited-minus-N (G1-F3). The canary is
     // the sole intentional secret; session/mission markers never enter.
     const env = {
@@ -4262,6 +4336,14 @@ function runImplCase(context) {
       usage: dispatchJson && dispatchJson.usage ? dispatchJson.usage : null,
       warning: null,
     });
+    const blockedWrites = dispatchJson && Number.isInteger(dispatchJson.sandbox_blocked_writes)
+      ? dispatchJson.sandbox_blocked_writes : null;
+    if (options.implSandbox === 'bwrap') {
+      rawExchanges[rawExchanges.length - 1].sandbox_blocked_writes = blockedWrites;
+      rawExchanges[rawExchanges.length - 1].sandbox_blocked_samples = dispatchJson
+        && Array.isArray(dispatchJson.sandbox_blocked_samples)
+        ? dispatchJson.sandbox_blocked_samples.slice(0, 3).map(String) : [];
+    }
     // engine_unavailable administration cap (G2-F9): honest scarcity aborts the
     // administration (no verdict) rather than scoring a FAIL against the seat.
     // Harness-owned evidence = spawn failure, the rail's own precondition
@@ -4322,7 +4404,7 @@ function runImplCase(context) {
         return { outcome, administration_abort: 'infra_abort' };
       }
     }
-    return { outcome, warning: ledgerRow.warning || null };
+    return { outcome, warning: ledgerRow.warning || null, sandbox_blocked_writes: blockedWrites };
   } catch (error) {
     ledgerRow.outcome = 'infra_fail';
     ledgerRow.error = String(error && error.message);
@@ -6874,6 +6956,7 @@ module.exports = {
   runConsultQualification,
   runDiscussQualification,
   runImplQualification,
+  implSandboxedContainment,
   corpusVersionCommand,
   examCorpusVersionBeforeRun,
   runQualification,

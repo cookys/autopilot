@@ -12,7 +12,7 @@ Design and approval: the lead exam design note (PM approved 2026-11-06). Not a c
 
 | File | Role |
 |------|------|
-| `items.json` (+ `items.seal.json`) | Machine form of the items: system prompt, 6 rounds, 18 scored items (100 points), expected answers, deductions, hard fails HF1 to HF8. Sealed with `scripts/rubric-freeze.js`; re-seal only with a new items version. |
+| `items.json` (+ `items.seal.json`) | Machine form of the items: system prompt, 6 rounds, 18 scored items (100 points), expected answers, deductions, hard fails HF1 to HF8. Sealed with `scripts/rubric-freeze.js`; re-seal only with a new items version. Current version 1.1.0 (D1 moved outside round-1 rule r2: sender `lane_arcade`, so GO is unambiguous). |
 | `generate.js` | Round N prompt = system prompt + rounds 1..N-1 (messages plus the examinee's own earlier outputs) + round N messages. Names, card ids and shas come from `--seed`; structure is fixed; same seed gives byte-identical output. |
 | `run.js` | Drives one examinee through the 6 rounds (single shot, no tools, 4 min per round, 24 min hard stop, a timed-out round is blank and flagged, never re-run). Grades afterwards when a judge is configured. |
 | `grade.js` | Mechanical layer (enum hard fails, no model), then blinded judge layer, then the report. |

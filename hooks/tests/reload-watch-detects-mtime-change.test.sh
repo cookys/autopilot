@@ -4,6 +4,7 @@
 # stderr. First-cwd invocations silently init (no spam); only subsequent
 # changes fire the reminder.
 . "$(dirname "$0")/lib.sh"
+unset CLAUDE_CONFIG_DIR   # this case pins the unset default ($HOME/.claude)
 
 # Watched files (mirrored from hooks/reload-watch.js WATCH_FILES). Of these,
 # the one that lives under HOME is the easiest to control inside the sandbox.

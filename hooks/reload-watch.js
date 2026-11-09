@@ -7,11 +7,13 @@
  * drifted from the session-start skill catalog snapshot.
  *
  * Watches:
- *   - ~/.claude/plugins/installed_plugins.json   (marketplace install/update)
+ *   - <config dir>/plugins/installed_plugins.json   (marketplace install/update;
+ *     config dir = $CLAUDE_CONFIG_DIR, else ~/.claude)
  *   - $PWD/.claude/dispatch-config.md            (chain config)
  *   - $PWD/.claude/settings.local.json           (disabledSkills)
  *
- * Idempotent: state cached in ~/.claude/plugins/.reload-watch-state.json;
+ * Idempotent: state cached in <config dir>/plugins/.reload-watch-state.json
+ * (per login profile, so one profile's session never consumes another's reminder);
  * reminder only fires when mtime actually changed since the last seen state.
  * First run silently initializes the cache (no spam on a fresh machine).
  *
@@ -27,14 +29,15 @@ const path = require('path');
 
 const HOME = os.homedir();
 const CWD = process.cwd();
+const CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(HOME, '.claude');
 
 const WATCH_FILES = [
-  path.join(HOME, '.claude/plugins/installed_plugins.json'),
+  path.join(CONFIG_DIR, 'plugins/installed_plugins.json'),
   path.join(CWD, '.claude/dispatch-config.md'),
   path.join(CWD, '.claude/settings.local.json'),
 ];
 
-const STATE_FILE = path.join(HOME, '.claude/plugins/.reload-watch-state.json');
+const STATE_FILE = path.join(CONFIG_DIR, 'plugins/.reload-watch-state.json');
 
 function getMtimes() {
   const result = {};

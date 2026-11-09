@@ -18,12 +18,21 @@ const fx = require('./fixtures');
 const jd = require('./judge');
 const { callProvider } = require('./transport');
 
-// judge kind -> model family; a second judge must come from a different family than the first
-const JUDGE_FAMILY = { codex: 'openai', agy: 'google' };
+// judge kind (trimmed, lower-cased; provider aliases accepted) -> model family; a second judge must come from a
+// different family than the first, and a kind that names no known family is refused
+const JUDGE_FAMILY = { codex: 'openai', openai: 'openai', agy: 'google', google: 'google', gemini: 'google' };
+const normKind = (k) => String(k).trim().toLowerCase();
+function familyOf(kind) {
+  const f = JUDGE_FAMILY[normKind(kind)];
+  if (!f) throw new Error(`unknown judge kind ${JSON.stringify(kind)} (known: ${Object.keys(JUDGE_FAMILY).join(', ')})`);
+  return f;
+}
 function checkFamilies(kind1, kind2) {
-  if (kind2 && kind1 && JUDGE_FAMILY[kind1] && JUDGE_FAMILY[kind1] === JUDGE_FAMILY[kind2]) {
-    throw new Error(`second judge must be a different family than the first (both ${JUDGE_FAMILY[kind1]}: ${kind1}, ${kind2})`);
-  }
+  if (kind2 === undefined || kind2 === null) return;
+  const f2 = familyOf(kind2);
+  if (kind1 === undefined || kind1 === null) return;
+  const f1 = familyOf(kind1);
+  if (f1 === f2) throw new Error(`second judge must be a different family than the first (both ${f1}: ${kind1}, ${kind2})`);
 }
 
 const runSha = (run) => crypto.createHash('sha256').update(JSON.stringify(run.outputs || [])).digest('hex');
@@ -35,7 +44,7 @@ function secondFromReport(report, runs, seed, firstKind) {
   if (!report || report.schema !== 'lead-exam-report/1' || !Array.isArray(report.examinees)) throw new Error('second judge report is not a lead-exam report');
   if (report.seed !== seed) throw new Error(`second judge report has seed ${report.seed}, this grade has ${seed}`);
   const kind = report.judge && report.judge.kind;
-  if (!JUDGE_FAMILY[kind]) throw new Error('second judge report names no known judge kind');
+  if (!kind || !JUDGE_FAMILY[normKind(kind)]) throw new Error('second judge report names no known judge kind');
   checkFamilies(firstKind, kind);
   const matched = runs.map((r) => {
     const e = report.examinees.find((x) => x.name === r.name);
@@ -45,8 +54,9 @@ function secondFromReport(report, runs, seed, firstKind) {
     return { e, by: e.run_sha256 ? 'run_sha256' : 'name+model+run_wall_ms' };
   });
   return {
-    kind, model: report.judge.model || null, fromReport: true,
+    kind: normKind(kind), model: report.judge.model || null, fromReport: true,
     judgeVoid: report.status === 'judge_void' || !(report.controls && report.controls.tamper && report.controls.tamper.caught),
+    incomplete: matched.some(({ e }) => e.complete === false),
     tamperPass: !!(report.controls && report.controls.tamper && report.controls.tamper.caught),
     status: report.status, roundStatus: (report.controls && report.controls.rounds) || {}, calls: [],
     // judge-only standing hard fails: what the report counted beyond the mechanical layer
@@ -90,12 +100,18 @@ async function gradeExam(opts) {
   const itemsEff = { ...items, hard_fails: items.hard_fails.map((h) => ({ ...h, mech: h.mech.filter((c) => !voidMsgs.has(c.msg)) })) };
   if (opts.secondJudge && opts.secondReport) throw new Error('second judge: give a live judge or a report, not both');
   if (opts.secondJudge) checkFamilies(opts.judgeKind, opts.secondJudgeKind);
-  const rand = opts.rand || Math.random;
   const map = lib.deriveNames(items, seed);
   const runs = opts.runs;
   const examinees = runs.map((r) => ({ run: r, ex: lib.parseExaminee(r.outputs), blind: (r.outputs || []).map((o) => lib.blindText(o, r.model)) }));
   const xOut = fx.controlXOutputs(seed, items).map(lib.blindText);
   const zOut = lib.blindText(fx.controlZOutput());
+  // opaque labels for every judge call, drawn once so both judges see the same blinding
+  const hexLabel = () => `ex-${lib.hex(labelRand, 6)}`;
+  const labelRand = opts.rand || lib.seedRng(`${seed}:labels`);
+  const labels = {
+    tamper: hexLabel(),
+    rounds: items.rounds.map(() => ({ x: hexLabel(), z: hexLabel(), ex: examinees.map(hexLabel) })),
+  };
   // one full judging pass (tamper control, per-round controls X and Z, every examinee) with one judge
   const runPass = async (judge) => {
     const calls = [];
@@ -104,17 +120,15 @@ async function gradeExam(opts) {
     const judgeHf = examinees.map(() => []);
 
     // tamper control first: if the judge misses it, nothing it says is used
-    const tReq = jd.buildJudgeRequest(items, map, 3, { [`ex-${lib.hex(rand, 6)}`]: lib.blindText(fx.tamperGoodOutput(seed, items)) },
+    const tReq = jd.buildJudgeRequest(items, map, 3, { [labels.tamper]: lib.blindText(fx.tamperGoodOutput(seed, items)) },
       { item: fx.TAMPER_ITEM, expected: fx.TAMPER_EXPECTED });
     const t = await judgeWithRetry(judge, tReq);
     t.calls.forEach((c) => calls.push({ purpose: 'tamper_control', round: 3, ...c }));
     const tamperPass = !!(t.data && t.data.reference_conflicts.includes(fx.TAMPER_ITEM));
     const judgeVoid = !tamperPass;
 
-    const opaque = () => `ex-${lib.hex(rand, 6)}`;
     // one judge call = exactly one answer set: blinding removes identity only, it never mixes examinees into a prompt
-    const callOne = async (round, text, purpose) => {
-      const label = opaque();
+    const callOne = async (round, text, purpose, label) => {
       const req = jd.buildJudgeRequest(items, map, round, { [label]: text }, null);
       const r = await judgeWithRetry(judge, req);
       r.calls.forEach((c) => calls.push({ purpose, round, ...c }));
@@ -125,13 +139,13 @@ async function gradeExam(opts) {
     for (let round = 1; round <= items.rounds.length; round += 1) {
       if (judgeVoid) { roundStatus[round] = { status: 'void', reason: 'tamper control missed' }; continue; }
       const failures = [];
-      const xr = await callOne(round, xOut[round - 1], 'control_x');
+      const xr = await callOne(round, xOut[round - 1], 'control_x', labels.rounds[round - 1].x);
       if (!xr) failures.push('control X: judge reply invalid twice');
       else {
         const xFound = xr.e.hard_fails.map((h) => h.id);
         (fx.CONTROL_X_EXPECTED_HF[round] || []).forEach((id) => { if (!xFound.includes(id)) failures.push(`control X: ${id} not found`); });
       }
-      const zr = await callOne(round, zOut, 'control_z');
+      const zr = await callOne(round, zOut, 'control_z', labels.rounds[round - 1].z);
       if (!zr) failures.push('control Z: judge reply invalid twice');
       else {
         const ze = zr.e;
@@ -141,7 +155,7 @@ async function gradeExam(opts) {
       if (failures.length) { roundStatus[round] = { status: 'void', reason: failures.join('; ') }; continue; }
       const failed = [];
       for (let i = 0; i < examinees.length; i += 1) {
-        const r = await callOne(round, examinees[i].blind[round - 1] || '', 'judge');
+        const r = await callOne(round, examinees[i].blind[round - 1] || '', 'judge', labels.rounds[round - 1].ex[i]);
         if (!r) { failed.push(examinees[i].run.name); examineeVoid[i].push(round); continue; }
         Object.keys(r.e.items).forEach((id) => { judgeByExaminee[i][id] = { criteria: r.e.items[id].criteria, answered: r.e.items[id].answered }; });
         r.e.hard_fails.forEach((h) => judgeHf[i].push({ id: h.id, round, quote: h.quote }));
@@ -154,6 +168,20 @@ async function gradeExam(opts) {
   const P1 = await runPass(opts.judge);
   const P2 = opts.secondReport ? secondFromReport(opts.secondReport, runs, seed, opts.judgeKind)
     : (opts.secondJudge ? await runPass(opts.secondJudge) : null);
+  // the second judge counts as void for confirmation unless it is whole: tamper caught, every round ok, no examinee
+  // call lost, and (from a report) the report itself ok and complete
+  let p2Reason = null;
+  if (P2) {
+    const badRounds = Object.entries(P2.roundStatus || {}).filter(([, v]) => v.status !== 'ok');
+    if (P2.judgeVoid) p2Reason = 'tamper control missed';
+    else if (badRounds.length) p2Reason = `transport failure: round ${badRounds.map(([r, v]) => `${r} ${v.reason || v.status}`).join('; ')}`;
+    else if (P2.examineeVoid && P2.examineeVoid.some((l) => l.length)) p2Reason = 'transport failure: judge reply invalid twice for an examinee';
+    else if (P2.fromReport && P2.status !== 'ok') p2Reason = `report status ${P2.status}`;
+    else if (P2.fromReport && P2.incomplete) p2Reason = 'report holds an incomplete examinee';
+  }
+  const p2Void = p2Reason !== null;
+  const p2Status = !P2 ? null : P2.judgeVoid ? 'judge_void'
+    : (P2.fromReport ? (P2.status === 'ok' && p2Void ? 'partial' : P2.status) : (p2Void ? 'partial' : 'ok'));
   const { calls, roundStatus, judgeByExaminee, judgeHf, examineeVoid, tamperPass, judgeVoid } = P1;
 
   // the judge's own per-criterion hits with the verbatim quotes it gave as its reasons, and its hard fails with quotes
@@ -188,22 +216,28 @@ async function gradeExam(opts) {
     const scRaw = lib.scoreExaminee(items, e.ex, judgeByExaminee[i]);
     const sc = voidIds.length ? lib.rescaleVoided(items, e.ex, judgeByExaminee[i], voidIds) : scRaw;
     // dual-judge rule: a hard fail only a judge flagged counts when a second judge of another family flags it too
-    const standing2 = P2 && !P2.judgeVoid
-      ? Array.from(new Set(P2.judgeHf[i].filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round) && notVoided(h)).map((h) => h.id))).sort() : [];
-    const mr = lib.msgRounds(items);
-    const itemOf = hfItemOf;
-    const roundOf = (list, id) => (list.find((h) => h.id === id) || {}).round;
-    const judgeOnly = Array.from(new Set([...standing, ...standing2])).filter((id) => !mechHf.includes(id)).sort();
-    const confirmed = judgeOnly.filter((id) => standing.includes(id) && standing2.includes(id));
-    const unconfirmed = judgeOnly.filter((id) => !confirmed.includes(id)).map((id) => ({
-      item: itemOf(id, roundOf(judgeHf[i], id) || roundOf(P2 ? P2.judgeHf[i] : [], id)),
-      hf: id,
-      flagged_by: standing.includes(id) ? 'first' : 'second',
-    }));
+    const pairsOf = (hfs) => {
+      const seen = new Map();
+      hfs.filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round) && notVoided(h)).forEach((h) => {
+        const item = hfItemOf(h.id, h.round);
+        seen.set(`${item}|${h.id}`, { item, hf: h.id, noRound: h.round === undefined });
+      });
+      return Array.from(seen.values()).filter((p) => !mechHf.includes(p.hf));
+    };
+    // judge-only standing hard fails as (item, hf) pairs; a pair confirms only against the same hf on the same item
+    // (a report-sourced entry with no round resolves no item and matches by hf alone)
+    const pairs1 = pairsOf(judged);
+    const pairs2 = P2 && !p2Void ? pairsOf(P2.judgeHf[i]) : [];
+    const same = (p, q) => p.hf === q.hf && (p.item === q.item || p.noRound || q.noRound || p.item === null || q.item === null);
+    const confirmed = Array.from(new Set(pairs1.filter((p) => pairs2.some((q) => same(p, q))).map((p) => p.hf)));
+    const unconfirmed = [
+      ...pairs1.filter((p) => !pairs2.some((q) => same(p, q))).map((p) => ({ item: p.item, hf: p.hf, flagged_by: 'first' })),
+      ...pairs2.filter((q) => !pairs1.some((p) => same(p, q))).map((q) => ({ item: q.item, hf: q.hf, flagged_by: 'second' })),
+    ].sort((x, y) => (x.hf < y.hf ? -1 : x.hf > y.hf ? 1 : 0));
     const hardFails = Array.from(new Set([...mechHf, ...confirmed])).sort();
     let provisional = null;
     if (!P2) provisional = 'no second judge: judge-only hard fails are unconfirmed';
-    else if (P2.judgeVoid) provisional = 'second judge void (tamper control missed): judge-only hard fails are unconfirmed';
+    else if (p2Void) provisional = `second judge void (${p2Reason}): judge-only hard fails are unconfirmed`;
     const red = [];
     (e.run.rounds || []).forEach((rr) => { if (rr.timed_out) red.push(`round ${rr.round} timed out, counted blank`); else if (rr.error) red.push(`round ${rr.round} failed: ${rr.error}`); });
     if (unconfirmed.length) red.push('judge-only hard fails not confirmed by a second judge, not counted: PM spot-check');
@@ -230,7 +264,7 @@ async function gradeExam(opts) {
       scores_from: 'first_judge',
       pass_provisional: provisional !== null,
       ...(provisional ? { pass_provisional_reason: provisional } : {}),
-      ...(P2 ? { second_judge: { status: P2.judgeVoid ? 'judge_void' : 'ok', hard_fails: standing2, ...(P2.judgeVoid ? {} : (() => { const s2 = P2.fromReport ? P2.scores[i] : (voidIds.length ? lib.rescaleVoided(items, e.ex, P2.judgeByExaminee[i], voidIds) : lib.scoreExaminee(items, e.ex, P2.judgeByExaminee[i])); return { total: s2.total, complete: s2.complete, categories: s2.categories, categories_ok: s2.categories_ok }; })()) } } : {}),
+      ...(P2 ? { second_judge: { kind: P2.fromReport ? P2.kind : (opts.secondJudgeKind || null), model: P2.fromReport ? P2.model : (opts.secondJudgeModel || null), status: p2Status, hard_fails: pairs2.map((p) => p.hf).sort(), ...(p2Void ? {} : (() => { const s2 = P2.fromReport ? P2.scores[i] : (voidIds.length ? lib.rescaleVoided(items, e.ex, P2.judgeByExaminee[i], voidIds) : lib.scoreExaminee(items, e.ex, P2.judgeByExaminee[i])); return { total: s2.total, complete: s2.complete, categories: s2.categories, categories_ok: s2.categories_ok }; })()) } } : {}),
       lead_critical: leadCritical,
       usage: e.run.usage_totals || (e.run.rounds ? lib.usageTotals(e.run.rounds) : null),
       pass: lib.passVerdict(items, sc, hardFails), items: sc.items,
@@ -245,7 +279,7 @@ async function gradeExam(opts) {
     second_judge: P2 ? {
       kind: P2.fromReport ? P2.kind : (opts.secondJudgeKind || null), model: P2.fromReport ? P2.model : (opts.secondJudgeModel || null),
       ...(P2.fromReport ? { source: 'report', matched_by: P2.matchedBy, report_status: P2.status } : {}),
-      status: P2.judgeVoid ? 'judge_void' : (P2.fromReport ? P2.status : Object.values(P2.roundStatus).every((x) => x.status === 'ok') ? 'ok' : 'partial'),
+      status: p2Status, ...(p2Void ? { void_reason: p2Reason } : {}),
       tamper_caught: P2.tamperPass, rounds: P2.roundStatus, calls: P2.calls,
     } : null,
     status: judgeVoid ? 'judge_void' : (Object.values(roundStatus).every((s) => s.status === 'ok') ? 'ok' : 'partial'),

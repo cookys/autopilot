@@ -10,7 +10,7 @@ const { spawnSync } = require('child_process');
 const lib = require('../lib');
 const fx = require('../fixtures');
 const jd = require('../judge');
-const { gradeExam } = require('../grade');
+const { gradeExam, checkFamilies } = require('../grade');
 
 const items = lib.loadItems();
 const SEED = 'seed-dual';
@@ -261,4 +261,59 @@ test('unconfirmed hard fail names its item when the judge reported it in another
   const r = await oldStyleReport({ judge: forcing('HF8', 4) });
   const b = await viaReport(r, { judge: plain() });
   assert.deepStrictEqual(b.examinees[0].unconfirmed_judge_hard_fails, [{ item: 'E1', hf: 'HF8', flagged_by: 'second' }]);
+});
+
+// ---- review g1 fixes ---------------------------------------------------------------
+test('confirmation intersects (item, hf) pairs: the same hf on different items does not confirm', async () => {
+  // HF1 is defined on D2 and E2; the first judge reports it in round 6 (item R), the second in round 1 (item A1)
+  const rep = await grade({ judge: forcing('HF1', 6), secondJudge: forcing('HF1', 1) });
+  const e = rep.examinees[0];
+  assert.deepStrictEqual(e.hard_fails.all, []);
+  assert.deepStrictEqual(e.unconfirmed_judge_hard_fails, [
+    { item: 'R', hf: 'HF1', flagged_by: 'first' }, { item: 'A1', hf: 'HF1', flagged_by: 'second' }]);
+  const same = await grade({ judge: forcing('HF1', 6), secondJudge: forcing('HF1', 6) });
+  assert.deepStrictEqual(same.examinees[0].hard_fails.all, ['HF1']);
+});
+
+test('a second judge with a transport failure or a void round confirms nothing and the grade is provisional', async () => {
+  const flaky = (failRound) => { const base = forcing('HF7', 6); return async (req) => { if (req.round === failRound) throw new Error('transport down'); return base(req); }; };
+  const rep = await grade({ judge: forcing('HF7', 6), secondJudge: flaky(4) });
+  const e = rep.examinees[0];
+  assert.notStrictEqual(rep.second_judge.status, 'ok');
+  assert.strictEqual(e.second_judge.status, rep.second_judge.status);
+  assert.deepStrictEqual(e.hard_fails.all, []);
+  assert.deepStrictEqual(e.unconfirmed_judge_hard_fails, [{ item: 'R', hf: 'HF7', flagged_by: 'first' }]);
+  assert.strictEqual(e.pass_provisional, true);
+  assert.match(e.pass_provisional_reason, /transport failure/);
+  // a report-sourced second judge that is not ok is void too
+  const r = await oldStyleReport({ judge: forcing('HF7', 6) });
+  r.status = 'partial';
+  const v = await viaReport(r, { judge: forcing('HF7', 6) });
+  assert.strictEqual(v.examinees[0].pass_provisional, true);
+  assert.deepStrictEqual(v.examinees[0].hard_fails.all, []);
+});
+
+test('both judges get identical blinding labels per call, in the same order', async () => {
+  let n = 0;
+  const rand = () => { n += 1; return (n * 0.6180339887) % 1; };
+  const seen = { a: [], b: [] };
+  const spy = (key, base) => async (req) => { seen[key].push(`${req.round}:${Object.keys(req.outputs).join(',')}`); return base(req); };
+  await grade({ rand, judge: spy('a', plain()), secondJudge: spy('b', plain()) });
+  assert.ok(seen.a.length > 0);
+  assert.deepStrictEqual(seen.b, seen.a);
+});
+
+test('checkFamilies normalises case and aliases and refuses unknown kinds', () => {
+  assert.throws(() => checkFamilies('CODEX', ' codex '), /different family/);
+  assert.throws(() => checkFamilies('openai', 'codex'), /different family/);
+  assert.throws(() => checkFamilies('Gemini', 'AGY'), /different family/);
+  assert.throws(() => checkFamilies('codex', 'mystery'), /unknown judge kind/);
+  assert.throws(() => checkFamilies('mystery', 'agy'), /unknown judge kind/);
+  assert.doesNotThrow(() => checkFamilies('Codex', 'GOOGLE'));
+});
+
+test('each examinee second_judge carries kind and model', async () => {
+  const rep = await grade({ judge: plain(), secondJudge: plain(), secondJudgeModel: 'm2' });
+  assert.strictEqual(rep.examinees[0].second_judge.kind, 'agy');
+  assert.strictEqual(rep.examinees[0].second_judge.model, 'm2');
 });

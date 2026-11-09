@@ -1,0 +1,100 @@
+=== red-check: validation: missing Problem accepted
+mutation: sed '/^const WRITER_REQUIRED/s/'Origin', 'Problem', 'Impact'/'Origin', 'Impact'/' scripts/lib/backlog-rules.js
+  506c506
+  < const WRITER_REQUIRED = ['Id', 'Since', 'Origin', 'Problem', 'Impact', 'Trigger-Type'];
+  ---
+  > const WRITER_REQUIRED = ['Id', 'Since', 'Origin', 'Impact', 'Trigger-Type'];
+--- suite: hooks/tests/record-files.test.sh (mutated)
+FAIL [record-files] v-missing-problem: refused: expected 'false', got 'true'
+FAIL [record-files] v-missing-problem: typed rule error: expected 'RuleViolationError', got ''
+FAIL [record-files] v-missing-problem: carries the rule: expected 'missing_field', got ''
+FAIL [record-files] v-missing-problem: exit code 3: expected '3', got ''
+FAIL [record-files] v-missing-problem: nothing written: expected '', got ' M docs/BACKLOG.md'
+FAIL [record-files] 107 passed, 5 failed
+      - v-missing-problem: refused: expected 'false', got 'true'
+      - v-missing-problem: typed rule error: expected 'RuleViolationError', got ''
+      - v-missing-problem: carries the rule: expected 'missing_field', got ''
+      - v-missing-problem: exit code 3: expected '3', got ''
+      - v-missing-problem: nothing written: expected '', got ' M docs/BACKLOG.md'
+--- restored
+--- suite: hooks/tests/record-files.test.sh (restored)
+PASS [record-files] 112 assertions
+
+=== red-check: validation: bad Trigger-Type accepted
+mutation: sed '112s/return 'bad_trigger_type';/return null;/' scripts/lib/backlog-rules.js
+  112c112
+  <   return 'bad_trigger_type';
+  ---
+  >   return null;
+--- suite: hooks/tests/record-files.test.sh (mutated)
+FAIL [record-files] v-bad-trigger-type: refused: expected 'false', got 'true'
+FAIL [record-files] v-bad-trigger-type: typed rule error: expected 'RuleViolationError', got ''
+FAIL [record-files] v-bad-trigger-type: carries the rule: expected 'bad_trigger_type', got ''
+FAIL [record-files] v-bad-trigger-type: exit code 3: expected '3', got ''
+FAIL [record-files] v-bad-trigger-type: nothing written: expected '', got ' M docs/BACKLOG.md'
+FAIL [record-files] 107 passed, 5 failed
+      - v-bad-trigger-type: refused: expected 'false', got 'true'
+      - v-bad-trigger-type: typed rule error: expected 'RuleViolationError', got ''
+      - v-bad-trigger-type: carries the rule: expected 'bad_trigger_type', got ''
+      - v-bad-trigger-type: exit code 3: expected '3', got ''
+      - v-bad-trigger-type: nothing written: expected '', got ' M docs/BACKLOG.md'
+--- restored
+--- suite: hooks/tests/record-files.test.sh (restored)
+PASS [record-files] 112 assertions
+
+=== red-check: validation: peer without Reporter accepted
+mutation: sed '306s/for (const f of missing) push('peer_field_missing', f, `Origin peer needs ${f}`);/for (const f of missing) void f;/' scripts/lib/backlog-rules.js
+  306c306
+  <     for (const f of missing) push('peer_field_missing', f, `Origin peer needs ${f}`);
+  ---
+  >     for (const f of missing) void f;
+--- suite: hooks/tests/record-files.test.sh (mutated)
+FAIL [record-files] v-peer-no-reporter: refused: expected 'false', got 'true'
+FAIL [record-files] v-peer-no-reporter: typed rule error: expected 'RuleViolationError', got ''
+FAIL [record-files] v-peer-no-reporter: carries the rule: expected 'peer_field_missing', got ''
+FAIL [record-files] v-peer-no-reporter: exit code 3: expected '3', got ''
+FAIL [record-files] v-peer-no-reporter: nothing written: expected '', got ' M docs/BACKLOG.md'
+FAIL [record-files] 107 passed, 5 failed
+      - v-peer-no-reporter: refused: expected 'false', got 'true'
+      - v-peer-no-reporter: typed rule error: expected 'RuleViolationError', got ''
+      - v-peer-no-reporter: carries the rule: expected 'peer_field_missing', got ''
+      - v-peer-no-reporter: exit code 3: expected '3', got ''
+      - v-peer-no-reporter: nothing written: expected '', got ' M docs/BACKLOG.md'
+--- restored
+--- suite: hooks/tests/record-files.test.sh (restored)
+PASS [record-files] 112 assertions
+
+=== red-check: byte-equal reply: extra byte written
+mutation: sed '224s/loc.lines.join('\\n')/loc.lines.join('\\n') + '\\n'/' scripts/lib/record-files.js
+  224c224
+  <   writeAtomic(backlogAbs, loc.lines.join('\n'));
+  ---
+  >   writeAtomic(backlogAbs, loc.lines.join('\n') + '\n');
+--- suite: hooks/tests/record-files.test.sh (mutated)
+FAIL [record-files] backlog-reply: docs/BACKLOG.md matches golden: expected '1', got '0'
+FAIL [record-files] backlog reply: the file is the base byte for byte except the Reply line: expected '1', got '0'
+FAIL [record-files] backlog reply: exactly one line replaced: expected '2', got '3'
+FAIL [record-files] 109 passed, 3 failed
+      - backlog-reply: docs/BACKLOG.md matches golden: expected '1', got '0'
+      - backlog reply: the file is the base byte for byte except the Reply line: expected '1', got '0'
+      - backlog reply: exactly one line replaced: expected '2', got '3'
+--- restored
+--- suite: hooks/tests/record-files.test.sh (restored)
+PASS [record-files] 112 assertions
+
+=== red-check: extraction is real: same Trigger-Type rule broken in backlog-rules.js, checker suite
+mutation: sed '112s/return 'bad_trigger_type';/return null;/' scripts/lib/backlog-rules.js
+  112c112
+  <   return 'bad_trigger_type';
+  ---
+  >   return null;
+--- suite: hooks/tests/check-backlog-entries.test.sh (mutated)
+FAIL [check-backlog-entries] --self-test exits 0: expected '0', got '2'
+FAIL [check-backlog-entries] Trigger-Type rejects a value outside the set: expected 'yes', got 'no'
+FAIL [check-backlog-entries] 126 passed, 2 failed
+      - --self-test exits 0: expected '0', got '2'
+      - Trigger-Type rejects a value outside the set: expected 'yes', got 'no'
+--- restored
+--- suite: hooks/tests/check-backlog-entries.test.sh (restored)
+PASS [check-backlog-entries] 128 assertions
+

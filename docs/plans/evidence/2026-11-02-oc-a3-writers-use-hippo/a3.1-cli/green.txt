@@ -1,0 +1,3 @@
+# bash hooks/tests/project-record.test.sh (TMPDIR=/tmp, real hippo 0.2.2)
+PASS [project-record] 220 assertions
+rc=0

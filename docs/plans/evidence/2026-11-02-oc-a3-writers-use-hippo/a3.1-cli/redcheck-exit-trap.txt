@@ -1,0 +1,13 @@
+# red-check exit-trap: the suite (a temp copy named hooks/tests/zz-redcheck-exit-trap.test.sh, removed afterwards) touches
+# a file in this checkout just before hs_exit_check; the exit trap must fire
+# exit 1
+FAIL [hippo-sandbox] this checkout's git status or .hippo/ changed during the suite
+2a3
+> ?? zz-redcheck-touch
+FAIL [hippo-sandbox] this checkout's git status or .hippo/ changed during the suite
+2a3
+> ?? zz-redcheck-touch
+
+# file removed afterwards, checkout restored
+# restored: exit 0
+PASS [project-record] 220 assertions

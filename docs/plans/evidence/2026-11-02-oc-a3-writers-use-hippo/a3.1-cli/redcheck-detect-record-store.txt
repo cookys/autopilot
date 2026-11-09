@@ -1,0 +1,9 @@
+# red-check detect-record-store: project-detect.js: record_store always files
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] project-detect: hippo: expected 'hippo', got 'files'
+FAIL [project-record] 219 passed, 1 failed
+      - project-detect: hippo: expected 'hippo', got 'files'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

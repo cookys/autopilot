@@ -1,0 +1,12 @@
+{
+ "fn": "backlogNew",
+ "input": {
+  "title": "No problem",
+  "origin": "self",
+  "impact": "I",
+  "trigger": "when X",
+  "triggerType": "event",
+  "effort": "S",
+  "source": "self 2026-11-09"
+ }
+}

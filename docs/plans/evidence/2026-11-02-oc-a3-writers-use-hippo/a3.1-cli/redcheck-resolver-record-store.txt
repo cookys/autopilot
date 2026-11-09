@@ -1,0 +1,13 @@
+# red-check resolver-record-store: resolve-project-paths.sh: record_store always files
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] resolve-project-paths: hippo: expected 'hippo', got 'files'
+FAIL [project-record] resolve-project-paths: JSON carries record_store: expected 'hippo', got 'files'
+FAIL [project-record] resolve-project-paths: spool when the binary is missing: expected 'spool', got 'files'
+FAIL [project-record] 217 passed, 3 failed
+      - resolve-project-paths: hippo: expected 'hippo', got 'files'
+      - resolve-project-paths: JSON carries record_store: expected 'hippo', got 'files'
+      - resolve-project-paths: spool when the binary is missing: expected 'spool', got 'files'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

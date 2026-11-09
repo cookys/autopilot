@@ -1,0 +1,70 @@
+# A3.1 fix1 red-checks. Each block: the one mutation applied to the fixed code (diff lines), then the suite's failing assertions. Restored after each run (git checkout).
+# Mutations: M1 validate after flush (finding 1) | M2 empty/garbage lock = dead + unconditional reclaim unlink (finding 2) | M3 list spool before the lock (finding 3) | M4a/M4b no row cap on reply, files/hippo mode (finding 4) | M5 hs_preflight back to the origin check (finding 5)
+
+=== M1:  1 file changed, 2 insertions(+), 2 deletions(-)
+-  const v = handler.validate ? handler.validate(repo, p, state) : null; // before any hippo call or file write
+-  if (v) for (const w of v.warnings) err(fmtWarn(w));
++  const v = handler.validate ? handler.validate(repo, p, state) : null;
++  if (v) for (const w of v.warnings) err(fmtWarn(w));
+--- project-record ---
+FAIL [project-record] validate-before-flush: the spool entry was not replayed by the refused write: expected '1', got '0'
+FAIL [project-record] validate-before-flush: no record was created: expected '0', got '1'
+FAIL [project-record] validate-before-flush: a malformed reply does not flush either: expected '1', got '0'
+FAIL [project-record] validate-before-flush: a bad close does not flush either: expected '1', got '0'
+FAIL [project-record] 231 passed, 4 failed
+      - validate-before-flush: the spool entry was not replayed by the refused write: expected '1', got '0'
+      - validate-before-flush: no record was created: expected '0', got '1'
+      - validate-before-flush: a malformed reply does not flush either: expected '1', got '0'
+      - validate-before-flush: a bad close does not flush either: expected '1', got '0'
+=== M4a:  1 file changed, 1 insertion(+), 1 deletion(-)
+-  if (rowBytes > rowCap) throw new RuleViolationError([{ code: 'cap_exceeded', title: fields.Title || '', field: 'row', detail: `${rowBytes} > ${rowCap}` }]);
++  if (false) throw new RuleViolationError([{ code: 'cap_exceeded', title: fields.Title || '', field: 'row', detail: `${rowBytes} > ${rowCap}` }]);
+--- project-record ---
+FAIL [project-record] files mode: a reply that overflows the row cap -> exit 3: expected '3', got '0'
+FAIL [project-record] files mode: the overflow names the rule: 'cap_exceeded' not found in output
+FAIL [project-record] files mode: an oversize reply leaves BACKLOG.md byte-equal: expected '035979e98c6842c812780159a221beccc282dd915bf272740f74e6b8346a1c62  <tmp>/hs/usage/docs/BACKLOG.md', got '7efd6d4e3acbd985b6b6eb68021386e6d8658e578942f60a2f01ca0cc43de008  <tmp>/hs/usage/docs/BACKLOG.md'
+FAIL [project-record] 232 passed, 3 failed
+      - files mode: a reply that overflows the row cap -> exit 3: expected '3', got '0'
+      - files mode: the overflow names the rule: 'cap_exceeded' not found in output
+      - files mode: an oversize reply leaves BACKLOG.md byte-equal: expected '035979e98c6842c812780159a221beccc282dd915bf272740f74e6b8346a1c62  <tmp>/hs/usage/docs/BACKLOG.md', got '7efd6d4e3acbd985b6b6eb68021386e6d8658e578942f60a2f01ca0cc43de008  <tmp>/hs/usage/docs/BACKLOG.md'
+=== M4b:  1 file changed, 1 insertion(+), 1 deletion(-)
+-    if (rowBytes > rowCap) throw new rules.RuleViolationError([{ code: 'cap_exceeded', title: rec.title, field: 'row', detail: `${rowBytes} > ${rowCap}` }]);
++    if (false) throw new rules.RuleViolationError([{ code: 'cap_exceeded', title: rec.title, field: 'row', detail: `${rowBytes} > ${rowCap}` }]);
+--- project-record ---
+FAIL [project-record] hippo: a reply that overflows the row cap -> exit 3: expected '3', got '0'
+FAIL [project-record] hippo: the overflow names the rule: 'cap_exceeded' not found in output
+FAIL [project-record] hippo: an oversize reply leaves the record body unchanged: expected '- **Since**: 2026-11-09
+FAIL [project-record] 232 passed, 3 failed
+      - hippo: a reply that overflows the row cap -> exit 3: expected '3', got '0'
+      - hippo: the overflow names the rule: 'cap_exceeded' not found in output
+      - hippo: an oversize reply leaves the record body unchanged: expected '- **Since**: 2026-11-09
+=== M2
+-  return /^[1-9][0-9]*\s*$/.test(txt) ? parseInt(txt, 10) : NaN;
++  return parseInt(txt, 10);
+-    if (lockOwner(lock) === deadPid) { try { fs.unlinkSync(lock); } catch { /* gone */ } }
++    if (true) { try { fs.unlinkSync(lock); } catch { /* gone */ } }
+-    if (!Number.isNaN(pid) && !pidAlive(pid)) { reclaimStale(lock, pid); continue; }
++    if (!(pid > 0 && pidAlive(pid))) { reclaimStale(lock, pid); continue; }
+--- hippo-lib ---
+FAIL [hippo-lib] flush: empty lock file is held -> times out with exit 5: expected '5', got '0'
+FAIL [hippo-lib] flush: entry not replayed under an empty lock: expected '1', got '0'
+FAIL [hippo-lib] flush: non-numeric lock content is held -> exit 5: expected '5', got '0'
+FAIL [hippo-lib] 104 passed, 3 failed
+      - flush: empty lock file is held -> times out with exit 5: expected '5', got '0'
+      - flush: entry not replayed under an empty lock: expected '1', got '0'
+      - flush: non-numeric lock content is held -> exit 5: expected '5', got '0'
+=== M3
++  const pre = spoolList(root);
+-      for (const e of spoolList(root)) {
++      for (const e of pre) {
+--- hippo-lib ---
+FAIL [hippo-lib] concurrent flush: both exit 0: expected '0 0', got '0 1'
+FAIL [hippo-lib] two flushes: both exit 0: expected '0 0', got '0 1'
+FAIL [hippo-lib] 105 passed, 2 failed
+      - concurrent flush: both exit 0: expected '0 0', got '0 1'
+      - two flushes: both exit 0: expected '0 0', got '0 1'
+=== M5: hs_preflight reverted to the origin check
+--- hippo-lib ---
+FAIL [hippo-lib] pre-flight accepted an in-tree config file whose hooksPath value is outside the temp tree
+FAIL [hippo-lib] 106 passed, 1 failed
+      - pre-flight accepted an in-tree config file whose hooksPath value is outside the temp tree

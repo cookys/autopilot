@@ -1,0 +1,10 @@
+# red-check state-hippo-problems: mutate scripts/lib/hippo.js: '  if (chk.exit === 3) {' -> '  if (false) {'
+# exit 1
+FAIL [hippo-lib] detect: store + check exit 3 -> hippo-problems: expected 'hippo-problems', got 'spool'
+FAIL [hippo-lib] detect: problems carry check's offending-file line: 'problem: record-drift .hippo/records/01M702A5C10D97631V97NW8WR9.md' not found in output
+FAIL [hippo-lib] 93 passed, 2 failed
+      - detect: store + check exit 3 -> hippo-problems: expected 'hippo-problems', got 'spool'
+      - detect: problems carry check's offending-file line: 'problem: record-drift .hippo/records/01M702A5C10D97631V97NW8WR9.md' not found in output
+
+# restored: exit 0
+PASS [hippo-lib] 95 assertions

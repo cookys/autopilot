@@ -35,7 +35,9 @@
 # commit path; assuming the autopilot answer is wrong in both directions.
 #
 # Output: JSON {memory_dir, knowledge_dir, knowledge_gitignored, discipline_target,
-#               backlog_path, plans_dir, source, target}
+#               backlog_path, plans_dir, record_store, source, target}
+#   record_store ∈ {files, hippo, hippo-problems, spool}: the state of `node scripts/lib/hippo.js detect` for the
+#   target; anything but `files` means records are written through scripts/project-record.js into the hippo store.
 #   source ∈ {override, project-cwd, project-repo, template, built-in-default}
 #   backlog_path / plans_dir are a path, or "none" when the project declares it absent.
 #
@@ -117,6 +119,13 @@ if [[ "$BACKLOG" == "auto" || "$PLANS" == "auto" ]]; then
   [[ "$PLANS" == "auto" || -z "$PLANS" ]] && PLANS="none"
 fi
 
+record_store() {  # lazy: `hippo check` runs only for record_store and the full JSON
+  local s
+  s="$(node -e 'try{process.stdout.write(require(process.argv[1]).detect(process.argv[2]).state)}catch(e){process.stdout.write("files")}' \
+    "$SCRIPT_DIR/lib/hippo.js" "$TARGET" 2>/dev/null)"
+  printf '%s' "${s:-files}"
+}
+
 # --- knowledge_gitignored is measured, never assumed ---
 KNOWLEDGE_IGNORED="unknown"
 if git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1; then
@@ -138,6 +147,7 @@ if [[ -n "$FIELD" ]]; then
     discipline_target) printf '%s\n' "$DISCIPLINE" ;;
     backlog_path) printf '%s\n' "$BACKLOG" ;;
     plans_dir) printf '%s\n' "$PLANS" ;;
+    record_store) printf '%s\n' "$(record_store)" ;;
     source) printf '%s\n' "$SOURCE" ;;
     target) printf '%s\n' "$TARGET" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
@@ -145,8 +155,8 @@ if [[ -n "$FIELD" ]]; then
   exit 0
 fi
 
-printf '{ "memory_dir": "%s", "knowledge_dir": "%s", "knowledge_gitignored": %s, "discipline_target": "%s", "backlog_path": "%s", "plans_dir": "%s", "source": "%s", "target": "%s" }\n' \
+printf '{ "memory_dir": "%s", "knowledge_dir": "%s", "knowledge_gitignored": %s, "discipline_target": "%s", "backlog_path": "%s", "plans_dir": "%s", "record_store": "%s", "source": "%s", "target": "%s" }\n' \
   "$(json_escape "$MEMORY_DIR")" "$(json_escape "$KNOWLEDGE_DIR")" \
   "$([[ "$KNOWLEDGE_IGNORED" == "unknown" ]] && printf '"unknown"' || printf '%s' "$KNOWLEDGE_IGNORED")" \
   "$(json_escape "$DISCIPLINE")" "$(json_escape "$BACKLOG")" "$(json_escape "$PLANS")" \
-  "$SOURCE" "$(json_escape "$TARGET")"
+  "$(record_store)" "$SOURCE" "$(json_escape "$TARGET")"

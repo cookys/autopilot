@@ -39,7 +39,10 @@
 # once named `docs/`. An invented path fails silently: the file is written, nobody reads it.
 #
 # Output: JSON {projects_dir, plans_dir, archive_dir, backlog, backlog_config, index, source, target,
-#               projects_dir_exists, plans_dir_exists, archive_dir_exists, backlog_exists, index_exists}
+#               projects_dir_exists, plans_dir_exists, archive_dir_exists, backlog_exists, index_exists, record_store}
+#   record_store ∈ {files, hippo, hippo-problems, spool}: the state `node scripts/lib/hippo.js detect` gives for
+#   <target> (files = no .hippo/repo.toml, so the file-mode paths above are where records are written; any other
+#   value means records go through scripts/project-record.js into the hippo store). A detect failure reports files.
 #   <field>_exists is true only when the resolved path is not `none` and exists under <target>
 #   (a directory for *_dir, a file for backlog/index). A detected default can name a path that was
 #   never created (fleet repo, 2026-11-01: backlog=docs/BACKLOG.md, no such file); a skill must treat
@@ -214,8 +217,16 @@ ARCHIVE_EXISTS="$(path_exists "$ARCHIVE" d)"
 BACKLOG_EXISTS="$(path_exists "$BACKLOG" f)"
 INDEX_EXISTS="$(path_exists "$INDEX" f)"
 
+record_store() {
+  local s
+  s="$(node -e 'try{process.stdout.write(require(process.argv[1]).detect(process.argv[2]).state)}catch(e){process.stdout.write("files")}' \
+    "$SCRIPT_DIR/lib/hippo.js" "$TARGET" 2>/dev/null)"
+  printf '%s' "${s:-files}"
+}
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
+    record_store) printf '%s\n' "$(record_store)" ;;
     projects_dir) printf '%s\n' "$PROJECTS" ;;
     plans_dir) printf '%s\n' "$PLANS" ;;
     archive_dir) printf '%s\n' "$ARCHIVE" ;;
@@ -234,7 +245,7 @@ if [[ -n "$FIELD" ]]; then
   exit 0
 fi
 
-printf '{ "projects_dir": "%s", "plans_dir": "%s", "archive_dir": "%s", "backlog": "%s", "backlog_config": "%s", "index": "%s", "source": "%s", "target": "%s", "projects_dir_exists": %s, "plans_dir_exists": %s, "archive_dir_exists": %s, "backlog_exists": %s, "index_exists": %s }\n' \
+printf '{ "projects_dir": "%s", "plans_dir": "%s", "archive_dir": "%s", "backlog": "%s", "backlog_config": "%s", "index": "%s", "source": "%s", "target": "%s", "projects_dir_exists": %s, "plans_dir_exists": %s, "archive_dir_exists": %s, "backlog_exists": %s, "index_exists": %s, "record_store": "%s" }\n' \
   "$(json_escape "$PROJECTS")" "$(json_escape "$PLANS")" "$(json_escape "$ARCHIVE")" \
   "$(json_escape "$BACKLOG")" "$(json_escape "$BACKLOG_CONFIG")" "$(json_escape "$INDEX")" "$SOURCE" "$(json_escape "$TARGET")" \
-  "$PROJECTS_EXISTS" "$PLANS_EXISTS" "$ARCHIVE_EXISTS" "$BACKLOG_EXISTS" "$INDEX_EXISTS"
+  "$PROJECTS_EXISTS" "$PLANS_EXISTS" "$ARCHIVE_EXISTS" "$BACKLOG_EXISTS" "$INDEX_EXISTS" "$(record_store)"

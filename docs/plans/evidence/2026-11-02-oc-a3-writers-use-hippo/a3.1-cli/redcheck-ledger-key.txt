@@ -1,0 +1,9 @@
+# red-check ledger-key: project-record.js: decision key ignores the ledger row
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] hippo: ledger row makes the key stable (one decision): expected '1', got '2'
+FAIL [project-record] 219 passed, 1 failed
+      - hippo: ledger row makes the key stable (one decision): expected '1', got '2'
+
+# restored: exit 0
+PASS [project-record] 220 assertions

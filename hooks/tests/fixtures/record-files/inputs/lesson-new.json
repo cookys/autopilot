@@ -1,0 +1,11 @@
+{
+ "fn": "lessonNew",
+ "input": {
+  "title": "Sandbox the HOME",
+  "category": "env",
+  "context": "Running tests",
+  "problem": "Real HOME was touched.",
+  "solution": "Set HOME to a temp dir.",
+  "summary": "Sandbox HOME in tests"
+ }
+}

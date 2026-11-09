@@ -59,12 +59,22 @@ function main() {
       coverage_thresholds: {},
       protected_path_candidates: [],
       project_paths: null,
+      record_store: 'files',
       installed_plugins: { superpowers: false },
       error: String(err && err.message ? err.message : err),
     };
   }
   process.stdout.write(JSON.stringify(result, null, 2));
   process.stdout.write('\n');
+}
+
+// files | hippo | hippo-problems | spool, from scripts/lib/hippo.js detect; any failure (not a repo, plugin dir) means files.
+function detectRecordStore(targetDir) {
+  try {
+    return require('./lib/hippo.js').detect(targetDir).state;
+  } catch {
+    return 'files';
+  }
 }
 
 function detectProject(targetDir) {
@@ -89,6 +99,7 @@ function detectProject(targetDir) {
     coverage_thresholds: {},
     protected_path_candidates: [],
     project_paths: null,
+    record_store: detectRecordStore(targetDir),
     installed_plugins: {
       superpowers: false,
     },

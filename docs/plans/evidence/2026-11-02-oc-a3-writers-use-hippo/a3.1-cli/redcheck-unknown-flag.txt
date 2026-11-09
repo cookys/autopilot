@@ -1,0 +1,15 @@
+# red-check unknown-flag: project-record.js: unknown flags are ignored
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] unknown flag -> exit 2: expected '2', got '3'
+FAIL [project-record] unknown flag is named: 'unknown flag: --bogus' not found in output
+FAIL [project-record] --count -> exit 2: expected '2', got '3'
+FAIL [project-record] counter flags are refused by name: 'no counter fields' not found in output
+FAIL [project-record] 216 passed, 4 failed
+      - unknown flag -> exit 2: expected '2', got '3'
+      - unknown flag is named: 'unknown flag: --bogus' not found in output
+      - --count -> exit 2: expected '2', got '3'
+      - counter flags are refused by name: 'no counter fields' not found in output
+
+# restored: exit 0
+PASS [project-record] 220 assertions

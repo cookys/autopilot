@@ -1,0 +1,12 @@
+{
+ "fn": "adrNew",
+ "input": {
+  "title": "Pick a store",
+  "context": "We need one.",
+  "decision": "Files.",
+  "consequences": "Simple."
+ },
+ "opts": {
+  "adrDir": "docs/dev/adr"
+ }
+}

@@ -1,0 +1,875 @@
+# red-check validation-skipped: project-record.js: hippo mode skips validation
+# mutated copy under <tmp>, this checkout untouched
+# exit 1
+FAIL [project-record] hippo: backlog new -> exit 0: expected '0', got '1'
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:14
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: id is not a ULID: 
+<anonymous_script>:1
+d.data.record.title
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: title: expected 'Hippo row', got ''
+<anonymous_script>:1
+d.data.record.kind
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: kind issue: expected 'issue', got ''
+<anonymous_script>:1
+d.data.record.type
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: default type debt: expected 'debt', got ''
+<anonymous_script>:1
+d.data.record.status
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: status open: expected 'open', got ''
+<anonymous_script>:1
+d.data.record.tags.filter(t=>!t.startsWith("key:")).join(",")
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: tags: expected 'effort:s,origin:self,trigger:ready', got ''
+<anonymous_script>:1
+d.data.record.body
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: Since bullet from the pinned clock: '- **Since**: 2026-11-09' not found in output
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:14
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: --relates creates a relates_to edge: expected '1', got ''
+FAIL [project-record] hippo: peer row created: expected '0', got '1'
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:14
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+<anonymous_script>:1
+d.data.record.tags.join(",")
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: reporter tag: 'reporter:cuda' not found in output
+FAIL [project-record] hippo: closing a peer row with no reply is refused (exit 3): expected '3', got '2'
+FAIL [project-record] hippo: backlog reply: expected '0', got '2'
+<anonymous_script>:1
+d.data.record.body
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: Reply bullet replaced: '- **Reply**: 2026-11-09 fleet:m1' not found in output
+FAIL [project-record] hippo: bad reply -> exit 3: expected '3', got '2'
+FAIL [project-record] hippo: backlog close with --commit and --by: expected '0', got '2'
+<anonymous_script>:1
+d.data.record.status
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: closed done: expected 'done', got ''
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: implemented_by edge: expected '1', got ''
+<anonymous_script>:1
+JSON.stringify(d.data.edges)
+                      ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:23)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: implemented_by carries the full sha: 'git:0866ad639da4bc31e431499fee75f6b8492c1ba3' not found in output
+FAIL [project-record] hippo: close superseded with a non-record ref: expected '0', got '2'
+FAIL [project-record] hippo: non-record --by is an info line: 'superseded by BL-0042' not found in output
+<anonymous_script>:1
+d.data.record.status
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: superseded: expected 'superseded', got ''
+FAIL [project-record] hippo: decision new: expected '0', got '3'
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:14
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+<anonymous_script>:1
+d.data.record.kind
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: decision kind: expected 'decision', got ''
+<anonymous_script>:1
+d.data.record.status
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: decision active: expected 'active', got ''
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: --decides edge: expected '1', got ''
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: decision --relates edge: expected '1', got ''
+FAIL [project-record] hippo: decision new with the same ledger row is a rerun: expected '0', got '3'
+FAIL [project-record] hippo: ledger row makes the key stable (one decision): expected '1', got '0'
+FAIL [project-record] hippo: decision supersede: expected '0', got '2'
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:14
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+<anonymous_script>:1
+d.data.record.status
+       ^
+
+TypeError: Cannot read properties of null (reading 'record')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: old decision superseded: expected 'superseded', got ''
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] hippo: supersedes edge: expected '1', got ''
+FAIL [project-record] hippo: validation exit 3 for: backlog new --title X --origin self: expected '3', got '1'
+FAIL [project-record] hippo: multi-line title -> exit 3: expected '3', got '1'
+FAIL [project-record] red line (a): missing binary -> exit 0 (spooled): expected '0', got '1'
+FAIL [project-record] red line (a): exactly one spool file: expected '1', got '0'
+FAIL [project-record] red line (a): degraded warning: 'WARNING record store degraded' not found in output
+FAIL [project-record] red line (b): hippo exit 3 invalid-value -> exit 3: expected '3', got '1'
+FAIL [project-record] red line (b): refusal printed: 'refused: exit 3 rule/invalid-value' not found in output
+FAIL [project-record] red line (c): hippo exit 5 -> exit 0 (spooled): expected '0', got '1'
+FAIL [project-record] red line (c): exactly one spool file: expected '1', got '0'
+FAIL [project-record] red line (d): real hippo leak refusal -> exit 3: expected '3', got '1'
+FAIL [project-record] red line (d): the rule is named: 'leak' not found in output
+FAIL [project-record] parity: peer row into Y: expected '0', got '1'
+FAIL [project-record] parity: dated row into Y: expected '0', got '1'
+FAIL [project-record] parity: urgent row into Y: expected '0', got '1'
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:1:14
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] parity: close the replaced row: expected '0', got '2'
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at [eval]:2:85
+    at Array.map (<anonymous>)
+    at [eval]:2:73
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+
+Node.js v24.22.1
+FAIL [project-record] parity: show --json equal except id/created/updated/closed/provenance/key tag: expected '{
+ "Dated owner row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Dated owner row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:l",
+   "origin:owner",
+   "trigger:date-2026-12-01"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Wait for the date.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-02\n- **Problem**: Wait for the date.\n- **Impact**: Late.\n- **Trigger**: on the date\n- **Source**: owner 2026-10-02\n- **Pointer**: none\n- **Context**: some context\n",
+  "conflicts": {}
+ },
+ "Peer row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Peer row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:s",
+   "origin:peer",
+   "reporter:cuda",
+   "trigger:peer"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: A peer asked.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-01\n- **Report**: 2026-10-01 fleet\n- **Reply**: none\n- **Problem**: A peer asked.\n- **Impact**: Blocked.\n- **Trigger**: when asked\n- **Source**: PEER-REPORTED cuda 2026-10-01\n- **Pointer**: none\n",
+  "conflicts": {}
+ },
+ "Replaced row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Replaced row",
+  "status": "cancelled",
+  "area": null,
+  "tags": [
+   "effort:m",
+   "origin:self",
+   "trigger:ready",
+   "urgent"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Replaced by another.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": false,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-05\n- **Problem**: Replaced by another.\n- **Impact**: None.\n- **Trigger**: now\n- **Source**: self 2026-10-05\n- **Pointer**: none\n",
+  "conflicts": {}
+ }
+}', got ''
+1,79c1
+< {
+<  "Dated owner row": {
+<   "kind": "issue",
+<   "type": "debt",
+<   "title": "Dated owner row",
+<   "status": "open",
+<   "area": null,
+<   "tags": [
+<    "effort:l",
+<    "origin:owner",
+<    "trigger:date-2026-12-01"
+<   ],
+<   "priority": null,
+<   "milestone": null,
+<   "due": null,
+<   "scope": "project",
+<   "visibility": "internal",
+<   "summary": "- **Problem**: Wait for the date.",
+<   "conflicted": [],
+<   "blocked": false,
+<   "ready": true,
+<   "superseded_by": [],
+<   "nonlocal": [],
+<   "body": "- **Since**: 2026-10-02\n- **Problem**: Wait for the date.\n- **Impact**: Late.\n- **Trigger**: on the date\n- **Source**: owner 2026-10-02\n- **Pointer**: none\n- **Context**: some context\n",
+<   "conflicts": {}
+<  },
+<  "Peer row": {
+<   "kind": "issue",
+<   "type": "debt",
+<   "title": "Peer row",
+<   "status": "open",
+<   "area": null,
+<   "tags": [
+<    "effort:s",
+<    "origin:peer",
+<    "reporter:cuda",
+<    "trigger:peer"
+<   ],
+<   "priority": null,
+<   "milestone": null,
+<   "due": null,
+<   "scope": "project",
+<   "visibility": "internal",
+<   "summary": "- **Problem**: A peer asked.",
+<   "conflicted": [],
+<   "blocked": false,
+<   "ready": true,
+<   "superseded_by": [],
+<   "nonlocal": [],
+<   "body": "- **Since**: 2026-10-01\n- **Report**: 2026-10-01 fleet\n- **Reply**: none\n- **Problem**: A peer asked.\n- **Impact**: Blocked.\n- **Trigger**: when asked\n- **Source**: PEER-REPORTED cuda 2026-10-01\n- **Pointer**: none\n",
+<   "conflicts": {}
+<  },
+<  "Replaced row": {
+<   "kind": "issue",
+<   "type": "debt",
+<   "title": "Replaced row",
+<   "status": "cancelled",
+<   "area": null,
+<   "tags": [
+<    "effort:m",
+<    "origin:self",
+<    "trigger:ready",
+<    "urgent"
+<   ],
+<   "priority": null,
+<   "milestone": null,
+<   "due": null,
+<   "scope": "project",
+<   "visibility": "internal",
+<   "summary": "- **Problem**: Replaced by another.",
+<   "conflicted": [],
+<   "blocked": false,
+<   "ready": false,
+<   "superseded_by": [],
+<   "nonlocal": [],
+<   "body": "- **Since**: 2026-10-05\n- **Problem**: Replaced by another.\n- **Impact**: None.\n- **Trigger**: now\n- **Source**: self 2026-10-05\n- **Pointer**: none\n",
+<   "conflicts": {}
+<  }
+< }
+---
+> 
+FAIL [project-record] fault after-create: exit 70: expected '70', got '1'
+FAIL [project-record] backlog new: rerun after after-create succeeds: expected '0', got '1'
+FAIL [project-record] backlog new: exactly one record after after-create rerun: expected '1', got '0'
+<anonymous_script>:1
+d.data.records[0].id
+                  ^
+
+TypeError: Cannot read properties of undefined (reading 'id')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:19)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] backlog new: both edges after after-create rerun: expected '2', got ''
+FAIL [project-record] fault after-first-link: exit 70: expected '70', got '1'
+FAIL [project-record] backlog new: rerun after after-first-link succeeds: expected '0', got '1'
+FAIL [project-record] backlog new: exactly one record after after-first-link rerun: expected '1', got '0'
+<anonymous_script>:1
+d.data.records[0].id
+                  ^
+
+TypeError: Cannot read properties of undefined (reading 'id')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:19)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] backlog new: both edges after after-first-link rerun: expected '2', got ''
+FAIL [project-record] before-spool-remove: write spooled: expected '1', got '0'
+FAIL [project-record] fault before-spool-remove: exit 70: expected '70', got '0'
+FAIL [project-record] before-spool-remove: spool entry still there: expected '1', got '0'
+FAIL [project-record] before-spool-remove: record already created: expected '1', got '0'
+FAIL [project-record] before-spool-remove: still exactly one record: expected '1', got '0'
+<anonymous_script>:1
+d.data.records[0].id
+                  ^
+
+TypeError: Cannot read properties of undefined (reading 'id')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:19)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+<anonymous_script>:1
+d.data.edges.filter(e=>e.state==="present").length
+       ^
+
+TypeError: Cannot read properties of null (reading 'edges')
+    at eval (eval at <anonymous> ([eval]:1:67), <anonymous>:1:8)
+    at [eval]:1:67
+    at runScriptInThisContext (node:internal/vm:219:10)
+    at node:internal/process/execution:451:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:449:60)
+    at evalFunction (node:internal/process/execution:283:30)
+    at evalTypeScript (node:internal/process/execution:295:3)
+    at node:internal/main/eval_string:71:3
+
+Node.js v24.22.1
+FAIL [project-record] before-spool-remove: both edges: expected '2', got ''
+FAIL [project-record] 158 passed, 62 failed
+      - hippo: backlog new -> exit 0: expected '0', got '1'
+      - hippo: id is not a ULID: 
+      - hippo: title: expected 'Hippo row', got ''
+      - hippo: kind issue: expected 'issue', got ''
+      - hippo: default type debt: expected 'debt', got ''
+      - hippo: status open: expected 'open', got ''
+      - hippo: tags: expected 'effort:s,origin:self,trigger:ready', got ''
+      - hippo: Since bullet from the pinned clock: '- **Since**: 2026-11-09' not found in output
+      - hippo: --relates creates a relates_to edge: expected '1', got ''
+      - hippo: peer row created: expected '0', got '1'
+      - hippo: reporter tag: 'reporter:cuda' not found in output
+      - hippo: closing a peer row with no reply is refused (exit 3): expected '3', got '2'
+      - hippo: backlog reply: expected '0', got '2'
+      - hippo: Reply bullet replaced: '- **Reply**: 2026-11-09 fleet:m1' not found in output
+      - hippo: bad reply -> exit 3: expected '3', got '2'
+      - hippo: backlog close with --commit and --by: expected '0', got '2'
+      - hippo: closed done: expected 'done', got ''
+      - hippo: implemented_by edge: expected '1', got ''
+      - hippo: implemented_by carries the full sha: 'git:0866ad639da4bc31e431499fee75f6b8492c1ba3' not found in output
+      - hippo: close superseded with a non-record ref: expected '0', got '2'
+      - hippo: non-record --by is an info line: 'superseded by BL-0042' not found in output
+      - hippo: superseded: expected 'superseded', got ''
+      - hippo: decision new: expected '0', got '3'
+      - hippo: decision kind: expected 'decision', got ''
+      - hippo: decision active: expected 'active', got ''
+      - hippo: --decides edge: expected '1', got ''
+      - hippo: decision --relates edge: expected '1', got ''
+      - hippo: decision new with the same ledger row is a rerun: expected '0', got '3'
+      - hippo: ledger row makes the key stable (one decision): expected '1', got '0'
+      - hippo: decision supersede: expected '0', got '2'
+      - hippo: old decision superseded: expected 'superseded', got ''
+      - hippo: supersedes edge: expected '1', got ''
+      - hippo: validation exit 3 for: backlog new --title X --origin self: expected '3', got '1'
+      - hippo: multi-line title -> exit 3: expected '3', got '1'
+      - red line (a): missing binary -> exit 0 (spooled): expected '0', got '1'
+      - red line (a): exactly one spool file: expected '1', got '0'
+      - red line (a): degraded warning: 'WARNING record store degraded' not found in output
+      - red line (b): hippo exit 3 invalid-value -> exit 3: expected '3', got '1'
+      - red line (b): refusal printed: 'refused: exit 3 rule/invalid-value' not found in output
+      - red line (c): hippo exit 5 -> exit 0 (spooled): expected '0', got '1'
+      - red line (c): exactly one spool file: expected '1', got '0'
+      - red line (d): real hippo leak refusal -> exit 3: expected '3', got '1'
+      - red line (d): the rule is named: 'leak' not found in output
+      - parity: peer row into Y: expected '0', got '1'
+      - parity: dated row into Y: expected '0', got '1'
+      - parity: urgent row into Y: expected '0', got '1'
+      - parity: close the replaced row: expected '0', got '2'
+      - parity: show --json equal except id/created/updated/closed/provenance/key tag: expected '{
+ "Dated owner row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Dated owner row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:l",
+   "origin:owner",
+   "trigger:date-2026-12-01"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Wait for the date.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-02\n- **Problem**: Wait for the date.\n- **Impact**: Late.\n- **Trigger**: on the date\n- **Source**: owner 2026-10-02\n- **Pointer**: none\n- **Context**: some context\n",
+  "conflicts": {}
+ },
+ "Peer row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Peer row",
+  "status": "open",
+  "area": null,
+  "tags": [
+   "effort:s",
+   "origin:peer",
+   "reporter:cuda",
+   "trigger:peer"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: A peer asked.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": true,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-01\n- **Report**: 2026-10-01 fleet\n- **Reply**: none\n- **Problem**: A peer asked.\n- **Impact**: Blocked.\n- **Trigger**: when asked\n- **Source**: PEER-REPORTED cuda 2026-10-01\n- **Pointer**: none\n",
+  "conflicts": {}
+ },
+ "Replaced row": {
+  "kind": "issue",
+  "type": "debt",
+  "title": "Replaced row",
+  "status": "cancelled",
+  "area": null,
+  "tags": [
+   "effort:m",
+   "origin:self",
+   "trigger:ready",
+   "urgent"
+  ],
+  "priority": null,
+  "milestone": null,
+  "due": null,
+  "scope": "project",
+  "visibility": "internal",
+  "summary": "- **Problem**: Replaced by another.",
+  "conflicted": [],
+  "blocked": false,
+  "ready": false,
+  "superseded_by": [],
+  "nonlocal": [],
+  "body": "- **Since**: 2026-10-05\n- **Problem**: Replaced by another.\n- **Impact**: None.\n- **Trigger**: now\n- **Source**: self 2026-10-05\n- **Pointer**: none\n",
+  "conflicts": {}
+ }
+}', got ''
+      - fault after-create: exit 70: expected '70', got '1'
+      - backlog new: rerun after after-create succeeds: expected '0', got '1'
+      - backlog new: exactly one record after after-create rerun: expected '1', got '0'
+      - backlog new: both edges after after-create rerun: expected '2', got ''
+      - fault after-first-link: exit 70: expected '70', got '1'
+      - backlog new: rerun after after-first-link succeeds: expected '0', got '1'
+      - backlog new: exactly one record after after-first-link rerun: expected '1', got '0'
+      - backlog new: both edges after after-first-link rerun: expected '2', got ''
+      - before-spool-remove: write spooled: expected '1', got '0'
+      - fault before-spool-remove: exit 70: expected '70', got '0'
+      - before-spool-remove: spool entry still there: expected '1', got '0'
+      - before-spool-remove: record already created: expected '1', got '0'
+      - before-spool-remove: still exactly one record: expected '1', got '0'
+      - before-spool-remove: both edges: expected '2', got ''
+
+# restored: exit 0
+PASS [project-record] 220 assertions

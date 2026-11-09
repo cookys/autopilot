@@ -1,0 +1,9 @@
+[
+ {
+  "decision_id": "dec-85f014e6102f",
+  "title": "Use hippo",
+  "rationale": "Later.",
+  "source": "project-record",
+  "supersedes": "dec-abc123def456"
+ }
+]

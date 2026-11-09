@@ -36,7 +36,7 @@ process.stdout.write(out.reason);
 GUARD_CMD="$(printf '%s' "$GUARD_REASON" | node -e '
 let s = ""; process.stdin.on("data", (d) => { s += d; });
 process.stdin.on("end", () => {
-  const m = s.match(/node (.*?) open --question/);
+  const m = s.match(/node (.*?) open --executor/);
   if (!m) process.exit(2);
   process.stdout.write("node " + m[1] + " open");
 });
@@ -52,7 +52,7 @@ process.stdout.write(buildBaseContext("/tmp"));
 START_CMD="$(printf '%s' "$START_TEXT" | node -e '
 let s = ""; process.stdin.on("data", (d) => { s += d; });
 process.stdin.on("end", () => {
-  const m = s.match(/node (.*?) open --question/);
+  const m = s.match(/node (.*?) open --executor/);
   if (!m) process.exit(2);
   process.stdout.write("node " + m[1] + " open");
 });

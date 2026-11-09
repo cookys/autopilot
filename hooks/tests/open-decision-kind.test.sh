@@ -10,7 +10,7 @@ export AUTOPILOT_RUNS_WATCH_AUTOSTART=0
 OD="$REPO_ROOT/scripts/open-decision.js"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q --allow-empty -m base
-od() { OUT="$(node "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+od() { OUT="$(node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 files() { find "$R/.git/autopilot/decisions" -name '*.json' 2>/dev/null | wc -l | tr -d ' '; }
 kind_of() { node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const e=v.decisions.find(d=>d.id===process.argv[2]);process.stdout.write(String(e.kind))' "$(find "$R/.git/autopilot/decisions" -name '*.json' | head -1)" "$1"; }
 

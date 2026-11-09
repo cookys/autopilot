@@ -52,8 +52,10 @@ function closeDecideReply(payload) {
   let closeDecisionById;
   let projectScopeFiles;
   let readEntries;
+  let deliverAnswer;
+  let receiptLine;
   try {
-    ({ closeDecisionById, projectScopeFiles, readEntries } = require('../scripts/open-decision.js'));
+    ({ closeDecisionById, projectScopeFiles, readEntries, deliverAnswer, receiptLine } = require('../scripts/open-decision.js'));
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
@@ -73,6 +75,7 @@ function closeDecideReply(payload) {
   try { const m = require('../scripts/lib/fleet-decision.js'); probeState = m.probe(); if (probeState === 'supported') fd = m; } catch (_e) { probeState = 'probe_error'; }
   const unverified = [];
   const notFound = [];
+  const delivery = new Map(); // id -> the verified answer of a card that has an executor: the program delivers it (PM 01M6ZXJYTQ), nothing closes it directly
   for (const id of ids) {
     if (probeState === 'probe_error') { unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
     if (fd) {
@@ -86,6 +89,23 @@ function closeDecideReply(payload) {
       try { for (const f of files) { const e = readEntries(f).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
       const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
       if (!bound.ok) { unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
+      delivery.set(id, { answer: v.answer, answer_id: aid });
+    }
+    if (delivery.has(id)) {
+      // a card with an executor: park + `fleet send` by program code, signed as this session; the receipt line goes to this session's model
+      let sent = false;
+      for (const file of files) {
+        let hit;
+        try { hit = readEntries(file).find((e) => e.id === id); } catch (_e) { hit = null; }
+        if (!hit || !hit.executor) continue;
+        const r = deliverAnswer(file, id, delivery.get(id));
+        if (r.status === 'absent') continue;
+        sent = true;
+        if (r.status === 'sent' || r.status === 'already') ctxLines.push(receiptLine(r));
+        else { ctxLines.push(receiptLine({ ...r, attempts: r.attempts || 1 })); process.stderr.write(`advisory-relay: ${receiptLine({ ...r, attempts: r.attempts || 1 })}\n`); }
+        break;
+      }
+      if (sent) continue;
     }
     // closeDecisionById locks before it looks up the id, so a locked scope file
     // returns status error even when this card is not in it. Keep every error
@@ -159,8 +179,12 @@ function recordCorrection(payload) {
 // BL-0336: the autostart's failure sentence (watcher could not start / live dir unusable) is the only thing this host adds to
 // stdout besides the advisory blob; it travels as a systemMessage, in the same JSON object when both exist.
 let sysMsg = null;
+const ctxLines = []; // receipt lines of delivered panel answers: the model of this (PM) session reads them
 function bye() {
-  try { if (sysMsg) fs.writeSync(1, JSON.stringify({ systemMessage: sysMsg })); } catch { /* fail-open */ }
+  try {
+    if (ctxLines.length) fs.writeSync(1, JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: ctxLines.join('\n') }, ...(sysMsg ? { systemMessage: sysMsg } : {}) }));
+    else if (sysMsg) fs.writeSync(1, JSON.stringify({ systemMessage: sysMsg }));
+  } catch { /* fail-open */ }
   process.exit(0);
 }
 
@@ -240,7 +264,7 @@ try {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: texts.join('\n'),
+        additionalContext: [...ctxLines.splice(0), ...texts].join('\n'),
       },
       ...(sysMsg ? { systemMessage: sysMsg } : {}),
     }));

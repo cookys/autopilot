@@ -31,6 +31,7 @@ if (a[0] === '--help') {
   process.stdout.write('fleet — courier CLI\n\nUSAGE:\n  fleet send x\n' + (process.env.DECOY ? '  fleet decisions-report x\n' : '') + (process.env.NO_DECISION ? '' : '  fleet decision claim|verify|list <card_id>\n'));
   process.exit(process.env.HELP_RC ? Number(process.env.HELP_RC) : 1);
 }
+if (a[0] === 'send') { process.stdout.write(JSON.stringify({ ok: true, member: a[1], message_id: '01MSGSTUBCLAIM' }) + '\n'); process.exit(0); } // the hook delivers a verified answer of a card with an executor (PM 01M6ZXJYTQ)
 const [, sub, card] = a;
 const idOf = (c, v) => 'A' + crypto.createHash('sha256').update(c + '|' + v).digest('hex').slice(0, 25).toUpperCase();
 const rows = () => (fs.existsSync(D + '/answers') ? fs.readFileSync(D + '/answers', 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
@@ -67,7 +68,7 @@ export STUB_DIR="$STUB" AUTOPILOT_FLEET_BIN="$STUB/fleet"
 calls() { cat "$STUB/calls" 2>/dev/null; }
 reset() { rm -f "$STUB/calls" "$STUB/answers"; printf '%s' "${1:-ok}" > "$STUB/mode"; }
 Q="Should the panel claim before it sends?"
-open_card() { node "$OD" open --cwd "$R" --root-run-id root-t --question "$Q" --option "Alpha::a" --option "Beta::b" --not-authorized irreversible 2>/dev/null | head -1; }
+open_card() { node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "$Q" --option "Alpha::a" --option "Beta::b" --not-authorized irreversible 2>/dev/null | head -1; }
 is_open() { node "$OD" show --cwd "$R" 2>/dev/null | grep -q "$1"; }
 hook() { HOUT="$(node -e 'process.stdout.write(JSON.stringify({session_id:"vf",cwd:process.argv[1],prompt:process.argv[2]}))' "$R" "$1" | node "$HOOK" 2>"$TEST_TMP/herr")"; HRC=$?; }
 jf() { node -e 'const j=JSON.parse(process.argv[1]);const v=j[process.argv[2]];console.log(v===null?"null":v)' "$1" "$2"; }

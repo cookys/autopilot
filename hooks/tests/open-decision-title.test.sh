@@ -25,7 +25,7 @@ export PATH="$STUB:$PATH"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q --allow-empty -m base
 : > "$STUB/calls.log"
-od() { local script="$1"; shift; OUT="$(node "$script" open --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$TEST_TMP/err" < /dev/null)"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+od() { local script="$1"; shift; OUT="$(node "$script" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$TEST_TMP/err" < /dev/null)"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 store() { cat "$R"/.git/autopilot/decisions/*.json 2>/dev/null; }
 entry() { node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(v.decisions.find(d=>d.id===process.argv[2])))' "$(find "$R/.git/autopilot/decisions" -name '*.json' | head -1)" "$1"; }
 OD="$S/open-decision.js"

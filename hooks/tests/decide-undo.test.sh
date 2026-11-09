@@ -181,7 +181,7 @@ red d-pick-not-needed-for-send tabs.ts "s/const answered = open.filter(d => !dec
 OD="$REPO_ROOT/scripts/open-decision.js"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q --allow-empty -m base
-open_card() { node "$OD" open --cwd "$R" --root-run-id root-t --question "要不要改？" --option "甲::a" --option "乙::b" --not-authorized irreversible 2>/dev/null | head -1; }
+open_card() { node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "要不要改？" --option "甲::a" --option "乙::b" --not-authorized irreversible 2>/dev/null | head -1; }
 card_json() { node "$OD" show --cwd "$R" --id "$1" --json 2>/dev/null; }
 hook_with() { # <hook dir> <prompt>: sets HOUT
   HOUT="$(node -e 'process.stdout.write(JSON.stringify({session_id:"fx",cwd:process.argv[1],prompt:process.argv[2]}))' "$R" "$2" | node "$1/advisory-relay.js" 2>"$TEST_TMP/herr")"

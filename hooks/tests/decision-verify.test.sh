@@ -31,6 +31,7 @@ if (a[0] === '--help') {
   process.stdout.write('fleet — courier CLI\n\nUSAGE:\n  fleet send x\n' + (process.env.DECOY ? '  fleet decisions-report x\n' : '') + (process.env.NO_DECISION ? '' : '  fleet decision claim|verify|list <card_id>\n'));
   process.exit(process.env.HELP_RC ? Number(process.env.HELP_RC) : 1);
 }
+if (a[0] === 'send') { process.stdout.write(JSON.stringify({ ok: true, member: a[1], message_id: '01MSGSTUBCLAIM' }) + '\n'); process.exit(0); } // the hook delivers a verified answer of a card with an executor (PM 01M6ZXJYTQ)
 const [, sub, card] = a;
 const idOf = (c, v) => 'A' + crypto.createHash('sha256').update(c + '|' + v).digest('hex').slice(0, 25).toUpperCase();
 const rows = () => (fs.existsSync(D + '/answers') ? fs.readFileSync(D + '/answers', 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
@@ -67,7 +68,9 @@ export STUB_DIR="$STUB" AUTOPILOT_FLEET_BIN="$STUB/fleet"
 calls() { cat "$STUB/calls" 2>/dev/null; }
 count() { if [ -f "$STUB/calls" ]; then grep -c "$1" "$STUB/calls" || true; else echo 0; fi; }
 reset() { rm -f "$STUB/calls" "$STUB/answers"; printf '%s' "${1:-ok}" > "$STUB/mode"; }
-open_card() { node "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible 2>/dev/null | head -1; }
+open_card() { node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible 2>/dev/null | head -1; }
+# a card with NO executor (what hooks/ask-decision.js writes): `close --option` closes it directly. With an executor the answer is parked for delivery (PM 01M6ZXJYTQ).
+open_card_x() { node -e 'process.stdout.write(require(process.argv[1]).openDecision({cwd:process.argv[2],root:"root-t",session:null,question:"Q?",options:[{label:"A",description:"a"},{label:"B",description:"b"}],not_authorized:"irreversible"}).id)' "$OD" "$R"; }
 is_open() { node "$OD" show --cwd "$R" 2>/dev/null | grep -q "$1"; }
 close() { OUT="$(node "$OD" close --cwd "$R" --root-run-id root-t --id "$@" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 hook() { # hook <prompt>
@@ -75,7 +78,7 @@ hook() { # hook <prompt>
 }
 
 # --- close: claim before act
-reset ok; C="$(open_card)"
+reset ok; C="$(open_card_x)"
 close "$C" --option A; assert_eq "$RC" 0 "claim ok: close exits 0"
 assert_contains "$(calls)" "decision claim $C --option A" "claim recorded before the close"
 is_open "$C"; assert_eq "$?" 1 "claim ok: card closed"
@@ -96,7 +99,7 @@ assert_contains "$ERR" "NOT closed" "unreachable: loud error"
 reset ok; close "$C" --option A; assert_eq "$RC" 0 "courier back: the same close now works"
 # unknown / card_closed on the courier: ledger entry still closes
 # exit 10 card_closed (fleet plan: an expired card is answered in-session): the ledger entry closes
-reset closed; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 0 "card_closed: exit 0"; is_open "$C"; assert_eq "$?" 1 "card_closed: ledger entry closed"
+reset closed; C="$(open_card_x)"; close "$C" --option A; assert_eq "$RC" 0 "card_closed: exit 0"; is_open "$C"; assert_eq "$?" 1 "card_closed: ledger entry closed"
 # exit 4 unknown: nothing confirmed the answer -> card stays open, exit 8
 reset unknown; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "unknown card: exit 8"; is_open "$C"; assert_eq "$?" 0 "unknown card: stays open"
 # a failed probe is not 'no courier'
@@ -106,7 +109,7 @@ reset ok; HELP_RC=0 close "$C" --option A; assert_eq "$RC" 0 "usage with exit 0 
 # a bare banner (no usage section) is a probe error, not "unsupported"
 reset banner; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "banner only: exit 8"; is_open "$C"; assert_eq "$?" 0 "banner only: card stays open"
 # `fleet decisions-report` is not `fleet decision`
-reset ok; C="$(open_card)"; DECOY=1 NO_DECISION=1 close "$C" --option A; assert_eq "$RC" 0 "decoy line only: unsupported, plain close"; assert_eq "$(count 'decision claim')" 0 "decoy line: no claim"
+reset ok; C="$(open_card_x)"; DECOY=1 NO_DECISION=1 close "$C" --option A; assert_eq "$RC" 0 "decoy line only: unsupported, plain close"; assert_eq "$(count 'decision claim')" 0 "decoy line: no claim"
 # ENOENT stays unsupported (covered below); timeout-like failure above is probe_error
 # exit 0 without an answer_id is an error, not a claim
 reset noid; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "claim exit 0 without answer_id: exit 8"; is_open "$C"; assert_eq "$?" 0 "no answer_id: card stays open"
@@ -116,9 +119,9 @@ reset ok; C="$(open_card)"; close "$C"; assert_eq "$RC" 0 "plain close: exit 0";
 close "x-1" --option A --free-text z; assert_eq "$RC" 2 "--option with --free-text: usage"
 
 # --- hosts without a courier keep today's behaviour
-reset ok; C="$(open_card)"; AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" close "$C" --option A
+reset ok; C="$(open_card_x)"; AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" close "$C" --option A
 assert_eq "$RC" 0 "no fleet binary: exit 0"; is_open "$C"; assert_eq "$?" 1 "no fleet binary: card closed"
-reset ok; C="$(open_card)"; NO_DECISION=1 close "$C" --option A
+reset ok; C="$(open_card_x)"; NO_DECISION=1 close "$C" --option A
 assert_eq "$RC" 0 "fleet without decision: exit 0"; is_open "$C"; assert_eq "$?" 1 "fleet without decision: card closed"; assert_eq "$(count 'decision claim')" 0 "fleet without decision: no claim attempted"
 
 # --- hook: verify before act
@@ -174,7 +177,7 @@ hook "$(printf '[待決回覆]\n%s｜Q? → A|%s\n' "$C" "$AIDA")"; is_open "$C"
 hook "$(printf '[待決回覆]\n%s｜Q? → A｜補充：not → B｜%s\n' "$C" "$AIDA")"; is_open "$C"; assert_eq "$?" 1 "legit: note containing an arrow does not matter (the note never takes part)"
 # an option label that itself contains ' → ' and a question longer than 30 characters
 reset ok; LQ="This is a long question that is certainly longer than thirty characters?"
-C="$(node "$OD" open --cwd "$R" --root-run-id root-t --question "$LQ" --option "A → B::a" --option "C::c" --not-authorized irreversible 2>/dev/null | head -1)"
+C="$(node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "$LQ" --option "A → B::a" --option "C::c" --not-authorized irreversible 2>/dev/null | head -1)"
 AIDL="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"A → B"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
 EXC="$(node -e 'console.log(require(process.argv[1]).excerptOf(process.argv[2]))' "$REPO_ROOT/scripts/lib/decide-line.js" "$LQ")"
 hook "$(printf '[待決回覆]\n%s｜%s → B｜%s\n' "$C" "$EXC" "$AIDL")"; is_open "$C"; assert_eq "$?" 0 "label 'A → B': a line saying only B is refused"

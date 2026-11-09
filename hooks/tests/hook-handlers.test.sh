@@ -88,7 +88,7 @@ const emptyRepo = fs.mkdtempSync(path.join(testTmp, 'empty-'));
 execFileSync('git', ['init', '-q'], { cwd: emptyRepo });
 const emptyBase = buildBaseContext(emptyRepo);
 assert(emptyBase.startsWith(BASE_AUTOPILOT_CONTEXT), 'table text stays the base prefix');
-assert(emptyBase.includes('open --question'), 'open a card');
+assert(emptyBase.includes('open --executor'), 'open a card');
 assert(emptyBase.includes(path.join(root, 'scripts', 'open-decision.js')), 'absolute open-decision.js');
 assert(emptyBase.includes('[待決回覆]'), 'panel reply head');
 assert(emptyBase.includes('show tool'), 'show tool');

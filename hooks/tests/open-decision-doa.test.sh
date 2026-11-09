@@ -28,7 +28,7 @@ marker plain null
 # od <sid> <args...>: run open; sets RC, ERR, OUT
 od() {
   local sid="$1"; shift
-  OUT="$(AUTOPILOT_SESSION_ID="$sid" node "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" "$@" 2>"$TEST_TMP/err")"; RC=$?
+  OUT="$(AUTOPILOT_SESSION_ID="$sid" node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" "$@" 2>"$TEST_TMP/err")"; RC=$?
   ERR="$(cat "$TEST_TMP/err")"
 }
 
@@ -57,12 +57,12 @@ od auto --not-authorized irreversible --doa-tier "a b"; assert_eq "$RC" 0 "resol
 od auto --not-authorized reversible   --doa-tier "a b"; assert_eq "$RC" 3 "resolve-doa fails, reversible: refused (cannot be verified)"; assert_contains "$ERR" "resolve-doa failed" "refusal names the failure"
 # 7b. resolve-doa cannot even be spawned (no bash on PATH)
 NODE_BIN="$(command -v node)"; NOBASH="$TEST_TMP/nobash"; mkdir -p "$NOBASH"; ln -s "$(command -v git)" "$NOBASH/git"
-OUT="$(AUTOPILOT_SESSION_ID=auto PATH="$NOBASH" "$NODE_BIN" "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized external 2>"$TEST_TMP/err")"; RC=$?
+OUT="$(AUTOPILOT_SESSION_ID=auto PATH="$NOBASH" "$NODE_BIN" "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized external 2>"$TEST_TMP/err")"; RC=$?
 assert_eq "$RC" 3 "no bash: external refused"; assert_contains "$(cat "$TEST_TMP/err")" "resolve-doa failed" "spawn failure named"
 
 # 7c. dcopt: a card needs options. Every case carries a valid --not-authorized, so each fails only on its own guard.
 R2="$TEST_TMP/r2"; mkdir -p "$R2"; git -C "$R2" init -q
-odn() { OUT="$(AUTOPILOT_SESSION_ID=plain node "$OD" open --cwd "$R2" --root-run-id root-n --not-authorized irreversible --question "Q?" "$@" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+odn() { OUT="$(AUTOPILOT_SESSION_ID=plain node "$OD" open --executor ns/cc/exec--claude --cwd "$R2" --root-run-id root-n --not-authorized irreversible --question "Q?" "$@" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 odn; assert_eq "$RC" 2 "no --option, no --free-text: exit 2"; assert_contains "$ERR" "--free-text" "refusal names --free-text"
 assert_eq "$(command ls "$R2/.git/autopilot/decisions" 2>/dev/null)" "" "the refused card wrote no scope file"
 odn --option "only::one"; assert_eq "$RC" 2 "exactly one --option: exit 2"
@@ -93,7 +93,7 @@ printf '## Production Targets\n\n| Target | Class |\n|---|---|\n| example-prod |
 marker auto2 l3; marker plain2 null
 odt() { # <sid> <args...> in PR
   local sid="$1"; shift
-  OUT="$(AUTOPILOT_SESSION_ID="$sid" node "$OD" open --cwd "$PR" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" "$@" 2>"$TEST_TMP/err")"; RC=$?
+  OUT="$(AUTOPILOT_SESSION_ID="$sid" node "$OD" open --executor ns/cc/exec--claude --cwd "$PR" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" "$@" 2>"$TEST_TMP/err")"; RC=$?
   ERR="$(cat "$TEST_TMP/err")"
 }
 noscope() { assert_eq "$(command ls "$PR/.git/autopilot/decisions" 2>/dev/null)" "" "$1"; }
@@ -115,6 +115,6 @@ odt auto2 --not-authorized reversible --target example-staging;   assert_eq "$RC
 odt auto2 --not-authorized irreversible; assert_eq "$RC" 0 "no --target: unchanged"
 # $DOA_CONFIG_OVERRIDE cannot relax production for open-decision either
 printf '## Production Targets\n\n| Target | Class |\n|---|---|\n| example-prod | staging |\n' > "$TEST_TMP/ov.md"
-OUT="$(DOA_CONFIG_OVERRIDE="$TEST_TMP/ov.md" AUTOPILOT_SESSION_ID=auto2 node "$OD" open --cwd "$PR" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible --target example-prod 2>"$TEST_TMP/err")"; RC=$?
+OUT="$(DOA_CONFIG_OVERRIDE="$TEST_TMP/ov.md" AUTOPILOT_SESSION_ID=auto2 node "$OD" open --executor ns/cc/exec--claude --cwd "$PR" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible --target example-prod 2>"$TEST_TMP/err")"; RC=$?
 assert_eq "$RC" 6 "(f) override file cannot make a production target openable"
 finalize_test

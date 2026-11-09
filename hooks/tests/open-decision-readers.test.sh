@@ -14,11 +14,11 @@ OD="$REPO_ROOT/scripts/open-decision.js"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 mkrepo() { rm -rf "$1" 2>/dev/null; mkdir -p "$1"; $GIT -C "$1" init -q; $GIT -C "$1" commit -q --allow-empty -m base; }
 R="$TEST_TMP/repo"; mkrepo "$R"
-mk() { node "$OD" open --cwd "$R" --root-run-id rr --question "$1" --free-text --not-authorized irreversible; }
+mk() { node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id rr --question "$1" --free-text --not-authorized irreversible; }
 OPEN="$(mk "Q-OPEN?")"; AWAIT="$(mk "Q-AWAIT?")"; CLOSED="$(mk "Q-CLOSED?")"; PEND="$(mk "Q-PEND?")"
 node "$OD" close --cwd "$R" --root-run-id rr --id "$PEND" --answer "p" --executor ns/cc/exec--claude >/dev/null
 node "$OD" close --cwd "$R" --root-run-id rr --id "$AWAIT" --answer "a" --awaiting-operator "run it" >/dev/null
-node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" --answer "c" >/dev/null
+node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" >/dev/null
 export R REPO_ROOT OPEN AWAIT CLOSED PEND
 
 # one script asks every reader; prints "name:ids" lines. SRC = where src/status comes from (the sabotaged copy in NC-R).
@@ -100,7 +100,7 @@ HAS="$(node -e 'const p=require("path"),r=process.env.REPO_ROOT;const {scopeFrom
 assert_eq "$HAS" "false,1,false" "all closed: hasOpenDecision false, the scope file is still there (the record), scopeFileHasLive false"
 
 # NC-R: a reader that was not updated shows the closed card again, and this test sees it
-mkrepo "$R"; OPEN="$(mk "Q-OPEN?")"; CLOSED="$(mk "Q-CLOSED?")"; node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" --answer c >/dev/null; export OPEN CLOSED
+mkrepo "$R"; OPEN="$(mk "Q-OPEN?")"; CLOSED="$(mk "Q-CLOSED?")"; node "$OD" close --cwd "$R" --root-run-id rr --id "$CLOSED" >/dev/null; export OPEN CLOSED
 SAB="$TEST_TMP/sabotaged-root"; mkdir -p "$SAB/src/status" "$SAB/scripts/lib"; cp "$REPO_ROOT"/src/status/scope-key.js "$REPO_ROOT"/src/status/decision-input.js "$SAB/src/status/"; cp "$REPO_ROOT"/scripts/lib/card-notice.js "$SAB/scripts/lib/" # decision-input.js requires ../../scripts/lib/card-notice.js
 sed -i '/if (isClosedEntry(e)) return null;/d' "$SAB/src/status/decision-input.js"
 grep -q "isClosedEntry(e)) return null" "$SAB/src/status/decision-input.js" && fail "sabotage did not apply"

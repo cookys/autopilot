@@ -28,7 +28,7 @@ R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q 
 reset_calls() { : > "$STUB/calls.log"; rm -f "$STUB/send-fails" "$STUB/recent-fails"; }
 sends() { grep -c '"args":\["send"' "$STUB/calls.log" | tr -d ' '; }
 open_card() { # <OD script> [env prefix via export] -> OUT=id
-  OUT="$(node "$1" open --cwd "$R" --root-run-id root-t --question "${2:-Which way?}" --option "A::a" --option "B::b" --not-authorized irreversible 2>"$TEST_TMP/err" < /dev/null)"; RC=$?
+  OUT="$(node "$1" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "${2:-Which way?}" --option "A::a" --option "B::b" --not-authorized irreversible 2>"$TEST_TMP/err" < /dev/null)"; RC=$?
 }
 OD="$S/open-decision.js"
 # build a mutant tree: scripts/ with every file symlinked except <rel> (a copy the sed edits), src symlinked

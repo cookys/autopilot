@@ -9,7 +9,8 @@
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
  *                                       [--title <short card title, <= 20 characters>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
- *   node scripts/open-decision.js open ... [--executor <address>] [--asker <address>]  (who carries out the answer / who asked: stored on the card)
+ *   node scripts/open-decision.js open ... --executor <address> [--asker <address>]  (--executor is REQUIRED: who carries out the answer; the PM's own cards name the PM; --asker: who asked)
+ *   node scripts/open-decision.js redeliver [--id <id>] [--cwd <dir>]   (resend the panel answer of every pending_dispatch card the program parked, see "Panel answer delivery")
  *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn; the card is KEPT, status closed)
  *   node scripts/open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]
  *                                       (with an executor: prints the dispatch JSON and parks the card in pending_dispatch; nothing is sent)
@@ -56,7 +57,13 @@
  * dispatched_task_id (set by close --dispatched), executor and asker (fleet addresses, set at `open --executor/--asker` or at close),
  * awaiting_operator (the step the operator must do), backfilled (true on a record made by backfill). Field list: this comment and
  * references/review-page.md (decisions); schemas/decision.schema.json validates them.
- * close --answer <text> [--executor A] [--asker B] (PM ruling 01M6RV0Y02: this script sends no dispatch and no fyi; the one thing it sends is the card notice below): records the answer verbatim and
+ * Panel answer delivery (PM 01M6ZXJYTQ, 2026-11-09; overrides the earlier PM ruling 01M6RV0Y02 "open-decision never sends"): when the hook verifies an operator answer
+ * from the live panel and the card has an executor, PROGRAM code (hooks/advisory-relay.js -> deliverAnswer here, no model) parks the card in pending_dispatch with the
+ * answer (answer_id, answer_option, answer_free_text, answer_digest), then runs the shell `fleet send <executor> <text>`, which inside a session signs as THAT session (never
+ * `fleet dispatch`, which signs as fleet-cli; FLEET_AS_CLI and FLEET_FYI are stripped). Success: status closed + dispatched_message_id + dispatched_via "send"; one receipt line.
+ * Failure (non-zero exit, output that is not {"ok":true,"message_id":...}): the card stays pending_dispatch with dispatch_error + dispatch_attempts, never closed.
+ * `redeliver` retries those cards with the same function. A card with dispatched_message_id is never sent again. `close --answer` below is the older, caller-dispatches path.
+ * close --answer <text> [--executor A] [--asker B] (PM ruling 01M6RV0Y02, overridden for panel answers by PM 01M6ZXJYTQ (2026-11-09): this `close --answer` path sends no dispatch and no fyi; the one thing it sends is the card notice below): records the answer verbatim and
  * prints ONE JSON on stdout: { ok, id, status, answer, pending_dispatch_at, dispatch: { to, task }, fyi: { to, text } | null, then }. The CALLER dispatches
  * `dispatch.task` to `dispatch.to` (and sends `fyi.text` to `fyi.to`) with its own fleet tools, then runs `close --id <id> --dispatched <task_id>`.
  * Until then the card is pending_dispatch (not a question, not closed). --executor falls back to the one stored at open; none anywhere -> the card
@@ -106,7 +113,7 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
   process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
-    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id>\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       (open also takes --executor <address> --asker <address> --title <short title, <= 20 characters>)\n');
+    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id>\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       (open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters>)\n');
   return 2;
 }
 
@@ -456,7 +463,7 @@ function main(argv) {
   if (tk.target !== undefined) args.target = tk.target;
   const cmd = args._[0];
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
-  if (!['open', 'close', 'done', 'show', 'list', 'backfill'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
+  if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);
   if (root && (!SAFE_ROOT.test(root) || root === '.' || root === '..')) return usage('--root-run-id must match [A-Za-z0-9._-]+');
@@ -497,6 +504,12 @@ function main(argv) {
     return 0;
   }
   if (cmd === 'backfill') return backfill(args, sf, root || null);
+  if (cmd === 'redeliver') {
+    const badR = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched', 'all']);
+    if (badR) return usage(`--${badR} is not a redeliver argument`);
+    if (args.id !== undefined && !SAFE_ID.test(args.id)) return usage('redeliver --id <id> needs a card id');
+    return redeliver(args);
+  }
   if (cmd === 'close') {
     if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('close needs --id <id> (see `show`)');
     const bad = stray(['all', 'apply', 'from']);
@@ -551,6 +564,7 @@ function main(argv) {
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   const bad = ['answer', 'awaiting-operator', 'from', 'all', 'apply', 'dispatched'].find((n) => ex[n] !== undefined);
   if (bad) return usage(`--${bad} is not an open argument`);
+  if (ex.executor === undefined) return usage('open needs --executor <address> (namespace/courier/member): the program delivers the operator\'s answer to it; a card the PM handles itself names the PM address');
   if (ex.title !== undefined && (!ex.title.trim() || Array.from(ex.title).length > TITLE_MAX || require('./lib/card-notice.js').CONTROL.test(ex.title))) { process.stderr.write(`open-decision: refused: --title must be non-empty, free of control characters, and at most ${TITLE_MAX} characters (got ${Array.from(ex.title).length}); it is never cut for you; nothing written\n`); return 2; }
   for (const k of ['executor', 'asker']) if (ex[k] !== undefined && !require('./lib/fleet-decision.js').isAddress(ex[k])) return usage(`--${k} "${ex[k]}" is not an address (namespace/courier/member)`);
   const options = args.option.length ? parseOptions(args.option) : null;
@@ -654,7 +668,7 @@ function closeDecisionById(file, id, isOurs, answer) {
   return r.status === 'updated' ? { status: 'closed' } : r;
 }
 
-// The dispatch a caller must send for `close --answer` with an executor (PM ruling 01M6RV0Y02: this script never sends). Plain data, printed as one JSON.
+// The dispatch a caller must send for `close --answer` with an executor (PM ruling 01M6RV0Y02 — overridden for panel answers by PM 01M6ZXJYTQ, 2026-11-09, see deliverAnswer: this `close --answer` packet is still not sent by this script). Plain data, printed as one JSON.
 function dispatchPacket({ id, question, answer, executor, asker, awaiting, status, at }) {
   const head = `[卡片答覆 ${id}] ${question}\n答覆原文：\n${answer}\n`;
   const task = `${head}${awaiting ? `此答覆還需操作員本人動手：${awaiting}（卡片狀態 awaiting_operator_action，操作員做完會用 done 結束）\n` : ''}請依上面的答覆執行，完成後回報卡號 ${id}。`;
@@ -666,6 +680,91 @@ function dispatchPacket({ id, question, answer, executor, asker, awaiting, statu
     ? `送出 dispatch（和 fyi）之後執行：node scripts/open-decision.js close --id ${id} --dispatched <task_id>`
     : `操作員做完後執行：node scripts/open-decision.js done --id ${id}`;
   return out;
+}
+
+// ---- Panel answer delivery (PM 01M6ZXJYTQ, 2026-11-09; overrides PM ruling 01M6RV0Y02 for panel answers). Header: "Panel answer delivery". ----
+// The sender is ONE function so a later session-signed dispatch can replace it. It must stay the shell `fleet send` (session-signed inside Claude Code);
+// `fleet dispatch` signs as <ns>/<courier>/fleet-cli and FLEET_AS_CLI forces that identity, so both are kept out.
+function sendFleet(to, text) {
+  const env = { ...process.env };
+  delete env.FLEET_AS_CLI;
+  delete env.FLEET_FYI; // the executor must act on this: not an FYI
+  const r = spawnSync(process.env.AUTOPILOT_FLEET_BIN || 'fleet', ['send', to, text], { encoding: 'utf8', timeout: 20000, env });
+  if (r.error) return { ok: false, error: r.error.code === 'ENOENT' ? 'no fleet binary' : r.error.message };
+  if (r.status !== 0) return { ok: false, error: `fleet send exit ${r.status}: ${String(r.stderr || '').trim().split('\n')[0] || 'no output'}` };
+  let j;
+  try { j = JSON.parse(String(r.stdout).trim()); } catch (_e) { return { ok: false, error: 'fleet send exit 0 but stdout is not JSON' }; }
+  if (!j || j.ok !== true || typeof j.message_id !== 'string' || !j.message_id) return { ok: false, error: 'fleet send exit 0 but the output has no ok:true + message_id' };
+  return { ok: true, message_id: j.message_id };
+}
+
+const nonEmpty = (x) => (typeof x === 'string' && x !== '' ? x : null);
+// The canonical answer the verify step returned: keys sorted (free_text, option), absent = null.
+const answerDigest = (a) => crypto.createHash('sha256').update(JSON.stringify({ free_text: nonEmpty(a.free_text), option: nonEmpty(a.option) })).digest('hex');
+
+// The delivery text: one field per line, the receiver's rule "Operator answers on PM cards" trusts it by the attested `from`. Values are verbatim (a multi-line value continues on the next lines).
+function deliveryText(c) {
+  const opt = Array.isArray(c.options) ? c.options.find((o) => o.label === c.answer_option) : null;
+  const optionLine = c.answer_option === null || c.answer_option === undefined ? '(none)' : (opt && opt.description ? `${c.answer_option} — ${opt.description}` : c.answer_option);
+  const lines = [`[操作員答覆] ${c.id}`, `answer_id: ${c.answer_id}`, `executor: ${c.executor}`, `question: ${c.question}`, `option: ${optionLine}`,
+    `free_text: ${nonEmpty(c.answer_free_text) === null ? '(none)' : c.answer_free_text}`, `answer_digest: ${c.answer_digest}`];
+  if (nonEmpty(c.request_id)) lines.push(`request_id: ${c.request_id}`);
+  return lines.join('\n');
+}
+
+const receiptLine = (r) => (r.status === 'sent' || r.status === 'already'
+  ? `[答覆已送達] ${r.id} → ${r.executor} message_id=${r.message_id}${r.status === 'already' ? '（先前已送，未重送）' : ''}`
+  : `[答覆未送達] ${r.id} → ${r.executor}: ${r.error}（第 ${r.attempts} 次；卡片留在 pending_dispatch；重送：node scripts/open-decision.js redeliver --id ${r.id}）`);
+
+// Send the stored answer of a parked card. -> { status: 'sent'|'failed'|'already'|'not_parked'|'absent'|'error', id, executor, message_id?, error?, attempts? }
+function sendParked(file, id, sender = sendFleet) {
+  const c = readFile(file, { all: true }).find((e) => e.id === id);
+  if (!c) return { status: 'absent', id };
+  if (c.dispatched_message_id) return { status: 'already', id, executor: c.executor, message_id: c.dispatched_message_id };
+  if (!isPendingDispatchEntry(c) || !c.executor || !c.answer_id) return { status: 'not_parked', id };
+  const r = sender(c.executor, deliveryText(c));
+  const now = new Date().toISOString();
+  if (r.ok) {
+    const p = patchDecision(file, id, { status: 'closed', closed_at: now, dispatched_message_id: r.message_id, dispatched_via: 'send', dispatched_at: now, dispatch_error: undefined }, { any: true });
+    if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: `sent (${r.message_id}) but the card could not be marked: ${p.message}`, message_id: r.message_id };
+    return { status: 'sent', id, executor: c.executor, message_id: r.message_id };
+  }
+  const p = patchDecision(file, id, (h) => ({ dispatch_error: r.error, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now }), { any: true });
+  return { status: 'failed', id, executor: c.executor, error: r.error, attempts: p.entry ? p.entry.dispatch_attempts : 1 };
+}
+
+// The hook's entry: an OPEN card with an executor and the courier-verified answer `v` ({ answer: {option, free_text}, answer_id }).
+// First park the card in pending_dispatch with the answer, then send. A card already parked (a replayed prompt) is just sent again unless it carries a message id.
+function deliverAnswer(file, id, v, sender = sendFleet) {
+  const c = readFile(file, { all: true }).find((e) => e.id === id);
+  if (!c) return { status: 'absent', id };
+  if (isOpenEntry(c)) {
+    const a = v.answer;
+    const option = nonEmpty(a.option);
+    const ft = nonEmpty(a.free_text);
+    const now = new Date().toISOString();
+    const p = patchDecision(file, id, { status: 'pending_dispatch', pending_dispatch_at: now, answer: option !== null ? option : ft, answer_id: v.answer_id, answer_option: option, answer_free_text: ft, answer_digest: answerDigest(a) });
+    if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
+  }
+  return sendParked(file, id, sender);
+}
+
+// `redeliver [--id]`: every pending_dispatch card the program parked (answer_id present) and not yet sent. Prints one receipt line per card. Exit 0 all sent / nothing to do, 9 some failed.
+function redeliver(args, sender = sendFleet) {
+  let failed = 0;
+  let n = 0;
+  for (const file of projectScopeFiles(args.cwd, { all: true })) {
+    for (const e of readFile(file, { all: true })) {
+      if (args.id !== undefined && e.id !== args.id) continue;
+      if (!isPendingDispatchEntry(e) || !e.answer_id || e.dispatched_message_id) continue;
+      const r = sendParked(file, e.id, sender);
+      n += 1;
+      process.stdout.write(`${receiptLine(r)}\n`);
+      if (r.status !== 'sent') failed += 1;
+    }
+  }
+  if (n === 0) process.stdout.write(args.id !== undefined ? `nothing to redeliver for ${args.id} (not a parked, unsent card)\n` : 'nothing to redeliver\n');
+  return failed ? 9 : 0;
 }
 
 // close --id <id> --dispatched <task_id>: pending_dispatch -> closed (dispatched_task_id, closed_at). Any other state is refused (exit 2) with the reason.
@@ -749,4 +848,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };

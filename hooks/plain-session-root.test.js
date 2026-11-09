@@ -156,7 +156,7 @@ test('read back: open-decision defaults to this session\'s plain marker root; no
   const f = fx();
   const od = (args) => spawnSync('node', [OPEN_DECISION, ...args, '--cwd', f.repo], { env: f.env, cwd: f.repo, encoding: 'utf8' });
   const dir = path.join(f.repo, '.git', 'autopilot', 'decisions');
-  let r = od(['open', '--not-authorized', 'irreversible', '--free-text', '--question', 'unbound?']);
+  let r = od(['open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'unbound?']);
   assert.strictEqual(r.status, 0, r.stderr);
   assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`]);
   assert.match(r.stdout.trim(), /^d-[0-9a-f]{8}$/, 'open prints the id');
@@ -165,20 +165,20 @@ test('read back: open-decision defaults to this session\'s plain marker root; no
   assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`], 'the closed record is kept');
   cli(f, ['set', '--repo-root', f.repo]);
   const root = readJson(f.marker()).root_run_id;
-  r = od(['open', '--not-authorized', 'irreversible', '--free-text', '--question', 'rooted?']);
+  r = od(['open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'rooted?']);
   assert.strictEqual(r.status, 0, r.stderr);
   const rootedId = r.stdout.trim();
   assert.deepStrictEqual(fs.readdirSync(dir).sort(), [`${f.key}--${root}.json`, `${f.key}.json`].sort(), 'the rooted card has its own file; the closed unbound record is kept');
   assert.strictEqual(readJson(path.join(dir, `${f.key}--${root}.json`)).root_run_id, root);
   assert.strictEqual(od(['show']).status, 0);
-  r = od(['open', '--not-authorized', 'irreversible', '--free-text', '--question', 'explicit?', '--root-run-id', 'job-other']);
+  r = od(['open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'explicit?', '--root-run-id', 'job-other']);
   assert.strictEqual(r.status, 0, r.stderr);
   const otherId = r.stdout.trim();
   assert.ok(fs.existsSync(path.join(dir, `${f.key}--job-other.json`)));
   expire(f, 'spr-session');
   od(['close', '--id', otherId, '--root-run-id', 'job-other']);
   od(['close', '--id', rootedId, '--root-run-id', root]);
-  r = od(['open', '--not-authorized', 'irreversible', '--free-text', '--question', 'after expiry']);
+  r = od(['open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'after expiry']);
   // closed cards stay as records, so the earlier files are still there; the new card must have gone to the UNBOUND file, not to the expired root's
   assert.ok(readJson(path.join(dir, `${f.key}.json`)).decisions.some((d) => d.question === 'after expiry' && d.status === 'open'), 'an expired marker no longer scopes the decision');
   assert.ok(!readJson(path.join(dir, `${f.key}--${root}.json`)).decisions.some((d) => d.question === 'after expiry'));

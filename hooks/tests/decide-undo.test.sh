@@ -192,8 +192,8 @@ check_hook() { # <repo root of the hook + scripts> -> number of failed expectati
   local H="$1" bad=0 C J OUT
   exp() { [ "$2" = "$3" ] || { bad=$((bad+1)); [ -z "${DBG:-}" ] || echo "hook exp fail: [$2] != [$3]" >&2; }; }
   C="$(open_card)"
-  hook_with "$H/hooks" "$(printf '[待決回覆]\n%s｜要不要改？ → 甲\n' "$C")"      # first answer: closes (no courier on this host => no id => stays open: today's behaviour)
-  node "$OD" close --cwd "$R" --id "$C" >/dev/null 2>&1                           # the session closes the card (normal flow after a verified first answer)
+  hook_with "$H/hooks" "$(printf '[待決回覆]\n%s｜要不要改？ → 甲\n' "$C")"      # first answer: no courier on this host => no id => the card parks in pending_dispatch
+  node "$OD" close --cwd "$R" --id "$C" --dispatched t-1 >/dev/null 2>&1          # the session records the dispatched task, which closes the pending_dispatch card (normal flow after a verified first answer)
   J="$(node "$OD" show --cwd "$R" --id "$C" --json 2>/dev/null)"; exp x "$(field "$J" status)" '"closed"'
   hook_with "$H/hooks" "$(printf '[待決回覆·更正] %s → 乙｜補充：改成乙' "$C")"
   exp x "$(node -e 'const j=JSON.parse(process.argv[1]);console.log(j.systemMessage)' "$HOUT" 2>/dev/null)" "更正：$C 新答案 乙（補充：改成乙）；已在執行的 lane 需停下或改做。未經 courier 核實。"

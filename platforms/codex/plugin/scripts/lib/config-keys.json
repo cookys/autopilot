@@ -1287,6 +1287,17 @@
       "note": "Path of the fleet binary used by fleet-decision.js (default: fleet on PATH). Tests point it at a stub."
     },
     {
+      "name": "AUTOPILOT_RELAY_SEND_BUDGET_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["hooks/advisory-relay.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Total time (ms, from the hook's start) the advisory-relay hook may spend sending verified panel answers; default 45000. Cards not sent in time stay pending_dispatch with dispatch_error hook_budget. Tests shrink it."
+    },
+    {
       "name": "AUTOPILOT_CLAIM_RETRIES",
       "kind": "env",
       "audience": "internal",

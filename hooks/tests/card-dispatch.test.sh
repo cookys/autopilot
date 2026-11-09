@@ -31,6 +31,7 @@ if (a[0] === '--help') { process.stdout.write(mode() === 'nocourier' ? 'fleet\n\
 if (a[0] === 'send') {
   fs.appendFileSync(D + '/sends.jsonl', JSON.stringify({ to: a[1], text: a[2], argc: a.length, as_cli: process.env.FLEET_AS_CLI === undefined ? null : process.env.FLEET_AS_CLI, fyi: process.env.FLEET_FYI === undefined ? null : process.env.FLEET_FYI }) + '\n');
   const m = mode();
+  try { const ms = Number(fs.readFileSync(D + '/sleepms', 'utf8')); if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch {}
   if (m === 'fail4') { process.stderr.write('hub refused\n'); process.exit(4); }
   if (m === 'garbage') { process.stdout.write('accepted, probably\n'); process.exit(0); }
   const n = fs.readFileSync(D + '/sends.jsonl', 'utf8').split('\n').filter(Boolean).length;
@@ -138,6 +139,7 @@ hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$C5" "$Q5" "AAAAAAAAAAAAA
 assert_eq "$(cf "$C5" status)" pending_dispatch "no courier + executor: parked in pending_dispatch, NOT closed"
 assert_eq "$(cf "$C5" dispatch_error)" no_courier "no courier + executor: dispatch_error names the reason"
 assert_eq "$(nsends)" "$RB" "no courier + executor: nothing sent"
+assert_eq "$(cf "$C5" dispatch_attempts)" 1 "no courier + executor: dispatch_attempts counted (1)"
 setmode ok
 OUT="$(node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$C5" 2>&1)"; assert_eq "$?" 0 "redeliver reports a card with no stored answer (exit 0)"
 assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" 1 "redeliver: one line for the skipped card"; assert_contains "$OUT" "[略過] $C5" "redeliver: the skipped card is named"
@@ -147,8 +149,70 @@ hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$C6" "$Q6" "BBBBBBBBBBBBB
 assert_eq "$(cf "$C6" status)" pending_dispatch "verify failure + executor: parked, NOT closed"
 assert_contains "$(cf "$C6" dispatch_error)" verify_failed "verify failure + executor: dispatch_error names verify_failed"
 assert_eq "$(nsends)" "$RB" "verify failure + executor: nothing sent"
+assert_eq "$(cf "$C6" dispatch_attempts)" 1 "verify failure + executor: dispatch_attempts counted (1)"
 # legacy close --answer on an executor card parks it too
 C7="$(mkcard "旧路徑？" --option "A::a" --option "B::b")"; node "$OD" close --cwd "$R" --root-run-id root-t --id "$C7" --answer "A" >/dev/null 2>&1
 assert_eq "$(cf "$C7" status)" pending_dispatch "legacy close --answer on an executor card: parked, not closed"
+
+# 8. class D: a card parked with NO stored answer (no_courier) gets a later verified answer through the hook -> delivered
+setmode ok; AIDX="$(claim "$C5" o A)"; RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$C5" "$Q5" "$AIDX")"
+assert_eq "$(( $(nsends) - RB ))" 1 "D no_courier-parked card: a later verified answer is sent"
+assert_eq "$(cf "$C5" status)" closed "D no_courier-parked card: closed after delivery"
+assert_eq "$(cf "$C5" answer_id)" "$AIDX" "D no_courier-parked card: answer stored"
+
+# 9. class D: parked after a failed send, then a NEW verified answer with a different option -> the new option and answer_id go out; a third answer after dispatch sends nothing
+setmode fail4; Q9="三選一？"
+C9="$(mkcard "$Q9" --option "A::a" --option "B::b" --option "C::c")"; AID9A="$(claim "$C9" o A)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$C9" "$Q9" "$AID9A")"
+assert_eq "$(cf "$C9" status)" pending_dispatch "D stale: first send failed, card parked"
+setmode ok; AID9B="$(claim "$C9" o B)"; RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s｜%s → B｜%s\n' "$C9" "$Q9" "$AID9B")"
+assert_eq "$(( $(nsends) - RB ))" 1 "D stale: new answer sent once"
+assert_contains "$(sendfield "$(( $(nsends) - 1 ))" text)" "answer_id: $AID9B" "D stale: delivery carries the NEW answer_id"
+assert_contains "$(sendfield "$(( $(nsends) - 1 ))" text)" "option: B — b" "D stale: delivery carries the NEW option"
+assert_eq "$(cf "$C9" answer)" B "D stale: stored answer replaced"; assert_eq "$(cf "$C9" status)" closed "D stale: closed after the send"
+AID9C="$(claim "$C9" o C)"; RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s｜%s → C｜%s\n' "$C9" "$Q9" "$AID9C")"
+assert_eq "$(nsends)" "$RB" "D stale: a third answer after dispatch sends nothing"
+assert_eq "$(cf "$C9" answer_id)" "$AID9B" "D stale: a dispatched card keeps its delivered answer"
+
+# 10. class A: two concurrent redeliver on one parked card with a slow stub -> exactly one send
+setmode fail4; Q10="並行？"
+C10="$(mkcard "$Q10" --option "A::a" --option "B::b")"; AID10="$(claim "$C10" o A)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$C10" "$Q10" "$AID10")"
+setmode ok; printf 2000 > "$STUB/sleepms"; RB="$(nsends)"
+node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$C10" >"$TEST_TMP/rd1" 2>&1 &
+P1=$!
+node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$C10" >"$TEST_TMP/rd2" 2>&1 &
+P2=$!
+wait $P1; RC1=$?; wait $P2; RC2=$?
+assert_eq "$(( $(nsends) - RB ))" 1 "A two concurrent redeliver: exactly one fleet send"
+assert_eq "$(cf "$C10" status)" closed "A concurrent: card closed"; assert_neq "$(cf "$C10" dispatched_message_id)" "<undef>" "A concurrent: message id recorded"
+assert_eq "$(cf "$C10" dispatch_claim)" "<undef>" "A concurrent: claim cleared after the send"
+assert_eq "$((RC1 + RC2))" 0 "A concurrent: neither redeliver reports a failure"
+# a live claim blocks sending; a dispatched id blocks sending even if the status patch never happened
+node -e 'const o=require(process.argv[1]);const f=o.projectScopeFiles(process.argv[2],{all:true}).find((x)=>o.readEntries(x,{all:true}).some((e)=>e.id===process.argv[3]));o.patchDecision(f,process.argv[3],{status:"pending_dispatch",dispatched_message_id:null,dispatch_claim:{pid:process.pid,at:new Date().toISOString()}},{any:true})' "$OD" "$R" "$C10"
+RB="$(nsends)"; OUT="$(node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$C10" 2>&1)"; assert_eq "$(nsends)" "$RB" "A live claim: redeliver sends nothing"
+rm -f "$STUB/sleepms"
+
+# 11. class B: 3 answered cards in one prompt, a slow stub, a small total budget -> sends in order until the budget is gone, the rest parked as hook_budget; the hook exits in time
+setmode ok; printf 3000 > "$STUB/sleepms"; RB="$(nsends)"
+QB="預算？"; CB1="$(mkcard "$QB" --option "A::a" --option "B::b")"; CB2="$(mkcard "$QB" --option "A::a" --option "B::b")"; CB3="$(mkcard "$QB" --option "A::a" --option "B::b")"
+AB1="$(claim "$CB1" o A)"; AB2="$(claim "$CB2" o A)"; AB3="$(claim "$CB3" o A)"
+T0="$(date +%s)"
+AUTOPILOT_RELAY_SEND_BUDGET_MS=8000 hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n%s｜%s → A｜%s\n%s｜%s → A｜%s\n' "$CB1" "$QB" "$AB1" "$CB2" "$QB" "$AB2" "$CB3" "$QB" "$AB3")"
+T1="$(date +%s)"
+assert_eq "$(( $(nsends) - RB ))" 1 "B budget: only the first card is sent before the deadline"
+assert_eq "$(cf "$CB1" status)" closed "B budget: first card closed"
+for c in "$CB2" "$CB3"; do
+  assert_eq "$(cf "$c" status)" pending_dispatch "B budget: $c stays pending_dispatch"
+  assert_eq "$(cf "$c" dispatch_error)" hook_budget "B budget: $c dispatch_error hook_budget"
+  assert_neq "$(cf "$c" answer_id)" "<undef>" "B budget: $c answer stored before sending"
+done
+assert_eq "$([ $((T1 - T0)) -le 7 ] && echo in_time || echo late)" in_time "B budget: hook exited within the budget (took $((T1 - T0))s)"
+assert_contains "$HOUT" "hook_budget" "B budget: the session is told about the deferred cards"
+rm -f "$STUB/sleepms"; RB="$(nsends)"
+node "$OD" redeliver --cwd "$R" --root-run-id root-t >"$TEST_TMP/o" 2>&1; assert_eq "$(( $(nsends) - RB ))" 2 "B budget: redeliver sends the two parked cards"
 
 finalize_test

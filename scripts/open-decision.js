@@ -685,11 +685,23 @@ function dispatchPacket({ id, question, answer, executor, asker, awaiting, statu
 // ---- Panel answer delivery (PM 01M6ZXJYTQ, 2026-11-09; overrides PM ruling 01M6RV0Y02 for panel answers). Header: "Panel answer delivery". ----
 // The sender is ONE function so a later session-signed dispatch can replace it. It must stay the shell `fleet send` (session-signed inside Claude Code);
 // `fleet dispatch` signs as <ns>/<courier>/fleet-cli and FLEET_AS_CLI forces that identity, so both are kept out.
-function sendFleet(to, text) {
+const SEND_TIMEOUT_MS = 20000;
+const CLAIM_MARGIN_MS = 10000; // a claim younger than SEND_TIMEOUT_MS + this is live
+const CLAIM_PID_CAP_MS = 300000; // an older claim still counts while its pid lives, but never longer than this (pid reuse)
+const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+// A claim ({pid, at}) written under the decision-file lock before a send: another caller that sees a live one does not send.
+function claimLive(cl, now) {
+  if (!cl || typeof cl !== 'object') return false;
+  const age = now - Date.parse(cl.at);
+  if (!Number.isFinite(age)) return false;
+  return age < SEND_TIMEOUT_MS + CLAIM_MARGIN_MS || (Number.isInteger(cl.pid) && pidAlive(cl.pid) && age < CLAIM_PID_CAP_MS);
+}
+
+function sendFleet(to, text, timeoutMs = SEND_TIMEOUT_MS) {
   const env = { ...process.env };
   delete env.FLEET_AS_CLI;
   delete env.FLEET_FYI; // the executor must act on this: not an FYI
-  const r = spawnSync(process.env.AUTOPILOT_FLEET_BIN || 'fleet', ['send', to, text], { encoding: 'utf8', timeout: 20000, env });
+  const r = spawnSync(process.env.AUTOPILOT_FLEET_BIN || 'fleet', ['send', to, text], { encoding: 'utf8', timeout: timeoutMs, env });
   if (r.error) return { ok: false, error: r.error.code === 'ENOENT' ? 'no fleet binary' : r.error.message };
   if (r.status !== 0) return { ok: false, error: `fleet send exit ${r.status}: ${String(r.stderr || '').trim().split('\n')[0] || 'no output'}` };
   let j;
@@ -712,41 +724,78 @@ function deliveryText(c) {
   return lines.join('\n');
 }
 
-const receiptLine = (r) => (r.status === 'sent' || r.status === 'already'
+const receiptLine = (r) => (r.status === 'in_flight'
+  ? `[答覆送出中] ${r.id} → ${r.executor}: 另一個程序正在送出，這次未重送`
+  : r.status === 'sent' || r.status === 'already'
   ? `[答覆已送達] ${r.id} → ${r.executor} message_id=${r.message_id}${r.status === 'already' ? '（先前已送，未重送）' : ''}`
   : `[答覆未送達] ${r.id} → ${r.executor}: ${r.error}（第 ${r.attempts} 次；卡片留在 pending_dispatch；重送：node scripts/open-decision.js redeliver --id ${r.id}）`);
 
-// Send the stored answer of a parked card. -> { status: 'sent'|'failed'|'already'|'not_parked'|'absent'|'error', id, executor, message_id?, error?, attempts? }
-function sendParked(file, id, sender = sendFleet) {
-  const c = readFile(file, { all: true }).find((e) => e.id === id);
-  if (!c) return { status: 'absent', id };
-  if (c.dispatched_message_id) return { status: 'already', id, executor: c.executor, message_id: c.dispatched_message_id };
-  if (!isPendingDispatchEntry(c) || !c.executor || !c.answer_id) return { status: 'not_parked', id };
-  const r = sender(c.executor, deliveryText(c));
+// Send the stored answer of a parked card. The send is claimed first, under the decision-file lock (dispatch_claim {pid, at}), so two callers never both send.
+// -> { status: 'sent'|'failed'|'already'|'in_flight'|'not_parked'|'absent'|'error', id, executor, message_id?, error?, attempts? }
+function sendParked(file, id, sender = sendFleet, { timeoutMs = SEND_TIMEOUT_MS } = {}) {
+  let won = null;
+  let seen = null;
+  const cl = patchDecision(file, id, (h) => {
+    seen = h;
+    if (h.dispatched_message_id || !isPendingDispatchEntry(h) || !h.executor || !h.answer_id || claimLive(h.dispatch_claim, Date.now())) return {};
+    won = h;
+    return { dispatch_claim: { pid: process.pid, at: new Date().toISOString() } };
+  }, { any: true });
+  if (cl.status === 'absent') return { status: 'absent', id };
+  if (cl.status === 'error') return { status: 'error', id, error: cl.message };
+  if (!won) {
+    if (seen.dispatched_message_id) return { status: 'already', id, executor: seen.executor, message_id: seen.dispatched_message_id };
+    if (!isPendingDispatchEntry(seen) || !seen.executor || !seen.answer_id) return { status: 'not_parked', id };
+    return { status: 'in_flight', id, executor: seen.executor };
+  }
+  const c = won;
+  const r = sender(c.executor, deliveryText(c), timeoutMs);
   const now = new Date().toISOString();
   if (r.ok) {
-    const p = patchDecision(file, id, { status: 'closed', closed_at: now, dispatched_message_id: r.message_id, dispatched_via: 'send', dispatched_at: now, dispatch_error: undefined }, { any: true });
-    if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: `sent (${r.message_id}) but the card could not be marked: ${p.message}`, message_id: r.message_id };
+    // the message id is persisted first: it is what stops a second send, even when the status patch below fails
+    const p = patchDecision(file, id, { dispatched_message_id: r.message_id, dispatched_via: 'send', dispatched_at: now, dispatch_claim: undefined }, { any: true });
+    const q = patchDecision(file, id, { status: 'closed', closed_at: now, dispatch_error: undefined }, { any: true });
+    const bad = p.status === 'error' ? p : q.status === 'error' ? q : null;
+    if (bad) return { status: 'error', id, executor: c.executor, error: `sent (${r.message_id}) but the card could not be marked: ${bad.message}`, message_id: r.message_id };
     return { status: 'sent', id, executor: c.executor, message_id: r.message_id };
   }
-  const p = patchDecision(file, id, (h) => ({ dispatch_error: r.error, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now }), { any: true });
+  const p = patchDecision(file, id, (h) => ({ dispatch_error: r.error, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now, dispatch_claim: undefined }), { any: true });
   return { status: 'failed', id, executor: c.executor, error: r.error, attempts: p.entry ? p.entry.dispatch_attempts : 1 };
 }
 
-// The hook's entry: an OPEN card with an executor and the courier-verified answer `v` ({ answer: {option, free_text}, answer_id }).
-// First park the card in pending_dispatch with the answer, then send. A card already parked (a replayed prompt) is just sent again unless it carries a message id.
-function deliverAnswer(file, id, v, sender = sendFleet) {
+// Store the courier-verified answer `v` ({ answer: {option, free_text}, answer_id }) on an OPEN executor card, or on a pending_dispatch card that has no answer or a
+// different one (a later answer replaces the parked one), and park it in pending_dispatch. A card already sent (dispatched_message_id) is never touched.
+// -> { status: 'ok'|'absent'|'not_parked'|'error' }; not_parked = closed/awaiting without a message id: nothing to deliver.
+function parkAnswer(file, id, v) {
   const c = readFile(file, { all: true }).find((e) => e.id === id);
   if (!c) return { status: 'absent', id };
-  if (isOpenEntry(c) || (isPendingDispatchEntry(c) && !c.answer_id)) { // open, or parked earlier without a deliverable answer (no_courier / verify_failed)
-    const a = v.answer;
-    const option = nonEmpty(a.option);
-    const ft = nonEmpty(a.free_text);
-    const now = new Date().toISOString();
-    const p = patchDecision(file, id, { status: 'pending_dispatch', pending_dispatch_at: now, answer: option !== null ? option : ft, answer_id: v.answer_id, answer_option: option, answer_free_text: ft, answer_digest: answerDigest(a) });
-    if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
-  }
-  return sendParked(file, id, sender);
+  if (c.dispatched_message_id) return { status: 'ok', id, executor: c.executor };
+  const parkedSame = isPendingDispatchEntry(c) && c.answer_id === v.answer_id;
+  if (parkedSame) return { status: 'ok', id, executor: c.executor };
+  if (!isOpenEntry(c) && !isPendingDispatchEntry(c)) return { status: 'not_parked', id, executor: c.executor };
+  const a = v.answer;
+  const option = nonEmpty(a.option);
+  const ft = nonEmpty(a.free_text);
+  const now = new Date().toISOString();
+  const p = patchDecision(file, id, { status: 'pending_dispatch', pending_dispatch_at: now, answer: option !== null ? option : ft, answer_id: v.answer_id, answer_option: option, answer_free_text: ft, answer_digest: answerDigest(a), dispatch_error: undefined },
+    { any: true, isOurs: (h) => !h.dispatched_message_id && (isOpenEntry(h) || isPendingDispatchEntry(h)) });
+  if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
+  if (p.status === 'absent') return { status: 'not_parked', id, executor: c.executor };
+  return { status: 'ok', id, executor: c.executor };
+}
+
+// The CLI/library entry: park the answer, then send it. A card already parked with the same answer (a replayed prompt) is just sent again unless it carries a message id.
+function deliverAnswer(file, id, v, sender = sendFleet, opts) {
+  const k = parkAnswer(file, id, v);
+  if (k.status === 'absent' || k.status === 'error') return k;
+  return sendParked(file, id, sender, opts);
+}
+
+// A parked answer that was not sent because the caller's time budget ran out stays pending_dispatch; record why and count the attempt.
+function deferDelivery(file, id, reason) {
+  const now = new Date().toISOString();
+  const p = patchDecision(file, id, (h) => ({ dispatch_error: reason, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now }), { any: true, isOurs: (h) => isPendingDispatchEntry(h) && !h.dispatched_message_id });
+  return { status: p.status === 'updated' ? 'deferred' : p.status, id, error: reason, attempts: p.entry ? p.entry.dispatch_attempts : undefined };
 }
 
 // An executor card whose answer cannot be delivered (no courier, verify failed, ...) is never closed: it is parked in pending_dispatch with dispatch_error naming the reason.
@@ -754,11 +803,12 @@ function deliverAnswer(file, id, v, sender = sendFleet) {
 function parkUndelivered(file, id, reason) {
   const c = readFile(file, { all: true }).find((e) => e.id === id);
   if (!c) return { status: 'absent', id };
-  if (!c.executor || !isOpenEntry(c)) return { status: 'no_executor', id };
+  if (!c.executor || !(isOpenEntry(c) || (isPendingDispatchEntry(c) && !c.dispatched_message_id))) return { status: 'no_executor', id };
   const now = new Date().toISOString();
-  const p = patchDecision(file, id, { status: 'pending_dispatch', pending_dispatch_at: now, dispatch_error: reason, last_dispatch_attempt_at: now });
+  const p = patchDecision(file, id, (h) => ({ status: 'pending_dispatch', pending_dispatch_at: h.pending_dispatch_at || now, dispatch_error: reason, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now }), { any: true, isOurs: (h) => !h.dispatched_message_id && (isOpenEntry(h) || isPendingDispatchEntry(h)) });
   if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
-  return { status: 'parked', id, executor: c.executor, error: reason };
+  if (p.status === 'absent') return { status: 'no_executor', id };
+  return { status: 'parked', id, executor: c.executor, error: reason, attempts: p.entry.dispatch_attempts };
 }
 
 // `redeliver [--id]`: every pending_dispatch card the program parked (answer_id present) and not yet sent. Prints one receipt line per card. Exit 0 all sent / nothing to do, 9 some failed.
@@ -777,7 +827,7 @@ function redeliver(args, sender = sendFleet) {
       const r = sendParked(file, e.id, sender);
       n += 1;
       process.stdout.write(`${receiptLine(r)}\n`);
-      if (r.status !== 'sent') failed += 1;
+      if (r.status !== 'sent' && r.status !== 'already' && r.status !== 'in_flight') failed += 1;
     }
   }
   if (n === 0) process.stdout.write(args.id !== undefined ? `nothing to redeliver for ${args.id} (not a parked, unsent card)\n` : 'nothing to redeliver\n');
@@ -865,4 +915,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, parkAnswer, deferDelivery, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };

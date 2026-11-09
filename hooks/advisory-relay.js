@@ -19,6 +19,8 @@
  *
  * hooks.json timeout (70 s) is the worst case of the [待決回覆] path, from scripts/lib/fleet-decision.js: probe() 5 s, then per card
  * verify() = two `fleet decision verify` calls of up to 15 s each = 30 s; 5 + 2 cards x 30 + 5 s margin for awaiting-owner = 70 s.
+ * The send step is bounded separately: every answered card is verified and parked first, then sent in order under one deadline (AUTOPILOT_RELAY_SEND_BUDGET_MS,
+ * default 45 s from the hook's start; per send min(20 s, remaining)); cards not sent in time stay pending_dispatch with dispatch_error hook_budget.
  * The old 10 s killed the hook, silently, after a single slow verify. Typical cost is milliseconds.
  */
 
@@ -28,6 +30,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DECIDE_REPLY_HEAD = '[待決回覆]';
+const MIN_SEND_WINDOW_MS = 5000;
 const DECIDE_ID = /^d-[0-9a-f]{8}(?![0-9a-f])/;
 
 const storedText = (a) => (a && typeof a === 'object' ? JSON.stringify(a.option !== null && a.option !== undefined ? { option: a.option } : { free_text: a.free_text === undefined ? null : a.free_text }) : 'nothing');
@@ -38,6 +41,7 @@ function closeDecideReply(payload) {
   if (typeof prompt !== 'string') return;
   const lines = prompt.split(/\r?\n/);
   if (lines[0] !== DECIDE_REPLY_HEAD) return;
+  const hookStart = Date.now();
   const ids = [];
   const seen = new Set();
   const idLine = new Map();
@@ -52,18 +56,20 @@ function closeDecideReply(payload) {
   let closeDecisionById;
   let projectScopeFiles;
   let readEntries;
-  let deliverAnswer;
+  let parkAnswer;
+  let sendParked;
+  let deferDelivery;
   let parkUndelivered;
   let receiptLine;
   try {
-    ({ closeDecisionById, projectScopeFiles, readEntries, deliverAnswer, receiptLine, parkUndelivered } = require('../scripts/open-decision.js'));
+    ({ closeDecisionById, projectScopeFiles, readEntries, parkAnswer, sendParked, deferDelivery, receiptLine, parkUndelivered } = require('../scripts/open-decision.js'));
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
   }
   let files;
   try {
-    files = projectScopeFiles(payload.cwd);
+    files = projectScopeFiles(payload.cwd, { all: true }); // all: a card parked in pending_dispatch takes a later answer too
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
@@ -74,6 +80,7 @@ function closeDecideReply(payload) {
   let fd = null;
   let probeState = 'unsupported';
   try { const m = require('../scripts/lib/fleet-decision.js'); probeState = m.probe(); if (probeState === 'supported') fd = m; } catch (_e) { probeState = 'probe_error'; }
+  const toSend = []; // parked answers, sent in order after every card is verified and parked
   const unverified = [];
   const notFound = [];
   const delivery = new Map(); // id -> the verified answer of a card that has an executor: the program delivers it (PM 01M6ZXJYTQ), nothing closes it directly
@@ -101,26 +108,26 @@ function closeDecideReply(payload) {
       // the verified STORED answer is the only authority: the line's own text must say that same answer
       // strict, field-wise (scripts/lib/decide-line.js): the question comes from the ledger card, the answer must EQUAL the stored one
       let question = null;
-      try { for (const f of files) { const e = readEntries(f).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
+      try { for (const f of files) { const e = readEntries(f, { all: true }).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
       const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
       if (!bound.ok) { if (parkExecutorCard(id, 'content_mismatch')) continue; unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
       delivery.set(id, { answer: v.answer, answer_id: aid });
     }
     if (delivery.has(id)) {
-      // a card with an executor: park + `fleet send` by program code, signed as this session; the receipt line goes to this session's model
-      let sent = false;
+      // a card with an executor: park the verified answer now (every answered card first), send later in order under one deadline
+      let handled = false;
       for (const file of files) {
         let hit;
-        try { hit = readEntries(file).find((e) => e.id === id); } catch (_e) { hit = null; }
+        try { hit = readEntries(file, { all: true }).find((e) => e.id === id); } catch (_e) { hit = null; }
         if (!hit || !hit.executor) continue;
-        const r = deliverAnswer(file, id, delivery.get(id));
-        if (r.status === 'absent') continue;
-        sent = true;
-        if (r.status === 'sent' || r.status === 'already') ctxLines.push(receiptLine(r));
-        else { ctxLines.push(receiptLine({ ...r, attempts: r.attempts || 1 })); process.stderr.write(`advisory-relay: ${receiptLine({ ...r, attempts: r.attempts || 1 })}\n`); }
+        const r = parkAnswer(file, id, delivery.get(id));
+        if (r.status === 'absent' || r.status === 'not_parked') continue;
+        handled = true;
+        if (r.status === 'error') { const line = receiptLine({ status: 'failed', id, executor: r.executor, error: r.error, attempts: 1 }); ctxLines.push(line); process.stderr.write(`advisory-relay: ${line}\n`); break; }
+        toSend.push({ file, id });
         break;
       }
-      if (sent) continue;
+      if (handled) continue;
     }
     if (!fd && parkExecutorCard(id, 'no_courier')) continue;
     // closeDecisionById locks before it looks up the id, so a locked scope file
@@ -152,6 +159,19 @@ function closeDecideReply(payload) {
       process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${failures.join('; ')}\n`);
     }
     if (!closed && failures.length === 0) notFound.push(id);
+  }
+  // Send phase: one total deadline for the whole hook (hooks.json allows 70 s; the default budget is 45 s, measured from the hook's start). Each send gets
+  // min(20 s, remaining); a send needs MIN_SEND_WINDOW_MS left, else the card stays pending_dispatch with dispatch_error hook_budget for `redeliver`.
+  const budget = Number(process.env.AUTOPILOT_RELAY_SEND_BUDGET_MS) > 0 ? Number(process.env.AUTOPILOT_RELAY_SEND_BUDGET_MS) : 45000;
+  for (const { file, id } of toSend) {
+    const remaining = hookStart + budget - Date.now();
+    let r;
+    if (remaining < MIN_SEND_WINDOW_MS) r = deferDelivery(file, id, 'hook_budget');
+    else r = sendParked(file, id, undefined, { timeoutMs: Math.min(20000, remaining) });
+    const ok = r.status === 'sent' || r.status === 'already' || r.status === 'in_flight';
+    const line = receiptLine(ok ? r : { ...r, status: 'failed', error: r.error || r.status, attempts: r.attempts || 1 });
+    ctxLines.push(line);
+    if (!ok) process.stderr.write(`advisory-relay: ${line}\n`);
   }
   if (notFound.length > 0) {
     const where = files.length === 0

@@ -9,7 +9,7 @@
  * Warn-mode default-on; never block by default.
  *
  * Inputs:
- * - Ledger path: process.env.AUTOPILOT_COSTS_FILE else path.join(os.homedir(), '.claude', 'metrics', 'costs.jsonl')
+ * - Ledger path: AUTOPILOT_COSTS_FILE else <CLAUDE_CONFIG_DIR or ~/.claude>/metrics/costs.jsonl
  * - Model tier: require('../scripts/cost-digest.js').tierOf(model)
  * - Config: ~/.autopilot/config.json key cost_fuse: {"mode": "warn"|"block"|"off", "daily_usd_brain": 150, "tiers": ["brain"]}
  * - Env overrides: AUTOPILOT_COST_FUSE_MODE (block|warn|off), AUTOPILOT_COST_FUSE_DAILY_USD (positive number)
@@ -23,7 +23,7 @@ const os = require('os');
 const path = require('path');
 const { tierOf } = require('../scripts/cost-digest.js');
 // One shared implementation of config resolution + today's tier spend (scripts/lib/brain-spend.js; the runs watcher reads it too).
-const { loadCostFuseConfig, safe, isSubagentRow, sumTodayTierSpend } = require('../scripts/lib/brain-spend.js');
+const { loadCostFuseConfig, costsFileOf, safe, isSubagentRow, sumTodayTierSpend } = require('../scripts/lib/brain-spend.js');
 
 const DEFAULT_DAILY_USD_BRAIN = 150; // the hook's own default; passed to the shared resolver (case7 of cost-fuse.test.sh mutates this literal)
 
@@ -282,7 +282,7 @@ function quotesPaired(s) {
       process.exit(0);
     }
 
-    const costsFile = process.env.AUTOPILOT_COSTS_FILE || path.join(os.homedir(), '.claude', 'metrics', 'costs.jsonl');
+    const costsFile = costsFileOf();
     if (!fs.existsSync(costsFile)) {
       process.exit(0);
     }

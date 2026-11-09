@@ -36,6 +36,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { costsFileOf } = require('./lib/config-path.js');
 
 /**
  * tierOf(model)
@@ -70,7 +71,7 @@ function printUsageAndExit(code) {
   const usageText = `Usage: node scripts/cost-digest.js [options]
 
 Options:
-  --file <path>              Path to costs.jsonl (defaults to $AUTOPILOT_COSTS_FILE or ~/.claude/metrics/costs.jsonl)
+  --file <path>              Path to costs.jsonl (defaults to $AUTOPILOT_COSTS_FILE or <CLAUDE_CONFIG_DIR or ~/.claude>/metrics/costs.jsonl)
   --since <N>                Include rows within last N days (inclusive of today, default: 7)
   --today                    Include only rows matching today's UTC day (shorthand; overrides --since)
   --by <day|model|session|tier|agent>
@@ -361,7 +362,7 @@ function renderNode(n, connector, childPrefix, lines, omitChildren) {
 function run() {
   const args = parseArgs(process.argv);
 
-  const defaultFilePath = process.env.AUTOPILOT_COSTS_FILE || '~/.claude/metrics/costs.jsonl';
+  const defaultFilePath = costsFileOf();
   const rawFilePath = args.file || defaultFilePath;
   const resolvedPath = resolveTilde(rawFilePath);
 

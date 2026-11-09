@@ -36,6 +36,7 @@
       "AUTOPILOT_TEST_NOW": "test-only ISO date for review-ledger rotate and status. Honoured only with AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1"
     },
     "config": {
+      "cost_usd": "field of a cost ledger row in cost-digest.js, not an operator config key",
       "artifact_type": "field of a qualification feed document, not an operator config key",
       "baseline_event_id": "field of a scorecard event, not an operator config key",
       "event_id": "field of a scorecard/feed event, not an operator config key",
@@ -2063,10 +2064,7 @@
       "class": "path_seam",
       "default": null,
       "readers": [
-        "hooks/cost-fuse.js",
-        "scripts/cost-digest.js",
-        "scripts/lib/brain-spend.js",
-        "src/status/runs-watch.js"
+        "scripts/lib/config-path.js"
       ],
       "doc": null,
       "relates": []

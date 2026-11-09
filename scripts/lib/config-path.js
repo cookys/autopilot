@@ -21,6 +21,18 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Cost metrics follow the active Claude profile; empty CLAUDE_CONFIG_DIR means the default profile.
+function metricsDirOf(opts = {}) {
+  const env = opts.env || process.env;
+  return path.join(env.CLAUDE_CONFIG_DIR || path.join(opts.home || os.homedir(), '.claude'), 'metrics');
+}
+
+// Existing ledger readers accept a file override; the tracker uses metricsDirOf directly.
+function costsFileOf(opts = {}) {
+  const env = opts.env || process.env;
+  return env.AUTOPILOT_COSTS_FILE || path.join(metricsDirOf(opts), 'costs.jsonl');
+}
+
 function configPath(opts) {
   const o = opts || {};
   const env = o.env || process.env;
@@ -139,4 +151,4 @@ function readContextBudget(opts) {
   return o.model ? applyPerModel(cfg, o.model) : cfg;
 }
 
-module.exports = { configPath, readContextBudget, applyPerModel, matchPerModel };
+module.exports = { configPath, metricsDirOf, costsFileOf, readContextBudget, applyPerModel, matchPerModel };

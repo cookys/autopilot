@@ -269,7 +269,7 @@ function recentSessionRoots(env, key, nowMs, windowS) {
 // --- cost aggregation from costs.jsonl (same path resolution as hooks/cost-tracker.js, which writes it, and hooks/cost-fuse.js) -------------------
 // Incremental: costs.jsonl is append-only, so only bytes past the last complete line are parsed.
 function createCostReader(env) {
-  const file = env.AUTOPILOT_COSTS_FILE || path.join(env.HOME || os.homedir(), '.claude', 'metrics', 'costs.jsonl');
+  const file = costsFileOf({ env, home: env.HOME || os.homedir() });
   const st = { offset: 0, sessions: new Map(), byDay: new Map() };
   const round = (n) => Math.round(n * 1e6) / 1e6;
   function refresh() {

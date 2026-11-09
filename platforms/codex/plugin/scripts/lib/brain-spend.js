@@ -7,7 +7,7 @@
 //
 //   loadCostFuseConfig({ env, home, defaultDailyUsdBrain? }) -> { mode, daily_usd_brain, tiers }   (~/.autopilot/config.json `cost_fuse`, then
 //                                        env overrides AUTOPILOT_COST_FUSE_MODE / AUTOPILOT_COST_FUSE_DAILY_USD)
-//   costsFileOf({ env, home })        -> costs.jsonl path (AUTOPILOT_COSTS_FILE else <home>/.claude/metrics/costs.jsonl)
+//   costsFileOf({ env, home })        -> costs.jsonl path (AUTOPILOT_COSTS_FILE else <CLAUDE_CONFIG_DIR or ~/.claude>/metrics/costs.jsonl)
 //   sumTodayTierSpend(file, tiersSet, onlySession?) -> USD summed over today's (UTC) rows whose model tier is in tiersSet
 //   createTierSpendReader(file)       -> incremental per-UTC-day, per-tier aggregate of the same rows (watcher; reads only appended
 //                                        bytes, resets on shrink / inode change); .read() -> { ok, todaySpend(tiersSet) }; ok=false when the
@@ -19,9 +19,8 @@
 
 const fs = require('fs');
 const os = require('os');
-const path = require('path');
 const { tierOf } = require('../cost-digest.js');
-const { configPath } = require('./config-path.js');
+const { configPath, costsFileOf } = require('./config-path.js');
 
 const DEFAULT_DAILY_USD_BRAIN = 150;
 const DEFAULT_MODE = 'warn';
@@ -71,11 +70,6 @@ function loadCostFuseConfig(opts = {}) {
   }
 
   return cfg;
-}
-
-function costsFileOf(opts = {}) {
-  const env = opts.env || process.env;
-  return env.AUTOPILOT_COSTS_FILE || path.join(homeOf(opts), '.claude', 'metrics', 'costs.jsonl');
 }
 
 // Filename-safe session key. Injective (BL-0105): an id that needed sanitising or truncating gets a hash of the

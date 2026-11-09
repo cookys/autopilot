@@ -9,7 +9,7 @@ cat > "$BIN/tmux" <<'STUB'
 #!/bin/sh
 case "$1" in
   capture-pane) [ -n "${FIXTURE:-}" ] && [ -f "$FIXTURE" ] && cat "$FIXTURE"; [ -n "${FIXTURE:-}" ] && [ -f "$FIXTURE" ] ;;
-  send-keys) shift; echo "$*" >> "$SENDS_LOG" ;;
+  send-keys) shift; echo "$*" >> "$SENDS_LOG"; exit "${SEND_RC:-0}" ;;
 esac
 STUB
 cat > "$BIN/logger" <<'STUB'
@@ -58,5 +58,23 @@ assert_eq "$(sends)" 0 "missing --pane: no key"
 run "$TEST_TMP/dev.txt" >/dev/null; rc=$?
 assert_eq "$(sends)" 1 "dialog visible on every poll: still one send"
 assert_not_contains "$(cat "$JOURNAL")" "WARNING" "journal never carries screen text"
+
+SEND_RC=1 run "$TEST_TMP/dev.txt"; rc=$?
+assert_exit_code "$rc" 1 "send-keys failure: exit 1"
+assert_eq "$(sends)" 1 "send-keys failure: one attempt, no retry"
+assert_contains "$(cat "$JOURNAL")" "outcome=send_failed" "journal says send_failed"
+assert_not_contains "$(cat "$JOURNAL")" "accepted" "failed send is not logged accepted"
+
+for args in '--timeout ""' '--interval 0' '--timeout 0' '--interval x' '--timeout'; do
+  : > "$SENDS"; eval "FIXTURE=$TEST_TMP/dev.txt bash \"$SCRIPT\" --pane lane:0.0 $args" </dev/null >/dev/null 2>&1; rc=$?
+  assert_exit_code "$rc" 2 "bad args [$args]: usage exit 2"
+  assert_eq "$(sends)" 0 "bad args [$args]: no key"
+done
+
+t0=$SECONDS
+FIXTURE="$TEST_TMP/trust.txt" timeout 10 bash "$SCRIPT" --pane lane:0.0 --timeout 2 --interval 3600 </dev/null >/dev/null 2>&1; rc=$?
+el=$((SECONDS - t0))
+assert_exit_code "$rc" 1 "huge interval: still exits 1 at the deadline"
+[ "$el" -lt 5 ] && assert_eq ok ok "huge interval: returned in ${el}s" || assert_eq "$el" "<5" "huge interval: took too long"
 
 finalize_test

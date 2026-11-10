@@ -87,7 +87,7 @@ const MULTIPLEXER_EVENT_TABLE = {
   ],
   PostToolUseFailure: ['mcp-health'],
   Stop: [
-    'cost-tracker', 'session-summary', 'check-console', 'batch-format',
+    'cost-tracker', 'session-summary', 'check-console', 'batch-format', 'askpm-log',
   ],
 };
 

@@ -315,7 +315,7 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
     ],
     PostToolUseFailure: ['mcp-health'],
     Stop: [
-      'cost-tracker', 'session-summary', 'check-console', 'batch-format',
+      'cost-tracker', 'session-summary', 'check-console', 'batch-format', 'askpm-log',
     ],
   };
   const wired = [];

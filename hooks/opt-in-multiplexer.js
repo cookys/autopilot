@@ -26,9 +26,12 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT
 
 // Closed table: event → ordered [{stem, matcher, args[]}]
 // Matchers use the same strings as hooks.json. Keep membership in lockstep with
-// hooks/opt-in-manifest.json (13 unique stems; mcp-health on two events). context-budget,
-// dispatch-model-guard and cost-tracker became default-on in v2.35.15 and are wired
-// directly in hooks.json.
+// hooks/opt-in-manifest.json except per-turn-gate, which stays a direct hooks.json
+// command (this multiplexer does not forward a Stop decision). askpm-log's
+// UserPromptSubmit half is hosted by advisory-relay.js (no extra process);
+// its Stop half is this table. 14 unique stems here; mcp-health on two events.
+// context-budget, dispatch-model-guard and cost-tracker became default-on in
+// v2.35.15 and are wired directly in hooks.json.
 const EVENT_TABLE = {
   PreToolUse: [
     { stem: 'branch-protection', matcher: 'Bash', args: [] },
@@ -51,6 +54,7 @@ const EVENT_TABLE = {
     { stem: 'session-summary', matcher: '', args: [] },
     { stem: 'check-console', matcher: '', args: [] },
     { stem: 'batch-format', matcher: '', args: [] },
+    { stem: 'askpm-log', matcher: '', args: [] },
   ],
 };
 

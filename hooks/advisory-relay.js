@@ -10,7 +10,9 @@
  *
  * Also the UserPromptSubmit HOST (mods P1W PERF): awaiting-owner's end-of-wait work and the
  * runs-watch-autostart ensure run in THIS process (hooks/awaiting-owner.js onUserPromptSubmit), so a
- * prompt costs no extra node spawn for them. They run before, and independent of, the relay's own knob;
+ * prompt costs no extra node spawn for them. Opt-in askpm-log's UserPromptSubmit half also runs
+ * here, and only when hooks.askpm-log / AUTOPILOT_HOOK_ASKPM_LOG is on (hooks/_shared/opt-in.js);
+ * disabled, it starts no child. They run before, and independent of, the relay's own knob;
  * their opt-outs are AUTOPILOT_AWAITING_OWNER / AUTOPILOT_RUNS_WATCH_AUTOSTART=0. Their failures never
  * change this hook's output. A live-panel answer whose first line is [待決回覆] closes the named
  * decision cards here too (opt-out AUTOPILOT_DECIDE_REPLY_CLOSE=off); that step is also fail-open.
@@ -230,6 +232,13 @@ try {
     if (payload && typeof payload === 'object') sysMsg = require('./awaiting-owner.js').onUserPromptSubmit(payload) || null;
   } catch (e) {
     process.stderr.write(`advisory-relay: live-state hosting fail-open: ${e && e.message ? e.message : e}\n`);
+  }
+  try {
+    if (payload && typeof payload === 'object' && require('./_shared/opt-in').isEnabled('askpm-log')) {
+      require('./askpm-log').handle(payload, process.env);
+    }
+  } catch (e) {
+    process.stderr.write(`advisory-relay: askpm-log hosting fail-open: ${e && e.message ? e.message : e}\n`);
   }
   try {
     if (payload && typeof payload === 'object') closeDecideReply(payload);

@@ -4,6 +4,7 @@
     { "stem": "accumulator", "class": "invariant_effect" },
     { "stem": "advisory-relay", "class": "invariant_effect" },
     { "stem": "ask-decision", "class": "invariant_effect" },
+    { "stem": "askpm-log", "class": "invariant_effect" },
     { "stem": "audit-log", "class": "invariant_effect" },
     { "stem": "awaiting-owner", "class": "invariant_effect" },
     { "stem": "batch-format", "class": "invariant_effect" },

@@ -1070,37 +1070,38 @@ if [[ "$ON_ENGINE_UNAVAILABLE" == "cloud-fallback" && -z "$CLOUD_FALLBACK_RUNG_J
   exit 3
 fi
 
-# reviewer_on_engine_unavailable: empty follows the global on_engine_unavailable. cloud-fallback is
-# this seat only — dispatch-review.sh pre-probes its endpoint and retreats once to
-# reviewer_cloud_fallback_rung. Same rung shape and cloud-runner allowlist as cloud_fallback_rung.
-# Always emitted (null rung when unset). Garbage policy is coerced to empty, matching the global
-# field's ignore-invalid, so an empty value stays distinguishable from an explicit cloud-fallback.
+# reviewer_on_engine_unavailable: empty follows the global on_engine_unavailable, except an
+# agy gemini-4-carbon-* reviewer (below). cloud-fallback is this seat only — dispatch-review.sh
+# pre-probes its endpoint and retreats once to reviewer_cloud_fallback_rung. Same rung shape and
+# cloud-runner allowlist as cloud_fallback_rung. Always emitted (null rung when unset). An explicit
+# policy uses the same set as on_engine_unavailable (ask|solo-fallback|wait-reset|cloud-fallback)
+# and is kept. Garbage is coerced to empty and is NOT the carbon default: only a truly unset
+# field becomes cloud-fallback.
 REVIEWER_ON_ENGINE_UNAVAILABLE="$(read_field "$CONFIG" reviewer_on_engine_unavailable "")"
+_reviewer_policy_unset=0
 case "$REVIEWER_ON_ENGINE_UNAVAILABLE" in
-  ''|cloud-fallback) ;;
+  '') _reviewer_policy_unset=1 ;;
+  ask|solo-fallback|wait-reset|cloud-fallback) ;;
   *)
-    echo "resolve-review-loop: ignoring invalid reviewer_on_engine_unavailable (must be empty or cloud-fallback): $REVIEWER_ON_ENGINE_UNAVAILABLE" >&2
+    echo "resolve-review-loop: ignoring invalid reviewer_on_engine_unavailable (must be empty or ask|solo-fallback|wait-reset|cloud-fallback): $REVIEWER_ON_ENGINE_UNAVAILABLE" >&2
     REVIEWER_ON_ENGINE_UNAVAILABLE=""
     ;;
 esac
 REVIEWER_CLOUD_FALLBACK_RUNGS_RAW="$(read_field "$CONFIG" reviewer_cloud_fallback_rung "")"
-# agy carbon reviewer, rung left empty: the next rung of the existing
-# reviewer cloud-fallback is argon of the same tier. An explicit rung is kept.
-# An empty reviewer policy becomes cloud-fallback so that retreat runs. The
-# global on_engine_unavailable is not rewritten. A spelled carbon id and the
-# gemini-flash alias (normalized above) both land here.
-if [[ -z "$REVIEWER_CLOUD_FALLBACK_RUNGS_RAW" && "$REV_RUNNER" == "agy" ]]; then
-  case "$REV_ENGINE" in
-    gemini-4-carbon-*)
-      _agy_tier="${REV_ENGINE##*-}"
-      case "$_agy_tier" in
-        low|medium|high)
-          REVIEWER_CLOUD_FALLBACK_RUNGS_RAW="gemini-4-argon-${_agy_tier}/${_agy_tier}@agy"
-          if [[ -z "$REVIEWER_ON_ENGINE_UNAVAILABLE" ]]; then
-            REVIEWER_ON_ENGINE_UNAVAILABLE="cloud-fallback"
-          fi
-          ;;
-      esac
+# agy carbon reviewer: an empty rung is argon of the same tier. An explicit rung is kept.
+# An unset reviewer policy becomes cloud-fallback whether the rung was supplied or defaulted,
+# so carbon failing retreats without asking. The global on_engine_unavailable is not rewritten.
+# A spelled gemini-4-carbon-* id lands here. Non-agy and non-carbon reviewers are unchanged.
+if [[ "$REV_RUNNER" == "agy" && "$REV_ENGINE" == gemini-4-carbon-* ]]; then
+  _agy_tier="${REV_ENGINE##*-}"
+  case "$_agy_tier" in
+    low|medium|high)
+      if [[ -z "$REVIEWER_CLOUD_FALLBACK_RUNGS_RAW" ]]; then
+        REVIEWER_CLOUD_FALLBACK_RUNGS_RAW="gemini-4-argon-${_agy_tier}/${_agy_tier}@agy"
+      fi
+      if [[ "$_reviewer_policy_unset" -eq 1 ]]; then
+        REVIEWER_ON_ENGINE_UNAVAILABLE="cloud-fallback"
+      fi
       ;;
   esac
 fi

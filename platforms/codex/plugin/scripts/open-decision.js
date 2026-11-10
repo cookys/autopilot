@@ -723,8 +723,15 @@ function sendFleet(to, text, timeoutMs = SEND_TIMEOUT_MS) {
 }
 
 const nonEmpty = (x) => (typeof x === 'string' && x !== '' ? x : null);
-// The canonical answer the verify step returned: keys sorted (free_text, option), absent = null.
-const answerDigest = (a) => crypto.createHash('sha256').update(JSON.stringify({ free_text: nonEmpty(a.free_text), option: nonEmpty(a.option) })).digest('hex');
+// Local fallback when verify stdout has no answer_digest. Binds the card: sha256 of the fixed-key
+// JSON {answer_id, card_id, free_text, option} (keys in that order). Absent text is null.
+// cardId and answerId are arguments; nothing else is read.
+const answerDigest = (cardId, answerId, freeText, option) => crypto.createHash('sha256').update(JSON.stringify({
+  answer_id: answerId,
+  card_id: cardId,
+  free_text: nonEmpty(freeText),
+  option: nonEmpty(option),
+})).digest('hex');
 
 // The delivery text: one field per line, the receiver's rule "Operator answers on PM cards" trusts it by the attested `from`. Values are verbatim (a multi-line value continues on the next lines).
 function deliveryText(c) {
@@ -822,7 +829,8 @@ function sendParked(file, id, sender = sendFleet, { deadline = Date.now() + SEND
   }
 }
 
-// Append the courier-verified answer `v` ({ answer: {option, free_text}, answer_id }) to an OPEN or pending_dispatch executor card and park it in pending_dispatch.
+// Append the courier-verified answer `v` ({ answer: {option, free_text, answer_digest?}, answer_id }) to an OPEN or pending_dispatch executor card and park it in pending_dispatch.
+// answer_digest is the courier's non-empty string, verbatim; otherwise the local card-bound digest.
 // A replay (answer_id already in answers[], sent or not) changes nothing; an entry is never edited or removed. A closed card that was delivered is 'ok' (sendParked says 'already').
 // -> { status: 'ok'|'absent'|'not_parked'|'error' }; not_parked = closed/awaiting without a delivery: nothing to deliver.
 function parkAnswer(file, id, v) {
@@ -833,7 +841,8 @@ function parkAnswer(file, id, v) {
   const option = nonEmpty(a.option);
   const ft = nonEmpty(a.free_text);
   const now = new Date().toISOString();
-  const entry = { answer_id: v.answer_id, answer: option !== null ? option : ft, answer_option: option, answer_free_text: ft, answer_digest: answerDigest(a), sent_message_id: null, sent_at: null };
+  const courierDigest = nonEmpty(a.answer_digest);
+  const entry = { answer_id: v.answer_id, answer: option !== null ? option : ft, answer_option: option, answer_free_text: ft, answer_digest: courierDigest !== null ? courierDigest : answerDigest(id, v.answer_id, a.free_text, a.option), sent_message_id: null, sent_at: null };
   const p = patchDecision(file, id, (h) => {
     const cur = answersOf(h);
     if (cur.some((x) => x.answer_id === v.answer_id)) return withAnswers(cur);

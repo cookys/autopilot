@@ -43,7 +43,7 @@ if (a[0] === 'dispatch') { fs.appendFileSync(D + '/dispatch.log', a.join(' ') + 
 const [, sub, card] = a;
 const idOf = (c, v) => 'A' + crypto.createHash('sha256').update(c + '|' + v).digest('hex').slice(0, 25).toUpperCase();
 const rows = () => (fs.existsSync(D + '/answers') ? fs.readFileSync(D + '/answers', 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
-const shape = (r, outcome) => ({ outcome, card_id: r.card_id, answer_id: r.answer_id, via: 'local', option: r.option || null, free_text: r.free_text || null, card_revision: 1, answered_at: '2026-11-09T09:12:44Z', operator: 'local' });
+const shape = (r, outcome) => { const o = { outcome, card_id: r.card_id, answer_id: r.answer_id, via: 'local', option: r.option || null, free_text: r.free_text || null, card_revision: 1, answered_at: '2026-11-09T09:12:44Z', operator: 'local' }; if (typeof r.answer_digest === 'string' && r.answer_digest !== '') o.answer_digest = r.answer_digest; return o; };
 if (sub === 'claim') {
   const i = a.indexOf('--option'); const j = a.indexOf('--free-text'); const v = i >= 0 ? a[i + 1] : a[j + 1];
   const r = { card_id: card, answer_id: idOf(card, v), option: i >= 0 ? v : null, free_text: j >= 0 ? v : null };
@@ -80,7 +80,7 @@ AID1="$(claim "$C1" o "甲")"
 hook "$(printf '[待決回覆]\n%s｜%s → 甲｜%s\n' "$C1" "$Q1" "$AID1")"
 assert_eq "$(nsends)" 1 "option card: exactly one fleet send"
 assert_eq "$(sendfield 0 to)" "$EXEC" "send goes to the executor"
-DIG1="$(node -e 'process.stdout.write(require("crypto").createHash("sha256").update("{\"free_text\":null,\"option\":\"甲\"}").digest("hex"))')"
+DIG1="$(node -e 'const [aid,cid]=process.argv.slice(1);process.stdout.write(require("crypto").createHash("sha256").update(JSON.stringify({answer_id:aid,card_id:cid,free_text:null,option:"甲"})).digest("hex"))' "$AID1" "$C1")"
 EXP1="$(printf '[操作員答覆] %s\nanswer_id: %s\nexecutor: %s\nquestion: %s\noption: 甲 — 走 A 路線\n第二行：含 | 與 → 符號\nfree_text: (none)\nanswer_digest: %s' "$C1" "$AID1" "$EXEC" "$Q1" "$DIG1")"
 assert_eq "$(sendfield 0 text)" "$EXP1" "delivery text: every field verbatim, in order"
 assert_eq "$(sendfield 0 argc)" 3 "send argv is exactly: send <to> <text>"
@@ -104,7 +104,7 @@ AID2="$(claim "$C2" f "$FT2")"
 FT2WIRE="第一行：理由 A 第二行 with \"quotes\" and \$(not run) \\ back"
 hook "$(printf '[待決回覆]\n%s｜%s → %s｜%s\n' "$C2" "$Q2" "$FT2WIRE" "$AID2")"
 assert_eq "$(nsends)" 2 "free-text card: one more send"
-DIG2="$(node -e 'process.stdout.write(require("crypto").createHash("sha256").update(JSON.stringify({free_text:process.argv[1],option:null})).digest("hex"))' "$FT2")"
+DIG2="$(node -e 'const [aid,cid,ft]=process.argv.slice(1);process.stdout.write(require("crypto").createHash("sha256").update(JSON.stringify({answer_id:aid,card_id:cid,free_text:ft,option:null})).digest("hex"))' "$AID2" "$C2" "$FT2")"
 EXP2="$(printf '[操作員答覆] %s\nanswer_id: %s\nexecutor: %s\nquestion: %s\noption: (none)\nfree_text: %s\nanswer_digest: %s' "$C2" "$AID2" "$EXEC" "$Q2" "$FT2" "$DIG2")"
 assert_eq "$(sendfield 1 text)" "$EXP2" "free text delivered verbatim (multi-line, non-ASCII, shell metacharacters)"
 assert_eq "$(cf "$C2" status)" closed "free-text card closed"
@@ -378,5 +378,48 @@ o.patchDecision(f, id, { status: 'pending_dispatch', answer: 'A', answer_id: 'GM
 JS
 node "$OD" redeliver --cwd "$R" --root-run-id root-t --id "$CGM" >/dev/null 2>&1
 assert_eq "$(nsends)" "$RB" "legacy: every entry sent and pending_dispatch: closed without sending"; assert_eq "$(cf "$CGM" status)" closed "legacy: closed without a send"
+
+# 14. answer_digest binds the card. The old digest was sha256({free_text, option}) and ignored which card the answer was for.
+digline() { sendfield "$1" text | sed -n 's/^answer_digest: //p'; }
+# (a) two different cards, the same option, one batch: every card's digest differs
+setmode ok; QA14="同選項？"; CA14="$(mkcard "$QA14" --option "A::a" --option "B::b")"; CB14="$(mkcard "$QA14" --option "A::a" --option "B::b")"
+AA14="$(claim "$CA14" o A)"; AB14="$(claim "$CB14" o A)"; RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n%s｜%s → A｜%s\n' "$CA14" "$QA14" "$AA14" "$CB14" "$QA14" "$AB14")"
+assert_eq "$(( $(nsends) - RB ))" 2 "(a) same option, two cards, one batch: both sent"
+DA14="$(digline "$RB")"; DB14="$(digline "$(( RB + 1 ))")"
+EXPA14="$(node -e 'const [aid,cid]=process.argv.slice(1);process.stdout.write(require("crypto").createHash("sha256").update(JSON.stringify({answer_id:aid,card_id:cid,free_text:null,option:"A"})).digest("hex"))' "$AA14" "$CA14")"
+EXPB14="$(node -e 'const [aid,cid]=process.argv.slice(1);process.stdout.write(require("crypto").createHash("sha256").update(JSON.stringify({answer_id:aid,card_id:cid,free_text:null,option:"A"})).digest("hex"))' "$AB14" "$CB14")"
+assert_neq "$DA14" "$DB14" "(a) two cards, same option: every digest differs"
+assert_eq "$DA14" "$EXPA14" "(a) first digest binds that card_id and answer_id"
+assert_eq "$DB14" "$EXPB14" "(a) second digest binds that card_id and answer_id"
+assert_eq "$(cf "$CA14" answer_digest)" "$DA14" "(a) first stored digest is the one delivered"
+assert_eq "$(cf "$CB14" answer_digest)" "$DB14" "(a) second stored digest is the one delivered"
+# (b) the same card re-sent (replay of the same answer_id): the digest does not change
+setmode fail4; QB14="重送摘要？"; CC14="$(mkcard "$QB14" --option "A::a" --option "B::b")"; AC14="$(claim "$CC14" o A)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CC14" "$QB14" "$AC14")"
+assert_eq "$(cf "$CC14" status)" pending_dispatch "(b) first send failed: answer parked, not closed"
+DBEFORE="$(cf "$CC14" answer_digest)"
+EXP14="$(node -e 'const [aid,cid]=process.argv.slice(1);process.stdout.write(require("crypto").createHash("sha256").update(JSON.stringify({answer_id:aid,card_id:cid,free_text:null,option:"A"})).digest("hex"))' "$AC14" "$CC14")"
+assert_eq "$DBEFORE" "$EXP14" "(b) parked digest binds this card and this answer_id"
+setmode ok; RB="$(nsends)"
+hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CC14" "$QB14" "$AC14")"
+assert_eq "$(( $(nsends) - RB ))" 1 "(b) replay of the same unsent answer_id sends once"
+DRE="$(digline "$RB")"
+assert_eq "$DRE" "$DBEFORE" "(b) re-sent digest unchanged"
+assert_eq "$(cf "$CC14" answer_digest)" "$DBEFORE" "(b) stored digest unchanged after the replay send"
+RB="$(nsends)"; hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CC14" "$QB14" "$AC14")"
+assert_eq "$(nsends)" "$RB" "(b) a second replay after delivery sends nothing"
+assert_eq "$(cf "$CC14" answer_digest)" "$DBEFORE" "(b) digest still unchanged after the second replay"
+# (c) a courier-supplied answer_digest on the verify stdout is stored verbatim
+setmode ok; QD14="快遞摘要？"; CD14="$(mkcard "$QD14" --option "A::a" --option "B::b")"; AD14="$(claim "$CD14" o A)"
+COURIER14="courier-digest-verbatim-not-a-local-hash"
+node -e 'const fs=require("fs");const p=process.argv[1],card=process.argv[2],d=process.argv[3];const lines=fs.readFileSync(p,"utf8").split("\n").filter(Boolean).map((l)=>JSON.parse(l));for(const r of lines)if(r.card_id===card)r.answer_digest=d;fs.writeFileSync(p,lines.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$STUB/answers" "$CD14" "$COURIER14"
+RB="$(nsends)"; hook "$(printf '[待決回覆]\n%s｜%s → A｜%s\n' "$CD14" "$QD14" "$AD14")"
+assert_eq "$(( $(nsends) - RB ))" 1 "(c) courier digest: the answer is sent"
+DCOUR="$(digline "$RB")"
+assert_eq "$DCOUR" "$COURIER14" "(c) delivery carries the courier answer_digest verbatim"
+assert_eq "$(cf "$CD14" answer_digest)" "$COURIER14" "(c) stored digest is the courier value"
+LOCAL14="$(node -e 'const [aid,cid]=process.argv.slice(1);process.stdout.write(require("crypto").createHash("sha256").update(JSON.stringify({answer_id:aid,card_id:cid,free_text:null,option:"A"})).digest("hex"))' "$AD14" "$CD14")"
+assert_neq "$DCOUR" "$LOCAL14" "(c) the courier value is not the local fallback"
 
 finalize_test

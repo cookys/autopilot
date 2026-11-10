@@ -26,11 +26,22 @@ test('compactDecision: silent below first threshold (49)', () => {
   assert.equal(compactDecision(49).warn, false);
 });
 
+function assertKeepWorking(text) {
+  assert.equal(typeof text, 'string');
+  assert.doesNotMatch(text, /\/clear/);
+  assert.doesNotMatch(text, /\/compact/);
+  assert.doesNotMatch(text, /next session/);
+  assert.doesNotMatch(text, /new session/);
+  assert.doesNotMatch(text, /wait/);
+  assert.match(text, /[Kk]eep working/);
+}
+
 test('compactDecision: warns at first threshold (50) with first-level message', () => {
   const d = compactDecision(50);
   assert.equal(d.warn, true);
   assert.equal(d.level, 'first');
-  assert.match(d.message, /Consider running \/compact/);
+  assert.match(d.message, /this session/);
+  assertKeepWorking(d.message);
 });
 
 test('compactDecision: silent between thresholds (51..74)', () => {
@@ -41,7 +52,12 @@ test('compactDecision: warns at first interval (75) with interval-level message'
   const d = compactDecision(75);
   assert.equal(d.warn, true);
   assert.equal(d.level, 'interval');
-  assert.match(d.message, /Strongly recommend \/compact/);
+  assert.doesNotMatch(d.message, /this session/);
+  assertKeepWorking(d.message);
+});
+
+test('negative control: old /compact wording is rejected', () => {
+  assert.throws(() => assertKeepWorking('Consider running /compact to free context.'));
 });
 
 test('compactDecision: unbounded — warns at 100 and 125, not capped at 100', () => {
@@ -89,7 +105,8 @@ test('wrapper: counter increments across invocations and nudges at the threshold
       if (i === FIRST_THRESHOLD) lastFirstThresholdStderr = r.stderr;
     }
     // The 50th call must emit the first-threshold nudge to stderr.
-    assert.match(lastFirstThresholdStderr, /Consider running \/compact/);
+    assert.match(lastFirstThresholdStderr, /Keep working/);
+    assert.doesNotMatch(lastFirstThresholdStderr, /\/compact/);
   } finally {
     fs.rmSync(tmpdir, { recursive: true, force: true });
   }
@@ -154,7 +171,8 @@ test('wrapper: bridge — the 50th call writes one advisory row with the stderr 
       fs.writeFileSync(path.join(tmpdir, `claude-tool-count-${sessionId}`), String(FIRST_THRESHOLD - 1));
       const r = runHook(tmpdir, sessionId, mode ? { AUTOPILOT_ADVISORY_BRIDGE_SUGGEST_COMPACT: mode } : {});
       assert.equal(r.status, 0);
-      assert.match(r.stderr, /Consider running \/compact/);
+      assert.match(r.stderr, /Keep working/);
+      assert.doesNotMatch(r.stderr, /\/compact/);
       assert.equal(fs.existsSync(rows), expectRow);
       // BL-0304: sink mode keeps stdout empty (the row is the channel); inject mode must put the text on stdout as ONE
       // PostToolUse additionalContext object, because stderr on exit 0 never reaches the model.

@@ -10,7 +10,7 @@ description: >
 
 # handoff
 
-Mid-work session continuation handoff.
+Mid-work session continuation handoff. When context is full, write the handoff as a backup and keep working; auto-compact restores context.
 
 ## Write Mode
 
@@ -82,7 +82,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    3. /absolute/path/to/file3 — [Why to read third]
 
    ## 陷阱
-   - [Gotchas discovered this session that would burn the next session]
+   - [Gotchas discovered this session that would burn a later reader of this backup]
    ```
 
 3.5. **Route the durable content out** (a handoff is a snapshot and gets deleted — Resume Mode step 5.
@@ -113,7 +113,7 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    Report what you routed in step 4 so the user can see what outlived the handoff.
 
 4. **Response to User**:
-   Reply with the file path, the paste-ready line: `read <path> 接續`, and a reminder that the machine-snapshot hook complement exists (`handoff_inject`, see hooks/README.md) if they want auto-capture on `/clear`.
+   Reply with the file path, the paste-ready line: `read <path> 接續`, and a reminder that the machine snapshot (`handoff_inject`, see hooks/README.md) is a backup. Auto-compact restores context; keep working.
 
 ## Resume Mode
 
@@ -128,8 +128,8 @@ Triggered by "read ...HANDOFF.md 接續" or "接手上個 session" or "resume fr
    If reality has drifted from "現況", report the drift to the user first before proceeding.
 3. Treat `已決事項(不重議)` as settled; do not reopen or litigate them.
 4. Execute `下一步` item 1 immediately; do not re-plan unless verification fails.
-5. When the work later completes, delete the consumed `HANDOFF.md` file as part of session-end cleanup (a handoff is a snapshot; a stale one misleads the next session). Deletion is only safe because Write Mode step 3.5 already routed the durable 段 out; if this handoff predates that step, run 3.5's walk over it **before** deleting.
+5. When the work later completes, delete the consumed `HANDOFF.md` file as part of session-end cleanup (a handoff is a snapshot; a stale one misleads a later reader). Deletion is only safe because Write Mode step 3.5 already routed the durable 段 out; if this handoff predates that step, run 3.5's walk over it **before** deleting.
 
 ## Proactive Offer Rule
 
-When context pressure signals occur (a compaction just happened; or the conversation is long and the user hints at wrapping/切換), OFFER a handoff in one sentence: "需要我寫 handoff 檔案以便 clear session 後繼續嗎？" (The user should never have to ask "需要寫 handoff 嗎?" themselves).
+When context pressure signals occur (a compaction just happened; or the conversation is long and the user hints at wrapping/切換), write the handoff as a backup and keep working; auto-compact restores context. OFFER in one sentence: "需要我寫 handoff 檔案當備份嗎？寫完繼續做。" (The user should never have to ask "需要寫 handoff 嗎?" themselves).

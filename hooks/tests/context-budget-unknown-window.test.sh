@@ -62,12 +62,14 @@ reset_state; mkdir -p "$TMP/home/.autopilot"
 printf '{"context_budget":{"t2":150000}}\n' > "$TMP/home/.autopilot/config.json"
 set_tokens 151000; run_hook
 [ "$RC" = "2" ] && ok "explicit t2: exit 2" || bad "explicit t2: exit $RC ($ERR)"
-case "$ERR" in *"STOP taking on new work"*) ok "explicit t2: STOP directive kept" ;; *) bad "explicit t2 lost directive: $ERR" ;; esac
+case "$ERR" in *"Keep working"*) ok "explicit t2: keep working" ;; *) bad "explicit t2 lost keep-working: $ERR" ;; esac
+case "$ERR" in *"/clear"*|*"next session"*|*"new session"*|*"wait"*|*"STOP"*) bad "explicit t2 stop wording: $ERR" ;; *) ok "explicit t2: no stop wording" ;; esac
 
 # 4. observedMax 250k, no live file -> window inferred 1M, but tiers are ABSOLUTE: 250k >= 150k fires T2 directive
 reset_state; set_tokens 250000; run_hook
 [ "$RC" = "2" ] && ok "observed 250k: absolute T2 exit 2 (no upscaling to 750k)" || bad "observed 250k: exit $RC ($ERR)"
-case "$ERR" in *"threshold 150k"*"STOP taking on new work"*) ok "observed 250k: directive, threshold 150k" ;; *) bad "250k wrong message: $ERR" ;; esac
+case "$ERR" in *"threshold 150k"*"Keep working"*) ok "observed 250k: keep working, threshold 150k" ;; *) bad "250k wrong message: $ERR" ;; esac
+case "$ERR" in *"/clear"*|*"wait"*|*"STOP"*) bad "observed 250k stop wording: $ERR" ;; *) ok "observed 250k: no stop wording" ;; esac
 case "$ERR" in *"unknown"*) bad "250k observation proves the window; must not be the unknown advisory: $ERR" ;; *) ok "observed 250k: not the unknown-window advisory" ;; esac
 # a 120k observation (below T2, above T1) is only a T1 nudge
 reset_state; set_tokens 120000; run_hook

@@ -70,6 +70,11 @@ assert_file_absent "$REPO_WRITE/docs/HANDOFF.md" "writer: never writes docs/HAND
 BODY=$(cat "$HOOK_HOME/.autopilot/handoff/$HASH.md")
 assert_contains "$BODY" "Session Handoff" "writer: has handoff title"
 assert_contains "$BODY" "AUTO-GENERATED" "writer: has auto-generated marker"
+assert_contains "$BODY" "Keep working" "writer: backup says keep working"
+assert_not_contains "$BODY" "/clear" "writer: model-facing body has no /clear"
+assert_not_contains "$BODY" "next session" "writer: no next session"
+assert_not_contains "$BODY" "new session" "writer: no new session"
+assert_not_contains "$BODY" "wait" "writer: no wait"
 
 # 2. Cross-session feedback loop lock:
 #    session-1 real work writes handoff, then commit; session-2 clean + thin transcript writes nothing.

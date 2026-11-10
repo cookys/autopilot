@@ -20,12 +20,11 @@
  *  - T1 (100k): stderr nudge, exit 0 (user-visible). On a known 1M window with no auto-compact
  *    window set and compaction on (scripts/lib/autocompact-window.js), it adds one line telling
  *    the owner to set autoCompactWindow.
- *  - T2 (150k): escalated advisory, exit 2 (stderr fed to the MODEL): write a
- *    handoff NOW + user-facing "/clear after it lands". When an auto-compact window is set
- *    (finite > 0) and compaction is on, the wording is instead "keep working, write a handoff
- *    at the next phase boundary" (BL-0124), wherever the window sits relative to T2. Without one
- *    the STOP wording also tells the owner to set autoCompactWindow. For T2 to remind BEFORE
- *    compaction, t2 + gap <= window - 33000 (session-start warns otherwise).
+ *  - T2 (150k): escalated advisory, exit 2 (stderr fed to the MODEL): keep working.
+ *    Claude Code auto-compacts at the window; write a handoff file as a backup and continue
+ *    the task. The same wording for every session, whether or not an auto-compact window is
+ *    set (BL-0124). For T2 to remind BEFORE compaction, t2 + gap <= window - 33000
+ *    (session-start warns otherwise).
  *  - Re-reminder throttle is per TOKEN STEP, not per call: a tier refires only after context
  *    grew >= step (default 50000; config context_budget.step / env AUTOPILOT_CONTEXT_BUDGET_STEP)
  *    since that tier's last fire; the context at last fire lives in the state file

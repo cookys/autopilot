@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# context-budget-t2-autocompact (BL-0124) — hook-level T2 wording: with an auto-compact window at or
-# below T2 and compaction on, T2 says "do NOT stop"; otherwise it keeps "Directive: STOP".
+# context-budget-t2-autocompact (BL-0124) — hook-level T2 wording: every session says
+# "Keep working" and never STOP, /clear, or a new-session wait.
 # Covers both call sites in hooks/context-budget.js: fresh status-line file (statusline path) and a
 # stale one (session-window path). HOME and the Claude config dir are scratch dirs.
 set -u
@@ -48,15 +48,18 @@ run_case() {  # $1 = fresh|stale; prints stderr
   cat "$TMP/err.txt"
 }
 
-expect() {  # $1 label, $2 nostop|stop, $3 stderr
+expect() {  # $1 label, $2 ignored (kept so each old case stays), $3 stderr
   case "$3" in *"Context budget T2"*) ;; *) bad "$1: no T2 message: $3"; return ;; esac
-  if [ "$2" = nostop ]; then
-    case "$3" in *'do NOT stop'*) ok "$1: no STOP" ;; *) bad "$1: expected 'do NOT stop': $3" ;; esac
-    case "$3" in *'Directive: STOP'*) bad "$1: STOP present" ;; esac
-  else
-    case "$3" in *'Directive: STOP'*) ok "$1: STOP kept" ;; *) bad "$1: expected 'Directive: STOP': $3" ;; esac
-  fi
+  case "$3" in *'Keep working'*) ok "$1: keep working" ;; *) bad "$1: expected 'Keep working': $3" ;; esac
+  case "$3" in *'Directive: STOP'*|*'/clear'*|*'next session'*|*'new session'*|*'wait'*) bad "$1: stop wording present: $3" ;; *) ok "$1: no stop wording" ;; esac
 }
+
+# negative control: the old /clear sentence fails the same predicate (revert -> red)
+node -e '
+const old = "Directive: STOP taking on new work. tell the user to /clear or restart the session";
+const rejected = /\/clear|next session|new session|wait/.test(old) || !/[Kk]eep working/.test(old);
+if (!rejected) { console.error("negative control accepted the old wording"); process.exit(1); }
+' || { bad "negative control: old /clear wording must be rejected"; }
 
 for path in fresh stale; do
   echo '{"autoCompactWindow": 250000}' > "$CFG/settings.json"
@@ -69,7 +72,7 @@ for path in fresh stale; do
   rm -f "$CFG/settings.json"
   out="$(run_case $path)"
   expect "$path, window unset" stop "$out"
-  case "$out" in *'autoCompactWindow'*'/autocompact'*) ok "$path: STOP carries autoCompactWindow hint" ;; *) bad "$path: hint missing: $out" ;; esac
+  case "$out" in *'/autocompact'*) bad "$path: model text still names /autocompact: $out" ;; *) ok "$path: no slash-compact instruction" ;; esac
 
   echo '{"autoCompactWindow": 5000}' > "$CFG/settings.json"
   expect "$path, invalid window (5000)" stop "$(run_case $path)"
@@ -83,6 +86,21 @@ for path in fresh stale; do
   expect "$path, window 533k + autoCompactEnabled false" stop "$(run_case $path)"
   rm -f "$CFG/settings.json"
 done
+
+# 90% of a 1M window: live file + transcript, same shape as the cases above.
+printf '%s\n' '{"timestamp":"2026-10-12T08:00:00.000Z","message":{"usage":{"input_tokens":2,"cache_read_input_tokens":900000,"cache_creation_input_tokens":0,"output_tokens":10}}}' > "$TRANSCRIPT"
+cat > "$LIVE/context/$SID.json" <<JSON
+{"cc_version":"2.1.296","schema_version":1,"session_id":"$SID",
+ "model":{"display_name":"test","id":"claude-opus-5[1m]"},
+ "context_window":{"context_window_size":1000000,"total_input_tokens":900002,
+   "current_usage":{"input_tokens":2,"cache_read_input_tokens":900000,"cache_creation_input_tokens":0,"output_tokens":10},
+   "used_percentage":90},
+ "written_at":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"}
+JSON
+rm -rf "$TMP/state"
+printf '%s' "$PAYLOAD" | node "$HOOK" >/dev/null 2>"$TMP/err.txt"
+expect "90% lane" keep "$(cat "$TMP/err.txt")"
+case "$(cat "$TMP/err.txt")" in *'90%'*) ok "90% lane: names 90%" ;; *) bad "90% lane: pct missing: $(cat "$TMP/err.txt")" ;; esac
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] && { echo "PASS [context-budget-t2-autocompact]"; exit 0; }

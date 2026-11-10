@@ -22,7 +22,7 @@ The catalog is layered by how central a skill is to the daily loop — **core** 
 | **debug** | Evidence-first debugging methodology (tool → log → code) with Three Red Lines | `superpowers:systematic-debugging` (broader hypothesis-driven framing) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **next** | Scan all work sources, recommend highest-priority task | — (no equivalent) |
-| **handoff** | Mid-work context-pressure handoff: standardized resume doc (write + resume modes) so a `/clear` never loses in-flight state | — (no equivalent) |
+| **handoff** | Mid-work context-pressure handoff: write the file as a backup and keep working; auto-compact restores context | — (no equivalent) |
 
 ### Delegation — the CEO autonomy ladder
 

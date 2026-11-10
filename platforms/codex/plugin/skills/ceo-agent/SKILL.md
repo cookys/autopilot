@@ -411,7 +411,7 @@ Hard-stop mechanism independent of CEO judgment:
 |---------|--------|
 | 3 consecutive build/test failures with same fix strategy | Pause, change strategy or report |
 | Scope drift (modified files unrelated to goal) | Pause, self-check |
-| Context near limit | Produce handoff, suggest new session |
+| Context near limit | Write the handoff as a backup and keep working; auto-compact restores context |
 
 ## Quality Checks
 

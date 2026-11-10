@@ -346,7 +346,7 @@
         "context_budget.gap",
         "autoCompactWindow"
       ],
-      "summary": "Context size (tokens) of the second, stronger reminder: write a handoff. With auto-compact configured it is only a reminder; without it the hook tells you to stop and /clear.",
+      "summary": "Context size (tokens) of the second, stronger reminder. Keep working; write a handoff file as a backup. Auto-compact restores context.",
       "type": "number"
     },
     {
@@ -435,7 +435,7 @@
       "relates": [
         "AUTOPILOT_COST_TRACKER_CLEAR_PCT"
       ],
-      "summary": "Window fill (percent) at or above which the cost warning recommends a handoff and /clear.",
+      "summary": "Window fill (percent) at or above which the cost warning says to keep working and to write a handoff file as a backup.",
       "type": "number"
     },
     {

@@ -247,6 +247,11 @@ function budgetDecision(state, cfg) {
     // it like T1 (exit 0, additionalContext).
     const resident = cfg.seat === 'resident';
     const residentClose = 'Update the state file and confirm that after compaction only the state file path and unfinished items remain.';
+    // Every session, window set or not: keep working. A handoff file is a backup.
+    // A slash command that resets the session is a user action this lane cannot press.
+    const keepWorking = resident
+      ? `Keep working. Claude Code auto-compacts at the window. ${residentClose}`
+      : 'Keep working. Claude Code auto-compacts at the window; write a handoff file as a BACKUP (not as a stopping point) and continue the task.';
     if (cfg.windowUnknown === true) {
       return {
         tier: 't2',
@@ -254,43 +259,17 @@ function budgetDecision(state, cfg) {
         message: resident
           ? `Context budget T2 (advisory): context is ${k}k tokens; the context window is unknown ` +
             '(no statusline live file, so 200K and 1M cannot be told apart). ' +
-            residentClose
+            keepWorking
           : `Context budget T2 (advisory): context is ${k}k tokens; the context window is unknown ` +
             '(no statusline live file, so 200K and 1M cannot be told apart). ' +
-            'If this is a 200K window, plan a handoff at the next phase boundary; ' +
-            'on a 1M window this is early and no action is needed.',
-      };
-    }
-    // An auto-compact window is set (finite > 0) and compaction is on (the hook passes a number only
-    // then): Claude Code resets this context itself, so stopping for a human /clear only adds an
-    // interruption (BL-0124). The window's position relative to T2 does not matter: T2 is then only a
-    // handoff reminder.
-    if (Number.isFinite(cfg.autocompactWindow) && cfg.autocompactWindow > 0) {
-      return {
-        tier: 't2',
-        message: resident
-          ? `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
-            `Auto-compact is set at ${Math.round(cfg.autocompactWindow / 1000)}k, so Claude Code compacts ` +
-            'this session on its own: do NOT stop and do NOT ask the user to /clear. Keep working; ' +
-            residentClose
-          : `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
-            `Auto-compact is set at ${Math.round(cfg.autocompactWindow / 1000)}k, so Claude Code compacts ` +
-            'this session on its own: do NOT stop and do NOT ask the user to /clear. Keep working; ' +
-            'write a handoff doc (autopilot:handoff) at the next phase boundary so the compaction rehydrates cleanly.',
+            'If this is a 200K window, the handoff file is the backup; ' +
+            'on a 1M window this is early and no action is needed. ' +
+            keepWorking,
       };
     }
     return {
       tier: 't2',
-      message: resident
-        ? `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
-          residentClose
-        : `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
-          'Directive: STOP taking on new work. Write a handoff doc NOW (autopilot:handoff), ' +
-          'then tell the user to /clear or restart the session — context cost compounds ' +
-          'quadratically with session length. [USER: after the handoff lands, /clear or ' +
-          'start a fresh session to reset the context.] ' +
-          'To avoid being asked to stop: set `autoCompactWindow` in ~/.claude/settings.json (or run /autocompact) ' +
-          'so Claude Code compacts the session itself; T2 then stays a handoff reminder only.',
+      message: `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ${keepWorking}`,
     };
   }
   if (cfg.t1 > 0 && contextTokens >= cfg.t1) {

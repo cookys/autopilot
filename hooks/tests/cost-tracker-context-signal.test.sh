@@ -92,8 +92,21 @@ assert_contains "$__RUN_STDERR" 'cheaper' "33%: suggests cheaper hands for mecha
 fresh_session; over; live ct-sig-hi 70
 run_hook cost-tracker.js "$(payload ct-sig-hi)"
 assert_contains "$__RUN_STDERR" 'context now 70%' "70%: carries the %"
-assert_contains "$__RUN_STDERR" 'handoff' "70%: recommends a handoff"
-assert_contains "$__RUN_STDERR" '/clear' "70%: recommends clear"
+assert_contains "$__RUN_STDERR" 'handoff' "70%: recommends a handoff backup"
+assert_contains "$__RUN_STDERR" 'Keep working' "70%: keep working"
+assert_not_contains "$__RUN_STDERR" '/clear' "70%: no /clear"
+assert_not_contains "$__RUN_STDERR" 'next session' "70%: no next session"
+assert_not_contains "$__RUN_STDERR" 'new session' "70%: no new session"
+assert_not_contains "$__RUN_STDERR" 'wait' "70%: no wait"
+
+fresh_session; over; live ct-sig-90 90
+run_hook cost-tracker.js "$(payload ct-sig-90)"
+assert_contains "$__RUN_STDERR" 'context now 90%' "90%: carries the %"
+assert_contains "$__RUN_STDERR" 'Keep working' "90%: keep working"
+assert_not_contains "$__RUN_STDERR" '/clear' "90%: no /clear"
+assert_not_contains "$__RUN_STDERR" 'next session' "90%: no next session"
+assert_not_contains "$__RUN_STDERR" 'new session' "90%: no new session"
+assert_not_contains "$__RUN_STDERR" 'wait' "90%: no wait"
 
 fresh_session; over; rm -f "$LIVE_DIR/context/ct-sig-unk.json"
 run_hook cost-tracker.js "$(payload ct-sig-unk)"
@@ -103,10 +116,12 @@ assert_contains "$__RUN_STDERR" 'context % unknown' "unknown %: says so"
 # exactly at the threshold counts as above; the env knob moves it
 fresh_session; over; live ct-sig-50 50
 run_hook cost-tracker.js "$(payload ct-sig-50)"
-assert_contains "$__RUN_STDERR" '/clear' "P == threshold (default 50): recommends clear"
+assert_contains "$__RUN_STDERR" 'Keep working' "P == threshold (default 50): keep working"
+assert_not_contains "$__RUN_STDERR" '/clear' "P == threshold (default 50): no /clear"
 fresh_session; over; live ct-sig-env 33
 AUTOPILOT_COST_TRACKER_CLEAR_PCT=20 run_hook cost-tracker.js "$(payload ct-sig-env)"
-assert_contains "$__RUN_STDERR" '/clear' "env knob 20: 33% now recommends clear"
+assert_contains "$__RUN_STDERR" 'Keep working' "env knob 20: 33% keep working"
+assert_not_contains "$__RUN_STDERR" '/clear' "env knob 20: no /clear"
 fresh_session; over; live ct-sig-env2 70
 AUTOPILOT_COST_TRACKER_CLEAR_PCT=90 run_hook cost-tracker.js "$(payload ct-sig-env2)"
 assert_not_contains "$__RUN_STDERR" '/clear' "env knob 90: 70% no clear"
@@ -116,7 +131,15 @@ mkdir -p "$HOOK_HOME/.autopilot"
 printf '{"cost_tracker":{"context_clear_pct":25}}' > "$HOOK_HOME/.autopilot/config.json"
 fresh_session; over; live ct-sig-cfg 33
 run_hook cost-tracker.js "$(payload ct-sig-cfg)"
-assert_contains "$__RUN_STDERR" '/clear' "config cost_tracker.context_clear_pct=25: 33% recommends clear"
+assert_contains "$__RUN_STDERR" 'Keep working' "config cost_tracker.context_clear_pct=25: 33% keep working"
+assert_not_contains "$__RUN_STDERR" '/clear' "config cost_tracker.context_clear_pct=25: no /clear"
 rm -f "$HOOK_HOME/.autopilot/config.json"
+
+# negative control: reverting to the old /clear sentence fails the same predicate
+node -e '
+const old = "write a handoff and /clear, or split the work";
+const rejected = /\/clear|next session|new session|wait/.test(old) || !/[Kk]eep working/.test(old);
+if (!rejected) { console.error("negative control accepted the old wording"); process.exit(1); }
+' || fail "negative control: old /clear wording must be rejected"
 
 finalize_test

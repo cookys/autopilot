@@ -71,4 +71,17 @@ assert_not_contains "$OUT" "[Autopilot config pair]" "empty home: no section"
 assert_not_contains "$OUT" "[Autopilot config check:" "empty home: no upgrade block"
 assert_contains "$OUT" "You have **Autopilot**" "empty home: baseline context still present"
 
+# auto-compact off: one fail-open line. On: that line is absent.
+OFF_LINE="auto-compact is off: this session will not compact itself; set autoCompact true / autoCompactWindow"
+OUT="$(run_hook DISABLE_AUTO_COMPACT=1)"
+assert_contains "$OUT" "$OFF_LINE" "DISABLE_AUTO_COMPACT: warns that compaction is off"
+OUT="$(run_hook)"
+assert_not_contains "$OUT" "$OFF_LINE" "compaction on: no off warning"
+printf '{"autoCompactEnabled":false}' > "$CLAUDE_CONFIG_DIR/settings.json"
+OUT="$(run_hook)"
+assert_contains "$OUT" "$OFF_LINE" "autoCompactEnabled false: warns that compaction is off"
+rm -f "$CLAUDE_CONFIG_DIR/settings.json"
+OUT="$(run_hook)"
+assert_not_contains "$OUT" "$OFF_LINE" "settings removed: no off warning"
+
 finalize_test

@@ -235,7 +235,7 @@ try {
   }
   try {
     if (payload && typeof payload === 'object' && require('./_shared/opt-in').isEnabled('askpm-log')) {
-      require('./askpm-log').handle(payload, process.env);
+      require('./askpm-log').handle(payload, { AUTOPILOT_STATE_DIR: process.env.AUTOPILOT_STATE_DIR, XDG_STATE_HOME: process.env.XDG_STATE_HOME, HOME: process.env.HOME });
     }
   } catch (e) {
     process.stderr.write(`advisory-relay: askpm-log hosting fail-open: ${e && e.message ? e.message : e}\n`);

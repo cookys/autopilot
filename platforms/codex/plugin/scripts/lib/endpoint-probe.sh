@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# endpoint-probe.sh — sourced by dispatch-hetero.sh and dispatch-consult.sh. One function:
+# endpoint-probe.sh — sourced by dispatch-hetero.sh, dispatch-consult.sh and dispatch-review.sh. One function:
 #   endpoint_preprobe <endpoint-name> <model>
 # Runs scripts/lib/endpoint-probe.js (GET <base>/models, 2 s total) and sets
 #   PROBE_JSON  the helper's one-line JSON ("" when the probe is off or produced nothing)

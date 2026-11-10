@@ -63,7 +63,12 @@
 #                               #   See references/hetero-dispatch.md § Context-window gate.
 #       [--endpoint <name>]     # anthropic-compatible/cc-shim: resolve creds via
 #                               #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*);
-#                               #   raw env still used when omitted (byte-identical)
+#                               #   raw env still used when omitted (byte-identical).
+#                               #   The roster reviewer tuple, and only that tuple, pre-probes
+#                               #   the endpoint when its effective policy is cloud-fallback
+#                               #   (reviewer_on_engine_unavailable, else the global) and may
+#                               #   retreat once to the cloud rung. AUTOPILOT_ENDPOINT_PREPROBE=off
+#                               #   skips the probe. Other seats are unchanged.
 #   ⏳ TIMEOUT: this call can run for MINUTES (codex xhigh especially). When invoking via
 #   Claude Code's Bash tool, pass a generous `timeout` — the 120s tool default SIGTERMs long
 #   runs (exit 143) even though this script's own inner timeouts are longer. Persist it once
@@ -293,10 +298,32 @@ done
 # a parsing caller reads as a transport failure rather than a precondition failure.
 # Falls back to raw interpolation only if json-emit.sh could not be sourced.
 _rv_esc() { if declare -F json_escape >/dev/null 2>&1; then json_escape "$(printf '%s' "${1:-}" | tr '\n' ' ')"; else printf '%s' "${1:-}"; fi; }
+# Set only when this invocation's reviewer-seat pre-probe ran. Absent from the JSON otherwise,
+# so an ask-policy dispatch stays byte-identical.
+PROBE_JSON=""
+SERVED_BY=""
+FALLBACK_LOG_ROW=""
+review_probe_suffix() {
+  if [ -n "${PROBE_JSON:-}" ]; then
+    printf ', "probe": %s, "served_by": "%s"' "$PROBE_JSON" "$(_rv_esc "${SERVED_BY:-}")"
+  fi
+}
+# One cloud-fallbacks.jsonl row per retreat, written when the review ends so the row carries
+# how it ended. Same writer as consult and the implementer retreat.
+review_log_fallback() {
+  local status="$1"
+  [ -n "${FALLBACK_LOG_ROW:-}" ] || return 0
+  printf '%s' "$FALLBACK_LOG_ROW" | node -e '
+let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+  const row = JSON.parse(s); row.outcome = process.argv[1]; row.ts = new Date().toISOString();
+  process.stdout.write(JSON.stringify(row));
+});' "$status" 2>/dev/null | node "$_REVIEW_SELF_DIR/engine-capability-state.js" cloud-fallback-log >/dev/null 2>&1 || true
+}
 die_precondition() {
   local _dp_json
-  _dp_json="$(printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null }' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")")"
+  _dp_json="$(printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null%s }' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")" "$(review_probe_suffix)")"
   printf '%s\n' "$_dp_json"
+  review_log_fallback "precondition_failed"
   # A start row was written (the run got as far as the dispatch): close it so it does not stay "running" forever.
   [ -n "${REVIEW_USAGE_STARTED:-}" ] && record_dispatch_usage "$_dp_json"
   exit 2
@@ -663,6 +690,67 @@ if [[ -n "$ENDPOINT" ]]; then
     ANTHROPIC_TOKEN_ENV="$EP_TOKEN_ENV"
   fi
   unset _ep_json
+  # Reviewer-seat pre-probe (PM 01M726SXVB). After detach, before any request is sent.
+  # Only the resolved reviewer tuple (engine + runner + endpoint), and only when that
+  # seat's effective policy is cloud-fallback: an explicit reviewer_on_engine_unavailable,
+  # or the global on_engine_unavailable when the reviewer field is empty. The explicit
+  # field retreats to reviewer_cloud_fallback_rung; following the global uses
+  # cloud_fallback_rung. One retreat, then the cloud runner. A failed resolve does not
+  # block the review — a non-reviewer --endpoint dispatch must still run.
+  # AUTOPILOT_ENDPOINT_PREPROBE=off skips the whole block (hook-test default).
+  if [[ "${AUTOPILOT_ENDPOINT_PREPROBE:-on}" != "off" ]]; then
+    # shellcheck source=lib/endpoint-probe.sh
+    . "$_REVIEW_SELF_DIR/lib/endpoint-probe.sh"
+    _rv_resolve_err="$(mktemp -t dispatch-review-resolve-XXXXXX)"
+    _rv_resolved="$("$_REVIEW_SELF_DIR/resolve-review-loop.sh" 2>"$_rv_resolve_err")"
+    _rv_resolve_rc=$?
+    if [[ "$_rv_resolve_rc" -ne 0 || -z "$_rv_resolved" ]]; then
+      echo "dispatch-review: reviewer cloud-fallback resolve skipped ($(tr '\n' ' ' < "$_rv_resolve_err" | head -c 240))" >&2
+    else
+      _rv_parsed="$(node -e '
+let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(0); }
+const s = (v) => (v === null || v === undefined) ? "" : String(v);
+const policyField = s(j.reviewer_on_engine_unavailable);
+const policy = policyField || s(j.on_engine_unavailable);
+const rung = policyField ? j.reviewer_cloud_fallback_rung : j.cloud_fallback_rung;
+let re = "", rf = "", rr = "";
+if (rung && typeof rung === "object") { re = s(rung.engine); rf = s(rung.effort); rr = s(rung.runner); }
+const clean = (v) => String(v).replace(/[|\n]/g, " ");
+process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_endpoint), policy, re, rf, rr].map(clean).join("|"));
+' "$_rv_resolved" 2>/dev/null)" || _rv_parsed=""
+      IFS='|' read -r _rv_eng _rv_run _rv_ep _rv_pol _rv_re _rv_rf _rv_rr <<< "${_rv_parsed}"
+      if [[ "$_rv_pol" == "cloud-fallback" && "$MODEL" == "$_rv_eng" && "$RUNNER" == "$_rv_run" && "$ENDPOINT" == "$_rv_ep" && -n "$_rv_re" && -n "$_rv_rf" && -n "$_rv_rr" ]]; then
+        endpoint_preprobe "$ENDPOINT" "$MODEL"
+        if [[ -n "$PROBE_JSON" ]]; then
+          SERVED_BY="$ENDPOINT"
+          case "$PROBE_DECISION" in
+            unreachable|busy)
+              echo "dispatch-review: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (status ${PROBE_STATUS:-none}, ${PROBE_MS:-0} ms, ${PROBE_REASON}); nothing sent" >&2
+              FALLBACK_LOG_ROW="$(node -e '
+process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: process.argv[3], error_class: process.argv[4], to_rung: process.argv[5], branch: null, served_by: process.argv[5], probe: JSON.parse(process.argv[6]) }));
+' "${RUN_ID:-}" "$RUNNER" "$ENDPOINT" "${PROBE_CLASS:-}" "${_rv_re}/${_rv_rf}@${_rv_rr}" "$PROBE_JSON")"
+              echo "dispatch-review: retreating once to cloud rung ${_rv_re}/${_rv_rf}@${_rv_rr} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
+              RUNNER="$_rv_rr"
+              MODEL="$_rv_re"
+              EFFORT="$_rv_rf"
+              EFFORT_EXPLICIT=1
+              ENDPOINT=""
+              EP_URL=""
+              EP_TOKEN_ENV=""
+              ANTHROPIC_BASE_URL=""
+              ANTHROPIC_TOKEN_ENV=""
+              unset ANTHROPIC_AUTH_TOKEN
+              SERVED_BY="${_rv_re}/${_rv_rf}@${_rv_rr}"
+              ;;
+            ok) echo "dispatch-review: endpoint pre-probe ${ENDPOINT}: ok (status ${PROBE_STATUS}, ${PROBE_MS} ms); served by local endpoint ${ENDPOINT}" >&2 ;;
+            "") ;;
+            *) echo "dispatch-review: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (${PROBE_REASON}); dispatching to local endpoint ${ENDPOINT}" >&2 ;;
+          esac
+        fi
+      fi
+    fi
+    rm -f "$_rv_resolve_err"
+  fi
 fi
 
 if [[ "$RUNNER" = "anthropic-compatible" ]]; then
@@ -1019,9 +1107,10 @@ emit_no_verdict() {
   passive_capture "no_verdict"
   salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
   local _rv_json
-  _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s%s }' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json" "$nv_json")"
+  _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s%s%s }' \
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json" "$nv_json" "$(review_probe_suffix)")"
   printf '%s\n' "$_rv_json"
+  review_log_fallback "no_verdict"
   record_dispatch_usage "$_rv_json"
   exit 1
 }
@@ -1148,8 +1237,9 @@ PARSE_INPUT="$RAW_LOG"
 # log_path points at the file that receives LIVE bytes per runner: codex streams stdout
 # to CODEX_OUT (merged into RAW_LOG only after completion), every other runner writes
 # RAW_LOG directly. Best-effort sidecar: a manifest failure never fails the dispatch.
-# Disable with AUTOPILOT_DISPATCH_MANIFEST=0. Final-JSON contract is UNCHANGED (strict
-# additionalProperties:false schema — v2.32.19 SSOT); correlate via raw_log, and derive
+# Disable with AUTOPILOT_DISPATCH_MANIFEST=0. The final JSON gains optional probe and
+# served_by only when this run's reviewer-seat pre-probe ran (PM 01M726SXVB); every other
+# dispatch keeps the previous object. Correlate via raw_log, and derive
 # usage post-hoc with: dispatch-status.js --log <raw_log> --usage-only.
 REVIEW_MANIFEST_FILE=""
 REVIEW_STARTED_EPOCH="$(date +%s)"
@@ -2352,11 +2442,13 @@ if [ "$VERDICT" = "SHIP-AS-IS" ]; then
   NO_FINDING_PROOF="$BATTERY_PROOF"
 fi
 
-_rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s, "frame_closed_by": "%s"%s }' \
+_rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s, "frame_closed_by": "%s"%s%s }' \
   "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" \
   "$([ -n "$NO_FINDING_PROOF" ] && printf '"%s"' "$(json_escape "$NO_FINDING_PROOF")" || printf 'null')" \
   "$(json_escape "$RAW_LOG")" "$REVIEW_USAGE_JSON" "$(json_escape "$FRAME_CLOSED_BY")" \
-  "$([ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && printf ', "role_kit": %s' "$ROLE_KIT_JSON")")"
+  "$([ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && printf ', "role_kit": %s' "$ROLE_KIT_JSON")" \
+  "$(review_probe_suffix)")"
 printf '%s\n' "$_rv_json"
+review_log_fallback "reviewed"
 record_dispatch_usage "$_rv_json"
 exit 0

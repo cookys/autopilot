@@ -278,7 +278,7 @@ These are plain-markdown files you place in a project's `.claude/` directory. Ho
 | `.claude/project-lifecycle-config.md` | Project paths and bootstrap/archive scripts. ([template](../../project-config-template/project-lifecycle-config.md)) |
 | `.claude/qc-gate-config.md` | Strength of the QC forcing function at push and finish-flow. ([template](../../project-config-template/qc-gate-config.md)) |
 | `.claude/quality-gate-config.md` | Test, scan and review commands. ([template](../../project-config-template/quality-gate-config.md)) |
-| `.claude/review-loop-config.md` | Engine roster and loop policy of the heterogeneous review pipeline. ([template](../../project-config-template/review-loop-config.md)) |
+| `.claude/review-loop-config.md` | Engine roster and loop policy of the heterogeneous review pipeline. The reviewer seat's `reviewer_on_engine_unavailable` (empty follows `on_engine_unavailable`; `cloud-fallback` retreats once to `reviewer_cloud_fallback_rung`) is separate from the global default, which stays `ask`. ([template](../../project-config-template/review-loop-config.md)) |
 | `.claude/skill-routing.md` | Maps keywords to your project domain skills. ([template](../../project-config-template/skill-routing.md)) |
 | `.claude/task-class-config.md` | Autonomous front-door routing and next-pick weighting. ([template](../../project-config-template/task-class-config.md)) |
 | `.claude/team-config.md` | Team role templates for your tech stack. ([template](../../project-config-template/team-config.md)) |

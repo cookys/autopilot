@@ -11,11 +11,11 @@
 // its own process, and only when the opt-in is on. Stop is spawned by
 // opt-in-multiplexer.js only when the opt-in is on.
 //
-// PM gate (either is enough, and only after the opt-in gate): AUTOPILOT_ASKPM=1,
-// or the hook input cwd (when that string is empty, process.cwd()) has
-// .claude/console.json in that directory or an ancestor up to the filesystem root,
-// and the file parses as JSON with schema autopilot.console/1. FLEET_ADDRESS and
-// FLEET_MEMBER are not read. No fleet whoami on this path.
+// PM gate (only after the opt-in gate): the hook input cwd (when that string is
+// empty, process.cwd()) has .claude/console.json in that directory or an ancestor
+// up to the filesystem root, and the file parses as JSON with schema
+// autopilot.console/1. FLEET_ADDRESS and FLEET_MEMBER are not read. No fleet
+// whoami on this path.
 //
 // Skips plugin-injected prompts: a first line starting with [待決回覆] (covers
 // [待決回覆·更正]), harness prefixes, a fleet <channel source="fleet"> turn,
@@ -58,8 +58,7 @@ function hasPmConsole(start) {
   }
 }
 
-function isPmSession(env, input) {
-  if (env && env.AUTOPILOT_ASKPM === '1') return true;
+function isPmSession(input) {
   const given = input && typeof input.cwd === 'string' ? input.cwd : '';
   return hasPmConsole(given !== '' ? given : process.cwd());
 }
@@ -145,7 +144,7 @@ function onStop(input, env) {
 function handle(input, env) {
   if (!isEnabled('askpm-log')) return;
   if (!input || typeof input !== 'object') return;
-  if (!isPmSession(env, input)) return;
+  if (!isPmSession(input)) return;
   if (input.hook_event_name === 'UserPromptSubmit') onPrompt(input, env);
   else if (input.hook_event_name === 'Stop') onStop(input, env);
 }

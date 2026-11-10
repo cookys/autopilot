@@ -10,11 +10,17 @@ const path = require('node:path');
 
 const HOOK = path.join(__dirname, 'askpm-log.js');
 const PM = 'cookys/aimax395/pm--claude';
+const CONSOLE_OK = '{"schema":"autopilot.console/1","mode":"program"}';
 
-function run(payload, env) {
+function run(payload, env, files) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-home-'));
   const state = path.join(home, 'state');
   fs.mkdirSync(state, { recursive: true });
+  for (const [rel, body] of Object.entries(files || {})) {
+    const abs = path.join(home, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  }
   const input = { ...payload };
   if (typeof input.cwd !== 'string' || input.cwd === '') input.cwd = home;
   const r = spawnSync(process.execPath, [HOOK], {
@@ -25,7 +31,6 @@ function run(payload, env) {
       HOME: home,
       TMPDIR: home,
       AUTOPILOT_STATE_DIR: state,
-      AUTOPILOT_ASKPM: '1',
       AUTOPILOT_HOOK_ASKPM_LOG: '1',
       ...env,
     },
@@ -37,7 +42,8 @@ function run(payload, env) {
 }
 
 test('injected message is not recorded; a real operator prompt is', () => {
-  const real = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '記憶線要不要合併？' });
+  const pm = { '.claude/console.json': CONSOLE_OK };
+  const real = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '記憶線要不要合併？' }, {}, pm);
   assert.equal(real.status, 0, real.stderr);
   assert.equal(real.stdout, '');
   assert.equal(real.lines.length, 1, 'real prompt recorded');
@@ -50,7 +56,7 @@ test('injected message is not recorded; a real operator prompt is', () => {
     'hello <channel source="fleet" from="cookys/aimax395/pm--claude@1" message_id="m" kind="chat">body</channel>',
     '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"advisory"}}',
   ]) {
-    const inj = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt });
+    const inj = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt }, {}, pm);
     assert.equal(inj.status, 0, inj.stderr);
     assert.equal(inj.stdout, '');
     assert.equal(inj.lines.length, 0, 'injected recorded: ' + prompt.slice(0, 40));
@@ -60,14 +66,14 @@ test('injected message is not recorded; a real operator prompt is', () => {
 test('a non-PM session records nothing', () => {
   const r = run(
     { hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '這題給 PM' },
-    { FLEET_ADDRESS: 'cookys/aimax395/game-lead--claude', AUTOPILOT_ASKPM: '' },
+    { FLEET_ADDRESS: 'cookys/aimax395/game-lead--claude' },
   );
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout, '');
   assert.equal(r.lines.length, 0);
   const missing = run(
     { hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '沒有位址' },
-    { FLEET_ADDRESS: '', AUTOPILOT_ASKPM: '' },
+    { FLEET_ADDRESS: '' },
   );
   assert.equal(missing.lines.length, 0);
 });
@@ -77,6 +83,8 @@ test('the hook writes nothing to stdout', () => {
   const state = path.join(home, 'state');
   const transcript = path.join(home, 't.jsonl');
   fs.mkdirSync(state, { recursive: true });
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'console.json'), CONSOLE_OK);
   fs.writeFileSync(transcript, [
     JSON.stringify({ type: 'user', message: { role: 'user', content: '進度？' } }),
     JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '等回報：遊戲線\n明天再看' }] } }),
@@ -86,21 +94,20 @@ test('the hook writes nothing to stdout', () => {
     HOME: home,
     TMPDIR: home,
     AUTOPILOT_STATE_DIR: state,
-    AUTOPILOT_ASKPM: '1',
     AUTOPILOT_HOOK_ASKPM_LOG: '1',
   };
   const ask = spawnSync(process.execPath, [HOOK], {
-    input: JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '進度？' }),
+    input: JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '進度？', cwd: home }),
     encoding: 'utf8',
     env,
   });
   const stop = spawnSync(process.execPath, [HOOK], {
-    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 's', transcript_path: transcript }),
+    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 's', transcript_path: transcript, cwd: home }),
     encoding: 'utf8',
     env,
   });
   const again = spawnSync(process.execPath, [HOOK], {
-    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 's', transcript_path: transcript, stop_hook_active: true }),
+    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 's', transcript_path: transcript, stop_hook_active: true, cwd: home }),
     encoding: 'utf8',
     env,
   });
@@ -116,9 +123,7 @@ test('the hook writes nothing to stdout', () => {
   assert.deepEqual(lines[1].lines, ['等回報：遊戲線', '明天再看']);
 });
 
-const CONSOLE_OK = '{"schema":"autopilot.console/1","mode":"program"}';
-
-// Isolated from run(): no FLEET_ADDRESS unless the case sets it, so a console.json or AUTOPILOT_ASKPM=1 is the only gate.
+// Isolated from run(): no FLEET_ADDRESS unless the case sets it. The PM gate is console.json only.
 function gateRun(extra, env, files) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-gate-'));
   const state = path.join(home, 'state');
@@ -177,11 +182,18 @@ test('absent console.json records nothing', () => {
   assert.equal(r.lines.length, 0, 'absent console.json recorded');
 });
 
-test('AUTOPILOT_ASKPM=1 records', () => {
+test('opt-in on but no console.json records nothing', () => {
+  const r = gateRun(null, { FLEET_ADDRESS: '' }, {});
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.equal(r.lines.length, 0, 'opt-in without console.json recorded');
+});
+
+test('AUTOPILOT_ASKPM=1 alone records nothing', () => {
   const r = gateRun(null, { AUTOPILOT_ASKPM: '1', FLEET_ADDRESS: '' }, {});
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout, '');
-  assert.equal(r.lines.length, 1, 'AUTOPILOT_ASKPM=1 did not record');
+  assert.equal(r.lines.length, 0, 'old env alone recorded');
 });
 
 test('malformed console.json records nothing', () => {
@@ -223,6 +235,7 @@ test('wiring: askpm-log is opt-in, not a per-prompt spawn', () => {
   const off = run(
     { hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: 'opt-in off records nothing' },
     { AUTOPILOT_HOOK_ASKPM_LOG: '' },
+    { '.claude/console.json': CONSOLE_OK },
   );
   assert.equal(off.status, 0, off.stderr);
   assert.equal(off.stdout, '');

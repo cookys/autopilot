@@ -434,7 +434,8 @@ hooks/tests/resolve-review-loop-pins-per-role.test.sh|two-role pin fixture confi
 hooks/tests/resolve-review-loop-standing-pin.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/review-loop-runner.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/cloud-fallback.test.sh|reviewer-seat config fixtures for the cloud-fallback rung; consult/discuss not involved
-hooks/tests/resolve-review-loop-agy-carbon-default.test.sh|reviewer-seat roster fixtures testing the default carbon-high pick and its fallback rung; consult/discuss not involved'
+hooks/tests/resolve-review-loop-agy-carbon-default.test.sh|reviewer-seat roster fixtures testing the default carbon-high pick and its fallback rung; consult/discuss not involved
+hooks/tests/resolve-review-loop-agy-carbon-policy.test.sh|reviewer-seat config fixtures for the carbon reviewer policy default; consult/discuss not involved'
 POP_B_MATCHED="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | sort -u)"
 POP_B_PINNED="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" 2>/dev/null | sort -u)"
 POP_B_UNREVIEWED=""

@@ -8,7 +8,7 @@
       "name": "autopilot",
       "source": "./",
       "version": "3.0.0-alpha.6",
-      "description": "Development autopilot — 31 skills + 3 methodology agents + 40 hooks (26 default-on, 14 opt-in) for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Standalone-capable; coexists with Superpowers when installed."
+      "description": "Development autopilot — 31 skills + 3 methodology agents + 41 hooks (26 default-on, 15 opt-in) for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Standalone-capable; coexists with Superpowers when installed."
     }
   ]
 }

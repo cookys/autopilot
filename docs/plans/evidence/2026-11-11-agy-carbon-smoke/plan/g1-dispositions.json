@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "agy-carbon-smoke-2026-11-11",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "38c11b3c9beb1546e6233f557b1bc737a76681cc2d6f677fff225dfe32e05a5c",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted as non-blocking. The throwaway plan's single Section 6 check names the acceptance in prose. This smoke only needs the artifact and the receipt to validate; it authorizes no production change and no second check."
+    }
+  ]
+}

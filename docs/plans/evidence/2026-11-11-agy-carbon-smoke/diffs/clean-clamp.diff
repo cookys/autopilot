@@ -1,0 +1,10 @@
+--- a/src/clamp.js
++++ b/src/clamp.js
+@@ -1,5 +1,5 @@
+ function clamp(value, low, high) {
+-  if (value < low) return low;
+-  if (value > high) return high;
++  if (value <= low) return low;
++  if (value >= high) return high;
+   return value;
+ }

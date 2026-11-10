@@ -1,0 +1,2 @@
+dispatch-plan-review: warning: required seat has no fallback: carbon (a failed first attempt cannot be substituted)
+stage-advance: 3 marker write refused (source cwd): AUTOPILOT_PARENT_SESSION_ID is set (c295ec00-831f-4f97-aa82-3e6be2c25768) and the only id available is inherited (cwd); an inherited id is read-only; no file touched

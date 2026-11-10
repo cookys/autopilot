@@ -1,0 +1,1 @@
+Acceptance: clamp returns low when value is below or equal to low, high when value is above or equal to high, and value otherwise. The two comparisons are equivalent to the previous strict comparisons because an equal bound already returns that bound.

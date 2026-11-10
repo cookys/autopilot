@@ -41,8 +41,8 @@ const DEFAULT_RATIO = 0.7;
 // Observed context windows, harvested from real runs on this machine:
 //   codex  — event_msg.token_count.info.model_context_window
 //   grok   — sessions/*/signals.json .contextWindowTokens
-// Deliberately absent (no local observation, no vendor figure used): GLM-5.3, gemini-4-argon,
-// MiniMax-M3.1-Flash-Preview. They resolve UNKNOWN_WINDOW until a run records one (BL-0198).
+// Deliberately absent (no local observation, no vendor figure used): GLM-5.3, gemini-4-carbon,
+// gemini-4-argon, MiniMax-M3.1-Flash-Preview. They resolve UNKNOWN_WINDOW until a run records one (BL-0198).
 // Where a model was observed with MORE than one window, the MINIMUM is recorded:
 // over-stating a window would let oversized input through, which is the failure
 // mode this gate exists to prevent.

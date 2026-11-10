@@ -40,7 +40,7 @@ assert_eq "default" "$(printf '%s' "$STUB_JSON" | jget reviewer_effort)" "roster
 assert_eq "qwen_local" "$(printf '%s' "$STUB_JSON" | jget reviewer_endpoint)" "roster loop reviewer endpoint is qwen_local"
 assert_eq '["gpt-6.1-sol","GLM-5.3"]' "$(printf '%s' "$STUB_JSON" | jget reviewer_fallback_preference)" "reviewer fallback order is cloud then GLM (glmback 2026-11-09, GLM never first)"
 assert_eq "Qwen3.8-Max" "$(printf '%s' "$STUB_JSON" | jget verification_author_engine)" "roster VA seat is Qwen3.8-Max"
-assert_eq '["gpt-6-astra","gpt-6.1-sol","GLM-5.3","gemini-4-argon-high"]' "$(printf '%s' "$STUB_JSON" | jget qc_panel)" "roster qc panel"
+assert_eq '["gpt-6-astra","gpt-6.1-sol","GLM-5.3","gemini-4-carbon-high"]' "$(printf '%s' "$STUB_JSON" | jget qc_panel)" "roster qc panel"
 assert_eq "[]" "$(printf '%s' "$STUB_JSON" | jget roster_overrides)" "no override declared -> roster_overrides is empty"
 assert_eq "$STUB" "$(printf '%s' "$STUB_JSON" | jget config_path)" "config_path still names the repo file"
 

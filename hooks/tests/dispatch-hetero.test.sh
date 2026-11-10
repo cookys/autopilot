@@ -2139,12 +2139,13 @@ assert_contains "$OUT" '"model": "gemini-3.7-flash-high"' \
 assert_not_contains "$OUT" '"model": "gemini-flash-high"' \
   "the unresolved alias never reaches the vendor as a literal model name"
 
-# The built-in default is that same alias, so a --model-less agy dispatch resolves too.
+# The built-in default is the literal agy implementer id, so a --model-less agy
+# dispatch sends it unchanged (a non-alias is not rewritten by the flash resolver).
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/alias-default --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default-model dispatch exit code"
-assert_contains "$OUT" '"model": "gemini-3.7-flash-high"' \
-  "the built-in default resolves to a live id instead of a rotted literal"
+assert_contains "$OUT" '"model": "gemini-4-carbon-low"' \
+  "the built-in default is gemini-4-carbon-low"
 
 # --- the default is agy-only: any other runner must be told, not guessed at ---
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/nomodel-grok --prompt-file "$PROMPT" \

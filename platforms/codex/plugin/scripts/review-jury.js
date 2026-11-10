@@ -85,6 +85,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
+const { portableRawLogInPlace } = require('./lib/raw-log-path');
 
 // max_tokens (anthropic-compatible seats only) is dispatch-review's --max-tokens. The runner default is 16384
 // (dispatch-anthropic-review.js:65) and the allowed range is 1..200000 (dispatch-review.sh:462-466, dispatch-anthropic-review.js:632).
@@ -497,7 +498,9 @@ async function cmdRun(o) {
     fs.writeFileSync(logPath, redactStderr(r.err), { mode: 0o644 });
     fs.chmodSync(logPath, 0o644);
     j.stderr_log = logPath;
-    fs.writeFileSync(path.join(o.out, 'seats', `${r.name}.json`), `${JSON.stringify(j)}\n`);
+    const seatPath = path.join(o.out, 'seats', `${r.name}.json`);
+    portableRawLogInPlace(j, path.dirname(seatPath));
+    fs.writeFileSync(seatPath, `${JSON.stringify(j)}\n`);
     state[r.name].rc = r.rc;
     const answered = r.attempts[r.attempts.length - 1].effort;
     if (answered !== state[r.name].effort) {

@@ -61,6 +61,13 @@
     "frame_closed_by": {
       "type": "string",
       "enum": ["end-marker", "begin-marker"]
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "served_by": {
+      "type": "string"
     }
   },
   "oneOf": [

@@ -2266,6 +2266,14 @@
       "content_hash": "31a5dea10773b1247b0c690ac12e00a8cd27ba7f03f2b251a445efdcf536d96b",
       "disposition": "removed",
       "rationale": "P0 skills/ceo-agent/SKILL.md:501 ('| Read a work product directly when the tree is active | All artifact reads go through `scripts/tree.js fetch <proj> <node> --raw` — this emits the logged `manager_raw_read` event;'). ADR-0002 (2026-10-22) makes the task tree and qc-panel dormant, so this default or mandatory tree/qc-panel instruction is deleted from skills/ceo-agent/SKILL.md and has no successor. What did not change: the scripts stay on disk; agents must not run them by default."
+    },
+    {
+      "content_hash": "bf07c2b658ef42f27b15c7a91f63bfd47b94994c8112d97443c63cf4be95b188",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "20d72d785f12a400449e62a1365411059a4c66052965291a7a4e3068f5d090ef"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:407 ('| Context near limit | Produce handoff, suggest new session |'). Rewritten in place at current skills/ceo-agent/SKILL.md:376 (and the same line in platforms/codex/plugin/skills/ceo-agent/SKILL.md); no line was inserted or removed, so segment ceo.circuit-and-quality stays 367-383 and duplicate_rule_sets line numbers stay put. The change only retargets the handoff wording: the circuit breaker still fires when context is near the limit, and the action is now to write the handoff as a backup and keep working (auto-compact restores context) instead of suggesting a new session. Successor is the rewritten line."
     }
   ]
 }

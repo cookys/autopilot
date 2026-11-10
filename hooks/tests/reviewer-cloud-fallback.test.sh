@@ -62,6 +62,12 @@ write_reviewer_cfg() { # $1 path, $2 extra lines (may be empty)
     printf '%s\n' "- reviewer_effort: default"
     printf '%s\n' "- reviewer_endpoint: qwen_local"
     [ -n "$2" ] && printf '%s\n' "$2"
+    # Incidental reviewer-seat fixture: pin the switches so this roster never
+    # rides a changed consult/discuss default (Population B). Appended last.
+    cat <<'PIN'
+- consult_dispatch: off
+- discuss_dispatch: off
+PIN
   } > "$1"
 }
 CFG_FB="$TEST_TMP/reviewer-fb.md"
@@ -123,6 +129,11 @@ bad_cfg() { # $1 path, $2 policy line, $3 rung line (optional)
     printf '%s\n' "- reviewer_endpoint: qwen_local"
     printf '%s\n' "$2"
     [ -n "${3:-}" ] && printf '%s\n' "$3"
+    # Same incidental pin as write_reviewer_cfg: the bad-rung fixtures are reviewer-only.
+    cat <<'PIN'
+- consult_dispatch: off
+- discuss_dispatch: off
+PIN
   } > "$1"
 }
 resolve_rc() {

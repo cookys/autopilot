@@ -1055,6 +1055,43 @@ if [[ "$ON_ENGINE_UNAVAILABLE" == "cloud-fallback" && -z "$CLOUD_FALLBACK_RUNG_J
   exit 3
 fi
 
+# reviewer_on_engine_unavailable: empty follows the global on_engine_unavailable. cloud-fallback is
+# this seat only — dispatch-review.sh pre-probes its endpoint and retreats once to
+# reviewer_cloud_fallback_rung. Same rung shape and cloud-runner allowlist as cloud_fallback_rung.
+# Always emitted (null rung when unset). Garbage policy is coerced to empty, matching the global
+# field's ignore-invalid, so an empty value stays distinguishable from an explicit cloud-fallback.
+REVIEWER_ON_ENGINE_UNAVAILABLE="$(read_field "$CONFIG" reviewer_on_engine_unavailable "")"
+case "$REVIEWER_ON_ENGINE_UNAVAILABLE" in
+  ''|cloud-fallback) ;;
+  *)
+    echo "resolve-review-loop: ignoring invalid reviewer_on_engine_unavailable (must be empty or cloud-fallback): $REVIEWER_ON_ENGINE_UNAVAILABLE" >&2
+    REVIEWER_ON_ENGINE_UNAVAILABLE=""
+    ;;
+esac
+REVIEWER_CLOUD_FALLBACK_RUNGS_RAW="$(read_field "$CONFIG" reviewer_cloud_fallback_rung "")"
+REVIEWER_CLOUD_FALLBACK_RUNG_JSON="null"
+_rcfe=""; _rcff=""; _rcfr=""
+if [[ -n "$REVIEWER_CLOUD_FALLBACK_RUNGS_RAW" ]]; then
+  if [[ ! "$REVIEWER_CLOUD_FALLBACK_RUNGS_RAW" =~ ^([^@[:space:]]+)/([^/@[:space:]]+)@([^/@[:space:]]+)$ ]]; then
+    echo "resolve-review-loop: invalid reviewer_cloud_fallback_rung (expected engine/effort@runner): ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW}" >&2
+    exit 3
+  fi
+  _rcfe="${BASH_REMATCH[1]}"; _rcff="${BASH_REMATCH[2]}"; _rcfr="${BASH_REMATCH[3]}"
+  case "$_rcff" in
+    default|low|medium|high|xhigh|max) ;;
+    *) echo "resolve-review-loop: invalid reviewer_cloud_fallback_rung effort (must be default|low|medium|high|xhigh|max): ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
+  esac
+  case "$_rcfr" in
+    codex|agy|grok|cursor|kimi|qoderclicn) ;;
+    *) echo "resolve-review-loop: invalid reviewer_cloud_fallback_rung runner (must be a cloud runner: codex|agy|grok|cursor|kimi|qoderclicn; cc-shim, anthropic-compatible and other local-endpoint runners are refused): ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
+  esac
+  REVIEWER_CLOUD_FALLBACK_RUNG_JSON="{\"engine\": \"$(json_escape "$_rcfe")\", \"effort\": \"${_rcff}\", \"runner\": \"${_rcfr}\"}"
+fi
+if [[ "$REVIEWER_ON_ENGINE_UNAVAILABLE" == "cloud-fallback" && "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" == "null" ]]; then
+  echo "resolve-review-loop: reviewer_on_engine_unavailable: cloud-fallback requires reviewer_cloud_fallback_rung (engine/effort@runner)" >&2
+  exit 3
+fi
+
 PLAN_REVIEW_RESOLVED_FROM=""
 PLAN_REVIEW_SAME_FAMILY_AS_DEPTH0=0
 HETERO_REVIEW_RESOLVED_FROM=""
@@ -1671,6 +1708,18 @@ if [[ -n "$CLOUD_FALLBACK_RUNG_JSON" ]]; then
   fi
   if [[ -n "$_cf_conflict" ]]; then
     echo "resolve-review-loop: cloud_fallback_rung ${CLOUD_FALLBACK_RUNGS_RAW} ${_cf_conflict} (on_family_conflict: ${ON_FAMILY_CONFLICT}); pick a rung from another family" >&2
+    exit 3
+  fi
+fi
+
+# reviewer_cloud_fallback_rung becomes the reviewer for one dispatch, so it must not share the
+# reviewer seat's own family. It is not checked against the implementer or against
+# required_review_families: the shipped retreat is the implementer's model on purpose
+# (gpt-6.1-sol, openai) while the reviewer seat stays alibaba.
+if [[ "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" != "null" ]]; then
+  _rcf_family="$(family_of "$_rcfe")"
+  if [[ "$_rcf_family" != "unknown" && "$_rcf_family" == "$REV_FAMILY" ]]; then
+    echo "resolve-review-loop: reviewer_cloud_fallback_rung ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW} shares the reviewer seat family (${_rcf_family}); pick a rung from another family" >&2
     exit 3
   fi
 fi
@@ -2864,6 +2913,8 @@ if [[ -n "$FIELD" ]]; then
     implementer_runner) printf '%s\n' "$IMPL_RUNNER" ;;
     implementer_ladder) printf '%s\n' "$IMPL_LADDER_JSON" ;;
     cloud_fallback_rung) printf '%s\n' "$CLOUD_FALLBACK_RUNG_JSON" ;;
+    reviewer_on_engine_unavailable) printf '%s\n' "$REVIEWER_ON_ENGINE_UNAVAILABLE" ;;
+    reviewer_cloud_fallback_rung) printf '%s\n' "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" ;;
     reviewer_endpoint) printf '%s\n' "$REV_ENDPOINT" ;;
     reviewer_family) printf '%s\n' "$REV_FAMILY" ;;
     implementer_endpoint) printf '%s\n' "$IMPL_ENDPOINT" ;;
@@ -3016,7 +3067,7 @@ READINESS_ARGS=(
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
   "$BRAIN_SEAT_JSON"
 )
-SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "unknown_escalation": "%s", "unknown_budget_u1": %s, "unknown_budget_u2": %s, "unknown_budget_u3": %s, "unknown_resolved_from": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s, "review_fresh_context": "%s", "roster_overrides": %s'
+SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "unknown_escalation": "%s", "unknown_budget_u1": %s, "unknown_budget_u2": %s, "unknown_budget_u3": %s, "unknown_resolved_from": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s, "review_fresh_context": "%s", "roster_overrides": %s, "reviewer_on_engine_unavailable": "%s", "reviewer_cloud_fallback_rung": %s'
 SEATS_ARGS=(
   "$(json_escape "$CONSULT_ENGINE")" "$CONSULT_EFFORT" "$CONSULT_RUNNER" "$CONSULT_ENDPOINT"
   "$(json_escape "$DISCUSS_ENGINE")" "$DISCUSS_EFFORT" "$DISCUSS_RUNNER" "$DISCUSS_ENDPOINT"
@@ -3025,6 +3076,8 @@ SEATS_ARGS=(
   "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
   "$REVIEW_FRESH_CONTEXT"
   "$ROSTER_OVERRIDES_JSON"
+  "$(json_escape "$REVIEWER_ON_ENGINE_UNAVAILABLE")"
+  "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_review_resolved_from": "%s", "plan_review_same_family_as_depth0": %s, "hetero_review": "%s", "hetero_review_resolved_from": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(

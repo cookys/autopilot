@@ -97,7 +97,9 @@
     "same_runner_dual_seat",
     "override_admitted_seats",
     "review_fresh_context",
-    "roster_overrides"
+    "roster_overrides",
+    "reviewer_on_engine_unavailable",
+    "reviewer_cloud_fallback_rung"
   ],
   "properties": {
     "reviewer_engine": {
@@ -906,6 +908,18 @@
       "x-shell-validated": true,
       "x-shell-var": "REVIEW_FRESH_CONTEXT",
       "description": "Whether a reviewer must run in a brand-new provider session. on (default) = a review dispatch that would continue an existing session (a resumed session id, or the implementer's own session) is refused at dispatch with a named error; off = legal, but the review receipt is stamped review_fresh_context=off so the waiver stays visible afterwards. Resolver coerces garbage to on (fail-closed). The guarantee of `on` comes from a structural guard, hooks/tests/review-rail-no-session-reuse.test.sh: the review rail has no session-resume entry (it runs each runner against a fake binary and fails if any resume/continue argument appears or a claude --session-id repeats), so there is nothing to refuse at dispatch today. If a resume entry is ever added to a review path, this key MUST refuse it at dispatch."
+    },
+    "reviewer_on_engine_unavailable": {
+      "type": "string",
+      "enum": [
+        "",
+        "cloud-fallback"
+      ],
+      "description": "Reviewer seat only. Empty follows the global on_engine_unavailable. cloud-fallback: when THIS seat's named endpoint is unreachable or busy, dispatch-review.sh probes once (scripts/lib/endpoint-probe.sh) and retreats once to reviewer_cloud_fallback_rung. Other seats are unchanged. Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string. Garbage is coerced to empty (follow the global)."
+    },
+    "reviewer_cloud_fallback_rung": {
+      "type": ["object", "null"],
+      "description": "The single rung the reviewer seat retreats to when reviewer_on_engine_unavailable is cloud-fallback. Same engine/effort@runner shape and cloud-runner allowlist as cloud_fallback_rung (codex|agy|grok|cursor|kimi|qoderclicn). Null when unset. Required when the reviewer policy is cloud-fallback. Its family must not be the reviewer seat's own family. Always emitted (null when unset), unlike the conditional cloud_fallback_rung."
     }
   },
   "required": [
@@ -1000,7 +1014,9 @@
     "same_runner_dual_seat",
     "override_admitted_seats",
     "review_fresh_context",
-    "roster_overrides"
+    "roster_overrides",
+    "reviewer_on_engine_unavailable",
+    "reviewer_cloud_fallback_rung"
   ],
   "additionalProperties": true
 }

@@ -291,6 +291,19 @@ function validateReviewLoopConfig(value) {
   );
   assertField(value, 'min_panel_size', (v) => Number.isInteger(v) && v >= 1, 'an integer >= 1');
   assertOneOf(value, 'on_engine_unavailable', schemaEnum('on_engine_unavailable'));
+  assertOneOf(value, 'reviewer_on_engine_unavailable', schemaEnum('reviewer_on_engine_unavailable'));
+  {
+    const rung = value.reviewer_cloud_fallback_rung;
+    if (rung !== null && (
+      !rung || typeof rung !== 'object' || Array.isArray(rung)
+      || !nonEmptyString(rung.engine) || !nonEmptyString(rung.effort) || !nonEmptyString(rung.runner)
+    )) {
+      throw new Error('review-loop output JSON field reviewer_cloud_fallback_rung must be {engine, effort, runner} or null');
+    }
+    if (value.reviewer_on_engine_unavailable === 'cloud-fallback' && rung === null) {
+      throw new Error('review-loop output JSON field reviewer_cloud_fallback_rung is required when reviewer_on_engine_unavailable is cloud-fallback');
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(value, 'cloud_fallback_rung')) {
     const rung = value.cloud_fallback_rung;
     if (!rung || typeof rung !== 'object' || Array.isArray(rung)

@@ -4151,6 +4151,8 @@ const validPayload = {
   override_admitted_seats: [],
   review_fresh_context: 'on',
   roster_overrides: [],
+  reviewer_on_engine_unavailable: '',
+  reviewer_cloud_fallback_rung: null,
   strict_l5_policy_override: '',
   brain_seat: null,
 };

@@ -20,7 +20,7 @@ const fs = require('fs');
 
 // Group membership of every seat field. Fields not matched here are non-seat knobs.
 const GROUPS = [
-  { name: 'reviewer', re: /^reviewer_(engine|effort|runner|endpoint|limitation|limitation_required|engine_low_risk|effort_low_risk|fallback_preference|fallback_preference_low_risk)$/,
+  { name: 'reviewer', re: /^reviewer_(engine|effort|runner|endpoint|limitation|limitation_required|engine_low_risk|effort_low_risk|fallback_preference|fallback_preference_low_risk|on_engine_unavailable|cloud_fallback_rung)$/,
     required: ['reviewer_engine', 'reviewer_runner', 'reviewer_effort'] },
   { name: 'implementer', re: /^implementer_(engine|effort|runner|endpoint|ladder)$/,
     required: ['implementer_engine', 'implementer_runner', 'implementer_effort'] },

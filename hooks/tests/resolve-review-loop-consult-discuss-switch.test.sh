@@ -200,6 +200,9 @@ const expectedAdded = [
   'review_fresh_context',
   // roster overlay (rosterssot): the repo override groups in force
   'roster_overrides',
+  // reviewer-seat cloud retreat (PM 01M726SXVB, 2026-11-10)
+  'reviewer_on_engine_unavailable',
+  'reviewer_cloud_fallback_rung',
 ].sort();
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);

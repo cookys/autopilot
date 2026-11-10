@@ -153,7 +153,7 @@ function main() {
   try {
     if (!isEnabled('askpm-log')) return;
     const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-    handle(input, process.env);
+    handle(input, { AUTOPILOT_STATE_DIR: process.env.AUTOPILOT_STATE_DIR, XDG_STATE_HOME: process.env.XDG_STATE_HOME, HOME: process.env.HOME });
   } catch (err) {
     process.stderr.write(`askpm-log: fail-open: ${err && err.message}\n`);
   }

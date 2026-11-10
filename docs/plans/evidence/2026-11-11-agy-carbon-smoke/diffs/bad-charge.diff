@@ -1,0 +1,10 @@
+--- a/src/quota.js
++++ b/src/quota.js
+@@ -1,7 +1,4 @@
+ function charge(account, amount) {
+-  if (!Number.isInteger(amount) || amount <= 0) {
+-    throw new Error("amount must be a positive integer");
+-  }
+   account.balance -= amount;
+   return account.balance;
+ }

@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "carbon-smoke",
+  "logical_plan_id": "agy-carbon-smoke-2026-11-11",
+  "session_id": "carbon-smoke-g1",
+  "session_key": "0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "nonblocking_conditional",
+  "rubric_sha256": "e8a20554a72bba0e796be0ed8d5f4b7ca851b362cda40de64a1003fdebf9eb21",
+  "manifest_sha256": "08e71d50885657c2927ba684618dd08fa31d2b88130b2c479f4710537e85c105",
+  "plan_sha256": "c77170dbe16ffb0c3241de77c8b422ee5a80e2748d5c8e41c1395de62cff4226",
+  "plan_path": "docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/tiny-plan.md",
+  "plan_git_blob_sha": "7630f1df70983a76127a2cd1a42047b2b44d1b48",
+  "repo_head_sha": "491c99f1325f0d100496cf126ec59c3f32d3e954",
+  "plan_dirty_vs_head": null,
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "carbon",
+      "target_id": "carbon",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-carbon-high",
+          "operation": "plan-review",
+          "request_digest": "0cbdeff8c392930d06213d60b4a108eda1e2ffb5c656f4ad0651c5a904d4dd74"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "f6c4b6f56506e7d8b6d87b16e20c7c8eb09ecec593af4a887b4e2d67326c40f2",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/home/team/.tmp/dispatch-author-log-vujlg3",
+          "digest": "f6c4b6f56506e7d8b6d87b16e20c7c8eb09ecec593af4a887b4e2d67326c40f2"
+        },
+        "receipt_digest": "fd27ebe238cc8658251decbf33486819afd165bb83f9928167949c1def30aaa0"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "carbon",
+      "target_id": "carbon",
+      "family": "google",
+      "runner": "agy",
+      "model": "gemini-4-carbon-high",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/tiny-plan.md (## 6 Checks)",
+      "claim": "Section 6 states the schema-validation acceptance check in prose without naming the exact repo schema path, target artifact path, or validation command.",
+      "evidence": "Under ## 6 Checks, the sole bullet reads '- the plan-review artifact validates against the repo schema' and omits the schema file path, artifact location, and validator invocation.",
+      "evidence_reference": "docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/tiny-plan.md#6-checks",
+      "repair": "No current change; follow-up only. If this throwaway smoke plan is reused as a template, cite the concrete schema path and validator command inside the single Section 6 check without adding a second check.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "carbon",
+          "runner": "agy",
+          "model": "gemini-4-carbon-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "38c11b3c9beb1546e6233f557b1bc737a76681cc2d6f677fff225dfe32e05a5c"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "38c11b3c9beb1546e6233f557b1bc737a76681cc2d6f677fff225dfe32e05a5c",
+      "rubric_id": "R3",
+      "affected_surface": "docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/tiny-plan.md (## 6 Checks)",
+      "claim": "Section 6 states the schema-validation acceptance check in prose without naming the exact repo schema path, target artifact path, or validation command.",
+      "evidence_reference": "docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/tiny-plan.md#6-checks",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-10T18:40:25.289Z"
+}

@@ -301,8 +301,9 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
   other seats build a fixture roster with `hooks/tests/lib/roster-fixture.js`); do not set it in real runs.
 
   So running the command from your autopilot checkout with `--cwd` pointing at another repository that
-  has no `.claude/review-loop-config.md` uses the shipped template (panel `gpt-6.1-sol`/`codex`,
-  `claude-opus`/`claude-native`, `gemini-4-argon-high`/`agy`), not your checkout's own config. Running
+  has no `.claude/review-loop-config.md` uses the shipped template (panel `gpt-6-astra`/`codex` low,
+  `gpt-6.1-sol`/`codex` medium, `GLM-5.3`/`anthropic-compatible` endpoint `glm`, `gemini-4-carbon-high`/`agy`;
+  the carbon seat's next rung is `gemini-4-argon-high`), not your checkout's own config. Running
   `scripts/resolve-review-loop.sh` by hand gives a different answer depending on where you stand
   (tier 3 applies only when you stand in the autopilot checkout): to see what a run will use, `cd` into
   the repository under review first and read `source`, `config_path` and `qc_panel_seats` in its JSON.

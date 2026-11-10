@@ -752,15 +752,19 @@ family_of() {
   esac
 }
 
-# Canonical agy slug observed by the committed 1.1.9 model-inventory probe.
-# Dispatch rails still re-query `agy models` immediately before spend and fail
-# closed if the installed host no longer offers this slug.
+# Static agy slug for the gemini-flash alias. Rails that accept a
+# gemini-flash[-tier] alias still re-query `agy models` before spend and fail
+# closed when the host has no match. This case arm is the only copy of the slug.
 normalize_agy_alias() {
   case "$1" in
-    gemini-flash) printf '%s' 'gemini-4-argon-high' ;;
+    gemini-flash) printf '%s' 'gemini-4-carbon-high' ;;
     *) printf '%s' "$1" ;;
   esac
 }
+
+# The reviewer seat is not expanded with the qc_panel loop above. A config that
+# writes the alias (or inherits one) must emit the same slug.
+REV_ENGINE="$(normalize_agy_alias "$REV_ENGINE")"
 
 # Expand the "all-calibrated" preset to the calibrated 5-family roster if matched exactly (trimmed/case-insensitive)
 _qc_panel_norm="$(printf '%s' "$QC_PANEL_RAW" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
@@ -1026,6 +1030,17 @@ elif [[ -n "$IMPL_LADDER_RAW" ]]; then
   IMPL_LADDER_JSON+="]"
   [[ "$_ladder_first" -eq 1 ]] && IMPL_LADDER_JSON="[]"
 fi
+# agy carbon implementer, ladder left empty: rung 0 is that id, rung 1 is argon
+# of the same tier. The existing ladder climb (repair round) is the next rung.
+# `auto` and an explicit list are left alone. The roster implementer is not carbon.
+if [[ -z "$IMPL_LADDER_RAW" && "$IMPL_RUNNER" == "agy" && "$IMPL_ENGINE" == gemini-4-carbon-* ]]; then
+  _impl_tier="${IMPL_ENGINE##*-}"
+  case "$_impl_tier" in
+    low|medium|high)
+      IMPL_LADDER_JSON="[{\"engine\": \"$(json_escape "$IMPL_ENGINE")\", \"effort\": \"${_impl_tier}\", \"runner\": \"agy\"}, {\"engine\": \"gemini-4-argon-${_impl_tier}\", \"effort\": \"${_impl_tier}\", \"runner\": \"agy\"}]"
+      ;;
+  esac
+fi
 
 # Optional cloud_fallback_rung: ONE engine/effort@runner rung the engine re-dispatches to when a
 # local-endpoint implementer dies endpoint_unreachable/endpoint_busy under
@@ -1069,6 +1084,26 @@ case "$REVIEWER_ON_ENGINE_UNAVAILABLE" in
     ;;
 esac
 REVIEWER_CLOUD_FALLBACK_RUNGS_RAW="$(read_field "$CONFIG" reviewer_cloud_fallback_rung "")"
+# agy carbon reviewer, rung left empty: the next rung of the existing
+# reviewer cloud-fallback is argon of the same tier. An explicit rung is kept.
+# An empty reviewer policy becomes cloud-fallback so that retreat runs. The
+# global on_engine_unavailable is not rewritten. A spelled carbon id and the
+# gemini-flash alias (normalized above) both land here.
+if [[ -z "$REVIEWER_CLOUD_FALLBACK_RUNGS_RAW" && "$REV_RUNNER" == "agy" ]]; then
+  case "$REV_ENGINE" in
+    gemini-4-carbon-*)
+      _agy_tier="${REV_ENGINE##*-}"
+      case "$_agy_tier" in
+        low|medium|high)
+          REVIEWER_CLOUD_FALLBACK_RUNGS_RAW="gemini-4-argon-${_agy_tier}/${_agy_tier}@agy"
+          if [[ -z "$REVIEWER_ON_ENGINE_UNAVAILABLE" ]]; then
+            REVIEWER_ON_ENGINE_UNAVAILABLE="cloud-fallback"
+          fi
+          ;;
+      esac
+      ;;
+  esac
+fi
 REVIEWER_CLOUD_FALLBACK_RUNG_JSON="null"
 _rcfe=""; _rcff=""; _rcfr=""
 if [[ -n "$REVIEWER_CLOUD_FALLBACK_RUNGS_RAW" ]]; then
@@ -1716,9 +1751,17 @@ fi
 # reviewer seat's own family. It is not checked against the implementer or against
 # required_review_families: the shipped retreat is the implementer's model on purpose
 # (gpt-6.1-sol, openai) while the reviewer seat stays alibaba.
+# One exception: agy carbon to agy argon of the same tier. Every other same-family pair exits 3.
 if [[ "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" != "null" ]]; then
   _rcf_family="$(family_of "$_rcfe")"
-  if [[ "$_rcf_family" != "unknown" && "$_rcf_family" == "$REV_FAMILY" ]]; then
+  _agy_model_step=0
+  if [[ "$REV_RUNNER" == "agy" && "$_rcfr" == "agy" \
+        && "$REV_ENGINE" == gemini-4-carbon-* \
+        && "$_rcfe" == gemini-4-argon-* \
+        && "${REV_ENGINE##*-}" == "${_rcfe##*-}" ]]; then
+    _agy_model_step=1
+  fi
+  if [[ "$_agy_model_step" -eq 0 && "$_rcf_family" != "unknown" && "$_rcf_family" == "$REV_FAMILY" ]]; then
     echo "resolve-review-loop: reviewer_cloud_fallback_rung ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW} shares the reviewer seat family (${_rcf_family}); pick a rung from another family" >&2
     exit 3
   fi

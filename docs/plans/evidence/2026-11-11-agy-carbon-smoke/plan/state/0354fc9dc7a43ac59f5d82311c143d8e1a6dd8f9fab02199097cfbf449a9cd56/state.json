@@ -1,0 +1,46 @@
+{
+  "version": 2,
+  "session_key": "0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56",
+  "repo_identity": "git-common-dir:/home/team/.tmp/claude-1001/-home-team-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.git",
+  "logical_plan_id": "agy-carbon-smoke-2026-11-11",
+  "ticket": "carbon-smoke",
+  "rubric_sha256": "e8a20554a72bba0e796be0ed8d5f4b7ca851b362cda40de64a1003fdebf9eb21",
+  "manifest_sha256": "08e71d50885657c2927ba684618dd08fa31d2b88130b2c479f4710537e85c105",
+  "context_sha256": null,
+  "baseline_plan_sha256": "c77170dbe16ffb0c3241de77c8b422ee5a80e2748d5c8e41c1395de62cff4226",
+  "baseline_plan_bytes": 377,
+  "started_at": "2026-11-10T18:35:25.086Z",
+  "deadline_at": "2026-11-10T20:35:25.086Z",
+  "max_generations": 2,
+  "max_wall_seconds": 7200,
+  "growth_warn_ratio": 1.25,
+  "growth_stop_ratio": 1.5,
+  "next_generation": 1,
+  "active_claim": null,
+  "terminal": true,
+  "terminal_verdict": "CONDITIONAL",
+  "repair_authorized": false,
+  "claims": [
+    {
+      "claim_id": "fc97fcd14b1d219e4a2d16e84e7aba0d",
+      "generation": 1,
+      "session_id": "carbon-smoke-g1",
+      "claimed_at": "2026-11-10T18:35:25.086Z",
+      "plan_sha256": "c77170dbe16ffb0c3241de77c8b422ee5a80e2748d5c8e41c1395de62cff4226",
+      "manifest_sha256": "08e71d50885657c2927ba684618dd08fa31d2b88130b2c479f4710537e85c105",
+      "owner": {
+        "pid": 1585584,
+        "process_start": "299233229",
+        "nonce": "fc97fcd14b1d219e4a2d16e84e7aba0d",
+        "session_inode": "73146675"
+      },
+      "status": "complete",
+      "artifact": "/home/team/.tmp/claude-1001/-home-team-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.claude/worktrees/hetero-hands-carbon-1-ogoLZx/docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/state/0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56/generation-01.json",
+      "attempt_count": 1
+    }
+  ],
+  "artifacts": [
+    "/home/team/.tmp/claude-1001/-home-team-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.claude/worktrees/hetero-hands-carbon-1-ogoLZx/docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/state/0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56/generation-01.json"
+  ],
+  "terminal_reason": "nonblocking_conditional"
+}

@@ -17,9 +17,13 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
-#       [--model gemini-flash-high]          # default (agy alias, resolved against the LIVE
-#                                             # `agy models` inventory); names: `agy models` /
-#                                             # `grok models`. Required for any non-agy runner.
+#       [--model gemini-4-carbon-low]        # default agy implementer id. A gemini-flash[-tier]
+#                                             # alias still resolves against the live `agy models`
+#                                             # inventory. Names: `agy models` / `grok models`.
+#                                             # Required for any non-agy runner. The next roster
+#                                             # rung when this id is the implementer and
+#                                             # implementer_ladder is empty is gemini-4-argon-low
+#                                             # (resolve-review-loop.sh; this script does not retry).
 #       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi|claude-native] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, *qwen*/*qwq*→qoderclicn, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
@@ -212,12 +216,11 @@ if [ "${AUTOPILOT_TEST_ALLOW_HETERO_SEAMS:-}" != "1" ]; then
   unset HETERO_TEST_SYSTEMCTL_KILL_FAIL HETERO_TEST_NO_SETSID HETERO_TEST_NO_JOBCONTROL
 fi
 
-# Default is the agy *alias*, never a literal vendor id: agy_resolve_model_alias() resolves it
-# against the live `agy models` inventory and fails closed when no tier match exists. A literal
-# id rots silently — "Gemini 3.5 Flash (High)" outlived its own model and every --model-less
-# dispatch died at the vendor. The alias is agy-only, so a non-agy runner without --model is
-# refused rather than handed a Gemini id (see MODEL_IS_DEFAULT below).
-MODEL="gemini-flash-high"
+# Default is the agy implementer id gemini-4-carbon-low (literal; the flash alias cannot
+# resolve to carbon). agy_resolve_model_alias() echoes a non-alias unchanged and still
+# resolves a gemini-flash[-tier] alias against the live inventory. The id is agy-only, so
+# a non-agy runner without --model is refused rather than handed it (see MODEL_IS_DEFAULT).
+MODEL="gemini-4-carbon-low"
 MODEL_IS_DEFAULT=1
 BASE="develop"
 TIMEOUT="9m"
@@ -2653,7 +2656,7 @@ elif [ "$MODEL_IS_DEFAULT" -eq 1 ]; then
   # The built-in default is an agy alias and means nothing to any other vendor. Refusing
   # here is the loud half of the fix: silently forwarding it produced a vendor-side error
   # whose text named a model the caller never chose.
-  die_precondition "--model is required for runner '$RUNNER' — the built-in default ('$MODEL') is an agy-only alias"
+  die_precondition "--model is required for runner '$RUNNER' — the built-in default ('$MODEL') is an agy model id"
 fi
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then

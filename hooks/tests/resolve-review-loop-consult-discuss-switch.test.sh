@@ -153,7 +153,7 @@ const problems = [];
 // byte-identical value (the parity template pins consult_dispatch: off, so the
 // consult seat fields are '' on both sides on every host).
 // qc_panel / qc_panel_seats moved on purpose after the pre-D6 pin (three seats: gpt-6.1-sol at low, claude-opus-5-5,
-// gemini-4-argon-high; now four seats: gpt-6-astra low, gpt-6.1-sol high, GLM-5.3 via glm (glmback 2026-11-09, after sol), gemini-4-argon-high): they are not compared with the old output but
+// gemini-4-argon-high; now four seats: gpt-6-astra low, gpt-6.1-sol high, GLM-5.3 via glm (glmback 2026-11-09, after sol), gemini-4-carbon-high): they are not compared with the old output but
 // asserted against the exact new values below (same values resolve-review-loop-b pins).
 // reviewer_effort moved on purpose (2026-11-09, the roster loop reviewer is the local qwen at effort `default`,
 // a value the frozen resolver does not accept): asserted against the exact new value, not the old output.
@@ -162,11 +162,11 @@ for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
   if (INTENTIONAL_DEFAULT_MOVE.has(key)) {
     const want = key === 'reviewer_effort' ? 'default' : key === 'qc_panel'
-      ? ['gpt-6-astra', 'gpt-6.1-sol', 'GLM-5.3', 'gemini-4-argon-high']
+      ? ['gpt-6-astra', 'gpt-6.1-sol', 'GLM-5.3', 'gemini-4-carbon-high']
       : [{role:'qc',runner:'codex',model:'gpt-6-astra',effort:'low',endpoint:null,family:'openai'},
          {role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'medium',endpoint:null,family:'openai'},
          {role:'qc',runner:'anthropic-compatible',model:'GLM-5.3',effort:'high',endpoint:'glm',family:'zhipu'},
-         {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'}];
+         {role:'qc',runner:'agy',model:'gemini-4-carbon-high',effort:'high',endpoint:null,family:'google'}];
     if (JSON.stringify(newJson[key]) !== JSON.stringify(want)) problems.push(`new-value-drift:${key}`);
     continue;
   }
@@ -433,7 +433,8 @@ hooks/tests/resolve-review-loop-d.test.sh|partial roster fixture, resolves consu
 hooks/tests/resolve-review-loop-pins-per-role.test.sh|two-role pin fixture config
 hooks/tests/resolve-review-loop-standing-pin.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/review-loop-runner.test.sh|partial roster fixture, resolves consult/discuss via the default
-hooks/tests/cloud-fallback.test.sh|reviewer-seat config fixtures for the cloud-fallback rung; consult/discuss not involved'
+hooks/tests/cloud-fallback.test.sh|reviewer-seat config fixtures for the cloud-fallback rung; consult/discuss not involved
+hooks/tests/resolve-review-loop-agy-carbon-default.test.sh|reviewer-seat roster fixtures testing the default carbon-high pick and its fallback rung; consult/discuss not involved'
 POP_B_MATCHED="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | sort -u)"
 POP_B_PINNED="$(git -C "$REPO_ROOT" grep -lE '^\s*-\s*(consult|discuss)_dispatch\s*:' -- hooks/ ":!$SELF" 2>/dev/null | sort -u)"
 POP_B_UNREVIEWED=""

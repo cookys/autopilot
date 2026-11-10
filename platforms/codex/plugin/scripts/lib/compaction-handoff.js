@@ -450,7 +450,7 @@ function budgetWarning(opts = {}) {
   const k = (n) => `${Math.round(n / 1000)}k`;
   return `Context budget config: auto-compact window ${k(win.configured)} puts the compaction point at ${k(compactAt)} (window - ${k(AUTOCOMPACT_BUFFER_TOKENS)} buffer), `
     + `but T2 ${k(t2)} + gap ${k(gap)} = ${k(t2 + gap)} is above it, so T2 is never reached before Claude Code compacts (with auto-compact set T2 is only a handoff reminder, so this only means no handoff reminder comes first). `
-    + `Window that fits: ${suggested} (t2 + gap + ${AUTOCOMPACT_BUFFER_TOKENS}); takes effect on the next session start. Nothing was changed.`;
+    + `Window that fits: ${suggested} (t2 + gap + ${AUTOCOMPACT_BUFFER_TOKENS}); takes effect on a later startup. Nothing was changed.`;
 }
 
 // --- compaction point record ----------------------------------------------------------------

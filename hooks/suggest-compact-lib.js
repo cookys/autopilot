@@ -23,14 +23,14 @@ function compactDecision(count, opts = {}) {
     return {
       warn: true,
       level: 'first',
-      message: `Context health: ${count} tool calls this session. Consider running /compact to free context.`,
+      message: `Context health: ${count} tool calls this session. Keep working. Claude Code auto-compacts at the window; write a handoff file as a BACKUP (not as a stopping point) and continue the task.`,
     };
   }
   if (count > first && (count - first) % interval === 0) {
     return {
       warn: true,
       level: 'interval',
-      message: `Context health: ${count} tool calls. Strongly recommend /compact.`,
+      message: `Context health: ${count} tool calls. Keep working. Claude Code auto-compacts at the window; write a handoff file as a BACKUP (not as a stopping point) and continue the task.`,
     };
   }
   return { warn: false, level: null, message: null };

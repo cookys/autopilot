@@ -223,10 +223,10 @@ try {
       const ctxText = ctx
         ? `context now ${ctx.pct}% (${fmt(ctx.tokens)} of ${fmt(ctx.window)} tokens)`
         : 'context % unknown (no fresh statusline live file)';
-      // Recommend handoff + /clear ONLY when the real window fill is at/above the threshold.
+      // Keep-working backup ONLY when the real window fill is at/above the threshold.
       // Below it the window is healthy and the money is calls x window (so split the work or
       // push mechanical work to cheaper hands); with no fresh live file there is no % to act on,
-      // so no /clear advice at all.
+      // so the window itself is not judged.
       let clearPct = 50;
       try {
         const cfg = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
@@ -237,7 +237,7 @@ try {
       if (Number.isFinite(envC) && envC > 0) clearPct = envC;
       let advice;
       if (ctx && ctx.pct >= clearPct) {
-        advice = `The window is ${ctx.pct}% full (≥ ${clearPct}%): write a handoff and /clear, or split the work.`;
+        advice = `The window is ${ctx.pct}% full (≥ ${clearPct}%). Keep working. Claude Code auto-compacts at the window; write a handoff file as a BACKUP (not as a stopping point) and continue the task.`;
       } else if (ctx) {
         advice = 'The window is fine; the cost comes from calls × window — consider splitting the work or dispatching mechanical work to cheaper hands.';
       } else {

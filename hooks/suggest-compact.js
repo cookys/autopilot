@@ -2,7 +2,7 @@
 /**
  * suggest-compact — PostToolUse/Write|Edit (Tier A, default-on; re-enabled v2.8.1)
  *
- * Counts Write|Edit tool calls per session; nudges /compact at 50, then every 25
+ * Counts Write|Edit tool calls per session; at 50, then every 25, says keep working and to write a handoff file as a backup
  * (unbounded: 50, 75, 100, …). Counter at /tmp/claude-tool-count-{sessionId}.
  *
  * Does NOT need tool_name — the Write|Edit matcher does the filtering — so unlike

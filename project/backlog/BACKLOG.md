@@ -1505,3 +1505,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PM 01M74K28MQ (2026-11-11)
 - **Pointer**: project/backlog/parallel-by-default-for-leads.md
+
+### Two suites red on clean develop: skill-onoff-d0gate-cc and qualification-consult-discuss-transport
+- **Id**: BL-0428
+- **Status**: open
+- **Since**: 2026-11-11
+- **Origin**: self
+- **Problem**: On develop 2baff5f99 (before the stack4 merge) both fail when run alone: hooks/tests/skill-onoff-d0gate-cc.test.sh ("FAIL: kept G4 evidence", projects-files.json shape []) and scripts/qualification-consult-discuss-transport.test.js ("consult: end-to-end broker -> sandbox -> socket -> real provider.js succeeds", actual failed). Root cause not looked at yet.
+- **Impact**: Two more entries in the baseline red list that every merge has to diff against; a real regression in either suite would hide behind them.
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: stack4 merge 66fc4f426 (2026-11-11)

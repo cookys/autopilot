@@ -242,6 +242,7 @@ Only matter once you have created an account registry (`~/.config/autopilot/acco
 | `accounts.quota_probe_timeout_secs` (config.json) | Seconds a probe call may run before it is killed. A failed probe never blocks the real call. | `20` |  |
 | `accounts.host_role` (config.json) | Role label written into this host's quota rows. | `agent` |  |
 | `AUTOPILOT_ACCOUNTS_DIR` | Directory of the registry and token store. Point it at a throwaway directory to try the layer without touching the real one (step O6). | `~/.config/autopilot/accounts` |  |
+| `AUTOPILOT_PM_ADDRESS` | Fleet address (`namespace/courier/member`, e.g. `ns/host-a/pm--claude`) that `profile-health.js notify` sends to when `--to` is omitted. No default: with neither `--to` nor `AUTOPILOT_PM_ADDRESS`, `notify` exits 2 without sending. | unset |  |
 
 Set by the layer, not by you: `AUTOPILOT_ACCOUNT` (the alias a child runs as). Test-only seams are listed as internal in `scripts/lib/config-keys.json`.
 

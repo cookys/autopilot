@@ -9,7 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const HOOK = path.join(__dirname, 'askpm-log.js');
-const PM = 'cookys/aimax395/pm--claude';
+const PM = 'ns/host-a/pm--claude';
 const CONSOLE_OK = '{"schema":"autopilot.console/1","mode":"program"}';
 
 function run(payload, env, files) {
@@ -53,7 +53,7 @@ test('injected message is not recorded; a real operator prompt is', () => {
     '[待決回覆·更正] d-00000000 → 甲',
     '<system-reminder>do not record</system-reminder>',
     '<task-notification>done</task-notification>',
-    'hello <channel source="fleet" from="cookys/aimax395/pm--claude@1" message_id="m" kind="chat">body</channel>',
+    'hello <channel source="fleet" from="ns/host-a/pm--claude@1" message_id="m" kind="chat">body</channel>',
     '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"advisory"}}',
   ]) {
     const inj = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt }, {}, pm);
@@ -66,7 +66,7 @@ test('injected message is not recorded; a real operator prompt is', () => {
 test('a non-PM session records nothing', () => {
   const r = run(
     { hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '這題給 PM' },
-    { FLEET_ADDRESS: 'cookys/aimax395/game-lead--claude' },
+    { FLEET_ADDRESS: 'ns/host-a/game-lead--claude' },
   );
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout, '');

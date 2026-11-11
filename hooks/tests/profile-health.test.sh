@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # profile-health.js: warns the PM 10 days or less before a Claude login profile expires. Against a STUB claude (canned JSON per CLAUDE_CONFIG_DIR,
 # with an email sentinel) and a STUB fleet. Negative controls (sed_mutant, shown red before green): drop the dedup; record a failed send;
-# move the threshold to 9 days; print the email.
+# move the threshold to 9 days; print the email; restore a hard-coded default notify address.
 . "$(dirname "$0")/lib.sh"
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME/.claude-profiles/a" "$HOME/.claude-profiles/b"
 export XDG_STATE_HOME="$TEST_TMP/state" AUTOPILOT_NOW=2026-11-09T00:00:00.000Z
@@ -22,7 +22,7 @@ fs.appendFileSync(D + '/fleet.log', JSON.stringify({ args: a, fyi: process.env.F
 process.exit(fs.existsSync(D + '/send-fails') ? 1 : 0);
 JS
 chmod +x "$STUB/claude" "$STUB/fleet"
-export STUB_DIR="$STUB" SENT AUTOPILOT_CLAUDE_BIN="$STUB/claude" AUTOPILOT_FLEET_BIN="$STUB/fleet" ANTHROPIC_API_KEY=should-be-dropped
+export STUB_DIR="$STUB" SENT AUTOPILOT_CLAUDE_BIN="$STUB/claude" AUTOPILOT_FLEET_BIN="$STUB/fleet" AUTOPILOT_PM_ADDRESS="ns/host-a/pm--claude" ANTHROPIC_API_KEY=should-be-dropped
 PH="$S/profile-health.js"; ST="$XDG_STATE_HOME/autopilot/profile-health.json"
 prof() { # <name> <days from AUTOPILOT_NOW> : write a logged-in answer expiring that many days (plus 3h) ahead
   local ms=$(( $(node -e 'process.stdout.write(String(Date.parse(process.env.AUTOPILOT_NOW)))') + $2 * 86400000 + 10800000 ))
@@ -51,7 +51,7 @@ assert_contains "$M" "剩 10 天" "message: days left"
 assert_contains "$M" 'CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/a" claude auth login --claudeai' "message: login command for profile a"
 assert_contains "$M" 'claude auth status --text' "message: check line"
 assert_not_contains "$(tail -1 "$STUB/fleet.log")" '"fyi":"1"' "send is not FYI"
-assert_contains "$(tail -1 "$STUB/fleet.log")" '"cookys/aimax395/pm--claude"' "send goes to the PM by default"
+assert_contains "$(tail -1 "$STUB/fleet.log")" '"ns/host-a/pm--claude"' "send goes to AUTOPILOT_PM_ADDRESS when --to is omitted"
 assert_contains "$(cat "$STUB/claude.log")" '"token":null' "claude ran without ANTHROPIC_API_KEY"
 # ---- 3. home gets the plain command ----
 reset; prof home 5; prof a 30; prof b 30
@@ -107,6 +107,26 @@ run; assert_eq "$(sends)" 2 "home collision: second run sends none"
 assert_contains "$(cat "$ST")" '"home"' "home collision: state keeps the home key"
 assert_contains "$(cat "$ST")" '"unsupported:home"' "home collision: state keeps the unsupported:home key"
 rm -rf "$HOME/.claude-profiles/home"
+# ---- 12. notify recipient: --to else AUTOPILOT_PM_ADDRESS; with neither, exit 2 and nothing sent ----
+reset; prof home 30; prof a 3; prof b 30
+OUT="$(env -u AUTOPILOT_PM_ADDRESS node "$PH" notify < /dev/null 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"
+assert_eq "$RC" 2 "no --to and no env: exit 2"
+assert_eq "$(sends)" 0 "no --to and no env: nothing sent"
+assert_eq "$OUT" "" "no --to and no env: nothing on stdout"
+assert_eq "$(printf '%s\n' "$ERR" | grep -c .)" 1 "no --to and no env: one-line usage error on stderr"
+assert_contains "$ERR" "AUTOPILOT_PM_ADDRESS" "no --to and no env: stderr names AUTOPILOT_PM_ADDRESS"
+OUT="$(AUTOPILOT_PM_ADDRESS="" node "$PH" notify < /dev/null 2>"$TEST_TMP/err")"; RC=$?
+assert_eq "$RC" 2 "empty AUTOPILOT_PM_ADDRESS: exit 2"
+assert_eq "$(sends)" 0 "empty AUTOPILOT_PM_ADDRESS: nothing sent"
+OUT="$(env -u AUTOPILOT_PM_ADDRESS node "$PH" notify --to ns/host-b/pm--claude < /dev/null 2>"$TEST_TMP/err")"; RC=$?
+assert_eq "$RC" 0 "--to without env: exit 0"
+assert_eq "$(sends)" 1 "--to without env: one send"
+assert_contains "$(tail -1 "$STUB/fleet.log")" '"ns/host-b/pm--claude"' "--to without env: sends to --to address"
+reset; prof home 30; prof a 3; prof b 30
+OUT="$(node "$PH" notify --to ns/host-b/pm--claude < /dev/null 2>"$TEST_TMP/err")"; RC=$?
+assert_eq "$RC" 0 "--to overrides env: exit 0"
+assert_eq "$(sends)" 1 "--to overrides env: one send"
+assert_contains "$(tail -1 "$STUB/fleet.log")" '"ns/host-b/pm--claude"' "--to overrides AUTOPILOT_PM_ADDRESS"
 # ---- negative controls ----
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT"
 mut() { sed_mutant "$PH" "$MUT/profile-health.js" "$1" || return 1; }
@@ -114,4 +134,5 @@ mut "s/state.sent\[slot\] === key/false/" && { reset; prof home 30; prof a 3; pr
 mut "s/if (r.status !== 0) {/if (false) {/" && { reset; prof home 30; prof a 3; prof b 30; touch "$STUB/send-fails"; run "$MUT/profile-health.js"; assert_contains "$(cat "$ST")" '"a"' "mutant (failed send recorded): state holds a, so the retry check is real"; }
 mut "s/<= THRESHOLD_DAYS/< 9/" && { reset; prof home 30; prof a 10; prof b 30; run "$MUT/profile-health.js"; assert_eq "$(sends)" 0 "mutant (threshold 9): no send at 10 days, so the 10-day check is real"; }
 mut "s/row.loggedIn = j.loggedIn === true;/row.loggedIn = j.loggedIn === true; row.email = j.email;/" && { reset; prof home 30; prof a 10; prof b 30; assert_contains "$(node "$MUT/profile-health.js" check --json < /dev/null)" "$SENT" "mutant (email read): sentinel appears, so the privacy check is real"; }
+mut "s#process.env.AUTOPILOT_PM_ADDRESS || ''#'ns/host-a/pm--claude'#" && { reset; prof home 30; prof a 3; prof b 30; OUT="$(env -u AUTOPILOT_PM_ADDRESS node "$MUT/profile-health.js" notify < /dev/null 2>"$TEST_TMP/err")"; RC=$?; assert_eq "$RC" 0 "mutant (default address restored): exits 0 instead of 2"; assert_eq "$(sends)" 1 "mutant (default address restored): sends without --to or env, so the exit-2 check is real"; }
 finalize_test

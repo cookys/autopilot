@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0430 -->
+<!-- next-id: BL-0431 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1518,3 +1518,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: stack4 merge 66fc4f426 (2026-11-11)
 - **Pointer**: project/backlog/baseline-reds-d0gate-consult.md
+
+### Quota cache is empty after a reboot until the next session writes it
+- **Id**: BL-0430
+- **Status**: open
+- **Since**: 2026-11-12
+- **Origin**: peer
+- **Reporter**: hangar
+- **Report**: fleet 01M767AX (hangar, 2026-11-12)
+- **Reply**: 2026-11-12 01M767WQ3R
+- **Problem**: The usage quota cache lives in memory-backed storage on purpose. A power cut or reboot clears it, and an account with no running session shows no quota until a session or timer writes again.
+- **Impact**: After a power cut the usage page shows no quota for idle accounts for hours, so pacing alerts and the page miss them.
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: hangar report after the 2026-11-12 power cut (fleet message 01M767AX)
+- **Pointer**: project/backlog/quota-cache-after-reboot.md

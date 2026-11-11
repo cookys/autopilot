@@ -1446,6 +1446,49 @@ test('rule6 allows subagent `rm -rf <scratch>/x` (CLAUDE_CODE_TMPDIR and TMPDIR 
   assert.strictEqual(rel.deny, false, rel.reason);
 });
 
+test('rule6 phantom cd: a cd that does not run in the shell of the later rm never commits a cwd', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  for (const cmd of [
+    `cd ${scratch} & rm -rf rv1`,
+    `cd ${scratch} | rm -rf rv1`,
+    `false && cd ${scratch}; rm -rf rv1`,
+    `false || cd ${scratch}; rm -rf rv1`,
+    `false && cd ${scratch}\nrm -rf rv1`,
+  ]) {
+    const r = run(cmd, {
+      extra: { agent_id: 'sub-1', cwd: sandbox },
+      env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+    });
+    assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  // Same-shell cd stays honoured, also when the rm is in the same backgrounded list.
+  for (const cmd of [`cd ${scratch} && rm -rf x`, `cd ${scratch}; rm -rf x`, `cd ${scratch} && rm -rf x &`]) {
+    const ok = run(cmd, {
+      extra: { agent_id: 'sub-1', cwd: sandbox },
+      env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+    });
+    assert.strictEqual(ok.deny, false, `expected allow for ${JSON.stringify(cmd)}: ${ok.reason}`);
+  }
+});
+
+test('rule6 heredoc script runs in the cwd of the segment that runs it, not the payload cwd', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  // payload cwd is the scratchpad, but a preceding `cd` moves the heredoc shell outside it: deny
+  const outside = run(`cd ${sandbox} && bash <<'EOF'\nrm -rf rv1\nEOF`, {
+    extra: { agent_id: 'sub-1', cwd: scratch },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(outside.deny, true, JSON.stringify(outside));
+  assert.match(outside.reason, /subagent-rm-outside-scratch/);
+  // payload cwd is outside, a preceding `cd` moves the heredoc shell into the scratchpad: allow
+  const inside = run(`cd ${scratch} && bash <<'EOF'\nrm -rf x\nEOF`, {
+    extra: { agent_id: 'sub-1', cwd: sandbox },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(inside.deny, false, inside.reason);
+});
+
 test('rule6 denies subagent targeting another session scratchpad, wrong uid dir, or session root itself', () => {
   const { tmpRoot, sessionRoot } = mkScratchSandbox('blg');
   const otherSession = path.join(tmpRoot, `claude-${process.getuid()}`, 'proj-slug', 'other-sid', 'scratchpad', 'x');

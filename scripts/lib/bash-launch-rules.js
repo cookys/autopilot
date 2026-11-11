@@ -76,6 +76,8 @@ function segments(text) {
   let listStart = 0;
   const big = s.length > SEG_MAX_TEXT;
   let pipeNext = false; // the next segment is the right-hand side of a `|` / `|&`
+  let condNext = false; // the next segment follows `&&` / `||`: it runs only conditionally
+  let listN = 0; // index of the `;`/newline/`&`-delimited list the next segment belongs to
   let subDepth = 0; // inside a `( … )` subshell: its background jobs are NOT waitable by the outer shell
   // `lvl`: which shell a segment runs in. A `wait` only sees jobs of its OWN shell level (the script itself, or one
   // `( … )` subshell of it); expandSegments prefixes the script id so `bash -c` / `$( )` bodies are levels of their own.
@@ -84,7 +86,7 @@ function segments(text) {
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
   const push = (bg, endsList = false) => {
-    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, lvl: lvlStack[lvlStack.length - 1] }); pipeNext = false; }
+    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, list: listN, lvl: lvlStack[lvlStack.length - 1] }); pipeNext = false; condNext = false; }
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
@@ -102,7 +104,7 @@ function segments(text) {
         }
       }
     }
-    if (endsList) listStart = out.length;
+    if (endsList) { listStart = out.length; listN += 1; condNext = false; }
   };
   for (let i = 0; i < s.length; i += 1) {
     const c = s[i];
@@ -128,13 +130,13 @@ function segments(text) {
     if (c === '|' && s[i - 1] === '>') { cur += c; continue; } // `>|` clobber redirect, not a pipe
     if (c === '|') {
       push(false);
-      if (s[i + 1] === '|') { i += 1; continue; } // `||`
+      if (s[i + 1] === '|') { i += 1; condNext = true; continue; } // `||`
       if (s[i + 1] === '&') i += 1; // `|&` (pipe stderr too)
       if (out.length) out[out.length - 1].pipe = true; // a pipeline member: `wait | cat` waits for nothing
       pipeNext = true; continue;
     }
     if (c === '&') {
-      if (s[i + 1] === '&') { push(false); i += 1; continue; }
+      if (s[i + 1] === '&') { push(false); i += 1; condNext = true; continue; }
       if (s[i - 1] === '>' || s[i + 1] === '>') { cur += c; continue; } // `2>&1`, `&>file`
       push(true, true); continue;
     }
@@ -677,6 +679,12 @@ function executesFile(segs, file) {
 // Heredoc bodies the call RUNS: fed straight to a shell (`bash <<EOF`, `cat <<EOF | bash`), or written to a file
 // (`cat > f <<EOF`) that another segment then executes. A heredoc that is only data (never run) is not returned.
 function runHeredocBodies(raw, segs) {
+  return runHeredocBodiesMeta(raw, segs).map((h) => h.body);
+}
+
+// Same, with where the body is run from: `op` is the `<<TAG` operator text, `file` the script file it was written to
+// (null when fed straight to a shell), so the caller can find the segment that runs it.
+function runHeredocBodiesMeta(raw, segs) {
   const out = [];
   const lines = String(raw).split('\n');
   for (let i = 0; i < lines.length; i += 1) {
@@ -687,14 +695,15 @@ function runHeredocBodies(raw, segs) {
     let j = i + 1;
     for (; j < lines.length; j += 1) { if ((m[1] ? lines[j].replace(/^\t+/, '') : lines[j]) === tag) break; body.push(lines[j]); }
     const intro = lines[i];
-    let runs = new RegExp(`^\\s*(?:(?:sudo|env|time|exec|nohup|setsid)\\s+)*${SHELL_RE}\\b(?![^<]*\\s-c\\b)[^<|;&]*<<`).test(intro)
+    let file = null;
+    let runs = new RegExp(`(?:^|[;&|(])\\s*(?:(?:sudo|env|time|exec|nohup|setsid)\\s+)*${SHELL_RE}\\b(?![^<]*\\s-c\\b)[^<|;&]*<<`).test(intro)
       || new RegExp(`\\|\\s*(?:(?:sudo|env|exec)\\s+)*${SHELL_RE}\\b`).test(intro.slice(m.index));
     if (!runs) {
       const fm = /(?:>>?|\btee(?:\s+-a)?)\s*(?:"([^"]+)"|'([^']+)'|([^\s<>|;&]+))/.exec(intro);
-      const file = fm && (fm[1] || fm[2] || fm[3]);
+      file = fm && (fm[1] || fm[2] || fm[3]);
       runs = !!file && executesFile(segs, file);
     }
-    if (runs) out.push(body.join('\n'));
+    if (runs) out.push({ body: body.join('\n'), op: m[0], file });
     i = j;
   }
   return out;
@@ -1297,20 +1306,35 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
   const prep = (e) => expandSegments(stripArrayAssigns(stripArithmetic(rewriteProcSubst(e))));
   const top = prep(exec);
   const scripts = [{ segs: top, initCwd: baseCwd }];
-  for (const body of runHeredocBodies(raw, top)) {
-    scripts.push({ segs: prep(executableText(body)), initCwd: baseCwd });
-  }
+  const heredocs = runHeredocBodiesMeta(raw, top);
+  const segCwd = new Map(); // top-level segment -> cwd of the shell that runs it (after its own cd)
   const out = [];
   for (let si = 0; si < scripts.length && si < 8; si += 1) {
     const { segs, initCwd } = scripts[si];
-    const cwdByLvl = new Map();
+    // Per shell level: cwd, the current list, and what that list did to it. A `cd` only holds in the shell that runs it:
+    // not in a pipeline member, not past the end of a backgrounded list, and a `cd` behind `&&`/`||` leaves the cwd
+    // unknown (null, so rule 6 denies a relative target) once its list ends.
+    const stByLvl = new Map();
     if (segs.length > 0 && typeof segs[0].lvl === 'string') {
-      cwdByLvl.set(`${segs[0].lvl.split(':')[0]}:0`, initCwd);
+      stByLvl.set(`${segs[0].lvl.split(':')[0]}:0`, {
+        cwd: initCwd, listId: segs[0].list, listStartCwd: initCwd, bgList: false, tainted: false,
+      });
     }
     let activeCwd = initCwd;
     for (const seg of segs) {
-      if (!cwdByLvl.has(seg.lvl)) cwdByLvl.set(seg.lvl, activeCwd);
-      const curCwd = cwdByLvl.get(seg.lvl);
+      let st = stByLvl.get(seg.lvl);
+      if (!st) {
+        st = { cwd: activeCwd, listId: seg.list, listStartCwd: activeCwd, bgList: false, tainted: false };
+        stByLvl.set(seg.lvl, st);
+      } else if (st.listId !== seg.list) {
+        if (st.bgList) st.cwd = st.listStartCwd;
+        else if (st.tainted) st.cwd = null;
+        st.listId = seg.list;
+        st.listStartCwd = st.cwd;
+        st.bgList = false;
+        st.tainted = false;
+      }
+      const curCwd = st.cwd;
       activeCwd = curCwd;
       const pos = commandPosition(seg.text);
       if (pos.head && dequote(pos.head).replace(/^.*\//, '') === 'eval') {
@@ -1318,11 +1342,16 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
         if (bodyText) scripts.push({ segs: prep(executableText(bodyText)), initCwd: curCwd });
         continue;
       }
-      const nextCwd = stepCd(seg, curCwd, homedir);
-      if (nextCwd !== curCwd) {
-        cwdByLvl.set(seg.lvl, nextCwd);
-        activeCwd = nextCwd;
+      if (seg.bg) st.bgList = true;
+      if (!seg.pipe) {
+        const nextCwd = stepCd(seg, curCwd, homedir);
+        if (nextCwd !== curCwd) {
+          st.cwd = nextCwd;
+          activeCwd = nextCwd;
+          if (seg.cond) st.tainted = true;
+        }
       }
+      if (si === 0) segCwd.set(seg, st.cwd);
       const targets = rmSegmentTargets(seg);
       if (!targets) continue;
       for (const w of targets) {
@@ -1346,6 +1375,16 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
             hasGlob: false, climbAfterGlob: false, resolved, parentResolved: null,
           });
         }
+      }
+    }
+    if (si === 0) {
+      // A heredoc script starts in the cwd of the top-level segment that runs it (executableText strips the `<<TAG`
+      // operator, so a shell-fed body is matched to the shell segments; segments that disagree, or none = unknown, null).
+      const shellRe = new RegExp(`^\\s*(?:(?:sudo|env|time|exec|nohup|setsid)\\s+)*${SHELL_RE}\\b`);
+      for (const h of heredocs) {
+        const runners = top.filter((sg) => segCwd.has(sg) && (h.file ? executesFile([sg], h.file) : shellRe.test(sg.text)));
+        const cwds = new Set(runners.map((sg) => segCwd.get(sg)));
+        scripts.push({ segs: prep(executableText(h.body)), initCwd: cwds.size === 1 ? [...cwds][0] : null });
       }
     }
   }

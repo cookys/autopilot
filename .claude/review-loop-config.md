@@ -1,20 +1,36 @@
 # Review-Loop Config — autopilot (self-hosting)
 
-> Follows the roster (`project-config-template/review-loop-config.md`) for every seat (loop reviewer,
-> verification author, qc panel); the one override block below keeps the grok implementer (the local qwen implementer is stopped since 2026-11-09) and the argon VA seat while qodercn is out of quota (until 2026-11-21; after that date the resolver only warns).
+> Follows the roster (`project-config-template/review-loop-config.md`) for every seat; the override blocks below are temporary.
+> Codex window (PM 01M747R1N0, codex quota nearly gone until its 2026-11-16 reset): implementer, loop-reviewer cloud rung, verification author and plan-review seats are routed away from codex until 2026-11-15; the roster itself is unchanged, and allow_same_runner_dual_seat is on for the window. On 2026-11-16 delete those blocks (see BACKLOG).
+> Older: the qodercn-out note on the VA seat (until 2026-11-21; after that date the resolver only warns); the grok implementer block is replaced by the agy one for the codex window.
 > Seat history before 2026-11-06 is in git; roster changes are logged in the template's changelog. Consumed by `scripts/resolve-review-loop.sh` (precedence slot 3).
 
 ## Settings
 
-- override: implementer | until 2026-11-20 | grok-4.7/low@grok restored 2026-11-09: qwen implementer write dispatches stopped after out-of-worktree writes; resume conditions in PM fleet 01M6YFRHBV (restore the qwen block from commit 3c471a733 when they are met).
-- implementer_engine: grok-4.7
+- override: implementer | until 2026-11-15 | PM 01M747R1N0 codex quota: implementer is gemini-4-carbon-low/low@agy, ladder step 2 grok-4.7/low@grok, until the codex reset on 2026-11-16. Replaces the earlier grok-only block (grok-4.7/low@grok restored 2026-11-09: qwen implementer write dispatches stopped after out-of-worktree writes; resume conditions in PM fleet 01M6YFRHBV, restore the qwen block from commit 3c471a733 when they are met).
+- implementer_engine: gemini-4-carbon-low
 - implementer_effort: low
-- implementer_runner: grok
+- implementer_runner: agy
+- implementer_ladder: gemini-4-carbon-low/low@agy, grok-4.7/low@grok
 
-- override: verification_author | until 2026-11-21 | PM 01M6Z8P87Y: qodercn quota is out until 2026-11-21 so the VA seat is gemini-4-argon-high@agy (google, a different family from the grok implementer). If the implementer is moved to agy, switch this block to gpt-6.1-sol@codex (medium) by hand: neither the resolver nor dispatch-author re-routes a same-family VA, dispatch-author.sh:694 dies instead. An expired override still applies (roster-overlay.js TTL only warns, never blocks or auto-reverts): after 2026-11-21 first confirm qodercn is usable, and only then delete this block by hand to return to Qwen3.8-Max@qoderclicn.
+- override: reviewer | until 2026-11-15 | PM 01M747R1N0 codex quota: qwen_local stays the loop reviewer; its cloud fallback rung moves from gpt-6.1-sol@codex to gemini-4-carbon-high@agy and the family-conflict fallback preference puts grok-4.7 before gpt-6.1-sol. All other fields copy the roster.
+- reviewer_engine: Qwen3.8-27B-QUASAR-NVFP4
+- reviewer_effort: default
+- reviewer_runner: anthropic-compatible
+- reviewer_endpoint: qwen_local
+- reviewer_on_engine_unavailable: cloud-fallback
+- reviewer_cloud_fallback_rung: gemini-4-carbon-high/high@agy
+- reviewer_limitation:
+- reviewer_limitation_required: false
+- reviewer_engine_low_risk:
+- reviewer_effort_low_risk:
+- reviewer_fallback_preference: grok-4.7, gpt-6.1-sol, GLM-5.3
+- reviewer_fallback_preference_low_risk: grok-4.7, gpt-6.1-sol, GLM-5.3
+
+- override: verification_author | until 2026-11-15 | PM 01M747R1N0 codex quota: the implementer is agy (google), and dispatch-author refuses a same-family VA, so the VA seat is grok-4.7@grok (high) for the window. Earlier note (PM 01M6Z8P87Y): qodercn quota is out until 2026-11-21, so on 2026-11-16 do not simply delete this block (that returns to Qwen3.8-Max@qoderclicn): replace it with gemini-4-argon-high@agy (high) until qodercn is usable, then delete. An expired override still applies (roster-overlay.js TTL only warns, never blocks or auto-reverts).
 - verification_author_present: true
-- verification_author_engine: gemini-4-argon-high
-- verification_author_runner: agy
+- verification_author_engine: grok-4.7
+- verification_author_runner: grok
 - verification_author_effort: high
 - verification_author_endpoint:
 
@@ -24,6 +40,21 @@
 - qc_panel_efforts: max, high, high, high, high
 - qc_panel_endpoints: @none, @none, @none, glm, @none
 - qc_panel_aggregation: union-on-verified-critical
+
+- override: plan_reviewer | until 2026-11-15 | PM 01M747R1N0 codex quota: plan-review chair is gemini-4-carbon-high@agy (high) until the codex reset on 2026-11-16.
+- plan_reviewer_engine: gemini-4-carbon-high
+- plan_reviewer_effort: high
+- plan_reviewer_runner: agy
+- plan_reviewer_endpoint:
+
+- override: plan_deep_reviewer | until 2026-11-15 | PM 01M747R1N0 codex quota: plan-review second reviewer is grok-4.7@grok (high) until the codex reset on 2026-11-16.
+- plan_deep_reviewer_engine: grok-4.7
+- plan_deep_reviewer_effort: high
+- plan_deep_reviewer_runner: grok
+- plan_deep_reviewer_endpoint:
+
+<!-- allow_same_runner_dual_seat: on is part of the codex window (PM 01M747R1N0, until 2026-11-15): the agy implementer shares a runner with the reviewer cloud rung and plan chair, and the grok ladder rung with the VA and plan second reviewer. Delete this line with the override blocks on 2026-11-16. -->
+- allow_same_runner_dual_seat: on
 
 - on_family_conflict: fallback
 

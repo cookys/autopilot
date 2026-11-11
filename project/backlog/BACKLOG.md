@@ -1479,6 +1479,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PM fleet 01M6TY1Q06 (2026-11-07)
 - **Pointer**: project/backlog/flaky-under-load-suites.md
 
+### 2026-11-16 刪除 codex 額度視窗的暫時路由設定
+- **Id**: BL-0426
+- **Status**: open
+- **Since**: 2026-11-11
+- **Origin**: owner
+- **Problem**: PM 01M747R1N0 因 codex 額度見底，把實作者、審查者雲端退路、驗證作者、計畫審查暫時改走其他引擎，並放行同 runner 雙席；11-16 重置後要刪掉並確認路由回到名冊。驗證作者先換回 argon（qodercn 到 11-21）。
+- **Impact**: 不刪的話，過期設定仍然生效，路由會一直繞開 codex 且同 runner 的獨立性被削弱。
+- **Trigger**: date:2026-11-16
+- **Trigger-Type**: date:2026-11-16
+- **Effort**: XS
+- **Source**: PM fleet 01M747R1N0 (2026-11-11)
+- **Pointer**: project/backlog/BACKLOG.md
+- **Context**: delete the PM 01M747R1N0 override blocks and allow_same_runner_dual_seat in .claude/review-loop-config.md (implementer, reviewer rung, VA, plan-review); keep the d-b155785a qc_panel block.
+
 ### Lead and lane skills should default to parallel for unrelated work
 - **Id**: BL-0427
 - **Status**: open

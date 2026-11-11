@@ -47,7 +47,7 @@ Every roster change adds a block here: date, reason, who ruled.
 
 **2026-11-11.** Local implementer seats always sandboxed, PM 01M748P8G8.
 
-* A cc-shim implementer whose endpoint is listed in `scripts/lib/local-sandbox-endpoints.json` (today `qwen_local`) is dispatched with `--sandbox bwrap` and `--worktree-parent`. `dispatch-hetero.sh` refuses that seat without `--sandbox bwrap` before any model call (`boundary_code` `local_implementer_sandbox_required`). Reviewer and consult seats are unchanged. No local DeepSeek endpoint name is registered yet.
+* A cc-shim implementer, and `--runner auto` or an empty `implementer_runner` when the endpoint is listed, whose endpoint is listed in `scripts/lib/local-sandbox-endpoints.json` (today `qwen_local`) is dispatched with `--sandbox bwrap` and one shared per-uid `--worktree-parent` (mode 0700; the base is not a directory inside a git repo). `dispatch-hetero.sh` refuses that seat without `--sandbox bwrap` before any model call (`boundary_code` `local_implementer_sandbox_required`). The last `--endpoint` or `--endpoint=` wins. An empty `--endpoint` does not fall back to the roster name. A cloud-fallback rung does not keep the local endpoint or `--sandbox bwrap`. Reviewer and consult seats are unchanged. No local DeepSeek endpoint name is registered yet.
 
 **2026-11-11.** The agy default moves from gemini-4-argon to gemini-4-carbon. Local smoke only (`docs/plans/evidence/2026-11-11-agy-carbon-smoke/`). Carbon is not written into the official qualification defaults.
 

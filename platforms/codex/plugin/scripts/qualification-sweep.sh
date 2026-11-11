@@ -407,12 +407,17 @@ OUTPUT: exactly one commit on the current branch.
 BOUNDARIES: do not push; keep the diff minimal.
 EOF
   # A listed local cc-shim endpoint must name itself and run under bwrap. The parent
-  # is a sibling of the probe repo, outside it. Other seats keep the previous argv.
+  # is the shared per-uid directory (same rule as buildImplementationArgs), never a
+  # per-call mktemp. Other seats keep the previous argv.
   local sbx_args=() wtparent="" listed_rc=0
   if [ "$runner" = "cc-shim" ] && [ -n "$endpoint" ] && [ "$endpoint" != "-" ] && [ "$endpoint" != "anthropic-native" ]; then
     local_sandbox_endpoint_listed "$endpoint" || listed_rc=$?
     if [ "$listed_rc" -eq 0 ]; then
-      wtparent="$(mktemp -d -t autopilot-local-sbx-XXXXXX)"
+      wtparent="$(local_sandbox_worktree_parent)" || {
+        rm -rf "$pd"
+        echo "PROBE: local sandbox worktree parent unavailable; refusing unsandboxed local probe" >&2
+        return 1
+      }
       sbx_args=(--endpoint "$endpoint" --sandbox bwrap --worktree-parent "$wtparent")
     elif [ "$listed_rc" -ne 1 ]; then
       rm -rf "$pd"
@@ -430,7 +435,8 @@ EOF
   # failed = the probe's result is not committed / reviewed (--failed-from; a runner that exited 0 with no commit is no_op = failed)
   auth_stop_check "probe-$runner/$model" --failed-from "$pd/.dispatch.out" --dispatch "$pd/.dispatch.out" --stderr "$pd/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
   rm -rf "$pd"
-  [ -n "$wtparent" ] && rm -rf "$wtparent"
+  # Leave the shared per-uid parent. Removing it would delete sibling worktrees.
+  # dispatch-hetero already removes this probe's child worktree.
   grep -q '"status": *"committed"' < <(echo "$out") && return 0
   echo "PROBE_OUT:$out" >&2
   return 1

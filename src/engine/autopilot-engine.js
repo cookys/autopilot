@@ -754,13 +754,20 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   return { policy, action, error_class: null, dispatch_status: dispatchStatus };
 }
 
-// --endpoint on an implementer dispatch: extraImplementationArgs wins when the caller passed
-// one (not reserved; the cloud fallback reads it and drops it, or the cloud rung would be sent
-// to the local endpoint again). Otherwise buildImplementationArgs emits roster.implementer_endpoint
-// for a cc-shim runner. A name in scripts/lib/local-sandbox-endpoints.json also forces
-// --sandbox bwrap and --worktree-parent; those two are reserved so extra args cannot strip them
-// (PM 01M748P8G8). The parent is created here, under os.tmpdir() and outside the repo, because
-// every implementer argv (engine, l5/l6, the ladder) is built by this function.
+// --endpoint on an implementer dispatch: the last extraImplementationArgs value wins
+// (`--endpoint v` or `--endpoint=v`). The flag is not reserved; the cloud fallback
+// strips it and clears roster.implementer_endpoint, or the next rung would be sent
+// to the local endpoint again. The roster name is emitted only when extra args
+// carry no --endpoint at all, for a cc-shim runner, and for implementer_runner
+// auto or empty when the seat endpoint is listed. An empty extra value does not
+// fall back to the roster. A name in scripts/lib/local-sandbox-endpoints.json also
+// forces --sandbox bwrap and
+// --worktree-parent on those same runners; those two are reserved so extra args cannot strip
+// them (PM 01M748P8G8). The shell re-resolves auto plus a listed endpoint onto cc-shim. The
+// worktree parent is one per-uid directory (mode 0700, owner checked), created here because
+// every implementer argv (engine, l5/l6, the ladder) is built by this function. Its base is
+// os.tmpdir() only when neither that directory nor any ancestor holds a .git; otherwise /tmp.
+// dispatch-hetero removes the child worktree. This function does not.
 const LOCAL_SANDBOX_ENDPOINTS = path.join(
   __dirname, '..', '..', 'scripts', 'lib', 'local-sandbox-endpoints.json',
 );
@@ -779,22 +786,102 @@ function localSandboxEndpointNames() {
   return list;
 }
 
+function tempBaseHasGitAncestor(start) {
+  let dir = path.resolve(start);
+  for (;;) {
+    try {
+      fs.lstatSync(path.join(dir, '.git'));
+      return true;
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') throw error;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+function ensureMode0700Owned(dir) {
+  if (typeof process.getuid !== 'function') {
+    throw new Error('local sandbox worktree parent requires process.getuid()');
+  }
+  const uid = process.getuid();
+  const inspect = () => {
+    const st = fs.lstatSync(dir);
+    if (st.isSymbolicLink() || !st.isDirectory()) {
+      throw new Error(`local sandbox worktree parent is not a real directory: ${dir}`);
+    }
+    if (st.uid !== uid) {
+      throw new Error(`local sandbox worktree parent owner is not uid ${uid}: ${dir}`);
+    }
+    if ((st.mode & 0o777) !== 0o700) {
+      throw new Error(`local sandbox worktree parent mode is not 0700: ${dir}`);
+    }
+  };
+  try {
+    inspect();
+    return dir;
+  } catch (error) {
+    if (!error || error.code !== 'ENOENT') throw error;
+    const prev = process.umask(0o077);
+    try {
+      fs.mkdirSync(dir, { mode: 0o700 });
+    } catch (mkdirError) {
+      if (!mkdirError || mkdirError.code !== 'EEXIST') throw mkdirError;
+    } finally {
+      process.umask(prev);
+    }
+    inspect();
+    return dir;
+  }
+}
+
+// One shared parent per uid. Not a per-call mkdtemp: two builds reuse this path.
+function localSandboxWorktreeParent() {
+  if (typeof process.getuid !== 'function') {
+    throw new Error('local sandbox worktree parent requires process.getuid()');
+  }
+  const uid = process.getuid();
+  let parent = path.join(os.tmpdir(), 'autopilot-local-sbx-' + uid);
+  if (tempBaseHasGitAncestor(path.dirname(parent))) {
+    parent = path.join('/tmp', 'autopilot-local-sbx-' + uid);
+  }
+  return ensureMode0700Owned(parent);
+}
+
 function implementerSeatEndpoint(extraImplementationArgs, roster) {
   const fromExtra = endpointFromImplementationArgs(extraImplementationArgs);
-  if (typeof fromExtra === 'string' && fromExtra.length > 0) return fromExtra;
+  // null means the caller passed no --endpoint. An empty value is explicit:
+  // do not substitute the roster name.
+  if (fromExtra !== null) return fromExtra;
   if (roster && typeof roster.implementer_endpoint === 'string'
       && VALID_ENDPOINT_NAME.test(roster.implementer_endpoint)) {
     return roster.implementer_endpoint;
   }
   return '';
 }
+// Last occurrence wins, matching dispatch-hetero.sh: both `--endpoint v` and
+// `--endpoint=v`. Returns null only when the flag is absent. An empty value
+// is returned as ''.
 function endpointFromImplementationArgs(args) {
   if (!Array.isArray(args)) return null;
+  let found = null;
+  let seen = false;
   for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === '--endpoint' && typeof args[i + 1] === 'string') return args[i + 1];
-    if (typeof args[i] === 'string' && args[i].startsWith('--endpoint=')) return args[i].slice('--endpoint='.length);
+    if (args[i] === '--endpoint') {
+      if (typeof args[i + 1] === 'string') {
+        seen = true;
+        found = args[i + 1];
+        i += 1;
+      }
+      continue;
+    }
+    if (typeof args[i] === 'string' && args[i].startsWith('--endpoint=')) {
+      seen = true;
+      found = args[i].slice('--endpoint='.length);
+    }
   }
-  return null;
+  return seen ? found : null;
 }
 
 function stripEndpointImplementationArgs(args) {
@@ -1064,6 +1151,16 @@ function buildImplementationArgs({
   retentionExpiresAt = null,
   timeoutSeconds = null,
 }) {
+  // An empty runner is invalid in general. A listed local endpoint is the same
+  // seat as auto: coerce a copy so validation and the argv see auto. Do not
+  // mutate the caller's roster, and do not invent a runner when the field is
+  // missing.
+  if (roster && roster.implementer_runner === '') {
+    const earlySeat = implementerSeatEndpoint(extraImplementationArgs, roster);
+    if (earlySeat && localSandboxEndpointNames().includes(earlySeat)) {
+      roster = { ...roster, implementer_runner: 'auto' };
+    }
+  }
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
     throw new TypeError('promptFile is required');
@@ -1225,17 +1322,17 @@ function buildImplementationArgs({
   }
   const seatEndpoint = implementerSeatEndpoint(extraImplementationArgs, roster);
   const extraEndpoint = endpointFromImplementationArgs(extraImplementationArgs);
-  if (roster.implementer_runner === 'cc-shim'
-      && (extraEndpoint === null || extraEndpoint === '')
+  const runner = roster.implementer_runner;
+  const listed = Boolean(seatEndpoint) && localSandboxEndpointNames().includes(seatEndpoint);
+  const localSeat = runner === 'cc-shim' || ((runner === 'auto' || runner === '') && listed);
+  if (localSeat
+      && extraEndpoint === null
       && typeof roster.implementer_endpoint === 'string'
       && VALID_ENDPOINT_NAME.test(roster.implementer_endpoint)) {
     args.push('--endpoint', roster.implementer_endpoint);
   }
-  if (roster.implementer_runner === 'cc-shim'
-      && seatEndpoint
-      && localSandboxEndpointNames().includes(seatEndpoint)) {
-    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-local-sbx-'));
-    args.push('--sandbox', 'bwrap', '--worktree-parent', parent);
+  if ((runner === 'cc-shim' || runner === 'auto' || runner === '') && listed) {
+    args.push('--sandbox', 'bwrap', '--worktree-parent', localSandboxWorktreeParent());
   }
   args.push(...extraImplementationArgs);
   return args;
@@ -4955,7 +5052,12 @@ class AutopilotEngine {
           implementer_engine: rung.engine,
           implementer_effort: rung.effort,
           implementer_runner: rung.runner,
-          implementer_endpoint: '',
+          // Drop the local name. After extra --endpoint flags are stripped,
+          // a still-set roster endpoint would be emitted onto this rung, and
+          // a listed name would also add --sandbox bwrap. That flag is not
+          // harmless here: codex refuses it, and a cloud cc-shim has no local
+          // seat to sandbox. null is not a name, so neither is emitted.
+          implementer_endpoint: null,
           implementer_family: rungFamily,
           implementer_ladder: [],
           cloud_fallback_attempted: true,

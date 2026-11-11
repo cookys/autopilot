@@ -25,8 +25,10 @@
 #   no bwrap / bwrap cannot start: fail closed (precondition_failed, no worker, no worktree).
 #   local seat (PM 01M748P8G8): cc-shim + endpoint qwen_local as implementer without
 #            --sandbox bwrap is refused before any model call (boundary_code
-#            local_implementer_sandbox_required). These cases run even when bwrap
-#            is missing. A non-local endpoint (glm) and a reviewer dispatch stay as before.
+#            local_implementer_sandbox_required). --runner auto with that endpoint
+#            is the same refusal (the gate runs at runner resolution, before any
+#            spawn). These cases run even when bwrap is missing. A non-local
+#            endpoint (glm) and a reviewer dispatch stay as before.
 # Seam: a stub `claude` on PATH, no real model, no GPU. Own temp dirs.
 . "$(dirname "$0")/lib.sh"
 eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
@@ -172,6 +174,58 @@ case "$(printf '%s' "$AJSON" | jfield error)" in
   *) fail "(a) error does not name the endpoint and the missing flag: $(printf '%s' "$AJSON" | jfield error)" ;;
 esac
 
+# (a-auto) --runner auto + listed endpoint, no sandbox: same refusal, no spawn.
+# Red until the gate runs on auto resolution, not only an explicit cc-shim.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner auto --model MiniMax-M3 \
+    --endpoint qwen_local \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-auto-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-auto")" || RC=$?
+eq 2 "$RC" "(a-auto) auto + qwen_local without --sandbox bwrap exits 2 (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-a-auto" 2>/dev/null))"
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(a-auto) no child spawned (sentinel absent)"
+AJSON="$(printf '%s' "$OUT" | result_json)" || fail "(a-auto) stdout has no result JSON: $OUT"
+eq '"precondition_failed"' "$(printf '%s' "$AJSON" | jfield status)" "(a-auto) status precondition_failed"
+eq 'false' "$(printf '%s' "$AJSON" | jfield dispatcher_called)" "(a-auto) dispatcher_called false"
+eq '0' "$(printf '%s' "$AJSON" | jfield model_calls)" "(a-auto) model_calls 0"
+eq '"local_implementer_sandbox_required"' "$(printf '%s' "$AJSON" | jfield boundary_code)" "(a-auto) boundary_code local_implementer_sandbox_required"
+case "$(printf '%s' "$AJSON" | jfield error)" in
+  *qwen_local*--sandbox\ bwrap*|*--sandbox\ bwrap*qwen_local*) eq 0 0 "(a-auto) error names qwen_local and --sandbox bwrap" ;;
+  *) fail "(a-auto) error does not name the endpoint and the missing flag: $(printf '%s' "$AJSON" | jfield error)" ;;
+esac
+
+# (a-eq) --endpoint=qwen_local is the same listed seat as the split form.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    --endpoint=qwen_local \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-eq-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-eq")" || RC=$?
+eq 2 "$RC" "(a-eq) --endpoint=qwen_local without --sandbox bwrap exits 2 (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-a-eq" 2>/dev/null))"
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(a-eq) no child spawned (sentinel absent)"
+AJSON="$(printf '%s' "$OUT" | result_json)" || fail "(a-eq) stdout has no result JSON: $OUT"
+eq '"precondition_failed"' "$(printf '%s' "$AJSON" | jfield status)" "(a-eq) status precondition_failed"
+eq 'false' "$(printf '%s' "$AJSON" | jfield dispatcher_called)" "(a-eq) dispatcher_called false"
+eq '"local_implementer_sandbox_required"' "$(printf '%s' "$AJSON" | jfield boundary_code)" "(a-eq) boundary_code local_implementer_sandbox_required"
+
+# (a-eq-last) the last endpoint form wins. An earlier glm does not hide qwen_local.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner auto --model MiniMax-M3 \
+    --endpoint glm --endpoint=qwen_local \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-eq-last-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-eq-last")" || RC=$?
+eq 2 "$RC" "(a-eq-last) last --endpoint=qwen_local without --sandbox bwrap exits 2 (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-a-eq-last" 2>/dev/null))"
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(a-eq-last) no child spawned (sentinel absent)"
+AJSON="$(printf '%s' "$OUT" | result_json)" || fail "(a-eq-last) stdout has no result JSON: $OUT"
+eq '"local_implementer_sandbox_required"' "$(printf '%s' "$AJSON" | jfield boundary_code)" "(a-eq-last) boundary_code local_implementer_sandbox_required"
+
 # (c) cc-shim + a non-local endpoint (glm), no sandbox: the new gate does not fire.
 rm -f "$SENTINEL"
 RC=0
@@ -224,6 +278,20 @@ eq 0 "$RC" "(b) qwen_local with --sandbox bwrap proceeds (rc=$RC stderr=$(tail -
 eq '"committed"' "$(status_of)" "(b) status committed (fake claude's in-worktree edit landed)"
 eq '"bwrap"' "$(printf '%s' "$OUT" | result_json | jfield sandbox.mode)" "(b) sandbox.mode is bwrap"
 eq '<absent>' "$(printf '%s' "$OUT" | result_json | jfield boundary_code)" "(b) no refusal boundary code"
+
+# (b-auto) auto + listed endpoint + bwrap is re-resolved onto the cc-shim sandbox path.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner auto --model MiniMax-M3 \
+    --endpoint qwen_local --sandbox bwrap --worktree-parent "$WTPARENT" \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-b-auto-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-b-auto")" || RC=$?
+eq 0 "$RC" "(b-auto) auto + qwen_local with --sandbox bwrap proceeds (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-b-auto" 2>/dev/null))"
+eq '"committed"' "$(status_of)" "(b-auto) status committed"
+eq '"bwrap"' "$(printf '%s' "$OUT" | result_json | jfield sandbox.mode)" "(b-auto) sandbox.mode is bwrap"
+eq '"cc-shim"' "$(printf '%s' "$OUT" | result_json | jfield runner)" "(b-auto) auto with a listed endpoint runs as cc-shim"
 
 # ---- green: worker writes inside the worktree only; sandbox on -> committed
 run_case bwrap 0 --worktree-parent "$WTPARENT"

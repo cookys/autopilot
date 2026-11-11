@@ -52,10 +52,12 @@
 #                                              #   family alias (grok46|codex53) resolved by
 #                                              #   lib/cursor-model.sh, or a full model id verbatim.
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
-#       [--endpoint <name>]                    # cc-shim only: resolve creds via
-#                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
-#                                              #   into ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env
-#                                              #   still used when omitted (byte-identical)
+#       [--endpoint <name>]                    # cc-shim only (also --endpoint=<name>; last one
+#                                              #   wins; @none clears; empty is refused): resolve
+#                                              #   creds via resolve-endpoint.sh
+#                                              #   (AUTOPILOT_ENDPOINT_<NAME>_*) into
+#                                              #   ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env still
+#                                              #   used when omitted (byte-identical)
 #       [--sandbox off|bwrap]                  # cc-shim only (any other runner is refused). bwrap: the worker
 #                                              #   runs inside bubblewrap with `/` read-only, so a write outside
 #                                              #   the worker's own directories fails BEFORE it lands (EROFS) instead of
@@ -70,8 +72,10 @@
 #                                              #   silent run without the sandbox. Result JSON + manifest carry
 #                                              #   `sandbox: {mode, writable, denied_writes}`. Default off.
 #                                              #   A local implementer seat (scripts/lib/local-sandbox-endpoints.json,
-#                                              #   today qwen_local) on cc-shim is refused BEFORE resolve-endpoint
-#                                              #   and before any model call unless this flag is bwrap
+#                                              #   today qwen_local) on cc-shim — and on --runner auto, which
+#                                              #   re-resolves to cc-shim when that endpoint is listed — is refused
+#                                              #   at runner resolution, BEFORE resolve-endpoint and before any
+#                                              #   model call, unless this flag is bwrap
 #                                              #   (boundary_code local_implementer_sandbox_required, PM 01M748P8G8).
 #                                              #   Read-only rails are not this script. No unsandboxed fallback.
 #                                              #   The worktree's `.git` gitfile is bound read-only; the rail also
@@ -2201,6 +2205,7 @@ while [ $# -gt 0 ]; do
     --effort) EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
+    --endpoint=*) ENDPOINT="${1#--endpoint=}"; [ -n "$ENDPOINT" ] || die_precondition "--endpoint requires a non-empty value"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift ;;
     --sandbox) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--sandbox requires off|bwrap"; SANDBOX="$2"; shift 2 ;;
     --worktree-parent) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--worktree-parent requires a non-empty directory path"; WORKTREE_PARENT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
@@ -2431,8 +2436,9 @@ set_runner_flags() {
     auto)
       # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
       # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
-      # cc-shim is never auto-selected: it is a base-url shim that requires env vars, so
-      # a bare model name must NOT silently route there.
+      # cc-shim is never auto-selected from the model name: it is a base-url shim that
+      # requires env vars, so a bare model name must NOT silently route there. A listed
+      # --endpoint re-resolves onto cc-shim after this case (local implementer seat).
       model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
       # 🔴 auto MUST NEVER SELECT cursor. This is a REFUSAL, not a route — placed before
       # the *grok*/*gpt* tests below on purpose. Every cursor model id contains grok, gpt,
@@ -2462,6 +2468,25 @@ set_runner_flags() {
       ;;
     *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi|claude-native (got: $RUNNER)" ;;
   esac
+  # --runner auto never selects cc-shim from the model name. A listed local
+  # endpoint on this write rail is still that seat: re-resolve before the
+  # sandbox preflight and the local-implementer gate, so both see cc-shim.
+  # Clear every other IS_* first: current_runner_name checks them after IS_CCSHIM.
+  if [ "$RUNNER" = "auto" ] && [ -n "${ENDPOINT:-}" ]; then
+    local _auto_listed_rc=0
+    local_sandbox_endpoint_listed "$ENDPOINT" || _auto_listed_rc=$?
+    case "$_auto_listed_rc" in
+      0)
+        IS_CODEX=0; IS_GROK=0; IS_PI=0; IS_QODER=0; IS_CURSOR=0
+        IS_OPENCODE=0; IS_KIMI=0; IS_CNATIVE=0
+        IS_CCSHIM=1
+        RUNNER="cc-shim"
+        declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand
+        ;;
+      1) ;;
+      *) die_precondition "local implementer sandbox registry unreadable (scripts/lib/local-sandbox-endpoints.json); refusing auto endpoint '${ENDPOINT}'" ;;
+    esac
+  fi
   if [ -n "${GATE_RULES_FILE:-}" ]; then
     # Silently ignoring the flag on another runner would make the arm marker lie, so refuse it.
     [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ] || die_precondition "--gate-rules applies only to --runner claude-native or cc-shim (got runner: $RUNNER)"
@@ -2490,6 +2515,11 @@ set_runner_flags() {
   # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED
   # init comment and die_precondition (FINDING 1).
   RUNNER_RESOLVED=1
+  # Every resolution path (explicit runner and the auto re-resolution above) hits
+  # this gate before resolve-endpoint, the pre-probe, the worktree, and the worker.
+  # A listed local endpoint without --sandbox bwrap dies here; bwrap requested but
+  # missing already died in the sandbox preflight (no unsandboxed fallback).
+  require_local_implementer_sandbox
 }
 
 D2_AGY_RESPONSE_CLAIM="cap-v1-e3b644661b8b04b75ff6402fb8465259b9fd50116f3bf0c65a2c6625aa354b3e"
@@ -2641,10 +2671,8 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
     "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
 fi
 set_runner_flags
-# Before resolve-endpoint, the pre-probe, the worktree, and the worker. A listed local
-# endpoint that did not ask for bwrap never reaches a model call. bwrap requested but
-# missing still dies in set_runner_flags (no unsandboxed fallback).
-require_local_implementer_sandbox
+# The local-implementer gate runs at the end of set_runner_flags, after the runner
+# (including auto + a listed endpoint) is resolved, still before resolve-endpoint.
 # agy is the else-case rail (no IS_* flag). Refuse an unusable --timeout HERE, in the parent: the agy
 # block itself runs in the detached child, where a die would leave no result file behind.
 if [ "${RUNNER_RESOLVED:-0}" -eq 1 ] \

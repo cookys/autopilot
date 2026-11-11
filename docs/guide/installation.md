@@ -257,7 +257,7 @@ Without these, symlinks materialise as plain text files containing the target pa
 ./scripts/install-hooks.sh                           # one-time per clone
 ```
 
-Activates `.githooks/pre-commit` which runs `sync-version.js --check` and `sync-agent-bodies.sh --check` to catch version-manifest drift and agent-body drift before they reach the remote.
+Activates the hooks in `.githooks/`: pre-commit (version and agent-body drift, leak-guard on staged lines) and pre-push (leak-guard on the pushed range, layout-lint, qc-gate). There is no hosted CI, so these local hooks are the only gate before the public remote. If your global `core.hooksPath` is the lab hooks dir, the script leaves it in charge and writes bridges in `.git/hooks/` instead of setting a local `core.hooksPath`; otherwise it sets the local one. Check it worked: stage a line naming a host and commit; the commit must be blocked.
 
 ---
 

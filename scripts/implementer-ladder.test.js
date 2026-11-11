@@ -193,6 +193,12 @@ test('roster override qwen_local implementer emits bwrap sandbox argv', () => {
     '- implementer_endpoint: qwen_local',
     '- implementer_ladder: Qwen3.8-27B-QUASAR-NVFP4/high@cc-shim',
     '- allow_same_runner_dual_seat: on',
+    '- override: verification_author | until 2099-01-01 | test fixture seat',
+    '- verification_author_present: true',
+    '- verification_author_engine: GLM-5.3',
+    '- verification_author_runner: cc-shim',
+    '- verification_author_effort: high',
+    '- verification_author_endpoint: glm',
     '',
   ].join('\n'));
   const { status, json, stderr } = resolveJson(cfg);

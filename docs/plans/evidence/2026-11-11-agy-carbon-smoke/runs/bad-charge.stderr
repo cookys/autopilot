@@ -1,2 +1,2 @@
-dispatch-review: run_id=review-1794335725-1585563-7028 manifest=/home/team/.tmp/autopilot-dispatch-runs/review-1794335725-1585563-7028.manifest.json (watch: scripts/dispatch-status.js --run review-1794335725-1585563-7028)
+dispatch-review: run_id=review-1794335725-1585563-7028 manifest=$HOME/.tmp/autopilot-dispatch-runs/review-1794335725-1585563-7028.manifest.json (watch: scripts/dispatch-status.js --run review-1794335725-1585563-7028)
 dispatch-review: agy/gemini-4-carbon-high (effort=xhigh) may run for MINUTES — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.

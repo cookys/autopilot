@@ -49,7 +49,7 @@
         },
         "private_raw_reference": {
           "kind": "private-file",
-          "locator": "/home/team/.tmp/dispatch-author-log-vujlg3",
+          "locator": "$HOME/.tmp/dispatch-author-log-vujlg3",
           "digest": "f6c4b6f56506e7d8b6d87b16e20c7c8eb09ecec593af4a887b4e2d67326c40f2"
         },
         "receipt_digest": "fd27ebe238cc8658251decbf33486819afd165bb83f9928167949c1def30aaa0"

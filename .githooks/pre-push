@@ -27,6 +27,34 @@ if [ -r "$__TIG_LIB" ]; then
   fi
 fi
 
+# --- leak-guard: no personal data in lines the pushed range adds ---
+# pre-commit already runs leak-guard --staged, but cherry-picks, merges, rebases and commits made in
+# another clone never pass through it. This checks the same range the gates below use. Exit 1 blocks;
+# exit 2 (git failure, bad registry) also blocks, since leak-guard treats it as "never a pass".
+__LG="$REPO_ROOT/scripts/leak-guard.js"
+if [ -r "$__LG" ] && command -v node >/dev/null 2>&1; then
+  __lg_fail=0
+  while read -r __lg_lref __lg_lsha __lg_rref __lg_rsha; do
+    [ -z "${__lg_lsha:-}" ] && continue
+    echo "$__lg_lsha" | grep -qE '^0+$' && continue
+    if echo "${__lg_rsha:-}" | grep -qE '^0+$' || ! git cat-file -e "${__lg_rsha}^{commit}" 2>/dev/null; then
+      __lg_base="$(git rev-parse --verify --quiet origin/HEAD 2>/dev/null || true)"
+      [ -n "$__lg_base" ] || { printf 'leak-guard: %s: no base to diff against - push blocked (git fetch first)\n' "${__lg_lref:-HEAD}" >&2; __lg_fail=1; continue; }
+      __lg_range="${__lg_base}..${__lg_lsha}"
+    else
+      __lg_range="${__lg_rsha}..${__lg_lsha}"
+    fi
+    if ! __lg_out="$(cd "$REPO_ROOT" && node "$__LG" --range "$__lg_range" 2>&1)"; then
+      printf '\n\033[1mleak-guard: %s (%s) blocked\033[0m\n%s\n' "${__lg_lref:-HEAD}" "$__lg_range" "$__lg_out" >&2
+      __lg_fail=1
+    fi
+  done <<< "$__PUSH_STDIN"
+  if [ "$__lg_fail" -ne 0 ]; then
+    printf 'Fix with the redaction command above in a new commit; this repo is public.\n\n' >&2
+    exit 1
+  fi
+fi
+
 # --- backlog gate (peer_report_lost + the file gate on the pushed commit) ---
 # Runs before the qc-gate so qc-gate `mode: off` cannot switch it off. Per pushed ref the range is
 # the same one the qc-gate below uses: <remote_sha>..<local_sha>, or origin/HEAD..<local_sha> for a

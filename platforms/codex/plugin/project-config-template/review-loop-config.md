@@ -57,7 +57,7 @@ Every roster change adds a block here: date, reason, who ruled.
 
 **2026-11-10.** The qwen reviewer seat retreats to a cloud seat when `qwen_local` is down or busy, and returns when the endpoint answers again. Ruled by the PM (fleet 01M726SXVB).
 
-* Reason: c4140 qwen planned downtime 16:05–18:40 +08. Only the reviewer seat. The global `on_engine_unavailable` stays `ask`, and every other seat is unchanged.
+* Reason: <host> qwen planned downtime 16:05–18:40 +08. Only the reviewer seat. The global `on_engine_unavailable` stays `ask`, and every other seat is unchanged.
 * `reviewer_on_engine_unavailable: cloud-fallback` and `reviewer_cloud_fallback_rung: gpt-6.1-sol/high@codex`. `dispatch-review.sh` pre-probes the reviewer's endpoint (the same `endpoint-probe.sh` the consult seat uses) and retreats once. A later probe that lists the model dispatches to `qwen_local` again and writes no second `cloud-fallbacks.jsonl` row.
 * Empty `reviewer_on_engine_unavailable` follows the global policy. A repo reviewer override that omits the two keys drops them with the rest of the group.
 

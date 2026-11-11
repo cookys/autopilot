@@ -25,7 +25,7 @@ nice -n 10 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
 | `diffs/bad-charge.diff` | `charge()` drops the positive-integer guard, so a negative amount increases `balance` | 0 (`runs/bad-charge.rc`) | `review-1794335725-1585563-7028` | `FIX-THEN-SHIP`, finding `🟠 [charge-amount-validation] MUST-FIX` |
 | `diffs/clean-clamp.diff` | `clamp` bounds change from `<`/`>` to `<=`/`>=`, which the spec says is equivalent | 0 (`runs/clean-clamp.rc`) | `review-1794335725-1585570-0c72` | `SHIP-AS-IS`, findings `none`, `no_finding_proof` present |
 
-Stdout is `runs/bad-charge.stdout` and `runs/clean-clamp.stdout`. Stderr run lines are the matching `.stderr` files. Raw logs (outside the repo): `/home/team/.tmp/dispatch-review-log-JO1MGS` (bad), `/home/team/.tmp/dispatch-review-log-aBZTdW` (clean). Manifests (outside the repo): `/home/team/.tmp/autopilot-dispatch-runs/review-1794335725-1585563-7028.manifest.json`, `/home/team/.tmp/autopilot-dispatch-runs/review-1794335725-1585570-0c72.manifest.json`.
+Stdout is `runs/bad-charge.stdout` and `runs/clean-clamp.stdout`. Stderr run lines are the matching `.stderr` files. Raw logs (outside the repo): `$HOME/.tmp/dispatch-review-log-JO1MGS` (bad), `$HOME/.tmp/dispatch-review-log-aBZTdW` (clean). Manifests (outside the repo): `$HOME/.tmp/autopilot-dispatch-runs/review-1794335725-1585563-7028.manifest.json`, `$HOME/.tmp/autopilot-dispatch-runs/review-1794335725-1585570-0c72.manifest.json`.
 
 ## Plan review (`scripts/dispatch-plan-review.js`)
 
@@ -46,7 +46,7 @@ nice -n 10 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
 | exit | 0 (`runs/plan-review.rc`) |
 | author run id | `author-1794335725-1585838` (role `plan-review`, model `gemini-4-carbon-high`, `final_status` `authored`, 18:35:25Z–18:40:25Z) |
 | panel manifest | `panel-0354fc9d-g1-1585584` (verdict `CONDITIONAL`) |
-| author log | `/home/team/.tmp/dispatch-author-log-vujlg3` |
+| author log | `$HOME/.tmp/dispatch-author-log-vujlg3` |
 | artifact | `plan/g1-artifact.json` (byte copy of `runs/plan-review.stdout`) |
 | model / family | `gemini-4-carbon-high`, runner `agy`, family `google` |
 | verdict | `CONDITIONAL` (`semantic_verdict` `CONDITIONAL`, `policy_reason` `nonblocking_conditional`, `terminal` true, `transport_status` `complete`) |

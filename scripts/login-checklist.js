@@ -6,7 +6,7 @@
  *   node scripts/login-checklist.js --hosts <file> [--json]
  *
  * Hosts file (JSON array, strict; unknown keys, bad names, empty lists and a repeated subscription in one OS account are rejected):
- *   [{"host":"cookys-aimax395","os_account":"team","profiles":["singularaion","stranity"]}]
+ *   [{"host":"<host>","os_account":"team","profiles":["singularaion","stranity"]}]
  * `profiles` entries use the profile-name grammar of profile-health.js (letters, digits, . _ -; max 64; starts with a letter or digit).
  * `home` (the native ~/.claude) is allowed: it needs no directory and no relogin, so it yields a note and no step.
  * One (host, os_account) pair appears once; the same subscription twice under one OS account is refused (two dirs of one subscription overwrite each other).

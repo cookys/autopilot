@@ -1,7 +1,7 @@
 {
   "version": 2,
   "session_key": "0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56",
-  "repo_identity": "git-common-dir:/home/team/.tmp/claude-1001/-home-team-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.git",
+  "repo_identity": "git-common-dir:$HOME/.tmp/claude-1001/-home-<user>-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.git",
   "logical_plan_id": "agy-carbon-smoke-2026-11-11",
   "ticket": "carbon-smoke",
   "rubric_sha256": "e8a20554a72bba0e796be0ed8d5f4b7ca851b362cda40de64a1003fdebf9eb21",
@@ -35,12 +35,12 @@
         "session_inode": "73146675"
       },
       "status": "complete",
-      "artifact": "/home/team/.tmp/claude-1001/-home-team-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.claude/worktrees/hetero-hands-carbon-1-ogoLZx/docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/state/0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56/generation-01.json",
+      "artifact": "$HOME/.tmp/claude-1001/-home-<user>-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.claude/worktrees/hetero-hands-carbon-1-ogoLZx/docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/state/0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56/generation-01.json",
       "attempt_count": 1
     }
   ],
   "artifacts": [
-    "/home/team/.tmp/claude-1001/-home-team-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.claude/worktrees/hetero-hands-carbon-1-ogoLZx/docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/state/0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56/generation-01.json"
+    "$HOME/.tmp/claude-1001/-home-<user>-projects-autopilot/c295ec00-831f-4f97-aa82-3e6be2c25768/scratchpad/askpm/clone/.claude/worktrees/hetero-hands-carbon-1-ogoLZx/docs/plans/evidence/2026-11-11-agy-carbon-smoke/plan/state/0354fc9dc7a43ac59f5d82311c143d8e1a6dd8f9fab02199097cfbf449a9cd56/generation-01.json"
   ],
   "terminal_reason": "nonblocking_conditional"
 }

@@ -1,1 +1,1 @@
-{"attempt":1,"runner":"agy","model":"gemini-3.8-flash-high","bin":"/home/codepower/.local/bin/agy","bin_version":"1.1.28","version_source":"operator-asserted","probe_rc":0,"note":"probe committed","instrument_charged":false,"probed_at":"2026-09-09T09:21:17Z"}
+{"attempt":1,"runner":"agy","model":"gemini-3.8-flash-high","bin":"$HOME/.local/bin/agy","bin_version":"1.1.28","version_source":"operator-asserted","probe_rc":0,"note":"probe committed","instrument_charged":false,"probed_at":"2026-09-09T09:21:17Z"}

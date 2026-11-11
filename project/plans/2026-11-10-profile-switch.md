@@ -141,7 +141,7 @@ Automatic switching; changing G37 registry, rails or tokens; subagent attributio
 1. Is the OS account's native login (`~/.claude`) the "home" profile with no new dir? **Recommend yes**: fewest logins (only the other subscriptions), `~/.claude` untouched; the brief's "one profile per subscription" is satisfied by the manifest mapping subscription -> dir.
 2. Lane manifest location: **recommend** `~/.config/autopilot/lanes/<lane>.json` (per OS account, 0600, no secrets), created by the PM/lane at first registration.
 3. Host and OS-account list for the checklist: not in the repo. **Recommend** the PM supplies it from `fleet directory` (one line per host/account) in P4.
-4. Can `lane-switch` verify that `--order` came from `cookys/aimax395/pm--claude`? **Recommend** v1 records the id and checks the message through the fleet tool at run time if the CLI supports it (unverified); otherwise the PM runs the command itself.
+4. Can `lane-switch` verify that `--order` came from `cookys/<host>/pm--claude`? **Recommend** v1 records the id and checks the message through the fleet tool at run time if the CLI supports it (unverified); otherwise the PM runs the command itself.
 5. If S3 shows rollup keys on session id and not config dir: **recommend** stop and ask the fleet lane to add a profile key before any live move.
 6. Pools beyond stranity and cookys? **Recommend** the generator takes subscription names as input; no hardcoded pool list.
 

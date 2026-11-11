@@ -258,6 +258,13 @@
       "reason": "verification worktree parent; marker/lock reapers only"
     },
     {
+      "pattern": "autopilot-local-sbx-*",
+      "kind": "worktree",
+      "owner": "src/engine/autopilot-engine.js",
+      "retention_days": null,
+      "reason": "shared per-uid local-implementer worktree parent autopilot-local-sbx-<uid>, mode 0700 (src/engine/autopilot-engine.js buildImplementationArgs and scripts/qualification-sweep.sh). Child worktrees are removed by dispatch-hetero; the parent stays bounded and is never age-pruned. Not a per-dispatch mkdtemp."
+    },
+    {
       "pattern": "qc-outcome-wt-*",
       "kind": "worktree",
       "owner": "scripts/check-test-outcome.js",

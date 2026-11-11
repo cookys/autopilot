@@ -262,6 +262,11 @@
       "file": "scripts/lib/repo-identity.sh",
       "match": "[ -k \"$TMPDIR\" ]",
       "reason": "runs_tmpdir_ensure only tests whether the user's TMPDIR is a root-owned sticky shared root before delegating its check to scripts/lib/runtime-paths.js; it allocates nothing."
+    },
+    {
+      "file": "scripts/lib/bash-launch-rules.js",
+      "match": "os.tmpdir()",
+      "reason": "Path policy: resolves the Claude Code session scratchpad root (CLAUDE_CODE_TMPDIR || TMPDIR || os.tmpdir()) to guard recursive rm; allocates nothing."
     }
   ]
 }

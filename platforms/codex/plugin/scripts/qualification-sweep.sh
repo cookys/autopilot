@@ -236,6 +236,8 @@ IFS=$'\t' read -r _tag PROMPT_HASH SEM_HASH CONTAIN_HASH HARNESS_VERSION EVROOT 
 
 # shellcheck source=lib/auth-stop.sh
 . "$REPO_ROOT/scripts/lib/auth-stop.sh"
+# shellcheck source=lib/local-sandbox-endpoint.sh
+. "$REPO_ROOT/scripts/lib/local-sandbox-endpoint.sh"
 
 SEAT_LINES=()
 while IFS= read -r line; do
@@ -283,6 +285,13 @@ plan_sweep() {
     fi
     echo "  scripts/dispatch-hetero.sh --branch probe-1 --prompt-file <tmp>/.prompt.txt \\"
     echo "    --runner $runner --model $model --effort $effort --base HEAD \\"
+    if [ "$runner" = "cc-shim" ] && [ "$endpoint" != "-" ] && [ "$endpoint" != "anthropic-native" ]; then
+      local _listed_rc=0
+      local_sandbox_endpoint_listed "$endpoint" || _listed_rc=$?
+      if [ "$_listed_rc" -eq 0 ]; then
+        echo "    --endpoint $endpoint --sandbox bwrap --worktree-parent <dir outside the probe repo> \\"
+      fi
+    fi
     echo "    --timeout 240s --scaffold-tier off"
     echo "  # rc 0 + \"status\": \"committed\" -> probe receipt rc=0 appended to $bundle/probe-receipts.jsonl, proceed"
     echo "  # otherwise -> probe receipt rc=1 appended (instrument_charged:false), SKIP administration (uncharged)"
@@ -385,8 +394,8 @@ resolve_runner_version() { # runner -> rc 0 usable
   return 0
 }
 
-stage0_probe() { # runner model effort -> rc 0 ok
-  local runner="$1" model="$2" effort="${3:-high}"
+stage0_probe() { # runner model effort [endpoint] -> rc 0 ok
+  local runner="$1" model="$2" effort="${3:-high}" endpoint="${4:-}"
   # Throwaway scratch dir (mktemp without a template).
   local pd; pd=$(mktemp -d)
   ( cd "$pd" && git init -q -b main && git config user.email t@t.invalid && git config user.name t \
@@ -397,15 +406,37 @@ SCOPE: modify ONLY note.md.
 OUTPUT: exactly one commit on the current branch.
 BOUNDARIES: do not push; keep the diff minimal.
 EOF
+  # A listed local cc-shim endpoint must name itself and run under bwrap. The parent
+  # is the shared per-uid directory (same rule as buildImplementationArgs), never a
+  # per-call mktemp. Other seats keep the previous argv.
+  local sbx_args=() wtparent="" listed_rc=0
+  if [ "$runner" = "cc-shim" ] && [ -n "$endpoint" ] && [ "$endpoint" != "-" ] && [ "$endpoint" != "anthropic-native" ]; then
+    local_sandbox_endpoint_listed "$endpoint" || listed_rc=$?
+    if [ "$listed_rc" -eq 0 ]; then
+      wtparent="$(local_sandbox_worktree_parent)" || {
+        rm -rf "$pd"
+        echo "PROBE: local sandbox worktree parent unavailable; refusing unsandboxed local probe" >&2
+        return 1
+      }
+      sbx_args=(--endpoint "$endpoint" --sandbox bwrap --worktree-parent "$wtparent")
+    elif [ "$listed_rc" -ne 1 ]; then
+      rm -rf "$pd"
+      echo "PROBE: local sandbox registry unreadable; refusing unsandboxed local probe" >&2
+      return 1
+    fi
+  fi
   local out
   out=$(cd "$pd" && timeout 320 bash "$REPO_ROOT/scripts/dispatch-hetero.sh" \
     --branch probe-1 --prompt-file "$pd/.prompt.txt" --runner "$runner" --model "$model" \
-    --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off 2>"$pd/.dispatch.err" | tee "$pd/.dispatch.out" | tail -1)
+    --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off \
+    ${sbx_args[@]+"${sbx_args[@]}"} 2>"$pd/.dispatch.err" | tee "$pd/.dispatch.out" | tail -1)
   # BL-0294: a probe that died on authentication means every later seat dies the same way. Read every output of
   # the call (full stdout, stderr, and the runner's agent_log the result names) BEFORE the scratch dir is removed.
   # failed = the probe's result is not committed / reviewed (--failed-from; a runner that exited 0 with no commit is no_op = failed)
   auth_stop_check "probe-$runner/$model" --failed-from "$pd/.dispatch.out" --dispatch "$pd/.dispatch.out" --stderr "$pd/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
   rm -rf "$pd"
+  # Leave the shared per-uid parent. Removing it would delete sibling worktrees.
+  # dispatch-hetero already removes this probe's child worktree.
   grep -q '"status": *"committed"' < <(echo "$out") && return 0
   echo "PROBE_OUT:$out" >&2
   return 1
@@ -458,7 +489,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
     export ANTHROPIC_BASE_URL="$base_url" ANTHROPIC_AUTH_TOKEN="${!token_env}"
   fi
   # Stage-0
-  if stage0_probe "$runner" "$model" "$effort"; then
+  if stage0_probe "$runner" "$model" "$effort" "$endpoint"; then
     probe_receipt "$bundle" "$runner" "$model" "$vsrc" 0 "probe committed"
   else
     probe_receipt "$bundle" "$runner" "$model" "$vsrc" 1 "probe failed - uncharged infra abort"

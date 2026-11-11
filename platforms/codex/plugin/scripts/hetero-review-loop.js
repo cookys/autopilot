@@ -19,6 +19,7 @@ const { stageWrite, familyOfEngine } = require('./lib/stage-write');
 const familyGate = require('./lib/review-family-gate');
 const { invalidSeatModels } = require('./lib/seat-model-id');
 const { portableRawLogInPlace } = require('./lib/raw-log-path');
+const codexFallback = require('./lib/qc-panel-codex-fallback');
 
 function assertSafeSeatId(id) {
   if (!isSafeSeatId(id)) {
@@ -421,14 +422,21 @@ function seatQuotaExhausted(seat) {
   }
 }
 
-function resolveSeats(seatsArg, repoRoot) {
+function resolveSeatsWithPolicy(seatsArg, repoRoot) {
   if (seatsArg) {
     const specs = seatsArg.split(',').map((s) => s.trim()).filter(Boolean);
-    return specs.map((spec, idx) => {
+    const seats = specs.map((spec, idx) => {
       const id = `s${idx}`;
       assertSafeSeatId(id);
       return parseSeatSpec(spec, id);
     });
+    return {
+      seats,
+      policy: {
+        crossFamilyRequired: true,
+        requiredReviewFamilies: seats.length > 1 ? 2 : 1,
+      },
+    };
   }
 
   const resolver = getResolverPath(repoRoot);
@@ -447,7 +455,7 @@ function resolveSeats(seatsArg, repoRoot) {
     process.exit(2);
   }
 
-  return qcSeats.map((seatObj, idx) => {
+  const seats = qcSeats.map((seatObj, idx) => {
     let endpoint = seatObj.endpoint;
     if (endpoint === null || endpoint === undefined || endpoint === '' || endpoint === '@none') {
       endpoint = undefined;
@@ -463,6 +471,19 @@ function resolveSeats(seatsArg, repoRoot) {
       family: typeof seatObj.family === 'string' && seatObj.family && seatObj.family !== 'unknown' ? seatObj.family : undefined,
     };
   });
+  return {
+    seats,
+    policy: {
+      crossFamilyRequired: !(fullJson && fullJson.cross_family_required === false),
+      requiredReviewFamilies: fullJson && Number.isSafeInteger(fullJson.required_review_families)
+        ? fullJson.required_review_families
+        : (seats.length > 1 ? 2 : 1),
+    },
+  };
+}
+
+function resolveSeats(seatsArg, repoRoot) {
+  return resolveSeatsWithPolicy(seatsArg, repoRoot).seats;
 }
 
 const SEVERITY_WORDS = new Set(['Critical', 'Major', 'Minor', 'Suggestion']);
@@ -593,8 +614,8 @@ function runGitDiff(base, head, repoRoot, excludes = []) {
 // failure is recorded exactly as before. Every other seat is untouched. The attempt is recorded
 // on the seat artifact as `format_retry` and on stderr.
 const FORMAT_RETRY_LIMIT = 1;
-async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
-  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '');
+async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, implementerFamily) {
+  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '', implementerFamily);
   const isFormatReject = (r) => r.status === 'no_verdict'
     && r.rawOutput && r.rawOutput.format_reject === true
     && typeof r.rawOutput.error === 'string' && r.rawOutput.error.length > 0;
@@ -605,7 +626,7 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
     const reason = typeof result.rawOutput.reject_reason === 'string' && result.rawOutput.reject_reason ? result.rawOutput.reject_reason : result.rawOutput.error;
     console.error(`INFO: seat ${seat.id} answer rejected for format (${reason}); re-asking this seat once (format retry ${attempts}/${FORMAT_RETRY_LIMIT})`);
     history.push({ attempt: attempts, reason, raw_log: result.rawOutput.raw_log || null, usage: result.rawOutput.usage === undefined ? null : result.rawOutput.usage });
-    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason);
+    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason, implementerFamily);
     if (result.rawOutput && typeof result.rawOutput === 'object') {
       result.rawOutput.format_retry = {
         attempts,
@@ -620,7 +641,7 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
   return result;
 }
 
-function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote) {
+function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote, implementerFamily) {
   return new Promise((resolve) => {
     let dispatchScript = process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT;
     if (!dispatchScript) {
@@ -641,6 +662,9 @@ function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout,
     }
     if (specFile) {
       args.push('--spec-file', specFile);
+    }
+    if (typeof implementerFamily === 'string' && implementerFamily.length > 0) {
+      args.push('--implementer-family', implementerFamily);
     }
 
     const childEnv = { ...process.env };
@@ -668,6 +692,8 @@ function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout,
       resolve({
         seat,
         status: 'no_verdict',
+        exitCode: null,
+        stderr,
         rawOutput: { status: 'no_verdict', error: err.message },
       });
     });
@@ -691,6 +717,8 @@ function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout,
         resolve({
           seat,
           status: 'no_verdict',
+          exitCode,
+          stderr,
           rawOutput: {
             ...fallbackRaw,
             status: 'no_verdict',
@@ -707,6 +735,8 @@ function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout,
       resolve({
         seat,
         status,
+        exitCode,
+        stderr,
         rawOutput: parsed,
       });
     });
@@ -991,8 +1021,11 @@ async function handleCollect(flags) {
 
   // Resolve seats
   let seats = [];
+  let panelPolicy = { crossFamilyRequired: true, requiredReviewFamilies: 1 };
   try {
-    seats = resolveSeats(flags.seats, repoRoot);
+    const resolvedSeats = resolveSeatsWithPolicy(flags.seats, repoRoot);
+    seats = resolvedSeats.seats;
+    panelPolicy = resolvedSeats.policy;
   } catch (e) {
     console.error(`ERROR: Seat resolution failed: ${e.message}`);
     process.exit(1);
@@ -1202,8 +1235,67 @@ async function handleCollect(flags) {
 
   // Stage graph (plan §2.7 writers): a review round starts here (collect only; finalize/opt-out never write). Fail-open.
   stageWrite({ to: 'code-review' });
-  const seatPromises = seats.map((seat) => runSeatDispatch(seat, repoRoot, gDir, specFile, timeout));
+  const implementerFamilyArg = [...new Set(
+    familyGate.familiesOfImplementer(implementerEngine).families.filter((f) => f && f !== 'unknown'),
+  )].join(',');
+  const seatPromises = seats.map((seat) => runSeatDispatch(seat, repoRoot, gDir, specFile, timeout, implementerFamilyArg));
   const seatResults = await Promise.all(seatPromises);
+
+  // Runtime codex quota fallback (PM ruling 01M74DH2FF): when a codex seat fails because
+  // codex quota/rate-limit is exhausted, re-run that seat at most ONCE on an eligible
+  // substitute (grok-4.7/high@grok first, gemini-4-carbon-high/high@agy second).
+  const substitutedSeats = [];
+  for (let i = 0; i < seatResults.length; i += 1) {
+    const res = seatResults[i];
+    if (!res || !res.seat || res.seat.runner !== 'codex' || res.status === 'reviewed') {
+      continue;
+    }
+    const raw = res.rawOutput && typeof res.rawOutput === 'object' ? res.rawOutput : {};
+    const quotaFailure = codexFallback.classifyCodexQuotaFailure({
+      runner: res.seat.runner,
+      exitCode: Number.isInteger(raw.exit_code) ? raw.exit_code : res.exitCode,
+      texts: [raw.reject_reason, raw.error, raw.stderr_tail, res.stderr],
+      rawLogPath: typeof raw.raw_log === 'string' ? raw.raw_log : null,
+      cwd: repoRoot || process.cwd(),
+    });
+    if (!quotaFailure) continue;
+
+    const activePanelSeats = seatResults.map((r) => r.seat);
+    const sub = codexFallback.selectCodexQuotaSubstitute({
+      failedSeat: res.seat,
+      failedIndex: i,
+      panelSeats: activePanelSeats,
+      implementerEngine,
+      crossFamilyRequired: panelPolicy.crossFamilyRequired,
+      requiredReviewFamilies: panelPolicy.requiredReviewFamilies,
+    });
+    if (!sub) continue;
+
+    const subSeat = {
+      id: res.seat.id,
+      runner: sub.runner,
+      engine: sub.engine,
+      effort: sub.effort,
+      ...(sub.endpoint ? { endpoint: sub.endpoint } : {}),
+      family: sub.family,
+    };
+    if (invalidSeatModels([subSeat]).length > 0) continue;
+
+    const subRecord = codexFallback.buildSubstitutionRecord({
+      originalSeat: res.seat,
+      substitute: sub,
+      reason: quotaFailure.reason,
+    });
+    console.error(subRecord.notice);
+
+    const subRes = await runSeatDispatch(subSeat, repoRoot, gDir, specFile, timeout);
+    subRes.substitution = subRecord;
+    if (subRes.rawOutput && typeof subRes.rawOutput === 'object') {
+      subRes.rawOutput.substitution = subRecord;
+    }
+    seatResults[i] = subRes;
+    substitutedSeats.push(subRecord);
+  }
 
   // Write per-seat JSON files and compute hashes
   const seatArtifactSha256 = {};
@@ -1418,6 +1510,12 @@ async function handleCollect(flags) {
     status: res.status === 'reviewed' ? 'reviewed' : 'no_verdict',
     engine: res.seat.engine,
     family: res.seat.family || familyOfEngine(res.seat.engine),
+    ...(res.substitution ? {
+      original_seat: res.substitution.original_seat,
+      substitute: res.substitution.substitute,
+      substitution_reason: res.substitution.reason,
+      substitution_notice: res.substitution.notice,
+    } : {}),
   }));
   const reviewedSeatsCount = seatResults.filter((r) => r.status === 'reviewed').length;
   const totalSeatsCount = seatResults.length;
@@ -1439,6 +1537,10 @@ async function handleCollect(flags) {
     findings_sha256: findingsSha256,
     seat_artifact_sha256: seatArtifactSha256,
     ...(skippedSeats.length ? { skipped_seats: skippedSeats } : {}),
+    ...(substitutedSeats.length ? {
+      substituted_seats: substitutedSeats,
+      panel_report: substitutedSeats.map((s) => s.notice),
+    } : {}),
     ...(packetRecord ? { packet: packetRecord } : {}),
     collected_at: new Date().toISOString(),
   }, { recordPointer: true });
@@ -1457,6 +1559,7 @@ async function handleCollect(flags) {
     seatSummaries[res.seat.id] = {
       findings_count: extracted.length,
       proof_present: proof.length > 0,
+      ...(res.substitution ? { substitution: res.substitution } : {}),
     };
   }
 
@@ -1471,6 +1574,10 @@ async function handleCollect(flags) {
     status: genStatus,
     seat_summaries: seatSummaries,
     ...(skippedSeats.length ? { skipped_seats: skippedSeats } : {}),
+    ...(substitutedSeats.length ? {
+      substituted_seats: substitutedSeats,
+      panel_report: substitutedSeats.map((s) => s.notice),
+    } : {}),
   };
   console.log(JSON.stringify(summary, null, 2));
   process.exit(0);
@@ -2035,6 +2142,15 @@ async function handleFinalize(flags) {
     phaseBaseSha = gen1Entry.base;
   }
 
+  const genSubstitutedSeats = Array.isArray(targetChainEntry.substituted_seats)
+    ? targetChainEntry.substituted_seats
+    : [];
+  for (const sub of genSubstitutedSeats) {
+    if (sub && typeof sub.notice === 'string' && sub.notice) {
+      console.error(sub.notice);
+    }
+  }
+
   const receipt = {
     kind: 'review',
     phase,
@@ -2045,6 +2161,10 @@ async function handleFinalize(flags) {
     verdict,
     open_findings: openFindings,
     ...(unresolvedAllowed ? { unresolved_allowed: unresolvedAllowed } : {}),
+    ...(genSubstitutedSeats.length ? {
+      substituted_seats: genSubstitutedSeats,
+      panel_report: genSubstitutedSeats.map((s) => s.notice),
+    } : {}),
     resolved_from: resolvedFrom,
     ...(freshContext === 'off' ? { review_fresh_context: 'off' } : {}),
     written_at: new Date().toISOString(),
@@ -2077,6 +2197,10 @@ async function handleFinalize(flags) {
     generation,
     verdict,
     open_findings_count: openFindings.length,
+    ...(genSubstitutedSeats.length ? {
+      substituted_seats: genSubstitutedSeats,
+      panel_report: genSubstitutedSeats.map((s) => s.notice),
+    } : {}),
   };
   console.log(JSON.stringify(summary, null, 2));
   process.exit(0);

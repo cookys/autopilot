@@ -540,6 +540,48 @@
       ]
     },
     {
+      "name": "depth0_delegate_gate.subagent_rm",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "deny",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE"
+      ],
+      "summary": "What to do when a subagent (non-empty payload agent_id) runs a recursive rm whose literal target resolves outside the session scratchpad (<tmp-root>/claude-<uid>/*/<session_id>/): values are \"off\", \"warn\", \"deny\"; default deny.",
+      "type": "enum",
+      "allowed": [
+        "deny",
+        "warn",
+        "off"
+      ]
+    },
+    {
+      "name": "depth0_delegate_gate.shared_rm",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "warn",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_SHARED_RM_MODE"
+      ],
+      "summary": "What to do when any session (main or subagent) runs a recursive rm whose literal non-glob target exists outside the session scratchpad and is a group/world-writable directory (mode & 0o022) or owned by another uid: values are \"off\", \"warn\", \"deny\"; default warn.",
+      "type": "enum",
+      "allowed": [
+        "warn",
+        "deny",
+        "off"
+      ]
+    },
+    {
       "name": "depth0_delegate_gate.threshold",
       "kind": "config_key",
       "audience": "user",
@@ -1147,7 +1189,7 @@
         "AUTOPILOT_RESIDUE_AUTO_REAP",
         "hooks.<stem>"
       ],
-      "summary": "Automatic reaping of finished dispatch worktrees and branches.",
+      "summary": "Automatic reaping of finished dispatch worktrees. Does not delete branches (see residue.delete_branches).",
       "type": "boolean"
     },
     {
@@ -1163,6 +1205,23 @@
       "relates": [],
       "summary": "Extra branch prefixes the reaper treats as dispatch branches (letters, digits, . _ - and an optional trailing /).",
       "type": "array"
+    },
+    {
+      "name": "residue.delete_branches",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": false,
+      "readers": [
+        "scripts/lib/residue-config.js",
+        "scripts/repo-residue-sweep.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RESIDUE_DELETE_BRANCHES"
+      ],
+      "summary": "When true, reap and close-session delete branches after printing each branch and its tip. Default false: branches stay and are listed for the owner.",
+      "type": "boolean"
     },
     {
       "name": "run_ledger.max_rotations",
@@ -4053,6 +4112,36 @@
       "summary": "Environment override of depth0_delegate_gate.rm_var_target; values are off, warn, deny (default deny); a garbage value maps to deny."
     },
     {
+      "name": "AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.subagent_rm"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.subagent_rm; values are off, warn, deny (default deny); a garbage value maps to deny."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_SHARED_RM_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.shared_rm"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.shared_rm; values are off, warn, deny (default warn); a garbage value maps to warn."
+    },
+    {
       "name": "AUTOPILOT_CAPTURE_PAYLOAD",
       "kind": "env",
       "audience": "user",
@@ -5035,6 +5124,21 @@
         "residue.auto_reap"
       ],
       "summary": "0 or 1; environment override of residue.auto_reap."
+    },
+    {
+      "name": "AUTOPILOT_RESIDUE_DELETE_BRANCHES",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": null,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "residue.delete_branches"
+      ],
+      "summary": "0 or 1; environment override of residue.delete_branches. Any other value is ignored."
     },
     {
       "name": "AUTOPILOT_RESIDUE_LEASE_HOURS",
@@ -6157,6 +6261,19 @@
       "note": "Set to off to skip the dispatch_usage/1 ledger row for this run (the consult rail sets it for the author transport it calls)."
     },
     {
+      "name": "AUTOPILOT_CODEFORGE_COLLECT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/codeforge-collect.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Set to off to skip codeforge usage collect after a throwaway claude config dir. Default on. A missing directory is skipped with no log."
+    },
+    {
       "name": "AUTOPILOT_DISPATCH_LANE",
       "kind": "env",
       "audience": "internal",
@@ -6284,6 +6401,26 @@
       "doc": null,
       "relates": [],
       "note": "Set by dispatch-review.sh on the agy carbon-to-argon retreat child: the cloud-fallbacks.jsonl row the child carries onto its result."
+    },
+    {
+      "name": "qc_panel.codex_quota_substitutes",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "needle": "codex_quota_substitutes",
+      "default": [
+        "grok-4.7/high@grok",
+        "gemini-4-carbon-high/high@agy"
+      ],
+      "readers": [
+        "scripts/lib/qc-panel-codex-fallback.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "topology.exclude_seats"
+      ],
+      "summary": "Ordered substitute seats (engine/effort@runner, or engine@runner defaulting effort to high) tried once at runtime when a qc_panel seat on the codex runner fails due to codex quota or rate-limit exhaustion; never alters qc_panel composition.",
+      "type": "array"
     }
   ]
 }

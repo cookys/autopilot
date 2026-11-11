@@ -289,7 +289,7 @@ rm -rf "$FX_ROOT"
 
 # (f) negative controls
 BAD="$TEST_TMP/mut-scripts"; cp -r "$REPO_ROOT/scripts" "$BAD"
-sed_mutate "$BAD/dispatch-review.sh" 's/ \${ROLE_KIT_EXTRA\[@\]+"\${ROLE_KIT_EXTRA\[@\]}"} > "\$RAW_LOG" 2>&1/ > "$RAW_LOG" 2>\&1/' >/dev/null
+sed_mutate "$BAD/dispatch-review.sh" 's/ \${ROLE_KIT_EXTRA\[@\]+"\${ROLE_KIT_EXTRA\[@\]}"}//g' >/dev/null
 run_rail "$BAD/dispatch-review.sh" review --role-kit "$KIT"
 assert_neq "" "$(argv_check "$KIT/role.md" "Read,Grep" "$KIT_REAL/plugin")" "(f) negative control: review rail that drops the kit argv is detected"
 MUT2="$TEST_TMP/mut2-scripts"; cp -r "$REPO_ROOT/scripts" "$MUT2"
@@ -308,7 +308,7 @@ sed_mutate "$MUT4/lib/role-kit.sh" 's/2>\/dev\/null < \/dev\/null/2>\&1 < \/dev\
 NODE_OPTIONS="--require $TEST_TMP/warn.js" run_rail "$MUT4/dispatch-review.sh" review --role-kit "$KIT"
 assert_eq "0" "$NCALLS" "(f) negative control: stderr merged into the parsed output makes a node warning refuse a good kit"
 MUT5="$TEST_TMP/mut5-scripts"; cp -r "$REPO_ROOT/scripts" "$MUT5"
-sed_mutate "$MUT5/dispatch-review.sh" "s/sed -n '2,58p'/sed -n '2,50p'/" >/dev/null
+sed_mutate "$MUT5/dispatch-review.sh" "s/sed -n '2,63p'/sed -n '2,50p'/" >/dev/null
 assert_not_contains "$("$MUT5/dispatch-review.sh" -h 2>&1)" "--role-kit" "(f) negative control: a -h range that stops early hides the --role-kit lines"
 
 # (g) opt-in byte-identity check: ROLE_KIT_BASELINE_SCRIPTS=<scripts dir of the pre-change tree> -> without a kit the child argv

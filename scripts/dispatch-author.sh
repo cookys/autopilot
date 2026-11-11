@@ -139,6 +139,9 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" ] && . "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" || true
+# shellcheck source=lib/codeforge-collect.sh
+# Best-effort: a missing helper skips usage collect; it never changes the author result.
+[ -r "$_AUTHOR_SELF_DIR/lib/codeforge-collect.sh" ] && . "$_AUTHOR_SELF_DIR/lib/codeforge-collect.sh" || true
 # A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
 if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || true; fi
 # shellcheck source=/dev/null
@@ -1200,6 +1203,7 @@ END=""
 DERIVED=""
 cleanup() {
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD" || true
+  declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && [ -n "$CCSHIM_CWD" ] && codeforge_collect_claude_dir "$CCSHIM_CWD/.claude" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD" || true
@@ -1466,6 +1470,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   declare -F ccshim_keep_transcript >/dev/null 2>&1 && { ccshim_keep_transcript "$CCSHIM_CWD" "$AUTHOR_RUN_ID" || true; }
+  declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$CCSHIM_CWD/.claude" || true
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
 elif [[ "$RUNNER" = "claude-native" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
@@ -1520,9 +1525,11 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     cat "$CNATIVE_WRAP_ERR" >> "$RUNNER_ERR_FILE" 2>/dev/null || true
     rm -f "$CNATIVE_WRAP_ERR"
   else
-  node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec -- \
+  # --collect-err-fd 3 and the 3>&2 below stay together: fd 3 is this script's stderr,
+  # saved before stdout/stderr go to the verdict capture. The child must not inherit it.
+  node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec --collect-err-fd 3 -- \
   timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
-    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
+    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} 3>&2 > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
     RUNNER_EXIT=$?
   fi
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"

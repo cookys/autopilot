@@ -10,7 +10,7 @@
 
 SCRIPT="$REPO_ROOT/scripts/repo-residue-sweep.js"
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME/.autopilot"
-unset AUTOPILOT_RESIDUE_AUTO_REAP AUTOPILOT_RESIDUE_LEASE_HOURS AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS
+unset AUTOPILOT_RESIDUE_AUTO_REAP AUTOPILOT_RESIDUE_LEASE_HOURS AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS AUTOPILOT_RESIDUE_DELETE_BRANCHES
 SBX="$TEST_TMP/repo"; mkdir -p "$SBX"
 G() { git -C "$SBX" -c user.email=t@t -c user.name=t "$@"; }
 jx() { printf '%s' "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const v=eval(process.argv[1]);process.stdout.write(typeof v==="string"?v:JSON.stringify(v));})' "$2"; }
@@ -219,17 +219,20 @@ assert_eq "$(jx "$OUT" 'j.removed.filter(r=>r.kind==="worktree").length')" "6" "
 assert_eq "$(jx "$OUT" 'j.removed.some(r=>r.path.endsWith("/wt-w-gone")&&r.reason==="missing_dir")')" "true" "missing-dir pruned and recorded"
 [ -z "$(G worktree list --porcelain | grep 'wt-w-gone')" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "missing-dir entry gone from git"
 
-# branches
-ref_of() { G rev-parse --verify -q "refs/archive/$(today)/$1"; }
-G rev-parse --verify -q refs/heads/hands/old >/dev/null && fail "hands/old (15d) should be archived+deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
-assert_eq "$(ref_of hands/old)" "$OLD15" "archive ref resolves to the old tip"
-G rev-parse --verify -q refs/heads/hetero/old-two >/dev/null && fail "hetero/old-two should be archived" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
-[ -n "$(ref_of hetero/old-two)" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "hetero/old-two archive ref"
-G rev-parse --verify -q refs/heads/bot/old >/dev/null && fail "residue.branch_prefixes bot/ should be archived" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
-[ -n "$(ref_of bot/old)" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "bot/old archive ref"
-G branch restored "refs/archive/$(today)/hands/old" && assert_eq "$(G rev-parse restored)" "$OLD15" "one command restores an archived branch"
-assert_eq "$(jx "$OUT" 'j.archived.map(a=>a.branch).sort().join(",")')" "bot/old,hands/old,hetero/old-two" "archived list"
+# branches: default auto never deletes. Integrated and archive-candidate dispatch branches stay,
+# and needs_human lists each one with its tip. Worktree removals above are unchanged.
+HETERO_OLD="$(G rev-parse refs/heads/hetero/old-two)"
+BOT_OLD="$(G rev-parse refs/heads/bot/old)"
 keep_branch() { G rev-parse --verify -q "refs/heads/$1" >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "branch $1 must stay ($2)"; }
+keep_branch hands/old "archive candidate stays when branch deletion is off"
+keep_branch hetero/old-two "archive candidate stays when branch deletion is off"
+keep_branch bot/old "prefix archive candidate stays when branch deletion is off"
+keep_branch hands/merged "integrated idle dispatch branch stays when branch deletion is off"
+assert_eq "$(G rev-parse refs/heads/hands/merged)" "$BASE" "integrated branch tip unchanged"
+assert_eq "$(G rev-parse refs/heads/hands/old)" "$OLD15" "archive-candidate tip unchanged"
+G rev-parse --verify -q "refs/archive/$(today)/hands/old" >/dev/null && fail "default auto must not create an archive ref" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+assert_eq "$(jx "$OUT" 'j.removed.some(r=>r.kind==="branch")')" "false" "default auto removes no branch"
+assert_eq "$(jx "$OUT" 'j.archived.length')" "0" "default auto archives no branch"
 keep_branch hands/young "younger than 14 days"
 keep_branch hands/touched "reflog says it was touched just now"
 keep_branch hands/camp-12345678-x "unresolved campaign id in the name"
@@ -238,8 +241,11 @@ keep_branch hands/checked "checked out"
 keep_branch feature/old "not a dispatch branch"
 keep_branch feature/merged "integrated but not a dispatch branch"
 keep_branch hands/fresh-int "integrated but created just now"
-G rev-parse --verify -q refs/heads/hands/merged >/dev/null && fail "integrated idle dispatch branch should be deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
-assert_eq "$(jx "$OUT" 'j.removed.some(r=>r.kind==="branch"&&r.branch==="hands/merged"&&r.reason==="integrated")')" "true" "integrated branch recorded in removed"
+nh_tip() { jx "$OUT" "j.needs_human.find(e=>e.branch==='$1'&&e.reason==='delete_branches_off').tip"; }
+assert_eq "$(nh_tip hands/merged)" "$BASE" "needs_human lists the integrated branch with its tip"
+assert_eq "$(nh_tip hands/old)" "$OLD15" "needs_human lists the archive candidate with its tip"
+assert_eq "$(nh_tip hetero/old-two)" "$HETERO_OLD" "needs_human lists hetero/old-two with its tip"
+assert_eq "$(nh_tip bot/old)" "$BOT_OLD" "needs_human lists bot/old with its tip"
 assert_eq "$(jx "$OUT" 'j.kept.find(k=>k.branch==="hands/ptr").why')" "live_or_unexpired_lease_worktree" "reason: lease worktree points at the branch"
 assert_eq "$(jx "$OUT" 'j.kept.find(k=>k.branch==="hands/camp-12345678-x").why')" "unresolved_campaign" "reason: branch in unresolved campaign"
 assert_eq "$(jx "$OUT" 'j.kept.find(k=>k.branch==="hands/young").why')" "younger_than_archive_days" "reason: young branch"
@@ -291,6 +297,24 @@ assert_eq "$(jx "$SCAN2" 'j.needs_human.filter(e=>e.kind==="worktree").every(e=>
 # idempotent: a second run removes nothing more
 OUT2="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes)"
 assert_eq "$(jx "$OUT2" 'j.removed.length+j.archived.length')" "0" "second run is a no-op"
+# opt-in: print "<branch> <tip>" then compare-and-swap delete. Worktrees already judged above stay put.
+OUTD="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes --delete-branches 2>"$TEST_TMP/delete-branches.err")"; assert_eq "$?" "0" "--delete-branches exit 0"
+DELERR="$(cat "$TEST_TMP/delete-branches.err")"
+assert_contains "$DELERR" "hands/merged $BASE" "flag: prints the integrated branch and its tip before deleting"
+assert_contains "$DELERR" "hands/old $OLD15" "flag: prints the archive candidate and its tip before deleting"
+assert_contains "$DELERR" "hetero/old-two $HETERO_OLD" "flag: prints hetero/old-two and its tip"
+assert_contains "$DELERR" "bot/old $BOT_OLD" "flag: prints bot/old and its tip"
+assert_not_contains "$DELERR" "hands/young" "flag: a young branch is not in the delete list"
+G rev-parse --verify -q refs/heads/hands/merged >/dev/null && fail "flag: integrated branch should be deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+G rev-parse --verify -q refs/heads/hands/old >/dev/null && fail "flag: hands/old should be deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+G rev-parse --verify -q refs/heads/hetero/old-two >/dev/null && fail "flag: hetero/old-two should be deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+G rev-parse --verify -q refs/heads/bot/old >/dev/null && fail "flag: bot/old should be deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+assert_eq "$(G rev-parse "refs/archive/$(today)/hands/old")" "$OLD15" "flag: archive ref resolves to the old tip"
+assert_eq "$(jx "$OUTD" 'j.removed.some(r=>r.kind==="branch"&&r.branch==="hands/merged"&&r.reason==="integrated"&&r.tip==="'"$BASE"'")')" "true" "flag: integrated branch recorded in removed with its tip"
+assert_eq "$(jx "$OUTD" 'j.archived.map(a=>a.branch).sort().join(",")')" "bot/old,hands/old,hetero/old-two" "flag: archived list"
+G branch restored "refs/archive/$(today)/hands/old" && assert_eq "$(G rev-parse restored)" "$OLD15" "one command restores an archived branch"
+[ -d "$TEST_TMP/wt-b-dirty" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "flag: worktree reaping is unchanged (dirty stays)"
+[ ! -d "$TEST_TMP/wt-w-expired" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "flag: an already-reaped worktree stays gone"
 
 # unreadable campaign signal → only root==run markers go; archives are skipped
 kill "$BUSY_PID" 2>/dev/null; wait "$BUSY_PID" 2>/dev/null
@@ -342,9 +366,15 @@ OLD4="$(old_commit 20 "$BASE")"; no_reflog_branch hands/coll "$OLD4"
 G update-ref "refs/archive/$(today)/hands/coll" "$BASE"
 OUT5="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes)"
 G rev-parse --verify -q refs/heads/hands/coll >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "branch with colliding archive ref must be kept"
-assert_eq "$(jx "$OUT5" 'j.kept.find(k=>k.branch==="hands/coll").why')" "archive_ref_failed" "reason: archive ref collision"
-assert_eq "$(G rev-parse "refs/archive/$(today)/hands/coll")" "$BASE" "branch collision: existing ref not overwritten"
-assert_contains "$(jx "$OUT5" 'j.needs_human.find(e=>e.branch==="hands/coll").command')" "'' && git" "needs_human branch command is create-only"
+assert_eq "$(jx "$OUT5" 'j.kept.some(k=>k.branch==="hands/coll")')" "false" "default: collision is not attempted"
+assert_eq "$(jx "$OUT5" 'j.needs_human.find(e=>e.branch==="hands/coll").reason')" "delete_branches_off" "default: colliding branch is listed, not archived"
+assert_eq "$(jx "$OUT5" 'j.needs_human.find(e=>e.branch==="hands/coll").tip')" "$OLD4" "default: colliding branch is listed with its tip"
+assert_eq "$(G rev-parse "refs/archive/$(today)/hands/coll")" "$BASE" "default: existing archive ref not touched"
+OUT5D="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes --delete-branches)"
+G rev-parse --verify -q refs/heads/hands/coll >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "flag: branch with colliding archive ref must be kept"
+assert_eq "$(jx "$OUT5D" 'j.kept.find(k=>k.branch==="hands/coll").why')" "archive_ref_failed" "flag: archive ref collision"
+assert_eq "$(G rev-parse "refs/archive/$(today)/hands/coll")" "$BASE" "flag: existing ref not overwritten"
+assert_contains "$(jx "$OUT5D" 'j.needs_human.find(e=>e.branch==="hands/coll").command')" "'' && git" "needs_human branch command is create-only"
 
 # (4) archive refs older than residue.archive_remind_days (default 90) are listed, never deleted
 D100="$(date -u -d '-100 days' +%F)"; D30="$(date -u -d '-30 days' +%F)"
@@ -372,6 +402,37 @@ rm "$MUTB/scripts/repo-residue-sweep.js"; sed -E 's/if \(age < remind\) continue
 cmp -s "$SCRIPT" "$MUTB/scripts/repo-residue-sweep.js" && fail "archive-age mutation did not apply"
 MB="$(node "$MUTB/scripts/repo-residue-sweep.js" scan --repo "$SBX")"
 assert_contains "$(jx "$MB" 'j.needs_human.map(e=>e.ref||"").join(" ")')" "$D30/hands/recent" "mutant: age gate removed -> the 30-day ref is listed (default-threshold assertion would fail)"
+
+# negative control: forcing the delete gate on makes a default auto run delete the integrated branch
+# (the "left in place" assertion above would fail). Also: the config key opts in without the CLI flag.
+mut_repo() { # <name> -> path; one idle integrated hands/keep
+  local sbx="$TEST_TMP/mutrepo-$1" d
+  mkdir -p "$sbx"
+  git -C "$sbx" init -q -b develop
+  git -C "$sbx" config user.email t@t
+  git -C "$sbx" config user.name t
+  echo a > "$sbx/a.txt"; git -C "$sbx" add a.txt
+  d="$(date -d "@$((NOW - 5 * 86400))" -R)"
+  GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d" git -C "$sbx" -c user.email=t@t -c user.name=t commit -q -m base
+  git -C "$sbx" -c core.logAllRefUpdates=false update-ref refs/heads/hands/keep HEAD
+  printf '%s' "$sbx"
+}
+MUTD="$TEST_TMP/mutd"; mkdir -p "$MUTD/scripts"; ln -s "$REPO_ROOT/src" "$MUTD/src"
+for f in "$REPO_ROOT"/scripts/*; do ln -s "$f" "$MUTD/scripts/$(basename "$f")"; done
+rm -f "$MUTD/scripts/repo-residue-sweep.js"
+sed -E 's/const branchDelete = branchDeleteOn\(o, cfg\);/const branchDelete = true;/' "$SCRIPT" > "$MUTD/scripts/repo-residue-sweep.js"
+cmp -s "$SCRIPT" "$MUTD/scripts/repo-residue-sweep.js" && fail "delete-gate mutation did not apply"
+MSB="$(mut_repo gate)"; MTIP="$(git -C "$MSB" rev-parse refs/heads/hands/keep)"
+MOUT="$(node "$MUTD/scripts/repo-residue-sweep.js" reap --repo "$MSB" --auto --yes 2>"$TEST_TMP/mutd.err")"
+git -C "$MSB" rev-parse --verify -q refs/heads/hands/keep >/dev/null && fail "mutant: gate forced on should delete hands/keep" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+assert_contains "$(cat "$TEST_TMP/mutd.err")" "hands/keep $MTIP" "mutant: still prints the branch and tip"
+CSB="$(mut_repo cfg)"; CTIP="$(git -C "$CSB" rev-parse refs/heads/hands/keep)"
+node "$SCRIPT" reap --repo "$CSB" --auto --yes >/dev/null
+git -C "$CSB" rev-parse --verify -q refs/heads/hands/keep >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "config default: integrated branch stays"
+COUT="$(AUTOPILOT_RESIDUE_DELETE_BRANCHES=1 node "$SCRIPT" reap --repo "$CSB" --auto --yes 2>"$TEST_TMP/cfgdel.err")"
+git -C "$CSB" rev-parse --verify -q refs/heads/hands/keep >/dev/null && fail "AUTOPILOT_RESIDUE_DELETE_BRANCHES=1 should delete" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+assert_contains "$(cat "$TEST_TMP/cfgdel.err")" "hands/keep $CTIP" "config opt-in prints the branch and tip"
+assert_eq "$(jx "$COUT" 'j.removed.some(r=>r.branch==="hands/keep"&&r.tip==="'"$CTIP"'")')" "true" "config opt-in records the tip"
 
 kill "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null
 kill "$RAIL_BUSY_PID" 2>/dev/null; wait "$RAIL_BUSY_PID" 2>/dev/null

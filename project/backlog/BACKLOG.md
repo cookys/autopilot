@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0426 -->
+<!-- next-id: BL-0428 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1478,3 +1478,30 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PM fleet 01M6TY1Q06 (2026-11-07)
 - **Pointer**: project/backlog/flaky-under-load-suites.md
+
+### 2026-11-16 刪除 codex 額度視窗的暫時路由設定
+- **Id**: BL-0426
+- **Status**: open
+- **Since**: 2026-11-11
+- **Origin**: owner
+- **Problem**: PM 01M747R1N0 因 codex 額度見底，把實作者、審查者雲端退路、驗證作者、計畫審查暫時改走其他引擎，並放行同 runner 雙席；11-16 重置後要刪掉並確認路由回到名冊。驗證作者先換回 argon（qodercn 到 11-21）。
+- **Impact**: 不刪的話，過期設定仍然生效，路由會一直繞開 codex 且同 runner 的獨立性被削弱。
+- **Trigger**: date:2026-11-16
+- **Trigger-Type**: date:2026-11-16
+- **Effort**: XS
+- **Source**: PM fleet 01M747R1N0 (2026-11-11)
+- **Pointer**: project/backlog/BACKLOG.md
+- **Context**: 11-16 order (PM 01M74FDC5Z): VA to gemini-4-argon-high@agy until qodercn works, then restore roster-overlay test pins, then delete other override blocks and allow_same_runner_dual_seat; keep qc_panel.
+
+### Lead and lane skills should default to parallel for unrelated work
+- **Id**: BL-0427
+- **Status**: open
+- **Since**: 2026-11-11
+- **Origin**: self
+- **Problem**: Operator rule (2026-11-11): unrelated incoming work gets its own worker at once (mechanical work to Haiku, Sonnet or a non-Claude seat); "queued behind X" only for a real dependency or the same scarce resource. The shipped lead and lane skills do not state this, so sessions queue serially.
+- **Impact**: Unrelated items wait behind the one in hand and the lead does mechanical work itself.
+- **Trigger**: ready; needs eval ON/OFF evidence before the wording ships (skills/CLAUDE.md)
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PM 01M74K28MQ (2026-11-11)
+- **Pointer**: project/backlog/parallel-by-default-for-leads.md

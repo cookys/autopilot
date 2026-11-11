@@ -43,11 +43,16 @@ assert_eq "$RC" "0" "reap exit 0 (nothing it was asked to remove was left)"
 [ -d "$TEST_TMP/wt-dirty-one" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: dirty kept without preserve record"
 [ -d "$TEST_TMP/wt-live-one" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: live kept"
 assert_contains "$OUT" '"why":"no verified preserve record under --preserve-dir"' "reap: dirty kept names the reason"
-G rev-parse --verify --quiet refs/heads/merged-branch >/dev/null && fail "reap: integrated branch deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+G rev-parse --verify --quiet refs/heads/merged-branch >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: integrated branch stays without --delete-branches"
 G rev-parse --verify --quiet refs/heads/ahead-branch >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: unintegrated branch kept"
 G rev-parse --verify --quiet refs/heads/integrated-clean >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "reap: branch of a removed worktree is only deleted when integrated AND not checked out — it IS integrated, so it goes on the next pass or now"
 assert_contains "$(field "$OUT" actions.worktrees_removed)" 'wt-gone-one' "reap: missing-dir pruned"
-assert_contains "$(field "$OUT" actions.branches_deleted)" 'merged-branch' "reap: branches_deleted lists merged-branch"
+assert_contains "$(field "$OUT" actions.branches_kept)" "\"branch\":\"merged-branch\",\"class\":\"integrated\",\"why\":\"delete_branches_off\",\"tip\":\"$BASE\"" "reap: integrated branch listed with its tip, not deleted"
+# the removed worktree's branch was class checked-out on the pass above, so it stayed; opt in now
+OUTD="$(node "$SCRIPT" reap --repo "$SBX" --yes --delete-branches 2>"$TEST_TMP/reap-del.err")"; assert_eq "$?" "0" "reap --delete-branches exit 0"
+assert_contains "$(cat "$TEST_TMP/reap-del.err")" "merged-branch $BASE" "reap --delete-branches prints merged-branch and its tip before deleting"
+G rev-parse --verify --quiet refs/heads/merged-branch >/dev/null && fail "reap --delete-branches deletes merged-branch" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+assert_contains "$(field "$OUTD" actions.branches_deleted)" 'merged-branch' "reap --delete-branches lists merged-branch"
 
 # ---------------------------------------------------------------- preserve dirty, verify, then reap it
 PRES="$TEST_TMP/preserve"
@@ -100,6 +105,8 @@ OUT="$(node "$SCRIPT" reap --repo "$SBX" --yes --older-than-days 30)"
 [ -d "$TEST_TMP/wt-young-clean" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "older-than: young clean-integrated kept"
 assert_contains "$OUT" 'younger than 30 days' "older-than: reason named"
 
+# An empty GIT_ALLOW_PROTOCOL (this sandbox) blocks the local file clone below.
+unset GIT_ALLOW_PROTOCOL
 # ---------------------------------------------------------------- stale local develop: integration = newer of local and upstream
 # Main checkout's local develop is BEHIND origin/develop (a HEAD merged+pushed elsewhere). A worktree whose
 # HEAD is only on origin/develop is integrated; one on neither is not; a dirty one is never removed.

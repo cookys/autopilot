@@ -52,10 +52,12 @@
 #                                              #   family alias (grok46|codex53) resolved by
 #                                              #   lib/cursor-model.sh, or a full model id verbatim.
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
-#       [--endpoint <name>]                    # cc-shim only: resolve creds via
-#                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
-#                                              #   into ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env
-#                                              #   still used when omitted (byte-identical)
+#       [--endpoint <name>]                    # cc-shim only (also --endpoint=<name>; last one
+#                                              #   wins; @none clears; empty is refused): resolve
+#                                              #   creds via resolve-endpoint.sh
+#                                              #   (AUTOPILOT_ENDPOINT_<NAME>_*) into
+#                                              #   ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env still
+#                                              #   used when omitted (byte-identical)
 #       [--sandbox off|bwrap]                  # cc-shim only (any other runner is refused). bwrap: the worker
 #                                              #   runs inside bubblewrap with `/` read-only, so a write outside
 #                                              #   the worker's own directories fails BEFORE it lands (EROFS) instead of
@@ -69,6 +71,13 @@
 #                                              #   sits inside any repo's working tree => precondition_failed, never a
 #                                              #   silent run without the sandbox. Result JSON + manifest carry
 #                                              #   `sandbox: {mode, writable, denied_writes}`. Default off.
+#                                              #   A local implementer seat (scripts/lib/local-sandbox-endpoints.json,
+#                                              #   today qwen_local) on cc-shim — and on --runner auto, which
+#                                              #   re-resolves to cc-shim when that endpoint is listed — is refused
+#                                              #   at runner resolution, BEFORE resolve-endpoint and before any
+#                                              #   model call, unless this flag is bwrap
+#                                              #   (boundary_code local_implementer_sandbox_required, PM 01M748P8G8).
+#                                              #   Read-only rails are not this script. No unsandboxed fallback.
 #                                              #   The worktree's `.git` gitfile is bound read-only; the rail also
 #                                              #   checks it is unchanged before any git against the worktree
 #                                              #   (else boundary_rejected, worktree_gitfile_tampered), sandbox or not; any nested `.git` below the
@@ -316,6 +325,33 @@ if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || tru
 # helper degrades to "no gate", never to a dispatch outage.
 # shellcheck source=/dev/null
 [ -r "$SELF_DIR/lib/context-window.sh" ] && . "$SELF_DIR/lib/context-window.sh" || true
+# shellcheck source=lib/codeforge-collect.sh
+# Best-effort: a missing helper skips usage collect; it never changes the dispatch result.
+[ -r "$SELF_DIR/lib/codeforge-collect.sh" ] && . "$SELF_DIR/lib/codeforge-collect.sh" || true
+# Collect then delete. Clearing the variable keeps cleanup/abort from collecting twice.
+# Defined before the EXIT trap so an early exit can call them.
+reap_cnative_config_dir() {
+  if [ -n "${CNATIVE_CONFIG_DIR:-}" ]; then
+    declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$CNATIVE_CONFIG_DIR" || true
+    # Set even when the dir was already gone, so the sandbox reap does not collect a second path.
+    _CODEFORGE_CNATIVE_COLLECTED=1
+    rm -rf "$CNATIVE_CONFIG_DIR"
+    CNATIVE_CONFIG_DIR=""
+  fi
+  return 0
+}
+reap_sandbox_config_dir() {
+  if [ -n "${SANDBOX_TMP:-}" ]; then
+    # Claude-backed runners only. claude-native already collected its seeded dir above.
+    if { [ "${IS_CCSHIM:-0}" -eq 1 ] || [ "${IS_CNATIVE:-0}" -eq 1 ]; } && [ -z "${_CODEFORGE_CNATIVE_COLLECTED:-}" ]; then
+      declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$SANDBOX_TMP/claude-config" || true
+    fi
+    rm -rf "$SANDBOX_TMP"
+  fi
+  SANDBOX_TMP=""
+  SANDBOX_ARGV=()
+  return 0
+}
 CONTEXT_WINDOW_GATE=""     # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 RUNNER_RESOLVED=0     # 1 only after set_runner_flags completes; die_precondition uses this to
@@ -534,8 +570,8 @@ cleanup() {
   [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR"
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
-  [ -n "${CNATIVE_CONFIG_DIR:-}" ] && rm -rf "$CNATIVE_CONFIG_DIR"
-  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
+  reap_cnative_config_dir || true
+  reap_sandbox_config_dir || true
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
@@ -570,6 +606,8 @@ usage() { awk 'NR>1 { if ($0 !~ /^#/) exit; print }' "$0" | sed 's/^# \{0,1\}//'
 . "$SELF_DIR/lib/agy-timeout.sh"
 # shellcheck source=lib/runner-fallback-bin.sh
 . "$SELF_DIR/lib/runner-fallback-bin.sh"
+# shellcheck source=lib/local-sandbox-endpoint.sh
+. "$SELF_DIR/lib/local-sandbox-endpoint.sh"
 
 # agy_edit_only_directive <worktree> — the harness directive prepended to every agy task
 # prompt. A FUNCTION, not an inline string, because the argv-ceiling guard has to measure the
@@ -1793,6 +1831,39 @@ sandbox_preflight() {
   fi
   return 0
 }
+
+# local_sandbox_endpoint_listed is scripts/lib/local-sandbox-endpoint.sh (one list).
+# This script only implements. A role label in the environment does not make the
+# worker read-only, so the gate is every cc-shim dispatch of a listed endpoint,
+# not an AUTOPILOT_DISPATCH_ROLE allowlist. Read-only seats use other rails.
+die_local_implementer_sandbox() {
+  local endpoint="$1"
+  local runner
+  runner="$(current_runner_name)"
+  local run_id_json="null"
+  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
+  local duplex_json="null"
+  [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
+  local msg="local implementer endpoint ${endpoint} requires --sandbox bwrap (missing flag); refusing before any model call"
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null, "boundary_code": "local_implementer_sandbox_required" }\n' \
+    "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$msg")" \
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
+  exit 2
+}
+
+require_local_implementer_sandbox() {
+  [ "${IS_CCSHIM:-0}" -eq 1 ] || return 0
+  [ -n "${ENDPOINT:-}" ] || return 0
+  [ "${SANDBOX:-off}" = "bwrap" ] && return 0
+  local listed_rc=0
+  local_sandbox_endpoint_listed "$ENDPOINT" || listed_rc=$?
+  case "$listed_rc" in
+    0) die_local_implementer_sandbox "$ENDPOINT" ;;
+    1) return 0 ;;
+    *) die_precondition "local implementer sandbox registry unreadable (scripts/lib/local-sandbox-endpoints.json); refusing cc-shim endpoint '${ENDPOINT}' without --sandbox bwrap" ;;
+  esac
+}
+
 # sandbox_nested_repo <path>: prints the nearest PROPER ancestor directory that holds a .git entry
 # (a repo's working tree, main checkout or linked worktree alike) and returns 0; returns 1 when
 # no ancestor is inside any repo. Strict on purpose: the independent clone the sandbox wants is
@@ -1825,9 +1896,7 @@ sandbox_setup() {
   return 0
 }
 sandbox_teardown() {
-  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
-  SANDBOX_TMP=""
-  SANDBOX_ARGV=()
+  reap_sandbox_config_dir
 }
 # sandbox_count_denied: EROFS lines the worker's own output shows. A count is only what the output
 # reveals (a worker can swallow the error), so no sighting reports "unknown", never 0.
@@ -2161,6 +2230,7 @@ while [ $# -gt 0 ]; do
     --effort) EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
+    --endpoint=*) ENDPOINT="${1#--endpoint=}"; [ -n "$ENDPOINT" ] || die_precondition "--endpoint requires a non-empty value"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift ;;
     --sandbox) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--sandbox requires off|bwrap"; SANDBOX="$2"; shift 2 ;;
     --worktree-parent) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--worktree-parent requires a non-empty directory path"; WORKTREE_PARENT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
@@ -2391,8 +2461,9 @@ set_runner_flags() {
     auto)
       # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
       # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
-      # cc-shim is never auto-selected: it is a base-url shim that requires env vars, so
-      # a bare model name must NOT silently route there.
+      # cc-shim is never auto-selected from the model name: it is a base-url shim that
+      # requires env vars, so a bare model name must NOT silently route there. A listed
+      # --endpoint re-resolves onto cc-shim after this case (local implementer seat).
       model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
       # 🔴 auto MUST NEVER SELECT cursor. This is a REFUSAL, not a route — placed before
       # the *grok*/*gpt* tests below on purpose. Every cursor model id contains grok, gpt,
@@ -2422,6 +2493,25 @@ set_runner_flags() {
       ;;
     *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi|claude-native (got: $RUNNER)" ;;
   esac
+  # --runner auto never selects cc-shim from the model name. A listed local
+  # endpoint on this write rail is still that seat: re-resolve before the
+  # sandbox preflight and the local-implementer gate, so both see cc-shim.
+  # Clear every other IS_* first: current_runner_name checks them after IS_CCSHIM.
+  if [ "$RUNNER" = "auto" ] && [ -n "${ENDPOINT:-}" ]; then
+    local _auto_listed_rc=0
+    local_sandbox_endpoint_listed "$ENDPOINT" || _auto_listed_rc=$?
+    case "$_auto_listed_rc" in
+      0)
+        IS_CODEX=0; IS_GROK=0; IS_PI=0; IS_QODER=0; IS_CURSOR=0
+        IS_OPENCODE=0; IS_KIMI=0; IS_CNATIVE=0
+        IS_CCSHIM=1
+        RUNNER="cc-shim"
+        declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand
+        ;;
+      1) ;;
+      *) die_precondition "local implementer sandbox registry unreadable (scripts/lib/local-sandbox-endpoints.json); refusing auto endpoint '${ENDPOINT}'" ;;
+    esac
+  fi
   if [ -n "${GATE_RULES_FILE:-}" ]; then
     # Silently ignoring the flag on another runner would make the arm marker lie, so refuse it.
     [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ] || die_precondition "--gate-rules applies only to --runner claude-native or cc-shim (got runner: $RUNNER)"
@@ -2450,6 +2540,11 @@ set_runner_flags() {
   # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED
   # init comment and die_precondition (FINDING 1).
   RUNNER_RESOLVED=1
+  # Every resolution path (explicit runner and the auto re-resolution above) hits
+  # this gate before resolve-endpoint, the pre-probe, the worktree, and the worker.
+  # A listed local endpoint without --sandbox bwrap dies here; bwrap requested but
+  # missing already died in the sandbox preflight (no unsandboxed fallback).
+  require_local_implementer_sandbox
 }
 
 D2_AGY_RESPONSE_CLAIM="cap-v1-e3b644661b8b04b75ff6402fb8465259b9fd50116f3bf0c65a2c6625aa354b3e"
@@ -2601,6 +2696,8 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
     "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
 fi
 set_runner_flags
+# The local-implementer gate runs at the end of set_runner_flags, after the runner
+# (including auto + a listed endpoint) is resolved, still before resolve-endpoint.
 # agy is the else-case rail (no IS_* flag). Refuse an unusable --timeout HERE, in the parent: the agy
 # block itself runs in the detached child, where a die would leave no result file behind.
 if [ "${RUNNER_RESOLVED:-0}" -eq 1 ] \
@@ -3726,8 +3823,8 @@ abort_dispatch() {
   [ -n "$CURSOR_PROMPT_FILE" ] && rm -f "$CURSOR_PROMPT_FILE"
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
-  [ -n "${CNATIVE_CONFIG_DIR:-}" ] && rm -rf "$CNATIVE_CONFIG_DIR"
-  [ -n "${SANDBOX_TMP:-}" ] && rm -rf "$SANDBOX_TMP"
+  reap_cnative_config_dir || true
+  reap_sandbox_config_dir || true
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
   [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
@@ -4362,8 +4459,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       echo "claude-native: could not seed config dir; worker not started" > "$LOG"
       AGENT_EXIT=1
     fi
-    [ -n "$CNATIVE_CONFIG_DIR" ] && rm -rf "$CNATIVE_CONFIG_DIR"
-    CNATIVE_CONFIG_DIR=""
+    reap_cnative_config_dir
   else
     run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
@@ -5924,7 +6020,7 @@ dispatch_detached_run() {
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f wt_gitfile_check _wt_git 2>/dev/null || true
-    declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json 2>/dev/null || true
+    declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \

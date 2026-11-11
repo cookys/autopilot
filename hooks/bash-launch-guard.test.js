@@ -34,6 +34,11 @@ function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = 
   const baseEnv = { ...process.env };
   delete baseEnv.AUTOPILOT_BASH_GUARD_PKILL_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_LS_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_RMVAR_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_SHARED_RM_MODE;
+  delete baseEnv.AUTOPILOT_CONFIG_FILE;
+  delete baseEnv.CLAUDE_CODE_TMPDIR;
   const r = spawnSync('node', [HOOK], {
     input: JSON.stringify({
       tool_name: 'Bash', session_id: 'blg', hook_event_name: 'PreToolUse', cwd: home,
@@ -1364,5 +1369,478 @@ test('rule5 fails open (no throw) on deeply nested quote/substitution input', ()
   const { detectRecursiveRmVar } = require('../scripts/lib/bash-launch-rules.js');
   for (const unit of ['a=( "$(', 'x="$(', '"`', '"((', "'((", '"<(', '"a=(']) {
     assert.doesNotThrow(() => detectRecursiveRmVar(`echo rm ${unit.repeat(25000)}`));
+  }
+});
+
+// ---- Rules 6 & 7: subagent-rm-outside-scratch + rm-shared-dir (PM go 01M747MFS8) ----
+function mkScratchSandbox(sessionId = 'blg') {
+  const tmpRoot = mk('blg-tmproot-');
+  const sandbox = mk('blg-sandbox-');
+  const sessionRoot = path.join(tmpRoot, `claude-${process.getuid()}`, 'proj-slug', sessionId);
+  const scratch = path.join(sessionRoot, 'scratchpad');
+  fs.mkdirSync(scratch, { recursive: true, mode: 0o700 });
+  fs.chmodSync(scratch, 0o700);
+  fs.chmodSync(sandbox, 0o700);
+  return { tmpRoot, sandbox, sessionRoot, scratch };
+}
+
+test('rule6 denies subagent `rm -rf /tmp/rv1` (literal target outside session scratchpad)', () => {
+  const { tmpRoot } = mkScratchSandbox('blg');
+  const r = run('rm -rf /tmp/rv1', {
+    extra: { agent_id: 'sub-1', agent_type: 'general-purpose' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(r.deny, true, r.reason);
+  assert.match(r.reason, /subagent-rm-outside-scratch/);
+  assert.match(r.reason, /AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE/);
+});
+
+test('rule6 denies subagent recursive rm across flags, wrappers, cwd resolution, ~ and eval/heredoc', () => {
+  const { tmpRoot, sandbox } = mkScratchSandbox('blg');
+  const outDir = path.join(sandbox, 'rv1');
+  fs.mkdirSync(outDir);
+  fs.chmodSync(outDir, 0o700);
+  for (const cmd of [
+    `rm -rf ${outDir}`,
+    `rm -r ${outDir}`,
+    `rm -R ${outDir}`,
+    `rm -fr -- ${outDir}`,
+    `rm --recursive ${outDir}`,
+    `sudo rm -rf ${outDir}`,
+    `/bin/rm -rf ${outDir}`,
+    `command rm -rf ${outDir}`,
+    'rm -rf ./rel-outside',
+    'rm -rf ~/outside-home-target',
+    `cd ${sandbox} && rm -rf rv1`,
+    `bash -c 'rm -rf ${outDir}'`,
+    `eval "rm -rf ${outDir}"`,
+    `bash <<'EOF'\nrm -rf ${outDir}\nEOF`,
+  ]) {
+    const r = run(cmd, {
+      extra: { agent_id: 'sub-1', cwd: sandbox },
+      env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+    });
+    assert.strictEqual(r.deny, true, `expected deny for ${cmd}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+});
+
+test('rule6 allows subagent `rm -rf <scratch>/x` (CLAUDE_CODE_TMPDIR and TMPDIR fallback)', () => {
+  const { tmpRoot, scratch } = mkScratchSandbox('blg');
+  const target = path.join(scratch, 'x');
+  fs.mkdirSync(target);
+  fs.chmodSync(target, 0o700);
+  for (const env of [
+    { CLAUDE_CODE_TMPDIR: tmpRoot },
+    { TMPDIR: tmpRoot },
+  ]) {
+    const r = run(`rm -rf ${target}`, { extra: { agent_id: 'sub-1' }, env });
+    assert.strictEqual(r.deny, false, r.reason);
+    assert.doesNotMatch(r.ctx, /subagent-rm-outside-scratch|rm-shared-dir/);
+  }
+  // Relative target after `cd <scratch>` also resolves inside scratchpad.
+  const rel = run(`cd ${scratch} && rm -rf x`, {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(rel.deny, false, rel.reason);
+});
+
+test('rule6 phantom cd: a cd that does not run in the shell of the later rm never commits a cwd', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  for (const cmd of [
+    `cd ${scratch} & rm -rf rv1`,
+    `cd ${scratch} | rm -rf rv1`,
+    `false && cd ${scratch}; rm -rf rv1`,
+    `false || cd ${scratch}; rm -rf rv1`,
+    `false && cd ${scratch}\nrm -rf rv1`,
+  ]) {
+    const r = run(cmd, {
+      extra: { agent_id: 'sub-1', cwd: sandbox },
+      env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+    });
+    assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  // Same-shell cd stays honoured, also when the rm is in the same backgrounded list.
+  for (const cmd of [`cd ${scratch} && rm -rf x`, `cd ${scratch}; rm -rf x`, `cd ${scratch} && rm -rf x &`]) {
+    const ok = run(cmd, {
+      extra: { agent_id: 'sub-1', cwd: sandbox },
+      env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+    });
+    assert.strictEqual(ok.deny, false, `expected allow for ${JSON.stringify(cmd)}: ${ok.reason}`);
+  }
+});
+
+test('rule6 conditional cd: the cwd after a cd behind &&/|| is unknown at once, inside the same list', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  for (const cmd of [
+    `false && cd ${scratch} || rm -rf rv1`,
+    `false && cd ${scratch} && rm -rf rv1`,
+    `true && cd ${scratch} && rm -rf rv1`,
+    `false || cd ${scratch} && rm -rf rv1`,
+    // the rm behind `||` only runs when the cd FAILED, so it runs in the payload cwd (outside)
+    `cd ${scratch} || rm -rf x`,
+    `cd ${scratch} && ls || rm -rf x`,
+    `cd ${scratch} || true && rm -rf x`,
+  ]) {
+    const r = run(cmd, sub(sandbox));
+    assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  // the cd is unconditional at the list start; only the rm sits behind &&: stays allowed
+  for (const cmd of [`cd ${scratch} && rm -rf x`, `cd ${scratch} && ls && rm -rf x`]) {
+    const ok = run(cmd, sub(sandbox));
+    assert.strictEqual(ok.deny, false, `expected allow for ${JSON.stringify(cmd)}: ${ok.reason}`);
+  }
+});
+
+test('rule6 `||` after a cd: a cd earlier in the list makes the cwd unknown, so a relative target is denied (fail-closed)', () => {
+  const { tmpRoot, scratch } = mkScratchSandbox('blg');
+  const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  // was allowed when the payload cwd was inside the scratchpad; a cd precedes the `||` now, so the cwd is null and it denies
+  const r = run(`cd ${scratch} || rm -rf x`, sub(scratch));
+  assert.strictEqual(r.deny, true, `expected deny: ${JSON.stringify(r)}`);
+  assert.match(r.reason, /subagent-rm-outside-scratch/);
+  // no cd before the `||`: the list-start cwd (inside the scratchpad) still applies
+  const ok = run(`false || rm -rf x`, sub(scratch));
+  assert.strictEqual(ok.deny, false, `expected allow: ${ok.reason}`);
+});
+
+test('rule6 post-`||` segment: a cd earlier in the list (or in the parent list of a subshell) never leaves the list-start cwd in force', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  for (const cmd of [
+    `cd ${scratch}; cd /tmp && false || rm -rf rv1`,
+    `false || cd /tmp && rm -rf rv1`,
+    `cd ${scratch} || (rm -rf rv1)`,
+    `cd ${scratch} && true || rm -rf rv1`,
+  ]) {
+    const r = run(cmd, sub(sandbox));
+    assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  // rule 7: with a cd earlier in the list the cwd is null, so the list-start dir is not stat'ed (no false "safe")
+  const grp = path.join(sandbox, 'shared-0775');
+  fs.mkdirSync(grp);
+  fs.chmodSync(grp, 0o775);
+  const w = run(`cd ${grp} && false || rm -rf .`, { env: { CLAUDE_CODE_TMPDIR: tmpRoot }, extra: { cwd: grp } });
+  assert.strictEqual(w.deny, false);
+  assert.doesNotMatch(w.ctx, /rm-shared-dir/);
+});
+
+test('rule6 subshell inherits the cwd only after the parent list boundary has been applied', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  for (const cmd of [
+    `cd ${scratch} & (rm -rf rv1)`,
+    `false && cd ${scratch}; (rm -rf rv1)`,
+    `false || cd ${scratch}\n(rm -rf rv1)`,
+  ]) {
+    const r = run(cmd, sub(sandbox));
+    assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  for (const cmd of [`cd ${scratch} && (rm -rf x)`, `cd ${scratch}; (rm -rf x)`, `(cd ${scratch} && rm -rf x)`]) {
+    const ok = run(cmd, sub(sandbox));
+    assert.strictEqual(ok.deny, false, `expected allow for ${JSON.stringify(cmd)}: ${ok.reason}`);
+  }
+});
+
+test('heredoc runner detection: a shell word inside quotes or $( ) does not run the heredoc', () => {
+  const { tmpRoot, sandbox } = mkScratchSandbox('blg');
+  for (const intro of [`echo "v $(bash --version)" <<'EOF'`, `echo 'x; bash' <<'EOF'`, `echo "a | bash" <<'EOF'`]) {
+    const sh = run(`${intro}\nrm -rf /tmp/rv1\nEOF`, { extra: { agent_id: 'sub-1', cwd: sandbox }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+    assert.strictEqual(sh.deny, false, `data heredoc must not deny (${intro}): ${sh.reason}`);
+    const main = run(`${intro}\nrm -rf "$TMPDIR/build"\nEOF`);
+    assert.strictEqual(main.deny, false, `data heredoc must not deny rule 5 (${intro}): ${main.reason}`);
+  }
+  // a real runner still counts
+  for (const intro of [`bash <<'EOF'`, `echo hi; bash <<'EOF'`, `true && sudo bash <<'EOF'`, `(bash <<'EOF'`]) {
+    const r = run(`${intro}\nrm -rf /tmp/rv1\nEOF`, { extra: { agent_id: 'sub-1', cwd: sandbox }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+    assert.strictEqual(r.deny, true, `runner heredoc must deny (${intro}): ${JSON.stringify(r)}`);
+  }
+  const piped = run(`cat <<'EOF' | bash\nrm -rf /tmp/rv1\nEOF`, { extra: { agent_id: 'sub-1', cwd: sandbox }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(piped.deny, true, JSON.stringify(piped));
+});
+
+test('rule6 tilde-user / ~+ / ~- targets are outside the scratchpad', () => {
+  const { tmpRoot, scratch } = mkScratchSandbox('blg');
+  for (const target of ['~other/dir', '~+/../../outside', '~-/x', '~root']) {
+    const r = run(`rm -rf ${target}`, { extra: { agent_id: 'sub-1', cwd: scratch }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+    assert.strictEqual(r.deny, true, `expected deny for ${target}: ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  // quoted tilde is a literal name inside the scratchpad
+  const ok = run(`rm -rf '~other'`, { extra: { agent_id: 'sub-1', cwd: scratch }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(ok.deny, false, ok.reason);
+});
+
+test('rule6 heredoc script runs in the cwd of the segment that runs it, not the payload cwd', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  // payload cwd is the scratchpad, but a preceding `cd` moves the heredoc shell outside it: deny
+  const outside = run(`cd ${sandbox} && bash <<'EOF'\nrm -rf rv1\nEOF`, {
+    extra: { agent_id: 'sub-1', cwd: scratch },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(outside.deny, true, JSON.stringify(outside));
+  assert.match(outside.reason, /subagent-rm-outside-scratch/);
+  // payload cwd is outside, a preceding `cd` moves the heredoc shell into the scratchpad: allow
+  const inside = run(`cd ${scratch} && bash <<'EOF'\nrm -rf x\nEOF`, {
+    extra: { agent_id: 'sub-1', cwd: sandbox },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(inside.deny, false, inside.reason);
+});
+
+test('rule6 denies subagent targeting another session scratchpad, wrong uid dir, or session root itself', () => {
+  const { tmpRoot, sessionRoot } = mkScratchSandbox('blg');
+  const otherSession = path.join(tmpRoot, `claude-${process.getuid()}`, 'proj-slug', 'other-sid', 'scratchpad', 'x');
+  const otherUid = path.join(tmpRoot, `claude-${process.getuid() + 1}`, 'proj-slug', 'blg', 'scratchpad', 'x');
+  for (const bad of [otherSession, otherUid, sessionRoot]) {
+    const r = run(`rm -rf ${bad}`, {
+      extra: { agent_id: 'sub-1' },
+      env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+    });
+    assert.strictEqual(r.deny, true, `expected deny for ${bad}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+});
+
+test('rule6 allows main session (no agent_id, or empty agent_id) on a non-shared tmp dir owned by us', () => {
+  const { tmpRoot, sandbox } = mkScratchSandbox('blg');
+  const ownDir = path.join(sandbox, 'rv1');
+  fs.mkdirSync(ownDir);
+  fs.chmodSync(ownDir, 0o700);
+  assert.strictEqual(fs.statSync(ownDir).mode & 0o777, 0o700);
+
+  const main = run(`rm -rf ${ownDir}`, { env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(main.deny, false, main.reason);
+  assert.strictEqual(main.ctx, '');
+
+  const emptyAgent = run(`rm -rf ${ownDir}`, {
+    extra: { agent_id: '' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(emptyAgent.deny, false, emptyAgent.reason);
+  assert.strictEqual(emptyAgent.ctx, '');
+});
+
+test('rule6 allows subagent non-recursive rm and quoted/heredoc data', () => {
+  const { tmpRoot, sandbox } = mkScratchSandbox('blg');
+  const f = path.join(sandbox, 'file.txt');
+  fs.writeFileSync(f, 'x');
+  for (const cmd of [
+    `rm -f ${f}`,
+    'echo "rm -rf /tmp/rv1"',
+    "cat <<'EOF'\nrm -rf /tmp/rv1\nEOF",
+  ]) {
+    const r = run(cmd, { extra: { agent_id: 'sub-1' }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+    assert.strictEqual(r.deny, false, r.reason);
+    assert.doesNotMatch(r.ctx, /subagent-rm-outside-scratch/);
+  }
+});
+
+test('rule6 knob: warn -> warn not deny, off -> allow, garbage -> deny, config.json honored', () => {
+  const { tmpRoot } = mkScratchSandbox('blg');
+  const warn = run('rm -rf /tmp/rv1', {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE: 'warn' },
+  });
+  assert.strictEqual(warn.deny, false);
+  assert.match(warn.ctx, /subagent-rm-outside-scratch/);
+
+  const off = run('rm -rf /tmp/rv1', {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE: 'off' },
+  });
+  assert.strictEqual(off.deny, false);
+  assert.doesNotMatch(off.ctx, /subagent-rm-outside-scratch/);
+
+  const bogus = run('rm -rf /tmp/rv1', {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE: 'bogus' },
+  });
+  assert.strictEqual(bogus.deny, true);
+
+  // config.json knob: subagent_rm = warn and off
+  const cfgHome = mk('blg-cfg-sr-');
+  const cfgFile = path.join(cfgHome, 'config.json');
+  fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { subagent_rm: 'warn' } }));
+  const cfgWarn = run('rm -rf /tmp/rv1', {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_CONFIG_FILE: cfgFile },
+  });
+  assert.strictEqual(cfgWarn.deny, false);
+  assert.match(cfgWarn.ctx, /subagent-rm-outside-scratch/);
+
+  fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { subagent_rm: 'off' } }));
+  const cfgOff = run('rm -rf /tmp/rv1', {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_CONFIG_FILE: cfgFile },
+  });
+  assert.strictEqual(cfgOff.deny, false);
+  assert.doesNotMatch(cfgOff.ctx, /subagent-rm-outside-scratch/);
+});
+
+test('rule6 symlink escape: trailing slash or descendant through symlink to outside dir is denied; bare symlink leaf passes', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const outside = path.join(sandbox, 'outside-real');
+  fs.mkdirSync(path.join(outside, 'child'), { recursive: true });
+  const link = path.join(scratch, 'esc');
+  fs.symlinkSync(outside, link);
+
+  const slash = run(`rm -rf ${link}/`, { extra: { agent_id: 'sub-1' }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(slash.deny, true, slash.reason);
+  assert.match(slash.reason, /subagent-rm-outside-scratch/);
+
+  const desc = run(`rm -rf ${link}/child`, { extra: { agent_id: 'sub-1' }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(desc.deny, true, desc.reason);
+
+  const bare = run(`rm -rf ${link}`, { extra: { agent_id: 'sub-1' }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(bare.deny, false, bare.reason);
+});
+
+test('rule7 warns on chmod 0775 (group-writable) and 0777 (world-writable) dir in main session; chmod 0700/0755 own dir has no warn', () => {
+  const { tmpRoot, sandbox } = mkScratchSandbox('blg');
+  const grpDir = path.join(sandbox, 'shared-0775');
+  fs.mkdirSync(grpDir);
+  fs.chmodSync(grpDir, 0o775);
+  assert.strictEqual(fs.statSync(grpDir).mode & 0o777, 0o775);
+
+  const w1 = run(`rm -rf ${grpDir}`, { env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(w1.deny, false);
+  assert.match(w1.ctx, /rm-shared-dir/);
+  assert.match(w1.ctx, /group-writable \(mode 0775\)/);
+
+  const worldDir = path.join(sandbox, 'shared-0777');
+  fs.mkdirSync(worldDir);
+  fs.chmodSync(worldDir, 0o777);
+  const w2 = run(`rm -rf ${worldDir}`, { env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(w2.deny, false);
+  assert.match(w2.ctx, /rm-shared-dir/);
+  assert.match(w2.ctx, /world-writable \(mode 0777\)/);
+
+  const own700 = path.join(sandbox, 'own-0700');
+  fs.mkdirSync(own700);
+  fs.chmodSync(own700, 0o700);
+  const ok700 = run(`rm -rf ${own700}`, { env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(ok700.deny, false);
+  assert.doesNotMatch(ok700.ctx, /rm-shared-dir/);
+
+  const own755 = path.join(sandbox, 'own-0755');
+  fs.mkdirSync(own755);
+  fs.chmodSync(own755, 0o755);
+  const ok755 = run(`rm -rf ${own755}`, { env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(ok755.deny, false);
+  assert.doesNotMatch(ok755.ctx, /rm-shared-dir/);
+});
+
+test('rule7 precedence & scratchpad exemption: subagent + shared dir outside scratch -> deny (rule 6 wins); shared dir inside scratch -> exempt', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const outsideShared = path.join(sandbox, 'shared-outside');
+  fs.mkdirSync(outsideShared);
+  fs.chmodSync(outsideShared, 0o775);
+
+  const subOut = run(`rm -rf ${outsideShared}`, {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(subOut.deny, true, subOut.reason);
+  assert.match(subOut.reason, /subagent-rm-outside-scratch/);
+
+  const insideShared = path.join(scratch, 'shared-inside');
+  fs.mkdirSync(insideShared);
+  fs.chmodSync(insideShared, 0o775);
+  for (const extra of [{}, { agent_id: 'sub-1' }]) {
+    const r = run(`rm -rf ${insideShared}`, { extra, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+    assert.strictEqual(r.deny, false, r.reason);
+    assert.doesNotMatch(r.ctx, /rm-shared-dir|subagent-rm-outside-scratch/);
+  }
+});
+
+test('rule7 knob: deny blocks, off silences, garbage falls back to warn, config.json honored', () => {
+  const { tmpRoot, sandbox } = mkScratchSandbox('blg');
+  const grpDir = path.join(sandbox, 'shared-knob');
+  fs.mkdirSync(grpDir);
+  fs.chmodSync(grpDir, 0o775);
+
+  const denied = run(`rm -rf ${grpDir}`, {
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'deny' },
+  });
+  assert.strictEqual(denied.deny, true);
+  assert.match(denied.reason, /rm-shared-dir/);
+
+  const off = run(`rm -rf ${grpDir}`, {
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'off' },
+  });
+  assert.strictEqual(off.deny, false);
+  assert.doesNotMatch(off.ctx, /rm-shared-dir/);
+
+  const bogus = run(`rm -rf ${grpDir}`, {
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_BASH_GUARD_SHARED_RM_MODE: 'bogus' },
+  });
+  assert.strictEqual(bogus.deny, false);
+  assert.match(bogus.ctx, /rm-shared-dir/);
+
+  const cfgHome = mk('blg-cfg-sh-');
+  const cfgFile = path.join(cfgHome, 'config.json');
+  fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { shared_rm: 'deny' } }));
+  const cfgDeny = run(`rm -rf ${grpDir}`, {
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_CONFIG_FILE: cfgFile },
+  });
+  assert.strictEqual(cfgDeny.deny, true);
+  assert.match(cfgDeny.reason, /rm-shared-dir/);
+});
+
+test('rules 6 & 7 unexpanded glob targets: rule 6 judges literal parent dir; rule 7 skips globs', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const grpDir = path.join(sandbox, 'glob-shared');
+  fs.mkdirSync(grpDir);
+  fs.chmodSync(grpDir, 0o775);
+
+  // Rule 6: outside glob parent -> deny; scratchpad glob parent -> allow; climb `..` after glob -> deny.
+  assert.strictEqual(run(`rm -rf ${grpDir}/*`, {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  }).deny, true);
+  assert.strictEqual(run(`rm -rf ${scratch}/*`, {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  }).deny, false);
+  assert.strictEqual(run(`rm -rf ${scratch}/*/../../outside`, {
+    extra: { agent_id: 'sub-1' },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  }).deny, true);
+
+  // Rule 7: main session with unexpanded glob skips rule 7 (no warn).
+  const mainGlob = run(`rm -rf ${grpDir}/*`, { env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(mainGlob.deny, false);
+  assert.doesNotMatch(mainGlob.ctx, /rm-shared-dir/);
+});
+
+test('rule7 detects foreign owner uid even when directory mode is 0700', () => {
+  const { detectRmSharedDir } = require('../scripts/lib/bash-launch-rules.js');
+  const { tmpRoot, sandbox } = mkScratchSandbox('blg');
+  const foreignDir = path.join(sandbox, 'foreign-0700');
+  fs.mkdirSync(foreignDir);
+  fs.chmodSync(foreignDir, 0o700);
+  const hit = detectRmSharedDir(`rm -rf ${foreignDir}`, {
+    sessionId: 'blg',
+    cwd: sandbox,
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+    uid: process.getuid() + 1,
+  });
+  assert.ok(hit, 'expected rm-shared-dir hit on uid mismatch');
+  assert.strictEqual(hit.rule, 'rm-shared-dir');
+  assert.match(hit.why, /owned by uid/);
+});
+
+test('rules 6 & 7 fail open (no throw) on deeply nested quote/substitution input', () => {
+  const { detectSubagentRmOutsideScratch, detectRmSharedDir } = require('../scripts/lib/bash-launch-rules.js');
+  for (const unit of ['a=( "$(', 'x="$(', '"`', '"((', "'((", '"<(', '"a=(']) {
+    assert.doesNotThrow(() => detectSubagentRmOutsideScratch(`echo rm ${unit.repeat(25000)}`, { agentId: 's1', sessionId: 'blg' }));
+    assert.doesNotThrow(() => detectRmSharedDir(`echo rm ${unit.repeat(25000)}`, { sessionId: 'blg' }));
   }
 });

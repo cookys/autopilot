@@ -1749,9 +1749,10 @@ if [[ -n "$CLOUD_FALLBACK_RUNG_JSON" ]]; then
 fi
 
 # reviewer_cloud_fallback_rung becomes the reviewer for one dispatch, so it must not share the
-# reviewer seat's own family. It is not checked against the implementer or against
-# required_review_families: the shipped retreat is the implementer's model on purpose
-# (gpt-6.1-sol, openai) while the reviewer seat stays alibaba.
+# reviewer seat's own family. It is not checked against required_review_families: the shipped
+# retreat is the implementer's model on purpose (gpt-6.1-sol, openai) while the reviewer seat
+# stays alibaba. The explicit-ladder rung-0 check is below; an empty ladder is not an explicit
+# rung 0, so the shipped gpt-6.1-sol retreat still resolves.
 # One exception: agy carbon to agy argon of the same tier. Every other same-family pair exits 3.
 if [[ "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" != "null" ]]; then
   _rcf_family="$(family_of "$_rcfe")"
@@ -1764,6 +1765,80 @@ if [[ "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" != "null" ]]; then
   fi
   if [[ "$_agy_model_step" -eq 0 && "$_rcf_family" != "unknown" && "$_rcf_family" == "$REV_FAMILY" ]]; then
     echo "resolve-review-loop: reviewer_cloud_fallback_rung ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW} shares the reviewer seat family (${_rcf_family}); pick a rung from another family" >&2
+    exit 3
+  fi
+fi
+
+# implementer_ladder: auto is synthesized from the host topology, which advertises every
+# qualified implementer, so the guards below would turn a normal host into exit 3. Shape the
+# synthesized ladder instead: drop rungs of verification_author_family, and move rungs of the
+# reviewer_cloud_fallback_rung family behind the others so rung 0 differs. An empty result keeps
+# the empty-ladder behaviour. Explicit ladders (and the agy carbon synthesis) keep the exit-3 checks.
+if [[ "$IMPL_LADDER_RAW" == "auto" && "$IMPL_LADDER_JSON" != "[]" ]]; then
+  _al_i=0; _al_drop=","; _al_back=","
+  while IFS= read -r _al_e; do
+    _al_fam="$(family_of "$_al_e")"
+    if [[ "$_al_fam" != "unknown" ]]; then
+      if [[ "$VER_AUTH_PRESENT" == "true" && "$_al_fam" == "$VER_AUTH_FAMILY" ]]; then
+        _al_drop+="${_al_i},"
+      elif [[ "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" != "null" && "$_al_fam" == "$_rcf_family" ]]; then
+        _al_back+="${_al_i},"
+      fi
+    fi
+    _al_i=$((_al_i + 1))
+  done < <(node -e '
+for (const r of JSON.parse(process.argv[1])) process.stdout.write(String(r && r.engine != null ? r.engine : "") + "\n");
+' "$IMPL_LADDER_JSON")
+  if [[ "$_al_drop" != "," || "$_al_back" != "," ]]; then
+    IMPL_LADDER_JSON="$(node -e '
+const j = JSON.parse(process.argv[1]);
+const drop = new Set(process.argv[2].split(",").filter(Boolean).map(Number));
+const back = new Set(process.argv[3].split(",").filter(Boolean).map(Number));
+const keep = j.map((r, i) => [r, i]).filter(([, i]) => !drop.has(i));
+const out = keep.filter(([, i]) => !back.has(i)).concat(keep.filter(([, i]) => back.has(i))).map(([r]) => r);
+process.stdout.write(JSON.stringify(out));
+' "$IMPL_LADDER_JSON" "$_al_drop" "$_al_back")"
+  fi
+fi
+
+# Famguard (PM 01M74FDC5Z). Every explicit implementer_ladder rung (a synthesized agy
+# carbon ladder included) and cloud_fallback_rung must not share verification_author_family.
+# allow_same_runner_dual_seat does not waive it. An empty ladder is not an implicit rung 0.
+if [[ "$VER_AUTH_PRESENT" == "true" && "$VER_AUTH_FAMILY" != "unknown" && "$IMPL_LADDER_JSON" != "[]" ]]; then
+  _fg_i=0
+  while IFS=$'\t' read -r _fg_e _fg_f _fg_r; do
+    [[ -z "${_fg_e:-}" ]] && continue
+    _fg_fam="$(family_of "$_fg_e")"
+    if [[ "$_fg_fam" != "unknown" && "$_fg_fam" == "$VER_AUTH_FAMILY" ]]; then
+      echo "resolve-review-loop: implementer_ladder rung ${_fg_i} ${_fg_e}/${_fg_f}@${_fg_r} shares verification_author_family (${VER_AUTH_FAMILY})" >&2
+      exit 3
+    fi
+    _fg_i=$((_fg_i + 1))
+  done < <(node -e '
+const j = JSON.parse(process.argv[1]);
+if (!Array.isArray(j)) process.exit(0);
+for (const r of j) {
+  if (!r || typeof r !== "object") continue;
+  process.stdout.write([r.engine, r.effort, r.runner].map((v) => (v == null ? "" : String(v))).join("\t") + "\n");
+}
+' "$IMPL_LADDER_JSON")
+fi
+if [[ "$VER_AUTH_PRESENT" == "true" && "$VER_AUTH_FAMILY" != "unknown" && -n "${CLOUD_FALLBACK_RUNG_JSON:-}" ]]; then
+  _cf_va_fam="$(family_of "${_cfe:-}")"
+  if [[ "$_cf_va_fam" != "unknown" && "$_cf_va_fam" == "$VER_AUTH_FAMILY" ]]; then
+    echo "resolve-review-loop: cloud_fallback_rung ${CLOUD_FALLBACK_RUNGS_RAW} shares verification_author_family (${VER_AUTH_FAMILY})" >&2
+    exit 3
+  fi
+fi
+if [[ "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" != "null" && "$IMPL_LADDER_RAW" != "auto" && "${IMPL_LADDER_JSON:-[]}" != "[]" ]]; then
+  _r0_engine="$(node -e '
+const j = JSON.parse(process.argv[1]);
+const r = Array.isArray(j) && j[0] && typeof j[0] === "object" ? j[0] : null;
+process.stdout.write(r && r.engine ? String(r.engine) : "");
+' "$IMPL_LADDER_JSON" 2>/dev/null)" || _r0_engine=""
+  _r0_fam="$(family_of "${_r0_engine:-}")"
+  if [[ -n "${_r0_engine:-}" && "$_r0_fam" != "unknown" && "$_r0_fam" == "$_rcf_family" ]]; then
+    echo "resolve-review-loop: reviewer_cloud_fallback_rung ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW} shares implementer rung 0 family (${_r0_fam})" >&2
     exit 3
   fi
 fi

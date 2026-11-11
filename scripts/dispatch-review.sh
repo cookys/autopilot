@@ -55,6 +55,11 @@
 #                               #   one-line <dir>/tools its --tools (`none` = no tools, today's posture). Validated
 #                               #   before any spawn; references/hetero-dispatch.md "Role kit". Off unless given.
 #       [--bin <path>]          # override the runner binary (test seam)
+#       [--implementer-family <family>]
+#                               # family of the engine that wrote this diff
+#                               #   (comma-separated when there are several).
+#                               #   A cloud-fallback or agy retreat onto that
+#                               #   family is skipped. Absent: resolved implementer_family.
 #       [--checklists <c1,c2>]  # optional adversarial checklist
 #       [--context-window off|warn|block]  # pre-dispatch context-window gate (default: block;
 #                               #   also AUTOPILOT_CONTEXT_WINDOW_GATE). Sizes diff+spec+pack
@@ -197,6 +202,9 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_REVIEW_SELF_DIR/lib/repo-identity.sh" ] && . "$_REVIEW_SELF_DIR/lib/repo-identity.sh" || true
+# shellcheck source=lib/codeforge-collect.sh
+# Best-effort: a missing helper skips usage collect; it never changes the review result.
+[ -r "$_REVIEW_SELF_DIR/lib/codeforge-collect.sh" ] && . "$_REVIEW_SELF_DIR/lib/codeforge-collect.sh" || true
 # A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
 if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || true; fi
 # Startup retention prune of OUR OWN aged ${TMPDIR} residue (raw logs, prompt/out/err
@@ -262,6 +270,8 @@ RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT
 REVIEW_USAGE_JSON="null"
 MAX_TOKENS=""; MAX_TOKENS_SUPPLIED=0; MAX_TOKENS_PARSE_ERROR=""
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
+IMPLEMENTER_FAMILY=""     # --implementer-family; empty falls back to resolved implementer_family
+FAMILY_GUARD_REFUSE=0     # 1 when a retreat has no cross-family rung left
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND
 # DISPATCH_DETACH!=0 (default on), the review runs inside a kill-surviving setsid session that
 # heartbeats to the ledger and lands its JSON result atomically (lib/dispatch-detach.sh).
@@ -289,13 +299,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --role-kit)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--role-kit requires a non-empty directory path" >&2; exit 2; }; ROLE_KIT_DIR="$2"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
+    --implementer-family) { [ $# -ge 2 ] && [ -n "${2:-}" ] && [[ "${2:-}" != --* ]]; } || { echo "--implementer-family requires a non-empty family" >&2; exit 2; }; IMPLEMENTER_FAMILY="$2"; shift 2 ;;
     --checklists) CHECKLISTS="${2:-}"; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --ledger)    LEDGER="${2:-}"; shift 2 ;;
     --run-id)    RUN_ID="${2:-}"; shift 2 ;;
     --stage)     STAGE="${2:-}"; shift 2 ;;
     --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
-    -h|--help)   sed -n '2,58p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,63p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -336,6 +347,103 @@ let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
   process.stdout.write(JSON.stringify(row));
 });' "$status" 2>/dev/null | node "$_REVIEW_SELF_DIR/engine-capability-state.js" cloud-fallback-log >/dev/null 2>&1 || true
 }
+
+# Famguard (PM 01M74FDC5Z). The diff's implementer family is --implementer-family when
+# the caller passed it, otherwise the resolved implementer_family. A retreat rung whose
+# family matches is skipped; the next runnable reviewer_fallback_preference entry of
+# another family is taken. None left refuses. Unknown families do not match.
+# familyOfEngine in lib/stage-write.js is the only family table used here.
+family_guard_bind() {
+  [ -n "${IMPLEMENTER_FAMILY:-}" ] && return 0
+  [ -n "${1:-}" ] || return 0
+  local fam
+  fam="$(node -e '
+let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(0); }
+const v = j && j.implementer_family;
+process.stdout.write(typeof v === "string" ? v : "");
+' "$1" 2>/dev/null)" || fam=""
+  IMPLEMENTER_FAMILY="$fam"
+}
+
+_review_family_of() {
+  local fam
+  fam="$(node -e 'process.stdout.write(require(process.argv[1]).familyOfEngine(process.argv[2]))' \
+    "$_REVIEW_SELF_DIR/lib/stage-write.js" "${1:-}" 2>/dev/null)" || fam=""
+  printf '%s' "${fam:-unknown}"
+}
+
+# return 0 when the engine's family is known and equals one known implementer family
+family_guard_same() {
+  local tfam part rest
+  tfam="$(_review_family_of "$1")"
+  [ -n "$tfam" ] && [ "$tfam" != "unknown" ] || return 1
+  [ -n "${IMPLEMENTER_FAMILY:-}" ] || return 1
+  rest="${IMPLEMENTER_FAMILY},"
+  while [[ "$rest" == *,* ]]; do
+    part="${rest%%,*}"
+    rest="${rest#*,}"
+    part="$(printf '%s' "$part" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [ -z "$part" ] || [ "$part" = "unknown" ] && continue
+    [ "$part" = "$tfam" ] && return 0
+  done
+  return 1
+}
+
+# $1 engine  $2 effort  $3 runner  $4 resolved JSON
+# Sets _FG_ENGINE _FG_EFFORT _FG_RUNNER. return 0 when a cross-family rung is chosen.
+family_guard_select() {
+  local eng="$1" eff="$2" run="$3" resolved="$4" prefs item e f r fam
+  _FG_ENGINE=""
+  _FG_EFFORT=""
+  _FG_RUNNER=""
+  family_guard_bind "$resolved"
+  if family_guard_same "$eng"; then
+    fam="$(_review_family_of "$eng")"
+    echo "family-guard: skipping rung ${eng}/${eff}@${run} (family ${fam} equals implementer family ${IMPLEMENTER_FAMILY})" >&2
+  else
+    _FG_ENGINE="$eng"
+    _FG_EFFORT="$eff"
+    _FG_RUNNER="$run"
+    return 0
+  fi
+  prefs="$(node -e '
+let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(0); }
+const a = j && j.reviewer_fallback_preference;
+if (!Array.isArray(a)) process.exit(0);
+for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
+' "$resolved" 2>/dev/null)" || prefs=""
+  while IFS= read -r item || [ -n "${item:-}" ]; do
+    [ -z "${item:-}" ] && continue
+    e=""; f=""; r=""
+    if [[ "$item" =~ ^([^@[:space:]]+)/([^/@[:space:]]+)@([^/@[:space:]]+)$ ]]; then
+      e="${BASH_REMATCH[1]}"; f="${BASH_REMATCH[2]}"; r="${BASH_REMATCH[3]}"
+    elif [[ "$item" =~ ^([^@[:space:]]+)@([^/@[:space:]]+)$ ]]; then
+      e="${BASH_REMATCH[1]}"; f="low"; r="${BASH_REMATCH[2]}"
+    else
+      continue
+    fi
+    case "$f" in
+      default|low|medium|high|xhigh|max) ;;
+      *) continue ;;
+    esac
+    case "$r" in
+      codex|agy|grok|cursor|kimi|qoderclicn) ;;
+      *) continue ;;
+    esac
+    if family_guard_same "$e"; then
+      fam="$(_review_family_of "$e")"
+      echo "family-guard: skipping rung ${e}/${f}@${r} (family ${fam} equals implementer family ${IMPLEMENTER_FAMILY})" >&2
+      continue
+    fi
+    _FG_ENGINE="$e"
+    _FG_EFFORT="$f"
+    _FG_RUNNER="$r"
+    return 0
+  done <<< "$prefs"
+  echo "family-guard: no cross-family reviewer for implementer family ${IMPLEMENTER_FAMILY}" >&2
+  return 1
+}
+
 die_precondition() {
   local _dp_json
   _dp_json="$(printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null%s }' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")" "$(review_probe_suffix)")"
@@ -743,21 +851,28 @@ process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_e
           case "$PROBE_DECISION" in
             unreachable|busy)
               echo "dispatch-review: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (status ${PROBE_STATUS:-none}, ${PROBE_MS:-0} ms, ${PROBE_REASON}); nothing sent" >&2
-              FALLBACK_LOG_ROW="$(node -e '
+              if family_guard_select "$_rv_re" "$_rv_rf" "$_rv_rr" "$_rv_resolved"; then
+                FALLBACK_LOG_ROW="$(node -e '
 process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: process.argv[3], error_class: process.argv[4], to_rung: process.argv[5], branch: null, served_by: process.argv[5], probe: JSON.parse(process.argv[6]) }));
-' "${RUN_ID:-}" "$RUNNER" "$ENDPOINT" "${PROBE_CLASS:-}" "${_rv_re}/${_rv_rf}@${_rv_rr}" "$PROBE_JSON")"
-              echo "dispatch-review: retreating once to cloud rung ${_rv_re}/${_rv_rf}@${_rv_rr} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
-              RUNNER="$_rv_rr"
-              MODEL="$_rv_re"
-              EFFORT="$_rv_rf"
-              EFFORT_EXPLICIT=1
-              ENDPOINT=""
-              EP_URL=""
-              EP_TOKEN_ENV=""
-              ANTHROPIC_BASE_URL=""
-              ANTHROPIC_TOKEN_ENV=""
-              unset ANTHROPIC_AUTH_TOKEN
-              SERVED_BY="${_rv_re}/${_rv_rf}@${_rv_rr}"
+' "${RUN_ID:-}" "$RUNNER" "$ENDPOINT" "${PROBE_CLASS:-}" "${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}" "$PROBE_JSON")"
+                echo "dispatch-review: retreating once to cloud rung ${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
+                if [[ "$_FG_RUNNER" != "$RUNNER" ]]; then
+                  BIN=""
+                fi
+                RUNNER="$_FG_RUNNER"
+                MODEL="$_FG_ENGINE"
+                EFFORT="$_FG_EFFORT"
+                EFFORT_EXPLICIT=1
+                ENDPOINT=""
+                EP_URL=""
+                EP_TOKEN_ENV=""
+                ANTHROPIC_BASE_URL=""
+                ANTHROPIC_TOKEN_ENV=""
+                unset ANTHROPIC_AUTH_TOKEN
+                SERVED_BY="${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}"
+              else
+                FAMILY_GUARD_REFUSE=1
+              fi
               ;;
             ok) echo "dispatch-review: endpoint pre-probe ${ENDPOINT}: ok (status ${PROBE_STATUS}, ${PROBE_MS} ms); served by local endpoint ${ENDPOINT}" >&2 ;;
             "") ;;
@@ -1140,25 +1255,36 @@ process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_e
   local _rv_eng _rv_run _rv_ep _rv_pol _rv_re _rv_rf _rv_rr
   IFS='|' read -r _rv_eng _rv_run _rv_ep _rv_pol _rv_re _rv_rf _rv_rr <<< "${_rv_parsed}"
   [[ "$_rv_pol" == "cloud-fallback" && "$MODEL" == "$_rv_eng" && "$RUNNER" == "$_rv_run" && "$ENDPOINT" == "$_rv_ep" && -n "$_rv_re" && -n "$_rv_rf" && -n "$_rv_rr" ]] || return 0
+  if ! family_guard_select "$_rv_re" "$_rv_rf" "$_rv_rr" "$_rv_resolved"; then
+    return 0
+  fi
   passive_capture "no_verdict"
-  local served="${_rv_re}/${_rv_rf}@${_rv_rr}"
+  local served="${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}"
   FALLBACK_LOG_ROW="$(node -e '
 process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: null, error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: null }));
 ' "${RUN_ID:-}" "$RUNNER" "$classification" "$served")"
   echo "dispatch-review: retreating once to cloud rung ${served} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
   echo "dispatch-review: agy retreat kept first-attempt raw log ${RAW_LOG}" >&2
   local -a _agy_retreat_args=()
-  local _i=0 _saw_effort=0 _a
+  local _i=0 _saw_effort=0 _a _drop_bin=0
+  [[ "$_FG_RUNNER" != "agy" ]] && _drop_bin=1
   while [ "$_i" -lt "${#ORIG_ARGS[@]}" ]; do
     _a="${ORIG_ARGS[$_i]}"
     case "$_a" in
-      --model)  _agy_retreat_args+=(--model "$_rv_re"); _i=$((_i + 2)) ;;
-      --runner) _agy_retreat_args+=(--runner "$_rv_rr"); _i=$((_i + 2)) ;;
-      --effort) _agy_retreat_args+=(--effort "$_rv_rf"); _saw_effort=1; _i=$((_i + 2)) ;;
+      --model)  _agy_retreat_args+=(--model "$_FG_ENGINE"); _i=$((_i + 2)) ;;
+      --runner) _agy_retreat_args+=(--runner "$_FG_RUNNER"); _i=$((_i + 2)) ;;
+      --effort) _agy_retreat_args+=(--effort "$_FG_EFFORT"); _saw_effort=1; _i=$((_i + 2)) ;;
+      --bin)
+        if [ "$_drop_bin" -eq 1 ]; then
+          _i=$((_i + 2))
+        else
+          _agy_retreat_args+=("$_a"); _i=$((_i + 1))
+        fi
+        ;;
       *) _agy_retreat_args+=("$_a"); _i=$((_i + 1)) ;;
     esac
   done
-  [ "$_saw_effort" -eq 1 ] || _agy_retreat_args+=(--effort "$_rv_rf")
+  [ "$_saw_effort" -eq 1 ] || _agy_retreat_args+=(--effort "$_FG_EFFORT")
   local _child_out _child_err _child_rc _child_json
   _child_out="$(mktemp -t dispatch-review-retreat-out-XXXXXX)"
   _child_err="$(mktemp -t dispatch-review-retreat-err-XXXXXX)"
@@ -1277,6 +1403,8 @@ cleanup() {
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
   [ -n "$IDLE_MARKER" ] && rm -f "$IDLE_MARKER"
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
+  # Collect before the trap deletes a scratch the explicit path did not reach.
+  declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && [ -n "$CCSHIM_CWD" ] && codeforge_collect_claude_dir "$CCSHIM_CWD/.claude" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
   [ -n "$CNATIVE_CFG" ] && rm -rf "$CNATIVE_CFG"
@@ -1600,6 +1728,9 @@ EOF
 _acct_forward() { kill -TERM "$_ACCT_CHILD" 2>/dev/null; wait "$_ACCT_CHILD" 2>/dev/null; exit 143; }
 # --- dispatch (read-only) ---
 declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_REVIEW_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches
+if [ "${FAMILY_GUARD_REFUSE:-0}" -eq 1 ]; then
+  emit_no_verdict "family-guard: no cross-family reviewer for implementer family ${IMPLEMENTER_FAMILY}"
+fi
 record_dispatch_usage_start   # dispatch_usage/1 start row; the finished row replaces it for the reader
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="$(runner_bin_fallback "${BIN:-codex}")"
@@ -2172,7 +2303,8 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   trap - TERM INT HUP
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
   declare -F ccshim_keep_transcript >/dev/null 2>&1 && { ccshim_keep_transcript "$CCSHIM_CWD" "$REVIEW_RUN_ID" || true; }
-  rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$CCSHIM_CWD/.claude" || true
+  rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't collect or rm the path a 2nd time
   if [ "$CCSHIM_RC" -ne 0 ]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CCSHIM_RC" "$([ "$CCSHIM_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
@@ -2227,9 +2359,11 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     trap - TERM INT HUP
     (exit "$_ACCT_RC")   # leaves the child's status in $? for the CNATIVE_RC line after the fi
   else
-  node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec -- \
+  # --collect-err-fd 3 and the 3>&2 below stay together: fd 3 is this script's stderr,
+  # saved before stdout/stderr go to the verdict capture. The child must not inherit it.
+  node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec --collect-err-fd 3 -- \
   timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
-      _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>&1
+      _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} 3>&2 > "$RAW_LOG" 2>&1
   fi
   CNATIVE_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true

@@ -73,6 +73,13 @@ PIN
 CFG_FB="$TEST_TMP/reviewer-fb.md"
 write_reviewer_cfg "$CFG_FB" "- reviewer_on_engine_unavailable: cloud-fallback
 - reviewer_cloud_fallback_rung: gpt-6.1-sol/high@codex"
+cat >> "$CFG_FB" <<'EOF'
+- override: implementer | until 2099-01-01 | cross-family so the openai cloud rung stays runnable
+- implementer_engine: grok-4.7
+- implementer_runner: grok
+- implementer_effort: low
+- implementer_ladder:
+EOF
 CFG_ASK="$TEST_TMP/reviewer-ask.md"
 write_reviewer_cfg "$CFG_ASK" ""
 

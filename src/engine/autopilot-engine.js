@@ -11,6 +11,7 @@ const {
   evaluate: evaluateRepairScope,
 } = require('../../scripts/check-repair-scope');
 const { portableRawLog, resolveRawLog } = require('../../scripts/lib/raw-log-path');
+const codexFallback = require('../../scripts/lib/qc-panel-codex-fallback');
 
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const {
@@ -754,16 +755,94 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   return { policy, action, error_class: null, dispatch_status: dispatchStatus };
 }
 
-// --endpoint on an implementer dispatch comes from the caller's extraImplementationArgs (the
-// builder does not reserve it). The cloud fallback must read it for the log and drop it, or the
-// cloud rung would be sent to the local endpoint again.
+// --endpoint on an implementer dispatch: the last extraImplementationArgs value wins
+// (`--endpoint v` or `--endpoint=v`). The flag is not reserved; the cloud fallback
+// strips it and clears roster.implementer_endpoint, or the next rung would be sent
+// to the local endpoint again. The roster name is emitted only when extra args
+// carry no --endpoint at all, for a cc-shim runner, and for implementer_runner
+// auto or empty when the seat endpoint is listed. An empty extra value does not
+// fall back to the roster. A name in scripts/lib/local-sandbox-endpoints.json, compared
+// case-insensitively (resolve-endpoint.sh uppercases the env suffix, so QWEN_LOCAL is
+// the same seat as qwen_local), also forces --sandbox bwrap and
+// --worktree-parent on those same runners; those two are reserved so extra args cannot strip
+// them (PM 01M748P8G8). The shell re-resolves auto plus a listed endpoint onto cc-shim. The
+// worktree parent is one per-uid directory (mode 0700, one lstat after mkdir), created by
+// scripts/lib/local-sandbox-parent.js because every implementer argv (engine, l5/l6, the
+// ladder) is built by this function. This passes os.tmpdir(); the helper realpaths it
+// before the .git walk. A relative path, a realpath error, or a .git ancestor uses /tmp.
+// dispatch-hetero removes the child worktree. This function does not.
+const LOCAL_SANDBOX_ENDPOINTS = path.join(
+  __dirname, '..', '..', 'scripts', 'lib', 'local-sandbox-endpoints.json',
+);
+
+function localSandboxEndpointNames() {
+  let doc;
+  try {
+    doc = JSON.parse(fs.readFileSync(LOCAL_SANDBOX_ENDPOINTS, 'utf8'));
+  } catch (error) {
+    throw new Error(`local implementer sandbox registry unreadable: ${LOCAL_SANDBOX_ENDPOINTS}`);
+  }
+  const list = doc && doc.local_sandbox_endpoints;
+  if (!Array.isArray(list) || list.some((name) => typeof name !== 'string' || name.length === 0)) {
+    throw new Error(`local implementer sandbox registry is malformed: ${LOCAL_SANDBOX_ENDPOINTS}`);
+  }
+  return list;
+}
+
+function localSandboxEndpointListed(name) {
+  if (typeof name !== 'string' || name.length === 0) return false;
+  const needle = name.toLowerCase();
+  return localSandboxEndpointNames().some((entry) => entry.toLowerCase() === needle);
+}
+
+const {
+  localSandboxWorktreeParent: sharedLocalSandboxWorktreeParent,
+} = require('../../scripts/lib/local-sandbox-parent');
+
+// One shared parent per uid. Not a per-call mkdtemp: two builds reuse this path.
+// The joined name keeps the registered residue prefix on this os.tmpdir() call.
+// The helper realpaths the directory before it walks for .git.
+function localSandboxWorktreeParent() {
+  if (typeof process.getuid !== 'function') {
+    throw new Error('local sandbox worktree parent requires process.getuid()');
+  }
+  const named = path.join(os.tmpdir(), 'autopilot-local-sbx-' + process.getuid());
+  return sharedLocalSandboxWorktreeParent(path.dirname(named));
+}
+
+function implementerSeatEndpoint(extraImplementationArgs, roster) {
+  const fromExtra = endpointFromImplementationArgs(extraImplementationArgs);
+  // null means the caller passed no --endpoint. An empty value is explicit:
+  // do not substitute the roster name.
+  if (fromExtra !== null) return fromExtra;
+  if (roster && typeof roster.implementer_endpoint === 'string'
+      && VALID_ENDPOINT_NAME.test(roster.implementer_endpoint)) {
+    return roster.implementer_endpoint;
+  }
+  return '';
+}
+// Last occurrence wins, matching dispatch-hetero.sh: both `--endpoint v` and
+// `--endpoint=v`. Returns null only when the flag is absent. An empty value
+// is returned as ''.
 function endpointFromImplementationArgs(args) {
   if (!Array.isArray(args)) return null;
+  let found = null;
+  let seen = false;
   for (let i = 0; i < args.length; i += 1) {
-    if (args[i] === '--endpoint' && typeof args[i + 1] === 'string') return args[i + 1];
-    if (typeof args[i] === 'string' && args[i].startsWith('--endpoint=')) return args[i].slice('--endpoint='.length);
+    if (args[i] === '--endpoint') {
+      if (typeof args[i + 1] === 'string') {
+        seen = true;
+        found = args[i + 1];
+        i += 1;
+      }
+      continue;
+    }
+    if (typeof args[i] === 'string' && args[i].startsWith('--endpoint=')) {
+      seen = true;
+      found = args[i].slice('--endpoint='.length);
+    }
   }
-  return null;
+  return seen ? found : null;
 }
 
 function stripEndpointImplementationArgs(args) {
@@ -919,6 +998,7 @@ function buildReviewArgs({
   checklists = [],
   dispatchIdentity = null,
   timeoutSeconds = null,
+  implementerFamily = null,
 }) {
   validateReviewRoster(roster);
   if (!diffFile || typeof diffFile !== 'string') {
@@ -938,6 +1018,7 @@ function buildReviewArgs({
     '--checklists',
     '--endpoint',
     '--timeout',
+    '--implementer-family',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
@@ -988,6 +1069,9 @@ function buildReviewArgs({
   if (timeoutSeconds !== null) {
     args.push('--timeout', `${timeoutSeconds}s`);
   }
+  if (typeof implementerFamily === 'string' && implementerFamily && implementerFamily !== 'unknown') {
+    args.push('--implementer-family', implementerFamily);
+  }
   appendDispatchIdentity(args, identity);
   args.push(...extraReviewArgs);
   return args;
@@ -1003,6 +1087,7 @@ function validateExtraReviewArgs(extraReviewArgs) {
     '--checklists',
     '--endpoint',
     '--timeout',
+    '--implementer-family',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
@@ -1033,6 +1118,16 @@ function buildImplementationArgs({
   retentionExpiresAt = null,
   timeoutSeconds = null,
 }) {
+  // An empty runner is invalid in general. A listed local endpoint is the same
+  // seat as auto: coerce a copy so validation and the argv see auto. Do not
+  // mutate the caller's roster, and do not invent a runner when the field is
+  // missing.
+  if (roster && roster.implementer_runner === '') {
+    const earlySeat = implementerSeatEndpoint(extraImplementationArgs, roster);
+    if (localSandboxEndpointListed(earlySeat)) {
+      roster = { ...roster, implementer_runner: 'auto' };
+    }
+  }
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
     throw new TypeError('promptFile is required');
@@ -1068,6 +1163,8 @@ function buildImplementationArgs({
     '--retain-reason',
     '--retain-until',
     '--timeout',
+    '--sandbox',
+    '--worktree-parent',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
   if (campaignContractFile !== null
@@ -1189,6 +1286,20 @@ function buildImplementationArgs({
   }
   if (timeoutSeconds !== null) {
     args.push('--timeout', `${timeoutSeconds}s`);
+  }
+  const seatEndpoint = implementerSeatEndpoint(extraImplementationArgs, roster);
+  const extraEndpoint = endpointFromImplementationArgs(extraImplementationArgs);
+  const runner = roster.implementer_runner;
+  const listed = localSandboxEndpointListed(seatEndpoint);
+  const localSeat = runner === 'cc-shim' || ((runner === 'auto' || runner === '') && listed);
+  if (localSeat
+      && extraEndpoint === null
+      && typeof roster.implementer_endpoint === 'string'
+      && VALID_ENDPOINT_NAME.test(roster.implementer_endpoint)) {
+    args.push('--endpoint', roster.implementer_endpoint);
+  }
+  if ((runner === 'cc-shim' || runner === 'auto' || runner === '') && listed) {
+    args.push('--sandbox', 'bwrap', '--worktree-parent', localSandboxWorktreeParent());
   }
   args.push(...extraImplementationArgs);
   return args;
@@ -3768,6 +3879,7 @@ class AutopilotEngine {
         timeoutSeconds: Object.prototype.hasOwnProperty.call(input, 'timeoutSeconds')
           ? input.timeoutSeconds
           : null,
+        implementerFamily: modelFamilyOfEngine(implementerEngine),
       });
     } catch (error) {
       ledger.push(this.ledgerEntry('prepare_review', 'blocked', startedAt));
@@ -4908,7 +5020,12 @@ class AutopilotEngine {
           implementer_engine: rung.engine,
           implementer_effort: rung.effort,
           implementer_runner: rung.runner,
-          implementer_endpoint: '',
+          // Drop the local name. After extra --endpoint flags are stripped,
+          // a still-set roster endpoint would be emitted onto this rung, and
+          // a listed name would also add --sandbox bwrap. That flag is not
+          // harmless here: codex refuses it, and a cloud cc-shim has no local
+          // seat to sandbox. null is not a name, so neither is emitted.
+          implementer_endpoint: null,
           implementer_family: rungFamily,
           implementer_ladder: [],
           cloud_fallback_attempted: true,
@@ -6473,7 +6590,7 @@ class AutopilotEngine {
             providedReviewResult: batchRows[i],
             sharedPacket,
           });
-          outcomes[entry.index] = { seat: entry.seat, outcome: finished };
+            outcomes[entry.index] = { seat: entry.seat, outcome: finished };
           if (seatStoreCtx && finished && finished.reviewed === true) {
             finalPanelSeatStore.recordVerdict(
               { ...seatStoreCtx, seat: entry.seat, seatIndex: entry.index },
@@ -6489,6 +6606,90 @@ class AutopilotEngine {
             );
           }
         }
+      }
+      const seatSubstitutions = [];
+      for (let i = 0; i < outcomes.length; i += 1) {
+        const row = outcomes[i];
+        if (!row || !row.seat || row.seat.runner !== 'codex' || (row.outcome && row.outcome.reviewed === true)) {
+          continue;
+        }
+        const out = row.outcome && typeof row.outcome === 'object' ? row.outcome : {};
+        const outRaw = out.raw && typeof out.raw === 'object' ? out.raw : {};
+        const revJson = outRaw.review && typeof outRaw.review === 'object' ? outRaw.review : {};
+        const revChild = outRaw.reviewResult && typeof outRaw.reviewResult === 'object' ? outRaw.reviewResult : {};
+        const quotaFailure = codexFallback.classifyCodexQuotaFailure({
+          runner: row.seat.runner,
+          exitCode: Number.isInteger(revJson.exit_code)
+            ? revJson.exit_code
+            : (Number.isInteger(revChild.status) ? revChild.status : null),
+          texts: [
+            out.reason,
+            outRaw.reason,
+            revJson.error,
+            revJson.stderr_tail,
+            revChild.stderr,
+            revChild.error && revChild.error.message,
+          ],
+          rawLogPath: out.raw_log || outRaw.raw_log || revJson.raw_log || null,
+          cwd: loopCwd,
+        });
+        if (!quotaFailure) continue;
+
+        const activePanelSeats = outcomes.map((r) => r.seat);
+        const sub = codexFallback.selectCodexQuotaSubstitute({
+          failedSeat: row.seat,
+          failedIndex: i,
+          panelSeats: activePanelSeats,
+          implementerEngine: roster.implementer_engine,
+          implementerFamily,
+          crossFamilyRequired: panelRoster.cross_family_required !== false,
+          requiredReviewFamilies: sealedRequired,
+          minPanelSize,
+          authorFamilyExcluded,
+        });
+        if (!sub) continue;
+
+        const subSeat = {
+          role: row.seat.role || 'qc',
+          runner: sub.runner,
+          model: sub.engine,
+          effort: sub.effort,
+          endpoint: sub.endpoint || null,
+          family: sub.family,
+        };
+        const subRecord = codexFallback.buildSubstitutionRecord({
+          originalSeat: {
+            id: `s${i}`,
+            engine: row.seat.model,
+            runner: row.seat.runner,
+            effort: row.seat.effort,
+            endpoint: row.seat.endpoint || undefined,
+          },
+          substitute: sub,
+          reason: quotaFailure.reason,
+        });
+        const subOutcome = performReview({
+          ...reviewInput,
+          scope: 'final',
+          reviewRoster: {
+            ...roster,
+            reviewer_runner: subSeat.runner,
+            reviewer_engine: subSeat.model,
+            reviewer_effort: subSeat.effort,
+            reviewer_endpoint: subSeat.endpoint || '',
+            reviewer_qualified: true,
+          },
+          reviewStage: `campaign-final-review#seat-${i + 1}`,
+          pinReviewerTuple: true,
+          review_timeout_seconds: seatTimeoutSeconds,
+          budget_consumer: 'panel',
+          deferDispatch: false,
+          sharedPacket,
+          seat_packet: incrementalRound ? 'incremental' : 'full',
+        });
+        outcomes[i] = { seat: subSeat, outcome: subOutcome };
+        seatSubstitutions.push(subRecord);
+        seatTrace.push(`final_panel_seat_codex_quota_substituted:${i + 1}:${sub.engine}@${sub.runner}`);
       }
       const panelEndedAt = this.now();
       for (const row of outcomes) {
@@ -6655,6 +6856,10 @@ class AutopilotEngine {
         ...(stationKind === 'panel' && packetHash ? { packet_hash: packetHash } : {}),
         ...(driftTrace.length + seatTrace.length > 0
           ? { trace: [...driftTrace, ...seatTrace] } : {}),
+        ...(seatSubstitutions.length > 0 ? {
+          substituted_seats: seatSubstitutions,
+          panel_report: seatSubstitutions.map((s) => s.notice),
+        } : {}),
         ...(incrementDecision ? incrementWiring.disclosureFor(incrementDecision) : {}),
       };
       if (!panelReviewed && stationKind === 'panel') {

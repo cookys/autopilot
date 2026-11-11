@@ -64,7 +64,7 @@
  *            backtick); literal targets, non-recursive rm and quoted data pass. Knob: depth0_delegate_gate.rm_var_target
  *            or env AUTOPILOT_BASH_GUARD_RMVAR_MODE = off|warn|deny (default deny). Runs at every depth, subagents included.
  *   2d. DENY (subagents only: non-empty payload.agent_id) a recursive rm whose literal target resolves outside the
- *            session scratchpad (<tmp-root>/claude-<uid>/*/<session_id>/, tmp-root = CLAUDE_CODE_TMPDIR || TMPDIR ||
+ *            session scratchpad (<tmp-root>/claude-<uid>/<project>/<session_id>/, tmp-root = CLAUDE_CODE_TMPDIR || TMPDIR ||
  *            system temp dir). Knob: depth0_delegate_gate.subagent_rm or env AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE =
  *            off|warn|deny (default deny; garbage ⇒ deny).
  *   2e. WARN (every session, main or subagent) a recursive rm whose literal non-glob target exists outside the session

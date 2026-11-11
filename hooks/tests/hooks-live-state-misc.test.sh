@@ -118,8 +118,12 @@ assert_r79_cc_shim_framing_chro() {
     bad "documents why launch-env cannot disable session-title generation"
   fi
 
-  local TMP STUB DIFF OUT RC ERR
+  local TMP LIVE STUB DIFF OUT RC ERR LEDGER ROWS NEG_XDG
   TMP="$(mktemp -d "/dev/shm/r79-cc-shim-framing-XXXXXX")"
+  # BL-0429: dispatch-usage.js appends to resolveLiveDir(); without AUTOPILOT_LIVE_DIR
+  # that is $XDG_RUNTIME_DIR/autopilot (the host ledger). Pin a suite-owned live dir.
+  LIVE="$TMP/live"
+  mkdir -m 0700 "$LIVE"
   DIFF="$TMP/d.diff"
   printf '+def f(): return x[::1]\n' > "$DIFF"
   STUB="$TMP/stub"
@@ -140,7 +144,8 @@ exit 0
 EOF
   chmod +x "$STUB"
 
-  OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR \
+  OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+    AUTOPILOT_LIVE_DIR="$LIVE" \
     AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
     MINIMAX_API_KEY=test-dummy AUTOPILOT_ENDPOINTS_ENV=/nonexistent \
     "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
@@ -153,7 +158,8 @@ EOF
     bad "chrome + complete block expected reviewed, got rc=$RC status-line=[$OUT] reason=[$ERR]"
   fi
 
-  OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR \
+  OUT="$(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+    AUTOPILOT_LIVE_DIR="$LIVE" \
     AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
     MINIMAX_API_KEY=test-dummy AUTOPILOT_ENDPOINTS_ENV=/nonexistent \
     R79_TRUNCATE=1 "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
@@ -165,7 +171,44 @@ EOF
   else
     bad "chrome + truncated block expected no_verdict, got rc=$RC out=[$OUT]"
   fi
-  rm -rf "$TMP"
+
+  # Guard (BL-0429): after the two dispatches the usage ledger is under LIVE and
+  # carries this suite's MiniMax-M3 / cc-shim / minimax rows (2 running + reviewed + no_verdict).
+  LEDGER="$(echo "$LIVE"/dispatch-usage-*.jsonl)"
+  if [ -f "$LEDGER" ]; then
+    ROWS="$(grep -c '"model":"MiniMax-M3"' "$LEDGER" 2>/dev/null || echo 0)"
+    if [ "$ROWS" -ge 4 ] && grep -q '"runner":"cc-shim"' "$LEDGER" && grep -q '"account":"minimax"' "$LEDGER"; then
+      ok "usage ledger under suite live dir has this suite's MiniMax-M3 rows (n=$ROWS)"
+    else
+      bad "usage ledger under suite live dir missing MiniMax-M3/cc-shim/minimax rows (n=$ROWS file=$LEDGER)"
+    fi
+  else
+    bad "usage ledger missing under suite live dir $LIVE"
+  fi
+
+  # Negative control: drop the AUTOPILOT_LIVE_DIR redirect; point XDG at a throwaway
+  # tmpfs so the host ledger is never touched. The suite LIVE stays empty → the
+  # guard above would be red. Then restore is the earlier redirected runs.
+  rm -f "$LIVE"/dispatch-usage-*.jsonl
+  NEG_XDG="$(mktemp -d "/dev/shm/r79-neg-xdg-XXXXXX")"
+  chmod 700 "$NEG_XDG"
+  env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u AUTOPILOT_LIVE_DIR \
+    XDG_RUNTIME_DIR="$NEG_XDG" \
+    AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1 \
+    MINIMAX_API_KEY=test-dummy AUTOPILOT_ENDPOINTS_ENV=/nonexistent \
+    "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
+    --diff-file "$DIFF" --bin "$STUB" >/dev/null 2>&1 || true
+  if ! compgen -G "$LIVE/dispatch-usage-*.jsonl" >/dev/null; then
+    ok "negative control: without AUTOPILOT_LIVE_DIR redirect the suite live dir stays empty"
+  else
+    bad "negative control: suite live dir gained a ledger without redirect"
+  fi
+  if compgen -G "$NEG_XDG/autopilot/dispatch-usage-*.jsonl" >/dev/null; then
+    ok "negative control: rows landed under throwaway XDG (proves guard would be red)"
+  else
+    bad "negative control: expected ledger under throwaway XDG_RUNTIME_DIR/autopilot"
+  fi
+  rm -rf "$NEG_XDG" "$TMP"
 }
 
 assert_r79_cc_shim_framing_chro

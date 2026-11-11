@@ -6251,6 +6251,39 @@
         "AUTOPILOT_ACCOUNTS_DIR"
       ],
       "note": "Test runners pin AUTOPILOT_ACCOUNTS_DIR to a path that does not exist so no suite reads the operator's real account registry; 1 keeps the caller's value (only the isolation negative control in scripts/account-rails.test.js uses it)."
+    },
+    {
+      "name": "AUTOPILOT_AGY_REVIEW_RETREATED",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/dispatch-review.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Set to 1 by dispatch-review.sh on the one re-dispatch of an agy carbon reviewer to its argon rung; the child reads it so it does not retreat a second time."
+    },
+    {
+      "name": "AUTOPILOT_AGY_RETREAT_SERVED_BY",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/dispatch-review.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Set by dispatch-review.sh on the agy carbon-to-argon retreat child: the served_by value the child copies onto its result."
+    },
+    {
+      "name": "AUTOPILOT_AGY_RETREAT_LOG_ROW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/dispatch-review.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Set by dispatch-review.sh on the agy carbon-to-argon retreat child: the cloud-fallbacks.jsonl row the child carries onto its result."
     }
   ]
 }

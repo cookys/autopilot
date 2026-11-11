@@ -18,6 +18,7 @@ const { isSafeSeatId } = require('./lib/seat-id-guard');
 const { stageWrite, familyOfEngine } = require('./lib/stage-write');
 const familyGate = require('./lib/review-family-gate');
 const { invalidSeatModels } = require('./lib/seat-model-id');
+const { portableRawLogInPlace } = require('./lib/raw-log-path');
 
 function assertSafeSeatId(id) {
   if (!isSafeSeatId(id)) {
@@ -1209,6 +1210,7 @@ async function handleCollect(flags) {
   for (const res of seatResults) {
     assertSafeSeatId(res.seat.id);
     const seatPath = path.join(gDir, `seat-${res.seat.id}.json`);
+    portableRawLogInPlace(res.rawOutput, gDir);
     const seatContent = JSON.stringify(res.rawOutput, null, 2) + '\n';
     writeFileSyncAtomic(seatPath, seatContent);
     seatArtifactSha256[res.seat.id] = crypto.createHash('sha256').update(seatContent, 'utf8').digest('hex');

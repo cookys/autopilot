@@ -10,6 +10,7 @@ const {
   contractDigest: repairScopeContractDigest,
   evaluate: evaluateRepairScope,
 } = require('../../scripts/check-repair-scope');
+const { portableRawLog, resolveRawLog } = require('../../scripts/lib/raw-log-path');
 
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const {
@@ -3907,7 +3908,7 @@ class AutopilotEngine {
         runner: roster.reviewer_runner,
         model: roster.reviewer_engine,
         exit_status: reviewResult ? reviewResult.status : null,
-        ...(blockedReason ? { raw_log: salvagedRawLog } : {}),
+        ...(blockedReason ? { raw_log: portableRawLog(salvagedRawLog) } : {}),
       }),
     );
 
@@ -5881,7 +5882,7 @@ class AutopilotEngine {
           reason: reviewed.reason || `review status ${reviewed.status}`,
           raw: reviewed,
           raw_log: Object.prototype.hasOwnProperty.call(reviewed, 'raw_log')
-            ? reviewed.raw_log
+            ? resolveRawLog(reviewed.raw_log)
             : null,
         };
       }
@@ -6089,7 +6090,7 @@ class AutopilotEngine {
       };
       if (!isReviewed && outcome && typeof outcome.raw_log === 'string'
           && outcome.raw_log.length > 0) {
-        body.raw_log = outcome.raw_log;
+        body.raw_log = portableRawLog(outcome.raw_log);
       }
       const seatFailure = isReviewed ? null : finalPanelSeatStore.failureFromOutcome(outcome);
       if (seatFailure) body.failure = seatFailure;

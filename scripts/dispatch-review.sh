@@ -69,6 +69,13 @@
 #                               #   (reviewer_on_engine_unavailable, else the global) and may
 #                               #   retreat once to the cloud rung. AUTOPILOT_ENDPOINT_PREPROBE=off
 #                               #   skips the probe. Other seats are unchanged.
+#                               #   An agy reviewer whose call matches that tuple (model + runner
+#                               #   + endpoint) and whose effective policy is cloud-fallback
+#                               #   retreats ONCE after a no_verdict classified quota_exhausted,
+#                               #   rate_limited or unavailable, onto the same cloud rung (an
+#                               #   unset gemini-4-carbon-* seat resolves to argon of the same
+#                               #   tier). That path is not a probe: AUTOPILOT_ENDPOINT_PREPROBE
+#                               #   does not gate it. A reviewed verdict is never re-run.
 #   ⏳ TIMEOUT: this call can run for MINUTES (codex xhigh especially). When invoking via
 #   Claude Code's Bash tool, pass a generous `timeout` — the 120s tool default SIGTERMs long
 #   runs (exit 143) even though this script's own inner timeouts are longer. Persist it once
@@ -298,14 +305,24 @@ done
 # a parsing caller reads as a transport failure rather than a precondition failure.
 # Falls back to raw interpolation only if json-emit.sh could not be sourced.
 _rv_esc() { if declare -F json_escape >/dev/null 2>&1; then json_escape "$(printf '%s' "${1:-}" | tr '\n' ' ')"; else printf '%s' "${1:-}"; fi; }
-# Set only when this invocation's reviewer-seat pre-probe ran. Absent from the JSON otherwise,
-# so an ask-policy dispatch stays byte-identical.
+# PROBE_JSON is set only when this invocation's reviewer-seat pre-probe ran.
+# SERVED_BY is also set when an agy post-failure retreat re-runs on the cloud rung
+# (no probe object). Absent from the JSON otherwise, so an ask-policy dispatch stays
+# byte-identical.
 PROBE_JSON=""
 SERVED_BY=""
 FALLBACK_LOG_ROW=""
+# A retreated child is a fresh process and the three assignments above clear the
+# parent's values. Restore from env the parent set for this one re-run only.
+if [ "${AUTOPILOT_AGY_REVIEW_RETREATED:-}" = "1" ]; then
+  SERVED_BY="${AUTOPILOT_AGY_RETREAT_SERVED_BY:-}"
+  FALLBACK_LOG_ROW="${AUTOPILOT_AGY_RETREAT_LOG_ROW:-}"
+fi
 review_probe_suffix() {
   if [ -n "${PROBE_JSON:-}" ]; then
     printf ', "probe": %s, "served_by": "%s"' "$PROBE_JSON" "$(_rv_esc "${SERVED_BY:-}")"
+  elif [ -n "${SERVED_BY:-}" ]; then
+    printf ', "served_by": "%s"' "$(_rv_esc "$SERVED_BY")"
   fi
 }
 # One cloud-fallbacks.jsonl row per retreat, written when the review ends so the row carries
@@ -1085,7 +1102,99 @@ record_dispatch_usage() {
     --provider-session-id "${CHILD_SESSION_ID:-}" || true
 }
 
+# One-shot agy retreat after a no_verdict. Not an endpoint probe, so
+# AUTOPILOT_ENDPOINT_PREPROBE does not gate it. Returns when this failure must be
+# emitted as-is. Never returns when it re-runs: the child prints the result
+# (served_by via review_probe_suffix) and this process exits with the child's status.
+agy_post_failure_retreat() {
+  [ "$RUNNER" = "agy" ] || return 0
+  [ "${AUTOPILOT_AGY_REVIEW_RETREATED:-}" = "1" ] && return 0
+  [ -n "${RAW_LOG:-}" ] && [ -r "$RAW_LOG" ] || return 0
+  local classification
+  classification="$("$_REVIEW_SELF_DIR/engine-capability-state.js" classify-error --file "$RAW_LOG" --exit-code "${AGY_RC:-1}" 2>/dev/null)" || return 0
+  case "$classification" in
+    quota_exhausted|rate_limited|unavailable) ;;
+    *) return 0 ;;
+  esac
+  local _rv_resolve_err _rv_resolved _rv_resolve_rc _rv_parsed
+  _rv_resolve_err="$(mktemp -t dispatch-review-resolve-XXXXXX)"
+  _rv_resolved="$("$_REVIEW_SELF_DIR/resolve-review-loop.sh" 2>"$_rv_resolve_err")"
+  _rv_resolve_rc=$?
+  if [[ "$_rv_resolve_rc" -ne 0 || -z "$_rv_resolved" ]]; then
+    rm -f "$_rv_resolve_err"
+    return 0
+  fi
+  rm -f "$_rv_resolve_err"
+  # Same policy/rung/tuple rule as the reviewer-seat pre-probe.
+  _rv_parsed="$(node -e '
+let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(0); }
+const s = (v) => (v === null || v === undefined) ? "" : String(v);
+const policyField = s(j.reviewer_on_engine_unavailable);
+const policy = policyField || s(j.on_engine_unavailable);
+const rung = policyField ? j.reviewer_cloud_fallback_rung : j.cloud_fallback_rung;
+let re = "", rf = "", rr = "";
+if (rung && typeof rung === "object") { re = s(rung.engine); rf = s(rung.effort); rr = s(rung.runner); }
+const clean = (v) => String(v).replace(/[|\n]/g, " ");
+process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_endpoint), policy, re, rf, rr].map(clean).join("|"));
+' "$_rv_resolved" 2>/dev/null)" || _rv_parsed=""
+  local _rv_eng _rv_run _rv_ep _rv_pol _rv_re _rv_rf _rv_rr
+  IFS='|' read -r _rv_eng _rv_run _rv_ep _rv_pol _rv_re _rv_rf _rv_rr <<< "${_rv_parsed}"
+  [[ "$_rv_pol" == "cloud-fallback" && "$MODEL" == "$_rv_eng" && "$RUNNER" == "$_rv_run" && "$ENDPOINT" == "$_rv_ep" && -n "$_rv_re" && -n "$_rv_rf" && -n "$_rv_rr" ]] || return 0
+  passive_capture "no_verdict"
+  local served="${_rv_re}/${_rv_rf}@${_rv_rr}"
+  FALLBACK_LOG_ROW="$(node -e '
+process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: null, error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: null }));
+' "${RUN_ID:-}" "$RUNNER" "$classification" "$served")"
+  echo "dispatch-review: retreating once to cloud rung ${served} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
+  echo "dispatch-review: agy retreat kept first-attempt raw log ${RAW_LOG}" >&2
+  local -a _agy_retreat_args=()
+  local _i=0 _saw_effort=0 _a
+  while [ "$_i" -lt "${#ORIG_ARGS[@]}" ]; do
+    _a="${ORIG_ARGS[$_i]}"
+    case "$_a" in
+      --model)  _agy_retreat_args+=(--model "$_rv_re"); _i=$((_i + 2)) ;;
+      --runner) _agy_retreat_args+=(--runner "$_rv_rr"); _i=$((_i + 2)) ;;
+      --effort) _agy_retreat_args+=(--effort "$_rv_rf"); _saw_effort=1; _i=$((_i + 2)) ;;
+      *) _agy_retreat_args+=("$_a"); _i=$((_i + 1)) ;;
+    esac
+  done
+  [ "$_saw_effort" -eq 1 ] || _agy_retreat_args+=(--effort "$_rv_rf")
+  local _child_out _child_err _child_rc _child_json
+  _child_out="$(mktemp -t dispatch-review-retreat-out-XXXXXX)"
+  _child_err="$(mktemp -t dispatch-review-retreat-err-XXXXXX)"
+  AUTOPILOT_AGY_REVIEW_RETREATED=1 DISPATCH_DETACH=0 \
+    AUTOPILOT_AGY_RETREAT_SERVED_BY="$served" \
+    AUTOPILOT_AGY_RETREAT_LOG_ROW="$FALLBACK_LOG_ROW" \
+    "$0" "${_agy_retreat_args[@]}" >"$_child_out" 2>"$_child_err" < /dev/null
+  _child_rc=$?
+  cat "$_child_err" >&2
+  node -e '
+const fs = require("fs");
+const text = fs.readFileSync(process.argv[1], "utf8");
+const lines = text.split("\n");
+let idx = -1;
+for (let i = lines.length - 1; i >= 0; i--) {
+  if (lines[i].startsWith("{")) { idx = i; break; }
+}
+if (idx < 0) process.exit(0);
+let j;
+try { j = JSON.parse(lines[idx]); } catch { process.exit(0); }
+const p = j && typeof j.raw_log === "string" ? j.raw_log : "";
+if (!p) process.exit(0);
+let body = "";
+try { body = fs.readFileSync(p, "utf8"); } catch { process.exit(0); }
+const note = "[dispatch-review: agy cloud retreat; first attempt raw log " + process.argv[2] + "]\n";
+if (!body.startsWith(note)) fs.writeFileSync(p, note + body);
+' "$_child_out" "$RAW_LOG" >/dev/null 2>&1 || true
+  _child_json="$(grep '^{' "$_child_out" | tail -n 1)"
+  [ -n "$_child_json" ] && record_dispatch_usage "$_child_json"
+  cat "$_child_out"
+  rm -f "$_child_out" "$_child_err"
+  exit "$_child_rc"
+}
+
 emit_no_verdict() {
+  agy_post_failure_retreat
   local reason="$1" format_reject_json="" nv_json="" nv_tail=""
   if [ -n "${NV_RC:-}" ]; then
     nv_tail="$(nv_stderr_tail "${NV_STDERR_FILE:-}")"
@@ -1238,8 +1347,9 @@ PARSE_INPUT="$RAW_LOG"
 # to CODEX_OUT (merged into RAW_LOG only after completion), every other runner writes
 # RAW_LOG directly. Best-effort sidecar: a manifest failure never fails the dispatch.
 # Disable with AUTOPILOT_DISPATCH_MANIFEST=0. The final JSON gains optional probe and
-# served_by only when this run's reviewer-seat pre-probe ran (PM 01M726SXVB); every other
-# dispatch keeps the previous object. Correlate via raw_log, and derive
+# served_by when this run's reviewer-seat pre-probe ran (PM 01M726SXVB). An agy
+# post-failure retreat adds served_by with no probe. Every other dispatch keeps the
+# previous object. Correlate via raw_log, and derive
 # usage post-hoc with: dispatch-status.js --log <raw_log> --usage-only.
 REVIEW_MANIFEST_FILE=""
 REVIEW_STARTED_EPOCH="$(date +%s)"

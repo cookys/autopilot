@@ -1248,7 +1248,7 @@ async function handleCollect(flags) {
     const quotaFailure = codexFallback.classifyCodexQuotaFailure({
       runner: res.seat.runner,
       exitCode: Number.isInteger(raw.exit_code) ? raw.exit_code : res.exitCode,
-      texts: [raw.reject_reason, raw.error, raw.stderr_tail, raw.raw, res.stderr],
+      texts: [raw.reject_reason, raw.error, raw.stderr_tail, res.stderr],
       rawLogPath: typeof raw.raw_log === 'string' ? raw.raw_log : null,
       cwd: repoRoot || process.cwd(),
     });

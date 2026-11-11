@@ -6621,7 +6621,6 @@ class AutopilotEngine {
             revJson.error,
             revJson.stderr_tail,
             revChild.stderr,
-            revChild.stdout,
             revChild.error && revChild.error.message,
           ],
           rawLogPath: out.raw_log || outRaw.raw_log || revJson.raw_log || null,

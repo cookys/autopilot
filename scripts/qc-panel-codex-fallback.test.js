@@ -78,7 +78,7 @@ test('classifyCodexQuotaFailure reuses engine-capability-state classifier for 42
   // Raw log fallback when stdout error is generic
   withTempDir((dir) => {
     const rawLog = path.join(dir, 'codex-raw.log');
-    fs.writeFileSync(rawLog, 'ERROR: exceeded your current quota, please check your plan and billing details\n');
+    fs.writeFileSync(rawLog, '--- codex stderr (chrome, not parsed) ---\nERROR: exceeded your current quota, please check your plan and billing details\n');
     assert.deepEqual(
       classifyCodexQuotaFailure({
         runner: 'codex',
@@ -86,6 +86,41 @@ test('classifyCodexQuotaFailure reuses engine-capability-state classifier for 42
         rawLogPath: rawLog,
       }),
       { matched: true, reason: 'quota_exhausted' },
+    );
+  });
+
+  // Raw log: only the section after the codex stderr marker counts, never model stdout.
+  withTempDir((dir) => {
+    const marker = '\n--- codex stderr (chrome, not parsed) ---\n';
+    const proseLog = path.join(dir, 'codex-prose.log');
+    fs.writeFileSync(proseLog, `the HTTP 429 handler is wrong${marker}Error: stream closed\n`);
+    assert.equal(
+      classifyCodexQuotaFailure({
+        runner: 'codex',
+        texts: ['Error: stream closed'],
+        rawLogPath: proseLog,
+      }),
+      null,
+    );
+    const noMarkerLog = path.join(dir, 'codex-nomarker.log');
+    fs.writeFileSync(noMarkerLog, 'the HTTP 429 handler is wrong; usage limit prose\n');
+    assert.equal(
+      classifyCodexQuotaFailure({
+        runner: 'codex',
+        texts: ['Error: stream closed'],
+        rawLogPath: noMarkerLog,
+      }),
+      null,
+    );
+    const quotaLog = path.join(dir, 'codex-quota.log');
+    fs.writeFileSync(quotaLog, `some stdout${marker}ERROR: HTTP 429 Too Many Requests\n`);
+    assert.deepEqual(
+      classifyCodexQuotaFailure({
+        runner: 'codex',
+        texts: ['Error: stream closed'],
+        rawLogPath: quotaLog,
+      }),
+      { matched: true, reason: 'rate_limited' },
     );
   });
 

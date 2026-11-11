@@ -117,6 +117,18 @@ function loadCodexQuotaSubstitutes(options = {}) {
   return DEFAULT_CODEX_QUOTA_SUBSTITUTES.map(parseSubstituteSpec).filter(Boolean);
 }
 
+// dispatch-review.sh writes `\n--- codex stderr (chrome, not parsed) ---\n` between the
+// model stdout and codex's own stderr. Only the stderr section may be classified; model
+// stdout can discuss "429" or "usage limit" as prose. No marker means no raw-log evidence.
+const CODEX_STDERR_MARKER = '--- codex stderr';
+
+function stderrSectionOf(text) {
+  const idx = text.lastIndexOf(CODEX_STDERR_MARKER);
+  if (idx === -1) return '';
+  const nl = text.indexOf('\n', idx);
+  return nl === -1 ? '' : text.slice(nl + 1);
+}
+
 function readRawLogTail(rawLogPath, cwd) {
   if (typeof rawLogPath !== 'string' || !rawLogPath.trim()) return '';
   let resolved = rawLogPath.trim();
@@ -161,7 +173,7 @@ function classifyCodexQuotaFailure({
       }
     }
   }
-  const logText = readRawLogTail(rawLogPath, cwd);
+  const logText = stderrSectionOf(readRawLogTail(rawLogPath, cwd));
   if (logText) chunks.push(logText);
 
   for (const chunk of chunks) {

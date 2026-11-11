@@ -1480,16 +1480,26 @@ test('rule6 conditional cd: the cwd after a cd behind &&/|| is unknown at once, 
     `false && cd ${scratch} && rm -rf rv1`,
     `true && cd ${scratch} && rm -rf rv1`,
     `false || cd ${scratch} && rm -rf rv1`,
+    // the rm behind `||` only runs when the cd FAILED, so it runs in the payload cwd (outside)
+    `cd ${scratch} || rm -rf x`,
+    `cd ${scratch} && ls || rm -rf x`,
   ]) {
     const r = run(cmd, sub(sandbox));
     assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
     assert.match(r.reason, /subagent-rm-outside-scratch/);
   }
   // the cd is unconditional at the list start; only the rm sits behind &&: stays allowed
-  for (const cmd of [`cd ${scratch} && rm -rf x`, `cd ${scratch} && ls && rm -rf x`, `cd ${scratch} || rm -rf x`]) {
+  for (const cmd of [`cd ${scratch} && rm -rf x`, `cd ${scratch} && ls && rm -rf x`]) {
     const ok = run(cmd, sub(sandbox));
     assert.strictEqual(ok.deny, false, `expected allow for ${JSON.stringify(cmd)}: ${ok.reason}`);
   }
+});
+
+test('rule6 `||` after a cd: allowed only when the cwd before the cd is already inside the scratchpad', () => {
+  const { tmpRoot, scratch } = mkScratchSandbox('blg');
+  const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  const ok = run(`cd ${scratch} || rm -rf x`, sub(scratch));
+  assert.strictEqual(ok.deny, false, `expected allow: ${ok.reason}`);
 });
 
 test('rule6 subshell inherits the cwd only after the parent list boundary has been applied', () => {

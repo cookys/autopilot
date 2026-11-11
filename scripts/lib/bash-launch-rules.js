@@ -77,6 +77,7 @@ function segments(text) {
   const big = s.length > SEG_MAX_TEXT;
   let pipeNext = false; // the next segment is the right-hand side of a `|` / `|&`
   let condNext = false; // the next segment follows `&&` / `||`: it runs only conditionally
+  let orNext = false; // the next segment follows `||`: it runs only when the previous command FAILED
   let listN = 0; // index of the `;`/newline/`&`-delimited list the next segment belongs to
   let subDepth = 0; // inside a `( … )` subshell: its background jobs are NOT waitable by the outer shell
   // `lvl`: which shell a segment runs in. A `wait` only sees jobs of its OWN shell level (the script itself, or one
@@ -86,7 +87,7 @@ function segments(text) {
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
   const push = (bg, endsList = false) => {
-    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; }
+    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, or: orNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; orNext = false; }
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
@@ -104,7 +105,7 @@ function segments(text) {
         }
       }
     }
-    if (endsList) { listStart = out.length; listN += 1; condNext = false; }
+    if (endsList) { listStart = out.length; listN += 1; condNext = false; orNext = false; }
   };
   for (let i = 0; i < s.length; i += 1) {
     const c = s[i];
@@ -130,7 +131,7 @@ function segments(text) {
     if (c === '|' && s[i - 1] === '>') { cur += c; continue; } // `>|` clobber redirect, not a pipe
     if (c === '|') {
       push(false);
-      if (s[i + 1] === '|') { i += 1; condNext = true; continue; } // `||`
+      if (s[i + 1] === '|') { i += 1; condNext = true; orNext = true; continue; } // `||`
       if (s[i + 1] === '&') i += 1; // `|&` (pipe stderr too)
       if (out.length) out[out.length - 1].pipe = true; // a pipeline member: `wait | cat` waits for nothing
       pipeNext = true; continue;
@@ -1351,7 +1352,9 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
         st = { cwd: inherited, listId: seg.list, listStartCwd: inherited, bgList: false };
         stByLvl.set(seg.lvl, st);
       } else settle(st, seg.list);
-      const curCwd = st.cwd;
+      // A segment behind `||` runs only when the previous command failed: a `cd` earlier in this list did not take effect,
+      // so it runs in the cwd the list started with (null when unknown: rule 6 then denies relative targets).
+      const curCwd = seg.or ? st.listStartCwd : st.cwd;
       activeCwd = curCwd;
       const pos = commandPosition(seg.text);
       if (pos.head && dequote(pos.head).replace(/^.*\//, '') === 'eval') {
@@ -1368,7 +1371,7 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
           activeCwd = st.cwd;
         }
       }
-      if (si === 0) segCwd.set(seg, st.cwd);
+      if (si === 0) segCwd.set(seg, seg.or ? curCwd : st.cwd);
       const targets = rmSegmentTargets(seg);
       if (!targets) continue;
       for (const w of targets) {

@@ -1517,3 +1517,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: stack4 merge 66fc4f426 (2026-11-11)
+
+### A test suite writes fake MiniMax rows into the real dispatch usage ledger
+- **Id**: BL-0429
+- **Status**: open
+- **Since**: 2026-11-11
+- **Origin**: self
+- **Problem**: /run/user/1001/autopilot/dispatch-usage-202611.jsonl on aimax395 (team) holds 48 rows for runner cc-shim / MiniMax-M3 / account minimax in the week to 2026-11-11, in groups of four (2 running, 1 reviewed, 1 no_verdict) with usage none, wall_secs null, no run manifest, at the times full or affected suites ran. They look like dispatch-review fixture runs whose usage ledger is not redirected to a temp dir.
+- **Impact**: The ledger is the primary data for quota and cost views; fake rows make MiniMax use look real (found while cross-checking the first quota-provider-sync probe, PM 01M75H3XZ0) and inflate counts on every suite run.
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: qps401 probe check (2026-11-11)

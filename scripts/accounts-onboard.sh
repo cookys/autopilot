@@ -14,30 +14,31 @@
 # to run `claude setup-token` in another window (this script NEVER runs setup-token), then read the token silently
 # with `read -rs` into <accounts-dir>/<name>/token (0600), and write the org record (org_label, org_id null) into
 # <accounts-dir>/<name>/token-meta.json (0600; never the e-mail); (O2) add the profile to registry.json (0600,
-# written by Node, idempotent); (O4) `claude-account.js env-check --alias`; (orgprofile) `GET
-# https://api.anthropic.com/api/oauth/profile` with `Authorization: Bearer <token>` and `anthropic-beta:
-# oauth-2025-04-20` (20 s timeout), reading ONLY `organization.{uuid,name,organization_type,rate_limit_tier,
-# billing_type}` (never any `account` or e-mail field; an org name failing orgLabelProblem is dropped): with an id
-# and none recorded it writes org_id (lowercased) plus org_type/rate_limit_tier into token-meta.json (org verified),
-# or refuses with "同一個 org 已登記在 <other>" and takes the just-added registry row back if another profile already
-# holds that org_id; with an id and one recorded the two are compared (mismatch = failed row); HTTP 401 is a failed
-# "token 無效" row and stops at that alias; any other profile-lookup failure marks org unverified and never blocks;
-# (O7) one haiku "say OK" call through `claude-account.js run --alias` (independent of orgprofile: a rate-limited OK
+# written by Node, idempotent); (O4) `claude-account.js env-check --alias`; (orghdr) `POST
+# https://api.anthropic.com/v1/messages` with `Authorization: Bearer <token>`, `anthropic-version: 2023-06-01`,
+# `anthropic-beta: oauth-2025-04-20`, `content-type: application/json` and a one-token OK body (30 s timeout),
+# reading ONLY response headers `anthropic-organization-id` (UUID, lowercased) and
+# `anthropic-ratelimit-unified-7d-utilization` (finite number; else empty) — never the response body or any other
+# header: with an id and none recorded it writes org_id into token-meta.json (org verified), or refuses with
+# "同一個 org 已登記在 <other>" and takes the just-added registry row back if another profile already holds that
+# org_id; with an id and one recorded the two are compared (mismatch = failed row); HTTP 401 is a failed
+# "token 無效" row and stops at that alias; any other org-header lookup failure marks org unverified and never blocks;
+# (O7) one haiku "say OK" call through `claude-account.js run --alias` (independent of orghdr: a rate-limited OK
 # call is its own row and never erases a verified org). Re-running on already-registered aliases keeps existing
 # tokens by default and (re)verifies any alias whose org_id is still null.
 # After all profiles: status, pick --purpose operator-check, selftest --real-binary, selftest --simulate-429 <first>
-# (needs two accounts), cooldown --clear <first>; then a summary table (every row marked, no secrets) plus the
-# O5 lane-reopen command and the O10 rollback command. Exit 0 only when every row is OK; 1 on any failed row or a
-# declined plan; 2 on usage errors.
+# (needs two accounts), cooldown --clear <first>; then a summary table (every row marked, no secrets; org label,
+# "org 已驗證", 7d utilization as a percent — never the full org id) plus the O5 lane-reopen command and the O10
+# rollback command. Exit 0 only when every row is OK; 1 on any failed row or a declined plan; 2 on usage errors.
 #
 # The registry row is added AFTER the token is written: a registry with an enabled alias that has no token makes
 # every later check fail closed, so an alias the operator skips is simply not registered. A bad token (env-check,
-# a 401 from OAuth profile, or the OK call fails) stops the whole run at that alias, because the registry checks
-# every enabled alias and each later step would only fail again naming that same alias; fix the token and re-run
-# (existing aliases are reused).
+# a 401 from the orghdr OK call, or the later haiku OK call fails) stops the whole run at that alias, because the
+# registry checks every enabled alias and each later step would only fail again naming that same alias; fix the
+# token and re-run (existing aliases are reused).
 #
 # The token only ever lives in the shell variable T, read from stdin (a tty or a pipe) and written by the
-# `printf` builtin (and read into Node memory only inside `orgprofile` for the Bearer header); it is never in argv,
+# `printf` builtin (and read into Node memory only inside `orghdr` for the Bearer header); it is never in argv,
 # a log, the screen or a temp file. Re-running with the same arguments is safe: registry bytes stay unchanged, and
 # an existing token file is kept unless the operator chooses to overwrite.
 #
@@ -46,7 +47,7 @@
 #   ONBOARD_CLAUDE_BIN      TEST SEAM ONLY: absolute path of a claude stand-in. It is used as the program of the
 #                           OK call, and as `--binary` of the two selftests,
 #                           nothing else. Unset = the real `claude`.
-#   ONBOARD_PROFILE_URL     TEST SEAM ONLY: overrides the https://api.anthropic.com/api/oauth/profile URL (base or
+#   ONBOARD_ORG_URL         TEST SEAM ONLY: overrides the https://api.anthropic.com/v1/messages URL (base or
 #                           full path, http/https only) so hermetic tests use a local stub server; unset = real URL.
 set -uo pipefail
 
@@ -81,11 +82,11 @@ accounts-onboard.sh：替每個「Claude 帳號＋org」登記一個 profile
   ③ 你：回到這個視窗貼上 token（不會顯示、不進命令列、不進記錄）。不想處理這個 profile 就輸入 skip。
      成功的樣子：本視窗出現「已收到 token（不顯示內容）」。
   ④ 本指令自動做：寫入 token 檔與 org 記錄、登記到 registry.json、檢查目錄與權限、
-     查詢這個 token 的 OAuth profile（GET /api/oauth/profile，只讀 org 識別碼與方案類型／級距，絕不讀也不印 email），
-     再用 haiku 做一次「say OK」的真實呼叫（用這個新 token，會用到一點點額度）。
-     org 識別碼與方案資訊會記進 token-meta.json（已驗證）；若同一個 org 已登記在別的 profile 就拒絕並把剛登記的列取回；
+     對這個 token 發一次 messages OK 呼叫（POST /v1/messages），只讀回應標頭裡的 org 識別碼與 7 日用量比例
+     （絕不讀回應本文、也不印 email 或完整 org id），再用 haiku 做一次「say OK」的真實呼叫（會用到一點點額度）。
+     org 識別碼會記進 token-meta.json（已驗證）；若同一個 org 已登記在別的 profile 就拒絕並把剛登記的列取回；
      若回應 401 代表 token 無效；其他查詢失敗則標為「org 未驗證」，不擋流程。OK 呼叫獨立計列，就算被限流也不會抹掉已驗證的 org。
-     成功的樣子：出現 ✅ 與該 profile 名稱、org 標籤與方案類型／級距。
+     成功的樣子：出現 ✅ 與該 profile 名稱、org 標籤、「org 已驗證」與 7 日用量百分比。
   全部 profile 處理完後，再自動做 status、pick、兩個 selftest，最後印出總結表。成功的樣子：每一列都是 ✅。
   任何錯誤訊息都會寫「修法」；修好後重跑即可，已完成的 profile 會被沿用。
 
@@ -97,7 +98,7 @@ accounts-onboard.sh：替每個「Claude 帳號＋org」登記一個 profile
   -h, --help             印出這段說明就結束，不建立任何東西。不帶任何參數時也是這樣（結束碼 2）。
   --yes                  跳過「繼續？」的詢問，直接開始。
   --org 名稱=org標籤     指定某個 profile 的 org 標籤（不可含 @ 或雙引號、不可像 email）；沒給就用 profile 名稱。
-                         標籤只是顯示用；org 識別碼與方案類型／級距永遠來自 token 自己的 OAuth profile（查不到就記為未知）。
+                         標籤只是顯示用；org 識別碼永遠來自 token 自己的 messages 回應標頭（查不到就記為未知）。
                          可重複給多個。例：--org team=Acme-Team
 
 安全與重複執行
@@ -109,7 +110,7 @@ accounts-onboard.sh：替每個「Claude 帳號＋org」登記一個 profile
   AUTOPILOT_ACCOUNTS_DIR  帳號目錄（預設 ~/.config/autopilot/accounts）
   ONBOARD_CLAUDE_BIN      僅供測試：指定替身 claude 的絕對路徑，只用在 OK 呼叫以及兩個 selftest
                           的 --binary，不開放其他行為；不設就用真的 claude。
-  ONBOARD_PROFILE_URL     僅供測試：覆寫 OAuth profile 查詢網址（指向本機測試替身伺服器）；不設就用預設網址。
+  ONBOARD_ORG_URL         僅供測試：覆寫 org 標頭查詢網址（指向本機測試替身伺服器）；不設就用預設網址。
 USAGE
 }
 
@@ -191,15 +192,15 @@ if (mode === 'dir') {
   const [alias, id, label, chk] = args;
   const lp = reg.orgLabelProblem(label);
   if (lp) die('org 標籤不合法：' + lp + '。修法：改用單純的名稱（1 到 64 字、不含 @ 和雙引號）。');
-  if (id !== '-' && reg.orgIdProblem(id)) die('org 識別碼不合法。修法：重跑；若仍如此，請回報這個 token 的 OAuth profile 回應格式。');
+  if (id !== '-' && reg.orgIdProblem(id)) die('org 識別碼不合法。修法：重跑；若仍如此，請回報這個 token 的 org 標頭格式。');
   reg.writeTokenMeta(reg.accountsDir({}), alias, { org_id: id === '-' ? null : id, org_label: label, org_check: chk === 'verified' ? 'verified' : 'unverified' });
-} else if (mode === 'orgprofile') {
-  // Read <accounts-dir>/<alias>/token into memory only; call GET /api/oauth/profile (20 s timeout); read ONLY
-  // organization.{uuid,name,organization_type,rate_limit_tier,billing_type}, never any account/email field.
-  // Always exit 0: prints ok\n<uuid>\n<name>\n<type>\n<tier>\n or fail:<code>\n.
+} else if (mode === 'orghdr') {
+  // Read <accounts-dir>/<alias>/token into memory only; POST /v1/messages OK call (30 s timeout); read ONLY
+  // anthropic-organization-id (UUID) and anthropic-ratelimit-unified-7d-utilization (finite number) from headers;
+  // never read or output the body. Always exit 0: prints ok\n<uuid>\n<7d util or ''>\n or fail:<code>\n.
   const alias = args[0] || '';
-  const PROFILE_PATH = '/api/oauth/profile';
-  const cleanField = (v) => (typeof v === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(v) && reg.orgLabelProblem(v) === null ? v : '');
+  const ORG_PATH = '/v1/messages';
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const fail = (code) => { process.stdout.write(`fail:${code}\n`); };
   (async () => {
     try {
@@ -208,87 +209,89 @@ if (mode === 'dir') {
       const info = reg.checkAlias({ dir: acc }, alias, { create: false });
       let token = fs.readFileSync(info.tokenFile, 'utf8').replace(/\r?\n$/, '');
       if (!token || /\s/.test(token)) { token = ''; return fail('request_failed'); }
-      let url = 'https://api.anthropic.com' + PROFILE_PATH;
-      const seam = process.env.ONBOARD_PROFILE_URL;
+      let url = 'https://api.anthropic.com' + ORG_PATH;
+      const seam = process.env.ONBOARD_ORG_URL;
       if (typeof seam === 'string' && seam !== '') {
         const u = new URL(seam);
         if (u.protocol !== 'http:' && u.protocol !== 'https:') { token = ''; return fail('request_failed'); }
-        if (!u.pathname.endsWith(PROFILE_PATH)) u.pathname = u.pathname.replace(/\/+$/, '') + PROFILE_PATH;
+        if (!u.pathname.endsWith(ORG_PATH)) u.pathname = u.pathname.replace(/\/+$/, '') + ORG_PATH;
         url = u.toString();
       }
       let res;
       try {
         res = await globalThis.fetch(url, {
-          method: 'GET',
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
+            'anthropic-version': '2023-06-01',
             'anthropic-beta': 'oauth-2025-04-20',
-            Accept: 'application/json',
+            'content-type': 'application/json',
           },
+          body: JSON.stringify({
+            model: 'claude-haiku-5-5',
+            max_tokens: 1,
+            system: "You are Claude Code, Anthropic's official CLI for Claude.",
+            messages: [{ role: 'user', content: 'OK' }],
+          }),
           redirect: 'manual',
-          signal: AbortSignal.timeout(20000),
+          signal: AbortSignal.timeout(30000),
         });
       } catch (e) { token = ''; return fail('request_failed'); }
       token = '';
       if (!res || typeof res.status !== 'number') return fail('request_failed');
+      // Only status and two headers are used; the body is never read, just cancelled.
+      if (res.body) { try { await res.body.cancel(); } catch (e) { /* discard */ } }
       if (res.status === 401) return fail('http_401');
       if (res.status < 200 || res.status > 299) return fail(`http_${res.status}`);
-      let raw = '';
-      try { raw = await res.text(); } catch (e) { return fail('request_failed'); }
-      let doc = null;
-      try { doc = JSON.parse(raw); } catch (e) { return fail('not_json'); }
-      if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return fail('not_json');
-      const org = doc.organization && typeof doc.organization === 'object' && !Array.isArray(doc.organization) ? doc.organization : null;
-      const rawUuid = org ? org.uuid : undefined;
-      if (typeof rawUuid !== 'string' || reg.orgIdProblem(rawUuid) !== null) return fail('no_org_id');
-      const rawName = org ? org.name : undefined;
-      const name = typeof rawName === 'string' && reg.orgLabelProblem(rawName) === null ? rawName : '';
-      const otype = cleanField(org ? org.organization_type : undefined) || cleanField(org ? org.billing_type : undefined);
-      const otier = cleanField(org ? org.rate_limit_tier : undefined);
-      process.stdout.write(`ok\n${rawUuid.toLowerCase()}\n${name}\n${otype}\n${otier}\n`);
+      const rawUuid = res.headers.get('anthropic-organization-id');
+      if (typeof rawUuid !== 'string' || !UUID_RE.test(rawUuid)) return fail('no_org_id');
+      const utilRaw = res.headers.get('anthropic-ratelimit-unified-7d-utilization');
+      let utilOut = '';
+      if (typeof utilRaw === 'string' && utilRaw !== '') {
+        const n = Number(utilRaw);
+        if (Number.isFinite(n)) utilOut = String(n);
+      }
+      process.stdout.write(`ok\n${rawUuid.toLowerCase()}\n${utilOut}\n`);
     } catch (e) {
       fail('request_failed');
     }
   })();
 } else if (mode === 'orgapply') {
-  // Apply orgprofile output to token-meta.json (0600). Prints <verdict>\n<label>\n<type>\n<tier>\n.
-  const [alias, status, oid, otype, otier] = args;
+  // Apply orghdr output to token-meta.json (0600). Prints <verdict>\n<label>\n<7d percent or ''>\n.
+  const [alias, status, oid, outil] = args;
   const acc = reg.accountsDir({});
   const m = reg.readTokenMeta(acc, alias, {});
   const label = m && typeof m.org_label === 'string' && !reg.orgLabelProblem(m.org_label) ? m.org_label : alias;
-  const extra = {};
-  if (otype && !reg.orgIdProblem(otype) && reg.orgLabelProblem(otype) === null) extra.org_type = otype;
-  if (otier && !reg.orgIdProblem(otier) && reg.orgLabelProblem(otier) === null) extra.rate_limit_tier = otier;
-  const effType = extra.org_type || (m && typeof m.org_type === 'string' && !reg.orgIdProblem(m.org_type) ? m.org_type : '');
-  const effTier = extra.rate_limit_tier || (m && typeof m.rate_limit_tier === 'string' && !reg.orgIdProblem(m.rate_limit_tier) ? m.rate_limit_tier : '');
-  const emit = (v, t, r) => { process.stdout.write(`${v}\n${label}\n${t}\n${r}\n`); };
+  const nUtil = Number(outil);
+  const utilShow = (outil && Number.isFinite(nUtil)) ? (String(Math.round(nUtil * 100)) + '%') : '';
+  const emit = (v) => { process.stdout.write(`${v}\n${label}\n${utilShow}\n`); };
   if (status === 'fail:http_401') {
-    emit('http_401', effType, effTier);
+    emit('http_401');
   } else if (status === 'ok' && oid && !reg.orgIdProblem(oid)) {
     if (m && typeof m.org_id === 'string') {
       if (oid.toLowerCase() === m.org_id.toLowerCase()) {
-        try { reg.writeTokenMeta(acc, alias, Object.assign({ org_check: 'verified' }, extra)); } catch (e) { die('org 記錄寫入失敗。修法：檢查該別名目錄的權限後重跑。'); }
-        emit('verified', effType, effTier);
+        try { reg.writeTokenMeta(acc, alias, { org_check: 'verified' }); } catch (e) { die('org 記錄寫入失敗。修法：檢查該別名目錄的權限後重跑。'); }
+        emit('verified');
       } else {
         try { reg.writeTokenMeta(acc, alias, { org_check: 'mismatch' }); } catch (e) { /* summary row still reports mismatch */ }
-        emit('mismatch', extra.org_type || '', extra.rate_limit_tier || '');
+        emit('mismatch');
       }
     } else {
       const owner = reg.findOrgOwner(acc, oid, alias);
       if (owner) {
-        emit('duplicate:' + owner, extra.org_type || '', extra.rate_limit_tier || '');
+        emit('duplicate:' + owner);
       } else {
         const base = m ? {} : { org_label: label };
-        try { reg.writeTokenMeta(acc, alias, Object.assign(base, { org_id: oid, org_check: 'verified' }, extra)); } catch (e) { die('org 識別碼寫入失敗。修法：檢查該別名目錄的權限後重跑。'); }
-        emit('recorded', effType, effTier);
+        try { reg.writeTokenMeta(acc, alias, Object.assign(base, { org_id: oid, org_check: 'verified' })); } catch (e) { die('org 識別碼寫入失敗。修法：檢查該別名目錄的權限後重跑。'); }
+        emit('recorded');
       }
     }
   } else {
-    if (m && m.org_check === 'verified') emit('kept', effType, effTier); // an earlier verified id stays
-    else if (m && m.org_check === 'mismatch') emit('kept_mismatch', effType, effTier); // a failed profile read does not erase an earlier mismatch
+    if (m && m.org_check === 'verified') emit('kept'); // an earlier verified id stays
+    else if (m && m.org_check === 'mismatch') emit('kept_mismatch'); // a failed orghdr read does not erase an earlier mismatch
     else {
       if (m) { try { reg.writeTokenMeta(acc, alias, { org_check: 'unverified' }); } catch (e) { /* the summary row still reports unverified */ } }
-      emit('unverified', effType, effTier);
+      emit('unverified');
     }
   }
 } else if (mode === 'unregister') { // take back a row this run just added (its org turned out to be a duplicate)
@@ -391,8 +394,8 @@ for alias in "$@"; do
   echo
   echo "== 別名 $alias（第 $idx 個，優先序 $((idx * 10))） =="
 
-  # --- org: the label only. The org ID and plan type/tier are learned from this token's OAuth profile
-  # (orgprofile below); the operator's current login (claude auth status) plays no part. ------------------------
+  # --- org: the label only. The org ID (and 7d utilization for the summary) are learned from this token's
+  # orghdr OK-call response headers below; the operator's current login (claude auth status) plays no part. ----
   ORG_PENDING=0; ORG_ID="-"; ORG_LABEL=""; ORG_CHECK="unverified"
   ORG_RELABEL=0
   given="$(org_given "$alias")"
@@ -407,10 +410,10 @@ for alias in "$@"; do
     ORG_PENDING=1
     if [ -n "$given" ]; then
       ORG_LABEL="$given"
-      row "✅" "$alias org" "標籤「$given」（以 --org 指定）；org 識別碼稍後由 OAuth profile 取得"
+      row "✅" "$alias org" "標籤「$given」（以 --org 指定）；org 識別碼稍後由 messages 回應標頭取得"
     else
       ORG_LABEL="$alias"
-      row "✅" "$alias org" "標籤「$alias」（沿用 profile 名稱）；org 識別碼稍後由 OAuth profile 取得"
+      row "✅" "$alias org" "標籤「$alias」（沿用 profile 名稱）；org 識別碼稍後由 messages 回應標頭取得"
     fi
   fi
 
@@ -528,35 +531,27 @@ EOF
     STOPPED="$alias"; break
   fi
 
-  prof_out="$(nodeh orgprofile "$alias")"
-  ost=""; oid=""; oname=""; otype=""; otier=""
+  prof_out="$(nodeh orghdr "$alias")"
+  ost=""; oid=""; outil=""
   {
     IFS= read -r ost || ost=""
     IFS= read -r oid || oid=""
-    IFS= read -r oname || oname=""
-    IFS= read -r otype || otype=""
-    IFS= read -r otier || otier=""
+    IFS= read -r outil || outil=""
   } <<< "$prof_out"
-  if ! app_out="$(nodeh orgapply "$alias" "$ost" "$oid" "$otype" "$otier" 2>&1)"; then
+  if ! app_out="$(nodeh orgapply "$alias" "$ost" "$oid" "$outil" 2>&1)"; then
     row "❌" "$alias org 核對" "token-meta.json 寫入失敗：$app_out；修法：檢查該別名目錄的權限，或先備份再移走既有的 token-meta.json 後重跑"
     row "❌" "$alias haiku OK 呼叫" "未執行"
     STOPPED="$alias"; break
   fi
-  orgv=""; olabel=""; oeff_type=""; oeff_tier=""
+  orgv=""; olabel=""; outil_show=""
   {
     IFS= read -r orgv || orgv=""
     IFS= read -r olabel || olabel=""
-    IFS= read -r oeff_type || oeff_type=""
-    IFS= read -r oeff_tier || oeff_tier=""
+    IFS= read -r outil_show || outil_show=""
   } <<< "$app_out"
   [ -n "$olabel" ] || olabel="$alias"
-  oplan=""
-  if [ -n "$oeff_type" ] && [ -n "$oeff_tier" ]; then oplan="$oeff_type / $oeff_tier"
-  elif [ -n "$oeff_type" ]; then oplan="$oeff_type"
-  elif [ -n "$oeff_tier" ]; then oplan="$oeff_tier"
-  fi
   plan_part=""
-  [ -n "$oplan" ] && plan_part="，方案 $oplan"
+  [ -n "$outil_show" ] && plan_part="，7d 用量 $outil_show"
   case "$ost" in fail:*) ofail="${ost#fail:}" ;; *) ofail="no_org_id" ;; esac
   [ -n "$ofail" ] || ofail="request_failed"
   case "$orgv" in
@@ -580,24 +575,24 @@ EOF
       fi
       continue ;;
     http_401)
-      echo "別名 $alias 的 OAuth profile 回應 401（token 無效），停止整個流程。"
+      echo "別名 $alias 的 org 標頭查詢回應 401（token 無效），停止整個流程。"
       echo "修法：重新在另一個視窗跑 claude setup-token，重跑本指令並選「覆蓋」。"
-      row "❌" "$alias org 核對" "token 無效（標籤「$olabel」，OAuth profile 回應 401）；修法：重新跑 claude setup-token，重跑本指令並選「覆蓋」"
+      row "❌" "$alias org 核對" "token 無效（標籤「$olabel」，org 標頭查詢回應 401）；修法：重新跑 claude setup-token，重跑本指令並選「覆蓋」"
       row "❌" "$alias haiku OK 呼叫" "未執行（token 無效）"
       STOPPED="$alias"; break ;;
     recorded)
-      row "✅" "$alias org 核對" "標籤「$olabel」${plan_part}；org 識別碼已由 OAuth profile 驗證並記錄" ;;
+      row "✅" "$alias org 核對" "標籤「$olabel」${plan_part}；org 已驗證" ;;
     verified)
-      row "✅" "$alias org 核對" "標籤「$olabel」${plan_part}；OAuth profile 的 org 識別碼與記錄相符（已驗證）" ;;
+      row "✅" "$alias org 核對" "標籤「$olabel」${plan_part}；org 已驗證" ;;
     mismatch)
-      echo "別名 $alias 的 OAuth profile org 識別碼與先前紀錄不同。修法：重新跑 claude setup-token 並確認 org，重跑選「覆蓋」。"
-      row "❌" "$alias org 核對" "標籤「$olabel」${plan_part}；OAuth profile 的 org 識別碼與記錄不同（這個 token 綁到別的 org）；修法：重新 setup-token 並確認 org，重跑選「覆蓋」" ;;
+      echo "別名 $alias 的 org 識別碼與先前紀錄不同。修法：重新跑 claude setup-token 並確認 org，重跑選「覆蓋」。"
+      row "❌" "$alias org 核對" "標籤「$olabel」${plan_part}；org 識別碼與記錄不同（這個 token 綁到別的 org）；修法：重新 setup-token 並確認 org，重跑選「覆蓋」" ;;
     kept)
-      row "➖" "$alias org 核對" "標籤「$olabel」${plan_part}；這次 OAuth profile 未取得（$ofail），保留先前已驗證的 org 記錄" ;;
+      row "➖" "$alias org 核對" "標籤「$olabel」${plan_part}；這次 org 標頭未取得（$ofail），保留先前已驗證的 org 記錄" ;;
     kept_mismatch)
-      row "➖" "$alias org 核對" "標籤「$olabel」${plan_part}；這次 OAuth profile 未取得（$ofail），先前的 mismatch 仍然有效（status 會顯示 org_check=mismatch）" ;;
+      row "➖" "$alias org 核對" "標籤「$olabel」${plan_part}；這次 org 標頭未取得（$ofail），先前的 mismatch 仍然有效（status 會顯示 org_check=mismatch）" ;;
     *)
-      row "➖" "$alias org 核對" "標籤「$olabel」${plan_part}；org 未驗證（OAuth profile：$ofail，不影響通過）" ;;
+      row "➖" "$alias org 核對" "標籤「$olabel」${plan_part}；org 未驗證（org 標頭：$ofail，不影響通過）" ;;
   esac
 
   okf="$WORK/ok-$idx.json"

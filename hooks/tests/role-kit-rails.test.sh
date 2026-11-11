@@ -289,7 +289,7 @@ rm -rf "$FX_ROOT"
 
 # (f) negative controls
 BAD="$TEST_TMP/mut-scripts"; cp -r "$REPO_ROOT/scripts" "$BAD"
-sed_mutate "$BAD/dispatch-review.sh" 's/ \${ROLE_KIT_EXTRA\[@\]+"\${ROLE_KIT_EXTRA\[@\]}"} > "\$RAW_LOG" 2>&1/ > "$RAW_LOG" 2>\&1/' >/dev/null
+sed_mutate "$BAD/dispatch-review.sh" 's/ \${ROLE_KIT_EXTRA\[@\]+"\${ROLE_KIT_EXTRA\[@\]}"}//g' >/dev/null
 run_rail "$BAD/dispatch-review.sh" review --role-kit "$KIT"
 assert_neq "" "$(argv_check "$KIT/role.md" "Read,Grep" "$KIT_REAL/plugin")" "(f) negative control: review rail that drops the kit argv is detected"
 MUT2="$TEST_TMP/mut2-scripts"; cp -r "$REPO_ROOT/scripts" "$MUT2"

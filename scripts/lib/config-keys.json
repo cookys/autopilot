@@ -6086,6 +6086,19 @@
       "summary": "Directory of the account registry and token store; point it at a throwaway directory to try the layer without touching the real one."
     },
     {
+      "name": "AUTOPILOT_PM_ADDRESS",
+      "kind": "env",
+      "audience": "user",
+      "group": "accounts",
+      "default": null,
+      "readers": [
+        "scripts/profile-health.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Fleet address (namespace/courier/member, e.g. ns/host-a/pm--claude) that profile-health.js notify sends to when --to is omitted. No default: with neither --to nor AUTOPILOT_PM_ADDRESS, notify exits 2 without sending."
+    },
+    {
       "name": "accounts.mode",
       "kind": "config_key",
       "audience": "user",

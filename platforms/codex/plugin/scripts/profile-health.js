@@ -4,7 +4,7 @@
  * profile-health.js - warn the PM before a Claude login profile's login expires.
  *
  *   node scripts/profile-health.js check [--json]
- *   node scripts/profile-health.js notify [--to <addr>]      (default cookys/aimax395/pm--claude)
+ *   node scripts/profile-health.js notify [--to <addr>]      (else AUTOPILOT_PM_ADDRESS; required)
  *
  * Profiles on this host: `home` (the default ~/.claude, no CLAUDE_CONFIG_DIR) plus each directory under ~/.claude-profiles/.
  * Per profile it runs `claude auth status --json` (CLAUDE_CONFIG_DIR set for non-home) and reads ONLY loggedIn, loginExpiresAt and
@@ -15,9 +15,9 @@
  * notify sends one `fleet send` per expiring / expired / logged_out profile, first line `[操作員決定]`: machine, OS account, profile,
  * expiry (Taipei time), days left and the login command the operator types. Dedup: once per (profile, loginExpiresAt, status), kept in
  * $XDG_STATE_HOME/autopilot/profile-health.json (default ~/.local/state/autopilot/), mode 0600; a failed send is not recorded and retries next run.
- * Exit 0 normally; notify exits 1 when a send failed.
+ * Exit 0 normally; notify exits 1 when a send failed, 2 when no recipient is given (--to or AUTOPILOT_PM_ADDRESS).
  *
- * Knobs: AUTOPILOT_CLAUDE_BIN (default claude), AUTOPILOT_FLEET_BIN (default fleet), AUTOPILOT_NOW (ISO time, tests), HOME, XDG_STATE_HOME.
+ * Knobs: AUTOPILOT_PM_ADDRESS (notify recipient when --to is omitted), AUTOPILOT_CLAUDE_BIN (default claude), AUTOPILOT_FLEET_BIN (default fleet), AUTOPILOT_NOW (ISO time, tests), HOME, XDG_STATE_HOME.
  * Node >= 20.10, built-ins only.
  */
 const fs = require('fs');
@@ -27,7 +27,6 @@ const { spawnSync } = require('child_process');
 
 const DAY = 86400000;
 const THRESHOLD_DAYS = 10;
-const DEFAULT_TO = 'cookys/aimax395/pm--claude';
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const DROP_ENV = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
 
@@ -137,9 +136,14 @@ function main(argv) {
   }
   if (cmd === 'notify') {
     const i = rest.indexOf('--to');
-    return notify(i >= 0 && rest[i + 1] ? rest[i + 1] : DEFAULT_TO);
+    const to = i >= 0 ? (rest[i + 1] || '').trim() : (process.env.AUTOPILOT_PM_ADDRESS || '').trim();
+    if (!to || (i >= 0 && to.startsWith('-'))) {
+      console.error('usage: profile-health.js notify --to <addr> (or set AUTOPILOT_PM_ADDRESS)');
+      return 2;
+    }
+    return notify(to);
   }
-  console.error('usage: profile-health.js check [--json] | notify [--to <addr>]');
+  console.error('usage: profile-health.js check [--json] | notify [--to <addr>] (or set AUTOPILOT_PM_ADDRESS)');
   return 2;
 }
 

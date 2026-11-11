@@ -95,6 +95,21 @@
       "path": "hooks/tests/review-jury.test.sh",
       "category": "home_path",
       "reason": "redaction test: a PWD=/home/... value that must be kept is the subject under test"
+    },
+    {
+      "path": "scripts/lib/account-alias.test.js",
+      "category": "home_path",
+      "reason": "hash-vector test: fictional /home/<name> fixture paths are the pinned inputs of the sha8 digests"
+    },
+    {
+      "path": "platforms/codex/plugin/scripts/lib/account-alias.test.js",
+      "category": "home_path",
+      "reason": "codex mirror of scripts/lib/account-alias.test.js"
+    },
+    {
+      "path": "hooks/tests/profile-health.test.sh",
+      "category": "email",
+      "reason": "privacy test: a placeholder .invalid e-mail sentinel is asserted never to appear in output or state"
     }
   ]
 }

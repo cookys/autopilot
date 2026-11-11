@@ -98,3 +98,60 @@ test('journal: e-mail-shaped and token-shaped values rejected, nothing written',
   appendJournal(f.base, ok);
   assert.strictEqual(fs.readFileSync(journalFile(f.base), 'utf8').trim().split('\n').length, 1);
 });
+
+// profsw-fix1 finding 1: steps 1 and 4 target the OLD profile
+test('steps 1 and 4 use the old (non-home) profile dir and never set CODEFORGE_DATA_DIR', () => {
+  const f = fx();
+  writeManifest(f.base, REC);
+  const txt = run(f, ['--lane', 'l1', '--profile', 'cookys', '--order', '01M70ABCDE', '--dry-run']).lines.join('\n');
+  const old = `${f.home}/.claude-profiles/stranity`;
+  assert.match(txt, new RegExp(`-u AUTOPILOT_ACCOUNT CLAUDE_CONFIG_DIR=${old} claude auth status --json`));
+  assert.match(txt, new RegExp(`env -u CODEFORGE_DATA_DIR CLAUDE_CONFIG_DIR=${old} codeforge usage collect`));
+});
+test('steps 1 and 4 for a home source unset CLAUDE_CONFIG_DIR; no manifest uses a placeholder', () => {
+  const f = fx();
+  writeManifest(f.base, { ...REC, profile: 'home' });
+  let txt = run(f, ['--lane', 'l1', '--profile', 'cookys', '--order', '01M70ABCDE', '--dry-run']).lines.join('\n');
+  assert.match(txt, /-u AUTOPILOT_ACCOUNT -u CLAUDE_CONFIG_DIR claude auth status --json/);
+  assert.match(txt, /env -u CODEFORGE_DATA_DIR -u CLAUDE_CONFIG_DIR codeforge usage collect/);
+  assert.ok(!/\.claude codeforge/.test(txt));
+  txt = run(f, ['--lane', 'l9', '--profile', 'cookys', '--order', '01M70ABCDE', '--dry-run']).lines.join('\n');
+  assert.match(txt, /CLAUDE_CONFIG_DIR=<old profile dir> claude auth status --json/);
+  assert.match(txt, /env -u CODEFORGE_DATA_DIR CLAUDE_CONFIG_DIR=<old profile dir> codeforge usage collect/);
+});
+
+// finding 2: order shape and journal-before-print
+test('order starting with - is a usage error; token-shaped order prints nothing', () => {
+  const f = fx();
+  writeManifest(f.base, REC);
+  let r = run(f, ['--order', '--lane', 'l1', '--profile', 'cookys', '--dry-run']);
+  assert.strictEqual(r.code, 2);
+  r = run(f, ['--lane', 'l1', '--profile', 'cookys', '--order', '-abcd1234', '--dry-run']);
+  assert.strictEqual(r.code, 2);
+  r = run(f, ['--lane', 'l1', '--profile', 'cookys', '--order', 'sk-ant-oat01-abcdefghijkl', '--dry-run']);
+  assert.strictEqual(r.code, 4);
+  assert.deepStrictEqual(r.lines, []);
+  assert.ok(!fs.existsSync(journalFile(f.base)));
+});
+
+// finding 3: manifest validation and quoting
+test('manifest: type checks, whitespace-free fields, prompt flags and newlines rejected', () => {
+  const f = fx();
+  assert.throws(() => writeManifest(f.base, { ...REC, profile: 123 }), /profile_invalid/);
+  assert.throws(() => writeManifest(f.base, { ...REC, lane: undefined }), /lane_invalid/);
+  assert.throws(() => writeManifest(f.base, { ...REC, lane: 5 }), /lane_invalid/);
+  for (const k of ['pane', 'seat', 'session_id', 'model']) {
+    assert.throws(() => writeManifest(f.base, { ...REC, [k]: '' }), new RegExp(`manifest_value:${k}`));
+    assert.throws(() => writeManifest(f.base, { ...REC, [k]: 'do the thing' }), new RegExp(`manifest_value:${k}`));
+  }
+  for (const fl of ['-p', '--print', '--prompt=hi', '--system-prompt', '--append-system-prompt=be nice', '-p=x', '--mcp-config=a\nb']) {
+    assert.throws(() => writeManifest(f.base, { ...REC, launch_flags: [fl] }), /launch_flags/, fl);
+  }
+  writeManifest(f.base, REC);
+});
+test('start line quotes session_id', () => {
+  const f = fx();
+  writeManifest(f.base, { ...REC, session_id: 'a;b$c' });
+  const txt = run(f, ['--lane', 'l1', '--profile', 'cookys', '--order', '01M70ABCDE', '--dry-run']).lines.join('\n');
+  assert.ok(txt.includes(`claude --resume '\\''a;b$c'\\''`), txt);
+});

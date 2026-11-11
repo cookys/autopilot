@@ -140,3 +140,20 @@ test('apply is idempotent and does not relink an existing different link', () =>
   assert.match(r.out, /不重連/);
   assert.strictEqual(fs.readlinkSync(l), '/elsewhere');
 });
+
+// profsw-fix1 finding 4
+test('status reports a chained broken symlink as 失效', () => {
+  const h = mkHome();
+  fs.rmSync(path.join(h, '.claude', 'skills'), { recursive: true });
+  fs.symlinkSync(path.join(h, 'nowhere'), path.join(h, '.claude', 'skills'));
+  assert.strictEqual(cap(['apply', '--profile', 'sub', '--entries', 'skills'], h).rc, 0);
+  assert.match(cap(['status', '--profile', 'sub'], h).out, /skills ->.*失效/);
+});
+test('apply with duplicate --entries links once and records the run', () => {
+  const h = mkHome();
+  const r = cap(['apply', '--profile', 'sub', '--entries', 'settings.json,settings.json'], h);
+  assert.strictEqual(r.rc, 0, r.err);
+  assert.ok(fs.existsSync(path.join(pdir(h), '.profile-links.json')));
+  assert.strictEqual(cap(['rollback', '--profile', 'sub'], h).rc, 0);
+  assert.ok(!fs.existsSync(path.join(pdir(h), 'settings.json')));
+});

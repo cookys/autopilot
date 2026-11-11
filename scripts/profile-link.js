@@ -46,6 +46,8 @@ function parse(argv) {
 
 function lstatOrNull(p) { try { return fs.lstatSync(p); } catch (e) { if (e.code === 'ENOENT') return null; throw e; } }
 
+function statOrNull(p) { try { return fs.statSync(p); } catch (e) { if (['ENOENT', 'ENOTDIR', 'ELOOP'].includes(e.code)) return null; throw e; } }
+
 function readManifest(file) {
   if (!lstatOrNull(file)) return { runs: [] };
   const m = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -82,7 +84,7 @@ function run(argv, ctx = {}) {
   const mfile = path.join(dir, MANIFEST);
 
   if (o.cmd === 'apply') {
-    const names = o.entries || ALLOWED;
+    const names = [...new Set(o.entries || ALLOWED)];
     for (const n of names) {
       if (NEVER.includes(n)) { err(`拒絕：${n} 絕不連結（登入檔與 session 私有資料各 profile 自有）`); return 1; }
       if (!ALLOWED.includes(n)) { err(`拒絕：${n} 不在共用清單 ${ALLOWED.join(', ')}`); return 2; }
@@ -128,7 +130,7 @@ function run(argv, ctx = {}) {
       if (!st) { out(`  ${n}: 無`); continue; }
       if (!st.isSymbolicLink()) { out(`  ${n}: 非連結（真實項目）`); continue; }
       const t = fs.readlinkSync(l);
-      out(`  ${n} -> ${t} ${lstatOrNull(t) ? '可解析' : '失效'}`);
+      out(`  ${n} -> ${t} ${statOrNull(l) ? '可解析' : '失效'}`);
     }
     return 0;
   }

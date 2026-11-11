@@ -20,7 +20,7 @@ const { readManifest } = require('./lib/lane-manifest');
 const { appendJournal } = require('./lib/switch-journal');
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const ORDER_RE = /^[A-Za-z0-9._-]{4,64}$/;
+const ORDER_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$/;
 // Same list as scripts/profile-health.js DROP_ENV, plus AUTOPILOT_ACCOUNT (tier 1 would defeat attribution).
 const DROP_ENV = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'AUTOPILOT_ACCOUNT'];
 
@@ -52,23 +52,25 @@ function startLine(dir, sid, flags) {
 function buildPlan(o, m, home) {
   const from = (m && m.profile) || '<manifest profile>';
   const fromDir = m && m.profile ? profileDir(home, m.profile) : null;
-  const fromDirTxt = m && m.profile ? (fromDir || '(home: unset)') : '<old profile dir>';
+  // Old-profile env for steps 1 and 4: its dir, or unset for home, or a placeholder without a manifest.
+  const oldCfg = m && m.profile ? (fromDir ? `CLAUDE_CONFIG_DIR=${q(fromDir)}` : '-u CLAUDE_CONFIG_DIR') : 'CLAUDE_CONFIG_DIR=<old profile dir>';
   const toDir = profileDir(home, o.profile);
   const pane = (m && m.pane) || '<pane>';
   const cwd = (m && m.cwd) || '<cwd>';
   const sid = (m && m.session_id) || '<session id>';
+  const sidQ = m && m.session_id ? q(sid) : sid; // placeholder stays bare
   const seat = (m && m.seat) || '<fleet seat>';
   const flags = ((m && m.launch_flags) || []).map(q);
   const dev = path.join(__dirname, 'accept-dev-channel-prompt.sh');
   const steps = [
     ['1 before', `fleet whoami / directory: confirm seat ${seat} is live; record session id ${sid} (transcript <old dir>/projects/<cwd-slug>/${sid}.jsonl) and pane cwd (tmux display -p -t ${shq(pane)} '#{pane_current_path}') into the manifest`],
-    ['1 before', `env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u AUTOPILOT_ACCOUNT claude auth status --json   # old profile ${from}: loggedIn + alias via lib/account-alias.js (never e-mail); latest cost-row account of the session`],
+    ['1 before', `env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u AUTOPILOT_ACCOUNT ${oldCfg} claude auth status --json   # old profile ${from}: loggedIn + alias via lib/account-alias.js (never e-mail); latest cost-row account of the session`],
     ['1 before', `profile-health.js check --json   # target ${o.profile} logged in and not expiring`],
     ['2 handoff', `fleet send ${shq(seat)} "autopilot:handoff"; proceed only when a handoff file newer than the request exists and the lane is idle`],
     ['3 stop', `tmux send-keys -t ${shq(pane)} '/exit' Enter; wait until #{pane_current_command} is the shell; confirm the old session released seat ${seat} (else a -2 seat)`],
-    ['4 collect+copy', `CLAUDE_CONFIG_DIR=${shq(fromDir || path.join(home, '.claude'))} codeforge usage collect > /dev/null   # no --quiet; CODEFORGE_DATA_DIR never set`],
+    ['4 collect+copy', `env -u CODEFORGE_DATA_DIR ${oldCfg} codeforge usage collect > /dev/null   # old profile; no --quiet; CODEFORGE_DATA_DIR never set`],
     ['4 collect+copy', `cp -a <old dir>/projects/<cwd-slug>/${sid}.jsonl <old dir>/projects/<cwd-slug>/${sid} -> ${toDir || path.join(home, '.claude')}/projects/<cwd-slug>/   # copy, never move`],
-    ['5 start', `tmux send-keys -t ${shq(pane)} ${shq(`cd ${q(cwd)} && ${startLine(toDir, sid, flags)}`)} Enter`],
+    ['5 start', `tmux send-keys -t ${shq(pane)} ${shq(`cd ${q(cwd)} && ${startLine(toDir, sidQ, flags)}`)} Enter`],
     ['6 dev-channel', `${shq(dev)} --pane ${shq(pane)} --timeout 90   # exit 1 (incl. folder-trust/login screen): send /exit, C-c, wait for shell, run the reverse start`],
     ['7 after', `check: same seat ${seat}, pane cwd ${cwd}, session id ${sid}; claude auth status --json of ${o.profile} loggedIn; alias of the target dir (lib/account-alias.js) differs from the old one and equals the first-login record. Mismatch = reverse + failure report to the PM; absence of a cost row never reverses`],
     ['8 confirm', `poll for the first cost row of session ${sid} after the switch (bounded 30 min after the next turn): account must equal the ${o.profile} alias; then codeforge usage --by account shows the pre-switch part under the old account`],
@@ -93,12 +95,13 @@ function main(argv, deps) {
   let m;
   try { m = readManifest(base, o.lane); } catch (e) { err(e.message); return 4; }
   const plan = buildPlan(o, m, home);
-  out(`# lane-switch dry-run lane=${o.lane} from=${plan.from} to=${o.profile} order=${o.order}${m ? '' : ' (no lane manifest: placeholders)'}`);
-  plan.steps.forEach(([n, c], i) => out(`${String(i + 1).padStart(2, '0')} [${n}] ${c}`));
-  out(`RB [rollback] ${plan.rollback}`);
+  // Journal first: its checkRow refuses token/e-mail-shaped values before anything reaches stdout.
   try {
     appendJournal(base, { order: o.order, lane: o.lane, step: 'dry-run', from: plan.from, to: o.profile, outcome: 'dry-run' }, d.now);
   } catch (e) { err(e.message); return 4; }
+  out(`# lane-switch dry-run lane=${o.lane} from=${plan.from} to=${o.profile} order=${o.order}${m ? '' : ' (no lane manifest: placeholders)'}`);
+  plan.steps.forEach(([n, c], i) => out(`${String(i + 1).padStart(2, '0')} [${n}] ${c}`));
+  out(`RB [rollback] ${plan.rollback}`);
   return 0;
 }
 

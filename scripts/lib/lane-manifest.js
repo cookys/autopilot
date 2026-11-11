@@ -13,6 +13,8 @@ const path = require('path');
 
 const LANE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+// Prompt-carrying flags are never stored: a manifest holds launch shape, not prompt text.
+const PROMPT_FLAG_RE = /^(-p|--print|--prompt|--system-prompt|--append-system-prompt)(=|$)/;
 const FIELDS = ['lane', 'pane', 'cwd', 'seat', 'session_id', 'model', 'launch_flags', 'profile'];
 
 function defaultBase() { return path.join(os.homedir(), '.config', 'autopilot'); }
@@ -24,12 +26,16 @@ function lanePath(base, lane) {
 function validate(rec) {
   if (!rec || typeof rec !== 'object' || Array.isArray(rec)) throw new Error('manifest_not_object');
   for (const k of Object.keys(rec)) if (!FIELDS.includes(k)) throw new Error(`manifest_field_rejected:${k}`);
-  if (!LANE_RE.test(String(rec.lane))) throw new Error('lane_invalid');
-  if (rec.profile !== undefined && !PROFILE_RE.test(String(rec.profile))) throw new Error('profile_invalid');
-  for (const k of ['pane', 'seat', 'session_id', 'model']) if (rec[k] !== undefined && typeof rec[k] !== 'string') throw new Error(`manifest_type:${k}`);
+  if (typeof rec.lane !== 'string' || !LANE_RE.test(rec.lane)) throw new Error('lane_invalid');
+  if (rec.profile !== undefined && (typeof rec.profile !== 'string' || !PROFILE_RE.test(rec.profile))) throw new Error('profile_invalid');
+  for (const k of ['pane', 'seat', 'session_id', 'model']) {
+    if (rec[k] === undefined) continue;
+    if (typeof rec[k] !== 'string') throw new Error(`manifest_type:${k}`);
+    if (!/^\S+$/.test(rec[k])) throw new Error(`manifest_value:${k}`);
+  }
   if (rec.cwd !== undefined && (typeof rec.cwd !== 'string' || !path.isAbsolute(rec.cwd))) throw new Error('manifest_cwd_not_absolute');
   if (rec.launch_flags !== undefined) {
-    if (!Array.isArray(rec.launch_flags) || rec.launch_flags.some((f) => typeof f !== 'string' || !f.startsWith('-') || /\s/.test(f) && !f.includes('='))) throw new Error('manifest_launch_flags_not_flags');
+    if (!Array.isArray(rec.launch_flags) || rec.launch_flags.some((f) => typeof f !== 'string' || !f.startsWith('-') || /[\r\n]/.test(f) || PROMPT_FLAG_RE.test(f) || /\s/.test(f) && !f.includes('='))) throw new Error('manifest_launch_flags_not_flags');
   }
   return rec;
 }

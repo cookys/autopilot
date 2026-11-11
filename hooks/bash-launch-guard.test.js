@@ -1483,6 +1483,7 @@ test('rule6 conditional cd: the cwd after a cd behind &&/|| is unknown at once, 
     // the rm behind `||` only runs when the cd FAILED, so it runs in the payload cwd (outside)
     `cd ${scratch} || rm -rf x`,
     `cd ${scratch} && ls || rm -rf x`,
+    `cd ${scratch} || true && rm -rf x`,
   ]) {
     const r = run(cmd, sub(sandbox));
     assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);

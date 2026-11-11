@@ -77,7 +77,7 @@ function segments(text) {
   const big = s.length > SEG_MAX_TEXT;
   let pipeNext = false; // the next segment is the right-hand side of a `|` / `|&`
   let condNext = false; // the next segment follows `&&` / `||`: it runs only conditionally
-  let orNext = false; // the next segment follows `||`: it runs only when the previous command FAILED
+  let orNext = false; // a `||` was seen earlier in this list (sticky to the list end): a `cd` before it may not have taken effect
   let listN = 0; // index of the `;`/newline/`&`-delimited list the next segment belongs to
   let subDepth = 0; // inside a `( … )` subshell: its background jobs are NOT waitable by the outer shell
   // `lvl`: which shell a segment runs in. A `wait` only sees jobs of its OWN shell level (the script itself, or one
@@ -87,7 +87,7 @@ function segments(text) {
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
   const push = (bg, endsList = false) => {
-    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, or: orNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; orNext = false; }
+    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, or: orNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; }
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
@@ -1352,8 +1352,8 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
         st = { cwd: inherited, listId: seg.list, listStartCwd: inherited, bgList: false };
         stByLvl.set(seg.lvl, st);
       } else settle(st, seg.list);
-      // A segment behind `||` runs only when the previous command failed: a `cd` earlier in this list did not take effect,
-      // so it runs in the cwd the list started with (null when unknown: rule 6 then denies relative targets).
+      // From the first `||` of a list to its end, whether an earlier `cd` of the list took effect is unknown (it did not if the
+      // `||` branch runs), so such a segment uses the cwd the list started with (null when unknown: rule 6 then denies relative targets).
       const curCwd = seg.or ? st.listStartCwd : st.cwd;
       activeCwd = curCwd;
       const pos = commandPosition(seg.text);

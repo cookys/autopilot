@@ -55,6 +55,16 @@ if [ -r "$__LG" ] && command -v node >/dev/null 2>&1; then
   fi
 fi
 
+# --- layout-lint: tracked files stay where the repo layout allows (whole tree, ~0.1 s) ---
+# Hosted CI is off (operator), so this push gate is the only place it runs.
+__LL="$REPO_ROOT/scripts/layout-lint.js"
+if [ -r "$__LL" ] && command -v node >/dev/null 2>&1; then
+  if ! __ll_out="$(cd "$REPO_ROOT" && node "$__LL" 2>&1)"; then
+    printf '\n\033[1mlayout-lint: push blocked\033[0m\n%s\n\n' "$__ll_out" >&2
+    exit 1
+  fi
+fi
+
 # --- backlog gate (peer_report_lost + the file gate on the pushed commit) ---
 # Runs before the qc-gate so qc-gate `mode: off` cannot switch it off. Per pushed ref the range is
 # the same one the qc-gate below uses: <remote_sha>..<local_sha>, or origin/HEAD..<local_sha> for a

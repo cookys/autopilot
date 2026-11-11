@@ -1337,9 +1337,13 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
       st.listId = listId;
       st.listStartCwd = st.cwd;
       st.bgList = false;
+      st.cdSeen = false;
     };
+    // The cwd of a segment at or after the first `||` of its list: the list-start cwd while no cd/pushd/popd came earlier in the
+    // list, otherwise unknown (null: an earlier cd may or may not have taken effect, rule 6 denies relative targets, rule 7 skips).
+    const orCwd = (st) => (st.cdSeen ? null : st.listStartCwd);
     if (segs.length > 0 && typeof segs[0].lvl === 'string') {
-      stByLvl.set(`${segs[0].lvl.split(':')[0]}:0`, { cwd: initCwd, listId: segs[0].list, listStartCwd: initCwd, bgList: false });
+      stByLvl.set(`${segs[0].lvl.split(':')[0]}:0`, { cwd: initCwd, listId: segs[0].list, listStartCwd: initCwd, bgList: false, cdSeen: false });
     }
     let activeCwd = initCwd;
     for (const seg of segs) {
@@ -1348,13 +1352,14 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
         // A new `( )` level inherits its parent's cwd AFTER the parent's list boundary has been applied.
         const parent = seg.plvl ? stByLvl.get(seg.plvl) : null;
         if (parent) settle(parent, seg.list);
-        const inherited = parent ? parent.cwd : activeCwd;
-        st = { cwd: inherited, listId: seg.list, listStartCwd: inherited, bgList: false };
+        // A level that starts at or after the parent list's first `||` inherits by the same rule as a segment there.
+        const inherited = parent ? (seg.or ? orCwd(parent) : parent.cwd) : activeCwd;
+        st = { cwd: inherited, listId: seg.list, listStartCwd: inherited, bgList: false, cdSeen: false };
         stByLvl.set(seg.lvl, st);
       } else settle(st, seg.list);
       // From the first `||` of a list to its end, whether an earlier `cd` of the list took effect is unknown (it did not if the
       // `||` branch runs), so such a segment uses the cwd the list started with (null when unknown: rule 6 then denies relative targets).
-      const curCwd = seg.or ? st.listStartCwd : st.cwd;
+      const curCwd = seg.or ? orCwd(st) : st.cwd;
       activeCwd = curCwd;
       const pos = commandPosition(seg.text);
       if (pos.head && dequote(pos.head).replace(/^.*\//, '') === 'eval') {
@@ -1364,6 +1369,8 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
       }
       if (seg.bg) st.bgList = true;
       if (!seg.pipe) {
+        const cdName = commandPosition(seg.text).head;
+        if (cdName && /^(?:cd|pushd|popd)$/.test(dequote(cdName))) st.cdSeen = true;
         const nextCwd = stepCd(seg, curCwd, homedir);
         if (nextCwd !== curCwd) {
           // A `cd` behind `&&`/`||` may not have run: the cwd of everything after it is unknown.

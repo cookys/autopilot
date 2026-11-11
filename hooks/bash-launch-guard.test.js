@@ -1496,11 +1496,38 @@ test('rule6 conditional cd: the cwd after a cd behind &&/|| is unknown at once, 
   }
 });
 
-test('rule6 `||` after a cd: allowed only when the cwd before the cd is already inside the scratchpad', () => {
+test('rule6 `||` after a cd: a cd earlier in the list makes the cwd unknown, so a relative target is denied (fail-closed)', () => {
   const { tmpRoot, scratch } = mkScratchSandbox('blg');
   const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
-  const ok = run(`cd ${scratch} || rm -rf x`, sub(scratch));
+  // was allowed when the payload cwd was inside the scratchpad; a cd precedes the `||` now, so the cwd is null and it denies
+  const r = run(`cd ${scratch} || rm -rf x`, sub(scratch));
+  assert.strictEqual(r.deny, true, `expected deny: ${JSON.stringify(r)}`);
+  assert.match(r.reason, /subagent-rm-outside-scratch/);
+  // no cd before the `||`: the list-start cwd (inside the scratchpad) still applies
+  const ok = run(`false || rm -rf x`, sub(scratch));
   assert.strictEqual(ok.deny, false, `expected allow: ${ok.reason}`);
+});
+
+test('rule6 post-`||` segment: a cd earlier in the list (or in the parent list of a subshell) never leaves the list-start cwd in force', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  for (const cmd of [
+    `cd ${scratch}; cd /tmp && false || rm -rf rv1`,
+    `false || cd /tmp && rm -rf rv1`,
+    `cd ${scratch} || (rm -rf rv1)`,
+    `cd ${scratch} && true || rm -rf rv1`,
+  ]) {
+    const r = run(cmd, sub(sandbox));
+    assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  // rule 7: with a cd earlier in the list the cwd is null, so the list-start dir is not stat'ed (no false "safe")
+  const grp = path.join(sandbox, 'shared-0775');
+  fs.mkdirSync(grp);
+  fs.chmodSync(grp, 0o775);
+  const w = run(`cd ${grp} && false || rm -rf .`, { env: { CLAUDE_CODE_TMPDIR: tmpRoot }, extra: { cwd: grp } });
+  assert.strictEqual(w.deny, false);
+  assert.doesNotMatch(w.ctx, /rm-shared-dir/);
 });
 
 test('rule6 subshell inherits the cwd only after the parent list boundary has been applied', () => {

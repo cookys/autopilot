@@ -56,4 +56,5 @@ mut c c 's/echo "qualify: staged identity file has no source stamp[^>]*>&2/:/'
 mut d d 's/^  \[ -f "\$real_file" \] || return 0$/  :/'
 
 echo "qualify-stage-identity: $pass passed, $fail failed"
-[ "$fail" = 0 ]
+[ "$fail" = 0 ] || fail "$fail case(s) failed (see FAIL: lines above)"
+finalize_test

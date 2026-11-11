@@ -1,6 +1,6 @@
 'use strict';
 
-// scripts/lib/bash-launch-rules.js — the ONE definition of three Bash-launch hazards that
+// scripts/lib/bash-launch-rules.js — the ONE definition of the Bash-launch hazards that
 // hooks/depth0-delegate-gate.js checks on every Bash call (all depths, BL-0019):
 //   1. detach-no-wake (DENY)  — a trailing `&` or `setsid -f` (with or without nohup) starting a dispatch RAIL entrypoint
 //      (one of the explicit RAIL_NAMES list below — observers such as dispatch-status.js and *.test.* files are
@@ -12,12 +12,17 @@
 //      expansion) or an unquoted glob that matches nothing (zsh `nomatch` aborts the whole line).
 //      Prefers silence: `**`, a partly-quoted word, a directory that cannot be read within the 50 ms budget,
 //      or oversized input ⇒ no warning.
+//   4. bare-ls (DENY by default, BL-0300; knob off|warn|deny) — a bare `ls` in command position.
+//   5. rm-var-target (DENY by default; knob off|warn|deny) — recursive `rm` with a runtime-expanding target.
+//   6. subagent-rm-outside-scratch (DENY by default; knob off|warn|deny) — subagent recursive `rm` with a literal target outside the session scratchpad.
+//   7. rm-shared-dir (WARN by default; knob off|warn|deny) — recursive `rm` targeting an existing group/world-writable or foreign-owned directory outside the session scratchpad.
 // Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js).
 //
 // scripts/lib/dispatch-detach.sh is NOT a launcher: it is a sourceable helper the read rails
 // source to detach THEMSELVES (setsid supervisor + durable result file). Nothing to allow here.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { executableText } = require('./bash-wait-rules.js');
 
@@ -1097,9 +1102,9 @@ function redirectWord(raw) {
   if (!m) return null;
   return { target: m[1] === '' };
 }
-function rmVarHit(seg) {
+function rmSegmentTargets(seg) {
   const { head, rest } = commandPosition(seg.text);
-  if (!head || dequote(head).replace(/^.*\//, '') !== 'rm') return undefined;
+  if (!head || dequote(head).replace(/^.*\//, '') !== 'rm') return null;
   let recursive = false;
   let afterDd = false;
   let skipNext = false;
@@ -1110,8 +1115,8 @@ function rmVarHit(seg) {
     if (skipNext) { skipNext = false; continue; } // the file word of a standalone redirection operator
     const redir = redirectWord(w);
     if (redir) { skipNext = redir.target; continue; } // a redirection is not an rm target
-    const flag = !afterDd && /^-/.test(dequote(w));
     const bare = dequote(w);
+    const flag = !afterDd && /^-/.test(bare);
     if (flag && bare === '--') { afterDd = true; continue; }
     if (flag) {
       if (bare === '--recursive' || /^-[a-zA-Z]*[rR]/.test(bare)) recursive = true;
@@ -1119,8 +1124,11 @@ function rmVarHit(seg) {
     }
     targets.push(w);
   }
-  if (!recursive) return undefined;
-  return targets.find(wordExpands);
+  return recursive ? targets : null;
+}
+function rmVarHit(seg) {
+  const targets = rmSegmentTargets(seg);
+  return targets ? targets.find(wordExpands) : undefined;
 }
 function detectRecursiveRmVarUnguarded(cmd) {
   const raw = typeof cmd === 'string' ? cmd : '';
@@ -1152,4 +1160,361 @@ function detectRecursiveRmVarUnguarded(cmd) {
   return null;
 }
 
-module.exports = { detectRecursiveRmVar, detectBareLs, globHasMatch, launchAdvice, findSubstitutions, detectDetachNoWake, detectPkillSelfMatch, patternMatchesSelf, detectZshExpansion, segments, expandSegments };
+// ---- Rules 6 & 7: literal recursive-rm targets (subagent scratchpad boundary + shared-dir protection) ----
+//
+// Scratchpad probe & derivation contract (PM go 01M747MFS8):
+//   - PreToolUse payload fields probed: `session_id` (always present on PreToolUse; subagents share the parent
+//     `session_id` and carry a non-empty `agent_id`), `cwd` (session/subagent working directory, typically the
+//     repo or worktree checkout, NOT necessarily inside the scratchpad), `transcript_path` (under
+//     `$CLAUDE_CONFIG_DIR/projects/<slug>/…`, not the temp scratchpad). Note: `scratchpad_dir` has been observed
+//     on `PermissionRequest` payloads in Claude Code 2.1.318 (`hooks/fixtures/permission-block-real.jsonl`), but is
+//     not guaranteed across PreToolUse payloads or synthetic callers, so it is not relied upon as the sole source.
+//   - Hook environment probed: Claude Code exports NO `*SCRATCH*` environment variable (`hooks/capture-payload.js`
+//     dumps all `CLAUDE*`/`AUTOPILOT*` vars). Temp-root resolution uses `CLAUDE_CODE_TMPDIR || TMPDIR || os.tmpdir()`:
+//     `CLAUDE_CODE_TMPDIR` honors Claude Code's explicit temp-dir override when set; `TMPDIR` is the reliable
+//     host-level root on multi-account Linux hosts (where accounts set private `$HOME/.tmp`); `os.tmpdir()` is the
+//     standard POSIX fallback when neither env var is set. No custom env var is invented.
+//   - Contract: host scratchpad layout is `<tmp-root>/claude-<uid>/<project-slug>/<session_id>/scratchpad`.
+//     The allowed session root for recursive `rm` by a subagent (and the exemption root for rule 7) is derived as
+//     `<tmp-root>/claude-<uid>/*/<session_id>/` (strictly beneath `<session_id>/`, with `*` matching one non-empty
+//     project-slug segment and `<session_id>` matching `payload.session_id`).
+
+// Parse a non-expanding target token (`!wordExpands(raw)`): expand a leading unquoted `~` (`~` or `~/…`), strip
+// quotes/escapes, and detect unquoted glob characters (`*`, `?`, `[`).
+function parseRmLiteralWord(raw, homedir) {
+  const cleanHome = typeof homedir === 'string' && homedir.length > 1 ? homedir.replace(/\/+$/, '') : (homedir || '');
+  const segs = [{ text: '', glob: false }];
+  const appendStr = (s, isGlob) => {
+    for (let k = 0; k < s.length; k += 1) {
+      const ch = s[k];
+      if (ch === '/') segs.push({ text: '', glob: false });
+      else {
+        const cur = segs[segs.length - 1];
+        cur.text += ch;
+        if (isGlob) cur.glob = true;
+      }
+    }
+  };
+  let i = 0;
+  if (raw === '~' && cleanHome) {
+    appendStr(cleanHome, false);
+    i = 1;
+  } else if (raw.startsWith('~/') && cleanHome) {
+    appendStr(cleanHome, false);
+    segs.push({ text: '', glob: false });
+    i = 2;
+  }
+  while (i < raw.length) {
+    const c = raw[i];
+    if (c === '$' && raw[i + 1] === "'") {
+      i += 2;
+      while (i < raw.length && raw[i] !== "'") {
+        if (raw[i] === '\\' && i + 1 < raw.length) i += 1;
+        appendStr(raw[i], false);
+        i += 1;
+      }
+      i += 1;
+      continue;
+    }
+    if (c === "'") {
+      const end = raw.indexOf("'", i + 1);
+      const stop = end < 0 ? raw.length : end;
+      appendStr(raw.slice(i + 1, stop), false);
+      i = stop + 1;
+      continue;
+    }
+    if (c === '"') {
+      i += 1;
+      while (i < raw.length && raw[i] !== '"') {
+        if (raw[i] === '\\' && /["\\$`]/.test(raw[i + 1] || '')) i += 1;
+        appendStr(raw[i], false);
+        i += 1;
+      }
+      i += 1;
+      continue;
+    }
+    if (c === '\\' && i + 1 < raw.length) {
+      i += 1;
+      appendStr(raw[i], false);
+      i += 1;
+      continue;
+    }
+    if (c === '/') {
+      segs.push({ text: '', glob: false });
+      i += 1;
+      continue;
+    }
+    appendStr(c, c === '*' || c === '?' || c === '[');
+    i += 1;
+  }
+  const text = segs.map((s) => s.text).join('/');
+  const trailingSlash = text.length > 1 && text.endsWith('/');
+  const gi = segs.findIndex((s) => s.glob);
+  if (gi < 0) {
+    return { raw, text, trailingSlash, hasGlob: false, literalParent: null, climbAfterGlob: false };
+  }
+  const climbAfterGlob = segs.slice(gi + 1).some((s) => s.text === '..');
+  const prefix = segs.slice(0, gi).map((s) => s.text);
+  let literalParent;
+  if (prefix.length === 0) literalParent = '.';
+  else if (prefix.length === 1 && prefix[0] === '') literalParent = '/';
+  else literalParent = prefix.join('/');
+  return { raw, text, trailingSlash, hasGlob: true, literalParent, climbAfterGlob };
+}
+
+function stepCd(seg, curCwd, homedir) {
+  const { head, rest } = commandPosition(seg.text);
+  if (!head) return curCwd;
+  const name = dequote(head);
+  if (name === 'popd') return null;
+  if (name !== 'cd' && name !== 'pushd') return curCwd;
+  const rawRest = rest.length ? tokens(seg.text).map((t) => t.raw).slice(-rest.length) : [];
+  let afterDd = false;
+  let skipNext = false;
+  const args = [];
+  for (const w of rawRest) {
+    if (skipNext) { skipNext = false; continue; }
+    const redir = redirectWord(w);
+    if (redir) { skipNext = redir.target; continue; }
+    const bare = dequote(w);
+    if (!afterDd && bare === '--') { afterDd = true; continue; }
+    if (!afterDd && bare.length > 1 && bare.startsWith('-')) continue;
+    args.push(w);
+  }
+  if (args.length === 0) return name === 'cd' ? (homedir || null) : null;
+  const target = args[0];
+  if (dequote(target) === '-' || wordExpands(target)) return null;
+  const parsed = parseRmLiteralWord(target, homedir);
+  if (!parsed.text || parsed.hasGlob) return null;
+  if (path.isAbsolute(parsed.text)) return path.resolve(parsed.text);
+  return curCwd ? path.resolve(curCwd, parsed.text) : null;
+}
+
+function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
+  const raw = typeof cmd === 'string' ? cmd : '';
+  if (!raw.includes('rm')) return [];
+  const exec = executableText(raw);
+  const prep = (e) => expandSegments(stripArrayAssigns(stripArithmetic(rewriteProcSubst(e))));
+  const top = prep(exec);
+  const scripts = [{ segs: top, initCwd: baseCwd }];
+  for (const body of runHeredocBodies(raw, top)) {
+    scripts.push({ segs: prep(executableText(body)), initCwd: baseCwd });
+  }
+  const out = [];
+  for (let si = 0; si < scripts.length && si < 8; si += 1) {
+    const { segs, initCwd } = scripts[si];
+    const cwdByLvl = new Map();
+    if (segs.length > 0 && typeof segs[0].lvl === 'string') {
+      cwdByLvl.set(`${segs[0].lvl.split(':')[0]}:0`, initCwd);
+    }
+    let activeCwd = initCwd;
+    for (const seg of segs) {
+      if (!cwdByLvl.has(seg.lvl)) cwdByLvl.set(seg.lvl, activeCwd);
+      const curCwd = cwdByLvl.get(seg.lvl);
+      activeCwd = curCwd;
+      const pos = commandPosition(seg.text);
+      if (pos.head && dequote(pos.head).replace(/^.*\//, '') === 'eval') {
+        const bodyText = dequote(pos.rest.join(' '));
+        if (bodyText) scripts.push({ segs: prep(executableText(bodyText)), initCwd: curCwd });
+        continue;
+      }
+      const nextCwd = stepCd(seg, curCwd, homedir);
+      if (nextCwd !== curCwd) {
+        cwdByLvl.set(seg.lvl, nextCwd);
+        activeCwd = nextCwd;
+      }
+      const targets = rmSegmentTargets(seg);
+      if (!targets) continue;
+      for (const w of targets) {
+        if (wordExpands(w)) continue; // rule 5 owns runtime-expanded targets
+        const parsed = parseRmLiteralWord(w, homedir);
+        if (!parsed.text) continue;
+        if (parsed.hasGlob) {
+          const parentResolved = path.isAbsolute(parsed.literalParent)
+            ? path.resolve(parsed.literalParent)
+            : (curCwd ? path.resolve(curCwd, parsed.literalParent) : null);
+          out.push({
+            raw: w, text: parsed.text, trailingSlash: parsed.trailingSlash,
+            hasGlob: true, climbAfterGlob: parsed.climbAfterGlob, resolved: null, parentResolved,
+          });
+        } else {
+          const resolved = path.isAbsolute(parsed.text)
+            ? path.resolve(parsed.text)
+            : (curCwd ? path.resolve(curCwd, parsed.text) : null);
+          out.push({
+            raw: w, text: parsed.text, trailingSlash: parsed.trailingSlash,
+            hasGlob: false, climbAfterGlob: false, resolved, parentResolved: null,
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function tryRealpath(fsImpl, p) {
+  try { return fsImpl.realpathSync(p); } catch { return null; }
+}
+
+function resolveTmpRoot(env = process.env) {
+  const rawTmp = (typeof env.CLAUDE_CODE_TMPDIR === 'string' && env.CLAUDE_CODE_TMPDIR.trim())
+    || (typeof env.TMPDIR === 'string' && env.TMPDIR.trim())
+    || os.tmpdir();
+  return path.resolve(rawTmp);
+}
+
+function matchesSessionLayout(candidatePath, tmpBase, uid, sessionId, allowSessionDirItself) {
+  const claudeRoot = path.join(tmpBase, `claude-${uid}`);
+  const rel = path.relative(claudeRoot, candidatePath);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  const parts = rel.split(path.sep);
+  if (parts.length < (allowSessionDirItself ? 2 : 3)) return false;
+  const [slug, sid] = parts;
+  if (!slug || slug === '.' || slug === '..') return false;
+  return sid === sessionId;
+}
+
+function isInsideSessionScratch(targetPath, opts = {}, flags = {}) {
+  if (typeof targetPath !== 'string' || !targetPath) return false;
+  const sessionId = typeof opts.sessionId === 'string' ? opts.sessionId.trim() : '';
+  if (!sessionId || sessionId === '.' || sessionId === '..' || !/^[A-Za-z0-9._-]+$/.test(sessionId)) return false;
+  const fsImpl = opts.fs || fs;
+  const env = opts.env || process.env;
+  const uid = typeof opts.uid === 'number' ? opts.uid : (typeof process.getuid === 'function' ? process.getuid() : -1);
+  if (uid < 0) return false;
+  const lexTmp = resolveTmpRoot(env);
+  const realTmp = tryRealpath(fsImpl, lexTmp);
+  const allowSessionDir = !!flags.allowSessionDirItself;
+  const matchLex = matchesSessionLayout(targetPath, lexTmp, uid, sessionId, allowSessionDir);
+  const matchReal = realTmp !== null && matchesSessionLayout(targetPath, realTmp, uid, sessionId, allowSessionDir);
+  if (!matchLex && !matchReal) return false;
+  if (realTmp === null) return true;
+  let probe = targetPath;
+  if (!flags.trailingSlash && !allowSessionDir) {
+    try {
+      if (fsImpl.lstatSync(targetPath).isSymbolicLink()) probe = path.dirname(targetPath);
+    } catch { /* missing leaf: check ancestors below */ }
+  }
+  const activeBase = matchLex ? lexTmp : realTmp;
+  while (probe && matchesSessionLayout(probe, activeBase, uid, sessionId, true)) {
+    const rp = tryRealpath(fsImpl, probe);
+    if (rp !== null) return matchesSessionLayout(rp, realTmp, uid, sessionId, true);
+    const parent = path.dirname(probe);
+    if (parent === probe) break;
+    probe = parent;
+  }
+  return true;
+}
+
+// Rule 6 (subagent-rm-outside-scratch): when PreToolUse carries a non-empty `agent_id` (subagent), any recursive `rm`
+// whose literal target resolves outside `<tmp-root>/claude-<uid>/*/<session_id>/` is denied by default.
+function detectSubagentRmOutsideScratch(cmd, opts = {}) {
+  try { return detectSubagentRmOutsideScratchUnguarded(cmd, opts); } catch { return null; }
+}
+function detectSubagentRmOutsideScratchUnguarded(cmd, opts = {}) {
+  const agentId = opts && typeof opts.agentId === 'string' ? opts.agentId.trim() : '';
+  if (!agentId) return null;
+  const env = (opts && opts.env) || process.env;
+  const cwd = (opts && typeof opts.cwd === 'string' && opts.cwd) ? path.resolve(opts.cwd) : process.cwd();
+  const homedir = (opts && typeof opts.homedir === 'string' && opts.homedir) || env.HOME || os.homedir();
+  const items = collectRecursiveRmLiterals(cmd, cwd, homedir);
+  if (!items.length) return null;
+  const uid = opts && typeof opts.uid === 'number' ? opts.uid : (typeof process.getuid === 'function' ? process.getuid() : -1);
+  const sessionId = opts && typeof opts.sessionId === 'string' ? opts.sessionId.trim() : '';
+  const scratchOpts = { sessionId, env, uid, fs: (opts && opts.fs) || fs };
+  for (const it of items) {
+    if (it.hasGlob) {
+      const ok = !it.climbAfterGlob && it.parentResolved
+        && isInsideSessionScratch(it.parentResolved, scratchOpts, { allowSessionDirItself: true, trailingSlash: true });
+      if (ok) continue;
+      const shown = it.parentResolved || '(unresolved working directory)';
+      return {
+        rule: 'subagent-rm-outside-scratch',
+        target: it.raw,
+        resolved: shown,
+        why: `subagent recursive rm target ${it.raw} (glob parent ${shown}) resolves outside this session's scratchpad `
+          + `(${resolveTmpRoot(env)}/claude-${uid >= 0 ? uid : '<uid>'}/*/${sessionId || '<missing-session-id>'}/). `
+          + 'Subagents may only recursively delete inside their session scratchpad. '
+          + 'Relax with AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE=warn|off (or depth0_delegate_gate.subagent_rm in ~/.autopilot/config.json)',
+      };
+    }
+    const ok = it.resolved
+      && isInsideSessionScratch(it.resolved, scratchOpts, { allowSessionDirItself: false, trailingSlash: it.trailingSlash });
+    if (ok) continue;
+    const shown = it.resolved || '(unresolved working directory)';
+    return {
+      rule: 'subagent-rm-outside-scratch',
+      target: it.raw,
+      resolved: shown,
+      why: `subagent recursive rm target ${it.raw} (${shown}) resolves outside this session's scratchpad `
+        + `(${resolveTmpRoot(env)}/claude-${uid >= 0 ? uid : '<uid>'}/*/${sessionId || '<missing-session-id>'}/). `
+        + 'Subagents may only recursively delete inside their session scratchpad. '
+        + 'Relax with AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE=warn|off (or depth0_delegate_gate.subagent_rm in ~/.autopilot/config.json)',
+    };
+  }
+  return null;
+}
+
+// Rule 7 (rm-shared-dir): for ANY session (main or subagent), a recursive `rm` whose literal non-glob target exists
+// outside the session scratchpad and is a group/world-writable directory (mode & 0o022) or owned by another uid
+// triggers at least a warning (default warn; knob off|warn|deny).
+function detectRmSharedDir(cmd, opts = {}) {
+  try { return detectRmSharedDirUnguarded(cmd, opts); } catch { return null; }
+}
+function detectRmSharedDirUnguarded(cmd, opts = {}) {
+  const env = (opts && opts.env) || process.env;
+  const fsImpl = (opts && opts.fs) || fs;
+  const cwd = (opts && typeof opts.cwd === 'string' && opts.cwd) ? path.resolve(opts.cwd) : process.cwd();
+  const homedir = (opts && typeof opts.homedir === 'string' && opts.homedir) || env.HOME || os.homedir();
+  const items = collectRecursiveRmLiterals(cmd, cwd, homedir);
+  if (!items.length) return null;
+  const uid = opts && typeof opts.uid === 'number' ? opts.uid : (typeof process.getuid === 'function' ? process.getuid() : -1);
+  const sessionId = opts && typeof opts.sessionId === 'string' ? opts.sessionId.trim() : '';
+  const scratchOpts = { sessionId, env, uid, fs: fsImpl };
+  for (const it of items) {
+    if (it.hasGlob || !it.resolved) continue; // unexpanded globs skip rule 7
+    if (isInsideSessionScratch(it.resolved, scratchOpts, { allowSessionDirItself: false, trailingSlash: it.trailingSlash })) continue;
+    let st;
+    try {
+      st = it.trailingSlash ? fsImpl.statSync(it.resolved) : fsImpl.lstatSync(it.resolved);
+    } catch {
+      continue;
+    }
+    if (!st || typeof st.isDirectory !== 'function' || !st.isDirectory()) continue;
+    const sharedMode = (st.mode & 0o022) !== 0;
+    const foreignOwner = uid >= 0 && typeof st.uid === 'number' && st.uid !== uid;
+    if (!sharedMode && !foreignOwner) continue;
+    const reasons = [];
+    if (sharedMode) {
+      const oct = `0${(st.mode & 0o777).toString(8).padStart(3, '0')}`;
+      reasons.push(`${(st.mode & 0o002) ? 'world-writable' : 'group-writable'} (mode ${oct})`);
+    }
+    if (foreignOwner) reasons.push(`owned by uid ${st.uid} !== process uid ${uid}`);
+    return {
+      rule: 'rm-shared-dir',
+      target: it.raw,
+      resolved: it.resolved,
+      why: `recursive rm targets shared/foreign directory ${it.raw} (${it.resolved}: ${reasons.join(', ')}) outside this session's scratchpad. `
+        + 'Verify no other account or session shares this directory before deleting it. '
+        + 'Configure with AUTOPILOT_BASH_GUARD_SHARED_RM_MODE=off|warn|deny (or depth0_delegate_gate.shared_rm in ~/.autopilot/config.json)',
+    };
+  }
+  return null;
+}
+
+module.exports = {
+  detectRecursiveRmVar,
+  detectSubagentRmOutsideScratch,
+  detectRmSharedDir,
+  isInsideSessionScratch,
+  detectBareLs,
+  globHasMatch,
+  launchAdvice,
+  findSubstitutions,
+  detectDetachNoWake,
+  detectPkillSelfMatch,
+  patternMatchesSelf,
+  detectZshExpansion,
+  segments,
+  expandSegments,
+};

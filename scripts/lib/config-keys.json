@@ -540,6 +540,48 @@
       ]
     },
     {
+      "name": "depth0_delegate_gate.subagent_rm",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "deny",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE"
+      ],
+      "summary": "What to do when a subagent (non-empty payload agent_id) runs a recursive rm whose literal target resolves outside the session scratchpad (<tmp-root>/claude-<uid>/*/<session_id>/): values are \"off\", \"warn\", \"deny\"; default deny.",
+      "type": "enum",
+      "allowed": [
+        "deny",
+        "warn",
+        "off"
+      ]
+    },
+    {
+      "name": "depth0_delegate_gate.shared_rm",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "warn",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_SHARED_RM_MODE"
+      ],
+      "summary": "What to do when any session (main or subagent) runs a recursive rm whose literal non-glob target exists outside the session scratchpad and is a group/world-writable directory (mode & 0o022) or owned by another uid: values are \"off\", \"warn\", \"deny\"; default warn.",
+      "type": "enum",
+      "allowed": [
+        "warn",
+        "deny",
+        "off"
+      ]
+    },
+    {
       "name": "depth0_delegate_gate.threshold",
       "kind": "config_key",
       "audience": "user",
@@ -4068,6 +4110,36 @@
         "depth0_delegate_gate.rm_var_target"
       ],
       "summary": "Environment override of depth0_delegate_gate.rm_var_target; values are off, warn, deny (default deny); a garbage value maps to deny."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.subagent_rm"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.subagent_rm; values are off, warn, deny (default deny); a garbage value maps to deny."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_SHARED_RM_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "depth0_delegate_gate.shared_rm"
+      ],
+      "summary": "Environment override of depth0_delegate_gate.shared_rm; values are off, warn, deny (default warn); a garbage value maps to warn."
     },
     {
       "name": "AUTOPILOT_CAPTURE_PAYLOAD",

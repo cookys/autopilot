@@ -15,8 +15,12 @@
 //   syncProvider(provider, o)  async -> { provider, alias, wrote, reason, shape?, tightest?, assumed? }
 //   convertMinimax(json, nowMs[, secret]) / convertGlm(json, nowMs[, secret])  pure -> { ok, windows, shape, tightest? } | { ok: false, reason, shape }
 //   Result `shape` (on the result and main() output, never in the record; token-free and value-free):
-//     glm:     { limits: [{ type, unit, number, used_window: 'rolling_5h'|'weekly'|null, dropped: 'expired'|'fields_missing'|null }, ...] }
-//              (one entry per data.limits[] item; type/unit/number copied only when string/number, strings scrubbed before slicing to 32 chars)
+//     glm:     { limits: [{ type, unit, number, used_window: 'rolling_5h'|'weekly'|null, dropped: 'expired'|'fields_missing'|null,
+//                           keys: (string|null)[], missing: ('percentage'|'nextResetTime')[],
+//                           pct_from: 'currentValue'|'remaining'|null, reset_assumed: boolean }, ...] }
+//              (one entry per data.limits[] item; type/unit/number copied only when string/number; keys lists up to 16 sorted own
+//              key names and never values; strings and key names are scrubbed before slicing to 32 chars; missing lists whichever of
+//              ['percentage','nextResetTime'] is absent or not a finite number)
 //     minimax: { models: <count of model_remains>, dropped: { rolling_5h: 'expired'|null, weekly: 'expired'|null } }
 //     An entry/window is `expired` when dropped because resets_at is in the past.
 //
@@ -30,6 +34,11 @@
 //   glm      GET https://api.z.ai/api/monitor/usage/quota/limit   Authorization: <token> (NO Bearer; unpublished API)
 //     data.limits[] of type TOKENS_LIMIT: unit 3 / number 5 is the rolling 5 h window, unit 6 / number 1 the week
 //     (ASSUMED, unconfirmed; result carries `assumed: true`); percentage is ASSUMED 0..100 used; nextResetTime is epoch ms or s.
+//     When `percentage` is not a finite number, `convertGlm` derives it only from finite `currentValue` + `usage` (> 0) or
+//     finite `remaining` + `usage` (> 0), clamped to [0, 100] (`pct_from: 'currentValue'|'remaining'`); these fallback field
+//     names are UNVERIFIED candidates, not confirmed provider fields. When `nextResetTime` is missing and the (given or derived)
+//     percentage is 0, resets_at defaults to floor(now/1000) + window length (5 h / 7 d) with `reset_assumed: true`; for
+//     percentage > 0 a missing reset stays `fields_missing`.
 // Every utilization goes through observation.clampUtilization: 1..1.5 clamps to 1, anything outside is rejected. Window
 // source is `probe`, observed_at is request completion time in seconds, elapsed windows are dropped. Rate limit: newer of
 // last ATTEMPT (`<alias>.attempt`, token-free, stamped before request) and mirror observed_at < 3600 s -> `too_soon`.
@@ -110,6 +119,19 @@ function convertMinimax(j, nowMs, secret) {
   return f.ok ? { ok: true, windows: f.windows, tightest: f.tightest, shape } : { ok: false, reason: f.reason, shape };
 }
 
+const GLM_WINDOW_S = Object.freeze({ rolling_5h: 5 * 3600, weekly: 7 * 86400 });
+const GLM_REQUIRED_FIELDS = Object.freeze(['percentage', 'nextResetTime']);
+const GLM_MAX_KEYS = 16;
+
+function ownNum(o, k) {
+  return Object.prototype.hasOwnProperty.call(o, k) && num(o[k]);
+}
+
+function clampPct(x) {
+  const c = Math.min(100, Math.max(0, x));
+  return c === 0 ? 0 : c;
+}
+
 function convertGlm(j, nowMs, secret) {
   if (!isObj(j) || !isObj(j.data) || !Array.isArray(j.data.limits)) {
     return { ok: false, reason: 'fields_missing', shape: { limits: [] } };
@@ -119,10 +141,18 @@ function convertGlm(j, nowMs, secret) {
   const winnerIdx = {};
   for (const l of j.data.limits) {
     if (!isObj(l)) {
-      limits.push({ type: null, unit: null, number: null, used_window: null, dropped: null });
+      limits.push({
+        type: null, unit: null, number: null, used_window: null, dropped: null,
+        keys: [], missing: GLM_REQUIRED_FIELDS.slice(), pct_from: null, reset_assumed: false,
+      });
       continue;
     }
-    const entry = { type: shapeVal(l.type, secret), unit: shapeVal(l.unit, secret), number: shapeVal(l.number, secret), used_window: null, dropped: null };
+    const keys = Object.keys(l).sort().slice(0, GLM_MAX_KEYS).map((k) => sliceClean(k, 32, secret));
+    const missing = GLM_REQUIRED_FIELDS.filter((k) => !ownNum(l, k));
+    const entry = {
+      type: shapeVal(l.type, secret), unit: shapeVal(l.unit, secret), number: shapeVal(l.number, secret),
+      used_window: null, dropped: null, keys, missing, pct_from: null, reset_assumed: false,
+    };
     limits.push(entry);
     if (l.type !== 'TOKENS_LIMIT') continue;
     let kind = null;
@@ -130,10 +160,30 @@ function convertGlm(j, nowMs, secret) {
     else if (l.unit === 6 && l.number === 1) kind = 'weekly';
     if (kind === null) continue;
     entry.used_window = kind;
-    if (!num(l.percentage) || !num(l.nextResetTime)) { entry.dropped = 'fields_missing'; continue; }
+    let pct = null;
+    if (ownNum(l, 'percentage')) {
+      pct = l.percentage === 0 ? 0 : l.percentage;
+    } else if (ownNum(l, 'currentValue') && ownNum(l, 'usage') && l.usage > 0) {
+      pct = clampPct((l.currentValue / l.usage) * 100);
+      entry.pct_from = 'currentValue';
+    } else if (ownNum(l, 'remaining') && ownNum(l, 'usage') && l.usage > 0) {
+      pct = clampPct(((l.usage - l.remaining) / l.usage) * 100);
+      entry.pct_from = 'remaining';
+    }
+    if (pct === null) { entry.dropped = 'fields_missing'; continue; }
+    let resetsAt;
+    if (ownNum(l, 'nextResetTime')) {
+      resetsAt = toEpochSeconds(l.nextResetTime);
+    } else if (pct === 0) {
+      resetsAt = Math.floor(nowMs / 1000) + GLM_WINDOW_S[kind];
+      entry.reset_assumed = true;
+    } else {
+      entry.dropped = 'fields_missing';
+      continue;
+    }
     if (winnerIdx[kind] !== undefined) limits[winnerIdx[kind]].used_window = null;
     winnerIdx[kind] = limits.length - 1;
-    byKind[kind] = { used: l.percentage / 100, resets_at: toEpochSeconds(l.nextResetTime), assumed: true };
+    byKind[kind] = { used: pct === 0 ? 0 : pct / 100, resets_at: resetsAt, assumed: true };
   }
   const f = finish(byKind, nowMs, undefined);
   for (const kind of ['rolling_5h', 'weekly']) {

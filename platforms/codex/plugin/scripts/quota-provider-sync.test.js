@@ -136,9 +136,9 @@ test('glm: normal body maps unit 3/number 5 to rolling_5h and unit 6/number 1 to
   assert.deepStrictEqual([r.wrote, r.reason, r.assumed], [true, null, true]);
   assert.deepStrictEqual(r.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null },
-      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null },
-      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null },
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
     ],
   });
   const rec = readRow(liveDir, 'glm', 'glm');
@@ -167,8 +167,8 @@ test('glm shape: 5h TOKENS_LIMIT with past nextResetTime marks dropped expired i
   assert.strictEqual(r.wrote, true);
   assert.deepStrictEqual(r.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'expired' },
-      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null },
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'expired', keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
     ],
   });
   const rec = readRow(liveDir, 'glm', 'glm');
@@ -185,8 +185,8 @@ test('glm shape: response without unit 3/number 5 lists limits with used_window 
   assert.deepStrictEqual([unmappedOnly.r.wrote, unmappedOnly.r.reason], [false, 'fields_missing']);
   assert.deepStrictEqual(unmappedOnly.r.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 1, number: 2, used_window: null, dropped: null },
-      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null },
+      { type: 'TOKENS_LIMIT', unit: 1, number: 2, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
     ],
   });
 
@@ -197,8 +197,8 @@ test('glm shape: response without unit 3/number 5 lists limits with used_window 
   assert.strictEqual(weeklyPlusUnmapped.r.wrote, true);
   assert.deepStrictEqual(weeklyPlusUnmapped.r.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null },
-      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null },
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
     ],
   });
 
@@ -210,8 +210,8 @@ test('glm shape: response without unit 3/number 5 lists limits with used_window 
   assert.strictEqual(edge.ok, false);
   assert.deepStrictEqual(edge.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'fields_missing' },
-      { type: 'L'.repeat(32), unit: null, number: null, used_window: null, dropped: null },
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'fields_missing', keys: ['number', 'type', 'unit'], missing: ['percentage', 'nextResetTime'], pct_from: null, reset_assumed: false },
+      { type: 'L'.repeat(32), unit: null, number: null, used_window: null, dropped: null, keys: ['number', 'type', 'unit'], missing: ['percentage', 'nextResetTime'], pct_from: null, reset_assumed: false },
     ],
   });
 
@@ -315,8 +315,8 @@ test('CLI: main() prints shape on stdout/stderr and shape + stdout/stderr never 
   assert.strictEqual(glmOk.status, 0);
   const expectedGlmShape = JSON.stringify({
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null },
-      { type: null, unit: 9, number: 1, used_window: null, dropped: null },
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: null, unit: 9, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
     ],
   });
   assert.strictEqual(glmOk.stdout, `sync-provider glm/glm: wrote shape=${expectedGlmShape}\n`);
@@ -339,7 +339,7 @@ test('CLI: main() prints shape on stdout/stderr and shape + stdout/stderr never 
   });
   assert.strictEqual(glmMiss.status, 1);
   const expectedMissShape = JSON.stringify({
-    limits: [{ type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null }],
+    limits: [{ type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false }],
   });
   assert.strictEqual(glmMiss.stderr, `sync-provider glm/glm: fields_missing shape=${expectedMissShape}\n`);
   assert.strictEqual(glmMiss.stdout, '');
@@ -699,6 +699,179 @@ test('planted: reverting sliceClean to slice before scrub leaks a 16-char token 
     nowMs: () => NOW,
   });
   assert.throws(() => assertNoToken16(JSON.stringify(badMm), LONG_TOK), /16-char token substring/);
+});
+
+// ---- glm partial-entry diagnostics, percentage fallback, and unstarted-window reset fallback
+test('glm (a): 5h entry with percentage 0 and no nextResetTime writes rolling_5h at now+5h with reset_assumed true; weekly 0% uses now+7d', async () => {
+  const { r, liveDir } = await run(real, 'glm', glm([
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 0 },
+  ]), 200, { nowMs: () => NOW + 789 });
+  assert.deepStrictEqual([r.wrote, r.reason, r.assumed], [true, null, true]);
+  assert.deepStrictEqual(r.shape, {
+    limits: [{
+      type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null,
+      keys: ['number', 'percentage', 'type', 'unit'], missing: ['nextResetTime'],
+      pct_from: null, reset_assumed: true,
+    }],
+  });
+  const rec = readRow(liveDir, 'glm', 'glm');
+  assert.strictEqual(rec.windows.length, 1);
+  const w5 = rec.windows[0];
+  assert.strictEqual(w5.kind, 'rolling_5h');
+  assert.strictEqual(w5.utilization, 0);
+  assert.strictEqual(w5.resets_at, NOW_S + 5 * 3600);
+  assert.strictEqual('reset_assumed' in w5, false);
+
+  const wkOnly = await run(real, 'glm', glm([{ type: 'TOKENS_LIMIT', unit: 6, number: 1, percentage: 0 }]));
+  assert.strictEqual(wkOnly.r.wrote, true);
+  assert.strictEqual(wkOnly.r.shape.limits[0].reset_assumed, true);
+  assert.deepStrictEqual(wkOnly.r.shape.limits[0].missing, ['nextResetTime']);
+  assert.strictEqual(readRow(wkOnly.liveDir, 'glm', 'glm').windows[0].resets_at, NOW_S + 7 * 86400);
+});
+
+test('glm (b): 5h entry with percentage 12 and no nextResetTime stays fields_missing and writes nothing', async () => {
+  for (const extra of [{}, { nextResetTime: null }, { nextResetTime: 'soon' }]) {
+    const { r, liveDir } = await run(real, 'glm', glm([
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 12, ...extra },
+    ]));
+    assert.deepStrictEqual([r.wrote, r.reason], [false, 'fields_missing']);
+    assert.strictEqual(r.shape.limits[0].used_window, 'rolling_5h');
+    assert.strictEqual(r.shape.limits[0].dropped, 'fields_missing');
+    assert.strictEqual(r.shape.limits[0].reset_assumed, false);
+    assert.deepStrictEqual(r.shape.limits[0].missing, ['nextResetTime']);
+    assert.strictEqual(readRow(liveDir, 'glm', 'glm'), null);
+  }
+});
+
+test('glm (c): percentage fallback from currentValue/usage or remaining/usage (clamped 0..100, pct_from recorded, derived 0% assumes reset)', async () => {
+  const { r, liveDir } = await run(real, 'glm', glm([
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, currentValue: 50, usage: 200, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]));
+  assert.deepStrictEqual([r.wrote, r.reason], [true, null]);
+  assert.deepStrictEqual(r.shape, {
+    limits: [{
+      type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null,
+      keys: ['currentValue', 'nextResetTime', 'number', 'type', 'unit', 'usage'],
+      missing: ['percentage'], pct_from: 'currentValue', reset_assumed: false,
+    }],
+  });
+  const w5 = readRow(liveDir, 'glm', 'glm').windows.find((w) => w.kind === 'rolling_5h');
+  assert.ok(Math.abs(w5.utilization - 0.25) < 1e-9);
+  assert.strictEqual(w5.resets_at, NOW_S + 3600);
+
+  const rem = await run(real, 'glm', glm([
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, remaining: 150, usage: 200, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]));
+  assert.strictEqual(rem.r.wrote, true);
+  assert.strictEqual(rem.r.shape.limits[0].pct_from, 'remaining');
+  assert.deepStrictEqual(rem.r.shape.limits[0].missing, ['percentage']);
+  assert.ok(Math.abs(readRow(rem.liveDir, 'glm', 'glm').windows[0].utilization - 0.25) < 1e-9);
+
+  const both = real.convertGlm(glm([
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, currentValue: 50, remaining: 10, usage: 200, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]), NOW);
+  assert.strictEqual(both.ok, true);
+  assert.strictEqual(both.shape.limits[0].pct_from, 'currentValue');
+  assert.ok(Math.abs(both.windows[0].utilization - 0.25) < 1e-9);
+
+  const over = await run(real, 'glm', glm([
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, currentValue: 500, usage: 200, nextResetTime: (NOW_S + 3600) * 1000 },
+    { type: 'TOKENS_LIMIT', unit: 6, number: 1, remaining: 300, usage: 200, nextResetTime: (NOW_S + 86400) * 1000 },
+  ]));
+  assert.strictEqual(over.r.wrote, true);
+  const overRec = readRow(over.liveDir, 'glm', 'glm');
+  assert.strictEqual(overRec.windows.find((w) => w.kind === 'rolling_5h').utilization, 1);
+  assert.strictEqual(overRec.windows.find((w) => w.kind === 'weekly').utilization, 0);
+
+  const derivedZero = await run(real, 'glm', glm([
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, currentValue: 0, usage: 200 },
+  ]));
+  assert.strictEqual(derivedZero.r.wrote, true);
+  assert.strictEqual(derivedZero.r.shape.limits[0].pct_from, 'currentValue');
+  assert.strictEqual(derivedZero.r.shape.limits[0].reset_assumed, true);
+  assert.deepStrictEqual(derivedZero.r.shape.limits[0].missing, ['percentage', 'nextResetTime']);
+  assert.strictEqual(readRow(derivedZero.liveDir, 'glm', 'glm').windows[0].resets_at, NOW_S + 5 * 3600);
+});
+
+test('glm (d): neither percentage nor usable fallback fields stays fields_missing and missing includes percentage', async () => {
+  const cases = [
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, unknownField: 10, nextResetTime: (NOW_S + 3600) * 1000 },
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, unknownField: 10 },
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, currentValue: 10, usage: 0, nextResetTime: (NOW_S + 3600) * 1000 },
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, remaining: 10, usage: -5, nextResetTime: (NOW_S + 3600) * 1000 },
+  ];
+  for (const item of cases) {
+    const { r, liveDir } = await run(real, 'glm', glm([item]));
+    assert.deepStrictEqual([r.wrote, r.reason], [false, 'fields_missing']);
+    assert.strictEqual(r.shape.limits[0].dropped, 'fields_missing');
+    assert.strictEqual(r.shape.limits[0].pct_from, null);
+    assert.strictEqual(r.shape.limits[0].missing.includes('percentage'), true);
+    assert.strictEqual(readRow(liveDir, 'glm', 'glm'), null);
+  }
+});
+
+test('glm (e): shape keys lists sorted own key names only (max 16, scrubbed + 32-char sliced) and never leaks token values', async () => {
+  const LONG_TOK = 'FAKE-sentinel-9a8b7c6d5e4f3a2b1c0d9e8f7a';
+  const manyProps = {};
+  for (let i = 19; i >= 0; i--) manyProps[`field_${String(i).padStart(2, '0')}`] = `v-${LONG_TOK}-${i}`;
+  const body = glm([
+    {
+      type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 20, nextResetTime: (NOW_S + 3600) * 1000,
+      ...manyProps,
+    },
+    {
+      type: 'TIME_LIMIT', unit: 5, number: 1, percentage: 10, nextResetTime: (NOW_S + 3600) * 1000,
+      [`a_${LONG_TOK}`]: 'ignored',
+      [`b_${'k'.repeat(40)}`]: LONG_TOK,
+      rawSecretValue: LONG_TOK,
+      prefixedSecretValue: `x${LONG_TOK}`,
+    },
+  ]);
+  const r = await real.syncProvider('glm', {
+    liveDir: tmpLive(),
+    env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK },
+    fetch: fakeFetch(200, body),
+    nowMs: () => NOW,
+  });
+  assert.strictEqual(r.wrote, true);
+  assert.strictEqual(r.shape.limits[0].keys.length, 16);
+  assert.deepStrictEqual(r.shape.limits[0].keys, r.shape.limits[0].keys.slice().sort());
+  assert.strictEqual(r.shape.limits[1].keys[0], null, 'key containing token is scrubbed to null');
+  assert.strictEqual(r.shape.limits[1].keys[1], `b_${'k'.repeat(30)}`, 'long key name is sliced to 32 chars');
+  assertNoToken16(JSON.stringify(r.shape), LONG_TOK);
+  assertNoToken16(JSON.stringify(r), LONG_TOK);
+
+  const unScrubbedCall = real.convertGlm(glm([{
+    type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 0,
+    carrierA: LONG_TOK, carrierB: `Bearer ${LONG_TOK}`,
+  }]), NOW);
+  assert.strictEqual(unScrubbedCall.ok, true);
+  assert.deepStrictEqual(unScrubbedCall.shape.limits[0].keys, ['carrierA', 'carrierB', 'number', 'percentage', 'type', 'unit']);
+  assertNoToken16(JSON.stringify(unScrubbedCall), LONG_TOK);
+});
+
+test('planted: breaking nextResetTime fallback (3) to also accept pct > 0 turns case (b) red; leaking values into keys is red', async () => {
+  const checkCaseB = async (mod) => {
+    const { r, liveDir } = await run(mod, 'glm', glm([{ type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 12 }]));
+    assert.deepStrictEqual([r.wrote, r.reason], [false, 'fields_missing']);
+    assert.strictEqual(r.shape.limits[0].dropped, 'fields_missing');
+    assert.strictEqual(r.shape.limits[0].reset_assumed, false);
+    assert.deepStrictEqual(r.shape.limits[0].missing, ['nextResetTime']);
+    assert.strictEqual(readRow(liveDir, 'glm', 'glm'), null);
+  };
+  await checkCaseB(real);
+  const acceptsUsedPct = mutant([['} else if (pct === 0) {', '} else if (pct >= 0) {']]);
+  const badB = await run(acceptsUsedPct, 'glm', glm([{ type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 12 }]));
+  assert.strictEqual(badB.r.wrote, true, 'the broken fallback writes an invented reset for pct > 0');
+  assert.strictEqual(badB.r.shape.limits[0].reset_assumed, true);
+  await assert.rejects(() => checkCaseB(acceptsUsedPct));
+
+  const LONG_TOK = 'FAKE-sentinel-9a8b7c6d5e4f3a2b1c0d9e8f7a';
+  const leaksValues = mutant([['Object.keys(l).sort()', 'Object.values(l).map(String).sort()']]);
+  const badKeys = leaksValues.convertGlm(glm([{
+    type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 0, carrier: LONG_TOK,
+  }]), NOW);
+  assert.throws(() => assertNoToken16(JSON.stringify(badKeys.shape), LONG_TOK), /16-char token substring/);
 });
 
 // ---- static scan: no secret file read, no token printed

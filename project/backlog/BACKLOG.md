@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0426 -->
+<!-- next-id: BL-0427 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1478,3 +1478,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PM fleet 01M6TY1Q06 (2026-11-07)
 - **Pointer**: project/backlog/flaky-under-load-suites.md
+
+### Lead and lane skills should default to parallel for unrelated work
+- **Id**: BL-0426
+- **Status**: open
+- **Since**: 2026-11-11
+- **Origin**: self
+- **Problem**: Operator rule (2026-11-11): unrelated incoming work gets its own worker at once (mechanical work to Haiku, Sonnet or a non-Claude seat); "queued behind X" only for a real dependency or the same scarce resource. The shipped lead and lane skills do not state this, so sessions queue serially.
+- **Impact**: Unrelated items wait behind the one in hand and the lead does mechanical work itself.
+- **Trigger**: ready; needs eval ON/OFF evidence before the wording ships (skills/CLAUDE.md)
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PM 01M74K28MQ (2026-11-11)
+- **Pointer**: project/backlog/parallel-by-default-for-leads.md

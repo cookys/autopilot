@@ -562,10 +562,22 @@ EOF
   case "$orgv" in
     duplicate:*)
       owner="${orgv#duplicate:}"
-      echo "別名 $alias：同一個 org 已登記在 $owner；同一個 org 登記兩次會讓同一份額度被算兩次，所以拒絕，$alias 不留在 registry 裡。"
-      echo "修法：重新在另一個視窗用另一個 org 的登入跑 claude setup-token，重跑本指令並選「覆蓋」；如果其實不需要，就不要登記 $alias。"
-      case "$r" in added|created) nodeh unregister "$alias" >/dev/null 2>&1 ;; esac
-      row "❌" "$alias org 核對" "同一個 org 已登記在 $owner（標籤「$olabel」${plan_part}），拒絕重複登記（已從 registry 取回）；修法：換用另一個 org 的 token 後重跑，選「覆蓋」"
+      took_back=0
+      case "$r" in
+        added|created)
+          if nodeh unregister "$alias" >/dev/null 2>&1; then
+            took_back=1
+          fi ;;
+      esac
+      if [ "$took_back" -eq 1 ]; then # onboard:dup-takeback
+        echo "別名 $alias：同一個 org 已登記在 $owner；同一個 org 登記兩次會讓同一份額度被算兩次，所以拒絕，$alias 不留在 registry 裡。"
+        echo "修法：重新在另一個視窗用另一個 org 的登入跑 claude setup-token，重跑本指令並選「覆蓋」；如果其實不需要，就不要登記 $alias。"
+        row "❌" "$alias org 核對" "同一個 org 已登記在 $owner（標籤「$olabel」${plan_part}），拒絕重複登記（已從 registry 取回）；修法：換用另一個 org 的 token 後重跑，選「覆蓋」"
+      else
+        echo "別名 $alias：同一個 org 已登記在 $owner；同一個 org 登記兩次會讓同一份額度被算兩次。$alias 仍在 registry 裡（未移除），請手動移除其中一個。"
+        echo "修法：請手動編輯 $ACC_DIR/registry.json 移除或停用其中一個（$alias 或 $owner），或改用另一個 org 的 token 重跑本指令並選「覆蓋」。"
+        row "❌" "$alias org 核對" "別名 $alias 仍在 registry 裡，且同一個 org 已登記在 $owner（標籤「$olabel」${plan_part}），未寫入 org 識別碼；修法：請手動從 registry.json 移除其中一個（$alias 或 $owner），或換用另一個 org 的 token 後重跑，選「覆蓋」"
+      fi
       continue ;;
     http_401)
       echo "別名 $alias 的 OAuth profile 回應 401（token 無效），停止整個流程。"

@@ -159,17 +159,20 @@ URL_GUARD_FAIL_FILE="$TEST_TMP/.url-guard-fail"
 PROFILE_URL_FOR() { printf '%s' "${ONBOARD_PROFILE_URL_OVERRIDE-http://127.0.0.1:$STUB_PORT/$(basename "$1")}"; }
 require_local_profile_url() { # <caller> <url>: fail closed so no helper ever reaches a real network URL
   local caller="$1" u="${2-}"
-  case "$u" in
-    http://127.0.0.1:*) ;;
-    *)
-      local msg="$caller: refusing empty or non-local ONBOARD_PROFILE_URL '$u'"
-      fail "$msg"
-      if [ "$BASHPID" != "$__TEST_TOP_BASHPID" ] && [ -n "${URL_GUARD_FAIL_FILE:-}" ]; then
-        printf '%s\n' "$msg" >> "$URL_GUARD_FAIL_FILE"
-      fi
-      return 1
-      ;;
-  esac
+  if ! U="$u" node -e '
+    const u = process.env.U || "";
+    if (!u) process.exit(1);
+    let parsed;
+    try { parsed = new URL(u); } catch (_) { process.exit(1); }
+    if (parsed.protocol !== "http:" || parsed.hostname !== "127.0.0.1" || parsed.username !== "" || parsed.password !== "") process.exit(1);
+  ' </dev/null >/dev/null 2>&1; then
+    local msg="$caller: refusing empty or non-local ONBOARD_PROFILE_URL '$u'"
+    fail "$msg"
+    if [ "$BASHPID" != "$__TEST_TOP_BASHPID" ] && [ -n "${URL_GUARD_FAIL_FILE:-}" ]; then
+      printf '%s\n' "$msg" >> "$URL_GUARD_FAIL_FILE"
+    fi
+    return 1
+  fi
 }
 run_onboard() {
   local script="$1" fx="$2" input="$3"; shift 3
@@ -527,6 +530,29 @@ assert_neq "$(rc_of "$fxc")" "0" "ORG3 same org in another letter case: refused"
 assert_contains "$(cat "$fxc/out.txt")" "❌  b org 核對" "ORG3 case-folded duplicate is a failed row"
 assert_contains "$(cat "$fxc/out.txt")" "同一個 org 已登記在 a" "ORG3 case-folded duplicate names owner"
 
+# O3b: re-run verifying an already-registered alias whose org_id is null when its token's org is owned by another alias:
+# unregister does not run (row already existed), so output says b is still registered and tells the operator to remove
+# one by hand, never claims 已從 registry 取回 / 不留在 registry, does not write org_id for b, and keeps b enabled.
+fxd2="$(mkfx "$TA" "$TB")"
+setctl "$fxd2" profiles "{\"$(tokfp "$TA")\":$(prof_ok "FAKE-ORG-X" "Org X" "claude_max" "default_claude_max_5x" "-"),\"$(tokfp "$TB")\":{\"status\":503,\"body\":{}}}"
+run_onboard "$SCRIPT" "$fxd2" "$INPUT_TOK" a b
+assert_eq "$(rc_of "$fxd2")" "0" "ORG3b initial run (a verified org X, b 503 unverified): exit 0"
+assert_contains "$(meta_of "$fxd2" a)" '"org_id":"fake-org-x"' "ORG3b a org_id verified as fake-org-x"
+assert_contains "$(meta_of "$fxd2" b)" '"org_id":null' "ORG3b b org_id stays null after stub failure"
+setctl "$fxd2" profiles "{\"$(tokfp "$TA")\":$(prof_ok "FAKE-ORG-X" "Org X" "claude_max" "default_claude_max_5x" "-"),\"$(tokfp "$TB")\":$(prof_ok "FAKE-ORG-X" "Org X" "claude_max" "default_claude_max_5x" "-")}"
+run_onboard "$SCRIPT" "$fxd2" $'\n\n' a b
+out_d2="$(cat "$fxd2/out.txt")"
+assert_neq "$(rc_of "$fxd2")" "0" "ORG3b re-run duplicate on existing alias: exit non-zero"
+assert_contains "$out_d2" "❌  b org 核對" "ORG3b b has a failed org row"
+assert_contains "$out_d2" "仍在 registry 裡" "ORG3b output says b is still registered"
+assert_contains "$out_d2" "同一個 org 已登記在 a" "ORG3b output says same org is registered as a"
+assert_contains "$out_d2" "手動" "ORG3b output tells operator to remove one by hand"
+assert_not_contains "$out_d2" "已從 registry 取回" "ORG3b output does NOT claim 已從 registry 取回"
+assert_not_contains "$out_d2" "不留在 registry" "ORG3b output does NOT claim 不留在 registry"
+assert_contains "$(meta_of "$fxd2" b)" '"org_id":null' "ORG3b b org_id remains null (not written)"
+assert_not_contains "$(meta_of "$fxd2" b)" "fake-org-x" "ORG3b duplicate org_id not written for b"
+assert_contains "$(cat "$(ACC "$fxd2")/registry.json")" '{"alias":"b","enabled":true,"priority":20}' "ORG3b registry still has b enabled"
+
 # Stub case (c): OAuth profile stub returns HTTP 401 -> failed row "token 無效", stops before global checks, no leak.
 fxc401="$(mkfx "$TA")"
 setctl "$fxc401" profileDefault '{"status":401,"body":{"error":{"type":"authentication_error","message":"invalid token"}}}'
@@ -690,7 +716,7 @@ printf '#!/usr/bin/env bash\n: > "%s/sentinel-ran"\n' "$fxm10" > "$nc10_sentinel
 chmod 755 "$nc10_sentinel"
 nc10_ugf="$TEST_TMP/nc10.ugf"
 nc10_plog_before="$(wc -l < "$fxo/profile.log")"
-for bad_u in "" "https://api.anthropic.com/api/oauth/profile" "http://localhost:$STUB_PORT/$(basename "$fxo")"; do
+for bad_u in "" "https://api.anthropic.com/api/oauth/profile" "http://localhost:$STUB_PORT/$(basename "$fxo")" "http://127.0.0.1:443""@""api.anthropic.com/api/oauth/profile" "http://127.0.0.1.evil.example:80/x"; do
   rm -f "$nc10_ugf"
   nc10_rc=0
   (
@@ -736,6 +762,30 @@ assert_eq "$nc10_rc" "0" "NC10 run_orgprofile 2-arg blocks empty default URL"
 assert_contains "$nc10_op_def_err" "FAIL [$TEST_NAME]" "NC10 run_orgprofile 2-arg empty override prints FAIL"
 nc10_plog_after="$(wc -l < "$fxo/profile.log")"
 assert_eq "$nc10_plog_after" "$nc10_plog_before" "NC10 blocked run_orgprofile calls never reached stub server"
+
+# NC11: Negative control for O3b (dup-takeback-claim) — revert the take-back check so duplicate:* always prints the
+# take-back claim -> O3b's "仍在 registry 裡" and no-"已從 registry 取回" assertions go red on the mutant and pass on
+# the restored script; also prove a non-zero unregister exit does not print the take-back claim.
+m11="$(mkmut duptakeback '/onboard:dup-takeback/s/-eq 1/-ge 0/')"
+fxm11="$(mkfx "$TA" "$TB")"
+setctl "$fxm11" profiles "{\"$(tokfp "$TA")\":$(prof_ok "FAKE-ORG-X" "Org X" "-" "-" "-"),\"$(tokfp "$TB")\":{\"status\":503,\"body\":{}}}"
+run_onboard "$SCRIPT" "$fxm11" "$INPUT_TOK" a b
+setctl "$fxm11" profiles "{\"$(tokfp "$TA")\":$(prof_ok "FAKE-ORG-X" "Org X" "-" "-" "-"),\"$(tokfp "$TB")\":$(prof_ok "FAKE-ORG-X" "Org X" "-" "-" "-")}"
+run_onboard "$m11" "$fxm11" $'\n\n' a b
+assert_contains "$(cat "$fxm11/out.txt")" "已從 registry 取回" "NC11 reverted script falsely claims 已從 registry 取回 (O3b would go red)"
+assert_not_contains "$(cat "$fxm11/out.txt")" "仍在 registry 裡" "NC11 reverted script omits still-registered message (O3b would go red)"
+assert_contains "$(cat "$(ACC "$fxm11")/registry.json")" '{"alias":"b","enabled":true,"priority":20}' "NC11 b remained enabled in registry despite false take-back claim"
+run_onboard "$SCRIPT" "$fxm11" $'\n\n' a b
+assert_neq "$(rc_of "$fxm11")" "0" "NC11 restored script exits non-zero"
+assert_contains "$(cat "$fxm11/out.txt")" "仍在 registry 裡" "NC11 restored script reports b still registered"
+assert_not_contains "$(cat "$fxm11/out.txt")" "已從 registry 取回" "NC11 restored script does not claim 已從 registry 取回"
+assert_contains "$(cat "$(ACC "$fxm11")/registry.json")" '{"alias":"b","enabled":true,"priority":20}' "NC11 restored script leaves b enabled in registry"
+m11b="$(mkmut unregfail "s/mode === 'unregister') {/mode === 'unregister') { process.exit(1);/")"
+fxm11b="$(mkfx "$TA" "$TB")"; setctl "$fxm11b" profileDefault "$(prof_ok "FAKE-ORG-1" "Shared Org" "-" "-" "-")"
+run_onboard "$m11b" "$fxm11b" "$INPUT_TOK" a b
+assert_neq "$(rc_of "$fxm11b")" "0" "NC11b unregister non-zero exit still fails the run"
+assert_contains "$(cat "$fxm11b/out.txt")" "仍在 registry 裡" "NC11b unregister non-zero exit reports b still registered"
+assert_not_contains "$(cat "$fxm11b/out.txt")" "已從 registry 取回" "NC11b unregister non-zero exit does not claim 已從 registry 取回"
 
 if [ -s "$URL_GUARD_FAIL_FILE" ]; then
   _ug_msg=""

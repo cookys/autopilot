@@ -155,14 +155,32 @@ tree_digest() { ( cd "$1" 2>/dev/null && find . -printf '%p %m\n' -type f -exec 
 
 # run_onboard <script> <fx> <stdin-text> <alias>...: leaves out.txt err.txt rc and 0.1 s `ps -eo args` snaps/N in <fx>.
 YESFLAG=(--yes)  # every run skips the plan question unless a case sets YESFLAG=() (then the input must start with y)
-PROFILE_URL_FOR() { printf '%s' "${ONBOARD_PROFILE_URL_OVERRIDE:-http://127.0.0.1:$STUB_PORT/$(basename "$1")}"; }
+URL_GUARD_FAIL_FILE="$TEST_TMP/.url-guard-fail"
+PROFILE_URL_FOR() { printf '%s' "${ONBOARD_PROFILE_URL_OVERRIDE-http://127.0.0.1:$STUB_PORT/$(basename "$1")}"; }
+require_local_profile_url() { # <caller> <url>: fail closed so no helper ever reaches a real network URL
+  local caller="$1" u="${2-}"
+  case "$u" in
+    http://127.0.0.1:*) ;;
+    *)
+      local msg="$caller: refusing empty or non-local ONBOARD_PROFILE_URL '$u'"
+      fail "$msg"
+      if [ "$BASHPID" != "$__TEST_TOP_BASHPID" ] && [ -n "${URL_GUARD_FAIL_FILE:-}" ]; then
+        printf '%s\n' "$msg" >> "$URL_GUARD_FAIL_FILE"
+      fi
+      return 1
+      ;;
+  esac
+}
 run_onboard() {
   local script="$1" fx="$2" input="$3"; shift 3
-  rm -rf "$fx/snaps" "$fx/rc"; mkdir -p "$fx/snaps"
+  rm -rf "$fx/snaps" "$fx/rc" "$fx/exec.trace"; mkdir -p "$fx/snaps"
   local tr=() purl
   purl="$(PROFILE_URL_FOR "$fx")"
+  if ! require_local_profile_url run_onboard "$purl"; then
+    : > "$fx/out.txt"; : > "$fx/err.txt"
+    return 1
+  fi
   [ "$HAVE_STRACE" = 1 ] && tr=(strace -f -e trace=execve -s 65536 -o "$fx/exec.trace" --)
-  rm -f "$fx/exec.trace"
   ( ${tr[@]+"${tr[@]}"} env -i PATH="$PATH" LANG=C HOME="$fx/fakehome" TMPDIR="$fx/tmp" XDG_RUNTIME_DIR="$fx/run" \
       AUTOPILOT_ACCOUNTS_DIR="$fx/fakehome/.config/autopilot/accounts" AUTOPILOT_LIVE_DIR="$fx/live" \
       AUTOPILOT_STATE_DIR="$fx/state" AUTOPILOT_CONFIG="$fx/config.json" ENGINE_CAPABILITY_DIR="$fx/ecd" \
@@ -429,7 +447,10 @@ assert_eq "$(leak_places "$fxo" "$TB")" "" "ORG1/(e) token b never appears in an
 # Direct `orgprofile <alias>` helper mode checks: 5-line ok output, dropped email-shaped org.name, and all 5 fail:<code> exits (all exit 0).
 HELPER_JS="$(awk '/^read -r -d .. NODE_HELPER/{f=1;next} /^JS$/{f=0} f' "$SCRIPT")"
 run_orgprofile() { # <fx> <alias> [url]
-  local fx="$1" al="$2" u="${3:-$(PROFILE_URL_FOR "$fx")}"
+  local fx="$1" al="$2"
+  local u="${3:-$(PROFILE_URL_FOR "$fx")}"
+  if [ "$#" -ge 3 ]; then u="$3"; fi
+  require_local_profile_url run_orgprofile "$u" || return 1
   env -i PATH="$PATH" HOME="$fx/fakehome" AUTOPILOT_ACCOUNTS_DIR="$(ACC "$fx")" ONBOARD_PROFILE_URL="$u" \
     node -e "$HELPER_JS" "$REPO_ROOT" orgprofile "$al" < /dev/null
 }
@@ -590,6 +611,10 @@ run_tty() { # <fx> <input> <arg>...
   local fx="$1" input="$2" purl; shift 2
   purl="$(PROFILE_URL_FOR "$fx")"
   rm -f "$fx/rc"
+  if ! require_local_profile_url run_tty "$purl"; then
+    : > "$fx/out.txt"; : > "$fx/err.txt"
+    return 1
+  fi
   ( printf '%s' "$input" | env -i PATH="$PATH" LANG=C HOME="$fx/fakehome" TMPDIR="$fx/tmp" XDG_RUNTIME_DIR="$fx/run" \
       AUTOPILOT_ACCOUNTS_DIR="$fx/fakehome/.config/autopilot/accounts" AUTOPILOT_LIVE_DIR="$fx/live" \
       AUTOPILOT_STATE_DIR="$fx/state" AUTOPILOT_CONFIG="$fx/config.json" ENGINE_CAPABILITY_DIR="$fx/ecd" \
@@ -658,5 +683,65 @@ fxm8="$(mkfx "$TA")"
 run_onboard "$m8" "$fxm8" "$TA"$'\n' --org "a=$FAKE_EMAIL" a
 assert_contains "$(no_email "$fxm8")" "leaked-file" "NC8 without the label check the e-mail is written to a file (the ORG5 case would be red)"
 
+# NC10: fail-closed URL guard refuses empty or non-127.0.0.1 URLs in run_orgprofile and run_onboard without running the helper.
+fxm10="$(mkfx "$TA")"
+nc10_sentinel="$TEST_TMP/nc10-sentinel.sh"
+printf '#!/usr/bin/env bash\n: > "%s/sentinel-ran"\n' "$fxm10" > "$nc10_sentinel"
+chmod 755 "$nc10_sentinel"
+nc10_ugf="$TEST_TMP/nc10.ugf"
+nc10_plog_before="$(wc -l < "$fxo/profile.log")"
+for bad_u in "" "https://api.anthropic.com/api/oauth/profile" "http://localhost:$STUB_PORT/$(basename "$fxo")"; do
+  rm -f "$nc10_ugf"
+  nc10_rc=0
+  (
+    __TEST_FAIL_MSGS=()
+    URL_GUARD_FAIL_FILE="$nc10_ugf"
+    out=""
+    op_rc=0
+    out="$(run_orgprofile "$fxo" a "$bad_u")" || op_rc=$?
+    [ "$op_rc" -ne 0 ] && [ -z "$out" ] && [ -s "$nc10_ugf" ]
+  ) 2>"$TEST_TMP/nc10-op.err" || nc10_rc=$?
+  nc10_op_err="$(cat "$TEST_TMP/nc10-op.err")"
+  assert_eq "$nc10_rc" "0" "NC10 run_orgprofile blocks URL '$bad_u' and counts failure"
+  assert_contains "$nc10_op_err" "FAIL [$TEST_NAME]" "NC10 run_orgprofile prints FAIL for '$bad_u'"
+
+  rm -f "$nc10_ugf"
+  nc10_rc=0
+  (
+    __TEST_FAIL_MSGS=()
+    URL_GUARD_FAIL_FILE="$nc10_ugf"
+    ONBOARD_PROFILE_URL_OVERRIDE="$bad_u"
+    ob_rc=0
+    run_onboard "$nc10_sentinel" "$fxm10" "" a || ob_rc=$?
+    [ "$ob_rc" -ne 0 ] && [ "${#__TEST_FAIL_MSGS[@]}" -eq 1 ] && [ -s "$nc10_ugf" ]
+  ) 2>"$TEST_TMP/nc10-ob.err" || nc10_rc=$?
+  nc10_ob_err="$(cat "$TEST_TMP/nc10-ob.err")"
+  assert_eq "$nc10_rc" "0" "NC10 run_onboard blocks URL '$bad_u' and counts failure"
+  assert_contains "$nc10_ob_err" "FAIL [$TEST_NAME]" "NC10 run_onboard prints FAIL for '$bad_u'"
+  assert_file_absent "$fxm10/sentinel-ran" "NC10 run_onboard never ran helper for '$bad_u'"
+done
+rm -f "$nc10_ugf"
+nc10_rc=0
+(
+  __TEST_FAIL_MSGS=()
+  URL_GUARD_FAIL_FILE="$nc10_ugf"
+  ONBOARD_PROFILE_URL_OVERRIDE=""
+  out=""
+  op_rc=0
+  out="$(run_orgprofile "$fxo" a)" || op_rc=$?
+  [ "$op_rc" -ne 0 ] && [ -z "$out" ] && [ -s "$nc10_ugf" ]
+) 2>"$TEST_TMP/nc10-op-def.err" || nc10_rc=$?
+nc10_op_def_err="$(cat "$TEST_TMP/nc10-op-def.err")"
+assert_eq "$nc10_rc" "0" "NC10 run_orgprofile 2-arg blocks empty default URL"
+assert_contains "$nc10_op_def_err" "FAIL [$TEST_NAME]" "NC10 run_orgprofile 2-arg empty override prints FAIL"
+nc10_plog_after="$(wc -l < "$fxo/profile.log")"
+assert_eq "$nc10_plog_after" "$nc10_plog_before" "NC10 blocked run_orgprofile calls never reached stub server"
+
+if [ -s "$URL_GUARD_FAIL_FILE" ]; then
+  _ug_msg=""
+  while IFS= read -r _ug_msg || [ -n "$_ug_msg" ]; do
+    __TEST_FAIL_MSGS+=("$_ug_msg")
+  done < "$URL_GUARD_FAIL_FILE"
+fi
 stop_stub_only
 finalize_test

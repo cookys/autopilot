@@ -211,4 +211,4 @@ Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) t
 - 帳號別名只由 `scripts/lib/account-alias.js` 算出，工具不會自己開 `.claude.json`，也不碰任何 `.credentials.json`。
 - 車道紀錄放 `~/.config/autopilot/lanes/<lane>.json`（權限 0600，欄位同上面的 Lane manifest 表，加 pane 與 session id；不得含提示詞）。
 - 回滾：同一個指令，`--profile` 改成原本的 profile。
-- 計畫與步驟：`docs/plans/2026-11-10-profile-switch.md`。
+- 計畫與步驟：`project/plans/2026-11-10-profile-switch.md`。

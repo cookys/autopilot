@@ -9,6 +9,7 @@
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
 | 2026-11-11 | [Agent brief Cost line for fable and opus](../plans/2026-11-11-brief-cost-line.md) | active | — | [plan](../plans/2026-11-11-brief-cost-line.md) |
+| 2026-11-10 | [Claude login profile switching (move a lane to the subscription that has room)](../plans/2026-11-10-profile-switch.md) | active | — | [plan](../plans/2026-11-10-profile-switch.md) |
 | 2026-11-03 | [G37: account aliases and automatic account switching for headless and lane claude](../plans/2026-11-03-g37-account-switching.md) | active | — | [plan](../plans/2026-11-03-g37-account-switching.md) |
 | 2026-11-03 | [G40-data: the agent lane gets its own live quota for every alias](../plans/2026-11-03-g40-agent-lane-quota.md) | active | — | [plan](../plans/2026-11-03-g40-agent-lane-quota.md) |
 | 2026-11-05 | [role kits for weak models: direction, five spikes, gated A/B (draft, awaiting plan review)](../plans/2026-11-05-rolekit-direction.md) | active | — | [plan](../plans/2026-11-05-rolekit-direction.md) |

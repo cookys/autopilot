@@ -8,6 +8,7 @@
 // and the token never appears in a result, an error or the output.
 //
 //   node scripts/quota-provider-sync.js sync-provider --provider minimax|glm [--alias NAME]
+//   HTTP 401 writes an empty-windows L1 row with token_state 'invalid' and returns reason `token_invalid` (exit 1); other non-2xx: `http_status`.
 //   exit 0 = a row was written or is already current; 1 = nothing written (reason code on stderr); 2 = usage.
 //
 //   syncProvider(provider, o)  async -> { provider, alias, wrote, reason, tightest? }
@@ -166,6 +167,17 @@ async function syncProvider(provider, o) {
       });
     } catch (_) { return out(false, 'request_failed'); }
     const nowMs = typeof opts.nowMs === 'function' ? opts.nowMs() : Date.now();
+    if (res && res.status === 401) {
+      // The provider rejected the token: record that (empty windows, L1, token_state invalid, seconds) so consumers see it is bad.
+      const bad = { schema: observation.SCHEMA, provider, alias, visibility: 'L1', windows: [], refusal: null,
+        token_state: 'invalid', token_state_at: Math.floor(nowMs / 1000) };
+      if (typeof opts.hostRole === 'string' && opts.hostRole) bad.host_role = opts.hostRole;
+      const bv = observation.validateRecord(bad, { provider, alias, secrets: [token] });
+      if (!bv.ok) return out(false, 'quota_invalid');
+      const bw = observation.writeLocalRow(liveDir, bad, { secrets: [token] });
+      if (bw.ok !== true) return out(false, typeof bw.code === 'string' ? bw.code : 'write_failed');
+      return out(false, 'token_invalid');
+    }
     if (!res || typeof res.status !== 'number' || res.status < 200 || res.status > 299) return out(false, 'http_status');
     let json;
     try { json = await res.json(); } catch (_) { return out(false, 'json_invalid'); }

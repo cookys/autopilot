@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * lane-switch.js - move a lane to another login profile (plan docs/plans/2026-11-10-profile-switch.md, P2).
+ * lane-switch.js - move a lane to another login profile (plan project/plans/2026-11-10-profile-switch.md, P2).
  *
  *   node scripts/lane-switch.js --lane L --profile P --order <fleet message id> [--dry-run]
  *

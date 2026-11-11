@@ -1341,10 +1341,21 @@
       "audience": "internal",
       "class": "path_seam",
       "default": null,
-      "readers": ["scripts/lib/fleet-decision.js", "scripts/profile-health.js"],
+      "readers": ["scripts/lib/fleet-decision.js", "scripts/profile-health.js", "scripts/quota-provider-sync.js"],
       "doc": null,
       "relates": [],
-      "note": "Path of the fleet binary used by fleet-decision.js and profile-health.js (default: fleet on PATH). Tests point it at a stub."
+      "note": "Path of the fleet binary used by fleet-decision.js, profile-health.js and quota-provider-sync.js (default: fleet on PATH). Tests point it at a stub."
+    },
+    {
+      "name": "AUTOPILOT_QUOTA_WATCH_TO",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/quota-provider-sync.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_PM_ADDRESS", "AUTOPILOT_FLEET_BIN"],
+      "note": "Comma-separated fleet recipient addresses for the one-shot GLM rolling_5h percentage > 0 probe watch in scripts/quota-provider-sync.js (falls back to AUTOPILOT_PM_ADDRESS)."
     },
     {
       "name": "AUTOPILOT_CLAUDE_BIN",
@@ -6092,7 +6103,8 @@
       "group": "accounts",
       "default": null,
       "readers": [
-        "scripts/profile-health.js"
+        "scripts/profile-health.js",
+        "scripts/quota-provider-sync.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],

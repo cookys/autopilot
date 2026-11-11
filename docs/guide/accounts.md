@@ -179,6 +179,11 @@ node scripts/claude-account.js set-default --restore <accounts-dir>/registry.jso
 - `rollback --profile <sub>` 回復最新一次 run（`--all` 回復全部，由新到舊）：只在該項目仍是符號連結且目標與紀錄相同時才移除，不符的略過並回報（結束碼 1）；目標不動，profile 目錄即使是空的也保留，移除目錄是操作員的手動步驟。
 - 登入由操作員自己在瀏覽器完成，本工具不執行也不讀取任何登入資料。
 
+### Login checklist
+
+`node scripts/login-checklist.js --hosts <file> [--json]` prints, for every host, OS account and profile in the file, the numbered steps the operator types once: open a terminal, `node ~/projects/autopilot/scripts/profile-link.js apply --profile <sub>`, `CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/<sub>" claude auth login --claudeai`, sign in with that subscription in the browser, `... claude auth status --text`, then `node ~/projects/autopilot/scripts/profile-health.js check`. Every step starts with "在 <host>、OS 帳號 <user>：". The file is a JSON array such as `[{"host":"cookys-aimax395","os_account":"team","profiles":["singularaion","stranity"]}]`; unknown keys, names outside the profile-name grammar, empty lists, a repeated (host, OS account) pair and one subscription twice in one OS account are refused (exit 2). `home` (the native `~/.claude`) needs no relogin and yields a note, not a step. The tool only prints: it never runs claude and never reads any credential or `~/.claude` file.
+
+
 ## Lane manifest
 
 Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) to reopen them the same way. There is no manifest file in the repo yet; this is the shape to record:

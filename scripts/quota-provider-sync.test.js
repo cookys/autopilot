@@ -136,9 +136,9 @@ test('glm: normal body maps unit 3/number 5 to rolling_5h and unit 6/number 1 to
   assert.deepStrictEqual([r.wrote, r.reason, r.assumed], [true, null, true]);
   assert.deepStrictEqual(r.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
-      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
-      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: true },
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: true },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: false },
     ],
   });
   const rec = readRow(liveDir, 'glm', 'glm');
@@ -167,8 +167,8 @@ test('glm shape: 5h TOKENS_LIMIT with past nextResetTime marks dropped expired i
   assert.strictEqual(r.wrote, true);
   assert.deepStrictEqual(r.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'expired', keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
-      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'expired', keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: true },
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: true },
     ],
   });
   const rec = readRow(liveDir, 'glm', 'glm');
@@ -185,8 +185,8 @@ test('glm shape: response without unit 3/number 5 lists limits with used_window 
   assert.deepStrictEqual([unmappedOnly.r.wrote, unmappedOnly.r.reason], [false, 'fields_missing']);
   assert.deepStrictEqual(unmappedOnly.r.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 1, number: 2, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
-      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TOKENS_LIMIT', unit: 1, number: 2, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: false },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: false },
     ],
   });
 
@@ -197,8 +197,8 @@ test('glm shape: response without unit 3/number 5 lists limits with used_window 
   assert.strictEqual(weeklyPlusUnmapped.r.wrote, true);
   assert.deepStrictEqual(weeklyPlusUnmapped.r.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
-      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: true },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: false },
     ],
   });
 
@@ -210,8 +210,8 @@ test('glm shape: response without unit 3/number 5 lists limits with used_window 
   assert.strictEqual(edge.ok, false);
   assert.deepStrictEqual(edge.shape, {
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'fields_missing', keys: ['number', 'type', 'unit'], missing: ['percentage', 'nextResetTime'], pct_from: null, reset_assumed: false },
-      { type: 'L'.repeat(32), unit: null, number: null, used_window: null, dropped: null, keys: ['number', 'type', 'unit'], missing: ['percentage', 'nextResetTime'], pct_from: null, reset_assumed: false },
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'fields_missing', keys: ['number', 'type', 'unit'], missing: ['percentage', 'nextResetTime'], pct_from: null, reset_assumed: false, pct_positive: false },
+      { type: 'L'.repeat(32), unit: null, number: null, used_window: null, dropped: null, keys: ['number', 'type', 'unit'], missing: ['percentage', 'nextResetTime'], pct_from: null, reset_assumed: false, pct_positive: false },
     ],
   });
 
@@ -308,15 +308,22 @@ test('CLI: main() prints shape on stdout/stderr and shape + stdout/stderr never 
     '};',
   ].join('\n'), 'utf8');
 
+  const fakeFleet = path.join(stubDir, 'fake-fleet');
+  fs.writeFileSync(fakeFleet, '#!/usr/bin/env node\nprocess.exit(0);\n', { mode: 0o755 });
+
   const glmOk = spawnSync(process.execPath, ['--require', preload, SRC, 'sync-provider', '--provider', 'glm'], {
-    env: { PATH: process.env.PATH, AUTOPILOT_LIVE_DIR: tmpLive(), AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN, QPS_STUB_MODE: 'glm-ok', QPS_STUB_TOK: FAKE_TOKEN },
+    env: {
+      PATH: process.env.PATH, AUTOPILOT_LIVE_DIR: tmpLive(), AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN,
+      AUTOPILOT_QUOTA_WATCH_TO: 'ns/courier/member', AUTOPILOT_FLEET_BIN: fakeFleet,
+      QPS_STUB_MODE: 'glm-ok', QPS_STUB_TOK: FAKE_TOKEN,
+    },
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
   });
   assert.strictEqual(glmOk.status, 0);
   const expectedGlmShape = JSON.stringify({
     limits: [
-      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
-      { type: null, unit: 9, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false },
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: true },
+      { type: null, unit: 9, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: false },
     ],
   });
   assert.strictEqual(glmOk.stdout, `sync-provider glm/glm: wrote shape=${expectedGlmShape}\n`);
@@ -339,7 +346,7 @@ test('CLI: main() prints shape on stdout/stderr and shape + stdout/stderr never 
   });
   assert.strictEqual(glmMiss.status, 1);
   const expectedMissShape = JSON.stringify({
-    limits: [{ type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false }],
+    limits: [{ type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null, keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'], missing: [], pct_from: null, reset_assumed: false, pct_positive: false }],
   });
   assert.strictEqual(glmMiss.stderr, `sync-provider glm/glm: fields_missing shape=${expectedMissShape}\n`);
   assert.strictEqual(glmMiss.stdout, '');
@@ -711,7 +718,7 @@ test('glm (a): 5h entry with percentage 0 and no nextResetTime writes rolling_5h
     limits: [{
       type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null,
       keys: ['number', 'percentage', 'type', 'unit'], missing: ['nextResetTime'],
-      pct_from: null, reset_assumed: true,
+      pct_from: null, reset_assumed: true, pct_positive: false,
     }],
   });
   const rec = readRow(liveDir, 'glm', 'glm');
@@ -725,6 +732,7 @@ test('glm (a): 5h entry with percentage 0 and no nextResetTime writes rolling_5h
   const wkOnly = await run(real, 'glm', glm([{ type: 'TOKENS_LIMIT', unit: 6, number: 1, percentage: 0 }]));
   assert.strictEqual(wkOnly.r.wrote, true);
   assert.strictEqual(wkOnly.r.shape.limits[0].reset_assumed, true);
+  assert.strictEqual(wkOnly.r.shape.limits[0].pct_positive, false);
   assert.deepStrictEqual(wkOnly.r.shape.limits[0].missing, ['nextResetTime']);
   assert.strictEqual(readRow(wkOnly.liveDir, 'glm', 'glm').windows[0].resets_at, NOW_S + 7 * 86400);
 });
@@ -738,6 +746,7 @@ test('glm (b): 5h entry with percentage 12 and no nextResetTime stays fields_mis
     assert.strictEqual(r.shape.limits[0].used_window, 'rolling_5h');
     assert.strictEqual(r.shape.limits[0].dropped, 'fields_missing');
     assert.strictEqual(r.shape.limits[0].reset_assumed, false);
+    assert.strictEqual(r.shape.limits[0].pct_positive, true);
     assert.deepStrictEqual(r.shape.limits[0].missing, ['nextResetTime']);
     assert.strictEqual(readRow(liveDir, 'glm', 'glm'), null);
   }
@@ -752,7 +761,7 @@ test('glm (c): percentage fallback from currentValue/usage or remaining/usage (c
     limits: [{
       type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null,
       keys: ['currentValue', 'nextResetTime', 'number', 'type', 'unit', 'usage'],
-      missing: ['percentage'], pct_from: 'currentValue', reset_assumed: false,
+      missing: ['percentage'], pct_from: 'currentValue', reset_assumed: false, pct_positive: true,
     }],
   });
   const w5 = readRow(liveDir, 'glm', 'glm').windows.find((w) => w.kind === 'rolling_5h');
@@ -874,8 +883,312 @@ test('planted: breaking nextResetTime fallback (3) to also accept pct > 0 turns 
   assert.throws(() => assertNoToken16(JSON.stringify(badKeys.shape), LONG_TOK), /16-char token substring/);
 });
 
+// ---- one-shot watch: first GLM rolling_5h with percentage > 0
+function captureStderr(fn) {
+  const chunks = [];
+  const orig = process.stderr.write;
+  process.stderr.write = (chunk) => { chunks.push(String(chunk)); return true; };
+  try {
+    return { result: fn(), stderr: chunks.join('') };
+  } finally {
+    process.stderr.write = orig;
+  }
+}
+const watchMarker = (liveDir, alias = 'glm') => path.join(observation.mirrorDir(liveDir, 'glm'), `${alias}.first-used-5h.json`);
+
+test('watch (a): pct 0 entry (and non-rolling_5h entries) -> pct_positive false on 5h, no send, no marker', async () => {
+  for (const limits of [
+    [g5(0)],
+    [{ type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 0 }],
+    [{ type: 'TOKENS_LIMIT', unit: 3, number: 5, currentValue: 0, usage: 100 }],
+    [{ type: 'TIME_LIMIT', unit: 5, number: 1, percentage: 99, nextResetTime: (NOW_S + 3600) * 1000 }],
+    [gw(50)],
+  ]) {
+    const { r, liveDir } = await run(real, 'glm', glm(limits));
+    if (limits[0].unit === 3 && limits[0].number === 5) {
+      assert.strictEqual(r.shape.limits[0].pct_positive, false);
+    }
+    const sent = [];
+    const w = real.watchFirstUsed5h(r, {
+      liveDir,
+      env: { AUTOPILOT_QUOTA_WATCH_TO: 'ns/courier/member' },
+      nowMs: () => NOW,
+      send: (addr, msg) => { sent.push([addr, msg]); return { status: 0 }; },
+    });
+    assert.deepStrictEqual(w, { fired: false });
+    assert.strictEqual(sent.length, 0);
+    assert.strictEqual(fs.existsSync(watchMarker(liveDir)), false);
+  }
+});
+
+test('watch (b): percentage 37 with nextResetTime -> pct_positive true, one send per recipient, 0600 marker with keys/missing', async () => {
+  const { r, liveDir } = await run(real, 'glm', glm([g5(37), gw(0)]));
+  assert.strictEqual(r.wrote, true);
+  assert.strictEqual(r.shape.limits[0].pct_positive, true);
+  assert.strictEqual(r.shape.limits[1].pct_positive, false);
+
+  const sent = [];
+  const w = real.watchFirstUsed5h(r, {
+    liveDir,
+    env: { AUTOPILOT_QUOTA_WATCH_TO: ' ns/courier/alpha , , ns/courier/beta ', AUTOPILOT_PM_ADDRESS: 'ns/courier/unused' },
+    nowMs: () => NOW + 789,
+    send: (addr, msg) => { sent.push([addr, msg]); return { status: 0 }; },
+  });
+  assert.deepStrictEqual(w, { fired: true, sent: 2 });
+  const expectedMsg = '[quota-watch] GLM glm rolling_5h 第一次出現 percentage>0：'
+    + 'keys=["nextResetTime","number","percentage","type","unit"] missing=[] pct_from=null dropped=null reset_assumed=false';
+  assert.deepStrictEqual(sent, [
+    ['ns/courier/alpha', expectedMsg],
+    ['ns/courier/beta', expectedMsg],
+  ]);
+
+  const markerPath = watchMarker(liveDir, 'glm');
+  assert.strictEqual(path.dirname(markerPath), path.dirname(path.join(liveDir, 'quota', 'glm', 'glm.attempt')));
+  assert.strictEqual(fs.existsSync(markerPath), true);
+  assert.strictEqual(fs.statSync(markerPath).mode & 0o777, 0o600);
+  const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  assert.deepStrictEqual(marker, {
+    at: NOW_S,
+    alias: 'glm',
+    entry: {
+      type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null,
+      keys: ['nextResetTime', 'number', 'percentage', 'type', 'unit'],
+      missing: [], pct_from: null, reset_assumed: false, pct_positive: true,
+    },
+  });
+
+  // Fallback to AUTOPILOT_PM_ADDRESS when AUTOPILOT_QUOTA_WATCH_TO is unset or empty
+  const fallbackRun = await run(real, 'glm', glm([g5(37)]));
+  const fallbackSent = [];
+  const fw = real.watchFirstUsed5h(fallbackRun.r, {
+    liveDir: fallbackRun.liveDir,
+    env: { AUTOPILOT_QUOTA_WATCH_TO: ' , ', AUTOPILOT_PM_ADDRESS: ' ns/courier/pm ' },
+    nowMs: NOW,
+    send: (addr, msg) => { fallbackSent.push([addr, msg]); return { status: 0 }; },
+  });
+  assert.deepStrictEqual(fw, { fired: true, sent: 1 });
+  assert.deepStrictEqual(fallbackSent, [['ns/courier/pm', expectedMsg]]);
+});
+
+test('watch (c) & (d): percentage 37 without nextResetTime -> dropped fields_missing AND fires; second call with marker -> no send', async () => {
+  const { r, liveDir } = await run(real, 'glm', glm([
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5, percentage: 37 },
+  ]), 200, { alias: 'glm-alt' });
+  assert.deepStrictEqual([r.wrote, r.reason], [false, 'fields_missing']);
+  assert.strictEqual(r.shape.limits[0].dropped, 'fields_missing');
+  assert.strictEqual(r.shape.limits[0].pct_positive, true);
+  assert.deepStrictEqual(r.shape.limits[0].missing, ['nextResetTime']);
+
+  const sent = [];
+  const env = { AUTOPILOT_QUOTA_WATCH_TO: 'ns/courier/member' };
+  const first = real.watchFirstUsed5h(r, {
+    liveDir, env, nowMs: () => NOW,
+    send: (addr, msg) => { sent.push([addr, msg]); return { status: 0 }; },
+  });
+  assert.deepStrictEqual(first, { fired: true, sent: 1 });
+  const expectedMsg = '[quota-watch] GLM glm-alt rolling_5h 第一次出現 percentage>0：'
+    + 'keys=["number","percentage","type","unit"] missing=["nextResetTime"] pct_from=null dropped=fields_missing reset_assumed=false';
+  assert.deepStrictEqual(sent, [['ns/courier/member', expectedMsg]]);
+
+  const markerPath = watchMarker(liveDir, 'glm-alt');
+  assert.strictEqual(fs.existsSync(markerPath), true);
+  const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  assert.strictEqual(marker.alias, 'glm-alt');
+  assert.strictEqual(marker.entry.dropped, 'fields_missing');
+  assert.deepStrictEqual(marker.entry.missing, ['nextResetTime']);
+
+  // (d) second call with marker present -> no send
+  const second = real.watchFirstUsed5h(r, {
+    liveDir, env, nowMs: () => NOW + 3600e3,
+    send: (addr, msg) => { sent.push([addr, msg]); return { status: 0 }; },
+  });
+  assert.deepStrictEqual(second, { fired: false, reason: 'already' });
+  assert.strictEqual(sent.length, 1);
+});
+
+test('watch (e): failing send (stub exit 1) writes no marker, warns on stderr, and retries on second call (injectable + AUTOPILOT_FLEET_BIN + CLI)', async () => {
+  const { spawnSync } = require('child_process');
+  const { r, liveDir } = await run(real, 'glm', glm([g5(37)]));
+  const env = { AUTOPILOT_QUOTA_WATCH_TO: 'ns/courier/a,ns/courier/b' };
+
+  // Partial failure (second recipient exits 1) -> no marker
+  let attempt = 0;
+  const calls = [];
+  const first = captureStderr(() => real.watchFirstUsed5h(r, {
+    liveDir, env, nowMs: () => NOW,
+    send: (addr, msg) => {
+      calls.push(addr);
+      attempt++;
+      return { status: attempt === 2 ? 1 : 0 };
+    },
+  }));
+  assert.deepStrictEqual(first.result, { fired: false, reason: 'send_failed' });
+  assert.deepStrictEqual(calls, ['ns/courier/a', 'ns/courier/b']);
+  assert.strictEqual(first.stderr.trim().split('\n').length, 1);
+  assert.strictEqual(fs.existsSync(watchMarker(liveDir)), false);
+
+  // Second call retries and writes marker once all exit 0
+  const second = real.watchFirstUsed5h(r, {
+    liveDir, env, nowMs: () => NOW + 3600e3,
+    send: (addr) => { calls.push(addr); return { status: 0 }; },
+  });
+  assert.deepStrictEqual(second, { fired: true, sent: 2 });
+  assert.strictEqual(fs.existsSync(watchMarker(liveDir)), true);
+
+  // End-to-end default spawnSync via stub AUTOPILOT_FLEET_BIN + CLI main() exit code / stdout preservation
+  const stubDir = tmpLive();
+  const fleetLog = path.join(stubDir, 'fleet-calls.jsonl');
+  const fleetBin = path.join(stubDir, 'stub-fleet');
+  fs.writeFileSync(fleetBin, [
+    '#!/usr/bin/env node',
+    "'use strict';",
+    "const fs = require('fs');",
+    'fs.appendFileSync(process.env.QPS_FLEET_LOG, JSON.stringify({ argv: process.argv.slice(2), hasFyi: "FLEET_FYI" in process.env, hasTok: "AUTOPILOT_ENDPOINT_GLM_TOKEN" in process.env }) + "\\n");',
+    'process.exit(process.env.QPS_FLEET_EXIT === "1" ? 1 : 0);',
+  ].join('\n'), { mode: 0o755 });
+  const preload = path.join(stubDir, 'preload-watch-cli.js');
+  fs.writeFileSync(preload, [
+    "'use strict';",
+    'globalThis.fetch = async () => {',
+    '  const mode = process.env.QPS_WATCH_MODE;',
+    '  if (mode === "no-reset") {',
+    '    return { status: 200, json: async () => ({ data: { limits: [{ type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 37 }] } }) };',
+    '  }',
+    '  return { status: 200, json: async () => ({ data: { limits: [{ type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 37, nextResetTime: Date.now() + 3600000 }] } }) };',
+    '};',
+  ].join('\n'), 'utf8');
+
+  const cliLive = tmpLive();
+  const baseEnv = {
+    PATH: process.env.PATH,
+    AUTOPILOT_LIVE_DIR: cliLive,
+    AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN,
+    AUTOPILOT_QUOTA_WATCH_TO: 'ns/courier/member',
+    AUTOPILOT_FLEET_BIN: fleetBin,
+    FLEET_FYI: '1',
+    QPS_FLEET_LOG: fleetLog,
+  };
+
+  // Failing fleet send on wrote=true: main() still exits 0 with unchanged stdout line, no marker written
+  const cliFailSend = spawnSync(process.execPath, ['--require', preload, SRC, 'sync-provider', '--provider', 'glm', '--alias', 'glm-cli'], {
+    env: { ...baseEnv, QPS_FLEET_EXIT: '1', QPS_WATCH_MODE: 'with-reset' },
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(cliFailSend.status, 0);
+  assert.match(cliFailSend.stdout, /^sync-provider glm\/glm-cli: wrote shape=.*\n$/);
+  assert.strictEqual(cliFailSend.stdout.trim().split('\n').length, 1);
+  assert.strictEqual(fs.existsSync(watchMarker(cliLive, 'glm-cli')), false);
+
+  // Failing syncProvider (fields_missing) with succeeding fleet send: main() still exits 1 with empty stdout, marker written
+  const cliMissLive = tmpLive();
+  const cliMissOkSend = spawnSync(process.execPath, ['--require', preload, SRC, 'sync-provider', '--provider', 'glm', '--alias', 'glm-miss'], {
+    env: { ...baseEnv, AUTOPILOT_LIVE_DIR: cliMissLive, QPS_FLEET_EXIT: '0', QPS_WATCH_MODE: 'no-reset' },
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(cliMissOkSend.status, 1);
+  assert.strictEqual(cliMissOkSend.stdout, '');
+  assert.match(cliMissOkSend.stderr, /^sync-provider glm\/glm-miss: fields_missing shape=.*\n$/);
+  assert.strictEqual(fs.existsSync(watchMarker(cliMissLive, 'glm-miss')), true);
+
+  const logged = fs.readFileSync(fleetLog, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.strictEqual(logged.length, 2);
+  assert.strictEqual(logged[0].argv[0], 'send');
+  assert.strictEqual(logged[0].argv[1], 'ns/courier/member');
+  assert.strictEqual(logged[0].hasFyi, false);
+  assert.strictEqual(logged[0].hasTok, false);
+});
+
+test('watch (f): no recipient env -> one-line stderr warning, no send, no marker, reason no_recipient', async () => {
+  const { r, liveDir } = await run(real, 'glm', glm([g5(37)]));
+  for (const env of [{}, { AUTOPILOT_QUOTA_WATCH_TO: ' , ', AUTOPILOT_PM_ADDRESS: '   ' }]) {
+    const sent = [];
+    const { result, stderr } = captureStderr(() => real.watchFirstUsed5h(r, {
+      liveDir, env, nowMs: () => NOW,
+      send: (addr, msg) => { sent.push([addr, msg]); return { status: 0 }; },
+    }));
+    assert.deepStrictEqual(result, { fired: false, reason: 'no_recipient' });
+    assert.strictEqual(sent.length, 0);
+    assert.strictEqual(stderr.trim().split('\n').length, 1);
+    assert.strictEqual(fs.existsSync(watchMarker(liveDir)), false);
+  }
+});
+
+test('watch (g): message and marker never contain a planted token or response value', async () => {
+  const PLANTED_TOK = 'FAKE-watch-token-9f8e7d6c5b4a3210fedcba987654';
+  const SECRET_VAL = 'RAW_RESPONSE_VALUE_DO_NOT_EMIT_9911';
+  const body = {
+    secret: PLANTED_TOK,
+    data: {
+      limits: [{
+        type: 'TOKENS_LIMIT',
+        unit: 3,
+        number: 5,
+        percentage: 37,
+        nextResetTime: (NOW_S + 3600) * 1000,
+        carrierValue: PLANTED_TOK,
+        prefixedValue: `Bearer ${PLANTED_TOK}`,
+        plainPayload: SECRET_VAL,
+        [`key_${PLANTED_TOK}`]: 1,
+        [`pre_${PLANTED_TOK.slice(0, 32)}`]: 2,
+      }],
+    },
+  };
+  const liveDir = tmpLive();
+  const env = {
+    AUTOPILOT_ENDPOINT_GLM_TOKEN: PLANTED_TOK,
+    AUTOPILOT_QUOTA_WATCH_TO: 'ns/courier/member',
+  };
+  const r = await real.syncProvider('glm', {
+    liveDir, env, fetch: fakeFetch(200, body), nowMs: () => NOW,
+  });
+  const sent = [];
+  const w = real.watchFirstUsed5h(r, {
+    liveDir, env, nowMs: () => NOW,
+    send: (addr, msg) => { sent.push([addr, msg]); return { status: 0 }; },
+  });
+  assert.deepStrictEqual(w, { fired: true, sent: 1 });
+  const msg = sent[0][1];
+  const rawMarker = fs.readFileSync(watchMarker(liveDir), 'utf8');
+  for (const text of [msg, rawMarker]) {
+    assert.strictEqual(text.includes(PLANTED_TOK), false);
+    assertNoToken16(text, PLANTED_TOK);
+    assert.strictEqual(text.includes(SECRET_VAL), false);
+    assert.strictEqual(text.includes('37'), false, 'even numeric percentage value is excluded from message/marker');
+  }
+  for (const f of allFiles(liveDir)) {
+    const content = fs.readFileSync(f, 'utf8');
+    assert.strictEqual(content.includes(PLANTED_TOK), false, f);
+    assertNoToken16(content, PLANTED_TOK);
+  }
+});
+
+test('planted: making watchFirstUsed5h marker check always false turns case (d) red', async () => {
+  const checkCaseD = async (mod) => {
+    const { r, liveDir } = await run(mod, 'glm', glm([g5(37)]));
+    const sent = [];
+    const opts = {
+      liveDir,
+      env: { AUTOPILOT_QUOTA_WATCH_TO: 'ns/courier/member' },
+      nowMs: () => NOW,
+      send: (addr, msg) => { sent.push([addr, msg]); return { status: 0 }; },
+    };
+    const first = mod.watchFirstUsed5h(r, opts);
+    assert.deepStrictEqual(first, { fired: true, sent: 1 });
+    const second = mod.watchFirstUsed5h(r, opts);
+    assert.deepStrictEqual(second, { fired: false, reason: 'already' });
+    assert.strictEqual(sent.length, 1);
+  };
+  await checkCaseD(real);
+
+  const alwaysFalseMarker = mutant([[
+    "if (fs.existsSync(markerPath)) return { fired: false, reason: 'already' };",
+    "if (false) return { fired: false, reason: 'already' };",
+  ]]);
+  await assert.rejects(() => checkCaseD(alwaysFalseMarker));
+});
+
 // ---- static scan: no secret file read, no token printed
-const SECRET_READ = [/credentials/i, /\.claude\b/, /oauth/i, /\.config\/autopilot/, /endpoints\.env/, /readFile/, /require\(['"]fs['"]\)/];
+const SECRET_READ = [/credentials/i, /\.claude\b/, /oauth/i, /\.config\/autopilot/, /endpoints\.env/, /readFile/];
 const PRINTS_TOKEN = /console\.[a-z]+\([^)]*token|write\([^)]*token/i;
 function stripComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.replace(/(^|[^:'"`\\])\/\/.*$/, '$1')).join('\n');
@@ -886,7 +1199,7 @@ function violations(src) {
   code.split('\n').forEach((l, i) => { for (const re of SECRET_READ) if (re.test(l)) hits.push(`${i + 1}:${re}`); if (PRINTS_TOKEN.test(l)) hits.push(`${i + 1}:prints-token`); });
   return hits;
 }
-test('static scan: the adapter reads no secret file, has no fs of its own and prints no token variable', () => {
+test('static scan: the adapter reads no secret file and prints no token variable', () => {
   assert.deepStrictEqual(violations(fs.readFileSync(SRC, 'utf8')), []);
 });
 test('static scan: planted secret reads and token prints are red', () => {

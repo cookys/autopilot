@@ -14,13 +14,15 @@
 //
 //   syncProvider(provider, o)  async -> { provider, alias, wrote, reason, shape?, tightest?, assumed? }
 //   convertMinimax(json, nowMs[, secret]) / convertGlm(json, nowMs[, secret])  pure -> { ok, windows, shape, tightest? } | { ok: false, reason, shape }
+//   watchFirstUsed5h(result, { liveDir, env, nowMs, send }) -> { fired: true, sent } | { fired: false, reason? }
 //   Result `shape` (on the result and main() output, never in the record; token-free and value-free):
 //     glm:     { limits: [{ type, unit, number, used_window: 'rolling_5h'|'weekly'|null, dropped: 'expired'|'fields_missing'|null,
 //                           keys: (string|null)[], missing: ('percentage'|'nextResetTime')[],
-//                           pct_from: 'currentValue'|'remaining'|null, reset_assumed: boolean }, ...] }
+//                           pct_from: 'currentValue'|'remaining'|null, reset_assumed: boolean, pct_positive: boolean }, ...] }
 //              (one entry per data.limits[] item; type/unit/number copied only when string/number; keys lists up to 16 sorted own
 //              key names and never values; strings and key names are scrubbed before slicing to 32 chars; missing lists whichever of
-//              ['percentage','nextResetTime'] is absent or not a finite number)
+//              ['percentage','nextResetTime'] is absent or not a finite number; pct_positive is true only on rolling_5h/weekly
+//              TOKENS_LIMIT candidates whose given-or-derived percentage is finite > 0, including when dropped fields_missing)
 //     minimax: { models: <count of model_remains>, dropped: { rolling_5h: 'expired'|null, weekly: 'expired'|null } }
 //     An entry/window is `expired` when dropped because resets_at is in the past.
 //
@@ -39,6 +41,13 @@
 //     names are UNVERIFIED candidates, not confirmed provider fields. When `nextResetTime` is missing and the (given or derived)
 //     percentage is 0, resets_at defaults to floor(now/1000) + window length (5 h / 7 d) with `reset_assumed: true`; for
 //     percentage > 0 a missing reset stays `fields_missing`.
+//   One-shot watch (`watchFirstUsed5h`, run by main() for glm whenever `result.shape` exists, whether wrote or failed):
+//     the first time a glm rolling_5h entry (TOKENS_LIMIT, unit 3, number 5) has `pct_positive: true`, sends one Traditional
+//     Chinese diagnostic paragraph per recipient via `<AUTOPILOT_FLEET_BIN||'fleet'> send <addr> <msg>` (30 s timeout, shape
+//     fields only, never a token or response value) and records `<live_dir>/quota/glm/<alias>.first-used-5h.json` (0600,
+//     `{ at, alias, entry }`) once every send exits 0. Recipients come from `AUTOPILOT_QUOTA_WATCH_TO` (comma-separated,
+//     trimmed, empties dropped, e.g. `ns/courier/member`), else `AUTOPILOT_PM_ADDRESS`; missing recipients or a non-zero send
+//     warns on stderr and leaves no marker so the next hourly run retries. Never alters main()'s stdout line or exit code.
 // Every utilization goes through observation.clampUtilization: 1..1.5 clamps to 1, anything outside is rejected. Window
 // source is `probe`, observed_at is request completion time in seconds, elapsed windows are dropped. Rate limit: newer of
 // last ATTEMPT (`<alias>.attempt`, token-free, stamped before request) and mirror observed_at < 3600 s -> `too_soon`.
@@ -46,8 +55,12 @@
 // Token: read from caller env (AUTOPILOT_ENDPOINT_<NAME>_TOKEN; for minimax also MINIMAX_API_KEY). Opens no secret file.
 // Node >= 20.10, built-ins only.
 
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
 const observation = require('./lib/account-observation');
 const { resolveLiveDir } = require('./lib/live-state-dir');
+const { ensurePrivateDir } = require('./lib/runtime-paths');
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const MIN_INTERVAL_S = 3600; // one query per provider/alias per hour (PM): a calibration, not a poll
@@ -143,7 +156,7 @@ function convertGlm(j, nowMs, secret) {
     if (!isObj(l)) {
       limits.push({
         type: null, unit: null, number: null, used_window: null, dropped: null,
-        keys: [], missing: GLM_REQUIRED_FIELDS.slice(), pct_from: null, reset_assumed: false,
+        keys: [], missing: GLM_REQUIRED_FIELDS.slice(), pct_from: null, reset_assumed: false, pct_positive: false,
       });
       continue;
     }
@@ -151,7 +164,7 @@ function convertGlm(j, nowMs, secret) {
     const missing = GLM_REQUIRED_FIELDS.filter((k) => !ownNum(l, k));
     const entry = {
       type: shapeVal(l.type, secret), unit: shapeVal(l.unit, secret), number: shapeVal(l.number, secret),
-      used_window: null, dropped: null, keys, missing, pct_from: null, reset_assumed: false,
+      used_window: null, dropped: null, keys, missing, pct_from: null, reset_assumed: false, pct_positive: false,
     };
     limits.push(entry);
     if (l.type !== 'TOKENS_LIMIT') continue;
@@ -171,6 +184,7 @@ function convertGlm(j, nowMs, secret) {
       entry.pct_from = 'remaining';
     }
     if (pct === null) { entry.dropped = 'fields_missing'; continue; }
+    if (pct > 0) entry.pct_positive = true;
     let resetsAt;
     if (ownNum(l, 'nextResetTime')) {
       resetsAt = toEpochSeconds(l.nextResetTime);
@@ -297,6 +311,126 @@ async function syncProvider(provider, o) {
   } catch (_) { return out(false, 'sync_error'); }
 }
 
+const WATCH_TIMEOUT_MS = 30000;
+
+function parseWatchList(raw) {
+  if (typeof raw !== 'string') return [];
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+function watchRecipients(env) {
+  const explicit = parseWatchList(env.AUTOPILOT_QUOTA_WATCH_TO);
+  if (explicit.length > 0) return explicit;
+  return parseWatchList(env.AUTOPILOT_PM_ADDRESS);
+}
+
+function cleanWatchEntry(e, secret) {
+  const keys = Array.isArray(e.keys)
+    ? e.keys.slice(0, GLM_MAX_KEYS).map((k) => (typeof k === 'string' ? sliceClean(k, 32, secret) : null))
+    : [];
+  const missing = Array.isArray(e.missing)
+    ? e.missing.filter((k) => k === 'percentage' || k === 'nextResetTime')
+    : [];
+  const pctFrom = e.pct_from === 'currentValue' || e.pct_from === 'remaining' ? e.pct_from : null;
+  const dropped = e.dropped === 'expired' || e.dropped === 'fields_missing' ? e.dropped : null;
+  const usedWindow = e.used_window === 'rolling_5h' || e.used_window === 'weekly' ? e.used_window : null;
+  return {
+    type: 'TOKENS_LIMIT', unit: 3, number: 5,
+    used_window: usedWindow, dropped, keys, missing,
+    pct_from: pctFrom, reset_assumed: e.reset_assumed === true, pct_positive: true,
+  };
+}
+
+function defaultWatchSend(addr, msg, env) {
+  const childEnv = Object.assign({}, env);
+  delete childEnv.FLEET_FYI;
+  for (const p of Object.values(PROVIDERS)) {
+    for (const k of p.tokenEnv) delete childEnv[k];
+  }
+  return spawnSync(env.AUTOPILOT_FLEET_BIN || 'fleet', ['send', addr, msg], {
+    stdio: ['ignore', 'ignore', 'ignore'],
+    timeout: WATCH_TIMEOUT_MS,
+    env: childEnv,
+  });
+}
+
+function sendExitedZero(r) {
+  if (isObj(r)) return r.status === 0;
+  if (typeof r === 'number') return r === 0;
+  if (typeof r === 'boolean') return r === true;
+  return false;
+}
+
+function writeWatchMarker(markerPath, payload) {
+  const made = ensurePrivateDir(path.dirname(markerPath));
+  if (!made.ok) return false;
+  const tmp = `${markerPath}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
+  let fd = -1;
+  try {
+    fd = fs.openSync(tmp, 'wx', 0o600);
+    fs.fchmodSync(fd, 0o600);
+    const body = `${JSON.stringify(payload)}\n`;
+    fs.writeSync(fd, body, null, 'utf8');
+    fs.closeSync(fd);
+    fd = -1;
+    fs.renameSync(tmp, markerPath);
+    return true;
+  } catch (_) {
+    if (fd !== -1) { try { fs.closeSync(fd); } catch (_e) { /* ignore */ } }
+    try { fs.unlinkSync(tmp); } catch (_e) { /* ignore */ }
+    return false;
+  }
+}
+
+function watchFirstUsed5h(result, o) {
+  const opts = isObj(o) ? o : {};
+  try {
+    if (!isObj(result) || !isObj(result.shape) || !Array.isArray(result.shape.limits)) return { fired: false };
+    const rawEntry = result.shape.limits.find((e) => (
+      isObj(e) && e.type === 'TOKENS_LIMIT' && e.unit === 3 && e.number === 5 && e.pct_positive === true
+    ));
+    if (!rawEntry) return { fired: false };
+    const alias = typeof result.alias === 'string' && result.alias !== '' ? result.alias : 'glm';
+    const env = opts.env || process.env;
+    let liveDir = opts.liveDir;
+    if (liveDir === undefined) {
+      try { liveDir = resolveLiveDir({ env, warn: () => {} }).base; } catch (_) { return { fired: false, reason: 'live_dir_refused' }; }
+    }
+    let markerPath;
+    try {
+      const mirror = observation.mirrorPath(liveDir, 'glm', alias);
+      markerPath = path.join(path.dirname(mirror), `${alias}.first-used-5h.json`);
+    } catch (_) { return { fired: false, reason: 'live_dir_refused' }; }
+    if (fs.existsSync(markerPath)) return { fired: false, reason: 'already' };
+    const recipients = watchRecipients(env);
+    if (recipients.length === 0) {
+      process.stderr.write(`quota-watch glm/${alias}: no recipient configured (set AUTOPILOT_QUOTA_WATCH_TO or AUTOPILOT_PM_ADDRESS)\n`);
+      return { fired: false, reason: 'no_recipient' };
+    }
+    const secret = tokenOf(PROVIDERS.glm, env);
+    const entry = cleanWatchEntry(rawEntry, secret);
+    const msg = `[quota-watch] GLM ${alias} rolling_5h 第一次出現 percentage>0：keys=${JSON.stringify(entry.keys)} missing=${JSON.stringify(entry.missing)} pct_from=${entry.pct_from} dropped=${entry.dropped} reset_assumed=${entry.reset_assumed}`;
+    const customSend = typeof opts.send === 'function' ? opts.send : null;
+    let allOk = true;
+    for (const addr of recipients) {
+      let sr;
+      try { sr = customSend ? customSend(addr, msg) : defaultWatchSend(addr, msg, env); } catch (_) { sr = null; }
+      if (!sendExitedZero(sr)) allOk = false;
+    }
+    if (!allOk) {
+      process.stderr.write(`quota-watch glm/${alias}: fleet send failed; marker not written\n`);
+      return { fired: false, reason: 'send_failed' };
+    }
+    const rawNow = typeof opts.nowMs === 'function' ? opts.nowMs() : (num(opts.nowMs) ? opts.nowMs : Date.now());
+    const at = Math.floor(rawNow / 1000);
+    if (!writeWatchMarker(markerPath, { at, alias, entry })) {
+      process.stderr.write(`quota-watch glm/${alias}: marker write failed\n`);
+      return { fired: false, reason: 'write_failed' };
+    }
+    return { fired: true, sent: recipients.length };
+  } catch (_) { return { fired: false, reason: 'watch_error' }; }
+}
+
 async function main(argv, env) {
   const a = argv.slice();
   if (a.shift() !== 'sync-provider') { process.stderr.write('usage: quota-provider-sync.js sync-provider --provider minimax|glm [--alias NAME]\n'); return 2; }
@@ -309,6 +443,7 @@ async function main(argv, env) {
   }
   if (!provider) { process.stderr.write('quota-provider-sync: --provider required\n'); return 2; }
   const r = await syncProvider(provider, { alias, env });
+  if (provider === 'glm' && r && r.shape) watchFirstUsed5h(r, { env });
   const shapePart = r.shape ? ` shape=${JSON.stringify(r.shape)}` : '';
   if (r.wrote) { process.stdout.write(`sync-provider ${r.provider}/${r.alias}: wrote${shapePart}\n`); return 0; }
   if (r.reason === 'superseded') { process.stdout.write(`sync-provider ${r.provider}/${r.alias}: superseded${shapePart}\n`); return 0; }
@@ -316,7 +451,7 @@ async function main(argv, env) {
   return 1;
 }
 
-module.exports = { MIN_INTERVAL_S, syncProvider, convertMinimax, convertGlm, PROVIDERS, TIMEOUT_MS: DEFAULT_TIMEOUT_MS };
+module.exports = { MIN_INTERVAL_S, syncProvider, convertMinimax, convertGlm, watchFirstUsed5h, PROVIDERS, TIMEOUT_MS: DEFAULT_TIMEOUT_MS };
 
 if (require.main === module) {
   main(process.argv.slice(2), process.env).then((c) => { process.exitCode = c; });

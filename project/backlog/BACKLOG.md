@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0427 -->
+<!-- next-id: BL-0428 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1480,7 +1480,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/backlog/flaky-under-load-suites.md
 
 ### Lead and lane skills should default to parallel for unrelated work
-- **Id**: BL-0426
+- **Id**: BL-0427
 - **Status**: open
 - **Since**: 2026-11-11
 - **Origin**: self

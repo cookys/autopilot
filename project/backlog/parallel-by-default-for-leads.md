@@ -1,4 +1,4 @@
-# Parallel-by-default for leads and lanes (BL-0426)
+# Parallel-by-default for leads and lanes (BL-0427)
 
 Operator rule (2026-11-11, PM SOP 8157002): a lead or lane runs unrelated incoming work in parallel immediately. Any new item that does not depend on the one in hand gets its own worker (subagent, hetero seat or member) at once. Read-only and mechanical work goes to Haiku, Sonnet or a non-Claude seat; the lead keeps judgment, verification and irreversible ops. Only a real dependency on the previous result, or the same scarce resource, justifies "queued behind X"; otherwise the answer is "dispatched to <worker>, due <time>".
 

@@ -17,7 +17,7 @@ const {
   formatCodexQuotaNotice,
   buildSubstitutionRecord,
 } = require('./lib/qc-panel-codex-fallback');
-const { auditObject } = require('./lib/config-audit');
+const { audit } = require('./lib/config-audit');
 
 function withTempDir(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qc-codex-fb-'));
@@ -218,9 +218,9 @@ test('loadCodexQuotaSubstitutes reads qc_panel.codex_quota_substitutes and confi
       { engine: 'grok-4.7', runner: 'grok', effort: 'high', family: 'xai' },
     ]);
 
-    const audit = auditObject(cfgObj);
-    assert.deepEqual(audit.unknownKeys, []);
-    assert.deepEqual(audit.typeErrors, []);
+    const result = audit({ configFile: cfgPath, projectDir: dir });
+    const bad = result.findings.filter((f) => f.key.startsWith('qc_panel') && ['unknown_key', 'bad_type', 'bad_value'].includes(f.rule));
+    assert.deepEqual(bad, []);
   });
 });
 

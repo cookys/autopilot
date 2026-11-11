@@ -15,7 +15,6 @@
 //   `codex 額度用完，由 <engine> 代打`
 
 const fs = require('fs');
-const { classifyErrorContent } = require('../engine-capability-state');
 const { configPath } = require('./config-path');
 const { familyOfEngine } = require('./stage-write');
 const { familiesOfImplementer } = require('./review-family-gate');
@@ -166,6 +165,8 @@ function classifyCodexQuotaFailure({
   if (logText) chunks.push(logText);
 
   for (const chunk of chunks) {
+    // Lazy: engine-capability-state pulls in src/engine, which isolated driver copies do not carry.
+    const { classifyErrorContent } = require('../engine-capability-state');
     const classified = classifyErrorContent(chunk);
     if (QUOTA_FAILURE_CLASSES.has(classified)) {
       return { matched: true, reason: classified };

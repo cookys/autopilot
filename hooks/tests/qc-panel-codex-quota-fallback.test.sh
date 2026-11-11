@@ -84,7 +84,7 @@ chmod +x "$STUB_DISPATCH"
 export AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$STUB_DISPATCH"
 
 EMPTY_DISP="$TEST_TMP/empty-dispositions.json"
-echo '{"dispositions":[],"resolutions":[]}' > "$EMPTY_DISP"
+echo '{"schema_version":1,"phase":"p1","generation":1,"findings":[]}' > "$EMPTY_DISP"
 
 # ─── Case 1: codex quota error -> grok-4.7@grok (effort high) substitutes once, Chinese line emitted, receipt validates ───
 LEDGER1="$TEST_TMP/ledger1"
@@ -126,7 +126,7 @@ assert_contains "$(cat "$F1_STDERR")" "codex 額度用完，由 grok-4.7@grok �
 assert_contains "$F1_STDOUT" '"verdict": "SHIP-AS-IS"' "case 1: finalize verdict is SHIP-AS-IS"
 assert_contains "$(cat "$LEDGER1/receipt-p1.json")" "codex 額度用完，由 grok-4.7@grok 代打" "case 1: receipt-p1.json carries verbatim notice"
 
-CHK1_OUT=$(node "$CHECKER" --repo-root "$SCRATCH_REPO" --receipt "$LEDGER1/receipt-p1.json" --branch work 2>&1); CHK1_RC=$?
+CHK1_OUT=$(node "$CHECKER" --repo-root "$SCRATCH_REPO" --ledger "$LEDGER1" --phase p1 --branch work --phase-base "$PHASE_BASE" 2>&1); CHK1_RC=$?
 assert_exit_code "$CHK1_RC" "0" "case 1: check-phase-review-receipt validates substituted receipt"
 
 # ─── Case 2: implementer is grok-4.7 (xai) -> skips grok-4.7@grok, substitutes gemini-4-carbon-high@agy (effort high) ───

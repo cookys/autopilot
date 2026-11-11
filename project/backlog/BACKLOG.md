@@ -1491,7 +1491,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: XS
 - **Source**: PM fleet 01M747R1N0 (2026-11-11)
 - **Pointer**: project/backlog/BACKLOG.md
-- **Context**: delete the PM 01M747R1N0 override blocks and allow_same_runner_dual_seat in .claude/review-loop-config.md (implementer, reviewer rung, VA, plan-review); keep the d-b155785a qc_panel block.
+- **Context**: 11-16 order (PM 01M74FDC5Z): VA to gemini-4-argon-high@agy until qodercn works, then restore roster-overlay test pins, then delete other override blocks and allow_same_runner_dual_seat; keep qc_panel.
 
 ### Lead and lane skills should default to parallel for unrelated work
 - **Id**: BL-0427

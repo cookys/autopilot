@@ -63,12 +63,12 @@ assert_eq "$(printf '%s' "$ROSTER_JSON" | jget qc_panel)" "$(printf '%s' "$OVR_J
 assert_eq "7" "$(printf '%s' "$OVR_JSON" | jget loop_max_rounds)" "non-seat knob written in the repo file wins"
 assert_eq '[{"group":"implementer","until":"2099-01-01","reason":"trial of another implementer","expired":false}]' "$(printf '%s' "$OVR_JSON" | jget roster_overrides)" "roster_overrides lists the declared group"
 
-# 3d. dated VA override (PM 01M747R1N0 codex window): grok-4.7@grok before and after the until date (expiry only warns),
+# 3d. dated VA override (PM 01M74FDC5Z codex window): GLM-5.3@cc-shim/glm before and after the until date (expiry only warns),
 # under a controlled clock (ROSTER_OVERLAY_TODAY) so the assertion does not depend on the real date.
 VA_CFG="$REPO_ROOT/.claude/review-loop-config.md"
 for _t in 2026-11-14 2026-11-16; do
   VA_JSON="$(ROSTER_OVERLAY_TODAY="$_t" REVIEW_LOOP_CONFIG_OVERRIDE="$VA_CFG" bash "$SCRIPT" 2>"$TEST_TMP/va-$_t.err")"
-  assert_eq "grok-4.7@grok" "$(printf '%s' "$VA_JSON" | jget verification_author_engine)@$(printf '%s' "$VA_JSON" | jget verification_author_runner)" "autopilot's own config seats the VA on grok-4.7@grok on $_t"
+  assert_eq "GLM-5.3@cc-shim/glm" "$(printf '%s' "$VA_JSON" | jget verification_author_engine)@$(printf '%s' "$VA_JSON" | jget verification_author_runner)/$(printf '%s' "$VA_JSON" | jget verification_author_endpoint)" "autopilot's own config seats the VA on GLM-5.3@cc-shim/glm on $_t"
 done
 assert_contains "$(printf '%s' "$VA_JSON" | jget roster_overrides)" '"expired":true' "after 2026-11-15 the VA override reports expired:true"
 assert_contains "$(cat "$TEST_TMP/va-2026-11-16.err")" "override for verification_author expired on 2026-11-15" "after 2026-11-15 the VA override prints an expiry warning"

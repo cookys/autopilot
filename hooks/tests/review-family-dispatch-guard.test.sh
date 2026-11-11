@@ -413,4 +413,38 @@ EOF
 resolve_of r0ok "$CFG_R0_OK"
 assert_eq "$RESOLVE_RC" "0" "c5: reviewer cloud rung of another family resolves"
 
+# (c6) implementer_ladder: auto synthesized from a topology that advertises the VA family and
+# the reviewer cloud rung family: the ladder is shaped, never exit 3. Explicit ladders keep c1/c4.
+TOPO_AUTO="$TEST_TMP/topo-auto.json"
+cat > "$TOPO_AUTO" <<'EOF2'
+{"implementer_ladder":[{"engine":"gpt-6.1-sol","effort":"high","runner":"codex"},{"engine":"Qwen3.8-Max","effort":"high","runner":"qoderclicn"},{"engine":"grok-4.7","effort":"low","runner":"grok"}]}
+EOF2
+CFG_AUTO="$TEST_TMP/auto-ladder.md"
+cat > "$CFG_AUTO" <<'EOF2'
+- consult_dispatch: off
+- discuss_dispatch: off
+- override: implementer | until 2099-01-01 | auto ladder
+- implementer_engine: gpt-6.1-sol
+- implementer_runner: auto
+- implementer_effort: high
+- implementer_ladder: auto
+- override: reviewer | until 2099-01-01 | reviewer cloud rung is the implementer's family
+- reviewer_engine: Qwen3.8-27B-QUASAR-NVFP4
+- reviewer_runner: anthropic-compatible
+- reviewer_effort: default
+- reviewer_endpoint: qwen_local
+- reviewer_on_engine_unavailable: cloud-fallback
+- reviewer_cloud_fallback_rung: gpt-6.1-sol/high@codex
+- override: verification_author | until 2099-01-01 | alibaba VA advertised in the topology
+- verification_author_present: true
+- verification_author_engine: Qwen3.8-Max
+- verification_author_runner: qoderclicn
+- verification_author_effort: high
+- verification_author_endpoint:
+EOF2
+AUTOPILOT_TOPOLOGY_FILE="$TOPO_AUTO" resolve_of auto "$CFG_AUTO"
+assert_eq "$RESOLVE_RC" "0" "c6: auto ladder with VA-family and reviewer-cloud-family rungs resolves"
+AUTO_LADDER="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8").split("\n")[0]); process.stdout.write(j.implementer_ladder.map((r)=>r.engine).join(","));' "$TEST_TMP/resolve-auto.out")"
+assert_eq "$AUTO_LADDER" "grok-4.7,gpt-6.1-sol" "c6: VA family dropped, reviewer cloud family moved off rung 0"
+
 finalize_test

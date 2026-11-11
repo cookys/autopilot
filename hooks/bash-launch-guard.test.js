@@ -1472,6 +1472,73 @@ test('rule6 phantom cd: a cd that does not run in the shell of the later rm neve
   }
 });
 
+test('rule6 conditional cd: the cwd after a cd behind &&/|| is unknown at once, inside the same list', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  for (const cmd of [
+    `false && cd ${scratch} || rm -rf rv1`,
+    `false && cd ${scratch} && rm -rf rv1`,
+    `true && cd ${scratch} && rm -rf rv1`,
+    `false || cd ${scratch} && rm -rf rv1`,
+  ]) {
+    const r = run(cmd, sub(sandbox));
+    assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  // the cd is unconditional at the list start; only the rm sits behind &&: stays allowed
+  for (const cmd of [`cd ${scratch} && rm -rf x`, `cd ${scratch} && ls && rm -rf x`, `cd ${scratch} || rm -rf x`]) {
+    const ok = run(cmd, sub(sandbox));
+    assert.strictEqual(ok.deny, false, `expected allow for ${JSON.stringify(cmd)}: ${ok.reason}`);
+  }
+});
+
+test('rule6 subshell inherits the cwd only after the parent list boundary has been applied', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const sub = (cwd) => ({ extra: { agent_id: 'sub-1', cwd }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  for (const cmd of [
+    `cd ${scratch} & (rm -rf rv1)`,
+    `false && cd ${scratch}; (rm -rf rv1)`,
+    `false || cd ${scratch}\n(rm -rf rv1)`,
+  ]) {
+    const r = run(cmd, sub(sandbox));
+    assert.strictEqual(r.deny, true, `expected deny for ${JSON.stringify(cmd)}: got ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  for (const cmd of [`cd ${scratch} && (rm -rf x)`, `cd ${scratch}; (rm -rf x)`, `(cd ${scratch} && rm -rf x)`]) {
+    const ok = run(cmd, sub(sandbox));
+    assert.strictEqual(ok.deny, false, `expected allow for ${JSON.stringify(cmd)}: ${ok.reason}`);
+  }
+});
+
+test('heredoc runner detection: a shell word inside quotes or $( ) does not run the heredoc', () => {
+  const { tmpRoot, sandbox } = mkScratchSandbox('blg');
+  for (const intro of [`echo "v $(bash --version)" <<'EOF'`, `echo 'x; bash' <<'EOF'`, `echo "a | bash" <<'EOF'`]) {
+    const sh = run(`${intro}\nrm -rf /tmp/rv1\nEOF`, { extra: { agent_id: 'sub-1', cwd: sandbox }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+    assert.strictEqual(sh.deny, false, `data heredoc must not deny (${intro}): ${sh.reason}`);
+    const main = run(`${intro}\nrm -rf "$TMPDIR/build"\nEOF`);
+    assert.strictEqual(main.deny, false, `data heredoc must not deny rule 5 (${intro}): ${main.reason}`);
+  }
+  // a real runner still counts
+  for (const intro of [`bash <<'EOF'`, `echo hi; bash <<'EOF'`, `true && sudo bash <<'EOF'`, `(bash <<'EOF'`]) {
+    const r = run(`${intro}\nrm -rf /tmp/rv1\nEOF`, { extra: { agent_id: 'sub-1', cwd: sandbox }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+    assert.strictEqual(r.deny, true, `runner heredoc must deny (${intro}): ${JSON.stringify(r)}`);
+  }
+  const piped = run(`cat <<'EOF' | bash\nrm -rf /tmp/rv1\nEOF`, { extra: { agent_id: 'sub-1', cwd: sandbox }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(piped.deny, true, JSON.stringify(piped));
+});
+
+test('rule6 tilde-user / ~+ / ~- targets are outside the scratchpad', () => {
+  const { tmpRoot, scratch } = mkScratchSandbox('blg');
+  for (const target of ['~other/dir', '~+/../../outside', '~-/x', '~root']) {
+    const r = run(`rm -rf ${target}`, { extra: { agent_id: 'sub-1', cwd: scratch }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+    assert.strictEqual(r.deny, true, `expected deny for ${target}: ${JSON.stringify(r)}`);
+    assert.match(r.reason, /subagent-rm-outside-scratch/);
+  }
+  // quoted tilde is a literal name inside the scratchpad
+  const ok = run(`rm -rf '~other'`, { extra: { agent_id: 'sub-1', cwd: scratch }, env: { CLAUDE_CODE_TMPDIR: tmpRoot } });
+  assert.strictEqual(ok.deny, false, ok.reason);
+});
+
 test('rule6 heredoc script runs in the cwd of the segment that runs it, not the payload cwd', () => {
   const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
   // payload cwd is the scratchpad, but a preceding `cd` moves the heredoc shell outside it: deny

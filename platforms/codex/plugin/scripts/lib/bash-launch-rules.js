@@ -86,7 +86,7 @@ function segments(text) {
   let inner = 0; // unquoted `(` that is not a subshell opener (`$(`, `f(`)
   let bt = false; // inside an unquoted backtick substitution
   const push = (bg, endsList = false) => {
-    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, list: listN, lvl: lvlStack[lvlStack.length - 1] }); pipeNext = false; condNext = false; }
+    if (cur.trim()) { out.push({ text: cur.trim(), bg, sub: subDepth > 0, pipe: pipeNext, cond: condNext, list: listN, lvl: lvlStack[lvlStack.length - 1], plvl: lvlStack.length > 1 ? lvlStack[lvlStack.length - 2] : null }); pipeNext = false; condNext = false; }
     cur = '';
     if (bg) {
       for (let k = listStart; k < out.length; k += 1) out[k].bg = true;
@@ -312,6 +312,7 @@ function expandSegmentsUncached(text, depth) {
   const sid = (scriptSeq += 1);
   for (const seg of segments(text)) {
     seg.lvl = `${sid}:${seg.lvl}`;
+    if (seg.plvl !== null) seg.plvl = `${sid}:${seg.plvl}`;
     all.push(seg);
     if (depth >= MAX_EXPAND_DEPTH) continue;
     const m = SHELL_C_RE.exec(seg.text);
@@ -682,6 +683,20 @@ function runHeredocBodies(raw, segs) {
   return runHeredocBodiesMeta(raw, segs).map((h) => h.body);
 }
 
+// Does this heredoc intro line feed its body to a shell? Judged on the quote-aware segments of the line: the segment that
+// carries the (unquoted) `<<` must itself start with the shell word (so a `bash` inside quotes, `$( )` or before a
+// quoted `;` never counts), or a later member of its pipeline must be a shell (`cat <<EOF | bash`).
+function introRunsShell(intro) {
+  const segs = segments(intro);
+  const k = segs.findIndex((sg) => /<<(?!<)/.test(maskQuotes(sg.text)));
+  if (k < 0) return false;
+  const direct = new RegExp(`^(?:(?:sudo|env|time|exec|nohup|setsid)\\s+)*${SHELL_RE}\\b(?![^<]*\\s-c\\b)[^<|;&]*<<`);
+  if (direct.test(maskQuotes(segs[k].text))) return true;
+  const piped = new RegExp(`^(?:(?:sudo|env|exec)\\s+)*${SHELL_RE}\\b`);
+  for (let j = k + 1; j < segs.length && segs[j - 1].pipe; j += 1) if (piped.test(maskQuotes(segs[j].text))) return true;
+  return false;
+}
+
 // Same, with where the body is run from: `op` is the `<<TAG` operator text, `file` the script file it was written to
 // (null when fed straight to a shell), so the caller can find the segment that runs it.
 function runHeredocBodiesMeta(raw, segs) {
@@ -696,8 +711,7 @@ function runHeredocBodiesMeta(raw, segs) {
     for (; j < lines.length; j += 1) { if ((m[1] ? lines[j].replace(/^\t+/, '') : lines[j]) === tag) break; body.push(lines[j]); }
     const intro = lines[i];
     let file = null;
-    let runs = new RegExp(`(?:^|[;&|(])\\s*(?:(?:sudo|env|time|exec|nohup|setsid)\\s+)*${SHELL_RE}\\b(?![^<]*\\s-c\\b)[^<|;&]*<<`).test(intro)
-      || new RegExp(`\\|\\s*(?:(?:sudo|env|exec)\\s+)*${SHELL_RE}\\b`).test(intro.slice(m.index));
+    let runs = introRunsShell(intro);
     if (!runs) {
       const fm = /(?:>>?|\btee(?:\s+-a)?)\s*(?:"([^"]+)"|'([^']+)'|([^\s<>|;&]+))/.exec(intro);
       file = fm && (fm[1] || fm[2] || fm[3]);
@@ -1313,27 +1327,30 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
     const { segs, initCwd } = scripts[si];
     // Per shell level: cwd, the current list, and what that list did to it. A `cd` only holds in the shell that runs it:
     // not in a pipeline member, not past the end of a backgrounded list, and a `cd` behind `&&`/`||` leaves the cwd
-    // unknown (null, so rule 6 denies a relative target) once its list ends.
+    // unknown (null, so rule 6 denies a relative target) from that point on.
     const stByLvl = new Map();
+    // Apply a list boundary to a shell level's state: a backgrounded list never changed this shell's cwd.
+    const settle = (st, listId) => {
+      if (st.listId === listId) return;
+      if (st.bgList) st.cwd = st.listStartCwd;
+      st.listId = listId;
+      st.listStartCwd = st.cwd;
+      st.bgList = false;
+    };
     if (segs.length > 0 && typeof segs[0].lvl === 'string') {
-      stByLvl.set(`${segs[0].lvl.split(':')[0]}:0`, {
-        cwd: initCwd, listId: segs[0].list, listStartCwd: initCwd, bgList: false, tainted: false,
-      });
+      stByLvl.set(`${segs[0].lvl.split(':')[0]}:0`, { cwd: initCwd, listId: segs[0].list, listStartCwd: initCwd, bgList: false });
     }
     let activeCwd = initCwd;
     for (const seg of segs) {
       let st = stByLvl.get(seg.lvl);
       if (!st) {
-        st = { cwd: activeCwd, listId: seg.list, listStartCwd: activeCwd, bgList: false, tainted: false };
+        // A new `( )` level inherits its parent's cwd AFTER the parent's list boundary has been applied.
+        const parent = seg.plvl ? stByLvl.get(seg.plvl) : null;
+        if (parent) settle(parent, seg.list);
+        const inherited = parent ? parent.cwd : activeCwd;
+        st = { cwd: inherited, listId: seg.list, listStartCwd: inherited, bgList: false };
         stByLvl.set(seg.lvl, st);
-      } else if (st.listId !== seg.list) {
-        if (st.bgList) st.cwd = st.listStartCwd;
-        else if (st.tainted) st.cwd = null;
-        st.listId = seg.list;
-        st.listStartCwd = st.cwd;
-        st.bgList = false;
-        st.tainted = false;
-      }
+      } else settle(st, seg.list);
       const curCwd = st.cwd;
       activeCwd = curCwd;
       const pos = commandPosition(seg.text);
@@ -1346,9 +1363,9 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
       if (!seg.pipe) {
         const nextCwd = stepCd(seg, curCwd, homedir);
         if (nextCwd !== curCwd) {
-          st.cwd = nextCwd;
-          activeCwd = nextCwd;
-          if (seg.cond) st.tainted = true;
+          // A `cd` behind `&&`/`||` may not have run: the cwd of everything after it is unknown.
+          st.cwd = seg.cond ? null : nextCwd;
+          activeCwd = st.cwd;
         }
       }
       if (si === 0) segCwd.set(seg, st.cwd);
@@ -1358,6 +1375,10 @@ function collectRecursiveRmLiterals(cmd, baseCwd, homedir) {
         if (wordExpands(w)) continue; // rule 5 owns runtime-expanded targets
         const parsed = parseRmLiteralWord(w, homedir);
         if (!parsed.text) continue;
+        if (/^~(?!\/|$)/.test(w)) { // `~user`, `~+`, `~-`: bash resolves them to somewhere we cannot see
+          out.push({ raw: w, text: parsed.text, trailingSlash: false, hasGlob: false, climbAfterGlob: false, resolved: null, parentResolved: null });
+          continue;
+        }
         if (parsed.hasGlob) {
           const parentResolved = path.isAbsolute(parsed.literalParent)
             ? path.resolve(parsed.literalParent)

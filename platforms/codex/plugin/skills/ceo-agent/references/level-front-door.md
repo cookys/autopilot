@@ -10,12 +10,7 @@
 
 ## What the front-door is
 
-`/l3 /l4 /l5 /l6 <goal>` is a terse entry point into **CEO mode** (`ceo-agent`). It
-pre-fills the four CEO startup questions so a long run starts without a Q&A round,
-and it sets the **execution posture** (run inline vs. offload to a dispatched
-sub-orchestrator). It is a *new slash-command namespace layered over* the existing
-CEO **Involvement** enum (`ceo-agent/SKILL.md` Startup §2: 1=every-step /
-2=phase / 3=just-results) — it does **not** redefine that term.
+`/l3 /l4 /l5 /l6 <goal>` is a terse entry into **CEO mode** (`ceo-agent`): it pre-fills the four startup questions to start without Q&A and sets the **execution posture** (inline vs. dispatched sub-orchestrator). It layers over the CEO **Involvement** enum (`ceo-agent/SKILL.md` Startup §2: 1=every-step / 2=phase / 3=just-results) without redefining it.
 
 | Sugar | Execution posture | Engine |
 |-------|-------------------|--------|
@@ -75,47 +70,23 @@ files/branches" escalation row in `SKILL.md` covers unmerged or protected branch
 
 ### One confirmation per run (opt-in, v2.36.17)
 
-The section above is the default: a front-door run never stops to ask "should I continue?".
-Some owners want one gate anyway — approve the whole thing once at the start, then let it run
-to the end without further checkpoints. That is what `run_approval` buys, and it is **off**
-until configured:
+By default a front-door run never pauses for "should I continue?". Owners who want a single upfront gate before unattended execution can enable `run_approval` (**off** by default):
 
 ```bash
 node <plugin>/scripts/run-approval.js persist --mode ask-once   # turn it on (machine-local)
 node <plugin>/scripts/run-approval.js status                     # {mode, source, config_path}
 ```
 
-When it is on, depth-0 does two things at the top of a run:
+When on, depth-0 does two things at run start:
 
-1. **Print the pre-flight report BEFORE the first dispatch.** It is the one moment the owner
-   can still redirect cheaply, so it states what the run will actually do, not what it hopes
-   to achieve: the size verdict, the branch and worktree it will create, the admitted
-   deliverables, which engine each one goes to, the file scope it expects to touch, and —
-   the load-bearing line — **the irreversible operations it intends to perform inside DOA
-   without asking again** (merge to `develop`, branch deletion, worktree teardown).
-2. **Dispatch normally.** `hooks/run-approval-gate.js` turns that first `Task`/`Agent` call
-   into a permission `ask`. The owner's answer to that dialog is the approval; approving it
-   covers the rest of the run and the gate goes silent.
+1. **Print the pre-flight report BEFORE the first dispatch**, stating concrete actions: size verdict, branch and worktree to create, admitted deliverables and target engines, expected file scope, and **the irreversible operations inside DOA it will perform without asking again** (merge to `develop`, branch deletion, worktree teardown).
+2. **Dispatch normally.** `hooks/run-approval-gate.js` turns that first `Task`/`Agent` call into a permission `ask`; approving it covers the rest of the run and silences the gate.
 
-The receipt is never a model claim that consent was given: the ask writes a `pending` record
-and only `PostToolUse` promotes it, so a model cannot mint approval by asserting it, and a
-`PostToolUse` with no matching ask (the knob flipping mid-call, say) records nothing. What it
-proves is "this gate asked and the call then ran" — not that a dialog was rendered and
-answered, since the hook is never told the permission outcome. A host that auto-allows `Task`
-would still execute it. That bound is stated rather than closed; closing it needs the host to
-report the decision back.
+The receipt cannot be model-minted: the `ask` writes a `pending` record that only `PostToolUse` promotes, and a `PostToolUse` with no matching `ask` records nothing. This proves "the gate asked and the call ran" — not that a dialog was rendered and answered, because the hook never receives the permission outcome (a host auto-allowing `Task` still executes it). That bound is stated rather than closed; closing it needs the host to report the permission decision back.
 
-A denial leaves no receipt, so the next dispatch asks again. The approval is bound to the
-marker's `level:started_at`, so a second front-door command in the same session is a new run
-and is approved on its own — **and so is a `--solo`/`precondition_failed` degradation**, which
-re-runs `session-mode.js set` and therefore asks again. That is intended: the owner approved a
-run that would offload to a foreman, and an inline `/l3` is a different run than the one
-described to them.
+A denial leaves no receipt, so the next dispatch asks again. Approval binds to the marker's `level:started_at`: a second front-door command in the same session, or a `--solo`/`precondition_failed` degradation (which re-runs `session-mode.js set`), starts a new run and asks again because inline `/l3` differs from the offloaded run originally approved.
 
-**Approval does not widen authority.** Project red lines, irreversible operations outside DOA,
-quota death and the stall fuse still stop the run exactly as they do without the knob. This
-gate removes the ordinary checkpoints and nothing else — the same asymmetry as `-x`, which may
-add red lines for a run but can never remove a project one.
+**Approval does not widen authority.** Project red lines, out-of-DOA irreversible ops, quota death, and the stall fuse still stop the run; like `-x` (adds red lines, never removes project ones), this gate only removes ordinary checkpoints.
 
 **Headless runs must leave it off**: `ask` is auto-denied without a human to answer it.
 
@@ -227,11 +198,11 @@ CEO (depth 0, this session)
 | **review seats** | plan review panel, reviewer ladder, consult ladder resolved via `scripts/resolve-dispatch-topology.js --role <plan_reviewer\|reviewer\|consult>` | auto expands to topology seats; falls back to native claude-native seat if unavailable | silent skip |
 
 Mechanical sources:
-- Review seats: the plan review panel, the reviewer ladder, and the consult ladder are all resolved by `scripts/resolve-dispatch-topology.js --role <plan_reviewer|reviewer|consult>`. Each of the three review-related knobs (`plan_review`, `hetero_review`, `consult_dispatch`) supports `auto`, which expands to these topology-resolved seats; when topology resolution is unavailable the stage falls back to a native claude-native seat rather than being silently skipped.
+- Review knobs (`plan_review`, `hetero_review`, `consult_dispatch`): `auto` expands via `scripts/resolve-dispatch-topology.js --role <plan_reviewer|reviewer|consult>`, falling back to a `claude-native` seat rather than skipping silently.
 - `implementer_ladder: auto` in `review-loop-config.md` expands the host topology written by `scripts/resolve-dispatch-topology.js` (cached at `~/.autopilot/topology.json`; `--check` detects drift).
 - Rung 0 is the first attempt for every unit class now (`ladder_start_rung_judgment` restores the old rung-1-first behavior for `judgment`-class units only).
 - `scripts/resolve-dispatch.sh` implementer default is `sonnet`; the new role `hands` resolves to `haiku`.
-- `dispatch-model-guard` (hook) reminds the dispatching agent (a deny carrying the reason, never a human dialog — v2.36.9) before dispatching `fable`/`opus` for any implementation-shaped dispatch (i.e. `mode` != `plan`); the agent decides — re-dispatch cheaper, or mark line 1 `Engine: <model> (intentional: <why>)` to proceed. It denies any dispatch whose prompt's first line is not `Engine: <model>…` matching the dispatch's `model:` argument.
+- `dispatch-model-guard` (hook) reminds the dispatching agent (denies with reason, never a human dialog — v2.36.9) before dispatching `fable`/`opus` when `mode` != `plan` — the agent decides: re-dispatch on a cheaper model, or mark line 1 `Engine: <model> (intentional: <why>)` to proceed; it also denies any prompt whose line 1 lacks `Engine: <model>…` matching `model:`. For `fable`/`opus` briefs, the `Cost:` line must be the exact `Cost:` text from `costLineFor` (`hooks/lib/brief-header-template.js`) within the first 6 lines even when marked `(intentional: …)`; `sonnet` and `haiku` are not denied when the `Cost:` line is missing (`sonnet`'s `costLineFor` text is advisory and `costLineFor` emits no default for `haiku`, though a `Cost:` line is allowed; `require_cost_line: off` skips the check).
 - Every foreman's DONE line includes the parallel section of the full suite (`hooks/tests/run.sh --parallel 4`) whenever the deliverable touches a shared contract (resolver fields, schema, template defaults) — a deliverable's own tests never see the fixtures it drifts (v2.36.0: 25 files; `references/evidence-discipline.md` §24–25).
 - `hooks/cost-fuse.js` (PreToolUse, default-on, warn mode) trips when brain-tier spend crosses USD 150/host/day (configurable via `cost_fuse` in `~/.autopilot/config.json`); `scripts/cost-digest.js` is the ledger view for that spend.
 
@@ -288,29 +259,9 @@ REACTING too fast, not from seeing too little):
    genuinely wedged (`run-ledger.sh resume` is the recovery path, and only
    after the foreman is confirmed dead).
 
-   HONEST BOUNDARY (LIVENESS): a `CONDITION ... dead reason=owner_absent` line
-   means only that the recorded lease PID has exited — for a CC-native
-   foreman that is the EXPECTED shape seconds after every `stage-acquire`
-   (the acquiring shell records its own PID and exits immediately; the
-   foreman keeps running as a separate agent turn, not as that shell's
-   child), not evidence the foreman died. The line self-flags this
-   (`note=pid_liveness_unreliable_for_cc_native`) — treat `dead` as
-   "confirmed foreman dead" only for a runner whose owning process stays
-   resident for the stage (a long-lived CLI/daemon runner), and for a
-   CC-native foreman fall back to git activity / `dispatch-status.js` before
-   escalating to `run-ledger.sh resume`.
+   HONEST BOUNDARY (LIVENESS): `CONDITION ... dead reason=owner_absent` means only that the recorded lease PID exited — expected seconds after every `stage-acquire` for a CC-native foreman (the shell exits while the agent turn continues), flagged by `note=pid_liveness_unreliable_for_cc_native`. Treat `dead` as confirmed only for resident CLI/daemon runners; for CC-native foremen check git activity / `dispatch-status.js` before `run-ledger.sh resume`.
 
-   Since v2.35.7 the watcher consults the lease's WORKTREE before judging, so
-   the PID is no longer the only input: a tree written to inside the quiet
-   window downgrades the line to `unknown reason=owner_absent_worktree_active`
-   (with the mtime age), a VANISHED tree keeps `dead` under the stronger
-   `owner_absent_worktree_absent`, and an idle-but-present tree falls back to
-   the caveated `dead reason=owner_absent` above. On-disk facts can only make
-   the verdict more cautious — the watcher never reports `working` from files,
-   because files cannot prove a process is running. For the full picture (base
-   head age, per-worktree dirty/ahead/behind, lock holders, disk headroom) run
-   [`scripts/agent-liveness-check.js`](../../../scripts/agent-liveness-check.js);
-   it is repo-agnostic and emits facts, not a verdict.
+   Since v2.35.7 the watcher also checks the lease WORKTREE: recent writes inside the quiet window downgrade to `unknown reason=owner_absent_worktree_active` (with mtime age), a vanished tree emits `dead` (`owner_absent_worktree_absent`), and an idle-but-present tree keeps the caveated `dead reason=owner_absent`. Disk facts never report `working`. For full facts (base head age, per-worktree dirty/ahead/behind, lock holders, disk headroom) run [`scripts/agent-liveness-check.js`](../../../scripts/agent-liveness-check.js) (repo-agnostic, facts only).
 5. **Advisory directive channel (Phase 2 — nudge, never seize).** Depth-0 may
    queue a one-way *advisory* nudge to a running stage's lease holder — it does
    NOT auto-kill, does NOT grab the lease, and never overrides the holder's
@@ -423,14 +374,7 @@ isolation. P0 spike (2026-06-22, PASS) verified every step below empirically:
 agentId = Agent(run_in_background: true, isolation: "worktree", subagent_type: "general-purpose", model: "opus", prompt: <foreman brief>)
 ```
 
-- **🔴 Every `Agent` dispatch MUST pass `model` explicitly.** With no `model`
-  argument the subagent **inherits the parent session's model** — so a Fable-class
-  CEO silently runs its foreman on Fable, which violates Amendment 11 (the foreman is
-  a `sub-orchestrator` → `opus`) and burns through Fable quota (real case 2026-07-09
-  hangar `/l6`: the foreman died mid-run on an API limit). Rule: set `model` on every
-  dispatch — foreman/sub-orchestrator defaults to `sonnet` (opus only when the dispatching brief
-  states why opus is needed); hands defaults to `haiku`/`sonnet` or the hetero implementer ladder.
-  Never rely on inheritance.
+- **🔴 Every `Agent` dispatch MUST pass `model` explicitly.** Omitting `model` inherits the parent session's model — e.g., a Fable CEO silently running its foreman on Fable, violating Amendment 11 (the foreman is a `sub-orchestrator` → `opus`) and burning Fable quota (real case 2026-07-09 hangar `/l6`: the foreman died mid-run on an API limit). Always set `model`: foreman/`sub-orchestrator` defaults to `sonnet` (`opus` only when the brief states why); `hands` defaults to `haiku`/`sonnet` or the hetero implementer ladder. Never rely on inheritance.
 - `Agent(run_in_background, isolation:"worktree")` returns an **`agentId`** that
   is usable as a `TaskStop` `task_id`.
 - The foreman's worktree is at a **deterministic** path:
@@ -470,21 +414,10 @@ PreToolUse — default-on since v2.35.15 — and `scripts/check-foreman-polling.
 
 #### Foreman lifecycle — 一刀一命 (v2.35.15)
 
-Source incident: cuda quota digest 2026-09-04 (`QUOTA-DIGEST-2026-09-04.md`): ≈$2,200 API-equivalent
-in 36 h, 79 % from four resident Sonnet foremen alive 13–33 h with 1,900–7,400 Bash calls each,
-34–97 万 cache-read tokens per call and ≈0 output; 413 wake-ups after cache TTL re-wrote the whole
-context ($455); each takeover re-read brief + rulings + a 14,648-line ledger + 26K lines of kernel
-source (≈300K to start). The prose rules existed; nothing was in the loop.
+Source incident (`QUOTA-DIGEST-2026-09-04.md`): ≈$2,200 API-equivalent in 36 h — 79% from four resident Sonnet foremen (13–33 h, 1,900–7,400 Bash calls each, 34–97万 cache-read/call, ≈0 output); 413 wake-ups after cache TTL re-wrote the whole context ($455); each takeover re-read brief + rulings + a 14,648-line ledger + 26K lines of kernel source (≈300K to start), because prose rules had no in-loop guard.
 
-- **One deliverable per foreman life.** A foreman owns exactly ONE admitted deliverable. When it is
-  integrated, when `foreman-guard` denies the 41st Bash, or when the foreman's own count nears the cap,
-  it writes its handoff (`autopilot:handoff`) and **ends its turn**. Depth-0 spawns the next foreman
-  for the next deliverable. A "resident" foreman waiting for its next assignment is forbidden.
-- **In-loop enforcement.** `hooks/foreman-guard.js` (PreToolUse `Bash|Monitor`, scope = session-mode
-  marker l4|l5|l6 AND payload `agent_id`): role from a line matching exactly `Role: foreman` /
-  `Role: worker` / `Role: reviewer` among the first five lines of the dispatcher-written first
-  message, re-derived every call, never cached. Dispatch briefs are written as line 1 `Engine: <model>`, line 2 `Role: <role>`,
-  line 3 `Lane: <name>` (required: `subagent-budget` denies an `Engine:` brief with no valid or inherited `Lane:`). Caps default foreman 40 / worker 120 / reviewer 120
+- **One deliverable per foreman life.** A foreman owns exactly ONE admitted deliverable. When integrated, when `foreman-guard` denies the 41st Bash, or near the cap, it writes `autopilot:handoff` and **ends its turn**. Depth-0 spawns a fresh foreman for the next deliverable; resident foremen waiting for assignments are forbidden.
+- **In-loop enforcement.** `hooks/foreman-guard.js` (PreToolUse `Bash|Monitor`, scope = session-mode marker l4|l5|l6 AND payload `agent_id`): role from `Role: foreman|worker|reviewer` in the first five lines of the dispatcher's first message, re-derived every call, never cached. Briefs start with line 1 `Engine: <model>`, line 2 `Role: <role>`, line 3 `Lane: <name>` (`subagent-budget` denies an `Engine:` brief lacking a valid/inherited `Lane:`); for `fable`/`opus`, the `Cost:` line must be the exact `Cost:` text from `costLineFor` (`hooks/lib/brief-header-template.js`) within the first 6 lines (`dispatch-model-guard` denies otherwise, even with `(intentional: …)`), while `sonnet` and `haiku` are not denied when the `Cost:` line is missing (`sonnet`'s `costLineFor` text is advisory and `costLineFor` emits no default for `haiku`, though a `Cost:` line is allowed; `require_cost_line: off` skips the check). Caps default foreman 40 / worker 120 / reviewer 120
   (`foreman_guard.role_caps`; env `AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS` comma list e.g.
   `worker=120,reviewer=120`; env overlays config overlays defaults, per key). Last effective-reserve
   calls (min of `foreman_guard.reserve_calls` default 8 / `AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS` and
@@ -530,38 +463,20 @@ source (≈300K to start). The prose rules existed; nothing was in the loop.
 
 #### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 
-By default `Agent(isolation:"worktree")` branches the new worktree from the repo's
-**default/integration branch (`origin/develop` = `origin/HEAD`)** — never the CEO's
-checked-out HEAD or current branch. Verified twice (2026-06-22) and re-confirmed
-2026-06-23 (CC 2.1.186): a probe with a HEAD-only sentinel commit found the sentinel
-**absent** in a default worktree.
+By default `Agent(isolation:"worktree")` branches from the repo's **default/integration branch (`origin/develop` = `origin/HEAD`)**, never the CEO's local HEAD or branch (verified CC 2.1.186: a HEAD-only sentinel commit is absent in a default worktree).
 
-There is **no per-call base parameter** on the `Agent` tool, but the base IS
-selectable via the **`worktree.baseRef` setting** (`fresh` | `head`; added CC 2.1.133,
-empirically re-verified 2.1.186 — takes effect **in-session, no restart**, read from
-any settings tier incl. project-local `.claude/settings.local.json`):
-- `fresh` (default) → `origin/<default>` (= `origin/develop`): a clean tree matching
-  the remote, ignoring un-pushed CEO commits.
-- `head` → the CEO's **local HEAD**, carrying un-pushed commits — verified: with
-  `worktree.baseRef:"head"` the same sentinel probe found the CEO-HEAD sentinel
-  **present** in the worktree.
+`Agent` has **no per-call base parameter**, but **`worktree.baseRef`** (`fresh` | `head`; CC ≥ 2.1.133, **in-session, no restart**, read from any settings tier incl. `.claude/settings.local.json`) selects the base:
+- `fresh` (default) → `origin/<default>` (`origin/develop`), ignoring un-pushed local commits.
+- `head` → the CEO's **local HEAD**, including un-pushed commits.
 
-⇒ **Base-currency decision the CEO makes BEFORE dispatch** — run
-`git merge-base --is-ancestor HEAD origin/develop`: **exit 0** = HEAD already in
-`origin/develop` (no un-merged work → keep default `fresh`); **exit 1** = HEAD has
-commits not yet on develop (→ the foreman must build on them, see table):
+⇒ **Before dispatch**, run `git merge-base --is-ancestor HEAD origin/develop`: **exit 0** = HEAD is already in `origin/develop` (keep `fresh`); **exit 1** = HEAD has un-merged commits (use table):
 
 | CEO's state | How to set the foreman's base |
 |-------------|-------------------------------|
-| Task is independent of any un-merged CEO work (HEAD already on/reachable-from `origin/develop`) | **none** — default `fresh` (`origin/develop`) is correct. |
-| Task must build on the CEO's un-merged work (feature-branch-only or self-referential — e.g. exercising tooling that lives only on this branch) | **Primary (Claude Code):** set `worktree.baseRef:"head"` (project-local settings) before dispatch — the foreman worktree then branches from the CEO's local HEAD directly. The setting is **session-global**, so every worktree dispatched while it is set shares that base (fine for parallel siblings, which fork the same integration point). **Portable fallback** (non-CC, or when you can't set the setting): `git reset --hard <CEO-HEAD-sha>` as the foreman's literal STEP 0 — git objects are shared across worktrees so `<CEO-HEAD-sha>` always resolves; verify a sentinel from your HEAD exists and **STOP (don't recreate)** if the reset fails. |
+| Independent of un-merged CEO work (HEAD reachable from `origin/develop`) | **none** — default `fresh` (`origin/develop`). |
+| Must build on un-merged CEO work (feature-branch-only or self-referential tooling) | **Primary (Claude Code):** set `worktree.baseRef:"head"` in project-local settings before dispatch (session-global: all sibling worktrees share that base). **Portable fallback** (non-CC or setting unavailable): `git reset --hard <CEO-HEAD-sha>` as the foreman's literal STEP 0 (shared git objects resolve `<CEO-HEAD-sha>`); verify a HEAD sentinel exists and **STOP (don't recreate)** if reset fails. |
 
-Historically (before the `worktree.baseRef` discovery) the P1.f dogfood's `/l5`
-foreman ran the *pre-feature* `dispatch-hetero.sh` because its develop base lacked
-the branch-only P1 work — the self-referential case above, now cleanly handled by
-`worktree.baseRef:"head"` (the `git reset` STEP-0 is the portable fallback). After the
-foreman commits on top of the CEO's HEAD, integrate by cherry-picking the foreman
-commit(s) (§4).
+After a foreman commits on top of the CEO's HEAD, integrate by cherry-picking the foreman commit(s) (§4).
 
 > **The depth-0 half of this contract moved to [`depth0-control-loop.md`](depth0-control-loop.md)**
 > in v2.36.21 — the CEO-owned control loop, Phase L width fan-out, run-summary

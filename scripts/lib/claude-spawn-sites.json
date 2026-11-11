@@ -311,6 +311,11 @@
       ]
     },
     {
+      "file": "scripts/lane-switch.js",
+      "status": "out_of_scope",
+      "reason": "never spawns a process; startLine() (line 50) only formats the claude --resume command the switch plan prints for the operator to run in the target pane"
+    },
+    {
       "file": "scripts/lib/account-rail.js",
       "status": "wired",
       "group": "account-layer",

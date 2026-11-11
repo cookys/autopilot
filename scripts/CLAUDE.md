@@ -43,7 +43,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json`
 
-**Setup & install** — `dev-setup.sh` `dev-update.sh` `accounts-onboard.sh` `profile-health.js` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `install-token-discipline.js` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js` `statusline-live-tee.js` `lib/opencode-discovery-probe.js` `lib/test-git-env.js` `lib/test-git-env.sh` `lib/test-gitconfig` `lib/runner-fallback-bin.sh`
+**Setup & install** — `dev-setup.sh` `dev-update.sh` `accounts-onboard.sh` `profile-health.js` `profile-link.js` `lane-switch.js` `login-checklist.js` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `install-token-discipline.js` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js` `statusline-live-tee.js` `lib/opencode-discovery-probe.js` `lib/test-git-env.js` `lib/test-git-env.sh` `lib/test-gitconfig` `lib/runner-fallback-bin.sh`
 
 **Skills tooling, evals & measurement** — `cost-digest.js` `benchmark-hook-latency.js` `status-events-bench.js` `distill-scan.js` `identifier-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh` `roundtable-window.js` `permission-prompt-watch.js` `lib/permission-prompt-detect.js`
 
@@ -53,7 +53,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Shared JSON & store primitives (cont.)** — `lib/claude-stream-envelope.js` `lib/account-observation.js` `lib/repo-layout.js` `lib/seat-model-id.js` `lib/roster-overlay.js` `lib/fleet-decision.js` `lib/decide-line.js` `lib/agy-timeout.sh` `lib/events-fixture.js` `lib/account-registry.js` `lib/account-quota.js` `lib/account-cooldown.js` `lib/account-pick.js` `lib/account-interpret.js` `lib/account-capture.js` `lib/account-probe.js` `lib/account-audit.js` `lib/account-env.js` `lib/account-fixtures/claude-shim.js` `lib/account-fixtures/shim-install.js` `lib/account-fixtures/os-lock-holder.js` `lib/account-rail.js` `lib/account-state.sh` `lib/role-kit.js` `lib/role-kit-kimi.js` `lib/role-kit.sh` `lib/eval-account.sh` `lib/eval-account.js` `lib/fixtures/gen-account-pick-g37-golden.js`
 
-**Shared JSON & store primitives (cont.)** — `lib/hippo.js`, `project-record.js`
+**Shared JSON & store primitives (cont.)** — `lib/hippo.js`, `project-record.js` `lib/lane-manifest.js` `lib/switch-journal.js`
 
 **Test helpers** — `lib/test-reaper.js`
 

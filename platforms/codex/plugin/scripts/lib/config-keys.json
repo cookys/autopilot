@@ -2615,6 +2615,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_LANE_BASE_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lane-switch.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_LEDGER_PATH",
       "kind": "env",
       "audience": "internal",

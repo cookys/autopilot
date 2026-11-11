@@ -111,7 +111,6 @@ test('minimax: missing fields, expired windows, non-2xx, bad JSON write nothing 
     [{ other: 1 }, 200, 'fields_missing'],
     [{ model_remains: [mm({ end_time: NOW_S - 10, weekly_end_time: NOW_S - 10 })] }, 200, 'quota_windows_expired'],
     [{ model_remains: [mm()] }, 500, 'http_status'],
-    [{ model_remains: [mm()] }, 401, 'http_status'],
     ['BADJSON', 200, 'json_invalid'],
   ];
   for (const [body, status, reason] of cases) {
@@ -135,6 +134,19 @@ test('glm: normal body maps unit 3/number 5 to rolling_5h and unit 6/number 1 to
   assert.strictEqual(rec.windows.find((w) => w.kind === 'weekly').resets_at, NOW_S + 86400);
   assert.strictEqual(seen.init.headers.Authorization, FAKE_TOKEN, 'no Bearer for glm');
   assert.strictEqual(seen.url, 'https://api.z.ai/api/monitor/usage/quota/limit');
+});
+test('minimax: 401 marks the token invalid (empty-window L1 row, token_state_at in seconds, no token in the row); 500 stays http_status with no row', async () => {
+  const { r, liveDir } = await run(real, 'minimax', { model_remains: [mm()] }, 401);
+  assert.deepStrictEqual([r.wrote, r.reason], [false, 'token_invalid']);
+  const rec = readRow(liveDir, 'minimax', 'minimax');
+  assert.strictEqual(rec.token_state, 'invalid');
+  assert.strictEqual(rec.token_state_at, NOW_S);
+  assert.deepStrictEqual(rec.windows, []);
+  assert.strictEqual(JSON.stringify(rec).includes(FAKE_TOKEN), false);
+  assert.strictEqual(JSON.stringify(r).includes(FAKE_TOKEN), false);
+  const five = await run(real, 'minimax', { model_remains: [mm()] }, 500);
+  assert.deepStrictEqual([five.r.wrote, five.r.reason], [false, 'http_status']);
+  assert.strictEqual(readRow(five.liveDir, 'minimax', 'minimax'), null);
 });
 test('glm: out-of-range percentage, missing fields, expired, non-2xx, bad JSON write nothing', async () => {
   const cases = [

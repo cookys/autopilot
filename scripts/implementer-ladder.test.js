@@ -184,6 +184,68 @@ test('planted negative: empty ladder dispatch argv equals pre-ladder roster', ()
   assert.deepEqual(after, before);
 });
 
+test('roster override qwen_local implementer emits bwrap sandbox argv', () => {
+  const cfg = writeConfig([
+    '- override: implementer | until 2099-01-01 | test fixture seat',
+    '- implementer_engine: Qwen3.8-27B-QUASAR-NVFP4',
+    '- implementer_effort: high',
+    '- implementer_runner: cc-shim',
+    '- implementer_endpoint: qwen_local',
+    '- implementer_ladder: Qwen3.8-27B-QUASAR-NVFP4/high@cc-shim',
+    '- allow_same_runner_dual_seat: on',
+    '',
+  ].join('\n'));
+  const { status, json, stderr } = resolveJson(cfg);
+  assert.equal(status, 0, stderr);
+  const applied = applyImplementerLadder(json, { unitClass: 'mechanical', repairRound: 0 });
+  assert.equal(applied.roster.implementer_runner, 'cc-shim');
+  assert.equal(applied.roster.implementer_endpoint, 'qwen_local');
+  const promptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-ladder-prompt-'));
+  const promptFile = path.join(promptDir, 'prompt.md');
+  fs.writeFileSync(promptFile, 'do the thing\n');
+  const args = buildImplementationArgs({
+    roster: applied.roster,
+    promptFile,
+    branch: 'feat/x',
+    base: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    cwd: promptDir,
+  });
+  const sandboxAt = args.indexOf('--sandbox');
+  assert.notEqual(sandboxAt, -1, args.join(' '));
+  assert.equal(args[sandboxAt + 1], 'bwrap');
+  const parentAt = args.indexOf('--worktree-parent');
+  assert.notEqual(parentAt, -1, args.join(' '));
+  const parent = args[parentAt + 1];
+  assert.equal(path.isAbsolute(parent), true);
+  assert.equal(parent.startsWith(REPO + path.sep), false);
+  assert.equal(fs.existsSync(parent), true);
+  assert.equal(args[args.lastIndexOf('--endpoint') + 1], 'qwen_local');
+  fs.rmSync(parent, { recursive: true, force: true });
+  fs.rmSync(promptDir, { recursive: true, force: true });
+});
+
+test('cc-shim glm implementer is not forced into the local sandbox', () => {
+  const promptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-ladder-prompt-'));
+  const promptFile = path.join(promptDir, 'prompt.md');
+  fs.writeFileSync(promptFile, 'do the thing\n');
+  const args = buildImplementationArgs({
+    roster: {
+      implementer_engine: 'GLM-5.3',
+      implementer_effort: 'high',
+      implementer_runner: 'cc-shim',
+      implementer_endpoint: 'glm',
+    },
+    promptFile,
+    branch: 'feat/x',
+    base: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    cwd: promptDir,
+  });
+  assert.equal(args.includes('--sandbox'), false, args.join(' '));
+  assert.equal(args.includes('--worktree-parent'), false, args.join(' '));
+  assert.equal(args[args.indexOf('--endpoint') + 1], 'glm');
+  fs.rmSync(promptDir, { recursive: true, force: true });
+});
+
 test('template config with auto implementer_ladder and no topology file emits empty ladder plus warning', () => {
   const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-ladder-template-'));
   const nonExistentTopo = path.join(scratchDir, 'nonexistent-topology.json');

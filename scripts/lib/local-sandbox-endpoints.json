@@ -1,0 +1,4 @@
+{
+  "_note": "Named endpoints whose cc-shim IMPLEMENTER dispatches must run under --sandbox bwrap (PM 01M748P8G8). One list, read by scripts/dispatch-hetero.sh and src/engine/autopilot-engine.js. Not transport_security: that field is the usage-ledger account alias and is credential-dependent. Add a local DeepSeek endpoint name here when one exists; none is registered today.",
+  "local_sandbox_endpoints": ["qwen_local"]
+}

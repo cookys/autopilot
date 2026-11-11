@@ -754,9 +754,40 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   return { policy, action, error_class: null, dispatch_status: dispatchStatus };
 }
 
-// --endpoint on an implementer dispatch comes from the caller's extraImplementationArgs (the
-// builder does not reserve it). The cloud fallback must read it for the log and drop it, or the
-// cloud rung would be sent to the local endpoint again.
+// --endpoint on an implementer dispatch: extraImplementationArgs wins when the caller passed
+// one (not reserved; the cloud fallback reads it and drops it, or the cloud rung would be sent
+// to the local endpoint again). Otherwise buildImplementationArgs emits roster.implementer_endpoint
+// for a cc-shim runner. A name in scripts/lib/local-sandbox-endpoints.json also forces
+// --sandbox bwrap and --worktree-parent; those two are reserved so extra args cannot strip them
+// (PM 01M748P8G8). The parent is created here, under os.tmpdir() and outside the repo, because
+// every implementer argv (engine, l5/l6, the ladder) is built by this function.
+const LOCAL_SANDBOX_ENDPOINTS = path.join(
+  __dirname, '..', '..', 'scripts', 'lib', 'local-sandbox-endpoints.json',
+);
+
+function localSandboxEndpointNames() {
+  let doc;
+  try {
+    doc = JSON.parse(fs.readFileSync(LOCAL_SANDBOX_ENDPOINTS, 'utf8'));
+  } catch (error) {
+    throw new Error(`local implementer sandbox registry unreadable: ${LOCAL_SANDBOX_ENDPOINTS}`);
+  }
+  const list = doc && doc.local_sandbox_endpoints;
+  if (!Array.isArray(list) || list.some((name) => typeof name !== 'string' || name.length === 0)) {
+    throw new Error(`local implementer sandbox registry is malformed: ${LOCAL_SANDBOX_ENDPOINTS}`);
+  }
+  return list;
+}
+
+function implementerSeatEndpoint(extraImplementationArgs, roster) {
+  const fromExtra = endpointFromImplementationArgs(extraImplementationArgs);
+  if (typeof fromExtra === 'string' && fromExtra.length > 0) return fromExtra;
+  if (roster && typeof roster.implementer_endpoint === 'string'
+      && VALID_ENDPOINT_NAME.test(roster.implementer_endpoint)) {
+    return roster.implementer_endpoint;
+  }
+  return '';
+}
 function endpointFromImplementationArgs(args) {
   if (!Array.isArray(args)) return null;
   for (let i = 0; i < args.length; i += 1) {
@@ -1068,6 +1099,8 @@ function buildImplementationArgs({
     '--retain-reason',
     '--retain-until',
     '--timeout',
+    '--sandbox',
+    '--worktree-parent',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
   if (campaignContractFile !== null
@@ -1189,6 +1222,20 @@ function buildImplementationArgs({
   }
   if (timeoutSeconds !== null) {
     args.push('--timeout', `${timeoutSeconds}s`);
+  }
+  const seatEndpoint = implementerSeatEndpoint(extraImplementationArgs, roster);
+  const extraEndpoint = endpointFromImplementationArgs(extraImplementationArgs);
+  if (roster.implementer_runner === 'cc-shim'
+      && (extraEndpoint === null || extraEndpoint === '')
+      && typeof roster.implementer_endpoint === 'string'
+      && VALID_ENDPOINT_NAME.test(roster.implementer_endpoint)) {
+    args.push('--endpoint', roster.implementer_endpoint);
+  }
+  if (roster.implementer_runner === 'cc-shim'
+      && seatEndpoint
+      && localSandboxEndpointNames().includes(seatEndpoint)) {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-local-sbx-'));
+    args.push('--sandbox', 'bwrap', '--worktree-parent', parent);
   }
   args.push(...extraImplementationArgs);
   return args;

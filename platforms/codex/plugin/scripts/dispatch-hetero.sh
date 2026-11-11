@@ -69,6 +69,11 @@
 #                                              #   sits inside any repo's working tree => precondition_failed, never a
 #                                              #   silent run without the sandbox. Result JSON + manifest carry
 #                                              #   `sandbox: {mode, writable, denied_writes}`. Default off.
+#                                              #   A local implementer seat (scripts/lib/local-sandbox-endpoints.json,
+#                                              #   today qwen_local) on cc-shim is refused BEFORE resolve-endpoint
+#                                              #   and before any model call unless this flag is bwrap
+#                                              #   (boundary_code local_implementer_sandbox_required, PM 01M748P8G8).
+#                                              #   Read-only rails are not this script. No unsandboxed fallback.
 #                                              #   The worktree's `.git` gitfile is bound read-only; the rail also
 #                                              #   checks it is unchanged before any git against the worktree
 #                                              #   (else boundary_rejected, worktree_gitfile_tampered), sandbox or not; any nested `.git` below the
@@ -570,6 +575,8 @@ usage() { awk 'NR>1 { if ($0 !~ /^#/) exit; print }' "$0" | sed 's/^# \{0,1\}//'
 . "$SELF_DIR/lib/agy-timeout.sh"
 # shellcheck source=lib/runner-fallback-bin.sh
 . "$SELF_DIR/lib/runner-fallback-bin.sh"
+# shellcheck source=lib/local-sandbox-endpoint.sh
+. "$SELF_DIR/lib/local-sandbox-endpoint.sh"
 
 # agy_edit_only_directive <worktree> — the harness directive prepended to every agy task
 # prompt. A FUNCTION, not an inline string, because the argv-ceiling guard has to measure the
@@ -1793,6 +1800,39 @@ sandbox_preflight() {
   fi
   return 0
 }
+
+# local_sandbox_endpoint_listed is scripts/lib/local-sandbox-endpoint.sh (one list).
+# This script only implements. A role label in the environment does not make the
+# worker read-only, so the gate is every cc-shim dispatch of a listed endpoint,
+# not an AUTOPILOT_DISPATCH_ROLE allowlist. Read-only seats use other rails.
+die_local_implementer_sandbox() {
+  local endpoint="$1"
+  local runner
+  runner="$(current_runner_name)"
+  local run_id_json="null"
+  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
+  local duplex_json="null"
+  [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
+  local msg="local implementer endpoint ${endpoint} requires --sandbox bwrap (missing flag); refusing before any model call"
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null, "boundary_code": "local_implementer_sandbox_required" }\n' \
+    "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$msg")" \
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
+  exit 2
+}
+
+require_local_implementer_sandbox() {
+  [ "${IS_CCSHIM:-0}" -eq 1 ] || return 0
+  [ -n "${ENDPOINT:-}" ] || return 0
+  [ "${SANDBOX:-off}" = "bwrap" ] && return 0
+  local listed_rc=0
+  local_sandbox_endpoint_listed "$ENDPOINT" || listed_rc=$?
+  case "$listed_rc" in
+    0) die_local_implementer_sandbox "$ENDPOINT" ;;
+    1) return 0 ;;
+    *) die_precondition "local implementer sandbox registry unreadable (scripts/lib/local-sandbox-endpoints.json); refusing cc-shim endpoint '${ENDPOINT}' without --sandbox bwrap" ;;
+  esac
+}
+
 # sandbox_nested_repo <path>: prints the nearest PROPER ancestor directory that holds a .git entry
 # (a repo's working tree, main checkout or linked worktree alike) and returns 0; returns 1 when
 # no ancestor is inside any repo. Strict on purpose: the independent clone the sandbox wants is
@@ -2601,6 +2641,10 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
     "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
 fi
 set_runner_flags
+# Before resolve-endpoint, the pre-probe, the worktree, and the worker. A listed local
+# endpoint that did not ask for bwrap never reaches a model call. bwrap requested but
+# missing still dies in set_runner_flags (no unsandboxed fallback).
+require_local_implementer_sandbox
 # agy is the else-case rail (no IS_* flag). Refuse an unusable --timeout HERE, in the parent: the agy
 # block itself runs in the detached child, where a die would leave no result file behind.
 if [ "${RUNNER_RESOLVED:-0}" -eq 1 ] \

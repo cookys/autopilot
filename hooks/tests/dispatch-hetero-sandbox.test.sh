@@ -23,6 +23,10 @@
 #   gitlink: a gitlink added outside the output paths is not hidden from the rail's BASE..HEAD diff (every boundary diff carries --ignore-submodules=none, so
 #            a .gitmodules `ignore = all` cannot hide it; status keeps =dirty; files_changed counts a committed or staged gitlink).
 #   no bwrap / bwrap cannot start: fail closed (precondition_failed, no worker, no worktree).
+#   local seat (PM 01M748P8G8): cc-shim + endpoint qwen_local as implementer without
+#            --sandbox bwrap is refused before any model call (boundary_code
+#            local_implementer_sandbox_required). These cases run even when bwrap
+#            is missing. A non-local endpoint (glm) and a reviewer dispatch stay as before.
 # Seam: a stub `claude` on PATH, no real model, no GPU. Own temp dirs.
 . "$(dirname "$0")/lib.sh"
 eq() { assert_eq "$2" "$1" "$3"; }  # eq <expected> <actual> <msg>
@@ -41,12 +45,6 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPI
   AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
   CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID 2>/dev/null || true
 
-if ! command -v bwrap >/dev/null 2>&1 || ! bwrap --ro-bind / / --dev /dev --proc /proc true >/dev/null 2>&1; then
-  echo "SKIP: bwrap is not usable on this host; the sandbox cases cannot run"
-  finalize_test
-  exit 0
-fi
-
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 SBX="$TEST_TMP/repo"; mkdir -p "$SBX"; $GIT -C "$SBX" init -q; $GIT -C "$SBX" commit -q --allow-empty -m base
 WTPARENT="$TEST_TMP/wts"; mkdir -p "$WTPARENT"        # outside every repo
@@ -60,6 +58,7 @@ BINDIR="$TEST_TMP/bin"; mkdir -p "$BINDIR"
 cat > "$BINDIR/claude" <<'EOS'
 #!/usr/bin/env bash
 cat >/dev/null
+[ -n "${STUB_SENTINEL:-}" ] && echo spawned > "$STUB_SENTINEL"
 echo edited >> sandbox-edit.txt
 if [ -n "${STUB_PARENT_TARGET:-}" ]; then
   echo leaked > "$STUB_PARENT_TARGET"
@@ -141,6 +140,90 @@ process.stdout.write(v === undefined ? "<absent>" : JSON.stringify(v));
 ' "$1"
 }
 status_of() { printf '%s' "$OUT" | result_json | jfield status; }
+
+# Named-endpoint env for the fake seat. HOME is the test home, so resolve-endpoint
+# never reads the real ~/.autopilot/endpoints.env. PREPROBE=off: no GET to the stub URL.
+export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:9"
+export AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN="t"
+export AUTOPILOT_ENDPOINT_GLM_URL="http://127.0.0.1:9"
+export AUTOPILOT_ENDPOINT_GLM_TOKEN="t"
+export AUTOPILOT_ENDPOINT_PREPROBE=off
+SENTINEL="$TEST_TMP/claude-spawned"
+
+# (a) direct dispatch-hetero, cc-shim + qwen_local implementer, no --sandbox.
+# Must refuse before any model call. Red until the sink grows the gate.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    --endpoint qwen_local \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-a-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a")" || RC=$?
+eq 2 "$RC" "(a) qwen_local implementer without --sandbox bwrap exits 2 (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-a" 2>/dev/null))"
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(a) no child spawned (sentinel absent)"
+AJSON="$(printf '%s' "$OUT" | result_json)" || fail "(a) stdout has no result JSON: $OUT"
+eq '"precondition_failed"' "$(printf '%s' "$AJSON" | jfield status)" "(a) status precondition_failed"
+eq 'false' "$(printf '%s' "$AJSON" | jfield dispatcher_called)" "(a) dispatcher_called false"
+eq '0' "$(printf '%s' "$AJSON" | jfield model_calls)" "(a) model_calls 0"
+eq '"local_implementer_sandbox_required"' "$(printf '%s' "$AJSON" | jfield boundary_code)" "(a) boundary_code local_implementer_sandbox_required"
+case "$(printf '%s' "$AJSON" | jfield error)" in
+  *qwen_local*--sandbox\ bwrap*|*--sandbox\ bwrap*qwen_local*) eq 0 0 "(a) error names qwen_local and --sandbox bwrap" ;;
+  *) fail "(a) error does not name the endpoint and the missing flag: $(printf '%s' "$AJSON" | jfield error)" ;;
+esac
+
+# (c) cc-shim + a non-local endpoint (glm), no sandbox: the new gate does not fire.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    --endpoint glm \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-c-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-c")" || RC=$?
+eq 0 "$RC" "(c) glm without sandbox still proceeds (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-c" 2>/dev/null))"
+eq "yes" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(c) fake claude ran"
+eq '"committed"' "$(status_of)" "(c) status stays committed"
+eq '<absent>' "$(printf '%s' "$OUT" | result_json | jfield boundary_code)" "(c) no local-implementer boundary code"
+
+# (e) reviewer rail, qwen_local, no sandbox: unchanged (this script is not the write sink).
+REVIEW_DIFF="$TEST_TMP/review.diff"
+printf '%s\n' 'diff --git a/f b/f' '--- a/f' '+++ b/f' '@@ -1 +1 @@' '-a' '+b' > "$REVIEW_DIFF"
+rm -f "$SENTINEL"
+RC=0
+EOUT="$(timeout 60 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    AUTOPILOT_SETTLE_MS=1500 AUTOPILOT_STABLE_POLLS=1 \
+    "$REPO_ROOT/scripts/dispatch-review.sh" --runner cc-shim --model MiniMax-M3 \
+    --endpoint qwen_local --diff-file "$REVIEW_DIFF" --context-window off --timeout 20s \
+    2>"$TEST_TMP/stderr-e")" || RC=$?
+eq "yes" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(e) reviewer dispatch reached fake claude (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-e" 2>/dev/null))"
+case "$EOUT $(cat "$TEST_TMP/stderr-e" 2>/dev/null)" in
+  *local_implementer_sandbox_required*) fail "(e) reviewer dispatch was refused by the implementer sandbox gate" ;;
+  *) eq 0 0 "(e) reviewer dispatch has no local-implementer sandbox refusal" ;;
+esac
+
+if ! command -v bwrap >/dev/null 2>&1 || ! bwrap --ro-bind / / --dev /dev --proc /proc true >/dev/null 2>&1; then
+  echo "SKIP: bwrap is not usable on this host; the sandbox cases cannot run"
+  finalize_test
+  exit 0
+fi
+
+# (b) the same local implementer seat with --sandbox bwrap --worktree-parent proceeds.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    --endpoint qwen_local --sandbox bwrap --worktree-parent "$WTPARENT" \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-b-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-b")" || RC=$?
+eq 0 "$RC" "(b) qwen_local with --sandbox bwrap proceeds (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-b" 2>/dev/null))"
+# The sentinel lives outside the worktree, so bwrap's read-only `/` hides the write.
+# A committed in-worktree edit is the proof the fake claude ran.
+eq '"committed"' "$(status_of)" "(b) status committed (fake claude's in-worktree edit landed)"
+eq '"bwrap"' "$(printf '%s' "$OUT" | result_json | jfield sandbox.mode)" "(b) sandbox.mode is bwrap"
+eq '<absent>' "$(printf '%s' "$OUT" | result_json | jfield boundary_code)" "(b) no refusal boundary code"
 
 # ---- green: worker writes inside the worktree only; sandbox on -> committed
 run_case bwrap 0 --worktree-parent "$WTPARENT"

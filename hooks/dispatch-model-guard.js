@@ -241,9 +241,10 @@ function engineTokenFromPrompt(prompt) {
   return m ? m[1] : '';
 }
 
-// After the other checks. Effective model is tool_input.model, or the Engine
-// token when model is absent. Fable/opus only. Intentional does not skip this:
-// callers run it before the guarded-engine allow path. Exits on deny.
+// Fable/opus only. Intentional does not skip this. Exits on deny.
+// Model present: after the engine-header check, before the guarded-engine allow.
+// Model absent: before the on_missing_model allow / ask / deny paths, with the
+// Engine token as the effective model.
 function denyIfMissingCostLine(config, prompt, modelForCost) {
   if (config.require_cost_line !== 'on') return;
   if (!missingCostLine(prompt, modelForCost)) return;
@@ -322,12 +323,13 @@ try {
   // would otherwise be dead config, since the header check ran first and
   // denied before allow could take effect).
   if (!model) {
+    // Cost line before allow / ask / deny. denyIfMissingCostLine exits on deny,
+    // so ask cannot turn a missing fable/opus Cost line into a dialog, and the
+    // default deny names the exact line.
+    const promptAbsent = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
+    const engineTok = engineTokenFromPrompt(promptAbsent);
+    denyIfMissingCostLine(config, promptAbsent, engineTok);
     if (config.on_missing_model === 'allow') {
-      // Model is absent and the missing-model policy already allowed. The cost
-      // rule still sees the Engine token (fable/opus only).
-      const promptAbsent = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
-      const engineTok = engineTokenFromPrompt(promptAbsent);
-      if (engineTok) denyIfMissingCostLine(config, promptAbsent, engineTok);
       exitAllow();
     }
     // v2.36.2: default is DENY, not ask. A missing model: is never a judgment for the
@@ -339,7 +341,7 @@ try {
     const reason = 'dispatch-model-guard: no model specified — the subagent would inherit the session model '
       + '(possibly a guarded engine); re-dispatch NOW with an explicit model: (scripts/resolve-dispatch.sh '
       + '--role <role>) and an "Engine: <model>" first prompt line'
-      + headerDenialSuffix(typeof toolInput.prompt === 'string' ? toolInput.prompt : '', '', { engineBy: 'self', laneBy: 'other' });
+      + headerDenialSuffix(promptAbsent, '', { engineBy: 'self', laneBy: 'other' });
     // on_missing_model: ask is the explicit opt-in to the dialog, so it asks even under
     // the default remind mode (warn stays advisory).
     if (config.on_missing_model === 'ask') handleGuard(reason, config.mode === 'remind' ? 'ask' : config.mode);

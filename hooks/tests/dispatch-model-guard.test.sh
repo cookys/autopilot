@@ -397,6 +397,40 @@ run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq "" "$__RUN_STDOUT" "costline-engine-token sonnet is not denied"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
+# model omitted + Engine: opus + no Cost line, on_missing_model: ask → deny, not ask.
+printf '%s\n' "- on_missing_model: ask" > "$TEST_TMP/config-cost-ask.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-ask.md"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-absent-ask-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-absent-ask denies"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "costline-absent-ask is not an ask"
+assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-absent-ask gives the exact line"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# model omitted + Engine: opus + no Cost line, default on_missing_model deny → exact Cost line.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-absent-deny-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-absent-deny denies"
+assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-absent-deny gives the exact line"
+
+# model omitted + Engine: sonnet + no Cost line stays the missing-model policy
+# (default deny names "no model specified"; ask stays ask). Not a cost deny.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-absent-sonnet-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-absent-sonnet still denies for a missing model"
+assert_contains "$__RUN_STDOUT" "no model specified" "costline-absent-sonnet keeps the missing-model reason"
+assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-sonnet is not a cost deny"
+printf '%s\n' "- on_missing_model: ask" > "$TEST_TMP/config-cost-ask-sonnet.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-ask-sonnet.md"
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "costline-absent-sonnet-ask stays ask"
+assert_contains "$__RUN_STDOUT" "no model specified" "costline-absent-sonnet-ask keeps the missing-model reason"
+assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-sonnet-ask is not a cost deny"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
 # A Cost line on line 7 does not count. Line 6 does. Intentional would otherwise allow.
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\n\n\n\n'"$COST_FABLE_OPUS"'"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"

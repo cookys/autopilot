@@ -12,7 +12,7 @@ Goal: when a Claude Agent subagent is dispatched on fable or opus, its own brief
 - sonnet → `Cost: 中價模型；機械性讀檔與搜尋可再派 haiku` (advisory; never a deny)
 - haiku, anything else, empty → no line
 
-`missingCostLine` is true only when that fable/opus line applies and none of the first 6 lines matches `^Cost:\s*\S`. `dispatch-model-guard` (PreToolUse Task|Agent) then denies, after the engine-header check and before the guarded-model check, with the reason `require_cost_line` and the exact line to paste. An `(intentional: …)` Engine header does not waive it. The effective model is `tool_input.model`, or the `Engine:` token when `model` is absent and `on_missing_model` is `allow`. `require_cost_line: on|off` defaults on; garbage stays on. `mode: off` and `AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off` still skip the whole hook.
+`missingCostLine` is true only when that fable/opus line applies and none of the first 6 lines matches `^Cost:\s*\S`. `dispatch-model-guard` (PreToolUse Task|Agent) then denies, after the engine-header check and before the guarded-model check, with the reason `require_cost_line` and the exact line to paste. An `(intentional: …)` Engine header does not waive it. The effective model is `tool_input.model`, or the `Engine:` token when `model` is absent. When `model` is absent the cost check runs before the `on_missing_model` allow, ask, and deny paths. `require_cost_line: on|off` defaults on; garbage stays on. `mode: off` and `AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off` still skip the whole hook.
 
 The SessionStart hint stays one line, at most 200 characters, and names the Cost slot: `Agent brief first lines: Engine: <model> | Role: <role> | Lane: <slug> | Cost: <fable/opus 必填，見 costLineFor>`.
 

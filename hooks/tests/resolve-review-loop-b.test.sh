@@ -176,9 +176,13 @@ AMBIENT_NO_BRAIN="$TEST_TMP/ambient-config-no-brain.md"
 # assertions here went red for a reason that had nothing to do with what they
 # check. Stripping the seat lets the resolver fall back to its built-in default,
 # which is what "ambient" was always meant to mean here.
+# Same for the dated override blocks' field lines (reviewer_*, plan_reviewer_*, plan_deep_reviewer_*,
+# allow_same_runner_dual_seat): the '- override:' header is stripped above, so without this the
+# window's seat fields leak in as plain settings and change the key list and the plan_review warning.
 if [ -f "$REPO_ROOT/.claude/review-loop-config.md" ]; then
   grep -v -e 'brain_seat_identity_file' -e '^- implementer_' -e '^- override:' \
     -e '^- on_engine_unavailable:' -e '^- cloud_fallback_rung:' \
+    -e '^- reviewer_' -e '^- plan_reviewer_' -e '^- plan_deep_reviewer_' -e '^- allow_same_runner_dual_seat:' \
     "$REPO_ROOT/.claude/review-loop-config.md" > "$AMBIENT_NO_BRAIN"
 else
   : > "$AMBIENT_NO_BRAIN"

@@ -11,6 +11,7 @@ const {
   evaluate: evaluateRepairScope,
 } = require('../../scripts/check-repair-scope');
 const { portableRawLog, resolveRawLog } = require('../../scripts/lib/raw-log-path');
+const codexFallback = require('../../scripts/lib/qc-panel-codex-fallback');
 
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const {
@@ -6582,7 +6583,7 @@ class AutopilotEngine {
             providedReviewResult: batchRows[i],
             sharedPacket,
           });
-          outcomes[entry.index] = { seat: entry.seat, outcome: finished };
+            outcomes[entry.index] = { seat: entry.seat, outcome: finished };
           if (seatStoreCtx && finished && finished.reviewed === true) {
             finalPanelSeatStore.recordVerdict(
               { ...seatStoreCtx, seat: entry.seat, seatIndex: entry.index },
@@ -6598,6 +6599,91 @@ class AutopilotEngine {
             );
           }
         }
+      }
+      const seatSubstitutions = [];
+      for (let i = 0; i < outcomes.length; i += 1) {
+        const row = outcomes[i];
+        if (!row || !row.seat || row.seat.runner !== 'codex' || (row.outcome && row.outcome.reviewed === true)) {
+          continue;
+        }
+        const out = row.outcome && typeof row.outcome === 'object' ? row.outcome : {};
+        const outRaw = out.raw && typeof out.raw === 'object' ? out.raw : {};
+        const revJson = outRaw.review && typeof outRaw.review === 'object' ? outRaw.review : {};
+        const revChild = outRaw.reviewResult && typeof outRaw.reviewResult === 'object' ? outRaw.reviewResult : {};
+        const quotaFailure = codexFallback.classifyCodexQuotaFailure({
+          runner: row.seat.runner,
+          exitCode: Number.isInteger(revJson.exit_code)
+            ? revJson.exit_code
+            : (Number.isInteger(revChild.status) ? revChild.status : null),
+          texts: [
+            out.reason,
+            outRaw.reason,
+            revJson.error,
+            revJson.stderr_tail,
+            revChild.stderr,
+            revChild.stdout,
+            revChild.error && revChild.error.message,
+          ],
+          rawLogPath: out.raw_log || outRaw.raw_log || revJson.raw_log || null,
+          cwd: loopCwd,
+        });
+        if (!quotaFailure) continue;
+
+        const activePanelSeats = outcomes.map((r) => r.seat);
+        const sub = codexFallback.selectCodexQuotaSubstitute({
+          failedSeat: row.seat,
+          failedIndex: i,
+          panelSeats: activePanelSeats,
+          implementerEngine: roster.implementer_engine,
+          implementerFamily,
+          crossFamilyRequired: panelRoster.cross_family_required !== false,
+          requiredReviewFamilies: sealedRequired,
+          minPanelSize,
+          authorFamilyExcluded,
+        });
+        if (!sub) continue;
+
+        const subSeat = {
+          role: row.seat.role || 'qc',
+          runner: sub.runner,
+          model: sub.engine,
+          effort: sub.effort,
+          endpoint: sub.endpoint || null,
+          family: sub.family,
+        };
+        const subRecord = codexFallback.buildSubstitutionRecord({
+          originalSeat: {
+            id: `s${i}`,
+            engine: row.seat.model,
+            runner: row.seat.runner,
+            effort: row.seat.effort,
+            endpoint: row.seat.endpoint || undefined,
+          },
+          substitute: sub,
+          reason: quotaFailure.reason,
+        });
+        const subOutcome = performReview({
+          ...reviewInput,
+          scope: 'final',
+          reviewRoster: {
+            ...roster,
+            reviewer_runner: subSeat.runner,
+            reviewer_engine: subSeat.model,
+            reviewer_effort: subSeat.effort,
+            reviewer_endpoint: subSeat.endpoint || '',
+            reviewer_qualified: true,
+          },
+          reviewStage: `campaign-final-review#seat-${i + 1}`,
+          pinReviewerTuple: true,
+          review_timeout_seconds: seatTimeoutSeconds,
+          budget_consumer: 'panel',
+          deferDispatch: false,
+          sharedPacket,
+          seat_packet: incrementalRound ? 'incremental' : 'full',
+        });
+        outcomes[i] = { seat: subSeat, outcome: subOutcome };
+        seatSubstitutions.push(subRecord);
+        seatTrace.push(`final_panel_seat_codex_quota_substituted:${i + 1}:${sub.engine}@${sub.runner}`);
       }
       const panelEndedAt = this.now();
       for (const row of outcomes) {
@@ -6764,6 +6850,10 @@ class AutopilotEngine {
         ...(stationKind === 'panel' && packetHash ? { packet_hash: packetHash } : {}),
         ...(driftTrace.length + seatTrace.length > 0
           ? { trace: [...driftTrace, ...seatTrace] } : {}),
+        ...(seatSubstitutions.length > 0 ? {
+          substituted_seats: seatSubstitutions,
+          panel_report: seatSubstitutions.map((s) => s.notice),
+        } : {}),
         ...(incrementDecision ? incrementWiring.disclosureFor(incrementDecision) : {}),
       };
       if (!panelReviewed && stationKind === 'panel') {

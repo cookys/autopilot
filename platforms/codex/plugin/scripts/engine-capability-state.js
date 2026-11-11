@@ -2741,6 +2741,7 @@ module.exports = {
   appendStrikeSeatRecord,
   appendStrikeInvalidation,
   brainSeatStatus,
+  classifyErrorContent,
   readEvidenceRows,
   readStrikeRows,
   readStrikeRowsLenient,

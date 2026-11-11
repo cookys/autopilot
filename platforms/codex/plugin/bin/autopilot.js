@@ -643,6 +643,17 @@ if (args[0] === 'engine') {
       // Stage graph (plan §2.7 writers): the per-deliverable review converged = that unit's `verify`. Fail-open.
       if (!reviewCandidateMode) implementReviewEngine.stageVerifyOnConverge(result);
       for (const line of formatCampaignAdvisories(result.campaign_control)) process.stderr.write(`${line}\n`);
+      const panelNotices = [];
+      for (const panelObj of [result && result.review, result && result.final_panel]) {
+        if (panelObj && Array.isArray(panelObj.panel_report)) {
+          for (const line of panelObj.panel_report) {
+            if (typeof line === 'string' && line && !panelNotices.includes(line)) {
+              panelNotices.push(line);
+            }
+          }
+        }
+      }
+      for (const line of panelNotices) process.stderr.write(`${line}\n`);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

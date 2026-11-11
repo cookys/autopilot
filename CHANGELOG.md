@@ -446,6 +446,7 @@
 ### Settings changes
 
 - **New `residue.delete_branches`** (boolean; default false). Env `AUTOPILOT_RESIDUE_DELETE_BRANCHES` (`0` or `1`; any other value is ignored). When true, `reap` and `close-session` delete branches after printing each `<branch> <tip>`. Default false: those branches stay and the automatic sweep lists them. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
+- **New `qc_panel.codex_quota_substitutes`** (array of strings; default `["grok-4.7/high@grok", "gemini-4-carbon-high/high@agy"]`). Ordered substitute seats (`engine/effort@runner`, or `engine@runner` with effort `high`) tried at most once at runtime when a `qc_panel` seat on the `codex` runner fails due to codex quota or rate-limit exhaustion; skips any substitute whose family matches the implementer or violates the panel's cross-family requirement, never alters `qc_panel` composition, and emits `codex 額度用完，由 <engine> 代打` plus a machine-readable substitution record.
 - **New `review_ledger_archive.dir`** (string; default unset, which is off). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR`. Empty string means off. The environment wins. Nothing is written while it is off.
 - **New `review_ledger_archive.include_diff`** (boolean; default false). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF`. True also stores `diff.txt`.
 - **New `per_turn_gate.session_arming`** (boolean; default true). Missing or true: a valid worker-bound gate file arms per-turn-gate for that session even when the hook is otherwise off. Only an explicit false ignores gate files.

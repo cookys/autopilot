@@ -335,7 +335,7 @@ Receipts: `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/`, `docs/plans
 **Brief lines for the subagent budget gate (`hooks/subagent-budget.js`, default-on).** Every Agent dispatch in this recipe is counted per lane
 from the subagent transcripts, so the brief carries the lane key and the role in its first lines: line 1 `Engine: <model>`, line 2 `Role: <role>`,
 line 3 `Lane: <slug>` (letters, digits, `.`, `_`, `-`, up to 64; one slug per unit, reused by every relay and repair of that unit; for a reviewer also
-`Role: reviewer`). **`Lane:` is required**: a brief whose first line starts with `Engine:` and that has no valid `Lane:` in its first five lines
+`Role: reviewer`). When the model is fable or opus, a `Cost:` line (the exact text from `costLineFor` in `hooks/lib/brief-header-template.js`) is required within the first 6 lines; `dispatch-model-guard` denies a missing one even if the Engine header is marked `(intentional: …)`. Sonnet's Cost line is advisory and haiku has none. **`Lane:` is required**: a brief whose first line starts with `Engine:` and that has no valid `Lane:` in its first five lines
 (and inherits none from the dispatching subagent or its ancestors) is denied, with or without a session-mode marker, and no owner panel card is
 opened (it is a format problem; fix the brief or pass `Budget-Ack:`). Briefs not starting with `Engine:` (Explore etc.) fall back to the Agent
 `description` and count only toward the session total. Defaults: the 5th

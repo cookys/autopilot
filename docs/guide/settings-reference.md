@@ -80,6 +80,11 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `AUTOPILOT_ADVISORY_RELAY` | Set to "off" to stop the UserPromptSubmit hook that drains queued advisories into the next prompt. | on |  |
 | `AUTOPILOT_DECIDE_REPLY_CLOSE` | Set to "off" to stop a live-panel reply whose first line is [待決回覆] from closing the decision cards it names. | on |  |
 | `AUTOPILOT_LIVE_DIR` | Overrides the directory for the live status files; an explicit value is an isolation request and is never replaced by a fallback. | auto (tmpfs) |  |
+| `AUTOPILOT_CTX_RESET_SOFT` | Soft context-token threshold for `scripts/session-ctx-report.js candidates` (reset reason `soft`). Positive number; CLI `--soft` beats env. See [`references/session-reset.md`](../../references/session-reset.md). | `150000` |  |
+| `AUTOPILOT_CTX_RESET_HARD` | Hard context-token threshold for session-ctx-report candidates (reset reason `hard`). Positive number; CLI `--hard` beats env. | `250000` |  |
+| `AUTOPILOT_CTX_RESET_SOFT_IDLE_MIN` | Idle minutes required with the soft threshold for a soft reset candidate. Positive number; CLI `--soft-idle-min` beats env. | `15` |  |
+| `AUTOPILOT_CTX_RESET_HARD_IDLE_MIN` | Idle minutes required with the hard threshold for a hard reset candidate. Positive number; CLI `--hard-idle-min` beats env. | `5` |  |
+| `AUTOPILOT_CTX_RESET_COOLDOWN_MIN` | Minutes after a session reset during which candidates keeps the session (`cooldown`). Positive number; CLI `--cooldown-min` beats env. | `120` |  |
 | `autoCompactEnabled` (Claude Code) | Claude Code setting (settings.json, else ~/.claude.json): false turns auto-compact off. | unset |  |
 | `autoCompactWindow` (Claude Code) | Claude Code setting (user/project/local/policy settings.json; also modelSettings.`<model>`.autoCompactWindow): token window after which Claude Code compacts, at window minus a 33k buffer. Set via /autocompact or in settings.json. | unset |  |
 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (Claude Code) | Claude Code environment variable: auto-compact window in tokens (clamped to 100000-1000000). Beats every settings file. | unset |  |

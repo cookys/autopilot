@@ -4364,6 +4364,84 @@
       "summary": "off, warn or block: what a dispatch does when its prompt would not fit the engine context window."
     },
     {
+      "name": "AUTOPILOT_CTX_RESET_COOLDOWN_MIN",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": 120,
+      "readers": [
+        "scripts/session-ctx-report.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CTX_RESET_SOFT",
+        "AUTOPILOT_CTX_RESET_HARD"
+      ],
+      "summary": "Minutes after a session reset during which candidates keeps the session (cooldown). Positive number; flags beat env."
+    },
+    {
+      "name": "AUTOPILOT_CTX_RESET_HARD",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": 250000,
+      "readers": [
+        "scripts/session-ctx-report.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CTX_RESET_HARD_IDLE_MIN",
+        "AUTOPILOT_CTX_RESET_SOFT"
+      ],
+      "summary": "Hard context-token threshold for session-ctx-report candidates (reset reason hard). Positive number; flags beat env."
+    },
+    {
+      "name": "AUTOPILOT_CTX_RESET_HARD_IDLE_MIN",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": 5,
+      "readers": [
+        "scripts/session-ctx-report.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CTX_RESET_HARD"
+      ],
+      "summary": "Idle minutes required with AUTOPILOT_CTX_RESET_HARD for a hard reset candidate. Positive number; flags beat env."
+    },
+    {
+      "name": "AUTOPILOT_CTX_RESET_SOFT",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": 150000,
+      "readers": [
+        "scripts/session-ctx-report.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CTX_RESET_SOFT_IDLE_MIN",
+        "AUTOPILOT_CTX_RESET_HARD"
+      ],
+      "summary": "Soft context-token threshold for session-ctx-report candidates (reset reason soft). Positive number; flags beat env."
+    },
+    {
+      "name": "AUTOPILOT_CTX_RESET_SOFT_IDLE_MIN",
+      "kind": "env",
+      "audience": "user",
+      "group": "context",
+      "default": 15,
+      "readers": [
+        "scripts/session-ctx-report.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_CTX_RESET_SOFT"
+      ],
+      "summary": "Idle minutes required with AUTOPILOT_CTX_RESET_SOFT for a soft reset candidate. Positive number; flags beat env."
+    },
+    {
       "name": "AUTOPILOT_COST_FUSE_DAILY_USD",
       "kind": "env",
       "audience": "user",

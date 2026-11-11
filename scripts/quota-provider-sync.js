@@ -13,10 +13,10 @@
 //   exit 0 = a row was written or is already current (`wrote` / `superseded`); 1 = nothing written (reason code on stderr); 2 = usage.
 //
 //   syncProvider(provider, o)  async -> { provider, alias, wrote, reason, shape?, tightest?, assumed? }
-//   convertMinimax(json, nowMs) / convertGlm(json, nowMs)  pure -> { ok, windows, shape, tightest? } | { ok: false, reason, shape }
+//   convertMinimax(json, nowMs[, secret]) / convertGlm(json, nowMs[, secret])  pure -> { ok, windows, shape, tightest? } | { ok: false, reason, shape }
 //   Result `shape` (on the result and main() output, never in the record; token-free and value-free):
 //     glm:     { limits: [{ type, unit, number, used_window: 'rolling_5h'|'weekly'|null, dropped: 'expired'|'fields_missing'|null }, ...] }
-//              (one entry per data.limits[] item; type/unit/number copied only when string/number, strings sliced to 32 chars)
+//              (one entry per data.limits[] item; type/unit/number copied only when string/number, strings scrubbed before slicing to 32 chars)
 //     minimax: { models: <count of model_remains>, dropped: { rolling_5h: 'expired'|null, weekly: 'expired'|null } }
 //     An entry/window is `expired` when dropped because resets_at is in the past.
 //
@@ -52,8 +52,12 @@ const PROVIDERS = Object.freeze({
 function isObj(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
 function num(x) { return typeof x === 'number' && Number.isFinite(x); }
 function toEpochSeconds(x) { return Math.floor(x > MS_THRESHOLD ? x / 1000 : x); }
-function shapeVal(x) {
-  if (typeof x === 'string') return x.slice(0, 32);
+function sliceClean(s, max, secret) {
+  const clean = scrubSecret(s, secret);
+  return clean === null ? null : clean.slice(0, max);
+}
+function shapeVal(x, secret) {
+  if (typeof x === 'string') return sliceClean(x, 32, secret);
   return num(x) ? x : null;
 }
 
@@ -80,7 +84,7 @@ function finish(byKind, nowMs, tightest) {
   return { ok: true, windows, tightest, expired };
 }
 
-function convertMinimax(j, nowMs) {
+function convertMinimax(j, nowMs, secret) {
   if (!isObj(j) || !Array.isArray(j.model_remains)) {
     return { ok: false, reason: 'fields_missing', shape: { models: 0, dropped: { rolling_5h: null, weekly: null } } };
   }
@@ -97,7 +101,7 @@ function convertMinimax(j, nowMs) {
       const used = usedFromRemainingPct(m[remKey]);
       if (!byKind[kind] || used > byKind[kind].used) {
         byKind[kind] = { used, resets_at: toEpochSeconds(m[endKey]) };
-        tightest[kind] = typeof m.model_name === 'string' ? m.model_name.slice(0, 64) : null;
+        tightest[kind] = typeof m.model_name === 'string' ? sliceClean(m.model_name, 64, secret) : null;
       }
     }
   }
@@ -106,7 +110,7 @@ function convertMinimax(j, nowMs) {
   return f.ok ? { ok: true, windows: f.windows, tightest: f.tightest, shape } : { ok: false, reason: f.reason, shape };
 }
 
-function convertGlm(j, nowMs) {
+function convertGlm(j, nowMs, secret) {
   if (!isObj(j) || !isObj(j.data) || !Array.isArray(j.data.limits)) {
     return { ok: false, reason: 'fields_missing', shape: { limits: [] } };
   }
@@ -118,7 +122,7 @@ function convertGlm(j, nowMs) {
       limits.push({ type: null, unit: null, number: null, used_window: null, dropped: null });
       continue;
     }
-    const entry = { type: shapeVal(l.type), unit: shapeVal(l.unit), number: shapeVal(l.number), used_window: null, dropped: null };
+    const entry = { type: shapeVal(l.type, secret), unit: shapeVal(l.unit, secret), number: shapeVal(l.number, secret), used_window: null, dropped: null };
     limits.push(entry);
     if (l.type !== 'TOKENS_LIMIT') continue;
     let kind = null;
@@ -226,7 +230,7 @@ async function syncProvider(provider, o) {
     if (!res || typeof res.status !== 'number' || res.status < 200 || res.status > 299) return out(false, 'http_status');
     let json;
     try { json = await res.json(); } catch (_) { return out(false, 'json_invalid'); }
-    const conv = CONVERT[provider](json, nowMs);
+    const conv = CONVERT[provider](json, nowMs, token);
     const shape = scrubSecret(conv.shape, token);
     if (!conv.ok) return out(false, conv.reason, { shape });
     const record = {

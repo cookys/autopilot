@@ -609,6 +609,98 @@ test('planted: dropping expired tracking from finish() breaks result.shape dropp
   assert.notStrictEqual(gBug.r.shape.limits[0].dropped, 'expired');
 });
 
+// ---- shape-slice-before-scrub fix: scrub full string before slicing so a prefixed long token never leaks
+function assertNoToken16(text, tok) {
+  assert.ok(tok.length > 32);
+  for (let i = 0; i + 16 <= tok.length; i++) {
+    assert.strictEqual(text.includes(tok.slice(i, i + 16)), false, `16-char token substring at ${i} leaked`);
+  }
+}
+test('shape-slice-before-scrub: limit type with short prefix + token > 32 chars leaks no 16-char token substring in shape or stdout', async () => {
+  const { spawnSync } = require('child_process');
+  const LONG_TOK = 'FAKE-sentinel-9a8b7c6d5e4f3a2b1c0d9e8f7a';
+  const body = glm([
+    g5(20),
+    { type: `x${LONG_TOK}`, unit: 9, number: 1, percentage: 50, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]);
+  const r = await real.syncProvider('glm', {
+    liveDir: tmpLive(),
+    env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK },
+    fetch: fakeFetch(200, body),
+    nowMs: () => NOW,
+  });
+  assert.strictEqual(r.wrote, true);
+  assert.strictEqual(r.shape.limits[1].type, null);
+  assertNoToken16(JSON.stringify(r.shape), LONG_TOK);
+  assertNoToken16(JSON.stringify(r), LONG_TOK);
+
+  const prefixOnly = await real.syncProvider('glm', {
+    liveDir: tmpLive(),
+    env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK },
+    fetch: fakeFetch(200, glm([{ type: `x${LONG_TOK.slice(0, 32)}`, unit: 9, number: 1, percentage: 50, nextResetTime: (NOW_S + 3600) * 1000 }])),
+    nowMs: () => NOW,
+  });
+  assert.strictEqual(prefixOnly.shape.limits[0].type, null);
+  assertNoToken16(JSON.stringify(prefixOnly.shape), LONG_TOK);
+
+  const mmRes = await real.syncProvider('minimax', {
+    liveDir: tmpLive(),
+    env: { MINIMAX_API_KEY: LONG_TOK },
+    fetch: fakeFetch(200, { model_remains: [mm({ model_name: `${'m'.repeat(40)}${LONG_TOK}` })] }),
+    nowMs: () => NOW,
+  });
+  assert.strictEqual(mmRes.wrote, true);
+  assert.strictEqual(mmRes.tightest.rolling_5h, null);
+  assertNoToken16(JSON.stringify(mmRes), LONG_TOK);
+
+  const stubDir = tmpLive();
+  const preload = path.join(stubDir, 'preload-prefixed-tok.js');
+  fs.writeFileSync(preload, [
+    "'use strict';",
+    'globalThis.fetch = async () => {',
+    '  const tok = process.env.QPS_STUB_TOK;',
+    '  const fut = Date.now() + 3600000;',
+    '  return { status: 200, json: async () => ({ data: { limits: [',
+    '    { type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 20, nextResetTime: fut },',
+    '    { type: "x" + tok, unit: 9, number: 1, percentage: 50, nextResetTime: fut },',
+    '  ] } }) };',
+    '};',
+  ].join('\n'), 'utf8');
+  const cli = spawnSync(process.execPath, ['--require', preload, SRC, 'sync-provider', '--provider', 'glm'], {
+    env: { PATH: process.env.PATH, AUTOPILOT_LIVE_DIR: tmpLive(), AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK, QPS_STUB_TOK: LONG_TOK },
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(cli.status, 0);
+  assert.match(cli.stdout, /^sync-provider glm\/glm: wrote shape=/);
+  assertNoToken16(cli.stdout, LONG_TOK);
+  assertNoToken16(cli.stderr, LONG_TOK);
+});
+test('planted: reverting sliceClean to slice before scrub leaks a 16-char token substring in shape (red)', async () => {
+  const LONG_TOK = 'FAKE-sentinel-9a8b7c6d5e4f3a2b1c0d9e8f7a';
+  const body = glm([
+    g5(20),
+    { type: `x${LONG_TOK}`, unit: 9, number: 1, percentage: 50, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]);
+  const reverted = mutant([[
+    'const clean = scrubSecret(s, secret);\n  return clean === null ? null : clean.slice(0, max);',
+    'return scrubSecret(s.slice(0, max), secret);',
+  ]]);
+  const badR = await reverted.syncProvider('glm', {
+    liveDir: tmpLive(),
+    env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK },
+    fetch: fakeFetch(200, body),
+    nowMs: () => NOW,
+  });
+  assert.throws(() => assertNoToken16(JSON.stringify(badR.shape), LONG_TOK), /16-char token substring/);
+  const badMm = await reverted.syncProvider('minimax', {
+    liveDir: tmpLive(),
+    env: { MINIMAX_API_KEY: LONG_TOK },
+    fetch: fakeFetch(200, { model_remains: [mm({ model_name: `${'m'.repeat(40)}${LONG_TOK}` })] }),
+    nowMs: () => NOW,
+  });
+  assert.throws(() => assertNoToken16(JSON.stringify(badMm), LONG_TOK), /16-char token substring/);
+});
+
 // ---- static scan: no secret file read, no token printed
 const SECRET_READ = [/credentials/i, /\.claude\b/, /oauth/i, /\.config\/autopilot/, /endpoints\.env/, /readFile/, /require\(['"]fs['"]\)/];
 const PRINTS_TOKEN = /console\.[a-z]+\([^)]*token|write\([^)]*token/i;

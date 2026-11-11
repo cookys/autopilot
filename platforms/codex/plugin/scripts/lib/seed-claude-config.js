@@ -13,7 +13,8 @@
 // removal of the directory in single-shot mode.
 //
 // --exec seeds that same directory, spawns <cmd> with stdio inherited and CLAUDE_CONFIG_DIR set to
-// the seeded dir, and removes the directory when the child exits, is killed, or cannot be spawned.
+// the seeded dir, asks codeforge to collect usage from that dir, then removes it when the child
+// exits, is killed, or cannot be spawned. Collect is best-effort and never changes the child's status.
 // SIGINT, SIGTERM and SIGHUP are forwarded to the child; the wrapper then waits, removes the dir,
 // and exits with the child's status (128+N when the child died of signal N).
 //
@@ -30,7 +31,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 function fail(msg) {
   process.stderr.write(`seed-claude-config: ${msg}\n`);
@@ -123,10 +124,24 @@ if (!execMode) {
 // right after the child is spawned and forwarded; the dir is recorded in `seeded` the moment mkdtemp returns, so
 // even a failure mid-seed removes exactly that dir.
 let seeded = '';
+// fd 3, when the shell duplicated the real stderr before pointing 1/2 at the verdict
+// capture, is that stderr. A collect log on fd 2 would be trailing text after the
+// END marker, which the review parser rejects. The claude child must not inherit fd 3.
+function collectSeeded(target) {
+  const helper = path.join(__dirname, 'codeforge-collect.sh');
+  let logFd = 2;
+  try { fs.fstatSync(3); logFd = 3; } catch { /* no saved stderr */ }
+  try {
+    spawnSync('bash', ['-c',
+      'set +e; if [ -r "$1" ]; then . "$1"; fi; if declare -F codeforge_collect_claude_dir >/dev/null 2>&1; then codeforge_collect_claude_dir "$2"; fi; exit 0',
+      'codeforge-collect', helper, target], { stdio: ['ignore', 'ignore', logFd] });
+  } catch { /* collect must not change the child status */ }
+}
 function removeSeeded() {
   const target = seeded;
   if (!target) return;
   seeded = '';
+  try { collectSeeded(target); } catch { /* still remove */ }
   try { fs.rmSync(target, { recursive: true, force: true }); } catch { /* idempotent */ }
 }
 process.on('exit', removeSeeded);
@@ -151,7 +166,9 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
 seeded = buildSeed((d) => { seeded = d; });
 const childEnv = Object.assign({}, process.env, { CLAUDE_CONFIG_DIR: seeded });
 
-child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit', env: childEnv });
+const childStdio = ['inherit', 'inherit', 'inherit'];
+try { fs.fstatSync(3); childStdio.push('ignore'); } catch { /* fd 3 not open */ }
+child = spawn(cmd[0], cmd.slice(1), { stdio: childStdio, env: childEnv });
 child.on('error', (err) => {
   const detail = err && err.code === 'ENOENT' ? `command not found: ${cmd[0]}` : `could not spawn: ${err.message}`;
   process.stderr.write(`seed-claude-config: ${detail}\n`);

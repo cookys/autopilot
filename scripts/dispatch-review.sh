@@ -197,6 +197,9 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_REVIEW_SELF_DIR/lib/repo-identity.sh" ] && . "$_REVIEW_SELF_DIR/lib/repo-identity.sh" || true
+# shellcheck source=lib/codeforge-collect.sh
+# Best-effort: a missing helper skips usage collect; it never changes the review result.
+[ -r "$_REVIEW_SELF_DIR/lib/codeforge-collect.sh" ] && . "$_REVIEW_SELF_DIR/lib/codeforge-collect.sh" || true
 # A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
 if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || true; fi
 # Startup retention prune of OUR OWN aged ${TMPDIR} residue (raw logs, prompt/out/err
@@ -1277,6 +1280,8 @@ cleanup() {
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
   [ -n "$IDLE_MARKER" ] && rm -f "$IDLE_MARKER"
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
+  # Collect before the trap deletes a scratch the explicit path did not reach.
+  declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && [ -n "$CCSHIM_CWD" ] && codeforge_collect_claude_dir "$CCSHIM_CWD/.claude" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
   [ -n "$CNATIVE_CFG" ] && rm -rf "$CNATIVE_CFG"
@@ -2172,7 +2177,8 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   trap - TERM INT HUP
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
   declare -F ccshim_keep_transcript >/dev/null 2>&1 && { ccshim_keep_transcript "$CCSHIM_CWD" "$REVIEW_RUN_ID" || true; }
-  rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$CCSHIM_CWD/.claude" || true
+  rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't collect or rm the path a 2nd time
   if [ "$CCSHIM_RC" -ne 0 ]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CCSHIM_RC" "$([ "$CCSHIM_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
@@ -2229,7 +2235,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   else
   node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec -- \
   timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
-      _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>&1
+      _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} 3>&2 > "$RAW_LOG" 2>&1
   fi
   CNATIVE_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true

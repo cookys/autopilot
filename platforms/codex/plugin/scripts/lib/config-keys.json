@@ -6157,6 +6157,19 @@
       "note": "Set to off to skip the dispatch_usage/1 ledger row for this run (the consult rail sets it for the author transport it calls)."
     },
     {
+      "name": "AUTOPILOT_CODEFORGE_COLLECT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/codeforge-collect.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Set to off to skip codeforge usage collect after a throwaway claude config dir. Default on."
+    },
+    {
       "name": "AUTOPILOT_DISPATCH_LANE",
       "kind": "env",
       "audience": "internal",

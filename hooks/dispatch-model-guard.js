@@ -12,6 +12,8 @@
  * `mode: ask` opts back into the interactive dialog.
  * Guards expensive engines during implementation dispatches (default: fable,opus via guarded_models_implementing).
  * Enforces self-declared engine headers on prompt line 1 matching the dispatch model (default: on via require_engine_header).
+ * Requires a Cost line in the first 6 lines when the effective model is fable or opus
+ * (default: on via require_cost_line). An `(intentional: …)` Engine header does not skip it.
  *
  * Headless (`claude -p`) behavior — verified 2026-09-04 on CC 2.1.259, both with and
  * without --dangerously-skip-permissions: an "ask" from a PreToolUse hook does NOT wedge
@@ -32,7 +34,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { headerDenialSuffix } = require('./lib/brief-header-template.js');
+const { headerDenialSuffix, missingCostLine, costLineFor } = require('./lib/brief-header-template.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). The 2026-09-04 cuda quota digest:
 // subagents inherited the session's [1m] Fable model because nothing asked.
@@ -74,6 +76,7 @@ const DEFAULTS = {
   guarded_models_implementing: ['fable', 'opus'],
   on_missing_model: 'deny', // v2.36.2: was 'ask' — see the comment at the missing-model branch
   require_engine_header: 'on',
+  require_cost_line: 'on',
   mode: 'remind', // v2.36.9: was 'ask' — remind the agent, never open a dialog
 };
 
@@ -144,6 +147,13 @@ function loadConfig(cwd) {
     requireEngineHeader = (v === 'on' || v === 'off') ? v : 'on';
   }
 
+  // require_cost_line: on | off; garbage → on (fail-closed), same as require_engine_header
+  let requireCostLine = DEFAULTS.require_cost_line;
+  if (Object.prototype.hasOwnProperty.call(parsed, 'require_cost_line')) {
+    const v = String(parsed.require_cost_line || '').trim().toLowerCase();
+    requireCostLine = (v === 'on' || v === 'off') ? v : 'on';
+  }
+
   // mode: remind | ask | warn | off; garbage → remind (fail-closed, no dialog)
   let mode = DEFAULTS.mode;
   if (Object.prototype.hasOwnProperty.call(parsed, 'mode')) {
@@ -156,6 +166,7 @@ function loadConfig(cwd) {
     guarded_models_implementing: guardedImplementing,
     on_missing_model: onMissing,
     require_engine_header: requireEngineHeader,
+    require_cost_line: requireCostLine,
     mode,
   };
 }
@@ -214,6 +225,32 @@ function handleGuard(reason, mode, { acknowledged = false } = {}) {
     reason
     + '. Your call: re-dispatch with a cheaper model (scripts/resolve-dispatch.sh --role <role>), '
     + 'or keep this engine and mark line 1 "Engine: <model> (intentional: <why>)" to proceed without a dialog',
+  );
+}
+
+function engineTokenFromPrompt(prompt) {
+  let firstLine = null;
+  for (const line of String(prompt || '').split('\n')) {
+    if (line.trim().length > 0) {
+      firstLine = line;
+      break;
+    }
+  }
+  if (firstLine === null) return '';
+  const m = firstLine.match(/^Engine:\s*(\S+)/);
+  return m ? m[1] : '';
+}
+
+// After the other checks. Effective model is tool_input.model, or the Engine
+// token when model is absent. Fable/opus only. Intentional does not skip this:
+// callers run it before the guarded-engine allow path. Exits on deny.
+function denyIfMissingCostLine(config, prompt, modelForCost) {
+  if (config.require_cost_line !== 'on') return;
+  if (!missingCostLine(prompt, modelForCost)) return;
+  const line = costLineFor(modelForCost);
+  handleDeny(
+    'dispatch-model-guard: require_cost_line: add this line within the first 6 lines: ' + line,
+    config.mode,
   );
 }
 
@@ -286,6 +323,11 @@ try {
   // denied before allow could take effect).
   if (!model) {
     if (config.on_missing_model === 'allow') {
+      // Model is absent and the missing-model policy already allowed. The cost
+      // rule still sees the Engine token (fable/opus only).
+      const promptAbsent = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
+      const engineTok = engineTokenFromPrompt(promptAbsent);
+      if (engineTok) denyIfMissingCostLine(config, promptAbsent, engineTok);
       exitAllow();
     }
     // v2.36.2: default is DENY, not ask. A missing model: is never a judgment for the
@@ -337,6 +379,10 @@ try {
       );
     }
   }
+
+  // Cost line, after the header check and before the guarded-engine allow.
+  // `(intentional: …)` does not skip it: handleGuard's allow path is below.
+  denyIfMissingCostLine(config, promptRaw, modelRaw);
 
   // guarded models check
   const isPlan = toolInput.mode === 'plan';

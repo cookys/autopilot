@@ -4,8 +4,12 @@
 # Test for dispatch-model-guard.js hook
 . "$(dirname "$0")/lib.sh"
 
+# Exact fable/opus Cost line. Existing fable/opus fixtures include it so they
+# still reach the guarded-engine check; the costline cases below omit it.
+COST_FABLE_OPUS="$(node -e 'process.stdout.write(require(process.argv[1]).costLineFor("opus"))' "$REPO_ROOT/hooks/lib/brief-header-template.js")"
+
 # Case 1: default-on since v2.35.15 — the opt-OUT env silences it; without it the guard fires
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case1-exit"
 assert_eq "" "$__RUN_STDOUT" "case1-silent (opt-out env)"
@@ -14,21 +18,21 @@ assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case1b-default-on
 assert_contains "$__RUN_STDOUT" "intentional" "case1b-reminder names the acknowledgement path"
 
 # Case 2: Enabled, model fable → remind (deny carrying the reminder; v2.36.9, was ask)
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case2-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case2-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "fable" "case2-reason"
 
 # Case 3: Enabled, model claude-fable-5 → ask (substring match)
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"claude-fable-5","prompt":"Engine: claude-fable-5@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"claude-fable-5","prompt":"Engine: claude-fable-5@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case3-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case3-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "claude-fable-5" "case3-reason"
 
 # Case 4: Enabled, model FABLE (uppercase) → ask (case-insensitive)
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"FABLE","prompt":"Engine: FABLE@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"FABLE","prompt":"Engine: FABLE@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case4-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case4-remind (deny with reminder, never a dialog)"
@@ -78,7 +82,7 @@ unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 # Case 6e (v2.36.9): guarded engine ACKNOWLEDGED on the Engine header → allowed silently
 # (stderr note only). The agent judged; no dialog, no deny.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: plan critique needs the strongest reader)\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: plan critique needs the strongest reader)\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case6e-exit"
 assert_eq "" "$__RUN_STDOUT" "case6e-silent stdout (acknowledged expensive dispatch proceeds)"
@@ -86,14 +90,14 @@ assert_contains "$__RUN_STDERR" "acknowledged as intentional" "case6e-stderr not
 
 # Case 6f (v2.36.9): the acknowledgement must sit on the Engine header line — an
 # "intentional" further down the prompt does not count.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable\nThis is (intentional: really).\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable\n'"$COST_FABLE_OPUS"'\nThis is (intentional: really).\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case6f-deny (ack not on line 1)"
 
 # Case 6g (v2.36.9): mode: ask opts back into the interactive dialog for guarded engines
 printf '%s\n' "- mode: ask" > "$TEST_TMP/config6g.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config6g.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"ask"' "case6g-ask (opt back into the dialog)"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
@@ -113,7 +117,7 @@ assert_contains "$__RUN_STDERR" "fail-open" "case8-fail-open"
 # Case 9: Config guarded_models: fable,opus → opus asks, sonnet silent
 printf '%s\n' "- guarded_models: fable,opus" > "$TEST_TMP/config9.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config9.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case9a-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case9a-remind (deny with reminder, never a dialog)"
@@ -159,7 +163,7 @@ unset DISPATCH_GUARD_CONFIG_OVERRIDE
 # Case 12: Config mode: warn → model fable: stdout empty, stderr non-empty
 printf '%s\n' "- mode: warn" > "$TEST_TMP/config12.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config12.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case12-exit"
 assert_contains "$__RUN_STDOUT" '"additionalContext"' "case12-stdout-advisory"
@@ -170,7 +174,7 @@ unset DISPATCH_GUARD_CONFIG_OVERRIDE
 # Case 13: Config garbage mode: yolo → model fable reminded/denied (fail-closed, no dialog)
 printf '%s\n' "- mode: yolo" > "$TEST_TMP/config13.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config13.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case13-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case13-remind (deny with reminder, never a dialog)"
@@ -178,20 +182,20 @@ unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 # Case 14: mode: "plan", model: "opus" → allowed (no ask/deny)
 # Plan-mode opus is a reviewer/debugger dispatch and must NOT be guarded by the new guarded_models_implementing default.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus@agy effort=low\nReview this code."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus@agy effort=low\n'"$COST_FABLE_OPUS"'\nReview this code."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case14-exit"
 assert_eq "" "$__RUN_STDOUT" "case14-silent (plan-mode opus allowed)"
 
 # Case 15: mode absent (or mode: "default"), model: "opus" → asks
 # Implementation-shaped opus is guarded by the new default guarded_models_implementing: fable,opus; reason contains opus.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus@agy effort=low\nImplement this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus@agy effort=low\n'"$COST_FABLE_OPUS"'\nImplement this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case15a-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case15a-remind (deny with reminder, never a dialog)"
 assert_contains "$__RUN_STDOUT" "opus" "case15a-reason"
 
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"default","prompt":"Engine: opus@agy effort=low\nImplement this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"default","prompt":"Engine: opus@agy effort=low\n'"$COST_FABLE_OPUS"'\nImplement this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case15b-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case15b-remind (deny with reminder, never a dialog)"
@@ -199,7 +203,7 @@ assert_contains "$__RUN_STDOUT" "opus" "case15b-reason"
 
 # Case 16: mode: "plan", model: "fable" → still asks
 # Existing guarded_models: fable applies to ALL dispatches regardless of mode.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","mode":"plan","prompt":"Engine: fable@agy effort=low\nPlan this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","mode":"plan","prompt":"Engine: fable@agy effort=low\n'"$COST_FABLE_OPUS"'\nPlan this."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case16-exit"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "case16-remind (deny with reminder, never a dialog)"
@@ -279,6 +283,127 @@ NOMODEL="$(node -e '
 NOMODEL_EC=$?
 assert_eq "$NOMODEL_EC" "0" "no model with Engine: sonnet does not list engine (exit ${NOMODEL_EC})"
 assert_not_contains ",${NOMODEL}," ",engine," "no model with Engine: sonnet returns a list without engine"
+
+# costLineFor table, the 6-line window, and the session hint (≤200, contains Cost:).
+COST_SONNET="$(node -e 'process.stdout.write(require(process.argv[1]).costLineFor("sonnet"))' "$REPO_ROOT/hooks/lib/brief-header-template.js")"
+COST_LIB="$(node -e '
+  const t = require(process.argv[1]);
+  const exp = t.costLineFor("opus");
+  const mid = t.costLineFor("sonnet");
+  const cases = [
+    ["fable", exp], ["opus", exp], ["Fable", exp], ["claude-opus-5-5", exp],
+    ["claude-fable-5-2", exp], ["opus@agy", exp], ["claude-opus-5-5@claude", exp],
+    ["sonnet", mid], ["Sonnet", mid], ["claude-sonnet-4-6", mid], ["sonnet@agy", mid],
+    ["haiku", ""], ["claude-haiku-4-5", ""], ["", ""], ["   ", ""], ["gpt-5", ""],
+  ];
+  for (const [m, want] of cases) {
+    if (t.costLineFor(m) !== want) {
+      process.stderr.write("costLineFor " + JSON.stringify(m) + "\n");
+      process.exit(2);
+    }
+  }
+  if (exp !== "Cost: 最貴的模型，會燒光共用池；只做最難的判斷，讀檔、搜尋、整理一律派 haiku/sonnet subagent") process.exit(3);
+  if (mid !== "Cost: 中價模型；機械性讀檔與搜尋可再派 haiku") process.exit(4);
+  if (!t.missingCostLine("Engine: opus\nRole: r\nLane: a\n", "claude-opus-5-5")) process.exit(5);
+  if (t.missingCostLine("Engine: opus\nRole: r\nLane: a\n" + exp, "opus")) process.exit(6);
+  if (t.missingCostLine("a\nb\nc\nd\ne\n" + exp, "fable")) process.exit(7);
+  if (!t.missingCostLine("a\nb\nc\nd\ne\nf\n" + exp, "fable")) process.exit(8);
+  if (t.missingCostLine("Engine: sonnet\n", "sonnet")) process.exit(9);
+  if (t.missingCostLine("Engine: haiku\n", "haiku")) process.exit(10);
+  const hint = t.sessionStartBriefHeaderLine();
+  if (hint.length > 200 || !hint.includes("Cost:")) process.exit(11);
+  const suffix = t.headerDenialSuffix("Engine: opus\nRole: r\nLane: a\n", "opus", { engineBy: "self", laneBy: "other" });
+  if (!suffix.includes(exp)) process.exit(12);
+  const suffixHaiku = t.headerDenialSuffix("no header", "haiku", { engineBy: "self", laneBy: "other" });
+  if (suffixHaiku.includes("Cost:")) process.exit(13);
+  process.stdout.write("costlib_ok");
+' "$REPO_ROOT/hooks/lib/brief-header-template.js" 2>"$TEST_TMP/costlib.err")"
+COST_LIB_EC=$?
+assert_eq "$COST_LIB_EC" "0" "costLineFor table and session hint (exit ${COST_LIB_EC})"
+assert_eq "costlib_ok" "$COST_LIB" "costLineFor table wrote costlib_ok"
+assert_eq "Cost: 中價模型；機械性讀檔與搜尋可再派 haiku" "$COST_SONNET" "sonnet cost line text"
+
+# opus brief without Cost → deny, reason contains the exact line.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus\nRole: worker\nLane: alpha\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-opus-missing-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-opus-missing denies"
+assert_contains "$__RUN_STDOUT" "require_cost_line" "costline-opus-missing names the rule"
+assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-opus-missing gives the exact line"
+
+# opus with the Cost line and an intentional Engine header → allowed (other checks allow).
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus (intentional: hardest judgment only)\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-opus-present-exit"
+assert_eq "" "$__RUN_STDOUT" "costline-opus-present allowed when other checks allow"
+assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-opus-present is not a cost deny"
+
+# fable with (intentional: x) but no Cost line → deny. Intentional does not skip it.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: x)\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-fable-intentional-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-fable-intentional denies"
+assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-fable-intentional gives the exact line"
+
+# full id claude-opus-5-5 is treated as opus.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"claude-opus-5-5","prompt":"Engine: claude-opus-5-5\nRole: worker\nLane: alpha\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-full-id-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-full-id denies"
+assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-full-id gives the opus line"
+
+# sonnet and haiku without a Cost line → no deny from this check.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-sonnet-exit"
+assert_eq "" "$__RUN_STDOUT" "costline-sonnet no deny"
+assert_not_contains "$__RUN_STDERR" "require_cost_line" "costline-sonnet stderr silent"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-haiku-exit"
+assert_eq "" "$__RUN_STDOUT" "costline-haiku no deny"
+
+# require_cost_line: off → no deny, even for intentional fable without a Cost line.
+printf '%s\n' "- require_cost_line: off" > "$TEST_TMP/config-cost-off.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-off.md"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: x)\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "costline-off-exit"
+assert_eq "" "$__RUN_STDOUT" "costline-off no deny"
+assert_contains "$__RUN_STDERR" "acknowledged as intentional" "costline-off still allows the intentional engine"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# garbage require_cost_line → on (fail-closed).
+printf '%s\n' "- require_cost_line: maybe" > "$TEST_TMP/config-cost-garbage.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-garbage.md"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\nReview."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-garbage denies (garbage → on)"
+assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-garbage gives the exact line"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# model absent, on_missing_model allow: the Engine token is the effective model.
+printf '%s\n' "- on_missing_model: allow" > "$TEST_TMP/config-cost-engine.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-engine.md"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: claude-fable-5-2\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-engine-token denies fable full id with no model field"
+assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-engine-token gives the exact line"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq "" "$__RUN_STDOUT" "costline-engine-token with the line is allowed when model is absent"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq "" "$__RUN_STDOUT" "costline-engine-token sonnet is not denied"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
+
+# A Cost line on line 7 does not count. Line 6 does. Intentional would otherwise allow.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\n\n\n\n'"$COST_FABLE_OPUS"'"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-line7 does not count"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\n\n\n'"$COST_FABLE_OPUS"'"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq "" "$__RUN_STDOUT" "costline-line6 counts"
 
 # Negative: Role alone is not a deny.
 PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'

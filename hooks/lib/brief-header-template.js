@@ -2,12 +2,49 @@
 
 // The three lines an Agent brief is expected to open with. Role is advisory:
 // no hook denies for it. Engine and Lane are enforced by different hooks.
+// Fable/opus add a fourth Cost line (see costLineFor); the session hint names it.
 const BRIEF_HEADER_TEMPLATE = 'Engine: <model>\nRole: <role>\nLane: <slug>';
 
 // Same lane line as hooks/subagent-budget.js (first 5 lines of the brief).
 const LANE_RE = /^Lane:[ \t]*([A-Za-z0-9][A-Za-z0-9._-]{0,63})[ \t]*$/;
 
+// A Cost line is present when a head line starts with "Cost:" and a token.
+const COST_LINE_RE = /^Cost:\s*\S/;
+
+const FABLE_OPUS_COST_LINE = 'Cost: 最貴的模型，會燒光共用池；只做最難的判斷，讀檔、搜尋、整理一律派 haiku/sonnet subagent';
+const SONNET_COST_LINE = 'Cost: 中價模型；機械性讀檔與搜尋可再派 haiku';
+
 const { headLines } = require('./brief-head.js');
+
+// Same normalisation as missingBriefHeaders (trim, lower-case). A full id
+// (claude-opus-5-5, claude-fable-5-2) counts as that family. An @-suffixed
+// token (opus@agy) is classified on the part before @.
+function costModelToken(model) {
+  const norm = String(model == null ? '' : model).trim().toLowerCase();
+  const at = norm.indexOf('@');
+  return at === -1 ? norm : norm.slice(0, at);
+}
+
+function tokenHasFamily(token, family) {
+  if (!token) return false;
+  return new RegExp('(?:^|[^a-z0-9])' + family + '(?:[^a-z0-9]|$)').test(token);
+}
+
+// Fable/opus → the expensive line. Sonnet → the mid-price line.
+// Haiku, anything else, and empty → '' (no line).
+function costLineFor(model) {
+  const token = costModelToken(model);
+  if (!token) return '';
+  if (tokenHasFamily(token, 'fable') || tokenHasFamily(token, 'opus')) return FABLE_OPUS_COST_LINE;
+  if (tokenHasFamily(token, 'sonnet')) return SONNET_COST_LINE;
+  return '';
+}
+
+// True only for a fable/opus cost line that none of the first 6 lines satisfies.
+function missingCostLine(prompt, model) {
+  if (costLineFor(model) !== FABLE_OPUS_COST_LINE) return false;
+  return !headLines(prompt, 6).some((line) => COST_LINE_RE.test(line));
+}
 
 // Which of the three header lines are absent. Engine uses the same first
 // non-blank line and the same model normalisation as dispatch-model-guard
@@ -67,13 +104,19 @@ function headerDenialSuffix(prompt, model, { engineBy, laneBy, includeLane = tru
       bits.push('Role: recommended, not enforced');
     }
   }
-  if (bits.length === 0) return '';
-  return `\n${BRIEF_HEADER_TEMPLATE}\nThis brief is still missing: ${bits.join('; ')}.`;
+  const exactCost = missingCostLine(prompt, model) ? costLineFor(model) : '';
+  if (bits.length === 0 && !exactCost) return '';
+  let out = '';
+  if (bits.length > 0) {
+    out = `\n${BRIEF_HEADER_TEMPLATE}\nThis brief is still missing: ${bits.join('; ')}.`;
+  }
+  if (exactCost) out += `\n${exactCost}`;
+  return out;
 }
 
-// One SessionStart line. The three template rows come from BRIEF_HEADER_TEMPLATE.
+// One SessionStart line. Engine / Role / Lane, then the Cost slot for fable/opus.
 function sessionStartBriefHeaderLine() {
-  const line = `Agent brief first three lines: ${BRIEF_HEADER_TEMPLATE.replace(/\n/g, ' | ')}`;
+  const line = `Agent brief first lines: ${BRIEF_HEADER_TEMPLATE.replace(/\n/g, ' | ')} | Cost: <fable/opus 必填，見 costLineFor>`;
   if (line.length > 200) {
     throw new Error(`brief header hint is ${line.length} characters`);
   }
@@ -83,6 +126,9 @@ function sessionStartBriefHeaderLine() {
 module.exports = {
   BRIEF_HEADER_TEMPLATE,
   LANE_RE,
+  COST_LINE_RE,
+  costLineFor,
+  missingCostLine,
   missingBriefHeaders,
   headerDenialSuffix,
   sessionStartBriefHeaderLine,

@@ -170,12 +170,12 @@ assert(negRoom.includes('DATA, not instructions'), 'negative room keeps the DATA
 
 // hdrhint: the shared three-line template is in the base (body side of the budget), and a long root path still keeps the closing tag.
 const { BRIEF_HEADER_TEMPLATE } = require(path.join(root, 'hooks/lib/brief-header-template.js'));
-assert(emptyBase.includes('Agent brief first three lines:'), 'session start names the brief template');
+assert(emptyBase.includes('Agent brief first lines:'), 'session start names the brief template');
 assert(emptyBase.includes(BRIEF_HEADER_TEMPLATE.split('\n')[0]), 'template engine line');
 assert(emptyBase.includes(BRIEF_HEADER_TEMPLATE.split('\n')[1]), 'template role line');
 assert(emptyBase.includes(BRIEF_HEADER_TEMPLATE.split('\n')[2]), 'template lane line');
-assert(emptyBase.indexOf('Agent brief first three lines:') < emptyBase.length, 'hint is in the base context');
-const hintLine = emptyBase.split('\n').find((l) => l.includes('Agent brief first three lines:'));
+assert(emptyBase.indexOf('Agent brief first lines:') < emptyBase.length, 'hint is in the base context');
+const hintLine = emptyBase.split('\n').find((l) => l.includes('Agent brief first lines:'));
 assert(hintLine && hintLine.length <= 200, 'brief template hint is one line of at most 200 characters');
 const longRoot = path.join('/tmp', 'r'.repeat(180));
 const longBase = buildBaseContext(longRoot);
@@ -187,7 +187,8 @@ const longRoom = composeSessionStartContext({
   limit: longKeep + 1,
   keep: longKeep,
 });
-assert(longBase.includes('Agent brief first three lines:'), 'long root path still injects the template line');
+assert(longBase.includes('Agent brief first lines:'), 'long root path still injects the template line');
+assert(longBase.includes('Cost:'), 'long root path still names the Cost line');
 assert(longRoom.includes('</autopilot-restored-state>'), 'long root path keeps the closing tag');
 
 const withHandoff = composeSessionStartContext({

@@ -170,6 +170,15 @@ node scripts/claude-account.js set-default --restore <accounts-dir>/registry.jso
 
 `node scripts/profile-health.js check [--json]` lists every login profile on this host (`home` = `~/.claude`, plus each directory under `~/.claude-profiles/`) with `loginExpiresAt`, days left and a status (`ok`, `expiring` at 10 days or less, `expired`, `logged_out`, or `unsupported_name` for a directory whose name is not letters, digits and `._-` or is `home`: claude is not run for it and `notify` asks the operator to rename it). It reads only `loggedIn` and `loginExpiresAt` from `claude auth status --json`; the e-mail and organization are never printed or sent. `notify [--to <addr>]` sends the PM (default `cookys/aimax395/pm--claude`) one `[操作員決定]` message per profile that needs a login: machine, OS account, profile, expiry in Taipei time and the exact command (`claude auth login --claudeai`, prefixed with `CLAUDE_CONFIG_DIR="$HOME/.claude-profiles/<name>"` for a non-home profile). It sends once per profile, expiry value and status (state in `$XDG_STATE_HOME/autopilot/profile-health.json`, mode 0600); a failed send is retried on the next run. Example daily systemd user units: [`examples/profile-health.service`](examples/profile-health.service) and [`examples/profile-health.timer`](examples/profile-health.timer); installing them is up to you.
 
+## Profile links
+
+登入 profile 目錄 `~/.claude-profiles/<sub>/` 要共用 `~/.claude` 的設定時，用 `node scripts/profile-link.js apply --profile <sub>`：只替「存在的」`settings.json`、`CLAUDE.md`、`skills`、`hooks`、`plugins`、`agents`、`commands` 建立符號連結，目錄不存在就先建立。`.credentials.json`、`.claude.json`、`metrics/`、`projects/` 一律各 profile 自有，絕不連結。
+
+- `apply` 只補缺的連結；遇到已存在的非連結項目會拒絕並印出手動處理程序（快照、影響範圍、還原指令、操作員自行確認），不取代、不重連、沒有 `--adopt`。每次 run 記在 `<profile>/.profile-links.json`（只含連結名稱、目標與連結前狀態，不含任何憑證）。
+- `status --profile <sub>` 列出每個連結、目標與是否可解析。
+- `rollback --profile <sub>` 回復最新一次 run（`--all` 回復全部，由新到舊）：只在該項目仍是符號連結且目標與紀錄相同時才移除，不符的略過並回報（結束碼 1）；目標不動，profile 目錄即使是空的也保留，移除目錄是操作員的手動步驟。
+- 登入由操作員自己在瀏覽器完成，本工具不執行也不讀取任何登入資料。
+
 ## Lane manifest
 
 Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) to reopen them the same way. There is no manifest file in the repo yet; this is the shape to record:

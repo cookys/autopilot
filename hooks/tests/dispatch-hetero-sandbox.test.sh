@@ -226,6 +226,47 @@ eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(a-eq-last) no child spa
 AJSON="$(printf '%s' "$OUT" | result_json)" || fail "(a-eq-last) stdout has no result JSON: $OUT"
 eq '"local_implementer_sandbox_required"' "$(printf '%s' "$AJSON" | jfield boundary_code)" "(a-eq-last) boundary_code local_implementer_sandbox_required"
 
+# (a-case) QWEN_LOCAL is the same listed seat. resolve-endpoint uppercases the name,
+# so a case-sensitive registry check would load the local credentials and skip the gate.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    --endpoint QWEN_LOCAL \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-case-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-case")" || RC=$?
+eq 2 "$RC" "(a-case) QWEN_LOCAL without --sandbox bwrap exits 2 (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-a-case" 2>/dev/null))"
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(a-case) no child spawned (sentinel absent)"
+AJSON="$(printf '%s' "$OUT" | result_json)" || fail "(a-case) stdout has no result JSON: $OUT"
+eq '"precondition_failed"' "$(printf '%s' "$AJSON" | jfield status)" "(a-case) status precondition_failed"
+eq 'false' "$(printf '%s' "$AJSON" | jfield dispatcher_called)" "(a-case) dispatcher_called false"
+eq '"local_implementer_sandbox_required"' "$(printf '%s' "$AJSON" | jfield boundary_code)" "(a-case) boundary_code local_implementer_sandbox_required"
+case "$(printf '%s' "$AJSON" | jfield error)" in
+  *QWEN_LOCAL*--sandbox\ bwrap*|*--sandbox\ bwrap*QWEN_LOCAL*) eq 0 0 "(a-case) error names QWEN_LOCAL and --sandbox bwrap" ;;
+  *) fail "(a-case) error does not name the endpoint and the missing flag: $(printf '%s' "$AJSON" | jfield error)" ;;
+esac
+
+# (a-case-eq) --endpoint=Qwen_Local on --runner auto is the same listed seat.
+rm -f "$SENTINEL"
+RC=0
+OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
+    STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner auto --model MiniMax-M3 \
+    --endpoint=Qwen_Local \
+    --prompt-file "$PROMPT" --context-window off \
+    --branch "feat/local-case-eq-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-case-eq")" || RC=$?
+eq 2 "$RC" "(a-case-eq) auto + --endpoint=Qwen_Local without --sandbox bwrap exits 2 (rc=$RC stderr=$(tail -c 400 "$TEST_TMP/stderr-a-case-eq" 2>/dev/null))"
+eq "no" "$([ -e "$SENTINEL" ] && echo yes || echo no)" "(a-case-eq) no child spawned (sentinel absent)"
+AJSON="$(printf '%s' "$OUT" | result_json)" || fail "(a-case-eq) stdout has no result JSON: $OUT"
+eq '"precondition_failed"' "$(printf '%s' "$AJSON" | jfield status)" "(a-case-eq) status precondition_failed"
+eq 'false' "$(printf '%s' "$AJSON" | jfield dispatcher_called)" "(a-case-eq) dispatcher_called false"
+eq '"local_implementer_sandbox_required"' "$(printf '%s' "$AJSON" | jfield boundary_code)" "(a-case-eq) boundary_code local_implementer_sandbox_required"
+case "$(printf '%s' "$AJSON" | jfield error)" in
+  *Qwen_Local*--sandbox\ bwrap*|*--sandbox\ bwrap*Qwen_Local*) eq 0 0 "(a-case-eq) error names Qwen_Local and --sandbox bwrap" ;;
+  *) fail "(a-case-eq) error does not name the endpoint and the missing flag: $(printf '%s' "$AJSON" | jfield error)" ;;
+esac
+
 # (c) cc-shim + a non-local endpoint (glm), no sandbox: the new gate does not fire.
 rm -f "$SENTINEL"
 RC=0

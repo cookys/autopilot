@@ -760,13 +760,15 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
 // to the local endpoint again. The roster name is emitted only when extra args
 // carry no --endpoint at all, for a cc-shim runner, and for implementer_runner
 // auto or empty when the seat endpoint is listed. An empty extra value does not
-// fall back to the roster. A name in scripts/lib/local-sandbox-endpoints.json also
-// forces --sandbox bwrap and
+// fall back to the roster. A name in scripts/lib/local-sandbox-endpoints.json, compared
+// case-insensitively (resolve-endpoint.sh uppercases the env suffix, so QWEN_LOCAL is
+// the same seat as qwen_local), also forces --sandbox bwrap and
 // --worktree-parent on those same runners; those two are reserved so extra args cannot strip
 // them (PM 01M748P8G8). The shell re-resolves auto plus a listed endpoint onto cc-shim. The
-// worktree parent is one per-uid directory (mode 0700, owner checked), created here because
-// every implementer argv (engine, l5/l6, the ladder) is built by this function. Its base is
-// os.tmpdir() only when neither that directory nor any ancestor holds a .git; otherwise /tmp.
+// worktree parent is one per-uid directory (mode 0700, one lstat after mkdir), created by
+// scripts/lib/local-sandbox-parent.js because every implementer argv (engine, l5/l6, the
+// ladder) is built by this function. This passes os.tmpdir(); the helper realpaths it
+// before the .git walk. A relative path, a realpath error, or a .git ancestor uses /tmp.
 // dispatch-hetero removes the child worktree. This function does not.
 const LOCAL_SANDBOX_ENDPOINTS = path.join(
   __dirname, '..', '..', 'scripts', 'lib', 'local-sandbox-endpoints.json',
@@ -786,67 +788,25 @@ function localSandboxEndpointNames() {
   return list;
 }
 
-function tempBaseHasGitAncestor(start) {
-  let dir = path.resolve(start);
-  for (;;) {
-    try {
-      fs.lstatSync(path.join(dir, '.git'));
-      return true;
-    } catch (error) {
-      if (!error || error.code !== 'ENOENT') throw error;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) return false;
-    dir = parent;
-  }
+function localSandboxEndpointListed(name) {
+  if (typeof name !== 'string' || name.length === 0) return false;
+  const needle = name.toLowerCase();
+  return localSandboxEndpointNames().some((entry) => entry.toLowerCase() === needle);
 }
 
-function ensureMode0700Owned(dir) {
-  if (typeof process.getuid !== 'function') {
-    throw new Error('local sandbox worktree parent requires process.getuid()');
-  }
-  const uid = process.getuid();
-  const inspect = () => {
-    const st = fs.lstatSync(dir);
-    if (st.isSymbolicLink() || !st.isDirectory()) {
-      throw new Error(`local sandbox worktree parent is not a real directory: ${dir}`);
-    }
-    if (st.uid !== uid) {
-      throw new Error(`local sandbox worktree parent owner is not uid ${uid}: ${dir}`);
-    }
-    if ((st.mode & 0o777) !== 0o700) {
-      throw new Error(`local sandbox worktree parent mode is not 0700: ${dir}`);
-    }
-  };
-  try {
-    inspect();
-    return dir;
-  } catch (error) {
-    if (!error || error.code !== 'ENOENT') throw error;
-    const prev = process.umask(0o077);
-    try {
-      fs.mkdirSync(dir, { mode: 0o700 });
-    } catch (mkdirError) {
-      if (!mkdirError || mkdirError.code !== 'EEXIST') throw mkdirError;
-    } finally {
-      process.umask(prev);
-    }
-    inspect();
-    return dir;
-  }
-}
+const {
+  localSandboxWorktreeParent: sharedLocalSandboxWorktreeParent,
+} = require('../../scripts/lib/local-sandbox-parent');
 
 // One shared parent per uid. Not a per-call mkdtemp: two builds reuse this path.
+// The joined name keeps the registered residue prefix on this os.tmpdir() call.
+// The helper realpaths the directory before it walks for .git.
 function localSandboxWorktreeParent() {
   if (typeof process.getuid !== 'function') {
     throw new Error('local sandbox worktree parent requires process.getuid()');
   }
-  const uid = process.getuid();
-  let parent = path.join(os.tmpdir(), 'autopilot-local-sbx-' + uid);
-  if (tempBaseHasGitAncestor(path.dirname(parent))) {
-    parent = path.join('/tmp', 'autopilot-local-sbx-' + uid);
-  }
-  return ensureMode0700Owned(parent);
+  const named = path.join(os.tmpdir(), 'autopilot-local-sbx-' + process.getuid());
+  return sharedLocalSandboxWorktreeParent(path.dirname(named));
 }
 
 function implementerSeatEndpoint(extraImplementationArgs, roster) {
@@ -1157,7 +1117,7 @@ function buildImplementationArgs({
   // missing.
   if (roster && roster.implementer_runner === '') {
     const earlySeat = implementerSeatEndpoint(extraImplementationArgs, roster);
-    if (earlySeat && localSandboxEndpointNames().includes(earlySeat)) {
+    if (localSandboxEndpointListed(earlySeat)) {
       roster = { ...roster, implementer_runner: 'auto' };
     }
   }
@@ -1323,7 +1283,7 @@ function buildImplementationArgs({
   const seatEndpoint = implementerSeatEndpoint(extraImplementationArgs, roster);
   const extraEndpoint = endpointFromImplementationArgs(extraImplementationArgs);
   const runner = roster.implementer_runner;
-  const listed = Boolean(seatEndpoint) && localSandboxEndpointNames().includes(seatEndpoint);
+  const listed = localSandboxEndpointListed(seatEndpoint);
   const localSeat = runner === 'cc-shim' || ((runner === 'auto' || runner === '') && listed);
   if (localSeat
       && extraEndpoint === null

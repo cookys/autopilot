@@ -249,6 +249,51 @@ test('runner auto plus qwen_local carries bwrap sandbox argv', () => {
   fs.rmSync(promptDir, { recursive: true, force: true });
 });
 
+test('implementer_endpoint QWEN_LOCAL carries bwrap sandbox argv', () => {
+  const promptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-ladder-prompt-'));
+  const promptFile = path.join(promptDir, 'prompt.md');
+  fs.writeFileSync(promptFile, 'do the thing\n');
+  const args = buildImplementationArgs({
+    roster: {
+      implementer_engine: 'Qwen3.8-27B-QUASAR-NVFP4',
+      implementer_effort: 'high',
+      implementer_runner: 'auto',
+      implementer_endpoint: 'QWEN_LOCAL',
+    },
+    promptFile,
+    branch: 'feat/x',
+    base: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    cwd: promptDir,
+  });
+  assert.equal(args[args.indexOf('--sandbox') + 1], 'bwrap', args.join(' '));
+  assert.equal(args[args.lastIndexOf('--endpoint') + 1], 'QWEN_LOCAL');
+  const parentAt = args.indexOf('--worktree-parent');
+  assert.notEqual(parentAt, -1, args.join(' '));
+  fs.rmSync(promptDir, { recursive: true, force: true });
+});
+
+test('empty implementer_runner with QWEN_LOCAL is sandboxed like auto', () => {
+  const promptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-ladder-prompt-'));
+  const promptFile = path.join(promptDir, 'prompt.md');
+  fs.writeFileSync(promptFile, 'do the thing\n');
+  const args = buildImplementationArgs({
+    roster: {
+      implementer_engine: 'Qwen3.8-27B-QUASAR-NVFP4',
+      implementer_effort: 'high',
+      implementer_runner: '',
+      implementer_endpoint: 'QWEN_LOCAL',
+    },
+    promptFile,
+    branch: 'feat/x',
+    base: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    cwd: promptDir,
+  });
+  assert.equal(args[args.indexOf('--runner') + 1], 'auto');
+  assert.equal(args[args.indexOf('--sandbox') + 1], 'bwrap', args.join(' '));
+  assert.equal(args[args.lastIndexOf('--endpoint') + 1], 'QWEN_LOCAL');
+  fs.rmSync(promptDir, { recursive: true, force: true });
+});
+
 test('empty implementer_runner with qwen_local is sandboxed like auto', () => {
   const promptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-ladder-prompt-'));
   const promptFile = path.join(promptDir, 'prompt.md');
@@ -320,6 +365,141 @@ test('a TMPDIR inside a git repo is not the local sandbox parent', () => {
     if (prev === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = prev;
     fs.rmSync(repoTmp, { recursive: true, force: true });
+  }
+});
+
+function fallbackLocalSandboxParent() {
+  return path.join('/tmp', `autopilot-local-sbx-${process.getuid()}`);
+}
+
+function shellWorktreeParent(tmpdir, cwd) {
+  const source = path.join(REPO, 'scripts/lib/local-sandbox-endpoint.sh');
+  return spawnSync(
+    'timeout',
+    ['5', 'bash', '-c', `source ${JSON.stringify(source)}; local_sandbox_worktree_parent`],
+    {
+      cwd,
+      env: { ...process.env, TMPDIR: tmpdir },
+      encoding: 'utf8',
+      timeout: 12000,
+    },
+  );
+}
+
+function engineWorktreeParent(tmpdir, cwd) {
+  const prompt = path.join(cwd, 'prompt.md');
+  if (!fs.existsSync(prompt)) fs.writeFileSync(prompt, 'x\n');
+  const code = [
+    'const { buildImplementationArgs } = require(process.argv[1]);',
+    'const args = buildImplementationArgs({',
+    '  roster: {',
+    '    implementer_engine: "Qwen3.8-27B-QUASAR-NVFP4",',
+    '    implementer_effort: "high",',
+    '    implementer_runner: "auto",',
+    '    implementer_endpoint: "qwen_local",',
+    '  },',
+    '  promptFile: process.argv[2],',
+    '  branch: "feat/x",',
+    '  base: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",',
+    '  cwd: process.cwd(),',
+    '});',
+    'const i = args.indexOf("--worktree-parent");',
+    'if (i < 0) process.exit(2);',
+    'process.stdout.write(args[i + 1]);',
+  ].join('\n');
+  return spawnSync(
+    'timeout',
+    ['5', process.execPath, '-e', code, path.join(REPO, 'src/engine/autopilot-engine.js'), prompt],
+    {
+      cwd,
+      env: { ...process.env, TMPDIR: tmpdir },
+      encoding: 'utf8',
+      timeout: 12000,
+    },
+  );
+}
+
+test('relative TMPDIR returns an absolute local sandbox parent and does not hang', () => {
+  const cwd = fs.mkdtempSync('/tmp/localsb-rel-');
+  try {
+    const shell = shellWorktreeParent('relname', cwd);
+    assert.notEqual(shell.status, 124, 'shell hung on a relative TMPDIR');
+    assert.equal(shell.status, 0, shell.stderr);
+    assert.equal(path.isAbsolute(shell.stdout.trim()), true, shell.stdout);
+    assert.equal(shell.stdout.trim(), fallbackLocalSandboxParent());
+    const engine = engineWorktreeParent('relname', cwd);
+    assert.notEqual(engine.status, 124, 'engine hung on a relative TMPDIR');
+    assert.equal(engine.status, 0, engine.stderr);
+    assert.equal(path.isAbsolute(engine.stdout.trim()), true, engine.stdout);
+    assert.equal(engine.stdout.trim(), fallbackLocalSandboxParent());
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('TMPDIR symlinked into a git repo uses the /tmp local sandbox parent', () => {
+  const outside = fs.mkdtempSync('/tmp/localsb-out-');
+  const inside = fs.mkdtempSync(path.join(REPO, 'impl-ladder-git-link-'));
+  const link = path.join(outside, 'tmp-link');
+  fs.symlinkSync(inside, link);
+  const prev = process.env.TMPDIR;
+  process.env.TMPDIR = link;
+  const promptDir = path.join(outside, 'prompt');
+  fs.mkdirSync(promptDir);
+  try {
+    const parent = worktreeParentOf(qwenLocalArgs(promptDir));
+    assert.equal(parent, fallbackLocalSandboxParent(), parent);
+    const shell = shellWorktreeParent(link, outside);
+    assert.notEqual(shell.status, 124, shell.stderr);
+    assert.equal(shell.status, 0, shell.stderr);
+    assert.equal(shell.stdout.trim(), fallbackLocalSandboxParent());
+  } finally {
+    if (prev === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = prev;
+    fs.rmSync(inside, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('a symlink at the local sandbox parent is refused', () => {
+  const base = fs.mkdtempSync('/tmp/localsb-cand-');
+  const decoy = fs.mkdtempSync('/tmp/localsb-decoy-');
+  fs.symlinkSync(decoy, path.join(base, `autopilot-local-sbx-${process.getuid()}`));
+  const prev = process.env.TMPDIR;
+  process.env.TMPDIR = base;
+  const promptDir = path.join(base, 'prompt');
+  fs.mkdirSync(promptDir);
+  try {
+    assert.throws(() => qwenLocalArgs(promptDir));
+    const shell = shellWorktreeParent(base, '/tmp');
+    assert.notEqual(shell.status, 124, 'shell hung on a symlinked parent');
+    assert.notEqual(shell.status, 0, shell.stdout);
+  } finally {
+    if (prev === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = prev;
+    fs.rmSync(base, { recursive: true, force: true });
+    fs.rmSync(decoy, { recursive: true, force: true });
+  }
+});
+
+test('a local sandbox parent with the wrong mode is refused', () => {
+  const base = fs.mkdtempSync('/tmp/localsb-mode-');
+  const cand = path.join(base, `autopilot-local-sbx-${process.getuid()}`);
+  fs.mkdirSync(cand);
+  fs.chmodSync(cand, 0o755);
+  const prev = process.env.TMPDIR;
+  process.env.TMPDIR = base;
+  const promptDir = path.join(base, 'prompt');
+  fs.mkdirSync(promptDir);
+  try {
+    assert.throws(() => qwenLocalArgs(promptDir));
+    const shell = shellWorktreeParent(base, '/tmp');
+    assert.notEqual(shell.status, 124, 'shell hung on a wrong-mode parent');
+    assert.notEqual(shell.status, 0, shell.stdout);
+  } finally {
+    if (prev === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = prev;
+    fs.rmSync(base, { recursive: true, force: true });
   }
 });
 

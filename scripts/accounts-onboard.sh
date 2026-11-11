@@ -8,16 +8,18 @@
 # 30... in argument order. Validation (names; --org specs) and a plan with a [y/N] question (default N; --yes skips
 # it, which a non-interactive stdin needs) come first and create nothing.
 #
-# Per profile, in order: (org) run `claude auth status --json` through the binary, show ONLY the org name and plan
-# (never the e-mail), refuse an org another profile already has, ask the operator to confirm; (O1) create the 0700
-# directories; ask the operator to run `claude setup-token` in another window (this script NEVER runs setup-token),
-# then read the token silently with `read -rs` into <accounts-dir>/<name>/token (0600), and write the org record
-# (org_id, org_label) into <accounts-dir>/<name>/token-meta.json (0600; never the e-mail); (O2) add the profile to
-# registry.json (0600, written by Node, idempotent); (O4) `claude-account.js env-check --alias`; (O7) one haiku
-# "say OK" call through `claude-account.js run`; if its result envelope carries an org id it is compared with the
-# recorded one (mismatch = failed row), if not the org check is marked unverified (never blocks).
-# `--org <name>=<label>` is the explicit confirmation for a profile whose auth status cannot be read or has no orgId:
-# org_id is then recorded as unknown (null) and the label as given; the summary says so. Without it that case fails.
+# Per profile, in order: (org) the org LABEL is --org's label, else the profile name (nothing is read from the
+# operator's current login: `claude auth status` is never called, so the window's login does not matter and need
+# not be switched; setup-token's browser login picks the org); (O1) create the 0700 directories; ask the operator
+# to run `claude setup-token` in another window (this script NEVER runs setup-token), then read the token silently
+# with `read -rs` into <accounts-dir>/<name>/token (0600), and write the org record (org_label, org_id null) into
+# <accounts-dir>/<name>/token-meta.json (0600; never the e-mail); (O2) add the profile to registry.json (0600,
+# written by Node, idempotent); (O4) `claude-account.js env-check --alias`; (O7) one haiku "say OK" call through
+# `claude-account.js run --alias`, i.e. made with the new token. The org id comes from that call's result envelope
+# (field orgId, else org_id, else organization_id): with an id and none recorded it is written to token-meta.json as
+# org_id (org verified), and a profile whose org id another registered profile already has is a failed row (its
+# registry row is taken back); with an id and one recorded the two are compared (mismatch = failed row); with no id
+# in the envelope org_id stays unknown (null) and the org check is marked unverified (never blocks).
 # After all profiles: status, pick --purpose operator-check, selftest --real-binary, selftest --simulate-429 <first>
 # (needs two accounts), cooldown --clear <first>; then a summary table (every row marked, no secrets) plus the
 # O5 lane-reopen command and the O10 rollback command. Exit 0 only when every row is OK; 1 on any failed row or a
@@ -35,7 +37,7 @@
 # Environment:
 #   AUTOPILOT_ACCOUNTS_DIR  accounts dir (default ~/.config/autopilot/accounts); also AUTOPILOT_LIVE_DIR / AUTOPILOT_STATE_DIR
 #   ONBOARD_CLAUDE_BIN      TEST SEAM ONLY: absolute path of a claude stand-in. It is used as the program of the
-#                           `auth status --json` call and the OK call, and as `--binary` of the two selftests,
+#                           OK call, and as `--binary` of the two selftests,
 #                           nothing else. Unset = the real `claude`.
 set -uo pipefail
 
@@ -63,16 +65,16 @@ accounts-onboard.sh：替每個「Claude 帳號＋org」登記一個 profile
     scripts/accounts-onboard.sh main spare             登記兩個：主力與備用
 
 每個 profile 的步驟（約 2–3 分鐘；標「你」的要你親手做）
-  ① 你：在【另一個終端視窗】登入該 profile 要用的 Claude 帳號，需要的話切到對的 org。
-     本指令會讀 claude auth status 並只顯示 org 名稱與方案（不顯示 email），請你確認。
-     已有別的 profile 用了同一個 org 就會拒絕（避免同一份額度被算兩次）。
-     成功的樣子：本視窗出現「目前登入的 org：名稱（方案：…）」，名稱對就輸入 y。
-  ② 你：在【另一個終端視窗】執行 claude setup-token，複製它印出的那一長串 token。
-     本指令絕不代跑 setup-token。成功的樣子：另一個視窗印出一長串 token。
+  ① 不用切換本視窗的登入：org 由 token 自己決定。本指令不讀目前登入的帳號（不呼叫 claude auth status）；
+     profile 的 org 標籤用 --org 給的值，沒給就用 profile 名稱。
+  ② 你：在【另一個終端視窗】執行 claude setup-token（它的瀏覽器登入選哪個 org，token 就屬於哪個 org），
+     複製它印出的那一長串 token。本指令絕不代跑 setup-token。成功的樣子：另一個視窗印出一長串 token。
   ③ 你：回到這個視窗貼上 token（不會顯示、不進命令列、不進記錄）。不想處理這個 profile 就輸入 skip。
      成功的樣子：本視窗出現「已收到 token（不顯示內容）」。
   ④ 本指令自動做：寫入 token 檔與 org 記錄、登記到 registry.json、檢查目錄與權限、
-     用 haiku 做一次「say OK」的真實呼叫（會用到一點點額度）。成功的樣子：出現 ✅ 與該 profile 名稱。
+     用 haiku 做一次「say OK」的真實呼叫（用這個新 token，會用到一點點額度）。org 識別碼從這次呼叫的回應取得並記進 token-meta.json；
+     已有別的 profile 用了同一個 org 就拒絕（避免同一份額度被算兩次，並把剛登記的列取回）；回應沒帶 org 識別碼就記為未知、總結表寫「org 未驗證」，不擋。
+     成功的樣子：出現 ✅ 與該 profile 名稱。
   全部 profile 處理完後，再自動做 status、pick、兩個 selftest，最後印出總結表。成功的樣子：每一列都是 ✅。
   任何錯誤訊息都會寫「修法」；修好後重跑即可，已完成的 profile 會被沿用。
 
@@ -83,22 +85,18 @@ accounts-onboard.sh：替每個「Claude 帳號＋org」登記一個 profile
 選項
   -h, --help             印出這段說明就結束，不建立任何東西。不帶任何參數時也是這樣（結束碼 2）。
   --yes                  跳過「繼續？」的詢問，直接開始。
-  --org 名稱=org標籤     指定某個 profile 的 org 標籤（不可含 @ 或雙引號、不可像 email）。
-                         orgId 讀得到時照常記錄並檢查重複，只有標籤用你給的字（名稱含 email 時尤其好用）；
-                         claude auth status 完全讀不到 orgId 時，org 識別碼記為未知，總結表寫「org 未驗證」。
+  --org 名稱=org標籤     指定某個 profile 的 org 標籤（不可含 @ 或雙引號、不可像 email）；沒給就用 profile 名稱。
+                         標籤只是顯示用；org 識別碼永遠來自 token 自己的 OK 呼叫回應（沒帶就記為未知）。
                          可重複給多個。例：--org team=Acme-Team
 
 安全與重複執行
   重複執行是安全的：token 檔已存在時問「沿用／覆蓋」，預設沿用；已有 org 記錄就不再問 org。
   某個 profile 的 token 壞掉會在該 profile 停下並點名，結束碼非 0，修好後再跑一次即可。
-  個人 org 的名稱常是「<email> 的 Organization」：名稱含 email 時，本指令不顯示也不儲存名稱，
-  但 orgId 讀得到就照常記錄並檢查重複；標籤改用 --org 給的值，沒給就當場請你輸入一個
-  （不可含 @ 或雙引號、不可像 email、最多 64 字；非互動又沒有 --org 就失敗並告訴你怎麼修）。
   回滾：mv <帳號目錄>/registry.json <帳號目錄>/registry.json.off（跑完會印出完整指令）。
 
 環境變數
   AUTOPILOT_ACCOUNTS_DIR  帳號目錄（預設 ~/.config/autopilot/accounts）
-  ONBOARD_CLAUDE_BIN      僅供測試：指定替身 claude 的絕對路徑，只用在 auth status 與 OK 呼叫以及兩個 selftest
+  ONBOARD_CLAUDE_BIN      僅供測試：指定替身 claude 的絕對路徑，只用在 OK 呼叫以及兩個 selftest
                           的 --binary，不開放其他行為；不設就用真的 claude。
 USAGE
 }
@@ -169,22 +167,6 @@ if (mode === 'dir') {
     const lp = reg.orgLabelProblem(label);
     if (lp) die(`第 ${i + 1} 個 --org 的標籤不合法（${lp}）：1 到 64 字、不可含 @ 或雙引號、不可像 email 或帳號資訊。修法：改用不含 email 的單純標籤再重跑，沒有建立任何東西。`);
   });
-} else if (mode === 'authstatus') {
-  // `claude auth status --json` through the given program. Prints: status line (ok|fail:<code>), orgId, org name
-  // ('' when it is not printable-safe, e.g. it carries an e-mail), plan. The e-mail field is never read out.
-  const r = require('child_process').spawnSync(args[0], ['auth', 'status', '--json'], { encoding: 'utf8', timeout: 30000, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 20 });
-  const fail = (c) => { process.stdout.write(`fail:${c}\n`); process.exit(0); };
-  if (r.error || r.status !== 0) fail('unreadable');
-  let j;
-  try { j = JSON.parse(r.stdout); } catch (e) { fail('not_json'); }
-  if (!j || typeof j !== 'object' || Array.isArray(j)) fail('not_json');
-  if (reg.orgIdProblem(j.orgId)) fail('no_org_id');
-  const name = typeof j.orgName === 'string' && !reg.orgLabelProblem(j.orgName) ? j.orgName : '';
-  const sub = typeof j.subscriptionType === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(j.subscriptionType) ? j.subscriptionType : '';
-  process.stdout.write(`ok\n${j.orgId.toLowerCase()}\n${name}\n${sub}\n`);
-} else if (mode === 'orgowner') {
-  const o = reg.findOrgOwner(reg.accountsDir({}), args[1], args[0]);
-  process.stdout.write((o || '') + '\n');
 } else if (mode === 'hasorg') {
   const m = reg.readTokenMeta(reg.accountsDir({}), args[0], {});
   process.stdout.write(m && typeof m.org_label === 'string' ? 'yes\n' : 'no\n');
@@ -192,24 +174,40 @@ if (mode === 'dir') {
   const [alias, id, label, chk] = args;
   const lp = reg.orgLabelProblem(label);
   if (lp) die('org 標籤不合法：' + lp + '。修法：改用單純的名稱（1 到 64 字、不含 @ 和雙引號）。');
-  if (id !== '-' && reg.orgIdProblem(id)) die('org 識別碼不合法。修法：重跑並確認 claude auth status 的 orgId 正常，或改用 --org 給標籤。');
+  if (id !== '-' && reg.orgIdProblem(id)) die('org 識別碼不合法。修法：重跑；若仍如此，請回報這個 token 的 OK 呼叫回應格式。');
   reg.writeTokenMeta(reg.accountsDir({}), alias, { org_id: id === '-' ? null : id, org_label: label, org_check: chk === 'verified' ? 'verified' : 'unverified' });
-} else if (mode === 'labelcheck') { // the typed label arrives by environment, never argv (a mistyped e-mail must not reach ps)
-  if (reg.orgLabelProblem(process.env.ONBOARD_LABEL)) process.exit(2);
-} else if (mode === 'orgcmp') {
-  // Compare the result envelope's org id (if it carries one) with the recorded org_id; set org_check.
+} else if (mode === 'orgrecord') {
+  // The OK call's result envelope is the only source of the org id (fields: orgId, org_id, organization_id).
+  // With an id and none recorded yet: refuse if another profile holds it, else record it (verified). With an id
+  // and one recorded: compare. Without a usable id: unverified, never blocks.
   const [alias, file] = args;
   const acc = reg.accountsDir({});
   const m = reg.readTokenMeta(acc, alias, {});
   let env = null;
   try { env = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { /* not a single JSON document */ }
   const seen = env && typeof env === 'object' ? [env.orgId, env.org_id, env.organization_id].find((v) => typeof v === 'string') : undefined;
+  const usable = seen !== undefined && !reg.orgIdProblem(seen);
   let verdict = 'unverified';
-  if (seen !== undefined && m && typeof m.org_id === 'string') verdict = seen.toLowerCase() === m.org_id.toLowerCase() ? 'verified' : 'mismatch';
-  if (verdict === 'unverified' && m && m.org_check === 'verified') verdict = 'kept'; // an id read from auth status stays verified
+  if (usable && m && typeof m.org_id === 'string') verdict = seen.toLowerCase() === m.org_id.toLowerCase() ? 'verified' : 'mismatch';
+  else if (usable && m) {
+    const owner = reg.findOrgOwner(acc, seen, alias);
+    if (owner) { process.stdout.write('duplicate:' + owner + '\n'); process.exit(0); }
+    try { reg.writeTokenMeta(acc, alias, { org_id: seen, org_check: 'verified' }); verdict = 'recorded'; } catch (e) { die('org 識別碼寫入失敗。修法：檢查該別名目錄的權限後重跑。'); }
+  }
+  if (verdict === 'unverified' && m && m.org_check === 'verified') verdict = 'kept'; // an earlier verified id stays
   else if (verdict === 'unverified' && m && m.org_check === 'mismatch') verdict = 'kept_mismatch'; // an envelope without an id does not erase an earlier mismatch
-  else if (m) { try { reg.writeTokenMeta(acc, alias, { org_check: verdict }); } catch (e) { /* the summary row still reports the verdict */ } } // a mismatch overwrites an earlier verified
+  else if (verdict !== 'recorded' && m) { try { reg.writeTokenMeta(acc, alias, { org_check: verdict }); } catch (e) { /* the summary row still reports the verdict */ } }
   process.stdout.write(verdict + '\n');
+} else if (mode === 'unregister') { // take back a row this run just added (its org turned out to be a duplicate)
+  const alias = args[0];
+  const acc = reg.accountsDir({});
+  const r = reg.loadRegistry({});
+  const rows = r.accounts.filter((x) => x.alias !== alias).map((x) => ({ alias: x.alias, enabled: x.enabled, priority: x.priority }));
+  const file = path.join(acc, 'registry.json');
+  const tmp = path.join(acc, `registry.json.tmp-${process.pid}`);
+  fs.writeFileSync(tmp, JSON.stringify({ schema: reg.SCHEMA, accounts: rows }) + '\n', { mode: 0o600 });
+  fs.chmodSync(tmp, 0o600);
+  fs.renameSync(tmp, file);
 } else if (mode === 'prepare') {
   const alias = args[0];
   const p = reg.aliasProblem(alias);
@@ -300,86 +298,20 @@ for alias in "$@"; do
   echo
   echo "== 別名 $alias（第 $idx 個，優先序 $((idx * 10))） =="
 
-  # --- org: which organization is this profile? Decided before anything is written for it. ---------------------
-  ORG_PENDING=0; ORG_ID="-"; ORG_LABEL=""; ORG_NOTE=""; ORG_CHECK="unverified"
-  org_skip() { # <reason>: the profile is not registered
-    row "❌" "$alias org" "$1"
-    row "❌" "$alias token" "未處理（org 未確認），沒有登記"
-    row "❌" "$alias env-check" "未執行"
-    row "❌" "$alias haiku OK 呼叫" "未執行"
-  }
+  # --- org: the label only. The org ID is learned from this token's own OK call (orgrecord below); the operator's
+  # current login (claude auth status) plays no part. -----------------------------------------------------------
+  ORG_PENDING=0; ORG_ID="-"; ORG_LABEL=""; ORG_CHECK="unverified"
   if [ "$(nodeh hasorg "$alias")" = "yes" ]; then
     row "✅" "$alias org" "沿用既有 org 記錄（token-meta.json）"
   else
     given="$(org_given "$alias")"
-    echo "步驟 ①（在【另一個終端視窗】做）：登入 $alias 要用的 Claude 帳號，需要的話切到對的 org。"
-    echo "準備好後本視窗會讀 claude auth status，只顯示 org 名稱與方案（不顯示 email）。"
-    echo "成功的樣子：下面出現「目前登入的 org：<名稱>（方案：…）」，名稱對就輸入 y 確認；不對就輸入 n，先在另一個視窗切換再重跑。"
-    if ! aout="$(nodeh authstatus "$CLAUDE_PROG" 2>/dev/null)"; then aout="fail:unreadable"; fi
-    { IFS= read -r ast; IFS= read -r oid; IFS= read -r oname; IFS= read -r osub; } <<< "$aout"
-    if [ "$ast" != "ok" ]; then
-      if [ -n "$given" ]; then
-        ORG_PENDING=1; ORG_ID="-"; ORG_LABEL="$given"; ORG_CHECK="unverified"
-        echo "讀不到 $alias 的 orgId，改用你以 --org 給的標籤「$given」（org 識別碼記為未知，不做重複 org 偵測）。"
-        row "✅" "$alias org" "標籤「$given」（以 --org 手動確認；org 識別碼未知，org 未驗證）"
-      else
-        echo "讀不到 $alias 的 org：claude auth status --json 失敗、不是 JSON，或沒有 orgId（${ast#fail:}）。"
-        echo "修法：先在另一個視窗登入該帳號後重跑；或你確定是哪個 org 時，加 --org $alias=<org 標籤> 重跑（org 識別碼會記為未知）。"
-        org_skip "讀不到 org（${ast#fail:}），為避免登記錯誤的 org 已停止；修法：先登入再重跑，或加 --org $alias=<org 標籤>"
-        continue
-      fi
+    ORG_PENDING=1
+    if [ -n "$given" ]; then
+      ORG_LABEL="$given"
+      row "✅" "$alias org" "標籤「$given」（以 --org 指定）；org 識別碼稍後由這個 token 自己的 OK 呼叫取得"
     else
-      # orgId was read: the duplicate-org guard runs whatever the org name looks like (a personal org's name is
-      # usually "<e-mail>'s Organization"; that name is never shown or stored, the id still is).
-      owner="$(nodeh orgowner "$alias" "$oid" 2>/dev/null)"
-      if [ -n "$owner" ]; then
-        echo "這個 org 已經由 profile $owner 登記了；同一個 org 登記兩次會讓同一份額度被算兩次，所以拒絕，$alias 沒有建立任何東西。"
-        echo "修法：在另一個視窗切到 $alias 真正要用的另一個 org 後重跑；如果其實不需要，就不要登記 $alias。"
-        org_skip "org 已由 profile $owner 登記，拒絕重複登記；修法：切到另一個 org 後重跑"
-        continue
-      fi
-      if [ -n "$given" ]; then
-        ORG_PENDING=1; ORG_ID="$oid"; ORG_LABEL="$given"; ORG_CHECK="verified"
-        echo "已用 --org 指定標籤「$given」；org 識別碼已由 claude auth status 讀到並記錄。"
-        row "✅" "$alias org" "標籤「$given」（以 --org 指定），org 已驗證（識別碼來自 auth status${oname:+；名稱 $oname 未採用}）"
-      elif [ -z "$oname" ]; then
-        echo "目前登入的 org 名稱含帳號資訊（例如 email）或無法顯示，所以不顯示也不儲存；org 識別碼已讀到並會照常記錄與檢查重複。"
-        echo "請為 profile $alias 輸入一個 org 標籤（1 到 64 字，不可含 @ 或雙引號、不可像 email；例：personal）。"
-        lbl=""; tries=0
-        while [ "$tries" -lt 3 ]; do
-          tries=$((tries + 1))
-          printf '%s 的 org 標籤：' "$alias"
-          if ! read -r lbl; then
-            echo
-            echo "讀不到輸入，沒有標籤可用。修法：加 --org $alias=<org 標籤> 重跑（可在非互動環境使用）。"
-            lbl=""; break
-          fi
-          if ONBOARD_LABEL="$lbl" nodeh labelcheck >/dev/null 2>&1; then break; fi
-          echo "標籤不合法（空白、超過 64 字、含 @、含雙引號或像 email）。修法：請改輸入單純的名稱，例如 personal。"
-          lbl=""
-        done
-        if [ -z "$lbl" ]; then
-          org_skip "org 名稱不可顯示（含 email），也沒有取得合法標籤；修法：加 --org $alias=<org 標籤> 重跑"
-          continue
-        fi
-        ORG_PENDING=1; ORG_ID="$oid"; ORG_LABEL="$lbl"; ORG_CHECK="verified"
-        row "✅" "$alias org" "標籤「$lbl」，org 已驗證（名稱已隱藏）"
-      else
-        echo "目前登入的 org：$oname${osub:+（方案：$osub）}"
-        printf '這是 profile %s 要用的 org 嗎？（對：輸入 y；不對：直接按 Enter）[y/N] ' "$alias"
-        oc=""
-        read -r oc || oc=""
-        echo
-        case "$oc" in
-          y|Y|yes|YES) ;;
-          *)
-            echo "已略過 $alias。請在另一個視窗切到正確的帳號／org 後重跑本指令。"
-            org_skip "你沒有確認 org，沒有登記；修法：切到正確的 org 後重跑"
-            continue ;;
-        esac
-        ORG_PENDING=1; ORG_ID="$oid"; ORG_LABEL="$oname"
-        row "✅" "$alias org" "$oname${osub:+（$osub）}，已由你確認"
-      fi
+      ORG_LABEL="$alias"
+      row "✅" "$alias org" "標籤「$alias」（沿用 profile 名稱）；org 識別碼稍後由這個 token 自己的 OK 呼叫取得"
     fi
   fi
 
@@ -499,8 +431,19 @@ EOF
   if [ "$rc" -eq 0 ] && grep -Eq '"is_error": ?false' "$okf" 2>/dev/null; then
     echo "步驟 ④ 完成 ✅ 別名 $alias：haiku OK 呼叫成功。"
     row "✅" "$alias haiku OK 呼叫" "回應正常（is_error:false）"
+    orgv="$(nodeh orgrecord "$alias" "$okf" 2>/dev/null)" || orgv="unverified"
+    case "$orgv" in
+      duplicate:*)
+        owner="${orgv#duplicate:}"
+        echo "這個 token 的 org 已經由 profile $owner 登記了；同一個 org 登記兩次會讓同一份額度被算兩次，所以拒絕，$alias 不留在 registry 裡。"
+        echo "修法：重新在另一個視窗用另一個 org 的登入跑 claude setup-token，重跑本指令並選「覆蓋」；如果其實不需要，就不要登記 $alias。"
+        case "$r" in added|created) nodeh unregister "$alias" >/dev/null 2>&1 ;; esac
+        row "❌" "$alias org 核對" "這個 token 的 org 已由 profile $owner 登記，拒絕重複登記（已從 registry 取回）；修法：換用另一個 org 的 token 後重跑，選「覆蓋」"
+        continue ;;
+    esac
     OK_ALIASES+=("$alias")
-    case "$(nodeh orgcmp "$alias" "$okf" 2>/dev/null)" in
+    case "$orgv" in
+      recorded) row "✅" "$alias org 核對" "org 識別碼取自這個 token 自己的 OK 呼叫並已記錄（org 已驗證）" ;;
       verified) row "✅" "$alias org 核對" "OK 呼叫的回應帶有 org 識別碼，與記錄相符" ;;
       mismatch) row "❌" "$alias org 核對" "OK 呼叫的回應帶的 org 識別碼與記錄不同：這個 token 可能綁到別的 org；修法：重新 setup-token 並確認 org" ;;
       kept) ;;

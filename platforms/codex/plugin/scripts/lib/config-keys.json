@@ -1147,7 +1147,7 @@
         "AUTOPILOT_RESIDUE_AUTO_REAP",
         "hooks.<stem>"
       ],
-      "summary": "Automatic reaping of finished dispatch worktrees and branches.",
+      "summary": "Automatic reaping of finished dispatch worktrees. Does not delete branches (see residue.delete_branches).",
       "type": "boolean"
     },
     {
@@ -1163,6 +1163,23 @@
       "relates": [],
       "summary": "Extra branch prefixes the reaper treats as dispatch branches (letters, digits, . _ - and an optional trailing /).",
       "type": "array"
+    },
+    {
+      "name": "residue.delete_branches",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "residue",
+      "default": false,
+      "readers": [
+        "scripts/lib/residue-config.js",
+        "scripts/repo-residue-sweep.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RESIDUE_DELETE_BRANCHES"
+      ],
+      "summary": "When true, reap and close-session delete branches after printing each branch and its tip. Default false: branches stay and are listed for the owner.",
+      "type": "boolean"
     },
     {
       "name": "run_ledger.max_rotations",
@@ -5035,6 +5052,21 @@
         "residue.auto_reap"
       ],
       "summary": "0 or 1; environment override of residue.auto_reap."
+    },
+    {
+      "name": "AUTOPILOT_RESIDUE_DELETE_BRANCHES",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": null,
+      "readers": [
+        "scripts/lib/residue-config.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "residue.delete_branches"
+      ],
+      "summary": "0 or 1; environment override of residue.delete_branches. Any other value is ignored."
     },
     {
       "name": "AUTOPILOT_RESIDUE_LEASE_HOURS",

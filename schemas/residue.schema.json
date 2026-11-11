@@ -41,7 +41,8 @@
           "age_days": { "type": ["number", "null"] },
           "bytes": { "type": ["integer", "null"], "minimum": 0 },
           "reason": { "type": ["string", "null"] },
-          "command": { "type": ["string", "null"] }
+          "command": { "type": ["string", "null"] },
+          "tip": { "type": "string", "minLength": 1 }
         }
       }
     },

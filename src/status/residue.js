@@ -75,6 +75,7 @@ function autoFields(report, auto) {
         command: textOf(e.command),
       };
       if (e.kind === 'worktree') row.path = e.path; else if (e.kind === 'branch') row.branch = e.branch; else row.ref = e.ref;
+      if (textOf(e.tip)) row.tip = e.tip;
       rows.push(row);
     }
     out.needs_human_count = rows.length;

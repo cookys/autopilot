@@ -10,7 +10,7 @@ SCRIPT="$REPO_ROOT/scripts/repo-residue-sweep.js"
 export HOME="$TEST_TMP/home"
 mkdir -p "$HOME/.autopilot"
 export AUTOPILOT_RESIDUE_RECENT_HOURS=0
-unset AUTOPILOT_RESIDUE_AUTO_REAP AUTOPILOT_RESIDUE_LEASE_HOURS AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS
+unset AUTOPILOT_RESIDUE_AUTO_REAP AUTOPILOT_RESIDUE_LEASE_HOURS AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS AUTOPILOT_RESIDUE_DELETE_BRANCHES
 
 jx() { printf '%s' "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);let v;try{v=eval(process.argv[1]);}catch(e){v=undefined;}process.stdout.write(v===undefined?"<undef>":(typeof v==="string"?v:JSON.stringify(v)));})' "$2"; }
 
@@ -86,8 +86,14 @@ B2="$TIP"
 assert_eq "$(jx "$ROW" 'j.patch_id_matches.map(m=>m.branch+"->"+m.target).join(",")')" "$B1->$P1,$B2->$P2" "both: each branch commit names its cherry-pick"
 OUT="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes --integration-ref develop)"
 assert_eq "$?" "0" "both: apply exit 0"
-git -C "$SBX" rev-parse --verify -q refs/heads/hands/both >/dev/null && fail "both: apply should delete hands/both" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
-assert_eq "$(jx "$OUT" 'j.removed.some(r=>r.kind==="branch"&&r.branch==="hands/both"&&r.reason==="integrated")')" "true" "both: removed as integrated"
+git -C "$SBX" rev-parse --verify -q refs/heads/hands/both >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "both: default auto leaves hands/both"
+assert_eq "$(jx "$OUT" 'j.needs_human.find(e=>e.branch==="hands/both"&&e.reason==="delete_branches_off").tip')" "$TIP" "both: listed with its tip"
+assert_eq "$(jx "$OUT" 'j.removed.some(r=>r.kind==="branch")')" "false" "both: default auto removes no branch"
+OUTD="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes --delete-branches --integration-ref develop 2>"$TEST_TMP/both-del.err")"
+assert_eq "$?" "0" "both: --delete-branches exit 0"
+assert_contains "$(cat "$TEST_TMP/both-del.err")" "hands/both $TIP" "both: flag prints the branch and tip before deleting"
+git -C "$SBX" rev-parse --verify -q refs/heads/hands/both >/dev/null && fail "both: flag deletes hands/both" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+assert_eq "$(jx "$OUTD" 'j.removed.some(r=>r.kind==="branch"&&r.branch==="hands/both"&&r.reason==="integrated"&&r.tip==="'"$TIP"'")')" "true" "both: removed as integrated with its tip"
 
 # --- 2. one hunk altered: unintegrated, kept ---
 SBX="$(new_repo alter)"
@@ -119,8 +125,12 @@ ROW="$(branch_row hands/anc "$SCAN")"
 assert_eq "$(jx "$ROW" 'j.class')" "integrated" "ancestor: class integrated"
 assert_eq "$(jx "$ROW" 'j.integrated_by')" "ancestor" "ancestor: integrated_by ancestor"
 assert_eq "$(jx "$ROW" 'j.patch_id_matches')" "<undef>" "ancestor: no patch_id_matches"
-node "$SCRIPT" reap --repo "$SBX" --auto --yes --integration-ref develop >/dev/null
-git -C "$SBX" rev-parse --verify -q refs/heads/hands/anc >/dev/null && fail "ancestor: should still be deleted" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+OUTA="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes --integration-ref develop)"
+git -C "$SBX" rev-parse --verify -q refs/heads/hands/anc >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "ancestor: default auto leaves hands/anc"
+assert_eq "$(jx "$OUTA" 'j.needs_human.find(e=>e.branch==="hands/anc"&&e.reason==="delete_branches_off").tip')" "$BASE" "ancestor: listed with its tip"
+OUTAD="$(node "$SCRIPT" reap --repo "$SBX" --auto --yes --delete-branches --integration-ref develop 2>"$TEST_TMP/anc-del.err")"
+assert_contains "$(cat "$TEST_TMP/anc-del.err")" "hands/anc $BASE" "ancestor: flag prints the branch and tip before deleting"
+git -C "$SBX" rev-parse --verify -q refs/heads/hands/anc >/dev/null && fail "ancestor: flag deletes hands/anc" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
 
 # --- 5. clean worktree whose HEAD was cherry-picked ---
 SBX="$(new_repo wt)"

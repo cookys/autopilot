@@ -11,7 +11,7 @@
 SCRIPT="$REPO_ROOT/scripts/repo-residue-sweep.js"
 LIB="$REPO_ROOT/scripts/lib/dispatch-branch-ledger.sh"
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME/.autopilot"
-unset AUTOPILOT_RESIDUE_AUTO_REAP AUTOPILOT_RESIDUE_LEASE_HOURS AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS AUTOPILOT_SESSION_ID
+unset AUTOPILOT_RESIDUE_AUTO_REAP AUTOPILOT_RESIDUE_LEASE_HOURS AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS AUTOPILOT_RESIDUE_DELETE_BRANCHES AUTOPILOT_SESSION_ID
 NOW="$(date +%s)"
 TODAY="$(date -u +%F)"
 jx() { printf '%s' "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const v=eval(process.argv[1]);process.stdout.write(typeof v==="string"?v:JSON.stringify(v));})' "$2"; }
@@ -73,7 +73,7 @@ build_fixture() {
   ledger_row sib-shared S3 r-sib shared-root
   # noledger: deliberately no row
 }
-run_close() { node "${CS_SCRIPT:-$SCRIPT}" close-session --repo "$SBX" "$@"; }
+run_close() { node "${CS_SCRIPT:-$SCRIPT}" close-session --repo "$SBX" --delete-branches "$@"; }
 refs_snapshot() { G for-each-ref --format='%(refname) %(objectname)' | sort; }
 
 # ---------------------------------------------------------------- the ledger writer (bash lib)
@@ -115,8 +115,17 @@ EXPECT="deleted=foreman/F1,hands/F1/u1,hands/F1/u2,s1-merged,s1-shared,s1-unint;
 assert_eq "$(sig "$DRY")" "$EXPECT" "dry run plan = the real plan"
 assert_eq "$(jx "$DRY" 'j.schema+"|"+j.session')" "autopilot.close-session/1|S1" "report schema + session"
 
+# --yes without --delete-branches keeps every planned branch and does not print the list
+KEEPERR="$TEST_TMP/s1-keep.err"
+KEEP="$(node "$SCRIPT" close-session --repo "$SBX" --session S1 --yes 2>"$KEEPERR")"; assert_eq "$?" "0" "close-session --yes without --delete-branches -> exit 0"
+assert_eq "$(jx "$KEEP" 'j.deleted.length')" "0" "without the flag nothing is deleted"
+assert_eq "$(jx "$KEEP" 'j.kept.filter(k=>k.why==="delete_branches_off").map(k=>k.branch).sort().join(",")')" "foreman/F1,hands/F1/u1,hands/F1/u2,s1-merged,s1-shared,s1-unint" "without the flag the planned branches are kept"
+G rev-parse --verify -q refs/heads/s1-merged >/dev/null && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "without the flag s1-merged stays"
+assert_not_contains "$(cat "$KEEPERR")" "s1-merged" "without the flag the delete list is not printed"
+assert_eq "$(refs_snapshot)" "$BEFORE" "without the flag no ref changes"
+
 # ---------------------------------------------------------------- the real run
-S2TIP="$(G rev-parse s2-unint)"; NLTIP="$(G rev-parse noledger)"; U1TIP="$(G rev-parse hands/F1/u1)"; UNTIP="$(G rev-parse s1-unint)"
+S2TIP="$(G rev-parse s2-unint)"; NLTIP="$(G rev-parse noledger)"; U1TIP="$(G rev-parse hands/F1/u1)"; UNTIP="$(G rev-parse s1-unint)"; MERGETIP="$(G rev-parse s1-merged)"
 OUT="$(run_close --session S1 --yes 2>"$TEST_TMP/s1.err")"; RC=$?
 assert_eq "$RC" "0" "S1 close-out -> exit 0 (only keep rules left behind)"
 assert_eq "$(sig "$OUT")" "$EXPECT" "S1 close-out acts exactly on the right branches"
@@ -127,7 +136,8 @@ assert_eq "$(jx "$OUT" '"archived" in j')" "false" "report has no archived list"
 assert_eq "$(jx "$OUT" 'j.deleted.find(d=>d.branch==="s1-unint").integrated+"|"+j.deleted.find(d=>d.branch==="s1-merged").integrated+"|"+j.deleted.find(d=>d.branch==="s1-unint").tip')" "false|true|$UNTIP" "deleted entries carry integrated + tip"
 assert_contains "$(cat "$TEST_TMP/s1.err")" "git branch s1-unint $UNTIP" "stderr recovery line for an unintegrated delete"
 assert_contains "$(cat "$TEST_TMP/s1.err")" "git branch hands/F1/u1 $U1TIP" "stderr recovery line for the foreman-owned hand"
-assert_not_contains "$(cat "$TEST_TMP/s1.err")" "s1-merged" "no recovery line for an integrated delete"
+assert_contains "$(cat "$TEST_TMP/s1.err")" "s1-merged $MERGETIP" "stderr lists the integrated branch and its tip before deleting"
+assert_not_contains "$(cat "$TEST_TMP/s1.err")" "git branch s1-merged" "no recovery line for an integrated delete"
 G branch -q restored-s1-unint "$UNTIP" && assert_eq "$(G rev-parse restored-s1-unint)" "$UNTIP" "the printed recovery command's tip is restorable" ; G branch -q -D restored-s1-unint
 assert_eq "$(G rev-parse s2-unint)" "$S2TIP" "S2's branch untouched"
 assert_eq "$(G rev-parse noledger)" "$NLTIP" "branch with no ledger row untouched"
@@ -177,7 +187,7 @@ rm "$LATE/scripts/pin-evidence-anchors.js" "$LATE/scripts/repo-residue-sweep.js"
 printf '%s\n' "const {spawnSync}=require('child_process');const a=process.argv;const root=a[a.indexOf('--repo-root')+1];" \
   "spawnSync('git',['-C',root,'worktree','add','-q',process.env.LATE_WT,'s1-unint']);process.stdout.write('{}');" > "$LATE/scripts/pin-evidence-anchors.js"
 UNTIP="$(G rev-parse s1-unint)"
-OUT="$(LATE_WT="$TEST_TMP/late-wt" node "$LATE/scripts/repo-residue-sweep.js" close-session --repo "$SBX" --session S1 --yes)"; RC=$?
+OUT="$(LATE_WT="$TEST_TMP/late-wt" node "$LATE/scripts/repo-residue-sweep.js" close-session --repo "$SBX" --session S1 --yes --delete-branches)"; RC=$?
 assert_eq "$RC" "0" "checked_out_late is a keep rule: exit 0"
 assert_eq "$(jx "$OUT" 'j.kept.find(k=>k.branch==="s1-unint").why')" "checked_out_late" "branch checked out during anchoring is kept"
 assert_eq "$(G rev-parse s1-unint)" "$UNTIP" "late-checked-out branch still exists at its tip"
@@ -186,7 +196,7 @@ LM="$(sed -E "s/if \(listWorktrees\(mainPath\)\.some\(\(w\) => w\.branch === b\.
 rm "$LATE/scripts/repo-residue-sweep.js"; printf '%s\n' "$LM" > "$LATE/scripts/repo-residue-sweep.js"
 cmp -s "$SCRIPT" "$LATE/scripts/repo-residue-sweep.js" && fail "late-checkout mutation did not apply"
 G worktree remove --force "$TEST_TMP/late-wt" 2>/dev/null
-OUTM="$(LATE_WT="$TEST_TMP/late-wt2" node "$LATE/scripts/repo-residue-sweep.js" close-session --repo "$SBX" --session S1 --yes)"
+OUTM="$(LATE_WT="$TEST_TMP/late-wt2" node "$LATE/scripts/repo-residue-sweep.js" close-session --repo "$SBX" --session S1 --yes --delete-branches)"
 assert_neq "$(jx "$OUTM" 'j.kept.find(k=>k.branch==="s1-unint")?j.kept.find(k=>k.branch==="s1-unint").why:"deleted"')" "checked_out_late" "mutant: late re-check removed -> the checked-out branch is deleted"
 
 # ---------------------------------------------------------------- no ledger at all

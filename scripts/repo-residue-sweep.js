@@ -12,11 +12,11 @@
 // USAGE:
 //   repo-residue-sweep.js scan     --repo <dir> [--integration-ref <ref>] [--sizes] [--json]
 //   repo-residue-sweep.js preserve --repo <dir> --out <dir> [--worktree <path>]... [--json]
-//   repo-residue-sweep.js reap     --repo <dir> --yes [--preserve-dir <dir>] [--older-than-days N]
+//   repo-residue-sweep.js reap     --repo <dir> --yes [--delete-branches] [--preserve-dir <dir>] [--older-than-days N]
 //                                  [--integration-ref <ref>] [--json]
 //   repo-residue-sweep.js reap     --repo <dir> --yes --worktree <path>...   (only those worktrees; no branch or seat phase)
-//   repo-residue-sweep.js reap     --repo <dir> --auto --yes [--integration-ref <ref>] [--tmpdir <dir>] [--json]
-//   repo-residue-sweep.js close-session --session <sid> [--yes] [--repo <dir>] [--integration-ref <ref>] [--json]
+//   repo-residue-sweep.js reap     --repo <dir> --auto --yes [--delete-branches] [--integration-ref <ref>] [--tmpdir <dir>] [--json]
+//   repo-residue-sweep.js close-session --session <sid> [--yes] [--delete-branches] [--repo <dir>] [--integration-ref <ref>] [--json]
 //
 // CLASSES (from git facts, never from a marker's claim):
 //   worktree: live | busy | missing-dir | dirty | clean-integrated | clean-unintegrated   (busy = a process uses it: cwd, exe or a mapped file inside, or /proc unreadable; never removable)
@@ -41,9 +41,11 @@
 // REAP (requires --yes):
 //   removes  missing-dir + clean-integrated worktrees; dirty worktrees ONLY when a manifest
 //            under --preserve-dir names this worktree's path + HEAD and re-verifies now
-//   deletes  integrated branches not checked out anywhere, AFTER
-//            pin-evidence-anchors.js apply --exclude-ref <each> (receipt-anchored commits stay
-//            reachable; an anchor failure aborts the branch phase)
+//   deletes  integrated branches not checked out anywhere ONLY with --delete-branches
+//            (or residue.delete_branches). It prints `<branch> <tip>` first, then
+//            pin-evidence-anchors.js apply --exclude-ref <each>, then
+//            `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap).
+//            Without the flag the branch stays in branches_kept (why delete_branches_off, plus tip).
 //   never    live worktrees, unintegrated branches, unpreserved dirty worktrees
 //   --older-than-days narrows the candidate set (age from the marker's created_at, else the
 //   branch's last commit date, else the directory mtime); it never widens it.
@@ -59,12 +61,15 @@
 //      lease-expired (retention_expires_at, else created_at + residue.lease_hours), that do not
 //      hold an unexpired explicit `retention=lease`, and that do not belong to an unresolved
 //      campaign or Mission (root_run_id; see CAMPAIGN SIGNAL). The branch always stays;
-//   3. dispatch branches (^(hands|hetero|foreman)/ + residue.branch_prefixes): integrated ones
-//      (idle >= 1 h) via pin-evidence-anchors + `branch -D`; unintegrated ones idle longer than
-//      residue.archive_branch_days (later of tip committer date and newest reflog entry), not
-//      checked out, not pointed at by a live/unexpired-lease marker, not in an unresolved
-//      campaign, after `update-ref refs/archive/<YYYY-MM-DD>/<branch> <tip>` + verify. Restore:
-//      `git branch <name> refs/archive/<date>/<name>`.
+//   3. dispatch branches (^(hands|hetero|foreman)/ + residue.branch_prefixes) are NOT deleted
+//      and NOT archived unless --delete-branches or residue.delete_branches is set
+//      (env AUTOPILOT_RESIDUE_DELETE_BRANCHES=1). Without it, integrated ones idle >= 1 h and
+//      unintegrated ones the archive path would have taken are listed in needs_human with the
+//      branch name and tip (reason delete_branches_off). With it: the same selection; print
+//      `<branch> <tip>`, pin-evidence-anchors, create+verify refs/archive/<YYYY-MM-DD>/<branch>
+//      for the unintegrated path, then `update-ref -d refs/heads/<branch> <tip>`. Restore an
+//      archived one with `git branch <name> refs/archive/<date>/<name>`. Worktrees and tmp
+//      are reaped either way.
 //   4. tmp phase (once per 24 h per HOST): aged scratch|evidence entries of the shared temp root, via
 //      scripts/lib/tmp-residue.js prune (registry scripts/lib/tmp-residue-registry.json; live, lock, worktree and
 //      test-lockgated kinds, symlinks, lock-holding dirs and live .autopilot-owner dirs are never touched). Host stamp
@@ -76,8 +81,9 @@
 // `bytes` (`du -sk`, 60 s total budget, null after it) exists only for `reap --auto` and
 // `scan --sizes`; a plain scan copies cached sizes from the auto result. The auto result is
 // written to <git-common-dir>/autopilot-residue-auto.json (schema autopilot.residue-auto/1).
-// Config: scripts/lib/residue-config.js (residue.auto_reap, lease_hours, archive_branch_days,
-// branch_prefixes). pin-evidence-anchors is run before every branch deletion, archived or not
+// Config: scripts/lib/residue-config.js (residue.auto_reap, residue.delete_branches default
+// false, lease_hours, archive_branch_days, branch_prefixes). pin-evidence-anchors is run
+// before every branch deletion, archived or not, and only when deletion is opted in
 // (the archive ref would keep the tip reachable, but anchors may point at commits that are
 // not the tip's ancestors, so the integrated path's guard is reused unchanged).
 // CAMPAIGN SIGNAL (authoritative): a root_run_id is "unresolved" when the campaign journal
@@ -113,12 +119,15 @@
 //         process cwd inside (or /proc unknowable) or an unexpired lease; stale ledger row; campaign signal unreliable
 //         (campaign_signal_unavailable); a row's root_run_id/run_id (or the marker's) in an unresolved
 //         campaign/Mission (unresolved_campaign);
-//   integrated (same rule as the sweep: ancestor, else full stable patch-id equivalence) -> pin-evidence-anchors apply, then `git update-ref -d` with the expected tip (compare-and-swap);
+//   integrated (same rule as the sweep: ancestor, else full stable patch-id equivalence) and
+//   unintegrated are deleted ONLY with --delete-branches or residue.delete_branches. Then:
+//         print `<branch> <tip>`, pin-evidence-anchors apply, then `git update-ref -d` with the
+//         expected tip (compare-and-swap). Without the flag they are kept (why delete_branches_off).
 //   unintegrated -> abandoned work (finish-flow close-out ends the round; handoff does not run close-out):
-//         pin anchors, then DELETE directly with `git update-ref -d refs/heads/<branch> <tip>` (compare-and-swap);
 //         NO refs/archive ref is written. Recovery: for each unintegrated delete one stderr line
 //         `git branch <branch> <tip>` works until git gc prunes the unreachable commits (~2 weeks by default).
-//         (`reap --auto`'s 14-day path still archives: those are sessions that never finished.)
+//         (`reap --auto`'s 14-day path still archives, but only when branch deletion is opted in:
+//         those are sessions that never finished.)
 // Output {schema:"autopilot.close-session/1", session, dry_run, deleted:[{branch,tip,integrated:true|false}],
 // kept:[{branch,why}]} (no `archived` list). Exit 0 = nothing left behind except by a keep rule;
 // 1 = something it was asked to remove stayed (evidence_anchoring_failed, tip_changed,
@@ -155,12 +164,12 @@ const AUTO_RESULT_NAME = 'autopilot-residue-auto.json';
 
 function usage(msg) {
   if (msg) process.stderr.write(`repo-residue-sweep: ${msg}\n`);
-  process.stderr.write('usage: repo-residue-sweep.js scan|preserve|reap|close-session --repo <dir> [--session <sid>] [--integration-ref <ref>] [--out <dir>] [--worktree <path>]... [--yes] [--auto] [--sizes] [--tmpdir <dir>] [--preserve-dir <dir>] [--older-than-days N] [--json]\n');
+  process.stderr.write('usage: repo-residue-sweep.js scan|preserve|reap|close-session --repo <dir> [--session <sid>] [--integration-ref <ref>] [--out <dir>] [--worktree <path>]... [--yes] [--auto] [--delete-branches] [--sizes] [--tmpdir <dir>] [--preserve-dir <dir>] [--older-than-days N] [--json]\n');
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const out = { cmd: null, repo: null, integrationRef: null, out: null, worktrees: [], yes: false, preserveDir: null, olderThanDays: null, auto: false, sizes: false, session: null, tmpdir: null };
+  const out = { cmd: null, repo: null, integrationRef: null, out: null, worktrees: [], yes: false, preserveDir: null, olderThanDays: null, auto: false, sizes: false, session: null, tmpdir: null, deleteBranches: false };
   const cmd = argv[0];
   if (!['scan', 'preserve', 'reap', 'close-session'].includes(cmd)) usage(`command must be scan|preserve|reap|close-session (got: ${cmd || ''})`);
   out.cmd = cmd;
@@ -175,6 +184,7 @@ function parseArgs(argv) {
     else if (k === '--tmpdir') out.tmpdir = need();
     else if (k === '--yes') out.yes = true;
     else if (k === '--auto') out.auto = true;
+    else if (k === '--delete-branches') out.deleteBranches = true;
     else if (k === '--sizes') out.sizes = true;
     else if (k === '--preserve-dir') out.preserveDir = need();
     else if (k === '--older-than-days') { out.olderThanDays = Number(need()); if (!Number.isFinite(out.olderThanDays) || out.olderThanDays < 0) usage('--older-than-days must be a non-negative number'); }
@@ -187,8 +197,9 @@ function parseArgs(argv) {
   if (out.session !== null && cmd !== 'close-session') usage('--session belongs to close-session');
   if (cmd === 'close-session') {
     if (!out.session || !/^[A-Za-z0-9._-]+$/.test(out.session)) usage('close-session requires --session <sid> ([A-Za-z0-9._-]+)');
-    if (out.auto || out.sizes || out.preserveDir !== null || out.olderThanDays !== null || out.out || out.worktrees.length) usage('close-session takes only --session --yes --repo --integration-ref --json');
+    if (out.auto || out.sizes || out.preserveDir !== null || out.olderThanDays !== null || out.out || out.worktrees.length) usage('close-session takes only --session --yes --delete-branches --repo --integration-ref --json');
   }
+  if (out.deleteBranches && cmd !== 'reap' && cmd !== 'close-session') usage('--delete-branches belongs to reap and close-session');
   if (out.worktrees.length && cmd !== 'preserve' && !(cmd === 'reap' && !out.auto)) usage('--worktree belongs to preserve and to reap without --auto');
   if (cmd === 'preserve' && !out.out) usage('preserve requires --out <dir>');
   if (cmd === 'reap' && !out.yes) usage('reap requires --yes');
@@ -872,7 +883,55 @@ function archiveRefLeaf(wtPath, head) {
   for (let prev = null; prev !== b;) { prev = b; b = b.replace(/\.lock$/, '').replace(/\.+$/, ''); }
   return `${b || 'wt'}-${String(head).slice(0, 12)}`;
 }
-// ctx: { mainPath, cfg, nowMs, sig, scriptPath, failedWorktrees:Set, failedBranches:Set }
+// Branch deletion is off unless the CLI flag or residue.delete_branches says otherwise.
+function branchDeleteOn(o, cfg) {
+  return o.deleteBranches === true || cfg.delete_branches === true;
+}
+function deleteHeadCas(mainPath, branch, tip) {
+  return git(mainPath, ['update-ref', '-d', `refs/heads/${branch}`, tip]);
+}
+function printBranchTips(branches) {
+  for (const b of branches) process.stderr.write(`${b.branch} ${b.tip}\n`);
+}
+// Dispatch branches runAuto would delete when deletion is opted in. `kept` records the same why strings.
+function partitionDispatchBranches(branches, { mainPath, cfg, nowMs, checkedOut, markerBranches, sig }) {
+  const doomedIntegrated = [];
+  const doomedArchive = [];
+  const kept = [];
+  const heldByCampaign = (root) => sig.unresolved.has(root);
+  for (const b of branches) {
+    if (b.class === 'integration-ref' || b.class === 'checked-out' || checkedOut.has(b.branch)) continue;
+    if (!isDispatchBranch(b.branch, cfg)) continue;
+    const act = branchLastActivity(mainPath, b);
+    b.activity_unix = act;
+    const idleS = act ? nowMs / 1000 - act : null;
+    if (b.class === 'integrated') {
+      if (idleS === null || idleS < MIN_INTEGRATED_BRANCH_IDLE_S) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'integrated_but_recent' }); continue; }
+      doomedIntegrated.push(b); continue;
+    }
+    if (b.class !== 'unintegrated') continue;
+    if (idleS === null || idleS / 86400 < cfg.archive_branch_days) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'younger_than_archive_days' }); continue; }
+    const pointer = markerBranches.get(b.branch);
+    if (pointer && (pointer.class === 'live' || pointer.lease_expired === false)) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'live_or_unexpired_lease_worktree' }); continue; }
+    if (!sig.reliable) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'campaign_signal_unavailable' }); continue; }
+    const campaignHit = (pointer && heldByCampaign(pointer.marker_strict.root_run_id))
+      || [...sig.unresolved].some((id) => id.length >= 8 && b.branch.includes(id));
+    if (campaignHit) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'unresolved_campaign' }); continue; }
+    doomedArchive.push(b);
+  }
+  return { doomedIntegrated, doomedArchive, kept };
+}
+function ownerBranchEntry(b, ctx, archive) {
+  const act = b.activity_unix !== undefined ? b.activity_unix : branchLastActivity(ctx.mainPath, b);
+  const age = daysSince(act || b.last_commit_unix, ctx.nowMs);
+  const cas = `git -C ${shq(ctx.mainPath)} update-ref -d ${shq(`refs/heads/${b.branch}`)} ${b.tip}`;
+  const command = archive
+    ? `git -C ${shq(ctx.mainPath)} update-ref ${shq(`refs/archive/${utcDate(ctx.nowMs)}/${b.branch}`)} ${b.tip} '' && ${cas}`
+    : cas;
+  return { kind: 'branch', branch: b.branch, tip: b.tip, class: b.class, age_days: age, bytes: null, reason: 'delete_branches_off', command };
+}
+
+// ctx: { mainPath, cfg, nowMs, sig, scriptPath, failedWorktrees:Set, failedBranches:Set, deleteBranches }
 function computeNeedsHuman(rows, branches, ctx) {
   const list = [];
   const wtRoot = `${ctx.mainPath}/.claude/worktrees/`;
@@ -963,6 +1022,16 @@ function computeNeedsHuman(rows, branches, ctx) {
         list.push({ kind: 'archive-ref', ref: m[1], class: 'archive-old', age_days: age, bytes: null, reason: `archive ref older than ${remind} days`, command: `git -C ${shq(ctx.mainPath)} update-ref -d ${shq(m[1])} ${m[3]}` });
       }
     }
+  }
+  // Same set the auto sweep would have deleted. Listed, never deleted, unless deletion was opted in
+  // (those branches are already gone, or failed and listed above).
+  if (ctx.deleteBranches !== true && ctx.sig) {
+    const listed = new Set(list.filter((e) => e.branch).map((e) => e.branch));
+    const part = partitionDispatchBranches(branches, {
+      mainPath: ctx.mainPath, cfg: ctx.cfg, nowMs: ctx.nowMs, checkedOut: new Set(), markerBranches, sig: ctx.sig,
+    });
+    for (const b of part.doomedIntegrated) if (!listed.has(b.branch)) list.push(ownerBranchEntry(b, ctx, false));
+    for (const b of part.doomedArchive) if (!listed.has(b.branch)) list.push(ownerBranchEntry(b, ctx, true));
   }
   return list;
 }
@@ -1072,55 +1141,52 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
   const markerBranches = new Map();
   for (const w of rows) if (w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path)) markerBranches.set(w.marker_strict.branch, w);
   branches = classifyBranches(mainPath, wtAfter.map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha, integrationBranch);
-  const doomedIntegrated = []; const doomedArchive = [];
-  for (const b of branches) {
-    if (b.class === 'integration-ref' || b.class === 'checked-out' || checkedOut.has(b.branch)) continue;
-    if (!isDispatchBranch(b.branch, cfg)) continue;
-    const act = branchLastActivity(mainPath, b);
-    const idleS = act ? nowMs / 1000 - act : null;
-    if (b.class === 'integrated') {
-      if (idleS === null || idleS < MIN_INTEGRATED_BRANCH_IDLE_S) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'integrated_but_recent' }); continue; }
-      doomedIntegrated.push(b); continue;
-    }
-    if (b.class !== 'unintegrated') continue;
-    if (idleS === null || idleS / 86400 < cfg.archive_branch_days) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'younger_than_archive_days' }); continue; }
-    const pointer = markerBranches.get(b.branch);
-    if (pointer && (pointer.class === 'live' || pointer.lease_expired === false)) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'live_or_unexpired_lease_worktree' }); continue; }
-    if (!sig.reliable) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'campaign_signal_unavailable' }); continue; }
-    const campaignHit = (pointer && heldByCampaign(pointer.marker_strict.root_run_id))
-      || [...sig.unresolved].some((id) => id.length >= 8 && b.branch.includes(id));
-    if (campaignHit) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'unresolved_campaign' }); continue; }
-    doomedArchive.push(b);
-  }
-  // archive first (each verified), then one anchor pass, then delete
-  const archiveReady = [];
-  for (const b of doomedArchive) {
-    const ref = `refs/archive/${utcDate(nowMs)}/${b.branch}`;
-    const cur = git(mainPath, ['rev-parse', '--verify', '--quiet', ref]);
-    let ok = cur.ok && cur.out.trim() === b.tip;
-    if (!ok && !cur.ok) ok = git(mainPath, ['update-ref', ref, b.tip, '']).ok;
-    const verify = ok ? git(mainPath, ['rev-parse', '--verify', `${ref}^{commit}`]) : null;
-    if (verify && verify.ok && verify.out.trim() === b.tip) archiveReady.push({ b, ref });
-    else { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'archive_ref_failed' }); failedBranches.add(b.branch); }
-  }
-  const toDelete = doomedIntegrated.map((b) => ({ b, ref: null })).concat(archiveReady);
+  const branchDelete = branchDeleteOn(o, cfg);
+  const part = partitionDispatchBranches(branches, { mainPath, cfg, nowMs, checkedOut, markerBranches, sig });
+  for (const k of part.kept) kept.push(k);
   let anchors = null;
-  if (toDelete.length > 0) {
-    const args = [path.join(__dirname, 'pin-evidence-anchors.js'), 'apply', '--repo-root', mainPath, '--json'];
-    for (const { b } of toDelete) args.push('--exclude-ref', `refs/heads/${b.branch}`);
-    const r = spawnSync('node', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    anchors = { ok: r.status === 0, stderr: (r.stderr || '').slice(0, 1000) };
-    if (r.status !== 0) {
-      for (const { b } of toDelete) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'evidence_anchoring_failed' }); failedBranches.add(b.branch); }
-    } else {
-      for (const { b, ref } of toDelete) {
-        // the tip must be unchanged since classification (a run may have committed meanwhile)
-        const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
-        if (!nowTip.ok || nowTip.out.trim() !== b.tip) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'tip_changed' }); continue; }
-        const d = git(mainPath, ['branch', '-D', b.branch]);
-        if (!d.ok) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: d.err.trim().slice(0, 200) }); failedBranches.add(b.branch); continue; }
-        if (ref) archived.push({ kind: 'branch', branch: b.branch, tip: b.tip, ref });
-        else removed.push({ kind: 'branch', branch: b.branch, class: b.class, reason: 'integrated', tip: b.tip });
+  // Off: no archive ref, no pin, no delete. needs_human lists the same doomed set with its tip.
+  if (branchDelete) {
+    const archiveReady = [];
+    for (const b of part.doomedArchive) {
+      const ref = `refs/archive/${utcDate(nowMs)}/${b.branch}`;
+      const cur = git(mainPath, ['rev-parse', '--verify', '--quiet', ref]);
+      let ok = cur.ok && cur.out.trim() === b.tip;
+      if (!ok && !cur.ok) ok = git(mainPath, ['update-ref', ref, b.tip, '']).ok;
+      const verify = ok ? git(mainPath, ['rev-parse', '--verify', `${ref}^{commit}`]) : null;
+      if (verify && verify.ok && verify.out.trim() === b.tip) archiveReady.push({ b, ref });
+      else { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'archive_ref_failed' }); failedBranches.add(b.branch); }
+    }
+    const prepared = part.doomedIntegrated.map((b) => ({ b, ref: null })).concat(archiveReady);
+    const ready = [];
+    for (const item of prepared) {
+      const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${item.b.branch}`]);
+      if (!nowTip.ok || nowTip.out.trim() !== item.b.tip) { kept.push({ kind: 'branch', branch: item.b.branch, class: item.b.class, why: 'tip_changed' }); continue; }
+      if (listWorktrees(mainPath).some((w) => w.branch === item.b.branch)) { kept.push({ kind: 'branch', branch: item.b.branch, class: item.b.class, why: 'checked_out_late' }); continue; }
+      ready.push(item);
+    }
+    if (ready.length > 0) {
+      const args = [path.join(__dirname, 'pin-evidence-anchors.js'), 'apply', '--repo-root', mainPath, '--json'];
+      for (const { b } of ready) args.push('--exclude-ref', `refs/heads/${b.branch}`);
+      const r = spawnSync('node', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      anchors = { ok: r.status === 0, stderr: (r.stderr || '').slice(0, 1000) };
+      if (r.status !== 0) {
+        for (const { b } of ready) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: 'evidence_anchoring_failed' }); failedBranches.add(b.branch); }
+      } else {
+        const final = [];
+        for (const item of ready) {
+          const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${item.b.branch}`]);
+          if (!nowTip.ok || nowTip.out.trim() !== item.b.tip) { kept.push({ kind: 'branch', branch: item.b.branch, class: item.b.class, why: 'tip_changed' }); continue; }
+          if (listWorktrees(mainPath).some((w) => w.branch === item.b.branch)) { kept.push({ kind: 'branch', branch: item.b.branch, class: item.b.class, why: 'checked_out_late' }); continue; }
+          final.push(item);
+        }
+        printBranchTips(final.map((item) => item.b));
+        for (const { b, ref } of final) {
+          const d = deleteHeadCas(mainPath, b.branch, b.tip);
+          if (!d.ok) { kept.push({ kind: 'branch', branch: b.branch, class: b.class, why: d.err.trim().slice(0, 200) }); failedBranches.add(b.branch); continue; }
+          if (ref) archived.push({ kind: 'branch', branch: b.branch, tip: b.tip, ref });
+          else removed.push({ kind: 'branch', branch: b.branch, class: b.class, reason: 'integrated', tip: b.tip });
+        }
       }
     }
   }
@@ -1135,7 +1201,7 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
   branches = classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha, integrationBranch);
   const tmp_prune = runTmpPrune(o, cfg);
   const report = { schema: 'autopilot.residue-auto/1', ran_at: new Date(nowMs).toISOString(), ran_at_epoch: Math.floor(nowMs / 1000), removed, archived, kept, notes, anchors, ledger, tmp_prune };
-  const ctx = { mainPath, cfg, nowMs: Date.now(), sig, failedWorktrees, failedBranches };
+  const ctx = { mainPath, cfg, nowMs: Date.now(), sig, failedWorktrees, failedBranches, deleteBranches: branchDelete };
   attachNeedsHuman(report, rows, branches, ctx, 'measure', null);
   const tmp = `${resultPath}.tmp.${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify({ schema: report.schema, ran_at: report.ran_at, ran_at_epoch: report.ran_at_epoch, removed, archived, tmp_prune, needs_human: report.needs_human, needs_human_count: report.needs_human_count, needs_human_bytes: report.needs_human_bytes })}\n`);
@@ -1294,6 +1360,13 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
     return 0;
   }
 
+  const branchDelete = branchDeleteOn(o, cfg);
+  if (!branchDelete) {
+    for (const b of planDelete) report.kept.push({ branch: b.branch, why: 'delete_branches_off' });
+    writeStdout(`${JSON.stringify(report)}\n`);
+    return 0;
+  }
+
   // one anchor pass over everything to delete, then delete (no archive ref: owner ruling 2026-10-10)
   const toDelete = planDelete.map((b) => ({ b }));
   if (toDelete.length > 0) {
@@ -1303,13 +1376,21 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
     if (r.status !== 0) {
       for (const { b } of toDelete) report.kept.push({ branch: b.branch, why: 'evidence_anchoring_failed', failed: true });
     } else {
+      const ready = [];
       for (const { b } of toDelete) {
         const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
         if (!nowTip.ok || nowTip.out.trim() !== b.tip) { report.kept.push({ branch: b.branch, why: 'tip_changed', failed: true }); continue; }
         // anchoring took time: a worktree may have checked the branch out meanwhile
         if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { report.kept.push({ branch: b.branch, why: 'checked_out_late' }); continue; }
+        ready.push(b);
+      }
+      printBranchTips(ready);
+      for (const b of ready) {
+        const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
+        if (!nowTip.ok || nowTip.out.trim() !== b.tip) { report.kept.push({ branch: b.branch, why: 'tip_changed', failed: true }); continue; }
+        if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { report.kept.push({ branch: b.branch, why: 'checked_out_late' }); continue; }
         // compare-and-swap: refuses if the branch moved since classification
-        const d = git(mainPath, ['update-ref', '-d', `refs/heads/${b.branch}`, b.tip]);
+        const d = deleteHeadCas(mainPath, b.branch, b.tip);
         if (!d.ok) { report.kept.push({ branch: b.branch, why: d.err.trim().slice(0, 200) || 'branch_delete_failed', failed: true }); continue; }
         const integrated = b.class === 'integrated';
         report.deleted.push({ branch: b.branch, tip: b.tip, integrated });
@@ -1380,7 +1461,7 @@ function main() {
     const cfg = loadResidueConfig();
     const nowMs = Date.now();
     annotateWorktrees(worktrees, cfg, nowMs, readProcUse(), mainPath);
-    const ctx = { mainPath, cfg, nowMs, sig: loadCampaignSignal(common), failedWorktrees: new Set(), failedBranches: new Set() };
+    const ctx = { mainPath, cfg, nowMs, sig: loadCampaignSignal(common), failedWorktrees: new Set(), failedBranches: new Set(), deleteBranches: cfg.delete_branches };
     attachNeedsHuman(report, worktrees, branches, ctx, o.sizes ? 'measure' : 'cached', readCachedSizes(common));
     writeStdout(`${JSON.stringify(report)}\n`);
     return 0;
@@ -1423,18 +1504,34 @@ function main() {
   const stillCheckedOut = new Set(listWorktrees(mainPath).map((x) => x.branch).filter(Boolean));
   const candidates = onlyWt.length > 0 ? [] : branches.filter((b) => b.class === 'integrated' && !stillCheckedOut.has(b.branch) && !tooYoung(b.last_commit_unix ? (Date.now() / 1000 - b.last_commit_unix) / 86400 : null));
   if (onlyWt.length === 0) for (const b of branches) if (!candidates.includes(b) && b.class !== 'integration-ref') actions.branches_kept.push({ branch: b.branch, class: b.class, ahead: b.ahead });
-  if (candidates.length > 0) {
-    const pin = path.join(__dirname, 'pin-evidence-anchors.js');
-    const args = [pin, 'apply', '--repo-root', mainPath, '--json'];
-    for (const b of candidates) args.push('--exclude-ref', `refs/heads/${b.branch}`);
-    const r = spawnSync('node', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    actions.anchors = { ok: r.status === 0, stdout: (r.stdout || '').slice(0, 4000), stderr: (r.stderr || '').slice(0, 2000) };
-    if (r.status !== 0) {
-      for (const b of candidates) actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'evidence anchoring failed; branch phase aborted' });
-    } else {
-      for (const b of candidates) {
-        const d = git(mainPath, ['branch', '-D', b.branch]);
-        if (d.ok) actions.branches_deleted.push({ branch: b.branch, tip: b.tip }); else actions.branches_kept.push({ branch: b.branch, class: b.class, why: d.err.trim() });
+  const branchDelete = branchDeleteOn(o, loadResidueConfig());
+  if (candidates.length > 0 && !branchDelete) {
+    for (const b of candidates) actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'delete_branches_off', tip: b.tip });
+  } else if (candidates.length > 0) {
+    const ready = [];
+    for (const b of candidates) {
+      const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
+      if (!nowTip.ok || nowTip.out.trim() !== b.tip) { actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'tip_changed' }); continue; }
+      if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'checked_out_late' }); continue; }
+      ready.push(b);
+    }
+    if (ready.length > 0) {
+      const pin = path.join(__dirname, 'pin-evidence-anchors.js');
+      const args = [pin, 'apply', '--repo-root', mainPath, '--json'];
+      for (const b of ready) args.push('--exclude-ref', `refs/heads/${b.branch}`);
+      const r = spawnSync('node', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      actions.anchors = { ok: r.status === 0, stdout: (r.stdout || '').slice(0, 4000), stderr: (r.stderr || '').slice(0, 2000) };
+      if (r.status !== 0) {
+        for (const b of ready) actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'evidence anchoring failed; branch phase aborted' });
+      } else {
+        printBranchTips(ready);
+        for (const b of ready) {
+          const nowTip = git(mainPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${b.branch}`]);
+          if (!nowTip.ok || nowTip.out.trim() !== b.tip) { actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'tip_changed' }); continue; }
+          if (listWorktrees(mainPath).some((w) => w.branch === b.branch)) { actions.branches_kept.push({ branch: b.branch, class: b.class, why: 'checked_out_late' }); continue; }
+          const d = deleteHeadCas(mainPath, b.branch, b.tip);
+          if (d.ok) actions.branches_deleted.push({ branch: b.branch, tip: b.tip }); else actions.branches_kept.push({ branch: b.branch, class: b.class, why: d.err.trim() });
+        }
       }
     }
   }

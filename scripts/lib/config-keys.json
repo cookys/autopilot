@@ -6167,7 +6167,7 @@
       ],
       "doc": null,
       "relates": [],
-      "note": "Set to off to skip codeforge usage collect after a throwaway claude config dir. Default on."
+      "note": "Set to off to skip codeforge usage collect after a throwaway claude config dir. Default on. A missing directory is skipped with no log."
     },
     {
       "name": "AUTOPILOT_DISPATCH_LANE",

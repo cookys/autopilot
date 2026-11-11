@@ -220,13 +220,9 @@ export TMPDIR="$HOOK_TMPDIR"
 export GIT_CEILING_DIRECTORIES="${GIT_CEILING_DIRECTORIES}:${TMPDIR}"
 
 # A host may have a real codeforge on PATH. Dispatch suites that reach a throwaway
-# claude config dir must not invoke it. This no-op is first; a suite that records
-# collect argv prepends its own fake and unsets AUTOPILOT_CODEFORGE_COLLECT.
-_CF_FAKE_DIR="$TEST_TMP/bin"
-mkdir -p "$_CF_FAKE_DIR"
-printf '%s\n' '#!/bin/sh' 'exit 0' > "$_CF_FAKE_DIR/codeforge"
-chmod +x "$_CF_FAKE_DIR/codeforge"
-export PATH="$_CF_FAKE_DIR:$PATH"
+# claude config dir must not invoke it. off skips the helper with no log.
+# hooks/tests/codeforge-collect.test.sh unsets this and puts its own fake first on PATH.
+export AUTOPILOT_CODEFORGE_COLLECT=off
 
 # `repo-residue-sweep.js reap --auto` carries a daily host-wide temp-root prune whose stamp lives under
 # $XDG_RUNTIME_DIR (the real host). A suite that runs the sweep must not stamp or prune the real host, so it

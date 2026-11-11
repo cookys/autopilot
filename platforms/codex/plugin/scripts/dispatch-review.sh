@@ -2233,7 +2233,9 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     trap - TERM INT HUP
     (exit "$_ACCT_RC")   # leaves the child's status in $? for the CNATIVE_RC line after the fi
   else
-  node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec -- \
+  # --collect-err-fd 3 and the 3>&2 below stay together: fd 3 is this script's stderr,
+  # saved before stdout/stderr go to the verdict capture. The child must not inherit it.
+  node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec --collect-err-fd 3 -- \
   timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
       _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} 3>&2 > "$RAW_LOG" 2>&1
   fi

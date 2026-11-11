@@ -333,6 +333,8 @@ if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || tru
 reap_cnative_config_dir() {
   if [ -n "${CNATIVE_CONFIG_DIR:-}" ]; then
     declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$CNATIVE_CONFIG_DIR" || true
+    # Set even when the dir was already gone, so the sandbox reap does not collect a second path.
+    _CODEFORGE_CNATIVE_COLLECTED=1
     rm -rf "$CNATIVE_CONFIG_DIR"
     CNATIVE_CONFIG_DIR=""
   fi
@@ -340,7 +342,10 @@ reap_cnative_config_dir() {
 }
 reap_sandbox_config_dir() {
   if [ -n "${SANDBOX_TMP:-}" ]; then
-    declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$SANDBOX_TMP/claude-config" || true
+    # Claude-backed runners only. claude-native already collected its seeded dir above.
+    if { [ "${IS_CCSHIM:-0}" -eq 1 ] || [ "${IS_CNATIVE:-0}" -eq 1 ]; } && [ -z "${_CODEFORGE_CNATIVE_COLLECTED:-}" ]; then
+      declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$SANDBOX_TMP/claude-config" || true
+    fi
     rm -rf "$SANDBOX_TMP"
   fi
   SANDBOX_TMP=""

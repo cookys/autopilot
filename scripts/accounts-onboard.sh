@@ -239,9 +239,10 @@ if (mode === 'dir') {
       } catch (e) { token = ''; return fail('request_failed'); }
       token = '';
       if (!res || typeof res.status !== 'number') return fail('request_failed');
-      if (res.status === 401) { try { await res.arrayBuffer(); } catch (e) { /* discard */ } return fail('http_401'); }
-      if (res.status < 200 || res.status > 299) { try { await res.arrayBuffer(); } catch (e) { /* discard */ } return fail(`http_${res.status}`); }
-      try { await res.arrayBuffer(); } catch (e) { return fail('request_failed'); }
+      // Only status and two headers are used; the body is never read, just cancelled.
+      if (res.body) { try { await res.body.cancel(); } catch (e) { /* discard */ } }
+      if (res.status === 401) return fail('http_401');
+      if (res.status < 200 || res.status > 299) return fail(`http_${res.status}`);
       const rawUuid = res.headers.get('anthropic-organization-id');
       if (typeof rawUuid !== 'string' || !UUID_RE.test(rawUuid)) return fail('no_org_id');
       const utilRaw = res.headers.get('anthropic-ratelimit-unified-7d-utilization');

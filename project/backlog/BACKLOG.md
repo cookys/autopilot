@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0431 -->
+<!-- next-id: BL-0432 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1534,3 +1534,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: hangar report after the 2026-11-12 power cut (fleet message 01M767AX)
 - **Pointer**: project/backlog/quota-cache-after-reboot.md
+
+### Account onboarding cannot confirm which organization a token belongs to
+- **Id**: BL-0431
+- **Status**: open
+- **Since**: 2026-11-12
+- **Origin**: self
+- **Problem**: The onboarding step that checks a token's organization is refused for the long-lived tokens the operator creates, so every account stays unverified and a token pasted under the wrong account name would not be caught.
+- **Impact**: Two accounts could silently point at the same organization, which breaks failover and quota accounting.
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: G37 re-verify 2026-11-12 (PM message 01M76ADD)
+- **Pointer**: project/backlog/orgprofile-403-setup-token.md

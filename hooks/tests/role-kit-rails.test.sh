@@ -308,7 +308,7 @@ sed_mutate "$MUT4/lib/role-kit.sh" 's/2>\/dev\/null < \/dev\/null/2>\&1 < \/dev\
 NODE_OPTIONS="--require $TEST_TMP/warn.js" run_rail "$MUT4/dispatch-review.sh" review --role-kit "$KIT"
 assert_eq "0" "$NCALLS" "(f) negative control: stderr merged into the parsed output makes a node warning refuse a good kit"
 MUT5="$TEST_TMP/mut5-scripts"; cp -r "$REPO_ROOT/scripts" "$MUT5"
-sed_mutate "$MUT5/dispatch-review.sh" "s/sed -n '2,58p'/sed -n '2,50p'/" >/dev/null
+sed_mutate "$MUT5/dispatch-review.sh" "s/sed -n '2,63p'/sed -n '2,50p'/" >/dev/null
 assert_not_contains "$("$MUT5/dispatch-review.sh" -h 2>&1)" "--role-kit" "(f) negative control: a -h range that stops early hides the --role-kit lines"
 
 # (g) opt-in byte-identity check: ROLE_KIT_BASELINE_SCRIPTS=<scripts dir of the pre-change tree> -> without a kit the child argv

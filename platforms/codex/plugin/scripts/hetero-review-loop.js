@@ -614,8 +614,8 @@ function runGitDiff(base, head, repoRoot, excludes = []) {
 // failure is recorded exactly as before. Every other seat is untouched. The attempt is recorded
 // on the seat artifact as `format_retry` and on stderr.
 const FORMAT_RETRY_LIMIT = 1;
-async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout) {
-  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '');
+async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, implementerFamily) {
+  let result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, '', implementerFamily);
   const isFormatReject = (r) => r.status === 'no_verdict'
     && r.rawOutput && r.rawOutput.format_reject === true
     && typeof r.rawOutput.error === 'string' && r.rawOutput.error.length > 0;
@@ -626,7 +626,7 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
     const reason = typeof result.rawOutput.reject_reason === 'string' && result.rawOutput.reject_reason ? result.rawOutput.reject_reason : result.rawOutput.error;
     console.error(`INFO: seat ${seat.id} answer rejected for format (${reason}); re-asking this seat once (format retry ${attempts}/${FORMAT_RETRY_LIMIT})`);
     history.push({ attempt: attempts, reason, raw_log: result.rawOutput.raw_log || null, usage: result.rawOutput.usage === undefined ? null : result.rawOutput.usage });
-    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason);
+    result = await runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, reason, implementerFamily);
     if (result.rawOutput && typeof result.rawOutput === 'object') {
       result.rawOutput.format_retry = {
         attempts,
@@ -641,7 +641,7 @@ async function runSeatDispatch(seat, repoRoot, ledgerPhaseGDir, specFile, timeou
   return result;
 }
 
-function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote) {
+function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout, retryNote, implementerFamily) {
   return new Promise((resolve) => {
     let dispatchScript = process.env.AUTOPILOT_DISPATCH_REVIEW_SCRIPT;
     if (!dispatchScript) {
@@ -662,6 +662,9 @@ function runSeatDispatchOnce(seat, repoRoot, ledgerPhaseGDir, specFile, timeout,
     }
     if (specFile) {
       args.push('--spec-file', specFile);
+    }
+    if (typeof implementerFamily === 'string' && implementerFamily.length > 0) {
+      args.push('--implementer-family', implementerFamily);
     }
 
     const childEnv = { ...process.env };
@@ -1232,7 +1235,10 @@ async function handleCollect(flags) {
 
   // Stage graph (plan §2.7 writers): a review round starts here (collect only; finalize/opt-out never write). Fail-open.
   stageWrite({ to: 'code-review' });
-  const seatPromises = seats.map((seat) => runSeatDispatch(seat, repoRoot, gDir, specFile, timeout));
+  const implementerFamilyArg = [...new Set(
+    familyGate.familiesOfImplementer(implementerEngine).families.filter((f) => f && f !== 'unknown'),
+  )].join(',');
+  const seatPromises = seats.map((seat) => runSeatDispatch(seat, repoRoot, gDir, specFile, timeout, implementerFamilyArg));
   const seatResults = await Promise.all(seatPromises);
 
   // Runtime codex quota fallback (PM ruling 01M74DH2FF): when a codex seat fails because

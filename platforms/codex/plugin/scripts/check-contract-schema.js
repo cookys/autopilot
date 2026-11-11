@@ -86,10 +86,18 @@ function main() {
     );
   }
 
-  // (a) field-set parity vs shell default output
+  // (a) field-set parity vs shell default output.
+  // implementer_ladder: auto reads the host topology. Famguard exits 3 when any
+  // such rung shares verification_author_family, so a host ladder that includes
+  // the template VA's family fails the resolve. This gate compares keys only;
+  // pin a missing topology, the same way hooks/tests/contract-parity.test.sh does.
   const run = spawnSync(SHELL_PATH, [], {
     cwd: REPO_ROOT,
-    env: { ...process.env, REVIEW_LOOP_CONFIG_OVERRIDE: TEMPLATE_CONFIG },
+    env: {
+      ...process.env,
+      REVIEW_LOOP_CONFIG_OVERRIDE: TEMPLATE_CONFIG,
+      AUTOPILOT_TOPOLOGY_FILE: path.join(REPO_ROOT, 'project-config-template', '.no-host-topology.json'),
+    },
     encoding: 'utf8',
   });
   if (run.status !== 0) {

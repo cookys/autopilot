@@ -998,6 +998,7 @@ function buildReviewArgs({
   checklists = [],
   dispatchIdentity = null,
   timeoutSeconds = null,
+  implementerFamily = null,
 }) {
   validateReviewRoster(roster);
   if (!diffFile || typeof diffFile !== 'string') {
@@ -1017,6 +1018,7 @@ function buildReviewArgs({
     '--checklists',
     '--endpoint',
     '--timeout',
+    '--implementer-family',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
@@ -1067,6 +1069,9 @@ function buildReviewArgs({
   if (timeoutSeconds !== null) {
     args.push('--timeout', `${timeoutSeconds}s`);
   }
+  if (typeof implementerFamily === 'string' && implementerFamily && implementerFamily !== 'unknown') {
+    args.push('--implementer-family', implementerFamily);
+  }
   appendDispatchIdentity(args, identity);
   args.push(...extraReviewArgs);
   return args;
@@ -1082,6 +1087,7 @@ function validateExtraReviewArgs(extraReviewArgs) {
     '--checklists',
     '--endpoint',
     '--timeout',
+    '--implementer-family',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
@@ -3873,6 +3879,7 @@ class AutopilotEngine {
         timeoutSeconds: Object.prototype.hasOwnProperty.call(input, 'timeoutSeconds')
           ? input.timeoutSeconds
           : null,
+        implementerFamily: modelFamilyOfEngine(implementerEngine),
       });
     } catch (error) {
       ledger.push(this.ledgerEntry('prepare_review', 'blocked', startedAt));

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # scripts/accounts-onboard.sh (G37 O1-O9 in one command). Hermetic: tempdirs, FAKE- tokens, a Node claude stand-in
-# reached only through ONBOARD_CLAUDE_BIN. Never calls the real claude, never hits an API, never runs setup-token.
+# reached only through ONBOARD_CLAUDE_BIN, and a local HTTP stub server on 127.0.0.1:0 reached through
+# ONBOARD_PROFILE_URL. Never calls the real claude, never hits a real network API, never runs setup-token.
 # Red cases: (1) token never leaks (stdout, stderr, 0.1 s ps snapshots, every other file, audit),
-# (2) re-run is idempotent, (3) a 401 token stops the run, names the alias, and never falls back to the ambient login.
-# Negative controls: argv leak and stdout leak turn case 1 red; dropping the idempotency check turns case 2 red.
+# (2) re-run is idempotent, (3) a 401 token stops the run, names the alias, and never falls back to the ambient login,
+# (4) OAuth profile org verification (distinct orgs, duplicate refusal + take-back, 401 token 無效, email never leaked).
+# Negative controls: argv leak, stdout leak, idempotency, symlink guard, failover gate, duplicate-org check, label hygiene.
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/accounts-onboard.sh"
@@ -36,7 +38,8 @@ for (const b of [process.env.CLAUDE_CONFIG_DIR, process.env.HOME && path.join(pr
 }
 const base = process.env.ANTHROPIC_BASE_URL || null;
 fs.appendFileSync(ctl.log, JSON.stringify({ argv: process.argv.slice(2), fp, decoy_read: decoy, base }) + '\n');
-const env = (isErr, status, text) => JSON.stringify({ type: 'result', subtype: 'success', is_error: isErr, ...((ctl.envOrgs || {})[fp] || ctl.envOrg ? { orgId: (ctl.envOrgs || {})[fp] || ctl.envOrg } : {}),
+// Real haiku result envelopes carry NO org id (verified 2026-11-11).
+const env = (isErr, status, text) => JSON.stringify({ type: 'result', subtype: 'success', is_error: isErr,
   ...(status ? { api_error_status: status, terminal_reason: 'api_error' } : {}), result: text }) + '\n';
 const OK = { exit: 0, out: env(false, 0, 'OK') };
 const R401 = { exit: 1, out: env(true, 401, 'Failed to authenticate. API Error: 401 OAuth access token is invalid.') };
@@ -47,8 +50,68 @@ else if (base) {
   const req = http.request(base + '/v1/messages', { method: 'POST' }, (res) => { res.resume(); res.on('end', () => done(res.statusCode === 429 ? R429 : OK)); });
   req.on('error', () => done(R401));
   req.end('{}');
-} else done(ctl.ok.includes(fp) ? OK : R401);
+} else if ((ctl.rateLimit || []).includes(fp)) done(R429);
+else done(ctl.ok.includes(fp) ? OK : R401);
 SHIM
+
+# Local OAuth profile stub HTTP server on 127.0.0.1:0 (zero real network in tests).
+# Routes GET /<fxName>/api/oauth/profile -> <TEST_TMP>/<fxName>/bin/ctl.json, and GET /api/oauth/profile -> <TEST_TMP>/stub-ctl.json.
+STUB_PORT_FILE="$TEST_TMP/stub.port"
+STUB_PID=""
+stop_stub_only() {
+  if [ -n "${STUB_PID:-}" ] && kill -0 "$STUB_PID" 2>/dev/null; then
+    kill "$STUB_PID" 2>/dev/null
+    wait "$STUB_PID" 2>/dev/null
+  fi
+  STUB_PID=""
+}
+stop_profile_stub() {
+  [ "$BASHPID" = "$__TEST_TOP_BASHPID" ] || return 0
+  stop_stub_only
+  cleanup_test_tmp
+}
+if [ "$BASHPID" = "$__TEST_TOP_BASHPID" ]; then trap stop_profile_stub EXIT; fi
+node -e '
+const fs = require("fs");
+const path = require("path");
+const http = require("http");
+const crypto = require("crypto");
+const [root, portFile] = process.argv.slice(1);
+const srv = http.createServer((req, res) => {
+  const m = /^\/(?:(fx\.[^/]+)\/)?api\/oauth\/profile$/.exec(req.url || "");
+  if (!m || req.method !== "GET") {
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end("{\"error\":\"not_found\"}");
+    return;
+  }
+  const ctlPath = m[1] ? path.join(root, m[1], "bin", "ctl.json") : path.join(root, "stub-ctl.json");
+  let ctl = {};
+  try { ctl = JSON.parse(fs.readFileSync(ctlPath, "utf8")); } catch (e) { /* unconfigured */ }
+  const auth = String(req.headers.authorization || "");
+  const tok = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  const fp = crypto.createHash("sha256").update(tok).digest("hex").slice(0, 8);
+  const beta = String(req.headers["anthropic-beta"] || "");
+  const accept = String(req.headers.accept || "");
+  if (ctl.profileLog) {
+    fs.appendFileSync(ctl.profileLog, JSON.stringify({ method: req.method, url: req.url, fp, has_bearer: auth.startsWith("Bearer "), beta, accept }) + "\n");
+  }
+  const spec = (ctl.profiles && Object.prototype.hasOwnProperty.call(ctl.profiles, fp)) ? ctl.profiles[fp] : ctl.profileDefault;
+  if (!spec) {
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end("{}");
+    return;
+  }
+  const status = typeof spec.status === "number" ? spec.status : 200;
+  const body = typeof spec.rawBody === "string" ? spec.rawBody : JSON.stringify(spec.body !== undefined ? spec.body : {});
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(body);
+});
+srv.listen(0, "127.0.0.1", () => { fs.writeFileSync(portFile, String(srv.address().port)); });
+' "$TEST_TMP" "$STUB_PORT_FILE" </dev/null >/dev/null 2>&1 &
+STUB_PID=$!
+for _ in $(seq 1 100); do [ -s "$STUB_PORT_FILE" ] && break; sleep 0.05; done
+[ -s "$STUB_PORT_FILE" ] || fail "profile stub server did not bind 127.0.0.1:0"
+STUB_PORT="$(cat "$STUB_PORT_FILE")"
 
 # argv leaks are judged on an execve trace (deterministic); the 0.1 s ps snapshots are only a second look.
 HAVE_STRACE=0
@@ -66,13 +129,25 @@ mkfx() {
   printf '{"accounts":{"quota_probe":"off"}}' > "$fx/config.json"  # BL-0375: unset follows the manifest (an on-demand probe call through the PATH claude); this suite tests onboarding, not the probe
   cp "$NODE_SHIM" "$fx/bin/claude"; chmod 755 "$fx/bin/claude"
   for t in "$@"; do okjson="$okjson${okjson:+,}\"$(tokfp "$t")\""; done
-  printf '{"log":"%s","ok":[%s],"auth":[%s]}' "$fx/shim.log" "$okjson" "$(default_auth)" > "$fx/bin/ctl.json"
+  printf '{"log":"%s","profileLog":"%s","ok":[%s],"auth":[%s]}' "$fx/shim.log" "$fx/profile.log" "$okjson" "$(default_auth)" > "$fx/bin/ctl.json"
   echo "$fx"
 }
 # The stand-in's `auth status --json` answers, in call order. Fake e-mail on purpose: it must never reach any file or output.
 FAKE_EMAIL="user""@""example.invalid"  # assembled so the leak guard sees no address in this file
 authj() { printf '{"loggedIn":true,"authMethod":"claude.ai","email":"%s","orgId":"%s","orgName":"%s","subscriptionType":"%s"}' "$FAKE_EMAIL" "$1" "$2" "${3:-max}"; }
 default_auth() { printf '%s,%s,%s,%s' "$(authj FAKE-ORG-1 'FAKE Org One')" "$(authj FAKE-ORG-2 'FAKE Org Two' team)" "$(authj FAKE-ORG-3 'FAKE Org Three')" "$(authj FAKE-ORG-4 'FAKE Org Four')"; }
+# prof_ok <uuid> [name|-] [org_type|-] [rate_limit_tier|-] [billing_type|-]: stub 200 payload (always includes account.email to prove it never leaks)
+prof_ok() {
+  node -e '
+    const [uuid, name, otype, tier, bill, email] = process.argv.slice(1);
+    const org = { uuid };
+    if (name !== "-") org.name = name;
+    if (otype !== "-") org.organization_type = otype;
+    if (tier !== "-") org.rate_limit_tier = tier;
+    if (bill !== "-") org.billing_type = bill;
+    process.stdout.write(JSON.stringify({ status: 200, body: { account: { uuid: "acc-stub", email, email_address: email }, organization: org } }));
+  ' "$1" "${2:--}" "${3:--}" "${4:--}" "${5:--}" "$FAKE_EMAIL"
+}
 # setctl <fx> <key> <json>: replace one key of the stand-in's control file
 setctl() { node -e 'const f=process.argv[1]+"/bin/ctl.json";const c=JSON.parse(require("fs").readFileSync(f,"utf8"));c[process.argv[2]]=JSON.parse(process.argv[3]);require("fs").writeFileSync(f,JSON.stringify(c))' "$1" "$2" "$3"; }
 # snapshot of the accounts dir (names, modes, content hashes) to prove "nothing changed"
@@ -80,16 +155,18 @@ tree_digest() { ( cd "$1" 2>/dev/null && find . -printf '%p %m\n' -type f -exec 
 
 # run_onboard <script> <fx> <stdin-text> <alias>...: leaves out.txt err.txt rc and 0.1 s `ps -eo args` snaps/N in <fx>.
 YESFLAG=(--yes)  # every run skips the plan question unless a case sets YESFLAG=() (then the input must start with y)
+PROFILE_URL_FOR() { printf '%s' "${ONBOARD_PROFILE_URL_OVERRIDE:-http://127.0.0.1:$STUB_PORT/$(basename "$1")}"; }
 run_onboard() {
   local script="$1" fx="$2" input="$3"; shift 3
   rm -rf "$fx/snaps" "$fx/rc"; mkdir -p "$fx/snaps"
-  local tr=()
+  local tr=() purl
+  purl="$(PROFILE_URL_FOR "$fx")"
   [ "$HAVE_STRACE" = 1 ] && tr=(strace -f -e trace=execve -s 65536 -o "$fx/exec.trace" --)
   rm -f "$fx/exec.trace"
   ( ${tr[@]+"${tr[@]}"} env -i PATH="$PATH" LANG=C HOME="$fx/fakehome" TMPDIR="$fx/tmp" XDG_RUNTIME_DIR="$fx/run" \
       AUTOPILOT_ACCOUNTS_DIR="$fx/fakehome/.config/autopilot/accounts" AUTOPILOT_LIVE_DIR="$fx/live" \
       AUTOPILOT_STATE_DIR="$fx/state" AUTOPILOT_CONFIG="$fx/config.json" ENGINE_CAPABILITY_DIR="$fx/ecd" \
-      AUTOPILOT_STRIKE_WRITER=off ONBOARD_CLAUDE_BIN="$fx/bin/claude" \
+      AUTOPILOT_STRIKE_WRITER=off ONBOARD_CLAUDE_BIN="$fx/bin/claude" ONBOARD_PROFILE_URL="$purl" \
       "$script" ${YESFLAG[@]+"${YESFLAG[@]}"} "$@" <<< "$input" > "$fx/out.txt" 2> "$fx/err.txt"
     echo $? > "$fx/rc" ) &
   local pid=$! n=0
@@ -121,6 +198,7 @@ run_onboard "$SCRIPT" "$fx0" "" --help
 assert_eq "$(rc_of "$fx0")" "0" "help exit 0"
 assert_contains "$(cat "$fx0/out.txt")" "用法" "help prints usage"
 assert_contains "$(cat "$fx0/out.txt")" "ONBOARD_CLAUDE_BIN" "help documents the test seam"
+assert_contains "$(cat "$fx0/out.txt")" "ONBOARD_PROFILE_URL" "help documents ONBOARD_PROFILE_URL test seam"
 [ ! -e "$fx0/fakehome/.config" ] && [ ! -e "$fx0/shim.log" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "help must create nothing"
 run_onboard "$SCRIPT" "$fx0" "" 'Bad_Alias'
 assert_eq "$(rc_of "$fx0")" "2" "bad alias exit 2"
@@ -303,24 +381,74 @@ assert_contains "$(cat "$fx1/out.txt")" "需要兩個帳號" "NC6 old gate skips
 no_email() { [ -z "$(grep -rlF -e "$FAKE_EMAIL" "$1" --exclude=ctl.json --exclude=claude --exclude=exec.trace --exclude-dir=snaps 2>/dev/null)" ] || echo "leaked-file"; grep -qF -e "$FAKE_EMAIL" "$1/out.txt" "$1/err.txt" && echo "leaked-output"; [ ! -f "$1/exec.trace" ] || ! grep -qF -e "$FAKE_EMAIL" "$1/exec.trace" || echo "leaked-argv"; return 0; }
 meta_of() { cat "$(ACC "$1")/$2/token-meta.json" 2>/dev/null || echo none; }
 
-# O1. happy path: the org id comes from each token's OWN OK envelope (the ambient auth status says other orgs and is
-# never even called); org_id and org_label (= the profile name) land in token-meta (0600).
+# O1 / stub case (a): two profiles, different org uuids from local HTTP stub server via ONBOARD_PROFILE_URL
+# (ambient auth status says other orgs and is never called); org_id, org_type, rate_limit_tier and org_label (= profile
+# name) land in token-meta.json (0600); account.email and email-shaped org.name never surface (stub case (d)); tokens
+# never leak anywhere (stub case (e)). Also exercises bare base URL ONBOARD_PROFILE_URL=http://127.0.0.1:<port>.
 fxo="$(mkfx "$TA" "$TB")"
-setctl "$fxo" envOrgs "{\"$(tokfp "$TA")\":\"FAKE-ORG-1\",\"$(tokfp "$TB")\":\"FAKE-ORG-2\"}"
+UUID_A="550E8400-E29B-41D4-A716-446655440000"
+UUID_B="660E8400-E29B-41D4-A716-446655440001"
+PROFILES_AB="{\"$(tokfp "$TA")\":$(prof_ok "$UUID_A" "Alpha Org" "claude_max" "default_claude_max_20x" "stripe_subscription"),\"$(tokfp "$TB")\":$(prof_ok "$UUID_B" "${FAKE_EMAIL}'s Organization" "claude_team" "default_claude_team" "stripe_subscription")}"
+printf '{"profileLog":"%s","profiles":%s}' "$fxo/profile.log" "$PROFILES_AB" > "$TEST_TMP/stub-ctl.json"
 setctl "$fxo" auth "[$(authj AMBIENT-X 'Ambient Org X'),$(authj AMBIENT-X 'Ambient Org X')]"
+ONBOARD_PROFILE_URL_OVERRIDE="http://127.0.0.1:$STUB_PORT"
 run_onboard "$SCRIPT" "$fxo" "$INPUT_TOK" a b
-assert_eq "$(rc_of "$fxo")" "0" "ORG1 two orgs: exit 0"
-assert_contains "$(meta_of "$fxo" a)" '"org_id":"fake-org-1"' "ORG1 a org_id is the one in its OK envelope, not the ambient one"
-assert_contains "$(meta_of "$fxo" a)" '"org_label":"a"' "ORG1 a org_label defaults to the profile name"
-assert_contains "$(meta_of "$fxo" a)" '"org_check":"verified"' "ORG1 a org verified"
-assert_contains "$(meta_of "$fxo" b)" '"org_id":"fake-org-2"' "ORG1 b org_id recorded"
+unset ONBOARD_PROFILE_URL_OVERRIDE
+assert_eq "$(rc_of "$fxo")" "0" "ORG1/(a) two distinct orgs via ONBOARD_PROFILE_URL: exit 0"
+assert_contains "$(meta_of "$fxo" a)" '"org_id":"550e8400-e29b-41d4-a716-446655440000"' "ORG1/(a) a org_id lowercased in token-meta"
+assert_contains "$(meta_of "$fxo" a)" '"org_label":"a"' "ORG1/(a) a org_label defaults to profile name"
+assert_contains "$(meta_of "$fxo" a)" '"org_check":"verified"' "ORG1/(a) a org verified"
+assert_contains "$(meta_of "$fxo" a)" '"org_type":"claude_max"' "ORG1/(a) a org_type recorded"
+assert_contains "$(meta_of "$fxo" a)" '"rate_limit_tier":"default_claude_max_20x"' "ORG1/(a) a rate_limit_tier recorded"
+assert_contains "$(meta_of "$fxo" b)" '"org_id":"660e8400-e29b-41d4-a716-446655440001"' "ORG1/(a) b org_id recorded"
+assert_contains "$(meta_of "$fxo" b)" '"org_check":"verified"' "ORG1/(a) b org verified"
+assert_contains "$(meta_of "$fxo" b)" '"org_type":"claude_team"' "ORG1/(a) b org_type recorded"
+assert_contains "$(meta_of "$fxo" b)" '"rate_limit_tier":"default_claude_team"' "ORG1/(a) b rate_limit_tier recorded"
 assert_not_contains "$(meta_of "$fxo" a)" "ambient-x" "ORG1 ambient org id nowhere in the record"
 assert_eq "$(stat -c %a "$(ACC "$fxo")/a/token-meta.json")" "600" "ORG1 token-meta 0600"
 assert_not_contains "$(cat "$(ACC "$fxo")/registry.json")" "org" "ORG1 registry.json row keys unchanged (no org)"
 assert_not_contains "$(cat "$fxo/shim.log")" "auth_status" "ORG1 claude auth status is never called"
-assert_contains "$(cat "$fxo/out.txt")" "org 識別碼取自這個 token 自己的 OK 呼叫" "ORG1 summary says where the org id came from"
-assert_contains "$(grep -h '^alias=a ' "$fxo/out.txt" | head -1)" 'org="a" org_check=verified' "ORG1 status shows the label and verified"
-assert_eq "$(no_email "$fxo")" "" "ORG1 e-mail appears in no file or output"
+assert_contains "$(cat "$fxo/profile.log")" '"has_bearer":true' "ORG1 Bearer header sent to OAuth profile"
+assert_contains "$(cat "$fxo/profile.log")" '"beta":"oauth-2025-04-20"' "ORG1 anthropic-beta oauth-2025-04-20 header sent"
+assert_contains "$(cat "$fxo/profile.log")" '"accept":"application/json"' "ORG1 Accept application/json header sent"
+assert_contains "$(cat "$fxo/out.txt")" "標籤「a」，方案 claude_max / default_claude_max_20x" "ORG1 summary shows org label and plan type/tier"
+assert_contains "$(cat "$fxo/out.txt")" "org 識別碼已由 OAuth profile 驗證並記錄" "ORG1 summary says org id came from OAuth profile"
+status_a="$(grep -h '^alias=a ' "$fxo/out.txt" | head -1)"
+assert_contains "$status_a" 'org="a"' "ORG1 status shows org label"
+assert_not_contains "$status_a" 'org_check=' "ORG1 verified status omits org_check suffix"
+# Stub cases (d) & (e): account.email / email-shaped org.name never appear in stdout, token-meta or registry; tokens never appear anywhere.
+assert_not_contains "$(cat "$fxo/out.txt")" "$FAKE_EMAIL" "ORG1/(d) account.email never in stdout"
+assert_not_contains "$(cat "$fxo/err.txt")" "$FAKE_EMAIL" "ORG1/(d) account.email never in stderr"
+assert_not_contains "$(meta_of "$fxo" a)" "$FAKE_EMAIL" "ORG1/(d) account.email never in a token-meta"
+assert_not_contains "$(meta_of "$fxo" b)" "$FAKE_EMAIL" "ORG1/(d) email-shaped org.name & account.email never in b token-meta"
+assert_not_contains "$(cat "$(ACC "$fxo")/registry.json")" "$FAKE_EMAIL" "ORG1/(d) account.email never in registry"
+assert_eq "$(no_email "$fxo")" "" "ORG1/(d) e-mail appears in no file or output"
+assert_eq "$(leak_places "$fxo" "$TA")" "" "ORG1/(e) token a never appears in any output or file"
+assert_eq "$(leak_places "$fxo" "$TB")" "" "ORG1/(e) token b never appears in any output or file"
+
+# Direct `orgprofile <alias>` helper mode checks: 5-line ok output, dropped email-shaped org.name, and all 5 fail:<code> exits (all exit 0).
+HELPER_JS="$(awk '/^read -r -d .. NODE_HELPER/{f=1;next} /^JS$/{f=0} f' "$SCRIPT")"
+run_orgprofile() { # <fx> <alias> [url]
+  local fx="$1" al="$2" u="${3:-$(PROFILE_URL_FOR "$fx")}"
+  env -i PATH="$PATH" HOME="$fx/fakehome" AUTOPILOT_ACCOUNTS_DIR="$(ACC "$fx")" ONBOARD_PROFILE_URL="$u" \
+    node -e "$HELPER_JS" "$REPO_ROOT" orgprofile "$al" < /dev/null
+}
+op_ok_a="$(run_orgprofile "$fxo" a "http://127.0.0.1:$STUB_PORT/api/oauth/profile")"; op_rc_a=$?
+assert_eq "$op_rc_a" "0" "ORGPROFILE ok exits 0"
+assert_eq "$op_ok_a" $'ok\n550e8400-e29b-41d4-a716-446655440000\nAlpha Org\nclaude_max\ndefault_claude_max_20x' "ORGPROFILE ok 5-line contract"
+op_ok_b="$(run_orgprofile "$fxo" b "http://127.0.0.1:$STUB_PORT")"; op_rc_b=$?
+assert_eq "$op_rc_b" "0" "ORGPROFILE email-shaped org.name exits 0"
+assert_eq "$op_ok_b" $'ok\n660e8400-e29b-41d4-a716-446655440001\n\nclaude_team\ndefault_claude_team' "ORGPROFILE drops org.name failing orgLabelProblem"
+assert_not_contains "$op_ok_b" "$FAKE_EMAIL" "ORGPROFILE never outputs email"
+setctl "$fxo" profileDefault '{"status":401,"body":{"error":"unauthorized"}}'
+op_f401="$(run_orgprofile "$fxo" a)"; assert_eq "$?" "0" "ORGPROFILE 401 exits 0"; assert_eq "$op_f401" "fail:http_401" "ORGPROFILE fail:http_401"
+setctl "$fxo" profileDefault '{"status":503,"body":{}}'
+op_f503="$(run_orgprofile "$fxo" a)"; assert_eq "$?" "0" "ORGPROFILE 503 exits 0"; assert_eq "$op_f503" "fail:http_503" "ORGPROFILE fail:http_503"
+setctl "$fxo" profileDefault '{"status":200,"rawBody":"<html>not-json"}'
+op_fjson="$(run_orgprofile "$fxo" a)"; assert_eq "$?" "0" "ORGPROFILE bad json exits 0"; assert_eq "$op_fjson" "fail:not_json" "ORGPROFILE fail:not_json"
+setctl "$fxo" profileDefault '{"status":200,"body":{"organization":{}}}'
+op_fnoid="$(run_orgprofile "$fxo" a)"; assert_eq "$?" "0" "ORGPROFILE missing uuid exits 0"; assert_eq "$op_fnoid" "fail:no_org_id" "ORGPROFILE fail:no_org_id"
+op_freq="$(run_orgprofile "$fxo" a "http://127.0.0.1:1")"; assert_eq "$?" "0" "ORGPROFILE network failure exits 0"; assert_eq "$op_freq" "fail:request_failed" "ORGPROFILE fail:request_failed"
 
 # PROMPTS: each step says what to do, in which window, and what success looks like; the receipt line never carries the token.
 assert_contains "$(cat "$fxo/out.txt")" "已收到 token（不顯示內容）" "PROMPT paste receipt shown"
@@ -330,15 +458,24 @@ assert_contains "$(cat "$fxo/out.txt")" "每一列都是 ✅" "PROMPT summary sa
 assert_eq "$(grep -h '已收到 token' "$fxo/out.txt" | grep -cF -e "$TA" || true)" "0" "PROMPT receipt line does not carry the token"
 assert_contains "$(cat "$fx3/out.txt")" "修法" "PROMPT a failed run says how to fix it"
 
-# O2. envelope WITHOUT an org id: org_id unknown (null), org check unverified, never blocks; --org gives the label.
+# O2. non-401 profile failures (no_org_id, 503): org_id unknown (null), org check unverified, never blocks; --org gives the label.
+# Re-running once OAuth profile responds verifies the existing alias without new flags.
 fxn1="$(mkfx "$TA")"
+setctl "$fxn1" profileDefault '{"status":200,"body":{"organization":{}}}'
 run_onboard "$SCRIPT" "$fxn1" "$TA"$'\n' --org a=Hand-Label a
-assert_eq "$(rc_of "$fxn1")" "0" "ORG2 no org id in the envelope: exit 0"
+assert_eq "$(rc_of "$fxn1")" "0" "ORG2 no org id in profile: exit 0"
 assert_contains "$(meta_of "$fxn1" a)" '"org_id":null' "ORG2 org_id recorded as unknown"
 assert_contains "$(meta_of "$fxn1" a)" '"org_label":"Hand-Label"' "ORG2 org_label from --org"
 assert_contains "$(meta_of "$fxn1" a)" '"org_check":"unverified"' "ORG2 org_check unverified"
 assert_contains "$(cat "$fxn1/out.txt")" "org 未驗證" "ORG2 summary says org unverified"
 assert_not_contains "$(cat "$fxn1/shim.log")" "auth_status" "ORG2 auth status never called"
+# Re-run on already-registered alias with org_id:null (keeping existing token) verifies its org!
+setctl "$fxn1" profileDefault "$(prof_ok "FAKE-ORG-REVERIFY" "Hand Org" "claude_pro" "default_claude_pro" "-")"
+run_onboard "$SCRIPT" "$fxn1" $'\n' a
+assert_eq "$(rc_of "$fxn1")" "0" "ORG2 re-run verifies previously null org_id: exit 0"
+assert_contains "$(meta_of "$fxn1" a)" '"org_id":"fake-org-reverify"' "ORG2 re-run writes org_id"
+assert_contains "$(meta_of "$fxn1" a)" '"org_check":"verified"' "ORG2 re-run upgrades org_check to verified"
+assert_contains "$(meta_of "$fxn1" a)" '"org_label":"Hand-Label"' "ORG2 re-run keeps Hand-Label"
 # an unreadable ambient login is irrelevant (no --org needed either)
 fxn2="$(mkfx "$TA")"; setctl "$fxn2" auth '["FAIL"]'
 run_onboard "$SCRIPT" "$fxn2" "$TA"$'\n' a
@@ -346,34 +483,64 @@ assert_eq "$(rc_of "$fxn2")" "0" "ORG2 unreadable ambient login does not matter"
 assert_contains "$(meta_of "$fxn2" a)" '"org_label":"a"' "ORG2 label falls back to the profile name"
 assert_contains "$(meta_of "$fxn2" a)" '"org_id":null' "ORG2 org_id unknown"
 
-# O3. RED: two profiles whose tokens report the SAME org id -> the second is a failed row, its org id is not recorded,
-# its registry row is taken back, the first profile is untouched.
-fxd="$(mkfx "$TA" "$TB")"; setctl "$fxd" envOrg '"FAKE-ORG-1"'
+# O3 / stub case (b): two profiles whose tokens report the SAME org uuid -> second is a failed row
+# ("同一個 org 已登記在 a"), its org id is not recorded, its registry row is taken back, first profile untouched.
+fxd="$(mkfx "$TA" "$TB")"; setctl "$fxd" profileDefault "$(prof_ok "FAKE-ORG-1" "Shared Org" "claude_team" "default_claude_team" "-")"
 run_onboard "$SCRIPT" "$fxd" "$INPUT_TOK" a b
-assert_neq "$(rc_of "$fxd")" "0" "ORG3 duplicate org: exit non-zero"
-assert_contains "$(cat "$fxd/out.txt")" "❌  b org 核對" "ORG3 b has a failed org row"
-assert_contains "$(cat "$fxd/out.txt")" "已經由 profile a 登記" "ORG3 names the existing alias"
-assert_contains "$(meta_of "$fxd" a)" '"org_id":"fake-org-1"' "ORG3 a keeps the org"
-assert_not_contains "$(meta_of "$fxd" b)" "fake-org-1" "ORG3 b did not record the duplicate org id"
-assert_not_contains "$(cat "$(ACC "$fxd")/registry.json")" '"b"' "ORG3 b's registry row was taken back"
-assert_contains "$(cat "$(ACC "$fxd")/registry.json")" '"a"' "ORG3 a still registered"
-assert_eq "$(no_email "$fxd")" "" "ORG3 e-mail appears nowhere"
+assert_neq "$(rc_of "$fxd")" "0" "ORG3/(b) duplicate org: exit non-zero"
+assert_contains "$(cat "$fxd/out.txt")" "❌  b org 核對" "ORG3/(b) b has a failed org row"
+assert_contains "$(cat "$fxd/out.txt")" "同一個 org 已登記在 a" "ORG3/(b) names the existing alias with required message"
+assert_contains "$(meta_of "$fxd" a)" '"org_id":"fake-org-1"' "ORG3/(b) a keeps the org"
+assert_not_contains "$(meta_of "$fxd" b)" "fake-org-1" "ORG3/(b) b did not record the duplicate org id"
+assert_not_contains "$(cat "$(ACC "$fxd")/registry.json")" '"b"' "ORG3/(b) b's registry row was taken back"
+assert_contains "$(cat "$(ACC "$fxd")/registry.json")" '"a"' "ORG3/(b) a still registered"
+assert_eq "$(no_email "$fxd")" "" "ORG3/(b) e-mail appears nowhere"
+assert_eq "$(leak_places "$fxd" "$TA")" "" "ORG3/(b)/(e) token a never leaks"
+assert_eq "$(leak_places "$fxd" "$TB")" "" "ORG3/(b)/(e) token b never leaks"
 # same org id in another letter case is the same org
-fxc="$(mkfx "$TA" "$TB")"; setctl "$fxc" envOrgs "{\"$(tokfp "$TA")\":\"FAKE-ORG-7\",\"$(tokfp "$TB")\":\"fake-org-7\"}"
+fxc="$(mkfx "$TA" "$TB")"
+setctl "$fxc" profiles "{\"$(tokfp "$TA")\":$(prof_ok "FAKE-ORG-7" "-" "-" "-" "-"),\"$(tokfp "$TB")\":$(prof_ok "fake-org-7" "-" "-" "-" "-")}"
 run_onboard "$SCRIPT" "$fxc" "$INPUT_TOK" a b
 assert_contains "$(meta_of "$fxc" a)" '"org_id":"fake-org-7"' "ORG3 org id stored lower-case"
 assert_neq "$(rc_of "$fxc")" "0" "ORG3 same org in another letter case: refused"
 assert_contains "$(cat "$fxc/out.txt")" "❌  b org 核對" "ORG3 case-folded duplicate is a failed row"
+assert_contains "$(cat "$fxc/out.txt")" "同一個 org 已登記在 a" "ORG3 case-folded duplicate names owner"
 
-# O4. envelope org id vs a recorded one: match -> verified; different -> failed row.
-fxv="$(mkfx "$TA")"; setctl "$fxv" envOrg '"FAKE-ORG-1"'
+# Stub case (c): OAuth profile stub returns HTTP 401 -> failed row "token 無效", stops before global checks, no leak.
+fxc401="$(mkfx "$TA")"
+setctl "$fxc401" profileDefault '{"status":401,"body":{"error":{"type":"authentication_error","message":"invalid token"}}}'
+run_onboard "$SCRIPT" "$fxc401" "$TA"$'\n' a
+assert_neq "$(rc_of "$fxc401")" "0" "STUB-(c) profile 401: exit non-zero"
+assert_contains "$(cat "$fxc401/out.txt")" "❌  a org 核對" "STUB-(c) profile 401 marks org row failed"
+assert_contains "$(cat "$fxc401/out.txt")" "token 無效" "STUB-(c) profile 401 shows token 無效"
+assert_contains "$(cat "$fxc401/out.txt")" "修法" "STUB-(c) profile 401 includes remedy"
+assert_not_contains "$(cat "$fxc401/out.txt")" "selftest: fake token" "STUB-(c) stops before global checks"
+assert_eq "$(leak_places "$fxc401" "$TA")" "" "STUB-(c)/(e) 401 token never leaks"
+
+# Rate-limited haiku OK call (429) is its own failed row and MUST NOT erase a verified org from orgprofile.
+fxrl="$(mkfx "$TA")"
+setctl "$fxrl" profileDefault "$(prof_ok "880e8400-e29b-41d4-a716-446655440088" "RL Org" "claude_max" "default_claude_max_5x" "-")"
+setctl "$fxrl" rateLimit "[\"$(tokfp "$TA")\"]"
+run_onboard "$SCRIPT" "$fxrl" "$TA"$'\n' a
+assert_neq "$(rc_of "$fxrl")" "0" "RL rate-limited OK call: exit non-zero"
+assert_contains "$(cat "$fxrl/out.txt")" "✅  a org 核對" "RL orgprofile row stays green"
+assert_contains "$(cat "$fxrl/out.txt")" "❌  a haiku OK 呼叫" "RL OK call has its own failed row"
+assert_contains "$(meta_of "$fxrl" a)" '"org_id":"880e8400-e29b-41d4-a716-446655440088"' "RL verified org_id preserved"
+assert_contains "$(meta_of "$fxrl" a)" '"org_check":"verified"' "RL rate-limited OK call did not erase verified org"
+
+# O4. OAuth profile org id vs a recorded one: match -> verified; transient failure -> kept; different -> failed row.
+fxv="$(mkfx "$TA")"; setctl "$fxv" profileDefault "$(prof_ok "FAKE-ORG-1" "-" "claude_max" "-" "-")"
 run_onboard "$SCRIPT" "$fxv" "$TA"$'\n' a
 run_onboard "$SCRIPT" "$fxv" $'\n' a
-assert_eq "$(rc_of "$fxv")" "0" "ORG4 re-run, matching envelope org: exit 0"
-assert_contains "$(cat "$fxv/out.txt")" "回應帶有 org 識別碼，與記錄相符" "ORG4 verified row"
-setctl "$fxv" envOrg '"FAKE-ORG-OTHER"'
+assert_eq "$(rc_of "$fxv")" "0" "ORG4 re-run, matching profile org: exit 0"
+assert_contains "$(cat "$fxv/out.txt")" "OAuth profile 的 org 識別碼與記錄相符" "ORG4 verified row"
+setctl "$fxv" profileDefault '{"status":503,"body":{}}'
 run_onboard "$SCRIPT" "$fxv" $'\n' a
-assert_neq "$(rc_of "$fxv")" "0" "ORG4 mismatching envelope org: exit non-zero"
+assert_eq "$(rc_of "$fxv")" "0" "ORG4 transient 503 after verified does not block"
+assert_contains "$(meta_of "$fxv" a)" '"org_check":"verified"' "ORG4 transient 503 keeps verified org_check"
+setctl "$fxv" profileDefault "$(prof_ok "FAKE-ORG-OTHER" "-" "-" "-" "-")"
+run_onboard "$SCRIPT" "$fxv" $'\n' a
+assert_neq "$(rc_of "$fxv")" "0" "ORG4 mismatching profile org: exit non-zero"
 assert_contains "$(cat "$fxv/out.txt")" "❌  a org 核對" "ORG4 mismatch row is red"
 
 # O5. RED: email-shaped org_label refused with nothing created.
@@ -420,12 +587,13 @@ YESFLAG=(); run_onboard "$SCRIPT" "$fxp" "" a; YESFLAG=(--yes)
 assert_eq "$(rc_of "$fxp")" "1" "PLAN A empty stdin without --yes refused"
 # the real question, on a pseudo-terminal (script(1)): default N declines, y proceeds
 run_tty() { # <fx> <input> <arg>...
-  local fx="$1" input="$2"; shift 2
+  local fx="$1" input="$2" purl; shift 2
+  purl="$(PROFILE_URL_FOR "$fx")"
   rm -f "$fx/rc"
   ( printf '%s' "$input" | env -i PATH="$PATH" LANG=C HOME="$fx/fakehome" TMPDIR="$fx/tmp" XDG_RUNTIME_DIR="$fx/run" \
       AUTOPILOT_ACCOUNTS_DIR="$fx/fakehome/.config/autopilot/accounts" AUTOPILOT_LIVE_DIR="$fx/live" \
       AUTOPILOT_STATE_DIR="$fx/state" AUTOPILOT_CONFIG="$fx/config.json" ENGINE_CAPABILITY_DIR="$fx/ecd" \
-      AUTOPILOT_STRIKE_WRITER=off ONBOARD_CLAUDE_BIN="$fx/bin/claude" \
+      AUTOPILOT_STRIKE_WRITER=off ONBOARD_CLAUDE_BIN="$fx/bin/claude" ONBOARD_PROFILE_URL="$purl" \
       script -qec "$(printf '%q ' "$SCRIPT" "$@")" /dev/null > "$fx/out.txt" 2> "$fx/err.txt"
     echo $? > "$fx/rc" )
 }
@@ -440,18 +608,18 @@ if command -v script >/dev/null 2>&1; then
 else echo "SKIP [accounts-onboard] script(1) unavailable: the tty plan-question cases are skipped, not passed" >&2; fi
 
 # B. the org state follows the facts: verified, then a token of another org -> mismatch, never stays verified.
-fxb="$(mkfx "$TA" "$TA2")"; setctl "$fxb" envOrg '"fake-org-1"'
+fxb="$(mkfx "$TA" "$TA2")"; setctl "$fxb" profileDefault "$(prof_ok "fake-org-1" "-" "-" "-" "-")"
 run_onboard "$SCRIPT" "$fxb" "$TA"$'\n' a
 assert_contains "$(meta_of "$fxb" a)" '"org_check":"verified"' "B verified first"
-setctl "$fxb" envOrg '"some-other-org"'
+setctl "$fxb" profileDefault "$(prof_ok "some-other-org" "-" "-" "-" "-")"
 run_onboard "$SCRIPT" "$fxb" $'覆蓋\n'"$TA2"$'\n' a
 assert_neq "$(rc_of "$fxb")" "0" "B token of another org: exit non-zero"
 assert_contains "$(meta_of "$fxb" a)" '"org_check":"mismatch"' "B org_check no longer verified after a mismatch"
 assert_contains "$(grep -h '^alias=a ' "$fxb/out.txt" | head -1)" 'org_check=mismatch' "B status shows the mismatch"
-# a later OK call whose envelope carries no org id must not erase the mismatch
-setctl "$fxb" envOrg 'null'
+# a later run where OAuth profile carries no org id must not erase the mismatch
+setctl "$fxb" profileDefault '{"status":200,"body":{"organization":{}}}'
 run_onboard "$SCRIPT" "$fxb" $'覆蓋\n'"$TA2"$'\n' a
-assert_contains "$(meta_of "$fxb" a)" '"org_check":"mismatch"' "B a later envelope without an org id keeps the mismatch"
+assert_contains "$(meta_of "$fxb" a)" '"org_check":"mismatch"' "B a later unverified profile keeps the mismatch"
 assert_contains "$(grep -h '^alias=a ' "$fxb/out.txt" | head -1)" 'org_check=mismatch' "B status still shows the mismatch"
 # D. every refusal says how to fix it.
 run_onboard "$SCRIPT" "$fx0" "" a a
@@ -466,11 +634,17 @@ assert_eq "$(rc_of "$fx0")" "2" "E label with a double quote refused"
 bad_rows="$(grep -n 'row "❌"' "$SCRIPT" | grep -v -e '修法' -e '未執行' -e '未處理' -e '"\$1"' -e '"\$why"' -e '請照上面訊息' || true)"
 assert_eq "$bad_rows" "" "D every failed summary row carries a remedy (or is a not-run follow-on)"
 
-# NC7: duplicate-org check removed -> ORG3 must turn red.
-m7="$(mkmut orgdup 's#const owner = reg.findOrgOwner(acc, seen, alias);#const owner = null;#')"
-fxm7="$(mkfx "$TA" "$TB")"; setctl "$fxm7" envOrg '"FAKE-ORG-1"'
+# NC7: Negative control for stub case (b) — break the duplicate-org check -> (b) goes red (exits 0 and keeps b in
+# registry), while the restored/unmutated script refuses the duplicate and takes b back.
+m7="$(mkmut orgdup 's#const owner = reg.findOrgOwner(acc, oid, alias);#const owner = null;#')"
+fxm7="$(mkfx "$TA" "$TB")"; setctl "$fxm7" profileDefault "$(prof_ok "FAKE-ORG-1" "Shared Org" "-" "-" "-")"
 run_onboard "$m7" "$fxm7" "$INPUT_TOK" a b
-assert_eq "$(rc_of "$fxm7")" "0" "NC7 without the duplicate check the same org registers twice (ORG3 would be red)"
+assert_eq "$(rc_of "$fxm7")" "0" "NC7 without the duplicate check case (b) goes red (registers duplicate with exit 0)"
+assert_contains "$(cat "$(ACC "$fxm7")/registry.json")" '"b"' "NC7 broken duplicate check leaves b in registry"
+fxm7_ok="$(mkfx "$TA" "$TB")"; setctl "$fxm7_ok" profileDefault "$(prof_ok "FAKE-ORG-1" "Shared Org" "-" "-" "-")"
+run_onboard "$SCRIPT" "$fxm7_ok" "$INPUT_TOK" a b
+assert_neq "$(rc_of "$fxm7_ok")" "0" "NC7 restored script catches duplicate org again"
+assert_not_contains "$(cat "$(ACC "$fxm7_ok")/registry.json")" '"b"' "NC7 restored script takes back b"
 
 # NC9: org id taken from the ambient login again (old behaviour: auth status called) -> ORG1 must turn red.
 m9="$(mkmut ambient 's#^  ORG_PENDING=0; ORG_ID="-"; ORG_LABEL=""; ORG_CHECK="unverified"#  ORG_PENDING=0; ORG_ID="-"; ORG_LABEL=""; ORG_CHECK="unverified"; "$CLAUDE_PROG" auth status --json >/dev/null 2>\&1#')"
@@ -484,4 +658,5 @@ fxm8="$(mkfx "$TA")"
 run_onboard "$m8" "$fxm8" "$TA"$'\n' --org "a=$FAKE_EMAIL" a
 assert_contains "$(no_email "$fxm8")" "leaked-file" "NC8 without the label check the e-mail is written to a file (the ORG5 case would be red)"
 
+stop_stub_only
 finalize_test

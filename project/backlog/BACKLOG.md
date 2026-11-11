@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0428 -->
+<!-- next-id: BL-0430 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1511,21 +1511,23 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-11-11
 - **Origin**: self
-- **Problem**: On develop 2baff5f99 (before the stack4 merge) both fail when run alone: hooks/tests/skill-onoff-d0gate-cc.test.sh ("FAIL: kept G4 evidence", projects-files.json shape []) and scripts/qualification-consult-discuss-transport.test.js ("consult: end-to-end broker -> sandbox -> socket -> real provider.js succeeds", actual failed). Root cause not looked at yet.
-- **Impact**: Two more entries in the baseline red list that every merge has to diff against; a real regression in either suite would hide behind them.
+- **Problem**: Two test suites already fail on a clean develop before any change, so every merge has to compare against them. Root cause not looked at yet.
+- **Impact**: A real regression in either suite would hide behind the known failures.
 - **Trigger**: ready
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: stack4 merge 66fc4f426 (2026-11-11)
+- **Pointer**: project/backlog/baseline-reds-d0gate-consult.md
 
 ### A test suite writes fake MiniMax rows into the real dispatch usage ledger
 - **Id**: BL-0429
 - **Status**: open
 - **Since**: 2026-11-11
 - **Origin**: self
-- **Problem**: /run/user/1001/autopilot/dispatch-usage-202611.jsonl on aimax395 (team) holds 48 rows for runner cc-shim / MiniMax-M3 / account minimax in the week to 2026-11-11, in groups of four (2 running, 1 reviewed, 1 no_verdict) with usage none, wall_secs null, no run manifest, at the times full or affected suites ran. They look like dispatch-review fixture runs whose usage ledger is not redirected to a temp dir.
-- **Impact**: The ledger is the primary data for quota and cost views; fake rows make MiniMax use look real (found while cross-checking the first quota-provider-sync probe, PM 01M75H3XZ0) and inflate counts on every suite run.
+- **Problem**: Some test suite records fake MiniMax dispatches in the real usage ledger on this host each time the suites run, so the ledger shows MiniMax use that never happened.
+- **Impact**: Quota and cost views read the ledger; fake rows make MiniMax use look real and grow on every suite run.
 - **Trigger**: ready
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: qps401 probe check (2026-11-11)
+- **Pointer**: project/backlog/fake-minimax-ledger-rows.md

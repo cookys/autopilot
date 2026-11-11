@@ -154,4 +154,7 @@ test('start line quotes session_id', () => {
   writeManifest(f.base, { ...REC, session_id: 'a;b$c' });
   const txt = run(f, ['--lane', 'l1', '--profile', 'cookys', '--order', '01M70ABCDE', '--dry-run']).lines.join('\n');
   assert.ok(txt.includes(`claude --resume '\\''a;b$c'\\''`), txt);
+  // every plan line (Step 5 and the RB rollback alike) must never carry the sid unquoted after --resume
+  for (const line of txt.split('\n')) assert.ok(!line.includes('claude --resume a;b$c'), line);
+  assert.ok(txt.split('\n').some((l) => l.startsWith('RB ')), 'RB line present');
 });

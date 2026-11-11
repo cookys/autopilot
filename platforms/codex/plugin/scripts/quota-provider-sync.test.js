@@ -63,7 +63,12 @@ async function run(mod, provider, body, status, extra) {
 test('minimax: normal body writes 2 windows, used = 1 - remaining/100, source probe, ms end_time handled', async () => {
   const { r, liveDir, seen } = await run(real, 'minimax', { model_remains: [mm({ end_time: (NOW_S + 3600) * 1000 })] });
   assert.deepStrictEqual([r.wrote, r.reason], [true, null]);
+  assert.deepStrictEqual(r.shape, { models: 1, dropped: { rolling_5h: null, weekly: null } });
   const rec = readRow(liveDir, 'minimax', 'minimax');
+  assert.strictEqual(rec.token_state, 'ok');
+  assert.strictEqual(Number.isInteger(rec.token_state_at), true);
+  assert.strictEqual(rec.token_state_at, NOW_S);
+  assert.strictEqual('shape' in rec, false);
   const w5 = rec.windows.find((w) => w.kind === 'rolling_5h');
   const wk = rec.windows.find((w) => w.kind === 'weekly');
   assert.ok(Math.abs(w5.utilization - 0.2) < 1e-9);
@@ -122,18 +127,97 @@ test('minimax: missing fields, expired windows, non-2xx, bad JSON write nothing 
 test('minimax: an expired weekly keeps the live 5 h window only', async () => {
   const { r, liveDir } = await run(real, 'minimax', { model_remains: [mm({ weekly_end_time: NOW_S - 1 })] });
   assert.strictEqual(r.wrote, true);
+  assert.deepStrictEqual(r.shape, { models: 1, dropped: { rolling_5h: null, weekly: 'expired' } });
   assert.deepStrictEqual(readRow(liveDir, 'minimax', 'minimax').windows.map((w) => w.kind), ['rolling_5h']);
 });
 
 test('glm: normal body maps unit 3/number 5 to rolling_5h and unit 6/number 1 to weekly, bare token header, assumed flagged', async () => {
   const { r, liveDir, seen } = await run(real, 'glm', glm([g5(25), gw(40), { type: 'TIME_LIMIT', unit: 5, number: 1, percentage: 99, nextResetTime: 1 }]));
   assert.deepStrictEqual([r.wrote, r.reason, r.assumed], [true, null, true]);
+  assert.deepStrictEqual(r.shape, {
+    limits: [
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null },
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null },
+    ],
+  });
   const rec = readRow(liveDir, 'glm', 'glm');
+  assert.strictEqual(rec.token_state, 'ok');
+  assert.strictEqual(Number.isInteger(rec.token_state_at), true);
+  assert.strictEqual(rec.token_state_at, NOW_S);
+  assert.strictEqual('shape' in rec, false);
   assert.strictEqual(rec.windows.length, 2);
   assert.ok(Math.abs(rec.windows.find((w) => w.kind === 'rolling_5h').utilization - 0.25) < 1e-9);
   assert.strictEqual(rec.windows.find((w) => w.kind === 'weekly').resets_at, NOW_S + 86400);
   assert.strictEqual(seen.init.headers.Authorization, FAKE_TOKEN, 'no Bearer for glm');
   assert.strictEqual(seen.url, 'https://api.z.ai/api/monitor/usage/quota/limit');
+});
+test('success row: token_state is ok and token_state_at is integer epoch seconds (floors sub-second nowMs)', async () => {
+  for (const [provider, body] of [['minimax', { model_remains: [mm()] }], ['glm', glm([g5(20)])]]) {
+    const { r, liveDir } = await run(real, provider, body, 200, { nowMs: () => NOW + 789 });
+    assert.strictEqual(r.wrote, true);
+    const rec = readRow(liveDir, provider, provider);
+    assert.strictEqual(rec.token_state, 'ok');
+    assert.strictEqual(Number.isInteger(rec.token_state_at), true);
+    assert.strictEqual(rec.token_state_at, NOW_S);
+  }
+});
+test('glm shape: 5h TOKENS_LIMIT with past nextResetTime marks dropped expired in result.shape and writes only weekly', async () => {
+  const { r, liveDir } = await run(real, 'glm', glm([g5(25, (NOW_S - 10) * 1000), gw(40)]));
+  assert.strictEqual(r.wrote, true);
+  assert.deepStrictEqual(r.shape, {
+    limits: [
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'expired' },
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null },
+    ],
+  });
+  const rec = readRow(liveDir, 'glm', 'glm');
+  assert.deepStrictEqual(rec.windows.map((w) => w.kind), ['weekly']);
+  assert.strictEqual(rec.token_state, 'ok');
+  assert.strictEqual(rec.token_state_at, NOW_S);
+  assert.strictEqual('shape' in rec, false);
+});
+test('glm shape: response without unit 3/number 5 lists limits with used_window null; fields_missing and scalar rules', async () => {
+  const unmappedOnly = await run(real, 'glm', glm([
+    { type: 'TOKENS_LIMIT', unit: 1, number: 2, percentage: 10, nextResetTime: (NOW_S + 3600) * 1000 },
+    { type: 'TIME_LIMIT', unit: 5, number: 1, percentage: 50, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]));
+  assert.deepStrictEqual([unmappedOnly.r.wrote, unmappedOnly.r.reason], [false, 'fields_missing']);
+  assert.deepStrictEqual(unmappedOnly.r.shape, {
+    limits: [
+      { type: 'TOKENS_LIMIT', unit: 1, number: 2, used_window: null, dropped: null },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null },
+    ],
+  });
+
+  const weeklyPlusUnmapped = await run(real, 'glm', glm([
+    gw(30),
+    { type: 'TIME_LIMIT', unit: 5, number: 1, percentage: 50, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]));
+  assert.strictEqual(weeklyPlusUnmapped.r.wrote, true);
+  assert.deepStrictEqual(weeklyPlusUnmapped.r.shape, {
+    limits: [
+      { type: 'TOKENS_LIMIT', unit: 6, number: 1, used_window: 'weekly', dropped: null },
+      { type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null },
+    ],
+  });
+
+  const longType = 'L'.repeat(40);
+  const edge = real.convertGlm(glm([
+    { type: 'TOKENS_LIMIT', unit: 3, number: 5 },
+    { type: longType, unit: true, number: { nested: 1 } },
+  ]), NOW);
+  assert.strictEqual(edge.ok, false);
+  assert.deepStrictEqual(edge.shape, {
+    limits: [
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: 'fields_missing' },
+      { type: 'L'.repeat(32), unit: null, number: null, used_window: null, dropped: null },
+    ],
+  });
+
+  const mmExp = real.convertMinimax({ model_remains: [mm({ end_time: NOW_S - 5, weekly_end_time: NOW_S - 5 }), mm({ end_time: NOW_S - 2, weekly_end_time: NOW_S - 2 })] }, NOW);
+  assert.deepStrictEqual([mmExp.ok, mmExp.reason], [false, 'quota_windows_expired']);
+  assert.deepStrictEqual(mmExp.shape, { models: 2, dropped: { rolling_5h: 'expired', weekly: 'expired' } });
 });
 test('minimax: 401 marks the token invalid (empty-window L1 row, token_state_at in seconds, no token in the row); 500 stays http_status with no row', async () => {
   const { r, liveDir } = await run(real, 'minimax', { model_remains: [mm()] }, 401);
@@ -196,6 +280,70 @@ test('CLI: unknown provider exits 1 with the code and no token on stderr; usage 
   assert.ok(!(a.stdout + a.stderr + b.stdout + b.stderr).includes(FAKE_TOKEN));
   const c = spawnSync(process.execPath, [SRC], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   assert.strictEqual(c.status, 2);
+});
+test('CLI: main() prints shape on stdout/stderr and shape + stdout/stderr never contain the token', () => {
+  const { spawnSync } = require('child_process');
+  const stubDir = tmpLive();
+  const preload = path.join(stubDir, 'preload-fetch.js');
+  fs.writeFileSync(preload, [
+    "'use strict';",
+    'globalThis.fetch = async () => {',
+    '  const mode = process.env.QPS_STUB_MODE;',
+    '  const tok = process.env.QPS_STUB_TOK;',
+    '  const fut = Date.now() + 3600000;',
+    '  if (mode === "glm-ok") {',
+    '    return { status: 200, json: async () => ({ secret: tok, data: { limits: [',
+    '      { type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 20, nextResetTime: fut },',
+    '      { type: tok, unit: 9, number: 1, percentage: 50, nextResetTime: fut },',
+    '    ] } }) };',
+    '  }',
+    '  if (mode === "glm-unmapped") {',
+    '    return { status: 200, json: async () => ({ secret: tok, data: { limits: [',
+    '      { type: "TIME_LIMIT", unit: 5, number: 1, percentage: 50, nextResetTime: fut },',
+    '    ] } }) };',
+    '  }',
+    '  return { status: 200, json: async () => ({ secret: tok, model_remains: [',
+    '    { model_name: tok, current_interval_remaining_percent: 80, end_time: fut, current_weekly_remaining_percent: 50, weekly_end_time: fut },',
+    '  ] }) };',
+    '};',
+  ].join('\n'), 'utf8');
+
+  const glmOk = spawnSync(process.execPath, ['--require', preload, SRC, 'sync-provider', '--provider', 'glm'], {
+    env: { PATH: process.env.PATH, AUTOPILOT_LIVE_DIR: tmpLive(), AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN, QPS_STUB_MODE: 'glm-ok', QPS_STUB_TOK: FAKE_TOKEN },
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(glmOk.status, 0);
+  const expectedGlmShape = JSON.stringify({
+    limits: [
+      { type: 'TOKENS_LIMIT', unit: 3, number: 5, used_window: 'rolling_5h', dropped: null },
+      { type: null, unit: 9, number: 1, used_window: null, dropped: null },
+    ],
+  });
+  assert.strictEqual(glmOk.stdout, `sync-provider glm/glm: wrote shape=${expectedGlmShape}\n`);
+  assert.strictEqual(glmOk.stderr, '');
+  assert.strictEqual((glmOk.stdout + glmOk.stderr).includes(FAKE_TOKEN), false);
+
+  const mmOk = spawnSync(process.execPath, ['--require', preload, SRC, 'sync-provider', '--provider', 'minimax'], {
+    env: { PATH: process.env.PATH, AUTOPILOT_LIVE_DIR: tmpLive(), MINIMAX_API_KEY: FAKE_TOKEN, QPS_STUB_MODE: 'mm-ok', QPS_STUB_TOK: FAKE_TOKEN },
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(mmOk.status, 0);
+  const expectedMmShape = JSON.stringify({ models: 1, dropped: { rolling_5h: null, weekly: null } });
+  assert.strictEqual(mmOk.stdout, `sync-provider minimax/minimax: wrote shape=${expectedMmShape}\n`);
+  assert.strictEqual(mmOk.stderr, '');
+  assert.strictEqual((mmOk.stdout + mmOk.stderr).includes(FAKE_TOKEN), false);
+
+  const glmMiss = spawnSync(process.execPath, ['--require', preload, SRC, 'sync-provider', '--provider', 'glm'], {
+    env: { PATH: process.env.PATH, AUTOPILOT_LIVE_DIR: tmpLive(), AUTOPILOT_ENDPOINT_GLM_TOKEN: FAKE_TOKEN, QPS_STUB_MODE: 'glm-unmapped', QPS_STUB_TOK: FAKE_TOKEN },
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(glmMiss.status, 1);
+  const expectedMissShape = JSON.stringify({
+    limits: [{ type: 'TIME_LIMIT', unit: 5, number: 1, used_window: null, dropped: null }],
+  });
+  assert.strictEqual(glmMiss.stderr, `sync-provider glm/glm: fields_missing shape=${expectedMissShape}\n`);
+  assert.strictEqual(glmMiss.stdout, '');
+  assert.strictEqual((glmMiss.stdout + glmMiss.stderr).includes(FAKE_TOKEN), false);
 });
 
 test('rate limit: a 30 minute old mirror row means no request (too_soon); a 62 minute old one queries again', async () => {
@@ -435,6 +583,122 @@ test('planted: used = remaining (forgetting 1 - x) gives a different utilization
   const { liveDir } = await run(bug, 'minimax', { model_remains: [mm()] });
   const u = readRow(liveDir, 'minimax', 'minimax').windows.find((w) => w.kind === 'rolling_5h').utilization;
   assert.ok(Math.abs(u - 0.2) > 0.1);
+});
+test('planted: reverting token_state ok / token_state_at on 2xx success back to unknown/null is red', async () => {
+  const checkOkTokenState = (rec) => {
+    assert.strictEqual(rec.token_state, 'ok');
+    assert.strictEqual(Number.isInteger(rec.token_state_at), true);
+    assert.strictEqual(rec.token_state_at, NOW_S);
+  };
+  for (const [provider, body] of [['minimax', { model_remains: [mm()] }], ['glm', glm([g5(10)])]]) {
+    const okRun = await run(real, provider, body);
+    checkOkTokenState(readRow(okRun.liveDir, provider, provider));
+  }
+  const reverted = mutant([["token_state: 'ok', token_state_at: Math.floor(nowMs / 1000)", "token_state: 'unknown', token_state_at: null"]]);
+  for (const [provider, body] of [['minimax', { model_remains: [mm()] }], ['glm', glm([g5(10)])]]) {
+    const badRun = await run(reverted, provider, body);
+    const badRec = readRow(badRun.liveDir, provider, provider);
+    assert.throws(() => checkOkTokenState(badRec));
+  }
+});
+test('planted: dropping expired tracking from finish() breaks result.shape dropped expired (red)', async () => {
+  const noExp = mutant([["if (w.resets_at * 1000 <= nowMs) { expired[kind] = 'expired'; continue; }", 'if (w.resets_at * 1000 <= nowMs) continue;']]);
+  const gReal = await run(real, 'glm', glm([g5(25, (NOW_S - 10) * 1000), gw(40)]));
+  const gBug = await run(noExp, 'glm', glm([g5(25, (NOW_S - 10) * 1000), gw(40)]));
+  assert.strictEqual(gReal.r.shape.limits[0].dropped, 'expired');
+  assert.notStrictEqual(gBug.r.shape.limits[0].dropped, 'expired');
+});
+
+// ---- shape-slice-before-scrub fix: scrub full string before slicing so a prefixed long token never leaks
+function assertNoToken16(text, tok) {
+  assert.ok(tok.length > 32);
+  for (let i = 0; i + 16 <= tok.length; i++) {
+    assert.strictEqual(text.includes(tok.slice(i, i + 16)), false, `16-char token substring at ${i} leaked`);
+  }
+}
+test('shape-slice-before-scrub: limit type with short prefix + token > 32 chars leaks no 16-char token substring in shape or stdout', async () => {
+  const { spawnSync } = require('child_process');
+  const LONG_TOK = 'FAKE-sentinel-9a8b7c6d5e4f3a2b1c0d9e8f7a';
+  const body = glm([
+    g5(20),
+    { type: `x${LONG_TOK}`, unit: 9, number: 1, percentage: 50, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]);
+  const r = await real.syncProvider('glm', {
+    liveDir: tmpLive(),
+    env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK },
+    fetch: fakeFetch(200, body),
+    nowMs: () => NOW,
+  });
+  assert.strictEqual(r.wrote, true);
+  assert.strictEqual(r.shape.limits[1].type, null);
+  assertNoToken16(JSON.stringify(r.shape), LONG_TOK);
+  assertNoToken16(JSON.stringify(r), LONG_TOK);
+
+  const prefixOnly = await real.syncProvider('glm', {
+    liveDir: tmpLive(),
+    env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK },
+    fetch: fakeFetch(200, glm([{ type: `x${LONG_TOK.slice(0, 32)}`, unit: 9, number: 1, percentage: 50, nextResetTime: (NOW_S + 3600) * 1000 }])),
+    nowMs: () => NOW,
+  });
+  assert.strictEqual(prefixOnly.shape.limits[0].type, null);
+  assertNoToken16(JSON.stringify(prefixOnly.shape), LONG_TOK);
+
+  const mmRes = await real.syncProvider('minimax', {
+    liveDir: tmpLive(),
+    env: { MINIMAX_API_KEY: LONG_TOK },
+    fetch: fakeFetch(200, { model_remains: [mm({ model_name: `${'m'.repeat(40)}${LONG_TOK}` })] }),
+    nowMs: () => NOW,
+  });
+  assert.strictEqual(mmRes.wrote, true);
+  assert.strictEqual(mmRes.tightest.rolling_5h, null);
+  assertNoToken16(JSON.stringify(mmRes), LONG_TOK);
+
+  const stubDir = tmpLive();
+  const preload = path.join(stubDir, 'preload-prefixed-tok.js');
+  fs.writeFileSync(preload, [
+    "'use strict';",
+    'globalThis.fetch = async () => {',
+    '  const tok = process.env.QPS_STUB_TOK;',
+    '  const fut = Date.now() + 3600000;',
+    '  return { status: 200, json: async () => ({ data: { limits: [',
+    '    { type: "TOKENS_LIMIT", unit: 3, number: 5, percentage: 20, nextResetTime: fut },',
+    '    { type: "x" + tok, unit: 9, number: 1, percentage: 50, nextResetTime: fut },',
+    '  ] } }) };',
+    '};',
+  ].join('\n'), 'utf8');
+  const cli = spawnSync(process.execPath, ['--require', preload, SRC, 'sync-provider', '--provider', 'glm'], {
+    env: { PATH: process.env.PATH, AUTOPILOT_LIVE_DIR: tmpLive(), AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK, QPS_STUB_TOK: LONG_TOK },
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  assert.strictEqual(cli.status, 0);
+  assert.match(cli.stdout, /^sync-provider glm\/glm: wrote shape=/);
+  assertNoToken16(cli.stdout, LONG_TOK);
+  assertNoToken16(cli.stderr, LONG_TOK);
+});
+test('planted: reverting sliceClean to slice before scrub leaks a 16-char token substring in shape (red)', async () => {
+  const LONG_TOK = 'FAKE-sentinel-9a8b7c6d5e4f3a2b1c0d9e8f7a';
+  const body = glm([
+    g5(20),
+    { type: `x${LONG_TOK}`, unit: 9, number: 1, percentage: 50, nextResetTime: (NOW_S + 3600) * 1000 },
+  ]);
+  const reverted = mutant([[
+    'const clean = scrubSecret(s, secret);\n  return clean === null ? null : clean.slice(0, max);',
+    'return scrubSecret(s.slice(0, max), secret);',
+  ]]);
+  const badR = await reverted.syncProvider('glm', {
+    liveDir: tmpLive(),
+    env: { AUTOPILOT_ENDPOINT_GLM_TOKEN: LONG_TOK },
+    fetch: fakeFetch(200, body),
+    nowMs: () => NOW,
+  });
+  assert.throws(() => assertNoToken16(JSON.stringify(badR.shape), LONG_TOK), /16-char token substring/);
+  const badMm = await reverted.syncProvider('minimax', {
+    liveDir: tmpLive(),
+    env: { MINIMAX_API_KEY: LONG_TOK },
+    fetch: fakeFetch(200, { model_remains: [mm({ model_name: `${'m'.repeat(40)}${LONG_TOK}` })] }),
+    nowMs: () => NOW,
+  });
+  assert.throws(() => assertNoToken16(JSON.stringify(badMm), LONG_TOK), /16-char token substring/);
 });
 
 // ---- static scan: no secret file read, no token printed

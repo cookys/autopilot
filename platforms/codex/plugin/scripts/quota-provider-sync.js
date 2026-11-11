@@ -8,33 +8,33 @@
 // and the token never appears in a result, an error or the output.
 //
 //   node scripts/quota-provider-sync.js sync-provider --provider minimax|glm [--alias NAME]
-//   HTTP 401 writes an empty-windows L1 row with token_state 'invalid' and returns reason `token_invalid` (exit 1); other non-2xx: `http_status`.
-//   exit 0 = a row was written or is already current; 1 = nothing written (reason code on stderr); 2 = usage.
+//   2xx success writes an L3 row with token_state 'ok' and token_state_at in epoch seconds; HTTP 401 writes an
+//   empty-windows L1 row with token_state 'invalid' and returns reason `token_invalid` (exit 1); other non-2xx: `http_status`.
+//   exit 0 = a row was written or is already current (`wrote` / `superseded`); 1 = nothing written (reason code on stderr); 2 = usage.
 //
-//   syncProvider(provider, o)  async -> { provider, alias, wrote, reason, tightest? }
-//   convertMinimax(json, nowMs) / convertGlm(json, nowMs)  pure -> { ok, windows, tightest? } | { ok: false, reason }
+//   syncProvider(provider, o)  async -> { provider, alias, wrote, reason, shape?, tightest?, assumed? }
+//   convertMinimax(json, nowMs[, secret]) / convertGlm(json, nowMs[, secret])  pure -> { ok, windows, shape, tightest? } | { ok: false, reason, shape }
+//   Result `shape` (on the result and main() output, never in the record; token-free and value-free):
+//     glm:     { limits: [{ type, unit, number, used_window: 'rolling_5h'|'weekly'|null, dropped: 'expired'|'fields_missing'|null }, ...] }
+//              (one entry per data.limits[] item; type/unit/number copied only when string/number, strings scrubbed before slicing to 32 chars)
+//     minimax: { models: <count of model_remains>, dropped: { rolling_5h: 'expired'|null, weekly: 'expired'|null } }
+//     An entry/window is `expired` when dropped because resets_at is in the past.
 //
 // Endpoint facts (probed by the PM; the field semantics marked ASSUMED are not confirmed by documentation):
 //   minimax  GET https://www.minimax.io/v1/token_plan/remains   Authorization: Bearer <token>
 //     model_remains[] carries current_interval_remaining_percent (+ end_time) for the 5 h window and
 //     current_weekly_remaining_percent (+ weekly_end_time) for the week. ASSUMED: remaining is a percentage 0..100,
 //     so used = 1 - remaining/100; end_time may be epoch ms (above 1e11) and is converted to seconds. usage_count and
-//     total_count are always 0 and are not read. Several model entries: the tightest (largest used) wins per window; the record schema is closed, so the winning
-//     model names are returned in the result as `tightest: { rolling_5h, weekly }`, not in the record.
+//     total_count are always 0 and are not read. Several model entries: the tightest (largest used) wins per window; the
+//     record schema is closed, so winning model names return in the result as `tightest: { rolling_5h, weekly }`, not in the record.
 //   glm      GET https://api.z.ai/api/monitor/usage/quota/limit   Authorization: <token> (NO Bearer; unpublished API)
 //     data.limits[] of type TOKENS_LIMIT: unit 3 / number 5 is the rolling 5 h window, unit 6 / number 1 the week
-//     (ASSUMED, unconfirmed; the closed record schema has no field for it, so the result object carries `assumed: true`); percentage is ASSUMED 0..100 used; nextResetTime is epoch ms or s. Other types ignored.
-// Every utilization goes through observation.clampUtilization (the single clamp boundary): 1..1.5 clamps to 1, anything
-// outside is rejected, so a value in the wrong unit never gets in. Window source is `probe`, observed_at is the
-// request completion time in seconds, an elapsed window is dropped. Rate limit: the newer of the last ATTEMPT
-// (a token-free `<alias>.attempt` stamp, written before the request, failures included) and the mirror row's observed_at,
-// less than 3600 s ago, skips the request and returns `too_soon` (the fetch is not called); a held lock gives `too_soon` too.
-//
-// Not a timer: nothing runs this periodically. The primary data is the dispatch ledger (every dispatch records account,
-// model and tokens); this adapter only CALIBRATES it, run by a caller on demand (before scheduling, or after a 429).
-//
-// Token: read from the environment the caller passes, the same names scripts/resolve-endpoint.sh uses
-// (AUTOPILOT_ENDPOINT_<NAME>_TOKEN; for minimax also the provider-native MINIMAX_API_KEY). This file opens no secret file.
+//     (ASSUMED, unconfirmed; result carries `assumed: true`); percentage is ASSUMED 0..100 used; nextResetTime is epoch ms or s.
+// Every utilization goes through observation.clampUtilization: 1..1.5 clamps to 1, anything outside is rejected. Window
+// source is `probe`, observed_at is request completion time in seconds, elapsed windows are dropped. Rate limit: newer of
+// last ATTEMPT (`<alias>.attempt`, token-free, stamped before request) and mirror observed_at < 3600 s -> `too_soon`.
+// Not a timer: calibrates the dispatch ledger on demand (before scheduling, or after a 429).
+// Token: read from caller env (AUTOPILOT_ENDPOINT_<NAME>_TOKEN; for minimax also MINIMAX_API_KEY). Opens no secret file.
 // Node >= 20.10, built-ins only.
 
 const observation = require('./lib/account-observation');
@@ -52,29 +52,42 @@ const PROVIDERS = Object.freeze({
 function isObj(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
 function num(x) { return typeof x === 'number' && Number.isFinite(x); }
 function toEpochSeconds(x) { return Math.floor(x > MS_THRESHOLD ? x / 1000 : x); }
+function sliceClean(s, max, secret) {
+  const clean = scrubSecret(s, secret);
+  return clean === null ? null : clean.slice(0, max);
+}
+function shapeVal(x, secret) {
+  if (typeof x === 'string') return sliceClean(x, 32, secret);
+  return num(x) ? x : null;
+}
 
 // remaining percent (0..100) -> raw used fraction; unit errors surface in clampUtilization, not here.
 function usedFromRemainingPct(p) { return 1 - p / 100; }
 
 function finish(byKind, nowMs, tightest) {
   const windows = [];
+  const expired = { rolling_5h: null, weekly: null };
+  let quotaInvalid = false;
   for (const kind of ['rolling_5h', 'weekly']) {
     const w = byKind[kind];
     if (!w) continue;
-    if (w.resets_at * 1000 <= nowMs) continue; // an elapsed window is not an observation of the present
+    if (w.resets_at * 1000 <= nowMs) { expired[kind] = 'expired'; continue; } // an elapsed window is not an observation of the present
     const c = observation.clampUtilization(w.used);
-    if (!c.ok) return { ok: false, reason: 'quota_invalid' };
+    if (!c.ok) { quotaInvalid = true; continue; }
     const win = { kind, utilization: c.value, resets_at: w.resets_at, source: 'probe', observed_at: Math.floor(nowMs / 1000) };
     if (c.clamped) win.clamped = true;
     windows.push(win);
   }
-  if (Object.keys(byKind).length === 0) return { ok: false, reason: 'fields_missing' };
-  if (windows.length === 0) return { ok: false, reason: 'quota_windows_expired' };
-  return { ok: true, windows, tightest };
+  if (quotaInvalid) return { ok: false, reason: 'quota_invalid', expired };
+  if (Object.keys(byKind).length === 0) return { ok: false, reason: 'fields_missing', expired };
+  if (windows.length === 0) return { ok: false, reason: 'quota_windows_expired', expired };
+  return { ok: true, windows, tightest, expired };
 }
 
-function convertMinimax(j, nowMs) {
-  if (!isObj(j) || !Array.isArray(j.model_remains)) return { ok: false, reason: 'fields_missing' };
+function convertMinimax(j, nowMs, secret) {
+  if (!isObj(j) || !Array.isArray(j.model_remains)) {
+    return { ok: false, reason: 'fields_missing', shape: { models: 0, dropped: { rolling_5h: null, weekly: null } } };
+  }
   const byKind = {};
   const tightest = {};
   const spec = [
@@ -88,29 +101,65 @@ function convertMinimax(j, nowMs) {
       const used = usedFromRemainingPct(m[remKey]);
       if (!byKind[kind] || used > byKind[kind].used) {
         byKind[kind] = { used, resets_at: toEpochSeconds(m[endKey]) };
-        tightest[kind] = typeof m.model_name === 'string' ? m.model_name.slice(0, 64) : null;
+        tightest[kind] = typeof m.model_name === 'string' ? sliceClean(m.model_name, 64, secret) : null;
       }
     }
   }
-  return finish(byKind, nowMs, tightest);
+  const f = finish(byKind, nowMs, tightest);
+  const shape = { models: j.model_remains.length, dropped: f.expired };
+  return f.ok ? { ok: true, windows: f.windows, tightest: f.tightest, shape } : { ok: false, reason: f.reason, shape };
 }
 
-function convertGlm(j, nowMs) {
-  if (!isObj(j) || !isObj(j.data) || !Array.isArray(j.data.limits)) return { ok: false, reason: 'fields_missing' };
+function convertGlm(j, nowMs, secret) {
+  if (!isObj(j) || !isObj(j.data) || !Array.isArray(j.data.limits)) {
+    return { ok: false, reason: 'fields_missing', shape: { limits: [] } };
+  }
   const byKind = {};
+  const limits = [];
+  const winnerIdx = {};
   for (const l of j.data.limits) {
-    if (!isObj(l) || l.type !== 'TOKENS_LIMIT') continue;
+    if (!isObj(l)) {
+      limits.push({ type: null, unit: null, number: null, used_window: null, dropped: null });
+      continue;
+    }
+    const entry = { type: shapeVal(l.type, secret), unit: shapeVal(l.unit, secret), number: shapeVal(l.number, secret), used_window: null, dropped: null };
+    limits.push(entry);
+    if (l.type !== 'TOKENS_LIMIT') continue;
     let kind = null;
     if (l.unit === 3 && l.number === 5) kind = 'rolling_5h';
     else if (l.unit === 6 && l.number === 1) kind = 'weekly';
     if (kind === null) continue;
-    if (!num(l.percentage) || !num(l.nextResetTime)) continue;
+    entry.used_window = kind;
+    if (!num(l.percentage) || !num(l.nextResetTime)) { entry.dropped = 'fields_missing'; continue; }
+    if (winnerIdx[kind] !== undefined) limits[winnerIdx[kind]].used_window = null;
+    winnerIdx[kind] = limits.length - 1;
     byKind[kind] = { used: l.percentage / 100, resets_at: toEpochSeconds(l.nextResetTime), assumed: true };
   }
-  return finish(byKind, nowMs, undefined);
+  const f = finish(byKind, nowMs, undefined);
+  for (const kind of ['rolling_5h', 'weekly']) {
+    if (f.expired[kind] && winnerIdx[kind] !== undefined) limits[winnerIdx[kind]].dropped = 'expired';
+  }
+  const shape = { limits };
+  return f.ok ? { ok: true, windows: f.windows, shape } : { ok: false, reason: f.reason, shape };
 }
 
 const CONVERT = { minimax: convertMinimax, glm: convertGlm };
+
+function scrubSecret(val, secret) {
+  if (typeof secret !== 'string' || secret === '') return val;
+  const prefix32 = secret.length > 32 ? secret.slice(0, 32) : null;
+  if (typeof val === 'string') {
+    if (val.includes(secret) || (prefix32 !== null && val.includes(prefix32))) return null;
+    return val;
+  }
+  if (Array.isArray(val)) return val.map((x) => scrubSecret(x, secret));
+  if (isObj(val)) {
+    const o = {};
+    for (const k of Object.keys(val)) o[k] = scrubSecret(val[k], secret);
+    return o;
+  }
+  return val;
+}
 
 // Newest observed_at (epoch s) among the local row's windows, or null (no row, unreadable, no window). Never throws.
 function lastObservedAt(liveDir, provider, alias) {
@@ -181,19 +230,20 @@ async function syncProvider(provider, o) {
     if (!res || typeof res.status !== 'number' || res.status < 200 || res.status > 299) return out(false, 'http_status');
     let json;
     try { json = await res.json(); } catch (_) { return out(false, 'json_invalid'); }
-    const conv = CONVERT[provider](json, nowMs);
-    if (!conv.ok) return out(false, conv.reason);
+    const conv = CONVERT[provider](json, nowMs, token);
+    const shape = scrubSecret(conv.shape, token);
+    if (!conv.ok) return out(false, conv.reason, { shape });
     const record = {
       schema: observation.SCHEMA, provider, alias, visibility: 'L3', windows: conv.windows,
-      refusal: null, token_state: 'unknown', token_state_at: null,
+      refusal: null, token_state: 'ok', token_state_at: Math.floor(nowMs / 1000),
     };
     if (typeof opts.hostRole === 'string' && opts.hostRole) record.host_role = opts.hostRole;
     const v = observation.validateRecord(record, { provider, alias, secrets: [token] });
-    if (!v.ok) return out(false, 'quota_invalid');
+    if (!v.ok) return out(false, 'quota_invalid', { shape });
     const w = observation.writeLocalRow(liveDir, record, { secrets: [token] });
-    const extra = provider === 'glm' ? { assumed: true } : { tightest: conv.tightest };
+    const extra = provider === 'glm' ? { assumed: true, shape } : { tightest: scrubSecret(conv.tightest, token), shape };
     if (w.ok === true) return w.superseded ? out(false, 'superseded', extra) : out(true, null, extra);
-    return out(false, typeof w.code === 'string' ? w.code : 'write_failed');
+    return out(false, typeof w.code === 'string' ? w.code : 'write_failed', { shape });
   } catch (_) { return out(false, 'sync_error'); }
 }
 
@@ -209,9 +259,10 @@ async function main(argv, env) {
   }
   if (!provider) { process.stderr.write('quota-provider-sync: --provider required\n'); return 2; }
   const r = await syncProvider(provider, { alias, env });
-  if (r.wrote) { process.stdout.write(`sync-provider ${r.provider}/${r.alias}: wrote\n`); return 0; }
-  if (r.reason === 'superseded') { process.stdout.write(`sync-provider ${r.provider}/${r.alias}: superseded\n`); return 0; }
-  process.stderr.write(`sync-provider ${r.provider}/${r.alias}: ${r.reason}\n`);
+  const shapePart = r.shape ? ` shape=${JSON.stringify(r.shape)}` : '';
+  if (r.wrote) { process.stdout.write(`sync-provider ${r.provider}/${r.alias}: wrote${shapePart}\n`); return 0; }
+  if (r.reason === 'superseded') { process.stdout.write(`sync-provider ${r.provider}/${r.alias}: superseded${shapePart}\n`); return 0; }
+  process.stderr.write(`sync-provider ${r.provider}/${r.alias}: ${r.reason}${shapePart}\n`);
   return 1;
 }
 

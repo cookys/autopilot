@@ -53,6 +53,31 @@ Counts: 13 existing cases, 1 synthetic case, 2 arms, 1 repeat, 28 model calls.
 
 Raw rows: `results/arm-a.jsonl`, `results/arm-b.jsonl`. Scores: `results/scores.json`, `results/summary.json`.
 
+## Repetitions (PM 01M78M9M)
+
+On top of eval/d8c-a2. Same instrument (`run-ab.py` `grok_call`: `grok-4.7`, reasoning effort `low`, the flags in `results/engine.json`), same grader (`grade.py`), same arm B file `arm-b/SKILL.md`. Run 1 is the recorded n=1 row in `results/scores.json`. Runs 2 and 3 are new calls on three cells only: `ff-usage-green-unused`, `f1-ready-to-merge`, and `ff-trigger-06`, both arms. No infra retry fired. Every exit code is 0.
+
+`grade.py --check-fixture` is false on this tree because d8c-a2 already replaced live `skills/finish-flow/SKILL.md` line 130 with the arm B sentence (live sha `efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498`, the same as arm B). This repetition did not edit that file and did not use it as the arm A prompt. Arm A prompts used the recorded arm A blob `e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2` (`git show 0506b25d3:skills/finish-flow/SKILL.md`), which is the text run 1 graded. Arm B prompts used `arm-b/SKILL.md`.
+
+| case | arm | run 1 | run 2 | run 3 | pass count |
+|---|---|---|---|---|---|
+| `ff-usage-green-unused` | A | FAIL | FAIL | FAIL | 0/3 |
+| `ff-usage-green-unused` | B | PASS | PASS | PASS | 3/3 |
+| `f1-ready-to-merge` | A | PASS | PASS | PASS | 3/3 |
+| `f1-ready-to-merge` | B | PASS | PASS | PASS | 3/3 |
+| `ff-trigger-06` | A | PASS | PASS | PASS | 3/3 |
+| `ff-trigger-06` | B | PASS | PASS | PASS | 3/3 |
+
+Arm B synthetic lines: run 1 `Used: n/a no person has used the merged result and there is no end-to-end run` (graded fields only; raw text was not retained); run 2 `Used: n/a no person has used the merged result and there is no end-to-end run`; run 3 `Used: n/a no person has used the merged result and there is no end-to-end run`.
+
+Arm B passes the synthetic case in at least 2 of 3 runs: **yes** (3/3).
+
+Raw outputs: `results/reps/run-1.json`, `results/reps/run-2.json`, `results/reps/run-3.json`. Pass counts: `results/reps/summary.json`. Runs 2 and 3 store the model text. Run 1 stores the graded row from `results/scores.json` because the original `arm-*.jsonl` files are gitignored and are not in the tree.
+
+New model calls: 12 (3 cases, 2 arms, 2 new runs).
+
 ## Out of scope
 
 No edit to `skills/finish-flow/SKILL.md`, frozen `packs/`, or the Codex plugin mirror. Session end (lite) item (3) still says staging. No commit in this run. Intended commit message, for the harness: `eval(finish-flow): A/B Staging verify vs Usage evidence for step 7 (PM 01M78GBW, D8c part A evidence)`.
+
+This repetition also did not edit `skills/finish-flow/SKILL.md`, `arm-b/SKILL.md`, `grade.py`, `cases.json`, `prompt-wrapper.md`, or `run-ab.py`. The other ten cases were not repeated. Intended commit message, for the harness: `eval(finish-flow): step7-usage-ab reps to 3 runs on the synthetic and two existing cases (PM 01M78M9M)`.

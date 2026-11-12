@@ -1,0 +1,251 @@
+{
+  "run": 3,
+  "partial": false,
+  "engine": {
+    "model": "grok-4.7",
+    "reasoning_effort": "low",
+    "runner": "grok",
+    "runner_version": "grok 1.0.77 (50ca579fa996) [stable]",
+    "flags": [
+      "--model grok-4.7",
+      "--reasoning-effort low",
+      "--max-turns 1",
+      "--no-subagents",
+      "--disable-web-search",
+      "--output-format json",
+      "--verbatim",
+      "--permission-mode dontAsk",
+      "--cwd /tmp"
+    ],
+    "skill_sha256": {
+      "a": "e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2",
+      "b": "efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498"
+    },
+    "arm_a_source": "git show 0506b25d3:skills/finish-flow/SKILL.md",
+    "arm_b_source": "evals/skill-onoff/step7-usage-ab/arm-b/SKILL.md",
+    "live_skill_sha256": "efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498",
+    "live_skill_used_as_prompt": false
+  },
+  "rows": [
+    {
+      "run": 3,
+      "id": "ff-trigger-06",
+      "arm": "a",
+      "rubric": "trigger",
+      "should_trigger": false,
+      "source": "skill-creator-workspace/evals/finish-flow-evals.json",
+      "query": "I'm starting a new L-size feature — set me up with branch and project tracking",
+      "exit_code": 0,
+      "stop_reason": "end_turn",
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 29644,
+        "output_tokens": 207,
+        "reasoning_tokens": 204,
+        "cache_read_input_tokens": 1152,
+        "cache_creation_input_tokens": 0,
+        "total_tokens": 31003
+      },
+      "text": "NO-TRIGGER",
+      "stderr_tail": "",
+      "prompt_sha256": "f0b4f505f830244b00286d55526c3e1f4b87670daf6509041c89be7a4e141234",
+      "skill_sha256": "e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2",
+      "score": {
+        "id": "ff-trigger-06",
+        "arm": "a",
+        "rubric": "trigger",
+        "should_trigger": false,
+        "exit_code": 0,
+        "trigger_pass": true,
+        "usage_pass": null,
+        "pass": true,
+        "label": "NO-TRIGGER",
+        "used_lines": []
+      }
+    },
+    {
+      "run": 3,
+      "id": "f1-ready-to-merge",
+      "arm": "a",
+      "rubric": "trigger",
+      "should_trigger": true,
+      "source": "evals/skill-onoff/tasks/f1-ready-to-merge/task.md",
+      "query": "The `feature/greet` branch is finished: the work is done and `bash run-tests.sh` is green on it.\nWrap it up: get it merged into `develop` (a normal merge) and leave the repository tidy.",
+      "exit_code": 0,
+      "stop_reason": "end_turn",
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 29678,
+        "output_tokens": 632,
+        "reasoning_tokens": 621,
+        "cache_read_input_tokens": 1152,
+        "cache_creation_input_tokens": 0,
+        "total_tokens": 31462
+      },
+      "text": "TRIGGER\nStaging verify: skip (no staging environment)",
+      "stderr_tail": "",
+      "prompt_sha256": "80e3ed020f6ea9e5b712c13c7be511a391254136348a8569883185ef40c00956",
+      "skill_sha256": "e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2",
+      "score": {
+        "id": "f1-ready-to-merge",
+        "arm": "a",
+        "rubric": "trigger",
+        "should_trigger": true,
+        "exit_code": 0,
+        "trigger_pass": true,
+        "usage_pass": null,
+        "pass": true,
+        "label": "TRIGGER",
+        "used_lines": []
+      }
+    },
+    {
+      "run": 3,
+      "id": "ff-usage-green-unused",
+      "arm": "a",
+      "rubric": "usage",
+      "should_trigger": true,
+      "source": "synthetic",
+      "query": "The feature just merged into develop. bash run-tests.sh is green and the review verdict is PASS. No person has used the merged result, and there is no end-to-end run. Produce Session end (full) checklist item 7 only.",
+      "exit_code": 0,
+      "stop_reason": "end_turn",
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 29679,
+        "output_tokens": 853,
+        "reasoning_tokens": 801,
+        "cache_read_input_tokens": 1152,
+        "cache_creation_input_tokens": 0,
+        "total_tokens": 31684
+      },
+      "text": "TRIGGER\n7. Staging verify: FAIL — the merge is on develop with green tests and a PASS review, but no person has used the merged result and there is no end-to-end run, so staging verification is not met and is not skipped.",
+      "stderr_tail": "",
+      "prompt_sha256": "b4170488ea3ff28888f0e941d6e6f45180f023f9cd9d12538c8cc1820c07702f",
+      "skill_sha256": "e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2",
+      "score": {
+        "id": "ff-usage-green-unused",
+        "arm": "a",
+        "rubric": "usage",
+        "should_trigger": true,
+        "exit_code": 0,
+        "trigger_pass": true,
+        "usage_pass": false,
+        "pass": false,
+        "label": "TRIGGER",
+        "used_lines": []
+      }
+    },
+    {
+      "run": 3,
+      "id": "ff-trigger-06",
+      "arm": "b",
+      "rubric": "trigger",
+      "should_trigger": false,
+      "source": "skill-creator-workspace/evals/finish-flow-evals.json",
+      "query": "I'm starting a new L-size feature — set me up with branch and project tracking",
+      "exit_code": 0,
+      "stop_reason": "end_turn",
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 29671,
+        "output_tokens": 227,
+        "reasoning_tokens": 224,
+        "cache_read_input_tokens": 1152,
+        "cache_creation_input_tokens": 0,
+        "total_tokens": 31050
+      },
+      "text": "NO-TRIGGER",
+      "stderr_tail": "",
+      "prompt_sha256": "6e48435ef53870559e538ef96094f3723105225991c76aabd7e55f881e8ba35b",
+      "skill_sha256": "efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498",
+      "score": {
+        "id": "ff-trigger-06",
+        "arm": "b",
+        "rubric": "trigger",
+        "should_trigger": false,
+        "exit_code": 0,
+        "trigger_pass": true,
+        "usage_pass": null,
+        "pass": true,
+        "label": "NO-TRIGGER",
+        "used_lines": []
+      }
+    },
+    {
+      "run": 3,
+      "id": "f1-ready-to-merge",
+      "arm": "b",
+      "rubric": "trigger",
+      "should_trigger": true,
+      "source": "evals/skill-onoff/tasks/f1-ready-to-merge/task.md",
+      "query": "The `feature/greet` branch is finished: the work is done and `bash run-tests.sh` is green on it.\nWrap it up: get it merged into `develop` (a normal merge) and leave the repository tidy.",
+      "exit_code": 0,
+      "stop_reason": "end_turn",
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 29702,
+        "output_tokens": 370,
+        "reasoning_tokens": 348,
+        "cache_read_input_tokens": 1152,
+        "cache_creation_input_tokens": 0,
+        "total_tokens": 31224
+      },
+      "text": "TRIGGER\nUsed: n/a green tests only; no user or e2e run of the merged change",
+      "stderr_tail": "",
+      "prompt_sha256": "6bb348fbd41af69463a17dfecb52b4103b21b1954fb64ed9fb8ad2f2384bc451",
+      "skill_sha256": "efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498",
+      "score": {
+        "id": "f1-ready-to-merge",
+        "arm": "b",
+        "rubric": "trigger",
+        "should_trigger": true,
+        "exit_code": 0,
+        "trigger_pass": true,
+        "usage_pass": null,
+        "pass": true,
+        "label": "TRIGGER",
+        "used_lines": [
+          "Used: n/a green tests only; no user or e2e run of the merged change"
+        ]
+      }
+    },
+    {
+      "run": 3,
+      "id": "ff-usage-green-unused",
+      "arm": "b",
+      "rubric": "usage",
+      "should_trigger": true,
+      "source": "synthetic",
+      "query": "The feature just merged into develop. bash run-tests.sh is green and the review verdict is PASS. No person has used the merged result, and there is no end-to-end run. Produce Session end (full) checklist item 7 only.",
+      "exit_code": 0,
+      "stop_reason": "end_turn",
+      "num_turns": 1,
+      "usage": {
+        "input_tokens": 29705,
+        "output_tokens": 446,
+        "reasoning_tokens": 422,
+        "cache_read_input_tokens": 1152,
+        "cache_creation_input_tokens": 0,
+        "total_tokens": 31303
+      },
+      "text": "TRIGGER\nUsed: n/a no person has used the merged result and there is no end-to-end run",
+      "stderr_tail": "",
+      "prompt_sha256": "586b5a13e1e65f95774022dfd05d09a538d97ae3954a52fe0f248ebfe49f5bea",
+      "skill_sha256": "efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498",
+      "score": {
+        "id": "ff-usage-green-unused",
+        "arm": "b",
+        "rubric": "usage",
+        "should_trigger": true,
+        "exit_code": 0,
+        "trigger_pass": true,
+        "usage_pass": true,
+        "pass": true,
+        "label": "TRIGGER",
+        "used_lines": [
+          "Used: n/a no person has used the merged result and there is no end-to-end run"
+        ]
+      }
+    }
+  ]
+}

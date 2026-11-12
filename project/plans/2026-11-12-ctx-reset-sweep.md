@@ -35,14 +35,14 @@ Reset idle, oversized Claude lanes safely and unattended on every host with a Cl
 
 ## 2. OKR / KRs
 
-- KR1: on each first-batch host (c4140, xl270d), 24 h of journal rows show a decision with a reason for every live session, zero sends and zero keys (`mode: dry-run`), and every excluded class (PM, hangar, lead, resident, claim, GO, draft, background) appears at least once as a `keep` reason or is shown by fixture.
-- KR2: first live resets (three, on c4140 and xl270d) on low-risk sessions: `[session-reset]` sent, `[reset-ready]` received, durable handoff copy sha256-equal to the source, old claude exited without the background dialog, new session id live within 5 min, screen shows the handoff being read, fleet address unchanged (no `-2`).
-- KR3: every host with a Claude lane has a sha16 receipt equal to the develop tip, produced by hangar's existing rollout path, before its sweep timer is enabled and again before it is promoted to live (c4140 currently at `c663a4ade`, 11-10).
+- KR1: on each first-batch host (gpu-host, bench-host), 24 h of journal rows show a decision with a reason for every live session, zero sends and zero keys (`mode: dry-run`), and every excluded class (PM, hangar, lead, resident, claim, GO, draft, background) appears at least once as a `keep` reason or is shown by fixture.
+- KR2: first live resets (three, on gpu-host and bench-host) on low-risk sessions: `[session-reset]` sent, `[reset-ready]` received, durable handoff copy sha256-equal to the source, old claude exited without the background dialog, new session id live within 5 min, screen shows the handoff being read, fleet address unchanged (no `-2`).
+- KR3: every host with a Claude lane has a sha16 receipt equal to the develop tip, produced by hangar's existing rollout path, before its sweep timer is enabled and again before it is promoted to live (gpu-host currently at `c663a4ade`, 11-10).
 - KR4: no reset in the first week was followed by an operator restore (`claude --resume <old sid>`) caused by lost work.
 
 ## 2.5 Global Constraints (copied verbatim into every implementer and reviewer brief)
 
-0. PM order facts (fixed): the first batch is exactly c4140 and xl270d; PM and hangar sessions are excluded for the first week (observe only: journaled as `keep excluded`, never asked or keyed); leads and resident sessions are excluded; the implementer is grok or agy, never codex; dry-run is the default and live needs `--live --order <fleet message id>` on every tool that writes, sends or presses keys, including the handoff copier; every host gets a sha16 receipt equal to the develop tip via hangar's existing rollout path before its sweep is enabled.
+0. PM order facts (fixed): the first batch is exactly gpu-host (the GPU lead's host, named in the PM order) and bench-host (the inference-bench host, also named in the PM order); PM and hangar sessions are excluded for the first week (observe only: journaled as `keep excluded`, never asked or keyed); leads and resident sessions are excluded; the implementer is grok or agy, never codex; dry-run is the default and live needs `--live --order <fleet message id>` on every tool that writes, sends or presses keys, including the handoff copier; every host gets a sha16 receipt equal to the develop tip via hangar's existing rollout path before its sweep is enabled.
 1. Dry-run is the default on every tool (`ctx-reset-sweep.js` and `ctx-reset-handoff.js`). Sending any fleet message, any tmux key or copying any file requires `--live --order <fleet message id>` (non-empty after trim, else exit 2); the order id is written to every journal row.
 2. Never reset: a session that holds a fleet claim, has a running GO, has open tasks, is the PM, hangar, any lead or any resident session, whose sid is in `retired_sids`, or whose sid or mapped pane is in `state.json` `quarantine` (`keep reset_failed_quarantine`). Unknown role = excluded. Every unknown, missing, unreadable or malformed fact (fleet field, `tasks/<sid>.json`, `state.json`, `<sid>.tasks.json` unconditionally, `/proc`, or launch/profile reconstruction) fails closed to `keep`.
 3. Not idle (fail closed to `keep`): typed-but-unsent text anywhere in the full input-box region (including multi-line drafts), a running background subagent (or missing/unreadable/schema-invalid `<sid>.tasks.json`), any non-allowlisted descendant process under `pane_pid` outside the single verified `(wrapper_pid -> claude_pid)` spine, a pane whose `pane_pid` is not a persistent interactive shell, an unrecognised screen.
@@ -129,8 +129,8 @@ Acceptance: fake tmux + fake fleet scenario suite. Negative controls: D4 --dry-r
 
 ### D5 — rollout with hangar (M; human-gated; after D4 merged to develop)
 
-1. **Host list**: every (host, OS account) with a Claude lane, from hangar's D0 item 5 answer; stored in the evidence dir. First batch is exactly c4140 and xl270d.
-2. **Checkout sync** through hangar's existing rollout path (D0 item 5 command), ff-only to the develop tip; a dirty or diverged checkout is reported to hangar, not forced. Receipt row per host: `host, os_account, checkout path, before sha16, after sha16, develop sha16, UTC time` where sha16 = first 16 hex of `git -C <checkout> rev-parse HEAD`. c4140 (`c663a4ade`) is a known stale case. The receipt is checked (`after sha16 == current develop tip sha16 == journal checkout sha16`) before enabling that host's `--dry-run` timer and again, re-synced if develop moved, before promoting that host to live.
+1. **Host list**: every (host, OS account) with a Claude lane, from hangar's D0 item 5 answer; stored in the evidence dir. First batch is exactly gpu-host and bench-host.
+2. **Checkout sync** through hangar's existing rollout path (D0 item 5 command), ff-only to the develop tip; a dirty or diverged checkout is reported to hangar, not forced. Receipt row per host: `host, os_account, checkout path, before sha16, after sha16, develop sha16, UTC time` where sha16 = first 16 hex of `git -C <checkout> rev-parse HEAD`. gpu-host (`c663a4ade`) is a known stale case. The receipt is checked (`after sha16 == current develop tip sha16 == journal checkout sha16`) before enabling that host's `--dry-run` timer and again, re-synced if develop moved, before promoting that host to live.
 3. **Install**: `docs/guide/examples/ctx-reset-sweep.{service,timer}` (every 5 min, `--dry-run`), installed by hangar's rollout; live is a per-host unit override `ExecStart=… --live --order <fleet order id> --alert-to <member> --max-resets 1` (plus `--stop-after-ready` in stage B), installed through the same path per stage below.
 Acceptance: every host receipt `after == develop tip` at enable time and at live promotion; the sweep journal's own sha16 equals the receipt.
 
@@ -140,11 +140,11 @@ D0 (hangar answers recorded) → {D1, D2, D4} ; D3 independent ; {D1, D2, D3} �
 
 ## 5. Rollout order (inside D5)
 
-First batch is exactly c4140 and xl270d; no other host is enabled before stage D. Each stage entry re-checks the host's sha16 receipt against the current develop tip (D5.2). Through the first week the PM and hangar sessions are observe-only (`keep excluded`) on every host.
-- **A. Dry-run, c4140 and xl270d, 24 h**: timer in `--dry-run` on both, after each host's receipt. Gate: KR1 on both, and a human reads the journals for false `reset` decisions.
-- **B. Ask-only, c4140 and xl270d**: `--live --order <id> --alert-to <member> --stop-after-ready` on one or two idle, low-risk sessions (no claim, no GO, not a lead, small task list, idle > 1 h). Gate: replies parsed, durable copies sha-equal, no keys sent.
-- **C. First restarts, c4140 and xl270d**: `--live --order <id> --alert-to <member> --max-resets 1` on the same low-risk sessions, operator watching the pane. Gate: KR2 on three resets.
-- **D. Widen**: held until c4140 and xl270d both pass KR1 and KR2; then the remaining Claude-lane hosts from the D5 host list, one at a time, each repeating A for 24 h after its sync receipt and re-verifying the receipt before any live order.
+First batch is exactly gpu-host and bench-host; no other host is enabled before stage D. Each stage entry re-checks the host's sha16 receipt against the current develop tip (D5.2). Through the first week the PM and hangar sessions are observe-only (`keep excluded`) on every host.
+- **A. Dry-run, gpu-host and bench-host, 24 h**: timer in `--dry-run` on both, after each host's receipt. Gate: KR1 on both, and a human reads the journals for false `reset` decisions.
+- **B. Ask-only, gpu-host and bench-host**: `--live --order <id> --alert-to <member> --stop-after-ready` on one or two idle, low-risk sessions (no claim, no GO, not a lead, small task list, idle > 1 h). Gate: replies parsed, durable copies sha-equal, no keys sent.
+- **C. First restarts, gpu-host and bench-host**: `--live --order <id> --alert-to <member> --max-resets 1` on the same low-risk sessions, operator watching the pane. Gate: KR2 on three resets.
+- **D. Widen**: held until gpu-host and bench-host both pass KR1 and KR2; then the remaining Claude-lane hosts from the D5 host list, one at a time, each repeating A for 24 h after its sync receipt and re-verifying the receipt before any live order.
 
 ## 6. Test / validation
 

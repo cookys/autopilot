@@ -4,12 +4,11 @@
 # every subcommand in hippo mode, parity with `hippo import --from autopilot-backlog`, validation in both modes, fault reruns,
 # the refused-child retry, --target and plugin-dir refusal, read commands leaving the checkout alone, the `record_store` resolver
 # field and the session-start spool line.
-# Needs a hippo >= 0.2.2 (HIPPO_BIN, else hippo on PATH); prints SKIPPED and exits 0 without it. Every repo is a temp repo under a sandbox
+# Needs a hippo >= 0.2.2 (HIPPO_BIN, hippo on PATH, else $HOME/.local/bin/hippo); prints SKIP [suite] and exits 0 without it. Every repo is a temp repo under a sandbox
 # HOME (hooks/tests/lib/hippo-sandbox.sh, C6). AP_PLUGIN_ROOT (default: this checkout) names the tree whose scripts/ and hooks/ are
 # under test, so red-checks mutate a temp copy and never this checkout. Red-checks: docs/plans/evidence/2026-11-02-oc-a3-writers-use-hippo/a3.1-cli/.
 . "$(dirname "$0")/lib.sh"
-HIPPO_BIN="${HIPPO_BIN:-$(command -v hippo 2>/dev/null)}"
-if [ -z "$HIPPO_BIN" ]; then echo "SKIPPED: no hippo (HIPPO_BIN unset, none on PATH)"; exit 0; fi
+require_hippo_or_skip project-record
 export HIPPO_BIN
 HIPPO_BIN="$(command -v "$HIPPO_BIN")" || fail "HIPPO_BIN is not executable"
 export HIPPO_BIN

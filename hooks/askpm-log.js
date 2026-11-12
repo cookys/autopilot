@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // hooks/askpm-log.js — PM session only. UserPromptSubmit appends the operator's prompt;
-// Stop appends the first two lines of that turn's reply. One jsonl under the account
+// Stop appends the first two lines of that turn's reply (the payload's
+// last_assistant_message when that string is non-blank, else transcript_path).
+// One reply per ask: the re-entry after another
+// Stop hook blocked (stop_hook_active) still writes when the first Stop wrote nothing,
+// and a second Stop in the same turn does not append again. One jsonl under the account
 // state dir (absolute AUTOPILOT_STATE_DIR, else $XDG_STATE_HOME/autopilot, else
 // ~/.local/state/autopilot). Silent: never writes stdout. Fail-open: one stderr line, exit 0.
 //
@@ -86,16 +90,35 @@ function isInjected(prompt) {
   return false;
 }
 
+function logFile(env) {
+  return path.join(stateDir(env), 'askpm.jsonl');
+}
+
 function append(env, row) {
   const dir = stateDir(env);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const file = path.join(dir, 'askpm.jsonl');
-  const fd = fs.openSync(file, 'a', 0o600);
+  const fd = fs.openSync(logFile(env), 'a', 0o600);
   try {
     fs.writeSync(fd, JSON.stringify(row) + '\n');
   } finally {
     fs.closeSync(fd);
   }
+}
+
+// True when the newest ask already has its reply. A second Stop in the same turn
+// (the re-entry after another Stop hook blocked) must not append again.
+function openAskAnswered(env) {
+  let raw;
+  try { raw = fs.readFileSync(logFile(env), 'utf8'); } catch { return false; }
+  let kind = '';
+  for (const line of raw.split('\n')) {
+    if (!line) continue;
+    let row;
+    try { row = JSON.parse(line); } catch { continue; }
+    if (!row || row.schema !== SCHEMA || (row.kind !== 'ask' && row.kind !== 'reply')) continue;
+    kind = row.kind;
+  }
+  return kind === 'reply';
 }
 
 function clip(text) {
@@ -130,12 +153,31 @@ function onPrompt(input, env) {
   append(env, { schema: SCHEMA, kind: 'ask', at: new Date().toISOString(), text: clip(input.prompt) });
 }
 
-function onStop(input, env) {
-  if (input.stop_hook_active === true) return;
-  if (input.agent_id) return;
+// The Stop payload's last_assistant_message is the reply of the turn that is
+// stopping. The transcript can lag: its newest assistant entry may still be a
+// previous turn, with no newer user line. Use the payload whenever it is a
+// non-blank string, and read the transcript only when that field is missing
+// or blank. A missing or unreadable transcript is not fatal.
+function replyBody(input) {
+  const direct = input.last_assistant_message;
+  if (typeof direct === 'string' && direct.trim()) return direct;
   const tp = input.transcript_path;
-  if (typeof tp !== 'string' || tp === '') return;
-  const text = lastAssistantText(fs.readFileSync(tp, 'utf8'));
+  if (typeof tp === 'string' && tp !== '') {
+    try {
+      const text = lastAssistantText(fs.readFileSync(tp, 'utf8'));
+      if (text) return text;
+    } catch { /* fall through */ }
+  }
+  return null;
+}
+
+function onStop(input, env) {
+  if (input.agent_id) return;
+  // stop_hook_active true is the re-entry after another Stop hook blocked. That
+  // call is the one that ends the turn, so it still records when the first Stop
+  // wrote nothing. It does not record a second row for the same ask.
+  if (openAskAnswered(env)) return;
+  const text = replyBody(input);
   if (!text) return;
   const norm = text.replace(/\r\n/g, '\n');
   append(env, { schema: SCHEMA, kind: 'reply', at: new Date().toISOString(), lines: norm.split('\n').slice(0, 2), text: clip(norm) });

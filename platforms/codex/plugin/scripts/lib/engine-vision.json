@@ -5,12 +5,17 @@
     {
       "pattern": "*/GLM-5.3",
       "input_image": "unsupported",
-      "evidence": "text-only model; an image was dropped silently in another project on 2026-11-12"
+      "evidence": "text-only model; the serving proxy forwards Anthropic image blocks unchanged and the model ignores them (silent drop observed 2026-11-12)"
     },
     {
       "pattern": "*/Qwen3.8-27B-QUASAR-NVFP4",
-      "input_image": "unknown",
-      "evidence": "local Qwen3.8-27B-QUASAR-NVFP4; no observation that image input is accepted or rejected"
+      "input_image": "unsupported",
+      "evidence": "local server rejects image input with HTTP 500 (observed 2026-11-12)"
+    },
+    {
+      "pattern": "*/deepseek-v4*",
+      "input_image": "unsupported",
+      "evidence": "remote server code returns HTTP 400 for image input (code reading 2026-11-12, not live-tested)"
     }
   ]
 }

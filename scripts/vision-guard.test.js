@@ -6,6 +6,10 @@ require('./lib/test-git-env');
 // the wired test red, because the stub runner is then invoked. The suite copies
 // dispatch-review.sh, strips that one call, and requires the stub marker. A copy
 // whose guard text no longer matches fails closed instead of pointing at nothing.
+//
+// The hetero, author, and consult wired tests go red when that script's
+// vision-guard failure branch is replaced by `|| true`: the refusal is swallowed
+// and the stub runner runs. A text-only check of the call site stays green.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -20,6 +24,9 @@ const ROOT = path.join(__dirname, '..');
 const GUARD_JS = path.join(__dirname, 'lib', 'vision-guard.js');
 const STATE_JS = path.join(__dirname, 'engine-capability-state.js');
 const REVIEW_SH = path.join(__dirname, 'dispatch-review.sh');
+const HETERO_SH = path.join(__dirname, 'dispatch-hetero.sh');
+const AUTHOR_SH = path.join(__dirname, 'dispatch-author.sh');
+const CONSULT_SH = path.join(__dirname, 'dispatch-consult.sh');
 const MUTATION = path.join(__dirname, 'vision-guard-wired-mut.test.sh');
 
 const PNG = Buffer.from([
@@ -142,7 +149,7 @@ test('PNG bytes as a spec file to GLM-5.3 are refused as unsupported', () => {
   assert.notStrictEqual(result.code, 0);
   assert.match(result.message, /GLM-5\.3/);
   assert.match(result.message, /input_image=unsupported/);
-  assert.match(result.message, /dropped silently/);
+  assert.match(result.message, /silent drop observed/);
   assert.ok(result.message.includes(spec));
 });
 
@@ -308,7 +315,7 @@ test('a malformed vision row does not override the static default', () => {
   });
   assert.strictEqual(result.input_image, 'unsupported');
   assert.strictEqual(result.source, 'static');
-  assert.match(result.evidence, /dropped silently/);
+  assert.match(result.evidence, /silent drop observed/);
 });
 
 test('the highest event_id wins, then the later line', () => {
@@ -341,7 +348,7 @@ test('the highest event_id wins, then the later line', () => {
   assert.match(later.evidence, /later same id/);
 });
 
-test('Qwen3.8-27B-QUASAR-NVFP4 static row is unknown and load-bearing', () => {
+test('Qwen3.8-27B-QUASAR-NVFP4 static row is unsupported and load-bearing', () => {
   const dir = mk('vg-qwen-');
   const spec = writeBytes(dir, 'spec.png', PNG);
   const result = guardVision({
@@ -351,9 +358,36 @@ test('Qwen3.8-27B-QUASAR-NVFP4 static row is unknown and load-bearing', () => {
     capabilityStatePath: null,
   });
   assert.strictEqual(result.ok, false);
-  assert.strictEqual(result.input_image, 'unknown');
+  assert.strictEqual(result.input_image, 'unsupported');
   assert.strictEqual(result.source, 'static');
-  assert.match(result.evidence, /no observation that image input is accepted or rejected/);
+  assert.match(result.evidence, /local server rejects image input with HTTP 500/);
+});
+
+test('deepseek-v4* static row is unsupported', () => {
+  // matchPattern splits on the first slash: runner glob "*", model glob "deepseek-v4*".
+  const dir = mk('vg-ds-');
+  const spec = writeBytes(dir, 'spec.png', PNG);
+  for (const model of ['deepseek-v4-pro', 'deepseek-v4.1-flash']) {
+    const result = guardVision({
+      runner: 'opencode',
+      model,
+      files: [spec],
+      capabilityStatePath: null,
+    });
+    assert.strictEqual(result.ok, false, model);
+    assert.strictEqual(result.input_image, 'unsupported', model);
+    assert.strictEqual(result.source, 'static', model);
+    assert.match(result.evidence, /HTTP 400 for image input/);
+    assert.ok(result.message.includes(spec), model);
+  }
+  const other = guardVision({
+    runner: 'opencode',
+    model: 'deepseek-v3',
+    files: [spec],
+    capabilityStatePath: null,
+  });
+  assert.strictEqual(other.input_image, 'unknown');
+  assert.strictEqual(other.source, 'static-default');
 });
 
 test('the first image file is the one named in the refusal', () => {
@@ -382,7 +416,7 @@ test('CLI refuses a PNG for GLM-5.3 on stderr and exits non-zero', () => {
   assert.strictEqual(res.stdout, '');
   assert.match(res.stderr, /GLM-5\.3/);
   assert.match(res.stderr, /input_image=unsupported/);
-  assert.match(res.stderr, /dropped silently/);
+  assert.match(res.stderr, /silent drop observed/);
   assert.ok(res.stderr.includes(spec));
 });
 
@@ -546,7 +580,7 @@ test('dispatch-review.sh refuses a PNG spec before the stub runner', { timeout: 
   assert.match(combined, /GLM-5\.3/);
   assert.ok(combined.includes(spec), combined);
   assert.match(combined, /input_image=unsupported/);
-  assert.match(combined, /dropped silently/);
+  assert.match(combined, /silent drop observed/);
   assert.match(combined, /precondition_failed/);
 });
 
@@ -572,4 +606,158 @@ test('negative control: removing the guard call makes the wired test red', { tim
   } finally {
     fs.rmSync(MUTATION, { force: true });
   }
+});
+
+function railEnv(dir, extra) {
+  const cap = path.join(dir, 'cap');
+  const mode = path.join(dir, 'mode');
+  fs.mkdirSync(cap, { recursive: true });
+  fs.mkdirSync(mode, { recursive: true });
+  const env = childEnv({
+    DISPATCH_QUIET: '1',
+    DISPATCH_DETACH: '0',
+    AUTOPILOT_GROK_EFFORT_PROBE: '0',
+    AUTOPILOT_DISPATCH_USAGE: 'off',
+    AUTOPILOT_RUNNER_HOME_FALLBACK: 'off',
+    AUTOPILOT_EMPTY_GRACE_MS: '200',
+    AUTOPILOT_SETTLE_MS: '1000',
+    AUTOPILOT_STABLE_POLLS: '1',
+    ENGINE_CAPABILITY_DIR: cap,
+    AUTOPILOT_SESSION_MODE_DIR: mode,
+    TMPDIR: dir,
+    ...extra,
+  });
+  for (const key of [
+    'AUTOPILOT_PARENT_RUN_ID',
+    'AUTOPILOT_ROOT_RUN_ID',
+    'AUTOPILOT_WORKTREE_ROOT_RUN_ID',
+    'AUTOPILOT_PARENT_SESSION_ID',
+    'AUTOPILOT_DISPATCH_DEPTH',
+    'AUTOPILOT_MISSION_ROOT_RUN_ID',
+    'AUTOPILOT_CONTINUATION_CHECKPOINT',
+    'AUTOPILOT_CONTINUATION_DURABLE',
+    'AUTOPILOT_CONTINUATION_STRICT',
+    'AUTOPILOT_RECONCILE_RECEIPT',
+  ]) delete env[key];
+  return env;
+}
+
+function initRepo(dir) {
+  const git = (args) => {
+    const res = cp.spawnSync('git', args, { cwd: dir, encoding: 'utf8', env: railEnv(dir) });
+    assert.strictEqual(res.status, 0, `${args.join(' ')}\n${res.stderr || ''}`);
+  };
+  git(['init', '-q', '-b', 'develop']);
+  git(['commit', '-q', '--allow-empty', '-m', 'base']);
+}
+
+function assertRefused(res, marker, engine, file) {
+  const combined = `${res.stdout || ''}\n${res.stderr || ''}`;
+  assert.notStrictEqual(res.status, 0, combined);
+  assert.ok(!fs.existsSync(marker), `stub was invoked:\n${combined}`);
+  assert.match(combined, engine, combined);
+  assert.ok(combined.includes(file), combined);
+  assert.match(combined, /vision-guard:/, combined);
+  assert.match(combined, /input_image=unsupported/, combined);
+  return combined;
+}
+
+test('dispatch-hetero.sh refuses a PNG prompt before the stub runner', { timeout: 40000 }, () => {
+  // Replacing `|| die_precondition ...` after the vision-guard call with `|| true`
+  // makes this test red: the refusal is swallowed and the stub runner is invoked.
+  const dir = mk('vg-hetero-');
+  initRepo(dir);
+  const prompt = writeBytes(dir, 'prompt.png', PNG);
+  const { stub, marker } = writeStub(dir);
+  const res = cp.spawnSync('bash', [
+    HETERO_SH,
+    '--runner', 'grok',
+    '--model', 'GLM-5.3',
+    '--grok-bin', stub,
+    '--prompt-file', prompt,
+    '--branch', 'vg-hetero-png',
+    '--effort', 'low',
+    '--timeout', '5s',
+    '--context-window', 'off',
+    '--scaffold-tier', 'off',
+  ], {
+    encoding: 'utf8',
+    cwd: dir,
+    timeout: 40000,
+    env: railEnv(dir),
+  });
+  assertRefused(res, marker, /grok\/GLM-5\.3/, prompt);
+});
+
+test('dispatch-author.sh refuses a PNG prompt before the stub runner', { timeout: 40000 }, () => {
+  // Replacing `|| die_precondition ...` after the vision-guard call with `|| true`
+  // makes this test red: the refusal is swallowed and the stub runner is invoked.
+  const dir = mk('vg-author-');
+  const prompt = writeBytes(dir, 'prompt.png', PNG);
+  const { stub, marker } = writeStub(dir);
+  const res = cp.spawnSync('bash', [
+    AUTHOR_SH,
+    '--runner', 'grok',
+    '--model', 'GLM-5.3',
+    '--bin', stub,
+    '--prompt-file', prompt,
+    '--timeout', '5s',
+    '--effort', 'low',
+    '--context-window', 'off',
+  ], {
+    encoding: 'utf8',
+    cwd: ROOT,
+    timeout: 40000,
+    env: railEnv(dir),
+  });
+  assertRefused(res, marker, /grok\/GLM-5\.3/, prompt);
+});
+
+test('dispatch-consult.sh refuses a PNG question before the stub runner', { timeout: 40000 }, () => {
+  // Replacing the vision-guard failure branch (`|| { echo; emit vision_refused; }`)
+  // with `|| true` makes this test red: the refusal is swallowed and the stub
+  // author rail is invoked.
+  const dir = mk('vg-consult-');
+  const question = writeBytes(dir, 'question.png', PNG);
+  const artifact = writeBytes(dir, 'artifact.diff', 'diff --git a/a b/a\n+hello\n');
+  const { stub, marker } = writeStub(dir);
+  const cfg = path.join(dir, 'consult.md');
+  fs.writeFileSync(cfg, [
+    '- override: consult | until 2099-01-01 | vision-guard fixture',
+    '- consult_engine: GLM-5.3',
+    '- consult_runner: grok',
+    '- consult_effort: low',
+    '- consult_dispatch: on',
+    '',
+  ].join('\n'));
+  const override = path.join(dir, 'override.json');
+  fs.writeFileSync(override, JSON.stringify({
+    schema: 1,
+    overrides: [{
+      engine: 'GLM-5.3',
+      runner: 'grok',
+      role: 'consult',
+      reason: 'vision-guard fixture',
+      operator: 'vision-guard.test',
+      expires: '2099-01-01',
+    }],
+  }));
+  const res = cp.spawnSync('bash', [
+    CONSULT_SH,
+    '--question-file', question,
+    '--artifact', artifact,
+    '--repo-root', dir,
+    '--dispatch-author-bin', stub,
+    '--timeout', '5s',
+  ], {
+    encoding: 'utf8',
+    cwd: ROOT,
+    timeout: 40000,
+    env: railEnv(dir, {
+      REVIEW_LOOP_CONFIG_OVERRIDE: cfg,
+      AUTOPILOT_QUALIFICATION_OVERRIDE: override,
+    }),
+  });
+  assertRefused(res, marker, /grok\/GLM-5\.3/, question);
+  assert.match(`${res.stdout || ''}`, /vision_refused/);
 });

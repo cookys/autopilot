@@ -98,6 +98,7 @@ capability store overrides that default. `unknown` is not acceptance:
 the file) when an input file is an image by magic bytes and the engine is not
 `supported`. Dispatch rails call the guard before the model runs. Evidence for the
 static rows is in `engine-vision.json`.
+Static unsupported engines: GLM-5.3, Qwen3.8-27B-QUASAR-NVFP4, and deepseek-v4* (`*/deepseek-v4*`).
 
 ## Codex-host native child boundary
 

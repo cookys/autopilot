@@ -1084,7 +1084,7 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
 const FORGE_LABEL_MAX = 30
 const FORGE_FULL_ROWS = 12
 const FORGE_BELOW_MIN_COLS = 26 // the narrowest the mod below is asked for its view (forge-stats draws a one-row summary under this)
-// Owner previews (BL-0359), two choices open until the owner picks: where the speed view sits against the mod below, and whether the label carries the pet (read from codeforge's pet.json).
+// BL-0359 closed. The speed view stays `beside` the mod below, as shipped. The pet on the speed label stays as shipped (`SPEED_LABEL_PET` false) unless the owner asks.
 const SPEED_PLACEMENT: SpeedPlacement = 'beside'
 const SPEED_LABEL_PET = false
 

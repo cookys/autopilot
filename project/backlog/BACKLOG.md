@@ -1005,23 +1005,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/backlog/band-fleet-tab.md
 - **Context**: No approve button on the tab (human-only tty gate); research how a mod reads fleet state first.
 
-### 速度量測與顯示從 forge-stats 移交給 live mod（分頁 ϟ 標籤、速度欄、最近請求表）
-- **Id**: BL-0359
-- **Status**: open
-- **Since**: 2026-11-01
-- **Origin**: peer
-- **Reporter**: codeforge
-- **Report**: 01M6A95050YK4D480QJXK54QDW
-- **Reply**: 2026-11-01 01M6A95N5HQ26507XPERC9JFVJ
-- **Problem**: owner 在 codeforge 的卡片 d-7b0f7a4a 選 A：速度整包改由 autopilot 量測並繪製，含分頁列的 ϟ 標籤、速度欄（平均、最佳、最新、首字、走勢）與最近請求表。forge-stats 之後只畫 Ferris、寵物、記憶與大腦。
-- **Impact**: 移交前 live mod 仍讀 codeforge 的 keyed Box；我們上線並把 sha 告訴 codeforge 後，他們才移除自己的速度程式，中間沒有空窗。
-- **Trigger**: 3.0.0 之後；after 3.0.0-alpha.7 ships (the mods path moves during the relayout, same reason as BL-0358)
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: PEER-REPORTED codeforge 2026-11-01 (fleet message), owner card d-7b0f7a4a
-- **Pointer**: project/backlog/live-speed-handover-from-forge-stats.md
-- **Context**: Algorithm, handover order and the pet-label question are in the sidecar. Show the owner a screenshot before any UI change; reply to codeforge with the sha once live.
-
 ### agent-call SKILL.md 沒有指向 FYI 寄件規則
 - **Id**: BL-0361
 - **Status**: open

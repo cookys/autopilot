@@ -1136,7 +1136,7 @@ export function strip<Id extends string = PaneTab>(u: Ctx, active: Id | null, ta
   return { next, tabs: built.map(({ id, on, label }) => ({ id, on, label })), rule, rows: rows + 1, exact }
 }
 
-// ---- the forge label on the band's left, after the ⓘ: `│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1` (forge-stats answers it; the strip keeps one short `ϟ` tab that opens its full view) ----
+// ---- the forge label on the band's left, after the ⓘ: `│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1` (the live mod draws it itself, BL-0359; the strip keeps one short `ϟ` tab that opens its full view) ----
 // Colours (owner ruling 2026-11-01, d-1081338d; plan section 12.11): the speed is `running` (how fast the running work goes: `ϟ` and the trend), its number default text, its unit dim,
 // the ` · ` `structure`, the pet dim; a speed of `—` (nothing measured) is `idle` as a whole. No new meaning for any role.
 // What the mod below (forge-stats) answers to a one-row ask, read into segments with a semantic role each. This is the ONLY place that reads the answer's shape.

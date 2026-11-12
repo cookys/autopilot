@@ -17,9 +17,14 @@ Each hit needs a card id (`d-` plus exactly eight hex digits, case insensitive) 
 the **same sentence**. The hook uses `scripts/open-decision.js`'s `findCard` reader
 across the invocation cwd's project scopes and checks the canonical `cardState`.
 Only `open` (including legacy absent status) and `awaiting_operator_action` qualify.
-`pending_dispatch`, `closed`, unknown and unreadable cards do not. Opening a card
-elsewhere in the turn, or listing it in a footer, never covers another sentence.
-An unbound or other-root live card in the same project is resolved by that same reader.
+`pending_dispatch`, `closed`, unknown and unreadable cards do not (store lookup
+errors fail closed as uncovered, never escaping into the hook's fail-open catch).
+Opening a card elsewhere in the turn, or listing it in a footer, never covers
+another sentence. In a non-root session, an unbound or other-root live card in
+the same project is resolved by that same reader; in a root-scoped session, a
+card this session opened without `--root-run-id` (unbound scope) does not exempt
+a sentence, and naming it blocks with `close --id <id>` + `open --root-run-id <root>`
+guidance.
 
 Sentence ends are `。？！`, newlines, or ASCII `.?!` followed by whitespace, end of
 text or a CJK/full-width character. Put the id **before** the question mark or final
@@ -78,7 +83,7 @@ file blocked. Usage errors, no inputs or no final assistant text return 2.
 Regression commands:
 
 ```sh
-node --test hooks/owner-question-guard.test.js scripts/replay-stop-guard.test.js
+node --test hooks/owner-question-guard.test.js scripts/replay-stop-guard.test.js hooks/session-root-liveness.test.js
 bash hooks/tests/owner-question-guard.test.sh
 ```
 

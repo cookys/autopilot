@@ -36,7 +36,7 @@ const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
 const CARD_ID = /\bd-[0-9a-f]{8}\b/gi;
 // A textual scheduling reference, not a claim that this hook queried the fleet.
 // ISO calendar day, optionally a UTC/offset timestamp; invalid calendar days do not qualify.
-const FLEET_DUE = /\b(?:fleet\s+task\s+[^\n]*?\s--due(?:=|\s+)|task_id=[A-Za-z0-9][A-Za-z0-9_-]{2,63}\s+due=)["']?(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2}))?)(?=["'\s).,;，。；]|$)/g;
+const FLEET_DUE = /\b(?:fleet\s+task\s+[^\n]*?\s--due(?:=|\s+)|task_id=[A-Za-z0-9][A-Za-z0-9_-]{2,63}\s+due=)["']?(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2}))?)(?=["'\s)\],.;:?!，。；：、）？！】]|$)/g;
 const ESCAPE_PREFIX = 'OWNER-GUARD-FALSE-POSITIVE';
 const MAX_ESCAPES = 8;
 
@@ -165,15 +165,21 @@ function hasDueTask(sentence) {
   });
 }
 
-function hasLiveCard(sentence, cwd) {
+function hasLiveCard(sentence, cwd, excludedIds = null) {
   const ids = [...sentence.matchAll(CARD_ID)];
   if (!ids.length) return false;
-  const { findCard } = require('../scripts/open-decision.js');
-  const { cardState } = require('../src/status/scope-key.js');
-  return ids.some(([id]) => {
-    const card = findCard(cwd, id.toLowerCase(), { all: true });
-    return card && ['open', 'awaiting_operator_action'].includes(cardState(card.entry));
-  });
+  try {
+    const { findCard } = require('../scripts/open-decision.js');
+    const { cardState } = require('../src/status/scope-key.js');
+    return ids.some(([id]) => {
+      const norm = id.toLowerCase();
+      if (excludedIds && excludedIds.has(norm)) return false;
+      const card = findCard(cwd, norm, { all: true });
+      return card && ['open', 'awaiting_operator_action'].includes(cardState(card.entry));
+    });
+  } catch {
+    return false;
+  }
 }
 
 function parseEscape(line) {
@@ -184,10 +190,10 @@ function parseEscape(line) {
   return { sentence: m[2], classes: [...new Set(classes)].sort().join(',') };
 }
 
-function unresolvedHits(text, cwd = process.cwd()) {
+function unresolvedHits(text, cwd = process.cwd(), excludedIds = null) {
   const lines = stripCode(text).split('\n').map((l) => l.trim()).filter((l) => l.startsWith(ESCAPE_PREFIX));
   const escapes = lines.length > MAX_ESCAPES ? [] : lines.map(parseEscape).filter(Boolean);
-  return findHits(text).filter(({ sentence, classes }) => !hasLiveCard(sentence, cwd) && !hasDueTask(sentence)
+  return findHits(text).filter(({ sentence, classes }) => !hasLiveCard(sentence, cwd, excludedIds) && !hasDueTask(sentence)
     && !escapes.some((e) => e.sentence === sentence && e.classes === [...classes].sort().join(',')));
 }
 
@@ -239,14 +245,24 @@ function decide(input) {
   const text = lastAssistantText(fs.readFileSync(tp, 'utf8'));
   if (!text) return null;
   const rs = rootState(input);
-  const hits = unresolvedHits(text, input.cwd || process.cwd());
-  if (!hits.length) return null;
+  const unboundIds = rs.root && rs.unbound.length ? new Set(rs.unbound.map((u) => u.id.toLowerCase())) : null;
+  const hits = unresolvedHits(text, input.cwd || process.cwd(), unboundIds);
+  const mentioned = unboundIds ? new Set([...stripCode(text).matchAll(CARD_ID)].map(([id]) => id.toLowerCase())) : null;
+  const namedUnbound = mentioned ? rs.unbound.filter((u) => mentioned.has(u.id.toLowerCase())) : [];
+  if (!hits.length && !namedUnbound.length) return null;
   const shown = hits.map((h) => `[${h.classes.join(',')}] ${h.sentence}`).join('\n');
   const autonomous = isAutonomous(input.session_id);
   const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
+  const unboundNote = namedUnbound.map((u) =>
+    `回覆提到的卡片 ${u.id} 落在未綁定範圍（本 session 的 root 是 ${rs.root}，root 面板看不到未綁定卡片）：請先執行 node ${OPEN_DECISION_CMD} close --id ${u.id}，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} 重新開卡並更新回覆中的卡號。`
+  ).join('\n');
+  const lead = [
+    ...(unboundNote ? [unboundNote] : []),
+    ...(hits.length ? [`以下句子需要 owner 回答、操作或後續提醒，但同句沒有本地 live 卡片或有 due 的 fleet task：\n${shown}`] : []),
+  ].join('\n');
   return {
     decision: 'block',
-    reason: `以下句子需要 owner 回答、操作或後續提醒，但同句沒有本地 live 卡片或有 due 的 fleet task：\n${shown}\n`
+    reason: `${lead}\n`
       + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --executor <執行者位址> --question <問題> [--background <背景>] --option <標籤>::<說明> --option <標籤>::<說明> [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] --not-authorized <邊界>[:<為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
       + '--not-authorized 必填，邊界只能是 read_only、reversible、external、irreversible（resolve-doa 的行動類別）或 goal-change、scope-expansion、resources-2x、red-line（董事會批准項）；'
       + '本 session 的 DOA 內會自動放行的類別，open 會拒絕（exit 3）。'

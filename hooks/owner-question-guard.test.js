@@ -10,11 +10,28 @@ const { spawnSync } = require('node:child_process');
 const guard = require('./owner-question-guard');
 const cards = require('../scripts/open-decision');
 
+const TEST_GITCONFIG = path.join(__dirname, '..', 'scripts', 'lib', 'test-gitconfig');
+
 function fixture(t) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'owner-guard-test-'));
-  t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
-  // Never let a pre-commit runner's Git environment redirect fixture writes.
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+  const modes = path.join(cwd, 'modes');
+  fs.mkdirSync(modes, { recursive: true });
+  // Never let a pre-commit runner's Git environment redirect in-process or child fixture writes.
+  const savedGit = Object.entries(process.env).filter(([k]) => k.startsWith('GIT_'));
+  const hadModeDir = Object.hasOwn(process.env, 'AUTOPILOT_SESSION_MODE_DIR');
+  const savedModeDir = process.env.AUTOPILOT_SESSION_MODE_DIR;
+  for (const [k] of savedGit) delete process.env[k];
+  process.env.GIT_CONFIG_GLOBAL = TEST_GITCONFIG;
+  process.env.GIT_CONFIG_NOSYSTEM = '1';
+  process.env.AUTOPILOT_SESSION_MODE_DIR = modes;
+  t.after(() => {
+    for (const k of Object.keys(process.env)) if (k.startsWith('GIT_')) delete process.env[k];
+    for (const [k, v] of savedGit) process.env[k] = v;
+    if (hadModeDir) process.env.AUTOPILOT_SESSION_MODE_DIR = savedModeDir;
+    else delete process.env.AUTOPILOT_SESSION_MODE_DIR;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+  const env = { ...process.env };
   assert.equal(spawnSync('git', ['-C', cwd, 'init', '-q'], { env }).status, 0);
   const transcript_path = path.join(cwd, 'turn.jsonl');
   function check(text, extra = {}, before = []) {
@@ -27,7 +44,7 @@ function fixture(t) {
     if (status !== 'open') cards.patchDecision(c.file, c.id, () => ({ status }), { any: true });
     return c.id;
   }
-  return { cwd, transcript_path, check, card };
+  return { cwd, modes, env, transcript_path, check, card };
 }
 
 const replayShapes = [
@@ -104,12 +121,117 @@ test('fleet exemption requires a task and explicit due date in the same sentence
     '`fleet task create check --due 2027-02-01T08:00:00Z`',
     'task_id=task-abc123 due=2027-02-01',
   ]) assert.equal(f.check(`Please run the check (${ref}).`), null, ref);
+  for (const fullSentence of [
+    '你自己執行（fleet task create x --due 2027-02-01）。',
+    '要不要現在處理，或照排程 fleet task create x --due 2027-02-01？',
+    '你自己執行——fleet task create x --due 2027-02-01！',
+    '你自己執行（fleet task create x --due 2027-02-01：已排程）。',
+    '你自己執行（fleet task create x --due 2027-02-01、已排程）。',
+    'Please run the check【fleet task create x --due 2027-02-01】。',
+    'Please run the check [fleet task create x --due 2027-02-01].',
+    'Should I wait, or use fleet task create x --due 2027-02-01?',
+    'Please run the check via fleet task create x --due 2027-02-01!',
+    'Please run the check (fleet task create x --due 2027-02-01: logged).',
+  ]) {
+    assert.ok(guard.findOwnerQuestion(fullSentence), fullSentence);
+    assert.equal(f.check(fullSentence), null, fullSentence);
+  }
   for (const ref of [
     'fleet task create check', 'fleet task create check --due',
     'fleet task create check --due someday', 'task_id=task-abc123',
     'due=2027-02-01', 'fleet task create check --due 2027-02-31',
   ]) assert.equal(f.check(`Please run the check (${ref}).`)?.decision, 'block', ref);
   assert.equal(f.check('Please run the check. fleet task create check --due 2027-02-01.')?.decision, 'block');
+});
+
+test('root-scoped session blocks unbound cards and points to close + reopen with --root-run-id', (t) => {
+  const f = fixture(t);
+  const unbound = f.card('open', null);
+  assert.equal(f.check(`待決卡片 ${unbound}，等你回覆。`), null);
+
+  fs.writeFileSync(path.join(f.modes, 'synthetic.json'), JSON.stringify({
+    session_id: 'synthetic',
+    level: null,
+    repo_root: f.cwd,
+    started_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+    root_run_id: 'root-xyz',
+  }));
+
+  const out = f.check(`待決卡片 ${unbound}，等你回覆。`);
+  assert.equal(out?.decision, 'block');
+  assert.match(out.reason, new RegExp(`${unbound}.*未綁定`));
+  assert.match(out.reason, new RegExp(`close --id ${unbound}`));
+  assert.match(out.reason, /open --root-run-id root-xyz/);
+
+  const statusOut = f.check(`已開立待決卡片 ${unbound}。`);
+  assert.equal(statusOut?.decision, 'block');
+  assert.match(statusOut.reason, new RegExp(`close --id ${unbound}`));
+  assert.match(statusOut.reason, /open --root-run-id root-xyz/);
+
+  assert.equal(f.check('已完成更新，測試通過，沒有待決事項。'), null);
+
+  const bound = f.card('open', 'root-xyz');
+  assert.equal(f.check(`待決卡片 ${bound}，等你回覆。`), null);
+});
+
+test('hasLiveCard fails closed when cwd is not a git repo or card lookup throws', (t) => {
+  const f = fixture(t);
+  const nonGit = fs.mkdtempSync(path.join(os.tmpdir(), 'owner-guard-nongit-'));
+  t.after(() => fs.rmSync(nonGit, { recursive: true, force: true }));
+  const tp = path.join(nonGit, 'turn.jsonl');
+  fs.writeFileSync(tp, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Please confirm d-00000000.' }] } }));
+  assert.equal(guard.decide({ cwd: nonGit, transcript_path: tp, session_id: 'synthetic' })?.decision, 'block');
+
+  const cli = spawnSync(process.execPath, [path.join(__dirname, 'owner-question-guard.js')], {
+    input: JSON.stringify({ cwd: 123, transcript_path: tp, session_id: 'synthetic', stop_hook_active: false }),
+    env: { ...f.env, AUTOPILOT_OWNER_QUESTION_GUARD: 'on', AUTOPILOT_SESSION_MODE_DIR: nonGit },
+    encoding: 'utf8',
+  });
+  assert.equal(cli.status, 0);
+  assert.equal(cli.stderr, '');
+  assert.equal(JSON.parse(cli.stdout).decision, 'block');
+
+  const origFindCard = cards.findCard;
+  t.after(() => { cards.findCard = origFindCard; });
+  cards.findCard = () => { throw new Error('corrupt decision store'); };
+  assert.equal(f.check('Please confirm d-00000000.')?.decision, 'block');
+});
+
+test('fixture strips ambient GIT_* so synthetic cards never land in an outer repo and restores env after', async (t) => {
+  const outer = fs.mkdtempSync(path.join(os.tmpdir(), 'owner-guard-outer-'));
+  t.after(() => fs.rmSync(outer, { recursive: true, force: true }));
+  const initEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
+  initEnv.GIT_CONFIG_GLOBAL = TEST_GITCONFIG;
+  initEnv.GIT_CONFIG_NOSYSTEM = '1';
+  assert.equal(spawnSync('git', ['-C', outer, 'init', '-q'], { env: initEnv }).status, 0);
+  const outerGitDir = path.join(outer, '.git');
+
+  const hadGitDir = Object.hasOwn(process.env, 'GIT_DIR');
+  const prevGitDir = process.env.GIT_DIR;
+  const hadWorkTree = Object.hasOwn(process.env, 'GIT_WORK_TREE');
+  const prevWorkTree = process.env.GIT_WORK_TREE;
+  t.after(() => {
+    if (hadGitDir) process.env.GIT_DIR = prevGitDir; else delete process.env.GIT_DIR;
+    if (hadWorkTree) process.env.GIT_WORK_TREE = prevWorkTree; else delete process.env.GIT_WORK_TREE;
+  });
+  process.env.GIT_DIR = outerGitDir;
+  process.env.GIT_WORK_TREE = outer;
+
+  await t.test('isolated inner fixture', (sub) => {
+    const f = fixture(sub);
+    assert.equal(process.env.GIT_DIR, undefined);
+    assert.equal(process.env.GIT_WORK_TREE, undefined);
+    assert.equal(f.env.GIT_DIR, undefined);
+    assert.equal(f.env.GIT_WORK_TREE, undefined);
+    const id = f.card();
+    assert.equal(f.check(`Please confirm ${id}.`), null);
+    assert.equal(fs.existsSync(path.join(outerGitDir, 'autopilot')), false);
+    assert.equal(fs.existsSync(path.join(f.cwd, '.git', 'autopilot', 'decisions')), true);
+  });
+
+  assert.equal(process.env.GIT_DIR, outerGitDir);
+  assert.equal(process.env.GIT_WORK_TREE, outer);
 });
 
 test('second Stop must block again', (t) => {
@@ -157,7 +279,7 @@ test('negative controls turn the closed-card and second-stop assertions red', (t
     fs.writeFileSync(preload, `const Module=require('node:module'); const load=Module._extensions['.js'];
 Module._extensions['.js']=(m,file)=>file===${JSON.stringify(sourcePath)}
   ? m._compile(${JSON.stringify(source.replace(before, after))},file) : load(m,file);\n`);
-    const env = { ...process.env };
+    const env = { ...f.env };
     delete env.NODE_TEST_CONTEXT;
     const r = spawnSync(process.execPath, ['--require', preload, '--test', '--test-name-pattern', `^${name}$`, __filename], { encoding: 'utf8', env });
     assert.equal(r.status, 1, `${name}: mutant must fail\n${r.stdout}\n${r.stderr}`);

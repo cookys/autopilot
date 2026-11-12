@@ -135,11 +135,11 @@ test('turn scope (UserPromptSubmit) records the root of an expired-but-live sess
 });
 
 // --- owner-question-guard (step 4) ---
-function guard(t, sid, assistantText) {
+function guard(t, sid, assistantText, stopHookActive = false) {
   const tp = path.join(t.base, 'tr.jsonl');
   fs.writeFileSync(tp, `${JSON.stringify({ type: 'user', message: { role: 'user', content: 'hi' } })}\n${JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: assistantText }] } })}\n`);
   const r = spawnSync(process.execPath, [path.join(ROOT, 'hooks', 'owner-question-guard.js')], {
-    input: JSON.stringify({ session_id: sid, cwd: t.repo, transcript_path: tp, stop_hook_active: false }), env: env(t, { AUTOPILOT_OWNER_QUESTION_GUARD: 'on' }), encoding: 'utf8',
+    input: JSON.stringify({ session_id: sid, cwd: t.repo, transcript_path: tp, stop_hook_active: stopHookActive }), env: env(t, { AUTOPILOT_OWNER_QUESTION_GUARD: 'on' }), encoding: 'utf8',
   });
   return r.stdout.trim() ? JSON.parse(r.stdout) : null;
 }
@@ -159,17 +159,19 @@ test('guard: no root => no --root-run-id demanded, message says the card will be
   assert.match(out.reason, /沒有可用的 root/);
 });
 
-test('guard: a reply naming a card that sits in the UNBOUND scope is blocked once, pointing at close + reopen with the root', () => {
+test('guard: root-scoped unbound card blocks (including repeated Stop) with close + reopen; non-root same-sentence live card exempts', () => {
   const t = fixture('l'); marker(t, 's1', { expiredHoursAgo: 30 });
   const c = openCard(t, 's1'); // unbound (no turn file)
   const id = c.stdout.trim();
+  assert.strictEqual(guard(t, 's1', `待決卡片 ${id}，等你回覆。`), null);
   marker(t, 's1'); // the session now has a live root (marker renewed) but the card is already unbound
   const out = guard(t, 's1', `待決卡片 ${id}，等你回覆。`);
   assert.strictEqual(out.decision, 'block');
   assert.match(out.reason, new RegExp(`${id}.*未綁定`));
   assert.match(out.reason, /close --id d-[0-9a-f]{8}/);
   assert.match(out.reason, /--root-run-id root-abc/);
-  // a card that is bound passes silently
+  assert.strictEqual(guard(t, 's1', `待決卡片 ${id}，等你回覆。`, true).decision, 'block');
+  // a card that is bound in the same sentence passes silently
   const c2 = openCard(t, 's1', ['--root-run-id', 'root-abc']);
   assert.strictEqual(guard(t, 's1', `待決卡片 ${c2.stdout.trim()}，等你回覆。`), null);
 });

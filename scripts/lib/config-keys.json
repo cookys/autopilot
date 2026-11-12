@@ -1341,7 +1341,7 @@
       "audience": "internal",
       "class": "path_seam",
       "default": null,
-      "readers": ["scripts/lib/fleet-decision.js", "scripts/profile-health.js", "scripts/quota-provider-sync.js"],
+      "readers": ["scripts/lib/fleet-decision.js", "scripts/noncq.js", "scripts/profile-health.js", "scripts/quota-provider-sync.js"],
       "doc": null,
       "relates": [],
       "note": "Path of the fleet binary used by fleet-decision.js, profile-health.js and quota-provider-sync.js (default: fleet on PATH). Tests point it at a stub."
@@ -1374,10 +1374,43 @@
       "audience": "internal",
       "class": "test_seam",
       "default": null,
-      "readers": ["scripts/profile-health.js"],
+      "readers": ["scripts/noncq.js", "scripts/profile-health.js"],
       "doc": null,
       "relates": [],
-      "note": "ISO time that replaces the clock in profile-health.js so tests get deterministic days-left."
+      "note": "ISO time that replaces the clock in profile-health.js so tests get deterministic days-left. Also used by scripts/noncq.js for deterministic ids, expiry and empty cooldown."
+    },
+    {
+      "name": "AUTOPILOT_NONCQ_DIR",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "~/.autopilot/noncq",
+      "readers": ["scripts/noncq.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_NONCQ_REPORT_TO", "AUTOPILOT_FLEET_BIN"],
+      "summary": "Queue root for scripts/noncq.js (non-Claude work queue). Created 0700. Persistent on purpose."
+    },
+    {
+      "name": "AUTOPILOT_NONCQ_REPORT_TO",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": ["scripts/noncq.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": ["AUTOPILOT_PM_ADDRESS", "AUTOPILOT_NONCQ_DIR", "AUTOPILOT_FLEET_BIN"],
+      "summary": "Fleet address for [noncq-empty] reports from scripts/noncq.js drain. Falls back to AUTOPILOT_PM_ADDRESS; with neither, drain prints one stderr line only."
+    },
+    {
+      "name": "AUTOPILOT_NONCQ_RAIL_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/noncq.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Directory containing stub dispatch-author.sh / dispatch-review.sh for scripts/noncq.js tests. Default: the scripts/ directory next to noncq.js."
     },
     {
       "name": "AUTOPILOT_RELAY_SEND_BUDGET_MS",
@@ -6181,6 +6214,7 @@
       "group": "accounts",
       "default": null,
       "readers": [
+        "scripts/noncq.js",
         "scripts/profile-health.js",
         "scripts/quota-provider-sync.js"
       ],

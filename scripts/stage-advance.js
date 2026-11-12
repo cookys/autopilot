@@ -65,7 +65,8 @@
 // Exit codes: 0 written; 1 usage / unreadable marker write; 2 no marker, or an invalid --coarse (stderr lists the
 // legal stages); 3 illegal transition or unit-rule
 // violation (stdout {allowed:false, from, to, legal_next, reason}); 6 `--resume-from` refused; 4 bump required (stdout {bump_to, files,
-// lines}); 5 `size` missing from the marker. One JSON object on stdout, diagnostics on stderr.
+// lines}); 5 `size` missing from the marker, or leaving `plan` with declared `## Inputs` not yet landed on target.
+// One JSON object on stdout, diagnostics on stderr.
 // Node >= 20.10, built-ins only.
 
 const fs = require('fs');
@@ -79,6 +80,7 @@ const { scopeFromCwd } = require('../src/status/project-key');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const STAGE_GRAPH = path.join(__dirname, 'stage-graph.js');
+const CHECK_INPUTS_LANDED = path.join(__dirname, 'check-inputs-landed.js');
 const GRAPH_JSON = path.join(REPO_ROOT, 'references', 'stage-graph.json');
 const LABEL_MAX = 64;
 const UNIT_RE = /^(phase|deliverable):(\d+)\/(\d+)(?::(.*))?$/su;
@@ -334,8 +336,212 @@ function sessionRepoRoot(marker) {
   return identity === marker.repo_identity ? dir : null;
 }
 
-// Pure decision over one marker snapshot. -> { code, out } | { write: patch, out }
-function decide(marker, opts, repoRootArg) {
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// D8b Open Q2 default: "## Inputs" section containing a fenced JSON block `{"inputs":[{"id","sha"}]}`.
+// Empty `{"inputs":[]}` or absent section/fence => null (no declared inputs, no check).
+function extractPlanInputsJson(markdown) {
+  if (typeof markdown !== 'string' || !markdown) return null;
+  const norm = markdown.replace(/\r\n/g, '\n');
+  const heading = /^##[ \t]+Inputs[ \t]*$/im.exec(norm);
+  if (!heading) return null;
+  const rest = norm.slice(heading.index + heading[0].length).replace(/^\n/, '');
+  const nextHeading = /^#{1,2}[ \t]+\S/m.exec(rest);
+  const section = nextHeading ? rest.slice(0, nextHeading.index) : rest;
+  const fence = /```(?:json|jsonc)?[ \t]*\n([\s\S]*?)```/i.exec(section);
+  if (!fence) return null;
+  const raw = fence[1].trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.inputs) && parsed.inputs.length === 0) {
+      return null;
+    }
+  } catch (_e) {
+    // Malformed JSON is handed to check-inputs-landed.js so it fails closed rather than skipping.
+  }
+  return raw;
+}
+
+function readTaskCardPlan(repoRoot, sid) {
+  if (!sid) return null;
+  const cardDir = process.env.AUTOPILOT_TASK_CARD_DIR || path.join(os.homedir(), '.autopilot', 'task-card');
+  const safeId = String(sid).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+  if (!safeId) return null;
+  try {
+    const card = JSON.parse(fs.readFileSync(path.join(cardDir, `${safeId}.json`), 'utf8'));
+    if (!card || card.schema !== 'autopilot.task-card/1' || typeof card.plan !== 'string' || !card.plan.trim()) return null;
+    const p = path.isAbsolute(card.plan) ? card.plan : path.join(repoRoot, card.plan);
+    return fs.existsSync(p) && fs.statSync(p).isFile() ? fs.readFileSync(p, 'utf8') : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function candidatePlanDirs(repoRoot) {
+  const dirs = [];
+  for (const cfgName of ['project-lifecycle-config.md', 'next-config.md', 'dev-flow-config.md']) {
+    try {
+      const txt = fs.readFileSync(path.join(repoRoot, '.claude', cfgName), 'utf8');
+      const m = /(?:Plans directory|Where plans live)\s*:\s*`?([^`\r\n]+?)`?\s*$/im.exec(txt);
+      if (m && m[1] && !path.isAbsolute(m[1])) dirs.push(m[1].replace(/\/+$/, ''));
+    } catch (_e) { /* optional */ }
+  }
+  for (const d of ['project/plans', 'docs/plans']) {
+    if (!dirs.includes(d)) dirs.push(d);
+  }
+  return dirs;
+}
+
+function findPlanFromIndex(repoRoot, branch) {
+  if (!branch) return null;
+  const bRe = new RegExp(`(?:^|\\||\\s)\`?${escapeRegExp(branch)}\`?(?:\\s|\\||$)`);
+  for (const idxRel of ['project/projects/INDEX.md', 'docs/projects/INDEX.md']) {
+    let txt;
+    try { txt = fs.readFileSync(path.join(repoRoot, idxRel), 'utf8'); } catch (_e) { continue; }
+    for (const line of txt.split('\n')) {
+      if (!line.includes('|') || !bRe.test(line)) continue;
+      const link = /\(([^)\s]+\.md)\)/.exec(line);
+      if (!link) continue;
+      const resolved = path.resolve(path.dirname(path.join(repoRoot, idxRel)), link[1]);
+      try {
+        if (fs.statSync(resolved).isFile()) return fs.readFileSync(resolved, 'utf8');
+      } catch (_e) { /* try next */ }
+    }
+  }
+  return null;
+}
+
+function findBranchPlanMarkdown(repoRoot, branch) {
+  const fromIdx = findPlanFromIndex(repoRoot, branch);
+  if (fromIdx !== null) return fromIdx;
+
+  const IGNORED = new Set(['README.md', 'TEMPLATE.md', 'INDEX.md']);
+  const entries = [];
+  for (const relDir of candidatePlanDirs(repoRoot)) {
+    const absDir = path.join(repoRoot, relDir);
+    let names;
+    try { names = fs.readdirSync(absDir); } catch (_e) { continue; }
+    for (const name of names.sort()) {
+      if (!name.endsWith('.md') || IGNORED.has(name)) continue;
+      const full = path.join(absDir, name);
+      try {
+        if (fs.statSync(full).isFile()) entries.push({ name, full });
+      } catch (_e) { /* ignore */ }
+    }
+  }
+  if (entries.length === 0) return null;
+
+  if (branch) {
+    const branchMetaRe = new RegExp(`\\bBranch\\*\\*?\\s*:\\s*\`?${escapeRegExp(branch)}(?:\`|[\\s,;|)]|$)`, 'i');
+    for (const e of entries) {
+      try {
+        const text = fs.readFileSync(e.full, 'utf8');
+        const head = text.split('\n', 40).join('\n');
+        if (branchMetaRe.test(head)) return text;
+      } catch (_e) { /* ignore */ }
+    }
+    const slug = branch.includes('/') ? branch.slice(branch.indexOf('/') + 1) : branch;
+    const flat = branch.replace(/\//g, '-');
+    const namePatterns = [slug, flat].filter(Boolean).map((s) => new RegExp(`^(?:\\d{4}-\\d{2}-\\d{2}-)?${escapeRegExp(s)}\\.md$`, 'i'));
+    for (const e of entries) {
+      if (namePatterns.some((re) => re.test(e.name))) {
+        try { return fs.readFileSync(e.full, 'utf8'); } catch (_e) { /* ignore */ }
+      }
+    }
+  }
+
+  if (entries.length === 1) {
+    try { return fs.readFileSync(entries[0].full, 'utf8'); } catch (_e) { return null; }
+  }
+  return null;
+}
+
+function findSessionPlanMarkdown(repoRoot, sid) {
+  const cardPlan = readTaskCardPlan(repoRoot, sid);
+  if (cardPlan !== null) return cardPlan;
+  const headOut = gitOut(repoRoot, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
+  const branch = headOut === null ? '' : headOut.toString('utf8').trim();
+  return findBranchPlanMarkdown(repoRoot, branch);
+}
+
+function readConfiguredInputsTarget(repoRoot) {
+  const files = [];
+  if (process.env.DEV_FLOW_CONFIG_OVERRIDE) files.push(process.env.DEV_FLOW_CONFIG_OVERRIDE);
+  if (repoRoot) {
+    files.push(path.join(repoRoot, '.claude', 'dev-flow-config.md'));
+    files.push(path.join(repoRoot, '.claude', 'qc-gate-config.md'));
+  }
+  for (const f of files) {
+    let txt;
+    try { txt = fs.readFileSync(f, 'utf8'); } catch (_e) { continue; }
+    for (const line of txt.split('\n')) {
+      const m = /^\s*-\s*inputs_target\s*:\s*(.*?)\s*$/.exec(line);
+      if (!m) continue;
+      const val = m[1].replace(/^`+|`+$/g, '').replace(/^['"]+|['"]+$/g, '').trim();
+      if (val) return val;
+    }
+  }
+  return '';
+}
+
+function resolveInputsTarget(repoRoot, marker) {
+  const configured = readConfiguredInputsTarget(repoRoot);
+  if (configured) return configured;
+  if (marker && typeof marker.base_branch === 'string' && marker.base_branch.trim()) {
+    return marker.base_branch.trim();
+  }
+  const pairs = [['develop', 'origin/develop'], ['main', 'origin/main'], ['master', 'origin/master']];
+  for (const [local, remote] of pairs) {
+    if (gitOut(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/remotes/${remote}^{commit}`]) !== null) {
+      return remote;
+    }
+    if (gitOut(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${local}^{commit}`]) !== null) {
+      return local;
+    }
+  }
+  if (marker && typeof marker.base_ref === 'string' && marker.base_ref.trim()) {
+    return marker.base_ref.trim();
+  }
+  return 'origin/develop';
+}
+
+function checkPlanInputsLanded(repoRoot, marker, sid) {
+  const rawInputs = extractPlanInputsJson(findSessionPlanMarkdown(repoRoot, sid));
+  if (rawInputs === null) return null;
+  const target = resolveInputsTarget(repoRoot, marker);
+  const inputsFile = path.join(os.tmpdir(), `stage-advance-diff-inputs-${process.pid}-${Date.now()}.json`);
+  fs.writeFileSync(inputsFile, `${rawInputs}\n`);
+  let r;
+  try {
+    r = spawnSync(process.execPath, [CHECK_INPUTS_LANDED, '--inputs', inputsFile, '--target', target, '--repo', repoRoot], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+  } finally {
+    try { fs.unlinkSync(inputsFile); } catch (_e) { /* best effort */ }
+  }
+  if (r.status === 0) return null;
+  const stderrText = String(r.stderr || '').trim();
+  const failingIds = [];
+  for (const line of stderrText.split('\n')) {
+    const m = /^NOT-LANDED id=(\S+)/.exec(line.trim());
+    if (m) failingIds.push(m[1]);
+  }
+  const detail = failingIds.length > 0
+    ? `inputs not landed on ${target}: ${failingIds.join(', ')}`
+    : `inputs check failed against ${target}${stderrText ? `: ${stderrText}` : ''}`;
+  return {
+    code: 5,
+    err: `stage-advance: ${detail}${failingIds.length > 0 && stderrText ? `\n${stderrText}` : ''}`,
+    out: { allowed: false, from: 'plan', target, failing_inputs: failingIds, reason: detail },
+  };
+}
+
+// Pure decision over one marker snapshot. -> { code, err?, out } | { patch, out }
+function decide(marker, opts, repoRootArg, sid) {
   const to = opts.to;
   const ids = JSON.parse(fs.readFileSync(GRAPH_JSON, 'utf8')).node_ids;
   if (!ids.includes(to)) throw new Usage(`unknown node "${to}" (want one of ${ids.join('|')})`);
@@ -365,6 +571,12 @@ function decide(marker, opts, repoRootArg) {
   if (uv) {
     const legal = from === null ? [nodes.entry] : graphJson(['next', '--from', from, ...variantFlags(marker, highRisk, from === 'research')]);
     return deny(legal, uv);
+  }
+
+  // D8b Open Q1 default: leaving `plan` runs check-inputs-landed when the session's plan declares `## Inputs`.
+  if (from === 'plan' && to !== 'plan') {
+    const il = checkPlanInputsLanded(repoRoot, marker, sid);
+    if (il) return { code: il.code, err: il.err, out: { ...il.out, from, to } };
   }
 
   // E1 bump: entering verify or qc-gate.
@@ -493,11 +705,11 @@ function run(argv) {
     if (!marker) return { code: 2, err: 'stage-advance: no unexpired session marker for this session (run `session-mode.js set --size <S>` first)', out: null };
     if (!sessionMode.SIZES.includes(marker.size)) return { code: 5, err: 'stage-advance: the marker has no size (run `session-mode.js set --size <S>`)', out: null };
     let d;
-    try { d = decide(marker, opts, repoRootArg); } catch (e) {
+    try { d = decide(marker, opts, repoRootArg, sid); } catch (e) {
       if (e instanceof Usage) return { code: 1, err: `stage-advance: ${e.message}`, out: null };
       return { code: 1, err: `stage-advance: ${e.message}`, out: null };
     }
-    if (!d.patch) return { code: d.code, out: d.out };
+    if (!d.patch) return { code: d.code, err: d.err, out: d.out };
     let result = null;
     let written = null;
     try {
@@ -526,4 +738,11 @@ function main() {
 }
 
 if (require.main === module) process.exit(main());
-module.exports = { run, parseUnit, unitViolation };
+module.exports = {
+  run,
+  parseUnit,
+  unitViolation,
+  extractPlanInputsJson,
+  findSessionPlanMarkdown,
+  resolveInputsTarget,
+};

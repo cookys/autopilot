@@ -1,12 +1,27 @@
 'use strict';
 
-// The three lines an Agent brief is expected to open with. Role is advisory:
-// no hook denies for it. Engine and Lane are enforced by different hooks.
-// Fable/opus add a fourth Cost line (see costLineFor); the session hint names it.
-const BRIEF_HEADER_TEMPLATE = 'Engine: <model>\nRole: <role>\nLane: <slug>';
+// The header lines an autopilot Agent brief is expected to open with. Role is advisory:
+// no hook denies for it. Engine and Lane are enforced by different hooks; Size and
+// Used-by are checked by dispatch-model-guard for autopilot briefs (Lane: present).
+// Fable/opus add a Cost line (see costLineFor); the session hint names it.
+const BRIEF_HEADER_TEMPLATE = 'Engine: <model>\nRole: <role>\nLane: <slug>\nSize: XS|S|M|L|XL\nUsed-by: user|e2e|n/a <reason>';
 
 // Same lane line as hooks/subagent-budget.js (first 5 lines of the brief).
 const LANE_RE = /^Lane:[ \t]*([A-Za-z0-9][A-Za-z0-9._-]{0,63})[ \t]*$/;
+
+// Autopilot dispatch brief metadata (checked within BRIEF_HEAD_WINDOW lines when Lane: is present).
+const SIZE_RE = /^Size:[ \t]*(XS|S|M|L|XL)[ \t]*$/;
+const USED_BY_RE = /^Used-by:[ \t]*(?:(?:user|e2e)(?:[ \t]+\S.*)?|n\/a[ \t]+\S.*)[ \t]*$/;
+const STAGES_RE = /^Stages:[ \t]*\S/;
+
+// Coarse stage lists per size (derived from references/stage-graph.json, D8b Open Q3 default).
+const STAGES_BY_SIZE = Object.freeze({
+  XS: 'build,review,merged',
+  S: 'build,review,merged',
+  M: 'plan,build,review,merged',
+  L: 'explore,plan,build,review,merged,shipped,used',
+  XL: 'explore,plan,build,review,merged,shipped,used',
+});
 
 // A Cost line is present when a head line starts with "Cost:" and a token.
 const COST_LINE_RE = /^Cost:\s*\S/;
@@ -14,7 +29,29 @@ const COST_LINE_RE = /^Cost:\s*\S/;
 const FABLE_OPUS_COST_LINE = 'Cost: 最貴的模型，會燒光共用池；只做最難的判斷，讀檔、搜尋、整理一律派 haiku/sonnet subagent';
 const SONNET_COST_LINE = 'Cost: 中價模型；機械性讀檔與搜尋可再派 haiku';
 
-const { headLines } = require('./brief-head.js');
+const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./brief-head.js');
+
+function hasBriefLane(prompt) {
+  return headLines(prompt, 5).some((line) => LANE_RE.test(line));
+}
+
+function briefSizeFromHead(prompt) {
+  const m = findHeadMatch(prompt, SIZE_RE, BRIEF_HEAD_WINDOW);
+  return m ? m[1] : '';
+}
+
+function hasValidUsedBy(prompt) {
+  return Boolean(findHeadMatch(prompt, USED_BY_RE, BRIEF_HEAD_WINDOW));
+}
+
+function hasStagesHeader(prompt) {
+  return Boolean(findHeadMatch(prompt, STAGES_RE, BRIEF_HEAD_WINDOW));
+}
+
+function stagesLineForSize(size) {
+  const list = typeof size === 'string' ? STAGES_BY_SIZE[size.trim()] : undefined;
+  return list ? `Stages: ${list}` : '';
+}
 
 // Same normalisation as missingBriefHeaders (trim, lower-case). A full id
 // (claude-opus-5-5, claude-fable-5-2) counts as that family. An @-suffixed
@@ -126,7 +163,16 @@ function sessionStartBriefHeaderLine() {
 module.exports = {
   BRIEF_HEADER_TEMPLATE,
   LANE_RE,
+  SIZE_RE,
+  USED_BY_RE,
+  STAGES_RE,
+  STAGES_BY_SIZE,
   COST_LINE_RE,
+  hasBriefLane,
+  briefSizeFromHead,
+  hasValidUsedBy,
+  hasStagesHeader,
+  stagesLineForSize,
   costLineFor,
   missingCostLine,
   missingBriefHeaders,

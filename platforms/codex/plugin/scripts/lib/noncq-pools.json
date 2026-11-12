@@ -1,0 +1,45 @@
+{
+  "grok-cli": {
+    "key": "grok",
+    "runner": "grok",
+    "model": "grok-4.7",
+    "max_parallel": 3
+  },
+  "grok-cli(alias 2)": {
+    "key": "grok",
+    "runner": "grok",
+    "model": "grok-4.7",
+    "max_parallel": 3
+  },
+  "glm": {
+    "key": "glm",
+    "runner": "cc-shim",
+    "endpoint": "glm",
+    "model": "glm-5.3",
+    "max_parallel": 2
+  },
+  "agy": {
+    "key": "agy",
+    "runner": "agy",
+    "model": "gemini-4-carbon-high",
+    "max_parallel": 2
+  },
+  "agy(alias 2)": {
+    "key": "agy",
+    "runner": "agy",
+    "model": "gemini-4-carbon-high",
+    "max_parallel": 2
+  },
+  "agyclaude": {
+    "key": "agyclaude",
+    "runner": "agy",
+    "model": null,
+    "max_parallel": 2
+  },
+  "agyclaude(alias 2)": {
+    "key": "agyclaude",
+    "runner": "agy",
+    "model": null,
+    "max_parallel": 2
+  }
+}

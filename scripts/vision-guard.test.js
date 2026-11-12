@@ -810,7 +810,18 @@ function railEnv(dir, extra) {
 
 function initRepo(dir) {
   const git = (args) => {
-    const res = cp.spawnSync('git', args, { cwd: dir, encoding: 'utf8', env: railEnv(dir) });
+    // test-identity-guard: an argv 'commit' in a *.test.js must carry its own identity.
+    const res = cp.spawnSync('git', args, {
+      cwd: dir,
+      encoding: 'utf8',
+      env: {
+        ...railEnv(dir),
+        GIT_AUTHOR_NAME: 'vision-guard-test',
+        GIT_AUTHOR_EMAIL: 'vision-guard-test@example.invalid',
+        GIT_COMMITTER_NAME: 'vision-guard-test',
+        GIT_COMMITTER_EMAIL: 'vision-guard-test@example.invalid',
+      },
+    });
     assert.strictEqual(res.status, 0, `${args.join(' ')}\n${res.stderr || ''}`);
   };
   git(['init', '-q', '-b', 'develop']);

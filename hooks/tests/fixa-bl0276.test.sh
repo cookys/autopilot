@@ -24,6 +24,7 @@ cp "$REPO_ROOT/hooks/lib/brief-head.js" "$SPACE/hooks/lib/brief-head.js"
 cp "$REPO_ROOT/hooks/lib/brief-header-template.js" "$SPACE/hooks/lib/brief-header-template.js"
 cp "$REPO_ROOT/scripts/lib/config-path.js" "$SPACE/scripts/lib/config-path.js"
 cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$SPACE/scripts/lib/repo-layout.js"
+cp "$REPO_ROOT/scripts/lib/team.js" "$SPACE/scripts/lib/team.js"
 cp "$START_SRC" "$SPACE/src/hooks/handlers/session-start.js"
 printf '%s\n' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Should I continue?"}]}}' > "$TEST_TMP/transcript.jsonl"
 

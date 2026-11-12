@@ -6,7 +6,7 @@
 
 Four lanes sat on menus the operator could not see (read-outside-cwd prompt, AskUserQuestion, hangar needs_human, dev-channel dialog). Ask: wherever a lane (any account/host) waits on the user, show a PM-panel card with context and options; the operator's answer returns to the lane and releases its menu.
 
-Research: `docs/plans/evidence/2026-11-09-menu-cards/research.md`. Facts:
+Research: `project/plans/evidence/2026-11-12-menucard-scope/research.md`. Facts:
 
 - Claude Code 2.1.319 lets a hook answer three of the menus programmatically, and a hook may block for its timeout (default 600 s for command hooks, overridable per hook):
   - **AskUserQuestion**: `PreToolUse` returns `permissionDecision:"allow"` plus `updatedInput` carrying the original `questions` and an `answers` map (question text → option label); allow alone is not enough (hooks doc). `deny` + `permissionDecisionReason` returns a reason to the model.
@@ -65,7 +65,7 @@ fleet repo (fleet lane owns; confirmed 01M709MPCG):
 ### P0 — spikes (S, CPU only, throwaway config dir seeded only with `.credentials.json`, never the real `~/.claude`)
 tmux session on 2.1.319, stub hook waiting on a file:
 - S1: `PreToolUse(AskUserQuestion)` blocking 30 s, 120 s, 700 s, then allow + `updatedInput.answers`: menu drawn? model gets the answer? tool_result? timeout behaviour (menu shown / denied; does empty output return the menu)? does a per-hook `timeout` above 600 s take effect (largest accepted)?
-Acceptance: `docs/plans/evidence/2026-11-09-menu-cards/spikes.md` records each answer (raw payload, screen text); amend only rows a spike contradicts.
+Acceptance: `project/plans/evidence/2026-11-12-menucard-scope/spikes.md` records each answer (raw payload, screen text); amend only rows a spike contradicts.
 
 ### P1 — content and output library (S, no fleet)
 `scripts/lib/menu-card-content.js`:

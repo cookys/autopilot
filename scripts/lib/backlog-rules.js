@@ -17,6 +17,8 @@
  *                         checkQueueLinks(entries, text); isReady(entry, ctx); isQueueForm;
  *                         pointerOk; parseEffortValue; triggerTypeCode; replyOk; replyUnanswered; reportPairs;
  *                         fieldOptedIn; withNextIdMark; blIdEnforced; unansweredReports
+ *                         paddedDeadline(entry | brief or fleet-reply text) -> PADDED_DEADLINE or null;
+ *                         EFFORT_HOURS (the one hour table); PADDED_DEADLINE_MULTIPLIER
  *   on a proposed row     validateProposed(proposed, ctx) -> {fields, row, violations, blocking, warnings}
  *                         assertProposedValid(proposed, ctx) -> same, or throws RuleViolationError
  *                         renderRow(fields) -> the heading row text; proposedFields(proposed) -> {Field: value}
@@ -38,7 +40,7 @@ const TRIGGER_TYPE_WORDS = ['owner', 'event', 'ready', 'peer'];
 const NEW_FIELDS = ['Id', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact'];
 // Queue-form fields are always read on a heading row. They are not part of the reporter-field
 // opt-in (do not add them to NEW_FIELDS). A heading row that carries any of them is queue-form.
-const QUEUE_FIELDS = ['Done-Check', 'Artifact', 'Needs', 'after', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds'];
+const QUEUE_FIELDS = ['Done-Check', 'Artifact', 'Needs', 'after', 'Due', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds'];
 const QUEUE_TEXT_FIELDS = ['Prompt', 'Inputs', 'Feeds'];
 const QUEUE_EFFORT = new Set(['XS', 'S', 'M']);
 const QUEUE_ARTIFACTS = ['code', 'text', 'run'];
@@ -87,6 +89,16 @@ function badEffortDetail(raw) {
   return `${v} (valid: ${loadSizes().join('|')} with optional ! or 急 suffix)`;
 }
 
+// Planning budget in hours for PADDED_DEADLINE. references/stage-graph.json names the
+// sizes and the bump limits; it does not state hours. This is the one table. A one-day
+// due on S (2x = 8h) or M (2x = 16h) is past the budget. The urgent suffix does not
+// change the hours.
+const EFFORT_HOURS = Object.freeze({ XS: 1, S: 4, M: 8, L: 24, XL: 40 });
+// A due span strictly longer than this multiple of the effort budget, with no checkable
+// dependency, is PADDED_DEADLINE. Exactly the multiple is clean. The negative-control
+// mutation rewrites this assignment and only this assignment.
+const PADDED_DEADLINE_MULTIPLIER = 2;
+
 const DEFAULT_CAPS = {
   Title: 120,
   Status: 64,
@@ -99,6 +111,7 @@ const DEFAULT_CAPS = {
   'Done-Check': 200,
   Needs: 120,
   after: 120,
+  Due: 64,
   ms: 64,
   'Used-by': 120,
   'Queued-By': 120,
@@ -625,6 +638,159 @@ function isReady(entry, ctx) {
   return true;
 }
 
+// A dependency counts only as a whole Needs or after token. Free text ("tomorrow",
+// "see BL-0123") does not. `none` and `engine:` do not. A named resource is the
+// `resource:<slug>` token Needs already uses, so a bare word is not a resource.
+const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const CARD_DEP_RE = /^(?:card:)?d-[0-9a-f]{8}$/;
+const RESOURCE_DEP_RE = /^resource:[a-z0-9][a-z0-9._-]*$/;
+const TASK_DEP_RE = /^task:[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$/;
+const BRIEF_FIELD_RE = /^\s*(?:[-*]\s+)?(?:\*\*)?(Due|Deadline|Effort|Since|Start|Needs|after|Status|Trigger-Type)(?:\*\*)?\s*[:：]\s*(.*?)\s*$/;
+
+function depTokens(value) {
+  if (value == null || String(value).trim() === '') return [];
+  return String(value).split(';').map((s) => s.trim()).filter((s) => s !== '');
+}
+
+function depTokenCheckable(token) {
+  const quoted = /^["']([^"']*)["']$/.exec(String(token).trim());
+  const t = quoted ? quoted[1].trim() : String(token).trim();
+  if (t === '' || t === 'none') return false;
+  if (BL_ID_RE.test(t)) return true;
+  if (CARD_DEP_RE.test(t)) return true;
+  if (RESOURCE_DEP_RE.test(t)) return true;
+  if (TASK_DEP_RE.test(t)) return true;
+  if (ULID_RE.test(t)) return true;
+  return false;
+}
+
+function hasCheckableDependency(fields) {
+  return depTokens(fields.Needs).concat(depTokens(fields.after)).some(depTokenCheckable);
+}
+
+function effortHoursOf(raw) {
+  if (raw == null || String(raw).trim() === '') return null;
+  const parsed = parseEffortValue(raw);
+  if (parsed) {
+    const hours = EFFORT_HOURS[parsed.size];
+    if (typeof hours !== 'number') return null;
+    return { hours, size: parsed.size };
+  }
+  const v = String(raw).trim();
+  let m = /^(\d+(?:\.\d+)?)h$/.exec(v);
+  if (m) return { hours: Number(m[1]), size: v };
+  m = /^(\d+(?:\.\d+)?)m$/.exec(v);
+  if (m) return { hours: Number(m[1]) / 60, size: v };
+  m = /^(\d+(?:\.\d+)?)$/.exec(v);
+  if (m) return { hours: Number(m[1]), size: v };
+  return null;
+}
+
+function parseInstant(raw) {
+  const v = String(raw).trim();
+  const day = /^(\d{4}-\d{2}-\d{2})$/.exec(v);
+  if (day) {
+    if (!realCalendarDate(day[1])) return null;
+    const t = Date.parse(day[1] + 'T00:00:00Z');
+    return Number.isNaN(t) ? null : t;
+  }
+  const iso = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})$/.exec(v);
+  if (!iso || !realCalendarDate(iso[1])) return null;
+  const sec = iso[2].length === 5 ? iso[2] + ':00' : iso[2];
+  const t = Date.parse(`${iso[1]}T${sec}${iso[3]}`);
+  return Number.isNaN(t) ? null : t;
+}
+
+// A duration is already a span, so it does not need Since. 1.5h is one unit;
+// 2h30m is a sum; 1.5h30m is not a duration.
+function parseDurationMs(raw) {
+  const v = String(raw).trim();
+  if (!/^(?:\d+(?:\.\d+)?[dhms])+$/.test(v)) return null;
+  const units = v.match(/[dhms]/g) || [];
+  if (/\./.test(v) && units.length !== 1) return null;
+  let ms = 0;
+  const re = /(\d+(?:\.\d+)?)([dhms])/g;
+  let m;
+  while ((m = re.exec(v))) {
+    const n = Number(m[1]);
+    if (!Number.isFinite(n)) return null;
+    ms += n * { d: 86400000, h: 3600000, m: 60000, s: 1000 }[m[2]];
+  }
+  return ms;
+}
+
+function dueSpanMs(fields) {
+  const dueRaw = fields.Due;
+  if (dueRaw == null || String(dueRaw).trim() === '') return null;
+  const dur = parseDurationMs(dueRaw);
+  if (dur != null) return dur;
+  const dueAt = parseInstant(dueRaw);
+  if (dueAt == null) return null;
+  if (fields.Since == null || String(fields.Since).trim() === '') return null;
+  const startAt = parseInstant(fields.Since);
+  if (startAt == null) return null;
+  return dueAt - startAt;
+}
+
+function formatHours(ms) {
+  return String(Math.round((ms / 3600000) * 1000) / 1000);
+}
+
+function fieldsFromText(text) {
+  const fields = {};
+  for (const line of String(text).split(/\r?\n/)) {
+    const m = BRIEF_FIELD_RE.exec(line);
+    if (!m || fields[m[1]] != null) continue;
+    fields[m[1]] = m[2].trim();
+  }
+  if (fields.Due == null && fields.Deadline != null) fields.Due = fields.Deadline;
+  if (fields.Start != null) fields.Since = fields.Start;
+  return fields;
+}
+
+function textNotReady(fields) {
+  const status = fields.Status == null ? '' : String(fields.Status).trim();
+  if (status !== '' && status !== 'open') return true;
+  const tt = fields['Trigger-Type'] == null ? '' : String(fields['Trigger-Type']).trim();
+  return tt !== '' && tt !== 'ready';
+}
+
+// entry (a parsed backlog row) is judged only when it is READY-shaped: Status open,
+// Trigger-Type ready, queue-form. Other blocking violations do not hide this one.
+// A string is a dispatch brief or a fleet reply: judged whenever Due, Effort and the
+// start are measurable, unless the text itself sets Status or Trigger-Type otherwise.
+// Deadline is an alias of Due, and Start of Since, on text only. Returns null when
+// the span is not strictly longer than the multiple, or a dependency is checkable.
+function paddedDeadline(subject) {
+  let fields;
+  if (typeof subject === 'string') {
+    fields = fieldsFromText(subject);
+    if (textNotReady(fields)) return null;
+  } else if (subject && typeof subject === 'object' && subject.fields && typeof subject.fields === 'object') {
+    fields = subject.fields;
+    if (String(fields.Status || '').trim() !== 'open') return null;
+    if (String(fields['Trigger-Type'] || '').trim() !== 'ready') return null;
+    if (!isQueueForm(subject)) return null;
+  } else if (subject && typeof subject === 'object') {
+    fields = subject;
+    if (textNotReady(fields)) return null;
+  } else {
+    return null;
+  }
+  const effort = effortHoursOf(fields.Effort);
+  if (!effort || !(effort.hours > 0) || !Number.isFinite(effort.hours)) return null;
+  const spanMs = dueSpanMs(fields);
+  if (spanMs == null || !Number.isFinite(spanMs)) return null;
+  if (hasCheckableDependency(fields)) return null;
+  const limitMs = PADDED_DEADLINE_MULTIPLIER * effort.hours * 3600000;
+  if (!(spanMs > limitMs)) return null;
+  return {
+    code: 'PADDED_DEADLINE',
+    field: 'Due',
+    detail: `${formatHours(spanMs)}h > ${PADDED_DEADLINE_MULTIPLIER}x ${effort.size} (${formatHours(limitMs)}h) with no checkable dependency`,
+  };
+}
+
 function checkEntry(entry, cfg, repoRoot, now, existsFn) {
   const vios = [];
   if (entry.unparseable) {
@@ -779,6 +945,8 @@ function checkEntry(entry, cfg, repoRoot, now, existsFn) {
   }
   vios.push(...checkReporterFields(entry, fields, title, cfg));
   vios.push(...checkQueueEntry(entry, cfg, repoRoot, existsFn));
+  const padded = paddedDeadline(entry);
+  if (padded) vios.push(Object.assign({ title }, padded));
   return vios;
 }
 
@@ -905,5 +1073,6 @@ module.exports = {
   checkCapsRaised, effectiveCap, isValidDate, splitMulti, replyOk, replyUnanswered, reportPairs, unansweredReports,
   hasNewFields, legacyBytes, blIdEnforced, withNextIdMark, triggerTypeRequired, fieldOptedIn, checkReporterFields, checkEntry,
   isQueueForm, checkQueueLinks, isReady, nextIdFromText, normalizeNextId,
+  EFFORT_HOURS, PADDED_DEADLINE_MULTIPLIER, paddedDeadline,
   RuleViolationError, levelOf, proposedFields, renderRow, entryForFields, validateProposed, assertProposedValid, assertPeerClosable,
 };

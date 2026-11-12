@@ -920,6 +920,104 @@ printf '%s\n' '## Style' '- style: heading' '## Mode' '- mode: block' '## Caps' 
 gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
 assert_eq "$(json_has_code "$GATE_OUT" config_raises_cap)" "yes" "a config may not raise the queue cap"
 
+# --- PADDED_DEADLINE (PM 01M78CC2) ---
+# Hours come from EFFORT_HOURS. Due is measured from Since at UTC midnight.
+# M * 2 is the exact boundary; one hour past it is the first case.
+PD_RULES="$REPO_ROOT/scripts/lib/backlog-rules.js"
+PD_LINE="$(node -e '
+const { EFFORT_HOURS } = require(process.argv[1]);
+const h = EFFORT_HOURS.M;
+const start = Date.parse("2026-11-13T00:00:00Z");
+const iso = (ms) => new Date(ms).toISOString().replace(/\.000Z$/, "Z");
+process.stdout.write(String(h) + " " + iso(start + h * 2 * 3600000) + " " + iso(start + h * 2 * 3600000 + 3600000));
+' "$PD_RULES")"
+read -r PD_M_HOURS PD_EXACT PD_OVER <<<"$PD_LINE"
+pd_file() { # <dir> <title> <effort> <due> <needs, empty omits the line> [trigger-type]
+  local needs="$5" tt="${6:-ready}"
+  {
+    printf '<!-- next-id: BL-0002 -->\n\n'
+    qhead "$2" BL-0001 | sed \
+      -e "s/- \*\*Effort\*\*: S/- **Effort**: $3/" \
+      -e "s/- \*\*Trigger-Type\*\*: ready/- **Trigger-Type**: $tt/" \
+      -e '/- \*\*Needs\*\*: none/d'
+    printf '%s\n' "- **Since**: 2026-11-13" "- **Due**: $4"
+    if [ -n "$needs" ]; then printf '%s\n' "- **Needs**: $needs"; fi
+  } > "$1/docs/BACKLOG.md"
+}
+
+d="$(repo pd-none)"
+pd_file "$d" 'Padded no needs' M "$PD_OVER" ''
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" PADDED_DEADLINE)" "yes" "M due past 2x with no Needs is PADDED_DEADLINE (${PD_M_HOURS}h, due $PD_OVER)"
+PD_FIRST="$d"
+# Negative control. The first case is red only while PADDED_DEADLINE_MULTIPLIER is 2.
+# Rewrite that one assignment to Infinity and the same row is not flagged, so the
+# assertion above would go red. How:
+#   sed -i 's/const PADDED_DEADLINE_MULTIPLIER = 2;/const PADDED_DEADLINE_MULTIPLIER = Infinity;/' scripts/lib/backlog-rules.js
+m="$(mutate padded 's/const PADDED_DEADLINE_MULTIPLIER = 2;/const PADDED_DEADLINE_MULTIPLIER = Infinity;/')"
+gate_run "$m" "$PD_FIRST"
+assert_eq "$(json_has_code "$GATE_OUT" PADDED_DEADLINE)" "no" "Infinity multiplier: the first case is not flagged"
+
+d="$(repo pd-bl)"
+pd_file "$d" 'Padded backlog dep' M "$PD_OVER" 'BL-0123'
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" PADDED_DEADLINE)" "no" "Needs: BL-0123 is a checkable dependency, so PADDED_DEADLINE is absent"
+assert_eq "$(json_has_code "$GATE_OUT" bad_needs)" "yes" "Needs: BL-0123 stays bad_needs; the dependency rule does not widen needsOk"
+
+d="$(repo pd-tomorrow)"
+pd_file "$d" 'Padded tomorrow' M "$PD_OVER" '"tomorrow"'
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" PADDED_DEADLINE)" "yes" "Needs: \"tomorrow\" is not a checkable dependency"
+
+d="$(repo pd-exact)"
+pd_file "$d" 'Exact two times' M "$PD_EXACT" 'none'
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "exactly 2x (${PD_EXACT}) with Needs: none is clean"
+
+d="$(repo pd-event)"
+pd_file "$d" 'Event due' M "$PD_OVER" 'none' event
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" PADDED_DEADLINE)" "no" "Trigger-Type event is not a READY row, so the same due is not flagged"
+
+pd_fn="$(node - "$PD_RULES" "$PD_EXACT" "$PD_OVER" <<'NODE'
+const { paddedDeadline, EFFORT_HOURS, PADDED_DEADLINE_MULTIPLIER } = require(process.argv[2]);
+const exact = process.argv[3];
+const over = process.argv[4];
+const limit = EFFORT_HOURS.M * PADDED_DEADLINE_MULTIPLIER;
+const fails = [];
+function check(cond, msg) { if (!cond) fails.push(msg); }
+const brief = paddedDeadline("Effort: M\nDue: " + (limit + 1) + "h\n");
+check(brief && brief.code === "PADDED_DEADLINE" && String(brief.detail).indexOf(limit + "h") >= 0, "padded brief");
+check(paddedDeadline("Effort: M\nDue: " + (limit + 1) + "h\nNeeds: BL-0123\n") == null, "brief Needs BL-0123");
+check(paddedDeadline("Effort: M\nDue: " + (limit + 1) + "h\nNeeds: \"tomorrow\"\n") != null, "brief Needs tomorrow");
+check(paddedDeadline("Effort: M\nSince: 2026-11-13\nDue: " + exact + "\n") == null, "brief exactly 2x");
+const reply = paddedDeadline("Effort: M\nStart: 2026-11-13T00:00:00Z\nDeadline: " + over + "\n");
+check(reply && reply.code === "PADDED_DEADLINE", "fleet reply uses paddedDeadline");
+check(paddedDeadline("Effort: M\nDue: " + (limit + 1) + "h\nafter: BL-0123\n") == null, "after BL-0123");
+process.stdout.write(fails.join("|"));
+NODE
+)"
+assert_eq "$pd_fn" "" "paddedDeadline on a brief and a fleet reply ($pd_fn)"
+
+pd_brief="$TEST_TMP/padded-brief.txt"
+node -e '
+const { EFFORT_HOURS, PADDED_DEADLINE_MULTIPLIER } = require(process.argv[1]);
+const limit = EFFORT_HOURS.M * PADDED_DEADLINE_MULTIPLIER;
+require("fs").writeFileSync(process.argv[2], "Effort: M\nDue: " + (limit + 1) + "h\n");
+' "$PD_RULES" "$pd_brief"
+set +e
+pd_out="$(timeout 30 "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch bl/padded-deadline-probe --prompt-file "$pd_brief" 2>&1)"
+pd_rc=$?
+set -e
+assert_eq "$pd_rc" "2" "dispatch guard refuses a padded brief (exit $pd_rc)"
+assert_contains "$pd_out" "PADDED_DEADLINE" "dispatch guard returns the rule name"
+PD_LIMIT=$((PD_M_HOURS * 2))
+assert_contains "$pd_out" "(${PD_LIMIT}h)" "dispatch guard detail is the computed 2x budget (${PD_LIMIT}h), not a hardcoded die"
+assert_contains "$pd_out" "2x" "dispatch guard detail names the 2x multiple"
+assert_contains "$pd_out" '"status": "precondition_failed"' "padded brief is precondition_failed"
+assert_contains "$pd_out" '"dispatcher_called": false' "padded brief is returned to the dispatcher"
+assert_contains "$pd_out" '"model_calls": 0' "padded brief does not reach a model call"
+
 # The record-files fixture, resolved from this repo root (the sidecar path is not under the fixture dir).
 FIX="$REPO_ROOT/hooks/tests/fixtures/record-files/base/docs/BACKLOG.md"
 set +e

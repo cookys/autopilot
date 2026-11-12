@@ -20,8 +20,8 @@
  * Origin=peer makes Reporter/Report/Reply mandatory. A `<!-- next-id: BL-NNNN -->` comment is
  * the Id high-water mark: every BL- Id must be below it and unique.
  *
- * Queue-form fields (Done-Check, Artifact, Needs, after, ms, Used-by, Queued-By, Prompt, Inputs,
- * Feeds) are always read on a heading row and are not part of the reporter-field opt-in. A heading
+ * Queue-form fields (Done-Check, Artifact, Needs, after, Due, ms, Used-by, Queued-By, Prompt,
+ * Inputs, Feeds) are always read on a heading row and are not part of the reporter-field opt-in. A heading
  * row that carries any of them is queue-form. Table and checklist styles still treat those lines
  * as extra content. `--ready` lists rows isReady accepts; lint exit is unchanged.
  *
@@ -100,6 +100,7 @@ const CODES = [
   'peer_closed_unanswered', 'problem_has_identifier',
   'effort_too_large', 'done_check_unrunnable', 'bad_artifact', 'bad_needs', 'bad_ms', 'bad_used_by',
   'bad_queued_by', 'text_row_missing_inputs', 'after_cycle', 'after_broken', 'feeds_broken',
+  'PADDED_DEADLINE',
 ];
 
 function usage(code) {
@@ -969,7 +970,7 @@ function miniHeading(fields) {
   const title = fields.Title;
   const keys = ['Id', 'Status', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact',
     'Trigger', 'Trigger-Type', 'Effort', 'Source', 'Pointer', 'Context',
-    'Done-Check', 'Artifact', 'Needs', 'after', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds'];
+    'Done-Check', 'Artifact', 'Needs', 'after', 'Due', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds'];
   const bullets = keys
     .filter((k) => fields[k] != null)
     .map((k) => `- **${k}**: ${fields[k]}`)
@@ -1212,6 +1213,15 @@ function runSelfTest() {
     add('done_check_unrunnable', 'heading', mark(2) + miniHeading({ ...qBase, 'Done-Check': 'TBD' }), ['done_check_unrunnable']);
     add('bad_artifact', 'heading', mark(2) + miniHeading({ ...qBase, Artifact: 'widget' }), ['bad_artifact']);
     add('bad_needs', 'heading', mark(2) + miniHeading({ ...qBase, Needs: 'later' }), ['bad_needs']);
+    // M is 8h in EFFORT_HOURS, so 2x is 16:00Z and 17:00Z is one hour past it. Needs: none
+    // is no dependency. Exactly this set of codes, or the self-test does not match.
+    add('PADDED_DEADLINE', 'heading', mark(2) + miniHeading({
+      ...qBase,
+      Title: 'Padded deadline row',
+      Effort: 'M',
+      Since: '2026-11-13',
+      Due: '2026-11-13T17:00:00Z',
+    }), ['PADDED_DEADLINE']);
     add('bad_ms', 'heading', mark(2) + miniHeading({ ...qBase, ms: 'Step' }), ['bad_ms']);
     add('bad_used_by', 'heading', mark(2) + miniHeading({ ...qBase, 'Used-by': 'n/a short' }), ['bad_used_by']);
     add('bad_queued_by', 'heading', mark(2) + miniHeading({ ...qBase, 'Queued-By': 'ns/c/m' }), ['bad_queued_by']);

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // hooks/askpm-log.js — PM session only. UserPromptSubmit appends the operator's prompt;
-// Stop appends the first two lines of that turn's reply (transcript_path, else the
-// payload's last_assistant_message). One reply per ask: the re-entry after another
+// Stop appends the first two lines of that turn's reply (the payload's
+// last_assistant_message when that string is non-blank, else transcript_path).
+// One reply per ask: the re-entry after another
 // Stop hook blocked (stop_hook_active) still writes when the first Stop wrote nothing,
 // and a second Stop in the same turn does not append again. One jsonl under the account
 // state dir (absolute AUTOPILOT_STATE_DIR, else $XDG_STATE_HOME/autopilot, else
@@ -152,10 +153,14 @@ function onPrompt(input, env) {
   append(env, { schema: SCHEMA, kind: 'ask', at: new Date().toISOString(), text: clip(input.prompt) });
 }
 
-// Transcript first. The Stop payload's last_assistant_message is the same reply
-// when the transcript has not caught up (Claude puts it there so a hook need not
-// parse the file). A missing or unreadable transcript is not fatal.
+// The Stop payload's last_assistant_message is the reply of the turn that is
+// stopping. The transcript can lag: its newest assistant entry may still be a
+// previous turn, with no newer user line. Use the payload whenever it is a
+// non-blank string, and read the transcript only when that field is missing
+// or blank. A missing or unreadable transcript is not fatal.
 function replyBody(input) {
+  const direct = input.last_assistant_message;
+  if (typeof direct === 'string' && direct.trim()) return direct;
   const tp = input.transcript_path;
   if (typeof tp === 'string' && tp !== '') {
     try {
@@ -163,8 +168,6 @@ function replyBody(input) {
       if (text) return text;
     } catch { /* fall through */ }
   }
-  const direct = input.last_assistant_message;
-  if (typeof direct === 'string' && direct.trim()) return direct;
   return null;
 }
 

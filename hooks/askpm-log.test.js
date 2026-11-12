@@ -316,6 +316,33 @@ test('stop_hook_active uses last_assistant_message when the transcript has no re
   assert.deepEqual(replies[0].lines, ['要我合併嗎', '好了']);
 });
 
+test('last_assistant_message wins when the transcript still ends on a previous turn', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-lag-'));
+  const state = path.join(home, 'state');
+  const transcript = path.join(home, 't.jsonl');
+  fs.mkdirSync(state, { recursive: true });
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'console.json'), CONSOLE_OK);
+  // Newest assistant entry is the previous turn. No user line after it, so the
+  // transcript looks complete while the current reply is only on the payload.
+  fs.writeFileSync(transcript, [
+    JSON.stringify({ type: 'user', message: { role: 'user', content: '上一題' } }),
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '上一輪回覆\n舊的' }] } }),
+  ].join('\n') + '\n');
+  const stop = hostStop(home, state, {
+    hook_event_name: 'Stop',
+    session_id: 's',
+    transcript_path: transcript,
+    cwd: home,
+    last_assistant_message: '這一輪回覆\n現在的',
+  });
+  const replies = readRows(state).filter((r) => r.kind === 'reply');
+  fs.rmSync(home, { recursive: true, force: true });
+  assert.equal(stop.status, 0, stop.stderr);
+  assert.equal(replies.length, 1);
+  assert.deepEqual(replies[0].lines, ['這一輪回覆', '現在的']);
+});
+
 test('two Stops in one turn record one reply', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-twice-'));
   const state = path.join(home, 'state');

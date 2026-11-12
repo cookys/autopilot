@@ -4,8 +4,11 @@
  * fleet-card-mirror.js — the PM-side mirror of the cards other hosts' sessions have open (fleetcards phase 1, PM ruling 01M6W4RNP6).
  *
  *   node scripts/fleet-card-mirror.js ingest [--member pm--claude] [--stdin] [--limit N]   read the messages handed to the PM seat, fold every valid
- *                                       `AUTOPILOT-CARD/1` notice into the mirror. Without --stdin it runs `fleet recent --member <seat> --json [--since <cursor>]`
- *                                       (the PM seat's own account; AUTOPILOT_FLEET_BIN overrides the binary). --stdin takes that JSON from stdin instead.
+ *                                       `AUTOPILOT-CARD/1` notice into the mirror. Without --stdin it runs `fleet recent --member <seat> --json --limit 50 [--since <cursor>]`
+ *                                       (the PM seat's own account; AUTOPILOT_FLEET_BIN overrides the binary). fleet refuses `--limit` above 50, so each call
+ *                                       asks for at most 50 and the next page starts at `--since` the newest id. Paging stops when a page is shorter than 50,
+ *                                       when the page reaches the stored cursor (the oldest message this sync still needs), or when the script's `--limit`
+ *                                       window is full. --stdin takes that JSON from stdin instead.
  *   node scripts/fleet-card-mirror.js view [--json] [--now <ISO>]       the read-only model the panel draws: open cards + the to-do list reconciled against them
  *   node scripts/fleet-card-mirror.js sync [--json] [--member <seat>]   ingest, then view (what the live panel runs every 60 s)
  *
@@ -34,6 +37,7 @@ const CLOSED_KEEP_MS = 14 * 24 * 3600 * 1000;
 const MAX_CARDS = 500;
 const MAX_REJECTS = 20;
 const MAX_PAGES = 5;
+const FLEET_PAGE = 50; // `fleet recent --limit` is an integer 1..50; a larger value exits 64
 const CARD_ID = /^d-[0-9a-f]{8}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const CONTROL = /[\u0000-\u001f\u007f\u2028\u2029]/;
@@ -133,14 +137,23 @@ function ingest({ member, stdinText, limit, nowMs }) {
       if (r.error) { m.last_error = r.error; writeMirror(m); return { ok: false, error: r.error, accepted: 0, duplicate: 0, rejected: 0 }; }
       pages = [r];
     } else {
-      let cursor = m.cursor;
-      for (let i = 0; i < MAX_PAGES; i += 1) {
-        const r = fetchRecent(member, cursor, limit);
+      const startCursor = m.cursor || null;
+      let cursor = startCursor;
+      let covered = 0;
+      for (let i = 0; i < MAX_PAGES && covered < limit; i += 1) {
+        const pageLimit = Math.min(FLEET_PAGE, limit - covered);
+        const r = fetchRecent(member, cursor, pageLimit);
         if (r.error) { m.last_error = r.error; writeMirror(m); return { ok: false, error: r.error, accepted: 0, duplicate: 0, rejected: 0 }; }
         pages.push(r);
         const ids = r.messages.map((x) => String(x.message_id || '')).filter(Boolean).sort();
-        if (!r.truncated || ids.length === 0 || ids[ids.length - 1] === cursor) break;
-        cursor = ids[ids.length - 1];
+        covered += ids.filter((id) => !cursor || id > cursor).length;
+        const oldest = ids[0] || '';
+        const newest = ids.length ? ids[ids.length - 1] : '';
+        // a short page has no further page; a cursor that does not move cannot be followed
+        if (r.messages.length < FLEET_PAGE || !newest || newest === cursor) break;
+        // this page already includes the oldest message the sync still needs (the stored cursor)
+        if (startCursor && oldest <= startCursor) break;
+        cursor = newest;
       }
     }
     const out = { ok: true, accepted: 0, duplicate: 0, rejected: 0, error: null };

@@ -1,0 +1,14 @@
+# autopilot:fleet-card-mirror/1
+# Opt-in systemd user unit for the fleet card mirror (PM 01M78C2N).
+# Install with: node scripts/install-fleet-card-mirror.js install
+# That replaces <repo> and writes this file under the user systemd config dir.
+# It does not run systemctl. Enable by hand:
+#   systemctl --user daemon-reload && systemctl --user enable --now fleet-card-mirror.timer
+# This unit opens no credential file. It only runs `fleet recent`.
+[Unit]
+Description=Refresh the fleet card mirror
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env node <repo>/scripts/fleet-card-mirror.js sync
+TimeoutStartSec=60

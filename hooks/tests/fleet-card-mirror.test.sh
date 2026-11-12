@@ -17,7 +17,36 @@ cat > "$STUB/fleet" <<'JS'
 const fs = require('fs'); const D = process.env.STUB_DIR; const a = process.argv.slice(2);
 fs.appendFileSync(D + '/calls.log', JSON.stringify({ args: a, fyi: process.env.FLEET_FYI || null }) + '\n');
 if (a[0] === 'send') { if (fs.existsSync(D + '/send-fails')) process.exit(1); process.stdout.write('{"ok":true}\n'); process.exit(0); }
-if (a[0] === 'recent') { if (fs.existsSync(D + '/recent-fails')) { process.stderr.write('boom\n'); process.exit(1); } process.stdout.write(fs.readFileSync(D + '/recent.json', 'utf8')); process.exit(0); }
+if (a[0] === 'recent') {
+  if (fs.existsSync(D + '/recent-fails')) { process.stderr.write('boom\n'); process.exit(1); }
+  const li = a.indexOf('--limit');
+  const raw = li >= 0 ? a[li + 1] : '';
+  const limitN = Number(raw);
+  if (fs.existsSync(D + '/limit-cap') && (!Number.isInteger(limitN) || limitN < 1 || limitN > 50)) {
+    process.stderr.write("--limit must be an integer 1-50, got '" + raw + "'\n");
+    process.exit(64);
+  }
+  if (fs.existsSync(D + '/page-sizes')) {
+    const sizes = fs.readFileSync(D + '/page-sizes', 'utf8').trim().split(/\s+/).map(Number);
+    const si = a.indexOf('--since');
+    const since = si >= 0 ? a[si + 1] : '';
+    const idAt = (i) => '01PAGE' + String(i).padStart(6, '0');
+    let start = 0;
+    const emit = (from, n) => {
+      const messages = [];
+      for (let i = 0; i < n; i++) messages.push({ message_id: idAt(from + i), from: 'ns/c/m', kind: 'chat', content: 'note' });
+      process.stdout.write(JSON.stringify({ member: 'pm--claude', truncated: false, messages }) + '\n');
+      process.exit(0);
+    };
+    for (const n of sizes) {
+      if (!since || since < idAt(start)) emit(start, n);
+      start += n;
+    }
+    emit(0, 0);
+  }
+  process.stdout.write(fs.readFileSync(D + '/recent.json', 'utf8'));
+  process.exit(0);
+}
 process.exit(1);
 JS
 chmod +x "$STUB/fleet"
@@ -229,4 +258,35 @@ TV2="$(node "$S/fleet-card-mirror.js" view --json < /dev/null)"
 assert_contains "$TV2" '"error":"not JSON"' "todo: a broken file is reported, not guessed"
 rm "$AUTOPILOT_CARD_MIRROR_DIR/fleet-card-todo.json"
 assert_contains "$(node "$S/fleet-card-mirror.js" view --json < /dev/null)" '"present":false' "todo: absent file is absent"
+
+# ---- 9. fleet recent --limit is 1..50; page until the window is covered or a page is short ----
+# The stub exits 64 with fleet's own message for any --limit above 50, and returns 50, then 50, then 12.
+rm -rf "$AUTOPILOT_CARD_MIRROR_DIR"
+touch "$STUB/limit-cap"
+printf '50 50 12\n' > "$STUB/page-sizes"
+reset_calls
+page_sum() { # calls.log -> count|limits|sinces  (a missing --since is "-")
+  node -e 'const fs=require("fs");const calls=fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(JSON.parse).filter(c=>c.args[0]==="recent");const lim=c=>c.args[c.args.indexOf("--limit")+1];const sin=c=>{const i=c.args.indexOf("--since");return i<0?"-":c.args[i+1]};process.stdout.write(calls.length+"|"+calls.map(lim).join(",")+"|"+calls.map(sin).join(","))' "$1"
+}
+node "$S/fleet-card-mirror.js" sync --json < /dev/null > "$TEST_TMP/p9view"
+assert_eq "$(page_sum "$STUB/calls.log")" "3|50,50,50|-,01PAGE000049,01PAGE000099" "paging: three fleet recent calls of --limit 50; --since walks to the newest id"
+assert_eq "$(node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write((v.last_error||"")+"|"+v.stale)' "$TEST_TMP/p9view")" "|false" "paging: sync succeeds (fleet accepted --limit 50; the mirror is fresh)"
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).cursor||"")' "$AUTOPILOT_CARD_MIRROR_DIR/fleet-card-mirror.json")" "01PAGE000111" "paging: cursor is the last id of the short page (50+50+12)"
+# the script's own --limit is the window, not the fleet page: 50 messages cover it, so paging stops on that full page
+rm -rf "$AUTOPILOT_CARD_MIRROR_DIR"
+reset_calls
+node "$S/fleet-card-mirror.js" sync --limit 50 --json < /dev/null > /dev/null
+assert_eq "$(page_sum "$STUB/calls.log")" "1|50|-" "window of 50: stop once the page holds the oldest message the sync needs"
+# a stored cursor is the oldest message already held; the next sync starts there and stops when the page is short
+node -e 'const fs=require("fs");const f=process.argv[1];const m=JSON.parse(fs.readFileSync(f,"utf8"));m.cursor="01PAGE000049";fs.writeFileSync(f,JSON.stringify(m))' "$AUTOPILOT_CARD_MIRROR_DIR/fleet-card-mirror.json"
+reset_calls
+node "$S/fleet-card-mirror.js" sync --json < /dev/null > /dev/null
+assert_eq "$(page_sum "$STUB/calls.log")" "2|50,50|01PAGE000049,01PAGE000099" "stored cursor: do not re-read older messages; stop when a page returns fewer than 50"
+# negative control: sending the whole window as one --limit is what fleet refuses
+mk_mut fleet-card-mirror.js 's/Math.min(FLEET_PAGE, limit - covered)/limit/' && {
+  rm -rf "$TEST_TMP/mirror-mut9"; mkdir -p "$TEST_TMP/mirror-mut9"
+  reset_calls
+  AUTOPILOT_CARD_MIRROR_DIR="$TEST_TMP/mirror-mut9" node "$MUT/scripts/fleet-card-mirror.js" sync --json < /dev/null > "$TEST_TMP/p9mut"
+  assert_contains "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).last_error||"")' "$TEST_TMP/p9mut")" "--limit must be an integer 1-50, got '200'" "limit mutant (one --limit for the whole window): fleet refuses, so the paging check above would be red"
+}
 finalize_test

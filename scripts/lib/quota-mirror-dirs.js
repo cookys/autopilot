@@ -5,7 +5,9 @@
 // when the variable is set, even empty, it replaces the config list) or config.json quota_mirror_dirs.
 // Extra entries are quota directories (the same shape as <live_dir>/quota), not the shared out-dir itself.
 // Merge is per (provider, alias, window kind): the strictly newer observed_at wins; a tie keeps the earlier
-// dir, and the local dir is first, so a tie keeps local. A missing, symlinked or unreadable extra dir is
+// dir, and the local dir is first, so a tie keeps local. When any kept window is not the local row, or there
+// is no local row, record metadata (visibility, token_state, refusal) comes from the winning slot with the
+// newest observed_at, and a tie on that stamp keeps local. A missing, symlinked or unreadable extra dir is
 // skipped. Parsed rows go through parseView / validateRecord; invalid rows are dropped. Only the local
 // courier's row is a candidate (peer rows stay out, the same rule as a null configured namespace).
 // sharedOutDirProblem is the one check for a shared producer --out-dir: it must already exist, must not be
@@ -107,6 +109,26 @@ function keepCandidate(prev, cand) {
   return cand.window.observed_at > prev.window.observed_at;
 }
 
+function slotObservedAt(slot) {
+  const at = slot && slot.window && slot.window.observed_at;
+  return typeof at === 'number' ? at : null;
+}
+
+// Among the windows that won their kind, the newest observed_at supplies record metadata. A tie keeps local.
+function newestMetaSlot(kinds) {
+  let best = null;
+  let bestAt = null;
+  for (const slot of kinds.values()) {
+    const at = slotObservedAt(slot);
+    if (!best) { best = slot; bestAt = at; continue; }
+    const newer = at !== null && (bestAt === null || at > bestAt);
+    const tieLocal = at !== null && at === bestAt && slot.local && !best.local;
+    const bothUntimed = at === null && bestAt === null && slot.local && !best.local;
+    if (newer || tieLocal || bothUntimed) { best = slot; bestAt = at; }
+  }
+  return best;
+}
+
 function accountId(provider, alias) { return `${provider}\0${alias}`; }
 
 // opts: { liveDir, env, home, secrets, provider, alias }. Never throws.
@@ -141,7 +163,7 @@ function readMerged(opts) {
       for (const w of row.record.windows) {
         if (!w || typeof w.kind !== 'string') continue;
         const key = `${id}\0${w.kind}`;
-        const cand = { window: w, local: isLocal };
+        const cand = { window: w, local: isLocal, row };
         if (keepCandidate(slots.get(key), cand)) slots.set(key, cand);
       }
     }
@@ -175,13 +197,13 @@ function readMerged(opts) {
         if (used.has(kind)) continue;
         windows.push(slot.window);
       }
-      record = Object.assign({}, acct.localRow.record, { windows });
+      record = Object.assign({}, newestMetaSlot(kinds).row.record, { windows });
       const rows = acct.localView.rows.map((r) => (r === acct.localRow ? Object.assign({}, r, { record }) : r));
       view = Object.assign({}, acct.localView, { rows });
     } else {
       const windows = [];
       for (const slot of kinds.values()) windows.push(slot.window);
-      const base = acct.extraRow.record;
+      const base = newestMetaSlot(kinds).row.record;
       record = Object.assign({}, base, { windows });
       const row = {
         writer_courier: observation.LOCAL_COURIER,

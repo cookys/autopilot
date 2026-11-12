@@ -117,6 +117,28 @@ test('env AUTOPILOT_QUOTA_MIRROR_DIRS overrides quota_mirror_dirs', () => {
   } finally { w.cleanup(); }
 });
 
+test('a newer extra L3 row supplies metadata, not the older local L1 row', () => {
+  const w = world();
+  try {
+    writeView(path.join(w.live, 'quota'), 'claude', 'a', [], (rec) => {
+      rec.visibility = 'L1';
+      rec.windows = [];
+      rec.token_state = 'invalid';
+      rec.token_state_at = T - 100;
+      rec.refusal = { observed_at: T - 100, retry_at: T + 1200, reason: 'rate_limit' };
+    });
+    writeView(w.extra, 'claude', 'a', [win('rolling_5h', 0.4, T + 50)]);
+    const rec = one(merged(w, { AUTOPILOT_QUOTA_MIRROR_DIRS: w.extra }), 'claude');
+    assert.strictEqual(rec.visibility, 'L3');
+    assert.strictEqual(rec.token_state, 'unknown');
+    assert.strictEqual(rec.token_state_at, null);
+    assert.strictEqual(rec.refusal, null);
+    assert.strictEqual(rec.windows.length, 1);
+    assert.strictEqual(rec.windows[0].utilization, 0.4);
+    assert.strictEqual(rec.windows[0].observed_at, T + 50);
+  } finally { w.cleanup(); }
+});
+
 test('a local refusal row with no windows is still returned', () => {
   const w = world();
   try {

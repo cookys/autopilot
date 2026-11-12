@@ -19,9 +19,11 @@
 // usage-probe and sync-statusline keep writing the live dir.
 // After the producers, runs scripts/g40-real-data/check.sh against the resolved live dir
 // (AUTOPILOT_LIVE_DIR, else the live-state-dir.js chain) and prints that verdict on its own line.
-// Then appends one idle line per Claude alias that has just become idle (BL-0372 task 4): the
+// Then appends one idle line per Claude alias per transition into idle (BL-0372 task 4): the
 // merged mirror shows rolling_5h absent or its resets_at already in the past, and accounts-audit.jsonl
-// has no attempt for that alias in the last 5.5 h. The line is <live_dir>/quota/idle-alias.jsonl.
+// has no attempt for that alias in the last 5.5 h. The same label is not repeated unless activity
+// happened after that line (an audit attempt with ts after the line's observed_at, or rolling_5h
+// resets_at after it). The line is <live_dir>/quota/idle-alias.jsonl.
 // One summary line per step. Child stdout and stderr are discarded, so a credential a child
 // printed is never read back and never printed. This process opens no credential file.
 //
@@ -182,13 +184,28 @@ function lastIdleLabels(file) {
     try { j = JSON.parse(line); } catch (_) { continue; }
     if (!j || typeof j.alias !== 'string') continue;
     if (j.five_hour !== 'absent' && j.five_hour !== 'reset') continue;
-    labels.set(j.alias, j.five_hour);
+    labels.set(j.alias, {
+      five_hour: j.five_hour,
+      observed_at: typeof j.observed_at === 'number' ? j.observed_at : null,
+    });
   }
   return { labels };
 }
 
-// One line per alias per transition into absent or reset. A repeat of the same label does not append.
-// opts: { liveDir, env, home, auditFile, nowMs }. Never throws. Does not read a token.
+// Activity after the previous idle line: a later audit attempt, or a rolling_5h window whose
+// resets_at is newer than that line. Either one means this idle spell is a new transition.
+function activityAfterIdle(prior, record, attempts) {
+  if (!prior || typeof prior.observed_at !== 'number') return false;
+  const at = prior.observed_at;
+  if (attempts.some((r) => r && r.alias === record.alias && r.attempt >= 1 && typeof r.ts === 'number' && r.ts > at * 1000)) return true;
+  const windows = Array.isArray(record.windows) ? record.windows : [];
+  const w = windows.find((x) => x && x.kind === 'rolling_5h');
+  return !!(w && typeof w.resets_at === 'number' && w.resets_at > at);
+}
+
+// One line per alias per transition into absent or reset. The same label is appended again when
+// activity happened after the previous line. opts: { liveDir, env, home, auditFile, nowMs }.
+// Never throws. Does not read a token.
 function appendIdleAliases(opts) {
   const o = opts || {};
   const env = o.env || process.env;
@@ -218,7 +235,8 @@ function appendIdleAliases(opts) {
     if (state === null) continue;
     const recent = attempts.some((r) => r && r.alias === record.alias && r.attempt >= 1 && typeof r.ts === 'number' && r.ts >= cutoff);
     if (recent) continue;
-    if (prior.labels.get(record.alias) === state) continue;
+    const prev = prior.labels.get(record.alias);
+    if (prev && prev.five_hour === state && !activityAfterIdle(prev, record, attempts)) continue;
     appended.push({ alias: record.alias, observed_at: nowS, five_hour: state });
   }
   if (appended.length === 0) return { appended };

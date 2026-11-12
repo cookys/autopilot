@@ -313,6 +313,43 @@ test('idle: a past resets_at writes reset; a future or null resets_at writes not
   } finally { unset.cleanup(); }
 });
 
+function runAt(w, nowS) {
+  return tick.appendIdleAliases({
+    liveDir: w.live, auditFile: w.auditFile, nowMs: nowS * 1000, env: {}, home: w.home,
+  });
+}
+
+test('idle: idle then active then the same label after activity appends again', () => {
+  const w = idleWorld();
+  try {
+    const t0 = IDLE_NOW_S;
+    const activeResets = t0 + 3600;
+    writeClaude(w.live, 'a', [idleWin('rolling_5h', t0 - 10)]);
+    writeClaude(w.live, 'b', [idleWin('weekly')]);
+    const first = runAt(w, t0);
+    const byAlias = (rows) => Object.fromEntries(rows.map((r) => [r.alias, r]));
+    const f = byAlias(first.appended);
+    assert.deepStrictEqual(f.a, { alias: 'a', observed_at: t0, five_hour: 'reset' });
+    assert.deepStrictEqual(f.b, { alias: 'b', observed_at: t0, five_hour: 'absent' });
+    assert.deepStrictEqual(runAt(w, t0).appended, [], 'same label with no later activity does not append');
+
+    writeClaude(w.live, 'a', [idleWin('rolling_5h', activeResets)]);
+    writeClaude(w.live, 'b', [idleWin('rolling_5h', activeResets)]);
+    audit.appendAudit(
+      { alias: 'b', purpose: 'run', attempt: 1, outcome: 'ok' },
+      { path: w.auditFile, now: (t0 + 30) * 1000 },
+    );
+    assert.deepStrictEqual(runAt(w, t0 + 60).appended, []);
+
+    const t2 = t0 + 6 * 3600;
+    writeClaude(w.live, 'a', [idleWin('rolling_5h', activeResets)]);
+    writeClaude(w.live, 'b', [idleWin('weekly')]);
+    const again = byAlias(runAt(w, t2).appended);
+    assert.deepStrictEqual(again.a, { alias: 'a', observed_at: t2, five_hour: 'reset' });
+    assert.deepStrictEqual(again.b, { alias: 'b', observed_at: t2, five_hour: 'absent' });
+  } finally { w.cleanup(); }
+});
+
 test('idle: absent then reset appends a second line', () => {
   const w = idleWorld();
   try {

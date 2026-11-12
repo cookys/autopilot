@@ -17,8 +17,10 @@
 // Results never echo an unvalidated string: a rejection carries a short fixed reason code only.
 // Mirror path: <live_dir>/quota/<provider>/<alias>.json, 0600 in a 0700 directory made through
 // runtime-paths.js ensurePrivateDir; <live_dir> is the caller's resolveLiveDir() base (liveDirOrNull below).
-// A shared producer (opts.shared) writes the same file at 0640 and creates only missing child dirs at 0750.
-// It does not call ensurePrivateDir, which would strip the group bits the other account reads through.
+// A shared producer (opts.shared) writes the same file at 0640 and creates only missing child dirs at 0750,
+// keeping the setgid bit inherited from the shared out-dir (02750). When that directory's group is not
+// this process's primary group, the new directory is chowned to that group so a 0640 file is group-readable
+// by the other account. It does not call ensurePrivateDir, which would strip the group bits.
 // Writers touch only their own row, under an OS flock on <alias>.oslock, taken on a descriptor the writer keeps open (never lost while the writer lives; 2 s wait).
 // Node >= 20.10, built-ins only.
 
@@ -535,6 +537,15 @@ function keepCorrupt(file, dir, base) {
 // view_too_large, write_failed.
 // Create missing layers under a shared out-dir at 0750. Does not chmod an existing ancestor
 // (that ancestor was already checked) and never tightens a directory to 0700.
+// Linux mkdir under a setgid directory inherits S_ISGID and that directory's group; a chmod
+// to plain 0750 strips the bit, so the next layer and a 0640 file take the producer's primary
+// group. Keep the inherited bit. When the ancestor group is not the primary group, chown the
+// new directory to it and set 02750 so later creates inherit that group too.
+function primaryGid() {
+  try { if (typeof process.getgid === 'function') return process.getgid(); } catch (_) { /* none */ }
+  return null;
+}
+
 function ensureSharedMirrorDir(dir) {
   if (typeof dir !== 'string' || !path.isAbsolute(dir)) return { ok: false, reason: 'not_absolute' };
   const missing = [];
@@ -552,11 +563,20 @@ function ensureSharedMirrorDir(dir) {
   if (st.isSymbolicLink()) return { ok: false, reason: 'symlink' };
   if (!st.isDirectory()) return { ok: false, reason: 'not_directory' };
   if ((st.mode & 0o002) !== 0) return { ok: false, reason: 'world_writable' };
+  const primary = primaryGid();
+  const inheritGroup = primary !== null && typeof st.gid === 'number' && st.gid !== primary;
   for (let i = missing.length - 1; i >= 0; i -= 1) {
     try { fs.mkdirSync(missing[i], { mode: 0o750 }); } catch (e) {
       if (!e || e.code !== 'EEXIST') return { ok: false, reason: 'mkdir' };
     }
-    try { fs.chmodSync(missing[i], 0o750); } catch (_) { return { ok: false, reason: 'chmod' }; }
+    try {
+      let mode = 0o750 | (fs.lstatSync(missing[i]).mode & 0o2000);
+      if (inheritGroup) {
+        fs.chownSync(missing[i], -1, st.gid);
+        mode = 0o2750;
+      }
+      fs.chmodSync(missing[i], mode);
+    } catch (_) { return { ok: false, reason: 'chmod' }; }
   }
   return { ok: true, path: path.resolve(dir), reason: null };
 }

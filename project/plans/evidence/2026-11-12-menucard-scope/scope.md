@@ -17,7 +17,7 @@
 
 | 檔案 | 變更 | r2a → 卡片路由 |
 |---|---|---|
-| `scripts/lib/team.js`（新） | 讀 `~/.autopilot/team.json`；缺檔但有本機 courier = lane（fail closed），solo 須明寫 | 取代 P6 `resolve-operator-channel.js` |
+| `scripts/lib/team.js`（新） | 讀 `~/.autopilot/team.json`；缺檔一律 solo（mode 檔出現前不生效）；檔在但壞 JSON、未知角色或讀不了 = lane | 取代 P6 `resolve-operator-channel.js` |
 | `scripts/open-decision.js` | library 與 CLI open 加角色閘：team 且非 PM → exit 4、不寫、指向 `request-decision.js`；PM 端加 `open --from-request <r-id>` | P2 改為角色閘；§4 第 2、3 項 |
 | `hooks/ask-decision.js` | 非 PM team：PreToolUse deny + `permissionDecisionReason` 指向 `request-decision.js`，不開卡；PM / solo 照舊 | P3a 只留 deny |
 | `scripts/request-decision.js`（新） | `send`/`forward`；發 `r-` id 並存本機，送一行 `AUTOPILOT-REQ/1`，設 `waiting_on_operator <r-id>`；read_only/reversible 送 PM exit 3 | 取代 P6 `[操作員決定]` |
@@ -31,7 +31,7 @@
 
 | 測試檔 | 斷言 | 負控制 |
 |---|---|---|
-| `scripts/lib/team.test.js`（新） | 缺檔+courier → lane；明寫 solo → solo；壞 JSON → lane | 缺檔改 solo → 紅 |
+| `scripts/lib/team.test.js`（新） | 缺檔（含 hub.toml）→ solo；明寫 pm/lane/lead/solo；壞 JSON → lane | 缺檔改回依 marker 判 lane → 紅 |
 | `scripts/open-decision-role-gate.test.js`（新） | lane/lead 走 CLI 與 library 皆 exit 4、scope 檔不變；PM、solo 照舊 | 拿掉閘，或只擋 CLI → 紅 |
 | `hooks/tests/ask-decision-gate.test.sh`（新） | 非 PM team → deny JSON、無新 entry；PM/solo → 無輸出、寫 entry | 空輸出放行突變 → 紅 |
 | `scripts/request-decision.test.js`（新，stub fleet） | 一行含問題/選項/建議與 `r-` id；read_only 送 PM exit 3；irreversible 缺 snapshot/blast radius 拒送；憑證被遮 | 拿掉 `redact()` → 紅 |

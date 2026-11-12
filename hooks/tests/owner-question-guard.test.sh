@@ -108,7 +108,6 @@ expect_pass nowait "reply without a wait phrase emits nothing"
 # Non-PM team names an r- id instead of a card. PM and solo still need a d- id.
 mkdir -p "$HOOK_HOME/.autopilot"
 printf '%s\n' '{"role":"lane"}' > "$HOOK_HOME/.autopilot/team.json"
-export AUTOPILOT_COURIER=1
 mk lane_r '可以強制刪嗎？見請求 r-4290499d。'
 expect_pass lane_r "lane with r- id"
 mk lane_none '可以強制刪嗎？你說可以我再刪。'
@@ -129,6 +128,5 @@ printf '%s\n' '{"role":"lane"}' > "$HOOK_HOME/.autopilot/team.json"
 mk lane_d '可以強制刪嗎？見待決 d-4290499d。'
 expect_pass lane_d "lane with a d- id"
 rm -f "$HOOK_HOME/.autopilot/team.json"
-unset AUTOPILOT_COURIER
 
 finalize_test

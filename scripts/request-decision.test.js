@@ -36,7 +36,6 @@ function envOf(s, extra = {}) {
     HOME: s.home,
     AUTOPILOT_FLEET_BIN: s.bin,
     FLEET_LOG: s.log,
-    AUTOPILOT_COURIER: '0',
     AUTOPILOT_CARD_NOTIFY: 'off',
     AUTOPILOT_RUNS_WATCH_AUTOSTART: '0',
     ...extra,

@@ -6,7 +6,6 @@
 REPO="$TEST_TMP/repo"
 mkdir -p "$REPO"
 git -C "$REPO" init -q
-export AUTOPILOT_COURIER=1
 
 payload() {
   node -e 'process.stdout.write(JSON.stringify({tool_name:"AskUserQuestion",session_id:"s1",cwd:process.argv[1],tool_input:{questions:[{question:"要刪嗎？",options:[{label:"刪",description:"刪掉"},{label:"留",description:"留下"}]}]}}))' "$REPO"
@@ -59,13 +58,14 @@ set_role lane
 expect_deny "lane"
 set_role lead
 expect_deny "lead"
-set_role missing
-expect_deny "missing file with courier"
 set_role pm
 expect_write "pm"
 set_role solo
 expect_write "solo"
 set_role missing
-AUTOPILOT_COURIER=0 expect_write "missing file without courier"
+expect_write "missing file is solo"
+mkdir -p "$HOOK_HOME/.config/fleet"
+printf '%s\n' 'hub = "local"' > "$HOOK_HOME/.config/fleet/hub.toml"
+expect_write "missing file with hub.toml is solo"
 
 finalize_test

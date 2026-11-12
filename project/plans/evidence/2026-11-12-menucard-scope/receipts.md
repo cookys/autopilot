@@ -8,15 +8,15 @@ Harness 禁止本工作階段 git commit / push / PR。下列各階段都沒有 
 
 - commit sha: pending harness commit
 - test command: `node --test scripts/lib/team.test.js`
-- pass count: 9（exit 0；含在本輪合併的 `node --test` 26 通過裡）
-- negative control: ENOENT 分支無條件回傳 `solo` → `scripts/lib/team.test.js` 紅
-- red output line: `'solo' !== 'lane'`
+- pass count: 7（exit 0；含在本輪合併的 `node --test` 24 通過裡）
+- negative control: 把缺檔分支改回「本機 hub.toml 存在則 lane」→ `missing file + hub.toml present is solo` 紅。已還原。
+- red output line: `'lane' !== 'solo'`
 
 ## A2 角色閘（`scripts/open-decision.js`）
 
 - commit sha: pending harness commit
 - test command: `node --test scripts/open-decision-role-gate.test.js`
-- pass count: 7（exit 0；含在本輪合併的 `node --test` 26 通過裡）
+- pass count: 7（exit 0；含在本輪合併的 `node --test` 24 通過裡）
 - negative control: library `openDecision` 的角色閘改成 `if (false && routed && routed.code === 4)` → `scripts/open-decision-role-gate.test.js` 紅
 - red output line: `'ok' !== 'error'`
 
@@ -24,7 +24,7 @@ Harness 禁止本工作階段 git commit / push / PR。下列各階段都沒有 
 
 - commit sha: pending harness commit
 - test command: `bash hooks/tests/ask-decision-gate.test.sh`
-- pass count: 21 assertions（exit 0）
+- pass count: 20 assertions（exit 0）
 - negative control: 角色檢查改成 `if (false && role !== 'solo' && role !== 'pm')` → `hooks/tests/ask-decision-gate.test.sh` 紅
 - red output line: `lane: denies: '"permissionDecision":"deny"' not found in output`
 
@@ -32,7 +32,7 @@ Harness 禁止本工作階段 git commit / push / PR。下列各階段都沒有 
 
 - commit sha: pending harness commit
 - test command: `node --test scripts/request-decision.test.js`
-- pass count: 10（exit 0；含在本輪合併的 `node --test` 26 通過裡）
+- pass count: 10（exit 0；含在本輪合併的 `node --test` 24 通過裡）
 - negative control: `scripts/lib/menu-card-content.js` 改成 `const redacted = raw`（不呼叫 `redact()`）→ `scripts/request-decision.test.js` 紅
 - red output line: `credential leaked: sk-ant-abcdefghijklmnopqrst`
 
@@ -50,9 +50,10 @@ Harness 禁止本工作階段 git commit / push / PR。下列各階段都沒有 
 
 ## 本輪終驗（還原後，2026-11-12）
 
-- `node --test scripts/lib/team.test.js scripts/open-decision-role-gate.test.js scripts/request-decision.test.js` → exit 0；tests 26、pass 26、fail 0
-- `bash hooks/tests/ask-decision-gate.test.sh` → exit 0；PASS 21 assertions
+- `node --test scripts/lib/team.test.js scripts/open-decision-role-gate.test.js scripts/request-decision.test.js` → exit 0；tests 24、pass 24、fail 0
+- `bash hooks/tests/ask-decision-gate.test.sh` → exit 0；PASS 20 assertions
 - `bash hooks/tests/owner-question-guard.test.sh` → exit 0；PASS 67 assertions
 - `bash hooks/tests/session-start-token-discipline.test.sh` → exit 0；PASS 13 assertions
 - `scripts/open-decision.test.js` → 檔案不存在，未跑
-- `node scripts/check-claude-md-inventory.js` → exit 0；379 scripts named、379 described；`scripts/CLAUDE.md` 15775/40000 bytes
+- `bash scripts/sync-all.sh --check` → exit 0；`ok: true`；failures 空
+- `node scripts/check-claude-md-inventory.js` → 含在上述 sync-all 裡，exit 0

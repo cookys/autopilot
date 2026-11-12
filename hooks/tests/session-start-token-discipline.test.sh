@@ -88,10 +88,9 @@ mutate_context drop-show "$TEST_TMP/show-removed.json"
 check_pointer "$TEST_TMP/show-removed.json"
 assert_exit_code "$?" 1 "negative control: missing show-tool sentence is rejected"
 
-# Role branch. The run above had no team file and no courier marker, so it stayed solo.
+# Role branch. The run above had no team file, so it stayed solo.
 mkdir -p "$HOOK_HOME/.autopilot"
 printf '%s\n' '{"role":"lane"}' > "$HOOK_HOME/.autopilot/team.json"
-export AUTOPILOT_COURIER=1
 run_hook session-start.js
 assert_exit_code "$__RUN_EXIT" 0 "lane session-start exits 0"
 assert_not_contains "$__RUN_STDOUT" "open a card" "lane context has no open-card line"
@@ -136,6 +135,5 @@ for (const [name, mod] of loaded) {
 JS
 assert_exit_code "$?" 0 "both trees branch by role"
 rm -f "$HOOK_HOME/.autopilot/team.json"
-unset AUTOPILOT_COURIER
 
 finalize_test

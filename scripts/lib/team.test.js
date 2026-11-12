@@ -10,11 +10,9 @@ function withHome(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'team-role-'));
   const prev = {
     HOME: process.env.HOME,
-    AUTOPILOT_COURIER: process.env.AUTOPILOT_COURIER,
     XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
   };
   process.env.HOME = dir;
-  delete process.env.AUTOPILOT_COURIER;
   delete process.env.XDG_CONFIG_HOME;
   try {
     return fn(dir);
@@ -33,43 +31,29 @@ function writeTeam(dir, body) {
   fs.writeFileSync(path.join(d, 'team.json'), body);
 }
 
-test('missing file + courier is lane', () => {
+test('missing file is solo', () => {
   withHome(() => {
-    process.env.AUTOPILOT_COURIER = '1';
     const r = team.resolve();
-    assert.equal(r.role, 'lane');
+    assert.equal(r.role, 'solo');
     assert.equal(r.source, 'default');
+    assert.equal(r.pm, null);
   });
 });
 
-test('missing file + courier marker under this home is lane', () => {
+test('missing file + hub.toml present is solo', () => {
   withHome((dir) => {
     const marker = path.join(dir, '.config', 'fleet');
     fs.mkdirSync(marker, { recursive: true });
     fs.writeFileSync(path.join(marker, 'hub.toml'), 'hub = "local"\n');
-    assert.equal(team.resolve().role, 'lane');
-  });
-});
-
-test('missing file and no courier is solo', () => {
-  withHome(() => {
-    process.env.AUTOPILOT_COURIER = '0';
-    assert.equal(team.resolve().role, 'solo');
-    assert.equal(team.courierPresent(), false);
-  });
-});
-
-test('a courier marker outside this home is not this home', () => {
-  withHome(() => {
-    process.env.XDG_CONFIG_HOME = path.join(os.tmpdir(), 'not-this-home-xdg');
-    assert.equal(team.courierPresent(), false);
-    assert.equal(team.resolve().role, 'solo');
+    const r = team.resolve();
+    assert.equal(r.role, 'solo');
+    assert.equal(r.source, 'default');
+    assert.equal(r.pm, null);
   });
 });
 
 test('explicit solo is solo', () => {
   withHome((dir) => {
-    process.env.AUTOPILOT_COURIER = '1';
     writeTeam(dir, '{"role":"solo"}\n');
     const r = team.resolve();
     assert.equal(r.role, 'solo');

@@ -30,7 +30,6 @@ function childEnv(home) {
   const env = {
     ...process.env,
     HOME: home,
-    AUTOPILOT_COURIER: '1',
     AUTOPILOT_RUNS_WATCH_AUTOSTART: '0',
     AUTOPILOT_CARD_NOTIFY: 'off',
   };
@@ -65,11 +64,9 @@ function withRole(role, fn) {
   writeRole(s.home, role);
   const prev = {
     HOME: process.env.HOME,
-    AUTOPILOT_COURIER: process.env.AUTOPILOT_COURIER,
     XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
   };
   process.env.HOME = s.home;
-  process.env.AUTOPILOT_COURIER = '1';
   delete process.env.XDG_CONFIG_HOME;
   try { return fn(s); } finally {
     for (const [k, v] of Object.entries(prev)) {

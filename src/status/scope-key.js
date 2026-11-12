@@ -61,6 +61,7 @@ function readScopeFile(file, { schema, projectKey, identity }) {
 // ends it) or 'closed' (kept with closed_at + answer). "The entry is in the file" never means "the card is open": every reader that lists cards asks this.
 // Only 'open' is a pending question (待決). awaiting_operator_action and pending_dispatch are LIVE (still shown, still need someone) but never counted
 // as a question. cardState() is the one place that maps a stored status to a state (absent or unknown = open, the pre-field behaviour).
+// operator_steps, last_answer and reask_at are optional entry fields. cardState does not read them. No status value was added for them.
 const CARD_STATUS = ['open', 'awaiting_operator_action', 'pending_dispatch', 'closed'];
 function cardState(e) {
   return e && typeof e === 'object' && CARD_STATUS.includes(e.status) ? e.status : 'open';

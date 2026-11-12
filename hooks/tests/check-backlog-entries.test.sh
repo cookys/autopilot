@@ -694,6 +694,9 @@ ready_ids() {
 has_ready_key() {
   printf '%s' "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write(Object.prototype.hasOwnProperty.call(j,"ready")?"yes":"no")}catch(e){process.stdout.write("x")}})'
 }
+exact_line() { # <text> <line> -> yes/no. The line is the whole line, so an empty Feeds value stays visible.
+  printf '%s\n' "$1" | grep -F -x -e "$2" >/dev/null && printf yes || printf no
+}
 qhead() { # <title> <id> — a valid queue-form code row, no after
   printf '%s\n' "### $1" "- **Id**: $2" \
     '- **Status**: open' \
@@ -727,6 +730,54 @@ m="$(mutate qready 's/if (!queueReadyCore(entry, ctx)) return false;/return fals
 gate_run "$m" "$d" --ready
 assert_eq "$(ready_count "$GATE_OUT")" "0" "READY mutation: the same row is not listed"
 assert_eq "$(codes_of "$GATE_OUT")" "" "READY mutation: lint is unchanged"
+
+# Non-JSON --ready. The six fields and ready_count are lines; the lint JSON stays the last line.
+# Negative control. Those lines are absent when the printer call is skipped:
+#   sed -i 's/if (args.ready && !args.json) printReadyText(report);/if (false) printReadyText(report);/' scripts/check-backlog-entries.js
+d="$(repo q-ready-text)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue code row' BL-0001; } > "$d/docs/BACKLOG.md"
+READY_TEXT_DIR="$d"
+set +e
+HUMAN_OUT="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --ready 2>/dev/null)"
+HUMAN_RC=$?
+set -e
+assert_eq "$HUMAN_RC" "0" "non-JSON --ready keeps the lint exit"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.Id BL-0001")" "yes" "non-JSON --ready prints Id"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.Title Queue code row")" "yes" "non-JSON --ready prints Title"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.Artifact code")" "yes" "non-JSON --ready prints Artifact"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.Needs none")" "yes" "non-JSON --ready prints Needs"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.ms d1.queue")" "yes" "non-JSON --ready prints ms"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.Feeds ")" "yes" "non-JSON --ready prints Feeds"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready_count 1")" "yes" "non-JSON --ready prints ready_count"
+HUMAN_JSON="$(printf '%s\n' "$HUMAN_OUT" | tail -n 1)"
+assert_eq "$(json_exit "$HUMAN_JSON")" "0" "non-JSON --ready keeps the lint JSON exit"
+assert_eq "$(codes_of "$HUMAN_JSON")" "" "non-JSON --ready keeps the lint JSON violations"
+assert_eq "$(ready_count "$HUMAN_JSON")" "1" "non-JSON --ready lint JSON still carries ready_count"
+gate_run "$GATE" "$d" --ready
+assert_eq "$(exact_line "$GATE_OUT" "ready.Id BL-0001")" "no" "--json --ready does not print ready.Id lines"
+assert_eq "$(ready_count "$GATE_OUT")" "1" "--json --ready still reports ready_count"
+d="$(repo q-ready-text-block)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue effort row' BL-0001 | sed 's/- \*\*Effort\*\*: S/- **Effort**: L/'; } > "$d/docs/BACKLOG.md"
+set +e
+HUMAN_OUT="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --ready 2>/dev/null)"
+HUMAN_RC=$?
+set -e
+assert_eq "$HUMAN_RC" "1" "non-JSON --ready keeps a blocking lint exit"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready_count 0")" "yes" "non-JSON --ready prints ready_count 0"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.Id BL-0001")" "no" "a blocked row is not printed as READY"
+HUMAN_JSON="$(printf '%s\n' "$HUMAN_OUT" | tail -n 1)"
+assert_eq "$(json_has_code "$HUMAN_JSON" effort_too_large)" "yes" "non-JSON --ready keeps the lint violation in the JSON"
+m="$(mutate qready-human 's/if (args.ready \&\& !args.json) printReadyText(report);/if (false) printReadyText(report);/')"
+set +e
+HUMAN_OUT="$(node "$m" --backlog "$READY_TEXT_DIR/docs/BACKLOG.md" --mode block --ready 2>/dev/null)"
+HUMAN_RC=$?
+set -e
+assert_eq "$HUMAN_RC" "0" "printer skipped: lint exit stays 0"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready.Id BL-0001")" "no" "printer skipped: Id line is gone"
+assert_eq "$(exact_line "$HUMAN_OUT" "ready_count 1")" "no" "printer skipped: ready_count line is gone"
+HUMAN_JSON="$(printf '%s\n' "$HUMAN_OUT" | tail -n 1)"
+assert_eq "$(ready_count "$HUMAN_JSON")" "1" "printer skipped: JSON ready_count remains"
+assert_eq "$(codes_of "$HUMAN_JSON")" "" "printer skipped: lint JSON is unchanged"
 
 d="$(repo q-effort)"
 { printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue effort row' BL-0001 | sed 's/- \*\*Effort\*\*: S/- **Effort**: L/'; } > "$d/docs/BACKLOG.md"
@@ -910,6 +961,54 @@ d="$(repo q-prompt)"
 { printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue prompt row' BL-0001; printf '%s\n' '- **Prompt**: docs/plans/ok.md'; } > "$d/docs/BACKLOG.md"
 gate_run "$GATE" "$d"
 assert_eq "$(json_has_code "$GATE_OUT" extra_content)" "yes" "Prompt on a code row is extra_content"
+
+# Empty after segments and empty Prompt/Inputs/Feeds bullets are not READY.
+# Negative control for after. Restoring filter(Boolean) drops the empty segment and the row is READY:
+#   sed -i "s/return String(raw).split(';').map((s) => s.trim());/return String(raw).split(';').map((s) => s.trim()).filter(Boolean);/" scripts/lib/backlog-rules.js
+d="$(repo q-after-empty)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue empty after' BL-0001; printf '%s\n' '- **after**:'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --ready
+assert_eq "$(json_has_code "$GATE_OUT" after_broken)" "yes" "empty after is after_broken"
+assert_eq "$(ready_ids "$GATE_OUT")" "" "empty after is not READY"
+d="$(repo q-after-semi)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue semi after' BL-0001; printf '%s\n' '- **after**: ;'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --ready
+assert_eq "$(json_has_code "$GATE_OUT" after_broken)" "yes" "after ';' is after_broken"
+assert_eq "$(ready_ids "$GATE_OUT")" "" "after ';' is not READY"
+d="$(repo q-after-trail)"
+{
+  printf '<!-- next-id: BL-0003 -->\n\n'
+  printf '%s\n' '### Shipped pred' '- **Id**: BL-0001' '- **Status**: shipped v0 2020-01-01' '- **Trigger**: when the fixture runs' '- **Trigger-Type**: event' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' ''
+  qhead 'Queue trail after' BL-0002
+  printf '%s\n' '- **after**: BL-0001;'
+} > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --ready
+assert_eq "$(json_has_code "$GATE_OUT" after_broken)" "yes" "after BL-0001; keeps the empty segment as after_broken"
+assert_eq "$(ready_ids "$GATE_OUT")" "" "a satisfied id plus an empty segment is not READY"
+m="$(mutate q-after-empty 's/return String(raw).split('"'"';'"'"').map((s) => s.trim());/return String(raw).split('"'"';'"'"').map((s) => s.trim()).filter(Boolean);/')"
+gate_run "$m" "$d" --ready
+assert_eq "$(json_has_code "$GATE_OUT" after_broken)" "no" "afterList filter(Boolean): the empty segment is not after_broken"
+assert_eq "$(ready_ids "$GATE_OUT")" "BL-0002" "afterList filter(Boolean): the row is READY again"
+
+# Negative control for text fields. queuePresent treats an empty bullet as absent:
+#   sed -i "s/if (fields\[f\] != null) push('extra_content'/if (queuePresent(fields, f)) push('extra_content'/" scripts/lib/backlog-rules.js
+d="$(repo q-empty-prompt)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue empty prompt' BL-0001; printf '%s\n' '- **Prompt**:' '- **Inputs**:' '- **Feeds**:'; } > "$d/docs/BACKLOG.md"
+EMPTY_TEXT_DIR="$d"
+gate_run "$GATE" "$d" --ready
+assert_contains "$(codes_of "$GATE_OUT")" "extra_content:Prompt:Queue empty prompt" "empty Prompt on a code row is extra_content"
+assert_contains "$(codes_of "$GATE_OUT")" "extra_content:Inputs:Queue empty prompt" "empty Inputs on a code row is extra_content"
+assert_contains "$(codes_of "$GATE_OUT")" "extra_content:Feeds:Queue empty prompt" "empty Feeds on a code row is extra_content"
+assert_eq "$(ready_ids "$GATE_OUT")" "" "empty text fields on a code row are not READY"
+d="$(repo q-empty-run)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue empty run' BL-0001 | sed 's/- \*\*Artifact\*\*: code/- **Artifact**: run/'; printf '%s\n' '- **Prompt**:'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --ready
+assert_eq "$(json_has_code "$GATE_OUT" extra_content)" "yes" "empty Prompt on a run row is extra_content"
+assert_eq "$(ready_ids "$GATE_OUT")" "" "empty Prompt on a run row is not READY"
+m="$(mutate q-empty-prompt 's/if (fields\[f\] != null) push('"'"'extra_content'"'"'/if (queuePresent(fields, f)) push('"'"'extra_content'"'"'/')"
+gate_run "$m" "$EMPTY_TEXT_DIR" --ready
+assert_eq "$(json_has_code "$GATE_OUT" extra_content)" "no" "queuePresent: an empty Prompt bullet is not extra_content"
+assert_eq "$(ready_ids "$GATE_OUT")" "BL-0001" "queuePresent: an empty Prompt row is READY again"
 
 d="$(repo q-caplow)"
 { printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue cap row' BL-0001; } > "$d/docs/BACKLOG.md"

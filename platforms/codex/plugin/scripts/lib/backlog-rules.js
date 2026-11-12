@@ -435,10 +435,12 @@ function rowId(entry) {
   return String(raw == null ? '' : raw).trim();
 }
 
+// Empty segments stay. "- **after**:", "- **after**: ;" and "- **after**: BL-0001;"
+// are after_broken, not a blank a READY row can skip.
 function afterList(entry) {
   const raw = entry && entry.fields && entry.fields.after;
-  if (raw == null || String(raw).trim() === '') return [];
-  return String(raw).split(';').map((s) => s.trim()).filter(Boolean);
+  if (raw == null) return [];
+  return String(raw).split(';').map((s) => s.trim());
 }
 
 function nextIdFromText(text) {
@@ -570,7 +572,8 @@ function checkQueueEntry(entry, cfg, repoRoot, existsFn) {
     if (!queuePresent(fields, 'Feeds')) push('text_row_missing_inputs', 'Feeds', 'Feeds missing');
   } else if (artifact === 'code' || artifact === 'run') {
     for (const f of QUEUE_TEXT_FIELDS) {
-      if (queuePresent(fields, f)) push('extra_content', f, `${f} is only allowed when Artifact is text`);
+      // An empty bullet is present. queuePresent would skip it and leave the row READY.
+      if (fields[f] != null) push('extra_content', f, `${f} is only allowed when Artifact is text`);
     }
   }
   return vios;

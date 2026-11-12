@@ -23,7 +23,10 @@
  * Queue-form fields (Done-Check, Artifact, Needs, after, Due, ms, Used-by, Queued-By, Prompt,
  * Inputs, Feeds) are always read on a heading row and are not part of the reporter-field opt-in. A heading
  * row that carries any of them is queue-form. Table and checklist styles still treat those lines
- * as extra content. `--ready` lists rows isReady accepts; lint exit is unchanged.
+ * as extra content. `--ready` lists rows isReady accepts. Without `--json` each READY row is
+ * printed as `ready.Id`, `ready.Title`, `ready.Artifact`, `ready.Needs`, `ready.ms`, `ready.Feeds`
+ * plus a `ready_count` line, and the lint JSON still follows. `--json` keeps that list on the
+ * report only. The lint exit is unchanged.
  *
  * sidecar_orphan (block, working-tree mode only): a `.md` under `docs/backlog/` (the `backlog/`
  * directory beside the backlog file) whose basename no part of the backlog text mentions.
@@ -1250,6 +1253,19 @@ function runSelfTest() {
       ...qBase, Title: 'Depends dropped', Id: 'BL-0002', after: 'BL-0001',
     }), ['after_broken', 'done_not_moved']);
     add('after_broken-no-mark', 'heading', miniHeading({ ...qBase, Id: 'BL-0002', after: 'BL-0001' }), ['after_broken']);
+    add('after_broken-empty', 'heading', mark(2) + miniHeading({ ...qBase, after: '' }), ['after_broken']);
+    add('after_broken-semi', 'heading', mark(2) + miniHeading({ ...qBase, after: ';' }), ['after_broken']);
+    add('after_broken-trailing-segment', 'heading', mark(3) + miniHeading({
+      ...base, Title: 'Shipped pred', Id: 'BL-0001', Status: 'shipped v0 2020-01-01',
+    }) + '\n' + miniHeading({
+      ...qBase, Title: 'Depends shipped trailing', Id: 'BL-0002', after: 'BL-0001;',
+    }), ['after_broken', 'done_not_moved']);
+    add('extra_content-empty-text-fields', 'heading', mark(2) + miniHeading({
+      ...qBase, Prompt: '', Inputs: '', Feeds: '',
+    }), ['extra_content']);
+    add('extra_content-empty-prompt-run', 'heading', mark(2) + miniHeading({
+      ...qBase, Artifact: 'run', Prompt: '',
+    }), ['extra_content']);
     add('after-open-not-broken', 'heading', mark(3) + miniHeading({
       ...base, Title: 'Open pred', Id: 'BL-0001',
     }) + '\n' + miniHeading({
@@ -1335,10 +1351,31 @@ function runSelfTest() {
       ['ready-needs-not-judged', mark(2) + miniHeading({
         ...qBase, Title: 'Queue needs row', Needs: 'resource:gpu;card:d-0123abcd;engine:local',
       }), ['BL-0001']],
+      ['ready-empty-after', mark(2) + miniHeading({ ...qBase, after: '' }), []],
+      ['ready-semi-after', mark(2) + miniHeading({ ...qBase, after: ';' }), []],
+      ['ready-trail-after', mark(3) + miniHeading({
+        ...base, Title: 'Shipped pred', Id: 'BL-0001', Status: 'shipped v0 2020-01-01',
+      }) + '\n' + miniHeading({
+        ...qBase, Title: 'Depends shipped trailing', Id: 'BL-0002', after: 'BL-0001;',
+      }), []],
+      ['ready-empty-text-fields', mark(2) + miniHeading({
+        ...qBase, Prompt: '', Inputs: '', Feeds: '',
+      }), []],
+      ['ready-empty-prompt-run', mark(2) + miniHeading({
+        ...qBase, Artifact: 'run', Prompt: '',
+      }), []],
     ];
     for (const [name, text, exp] of readyChecks) {
       const got = readyIds(text);
       if (JSON.stringify(got) !== JSON.stringify(exp)) failures.push({ name, expected: exp, got });
+    }
+    {
+      const text = mark(2) + miniHeading({ ...qBase, Prompt: '', Inputs: '', Feeds: '' });
+      const { violations: ev } = collectViolations(text, cfg, tmp, Date.now());
+      const fields = ev.filter((v) => v.code === 'extra_content').map((v) => v.field).sort();
+      if (JSON.stringify(fields) !== JSON.stringify(['Feeds', 'Inputs', 'Prompt'])) {
+        failures.push({ name: 'empty-text-fields', expected: ['Feeds', 'Inputs', 'Prompt'], got: fields });
+      }
     }
     for (const c of cases) {
       const ccfg = mergeConfig(cfg, Object.assign({ style: c.style }, c.extraCfg || {}));
@@ -1431,6 +1468,20 @@ function runReconcile(args) {
   process.exit(report.exit);
 }
 
+// Human lines for `--ready` without `--json`. The JSON lint report is still written
+// after these lines, and the process exit stays report.exit.
+function printReadyText(report) {
+  const rows = Array.isArray(report.ready) ? report.ready : [];
+  const keys = ['Id', 'Title', 'Artifact', 'Needs', 'ms', 'Feeds'];
+  for (const row of rows) {
+    for (const key of keys) {
+      const value = row[key] == null ? '' : String(row[key]);
+      process.stdout.write(`ready.${key} ${value}\n`);
+    }
+  }
+  process.stdout.write(`ready_count ${report.ready_count}\n`);
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.selfTest) {
@@ -1456,6 +1507,7 @@ function main() {
     const u = updateAllowlist(allow, allowPath || args.allowlist, style, annotated);
     if (u !== 0) process.exit(u);
   }
+  if (args.ready && !args.json) printReadyText(report);
   process.stdout.write(JSON.stringify(report) + '\n');
   process.exit(report.exit);
 }

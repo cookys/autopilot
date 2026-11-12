@@ -27,7 +27,7 @@ Caps are UTF-8 **bytes**. The instrument is `scripts/check-backlog-entries.js`; 
 | Done-Check | 200 | queue-form. One backticked command. The linter never runs it: the first token is `node`, `bash`, `sh`, `git`, `test`, `grep`, `python3` or `npm`, or a relative path that exists under the repo root and does not escape it. Prose (`TBD`, `manual`, `n/a`) is `done_check_unrunnable` |
 | Artifact | — | queue-form. `code` · `text` · `run` |
 | Needs | 120 | queue-form. `none`, or `;`-separated `resource:<slug>`, `card:d-` plus exactly 8 lowercase hex digits, `engine:<slug>`. A slug matches `[a-z0-9][a-z0-9._-]*`. Printed for the allocator; READY does not judge it |
-| after | 120 | queue-form, optional. The field label is exactly `after`. `;`-separated `BL-NNNN` ids |
+| after | 120 | queue-form, optional. The field label is exactly `after`. `;`-separated `BL-NNNN` ids. An empty value or an empty `;`-segment is kept and is `after_broken` |
 | Due | 64 | queue-form, optional. A due time. See Due time below. Absent means the row states none |
 | ms | 64 | queue-form. A milestone-step token `[a-z0-9][a-z0-9._-]{0,63}` |
 | Used-by | 120 | queue-form. `user` · `e2e` · `n/a <reason of 8 or more characters>` |
@@ -42,7 +42,7 @@ Several reporters on one row: `；`-separated in Reporter, Report and Reply, pos
 
 **Required**: Title/Status/Trigger/Effort/Source/Pointer always. Trigger-Type is required for new entries: once a file uses the field (or `required_fields` names it), every entry needs one line `- **Trigger-Type**: <value>` directly under Trigger. A file that never mentions it is unchanged. Id, Since, Origin, Problem, Impact only when the config lists them (default: optional, so a project with legacy rows and no config sees no change). Reporter/Report/Reply are required whenever Origin is `peer`.
 
-**Queue-form**: a heading row that carries any of Done-Check, Artifact, Needs, after, Due, ms, Used-by, Queued-By, Prompt, Inputs or Feeds. Those fields are always read; they are not part of the reporter-field opt-in. A checklist line that names one is `extra_content`. A table column that names one is not read. Required in addition to the legacy required fields: Id, Done-Check, Artifact, Needs, ms, Used-by, Queued-By. `Due` is not in that required list. Effort must be `XS`, `S` or `M` (an urgent suffix is allowed); `L` or `XL` is `effort_too_large`. An empty required value is `missing_field`. For `Artifact: text`, Prompt, Inputs and Feeds are required (`text_row_missing_inputs` when one is absent or a path does not exist). For `code` or `run` those three must be absent (`extra_content`). A legacy row that carries none of the queue-form fields is unchanged.
+**Queue-form**: a heading row that carries any of Done-Check, Artifact, Needs, after, Due, ms, Used-by, Queued-By, Prompt, Inputs or Feeds. Those fields are always read; they are not part of the reporter-field opt-in. A checklist line that names one is `extra_content`. A table column that names one is not read. Required in addition to the legacy required fields: Id, Done-Check, Artifact, Needs, ms, Used-by, Queued-By. `Due` is not in that required list. Effort must be `XS`, `S` or `M` (an urgent suffix is allowed); `L` or `XL` is `effort_too_large`. An empty required value is `missing_field`. For `Artifact: text`, Prompt, Inputs and Feeds are required (`text_row_missing_inputs` when one is absent or a path does not exist). For `code` or `run` those three must be absent (`extra_content`); an empty bullet is present and is `extra_content` too. A legacy row that carries none of the queue-form fields is unchanged.
 
 **Opt-in**: Since, Origin, Reporter, Report, Reply, Problem and Impact are read only in a file that opts in — a `<!-- next-id -->` mark, or the field in `required_fields` (Reporter/Report/Reply follow a required Origin). Until then every style parses the entry exactly as the legacy gate did: in a heading or checklist entry such a line is `extra_content`, in a table such a column is ignored, and every check (the pre-push `--range` rule and `check-plan-graduation.js` included) sees that legacy entry. Opting in through `required_fields` is per field: listing Since alone makes Since a read field while an Origin line in the same entry is still `extra_content`; only the next-id mark opts in every field at once. Id keeps its own rule (BL-NNNN only after the same opt-in). A file written by `--to-reporter-fields` carries the mark.
 
@@ -89,7 +89,7 @@ A queue-form code row (no `after`; Prompt, Inputs and Feeds stay absent):
 
 ## READY
 
-`node scripts/check-backlog-entries.js --backlog <file> --ready` adds `ready` and `ready_count` to the JSON report (Id, Title, Artifact, Needs, ms, Feeds). The lint exit is unchanged, so a clean file with zero READY rows still exits 0.
+`node scripts/check-backlog-entries.js --backlog <file> --ready` prints one line per field for each READY row (`ready.Id`, `ready.Title`, `ready.Artifact`, `ready.Needs`, `ready.ms`, `ready.Feeds`) and a `ready_count` line, then the same lint JSON as a run without `--ready`. The lint exit is unchanged, so a clean file with zero READY rows still exits 0 and prints `ready_count 0`. `--json` omits those lines and puts `ready` and `ready_count` on the JSON report only (Id, Title, Artifact, Needs, ms, Feeds).
 
 `isReady(entry, ctx)` (`ctx = {entries, nextId}`) is true only when Status is exactly `open`, Trigger-Type is exactly `ready`, the row is queue-form with no blocking violation, and every `after` id is satisfied. An id is satisfied when that row is absent and its number is below the file's next-id mark, or the row exists with Status `shipped`. Status `dropped` is `after_broken`. An id that is malformed, at or above the next-id mark, or absent when the file has no next-id mark, is `after_broken`. A cycle, including a self-reference, is `after_cycle`; the detail names the cycle (`BL-0002 -> BL-0003 -> BL-0002`, or `BL-0001 -> BL-0001`). An open or fired predecessor is not broken and is not satisfied. `Needs` is not judged here.
 
@@ -150,7 +150,7 @@ The code is blocking, so a flagged row is not listed by `--ready`.
 | bad_queued_by | block | Queued-By is not `<ns>/<courier>/<member> <message-id>` or the same address plus `self` |
 | text_row_missing_inputs | block | `Artifact: text` is missing Prompt, Inputs or Feeds, or a path does not exist |
 | after_cycle | block | `after` ids cycle, including a self-reference; the detail names the cycle |
-| after_broken | block | an `after` id is malformed, at or above next-id, absent with no next-id mark, or Status `dropped` |
+| after_broken | block | an `after` id is malformed, empty, at or above next-id, absent with no next-id mark, or Status `dropped`. An empty `;`-segment is its own id |
 | feeds_broken | block | Feeds is not an Id of a row in this file |
 | PADDED_DEADLINE | block | a READY-shaped row, or a dispatch brief, states a due time longer than 2× its Effort and names no checkable dependency. Exactly 2× is clean |
 

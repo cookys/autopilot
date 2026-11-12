@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0433 -->
+<!-- next-id: BL-0434 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1534,3 +1534,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: hangar report after the 2026-11-12 power cut (fleet message 01M767AX)
 - **Pointer**: project/backlog/quota-cache-after-reboot.md
+
+### Test harnesses leave their own tmux socket and claude process running
+- **Id**: BL-0433
+- **Status**: open
+- **Since**: 2026-11-12
+- **Origin**: peer
+- **Reporter**: PM (pm--claude) via hangar
+- **Report**: 2026-11-12 fleet (PM via hangar)
+- **Reply**: unknown
+- **Problem**: Test harnesses that start their own tmux socket and a claude process (the modscroll repro harness) are not torn down; one was still running on the PM host after 25 days, hangar stopped it on PM go.
+- **Impact**: Orphan claude processes and tmux servers keep running after the test, with a deleted exe and a gone plugin worktree.
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PM report via hangar 2026-11-12
+- **Pointer**: project/backlog/test-tmux-claude-teardown.md

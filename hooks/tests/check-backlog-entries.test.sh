@@ -684,4 +684,257 @@ tt_row 'Leap day' '- **Trigger-Type**: date:2028-02-29' > "$d/docs/BACKLOG.md"
 o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null || true)"
 assert_eq "$(json_exit "$o")" "0" "date:2028-02-29 is a real calendar date"
 
+# --- queue-form rows (heading only) and --ready ---
+ready_count() {
+  printf '%s' "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write(String(j.ready_count))}catch(e){process.stdout.write("x")}})'
+}
+ready_ids() {
+  printf '%s' "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write((j.ready||[]).map(r=>r.Id).join(","))}catch(e){process.stdout.write("x")}})'
+}
+has_ready_key() {
+  printf '%s' "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write(Object.prototype.hasOwnProperty.call(j,"ready")?"yes":"no")}catch(e){process.stdout.write("x")}})'
+}
+qhead() { # <title> <id> — a valid queue-form code row, no after
+  printf '%s\n' "### $1" "- **Id**: $2" \
+    '- **Status**: open' \
+    '- **Trigger**: when the fixture runs' \
+    '- **Trigger-Type**: ready' \
+    '- **Effort**: S' \
+    '- **Source**: suite' \
+    '- **Pointer**: docs/plans/ok.md' \
+    '- **Done-Check**: `node scripts/check-backlog-entries.js --self-test`' \
+    '- **Artifact**: code' \
+    '- **Needs**: none' \
+    '- **ms**: d1.queue' \
+    '- **Used-by**: e2e' \
+    '- **Queued-By**: ns/c/m self'
+}
+
+d="$(repo q-ready)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue code row' BL-0001; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --ready
+assert_eq "$GATE_RC" "0" "valid queue-form code row exits 0"
+assert_eq "$(codes_of "$GATE_OUT")" "" "valid queue-form code row has no violations"
+assert_eq "$(ready_count "$GATE_OUT")" "1" "valid queue-form code row is READY"
+assert_eq "$(ready_ids "$GATE_OUT")" "BL-0001" "--ready lists the code row Id"
+assert_contains "$GATE_OUT" '"Artifact":"code"' "--ready prints Artifact"
+assert_contains "$GATE_OUT" '"Needs":"none"' "--ready prints Needs"
+assert_contains "$GATE_OUT" '"ms":"d1.queue"' "--ready prints ms"
+assert_contains "$GATE_OUT" '"Feeds":""' "--ready prints Feeds"
+gate_run "$GATE" "$d"
+assert_eq "$(has_ready_key "$GATE_OUT")" "no" "without --ready the JSON has no ready key"
+m="$(mutate qready 's/if (!queueReadyCore(entry, ctx)) return false;/return false;/')"
+gate_run "$m" "$d" --ready
+assert_eq "$(ready_count "$GATE_OUT")" "0" "READY mutation: the same row is not listed"
+assert_eq "$(codes_of "$GATE_OUT")" "" "READY mutation: lint is unchanged"
+
+d="$(repo q-effort)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue effort row' BL-0001 | sed 's/- \*\*Effort\*\*: S/- **Effort**: L/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(codes_of "$GATE_OUT")" "effort_too_large:Effort:Queue effort row" "Effort L is effort_too_large"
+m="$(mutate q-effort "s/push('effort_too_large'/push('effort_too_large_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" effort_too_large)" "no" "effort_too_large mutation: the code is gone"
+
+d="$(repo q-tbd)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue tbd row' BL-0001 | sed 's/- \*\*Done-Check\*\*: `node scripts\/check-backlog-entries.js --self-test`/- **Done-Check**: TBD/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(codes_of "$GATE_OUT")" "done_check_unrunnable:Done-Check:Queue tbd row" "Done-Check TBD is unrunnable"
+m="$(mutate q-tbd "s/push('done_check_unrunnable'/push('done_check_unrunnable_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" done_check_unrunnable)" "no" "done_check_unrunnable mutation: the code is gone"
+
+d="$(repo q-artifact)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue artifact row' BL-0001 | sed 's/- \*\*Artifact\*\*: code/- **Artifact**: widget/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_artifact)" "yes" "Artifact widget is bad_artifact"
+m="$(mutate q-artifact "s/push('bad_artifact'/push('bad_artifact_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_artifact)" "no" "bad_artifact mutation: the code is gone"
+
+d="$(repo q-needs)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue needs row' BL-0001 | sed 's/- \*\*Needs\*\*: none/- **Needs**: later/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_needs)" "yes" "Needs later is bad_needs"
+m="$(mutate q-needs "s/push('bad_needs'/push('bad_needs_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_needs)" "no" "bad_needs mutation: the code is gone"
+
+d="$(repo q-ms)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue ms row' BL-0001 | sed 's/- \*\*ms\*\*: d1.queue/- **ms**: Step/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_ms)" "yes" "ms Step is bad_ms"
+m="$(mutate q-ms "s/push('bad_ms'/push('bad_ms_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_ms)" "no" "bad_ms mutation: the code is gone"
+
+d="$(repo q-used)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue used row' BL-0001 | sed 's/- \*\*Used-by\*\*: e2e/- **Used-by**: n\/a short/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_used_by)" "yes" "Used-by n/a short is bad_used_by"
+m="$(mutate q-used "s/push('bad_used_by'/push('bad_used_by_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_used_by)" "no" "bad_used_by mutation: the code is gone"
+
+d="$(repo q-queued)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue queued row' BL-0001 | sed 's/- \*\*Queued-By\*\*: ns\/c\/m self/- **Queued-By**: ns\/c\/m/'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_queued_by)" "yes" "Queued-By with no message id is bad_queued_by"
+m="$(mutate q-queued "s/push('bad_queued_by'/push('bad_queued_by_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" bad_queued_by)" "no" "bad_queued_by mutation: the code is gone"
+
+d="$(repo q-text)"
+cat > "$d/docs/BACKLOG.md" <<'EOF'
+<!-- next-id: BL-0003 -->
+
+### Host legacy row
+- **Id**: BL-0001
+- **Status**: open
+- **Trigger**: when the fixture runs
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: suite
+- **Pointer**: docs/plans/ok.md
+
+### Queue text row
+- **Id**: BL-0002
+- **Status**: open
+- **Trigger**: when the fixture runs
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: suite
+- **Pointer**: docs/plans/ok.md
+- **Done-Check**: `node scripts/check-backlog-entries.js --self-test`
+- **Artifact**: text
+- **Needs**: none
+- **ms**: d1.queue
+- **Used-by**: e2e
+- **Queued-By**: ns/c/m self
+- **Prompt**: docs/plans/ok.md
+- **Feeds**: BL-0001
+EOF
+gate_run "$GATE" "$d"
+assert_eq "$(codes_of "$GATE_OUT")" "text_row_missing_inputs:Inputs:Queue text row" "text row without Inputs is text_row_missing_inputs"
+m="$(mutate q-text "s/push('text_row_missing_inputs'/push('text_row_missing_inputs_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" text_row_missing_inputs)" "no" "text_row_missing_inputs mutation: the code is gone"
+
+d="$(repo q-feeds)"
+cat > "$d/docs/BACKLOG.md" <<'EOF'
+<!-- next-id: BL-0003 -->
+
+### Host legacy row
+- **Id**: BL-0001
+- **Status**: open
+- **Trigger**: when the fixture runs
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: suite
+- **Pointer**: docs/plans/ok.md
+
+### Queue feeds row
+- **Id**: BL-0002
+- **Status**: open
+- **Trigger**: when the fixture runs
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: suite
+- **Pointer**: docs/plans/ok.md
+- **Done-Check**: `node scripts/check-backlog-entries.js --self-test`
+- **Artifact**: text
+- **Needs**: none
+- **ms**: d1.queue
+- **Used-by**: e2e
+- **Queued-By**: ns/c/m self
+- **Prompt**: docs/plans/ok.md
+- **Inputs**: docs/plans/ok.md
+- **Feeds**: BL-0099
+EOF
+gate_run "$GATE" "$d"
+assert_eq "$(codes_of "$GATE_OUT")" "feeds_broken:Feeds:Queue feeds row" "Feeds of a missing id is feeds_broken"
+m="$(mutate q-feeds "s/code: 'feeds_broken'/code: 'feeds_broken_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" feeds_broken)" "no" "feeds_broken mutation: the code is gone"
+
+d="$(repo q-cycle)"
+{
+  printf '<!-- next-id: BL-0004 -->\n\n'
+  qhead 'Queue cycle a' BL-0002
+  printf '%s\n' '- **after**: BL-0003' ''
+  qhead 'Queue cycle b' BL-0003
+  printf '%s\n' '- **after**: BL-0002'
+} > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" after_cycle)" "yes" "BL-0002 <-> BL-0003 is after_cycle"
+assert_contains "$GATE_OUT" "BL-0002 -> BL-0003 -> BL-0002" "after_cycle names the cycle"
+assert_eq "$(json_has_code "$GATE_OUT" after_broken)" "no" "a live cycle is not after_broken"
+m="$(mutate q-cycle "s/code: 'after_cycle'/code: 'after_cycle_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" after_cycle)" "no" "after_cycle mutation: the code is gone"
+
+d="$(repo q-self)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue self row' BL-0001; printf '%s\n' '- **after**: BL-0001'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(codes_of "$GATE_OUT")" "after_cycle:after:Queue self row" "self-reference is after_cycle"
+assert_contains "$GATE_OUT" "BL-0001 -> BL-0001" "self-reference names the cycle"
+
+d="$(repo q-ge)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue future row' BL-0001; printf '%s\n' '- **after**: BL-0099'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(codes_of "$GATE_OUT")" "after_broken:after:Queue future row" "after BL-0099 >= next-id is after_broken"
+m="$(mutate q-ge "s/code: 'after_broken'/code: 'after_broken_off'/")"
+gate_run "$m" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" after_broken)" "no" "after_broken mutation: the code is gone"
+
+d="$(repo q-absent)"
+{ printf '<!-- next-id: BL-0003 -->\n\n'; qhead 'Queue depends absent' BL-0002; printf '%s\n' '- **after**: BL-0001'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --ready
+assert_eq "$GATE_RC" "0" "absent after id below the mark does not block"
+assert_eq "$(json_has_code "$GATE_OUT" after_broken)" "no" "absent below the mark is not after_broken"
+assert_eq "$(ready_ids "$GATE_OUT")" "BL-0002" "absent below the mark leaves B READY"
+
+d="$(repo q-open)"
+{
+  printf '<!-- next-id: BL-0003 -->\n\n'
+  printf '%s\n' '### Open pred' '- **Id**: BL-0001' '- **Status**: open' '- **Trigger**: when the fixture runs' '- **Trigger-Type**: event' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/ok.md' ''
+  qhead 'Queue depends open' BL-0002
+  printf '%s\n' '- **after**: BL-0001'
+} > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --ready
+assert_eq "$GATE_RC" "0" "an open predecessor is not a lint failure"
+assert_eq "$(json_has_code "$GATE_OUT" after_broken)" "no" "an open predecessor is not after_broken"
+assert_eq "$(ready_ids "$GATE_OUT")" "" "an open predecessor leaves B not READY"
+
+d="$(repo q-prompt)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue prompt row' BL-0001; printf '%s\n' '- **Prompt**: docs/plans/ok.md'; } > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(json_has_code "$GATE_OUT" extra_content)" "yes" "Prompt on a code row is extra_content"
+
+d="$(repo q-caplow)"
+{ printf '<!-- next-id: BL-0002 -->\n\n'; qhead 'Queue cap row' BL-0001; } > "$d/docs/BACKLOG.md"
+printf '%s\n' '## Style' '- style: heading' '## Mode' '- mode: block' '## Caps' '- queue: 100' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_contains "$(codes_of "$GATE_OUT")" "cap_exceeded:queue:" "a config may lower the queue cap"
+printf '%s\n' '## Style' '- style: heading' '## Mode' '- mode: block' '## Caps' '- queue: 2500' > "$d/.claude/backlog-config.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" config_raises_cap)" "yes" "a config may not raise the queue cap"
+
+# The record-files fixture, resolved from this repo root (the sidecar path is not under the fixture dir).
+FIX="$REPO_ROOT/hooks/tests/fixtures/record-files/base/docs/BACKLOG.md"
+set +e
+o="$(node "$GATE" --backlog "$FIX" --mode block --json 2>/dev/null)"
+rc=$?
+set -e
+assert_eq "$rc" "1" "legacy fixture exit unchanged"
+assert_eq "$(codes_of "$o")" "pointer_unresolved:Pointer:Row with a sidecar note" "legacy fixture violations unchanged"
+assert_contains "$o" "docs/backlog/side-note.md" "legacy fixture pointer detail unchanged"
+assert_eq "$(has_ready_key "$o")" "no" "legacy fixture lint JSON has no ready key"
+set +e
+o="$(node "$GATE" --backlog "$FIX" --mode block --json --ready 2>/dev/null)"
+rc=$?
+set -e
+assert_eq "$rc" "1" "legacy fixture --ready keeps the lint exit"
+assert_eq "$(ready_count "$o")" "0" "legacy rows are not READY"
+
 finalize_test

@@ -10,9 +10,11 @@
  * schema lives in references/backlog-entry.md; the caps are UTF-8 bytes.
  *
  * Exports:
- *   rules and constants   KNOWN_FIELDS REQUIRED NEW_FIELDS REQUIRABLE ALL_FIELDS PEER_FIELDS DEFAULT_CAPS BL_ID_RE
- *                         NEXT_ID_RE MULTI_SEP WARN_CODES LEGACY_EFFORT_MAP POINTER_THRESHOLD STATUS_RE ...
+ *   rules and constants   KNOWN_FIELDS REQUIRED NEW_FIELDS QUEUE_FIELDS REQUIRABLE ALL_FIELDS PEER_FIELDS
+ *                         DEFAULT_CAPS BL_ID_RE NEXT_ID_RE MULTI_SEP WARN_CODES LEGACY_EFFORT_MAP
+ *                         POINTER_THRESHOLD STATUS_RE ...
  *   on parsed rows        checkEntry(entry, cfg, repoRoot, now, existsFn) -> violations; checkReporterFields;
+ *                         checkQueueLinks(entries, text); isReady(entry, ctx); isQueueForm;
  *                         pointerOk; parseEffortValue; triggerTypeCode; replyOk; replyUnanswered; reportPairs;
  *                         fieldOptedIn; withNextIdMark; blIdEnforced; unansweredReports
  *   on a proposed row     validateProposed(proposed, ctx) -> {fields, row, violations, blocking, warnings}
@@ -34,6 +36,17 @@ const TRIGGER_TYPE_WORDS = ['owner', 'event', 'ready', 'peer'];
 // them gets the larger row cap (R2). `required_fields` may name only REQUIRABLE ones; the peer
 // trio is required by `Origin: peer` itself.
 const NEW_FIELDS = ['Id', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact'];
+// Queue-form fields are always read on a heading row. They are not part of the reporter-field
+// opt-in (do not add them to NEW_FIELDS). A heading row that carries any of them is queue-form.
+const QUEUE_FIELDS = ['Done-Check', 'Artifact', 'Needs', 'after', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds'];
+const QUEUE_TEXT_FIELDS = ['Prompt', 'Inputs', 'Feeds'];
+const QUEUE_EFFORT = new Set(['XS', 'S', 'M']);
+const QUEUE_ARTIFACTS = ['code', 'text', 'run'];
+const DONE_CHECK_COMMANDS = new Set(['node', 'bash', 'sh', 'git', 'test', 'grep', 'python3', 'npm']);
+const NEED_SLUG_RE = /^[a-z0-9][a-z0-9._-]*$/;
+const NEED_CARD_RE = /^d-[0-9a-f]{8}$/;
+const MS_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const QUEUE_ADDR_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const REQUIRABLE = ['Id', 'Since', 'Origin', 'Problem', 'Impact', 'Trigger-Type'];
 const PEER_FIELDS = ['Reporter', 'Report', 'Reply'];
 const ALL_FIELDS = KNOWN_FIELDS.concat(NEW_FIELDS);
@@ -83,9 +96,19 @@ const DEFAULT_CAPS = {
   Context: 240,
   Problem: 300,
   Impact: 160,
-  // `entry` caps a legacy row (no reporter field); `row` caps a row carrying any reporter field.
+  'Done-Check': 200,
+  Needs: 120,
+  after: 120,
+  ms: 64,
+  'Used-by': 120,
+  'Queued-By': 120,
+  Prompt: 200,
+  Inputs: 300,
+  // `entry` caps a legacy row (no reporter field); `row` caps a row carrying any reporter field;
+  // `queue` caps a queue-form row. A config may only lower these.
   entry: 900,
   row: 1600,
+  queue: 2400,
 };
 const POINTER_THRESHOLD = 600;
 
@@ -226,7 +249,7 @@ function hasNewFields(entry) {
 // on a reporter row, the Id line) are subtracted, so a legacy row measures what it always did.
 function legacyBytes(entry) {
   const id = hasNewFields(entry) ? (entry.idBytes || 0) : 0;
-  return byteLen(entry.text) - (entry.newFieldBytes || 0) - id;
+  return byteLen(entry.text) - (entry.newFieldBytes || 0) - (entry.queueFieldBytes || 0) - id;
 }
 
 // BL-NNNN is enforced only once a file opts in: `required_fields` names Id, or the file carries a
@@ -325,6 +348,283 @@ function checkReporterFields(entry, fields, title, cfg) {
   return vios;
 }
 
+function isQueueForm(entry) {
+  const fields = entry && entry.fields;
+  if (!fields) return false;
+  return QUEUE_FIELDS.some((f) => fields[f] != null);
+}
+
+function queuePresent(fields, f) {
+  return fields[f] != null && String(fields[f]).trim() !== '';
+}
+
+function relativeUnderRoot(token, repoRoot, existsFn) {
+  const rel = String(token || '').trim().replace(/^\.\/+/, '');
+  if (!rel || path.isAbsolute(rel) || rel.includes('\0') || /^[A-Za-z]:/.test(rel)) return false;
+  const root = path.resolve(repoRoot || '.');
+  const abs = path.resolve(root, rel);
+  if (abs !== root && !abs.startsWith(root + path.sep)) return false;
+  return Boolean((existsFn || fs.existsSync)(abs));
+}
+
+function doneCheckRunnable(value, repoRoot, existsFn) {
+  const v = String(value == null ? '' : value).trim();
+  const m = /^`([^`\n]+)`$/.exec(v);
+  if (!m) return false;
+  const inner = m[1].trim();
+  if (!inner) return false;
+  const token = inner.split(/\s+/)[0];
+  if (DONE_CHECK_COMMANDS.has(token)) return true;
+  return relativeUnderRoot(token, repoRoot, existsFn);
+}
+
+function needsOk(value) {
+  const v = String(value == null ? '' : value).trim();
+  if (v === 'none') return true;
+  const parts = v.split(';').map((s) => s.trim());
+  if (!parts.length || parts.some((p) => p === '')) return false;
+  return parts.every((p) => {
+    const i = p.indexOf(':');
+    if (i <= 0) return false;
+    const kind = p.slice(0, i);
+    const rest = p.slice(i + 1);
+    if (kind === 'resource' || kind === 'engine') return NEED_SLUG_RE.test(rest);
+    if (kind === 'card') return NEED_CARD_RE.test(rest);
+    return false;
+  });
+}
+
+function usedByOk(value) {
+  const v = String(value == null ? '' : value).trim();
+  if (v === 'user' || v === 'e2e') return true;
+  const m = /^n\/a (.+)$/.exec(v);
+  return Boolean(m && m[1].length >= 8);
+}
+
+function queuedByOk(value) {
+  const v = String(value == null ? '' : value).trim();
+  const m = /^(\S+)\s+(\S+)$/.exec(v);
+  if (!m || !QUEUE_ADDR_RE.test(m[1])) return false;
+  return m[2].length > 0;
+}
+
+function inputsOk(value, repoRoot, existsFn) {
+  const v = String(value == null ? '' : value).trim();
+  if (!v) return false;
+  const parts = v.split(';').map((s) => s.trim());
+  if (!parts.length || parts.some((p) => p === '')) return false;
+  return parts.every((p) => relativeUnderRoot(p, repoRoot, existsFn));
+}
+
+function rowId(entry) {
+  if (!entry) return '';
+  const raw = entry.id != null && String(entry.id).trim() !== '' ? entry.id : (entry.fields && entry.fields.Id);
+  return String(raw == null ? '' : raw).trim();
+}
+
+function afterList(entry) {
+  const raw = entry && entry.fields && entry.fields.after;
+  if (raw == null || String(raw).trim() === '') return [];
+  return String(raw).split(';').map((s) => s.trim()).filter(Boolean);
+}
+
+function nextIdFromText(text) {
+  const mark = String(text || '').match(NEXT_ID_RE);
+  if (!mark) return null;
+  const m = String(mark[1]).match(BL_ID_RE);
+  return m ? Number(m[1]) : null;
+}
+
+function normalizeNextId(nextId) {
+  if (typeof nextId === 'number' && Number.isFinite(nextId)) return nextId;
+  if (nextId == null || nextId === '') return null;
+  return nextIdFromText(String(nextId)) != null && NEXT_ID_RE.test(String(nextId))
+    ? nextIdFromText(String(nextId))
+    : (() => {
+      const m = String(nextId).trim().match(BL_ID_RE) || String(nextId).trim().match(/^(\d+)$/);
+      return m ? Number(m[1]) : null;
+    })();
+}
+
+function findRow(entries, id) {
+  return (entries || []).find((e) => rowId(e) === id) || null;
+}
+
+// null when the dependency is well-formed. Dropped, malformed, at/above the mark, or absent
+// with no mark is after_broken. An id below the mark that is simply not in the file is a
+// deleted row (shipped or dropped cannot be told apart) and is not broken.
+function afterBrokenReason(id, entries, nextNum) {
+  if (!BL_ID_RE.test(id)) return `${id} (expected BL-NNNN)`;
+  const n = Number(BL_ID_RE.exec(id)[1]);
+  if (nextNum != null && n >= nextNum) return `${id} is not below next-id`;
+  const ent = findRow(entries, id);
+  if (ent) {
+    const st = String((ent.fields && ent.fields.Status) || '').trim();
+    if (/^dropped\b/.test(st)) return `${id} Status dropped`;
+    return null;
+  }
+  if (nextNum == null) return `${id} absent with no next-id mark`;
+  return null;
+}
+
+function afterIdSatisfied(id, entries, nextNum) {
+  if (afterBrokenReason(id, entries, nextNum)) return false;
+  const ent = findRow(entries, id);
+  if (ent) return /^shipped\b/.test(String((ent.fields && ent.fields.Status) || '').trim());
+  return BL_ID_RE.test(id) && nextNum != null && Number(BL_ID_RE.exec(id)[1]) < nextNum;
+}
+
+function findAfterCycles(entries) {
+  const nodes = new Set();
+  const graph = new Map();
+  for (const e of entries || []) {
+    const id = rowId(e);
+    if (!BL_ID_RE.test(id)) continue;
+    nodes.add(id);
+    const outs = afterList(e).filter((a) => BL_ID_RE.test(a));
+    if (outs.length) graph.set(id, outs);
+  }
+  const color = new Map();
+  const cycles = [];
+  function dfs(u, stack) {
+    color.set(u, 1);
+    stack.push(u);
+    for (const v of graph.get(u) || []) {
+      if (v === u) {
+        cycles.push([u, u]);
+        continue;
+      }
+      if (!nodes.has(v)) continue;
+      if (color.get(v) === 1) {
+        const i = stack.indexOf(v);
+        if (i >= 0) cycles.push(stack.slice(i).concat([v]));
+      } else if (color.get(v) !== 2) dfs(v, stack);
+    }
+    stack.pop();
+    color.set(u, 2);
+  }
+  for (const id of graph.keys()) if (color.get(id) !== 2) dfs(id, []);
+  return cycles;
+}
+
+function checkQueueEntry(entry, cfg, repoRoot, existsFn) {
+  const vios = [];
+  if (!isQueueForm(entry)) return vios;
+  const fields = entry.fields || {};
+  const title = fields.Title || entry.title || '';
+  const push = (code, field, detail) => vios.push({ code, title, field, detail });
+  const required = ['Id', 'Done-Check', 'Artifact', 'Needs', 'ms', 'Used-by', 'Queued-By'];
+  for (const f of required) {
+    if (!queuePresent(fields, f)) push('missing_field', f, `${f} missing`);
+  }
+  if (queuePresent(fields, 'Id') && !BL_ID_RE.test(String(fields.Id).trim()) && !blIdEnforced(cfg)) {
+    push('bad_id', 'Id', `${String(fields.Id).trim()} (expected BL-NNNN)`);
+  }
+  if (queuePresent(fields, 'Effort')) {
+    const parsed = parseEffortValue(fields.Effort);
+    if (parsed && !QUEUE_EFFORT.has(parsed.size)) {
+      push('effort_too_large', 'Effort', `${parsed.size} (queue-form allows XS|S|M)`);
+    }
+  }
+  if (queuePresent(fields, 'Done-Check') && !doneCheckRunnable(fields['Done-Check'], repoRoot, existsFn)) {
+    push('done_check_unrunnable', 'Done-Check', `${String(fields['Done-Check']).trim()} (one backticked command; not executed)`);
+  }
+  const artifact = queuePresent(fields, 'Artifact') ? String(fields.Artifact).trim() : '';
+  if (artifact && !QUEUE_ARTIFACTS.includes(artifact)) {
+    push('bad_artifact', 'Artifact', `${artifact} (expected code|text|run)`);
+  }
+  if (queuePresent(fields, 'Needs') && !needsOk(fields.Needs)) {
+    push('bad_needs', 'Needs', `${String(fields.Needs).trim()} (expected none or resource:|card:|engine: tokens)`);
+  }
+  if (queuePresent(fields, 'ms') && !MS_RE.test(String(fields.ms).trim())) {
+    push('bad_ms', 'ms', `${String(fields.ms).trim()} (expected a milestone-step token)`);
+  }
+  if (queuePresent(fields, 'Used-by') && !usedByOk(fields['Used-by'])) {
+    push('bad_used_by', 'Used-by', `${String(fields['Used-by']).trim()} (expected user|e2e|n/a <reason of 8+ chars>)`);
+  }
+  if (queuePresent(fields, 'Queued-By') && !queuedByOk(fields['Queued-By'])) {
+    push('bad_queued_by', 'Queued-By', `${String(fields['Queued-By']).trim()} (expected <ns>/<courier>/<member> <message-id|self>)`);
+  }
+  if (artifact === 'text') {
+    if (!queuePresent(fields, 'Prompt')) push('text_row_missing_inputs', 'Prompt', 'Prompt missing');
+    else if (!relativeUnderRoot(String(fields.Prompt).trim(), repoRoot, existsFn)) {
+      push('text_row_missing_inputs', 'Prompt', `${String(fields.Prompt).trim()} does not exist`);
+    }
+    if (!queuePresent(fields, 'Inputs')) push('text_row_missing_inputs', 'Inputs', 'Inputs missing');
+    else if (!inputsOk(fields.Inputs, repoRoot, existsFn)) {
+      push('text_row_missing_inputs', 'Inputs', `${String(fields.Inputs).trim()} is not a list of existing relative paths`);
+    }
+    if (!queuePresent(fields, 'Feeds')) push('text_row_missing_inputs', 'Feeds', 'Feeds missing');
+  } else if (artifact === 'code' || artifact === 'run') {
+    for (const f of QUEUE_TEXT_FIELDS) {
+      if (queuePresent(fields, f)) push('extra_content', f, `${f} is only allowed when Artifact is text`);
+    }
+  }
+  return vios;
+}
+
+// Cross-row queue rules: after_cycle, after_broken, feeds_broken. Per-row rules stay in checkEntry.
+function checkQueueLinks(entries, text) {
+  const nextNum = nextIdFromText(text);
+  const vios = [];
+  const cycleById = new Map();
+  for (const cycle of findAfterCycles(entries)) {
+    const detail = cycle.join(' -> ');
+    for (const id of new Set(cycle.slice(0, -1))) {
+      if (!cycleById.has(id)) cycleById.set(id, []);
+      const list = cycleById.get(id);
+      if (!list.includes(detail)) list.push(detail);
+    }
+  }
+  for (const ent of entries || []) {
+    if (!isQueueForm(ent)) continue;
+    const fields = ent.fields || {};
+    const title = fields.Title || ent.title || '';
+    const id = rowId(ent);
+    if (cycleById.has(id)) {
+      vios.push({ code: 'after_cycle', title, field: 'after', detail: cycleById.get(id).join('; ') });
+    }
+    for (const dep of afterList(ent)) {
+      const reason = afterBrokenReason(dep, entries, nextNum);
+      if (reason) vios.push({ code: 'after_broken', title, field: 'after', detail: reason });
+    }
+    if (String(fields.Artifact || '').trim() === 'text' && queuePresent(fields, 'Feeds')) {
+      const fid = String(fields.Feeds).trim();
+      if (!BL_ID_RE.test(fid) || !findRow(entries, fid)) {
+        vios.push({ code: 'feeds_broken', title, field: 'Feeds', detail: `${fid} is not an Id of a row in this file` });
+      }
+    }
+  }
+  return vios;
+}
+
+function afterDependenciesSatisfied(entry, entries, nextId) {
+  const nextNum = normalizeNextId(nextId);
+  for (const id of afterList(entry)) {
+    if (!afterIdSatisfied(id, entries, nextNum)) return false;
+  }
+  return true;
+}
+
+function queueReadyCore(entry, ctx) {
+  const c = ctx || {};
+  const fields = (entry && entry.fields) || {};
+  if (String(fields.Status || '').trim() !== 'open') return false;
+  if (String(fields['Trigger-Type'] || '').trim() !== 'ready') return false;
+  if (!isQueueForm(entry)) return false;
+  const vios = Array.isArray(entry.violations) ? entry.violations : null;
+  if (!vios || vios.some((v) => levelOf(v) !== 'warn')) return false;
+  return afterDependenciesSatisfied(entry, c.entries || [], c.nextId);
+}
+
+// READY iff Status is open, Trigger-Type is ready, the row is queue-form with zero blocking
+// violations, and every after: id is satisfied (absent below the next-id mark, or Status shipped).
+// Needs is not judged here. ctx = {entries, nextId}. entry.violations is the gate's list.
+function isReady(entry, ctx) {
+  if (!queueReadyCore(entry, ctx)) return false;
+  return true;
+}
+
 function checkEntry(entry, cfg, repoRoot, now, existsFn) {
   const vios = [];
   if (entry.unparseable) {
@@ -375,7 +675,7 @@ function checkEntry(entry, cfg, repoRoot, now, existsFn) {
       }
     }
   }
-  for (const f of ALL_FIELDS) {
+  for (const f of ALL_FIELDS.concat(QUEUE_FIELDS)) {
     if (fields[f] == null) continue;
     const cap = effectiveCap(cfg, f);
     if (cap == null) continue;
@@ -389,7 +689,8 @@ function checkEntry(entry, cfg, repoRoot, now, existsFn) {
       });
     }
   }
-  const capKey = hasNewFields(entry) ? 'row' : 'entry';
+  let capKey = hasNewFields(entry) ? 'row' : 'entry';
+  if (isQueueForm(entry)) capKey = 'queue';
   const entryCap = effectiveCap(cfg, capKey);
   const ebytes = byteLen(entry.text);
   if (ebytes > entryCap) {
@@ -477,6 +778,7 @@ function checkEntry(entry, cfg, repoRoot, now, existsFn) {
     }
   }
   vios.push(...checkReporterFields(entry, fields, title, cfg));
+  vios.push(...checkQueueEntry(entry, cfg, repoRoot, existsFn));
   return vios;
 }
 
@@ -596,11 +898,12 @@ function assertPeerClosable(fields) {
 }
 
 module.exports = {
-  KNOWN_FIELDS, REQUIRED, TRIGGER_TYPE_WORDS, NEW_FIELDS, REQUIRABLE, PEER_FIELDS, ALL_FIELDS, ORIGINS,
+  KNOWN_FIELDS, REQUIRED, TRIGGER_TYPE_WORDS, NEW_FIELDS, QUEUE_FIELDS, QUEUE_TEXT_FIELDS, REQUIRABLE, PEER_FIELDS, ALL_FIELDS, ORIGINS,
   BL_ID_RE, NEXT_ID_RE, MULTI_SEP, WARN_CODES, URGENT_SUFFIXES, LEGACY_EFFORT_MAP, DEFAULT_CAPS, POINTER_THRESHOLD, STATUS_RE,
   ROW_ORDER, WRITER_REQUIRED,
   loadSizes, parseEffortValue, badEffortDetail, byteLen, realCalendarDate, triggerTypeCode, pointerOk, statusDate, daysAgo,
   checkCapsRaised, effectiveCap, isValidDate, splitMulti, replyOk, replyUnanswered, reportPairs, unansweredReports,
   hasNewFields, legacyBytes, blIdEnforced, withNextIdMark, triggerTypeRequired, fieldOptedIn, checkReporterFields, checkEntry,
+  isQueueForm, checkQueueLinks, isReady, nextIdFromText, normalizeNextId,
   RuleViolationError, levelOf, proposedFields, renderRow, entryForFields, validateProposed, assertProposedValid, assertPeerClosable,
 };

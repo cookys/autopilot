@@ -20,6 +20,11 @@
  * Origin=peer makes Reporter/Report/Reply mandatory. A `<!-- next-id: BL-NNNN -->` comment is
  * the Id high-water mark: every BL- Id must be below it and unique.
  *
+ * Queue-form fields (Done-Check, Artifact, Needs, after, ms, Used-by, Queued-By, Prompt, Inputs,
+ * Feeds) are always read on a heading row and are not part of the reporter-field opt-in. A heading
+ * row that carries any of them is queue-form. Table and checklist styles still treat those lines
+ * as extra content. `--ready` lists rows isReady accepts; lint exit is unchanged.
+ *
  * sidecar_orphan (block, working-tree mode only): a `.md` under `docs/backlog/` (the `backlog/`
  * directory beside the backlog file) whose basename no part of the backlog text mentions.
  * A note lives only while a row points at it; delete it with its row
@@ -28,7 +33,7 @@
  * Usage:
  *   node scripts/check-backlog-entries.js --backlog <file>
  *     [--config <file>] [--allowlist <file>] [--mode warn|block]
- *     [--json] [--self-test] [--update-allowlist]
+ *     [--json] [--self-test] [--update-allowlist] [--ready]
  *   node scripts/check-backlog-entries.js --backlog <file> --range <base>..<head> | <head>
  *     pre-push mode: the file gate on <head>'s committed backlog, plus peer_report_lost over
  *     every commit in the range (base included) that touched the backlog.
@@ -50,6 +55,7 @@ const {
   KNOWN_FIELDS,
   REQUIRED,
   NEW_FIELDS,
+  QUEUE_FIELDS,
   REQUIRABLE,
   ALL_FIELDS,
   BL_ID_RE,
@@ -73,6 +79,9 @@ const {
   withNextIdMark,
   fieldOptedIn,
   checkEntry,
+  checkQueueLinks,
+  isReady,
+  nextIdFromText,
 } = require('./lib/backlog-rules.js');
 // Pointer roots: this repo's work-record locations from the layout registry (docs/ at bootstrap, project/ from P1; the plans
 // evidence dir may sit beside the plans dir); any other repo (a consuming project) gets the docs/ convention, so the
@@ -89,13 +98,15 @@ const CODES = [
   'unparseable_entry', 'config_raises_cap',
   'bad_id', 'bad_since', 'bad_origin', 'bad_reply', 'bad_trigger_type', 'bad_trigger_date', 'peer_field_missing',
   'peer_closed_unanswered', 'problem_has_identifier',
+  'effort_too_large', 'done_check_unrunnable', 'bad_artifact', 'bad_needs', 'bad_ms', 'bad_used_by',
+  'bad_queued_by', 'text_row_missing_inputs', 'after_cycle', 'after_broken', 'feeds_broken',
 ];
 
 function usage(code) {
   process.stderr.write(
     'Usage: node scripts/check-backlog-entries.js --backlog <file> ' +
     '[--config <file>] [--allowlist <file>] [--mode warn|block] ' +
-    '[--json] [--self-test] [--update-allowlist] [--range <base>..<head>]\n' +
+    '[--json] [--ready] [--self-test] [--update-allowlist] [--range <base>..<head>]\n' +
     '       node scripts/check-backlog-entries.js --hippo --reconcile [--target <dir>] [--backlog <file>] [--adr-dir <dir>]\n'
   );
   process.exit(code);
@@ -110,6 +121,7 @@ function parseArgs(argv) {
     json: false,
     selfTest: false,
     updateAllowlist: false,
+    ready: false,
     range: null,
     hippo: false,
     reconcile: false,
@@ -130,6 +142,7 @@ function parseArgs(argv) {
     else if (a === '--json') out.json = true;
     else if (a === '--self-test') out.selfTest = true;
     else if (a === '--update-allowlist') out.updateAllowlist = true;
+    else if (a === '--ready') out.ready = true;
     else if (a === '--range') out.range = need();
     else if (a === '--hippo') out.hippo = true;
     else if (a === '--reconcile') out.reconcile = true;
@@ -213,12 +226,13 @@ function parseConfigFile(filePath) {
       .filter(Boolean);
   }
   const capLines = text.split(/\r?\n/);
+  const capNames = ALL_FIELDS.concat(QUEUE_FIELDS, ['entry', 'row', 'queue']);
+  const capAlt = capNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const capRe = new RegExp(String.raw`^\s*-\s+(?:caps\.)?(${capAlt})\s*:\s*(\d+)\s*$`, 'i');
   for (const line of capLines) {
-    const m = line.match(/^\s*-\s+caps\.(\w+)\s*:\s*(\d+)\s*$/i)
-      || line.match(/^\s*-\s+(Title|Status|Trigger|Source|Pointer|Context|Problem|Impact|entry|row)\s*:\s*(\d+)\s*$/i);
+    const m = line.match(capRe);
     if (m) {
-      const canonical = ALL_FIELDS.find((f) => f.toLowerCase() === m[1].toLowerCase())
-        || (['entry', 'row'].includes(m[1].toLowerCase()) ? m[1].toLowerCase() : null);
+      const canonical = capNames.find((f) => f.toLowerCase() === m[1].toLowerCase()) || null;
       if (canonical) cfg.caps[canonical] = Number(m[2]);
     }
   }
@@ -265,15 +279,19 @@ function fieldLine(line) {
     || line.match(/^\s*-\s+([A-Za-z]+(?:-[A-Za-z]+)*)\s*[:：]\s*(.*)$/);
   if (!m) return null;
   const name = m[1];
-  if (!ALL_FIELDS.includes(name)) return { extra: true, raw: line };
+  if (!ALL_FIELDS.includes(name) && !QUEUE_FIELDS.includes(name)) return { extra: true, raw: line };
   return { name, value: m[2].trim() };
 }
 
 // fieldLine, with the opt-in rule applied: a Since/Origin/Reporter/Report/Reply/Problem/Impact
 // line in a file that has not opted in (fieldOptedIn) is what the old gate made of it — an
 // unknown field line, i.e. extra content. Id keeps its own rule (blIdEnforced).
-function gatedFieldLine(line, cfg) {
+function gatedFieldLine(line, cfg, style) {
   const fl = fieldLine(line);
+  // Queue-form fields are heading-only. Checklist (and any other style) keeps them as extra content.
+  if (fl && !fl.extra && QUEUE_FIELDS.includes(fl.name) && style !== 'heading') {
+    return { extra: true, raw: line };
+  }
   if (fl && !fl.extra && fl.name !== 'Id' && NEW_FIELDS.includes(fl.name) && !fieldOptedIn(cfg, fl.name)) {
     return { extra: true, raw: line };
   }
@@ -315,6 +333,7 @@ function parseHeadingBlock(block, cfg) {
   let inFence = false;
   let newFieldBytes = 0;
   let idBytes = 0;
+  let queueFieldBytes = 0;
   for (let i = 1; i < block.lines.length; i++) {
     const line = block.lines[i];
     if (/^\s*```/.test(line)) {
@@ -327,7 +346,7 @@ function parseHeadingBlock(block, cfg) {
       continue;
     }
     if (!line.trim()) continue;
-    const fl = gatedFieldLine(line, cfg); // heading
+    const fl = gatedFieldLine(line, cfg, 'heading');
     if (fl && fl.extra) {
       extra = true;
       continue;
@@ -337,13 +356,14 @@ function parseHeadingBlock(block, cfg) {
       fields[fl.name] = fl.value;
       if (fl.name === 'Id') idBytes += byteLen(line) + 1;
       else if (NEW_FIELDS.includes(fl.name)) newFieldBytes += byteLen(line) + 1;
+      else if (QUEUE_FIELDS.includes(fl.name)) queueFieldBytes += byteLen(line) + 1;
       continue;
     }
     extra = true;
   }
   if (fields.Title == null) fields.Title = block.title;
   else if (fields.Title.trim() !== block.title.trim()) extra = true;
-  return { fields, extra, text, id: fields.Id || null, title: fields.Title, newFieldBytes, idBytes };
+  return { fields, extra, text, id: fields.Id || null, title: fields.Title, newFieldBytes, idBytes, queueFieldBytes };
 }
 
 // Split a table row on unescaped pipes; `\|` inside a cell is a literal pipe.
@@ -398,7 +418,7 @@ function parseChecklist(text, cfg) {
       continue;
     }
     if (!line.trim()) continue;
-    const fl = gatedFieldLine(line, cfg); // checklist
+    const fl = gatedFieldLine(line, cfg, 'checklist');
     if (fl && fl.extra) {
       cur.extra = true;
       continue;
@@ -432,6 +452,13 @@ function foreignEntryLines(text, style) {
     if (style === 'checklist' && !line.trim()) inItem = false;
   }
   return out.map((line) => ({ unparseable: true, text: line, title: '' }));
+}
+
+function headingCommentOnly(text) {
+  return String(text || '').split(/\r?\n/).every((line) => {
+    const t = line.trim();
+    return t === '' || /^<!--.*-->$/.test(t);
+  });
 }
 
 // `cfg` (optional) carries the opt-in (fieldOptedIn): without it, and without a next-id mark in
@@ -499,7 +526,8 @@ function collectEntries(text, style, cfg) {
   }
   const blocks = splitHeadingEntries(text);
   if (!blocks.length && text.trim()) {
-    out.push({ unparseable: true, text, title: '' });
+    // A freshly scaffolded backlog is only the next-id mark and a one-line comment.
+    if (!headingCommentOnly(text)) out.push({ unparseable: true, text, title: '' });
     return out;
   }
   for (const b of blocks) {
@@ -576,6 +604,17 @@ function collectViolations(text, cfg, repoRoot, now, existsFn) {
     violations.push(...checkEntry(ent, ecfg, repoRoot, now, existsFn));
   }
   violations.push(...checkNextId(text, entries, ecfg));
+  if (style === 'heading') violations.push(...checkQueueLinks(entries, text));
+  const byTitle = new Map();
+  for (const v of violations) {
+    const t = v.title || '';
+    if (!byTitle.has(t)) byTitle.set(t, []);
+    byTitle.get(t).push(v);
+  }
+  for (const ent of entries) {
+    const t = (ent.fields && ent.fields.Title) || ent.title || '';
+    ent.violations = byTitle.get(t) || [];
+  }
   return { entries, violations };
 }
 
@@ -685,12 +724,44 @@ function runCheck(opts, at) {
   const style = cfg.style || 'heading';
   const { entries, violations } = collectViolations(text, cfg, repoRoot, now, at && at.existsFn);
   if (!at) violations.push(...checkSidecarOrphans(text, backlogPath));
+  // Sidecar findings are file-level; re-attach so isReady sees the full per-title list.
+  if (!at) {
+    const byTitle = new Map();
+    for (const v of violations) {
+      const t = v.title || '';
+      if (!byTitle.has(t)) byTitle.set(t, []);
+      byTitle.get(t).push(v);
+    }
+    for (const ent of entries) {
+      const t = (ent.fields && ent.fields.Title) || ent.title || '';
+      ent.violations = byTitle.get(t) || [];
+    }
+  }
   const annotated = violations.map((v) => {
     const fp = fingerprint(style, v.title);
     const allowed = allowedPairs.has(`${fp}\0${v.code}`);
     return Object.assign({ allowed }, v, { level: violationLevel(v) });
   });
   const report = buildReport(cfg, backlogPath, style, entries.length, byteLen(text), annotated);
+  // --ready is additive. Lint exit stays report.exit, including when nothing is READY.
+  if (opts.ready) {
+    const nextId = nextIdFromText(text);
+    const ready = [];
+    for (const ent of entries) {
+      if (!isReady(ent, { entries, nextId })) continue;
+      const f = ent.fields || {};
+      ready.push({
+        Id: String(f.Id || ent.id || '').trim(),
+        Title: String(f.Title || ent.title || ''),
+        Artifact: f.Artifact == null ? '' : String(f.Artifact),
+        Needs: f.Needs == null ? '' : String(f.Needs),
+        ms: f.ms == null ? '' : String(f.ms),
+        Feeds: f.Feeds == null ? '' : String(f.Feeds),
+      });
+    }
+    report.ready = ready;
+    report.ready_count = ready.length;
+  }
   return { report, allow, allowPath, cfg, style, annotated, entries, repoRoot };
 }
 
@@ -897,7 +968,8 @@ function updateAllowlist(allow, allowPath, style, annotated) {
 function miniHeading(fields) {
   const title = fields.Title;
   const keys = ['Id', 'Status', 'Since', 'Origin', 'Reporter', 'Report', 'Reply', 'Problem', 'Impact',
-    'Trigger', 'Trigger-Type', 'Effort', 'Source', 'Pointer', 'Context'];
+    'Trigger', 'Trigger-Type', 'Effort', 'Source', 'Pointer', 'Context',
+    'Done-Check', 'Artifact', 'Needs', 'after', 'ms', 'Used-by', 'Queued-By', 'Prompt', 'Inputs', 'Feeds'];
   const bullets = keys
     .filter((k) => fields[k] != null)
     .map((k) => `- **${k}**: ${fields[k]}`)
@@ -1113,7 +1185,151 @@ function runSelfTest() {
     add('problem_has_identifier', 'heading', mark(2) + miniHeading({ ...peer, Problem: '`scripts/x.js` 壞了' }),
       ['problem_has_identifier']);
 
+    // --- queue-form (heading only; always read, not an opt-in) ---
+    const qBase = {
+      Title: 'Queue code row',
+      Id: 'BL-0001',
+      Status: 'open',
+      Trigger: 'when the fixture runs',
+      'Trigger-Type': 'ready',
+      Effort: 'S',
+      Source: 'self-test',
+      Pointer: 'docs/plans/ok.md',
+      'Done-Check': '`node scripts/check-backlog-entries.js --self-test`',
+      Artifact: 'code',
+      Needs: 'none',
+      ms: 'd1.queue',
+      'Used-by': 'e2e',
+      'Queued-By': 'ns/c/m self',
+    };
+    const host = { ...base, Title: 'Host legacy row', Id: 'BL-0001' };
+    add('queue-code-ok', 'heading', mark(2) + miniHeading(qBase), []);
+    add('queue-effort-urgent-ok', 'heading', mark(2) + miniHeading({ ...qBase, Effort: 'S!' }), []);
+    add('queue-needs-ok', 'heading', mark(2) + miniHeading({
+      ...qBase, Title: 'Queue needs row', Needs: 'resource:gpu;card:d-0123abcd;engine:local',
+    }), []);
+    add('effort_too_large', 'heading', mark(2) + miniHeading({ ...qBase, Effort: 'L' }), ['effort_too_large']);
+    add('done_check_unrunnable', 'heading', mark(2) + miniHeading({ ...qBase, 'Done-Check': 'TBD' }), ['done_check_unrunnable']);
+    add('bad_artifact', 'heading', mark(2) + miniHeading({ ...qBase, Artifact: 'widget' }), ['bad_artifact']);
+    add('bad_needs', 'heading', mark(2) + miniHeading({ ...qBase, Needs: 'later' }), ['bad_needs']);
+    add('bad_ms', 'heading', mark(2) + miniHeading({ ...qBase, ms: 'Step' }), ['bad_ms']);
+    add('bad_used_by', 'heading', mark(2) + miniHeading({ ...qBase, 'Used-by': 'n/a short' }), ['bad_used_by']);
+    add('bad_queued_by', 'heading', mark(2) + miniHeading({ ...qBase, 'Queued-By': 'ns/c/m' }), ['bad_queued_by']);
+    add('text_row_missing_inputs', 'heading', mark(3) + miniHeading(host) + '\n' + miniHeading({
+      ...qBase, Title: 'Queue text row', Id: 'BL-0002', Artifact: 'text', Prompt: 'docs/plans/ok.md', Feeds: 'BL-0001',
+    }), ['text_row_missing_inputs']);
+    add('feeds_broken', 'heading', mark(3) + miniHeading(host) + '\n' + miniHeading({
+      ...qBase,
+      Title: 'Queue text feeds',
+      Id: 'BL-0002',
+      Artifact: 'text',
+      Prompt: 'docs/plans/ok.md',
+      Inputs: 'docs/plans/ok.md',
+      Feeds: 'BL-0099',
+    }), ['feeds_broken']);
+    add('after_cycle', 'heading', mark(4) + miniHeading({
+      ...qBase, Title: 'Queue cycle a', Id: 'BL-0002', after: 'BL-0003',
+    }) + '\n' + miniHeading({
+      ...qBase, Title: 'Queue cycle b', Id: 'BL-0003', after: 'BL-0002',
+    }), ['after_cycle']);
+    add('after_cycle-self', 'heading', mark(2) + miniHeading({ ...qBase, after: 'BL-0001' }), ['after_cycle']);
+    add('after_broken', 'heading', mark(2) + miniHeading({ ...qBase, after: 'BL-0099' }), ['after_broken']);
+    add('after_broken-dropped', 'heading', mark(3) + miniHeading({
+      ...base, Title: 'Dropped pred', Id: 'BL-0001', Status: 'dropped 2020-01-01',
+    }) + '\n' + miniHeading({
+      ...qBase, Title: 'Depends dropped', Id: 'BL-0002', after: 'BL-0001',
+    }), ['after_broken', 'done_not_moved']);
+    add('after_broken-no-mark', 'heading', miniHeading({ ...qBase, Id: 'BL-0002', after: 'BL-0001' }), ['after_broken']);
+    add('after-open-not-broken', 'heading', mark(3) + miniHeading({
+      ...base, Title: 'Open pred', Id: 'BL-0001',
+    }) + '\n' + miniHeading({
+      ...qBase, Title: 'Depends open', Id: 'BL-0002', after: 'BL-0001',
+    }), []);
+    const band = {
+      ...qBase,
+      Title: 'Queue cap band row',
+      Trigger: 't'.repeat(200),
+      Source: 's'.repeat(140),
+      Context: 'c'.repeat(200),
+      'Done-Check': '`' + 'node ' + 'x'.repeat(170) + '`',
+    };
+    const bandText = miniHeading(band);
+    add('queue-cap-band', 'heading', mark(2) + bandText, []);
+    add('queue-cap-lowered', 'heading', mark(2) + miniHeading(qBase), ['cap_exceeded'], { caps: { queue: 100 } });
+    add('config_raises_cap-queue', 'heading', miniHeading(base), ['config_raises_cap'], { caps: { queue: 2500 } });
+    add(
+      'queue-field-checklist-extra',
+      'checklist',
+      '- [ ] [Minor] Gate self-test row\n' +
+      '  - Status: open\n' +
+      '  - Trigger: when the fixture runs\n' +
+      '  - Effort: S\n' +
+      '  - Source: self-test\n' +
+      '  - Pointer: docs/plans/ok.md\n' +
+      '  - Done-Check: `node ok`\n',
+      ['extra_content'],
+      { style: 'checklist' }
+    );
+    add(
+      'queue-comment-only',
+      'heading',
+      '<!-- next-id: BL-0001 -->\n<!-- queue-form backlog; schema: references/backlog-entry.md -->\n',
+      []
+    );
+
     const failures = [];
+    const bandBytes = Buffer.byteLength(bandText, 'utf8');
+    if (bandBytes <= 900 || bandBytes >= 2400) {
+      failures.push({ name: 'queue-cap-band-bytes', expected: ['900<n<2400'], got: [bandBytes] });
+    }
+    {
+      const lowCfg = mergeConfig(cfg, { caps: { queue: 100 } });
+      const { violations: lowV } = collectViolations(mark(2) + miniHeading(qBase), lowCfg, tmp, Date.now());
+      const caps = lowV.filter((v) => v.code === 'cap_exceeded');
+      if (caps.length !== 1 || caps[0].field !== 'queue') {
+        failures.push({ name: 'queue-cap-field', expected: ['queue'], got: caps.map((v) => v.field) });
+      }
+    }
+    {
+      const cycleText = mark(4) + miniHeading({
+        ...qBase, Title: 'Queue cycle a', Id: 'BL-0002', after: 'BL-0003',
+      }) + '\n' + miniHeading({
+        ...qBase, Title: 'Queue cycle b', Id: 'BL-0003', after: 'BL-0002',
+      });
+      const { violations: cv } = collectViolations(cycleText, cfg, tmp, Date.now());
+      const details = cv.filter((v) => v.code === 'after_cycle').map((v) => v.detail);
+      if (!details.length || details.some((d) => d !== 'BL-0002 -> BL-0003 -> BL-0002')) {
+        failures.push({ name: 'after_cycle-detail', expected: ['BL-0002 -> BL-0003 -> BL-0002'], got: details });
+      }
+      const { violations: sv } = collectViolations(mark(2) + miniHeading({ ...qBase, after: 'BL-0001' }), cfg, tmp, Date.now());
+      const selfDetails = sv.filter((v) => v.code === 'after_cycle').map((v) => v.detail);
+      if (selfDetails.length !== 1 || selfDetails[0] !== 'BL-0001 -> BL-0001') {
+        failures.push({ name: 'after_cycle-self-detail', expected: ['BL-0001 -> BL-0001'], got: selfDetails });
+      }
+    }
+    function readyIds(text) {
+      const { entries } = collectViolations(text, cfg, tmp, Date.now());
+      return entries.filter((e) => isReady(e, { entries, nextId: nextIdFromText(text) })).map((e) => String(e.id).trim());
+    }
+    const readyChecks = [
+      ['ready-queue-code', mark(2) + miniHeading(qBase), ['BL-0001']],
+      ['ready-absent-below', mark(3) + miniHeading({ ...qBase, Title: 'Depends absent', Id: 'BL-0002', after: 'BL-0001' }), ['BL-0002']],
+      ['ready-open-pred', mark(3) + miniHeading({ ...base, Title: 'Open pred', Id: 'BL-0001' }) + '\n' + miniHeading({
+        ...qBase, Title: 'Depends open', Id: 'BL-0002', after: 'BL-0001',
+      }), []],
+      ['ready-shipped-pred', mark(3) + miniHeading({
+        ...base, Title: 'Shipped pred', Id: 'BL-0001', Status: 'shipped v0 2020-01-01',
+      }) + '\n' + miniHeading({
+        ...qBase, Title: 'Depends shipped', Id: 'BL-0002', after: 'BL-0001',
+      }), ['BL-0002']],
+      ['ready-needs-not-judged', mark(2) + miniHeading({
+        ...qBase, Title: 'Queue needs row', Needs: 'resource:gpu;card:d-0123abcd;engine:local',
+      }), ['BL-0001']],
+    ];
+    for (const [name, text, exp] of readyChecks) {
+      const got = readyIds(text);
+      if (JSON.stringify(got) !== JSON.stringify(exp)) failures.push({ name, expected: exp, got });
+    }
     for (const c of cases) {
       const ccfg = mergeConfig(cfg, Object.assign({ style: c.style }, c.extraCfg || {}));
       const { violations: vios } = collectViolations(c.text, ccfg, tmp, Date.now());

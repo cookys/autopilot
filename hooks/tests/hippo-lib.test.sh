@@ -108,6 +108,28 @@ eq 2 "$RC" "detect: plugin install directory -> exit 2"
 assert_contains "$(cat "$TEST_TMP/plg.err")" "plugin's own install directory" "detect: plugin-dir refusal names the reason"
 node "$LIB" detect --target "$TEST_TMP" >/dev/null 2>&1; eq 2 "$?" "detect: not a git work tree -> exit 2"
 
+# (a) is the case above: plugin root, no .hippo directory, still refused.
+# (b) plugin root (module copied so the temp repo is PLUGIN_ROOT; path is not a plugin cache)
+#     with a committed .hippo/repo.toml whose id is autopilot -> state hippo.
+DEV="$TEST_TMP/dev-checkout"; mkdir -p "$DEV/scripts/lib"; cp "$LIB" "$DEV/scripts/lib/hippo.js"
+git init -q --template= "$DEV" && git -C "$DEV" add -A && git -C "$DEV" commit -q -m copy
+"$HIPPO_BIN" --json -C "$DEV" init --visibility internal --id autopilot >/dev/null
+git -C "$DEV" add -A && git -C "$DEV" commit -q -m store
+D="$(node "$DEV/scripts/lib/hippo.js" detect --target "$DEV" --json)"
+eq hippo "$(echo "$D" | jf d.state)" "detect: dev checkout with committed store id autopilot -> hippo"
+eq autopilot "$(echo "$D" | jf d.store_id)" "detect: dev checkout store_id is autopilot"
+
+# (c) plugin cache path, built the same way (module at <root>/scripts/lib so <root> is PLUGIN_ROOT),
+# with a .hippo directory and a committed id autopilot, is still refused.
+CACHE="$TEST_TMP/plugins/cache/autopilot/autopilot/9.9.9"
+mkdir -p "$CACHE/scripts/lib"; cp "$LIB" "$CACHE/scripts/lib/hippo.js"
+git init -q --template= "$CACHE" && git -C "$CACHE" add -A && git -C "$CACHE" commit -q -m copy
+"$HIPPO_BIN" --json -C "$CACHE" init --visibility internal --id autopilot >/dev/null
+git -C "$CACHE" add -A && git -C "$CACHE" commit -q -m store
+node "$CACHE/scripts/lib/hippo.js" detect --target "$CACHE" >/dev/null 2>"$TEST_TMP/cache.err"; RC=$?
+eq 2 "$RC" "detect: plugin cache path with a .hippo dir -> exit 2"
+assert_contains "$(cat "$TEST_TMP/cache.err")" "plugin's own install directory" "detect: plugin cache refusal names the reason"
+
 # --- spool: two writes with hippo hidden -> 2 entries, flush with hippo -> 2 records, 0 entries
 mkplan() { # mkplan <file> <key> <title> -> one-create plan
   printf '{"key":"%s","steps":[{"op":"create","ref":"root","kind":"issue","argv":["--title","%s","--status","open"],"body":"body of %s","key":"%s"}]}\n' "$2" "$3" "$3" "$2" > "$1"

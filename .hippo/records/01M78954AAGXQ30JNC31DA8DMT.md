@@ -1,0 +1,13 @@
+---
+id: 01M78954AAGXQ30JNC31DA8DMT
+kind: issue
+created: 2026-11-05T00:00:00.000Z
+---
+- **Since**: 2026-11-05
+- **Report**: 2026-11-03 fleet
+- **Reply**: none
+- **Problem**: 想在即時面板輸入兩個 @ 時，列出席位名稱讓人補全（例如 @@codex）。這是新功能，不是缺陷，目前沒有人回報任何症狀。
+- **Impact**: 不做的話，指定席位仍要手打完整名稱，容易打錯。
+- **Trigger**: 角色成員機制的計畫完成之後
+- **Source**: PM 2026-11-03 request；fleet 01M6FA4D51Q47AGXJR4ACY94TP 處置：排在 role-members 之後
+- **Pointer**: project/backlog/seat-name-autocomplete.md

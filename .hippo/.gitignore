@@ -1,0 +1,8 @@
+# hippo-store-ignore v1: re-include the store even under a global excludes file
+!/repo.toml
+!/.gitignore
+!/relocations.jsonl
+!/ops/*
+!/bodies/*
+!/records/*
+/.cache/

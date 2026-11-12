@@ -76,7 +76,7 @@ exit ${exitCode}
 }
 
 /** Fleet stub that prints a sha256 on `upload` and records `send` bodies. */
-function makeUploadFleet(dir, { uploadExit = 0 } = {}) {
+function makeUploadFleet(dir, { uploadExit = 0, uploadStderr = null } = {}) {
   const sha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const bin = path.join(dir, `fake-fleet-upload-${uploadExit}`);
   const nul = path.join(dir, `upload-fleet-${uploadExit}.nul`);
@@ -84,7 +84,9 @@ function makeUploadFleet(dir, { uploadExit = 0 } = {}) {
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const uploadBody = uploadExit === 0
     ? `printf '%s\\n' ${q(sha)}\nexit 0`
-    : `echo upload_refused >&2\nexit ${Number(uploadExit)}`;
+    : (uploadStderr == null
+      ? `echo upload_refused >&2\nexit ${Number(uploadExit)}`
+      : `printf '%s\\n' ${q(uploadStderr)} >&2\nexit ${Number(uploadExit)}`);
   write(bin, `#!/usr/bin/env bash
 printf '%s\\0' "$@" >> ${q(nul)}
 if [ "$1" = upload ]; then
@@ -98,6 +100,44 @@ exit 0
 `, 0o755);
   fs.chmodSync(bin, 0o755);
   return { bin, nul, msgLog, sha };
+}
+
+/**
+ * Fleet stub on the AUTOPILOT_FLEET_BIN seam. `upload <file>` stats <file>
+ * and refuses owner-only modes the way fleet refuses credential_mode:
+ * exit 1, stderr `fleet upload: refused: credential_mode` when
+ * (mode & 0o077) === 0; otherwise print a 64-hex sha and exit 0.
+ */
+function makeCredentialModeFleet(dir) {
+  const sha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  const bin = path.join(dir, 'fake-fleet-credential-mode');
+  const msgLog = path.join(dir, 'credential-mode-msgs.txt');
+  const script = [
+    '#!/usr/bin/env node',
+    "'use strict';",
+    "const fs = require('fs');",
+    'const args = process.argv.slice(2);',
+    `const sha = ${JSON.stringify(sha)};`,
+    `const msgLog = ${JSON.stringify(msgLog)};`,
+    "if (args[0] === 'upload') {",
+    '  const mode = fs.statSync(args[1]).mode;',
+    '  if ((mode & 0o077) === 0) {',
+    "    process.stderr.write('fleet upload: refused: credential_mode\\n');",
+    '    process.exit(1);',
+    '  }',
+    "  process.stdout.write(sha + '\\n');",
+    '  process.exit(0);',
+    '}',
+    "if (args[0] === 'send') {",
+    "  fs.appendFileSync(msgLog, String(args[2] == null ? '' : args[2]) + '\\n');",
+    '  process.exit(0);',
+    '}',
+    'process.exit(0);',
+    '',
+  ].join('\n');
+  write(bin, script, 0o755);
+  fs.chmodSync(bin, 0o755);
+  return { bin, msgLog, sha };
 }
 
 function makeRails(dir, {
@@ -1125,6 +1165,71 @@ test('(4) notify uploads share/result.md and puts ref= next to the path', () => 
   const item2 = JSON.parse(fs.readFileSync(path.join(q2, 'items', id2, 'item.json'), 'utf8'));
   assert.equal(item2.notified, true);
   assert.equal(fs.statSync(path.join(q2, 'items', id2, 'share', 'result.md')).mode & 0o777, 0o640);
+});
+
+test('(4b) upload failure notice names the sanitized fleet reason', () => {
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work, { authorRawContent: 'SHARE_ME\n' });
+  const brief = briefFile(work);
+  const fleet = makeUploadFleet(work, {
+    uploadExit: 1,
+    uploadStderr: 'fleet upload: refused: unattributed (x y)',
+  });
+  const q = mkTmp('noncq-q-');
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'draft', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], {
+    AUTOPILOT_NONCQ_DIR: q,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: fleet.bin,
+  });
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const pace = writePace(work, [paceRow()], 'pace-reason.json');
+  drain(q, pace, rails.dir, fleet.bin);
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', id, 'rail.exit')), 8000));
+  const d = drain(q, pace, rails.dir, fleet.bin);
+  assert.equal(d.status, 0, d.stderr);
+  const result = path.join(q, 'items', id, 'result.md');
+  const msg = fs.readFileSync(fleet.msgLog, 'utf8');
+  assert.ok(msg.includes(`${id} done ${result} upload_failed:refused:_unattributed_(x_y)`), msg);
+});
+
+// ---------------------------------------------------------------------------
+// (4c) fleet refuses the 0600 result.md; the 0640 share copy is what is uploaded
+// ---------------------------------------------------------------------------
+test('(4c) 0600 result.md is handed to fleet upload as a 0640 share copy', () => {
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work, { authorRawContent: 'SHARE_ME\n' });
+  const brief = briefFile(work);
+  const fleet = makeCredentialModeFleet(work);
+  const q = mkTmp('noncq-q-');
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'draft', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], {
+    AUTOPILOT_NONCQ_DIR: q,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: fleet.bin,
+  });
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const pace = writePace(work, [paceRow()], 'pace-credmode.json');
+  let d = drain(q, pace, rails.dir, fleet.bin);
+  assert.equal(JSON.parse(d.stdout).dispatched.length, 1);
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', id, 'rail.exit')), 8000));
+  d = drain(q, pace, rails.dir, fleet.bin);
+  assert.equal(d.status, 0, d.stderr);
+  const resultPath = path.join(q, 'items', id, 'result.md');
+  const share = path.join(q, 'items', id, 'share', 'result.md');
+  // Production reap writes result.md 0600. copyFile keeps that mode; only the
+  // share chmod makes the file fleet will accept.
+  assert.equal(fs.statSync(resultPath).mode & 0o777, 0o600);
+  const msg = fs.readFileSync(fleet.msgLog, 'utf8');
+  assert.ok(msg.includes(`${id} done ${resultPath} ref=${fleet.sha}`), msg);
+  assert.equal(msg.includes('upload_failed'), false, msg);
+  assert.equal(fs.statSync(share).mode & 0o777, 0o640);
 });
 
 // ---------------------------------------------------------------------------

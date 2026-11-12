@@ -18,8 +18,8 @@
  * two `--input` files share a basename. `--needs-shell` stores
  * `needs_shell: true`; drain will not assign that item to a runner of `agy`.
  * Notify copies `result.md` to `share/result.md` (0640), uploads it with the
- * fleet bin, and puts `ref=<sha256>` on the line (`upload_failed` if upload
- * fails). A rail failure whose stderr or raw log contains `agy_stdin_ceiling`
+ * fleet bin, and puts `ref=<sha256>` on the line (`upload_failed:<reason>` if
+ * upload fails). A rail failure whose stderr or raw log contains `agy_stdin_ceiling`
  * is terminal.
  *
  * USAGE:
@@ -837,16 +837,53 @@ function parsePrintedSha256(text) {
   return m ? m[0].toLowerCase() : null;
 }
 
+const UPLOAD_REASON_PREFIX = 'fleet upload: ';
+const UPLOAD_REASON_MAX = 80;
+
+function firstNonEmptyLine(text) {
+  if (typeof text !== 'string' || text.length === 0) return '';
+  for (const raw of text.split('\n')) {
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    if (line.trim() !== '') return line;
+  }
+  return '';
+}
+
+/** Leading `fleet upload: ` off, whitespace runs to `_`, then a token of at most 80. */
+function sanitizeUploadReason(text) {
+  let s = String(text);
+  if (s.startsWith(UPLOAD_REASON_PREFIX)) s = s.slice(UPLOAD_REASON_PREFIX.length);
+  s = s.replace(/\s+/g, '_').replace(/[^A-Za-z0-9._:()=-]/g, '');
+  return s.length > UPLOAD_REASON_MAX ? s.slice(0, UPLOAD_REASON_MAX) : s;
+}
+
+function uploadFailureReason(r) {
+  const line = firstNonEmptyLine(r && r.stderr) || firstNonEmptyLine(r && r.stdout);
+  if (line) {
+    const cleaned = sanitizeUploadReason(line);
+    if (cleaned) return cleaned;
+  }
+  if (r && r.error && r.error.code) {
+    const code = sanitizeUploadReason(String(r.error.code));
+    if (code) return code;
+  }
+  if (r && typeof r.status === 'number') return `rc=${r.status}`;
+  return 'rc=';
+}
+
 /** Upload the 0640 share copy. Same AUTOPILOT_FLEET_BIN seam as fleetSend. */
 function fleetUpload(file, name, summary, env = process.env) {
   const r = fleetSpawn(['upload', file, '--name', name, '--summary', summary], env);
-  if (!r || r.error || r.status !== 0) return null;
-  return parsePrintedSha256(r.stdout);
+  if (r && !r.error && r.status === 0) {
+    const sha = parsePrintedSha256(r.stdout);
+    if (sha) return { sha };
+  }
+  return { reason: uploadFailureReason(r) };
 }
 
 /**
  * Copy result.md to items/<id>/share/result.md (0640) and upload it.
- * The notice keeps the local path and adds ref=<sha> or upload_failed.
+ * The notice keeps the local path and adds ref=<sha> or upload_failed:<reason>.
  */
 function resultNoticeLine(row, env) {
   const src = row.path;
@@ -857,11 +894,12 @@ function resultNoticeLine(row, env) {
       fs.mkdirSync(path.dirname(share), { recursive: true, mode: 0o750 });
       fs.copyFileSync(src, share);
       fs.chmodSync(share, 0o640);
-      const sha = fleetUpload(share, `${row.id}-result.md`, `${row.id} ${row.outcome}`, env);
-      if (sha) tag = `ref=${sha}`;
+      const uploaded = fleetUpload(share, `${row.id}-result.md`, `${row.id} ${row.outcome}`, env);
+      tag = uploaded.sha ? `ref=${uploaded.sha}` : `upload_failed:${uploaded.reason}`;
     }
-  } catch {
-    tag = 'upload_failed';
+  } catch (err) {
+    const code = err && err.code ? sanitizeUploadReason(String(err.code)) : '';
+    tag = `upload_failed:${code || 'copy_error'}`;
   }
   return `${row.id} ${row.outcome} ${src} ${tag}`;
 }

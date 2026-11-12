@@ -7,9 +7,11 @@
 // Merge is per (provider, alias, window kind): the strictly newer observed_at wins; a tie keeps the earlier
 // dir, and the local dir is first, so a tie keeps local. When any kept window is not the local row, or there
 // is no local row, record metadata (visibility, token_state, refusal) comes from the winning slot with the
-// newest observed_at, and a tie on that stamp keeps local. A missing, symlinked or unreadable extra dir is
-// skipped. Parsed rows go through parseView / validateRecord; invalid rows are dropped. Only the local
-// courier's row is a candidate (peer rows stay out, the same rule as a null configured namespace).
+// newest observed_at, and a tie on that stamp keeps local. No winning window (empty-window L1) leaves
+// newestMetaSlot null: metadata stays on the local row, or on the extra row when there is no local row.
+// A missing, symlinked or unreadable extra dir is skipped. Parsed rows go through parseView / validateRecord;
+// invalid rows are dropped. Only the local courier's row is a candidate (peer rows stay out, the same rule
+// as a null configured namespace).
 // sharedOutDirProblem is the one check for a shared producer --out-dir: it must already exist, must not be
 // world-writable, and must be owned by this user or a group this user is in. It is not a tmpfs live dir.
 // Node >= 20.10, built-ins only.
@@ -129,6 +131,12 @@ function newestMetaSlot(kinds) {
   return best;
 }
 
+// newestMetaSlot is null when no window won a kind. The fallback is the row still returned.
+function metaRecord(kinds, fallback) {
+  const slot = newestMetaSlot(kinds);
+  return slot ? slot.row.record : fallback;
+}
+
 function accountId(provider, alias) { return `${provider}\0${alias}`; }
 
 // opts: { liveDir, env, home, secrets, provider, alias }. Never throws.
@@ -175,13 +183,19 @@ function readMerged(opts) {
     if (!byAccount.has(id)) byAccount.set(id, new Map());
     byAccount.get(id).set(kind, slot);
   }
+  // An empty-window row wins no kind, so it has no entry yet. An empty map makes the merge
+  // below run with newestMetaSlot === null and take the row fallback.
+  for (const id of accounts.keys()) {
+    if (!byAccount.has(id)) byAccount.set(id, new Map());
+  }
   const records = [];
   for (const [id, kinds] of byAccount) {
     const acct = accounts.get(id);
     const changed = Array.from(kinds.values()).some((slot) => slot.local === false);
     let view;
     let record;
-    if (acct.localView && !changed) {
+    // No kept window: not the unchanged-file fast path. The localRow branch's null fallback returns it.
+    if (acct.localView && !changed && kinds.size > 0) {
       view = acct.localView;
       record = acct.localRow.record;
     } else if (acct.localRow) {
@@ -197,13 +211,13 @@ function readMerged(opts) {
         if (used.has(kind)) continue;
         windows.push(slot.window);
       }
-      record = Object.assign({}, newestMetaSlot(kinds).row.record, { windows });
+      record = Object.assign({}, metaRecord(kinds, acct.localRow.record), { windows });
       const rows = acct.localView.rows.map((r) => (r === acct.localRow ? Object.assign({}, r, { record }) : r));
       view = Object.assign({}, acct.localView, { rows });
     } else {
       const windows = [];
       for (const slot of kinds.values()) windows.push(slot.window);
-      const base = newestMetaSlot(kinds).row.record;
+      const base = metaRecord(kinds, acct.extraRow.record);
       record = Object.assign({}, base, { windows });
       const row = {
         writer_courier: observation.LOCAL_COURIER,

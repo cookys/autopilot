@@ -139,6 +139,37 @@ test('a newer extra L3 row supplies metadata, not the older local L1 row', () =>
   } finally { w.cleanup(); }
 });
 
+test('an extra-only empty-window L1 row is returned', () => {
+  const w = world();
+  try {
+    // HTTP 401 token_invalid row, the shape quota-provider-sync writes for a rejected token.
+    writeView(w.extra, 'minimax', 'minimax', [], (rec) => {
+      rec.visibility = 'L1';
+      rec.windows = [];
+      rec.token_state = 'invalid';
+      rec.token_state_at = T;
+    });
+    // A refusal row is the other empty-window L1 shape. No local row for either account.
+    writeView(w.extra, 'claude', 'a', [], (rec) => {
+      rec.visibility = 'L1';
+      rec.windows = [];
+      rec.refusal = { observed_at: T - 10, retry_at: T + 1200, reason: 'rate_limit' };
+    });
+    const records = merged(w, { AUTOPILOT_QUOTA_MIRROR_DIRS: w.extra });
+    assert.strictEqual(records.length, 2);
+    const invalid = one(records, 'minimax');
+    assert.strictEqual(invalid.visibility, 'L1');
+    assert.strictEqual(invalid.token_state, 'invalid');
+    assert.strictEqual(invalid.token_state_at, T);
+    assert.strictEqual(invalid.refusal, null);
+    assert.deepStrictEqual(invalid.windows, []);
+    const refusal = one(records, 'claude');
+    assert.strictEqual(refusal.visibility, 'L1');
+    assert.strictEqual(refusal.refusal.reason, 'rate_limit');
+    assert.deepStrictEqual(refusal.windows, []);
+  } finally { w.cleanup(); }
+});
+
 test('a local refusal row with no windows is still returned', () => {
   const w = world();
   try {

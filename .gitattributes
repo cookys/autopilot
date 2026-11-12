@@ -1,0 +1,4 @@
+.hippo/ops/* merge=union eol=lf
+.hippo/relocations.jsonl merge=union eol=lf
+.hippo/bodies/* eol=lf
+.hippo/records/*.md merge=hippo eol=lf

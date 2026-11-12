@@ -1,0 +1,11 @@
+---
+id: 01M7894X21J88PQPZFXM4P1GHZ
+kind: issue
+created: 2026-11-06T00:00:00.000Z
+---
+- **Since**: 2026-11-06
+- **Problem**: fleet 相關的 lane 文字還留在 repo 裡，沒有清乾淨（參照 2b1d4711）。
+- **Impact**: 舊文字會誤導之後讀文件的人和 agent。
+- **Trigger**: ready；next docs lane
+- **Source**: fleet lane residue, ref 2b1d4711
+- **Pointer**: project/backlog/fleet-lane-text-and-task-due.md

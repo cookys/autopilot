@@ -69,3 +69,4 @@ evals/skill-onoff/results/qs*.cells/
 # Repo .gitignore outranks core.excludesFile (gitignore(5), order of precedence).
 !hooks/tests/fixtures/**/*.jsonl
 !docs/plans/evidence/**/*.jsonl
+.hippo/.cache/

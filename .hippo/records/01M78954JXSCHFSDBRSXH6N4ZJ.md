@@ -1,0 +1,11 @@
+---
+id: 01M78954JXSCHFSDBRSXH6N4ZJ
+kind: issue
+created: 2026-11-06T00:00:00.000Z
+---
+- **Since**: 2026-11-06
+- **Problem**: 只改 mods/roundtable 十個檔案，受影響套件挑出 496/789，等於每次都要跑全套。還不知道 mods 的變更為何擴散這麼廣。
+- **Impact**: 小改動也觸發全套規則，浪費時間。與 BL-0391、BL-0410 同屬挑選準確度。
+- **Trigger**: PM 派工
+- **Source**: autopilot depth-0, 2026-11-06 (rtchat)
+- **Pointer**: project/backlog/affected-suites-accuracy-2026-11-06.md

@@ -1,0 +1,11 @@
+---
+id: 01M7894XAWVYXSG13337HHMT6B
+kind: issue
+created: 2026-11-07T00:00:00.000Z
+---
+- **Since**: 2026-11-07
+- **Problem**: account 路徑還原 trap 時是重設而非存回原本的；trap 要放在 fork 之前；要用不回應信號的替身驗 137；review 的 cc-shim 缺 -k；review 的 account 路徑缺 timeout -k（76f11d50）。
+- **Impact**: 極端時序下憑證副本或子程序可能殘留。
+- **Trigger**: next touch of the account rails seeding code
+- **Source**: seedclean g3 review (adb8f4b0, de92deb9, 76f11d50)
+- **Pointer**: project/backlog/docsz6-hardening-notes.md

@@ -1,0 +1,11 @@
+---
+id: 01M7894XS44AERJDGWHWAKXQ9K
+kind: issue
+created: 2026-11-01T00:00:00.000Z
+---
+- **Since**: 2026-11-01
+- **Problem**: 專案根目錄預設取目前所在目錄，在子目錄執行檢查會失敗而且訊息沒說用了哪個根；另有一個測試的讀取計數在走正規路徑時會漏算。
+- **Impact**: 使用者在子目錄執行會看到不明原因的失敗；漏算的計數讓測試可能假綠。
+- **Trigger**: next edit to graph-check, graduation or doc-drift-gate, or a report of a failure caused by running from a subdirectory
+- **Source**: planpath acceptance, 3b39f9077, 2026-11-01
+- **Pointer**: project/backlog/planpath-follow-ups.md

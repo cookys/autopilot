@@ -1,0 +1,14 @@
+---
+id: 01M78951JGJC29ZNXZMFWHF2X9
+kind: issue
+created: 2026-10-31T00:00:00.000Z
+---
+- **Since**: 2026-10-31
+- **Report**: 01M67HZPT918GAWJG237T0JG8N
+- **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
+- **Problem**: strike 寫入者的允許名單裡沒有「專案植入校準」這類寫入者，回報者只能暫借 qualification_admin 的身分寫入。
+- **Impact**: 回報者借用不屬於自己的寫入者身分，紀錄的來源標示不準確。
+- **Trigger**: next edit to the strike writer allowlist, or a second project embeds calibration
+- **Source**: PEER-REPORTED peace (<host>) 2026-10-31
+- **Pointer**: project/backlog/strike-writer-allowlist-calibration.md
+- **Context**: Decide whether to add a dedicated writer id for project-embedded calibration to the strike writer allowlist.

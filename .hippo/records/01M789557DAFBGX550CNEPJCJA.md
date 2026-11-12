@@ -1,0 +1,11 @@
+---
+id: 01M789557DAFBGX550CNEPJCJA
+kind: issue
+created: 2026-11-07T00:00:00.000Z
+---
+- **Since**: 2026-11-07
+- **Problem**: review-server 測試裡「watcher 啟動的伺服器回 200」在全套負載 44 時回 000，全套與單獨重跑都紅；但單獨在兩個基底上各跑一次都綠。要在高負載穩定重現並修好根因。
+- **Impact**: 全套高負載時出現假紅，真壞掉會被當成雜訊放過。
+- **Trigger**: ready；在負載 40 以上用壓力工具或平行套件重現
+- **Source**: PM fleet 01M6TY1Q06 (2026-11-07)
+- **Pointer**: project/backlog/flaky-under-load-suites.md

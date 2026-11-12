@@ -1,0 +1,13 @@
+---
+id: 01M78955KX503RM4MG4XNEKGZC
+kind: issue
+created: 2026-11-12T00:00:00.000Z
+---
+- **Since**: 2026-11-12
+- **Report**: 2026-11-12 fleet (PM via hangar)
+- **Reply**: unknown
+- **Problem**: Test harnesses that start their own tmux socket and a claude process (the modscroll repro harness) are not torn down; one was still running on the PM host after 25 days, hangar stopped it on PM go.
+- **Impact**: Orphan claude processes and tmux servers keep running after the test, with a deleted exe and a gone plugin worktree.
+- **Trigger**: ready
+- **Source**: PM report via hangar 2026-11-12
+- **Pointer**: project/backlog/test-tmux-claude-teardown.md

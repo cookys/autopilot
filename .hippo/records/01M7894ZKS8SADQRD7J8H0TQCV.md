@@ -1,0 +1,14 @@
+---
+id: 01M7894ZKS8SADQRD7J8H0TQCV
+kind: issue
+created: 2026-10-21T00:00:00.000Z
+---
+- **Since**: 2026-10-21
+- **Report**: 01M5EWE5D6HT343H26BCXSHBPM；01M5EX8WGH1FT9MJDXYNQ2WGWN；01M5EY27E8E1PJVDB7B05FEENX
+- **Reply**: 2026-10-21 01M5EWEHPTPD4F0P6KAP5VDCAH；2026-10-21 01M5EX9883PHTTG3N2HPE08CG6；2026-10-21 01M5EY2GX2JCMJB1VX3TMF81EX
+- **Problem**: 跨工具的長駐席位沒有共用的用量紀律。交接時機、讀檔、輪詢、子代理與回覆節奏都靠各席自己拿捏。
+- **Impact**: 主執行緒會累積到十億級用量。壓縮後仍比新執行緒肥，成本與延遲都下不來。
+- **Trigger**: 3.0.0 之後；the owner decides whether to build P1-P3 of the concurrency plan.
+- **Source**: PEER llm-playground claude-4 2026-10-21
+- **Pointer**: project/backlog/cross-harness-token-discipline.md
+- **Context**: Item 4: owner chose P0 only (d-02c60498); p0spike 8eee6eac0 settled the seven hook facts; P1-P3 not started.

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// hooks/askpm-log.js — PM session only. UserPromptSubmit appends the operator's prompt;
-// Stop appends the first two lines of that turn's reply (the payload's
-// last_assistant_message when that string is non-blank, else transcript_path).
+// hooks/askpm-log.js — PM session only. UserPromptSubmit appends the operator's prompt.
+// An injected prompt appends a turn marker instead of an ask. Stop appends the first
+// two lines of the reply of the turn that ask started (the payload's
+// last_assistant_message when that string is non-blank, else the last assistant
+// text of that turn in transcript_path). A Stop for any other turn appends nothing.
 // One reply per ask: the re-entry after another
 // Stop hook blocked (stop_hook_active) still writes when the first Stop wrote nothing,
 // and a second Stop in the same turn does not append again. One jsonl under the account
@@ -21,9 +23,13 @@
 // autopilot.console/1. FLEET_ADDRESS and FLEET_MEMBER are not read. No fleet
 // whoami on this path.
 //
-// Skips plugin-injected prompts: a first line starting with [待決回覆] (covers
-// [待決回覆·更正]), harness prefixes, a fleet <channel source="fleet"> turn,
-// advisory-relay's additionalContext JSON, and any payload that carries agent_id.
+// An injected prompt is not an ask. UserPromptSubmit appends {schema, kind:'turn',
+// at, injected:true} for a first line starting with [待決回覆] or [待決回覆·更正],
+// a harness prefix, a fleet <channel source="fleet"> turn, or advisory-relay's
+// additionalContext JSON. That turn marker closes the open ask, so the following
+// Stop records no reply. A fleet channel notification has no UserPromptSubmit;
+// Stop then skips the reply when the transcript's last real user text is not the
+// open ask. A payload that carries agent_id appends nothing.
 'use strict';
 
 const fs = require('fs');
@@ -105,27 +111,62 @@ function append(env, row) {
   }
 }
 
-// True when the newest ask already has its reply. A second Stop in the same turn
-// (the re-entry after another Stop hook blocked) must not append again.
-function openAskAnswered(env) {
-  let raw;
-  try { raw = fs.readFileSync(logFile(env), 'utf8'); } catch { return false; }
-  let kind = '';
-  for (const line of raw.split('\n')) {
-    if (!line) continue;
-    let row;
-    try { row = JSON.parse(line); } catch { continue; }
-    if (!row || row.schema !== SCHEMA || (row.kind !== 'ask' && row.kind !== 'reply')) continue;
-    kind = row.kind;
-  }
-  return kind === 'reply';
-}
-
 function clip(text) {
   return text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) : text;
 }
 
-// Last assistant text after the last real user turn. A tool_result-only user turn is not that turn.
+// Ask-row text, and the comparison against a transcript user entry: CRLF to LF, then clip.
+function normClip(text) {
+  const s = typeof text === 'string' ? text.replace(/\r\n/g, '\n') : '';
+  return clip(s);
+}
+
+function textOf(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n');
+}
+
+function onlyToolResult(content) {
+  return Array.isArray(content) && content.length > 0 && content.every((b) => b && b.type === 'tool_result');
+}
+
+// Rows this hook wrote. null when the log cannot be read (nothing recorded yet).
+function relevantRows(env) {
+  let raw;
+  try { raw = fs.readFileSync(logFile(env), 'utf8'); } catch { return null; }
+  const rows = [];
+  for (const line of raw.split('\n')) {
+    if (!line) continue;
+    let row;
+    try { row = JSON.parse(line); } catch { continue; }
+    if (!row || row.schema !== SCHEMA) continue;
+    if (row.kind !== 'ask' && row.kind !== 'reply' && row.kind !== 'turn') continue;
+    rows.push(row);
+  }
+  return rows;
+}
+
+// The open ask is the newest ask that no later reply or turn row has closed.
+// A turn row is an injected UserPromptSubmit: that Stop is not the operator's turn.
+// null askText with closed false: no log yet, so a Stop still records (no ask to guard).
+// closed true: a reply is already stored, or a turn row closed the ask.
+function replyGate(env) {
+  const rows = relevantRows(env);
+  if (rows === null || rows.length === 0) return { closed: false, askText: null };
+  let ask = null;
+  for (const row of rows) {
+    if (row.kind === 'ask') ask = row;
+    else ask = null;
+  }
+  if (!ask) return { closed: true, askText: null };
+  return { closed: false, askText: typeof ask.text === 'string' ? ask.text : '' };
+}
+
+// Last assistant text in the current turn, after the last real user entry.
+// A tool_result-only user entry stays inside the turn. Walk from the end so the
+// reply is the last assistant entry that has text, not an earlier one spoken
+// before a tool call.
 function lastAssistantText(transcript) {
   const lines = transcript.split('\n');
   for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -135,22 +176,51 @@ function lastAssistantText(transcript) {
     const role = e && (e.type || (e.message && e.message.role));
     const content = e && e.message && e.message.content;
     if (role === 'user') {
-      const onlyToolResult = Array.isArray(content) && content.length > 0 && content.every((b) => b && b.type === 'tool_result');
-      if (!onlyToolResult) return null;
+      if (!onlyToolResult(content)) return null;
       continue;
     }
     if (role !== 'assistant') continue;
-    const text = typeof content === 'string' ? content
-      : Array.isArray(content) ? content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n') : '';
+    const text = textOf(content);
     if (text.trim()) return text;
   }
   return null;
 }
 
+// Last real user text in the transcript, or null when every user entry is a tool result.
+function lastRealUserText(transcript) {
+  const lines = transcript.split('\n');
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (!lines[i].trim()) continue;
+    let e;
+    try { e = JSON.parse(lines[i]); } catch { continue; }
+    const role = e && (e.type || (e.message && e.message.role));
+    if (role !== 'user') continue;
+    const content = e && e.message && e.message.content;
+    if (onlyToolResult(content)) continue;
+    return textOf(content);
+  }
+  return null;
+}
+
+// Unreadable transcript: keep recording. Readable: record only when the last real
+// user text is the open ask after the same clip + CRLF normalisation as the ask row.
+function transcriptMatchesAsk(input, askText) {
+  const tp = input.transcript_path;
+  if (typeof tp !== 'string' || tp === '') return true;
+  let raw;
+  try { raw = fs.readFileSync(tp, 'utf8'); } catch { return true; }
+  const user = lastRealUserText(raw);
+  if (user === null) return false;
+  return normClip(user) === normClip(askText);
+}
+
 function onPrompt(input, env) {
   if (input.agent_id) return;
-  if (isInjected(input.prompt)) return;
-  append(env, { schema: SCHEMA, kind: 'ask', at: new Date().toISOString(), text: clip(input.prompt) });
+  if (isInjected(input.prompt)) {
+    append(env, { schema: SCHEMA, kind: 'turn', at: new Date().toISOString(), injected: true });
+    return;
+  }
+  append(env, { schema: SCHEMA, kind: 'ask', at: new Date().toISOString(), text: normClip(input.prompt) });
 }
 
 // The Stop payload's last_assistant_message is the reply of the turn that is
@@ -175,8 +245,11 @@ function onStop(input, env) {
   if (input.agent_id) return;
   // stop_hook_active true is the re-entry after another Stop hook blocked. That
   // call is the one that ends the turn, so it still records when the first Stop
-  // wrote nothing. It does not record a second row for the same ask.
-  if (openAskAnswered(env)) return;
+  // wrote nothing. It does not record a second row for the same ask. A turn row
+  // after the ask means this Stop ends a turn the operator did not start.
+  const gate = replyGate(env);
+  if (gate.closed) return;
+  if (gate.askText !== null && !transcriptMatchesAsk(input, gate.askText)) return;
   const text = replyBody(input);
   if (!text) return;
   const norm = text.replace(/\r\n/g, '\n');

@@ -52,6 +52,7 @@ export function parseAskpm(raw: string | null | undefined): AskRecord[] {
     try { v = JSON.parse(line) } catch { continue }
     if (v === null || typeof v !== 'object') continue
     const o = v as Record<string, unknown>
+    // kind 'turn' is an injected prompt marker. It is not an ask or a reply.
     if ((o.kind !== 'ask' && o.kind !== 'reply') || typeof o.at !== 'string') continue
     const rec: AskRecord = { kind: o.kind, at: o.at }
     if (typeof o.schema === 'string') rec.schema = o.schema

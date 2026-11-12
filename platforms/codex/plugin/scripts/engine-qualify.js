@@ -1900,10 +1900,12 @@ function parseBrokerResponse(stdout, panelConfig) {
   } catch {
     throw new Error('case broker returned malformed JSON');
   }
-  // Optional `usage` telemetry key (qualification-usage.js); a response without it
+  // Optional `usage` / `finish_reason` telemetry keys; a response without them
   // is the historic shape and stays valid.
   const brokerKeys = ['schema_version', 'status', 'output', 'error', 'receipt'];
-  if (!hasExactKeys(value, Object.hasOwn(value, 'usage') ? [...brokerKeys, 'usage'] : brokerKeys)
+  if (Object.hasOwn(value, 'usage')) brokerKeys.push('usage');
+  if (Object.hasOwn(value, 'finish_reason')) brokerKeys.push('finish_reason');
+  if (!hasExactKeys(value, brokerKeys)
       || value.schema_version !== 1 || !['ok', 'failed'].includes(value.status)) {
     throw new Error('case broker response has an invalid shape');
   }
@@ -1913,6 +1915,11 @@ function parseBrokerResponse(stdout, panelConfig) {
     } catch (error) {
       throw new Error(`case broker response has an invalid shape: ${error.message}`);
     }
+  }
+  if (Object.hasOwn(value, 'finish_reason')
+      && value.finish_reason !== null
+      && typeof value.finish_reason !== 'string') {
+    throw new Error('case broker response has an invalid finish_reason');
   }
   if (!value.receipt || typeof value.receipt !== 'object' || Array.isArray(value.receipt)) {
     throw new Error('case broker response is missing its bound receipt');
@@ -1968,6 +1975,8 @@ function executePanelCase(panelConfig, diff) {
     ...result,
     wall_s: Number(process.hrtime.bigint() - started) / 1e9,
     usage: result.usage || null,
+    // Telemetry only: server stop/finish reason verbatim, null when absent.
+    finish_reason: Object.hasOwn(result, 'finish_reason') ? result.finish_reason : null,
   };
 }
 
@@ -2066,6 +2075,9 @@ function executePanelCaseTransport(panelConfig, diff) {
     stdout: broker.value.output,
     receiptHash: broker.receiptHash,
     usage: broker.value.usage || null,
+    finish_reason: Object.hasOwn(broker.value, 'finish_reason')
+      ? broker.value.finish_reason
+      : null,
   };
 }
 
@@ -2092,6 +2104,7 @@ function runPanelCase(panelConfig, testCase, rawSink = null) {
       stdout: result.stdout,
       parse_error: parseError,
       panel_verdict: panel.verdict,
+      finish_reason: result.finish_reason ?? null,
     });
   }
   let oraclePassed;
@@ -2174,6 +2187,7 @@ function runOwnerPanelCase(panelConfig, testCase, rawSink = null) {
       stdout: result.stdout,
       parse_error: parseError,
       panel_verdict: panel.decision === 'reject' ? 'fail' : 'pass',
+      finish_reason: result.finish_reason ?? null,
     });
   }
   const oraclePassed = testCase.kind === 'known_bad'
@@ -2818,6 +2832,7 @@ function runVaQualification(options) {
         envelope: caseData.envelope,
         transport_ok: execution.ok,
         output,
+        finish_reason: execution.finish_reason ?? null,
         // d-80d327c9: an empty plan from a forbidden tool attempt carries its reason.
         ...(execution.toolAttemptForbidden ? { reason: execution.toolAttemptForbidden } : {}),
       });
@@ -3135,6 +3150,7 @@ function runBrainQualification(options) {
         transportAbort = `transport failure on trial ${trialIndex + 1} round ${round.round_id}: ${execution.error}`;
         rawExchanges.push({
           round_id: round.round_id, input, transport_ok: false, output: stdout,
+          finish_reason: execution.finish_reason ?? null,
         });
         break;
       }
@@ -3155,6 +3171,7 @@ function runBrainQualification(options) {
       );
       rawExchanges.push({
         round_id: round.round_id, input, transport_ok: true, output: stdout,
+        finish_reason: execution.finish_reason ?? null,
         // d-80d327c9: an empty answer from a forbidden tool attempt carries its reason.
         ...(execution.toolAttemptForbidden ? { reason: execution.toolAttemptForbidden } : {}),
       });
@@ -4334,6 +4351,10 @@ function runImplCase(context) {
       // but never usage; runner logs are runner-specific and pruned).
       wall_secs: dispatchJson && Number.isFinite(dispatchJson.wall_secs) ? dispatchJson.wall_secs : null,
       usage: dispatchJson && dispatchJson.usage ? dispatchJson.usage : null,
+      // Implementer rails have no HTTP stop/finish reason; null unless a rail reports one.
+      finish_reason: dispatchJson && typeof dispatchJson.finish_reason === 'string'
+        ? dispatchJson.finish_reason
+        : null,
       warning: null,
     });
     const blockedWrites = dispatchJson && Number.isInteger(dispatchJson.sandbox_blocked_writes)
@@ -5172,6 +5193,7 @@ function runConsultDiscussQualification(options) {
           response: responseParsed,
           outcome,
           tier_classification: tierClassification,
+          finish_reason: execution.finish_reason ?? null,
         });
         cases.push({ family: caseSpec.family, case_id: caseSpec.case_id, outcome });
 

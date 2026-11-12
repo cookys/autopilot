@@ -53,10 +53,10 @@ PROMPT="$TEST_TMP/prompt.txt"; printf 'update repo file\n' > "$PROMPT"
 AUTHOR_PROMPT="$TEST_TMP/author-prompt.txt"; printf 'Return a small JSON object.\n' > "$AUTHOR_PROMPT"
 OUTSIDE="$TEST_TMP/outside.txt"; printf 'not part of the kit\n' > "$OUTSIDE"
 
-# mkkit <dir> : a good kit. The role card has quotes, a $( ) text, a leading dash line and a trailing newline pair.
+# mkkit <dir> : a good kit. The role card has quotes, a $( ) text, a leading dash line, the A9 line and a trailing newline pair.
 mkkit() {
   rm -rf "$1"; mkdir -p "$1/plugin/skills/only-skill"
-  printf -- '# Role card\n- keep "quotes" and $(not run) and `ticks`\n--not-a-flag\nlast line\n\n' > "$1/role.md"
+  printf -- '# Role card\n- keep "quotes" and $(not run) and `ticks`\n--not-a-flag\nA9: delegate mechanical or read-only work to a cheap seat; keep judgment and irreversible acts.\nlast line\n\n' > "$1/role.md"
   printf 'Read,Grep\n' > "$1/tools"
   printf 'skill\n' > "$1/plugin/skills/only-skill/SKILL.md"
 }
@@ -138,14 +138,15 @@ for KIND in review author hetero; do
   assert_eq "" "$(argv_check "$KIT_NOPLUG/role.md" "" "")" "(b2) $KIND: no --plugin-dir, tools none -> --tools \"\""
 
   # (c) validation failures: refused before any spawn, with a one-line reason
-  declare -a CASES=(missing-dir no-role empty-role big-role empty-tools bad-tools multi-tools plugin-file link-escape dangling)
+  declare -a CASES=(missing-dir no-role empty-role no-a9 big-role empty-tools bad-tools multi-tools plugin-file link-escape dangling)
   for C in "${CASES[@]}"; do
     K="$TEST_TMP/bad-$C"; mkkit "$K"; WHY=""
     case "$C" in
       missing-dir) K="$TEST_TMP/does-not-exist"; WHY="kit dir missing" ;;
       no-role) rm "$K/role.md"; WHY="role.md missing" ;;
       empty-role) : > "$K/role.md"; WHY="role.md is empty" ;;
-      big-role) head -c 8193 /dev/zero | tr '\0' 'a' > "$K/role.md"; WHY="over the 8192 byte cap" ;;
+      no-a9) printf '# Role card\na9: lowercase is not A9\n A9: indented is not at line start\n' > "$K/role.md"; WHY="role.md missing the A9 rule line" ;;
+      big-role) { printf 'A9: rule\n'; head -c 8192 /dev/zero | tr '\0' 'a'; } > "$K/role.md"; WHY="over the 8192 byte cap" ;;
       empty-tools) printf '\n' > "$K/tools"; WHY="tools line is empty" ;;
       bad-tools) printf 'Read;rm -rf\n' > "$K/tools"; WHY="unknown tool name shape" ;;
       multi-tools) printf 'Read\nGrep\n' > "$K/tools"; WHY="single line" ;;
@@ -188,7 +189,7 @@ for KIND in review author hetero; do
   assert_contains "$("$REPO_ROOT/scripts/dispatch-$KIND.sh" -h 2>&1)" "--role-kit" "(h1) $KIND: -h prints the --role-kit lines"
 done
 # h2: a role card whose first bytes are "--example" reaches claude whole, as the value after --system-prompt
-KIT_DASH="$TEST_TMP/kit-dash"; mkkit "$KIT_DASH"; printf -- '--example\nsecond line' > "$KIT_DASH/role.md"
+KIT_DASH="$TEST_TMP/kit-dash"; mkkit "$KIT_DASH"; printf -- '--example\nA9: delegate mechanical work\nsecond line' > "$KIT_DASH/role.md"
 for KIND in review author hetero; do
   run_rail "$REPO_ROOT/scripts/dispatch-$KIND.sh" "$KIND" --role-kit "$KIT_DASH"
   assert_eq "1" "$NCALLS" "(h2) $KIND: dash-leading role card -> one claude call"
@@ -310,6 +311,16 @@ assert_eq "0" "$NCALLS" "(f) negative control: stderr merged into the parsed out
 MUT5="$TEST_TMP/mut5-scripts"; cp -r "$REPO_ROOT/scripts" "$MUT5"
 sed_mutate "$MUT5/dispatch-review.sh" "s/sed -n '2,63p'/sed -n '2,50p'/" >/dev/null
 assert_not_contains "$("$MUT5/dispatch-review.sh" -h 2>&1)" "--role-kit" "(f) negative control: a -h range that stops early hides the --role-kit lines"
+A9_CHECK_OUT="$(node "$REPO_ROOT/scripts/lib/role-kit.js" check "$TEST_TMP/bad-no-a9" < /dev/null)"; A9_CHECK_RC=$?
+assert_eq "2" "$A9_CHECK_RC" "(f) direct role-kit.js check on kit without A9 exits 2"
+assert_eq "REASON: role.md missing the A9 rule line" "$A9_CHECK_OUT" "(f) direct role-kit.js check prints exact REASON line"
+KIT_BARE_A9="$TEST_TMP/kit-bare-a9"; mkkit "$KIT_BARE_A9"; printf 'A9:\n' > "$KIT_BARE_A9/role.md"
+node "$REPO_ROOT/scripts/lib/role-kit.js" check "$KIT_BARE_A9" >/dev/null < /dev/null; BARE_A9_RC=$?
+assert_eq "0" "$BARE_A9_RC" "(f) A9: at line start with empty suffix is accepted"
+MUT6="$TEST_TMP/mut6-scripts"; cp -r "$REPO_ROOT/scripts" "$MUT6"
+sed_mutate "$MUT6/lib/role-kit.js" "s/fail('role.md missing the A9 rule line')/void 0/" >/dev/null
+run_rail "$MUT6/dispatch-review.sh" review --role-kit "$TEST_TMP/bad-no-a9"
+assert_neq "0" "$NCALLS" "(f) negative control: validator without the A9 check lets a kit missing A9 through to a spawn"
 
 # (g) opt-in byte-identity check: ROLE_KIT_BASELINE_SCRIPTS=<scripts dir of the pre-change tree> -> without a kit the child argv
 # and env are byte-identical to that tree's (random suffixes of temp names and session ids normalised).
@@ -328,10 +339,11 @@ if [ -n "${ROLE_KIT_BASELINE_SCRIPTS:-}" ]; then
   done
 fi
 
-# (i) the reference states the two caveats
+# (i) the reference states the two caveats and the A9 refusal
 REFDOC="$(cat "$REPO_ROOT/references/hetero-dispatch.md")"
 assert_contains "$REFDOC" "no longer zero-tool" "(i) reference: a review kit with tools is no longer zero-tool"
 assert_contains "$REFDOC" "hooks and \`.mcp.json\` run" "(i) reference: plugin hooks and .mcp.json run"
+assert_contains "$REFDOC" "role.md missing the A9 rule line" "(i) reference: names the A9 rule line refusal"
 assert_not_contains "$REFDOC" "holding only that role's skills" "(i) reference: the skills-only wording is gone"
 assert_eq "$REFDOC" "$(cat "$REPO_ROOT/platforms/codex/plugin/references/hetero-dispatch.md")" "(i) codex mirror of the reference is in sync"
 

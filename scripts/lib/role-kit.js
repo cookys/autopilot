@@ -16,8 +16,9 @@
 //            exit 0
 //   fail  -> stdout, one line `REASON: <reason>`, exit 2 (stderr is left to node warnings and is never parsed). The rail refuses before any spawn.
 //
-// Limits: role.md <= ROLE_MD_MAX_BYTES (8 KiB: the role-kit direction caps a card at ~2 KiB, so this is 4x
-// headroom, far below the 128 KiB single-argv limit, and keeps the point of a kit, a small prompt).
+// Limits: role.md <= ROLE_MD_MAX_BYTES (8 KiB: the role-kit direction budgets ~2 KiB per card including the required
+// `A9:` rule line, so this is 4x headroom, far below the 128 KiB single-argv limit, and keeps the point of a kit, a small prompt).
+// Every role.md must carry a line starting `A9:` (/^A9:/m, case-sensitive at line start), else refused before spawn.
 // Every symlink anywhere under the kit must resolve inside the kit root (dangling ones are refused too).
 
 const fs = require('fs');
@@ -76,7 +77,9 @@ function check(dir) {
   if (role.length === 0 || role.toString('utf8').trim() === '') fail('role.md is empty');
   if (role.length > ROLE_MD_MAX_BYTES) fail(`role.md is ${role.length} bytes, over the ${ROLE_MD_MAX_BYTES} byte cap`);
   if (role.includes(0)) fail('role.md contains a NUL byte');
-  try { new TextDecoder('utf-8', { fatal: true }).decode(role); } catch { fail('role.md is not valid UTF-8'); }
+  let roleText;
+  try { roleText = new TextDecoder('utf-8', { fatal: true }).decode(role); } catch { fail('role.md is not valid UTF-8'); }
+  if (!/^A9:/m.test(roleText)) fail('role.md missing the A9 rule line');
 
   const toolsRaw = readKitFile(root, 'tools');
   if (toolsRaw.length > TOOLS_MAX_BYTES) fail(`tools file is over the ${TOOLS_MAX_BYTES} byte cap`);

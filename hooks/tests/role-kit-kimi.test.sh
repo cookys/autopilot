@@ -45,7 +45,7 @@ export KIT_CAP="$CAP"
 export PATH="$BIN:$PATH"
 
 PROMPT="$TEST_TMP/p.txt"; printf 'say hi\n' > "$PROMPT"
-mkkit() { rm -rf "$1"; mkdir -p "$1"; printf -- '# Role card\n- keep "quotes" and $(not run) and `ticks`\n--not-a-flag\nlast line\n\n' > "$1/role.md"; printf 'Read,Grep\n' > "$1/tools"; }
+mkkit() { rm -rf "$1"; mkdir -p "$1"; printf -- '# Role card\n- keep "quotes" and $(not run) and `ticks`\n--not-a-flag\nA9: delegate mechanical or read-only work to a cheap seat; keep judgment and irreversible acts.\nlast line\n\n' > "$1/role.md"; printf 'Read,Grep\n' > "$1/tools"; }
 KIT="$TEST_TMP/kit"; mkkit "$KIT"
 KIT_REAL="$(cd "$KIT" && pwd -P)"
 
@@ -157,8 +157,9 @@ refuse_case() { # <name> <why>
     missing-dir) K="$TEST_TMP/does-not-exist" ;;
     plugin) mkdir -p "$K/plugin/skills/only-skill"; printf 'skill\n' > "$K/plugin/skills/only-skill/SKILL.md" ;;
     empty-role) : > "$K/role.md" ;;
-    kimi-cap) head -c 4097 /dev/zero | tr '\0' 'a' > "$K/role.md" ;;
-    big-role) head -c 8193 /dev/zero | tr '\0' 'a' > "$K/role.md" ;;
+    no-a9) printf '# Role card\na9: lowercase is not A9\n A9: indented is not at line start\n' > "$K/role.md" ;;
+    kimi-cap) { printf 'A9: rule\n'; head -c 4096 /dev/zero | tr '\0' 'a'; } > "$K/role.md" ;;
+    big-role) { printf 'A9: rule\n'; head -c 8192 /dev/zero | tr '\0' 'a'; } > "$K/role.md" ;;
     bad-tools) printf 'Read;rm -rf\n' > "$K/tools" ;;
     empty-tools) printf '\n' > "$K/tools" ;;
     link-escape) rm "$K/role.md"; ln -s "$OUTSIDE" "$K/role.md" ;;
@@ -173,6 +174,7 @@ refuse_case() { # <name> <why>
 refuse_case missing-dir "kit dir missing"
 refuse_case plugin "cannot read plugin skills"
 refuse_case empty-role "role.md is empty"
+refuse_case no-a9 "role.md missing the A9 rule line"
 refuse_case kimi-cap "over the 4096 byte kimi cap"
 refuse_case big-role "over the 8192 byte cap"
 refuse_case bad-tools "unknown tool name shape"
@@ -211,5 +213,8 @@ run_author "$TEST_TMP/m3/scripts" --role-kit "$TEST_TMP/bad-plugin"
 assert_eq "1" "$NCALLS" "(g) red case: without the plugin refusal a plugin kit reaches a spawn"
 mut_tree m4; sed_mutate "$TEST_TMP/m4/src/runners/kimi.js" "s/\.\.\.(agentFile === null ? \[\] : \['--agent-file', agentFile\]),//" >/dev/null
 assert_contains "$(kit_problems "$TEST_TMP/m4/scripts")" "no --agent-file" "(g) red case: an adapter that ignores agentFile is caught"
+mut_tree m5; sed_mutate "$TEST_TMP/m5/scripts/lib/role-kit.js" "s/fail('role.md missing the A9 rule line')/void 0/" >/dev/null
+run_author "$TEST_TMP/m5/scripts" --role-kit "$TEST_TMP/bad-no-a9"
+assert_eq "1" "$NCALLS" "(g) red case: without the A9 refusal a kit missing A9 reaches a kimi spawn"
 
 finalize_test

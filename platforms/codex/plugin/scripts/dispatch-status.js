@@ -22,6 +22,10 @@
 //   dispatch-status.js --log <path> --usage-only [--format F] # ONE line: usage object or `null`
 //   dispatch-status.js --log <path> --agy-envelope             # strict {response,usage}
 //   dispatch-status.js --list [--dir <manifest-dir>]
+//   dispatch-status.js --reconcile [--dir <manifest-dir>]
+//   --reconcile: {ordinary, fell_back, unreadable}. A non-array object fell_back counts only
+//   as fell_back. JSON that does not parse counts unreadable. A plan_review_panel_manifest
+//   is skipped. --list row keys are unchanged.
 //   dispatch-status.js --panels [--dir <manifest-dir>]        # plan-review PANEL progress (newest 10; --limit <n|all>)
 //   dispatch-status.js --panel <file|prefix> [--dir <dir>]    # one panel's seat table
 //   --panels/--panel: renders panel-<key>-gN manifests written by dispatch-plan-review
@@ -776,6 +780,37 @@ function reapRuns(dir, days, dryRun) {
   return out;
 }
 
+// BL-0435: fell_back is a dispatch that already retreated. It is not an ordinary dispatch.
+function reconcileManifests(dir) {
+  const out = { ordinary: 0, fell_back: 0, unreadable: 0 };
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json'));
+  } catch (_e) {
+    return out;
+  }
+  for (const f of entries) {
+    let m;
+    try {
+      m = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    } catch (_e) {
+      out.unreadable += 1;
+      continue;
+    }
+    if (!m || typeof m !== 'object' || Array.isArray(m)) {
+      out.unreadable += 1;
+      continue;
+    }
+    if (m.artifact_type === 'plan_review_panel_manifest') continue;
+    if (m.fell_back && typeof m.fell_back === 'object' && !Array.isArray(m.fell_back)) {
+      out.fell_back += 1;
+    } else {
+      out.ordinary += 1;
+    }
+  }
+  return out;
+}
+
 function main(argv) {
   const args = { stallSecs: DEFAULT_STALL_SECS, days: 7 };
   for (let i = 0; i < argv.length; i += 1) {
@@ -791,6 +826,7 @@ function main(argv) {
     else if (a === '--usage-only') { args.usageOnly = true; }
     else if (a === '--agy-envelope') { args.agyEnvelope = true; }
     else if (a === '--list') { args.list = true; }
+    else if (a === '--reconcile') { args.reconcile = true; }
     else if (a === '--panels') { args.panels = true; }
     else if (a === '--panel') {
       args.panel = argv[++i];
@@ -940,6 +976,17 @@ function main(argv) {
       process.stderr.write(`${JSON.stringify({ total: out.length, shown: limit, truncated: true, hint: 'use --limit <n|all> to list more' })}\n`);
     }
     process.stdout.write(`${JSON.stringify(out.slice(0, limit))}\n`);
+    return 0;
+  }
+
+  if (args.reconcile) {
+    if (args.list || args.reap || args.panels || args.panel || args.run || args.log || args.summary || args.usageOnly || args.agyEnvelope) {
+      process.stderr.write('--reconcile counts manifests only; do not combine it with another mode\n');
+      return 2;
+    }
+    const ens = ensuredManifestDir(args.dir);
+    if (ens.error) return unusableRunsDir(ens.error);
+    process.stdout.write(`${JSON.stringify(reconcileManifests(ens.dir))}\n`);
     return 0;
   }
 

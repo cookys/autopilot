@@ -5001,6 +5001,17 @@ class AutopilotEngine {
           reason: 'cloud-fallback is not used inside a campaign (PM ruling 2026-11-08); escalating',
         };
       }
+      // BL-0435: dispatch-hetero already recorded fell_back, so this retreat already happened.
+      if (parsed && parsed.fell_back && typeof parsed.fell_back === 'object' && !Array.isArray(parsed.fell_back)
+          && engineUnavailable && engineUnavailable.action === 'cloud-fallback') {
+        const { cloud_fallback_rung: _alreadyRung, ...alreadyDirective } = engineUnavailable;
+        engineUnavailable = {
+          ...alreadyDirective,
+          action: 'escalate',
+          cloud_fallback_exhausted: true,
+          reason: 'dispatch-hetero already fell back once',
+        };
+      }
       if (engineUnavailable) {
         ledger.push(this.ledgerEntry('engine_unavailable_policy', engineUnavailable.action, this.now(), {
           policy: engineUnavailable.policy,
@@ -12098,7 +12109,7 @@ class AutopilotEngine {
       if (implementation.cloud_fallback && implementation.cloud_fallback.branch) currentBranch = implementation.cloud_fallback.branch;
       implementationChain.push(implementation);
       if (lifecycleObservation) lifecycleObservation.observeImplementationResult(implementation, round);
-      if (implementation.status !== 'committed') {
+      if (implementation.status !== 'committed') { // BL-0435 a fell_back commit is still reviewed
         const implementationPhase = implementation.phase || 'dispatch_implementation';
         if (campaignControl
             && campaignControl.status === 'admitted'

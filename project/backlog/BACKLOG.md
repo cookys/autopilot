@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0436 -->
+<!-- next-id: BL-0437 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -147,7 +147,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 還不知道真實 dispatch 下 json 與 stream-json 兩種輸出格式的 result 位元組是否一致；這是 G40 agent lane 被動觀測的前提。要用真實 dispatch 量測，PM 目前停車中。
 - **Impact**: 前提沒確認就做被動觀測，兩種格式若不一致，觀測到的結果會對不上。
-- **Trigger**: 3.0.0 之後；Tasks 0-3 已於 05a70bf82 合併；Tasks 4-5（約 70 次 haiku 呼叫）等已註冊的 alias（d-2a19fdb5）；兩層都 PASS 才切 G40 P2 旗標；PM 追蹤 bl-ap-sj45
+- **Trigger**: 3.0.0 之後；Tasks 0-3 已於 05a70bf82 合併；Tasks 4-5（約 70 次 haiku 呼叫）等已註冊的 alias（d-85f5c883（接手 d-2a19fdb5））；兩層都 PASS 才切 G40 P2 旗標；PM 追蹤 bl-ap-sj45
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: PM 2026-11-04 ordering message
@@ -1582,3 +1582,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: qwen canary final report 2026-11-12, PM ruling fleet 01M76WDT193M2A7QRQ9X5YFWVZ
 - **Pointer**: project/backlog/hetero-endpoint-fallback.md
+
+### Stop hook 在最終回覆重列超過兩張未開未關的決策卡時警告
+- **Id**: BL-0436
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: owner
+- **Problem**: PM 每次回覆結尾都把整排待決卡再列一次。即時窗已經顯示待決卡，這份清單是重複的。助手最後一則回覆若列出超過兩張本輪既未開也未關的決策卡，Stop hook 應警告。
+- **Impact**: 操作員每則回覆都要重讀同一排卡，本輪真正新開或結掉的卡被淹沒。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: operator via PM 01M787BF, 2026-11-13
+- **Pointer**: none
+- **Context**: Acceptance: warn when the final reply lists more than 2 decision-card ids (d- plus 8 hex) neither opened nor closed this turn. Negative control: a reply listing 3 untouched ids warns; one that opens or closes them does not.

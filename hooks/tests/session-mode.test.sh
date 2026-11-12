@@ -9,7 +9,9 @@ set -u
 SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
-git clone -q --no-local "$SOURCE_ROOT" "$TMP/hermetic-repo"
+# Empty GIT_ALLOW_PROTOCOL plus protocol.allow=never (this sandbox) blocks the
+# local --no-local clone. Drop that lockdown for this clone only.
+env -u GIT_ALLOW_PROTOCOL GIT_CONFIG_COUNT=0 git clone -q --no-local "$SOURCE_ROOT" "$TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TMP/hermetic-repo" apply
 REPO_ROOT="$TMP/hermetic-repo"
 # D10.27: the sealed active mission graph still names docs/BACKLOG.md as an output; the copy seeds the old name
@@ -18,6 +20,10 @@ CLI="$REPO_ROOT/scripts/session-mode.js"
 
 export AUTOPILOT_SESSION_MODE_DIR="$TMP/markers"
 export CLAUDE_CODE_SESSION_ID="test-session-aaa"
+# A rail exports AUTOPILOT_PARENT_SESSION_ID. With it set, an inherited AUTOPILOT_SESSION_ID
+# is not the write target (rule 2), so the managed-admission session-mismatch case would
+# follow CLAUDE_CODE_SESSION_ID instead. This suite assumes the parent is unset.
+unset AUTOPILOT_PARENT_SESSION_ID
 
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); echo "ok - $1"; }
@@ -419,6 +425,35 @@ OUT=$(AUTOPILOT_SESSION_MODE_DIR="$RMD" node "$CLI" retire --session other-repo 
 check "retire: another repository's marker is refused (exit 1)" 1 "$RC"
 echo "$OUT" | grep -q 'different repository' && ok "retire: refusal names the repo mismatch" || fail "retire: refusal text ($OUT)"
 
+
+# D8a: --fleet-task binds the session. Negative: whitespace is rejected and the marker bytes stay.
+export CLAUDE_CODE_SESSION_ID="fleet-task-d8a"
+OUT=$(node "$CLI" set --fleet-task task-synth-d8a --repo-root "$REPO_ROOT" 2>"$TMP/fleet.err"); RC=$?
+check "set --fleet-task exit 0" 0 "$RC"
+echo "$OUT" | grep -q '"fleet_task_id": "task-synth-d8a"' && ok "set JSON shows fleet_task_id" || fail "set JSON shows fleet_task_id ($OUT)"
+OUT=$(node "$CLI" status)
+echo "$OUT" | grep -q '"fleet_task_id": "task-synth-d8a"' && ok "status JSON shows fleet_task_id" || fail "status JSON shows fleet_task_id ($OUT)"
+node "$CLI" set --size M --repo-root "$REPO_ROOT" >/dev/null 2>&1; RC=$?
+check "later set without --fleet-task exit 0" 0 "$RC"
+OUT=$(node "$CLI" status)
+echo "$OUT" | grep -q '"fleet_task_id": "task-synth-d8a"' && ok "later set keeps fleet_task_id" || fail "later set keeps fleet_task_id ($OUT)"
+node "$CLI" set --fleet-task task-synth-d8b --repo-root "$REPO_ROOT" >/dev/null 2>&1
+OUT=$(node "$CLI" status)
+echo "$OUT" | grep -q '"fleet_task_id": "task-synth-d8b"' && ok "a different id replaces fleet_task_id" || fail "a different id replaces fleet_task_id ($OUT)"
+node "$CLI" set --new-task --size S --fleet-task task-synth-d8c --repo-root "$REPO_ROOT" >/dev/null 2>&1; RC=$?
+check "set --new-task --fleet-task exit 0" 0 "$RC"
+OUT=$(node "$CLI" status)
+echo "$OUT" | grep -q '"fleet_task_id": "task-synth-d8c"' && ok "--new-task with --fleet-task stores the new id" || fail "--new-task with --fleet-task stores the new id ($OUT)"
+BEFORE=$(cksum <"$TMP/markers/fleet-task-d8a.json")
+node "$CLI" set --fleet-task "bad id" --repo-root "$REPO_ROOT" >/dev/null 2>"$TMP/fleet.err"; RC=$?
+check "whitespace --fleet-task exit 2" 2 "$RC"
+grep -q 'no whitespace' "$TMP/fleet.err" && ok "whitespace --fleet-task names the rule" || fail "whitespace --fleet-task names the rule ($(cat "$TMP/fleet.err"))"
+[ "$BEFORE" = "$(cksum <"$TMP/markers/fleet-task-d8a.json")" ] && ok "whitespace --fleet-task leaves the marker untouched" || fail "whitespace --fleet-task leaves the marker untouched"
+# negative: a set that never passes the flag does not invent the field
+export CLAUDE_CODE_SESSION_ID="fleet-task-none"
+node "$CLI" set --size S --repo-root "$REPO_ROOT" >/dev/null 2>&1
+node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(Object.prototype.hasOwnProperty.call(m,"fleet_task_id")?1:0)' "$TMP/markers/fleet-task-none.json" \
+  && ok "set without --fleet-task omits fleet_task_id" || fail "set without --fleet-task omits fleet_task_id"
 
 echo "---"
 echo "pass=$PASS fail=$FAIL"

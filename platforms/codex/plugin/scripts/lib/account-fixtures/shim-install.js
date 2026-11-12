@@ -7,10 +7,12 @@
  *   makeFixture(opts) -> a complete tempdir world: fake passwd home with a DECOY credentials file,
  *     accounts dir + registry + per-alias dirs/tokens, live dir, state dir, config file, shim, and
  *     the caller env (PATH with the shim first, TMPDIR, XDG_RUNTIME_DIR, AUTOPILOT_* locators).
+ *     The root is mkdtemp on /dev/shm so AUTOPILOT_LIVE_DIR is tmpfs (codeforge rejects any
+ *     other filesystem and would fall through to the uid live dir). AUTOPILOT_CODEFORGE_COLLECT
+ *     is off. cleanup() removes the root, live dir included.
  * Test-only. Tokens are FAKE- literals. Built-ins only.
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 const SHIM_SRC = path.join(__dirname, 'claude-shim.js');
@@ -87,7 +89,10 @@ function pinProbeOff(config, probeFromManifest) {
  */
 function makeFixture(opts) {
   const o = opts || {};
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'g37-fix-')));
+  // No disk fallback: a non-tmpfs live dir is rejected by codeforge and the collect
+  // lands on the uid directory. /dev/shm is tmpfs; cleanup() removes this root.
+  if (!fs.existsSync('/dev/shm')) throw new Error('makeFixture: /dev/shm is required so the live dir stays on tmpfs');
+  const root = fs.realpathSync(fs.mkdtempSync(path.join('/dev/shm', 'g37-fix-')));
   const realHome = path.join(root, 'fakehome');
   const decoy = path.join(realHome, '.claude', '.credentials.json');
   fs.mkdirSync(path.dirname(decoy), { recursive: true });
@@ -137,6 +142,7 @@ function makeFixture(opts) {
     XDG_RUNTIME_DIR: runtimeDir,
     AUTOPILOT_ACCOUNTS_DIR: accountsDir, AUTOPILOT_LIVE_DIR: liveDir, AUTOPILOT_STATE_DIR: stateDir,
     AUTOPILOT_CONFIG: configFile,
+    AUTOPILOT_CODEFORGE_COLLECT: 'off',
   };
   return {
     root, realHome, decoy, accountsDir, liveDir, stateDir, runtimeDir, tmpDir, configFile, regFile,

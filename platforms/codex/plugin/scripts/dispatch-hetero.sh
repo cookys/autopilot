@@ -138,14 +138,16 @@
 #                                               #   check-blueprint-conformance.js preflight
 #       [--keep-worktree]                      # keep worktree even on success
 #       [--sibling-ref-prefix refs/heads/x/]   # repeatable: a ref namespace the CALLER owns
-#                                              #   (sibling dispatches running concurrently on
-#                                              #   this repo, e.g. refs/heads/hands/kr1/). Refs
-#                                              #   created or moved there are not counted as a
-#                                              #   main-checkout mutation. Must start with
+#                                              #   (e.g. refs/heads/hands/kr1/). Must start with
 #                                              #   refs/heads/ and end with /; refs/heads/ alone
-#                                              #   is refused. Default: only this dispatch's own
-#                                              #   --branch is exempt, so concurrent dispatches
-#                                              #   on one repo reject each other (308, 2026-09-14).
+#                                              #   is refused. The round fingerprint (fleet
+#                                              #   01M788GD) already ignores every other
+#                                              #   refs/heads/*, so two dispatch-hetero runs no
+#                                              #   longer reject each other for each other's
+#                                              #   branches. The flag still drops that namespace
+#                                              #   from whatever is measured (the checkout's
+#                                              #   branch, --base, and — for a caller that leaves
+#                                              #   the scope unset — every ref).
 #       [--sibling-path-prefix <dir>/]         # repeatable: a checkout-relative directory the
 #                                              #   CALLER writes its own rail I/O into (hand
 #                                              #   stderr/result under the checkout, 308-8f).
@@ -267,6 +269,9 @@ KIMI_BIN="kimi"            # Kimi Code CLI runner (Moonshot); test seam via --ki
 KEEP=0
 MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()  # --sibling-ref-prefix; read by main_checkout_fingerprint (lib/main-checkout-boundary.sh)
 MAIN_CHECKOUT_FP_EXCLUDE_PATHS=()     # --sibling-path-prefix; pruned from the fingerprint's stat walk
+# Round scope (fleet 01M788GD): this rail's fingerprint watches the main checkout and this
+# round's own refs, not every refs/heads/* in the shared ref store. Foreman leaves it unset.
+MAIN_CHECKOUT_FP_REF_SCOPE=round
 WRAPPER_COMMITTED=0  # set when the rail's own capture commit is made; gates --expect-wrapper-subject
 RETENTION_OWNER=""
 RETENTION_REASON=""
@@ -3695,14 +3700,18 @@ fi
 #     preserved by continuing the index. This is an accident guard, not a sandbox: a worker
 #     that `env -i`s or unsets the variable is evading, and detection is the backstop.
 #   detection — the main checkout is fingerprinted before hands and re-read after, on EVERY
-#     outcome: HEAD, the symbolic-ref target (measured with rev-parse, whose rc separates
-#     "detached" from "could not measure"), every refs/heads/* except this dispatch's own
-#     branch, every refs/tags/* and refs/remotes/* with symref targets, and the index +
-#     worktree dirty inventory. Any delta rejects the round as `main_checkout_mutated`. A
-#     measurement that fails yields UNVERIFIABLE-<nonce> and never compares equal. This
-#     CANNOT attribute: a concurrent operator fetch, edit, or a second dispatch creating its
-#     branch trips it too, and the honest answer is a discarded round with the worktree
-#     retained, not a guess. Re-dispatch once the main checkout is quiescent.
+#     outcome (MAIN_CHECKOUT_FP_REF_SCOPE=round, fleet 01M788GD): HEAD sha and symbolic
+#     target (rev-parse, whose rc separates "detached" from "could not measure"), the branch
+#     that checkout is on, this round's --base when it names a ref, this round's own --branch
+#     exempt unless it is that branch or the --base ref, every non-branch ref (tags, remotes,
+#     replace, notes), and the index + worktree dirty inventory. Creating, moving or deleting
+#     any other refs/heads/* is not a mutation, and adding or removing another worktree is
+#     not one either. A real main-checkout change (HEAD moved, its branch moved, the working
+#     tree dirtied, a tag/remote/replace/config/hook change) still rejects as
+#     `main_checkout_mutated`. A measurement that fails yields UNVERIFIABLE-<nonce> and
+#     never compares equal. This CANNOT attribute a real change: a concurrent edit of this
+#     checkout discards the round with the worktree retained. Re-dispatch once the main
+#     checkout is quiescent.
 MAIN_CHECKOUT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 # The fingerprint and the env block are ONE implementation shared with dispatch-foreman.sh:
 # scripts/lib/main-checkout-boundary.sh (extracted 2026-09-13, behaviour unchanged).
@@ -6016,8 +6025,10 @@ dispatch_detached_run() {
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
     declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE MAIN_CHECKOUT_BEFORE_PARTS HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true
-    # The after-fingerprint in the detached child must exempt the same sibling namespaces
-    # the parent's before-fingerprint did, or every --sibling-ref-prefix run rejects itself.
+    # The after-fingerprint in the detached child must use the same scope and the same
+    # sibling namespaces the parent's before-fingerprint did. Without the scope, the child
+    # measures every ref and every detached round rejects (fleet 01M788GD).
+    declare -p MAIN_CHECKOUT_FP_REF_SCOPE 2>/dev/null || true
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES 2>/dev/null || true
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PATHS 2>/dev/null || true
     declare -p WRAPPER_COMMITTED 2>/dev/null || true

@@ -215,6 +215,131 @@ test('FLEET_ADDRESS pm--claude alone records nothing', () => {
   assert.equal(r.lines.length, 0, 'FLEET_ADDRESS alone recorded');
 });
 
+// Host Stop entry is the opt-in multiplexer (hooks.json). owner-question-guard is a
+// later Stop command: it can block the first Stop, and the turn then ends on a second
+// Stop with stop_hook_active true, delivered to the same entry.
+const MUX = path.join(__dirname, 'opt-in-multiplexer.js');
+const GUARD = path.join(__dirname, 'owner-question-guard.js');
+const ROOT = path.join(__dirname, '..');
+
+function hostStop(home, state, payload) {
+  return spawnSync(process.execPath, [MUX, 'Stop'], {
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+    env: {
+      PATH: process.env.PATH,
+      HOME: home,
+      TMPDIR: home,
+      AUTOPILOT_STATE_DIR: state,
+      AUTOPILOT_HOOK_ASKPM_LOG: '1',
+      CLAUDE_PLUGIN_ROOT: ROOT,
+    },
+  });
+}
+
+function readRows(state) {
+  const file = path.join(state, 'askpm.jsonl');
+  if (!fs.existsSync(file)) return [];
+  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+}
+
+test('first Stop blocked by another hook, second Stop with stop_hook_active records one reply', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-block-'));
+  const state = path.join(home, 'state');
+  const transcript = path.join(home, 't.jsonl');
+  fs.mkdirSync(state, { recursive: true });
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'console.json'), CONSOLE_OK);
+  const user = JSON.stringify({ type: 'user', message: { role: 'user', content: '剛剛我還沒改，現在改好了' } });
+  const assistant = JSON.stringify({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'text', text: '要我合併嗎\n好了' }] },
+  });
+  // The multiplexer runs before owner-question-guard. The reply is not in the
+  // transcript yet, so this Stop records nothing. The guard then sees the reply and blocks.
+  fs.writeFileSync(transcript, user + '\n');
+  const ask = spawnSync(process.execPath, [HOOK], {
+    input: JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '剛剛我還沒改，現在改好了', cwd: home }),
+    encoding: 'utf8',
+    env: {
+      PATH: process.env.PATH,
+      HOME: home,
+      TMPDIR: home,
+      AUTOPILOT_STATE_DIR: state,
+      AUTOPILOT_HOOK_ASKPM_LOG: '1',
+    },
+  });
+  const first = hostStop(home, state, { hook_event_name: 'Stop', session_id: 's', transcript_path: transcript, cwd: home, stop_hook_active: false });
+  fs.appendFileSync(transcript, assistant + '\n');
+  const guard = spawnSync(process.execPath, [GUARD], {
+    input: JSON.stringify({ hook_event_name: 'Stop', session_id: 's', transcript_path: transcript, cwd: home, stop_hook_active: false }),
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH, HOME: home, TMPDIR: home },
+  });
+  const second = hostStop(home, state, { hook_event_name: 'Stop', session_id: 's', transcript_path: transcript, cwd: home, stop_hook_active: true });
+  const rows = readRows(state);
+  fs.rmSync(home, { recursive: true, force: true });
+  assert.equal(ask.status, 0, ask.stderr);
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(JSON.parse(guard.stdout).decision, 'block');
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(second.stdout, '');
+  const replies = rows.filter((r) => r.kind === 'reply');
+  assert.equal(replies.length, 1, 'the stop_hook_active Stop must record the reply the blocked Stop missed');
+  assert.deepEqual(replies[0].lines, ['要我合併嗎', '好了']);
+  assert.equal(rows.filter((r) => r.kind === 'ask').length, 1);
+});
+
+test('stop_hook_active uses last_assistant_message when the transcript has no reply yet', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-direct-'));
+  const state = path.join(home, 'state');
+  const transcript = path.join(home, 't.jsonl');
+  fs.mkdirSync(state, { recursive: true });
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'console.json'), CONSOLE_OK);
+  fs.writeFileSync(transcript, JSON.stringify({ type: 'user', message: { role: 'user', content: '剛剛我還沒改，現在改好了' } }) + '\n');
+  const payload = {
+    hook_event_name: 'Stop',
+    session_id: 's',
+    transcript_path: transcript,
+    cwd: home,
+    stop_hook_active: true,
+    last_assistant_message: '要我合併嗎\n好了',
+  };
+  const first = hostStop(home, state, payload);
+  const second = hostStop(home, state, payload);
+  const replies = readRows(state).filter((r) => r.kind === 'reply');
+  fs.rmSync(home, { recursive: true, force: true });
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(replies.length, 1);
+  assert.deepEqual(replies[0].lines, ['要我合併嗎', '好了']);
+});
+
+test('two Stops in one turn record one reply', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-twice-'));
+  const state = path.join(home, 'state');
+  const transcript = path.join(home, 't.jsonl');
+  fs.mkdirSync(state, { recursive: true });
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'console.json'), CONSOLE_OK);
+  fs.writeFileSync(transcript, [
+    JSON.stringify({ type: 'user', message: { role: 'user', content: '剛剛我還沒改，現在改好了' } }),
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '要我合併嗎\n好了' }] } }),
+  ].join('\n') + '\n');
+  const base = { hook_event_name: 'Stop', session_id: 's', transcript_path: transcript, cwd: home };
+  const first = hostStop(home, state, { ...base, stop_hook_active: false });
+  const second = hostStop(home, state, { ...base, stop_hook_active: true });
+  const replies = readRows(state).filter((r) => r.kind === 'reply');
+  fs.rmSync(home, { recursive: true, force: true });
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(first.stdout, '');
+  assert.equal(second.stdout, '');
+  assert.equal(replies.length, 1);
+  assert.deepEqual(replies[0].lines, ['要我合併嗎', '好了']);
+});
+
 test('wiring: askpm-log is opt-in, not a per-prompt spawn', () => {
   const hooks = JSON.parse(fs.readFileSync(path.join(__dirname, 'hooks.json'), 'utf8'));
   const commands = (event) => (hooks.hooks[event] || []).flatMap((g) => (g.hooks || []).map((h) => h.command));

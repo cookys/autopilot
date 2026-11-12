@@ -76,7 +76,7 @@ exit ${exitCode}
 }
 
 /** Fleet stub that prints a sha256 on `upload` and records `send` bodies. */
-function makeUploadFleet(dir, { uploadExit = 0 } = {}) {
+function makeUploadFleet(dir, { uploadExit = 0, uploadStderr = null } = {}) {
   const sha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
   const bin = path.join(dir, `fake-fleet-upload-${uploadExit}`);
   const nul = path.join(dir, `upload-fleet-${uploadExit}.nul`);
@@ -84,7 +84,9 @@ function makeUploadFleet(dir, { uploadExit = 0 } = {}) {
   const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
   const uploadBody = uploadExit === 0
     ? `printf '%s\\n' ${q(sha)}\nexit 0`
-    : `echo upload_refused >&2\nexit ${Number(uploadExit)}`;
+    : (uploadStderr == null
+      ? `echo upload_refused >&2\nexit ${Number(uploadExit)}`
+      : `printf '%s\\n' ${q(uploadStderr)} >&2\nexit ${Number(uploadExit)}`);
   write(bin, `#!/usr/bin/env bash
 printf '%s\\0' "$@" >> ${q(nul)}
 if [ "$1" = upload ]; then
@@ -1125,6 +1127,35 @@ test('(4) notify uploads share/result.md and puts ref= next to the path', () => 
   const item2 = JSON.parse(fs.readFileSync(path.join(q2, 'items', id2, 'item.json'), 'utf8'));
   assert.equal(item2.notified, true);
   assert.equal(fs.statSync(path.join(q2, 'items', id2, 'share', 'result.md')).mode & 0o777, 0o640);
+});
+
+test('(4b) upload failure notice names the sanitized fleet reason', () => {
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work, { authorRawContent: 'SHARE_ME\n' });
+  const brief = briefFile(work);
+  const fleet = makeUploadFleet(work, {
+    uploadExit: 1,
+    uploadStderr: 'fleet upload: refused: unattributed (x y)',
+  });
+  const q = mkTmp('noncq-q-');
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'draft', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], {
+    AUTOPILOT_NONCQ_DIR: q,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: fleet.bin,
+  });
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const pace = writePace(work, [paceRow()], 'pace-reason.json');
+  drain(q, pace, rails.dir, fleet.bin);
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', id, 'rail.exit')), 8000));
+  const d = drain(q, pace, rails.dir, fleet.bin);
+  assert.equal(d.status, 0, d.stderr);
+  const result = path.join(q, 'items', id, 'result.md');
+  const msg = fs.readFileSync(fleet.msgLog, 'utf8');
+  assert.ok(msg.includes(`${id} done ${result} upload_failed:refused:_unattributed_(x_y)`), msg);
 });
 
 // ---------------------------------------------------------------------------

@@ -794,7 +794,7 @@ function cmdDrain(flags, env = process.env, opts = {}) {
   }
 
   const dryRun = !!flags.dryRun || !!flags['dry-run'];
-  const pools = loadPools();
+  const pools = loadPools(env.AUTOPILOT_NONCQ_POOLS || POOLS_PATH);
   const root = queueRoot(env);
   // Dry-run must not create the queue directory tree.
   if (!dryRun) ensureQueue(root);

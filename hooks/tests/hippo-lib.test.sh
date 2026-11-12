@@ -2,14 +2,10 @@
 # hooks/tests/hippo-lib.test.sh - scripts/lib/hippo.js against the REAL hippo binary (plan 2026-11-02-oc-a3-writers-use-hippo,
 # A3.1 step 1): the four store states, the plugin-dir refusal, the write spool and its flush (lock, worktree/branch filter),
 # the idempotent step runner under fault injection, the leak_ok / refusal contract, flush in state `files`.
-# Needs a hippo >= 0.2.2 (HIPPO_BIN, else hippo on PATH); prints SKIPPED and exits 0 without it. Every repo is a temp repo under a sandbox
+# Needs a hippo >= 0.2.2 (HIPPO_BIN, hippo on PATH, else $HOME/.local/bin/hippo); prints SKIP [suite] and exits 0 without it. Every repo is a temp repo under a sandbox
 # HOME (hooks/tests/lib/hippo-sandbox.sh, C6). Red-checks: docs/plans/evidence/2026-11-02-oc-a3-writers-use-hippo/a3.1-lib/.
 . "$(dirname "$0")/lib.sh"
-HIPPO_BIN="${HIPPO_BIN:-$(command -v hippo 2>/dev/null)}"
-if [ -z "$HIPPO_BIN" ]; then echo "SKIPPED: no hippo (HIPPO_BIN unset, none on PATH)"; exit 0; fi
-export HIPPO_BIN
-HIPPO_BIN="$(command -v "$HIPPO_BIN")" || fail "HIPPO_BIN is not executable"
-export HIPPO_BIN
+require_hippo_or_skip hippo-lib
 . "$(dirname "$0")/lib/hippo-sandbox.sh"
 hs_setup
 
@@ -82,6 +78,27 @@ chmod +x "$STUB5"
 D="$(HIPPO_BIN="$STUB5" detect_json "$R_HIP")"
 eq spool "$(echo "$D" | jf d.state)" "detect: store + hippo exit 5 -> spool"
 assert_contains "$(echo "$D" | jf d.reason)" "no actor" "detect: spool reason names the exit-5 cause"
+
+# --- binary lookup with HIPPO_BIN unset: PATH, then $HOME/.local/bin/hippo, else one line in $HOME/.autopilot/logs/hippo.log.
+# Team-lane tmux windows start without ~/.local/bin on PATH; PATH alone missed the installed hippo there.
+NB="$HS_ROOT/path-nohippo"; mkdir -p "$NB"
+for t in node git; do ln -s "$(command -v "$t")" "$NB/$t"; done
+lookup() { env -u HIPPO_BIN PATH="$NB${1:+:$1}" "$NB/node" "$LIB" detect --target "$R_HIP" --json; }
+HLOG="$HOME/.autopilot/logs/hippo.log"
+rm -f "$HLOG"
+D="$(lookup)"
+eq spool "$(echo "$D" | jf d.state)" "lookup: no hippo on PATH or in ~/.local/bin -> spool"
+assert_contains "$(cat "$HLOG" 2>/dev/null)" "hippo binary not found: HIPPO_BIN unset, not on PATH, not at $HOME/.local/bin/hippo" "lookup: the miss is logged to hippo.log"
+mkdir -p "$HOME/.local/bin" && ln -s "$HIPPO_BIN" "$HOME/.local/bin/hippo"
+rm -f "$HLOG"
+D="$(lookup)"
+eq hippo "$(echo "$D" | jf d.state)" "lookup: hippo only in ~/.local/bin -> found, state hippo"
+eq "$HOME/.local/bin/hippo" "$(echo "$D" | jf d.bin)" "lookup: bin is the ~/.local/bin path"
+assert_file_absent "$HLOG" "lookup: a found binary logs nothing"
+PD="$HS_ROOT/path-hippo"; mkdir -p "$PD" && ln -s "$HIPPO_BIN" "$PD/hippo"
+D="$(lookup "$PD")"
+eq "$PD/hippo" "$(echo "$D" | jf d.bin)" "lookup: PATH wins over ~/.local/bin"
+rm -f "$HOME/.local/bin/hippo"
 
 # --- plugin install directory refused (a temp copy of the module placed at <root>/scripts/lib, so <root> is its plugin root)
 PLG="$TEST_TMP/plugin-copy"; mkdir -p "$PLG/scripts/lib"; cp "$LIB" "$PLG/scripts/lib/hippo.js"
@@ -326,6 +343,31 @@ chmod +x "$TPL_OWN/tpl/hooks/post-commit"
 ( export GIT_TEMPLATE_DIR="$TPL_OWN/tpl"; hs_scrub_git_env; hs_mkrepo tpl >/dev/null )
 assert_file_absent "$TPL_OWN/sentinel" "an inherited GIT_TEMPLATE_DIR hook does not run in hs_mkrepo"
 rm -rf "$TPL_OWN"
+
+# --- require_hippo_or_skip (hooks/tests/lib.sh): each case in a subshell with its own PATH / HOME / HIPPO_BIN
+RQ="$HS_ROOT/rq"; mkdir -p "$RQ/pathbin" "$RQ/home/.local/bin" "$RQ/emptyhome" "$RQ/dirhome/.local/bin/hippo" "$RQ/nxhome/.local/bin" "$RQ/emptypath"
+printf '#!/bin/sh\nexit 0\n' > "$RQ/stub"; chmod +x "$RQ/stub"
+cp "$RQ/stub" "$RQ/pathbin/hippo"; cp "$RQ/stub" "$RQ/home/.local/bin/hippo"
+printf '#!/bin/sh\nexit 0\n' > "$RQ/nxhome/.local/bin/hippo"; chmod -x "$RQ/nxhome/.local/bin/hippo"
+RQ_PATH_EMPTY="$RQ/emptypath"
+( export HIPPO_BIN="$RQ/stub" PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/emptyhome"; require_hippo_or_skip rqsuite; echo "rc=$? bin=$HIPPO_BIN" ) > "$RQ/a.out" 2>&1
+assert_contains "$(cat "$RQ/a.out")" "rc=0 bin=$RQ/stub" "require_hippo_or_skip: valid HIPPO_BIN -> returns 0, exported"
+( export HIPPO_BIN="$RQ/no/such/hippo" PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/home"; require_hippo_or_skip rqsuite; echo "NOT-REACHED" ) > "$RQ/b.out" 2>&1; eq 1 "$?" "require_hippo_or_skip: set but nonexistent HIPPO_BIN -> exit 1 (even with a good ~/.local/bin/hippo)"
+assert_contains "$(cat "$RQ/b.out")" "FAIL [rqsuite]" "require_hippo_or_skip: invalid HIPPO_BIN prints a FAIL line"
+assert_not_contains "$(cat "$RQ/b.out")" "SKIP" "require_hippo_or_skip: invalid HIPPO_BIN never prints SKIP"
+assert_not_contains "$(cat "$RQ/b.out")" "NOT-REACHED" "require_hippo_or_skip: invalid HIPPO_BIN stops the suite"
+( unset HIPPO_BIN; export PATH="$RQ/pathbin" AUTOPILOT_TEST_REAL_HOME="$RQ/emptyhome"; require_hippo_or_skip rqsuite; echo "rc=$? bin=$HIPPO_BIN" ) > "$RQ/c.out" 2>&1
+assert_contains "$(cat "$RQ/c.out")" "rc=0 bin=$RQ/pathbin/hippo" "require_hippo_or_skip: unset, hippo on PATH -> found"
+( unset HIPPO_BIN; export PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/home"; require_hippo_or_skip rqsuite; echo "rc=$? bin=$HIPPO_BIN" ) > "$RQ/d.out" 2>&1
+assert_contains "$(cat "$RQ/d.out")" "rc=0 bin=$RQ/home/.local/bin/hippo" "require_hippo_or_skip: unset, only \$HOME/.local/bin/hippo executable -> found"
+( unset HIPPO_BIN; export PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/emptyhome"; require_hippo_or_skip rqsuite; echo "NOT-REACHED" ) > "$RQ/e.out" 2>&1; eq 0 "$?" "require_hippo_or_skip: nothing found -> exit 0"
+assert_contains "$(cat "$RQ/e.out")" "SKIP [rqsuite]" "require_hippo_or_skip: nothing found -> SKIP [suite] line"
+assert_not_contains "$(cat "$RQ/e.out")" "NOT-REACHED" "require_hippo_or_skip: nothing found -> exits instead of returning"
+for h in dirhome nxhome; do
+  ( unset HIPPO_BIN; export PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/$h"; require_hippo_or_skip rqsuite; echo "NOT-REACHED" ) > "$RQ/f.out" 2>&1; eq 0 "$?" "require_hippo_or_skip: $h/.local/bin/hippo (directory / non-executable) -> exit 0"
+  assert_contains "$(cat "$RQ/f.out")" "SKIP [rqsuite]" "require_hippo_or_skip: $h/.local/bin/hippo treated as missing -> SKIP"
+  assert_not_contains "$(cat "$RQ/f.out")" "NOT-REACHED" "require_hippo_or_skip: $h/.local/bin/hippo not used as the binary"
+done
 
 hs_exit_check
 finalize_test

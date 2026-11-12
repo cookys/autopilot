@@ -999,3 +999,29 @@ seed_dogfood_implementer_pin() {
 # repo-residue-sweep keeps a worktree with activity in the last 24h out of every removal path; fixtures here are all brand new, so
 # the existing suites turn that guard off and residue-recent-activity.test.sh turns it back on.
 export AUTOPILOT_RESIDUE_RECENT_HOURS=0
+
+# require_hippo_or_skip <suite-name>: resolve hippo in the order scripts/lib/hippo.js bin() uses (HIPPO_BIN, hippo on PATH,
+# $HOME/.local/bin/hippo) and export HIPPO_BIN as an absolute path. With none found, print the one `SKIP [suite]` line that
+# run.sh collect_skips() lists, and exit 0.
+require_hippo_or_skip() {
+  local _c
+  if [ -n "${HIPPO_BIN:-}" ]; then
+    # A set HIPPO_BIN is an explicit choice: an unusable one is a failure, never a skip.
+    _c="$(command -v "$HIPPO_BIN" 2>/dev/null || true)"
+    if [ -z "$_c" ]; then
+      echo "FAIL [$1] HIPPO_BIN is set but not executable: $HIPPO_BIN"
+      exit 1
+    fi
+    export HIPPO_BIN="$_c"
+    return 0
+  fi
+  _c="$(command -v hippo 2>/dev/null || true)"
+  # lib.sh has already swapped HOME for the sandbox; the uid's real home is AUTOPILOT_TEST_REAL_HOME.
+  local _h="${AUTOPILOT_TEST_REAL_HOME:-$HOME}"
+  if [ -z "$_c" ] && [ -f "$_h/.local/bin/hippo" ] && [ -x "$_h/.local/bin/hippo" ]; then _c="$_h/.local/bin/hippo"; fi
+  if [ -z "$_c" ]; then
+    echo "SKIP [$1] no hippo (HIPPO_BIN unset, not on PATH, not at \$HOME/.local/bin/hippo)"
+    exit 0
+  fi
+  export HIPPO_BIN="$_c"
+}

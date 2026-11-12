@@ -18,6 +18,15 @@
 // changed file is documentation. Full mode never executes hooks/tests/run.sh: it prints
 // full_reasons and "whole suite deferred to the pre-merge run (CLAUDE.md Mission graph
 // verification)", then runs only always_run plus extra_runners.
+// Both streams are piped (a serial run writes each chunk through as it arrives). A line matching
+// ^SKIP \[ (hooks/tests/run.sh collect_skips: both streams, unique, sorted) is reported. The summary
+// stays `summary: N run, M failed` when no such line was printed (a timeout list still follows
+// `failed` as before). Otherwise it appends `, K skipped: <paths>` and, when every non-empty line of
+// an rc-0 suite is such a line, `, U unverified: <paths>`, then `skipped: <path>: <line>` before any
+// budget, attribution or record line. A whole-run skip is unverified: not a pass and not a failure
+// count, and the run exits 1. A SKIP line beside other output is named and the suite's own rc still
+// decides. An rc other than 0 is a failure only (not also listed as skipped). With no SKIP [ line the
+// summary text is unchanged. A pipe a suite leaves open is drained for 300 ms after exit, then cut off.
 //
 // --record writes one plain JSON run record after --run finishes (every entry has run, whatever
 // its rc). Without --run it is a usage error (stderr, exit 2, nothing written). With --files
@@ -27,12 +36,14 @@
 // when git prints a relative path; parent directories are created. base and head are full shas
 // from git rev-parse (--head or HEAD). The file is written atomically (temp file beside it, then
 // rename). A failed write prints to stderr and exits 2. After the summary line, stdout gets
-// `record: <path>`. The command's exit code stays the run's (non-zero when any entry failed).
+// `record: <path>`. The command's exit code stays the run's (non-zero when any entry failed or a
+// suite is unverified).
 // Record schema 1, key order: {schema:1, head, base, mode:"selective"|"full",
 //   suites:[{path, rc, seconds}, ...]} — one object per entry actually executed, in execution order
 //   (suites then extra_runners when selective; always_run then extra_runners when full). rc is
 //   the integer already printed as rc=N; seconds is that entry's wall time (BL-0330, additive: the
-//   `rc=N <path>` output line is unchanged). A --jobs pool failure that passed its serial rerun also
+//   `rc=N <path>` output line is unchanged). A whole-run skip keeps that rc and adds `unverified: true`.
+//   A --jobs pool failure that passed its serial rerun also
 //   carries `flaky_under_parallel: true`.
 //
 // Durations (BL-0330): every --run also merges each entry's whole-second wall time into the file
@@ -54,7 +65,7 @@
 // corrupt the next entry, so it must not pass silently) and the record row carries `lingering_group: true`. A process
 // that left the group with setsid is outside any group and is NOT tracked (an escape, not a failure).
 // AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries and 1 for the serial part (a value already in the environment wins). Output is buffered per
-// entry and printed whole, followed by its `rc=N <path>`; the summary line is unchanged and a
+// entry and printed whole, followed by its `rc=N <path>`; the summary line is unchanged when no suite printed a SKIP [ line, and a
 // `slowest: <path> <s>s, ...` line (top 10) is printed last, after any `attribution:` and `record:` lines
 // (so a consumer that reads the summary-then-record sequence sees the same order as without --jobs).
 // A pool entry that exits non-zero is re-run once, alone, after the pool drains: rc 0 prints
@@ -78,9 +89,9 @@
 // it may be a timeout inside the suite itself, indistinguishable from outside) proves nothing, so that entry
 // is `unattributed` (a failure, never preexisting; fail-closed: worst case is one more failure to look at). Prints `attribution: preexisting N: ...`,
 // `attribution: new N: ...` and `attribution: unattributed N: ...`. Exit code with --attribute:
-// non-zero (1) if any entry is `new` or `unattributed` (or an empty selection is not a pass); 3 is
+// non-zero (1) if any entry is `new` or `unattributed` or an unverified whole-run skip (or an empty selection is not a pass); 3 is
 // kept for a budget stop (any suite skipped for budget, even when the executed failures are all
-// preexisting); preexisting-only failures with nothing skipped (base finished normally, non-zero) exit 0.
+// preexisting) only when no executed suite is unverified; preexisting-only failures with nothing skipped (base finished normally, non-zero) exit 0.
 // Order: new/unattributed -> 1; else budget stop -> 3; else 0. With --entry-timeout, TERM/INT kills every
 // running entry's process group (they run detached) and exits 143/130, in the head phase as well.
 // Without --attribute the exit code is unchanged. --record adds, per re-run suite, an additive
@@ -93,7 +104,7 @@
 // <git-common-dir>/autopilot/qc-runs/*.json, newest wins), then by name; extra_runners last.
 // Once N seconds have passed no new entry starts (a running one finishes); the rest print as
 // `not run (budget): <path>` plus `skipped_for_budget: <count>`. Exit 3 = budget ran out and every
-// executed entry is green; a red executed entry still exits 1. With --json the run ends with a JSON
+// executed entry is green (a whole-run skip is unverified, so that run exits 1, not 3); a red executed entry still exits 1. With --json the run ends with a JSON
 // document {budget, executed, skipped_for_budget}; --record adds the same three keys and a per-suite
 // `seconds`. Without the flag nothing changes: name order, no budget keys.
 //
@@ -103,7 +114,7 @@
 //   extra_runners = entry points outside run.sh that the diff needs (mods/live/**, mods/viewer/**, mods/register.ts => mods/live/run-tests.sh + mods/viewer/run-tests.sh);
 //   present in both modes. Text output prints them as extra lines after the suites (or after FULL).
 //   mode "full" means: run the whole suite (hooks/tests/run.sh); `suites` is then empty.
-// Exit: 0 ok (selective or full), 2 usage/git error, 3 --budget-seconds ran out (executed entries green).
+// Exit: 0 ok (selective or full; a whole-run skip is not ok), 1 a failed entry or an unverified whole-run skip, 2 usage/git error, 3 --budget-seconds ran out (executed entries green, none unverified).
 //
 // How it selects (static, conservative = over-select rather than miss):
 //   1. Index every code file (js/mjs/cjs/sh/bash/zsh/py/ps1) in the head tree by the file names it
@@ -786,8 +797,51 @@ function killGroup(pid, sig) { try { process.kill(-pid, sig); } catch { /* ESRCH
 // How long a --jobs entry's process group may outlive the entry after SIGKILL (AFFECTED_SUITES_GROUP_WAIT_MS, default 5000).
 function groupWaitMs() { const n = Number(process.env.AFFECTED_SUITES_GROUP_WAIT_MS); return Number.isFinite(n) && n >= 0 && process.env.AFFECTED_SUITES_GROUP_WAIT_MS !== undefined ? n : 5000; }
 
-// Resolves {rc, timedOut}. With timeoutSecs the entry runs in its own process group; on expiry the
-// group gets TERM, then KILL 2s later, and rc is 124. Without it the spawn is the plain inherit run.
+// BL-0434. Same line as hooks/tests/run.sh collect_skips (`grep -a '^SKIP \['` on both streams).
+function outputText(chunks) {
+  return (chunks || []).map(([, b]) => (Buffer.isBuffer(b) ? b : Buffer.from(b)).toString('utf8')).join('');
+}
+function skipLinesOf(chunks) {
+  const seen = new Set();
+  const lines = [];
+  for (const raw of outputText(chunks).split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    if (/^SKIP \[/.test(line) && !seen.has(line)) { seen.add(line); lines.push(line); }
+  }
+  lines.sort();
+  return lines;
+}
+function wholeSkip(chunks) {
+  const lines = outputText(chunks).split('\n').map((l) => l.replace(/\r$/, '')).filter((l) => l.trim() !== '');
+  return lines.length > 0 && lines.every((l) => /^SKIP \[/.test(l));
+}
+function classifySkip(rel, chunks, rc) {
+  if (rc !== 0) return null;
+  const lines = skipLinesOf(chunks);
+  if (!lines.length) return null;
+  return { path: rel, lines, unverified: wholeSkip(chunks) };
+}
+function attachSkip(row, chunks) {
+  const info = classifySkip(row.path, chunks, row.rc);
+  if (info && info.unverified) row.unverified = true;
+  return info;
+}
+function writeSkipSummary(n, failed, timedOut, infos) {
+  const skipped = infos.filter(Boolean);
+  const unverified = skipped.filter((s) => s.unverified);
+  let line = `summary: ${n} run, ${failed} failed`;
+  if (timedOut.length) line += ` (timeout: ${timedOut.join(' ')})`;
+  if (skipped.length) line += `, ${skipped.length} skipped: ${skipped.map((s) => s.path).join(' ')}`;
+  if (unverified.length) line += `, ${unverified.length} unverified: ${unverified.map((s) => s.path).join(' ')}`;
+  process.stdout.write(`${line}\n`);
+  for (const s of skipped) for (const ln of s.lines) process.stdout.write(`skipped: ${s.path}: ${ln}\n`);
+  return unverified.length;
+}
+
+// Resolves {rc, timedOut, chunks}. With timeoutSecs the entry runs in its own process group; on expiry the
+// group gets TERM, then KILL 2s later, and rc is 124. stdout and stderr are always piped so a SKIP [ line
+// is visible. Without opts.capture each chunk is written through at once and the rc line is printed here.
+// 'close' finishes a normal suite; 'exit' plus 300 ms finishes one whose pipe a leftover process keeps open.
 function runEntry(root, rel, timeoutSecs, group, opts) {
   const capture = !!(opts && opts.capture); // --jobs: buffer output, the caller prints it with the rc line
   const env = opts && opts.env ? opts.env : undefined;
@@ -797,18 +851,20 @@ function runEntry(root, rel, timeoutSecs, group, opts) {
     if (capture) return Promise.resolve({ rc: 1, timedOut: false, chunks: [['err', msg]] });
     process.stderr.write(msg);
     process.stdout.write(`rc=1 ${rel}\n`);
-    return Promise.resolve({ rc: 1, timedOut: false });
+    return Promise.resolve({ rc: 1, timedOut: false, chunks: [['err', msg]] });
   }
   const argv = spec.argv.slice();
   argv[argv.length - 1] = path.join(root, rel);
   return new Promise((resolve) => {
-    const child = spawn(spec.cmd, argv, { cwd: root, env, stdio: capture ? ['inherit', 'pipe', 'pipe'] : 'inherit', detached: group || timeoutSecs != null });
+    const child = spawn(spec.cmd, argv, { cwd: root, env, stdio: ['inherit', 'pipe', 'pipe'], detached: group || timeoutSecs != null });
     const chunks = [];
-    if (capture) {
-      child.stdout.on('data', (d) => chunks.push(['out', d]));
-      child.stderr.on('data', (d) => chunks.push(['err', d]));
-    }
-    let timedOut = false, killTimer = null, termTimer = null, done = false;
+    const take = (kind) => (d) => {
+      chunks.push([kind, d]);
+      if (!capture) (kind === 'err' ? process.stderr : process.stdout).write(d);
+    };
+    child.stdout.on('data', take('out'));
+    child.stderr.on('data', take('err'));
+    let timedOut = false, killTimer = null, termTimer = null, graceTimer = null, done = false;
     const grouped = group || timeoutSecs != null;
     if (grouped) ACTIVE.add(child.pid);
     if (timeoutSecs != null) {
@@ -823,6 +879,7 @@ function runEntry(root, rel, timeoutSecs, group, opts) {
       done = true;
       clearTimeout(termTimer);
       clearTimeout(killTimer);
+      clearTimeout(graceTimer);
       const pid = child.pid;
       if (pid && grouped) killGroup(pid, 'SIGKILL');
       const settle = (lingering) => {
@@ -852,7 +909,7 @@ function runEntry(root, rel, timeoutSecs, group, opts) {
     child.on('error', () => finish(1));
     child.on('close', (code) => finish(code));
     // A suite that leaves a background process holding the pipe open would keep 'close' from firing.
-    if (capture) child.on('exit', (code) => setTimeout(() => finish(code), 300));
+    child.on('exit', (code) => { graceTimer = setTimeout(() => finish(code), 300); });
   });
 }
 
@@ -1051,6 +1108,7 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
   const made = new Set();
   const results = [];
   const timedOut = [];
+  const skipInfos = [];
   let failed = 0;
   const callerFactor = process.env.AUTOPILOT_TEST_TIMING_FACTOR;
   const exec = async (rel, factor, isolateXdg) => {
@@ -1072,6 +1130,8 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
     if (flaky) { row.flaky_under_parallel = true; row.pool_rc = flaky.pool_rc; if (flaky.pool_timed_out) row.pool_timed_out = true; }
     results.push(row);
     if (r.rc !== 0) failed++;
+    const info = attachSkip(row, r.chunks);
+    if (info) skipInfos.push(info);
   };
   try {
     tmpRoot = tmpParent();
@@ -1119,9 +1179,9 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
     failed++;
     emptyFail = true;
   }
-  process.stdout.write(`summary: ${results.length} run, ${failed} failed${timedOut.length ? ` (timeout: ${timedOut.join(' ')})` : ''}\n`);
+  const unverifiedCount = writeSkipSummary(results.length, failed, timedOut, skipInfos);
   const slow = results.slice().sort((a, b) => b.seconds - a.seconds).slice(0, 10).map((r) => `${r.path} ${r.seconds}s`);
-  return { code: failed === 0 ? 0 : 1, results, budgetDoc: null, emptyFail, timedOutPaths: timedOut, slowest: slow.length ? `slowest: ${slow.join(', ')}\n` : '' };
+  return { code: failed === 0 && unverifiedCount === 0 ? 0 : 1, results, budgetDoc: null, emptyFail, timedOutPaths: timedOut, slowest: slow.length ? `slowest: ${slow.join(', ')}\n` : '', unverifiedCount };
 }
 
 async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs) {
@@ -1138,6 +1198,7 @@ async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs) {
   }
   const results = [];
   const skipped = [];
+  const skipInfos = [];
   let failed = 0;
   const timedOut = [];
   let emptyFail = false;
@@ -1145,18 +1206,21 @@ async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs) {
   for (const rel of entries) {
     if (budgeted && (Date.now() - started) / 1000 >= budget) { skipped.push(rel); continue; }
     const t0 = Date.now();
-    const { rc, timedOut: to } = await runEntry(root, rel, entryTimeout);
+    const { rc, timedOut: to, chunks } = await runEntry(root, rel, entryTimeout);
     if (to) timedOut.push(rel);
-    results.push({ path: rel, rc, seconds: Math.round(Date.now() - t0) / 1000 });
+    const row = { path: rel, rc, seconds: Math.round(Date.now() - t0) / 1000 };
+    results.push(row);
     if (rc !== 0) failed++;
+    const info = attachSkip(row, chunks);
+    if (info) skipInfos.push(info);
   }
   if (doc.mode === 'selective' && doc.suites.length === 0 && !doc.changed.every(isProse)) {
     process.stdout.write('empty suites is not a pass: not every changed file is documentation\n');
     failed++;
     emptyFail = true;
   }
-  process.stdout.write(`summary: ${results.length} run, ${failed} failed${timedOut.length ? ` (timeout: ${timedOut.join(' ')})` : ''}\n`);
-  let code = failed === 0 ? 0 : 1;
+  const unverifiedCount = writeSkipSummary(results.length, failed, timedOut, skipInfos);
+  let code = failed === 0 && unverifiedCount === 0 ? 0 : 1;
   let budgetDoc = null;
   if (budgeted) {
     for (const rel of skipped) process.stdout.write(`not run (budget): ${rel}\n`);
@@ -1164,7 +1228,7 @@ async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs) {
     if (code === 0 && skipped.length > 0) code = 3;
     budgetDoc = { budget, executed: results.map((x) => x.path), skipped_for_budget: skipped };
   }
-  return { code, results, budgetDoc, emptyFail, timedOutPaths: timedOut };
+  return { code, results, budgetDoc, emptyFail, timedOutPaths: timedOut, unverifiedCount };
 }
 
 // --attribute: re-run only the non-zero entries at the base commit in a temporary detached worktree
@@ -1394,7 +1458,7 @@ async function main(argv) {
         process.stdout.write(`attribution: new ${g.new.length}${g.new.length ? ': ' + g.new.join(' ') : ''}\n`);
         process.stdout.write(`attribution: unattributed ${g.unattributed.length}${g.unattributed.length ? ': ' + g.unattributed.join(' ') : ''}\n`);
         const budgetStop = ran.code === 3 || (ran.budgetDoc != null && ran.budgetDoc.skipped_for_budget.length > 0);
-        attrCode = g.new.length > 0 || g.unattributed.length > 0 || ran.emptyFail ? 1 : (budgetStop ? 3 : 0);
+        attrCode = g.new.length > 0 || g.unattributed.length > 0 || ran.emptyFail || ran.unverifiedCount ? 1 : (budgetStop ? 3 : 0);
       }
       if (a.json && ran.budgetDoc) process.stdout.write(JSON.stringify(ran.budgetDoc, null, 2) + '\n');
       if (a.record) {

@@ -817,9 +817,9 @@ function initRepo(dir) {
       env: {
         ...railEnv(dir),
         GIT_AUTHOR_NAME: 'vision-guard-test',
-        GIT_AUTHOR_EMAIL: 'vision-guard-test@example.invalid',
+        GIT_AUTHOR_EMAIL: 't@t',
         GIT_COMMITTER_NAME: 'vision-guard-test',
-        GIT_COMMITTER_EMAIL: 'vision-guard-test@example.invalid',
+        GIT_COMMITTER_EMAIL: 't@t',
       },
     });
     assert.strictEqual(res.status, 0, `${args.join(' ')}\n${res.stderr || ''}`);

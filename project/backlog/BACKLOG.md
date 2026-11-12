@@ -1484,21 +1484,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hangar report after the 2026-11-12 power cut (fleet message 01M767AX)
 - **Pointer**: project/backlog/quota-cache-after-reboot.md
 
-### Test harnesses leave their own tmux socket and claude process running
-- **Id**: BL-0433
-- **Status**: open
-- **Since**: 2026-11-12
-- **Origin**: peer
-- **Reporter**: PM (pm--claude) via hangar
-- **Report**: 2026-11-12 fleet (PM via hangar)
-- **Reply**: unknown
-- **Problem**: Test harnesses that start their own tmux socket and a claude process (the modscroll repro harness) are not torn down; one was still running on the PM host after 25 days, hangar stopped it on PM go.
-- **Impact**: Orphan claude processes and tmux servers keep running after the test, with a deleted exe and a gone plugin worktree.
-- **Trigger**: ready
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PM report via hangar 2026-11-12
-- **Pointer**: project/backlog/test-tmux-claude-teardown.md
 
 ### dispatch-hetero --endpoint has no fallback when the local endpoint is unavailable
 - **Id**: BL-0435

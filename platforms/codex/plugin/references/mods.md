@@ -143,6 +143,10 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
   Run the suite with `bash mods/live/run-tests.sh`, which copies `mods/live` to a temp plugin. `claude plugin test .` at the
   repo root is not a supported entry point: it also picks up the 2026-10-03 spike evidence tests (S4 image, S5
   `clock.every`), which need their own register files and fail there.
+  A live look that starts its own tmux socket and a claude process sources `scripts/lib/test-tmux-claude-teardown.sh`,
+  calls `ap_arm_tmux_claude_teardown` before the first `new-session`, and `ap_record_claude_pid` for the claude it
+  started; the EXIT trap runs `tmux -L <socket> kill-server` and kills only that pid. Never pkill. The same rule covers
+  TUI screenshot runs (gate `DRIVER.md` and `RUNBOOK.md`).
 - **Loading it before it is wired**: `claude plugin validate` refuses a module path that leaves the plugin directory and a
   symlink that resolves outside it, so a scratch wrapper plugin (name `autopilot`, `hooks/hooks.json` =
   `{"modules": ["../mods/live/register.ts"]}`) holds a **copy** of `mods/`; re-copy after each edit.

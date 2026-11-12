@@ -178,8 +178,9 @@ CODEX_EDIT_GATE_LIB_DEST="hooks/orchestrator-edit-gate-lib.js"
 CODEX_DIRTY_TREE_SOURCE="hooks/dirty-protected-paths.js"
 CODEX_DIRTY_TREE_DEST="hooks/dirty-protected-paths.js"
 # Hook libs that mirrored scripts require as ../hooks/<name> (scripts/permission-prompt-watch.js needs the first two;
-# permission-block-lib.js lazily needs ask-decision.js). Same-name mirror, no remap.
-CODEX_HOOK_LIBS=(live-session-lib.js permission-block-lib.js ask-decision.js)
+# permission-block-lib.js lazily needs ask-decision.js; replay-stop-guard.js needs owner-question-guard.js).
+# Same-name mirrors only: this does not register additional Codex hooks.
+CODEX_HOOK_LIBS=(live-session-lib.js permission-block-lib.js ask-decision.js owner-question-guard.js)
 PLUGIN_MANIFEST="$PLUGIN/.codex-plugin/plugin.json"
 
 if [ ! -d "$SRC" ]; then

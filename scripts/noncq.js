@@ -465,12 +465,12 @@ function buildRailCommand(dir, item, profile, runId, env) {
   const sourceBit = profile.endpoint
     ? `[ -f '${loadEnvQ}' ] && . '${loadEnvQ}'\nset +e`
     : '';
-  // EXIT trap so an early exit from source/rail still records rail.exit.
+  // EXIT trap is registered BEFORE sourcing so an exit inside the sourced file still records rail.exit.
   const shell = [
     'set +e',
-    sourceBit,
     `exit_path='${exitPathQ}'`,
-    'trap \'ec=$?; printf "%s" "$ec" > "$exit_path.tmp"; mv "$exit_path.tmp" "$exit_path"\' EXIT',
+    'trap \'ec=$?; set +e; printf "%s" "$ec" > "$exit_path.tmp"; mv "$exit_path.tmp" "$exit_path"\' EXIT',
+    sourceBit,
     `bash '${railScript.replace(/'/g, `'\\''`)}' ${argStr} > '${stdoutPath.replace(/'/g, `'\\''`)}' 2> '${stderrPath.replace(/'/g, `'\\''`)}'`,
   ].filter((line) => line !== '').join('\n');
 

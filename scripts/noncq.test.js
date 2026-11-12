@@ -775,3 +775,32 @@ test('review-seat1 add+drain reaps findings into result.md', () => {
   const body = fs.readFileSync(item.result.path, 'utf8');
   assert.match(body, /F1/);
 });
+
+// ---------------------------------------------------------------------------
+// W1: EXIT trap must exist before endpoints are sourced
+// ---------------------------------------------------------------------------
+test('(trap-order) load-endpoints-env.sh that exits still records rail.exit and is reaped', () => {
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  // Stub that kills the shell before the rail runs.
+  write(rails.loadEnv, '#!/usr/bin/env bash\nexit 7\n', 0o755);
+  const fleet = makeFleetBin(work);
+  const brief = briefFile(work);
+  const add = cli(['add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief, '--accept', 'ok', '--prefer', 'glm'], {
+    AUTOPILOT_NONCQ_DIR: q, AUTOPILOT_NONCQ_RAIL_DIR: rails.dir, AUTOPILOT_FLEET_BIN: fleet.bin,
+  });
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const pace = writePace(work, [paceRow({ pool: 'glm' })]);
+  let d = drain(q, pace, rails.dir, fleet.bin, [], { AUTOPILOT_NOW: new Date(NOW_MS + 10_000).toISOString() });
+  assert.equal(d.status, 0, d.stderr);
+  assert.equal(JSON.parse(d.stdout).dispatched.length, 1);
+  const exitFile = path.join(q, 'items', id, 'rail.exit');
+  assert.ok(waitFor(() => fs.existsSync(exitFile), 8000), 'rail.exit must be written even when sourcing exits');
+  assert.notEqual(fs.readFileSync(exitFile, 'utf8').trim(), '0');
+  d = drain(q, pace, rails.dir, fleet.bin, [], { AUTOPILOT_NOW: new Date(NOW_MS + 11_000).toISOString() });
+  assert.equal(d.status, 0, d.stderr);
+  const item = JSON.parse(fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8'));
+  assert.notEqual(item.state, 'dispatched', 'item must be reaped, not stuck dispatched');
+});

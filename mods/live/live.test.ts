@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, layoutBandLine, BAND_NARROW_STEPS, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, slotFleet, slotVerdict, readLoadSource, PANE_TABS, verdictOf, wrapLines, bandView, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, redactSecrets, scanBackground, lastOutputLine, NO_SECTIONS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION, proxySegments } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, layoutBandLine, fittedBandWidth, BAND_NARROW_STEPS, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, slotFleet, slotVerdict, readLoadSource, PANE_TABS, verdictOf, wrapLines, bandView, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, redactSecrets, scanBackground, lastOutputLine, NO_SECTIONS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION, proxySegments } from './model'
 import { reviewTabLines, legendLines, hygieneTabLines, dispatchLines, spendTabLines, recentLines } from './tabs'
 import type { SessionMsg, QuotaWindow, AccountSnap } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
@@ -3585,8 +3585,10 @@ function bandOneLine(cols: number, steps: readonly (readonly ('pet' | 'trend' | 
     { role: 'pet' as const, text: 'Ferris Lv.1' },
   ]
   const r = layoutBandLine(slots, cols, speed, steps)
+  const segW = r.band.segs.reduce((n, s) => n + displayWidth(s.text), 0)
+  const width = fittedBandWidth(segW, r.speed, false)
   const text = r.band.text + (r.speed === null ? '' : ui.forgeBar(r.speed).segs.map(g => g.text).join(''))
-  return { applied: r.applied, text }
+  return { applied: r.applied, text, width }
 }
 const STUCK_ON_LAST = BAND_NARROW_STEPS.map((step, i) => (i === BAND_NARROW_STEPS.length - 1 ? [...step, 'fleetStuck' as const] : step))
 
@@ -3618,6 +3620,7 @@ test('band one line: the fleet slot is `艦隊 ⊘ N  ● N  ⋯ N` after the ve
 test('band one line tier wide: verdict, fleet, spend, 7d, speed and the pet, in that order', () => {
   const wide = bandOneLine(200)
   expect(wide.applied).toBe(0)
+  expect(wide.width).toBe(displayWidth(wide.text))
   expect(wide.text).toContain('▲ 要你決定 │ 艦隊 ⊘ 2  ● 12  ⋯ 16 │ $97 ▰▰▰▰▰▰▱▱▱▱ 60% │ 7d 7% │ ⓘ │ ϟ 44 tok/s █▅▇▂▅ · Ferris Lv.1')
   const mid = bandOneLine(120)
   expect(mid.applied).toBe(0)
@@ -6696,6 +6699,49 @@ for (const surface of SURFACES) {
     expect(row.text).toContain('⊘ 2')
     expect(row.text).toContain(' ' + t('tab.now') + ' ')
     expect(row.text).toContain(' ' + t('tab.review') + ' ')
+  })
+
+  // the shared fitted width includes the ⓘ and the ›, so the drawn row is exactly `columns` at every width in this range (never columns+1)
+  const rowAt = async ($: any, bodyColumns: number) => {
+    const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: { ...F_PROPS, bodyColumns }, viewport: { columns: bodyColumns, rows: 50, isFullscreen: true } })
+    const tree = (await ui.drawn()) as Node
+    await ui.unmount()
+    const cells = cellsOf(tree)
+    const last = cells[cells.length - 1]
+    return { text: cells.map(c => c.text).join(''), width: last === undefined ? 0 : last.start + last.width }
+  }
+  const sweepWidths = async ($: any, name: string) => {
+    const bad: string[] = []
+    for (let columns = 40; columns <= 220; columns++) {
+      const row = await rowAt($, columns)
+      if (row.width !== columns) {
+        bad.push(name + '@' + columns + '=' + row.width)
+        if (bad.length >= 6) break
+      }
+    }
+    expect(bad, bad.join(' ')).toEqual([])
+  }
+
+  test('band row: idle fleet draws exactly columns cells from 40 to 220 (' + surface + ')', async ($, on) => {
+    g33Ran(on)
+    const files = base()
+    const quiet = { runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 } }
+    files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope(quiet))
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope(quiet, null))
+    const w = world(on, files)
+    await start($, surface)
+    TURN_PLAN = FIVE_FAST; TURN_AT = 0
+    await runPlan($, FIVE_FAST.map(() => undefined))
+    await w.clock.advance(5_000)
+    await sweepWidths($, 'idle')
+  })
+
+  test('band row: active fleet draws exactly columns cells from 40 to 220 (' + surface + ')', async ($, on) => {
+    g33Ran(on)
+    const w = world(on, richWorld())
+    await start($, surface)
+    await w.clock.advance(5_000)
+    await sweepWidths($, 'active')
   })
 
   test('speed tab: the label does not time from the first visible chunk: hidden thinking counts from send (hook level, ' + surface + ')', async ($, on) => {

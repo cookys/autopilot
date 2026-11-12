@@ -1647,7 +1647,34 @@ function narrowSlots(slots: readonly Slot[], drop: ReadonlySet<BandNarrowId>): S
 
 export type BandLineLayout = { band: BandLayout; speed: ForgeSegment[] | null; applied: number }
 
-// `columns` is the room for the indicator AND the speed label together (the caller already removed the tab strip, the one-cell gap and the more-glyph).
+function segTextWidth(segs: readonly { text: string }[]): number {
+  return segs.reduce((n, s) => n + displayWidth(s.text), 0)
+}
+
+// The one width the one-line band shares. `segWidth` is the slot texts only (no ⓘ: layoutBand.width already added it, so callers pass the segs).
+// The ⓘ label is 2 cells, the speed label is forgeBar's own width, and `more` is the dim `›` plus the space after it.
+export function fittedBandWidth(segWidth: number, speed: readonly ForgeSegment[] | null, more: boolean): number {
+  const speedW = speed === null || speed.length === 0 ? 0 : ui.forgeBar(speed).width
+  const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
+  return segWidth + displayWidth(BAND_INFO_LABEL) + speedW + moreW
+}
+
+// The row (register.ts) shortens the segs until `fittedBandWidth` fits the room. layoutBandLine does not: its last candidate is returned even when it
+// overflows, so a pure caller at width 20 still has the verdict, the stuck count and the spend.
+export function shrinkToFitted(segs: readonly Seg[], speed: readonly ForgeSegment[] | null, more: boolean, room: number): Seg[] {
+  const out = segs.map(s => ({ ...s }))
+  while (fittedBandWidth(segTextWidth(out), speed, more) > room && out.length > 0) {
+    const last = out[out.length - 1]
+    const w = displayWidth(last.text)
+    if (w <= 1) { out.pop(); continue }
+    const cut = truncateToWidth(last.text, w - 1)
+    if (cut === last.text || displayWidth(cut) >= w) { out.pop(); continue }
+    out[out.length - 1] = { ...last, text: cut }
+  }
+  return out
+}
+
+// `columns` is the room for the indicator, the ⓘ, the speed label and, when `more` is set, the `›` cell (the caller already removed the tab strip and the one-cell gap).
 // The width table is shown at least 120 columns, so it cannot hide `$N`, the 5-cell bar or the quota window before the steps above take them; from 160 up it
 // sees the real width, so the 10-cell bar and the percent appear. A candidate whose verdict word was shortened is refused and the next step is tried.
 // The stuck count is not a step, so it is still on the line when every step has been applied.
@@ -1655,11 +1682,10 @@ export type BandLineLayout = { band: BandLayout; speed: ForgeSegment[] | null; a
 // them out at 120 columns, so after every step the line can still be wider than `columns`. They are then dropped one at a time, lowest priority first, and the
 // steps run again (a dropped slot frees room, so the speed label can come back). Verdict, fleet and spend stay. The last candidate is returned even when it still overflows.
 const BAND_OPTIONAL: readonly SlotId[] = ['hygiene', 'decisions', 'review', 'dispatch', 'unit', 'position']
-export function layoutBandLine(slots: readonly Slot[], columns: number, speed: readonly ForgeSegment[] | null, steps: readonly (readonly BandNarrowId[])[] = BAND_NARROW_STEPS): BandLineLayout {
+export function layoutBandLine(slots: readonly Slot[], columns: number, speed: readonly ForgeSegment[] | null, steps: readonly (readonly BandNarrowId[])[] = BAND_NARROW_STEPS, more = false): BandLineLayout {
   const verdict = slots.find(s => s.id === 'verdict')?.segs[0]?.text ?? null
-  const speedWidth = (parts: readonly ForgeSegment[] | null): number => (parts === null || parts.length === 0 ? 0 : ui.forgeBar(parts).width)
   const bandCols = columns >= 160 ? columns : Math.max(columns, 120)
-  const fits = (c: BandLineLayout) => (verdict === null || c.band.segs[0]?.text === verdict) && c.band.width + speedWidth(c.speed) <= columns
+  const fits = (c: BandLineLayout) => (verdict === null || c.band.segs[0]?.text === verdict) && fittedBandWidth(segTextWidth(c.band.segs), c.speed, more) <= columns
   const search = (list: readonly Slot[]): BandLineLayout => {
     let last: BandLineLayout | null = null
     for (let n = 0; n <= steps.length; n++) {

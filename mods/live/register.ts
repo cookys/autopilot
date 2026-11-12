@@ -70,7 +70,7 @@ import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  layoutBand, layoutBandLine, slotFleet, displayWidth, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
+  BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, shrinkToFitted, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
@@ -1236,19 +1236,22 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const atV = base.findIndex(s => s.id === 'verdict')
       const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...base.slice(atV + 1)]
       const parts = rows >= 1 ? speedLabelParts(steps, petText) : null
-      const roomFor = (more: boolean, speedTab: boolean) => {
+      // room is the cells left after the strip and the one-cell gap. The › is not subtracted here: fittedBandWidth counts it when `more` is set.
+      const roomFor = (speedTab: boolean) => {
         const stripW = barStrip(snap, t, null, speedTab ? GLYPHS.structure.speed : null, usageOn, con).width
-        const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
-        return Math.max(1, columns - stripW - 1 - moreW)
+        return Math.max(1, columns - stripW - 1)
       }
-      // `!usageOn` draws the dim `›` (the 用量 tab had no room) even when the speed label itself fits, so the first pass has to reserve those 2 cells too
-      let fitted = layoutBandLine(withFleet, roomFor(!usageOn, parts !== null), parts)
+      // `!usageOn` draws the dim `›` (the 用量 tab had no room) even when the speed label itself fits, so the first pass counts those 2 cells
+      let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, BAND_NARROW_STEPS, !usageOn)
       if (parts !== null && fitted.speed === null) {
         forgeMore = true
-        fitted = layoutBandLine(withFleet, roomFor(true, false), parts)
+        // null speed: the wider room (no forge tab) must not put the label back beside the › that stands in for it
+        fitted = layoutBandLine(withFleet, roomFor(false), null, BAND_NARROW_STEPS, true)
       }
+      const drawMore = !usageOn || forgeMore
+      const segs = shrinkToFitted(fitted.band.segs, fitted.speed, drawMore, roomFor(fitted.speed !== null))
       forge = fitted.speed
-      bandPreset = { segs: fitted.band.segs, width: fitted.band.width }
+      bandPreset = { segs, width: fittedBandWidth(segs.reduce((n, s) => n + displayWidth(s.text), 0), null, false) }
     } else if (rows >= 1) {
       const parts = speedLabelParts(steps, consoleOn ? null : petText)
       if (parts !== null) {

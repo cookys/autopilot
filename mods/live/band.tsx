@@ -5,7 +5,7 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } from './model'
+import { BAND_INFO_LABEL, BAND_SEP, displayWidth, fittedBandWidth, layoutBand, plainBandText } from './model'
 import { PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
@@ -81,15 +81,16 @@ function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | 
   const icon = Button === undefined
     ? <Text>{BAND_INFO_LABEL}</Text>
     : <Button key="info" plain autoFocus onPress={onInfo}>{BAND_INFO_LABEL}</Button>
-  // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again
-  if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: preset.width }
+  // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + ⓘ), never preset.width on its own.
+  const segW = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
+  if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: fittedBandWidth(segW(preset.segs), null, false) }
   if (snap === null || snap.band === null) {
     const reason = snap === null ? t('band.waiting') : snap.text
     const line = plainBandText(reason, columns) + BAND_SEP
-    return { nodes: [<Text key="w" {...dimProps()} wrap="truncate">{line}</Text>, icon], width: displayWidth(line) + displayWidth(BAND_INFO_LABEL) }
+    return { nodes: [<Text key="w" {...dimProps()} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) }
   }
   const line = layoutBand(snap.band.slots, columns)
-  return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: line.width }
+  return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: fittedBandWidth(segW(line.segs), null, false) }
 }
 
 export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T = T_EN, onSlot: (id: SlotId) => void = () => {}) {
@@ -112,7 +113,9 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const more = moreTo !== null
   const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
   const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot, preset)
-  const gap = Math.max(1, columns - left.width - forgeW - strip.width - moreW)
+  // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
+  const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
+  const gap = Math.max(1, columns - fittedBandWidth(segW, forge, more) - strip.width)
   const moreText = <Text key="m" {...drawSeg(moreSeg())} wrap="truncate">{GLYPHS.structure.goto}</Text>
   const moreNode = !more ? [] : [<Box key="more">{Button === undefined ? moreText : <Button key="more" plain onPress={() => hd.onTab(moreTo as BarTabId)}>{moreText}</Button>}<Text> </Text></Box>]
   const texts = fb === null ? [] : fb.segs.map((s, i) => <Text key={'f' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
@@ -126,7 +129,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       </Box>
     )
   })
-  return { node: <Box>{left.nodes}{speed}<Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>, strip, tabsAt: left.width + forgeW + gap }
+  return { node: <Box>{left.nodes}{speed}<Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>, strip, tabsAt: fittedBandWidth(segW, forge, false) + gap }
 }
 
 // the rule under the bar

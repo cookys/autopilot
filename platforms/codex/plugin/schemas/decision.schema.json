@@ -197,6 +197,17 @@
           },
           "backfilled": {
             "const": true
+          },
+          "kind": {
+            "enum": [
+              "decide",
+              "go",
+              "remind"
+            ]
+          },
+          "due_at": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }

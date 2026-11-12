@@ -181,7 +181,9 @@ const HELP_TEXT = `Usage:\n\
   strip-expiry is the one-time migration for stores written before qualification lost its expiry\n\
     (2026-10-26): it re-seals each evidence record without its expiry field (ids change, references follow),\n\
     drops the expiry field from scorecard rows and pins, and backs every store up (<file>.bak-strip-expiry-<UTC>)\n\
-    first. Qualification has no calendar: standing ends only through strikes. --dry-run plans only.\n\
+    first. It refuses when exactly one of the two store directories is overridden\n\
+    (ENGINE_SCORECARD_DIR versus ENGINE_CAPABILITY_DIR or ENGINE_CAPABILITY_FILE): the other would be the real store.\n\
+    Set both or neither. Qualification has no calendar: standing ends only through strikes. --dry-run plans only.\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -211,16 +213,18 @@ function isHelpToken(token) {
   return token === '-h' || token === '--help' || token === 'help';
 }
 
-const SCORECARD_DIR = path.resolve(
-  expandTilde(process.env.ENGINE_SCORECARD_DIR || path.join('~', '.autopilot', 'engine-scorecard')),
-);
+const DEFAULT_SCORECARD_DIR = path.resolve(expandTilde(path.join('~', '.autopilot', 'engine-scorecard')));
+const DEFAULT_CAPABILITY_DIR = path.resolve(expandTilde(path.join('~', '.autopilot', 'engine-capability')));
+const SCORECARD_DIR = process.env.ENGINE_SCORECARD_DIR
+  ? path.resolve(expandTilde(process.env.ENGINE_SCORECARD_DIR))
+  : DEFAULT_SCORECARD_DIR;
 const SCORECARD_FILE = path.join(SCORECARD_DIR, 'scorecard.jsonl');
 const LOCK_FILE = path.join(SCORECARD_DIR, '.lock');
 const CAPABILITY_DIR = process.env.ENGINE_CAPABILITY_DIR
   ? path.resolve(expandTilde(process.env.ENGINE_CAPABILITY_DIR))
   : process.env.ENGINE_CAPABILITY_FILE
     ? path.dirname(path.resolve(expandTilde(process.env.ENGINE_CAPABILITY_FILE)))
-    : path.resolve(expandTilde(path.join('~', '.autopilot', 'engine-capability')));
+    : DEFAULT_CAPABILITY_DIR;
 const CAPABILITY_EVIDENCE_FILE = path.join(CAPABILITY_DIR, 'qualification-evidence.jsonl');
 
 function readTextLines(filePath) {
@@ -3198,6 +3202,8 @@ function cmdRelabelEffort(args) {
 // rewrites the embedded copies and anchors. Rows carrying `expires`, status `expired`, and pin rows
 // carrying `expires: null` lose the field. Planned fully in memory first (all-or-nothing), every
 // store backed up, then rewritten atomically under both locks. --dry-run only plans.
+// Refuses when exactly one resolved directory is still the real ~/.autopilot store (BL-0339):
+// a copy of one store must not rewrite the other.
 // ---------------------------------------------------------------------------------------------
 function parseStripExpiryArgs(args) {
   const out = { dryRun: false };
@@ -3336,8 +3342,25 @@ function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
   };
 }
 
+// Overridden means the resolved directory is not the default ~/.autopilot location.
+// An env var set to that default is not an override: it would still write the real store.
+function refuseSplitStripExpiryStores() {
+  const scorecardIsDefault = SCORECARD_DIR === DEFAULT_SCORECARD_DIR;
+  const capabilityIsDefault = CAPABILITY_DIR === DEFAULT_CAPABILITY_DIR;
+  if (scorecardIsDefault === capabilityIsDefault) return;
+  const overriddenName = scorecardIsDefault ? 'the capability directory' : 'ENGINE_SCORECARD_DIR';
+  const realName = scorecardIsDefault ? 'ENGINE_SCORECARD_DIR' : 'the capability directory';
+  const realPath = scorecardIsDefault ? SCORECARD_DIR : CAPABILITY_DIR;
+  failValidation(
+    'strip-expiry refused, nothing written: exactly one of the two store directories is overridden'
+    + ` (${overriddenName} is overridden; ${realName} is still the real store at ${realPath}).`
+    + ' Set both ENGINE_SCORECARD_DIR and ENGINE_CAPABILITY_DIR (ENGINE_CAPABILITY_FILE also selects the capability directory), or set neither',
+  );
+}
+
 function cmdStripExpiry(args) {
   const opts = parseStripExpiryArgs(args);
+  refuseSplitStripExpiryStores();
   const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
   const pinsFile = path.join(CAPABILITY_DIR, 'pins.jsonl');
   const evidenceLock = { storeDir: CAPABILITY_DIR, lockFile: path.join(CAPABILITY_DIR, '.lock'), name: 'capability' };

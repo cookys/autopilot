@@ -39,7 +39,10 @@ the same commit.
 
 Stores written before 2026-10-26 still carry the field. They are migrated once with
 `node scripts/engine-scorecard.js strip-expiry` (`--dry-run` first; every store is backed up as
-`<file>.bak-strip-expiry-<UTC>`). Evidence ids are content hashes and `expires_at` was inside them,
+`<file>.bak-strip-expiry-<UTC>`). It refuses when exactly one of the two store directories is
+overridden (`ENGINE_SCORECARD_DIR`, or the capability directory via `ENGINE_CAPABILITY_DIR` or
+`ENGINE_CAPABILITY_FILE`), so a copy cannot rewrite the real store. Set both or neither.
+Evidence ids are content hashes and `expires_at` was inside them,
 so the migration re-seals the evidence and rewrites everything that points at it.
 An old `expired` row status becomes `qualified` (only its date had passed). An old stored `stale` evidence
 record has no recoverable earlier state and was read as not qualified, so it becomes `degraded` and its row

@@ -1145,3 +1145,37 @@ test('(5) empty report names lane backlog items tagged noncq-ok', () => {
   assert.equal(log.includes('project/backlog'), false);
   assert.equal(log.includes('/home/'), false);
 });
+
+// ---------------------------------------------------------------------------
+// (6) needs_shell does not count as eligible for an agy runner's empty report
+// ---------------------------------------------------------------------------
+test('(6) needs_shell item preferring agy,grok reports [noncq-empty] for agy and is not dispatched', () => {
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  const fleet = makeFleetBin(work);
+  const brief = briefFile(work);
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'agy,grok', '--needs-shell',
+  ], {
+    AUTOPILOT_NONCQ_DIR: q,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: fleet.bin,
+  });
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  // agy qualifies; grok does not.
+  const pace = writePace(work, [paceRow({ pool: 'agy', waste_pct_if_unused: 55 })], 'pace-agy-shell.json');
+  const d = drain(q, pace, rails.dir, fleet.bin, ['--dry-run']);
+  assert.equal(d.status, 0, d.stderr);
+  const out = JSON.parse(d.stdout);
+  assert.deepEqual(out.qualifying, ['agy']);
+  assert.equal(out.dispatched.length, 0, 'agy must not dispatch a needs_shell item');
+  assert.equal(out.empty_reported.length, 1);
+  assert.equal(out.empty_reported[0].engine, 'agy');
+  assert.equal(out.empty_reported[0].waste_pct_if_unused, 55);
+  const still = JSON.parse(fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8'));
+  assert.equal(still.state, 'queued');
+  assert.equal(still.needs_shell, true);
+});

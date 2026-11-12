@@ -727,17 +727,27 @@ function reapDispatched(entries, atIso, dryRun, actions) {
   return { finished, requeuedIds };
 }
 
-function pickForEngine(entries, engineKey, maxParallel, alreadyDispatchedCount, atMs, skipIds = new Set(), runner = null) {
+/**
+ * One predicate for "this queued item may be assigned to this engine profile".
+ * `pickForEngine` and the [noncq-empty] count both call it. Skip-ids and
+ * expiry stay with the caller: they are drain bookkeeping, not engine fit.
+ * agy under dispatch-author has no usable shell, so needs_shell leaves the
+ * item queued for a later non-agy engine.
+ */
+function itemEligibleForEngine(item, profile) {
+  return item.state === 'queued'
+    && Array.isArray(item.prefer)
+    && item.prefer.includes(profile.key)
+    && !(item.needs_shell === true && profile.runner === 'agy');
+}
+
+function pickForEngine(entries, engineKey, maxParallel, alreadyDispatchedCount, atMs, skipIds = new Set(), profile) {
   const slots = Math.max(0, maxParallel - alreadyDispatchedCount);
   if (slots === 0) return [];
   const eligible = entries
-    .filter(({ item }) => item.state === 'queued'
+    .filter(({ item }) => itemEligibleForEngine(item, profile)
       && !skipIds.has(item.id)
-      && Array.isArray(item.prefer)
-      && item.prefer.includes(engineKey)
-      && Date.parse(item.expires_at) > atMs // safety; expire pass already ran
-      // agy under dispatch-author has no usable shell. Leave the item queued.
-      && !(item.needs_shell === true && runner === 'agy'))
+      && Date.parse(item.expires_at) > atMs) // safety; expire pass already ran
     .map(({ dir, item }) => ({
       dir,
       item,
@@ -996,12 +1006,11 @@ function cmdDrain(flags, env = process.env, opts = {}) {
       }
       const dispatchedCount = countDispatched(entries, engineKey);
       const picks = pickForEngine(
-        entries, engineKey, profile.max_parallel || 1, dispatchedCount, atMs, pickedIds, profile.runner,
+        entries, engineKey, profile.max_parallel || 1, dispatchedCount, atMs, pickedIds, profile,
       );
       if (picks.length === 0) {
-        // eligible queued count for empty report: prefer contains key and queued
-        const eligibleQueued = entries.filter(({ item }) => item.state === 'queued'
-          && Array.isArray(item.prefer) && item.prefer.includes(engineKey)
+        // Same predicate as pickForEngine, including needs_shell vs runner agy.
+        const eligibleQueued = entries.filter(({ item }) => itemEligibleForEngine(item, profile)
           && !pickedIds.has(item.id)).length;
         const inFlight = dispatchedCount;
         if (eligibleQueued === 0 && inFlight === 0) {

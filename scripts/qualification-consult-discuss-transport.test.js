@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 'use strict';
 
-// RED at c9c3fd66e: consult provider run succeeds (stderr: model call failed: claude CLI identity unverifiable: JSON envelope has no string result)
-
 // qualification-consult-discuss-transport.test.js — D3 transport-extension
 // identity-binding suite (plan: docs/plans/2026-08-28-consult-discuss-
 // qualification.md, D3 "Plus transport acceptance"). Proves, for EACH of
@@ -386,11 +384,76 @@ function partB() {
 // provider.js binary as --provider-cmd, CLI-stub transport underneath ─────
 
 async function partC() {
+  // Negative: the CLI prints the consult answer as raw JSON, with no string
+  // `result`. The provider must fail closed. Shown red by expecting status
+  // 'ok' (actual was 'failed').
+  {
+    const capture = path.join(tempRoot, 'e2e-capture-raw.json');
+    const rawStub = path.join(tempRoot, 'e2e-stub-raw.js');
+    fs.writeFileSync(rawStub, `#!/usr/bin/env node
+'use strict';
+const fs = require('fs');
+const stdin = fs.readFileSync(0, 'utf8');
+fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ argv: process.argv.slice(2), stdin }));
+fs.writeSync(1, ${JSON.stringify(CONSULT_STUB_OUTPUT)});
+process.exit(0);
+`, { mode: 0o755 });
+    process.env.QRP_TRANSPORT = 'cli';
+    process.env.QRP_CLI_KIND = 'claude';
+    process.env.QRP_CLI_BIN = rawStub;
+    process.env.QRP_PROVIDER = 'fake-provider';
+    process.env.QRP_MODEL = 'fake-model-exact';
+    process.env.QRP_PROMPT_MODE = 'consult';
+    process.env.STUB_CAPTURE = capture;
+    process.env.STUB_OUTPUT = CONSULT_STUB_OUTPUT;
+    const raw = await runBrokerCase({
+      role: 'consult',
+      provider: 'fake-provider',
+      model: 'fake-model-exact',
+      providerCmd: `${shellQuote(process.execPath)} ${shellQuote(PROVIDER)}`,
+      providerEnvironment: [
+        'QRP_TRANSPORT', 'QRP_CLI_KIND', 'QRP_CLI_BIN', 'QRP_PROVIDER', 'QRP_MODEL',
+        'QRP_PROMPT_MODE', 'STUB_CAPTURE', 'STUB_OUTPUT',
+      ],
+      timeoutMs: 10_000,
+    }, consultRequest().payload.content);
+    equal(raw.status, 'failed', 'raw JSON with no result string is rejected');
+    check(/no string `result`/.test((raw.error && raw.error.message) || ''),
+      `the rejection names the missing result string (${raw.error && raw.error.message})`);
+  }
   for (const [role, request, stubOutput, promptNeedle] of [
     ['consult', consultRequest(), CONSULT_STUB_OUTPUT, 'consult seat'],
     ['discuss', discussRequest(), DISCUSS_STUB_OUTPUT, 'one seat in a multi-role debate'],
   ]) {
     const capture = path.join(tempRoot, `e2e-capture-${role}.json`);
+    // On a host with an active account registry the broker cannot pass
+    // AUTOPILOT_ACCOUNTS_DIR (that prefix is forbidden), so the provider takes
+    // the account layer. That layer replaces the CLI environment and drops
+    // STUB_CAPTURE / STUB_OUTPUT. Bake both into this per-role stub; an env
+    // value still wins when the layer is off (part B's shared stub).
+    const roleStub = path.join(tempRoot, `e2e-stub-${role}.js`);
+    fs.writeFileSync(roleStub, `#!/usr/bin/env node
+'use strict';
+const fs = require('fs');
+const stdin = fs.readFileSync(0, 'utf8');
+const capture = process.env.STUB_CAPTURE || ${JSON.stringify(capture)};
+const text = process.env.STUB_OUTPUT !== undefined ? process.env.STUB_OUTPUT : ${JSON.stringify(stubOutput)};
+fs.writeFileSync(capture, JSON.stringify({ argv: process.argv.slice(2), stdin }));
+function writeAnswer(body) {
+  const fmtAt = process.argv.indexOf('--output-format');
+  if (fmtAt !== -1 && process.argv[fmtAt + 1] === 'json') {
+    const modelAt = process.argv.indexOf('--model');
+    const model = modelAt !== -1 ? String(process.argv[modelAt + 1]) : '';
+    const modelUsage = {};
+    if (model) modelUsage[model] = { inputTokens: 1, outputTokens: 1 };
+    fs.writeSync(1, JSON.stringify({ result: String(body), modelUsage }));
+    return;
+  }
+  fs.writeSync(1, body);
+}
+if (text !== undefined) writeAnswer(text);
+process.exit(Number(process.env.STUB_EXIT || 0));
+`, { mode: 0o755 });
     const providerCmd = `${shellQuote(process.execPath)} ${shellQuote(PROVIDER)}`;
     const options = {
       role,
@@ -405,7 +468,7 @@ async function partC() {
     };
     process.env.QRP_TRANSPORT = 'cli';
     process.env.QRP_CLI_KIND = 'claude';
-    process.env.QRP_CLI_BIN = stubCli;
+    process.env.QRP_CLI_BIN = roleStub;
     process.env.QRP_PROVIDER = 'fake-provider';
     process.env.QRP_MODEL = 'fake-model-exact';
     process.env.QRP_PROMPT_MODE = role;

@@ -9,6 +9,28 @@
 # fails loudly instead of passing for the wrong reason.
 . "$(dirname "$0")/lib.sh"
 
+# The harness takes one fixed lock and flock opens it read-write. A file another
+# user left, which this user cannot write, makes flock exit 66 (cannot open lock
+# file: Permission denied) before any comparison. That is the host, not the chain.
+# Negative control, shown red before this landed: the same function with `[ -w ]`
+# in place of `[ ! -w ]` fails both asserts below (a writable file is treated as
+# a skip, and chmod a-w is not). Recorded outside the suite so the inverted
+# predicate cannot fall through into the corpus.
+ptc_lock_unwritable() { [ -e "$1" ] && [ ! -w "$1" ]; }
+_ptc_w="$TEST_TMP/writable.lock"
+: >"$_ptc_w"
+_ptc_verdict() { ptc_lock_unwritable "$1" && echo skip || echo run; }
+assert_eq "$(_ptc_verdict "$_ptc_w")" run "writable lock must not skip"
+if [ "$(id -u)" != 0 ]; then
+  chmod a-w "$_ptc_w"
+  assert_eq "$(_ptc_verdict "$_ptc_w")" skip "unwritable existing lock must skip"
+fi
+rm -f "$_ptc_w"
+if ptc_lock_unwritable /tmp/ptc-fixed-harness.lock; then
+  echo "SKIP [$TEST_NAME] /tmp/ptc-fixed-harness.lock exists but is not writable by this user, so flock cannot open it (Permission denied, exit 66). Host environment, not the chain."
+  finalize_test
+fi
+
 HARNESS="$REPO_ROOT/hooks/tests/lib/post-tool-chain-harness.js"
 MUT="$TEST_TMP/mut"
 mkdir -p "$MUT"

@@ -817,23 +817,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/backlog/brief-header-hint-guards.md
 - **Context**: hooks/lib/brief-header-template.js:76 joins lines with " | "; hooks/subagent-budget.js:498; dispatch-model-guard. Fix: copyable 3-line template incl. intentional form, one merged message, regression test.
 
-### engine-scorecard strip-expiry silently writes the real engine-capability store when only one directory is overridden
-- **Id**: BL-0339
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: peer
-- **Reporter**: peace (<host>)
-- **Report**: 01M67HZPT918GAWJG237T0JG8N
-- **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
-- **Problem**: 成績單工具的去除期限指令同時動到兩個資料夾，一個放席位成績列，一個放證據與釘選。只改道其中一個時，另一個會悄悄寫進真實的資料夾。
-- **Impact**: 回報者的子代理對副本跑時，真實的證據與釘選被改寫，事後靠備份還原；資料安全問題。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PEER-REPORTED peace (<host>) 2026-10-31, priority high (data safety)
-- **Pointer**: project/backlog/engine-scorecard-strip-expiry-store-split.md
-- **Context**: Fix direction: refuse when only one of the two dirs is overridden, or list every path about to be written before writing. Add a negative control (one override only must be refused).
-
 ### dispatch-review.sh cannot read only the last message and has no REWORK or STOP verdict
 - **Id**: BL-0340
 - **Status**: open

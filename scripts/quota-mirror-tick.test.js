@@ -1,8 +1,9 @@
 'use strict';
 
 // quota-mirror-tick.js — one failure must not stop the later steps, and the process
-// exits non-zero only when every step failed. Children are stubs in QUOTA_MIRROR_BIN.
-// The child sentinel must never appear in the tick's own output.
+// exits non-zero only when every producer failed. The smoke check still runs and
+// prints its own line; it does not count toward that exit. Children are stubs in
+// QUOTA_MIRROR_BIN. The child sentinel must never appear in the tick's own output.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -79,7 +80,7 @@ test('all steps ok: exit 0, every stub ran, child output is not relayed', () => 
     `smoke ${live}`,
   ]);
   assert.match(r.stdout, /quota-mirror-tick: smoke ok/);
-  assert.match(r.stdout, /quota-mirror-tick: 5\/5 ok/);
+  assert.match(r.stdout, /quota-mirror-tick: 4\/4 ok/);
   assert.ok(!r.stdout.includes(SENTINEL));
   assert.ok(!r.stderr.includes(SENTINEL));
   assert.ok(!r.stdout.includes(live));
@@ -94,12 +95,37 @@ test('one step fails: the others still run and the tick exits 0', () => {
   assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
   assert.match(r.stdout, /quota-mirror-tick: sync-statusline fail exit=1/);
   assert.match(r.stdout, /quota-mirror-tick: smoke ok/);
-  assert.match(r.stdout, /quota-mirror-tick: 4\/5 ok/);
+  assert.match(r.stdout, /quota-mirror-tick: 3\/4 ok/);
 });
 
 test('every step fails: exit non-zero after all of them ran', () => {
   const { r, lines } = runTick(all(1));
   assert.notStrictEqual(r.status, 0);
   assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
-  assert.match(r.stdout, /quota-mirror-tick: 0\/5 ok/);
+  assert.match(r.stdout, /quota-mirror-tick: 0\/4 ok/);
+});
+
+test('all four producers fail and smoke passes: exit non-zero, smoke line still printed', () => {
+  const codes = all(1);
+  codes.smoke = 0;
+  const { r, lines } = runTick(codes);
+  assert.notStrictEqual(r.status, 0);
+  assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
+  assert.match(r.stdout, /quota-mirror-tick: usage-probe fail exit=1/);
+  assert.match(r.stdout, /quota-mirror-tick: sync-statusline fail exit=1/);
+  assert.match(r.stdout, /quota-mirror-tick: sync-provider-minimax fail exit=1/);
+  assert.match(r.stdout, /quota-mirror-tick: sync-provider-glm fail exit=1/);
+  assert.match(r.stdout, /quota-mirror-tick: smoke ok/);
+  assert.match(r.stdout, /quota-mirror-tick: 0\/4 ok/);
+});
+
+test('one producer ok: exit 0', () => {
+  const codes = all(1);
+  codes['usage-probe'] = 0;
+  const { r, lines } = runTick(codes);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
+  assert.match(r.stdout, /quota-mirror-tick: usage-probe ok/);
+  assert.match(r.stdout, /quota-mirror-tick: smoke fail exit=1/);
+  assert.match(r.stdout, /quota-mirror-tick: 1\/4 ok/);
 });

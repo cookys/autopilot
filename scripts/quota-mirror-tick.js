@@ -8,7 +8,11 @@
 //   node scripts/quota-mirror-tick.js
 //
 // Steps, in order, each with its own timeout. One failure never stops the others.
-// Exit 0 when at least one step exited 0; exit 1 only when every step failed; exit 2 on usage.
+// Exit 0 when at least one producer exited 0; exit 1 only when every producer failed;
+// exit 2 on usage. Producers are usage-probe, sync-statusline, sync-provider minimax
+// and sync-provider glm. The smoke check runs after them and prints its own line.
+// It does not count toward that exit: a live dir left valid by an earlier tick must
+// not hide a tick where every producer failed.
 // After the producers, runs scripts/g40-real-data/check.sh against the resolved live dir
 // (AUTOPILOT_LIVE_DIR, else the live-state-dir.js chain) and prints that verdict on its own line.
 // One summary line per step. Child stdout and stderr are discarded, so a credential a child
@@ -44,7 +48,7 @@ function usage() {
   process.stdout.write(
     'usage: node scripts/quota-mirror-tick.js\n' +
     'One pass: usage-probe --due, sync-statusline, sync-provider minimax, sync-provider glm,\n' +
-    'then scripts/g40-real-data/check.sh <live_dir>. Exit 1 only when every step failed.\n'
+    'then scripts/g40-real-data/check.sh <live_dir>. Exit 1 only when every producer failed.\n'
   );
 }
 
@@ -130,12 +134,17 @@ function run() {
     results.push(runStep(step));
   }
   let ok = 0;
+  let producers = 0;
   for (const result of results) {
-    if (result.ok) ok += 1;
     process.stdout.write(`${summary(result)}\n`);
+    // Smoke is a post-step check of the live dir. It is printed above and is not
+    // a producer, so it is neither a success nor a failure for the exit.
+    if (result.id === 'smoke') continue;
+    producers += 1;
+    if (result.ok) ok += 1;
   }
-  process.stdout.write(`quota-mirror-tick: ${ok}/${results.length} ok\n`);
-  if (results.length > 0 && ok === 0) return 1;
+  process.stdout.write(`quota-mirror-tick: ${ok}/${producers} ok\n`);
+  if (producers > 0 && ok === 0) return 1;
   return 0;
 }
 

@@ -6,9 +6,6 @@
 # Red-checks: docs/plans/evidence/2026-11-02-oc-a3-writers-use-hippo/a3.4-reconcile/.
 . "$(dirname "$0")/lib.sh"
 require_hippo_or_skip backlog-reconcile
-export HIPPO_BIN
-HIPPO_BIN="$(command -v "$HIPPO_BIN")" || fail "HIPPO_BIN is not executable"
-export HIPPO_BIN
 . "$(dirname "$0")/lib/hippo-sandbox.sh"
 hs_setup
 

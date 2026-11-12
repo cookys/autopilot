@@ -6,9 +6,6 @@
 # HOME (hooks/tests/lib/hippo-sandbox.sh, C6). Red-checks: docs/plans/evidence/2026-11-02-oc-a3-writers-use-hippo/a3.1-lib/.
 . "$(dirname "$0")/lib.sh"
 require_hippo_or_skip hippo-lib
-export HIPPO_BIN
-HIPPO_BIN="$(command -v "$HIPPO_BIN")" || fail "HIPPO_BIN is not executable"
-export HIPPO_BIN
 . "$(dirname "$0")/lib/hippo-sandbox.sh"
 hs_setup
 
@@ -346,6 +343,31 @@ chmod +x "$TPL_OWN/tpl/hooks/post-commit"
 ( export GIT_TEMPLATE_DIR="$TPL_OWN/tpl"; hs_scrub_git_env; hs_mkrepo tpl >/dev/null )
 assert_file_absent "$TPL_OWN/sentinel" "an inherited GIT_TEMPLATE_DIR hook does not run in hs_mkrepo"
 rm -rf "$TPL_OWN"
+
+# --- require_hippo_or_skip (hooks/tests/lib.sh): each case in a subshell with its own PATH / HOME / HIPPO_BIN
+RQ="$HS_ROOT/rq"; mkdir -p "$RQ/pathbin" "$RQ/home/.local/bin" "$RQ/emptyhome" "$RQ/dirhome/.local/bin/hippo" "$RQ/nxhome/.local/bin" "$RQ/emptypath"
+printf '#!/bin/sh\nexit 0\n' > "$RQ/stub"; chmod +x "$RQ/stub"
+cp "$RQ/stub" "$RQ/pathbin/hippo"; cp "$RQ/stub" "$RQ/home/.local/bin/hippo"
+printf '#!/bin/sh\nexit 0\n' > "$RQ/nxhome/.local/bin/hippo"; chmod -x "$RQ/nxhome/.local/bin/hippo"
+RQ_PATH_EMPTY="$RQ/emptypath"
+( export HIPPO_BIN="$RQ/stub" PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/emptyhome"; require_hippo_or_skip rqsuite; echo "rc=$? bin=$HIPPO_BIN" ) > "$RQ/a.out" 2>&1
+assert_contains "$(cat "$RQ/a.out")" "rc=0 bin=$RQ/stub" "require_hippo_or_skip: valid HIPPO_BIN -> returns 0, exported"
+( export HIPPO_BIN="$RQ/no/such/hippo" PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/home"; require_hippo_or_skip rqsuite; echo "NOT-REACHED" ) > "$RQ/b.out" 2>&1; eq 1 "$?" "require_hippo_or_skip: set but nonexistent HIPPO_BIN -> exit 1 (even with a good ~/.local/bin/hippo)"
+assert_contains "$(cat "$RQ/b.out")" "FAIL [rqsuite]" "require_hippo_or_skip: invalid HIPPO_BIN prints a FAIL line"
+assert_not_contains "$(cat "$RQ/b.out")" "SKIP" "require_hippo_or_skip: invalid HIPPO_BIN never prints SKIP"
+assert_not_contains "$(cat "$RQ/b.out")" "NOT-REACHED" "require_hippo_or_skip: invalid HIPPO_BIN stops the suite"
+( unset HIPPO_BIN; export PATH="$RQ/pathbin" AUTOPILOT_TEST_REAL_HOME="$RQ/emptyhome"; require_hippo_or_skip rqsuite; echo "rc=$? bin=$HIPPO_BIN" ) > "$RQ/c.out" 2>&1
+assert_contains "$(cat "$RQ/c.out")" "rc=0 bin=$RQ/pathbin/hippo" "require_hippo_or_skip: unset, hippo on PATH -> found"
+( unset HIPPO_BIN; export PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/home"; require_hippo_or_skip rqsuite; echo "rc=$? bin=$HIPPO_BIN" ) > "$RQ/d.out" 2>&1
+assert_contains "$(cat "$RQ/d.out")" "rc=0 bin=$RQ/home/.local/bin/hippo" "require_hippo_or_skip: unset, only \$HOME/.local/bin/hippo executable -> found"
+( unset HIPPO_BIN; export PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/emptyhome"; require_hippo_or_skip rqsuite; echo "NOT-REACHED" ) > "$RQ/e.out" 2>&1; eq 0 "$?" "require_hippo_or_skip: nothing found -> exit 0"
+assert_contains "$(cat "$RQ/e.out")" "SKIP [rqsuite]" "require_hippo_or_skip: nothing found -> SKIP [suite] line"
+assert_not_contains "$(cat "$RQ/e.out")" "NOT-REACHED" "require_hippo_or_skip: nothing found -> exits instead of returning"
+for h in dirhome nxhome; do
+  ( unset HIPPO_BIN; export PATH="$RQ_PATH_EMPTY" AUTOPILOT_TEST_REAL_HOME="$RQ/$h"; require_hippo_or_skip rqsuite; echo "NOT-REACHED" ) > "$RQ/f.out" 2>&1; eq 0 "$?" "require_hippo_or_skip: $h/.local/bin/hippo (directory / non-executable) -> exit 0"
+  assert_contains "$(cat "$RQ/f.out")" "SKIP [rqsuite]" "require_hippo_or_skip: $h/.local/bin/hippo treated as missing -> SKIP"
+  assert_not_contains "$(cat "$RQ/f.out")" "NOT-REACHED" "require_hippo_or_skip: $h/.local/bin/hippo not used as the binary"
+done
 
 hs_exit_check
 finalize_test

@@ -1004,12 +1004,21 @@ export AUTOPILOT_RESIDUE_RECENT_HOURS=0
 # $HOME/.local/bin/hippo) and export HIPPO_BIN as an absolute path. With none found, print the one `SKIP [suite]` line that
 # run.sh collect_skips() lists, and exit 0.
 require_hippo_or_skip() {
-  local _c="${HIPPO_BIN:-}"
-  if [ -z "$_c" ]; then _c="$(command -v hippo 2>/dev/null || true)"; fi
+  local _c
+  if [ -n "${HIPPO_BIN:-}" ]; then
+    # A set HIPPO_BIN is an explicit choice: an unusable one is a failure, never a skip.
+    _c="$(command -v "$HIPPO_BIN" 2>/dev/null || true)"
+    if [ -z "$_c" ]; then
+      echo "FAIL [$1] HIPPO_BIN is set but not executable: $HIPPO_BIN"
+      exit 1
+    fi
+    export HIPPO_BIN="$_c"
+    return 0
+  fi
+  _c="$(command -v hippo 2>/dev/null || true)"
   # lib.sh has already swapped HOME for the sandbox; the uid's real home is AUTOPILOT_TEST_REAL_HOME.
   local _h="${AUTOPILOT_TEST_REAL_HOME:-$HOME}"
-  if [ -z "$_c" ] && [ -x "$_h/.local/bin/hippo" ]; then _c="$_h/.local/bin/hippo"; fi
-  if [ -n "$_c" ]; then _c="$(command -v "$_c" 2>/dev/null || true)"; fi
+  if [ -z "$_c" ] && [ -f "$_h/.local/bin/hippo" ] && [ -x "$_h/.local/bin/hippo" ]; then _c="$_h/.local/bin/hippo"; fi
   if [ -z "$_c" ]; then
     echo "SKIP [$1] no hippo (HIPPO_BIN unset, not on PATH, not at \$HOME/.local/bin/hippo)"
     exit 0

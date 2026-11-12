@@ -13,3 +13,11 @@ FAIL [hippo-lib] 125 passed, 1 failed
 ## restored; related suites
 PASS [project-record] 252 assertions
 PASS [backlog-reconcile] 28 assertions
+## red 3: require_hippo_or_skip reverted to the previous lib.sh (HIPPO_BIN swallowed by command -v)
+FAIL [hippo-lib] require_hippo_or_skip: set but nonexistent HIPPO_BIN -> exit 1 (even with a good ~/.local/bin/hippo): expected '1', got '0'
+FAIL [hippo-lib] require_hippo_or_skip: invalid HIPPO_BIN prints a FAIL line: 'FAIL [rqsuite]' not found in output
+FAIL [hippo-lib] require_hippo_or_skip: invalid HIPPO_BIN never prints SKIP: unexpected 'SKIP' in output
+FAIL [hippo-lib] 139 passed, 3 failed
+(f dirhome/nxhome stay green under the old code too: old -x on a directory made command -v fail -> SKIP, same outcome; the -f guard is belt-and-braces, not separately red-able)
+## restored lib.sh
+PASS [hippo-lib] 142 assertions

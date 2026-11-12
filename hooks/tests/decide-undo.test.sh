@@ -14,6 +14,7 @@ export AUTOPILOT_RUNS_WATCH_AUTOSTART=0
 export XDG_RUNTIME_DIR="$TEST_TMP/xdg"; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 export AUTOPILOT_LIVE_DIR="$TEST_TMP/live"; mkdir -p "$AUTOPILOT_LIVE_DIR"; chmod 700 "$AUTOPILOT_LIVE_DIR"
 export AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet"   # no courier on this host: nothing real is reached
+prefer_ts_node   # real mods/live/*.ts need type stripping; a non-TS node first on PATH reds the driver
 
 LDR="$TEST_TMP/ldr.mjs"
 cat > "$LDR" <<'E1'

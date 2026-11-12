@@ -12,6 +12,7 @@ export AUTOPILOT_RUNS_WATCH_AUTOSTART=0
 export XDG_RUNTIME_DIR="$TEST_TMP/xdg"; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 export AUTOPILOT_LIVE_DIR="$TEST_TMP/live"; mkdir -p "$AUTOPILOT_LIVE_DIR"; chmod 700 "$AUTOPILOT_LIVE_DIR"
 export AUTOPILOT_CLAIM_RETRY_MS=0
+prefer_ts_node   # real mods/live/model.ts need type stripping; a non-TS node first on PATH reds the pane driver
 OD="$REPO_ROOT/scripts/open-decision.js"; HOOK="$REPO_ROOT/hooks/advisory-relay.js"; CLAIM="$REPO_ROOT/scripts/decision-claim.js"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q --allow-empty -m base

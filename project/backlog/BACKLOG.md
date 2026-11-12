@@ -783,23 +783,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/backlog/missing-path-assumptions.md
 - **Context**: Widened by owner (second Report). Eg runs-watch.js:1059 aborts on missing /tmp/autopilot-dispatch-runs. Design doc first (inventory, ensureDir helper, unavailable reason, doctor, empty-HOME test).
 
-### Decision card opened from another repo's cwd lands in that repo and the panel never shows it
-- **Id**: BL-0337
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: peer
-- **Reporter**: hangar session (openclaw)
-- **Report**: 01M66YRNXRT5SNRXF6QDRV3JGF
-- **Reply**: none
-- **Problem**: 從別的專案目錄執行開決策卡指令時，卡片會寫進該目錄所在的專案，操作者的面板讀的是另一個專案，所以看不到卡，指令卻照常回傳編號、毫無警告。
-- **Impact**: 操作者漏看一張待決卡；這次改口頭回答，沒有損害，但可能再發生。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PEER-REPORTED hangar 2026-10-31
-- **Pointer**: project/backlog/open-decision-cwd-scope.md
-- **Context**: Scope from process cwd git-common-dir; only unbound warns (~L275). Options: warn/refuse on repo mismatch, derive from session marker, fix SessionStart hint wording.
-
 ### SessionStart agent-brief hint is not copyable and the two dispatch guards reject it one at a time
 - **Id**: BL-0338
 - **Status**: open

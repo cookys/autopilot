@@ -1,0 +1,14 @@
+# autopilot:quota-mirror/1
+# Opt-in systemd user unit for the fleet.quota/1 mirror producer (PM 01M7876Z).
+# Install with: node scripts/install-quota-mirror.js install
+# That replaces <repo> and writes this file under the user systemd config dir.
+# It does not run systemctl. Enable by hand:
+#   systemctl --user daemon-reload && systemctl --user enable --now quota-mirror.timer
+# Token env is whatever the user manager already has. This unit opens no credential file.
+[Unit]
+Description=Refresh the local fleet.quota/1 mirror
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env node <repo>/scripts/quota-mirror-tick.js
+TimeoutStartSec=360

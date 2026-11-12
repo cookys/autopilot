@@ -51,7 +51,7 @@
 // Every utilization goes through observation.clampUtilization: 1..1.5 clamps to 1, anything outside is rejected. Window
 // source is `probe`, observed_at is request completion time in seconds, elapsed windows are dropped. Rate limit: newer of
 // last ATTEMPT (`<alias>.attempt`, token-free, stamped before request) and mirror observed_at < 3600 s -> `too_soon`.
-// Not a timer: calibrates the dispatch ledger on demand (before scheduling, or after a 429).
+// Not itself a timer. A caller runs it (the opt-in quota-mirror user timer, before scheduling, or after a 429). The hourly cap still applies.
 // Token: read from caller env (AUTOPILOT_ENDPOINT_<NAME>_TOKEN; for minimax also MINIMAX_API_KEY). Opens no secret file.
 // Node >= 20.10, built-ins only.
 

@@ -267,8 +267,8 @@ assert_contains "$__RUN_STDOUT" "$HDR_TMPL" "hdrhint-both-missing has the three-
 assert_contains "$__RUN_STDOUT" "subagent-budget" "hdrhint-both-missing names subagent-budget"
 assert_contains "$__RUN_STDOUT" "subagent-budget requires Lane: for autopilot dispatches" "hdrhint-both-missing does not guess the lane gate"
 
-# Negative: all three lines stay allowed (same as a matching header on base).
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+# Negative: all required lines stay allowed (same as a matching header on base).
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "hdrhint-complete-exit"
 assert_eq "" "$__RUN_STDOUT" "hdrhint-complete stays allowed"
@@ -332,7 +332,7 @@ assert_contains "$__RUN_STDOUT" "require_cost_line" "costline-opus-missing names
 assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-opus-missing gives the exact line"
 
 # opus with the Cost line and an intentional Engine header → allowed (other checks allow).
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus (intentional: hardest judgment only)\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","prompt":"Engine: opus (intentional: hardest judgment only)\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo the hard judgment."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-opus-present-exit"
 assert_eq "" "$__RUN_STDOUT" "costline-opus-present allowed when other checks allow"
@@ -353,12 +353,12 @@ assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-full-id 
 assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-full-id gives the opus line"
 
 # sonnet and haiku without a Cost line → no deny from this check.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"sonnet","prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-sonnet-exit"
 assert_eq "" "$__RUN_STDOUT" "costline-sonnet no deny"
 assert_not_contains "$__RUN_STDERR" "require_cost_line" "costline-sonnet stderr silent"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-haiku-exit"
 assert_eq "" "$__RUN_STDOUT" "costline-haiku no deny"
@@ -366,7 +366,7 @@ assert_eq "" "$__RUN_STDOUT" "costline-haiku no deny"
 # require_cost_line: off → no deny, even for intentional fable without a Cost line.
 printf '%s\n' "- require_cost_line: off" > "$TEST_TMP/config-cost-off.md"
 export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-cost-off.md"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: x)\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable","prompt":"Engine: fable (intentional: x)\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "costline-off-exit"
 assert_eq "" "$__RUN_STDOUT" "costline-off no deny"
@@ -389,10 +389,10 @@ PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: claude-fable-5-2\n
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-engine-token denies fable full id with no model field"
 assert_contains "$__RUN_STDOUT" "add this line within the first 6 lines: ${COST_FABLE_OPUS}" "costline-engine-token gives the exact line"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: opus\nRole: worker\nLane: alpha\n'"$COST_FABLE_OPUS"'\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq "" "$__RUN_STDOUT" "costline-engine-token with the line is allowed when model is absent"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"prompt":"Engine: sonnet\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq "" "$__RUN_STDOUT" "costline-engine-token sonnet is not denied"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
@@ -432,10 +432,10 @@ assert_not_contains "$__RUN_STDOUT" "require_cost_line" "costline-absent-sonnet-
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 # A Cost line on line 7 does not count. Line 6 does. Intentional would otherwise allow.
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\n\n\n\n'"$COST_FABLE_OPUS"'"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\nStages: build,review,merged\n'"$COST_FABLE_OPUS"'"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "costline-line7 does not count"
-PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\n\n\n'"$COST_FABLE_OPUS"'"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"opus","mode":"plan","prompt":"Engine: opus\nRole: worker\nLane: alpha\nSize: S\nUsed-by: e2e\n'"$COST_FABLE_OPUS"'\nStages: build,review,merged"},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq "" "$__RUN_STDOUT" "costline-line6 counts"
 
@@ -444,5 +444,74 @@ PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: ha
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "hdrhint-role-only-exit"
 assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "hdrhint-role-only is not denied"
+
+# ---- D8b: Size: / Used-by: / Stages: on autopilot briefs (Lane: present) ----
+FULL_TMPL='Engine: <model>\nRole: <role>\nLane: <slug>\nSize: XS|S|M|L|XL\nUsed-by: user|e2e|n/a <reason>'
+
+# Default warn mode: autopilot brief missing Size: and Used-by: allows with advisory message.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "d8b-warn-missing-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "d8b-warn-missing does not deny"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "d8b-warn-missing emits additionalContext"
+assert_contains "$__RUN_STDOUT" "brief_size_used_by" "d8b-warn-missing names config key"
+assert_contains "$__RUN_STDOUT" "$FULL_TMPL" "d8b-warn-missing carries extended BRIEF_HEADER_TEMPLATE"
+
+# Deny mode: autopilot brief missing Size: / Used-by: -> permissionDecision: deny with template.
+printf '%s\n' "- brief_size_used_by: deny" > "$TEST_TMP/config-d8b-deny.md"
+export DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-d8b-deny.md"
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "d8b-deny-missing-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "d8b-deny-missing denies"
+assert_contains "$__RUN_STDOUT" "$FULL_TMPL" "d8b-deny-missing carries extended BRIEF_HEADER_TEMPLATE"
+
+# Deny mode: bare `Used-by: n/a` without <reason> or invalid Size is also denied.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nSize: M\nUsed-by: n/a\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "d8b-deny-na-without-reason denies"
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nSize: XXL\nUsed-by: user\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "d8b-deny-bad-size denies"
+
+# Stages: absent when Size: M and valid Used-by: are present -> NOT denied even in deny mode; suggests coarse list for M.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nSize: M\nUsed-by: n/a internal gate\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "d8b-stages-m-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "d8b-stages-m does not deny even under brief_size_used_by: deny"
+assert_contains "$__RUN_STDOUT" '"additionalContext"' "d8b-stages-m emits additionalContext"
+assert_contains "$__RUN_STDOUT" "Stages: plan,build,review,merged" "d8b-stages-m computes default M stages list"
+
+# Verify XS/S and L/XL computed Stages: lines.
+STAGES_CHECK="$(node -e '
+  const t = require(process.argv[1]);
+  const want = {
+    XS: "Stages: build,review,merged",
+    S: "Stages: build,review,merged",
+    M: "Stages: plan,build,review,merged",
+    L: "Stages: explore,plan,build,review,merged,shipped,used",
+    XL: "Stages: explore,plan,build,review,merged,shipped,used",
+  };
+  for (const [sz, exp] of Object.entries(want)) {
+    if (t.stagesLineForSize(sz) !== exp) {
+      process.stderr.write(sz + " got " + t.stagesLineForSize(sz) + "\n");
+      process.exit(2);
+    }
+  }
+  process.stdout.write("stages_ok");
+' "$REPO_ROOT/hooks/lib/brief-header-template.js")"
+assert_eq "stages_ok" "$STAGES_CHECK" "d8b-stages-map matches XS/S, M, L/XL defaults"
+
+# Complete autopilot brief (with Size:, Used-by:, Stages:) -> silent even in deny mode.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nRole: worker\nLane: alpha\nSize: M\nUsed-by: user\nStages: plan,build,review,merged\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "d8b-complete-exit"
+assert_eq "" "$__RUN_STDOUT" "d8b-complete silent in deny mode"
+
+# Non-autopilot brief (without Lane:) -> untouched even in deny mode.
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","prompt":"Engine: haiku\nExplore the codebase."},"hook_event_name":"PreToolUse","cwd":"'"$TEST_TMP"'"}'
+run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "d8b-no-lane-exit"
+assert_eq "" "$__RUN_STDOUT" "d8b-no-lane untouched in deny mode"
+unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 finalize_test

@@ -113,6 +113,177 @@ if [ -r "$__BL_GATE" ] && [ -r "$__BL_PATHS" ] && command -v node >/dev/null 2>&
   fi
 fi
 
+# --- inputs-landed gate (D8b; default on; opt-out AUTOPILOT_PREPUSH_INPUTS=off) ---
+# For each pushed ref whose branch plan declares a `## Inputs` JSON block, verify every
+# declared input sha is an ancestor of the push's remote target (catches fixes committed
+# on the wrong tree / unlanded upstream inputs). No plan or no declared inputs -> silent pass.
+__IL_GATE="$REPO_ROOT/scripts/check-inputs-landed.js"
+if [ "${AUTOPILOT_PREPUSH_INPUTS:-}" != "off" ] && [ -r "$__IL_GATE" ] && command -v node >/dev/null 2>&1; then
+  __il_fail=0
+  while read -r __il_lref __il_lsha __il_rref __il_rsha <&3; do
+    [ -z "${__il_lsha:-}" ] && continue
+    echo "$__il_lsha" | grep -qE '^0+$' && continue
+    __il_tmp="${TMPDIR:-/tmp}/autopilot-prepush-inputs-$$.json"
+    rm -f "$__il_tmp"
+    __il_target="$(node -e '
+      const fs = require("fs");
+      const path = require("path");
+      const { spawnSync } = require("child_process");
+      const [repoRoot, localRef, localSha, remoteRef, remoteSha, remoteName, outFile] = process.argv.slice(1);
+      const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const git = (args) => {
+        const r = spawnSync("git", ["-C", repoRoot, ...args], { encoding: "utf8" });
+        return r.status === 0 ? r.stdout : null;
+      };
+      const refExists = (ref) => git(["rev-parse", "--verify", "--quiet", ref + "^{commit}"]) !== null;
+      const extractInputs = (md) => {
+        if (typeof md !== "string" || !md) return null;
+        const norm = md.replace(/\r\n/g, "\n");
+        const h = /^##[ \t]+Inputs[ \t]*$/im.exec(norm);
+        if (!h) return null;
+        const rest = norm.slice(h.index + h[0].length).replace(/^\n/, "");
+        const nh = /^#{1,2}[ \t]+\S/m.exec(rest);
+        const sec = nh ? rest.slice(0, nh.index) : rest;
+        const fence = /```(?:json|jsonc)?[ \t]*\n([\s\S]*?)```/i.exec(sec);
+        if (!fence || !fence[1].trim()) return null;
+        const raw = fence[1].trim();
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object" && Array.isArray(parsed.inputs) && parsed.inputs.length === 0) return null;
+        } catch (_e) { /* let check-inputs-landed report invalid JSON */ }
+        return raw;
+      };
+      let branch = localRef.startsWith("refs/heads/") ? localRef.slice(11) : "";
+      if (!branch && (!localRef || localRef === "HEAD")) {
+        const sym = git(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+        branch = sym ? sym.trim() : "";
+      }
+      const IGNORED = new Set(["README.md", "TEMPLATE.md", "INDEX.md"]);
+      const planDirs = ["project/plans", "docs/plans"];
+      for (const cfg of ["project-lifecycle-config.md", "next-config.md", "dev-flow-config.md"]) {
+        const txt = git(["show", localSha + ":.claude/" + cfg]) || (() => { try { return fs.readFileSync(path.join(repoRoot, ".claude", cfg), "utf8"); } catch (_e) { return null; } })();
+        if (!txt) continue;
+        const m = /(?:Plans directory|Where plans live)\s*:\s*`?([^`\r\n]+?)`?\s*$/im.exec(txt);
+        if (m && m[1] && !path.isAbsolute(m[1])) {
+          const d = m[1].replace(/\/+$/, "");
+          if (!planDirs.includes(d)) planDirs.unshift(d);
+        }
+      }
+      const matchFromEntries = (entries, readIndex) => {
+        if (branch) {
+          const bRe = new RegExp("(?:^|\\||\\s)`?" + esc(branch) + "`?(?:\\s|\\||$)");
+          for (const idx of ["project/projects/INDEX.md", "docs/projects/INDEX.md"]) {
+            const txt = readIndex(idx);
+            if (!txt) continue;
+            for (const line of txt.split("\n")) {
+              if (!line.includes("|") || !bRe.test(line)) continue;
+              const lk = /\(([^)\s]+\.md)\)/.exec(line);
+              if (!lk) continue;
+              const rel = path.posix.normalize(path.posix.join(path.posix.dirname(idx), lk[1]));
+              const hit = entries.find((e) => e.rel === rel);
+              if (hit) return hit.read();
+            }
+          }
+          const metaRe = new RegExp("\\bBranch\\*\\*?\\s*:\\s*`?" + esc(branch) + "(?:`|[\\s,;|)]|$)", "i");
+          for (const e of entries) {
+            const t = e.read();
+            if (t && metaRe.test(t.split("\n", 40).join("\n"))) return t;
+          }
+          const slug = branch.includes("/") ? branch.slice(branch.indexOf("/") + 1) : branch;
+          const flat = branch.replace(/\//g, "-");
+          const pats = [slug, flat].filter(Boolean).map((s) => new RegExp("^(?:\\d{4}-\\d{2}-\\d{2}-)?" + esc(s) + "\\.md$", "i"));
+          for (const e of entries) {
+            if (pats.some((re) => re.test(e.name))) return e.read();
+          }
+        }
+        if (entries.length === 1) return entries[0].read();
+        return null;
+      };
+      const treeEntries = [];
+      for (const d of planDirs) {
+        const ls = git(["ls-tree", "--name-only", localSha, "--", d + "/"]);
+        if (!ls) continue;
+        for (const rel of ls.split("\n").map((s) => s.trim()).filter(Boolean).sort()) {
+          const name = path.posix.basename(rel);
+          if (!name.endsWith(".md") || IGNORED.has(name) || path.posix.dirname(rel) !== d) continue;
+          treeEntries.push({ name, rel, read: () => git(["show", localSha + ":" + rel]) });
+        }
+      }
+      let md = treeEntries.length > 0 ? matchFromEntries(treeEntries, (idx) => git(["show", localSha + ":" + idx])) : null;
+      if (md === null) {
+        const headSha = (git(["rev-parse", "--verify", "--quiet", "HEAD"]) || "").trim();
+        if (headSha && headSha === localSha) {
+          const diskEntries = [];
+          for (const d of planDirs) {
+            let names;
+            try { names = fs.readdirSync(path.join(repoRoot, d)); } catch (_e) { continue; }
+            for (const name of names.sort()) {
+              if (!name.endsWith(".md") || IGNORED.has(name)) continue;
+              const full = path.join(repoRoot, d, name);
+              try { if (fs.statSync(full).isFile()) diskEntries.push({ name, rel: d + "/" + name, read: () => fs.readFileSync(full, "utf8") }); } catch (_e) {}
+            }
+          }
+          md = diskEntries.length > 0 ? matchFromEntries(diskEntries, (idx) => { try { return fs.readFileSync(path.join(repoRoot, idx), "utf8"); } catch (_e) { return null; } }) : null;
+        }
+      }
+      const rawInputs = extractInputs(md);
+      if (rawInputs === null) process.exit(0);
+      let target = "";
+      const cfgFiles = [];
+      if (process.env.DEV_FLOW_CONFIG_OVERRIDE) cfgFiles.push(process.env.DEV_FLOW_CONFIG_OVERRIDE);
+      cfgFiles.push(path.join(repoRoot, ".claude", "dev-flow-config.md"), path.join(repoRoot, ".claude", "qc-gate-config.md"));
+      for (const f of cfgFiles) {
+        let txt;
+        try { txt = fs.readFileSync(f, "utf8"); } catch (_e) { continue; }
+        for (const line of txt.split("\n")) {
+          const m = /^\s*-\s*inputs_target\s*:\s*(.*?)\s*$/.exec(line);
+          if (m) {
+            const v = m[1].replace(/^`+|`+$/g, "").replace(/^["\x27]+|["\x27]+$/g, "").trim();
+            if (v) { target = v; break; }
+          }
+        }
+        if (target) break;
+      }
+      const nonZeroRemote = Boolean(remoteSha && !/^0+$/.test(remoteSha));
+      const remoteBranch = remoteRef.startsWith("refs/heads/") ? remoteRef.slice(11) : "";
+      const isIntegrationRef = remoteBranch === "develop" || remoteBranch === "main" || remoteBranch === "master";
+      const rem = remoteName && !remoteName.includes("/") && !remoteName.includes(":") ? remoteName : "origin";
+      if (!target && nonZeroRemote && (isIntegrationRef || (remoteRef && localRef && remoteRef !== localRef))) {
+        target = remoteSha;
+      }
+      if (!target) {
+        for (const cand of ["refs/remotes/" + rem + "/HEAD", "refs/remotes/" + rem + "/develop", "refs/remotes/" + rem + "/main", "refs/remotes/" + rem + "/master"]) {
+          if (refExists(cand)) { target = cand; break; }
+        }
+      }
+      if (!target && nonZeroRemote) target = remoteSha;
+      if (!target) {
+        for (const cand of ["refs/heads/develop", "refs/heads/main", "refs/heads/master"]) {
+          if (refExists(cand)) { target = cand; break; }
+        }
+      }
+      if (!target) target = rem + "/develop";
+      fs.writeFileSync(outFile, rawInputs + "\n");
+      process.stdout.write(target);
+    ' "$REPO_ROOT" "${__il_lref:-}" "$__il_lsha" "${__il_rref:-}" "${__il_rsha:-}" "${__PUSH_REMOTE:-origin}" "$__il_tmp" 2>/dev/null || true)"
+    if [ -s "$__il_tmp" ] && [ -n "$__il_target" ]; then
+      __il_out="$(node "$__IL_GATE" --inputs "$__il_tmp" --target "$__il_target" --repo "$REPO_ROOT" 2>&1)"
+      __il_rc=$?
+      rm -f "$__il_tmp"
+      if [ "$__il_rc" -ne 0 ]; then
+        printf '\n\033[1minputs-landed gate: %s -> %s blocked\033[0m\n%s\n' "${__il_lref:-HEAD}" "$__il_target" "$__il_out" >&2
+        __il_fail=1
+      fi
+    else
+      rm -f "$__il_tmp"
+    fi
+  done 3<<< "$__PUSH_STDIN"
+  if [ "$__il_fail" -ne 0 ]; then
+    printf 'Fix: land all declared ## Inputs commits onto the target branch (or rebase onto the right tree) before pushing; set AUTOPILOT_PREPUSH_INPUTS=off to opt out.\n\n' >&2
+    exit 1
+  fi
+fi
+
 RESOLVE="$REPO_ROOT/scripts/resolve-qc-gate.sh"
 if [ ! -x "$RESOLVE" ]; then
   # Degrade open (a broken install must not wedge every push), but never silently.

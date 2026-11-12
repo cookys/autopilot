@@ -661,5 +661,67 @@ eq "high_risk copied" "true" "$(jf high_risk)"
 eq "review_families copied" '["fam-a"]' "$(jf review_families)"
 STUB_RISK=high adv --to qc-gate; eq "high-risk resume: code-review -> qc-gate accepted (rc)" "0" "$RC"
 
+# ---------------------------------------------------------------- D8b: leaving plan checks declared ## Inputs
+RI="$TEST_TMP/r-inputs"; mkrepo "$RI"
+git -C "$RI" checkout -q -b wrong-tree
+echo "side" >"$RI/side.txt"; git -C "$RI" add side.txt; git -C "$RI" commit -q -m "wrong-tree commit"
+UNLANDED_SHA="$(git -C "$RI" rev-parse HEAD)"
+git -C "$RI" checkout -q -b feat/d8b develop
+mkdir -p "$RI/docs/plans"
+
+# Plan without ## Inputs -> leaving plan succeeds with no check
+cat >"$RI/docs/plans/2026-11-13-d8b.md" <<'EOF'
+# Plan without inputs
+
+## Context
+No inputs declared here.
+EOF
+newsess; sm set --size M --repo-root "$RI" >/dev/null 2>&1
+adv --to plan --repo-root "$RI"; eq "inputs-none: enter plan (rc)" "0" "$RC"
+adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-none: leaving plan without ## Inputs advances (rc)" "0" "$RC"
+eq "inputs-none: stage is implement" '"implement"' "$(jf stage)"
+
+# Plan with unlanded input -> leaving plan exits 5 naming the failing id, marker unchanged
+cat >"$RI/docs/plans/2026-11-13-d8b.md" <<EOF
+# Plan with inputs
+
+## Inputs
+
+\`\`\`json
+{"inputs":[{"id":"inp-unlanded","sha":"$UNLANDED_SHA"}]}
+\`\`\`
+EOF
+newsess; sm set --size M --repo-root "$RI" >/dev/null 2>&1
+adv --to plan --repo-root "$RI"; eq "inputs-bad: enter plan (rc)" "0" "$RC"
+adv --to plan --repo-root "$RI"; eq "inputs-bad: staying on plan does not block (rc)" "0" "$RC"
+PLAN_SUM="$(cksum <"$MARKER")"
+adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-bad: leaving plan with unlanded input exits 5" "5" "$RC"
+has "inputs-bad: stderr names failing id" "inp-unlanded" "$ERR"
+has "inputs-bad: stdout names failing id" "inp-unlanded" "$OUT"
+eq "inputs-bad: stage unchanged" '"plan"' "$(jf stage)"
+eq "inputs-bad: marker bytes untouched" "$PLAN_SUM" "$(cksum <"$MARKER")"
+
+# Land the input onto target branch (develop) -> leaving plan advances
+git -C "$RI" update-ref refs/heads/develop "$UNLANDED_SHA"
+adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-good: leaving plan after input lands advances (rc)" "0" "$RC"
+eq "inputs-good: stage is implement" '"implement"' "$(jf stage)"
+
+# Config inputs_target override (.claude/dev-flow-config.md): blocks when absent from configured target, advances when landed
+git -C "$RI" branch release HEAD~0
+# Point release back to the initial commit (without UNLANDED_SHA)
+INIT_SHA="$(git -C "$RI" rev-list --max-parents=0 HEAD | head -n1)"
+git -C "$RI" update-ref refs/heads/release "$INIT_SHA"
+mkdir -p "$RI/.claude"
+printf '%s\n' "- inputs_target: release" >"$RI/.claude/dev-flow-config.md"
+newsess; sm set --size L --repo-root "$RI" >/dev/null 2>&1
+adv --to intent --repo-root "$RI"; adv --to proposal --repo-root "$RI"; adv --to plan --repo-root "$RI"
+eq "inputs-cfg: reached plan on L (rc)" "0" "$RC"
+adv --to plan-review --repo-root "$RI"; eq "inputs-cfg: unlanded on configured inputs_target exits 5" "5" "$RC"
+has "inputs-cfg: names failing id" "inp-unlanded" "$ERR"
+eq "inputs-cfg: stage still plan" '"plan"' "$(jf stage)"
+git -C "$RI" update-ref refs/heads/release "$UNLANDED_SHA"
+adv --to plan-review --repo-root "$RI"; eq "inputs-cfg: landed on configured inputs_target advances (rc)" "0" "$RC"
+eq "inputs-cfg: stage is plan-review" '"plan-review"' "$(jf stage)"
+
 echo "stage-advance.test: pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

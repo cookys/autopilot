@@ -148,7 +148,8 @@ test('guard: block message carries the session root as a ready --root-run-id', (
   const t = fixture('j'); marker(t, 's1');
   const out = guard(t, 's1', 'push 會等你批准。');
   assert.strictEqual(out.decision, 'block');
-  assert.match(out.reason, / open --root-run-id root-abc --question /);
+  // 2b4a98d7e made --executor required between --root-run-id and --question
+  assert.match(out.reason, / open --root-run-id root-abc --executor <執行者位址> --question /);
 });
 
 test('guard: no root => no --root-run-id demanded, message says the card will be unbound', () => {

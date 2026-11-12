@@ -308,10 +308,15 @@ RELEASE_H2="$TEST_TMP/h2/release"
 FAKEBIN_H2="$TEST_TMP/h2/bin"
 mkdir -p "$FAKEBIN_H2" "$MANIFEST_H2"
 bash "$LEDGER_SH" init --ledger "$LEDGER_H2" >/dev/null
-cat > "$FAKEBIN_H2/setsid" <<'EOF'
+# HAVE_SETSID requires --wait in `setsid --help`. The plain fallback still runs
+# `setsid env ...` when setsid exists (see dispatch-hetero run_worker), so the
+# shim must omit --wait from help AND still exec — a no-op stub swallows the
+# worker (sibling pattern: hooks/tests/dispatch-runner-session-id-scrub.test.sh).
+REAL_SETSID_H2="$(command -v setsid)"
+cat > "$FAKEBIN_H2/setsid" <<EOF
 #!/usr/bin/env bash
-echo "fixture setsid without wait support"
-exit 0
+[ "\${1:-}" = "--help" ] && { echo "usage: setsid [options] program"; exit 0; }
+exec "$REAL_SETSID_H2" "\$@"
 EOF
 chmod +x "$FAKEBIN_H2/setsid"
 STUB_CONCURRENT_H2="$TEST_TMP/h2/agy-concurrent"

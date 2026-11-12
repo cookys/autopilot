@@ -1252,13 +1252,17 @@ assert_contains "$OUT" "invalid skill name" "'..' skill name rejected"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-dot --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill . 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "reject '.' skill name exit code"
 
-# 21. R1 detach gate falls back to inline when `setsid --help --wait` is unavailable
+# 21. R1 detach gate falls back to inline when `setsid --help --wait` is unavailable.
+# HAVE_SETSID needs --wait in help; the plain fallback still invokes bare `setsid env`
+# when setsid exists, so the shim must omit --wait AND exec (a always-exit-1 stub
+# makes the worker die with question_suspected). Sibling: dispatch-runner-session-id-scrub.
 SETSIDLESS_BIN="$TEST_TMP/no-setsid"
 mkdir -p "$SETSIDLESS_BIN"
-cat > "$SETSIDLESS_BIN/setsid" <<'EOF'
+REAL_SETSID_NOWAIT="$(command -v setsid)"
+cat > "$SETSIDLESS_BIN/setsid" <<EOF
 #!/usr/bin/env bash
-echo "set -: no setsid wait support" >&2
-exit 1
+[ "\${1:-}" = "--help" ] && { echo "usage: setsid [options] program"; exit 0; }
+exec "$REAL_SETSID_NOWAIT" "\$@"
 EOF
 chmod +x "$SETSIDLESS_BIN/setsid"
 LEDGER_NOSET="$TEST_TMP/no-setsid-ledger/ledger.jsonl"

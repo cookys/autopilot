@@ -17,6 +17,8 @@
 // Results never echo an unvalidated string: a rejection carries a short fixed reason code only.
 // Mirror path: <live_dir>/quota/<provider>/<alias>.json, 0600 in a 0700 directory made through
 // runtime-paths.js ensurePrivateDir; <live_dir> is the caller's resolveLiveDir() base (liveDirOrNull below).
+// A shared producer (opts.shared) writes the same file at 0640 and creates only missing child dirs at 0750.
+// It does not call ensurePrivateDir, which would strip the group bits the other account reads through.
 // Writers touch only their own row, under an OS flock on <alias>.oslock, taken on a descriptor the writer keeps open (never lost while the writer lives; 2 s wait).
 // Node >= 20.10, built-ins only.
 
@@ -531,7 +533,36 @@ function keepCorrupt(file, dir, base) {
 // { ok: true, superseded: true }: not an error.
 // Codes: quota_invalid, live_dir_refused, dir_refused, target_invalid, view_unsupported, mirror_lock_busy,
 // view_too_large, write_failed.
-// opts: { courier, secrets, now, sleep, waitMs, log, hooks }; hooks (test seams): beforePublish, beforeRename.
+// Create missing layers under a shared out-dir at 0750. Does not chmod an existing ancestor
+// (that ancestor was already checked) and never tightens a directory to 0700.
+function ensureSharedMirrorDir(dir) {
+  if (typeof dir !== 'string' || !path.isAbsolute(dir)) return { ok: false, reason: 'not_absolute' };
+  const missing = [];
+  let cur = path.resolve(dir);
+  let st = null;
+  for (;;) {
+    try { st = fs.lstatSync(cur); break; } catch (e) {
+      if (!e || e.code !== 'ENOENT') return { ok: false, reason: 'unreadable' };
+      missing.push(cur);
+      const parent = path.dirname(cur);
+      if (parent === cur) return { ok: false, reason: 'missing' };
+      cur = parent;
+    }
+  }
+  if (st.isSymbolicLink()) return { ok: false, reason: 'symlink' };
+  if (!st.isDirectory()) return { ok: false, reason: 'not_directory' };
+  if ((st.mode & 0o002) !== 0) return { ok: false, reason: 'world_writable' };
+  for (let i = missing.length - 1; i >= 0; i -= 1) {
+    try { fs.mkdirSync(missing[i], { mode: 0o750 }); } catch (e) {
+      if (!e || e.code !== 'EEXIST') return { ok: false, reason: 'mkdir' };
+    }
+    try { fs.chmodSync(missing[i], 0o750); } catch (_) { return { ok: false, reason: 'chmod' }; }
+  }
+  return { ok: true, path: path.resolve(dir), reason: null };
+}
+
+// opts: { courier, secrets, now, sleep, waitMs, log, hooks, shared }; hooks (test seams): beforePublish, beforeRename.
+// shared: group-readable producer write (0640, no ensurePrivateDir). The default live write stays 0600.
 function writeLocalRow(liveDir, record, opts) {
   const o = opts || {};
   const courier = o.courier === undefined ? LOCAL_COURIER : o.courier;
@@ -544,8 +575,9 @@ function writeLocalRow(liveDir, record, opts) {
 
   const dir = mirrorDir(liveDir, record.provider);
   const file = mirrorPath(liveDir, record.provider, record.alias);
-  const made = ensurePrivateDir(dir);
+  const made = o.shared ? ensureSharedMirrorDir(dir) : ensurePrivateDir(dir);
   if (!made.ok) return { ok: false, code: 'dir_refused', reason: made.reason };
+  const fileMode = o.shared ? 0o640 : 0o600;
   let st = null;
   try { st = fs.lstatSync(file); } catch (e) { if (!e || e.code !== 'ENOENT') return { ok: false, code: 'target_invalid', reason: 'unreadable' }; }
   if (st && st.isSymbolicLink()) return { ok: false, code: 'target_invalid', reason: 'symlink' };
@@ -594,8 +626,8 @@ function writeLocalRow(liveDir, record, opts) {
     if (Buffer.byteLength(text) > VIEW_MAX_BYTES) return { ok: false, code: 'view_too_large' };
 
     tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
-    const fd = fs.openSync(tmp, 'wx', 0o600);
-    try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
+    const fd = fs.openSync(tmp, 'wx', fileMode);
+    try { fs.fchmodSync(fd, fileMode); fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
     if (o.hooks && typeof o.hooks.beforePublish === 'function') o.hooks.beforePublish();
     // monotonic guard: never replace a newer local observation with an older one, whatever raced
     const now2 = readSmallFile(file, VIEW_MAX_BYTES);
@@ -686,8 +718,9 @@ function claimAttempt(liveDir, provider, alias, opts) {
   let dir;
   try { dir = mirrorDir(liveDir, provider); checkNames(liveDir, provider, alias); } catch (_) { return bad('names'); }
   if (!Number.isFinite(o.nowMs) || !Number.isFinite(o.minIntervalS)) return bad('claim_args');
-  const made = ensurePrivateDir(dir);
+  const made = o.shared ? ensureSharedMirrorDir(dir) : ensurePrivateDir(dir);
   if (!made.ok) return { ok: false, code: 'dir_refused', reason: made.reason };
+  const fileMode = o.shared ? 0o640 : 0o600;
   const file = path.join(dir, `${alias}.attempt`);
   let held;
   try { held = acquireLock(path.join(dir, `${alias}.oslock`), o); } catch (e) {
@@ -709,8 +742,8 @@ function claimAttempt(liveDir, provider, alias, opts) {
     }
     const writeStamp = () => {
       tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
-      const fd = fs.openSync(tmp, 'wx', 0o600);
-      try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, `${Math.floor(nowS)}\n`); } finally { fs.closeSync(fd); }
+      const fd = fs.openSync(tmp, 'wx', fileMode);
+      try { fs.fchmodSync(fd, fileMode); fs.writeSync(fd, `${Math.floor(nowS)}\n`); } finally { fs.closeSync(fd); }
       fs.renameSync(tmp, file);
       tmp = null;
     };
@@ -733,4 +766,5 @@ module.exports = {
   clampUtilization, buildRecord, validateRecord, hasMsKey, TOKEN_SHAPES, TOKEN_PREFIX_SHAPES,
   mirrorDir, mirrorPath, namespacePath, liveDirOrNull,
   parseView, readView, readNamespaceBinding, writeLocalRow, removeLocalRefusal, claimAttempt,
+  ensureSharedMirrorDir,
 };

@@ -166,6 +166,7 @@ node scripts/claude-account.js set-default --restore <accounts-dir>/registry.jso
 ## Day to day
 
 - `node scripts/claude-account.js status` shows each alias, its class and used fraction, any cooldown, and the last audit lines.
+- The local `fleet.quota/1` mirror is refreshed by an opt-in systemd user timer, every 10 minutes: `node scripts/install-quota-mirror.js install`, then `systemctl --user daemon-reload && systemctl --user enable --now quota-mirror.timer`. `uninstall` removes those two units. Templates: [`examples/quota-mirror.service`](examples/quota-mirror.service) and [`examples/quota-mirror.timer`](examples/quota-mirror.timer). The timer is not part of the default install. Autopilot writes the mirror; codeforge only reads it.
 - `node scripts/lane-reopen.js --pick --cwd <dir>` reopens a lane on the alias with the most headroom.
 - Adding an account later: repeat O1 to O4 for the new alias and add a row to `registry.json`. Disabling one: set `"enabled": false`.
 - Eight frozen evaluation runners are replay-only and keep using the logged-in credentials; see the `frozen_legacy` paragraph in the reference above.

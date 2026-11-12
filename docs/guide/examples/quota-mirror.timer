@@ -1,0 +1,16 @@
+# autopilot:quota-mirror/1
+# Opt-in systemd user timer. Every 10 minutes. A missed elapse while the machine
+# was off runs once on the next start (Persistent=true). RandomizedDelaySec is
+# small so hosts do not share one instant.
+[Unit]
+Description=Refresh the local fleet.quota/1 mirror every 10 minutes
+
+[Timer]
+Unit=quota-mirror.service
+OnCalendar=*:0/10
+Persistent=true
+RandomizedDelaySec=30
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

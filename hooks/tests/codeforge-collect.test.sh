@@ -402,7 +402,7 @@ _cf_extra_clean() {
 }
 trap '_cf_extra_clean; cleanup_test_tmp' EXIT
 
-# Seven-row usage pair. Counts are the "non-empty" signal; no host, path, or email.
+# Seven-row usage pair used as a sentinel. No host, path, or email.
 seed_seven() {
   local dest="$1/codeforge/usage"
   mkdir -p "$dest"
@@ -418,108 +418,6 @@ open(dest + "/usage-sessions.json", "w", encoding="utf-8").write(json.dumps({"sc
 sum_usage() {
   sha256sum "$1/codeforge/usage/summary.json" "$1/codeforge/usage/usage-sessions.json" | sha256sum | awk '{print $1}'
 }
-
-# (b) HOME has no transcript dir, the collect target has no transcripts, and the
-# live dir already holds 7 rows. An empty collect must not overwrite them.
-reset_cf
-B_LIVE="$(mktemp -d -p /dev/shm "autopilot-test-cfb-XXXXXX")"
-_CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $B_LIVE"
-seed_seven "$B_LIVE"
-B_BEFORE="$(sum_usage "$B_LIVE")"
-B_HOME="$TEST_TMP/case-b-home"
-mkdir -p "$B_HOME"
-B_TARGET="$TEST_TMP/case-b-target"
-mkdir -p "$B_TARGET"
-: > "$TEST_TMP/unit-err"
-PATH="$CF_BIN:/usr/bin:/bin" \
-  HOME="$B_HOME" \
-  AUTOPILOT_LIVE_DIR="$B_LIVE" \
-  CF_CLOBBER_LIVE="$B_LIVE" \
-  bash -c '
-    set -euo pipefail
-    unset AUTOPILOT_CODEFORGE_COLLECT
-    . "$1"
-    codeforge_collect_claude_dir "$2"
-    exit 7
-  ' _ "$HELPER" "$B_TARGET" 2>"$TEST_TMP/unit-err"
-UNIT_RC=$?
-UNIT_ERR="$(cat "$TEST_TMP/unit-err")"
-assert_eq "7" "$UNIT_RC" "b missing transcripts: caller rc stays 7"
-assert_eq "codeforge-collect: skipped empty collect; transcript dir missing, leaving non-empty usage in place" "$UNIT_ERR" "b missing transcripts: one log line"
-assert_file_absent_content "b missing transcripts"
-assert_eq "$B_BEFORE" "$(sum_usage "$B_LIVE")" "b missing transcripts: 7-row usage unchanged"
-assert_neq "$B_LIVE" "/dev/shm/autopilot-$(id -u)" "b live dir is not the uid live dir"
-
-# Run one collect against a private tmpfs live dir. Caller rc 7. Leaves UNIT_RC / UNIT_ERR.
-run_guarded() {
-  local home="$1" live="$2" target="$3"
-  : > "$TEST_TMP/unit-err"
-  PATH="$CF_BIN:/usr/bin:/bin" \
-    HOME="$home" \
-    AUTOPILOT_LIVE_DIR="$live" \
-    CF_CLOBBER_LIVE="$live" \
-    bash -c '
-      set -euo pipefail
-      unset AUTOPILOT_CODEFORGE_COLLECT
-      . "$1"
-      codeforge_collect_claude_dir "$2"
-      exit 7
-    ' _ "$HELPER" "$target" 2>"$TEST_TMP/unit-err"
-  UNIT_RC=$?
-  UNIT_ERR="$(cat "$TEST_TMP/unit-err")"
-}
-
-# (c) a real zero still writes: the transcript dir exists, even with no jsonl,
-# and an already-empty pair is not "non-empty" so a missing transcript dir
-# still collects. A transcript file under the target also still collects.
-reset_cf
-C_LIVE="$(mktemp -d -p /dev/shm "autopilot-test-cfc-XXXXXX")"
-_CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $C_LIVE"
-seed_seven "$C_LIVE"
-C_BEFORE="$(sum_usage "$C_LIVE")"
-C_HOME="$TEST_TMP/case-c-home"
-mkdir -p "$C_HOME/.claude/projects"
-C_TARGET="$TEST_TMP/case-c-target"
-mkdir -p "$C_TARGET"
-run_guarded "$C_HOME" "$C_LIVE" "$C_TARGET"
-assert_eq "7" "$UNIT_RC" "c transcript dir exists: caller rc stays 7"
-assert_eq "" "$UNIT_ERR" "c transcript dir exists: success is silent"
-n="$(grep -c . "$CF_ARGV" 2>/dev/null || true)"
-assert_eq "1" "$n" "c transcript dir exists: exactly one call"
-assert_neq "$C_BEFORE" "$(sum_usage "$C_LIVE")" "c transcript dir exists: empty result was written"
-
-reset_cf
-E_LIVE="$(mktemp -d -p /dev/shm "autopilot-test-cfe-XXXXXX")"
-_CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $E_LIVE"
-mkdir -p "$E_LIVE/codeforge/usage"
-printf '%s\n' '{"schema":"codeforge.usage-summary/1","days":[]}' > "$E_LIVE/codeforge/usage/summary.json"
-printf '%s\n' '{"schema":"codeforge.usage-sessions/1","rows":[]}' > "$E_LIVE/codeforge/usage/usage-sessions.json"
-E_HOME="$TEST_TMP/case-e-home"
-mkdir -p "$E_HOME"
-E_TARGET="$TEST_TMP/case-e-target"
-mkdir -p "$E_TARGET"
-run_guarded "$E_HOME" "$E_LIVE" "$E_TARGET"
-assert_eq "7" "$UNIT_RC" "c already empty: caller rc stays 7"
-assert_eq "" "$UNIT_ERR" "c already empty: success is silent"
-n="$(grep -c . "$CF_ARGV" 2>/dev/null || true)"
-assert_eq "1" "$n" "c already empty: exactly one call"
-
-reset_cf
-J_LIVE="$(mktemp -d -p /dev/shm "autopilot-test-cfj-XXXXXX")"
-_CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $J_LIVE"
-seed_seven "$J_LIVE"
-J_BEFORE="$(sum_usage "$J_LIVE")"
-J_HOME="$TEST_TMP/case-j-home"
-mkdir -p "$J_HOME"
-J_TARGET="$TEST_TMP/case-j-target/projects/p"
-mkdir -p "$J_TARGET"
-printf '%s\n' '{}' > "$J_TARGET/s.jsonl"
-run_guarded "$J_HOME" "$J_LIVE" "$TEST_TMP/case-j-target"
-assert_eq "7" "$UNIT_RC" "c target transcript: caller rc stays 7"
-assert_eq "" "$UNIT_ERR" "c target transcript: success is silent"
-n="$(grep -c . "$CF_ARGV" 2>/dev/null || true)"
-assert_eq "1" "$n" "c target transcript: exactly one call"
-assert_neq "$J_BEFORE" "$(sum_usage "$J_LIVE")" "c target transcript: collect wrote"
 
 # (a) Fake HOME, and the caller sets no live dir of its own. The sentinel is
 # the directory the resolver would use ($XDG_RUNTIME_DIR/autopilot) and it

@@ -2610,6 +2610,32 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_HETERO_FELL_BACK",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": ["AUTOPILOT_HETERO_FELL_BACK_JSON"],
+      "note": "Set to 1 by dispatch-hetero on the one cloud-seat re-exec after a failed --endpoint pre-probe. The child keeps the caller bwrap and does not retreat again."
+    },
+    {
+      "name": "AUTOPILOT_HETERO_FELL_BACK_JSON",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": ["AUTOPILOT_HETERO_FELL_BACK"],
+      "note": "JSON object the cloud-seat re-exec writes as fell_back on the result and the manifest. Empty on the first attempt."
+    },
+    {
       "name": "AUTOPILOT_JSON_EMIT_SH",
       "kind": "env",
       "audience": "internal",

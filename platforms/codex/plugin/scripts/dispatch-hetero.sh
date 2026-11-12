@@ -388,8 +388,11 @@ SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
-SANDBOX="off"          # --sandbox off|bwrap (cc-shim only)
+SANDBOX="off"          # --sandbox off|bwrap (cc-shim, or the one cloud fallback re-exec)
 SANDBOX_TMP=""         # bwrap: this dispatch's own writable scratch dir (made by the cc-shim arm, removed after the worker)
+# BL-0435: set on the cloud-seat re-exec after a failed endpoint pre-probe. Empty on the first attempt.
+FELL_BACK_JSON="${AUTOPILOT_HETERO_FELL_BACK_JSON:-}"
+FELL_BACK_LOGGED=0
 SANDBOX_ARGV=()        # bwrap: the argv prefix run_worker puts in front of the worker
 SANDBOX_DENIED="unknown"  # bwrap: EROFS lines seen in the worker output, else unknown
 WORKTREE_PARENT=""     # --worktree-parent: directory the new worktree is created under
@@ -1068,6 +1071,9 @@ NODE
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
   [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json), \"sandbox_blocked_writes\": ${SANDBOX_BLOCKED:-0}, \"sandbox_blocked_samples\": ${SANDBOX_BLOCKED_SAMPLES:-[]}"
+  local fell_back_fields=""
+  fell_back_fields="$(fell_back_json_suffix)"
+  hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
@@ -1080,7 +1086,7 @@ NODE
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields")"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields")"
   printf '%s\n' "$_emit_json"
   # dispatch_usage/1 ledger row (never affects the result or the exit code; see lib/dispatch-usage.js).
   printf '%s' "$_emit_json" | node "$SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-implementer}" \
@@ -1791,6 +1797,35 @@ current_runner_name() {
   printf '%s' "$runner"
 }
 
+# BL-0435: the cloud-seat re-exec carries this object. Empty on the first attempt and on ask.
+fell_back_json_suffix() {
+  [ -n "${FELL_BACK_JSON:-}" ] || return 0
+  printf ', "fell_back": %s' "$FELL_BACK_JSON"
+}
+# One cloud-fallbacks.jsonl row, written when the re-exec ends so the outcome is the result.
+hetero_log_fallback() { # $1 outcome
+  [ -n "${FELL_BACK_JSON:-}" ] || return 0
+  [ "${FELL_BACK_LOGGED:-0}" = "1" ] && return 0
+  FELL_BACK_LOGGED=1
+  node -e '
+let fb;
+try { fb = JSON.parse(process.argv[1]); } catch { process.exit(0); }
+if (!fb || typeof fb !== "object" || Array.isArray(fb)) process.exit(0);
+process.stdout.write(JSON.stringify({
+  ts: new Date().toISOString(),
+  run_id: process.argv[3] ? process.argv[3] : null,
+  from_runner: fb.from_runner,
+  from_endpoint: fb.from_endpoint == null || fb.from_endpoint === "" ? null : String(fb.from_endpoint),
+  error_class: fb.error_class,
+  to_rung: fb.to_rung,
+  outcome: process.argv[2],
+  probe: fb.probe && typeof fb.probe === "object" && !Array.isArray(fb.probe) ? fb.probe : null,
+  served_by: fb.to_rung,
+}));
+' "$FELL_BACK_JSON" "$1" "${DISPATCH_RUN_ID:-}" \
+    | node "$SELF_DIR/engine-capability-state.js" cloud-fallback-log >/dev/null 2>&1 || true
+}
+
 die_precondition() {
   local runner
   runner="$(current_runner_name)"
@@ -1798,9 +1833,10 @@ die_precondition() {
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null }\n' \
+  hetero_log_fallback "precondition_failed"
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null%s }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json" "$(fell_back_json_suffix)"
   exit 2
 }
 
@@ -2032,19 +2068,97 @@ sandbox_json() {
 
 # The endpoint pre-probe (scripts/lib/endpoint-probe.sh) found the local endpoint down or busy BEFORE any
 # worker or worktree was opened. Same result the post-hoc classifier gives a dead worker
-# (status engine_unavailable, "engine unavailable (<class>)"), so the engine applies on_engine_unavailable
-# (ask / cloud-fallback) unchanged. Exit 1 like every engine_unavailable. dispatcher_called stays true (the
-# engine rejects dispatcher_called:false on a non-committed result before it reads engine_unavailable);
-# model_calls 0 and resources_created 0 say that no worker ran.
+# (status engine_unavailable, "engine unavailable (<class>)"). Exit 1 like every engine_unavailable.
+# dispatcher_called stays true (the engine rejects dispatcher_called:false on a non-committed result
+# before it reads engine_unavailable); model_calls 0 and resources_created 0 say that no worker ran.
+# A configured cloud-fallback already re-exec'd before this runs. This die is the ask path, a missing
+# rung, or a retreat that could not start — and a failed retreat still carries fell_back.
 die_probe_unavailable() {
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
-  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "probe": %s }\n' \
+  hetero_log_fallback "engine_unavailable"
+  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "probe": %s%s }\n' \
     "$(current_runner_name)" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$([ "${CONTAINED:-0}" -eq 1 ] && echo true || echo false)" \
     "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$PROBE_CLASS" "$(_flat_json_escape "$ENDPOINT")" "$(_flat_json_escape "$PROBE_REASON")" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$PROBE_JSON"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$PROBE_JSON" "$(fell_back_json_suffix)"
   exit 1
+}
+
+# BL-0435: one re-exec onto cloud_fallback_rung when the pre-probe is unreachable or busy.
+# Returns 1 when this death stays engine_unavailable (ask, no rung, campaign, already retreated).
+# Does not return on a retreat: the child process's stdout is the result. Never invents a seat.
+hetero_endpoint_cloud_fallback() {
+  [ "${AUTOPILOT_HETERO_FELL_BACK:-}" = "1" ] && return 1
+  [ -n "${CAMPAIGN_CONTRACT_FILE:-}" ] && return 1
+  local errf resolved rc parsed policy engine effort runner to_rung
+  errf="$(mktemp -t dispatch-hetero-fb-resolve-XXXXXX)" || return 1
+  resolved="$("$SELF_DIR/resolve-review-loop.sh" 2>"$errf")"
+  rc=$?
+  rm -f "$errf"
+  [ "$rc" -eq 0 ] && [ -n "$resolved" ] || return 1
+  parsed="$(node -e '
+let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(2); }
+const s = (v) => (v == null ? "" : String(v));
+const policy = s(j.on_engine_unavailable);
+const rung = j.cloud_fallback_rung;
+let re = "", rf = "", rr = "";
+if (rung && typeof rung === "object" && !Array.isArray(rung)) {
+  re = s(rung.engine); rf = s(rung.effort); rr = s(rung.runner);
+}
+const clean = (v) => String(v).replace(/[|\n\r]/g, " ");
+process.stdout.write([policy, re, rf, rr].map(clean).join("|"));
+' "$resolved" 2>/dev/null)" || return 1
+  IFS='|' read -r policy engine effort runner <<< "$parsed"
+  [ "$policy" = "cloud-fallback" ] || return 1
+  [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
+  case "$runner" in
+    codex|agy|grok|cursor|kimi|qoderclicn) ;;
+    *) return 1 ;;
+  esac
+  to_rung="${engine}/${effort}@${runner}"
+  FELL_BACK_JSON="$(node -e '
+let probe = null;
+try { probe = JSON.parse(process.argv[1]); } catch { probe = null; }
+process.stdout.write(JSON.stringify({
+  from_runner: process.argv[2],
+  from_endpoint: process.argv[3] || null,
+  error_class: process.argv[4],
+  to_rung: process.argv[5],
+  probe,
+}));
+' "$PROBE_JSON" "$(current_runner_name)" "$ENDPOINT" "$PROBE_CLASS" "$to_rung")" || return 1
+  [ -n "$FELL_BACK_JSON" ] || return 1
+  echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION}; retreating once to cloud rung ${to_rung} (on_engine_unavailable: cloud-fallback)" >&2
+  local -a args=()
+  local i=0 a saw_runner=0 saw_model=0 saw_effort=0
+  while [ "$i" -lt "${#ORIG_ARGS[@]}" ]; do
+    a="${ORIG_ARGS[$i]}"
+    case "$a" in
+      --endpoint) i=$((i + 2)) ;;
+      --endpoint=*) i=$((i + 1)) ;;
+      --runner) args+=(--runner "$runner"); saw_runner=1; i=$((i + 2)) ;;
+      --model) args+=(--model "$engine"); saw_model=1; i=$((i + 2)) ;;
+      --effort) args+=(--effort "$effort"); saw_effort=1; i=$((i + 2)) ;;
+      --sandbox|--worktree-parent) # BL-0435 keep the caller bwrap on this one re-exec
+        args+=("$a" "${ORIG_ARGS[$((i + 1))]}")
+        i=$((i + 2)) ;;
+      *)
+        # Dropped here only when the keep arm above does not match, so a broken keep is visible.
+        case "$a" in
+          --sandbox|--worktree-parent) i=$((i + 2)) ;;
+          *) args+=("$a"); i=$((i + 1)) ;;
+        esac ;;
+    esac
+  done
+  [ "$saw_runner" -eq 1 ] || args+=(--runner "$runner")
+  [ "$saw_model" -eq 1 ] || args+=(--model "$engine")
+  [ "$saw_effort" -eq 1 ] || args+=(--effort "$effort")
+  unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
+  export AUTOPILOT_HETERO_FELL_BACK=1
+  export AUTOPILOT_HETERO_FELL_BACK_JSON="$FELL_BACK_JSON"
+  exec "$0" "${args[@]}" < /dev/null
+  return 1
 }
 
 die_dev_flow_admission() {
@@ -2185,6 +2299,7 @@ write_manifest() {
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
+  [ -n "${FELL_BACK_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"fell_back\": $FELL_BACK_JSON"
   local mf_timeout_secs="" mf_timeout_source="default" mf_timeout_enforced="false"
   mf_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   [ -n "$mf_timeout_secs" ] || mf_timeout_secs="null"
@@ -2217,6 +2332,7 @@ manifest_finalize() {
   write_manifest
 }
 
+ORIG_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
@@ -2522,7 +2638,10 @@ set_runner_flags() {
   case "$SANDBOX" in
     off) ;;
     bwrap)
-      [ "$IS_CCSHIM" -eq 1 ] || die_precondition "--sandbox bwrap applies only to --runner cc-shim (got runner: $RUNNER)"
+      # The one cloud fallback re-exec keeps the caller's bwrap. Any other runner still refuses it.
+      if [ "$IS_CCSHIM" -ne 1 ] && [ "${AUTOPILOT_HETERO_FELL_BACK:-}" != "1" ]; then
+        die_precondition "--sandbox bwrap applies only to --runner cc-shim (got runner: $RUNNER)"
+      fi
       sandbox_preflight || die_precondition "$SANDBOX_PREFLIGHT_ERROR"
       ;;
     *) die_precondition "--sandbox must be off or bwrap (got: $SANDBOX)" ;;
@@ -2806,6 +2925,7 @@ if [ -n "$ENDPOINT" ]; then
   endpoint_preprobe "$ENDPOINT" "$MODEL"
   case "$PROBE_DECISION" in
     unreachable|busy)
+      hetero_endpoint_cloud_fallback
       echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (status ${PROBE_STATUS:-none}, ${PROBE_MS:-0} ms, ${PROBE_REASON}); no worker started" >&2
       die_probe_unavailable ;;
     ok) echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ok (status ${PROBE_STATUS}, ${PROBE_MS} ms); served by local endpoint ${ENDPOINT}" >&2 ;;
@@ -3875,8 +3995,17 @@ trap abort_dispatch INT TERM
 # subshell cwd surviving the container boundary).
 prepare_managed_codex_home() {
   local controller_home="${CODEX_HOME:-$HOME/.codex}"
-  MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
-    || die_precondition "cannot allocate isolated managed Codex home"
+  # bwrap makes / read-only except the worktree and this scratch dir. The managed home has to be created inside it.
+  if [ "${SANDBOX:-off}" = "bwrap" ] && [ -z "${SANDBOX_TMP:-}" ]; then
+    sandbox_setup || die_precondition "cannot allocate the bwrap scratch dir for the managed Codex home"
+  fi
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    MANAGED_CODEX_HOME="$(mktemp -d "${SANDBOX_TMP}/autopilot-managed-codex-home-XXXXXX")" \
+      || die_precondition "cannot allocate isolated managed Codex home"
+  else
+    MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
+      || die_precondition "cannot allocate isolated managed Codex home"
+  fi
   chmod 700 "$MANAGED_CODEX_HOME" \
     || die_precondition "cannot protect isolated managed Codex home"
   # Codex documents that --ignore-user-config still reads authentication from
@@ -3894,7 +4023,7 @@ prepare_managed_codex_home() {
 cleanup_managed_codex_home() {
   [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
   case "$MANAGED_CODEX_HOME" in
-    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*)
+    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*|"${SANDBOX_TMP:-/nonexistent}"/autopilot-managed-codex-home-*)
       rm -rf -- "$MANAGED_CODEX_HOME"
       ;;
     *)
@@ -4291,8 +4420,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   if declare -F child_session_env_setup >/dev/null 2>&1; then child_session_env_setup "$SELF_DIR"; else CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u AUTOPILOT_CHILD_SESSION_ID); CHILD_SESSION_PARENT=""; fi
   # 3d: only the cc-shim claude child gets the C the rail minted for it (after every -u in the env argv); every other runner has C removed above.
   CHILD_SESSION_CLAUDE_ENV=(); if ( [ "${IS_CCSHIM:-0}" -eq 1 ] || [ "${IS_CNATIVE:-0}" -eq 1 ] ) && [ -n "${CHILD_SESSION_ID:-}" ]; then CHILD_SESSION_CLAUDE_ENV=("AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"); fi
-  # --sandbox bwrap: the whole worker argv runs inside the sandbox (SANDBOX_ARGV built by the cc-shim arm).
+  # --sandbox bwrap: the whole worker argv runs inside the sandbox. The cc-shim arm builds
+  # SANDBOX_ARGV itself; a cloud fallback re-exec builds it here, before the worker starts.
   if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then
+      sandbox_setup || { echo "sandbox: could not set up the bwrap scratch dir; worker not started" >"$LOG"; AGENT_EXIT=1; return 0; }
+    fi
     if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then echo "sandbox: no bwrap argv; worker not started" >"$LOG"; AGENT_EXIT=1; return 0; fi
     set -- "${SANDBOX_ARGV[@]}" "$@"
   fi
@@ -6026,7 +6159,7 @@ dispatch_detached_run() {
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
     declare -p WT_GITFILE_EXPECTED WT_GITFILE_ERROR 2>/dev/null || true
-    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
@@ -6035,7 +6168,7 @@ dispatch_detached_run() {
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f wt_gitfile_check _wt_git 2>/dev/null || true
     declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
-    declare -f agy_print_timeout agy_assert_disposable_home die_precondition child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
+    declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

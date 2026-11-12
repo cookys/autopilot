@@ -27,6 +27,18 @@ function shellQuotePath(p) {
   return `'${String(p).replace(/'/g, `'\\''`)}'`;
 }
 const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
+const OPEN_CARD_LINE = `Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_CMD} open --executor <address> --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>] (at least two options, or --free-text when the owner answers in typed text; --executor (who carries out the answer) and --not-authorized are required and refused when the DOA lets you decide it) and write the card id (d- + 8 hex) in the reply.`;
+
+function teamRole() {
+  try { return require('../../../scripts/lib/team.js').resolve().role; } catch { return 'lane'; }
+}
+
+function ownerQuestionLine() {
+  const role = teamRole();
+  if (role === 'solo' || role === 'pm') return OPEN_CARD_LINE;
+  const req = shellQuotePath(path.join(__dirname, '..', '..', '..', 'scripts', 'request-decision.js'));
+  return `Anything that needs the owner's decision or answer: send it to the PM with node ${req} send --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --boundary <boundary> (an irreversible request also needs --snapshot and --blast-radius) and write the request id (r- + 8 hex) in the reply.`;
+}
 // A user-reader doc: it sits in the layout registry's guide dir (docs/ at bootstrap, docs/guide/ from P1).
 const TOKEN_DISCIPLINE_DOC = path.join(__dirname, '..', '..', '..', ...require('../../../scripts/lib/repo-layout.js').path('guide_dir').split('/'), 'token-discipline.md');
 const DECISION_SCHEMA = 'autopilot.decision/2';
@@ -123,7 +135,7 @@ function landedAnswerLines(cwd) {
 function buildBaseContext(cwd = process.cwd()) {
   return `${BASE_AUTOPILOT_CONTEXT}
 
-Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_CMD} open --executor <address> --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>] (at least two options, or --free-text when the owner answers in typed text; --executor (who carries out the answer) and --not-authorized are required and refused when the DOA lets you decide it) and write the card id (d- + 8 hex) in the reply.
+${ownerQuestionLine()}
 When the owner answers in the live panel, a message whose first line is [待決回覆] arrives: act on the answers; the cards close automatically.
 To show the owner a file or a diff, use the show tool; do not paste the content.
 Cross-harness token discipline (advisory only): read ${TOKEN_DISCIPLINE_DOC}.

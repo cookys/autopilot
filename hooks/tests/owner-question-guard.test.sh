@@ -105,4 +105,30 @@ assert_not_contains "$__RUN_STDOUT" "node scripts/open-decision.js" "reason is n
 mk nowait '已完成清理，沒有要你決定的事。'
 expect_pass nowait "reply without a wait phrase emits nothing"
 
+# Non-PM team names an r- id instead of a card. PM and solo still need a d- id.
+mkdir -p "$HOOK_HOME/.autopilot"
+printf '%s\n' '{"role":"lane"}' > "$HOOK_HOME/.autopilot/team.json"
+export AUTOPILOT_COURIER=1
+mk lane_r '可以強制刪嗎？見請求 r-4290499d。'
+expect_pass lane_r "lane with r- id"
+mk lane_none '可以強制刪嗎？你說可以我再刪。'
+expect_block lane_none "lane without an id"
+assert_contains "$__RUN_STDOUT" "request-decision.js" "lane reason names request-decision.js"
+assert_not_contains "$__RUN_STDOUT" "open-decision.js" "lane reason does not name open-decision.js"
+printf '%s\n' '{"role":"lead"}' > "$HOOK_HOME/.autopilot/team.json"
+mk lead_r '可以強制刪嗎？見請求 r-abcdef01。'
+expect_pass lead_r "lead with r- id"
+printf '%s\n' '{"role":"pm"}' > "$HOOK_HOME/.autopilot/team.json"
+mk pm_r '可以強制刪嗎？見請求 r-4290499d。'
+expect_block pm_r "pm with only an r- id still blocks"
+assert_contains "$__RUN_STDOUT" "open-decision.js" "pm reason still names open-decision.js"
+printf '%s\n' '{"role":"solo"}' > "$HOOK_HOME/.autopilot/team.json"
+mk solo_r '可以強制刪嗎？見請求 r-4290499d。'
+expect_block solo_r "solo with only an r- id still blocks"
+printf '%s\n' '{"role":"lane"}' > "$HOOK_HOME/.autopilot/team.json"
+mk lane_d '可以強制刪嗎？見待決 d-4290499d。'
+expect_pass lane_d "lane with a d- id"
+rm -f "$HOOK_HOME/.autopilot/team.json"
+unset AUTOPILOT_COURIER
+
 finalize_test

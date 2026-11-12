@@ -20,8 +20,10 @@
  * `origin` is ours, so session A never closes session B's entry or a hand-opened one. An unanswered question stays (age never hides a
  * question; only an answer or the session end closes it).
  *
- * Opt-out: AUTOPILOT_ASK_DECISION=off. Fail-open: any error -> one stderr line, exit 0. Never blocks the tool,
- * never prints a permission decision.
+ * Opt-out: AUTOPILOT_ASK_DECISION=off. Fail-open: any error -> one stderr line, exit 0.
+ * PM and solo never block the tool and never print a permission decision.
+ * A non-PM team session (lane or lead) is the exception: PreToolUse prints a deny whose
+ * permissionDecisionReason points at scripts/request-decision.js, and no decision entry is written.
  */
 'use strict';
 
@@ -71,10 +73,26 @@ function applies(p) {
     && typeof p.session_id === 'string' && p.session_id && !L.knobOff(KNOB);
 }
 
+function teamRole() {
+  try { return require('../scripts/lib/team.js').resolve().role; } catch { return 'lane'; }
+}
+
+function denyNonPm() {
+  process.stdout.write(`${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: '非 PM 的 team session 不開操作員卡。請改用 scripts/request-decision.js，把問題、選項與建議送給 PM。',
+    },
+  })}\n`);
+}
+
 function onPreToolUse(p) {
   if (!applies(p) || typeof p.cwd !== 'string' || !p.cwd) return;
   const q = questionFrom(p.tool_input);
   if (!q) return;
+  const role = teamRole();
+  if (role !== 'solo' && role !== 'pm') { denyNonPm(); return; }
   const session = normSession(p.session_id);
   closeOwn(p); // this session's earlier unanswered question is superseded; nobody else's entry is touched
   const { openDecision } = require('../scripts/open-decision.js');

@@ -371,7 +371,8 @@ function qualifyingEngines(pace, pools, opts = {}) {
     if (!entry) continue;
     if (row.class === 'claude' || row.class === 'scarce') continue;
     if (row.status !== 'ALERT_behind') continue;
-    if (row.stale === true) continue;
+    // Fail-closed on stale: only stale === false qualifies (missing / null / true skipped).
+    if (row.stale !== false) continue;
     const hours = Number(row.hours_to_reset);
     if (!Number.isFinite(hours)) continue;
     if (requireHoursLt24 && !(hours < 24)) continue;
@@ -430,8 +431,8 @@ function buildRailCommand(dir, item, profile, runId, env) {
   const stdoutPath = path.join(dir, 'rail.stdout');
   const stderrPath = path.join(dir, 'rail.stderr');
   const exitPath = path.join(dir, 'rail.exit');
-  const repoScripts = __dirname;
-  const loadEnv = path.join(repoScripts, 'load-endpoints-env.sh');
+  // Resolve via railDir so AUTOPILOT_NONCQ_RAIL_DIR stubs never source the real script.
+  const loadEnv = path.join(rails, 'load-endpoints-env.sh');
 
   let railScript;
   const args = [];
@@ -459,17 +460,19 @@ function buildRailCommand(dir, item, profile, runId, env) {
   }
 
   const argStr = args.map((a) => `'${String(a).replace(/'/g, `'\\''`)}'`).join(' ');
+  const loadEnvQ = loadEnv.replace(/'/g, `'\\''`);
+  const exitPathQ = exitPath.replace(/'/g, `'\\''`);
   const sourceBit = profile.endpoint
-    ? `[ -f '${loadEnv.replace(/'/g, `'\\''`)}' ] && . '${loadEnv.replace(/'/g, `'\\''`)}'\n`
+    ? `[ -f '${loadEnvQ}' ] && . '${loadEnvQ}'\nset +e`
     : '';
+  // EXIT trap so an early exit from source/rail still records rail.exit.
   const shell = [
     'set +e',
     sourceBit,
+    `exit_path='${exitPathQ}'`,
+    'trap \'ec=$?; printf "%s" "$ec" > "$exit_path.tmp"; mv "$exit_path.tmp" "$exit_path"\' EXIT',
     `bash '${railScript.replace(/'/g, `'\\''`)}' ${argStr} > '${stdoutPath.replace(/'/g, `'\\''`)}' 2> '${stderrPath.replace(/'/g, `'\\''`)}'`,
-    'ec=$?',
-    `printf '%s' "$ec" > '${exitPath.replace(/'/g, `'\\''`)}.tmp'`,
-    `mv '${exitPath.replace(/'/g, `'\\''`)}.tmp' '${exitPath.replace(/'/g, `'\\''`)}'`,
-  ].join('\n');
+  ].filter((line) => line !== '').join('\n');
 
   return { shell, stdoutPath, stderrPath, exitPath, runId, railScript, args };
 }
@@ -500,7 +503,9 @@ function parseRailJson(stdoutText) {
 function expireItems(entries, atIso, dryRun, actions) {
   const atMs = Date.parse(atIso);
   for (const { dir, item } of entries) {
-    if (item.state !== 'queued' && item.state !== 'dispatched') continue;
+    // Expiry applies only to queued (incl. retryable failures requeued past expires_at).
+    // Dispatched items are reaped first; still-running ones keep counting toward max_parallel.
+    if (item.state !== 'queued') continue;
     const exp = Date.parse(item.expires_at);
     if (!Number.isFinite(exp) || !(exp <= atMs)) continue;
     actions.expired.push(item.id);
@@ -655,9 +660,18 @@ function dispatchOne(dir, item, profile, engineKey, env, dryRun, actions) {
     actions.skipped_null_model.push(engineKey);
     return false;
   }
+  // Dry-run: record the would-dispatch only — no assembleAuthorPrompt, no receipt, no spawn.
+  if (dryRun) {
+    const rails = railDir(env);
+    const railScript = item.kind === 'review-seat1'
+      ? path.join(rails, 'dispatch-review.sh')
+      : path.join(rails, 'dispatch-author.sh');
+    actions.dispatched.push({ id: item.id, engine: engineKey, run_id: runId, rail: railScript });
+    return true;
+  }
+
   const cmd = buildRailCommand(dir, item, profile, runId, env);
   actions.dispatched.push({ id: item.id, engine: engineKey, run_id: runId, rail: cmd.railScript });
-  if (dryRun) return true;
 
   const receipt = {
     run_id: runId,
@@ -781,7 +795,9 @@ function cmdDrain(flags, env = process.env, opts = {}) {
 
   const dryRun = !!flags.dryRun || !!flags['dry-run'];
   const pools = loadPools();
-  const root = ensureQueue(queueRoot(env));
+  const root = queueRoot(env);
+  // Dry-run must not create the queue directory tree.
+  if (!dryRun) ensureQueue(root);
   const atIso = nowIso(env);
   const atMs = nowMs(env);
 
@@ -805,11 +821,16 @@ function cmdDrain(flags, env = process.env, opts = {}) {
 
   const runBody = () => {
     let entries = loadAllItems(root);
-    expireItems(entries, atIso, dryRun, actions);
-    entries = loadAllItems(root);
-
+    // Reap finished dispatched items BEFORE expiry so a finished run past
+    // expires_at is reaped (and its lane notified), not marked expired.
     const { finished, requeuedIds } = reapDispatched(entries, atIso, dryRun, actions);
-    entries = loadAllItems(root);
+    entries = dryRun ? entries : loadAllItems(root);
+
+    expireItems(entries, atIso, dryRun, actions);
+    entries = dryRun ? entries : loadAllItems(root);
+
+    // Track picks in memory so one dry-run item is not reported for two engines.
+    const pickedIds = new Set(requeuedIds);
 
     for (const [engineKey, info] of qualified) {
       const profile = engineProfile(pools, engineKey) || info.profile;
@@ -820,12 +841,13 @@ function cmdDrain(flags, env = process.env, opts = {}) {
       }
       const dispatchedCount = countDispatched(entries, engineKey);
       const picks = pickForEngine(
-        entries, engineKey, profile.max_parallel || 1, dispatchedCount, atMs, requeuedIds,
+        entries, engineKey, profile.max_parallel || 1, dispatchedCount, atMs, pickedIds,
       );
       if (picks.length === 0) {
         // eligible queued count for empty report: prefer contains key and queued
         const eligibleQueued = entries.filter(({ item }) => item.state === 'queued'
-          && Array.isArray(item.prefer) && item.prefer.includes(engineKey)).length;
+          && Array.isArray(item.prefer) && item.prefer.includes(engineKey)
+          && !pickedIds.has(item.id)).length;
         const inFlight = dispatchedCount;
         if (eligibleQueued === 0 && inFlight === 0) {
           reportEmpty(root, engineKey, info.waste_pct_if_unused, atMs, dryRun, actions, env);
@@ -834,6 +856,7 @@ function cmdDrain(flags, env = process.env, opts = {}) {
       }
       for (const pick of picks) {
         dispatchOne(pick.dir, pick.item, profile, engineKey, env, dryRun, actions);
+        pickedIds.add(pick.item.id);
         // refresh so max_parallel counts the just-dispatched item within this drain
         if (!dryRun) {
           pick.item.state = 'dispatched';
@@ -842,7 +865,7 @@ function cmdDrain(flags, env = process.env, opts = {}) {
       entries = dryRun ? entries : loadAllItems(root);
     }
 
-    entries = loadAllItems(root);
+    entries = dryRun ? entries : loadAllItems(root);
     notifyLanes(finished, entries, dryRun, actions, env);
   };
 
@@ -892,6 +915,7 @@ module.exports = {
   makeId,
   parseRailJson,
   assembleAuthorPrompt,
+  buildRailCommand,
   SCHEMA,
   PACE_SCHEMA,
   KINDS,

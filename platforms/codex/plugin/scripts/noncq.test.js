@@ -19,6 +19,7 @@ const CLI = path.join(__dirname, 'noncq.js');
 const {
   qualifyingEngines,
   loadPools,
+  buildRailCommand,
 } = require('./noncq.js');
 
 const NOW = '2026-11-12T12:00:00.000Z';
@@ -84,6 +85,12 @@ function makeRails(dir, {
   write(rawLog, authorRawContent);
   const author = path.join(dir, 'dispatch-author.sh');
   const review = path.join(dir, 'dispatch-review.sh');
+  // Stub load-endpoints-env.sh in railDir so real endpoints.env is never sourced.
+  const loadEnv = path.join(dir, 'load-endpoints-env.sh');
+  write(loadEnv, `#!/usr/bin/env bash
+# stub — define no-op; never touch real endpoints.env
+autopilot_load_endpoints_env() { :; }
+`, 0o755);
   write(author, `#!/usr/bin/env bash
 # stub author rail
 echo '{"runner":"stub","model":"stub","status":"${authorStatus}","raw_log":"${rawLog.replace(/\\/g, '\\\\')}","error":null}'
@@ -96,7 +103,36 @@ exit ${reviewExit}
 `, 0o755);
   fs.chmodSync(author, 0o755);
   fs.chmodSync(review, 0o755);
-  return { dir, author, review, rawLog };
+  fs.chmodSync(loadEnv, 0o755);
+  return { dir, author, review, rawLog, loadEnv };
+}
+
+/** Snapshot queue tree as { relPath: Buffer } for byte-for-byte dry-run checks. */
+function snapshotTree(root) {
+  const out = {};
+  function walk(dir, rel) {
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir).sort()) {
+      const full = path.join(dir, name);
+      const key = rel ? `${rel}/${name}` : name;
+      let st;
+      try { st = fs.lstatSync(full); } catch { continue; }
+      if (st.isDirectory()) walk(full, key);
+      else out[key] = fs.readFileSync(full);
+    }
+  }
+  walk(root, '');
+  return out;
+}
+
+function assertTreeUnchanged(before, after, label) {
+  const bKeys = Object.keys(before).sort();
+  const aKeys = Object.keys(after).sort();
+  assert.deepEqual(aKeys, bKeys, `${label}: file set changed`);
+  for (const k of bKeys) {
+    assert.ok(Buffer.isBuffer(before[k]) && Buffer.isBuffer(after[k]));
+    assert.ok(before[k].equals(after[k]), `${label}: content changed at ${k}`);
+  }
 }
 
 function makeFailRails(dir, { exit = 1, status = 'runner_failed' } = {}) {
@@ -242,11 +278,17 @@ test('(b) drain picks only ALERT_behind <24h non-stale non-claude/scarce mapped 
   const badRows = [
     paceRow({ status: 'behind_early', hours_to_reset: 3 }),
     paceRow({ stale: true, hours_to_reset: 3 }),
+    paceRow({ stale: null, hours_to_reset: 3 }),
     paceRow({ class: 'claude', hours_to_reset: 3 }),
     paceRow({ class: 'scarce', hours_to_reset: 3 }),
     paceRow({ hours_to_reset: 24 }),
     paceRow({ hours_to_reset: 30 }),
   ];
+  // Fail-closed: missing `stale` must not qualify.
+  const missingStale = paceRow({ hours_to_reset: 3 });
+  delete missingStale.stale;
+  badRows.push(missingStale);
+
   for (const row of badRows) {
     const pace = writePace(work, [row], `pace-${row.status || 'x'}-${row.hours_to_reset}-${row.class}-${row.stale}.json`);
     const d = drain(q, pace, rails.dir, fleet.bin);
@@ -254,6 +296,14 @@ test('(b) drain picks only ALERT_behind <24h non-stale non-claude/scarce mapped 
     const out = JSON.parse(d.stdout);
     assert.equal(out.dispatched.length, 0, `should dispatch nothing for ${JSON.stringify(row)}`);
   }
+
+  // unit: missing stale does not qualify
+  const pools = loadPools();
+  const qMissing = qualifyingEngines(
+    { schema: 'capacity.pace/1', rows: [missingStale] },
+    pools,
+  );
+  assert.equal(qMissing.size, 0, 'missing stale must not qualify');
 
   // good row dispatches
   const good = writePace(work, [paceRow()], 'pace-good.json');
@@ -263,6 +313,8 @@ test('(b) drain picks only ALERT_behind <24h non-stale non-claude/scarce mapped 
   assert.equal(out.dispatched.length, 1);
   assert.equal(out.dispatched[0].id, id);
   assert.equal(out.dispatched[0].engine, 'grok');
+  // Wait for spawned child so the suite does not leak a rail process.
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', id, 'rail.exit')), 8000));
 });
 
 // ---------------------------------------------------------------------------
@@ -321,6 +373,27 @@ test('(c) prefer rank then FIFO; max_parallel respected counting dispatched', ()
   fs.writeFileSync(path.join(firstDir, 'receipt.json'), JSON.stringify({ engine: 'glm', run_id: 'pre' }));
   // no rail.exit → stays dispatched and counts toward max_parallel
 
+  // railDir carries stub load-endpoints-env.sh (makeRails) so glm endpoint never
+  // sources the real scripts/load-endpoints-env.sh or endpoints.env.
+  assert.ok(fs.existsSync(path.join(rails.dir, 'load-endpoints-env.sh')));
+  // Seam: load-endpoints path must come from railDir, not scripts/__dirname.
+  {
+    const seamDir = mkTmp('noncq-seam-');
+    const pools = loadPools();
+    const profile = pools.glm;
+    const cmd = buildRailCommand(
+      seamDir,
+      { kind: 'review-seat1', accept: ['ok'], wall_min: 20 },
+      profile,
+      'seam-check',
+      baseEnv({ AUTOPILOT_NONCQ_RAIL_DIR: rails.dir }),
+    );
+    const stubLoad = path.join(rails.dir, 'load-endpoints-env.sh');
+    assert.ok(cmd.shell.includes(stubLoad), 'shell must source load-endpoints via railDir');
+    assert.equal(cmd.shell.includes(path.join(__dirname, 'load-endpoints-env.sh')), false);
+    assert.match(cmd.shell, /trap .*EXIT/, 'shell must record rail.exit via EXIT trap');
+    assert.match(cmd.shell, /set \+e/, 'shell must restore set +e after source');
+  }
   const pace = writePace(work, [paceRow({ pool: 'glm' })]);
   const d = drain(q, pace, rails.dir, fleet.bin, [], { AUTOPILOT_NOW: new Date(NOW_MS + 10_000).toISOString() });
   assert.equal(d.status, 0, d.stderr);
@@ -329,6 +402,11 @@ test('(c) prefer rank then FIFO; max_parallel respected counting dispatched', ()
   assert.equal(out.dispatched.length, 1);
   // prefer rank: items with glm first in prefer (ids[0] already dispatched, ids[1] has glm,grok)
   assert.equal(out.dispatched[0].id, ids[1]);
+  // Wait for the spawned child's rail.exit before finishing (no leaked child).
+  assert.ok(
+    waitFor(() => fs.existsSync(path.join(q, 'items', ids[1], 'rail.exit')), 8000),
+    `rail.exit missing for newly dispatched ${ids[1]}`,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -483,21 +561,36 @@ test('(g) --dry-run changes no file and spawns nothing', () => {
   const rails = makeRails(work);
   const fleet = makeFleetBin(work);
   const brief = briefFile(work);
-  const add = cli(['add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief, '--accept', 'ok', '--prefer', 'grok'], {
+  // prefer two engines so a buggy dry-run could report the same id twice
+  const add = cli(['add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief, '--accept', 'ok', '--prefer', 'grok,glm'], {
     AUTOPILOT_NONCQ_DIR: q, AUTOPILOT_NONCQ_RAIL_DIR: rails.dir, AUTOPILOT_FLEET_BIN: fleet.bin,
   });
   const id = add.stdout.trim();
-  const before = fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8');
-  const pace = writePace(work, [paceRow()]);
+  const beforeTree = snapshotTree(q);
+  const pace = writePace(work, [paceRow(), paceRow({ pool: 'glm' })], 'pace-multi.json');
 
   const d = drain(q, pace, rails.dir, fleet.bin, ['--dry-run']);
   assert.equal(d.status, 0, d.stderr);
   const out = JSON.parse(d.stdout);
-  assert.equal(out.dispatched.length, 1);
-  const after = fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8');
-  assert.equal(after, before);
+  assert.equal(out.dispatched.length, 1, 'one item must not be reported for two engines in one dry-run');
+  assert.equal(out.dispatched[0].id, id);
+  assert.equal(fs.existsSync(path.join(q, 'items', id, 'assembled-prompt.md')), false);
   assert.equal(fs.existsSync(path.join(q, 'items', id, 'rail.exit')), false);
   assert.equal(fs.existsSync(fleet.log), false);
+  assertTreeUnchanged(beforeTree, snapshotTree(q), 'dry-run queue tree');
+});
+
+// Dry-run on a missing queue root must not create directories.
+test('(g2) --dry-run on missing queue root creates nothing', () => {
+  const q = path.join(mkTmp('noncq-missing-'), 'no-such-queue');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  const fleet = makeFleetBin(work);
+  assert.equal(fs.existsSync(q), false);
+  const pace = writePace(work, [paceRow()]);
+  const d = drain(q, pace, rails.dir, fleet.bin, ['--dry-run']);
+  assert.equal(d.status, 0, d.stderr);
+  assert.equal(fs.existsSync(q), false, 'dry-run must not call ensureQueue');
 });
 
 // ---------------------------------------------------------------------------
@@ -555,6 +648,100 @@ test('(i) expired items never dispatched', () => {
   assert.equal(out.dispatched.length, 0);
   const item = JSON.parse(fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8'));
   assert.equal(item.state, 'expired');
+});
+
+// ---------------------------------------------------------------------------
+// (j) reap before expiry: finished dispatched past expires_at → reaped, not expired
+// ---------------------------------------------------------------------------
+test('(j) finished dispatched past expires_at is reaped and lane notified, not expired', () => {
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  const fleet = makeFleetBin(work);
+  const brief = briefFile(work);
+
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok', '--expires', '1h',
+  ], {
+    AUTOPILOT_NONCQ_DIR: q, AUTOPILOT_NONCQ_RAIL_DIR: rails.dir, AUTOPILOT_FLEET_BIN: fleet.bin,
+    AUTOPILOT_NOW: NOW,
+  });
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const pace = writePace(work, [paceRow()]);
+
+  let d = drain(q, pace, rails.dir, fleet.bin, [], { AUTOPILOT_NOW: NOW });
+  assert.equal(d.status, 0, d.stderr);
+  assert.equal(JSON.parse(d.stdout).dispatched.length, 1);
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', id, 'rail.exit')), 8000));
+
+  // 2 h later: past expires_at, but rail.exit is present → must reap, not expire
+  d = drain(q, pace, rails.dir, fleet.bin, [], {
+    AUTOPILOT_NOW: new Date(NOW_MS + 2 * 60 * 60 * 1000).toISOString(),
+  });
+  assert.equal(d.status, 0, d.stderr);
+  const out = JSON.parse(d.stdout);
+  assert.equal(out.expired.includes(id), false, 'finished dispatched must not be marked expired');
+  assert.ok(out.reaped.some((r) => r.id === id), 'must be reaped');
+  assert.ok(out.notified.some((n) => n.ids.includes(id)), 'lane must be notified');
+  const item = JSON.parse(fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8'));
+  assert.equal(item.state, 'done');
+});
+
+// ---------------------------------------------------------------------------
+// (k) still-running dispatched past expires_at still counts toward max_parallel
+// ---------------------------------------------------------------------------
+test('(k) still-running dispatched past expires_at still counts toward max_parallel', () => {
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  const fleet = makeFleetBin(work);
+  const brief = briefFile(work);
+
+  // glm max_parallel = 2
+  const ids = [];
+  for (let i = 0; i < 3; i += 1) {
+    const r = cli([
+      'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+      '--accept', 'ok', '--prefer', 'glm', '--expires', '1h',
+    ], {
+      AUTOPILOT_NONCQ_DIR: q,
+      AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+      AUTOPILOT_FLEET_BIN: fleet.bin,
+      AUTOPILOT_NOW: new Date(NOW_MS + i * 1000).toISOString(),
+    });
+    assert.equal(r.status, 0, r.stderr);
+    ids.push(r.stdout.trim());
+  }
+
+  // Mark first two as still-running dispatched (no rail.exit), past expires_at once NOW advances.
+  for (const id of ids.slice(0, 2)) {
+    const dir = path.join(q, 'items', id);
+    const item = JSON.parse(fs.readFileSync(path.join(dir, 'item.json'), 'utf8'));
+    item.state = 'dispatched';
+    item.result = { status: 'dispatched', path: null, run_id: `pre-${id}`, engine: 'glm', finished_at: null };
+    fs.writeFileSync(path.join(dir, 'item.json'), `${JSON.stringify(item, null, 2)}\n`);
+    fs.writeFileSync(path.join(dir, 'receipt.json'), JSON.stringify({ engine: 'glm', run_id: `pre-${id}` }));
+  }
+
+  const pace = writePace(work, [paceRow({ pool: 'glm' })]);
+  const later = new Date(NOW_MS + 2 * 60 * 60 * 1000).toISOString();
+  const d = drain(q, pace, rails.dir, fleet.bin, [], { AUTOPILOT_NOW: later });
+  assert.equal(d.status, 0, d.stderr);
+  const out = JSON.parse(d.stdout);
+  // Two still-running dispatched fill max_parallel=2 → no new dispatch
+  assert.equal(out.dispatched.length, 0, 'in-flight past expires_at must still fill max_parallel');
+  // The two dispatched must not be expired; the third queued one is past expires_at → expired
+  assert.equal(out.expired.includes(ids[0]), false);
+  assert.equal(out.expired.includes(ids[1]), false);
+  assert.ok(out.expired.includes(ids[2]), 'queued past expires_at must expire');
+  for (const id of ids.slice(0, 2)) {
+    const item = JSON.parse(fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8'));
+    assert.equal(item.state, 'dispatched');
+  }
+  const queued = JSON.parse(fs.readFileSync(path.join(q, 'items', ids[2], 'item.json'), 'utf8'));
+  assert.equal(queued.state, 'expired');
 });
 
 // review-seat1 happy path smoke (diff+spec required)

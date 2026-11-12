@@ -17,7 +17,7 @@
 
 | 檔案 | 變更 | r2a → 卡片路由 |
 |---|---|---|
-| `scripts/lib/team.js`（新） | 讀 `~/.autopilot/team.json`；缺檔一律 solo（mode 檔出現前不生效）；檔在但壞 JSON、未知角色或讀不了 = lane | 取代 P6 `resolve-operator-channel.js` |
+| `scripts/lib/team.js`（新） | 讀 `team.json`；沒有 team.json 時路由不作用，lane 行為與改動前完全相同（PM 01M78BH1）；檔在但壞 JSON、未知角色或讀不了 = lane | 取代 P6 `resolve-operator-channel.js` |
 | `scripts/open-decision.js` | library 與 CLI open 加角色閘：team 且非 PM → exit 4、不寫、指向 `request-decision.js`；PM 端加 `open --from-request <r-id>` | P2 改為角色閘；§4 第 2、3 項 |
 | `hooks/ask-decision.js` | 非 PM team：PreToolUse deny + `permissionDecisionReason` 指向 `request-decision.js`，不開卡；PM / solo 照舊 | P3a 只留 deny |
 | `scripts/request-decision.js`（新） | `send`/`forward`；發 `r-` id 並存本機，送一行 `AUTOPILOT-REQ/1`，設 `waiting_on_operator <r-id>`；read_only/reversible 送 PM exit 3 | 取代 P6 `[操作員決定]` |
@@ -65,4 +65,4 @@
 | A4 | `request-decision.js`、`--from-request` | `node --test scripts/request-decision.test.js` |
 | A5 | guard、session-start | `bash hooks/tests/owner-question-guard.test.sh` |
 
-A0 ∥ A1 → A2 → A5 依序，每階段獨立 commit；mode 檔出現前不生效。合併前才跑全套：完整 suite、`bash scripts/validate.sh`、`node scripts/check-hook-inventory.js --check`、`node scripts/sync-version.js --check`。
+A0 ∥ A1 → A2 → A5 依序，每階段獨立 commit。沒有 team.json 時路由不作用，lane 行為與改動前完全相同（PM 01M78BH1）。上線：team.json 先部署到一條試點 lane（game-lead lane），在那裡驗證路由後，再部署到所有 lane；部署是另一次 rollout，不屬於這次變更。合併前才跑全套：完整 suite、`bash scripts/validate.sh`、`node scripts/check-hook-inventory.js --check`、`node scripts/sync-version.js --check`。

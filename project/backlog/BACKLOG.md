@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0437 -->
+<!-- next-id: BL-0443 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1596,3 +1596,87 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: operator via PM 01M787BF, 2026-11-13
 - **Pointer**: none
 - **Context**: Acceptance: warn when the final reply lists more than 2 decision-card ids (d- plus 8 hex) neither opened nor closed this turn. Negative control: a reply listing 3 untouched ids warns; one that opens or closes them does not.
+
+### develop 上審查派工測試有一則案例仍失敗
+- **Id**: BL-0437
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 主線單獨重跑審查派工測試，一百六十六則通過、一則失敗。失敗案例是相容封包層的執行器走到替身程式。
+- **Impact**: 主線已有這一則紅燈，之後的合併無法單靠這支測試判斷是不是新壞掉。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane，menucard 合併（PM 01M78BH1 要求列為可開工）
+- **Pointer**: none
+- **Context**: 166 passed, 1 failed. Case: anthropic-compatible: packet-tier runner reached the stub binary (rc=99 signature). Standalone on develop 9d3c5bd5e. hooks/tests/dispatch-review-b.test.sh.
+
+### agy 實作回合被預設列印逾時切斷
+- **Id**: BL-0438
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 異質派工用 agy 當執行器時，預設列印逾時是九分鐘，會把還在進行的實作回合切斷。今晚有兩回合因此失敗，被記成網路失敗或疑似在提問。
+- **Impact**: 實作回合做不完，而且失敗種類記錯，會被當成網路問題。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M78BH1）
+- **Pointer**: none
+- **Context**: dispatch-hetero --runner agy. Message: print timeout after 9m0s, labelled network_failed or question_suspected. Proposal: larger default for implementer rounds; classify print_timeout as timeout.
+
+### 合併差異裡的假憑證要到推送才被擋下
+- **Id**: BL-0439
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 合併提交裡的測試夾具若含假的憑證字面，要到推送時洩漏檢查才抓到，那時主工作目錄已經快轉前進。
+- **Impact**: 推送被擋之前主線工作目錄已經前進，假憑證字面進入歷史。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M78BH1）
+- **Pointer**: none
+- **Context**: Proposal: run leak-guard at pre-commit, or in the merge recipe, on the merge diff.
+
+### 審查派工的發現項目是一段文字不是清單
+- **Id**: BL-0440
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 審查派工回傳的結果裡，發現項目是一整段文字，不是一列一列的項目，讀的人必須自己拆開文字。
+- **Impact**: 每個下游都要自己解析同一段文字，格式一變就全部對不上。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M78BH1）
+- **Pointer**: none
+- **Context**: dispatch-review JSON: findings is a string, not an array.
+
+### grok 提交失敗被標成認證失敗
+- **Id**: BL-0441
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: grok 提交失敗時，回報的失敗種類寫成認證失敗。這列要先抓到一次可重現，完成條件是留下那次重現。
+- **Impact**: 人會去查登入，真正讓提交失敗的原因被放掉。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M78BH1）
+- **Pointer**: none
+- **Context**: Seen label: auth_failed. Done-Check: repro captured.
+
+### 新複本預設強制模式讓異質派工無法開工
+- **Id**: BL-0442
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 新的工作複本一開始就是任務強制模式，異質派工因此過不了前置條件，要先改治理檔。把那個改動暫存起來會悄悄把強制模式又打開。
+- **Impact**: 新複本不能直接派工；暫存治理檔改動後，強制模式在不知情下恢復。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M78BH1）
+- **Pointer**: none
+- **Context**: Precondition: Mission enforce mode requires a sealed campaign strict projection. Stashing the governance-file change re-enables enforce.

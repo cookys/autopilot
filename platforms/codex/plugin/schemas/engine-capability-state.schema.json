@@ -158,6 +158,26 @@
               "description": "Output-only (merged `current`): observed_at of the event that set `total_tokens`."
             }
           }
+        },
+        "vision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_image", "evidence", "observed_at"],
+          "description": "Whether this runner+model accepts image input. Consumed by scripts/lib/vision-guard.js from the JSONL, not from the merged current view. Absent leaves the static default in scripts/lib/engine-vision.json; a recorded row overrides it. unknown is not acceptance.",
+          "properties": {
+            "input_image": {
+              "type": "string",
+              "enum": ["supported", "unsupported", "unknown"]
+            },
+            "evidence": {
+              "type": "string",
+              "minLength": 1
+            },
+            "observed_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
         }
       }
     }

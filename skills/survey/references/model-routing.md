@@ -88,6 +88,17 @@ rule is the epistemic one — a routing decision must not claim stronger authori
 telemetry it reads, and the strongest available evidence tier is a live in-process qualification
 run via `scripts/engine-qualify.js`.)
 
+## Vision capability
+
+An engine accepts image input only when its vision capability is `supported`.
+`scripts/lib/engine-vision.json` is the static default (`unsupported` or `unknown`;
+anything not listed is `unknown`). A recorded `capability.vision` row in the engine
+capability store overrides that default. `unknown` is not acceptance:
+`scripts/lib/vision-guard.js` refuses the dispatch (non-zero, naming the engine and
+the file) when an input file is an image by magic bytes and the engine is not
+`supported`. Dispatch rails call the guard before the model runs. Evidence for the
+static rows is in `engine-vision.json`.
+
 ## Codex-host native child boundary
 
 The current `codex-cli 0.146.0` native `spawn_agent` schema exposes five fields:

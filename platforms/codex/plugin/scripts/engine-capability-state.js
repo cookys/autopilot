@@ -206,7 +206,7 @@ function validateEvent(event) {
     failValidation('capability must be an object');
   }
 
-  const capAllowed = new Set(['quota', 'skill_transport', 'context_window']);
+  const capAllowed = new Set(['quota', 'skill_transport', 'context_window', 'vision']);
   for (const key of Object.keys(event.capability)) {
     if (!capAllowed.has(key)) {
       failValidation(`unknown key in capability: ${key}`);
@@ -309,6 +309,32 @@ function validateEvent(event) {
     // Output-only on the merged `current` view; accepted on input for round-trip parity.
     if (ctxWindow.observed_at !== undefined && ctxWindow.observed_at !== null && typeof ctxWindow.observed_at !== 'string') {
       failValidation('context_window.observed_at must be a string or null');
+    }
+  }
+
+  // vision is optional on the event and is NOT folded into the merged `current`
+  // view. Absent must not become an emitted `unknown` that overrides a static
+  // default. scripts/lib/vision-guard.js reads the JSONL itself (latest row wins).
+  const vision = event.capability.vision;
+  if (vision !== undefined) {
+    if (!vision || typeof vision !== 'object' || Array.isArray(vision)) {
+      failValidation('capability.vision must be an object');
+    }
+    const visionAllowed = new Set(['input_image', 'evidence', 'observed_at']);
+    for (const key of Object.keys(vision)) {
+      if (!visionAllowed.has(key)) {
+        failValidation(`unknown key in capability.vision: ${key}`);
+      }
+    }
+    const validVisionStates = new Set(['supported', 'unsupported', 'unknown']);
+    if (!validVisionStates.has(vision.input_image)) {
+      failValidation(`invalid vision.input_image state: ${vision.input_image}`);
+    }
+    if (typeof vision.evidence !== 'string' || vision.evidence.length < 1) {
+      failValidation('vision.evidence must be a non-empty string');
+    }
+    if (!isValidISO8601(vision.observed_at)) {
+      failValidation('vision.observed_at must be a valid ISO-8601 date string');
     }
   }
 }

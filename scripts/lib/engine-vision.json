@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "default_input_image": "unknown",
+  "entries": [
+    {
+      "pattern": "*/GLM-5.3",
+      "input_image": "unsupported",
+      "evidence": "text-only model; an image was dropped silently in another project on 2026-11-12"
+    },
+    {
+      "pattern": "*/Qwen3.8-27B-QUASAR-NVFP4",
+      "input_image": "unknown",
+      "evidence": "local Qwen3.8-27B-QUASAR-NVFP4; no observation that image input is accepted or rejected"
+    }
+  ]
+}

@@ -51,6 +51,7 @@ try {
 }
 
 const { MESSAGES_EFFORT_WIRE_VALUES } = require('./lib/effort-scale');
+const { refuseNonTextBlocks } = require('./lib/vision-guard');
 
 const RUNNER = 'anthropic-compatible';
 // Live-probed on 2026-07-01: appending /v1/messages gives
@@ -478,10 +479,19 @@ function isTruncatedResponse(body) {
 
 function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens, effort, rawLog }) {
   const url = new URL(endpointUrl);
+  const content = [{ type: 'text', text: prompt }];
+  // Defence at the only HTTP body builder: a non-text block for an engine whose
+  // vision is not supported never becomes a request. Today's body is one text block.
+  const vision = refuseNonTextBlocks({ runner: RUNNER, model, blocks: content });
+  if (!vision.ok) {
+    const err = vision.error instanceof Error ? vision.error : new Error(vision.message);
+    err.code = 'VISION_REFUSED';
+    throw err;
+  }
   const payload = JSON.stringify({
     model,
     max_tokens: maxTokens,
-    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+    messages: [{ role: 'user', content }],
     ...(effort ? { output_config: { effort } } : {}),
   });
   const transport = url.protocol === 'https:' ? https : http;
@@ -662,6 +672,9 @@ async function main() {
       rawLog,
     });
   } catch (err) {
+    if (err && err.code === 'VISION_REFUSED') {
+      diePrecondition(model, err.message);
+    }
     const msg = redactForLog(err && err.message ? err.message : String(err), token);
     appendRawLog(rawLog, `\n[dispatch-anthropic-review: request failed — ${msg}]\n`);
     failNoVerdict(rawLog, `request failed: ${msg}`);

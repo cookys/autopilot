@@ -1148,6 +1148,11 @@ author_manifest_finalize() {
 write_author_manifest
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: run_id=${AUTHOR_RUN_ID} manifest=${AUTHOR_MANIFEST_FILE:-none} (watch: scripts/dispatch-status.js --run ${AUTHOR_RUN_ID})" >&2
 
+# vision-guard (scripts/lib/vision-guard.js): an image prompt to an engine that is
+# not vision-supported never reaches the runner. MODEL is already alias-resolved.
+_vg_msg="$(node "$_AUTHOR_SELF_DIR/lib/vision-guard.js" --runner "$RUNNER" --model "$MODEL" --file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+  || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${RUNNER}/${MODEL} file ${PROMPT_FILE}}"
+
 # Context-window gate — runs BEFORE any runner spawns, so an over-budget authoring
 # payload costs nothing. Authoring prompts are the largest single-file payloads on
 # any rail (see the header note about the 4096 review default truncating them), which

@@ -20,7 +20,7 @@
     "unit_kind": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
     "current": {
       "oneOf": [
-        { "enum": ["intent", "diagnose", "research", "proposal", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"] },
+        { "enum": ["intent", "diagnose", "research", "proposal", "explore", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"] },
         { "type": "null" }
       ]
     },

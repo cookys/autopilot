@@ -142,7 +142,7 @@ eq "marker without size -> exit 5" "5" "$RC"
 
 newsess; sm set --size L --repo-root "$R4" >/dev/null 2>&1
 adv --to plan; eq "L first write plan -> 3" "3" "$RC"
-has "first-write denial names the entry node" '"legal_next":["intent"]' "$OUT"
+has "first-write denial names the entry nodes" '"legal_next":["explore","intent"]' "$OUT"
 has "denial carries allowed:false and a reason" '"allowed":false' "$OUT"
 adv --to intent; eq "L first write intent -> 0" "0" "$RC"
 eq "stage written" '"intent"' "$(jf stage)"
@@ -153,6 +153,17 @@ adv --to implement; eq "illegal plan -> implement on L -> 3" "3" "$RC"
 has "illegal move lists plan-review" 'plan-review' "$OUT"
 eq "illegal move leaves stage untouched" '"plan"' "$(jf stage)"
 adv --to nonsense; eq "unknown node -> 1" "1" "$RC"
+
+newsess; sm set --size L --repo-root "$R4" >/dev/null 2>&1
+adv --to explore; eq "L first write explore -> 0" "0" "$RC"
+eq "explore stage written" '"explore"' "$(jf stage)"
+schema_ok "marker at explore"
+newsess; sm set --size L --bug --repo-root "$R4" >/dev/null 2>&1
+adv --to explore; eq "L bug first write explore -> 3" "3" "$RC"
+has "L bug entry stays diagnose" '"legal_next":["diagnose"]' "$OUT"
+newsess; sm set --size M --repo-root "$R4" >/dev/null 2>&1
+adv --to explore; eq "M first write explore -> 3" "3" "$RC"
+has "M entry stays plan" '"legal_next":["plan"]' "$OUT"
 
 newsess; sm set --size S --repo-root "$R4" >/dev/null 2>&1
 adv --to plan; eq "S first write plan -> 3" "3" "$RC"
@@ -660,6 +671,44 @@ adv --resume-from "$HR_OLD"; eq "high-risk resume (rc)" "0" "$RC"
 eq "high_risk copied" "true" "$(jf high_risk)"
 eq "review_families copied" '["fam-a"]' "$(jf review_families)"
 STUB_RISK=high adv --to qc-gate; eq "high-risk resume: code-review -> qc-gate accepted (rc)" "0" "$RC"
+
+# ---------------------------------------------------------------- leaving explore needs a Decision synthesis
+# Negative control: with the `from === 'explore'` refusal removed, the no-file
+# case below exits 0 and writes stage plan. With it present, exit is 5 and the
+# marker is unchanged. Shown red (exit 0) before this gate, then green (exit 5).
+RX="$TEST_TMP/r-explore"; mkrepo "$RX"
+newsess; sm set --size L --repo-root "$RX" >/dev/null 2>&1
+adv --to explore --repo-root "$RX"; eq "explore entry for synthesis cases" "0" "$RC"
+BEFORE=$(cksum <"$MARKER")
+adv --to plan --repo-root "$RX"; eq "explore -> plan without synthesis -> 5" "5" "$RC"
+has "UNSYNTHESIZED code" '"code":"UNSYNTHESIZED"' "$OUT"
+has "refusal names the conventional file" "explore-synthesis.md" "$OUT"
+eq "unsynthesized leaves stage at explore" '"explore"' "$(jf stage)"
+eq "unsynthesized leaves the marker bytes" "$BEFORE" "$(cksum <"$MARKER")"
+mkdir -p "$RX/docs/plans/evidence"
+printf 'Decision:\n' > "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to plan --repo-root "$RX"; eq "empty Decision: still blocked" "5" "$RC"
+printf 'Decision:   \n' > "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to plan --repo-root "$RX"; eq "whitespace Decision: still blocked" "5" "$RC"
+eq "empty Decision leaves stage" '"explore"' "$(jf stage)"
+printf 'note\nDecision: ship X\n' > "$TEST_TMP/synth-ok.md"
+adv --to plan --repo-root "$RX" --synthesis "$TEST_TMP/synth-ok.md"; eq "Decision: ship X via --synthesis -> 0" "0" "$RC"
+eq "cited Decision moves stage to plan" '"plan"' "$(jf stage)"
+newsess; sm set --size L --repo-root "$RX" >/dev/null 2>&1
+adv --to explore --repo-root "$RX"
+printf 'Decision:\n' > "$TEST_TMP/synth-empty.md"
+printf 'Decision: ship X\n' > "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to plan --repo-root "$RX" --synthesis "$TEST_TMP/synth-empty.md"; eq "empty --synthesis still passes via conventional file" "0" "$RC"
+newsess; sm set --size L --repo-root "$RX" >/dev/null 2>&1
+adv --to explore --repo-root "$RX"
+printf 'Decision:\tship X\n' > "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to plan --repo-root "$RX"; eq "tab Decision on the conventional path -> 0" "0" "$RC"
+newsess; sm set --size XL --repo-root "$RX" >/dev/null 2>&1
+adv --to explore --repo-root "$RX"
+rm -f "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to explore --repo-root "$RX"; eq "same-node explore needs no synthesis" "0" "$RC"
+eq "same-node stays explore" '"explore"' "$(jf stage)"
+adv --resume-from nope --synthesis "$TEST_TMP/synth-ok.md"; eq "--resume-from with --synthesis -> 1" "1" "$RC"
 
 echo "stage-advance.test: pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -134,12 +134,14 @@ def compare(scores: list) -> dict:
     return {"existing": existing, "usage": usage, "b_no_worse_on_existing": no_worse, "b_better_on_usage": better}
 
 
-def fixture_ok(root: Path) -> bool:
-    live = (root / "skills/finish-flow/SKILL.md").read_text().splitlines()
-    arm_b = (Path(__file__).resolve().parent / "arm-b/SKILL.md").read_text().splitlines()
-    if len(live) != len(arm_b):
+def fixture_ok() -> bool:
+    """The two frozen pack arms differ only at step 7. The live skill is not an arm."""
+    pack = Path(__file__).resolve().parent
+    arm_a = (pack / "arm-a/SKILL.md").read_text().splitlines()
+    arm_b = (pack / "arm-b/SKILL.md").read_text().splitlines()
+    if len(arm_a) != len(arm_b):
         return False
-    diffs = [i for i, (a, b) in enumerate(zip(live, arm_b)) if a != b]
+    diffs = [i for i, (a, b) in enumerate(zip(arm_a, arm_b)) if a != b]
     if diffs != [129]:
         return False
     old = "7. **Staging verify** (skip mid-implementation, docs-only, or no staging environment)."
@@ -147,7 +149,7 @@ def fixture_ok(root: Path) -> bool:
         "7. **Usage evidence** (one line `Used: user`, `Used: e2e`, or "
         "`Used: n/a <reason>` for the thing just merged; green tests and review PASS do not count)."
     )
-    return live[129] == old and arm_b[129] == new
+    return arm_a[129] == old and arm_b[129] == new
 
 
 def self_test() -> int:
@@ -206,8 +208,7 @@ def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         return self_test()
     if "--check-fixture" in argv:
-        root = Path(__file__).resolve().parents[3]
-        ok = fixture_ok(root)
+        ok = fixture_ok()
         print("fixture_ok", ok)
         return 0 if ok else 1
     if "--compare" in argv:

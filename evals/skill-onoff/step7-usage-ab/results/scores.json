@@ -178,7 +178,7 @@
     "pass": true,
     "label": "TRIGGER",
     "used_lines": [
-      "Used: n/a no user or e2e run recorded for the cross-tenant-allowance merge"
+      "Used: n/a no user or e2e use recorded for cross-tenant-allowance"
     ]
   },
   {
@@ -192,7 +192,7 @@
     "pass": true,
     "label": "TRIGGER",
     "used_lines": [
-      "Used: n/a \u672c\u8f2a\u53ea\u6709\u6536\u5c3e\u555f\u52d5\u8acb\u6c42\uff0c\u6c92\u6709\u5df2\u5408\u4f75\u7522\u7269\u88ab\u771f\u5be6\u4f7f\u7528\u8005\u6216\u7aef\u5230\u7aef\u8dd1\u904e\u7684\u8b49\u64da\u3002"
+      "Used: n/a \u672c\u8f2a\u53ea\u6709\u6536\u5c3e\u8981\u6c42\uff0c\u6c92\u6709\u5df2\u5408\u4f75\u3001\u53ef\u88ab\u4f7f\u7528\u8005\u6216 e2e \u4f7f\u7528\u7684\u4ea4\u4ed8"
     ]
   },
   {
@@ -206,7 +206,7 @@
     "pass": true,
     "label": "TRIGGER",
     "used_lines": [
-      "Used: n/a hotfix not yet merged or exercised by a user or an e2e run"
+      "Used: n/a hotfix has no user-use or e2e evidence yet"
     ]
   },
   {
@@ -220,7 +220,7 @@
     "pass": true,
     "label": "TRIGGER",
     "used_lines": [
-      "Used: n/a no merge and no real-user or e2e run of the work in this session"
+      "Used: n/a no merge and no user or e2e run recorded for this session"
     ]
   },
   {
@@ -234,7 +234,7 @@
     "pass": true,
     "label": "TRIGGER",
     "used_lines": [
-      "Used: n/a \u672c\u6b21\u6c92\u6709\u4f7f\u7528\u8005\u5be6\u6a5f\u4f7f\u7528\u6216\u7aef\u5230\u7aef\u5be6\u8dd1\u7684\u8b49\u64da"
+      "Used: n/a \u672c\u56de\u5408\u53ea\u6709\u6536\u5c3e\u5224\u5b9a\uff0c\u6c92\u6709\u5df2\u5408\u4f75\u7522\u7269\u88ab\u4f7f\u7528\u8005\u6216 e2e \u8dd1\u904e"
     ]
   },
   {
@@ -322,7 +322,7 @@
     "pass": true,
     "label": "TRIGGER",
     "used_lines": [
-      "Used: n/a tests passed (bash run-tests.sh); no real-user or e2e use of the merged build"
+      "Used: n/a green tests are not a real user on the real build"
     ]
   },
   {
@@ -336,7 +336,7 @@
     "pass": true,
     "label": "TRIGGER",
     "used_lines": [
-      "Used: n/a green tests on merged feature/greet do not count as usage"
+      "Used: n/a no user or e2e run recorded; green tests do not count"
     ]
   },
   {

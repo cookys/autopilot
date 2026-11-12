@@ -20,7 +20,19 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]
+
+
+def find_repo_root(start: Path) -> Path:
+    """Directory that holds the case library. Not evals/."""
+    for cand in (start, *start.parents):
+        if (cand / "skills/finish-flow/SKILL.md").is_file() and (
+            cand / "skill-creator-workspace/evals/finish-flow-evals.json"
+        ).is_file():
+            return cand
+    raise SystemExit("repo root not found from %s" % start)
+
+
+ROOT = find_repo_root(HERE)
 sys.path.insert(0, str(HERE))
 import grade  # noqa: E402
 
@@ -28,7 +40,7 @@ EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 HOME_RE = re.compile(re.escape(os.sep + "home" + os.sep) + r"\S+")
 HOST = socket.gethostname()
 ARM_SKILL = {
-    "a": ROOT / "skills/finish-flow/SKILL.md",
+    "a": HERE / "arm-a/SKILL.md",
     "b": HERE / "arm-b/SKILL.md",
 }
 
@@ -142,7 +154,7 @@ def keep_usage(parsed: dict) -> dict:
 
 
 def run_all(timeout_s: int) -> int:
-    if not grade.fixture_ok(ROOT):
+    if not grade.fixture_ok():
         print("fixture check failed", file=sys.stderr)
         return 2
     spec, cases = load_cases()
@@ -171,6 +183,13 @@ def run_all(timeout_s: int) -> int:
             "a": hashlib.sha256(ARM_SKILL["a"].read_bytes()).hexdigest(),
             "b": hashlib.sha256(ARM_SKILL["b"].read_bytes()).hexdigest(),
         },
+        "arm_files": {
+            "a": ARM_SKILL["a"].resolve().relative_to(ROOT).as_posix(),
+            "b": ARM_SKILL["b"].resolve().relative_to(ROOT).as_posix(),
+        },
+        "live_skill_equals_arm_b": hashlib.sha256(
+            (ROOT / "skills/finish-flow/SKILL.md").read_bytes()
+        ).hexdigest() == hashlib.sha256(ARM_SKILL["b"].read_bytes()).hexdigest(),
     }
     (results_dir / "engine.json").write_text(json.dumps(engine, indent=2) + "\n")
     scores = []
@@ -232,7 +251,9 @@ def write_readme(engine: dict, summary: dict, scores: list) -> None:
     lines = []
     lines.append("# finish-flow step 7 A/B: Staging verify vs Usage evidence")
     lines.append("")
-    lines.append("Campaign: PM 01M78GBW, D8c part A. Eval evidence only. `skills/finish-flow/SKILL.md` is arm A and was not edited.")
+    if not engine.get("live_skill_equals_arm_b"):
+        raise SystemExit("readme refused: live skill does not equal arm B")
+    lines.append("Campaign: PM 01M78GBW, D8c part A. The live skill `skills/finish-flow/SKILL.md` now equals arm B. Arm A is the frozen pre-change copy `arm-a/SKILL.md` (`1dfef70d8054875ad96b665bbfcdc4db6beb3c72`). The runner reads both arms from this pack, not from the live skill.")
     lines.append("")
     lines.append("## Instrument")
     lines.append("")
@@ -246,7 +267,7 @@ def write_readme(engine: dict, summary: dict, scores: list) -> None:
         engine["runner"], engine["runner_version"], engine["repeat"],
     ))
     lines.append("")
-    lines.append("Skill sha256: arm A `%s`, arm B `%s`. Arm B is `arm-b/SKILL.md`. The diff against the live skill is line 130 only." % (
+    lines.append("Skill sha256: arm A `%s` (`arm-a/SKILL.md`), arm B `%s` (`arm-b/SKILL.md`). The live skill now equals arm B. The two frozen arm files differ only at step 7." % (
         engine["skill_sha256"]["a"], engine["skill_sha256"]["b"],
     ))
     lines.append("")
@@ -298,7 +319,7 @@ def write_readme(engine: dict, summary: dict, scores: list) -> None:
     lines.append("")
     lines.append("## Out of scope")
     lines.append("")
-    lines.append("No edit to `skills/finish-flow/SKILL.md`, frozen `packs/`, or the Codex plugin mirror. Session end (lite) item (3) still says staging. No commit in this run. Intended commit message, for the harness: `eval(finish-flow): A/B Staging verify vs Usage evidence for step 7 (PM 01M78GBW, D8c part A evidence)`.")
+    lines.append("This run does not edit `skills/finish-flow/SKILL.md` (it already equals arm B), frozen `packs/`, or the Codex plugin mirror. Session end (lite) item (3) still says staging. `.claude/finish-flow-config.md` keeps its N/A reason text. No commit in this run.")
     lines.append("")
     text = "\n".join(lines)
     home_mark = os.sep + "home" + os.sep
@@ -311,8 +332,9 @@ def write_readme(engine: dict, summary: dict, scores: list) -> None:
 
 def main(argv: list[str]) -> int:
     if "--check-fixture" in argv:
-        print("fixture_ok", grade.fixture_ok(ROOT))
-        return 0 if grade.fixture_ok(ROOT) else 1
+        ok = grade.fixture_ok()
+        print("fixture_ok", ok)
+        return 0 if ok else 1
     timeout_s = 180
     if "--timeout" in argv:
         timeout_s = int(argv[argv.index("--timeout") + 1])

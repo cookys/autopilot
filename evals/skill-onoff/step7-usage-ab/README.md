@@ -1,6 +1,6 @@
 # finish-flow step 7 A/B: Staging verify vs Usage evidence
 
-Campaign: PM 01M78GBW, D8c part A. Eval evidence only. `skills/finish-flow/SKILL.md` is arm A and was not edited.
+Campaign: PM 01M78GBW, D8c part A. The live skill `skills/finish-flow/SKILL.md` now equals arm B. Arm A is the frozen pre-change copy `arm-a/SKILL.md` (`1dfef70d8054875ad96b665bbfcdc4db6beb3c72`). The runner reads both arms from this pack, not from the live skill.
 
 ## Instrument
 
@@ -12,7 +12,7 @@ The scorecard harness `evals/orchestration/run-orchestration-eval.sh` accepts `-
 
 Both arms were run as the same prose compliance check. The model sees the full skill text. The only difference is step 7. `grok-4.7` at reasoning effort `low` is a qualified non-Claude implementer seat in `references/official-qualification-defaults.json`. It is the seat used here because skill-onoff has no qualified non-Claude runner flag. Engine: `grok-4.7`, reasoning effort `low`, runner `grok` (`grok 1.0.77 (50ca579fa996) [stable]`). Repeat: 1. Seed: none (the runner has no seed flag). This n=1 pass is not the prereg repeat count and is not a gate result.
 
-Skill sha256: arm A `e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2`, arm B `efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498`. Arm B is `arm-b/SKILL.md`. The diff against the live skill is line 130 only.
+Skill sha256: arm A `e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2` (`arm-a/SKILL.md`), arm B `efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498` (`arm-b/SKILL.md`). The live skill now equals arm B. The two frozen arm files differ only at step 7.
 
 ## Frozen rubric
 
@@ -43,8 +43,6 @@ Per-case trigger expectation is the source file's `should_trigger` for `ff-trigg
 
 Synthetic usage lines: arm A `(none)`; arm B `Used: n/a no person has used the merged result and there is no end-to-end run`.
 
-Synthetic second lines, raw: arm A `7. Staging verify: FAIL — 合併進 develop 的結果尚無人使用，也沒有端到端執行。`; arm B `Used: n/a no person has used the merged result and there is no end-to-end run`.
-
 Arm B is no worse than A on every existing case: **yes**.
 
 Arm B is better on the usage-evidence case: **yes**.
@@ -53,11 +51,13 @@ Counts: 13 existing cases, 1 synthetic case, 2 arms, 1 repeat, 28 model calls.
 
 Raw rows: `results/arm-a.jsonl`, `results/arm-b.jsonl`. Scores: `results/scores.json`, `results/summary.json`.
 
+## Out of scope
+
+This run does not edit `skills/finish-flow/SKILL.md` (it already equals arm B), frozen `packs/`, or the Codex plugin mirror. Session end (lite) item (3) still says staging. `.claude/finish-flow-config.md` keeps its N/A reason text. No commit in this run.
+
 ## Repetitions (PM 01M78M9M)
 
-On top of eval/d8c-a2. Same instrument (`run-ab.py` `grok_call`: `grok-4.7`, reasoning effort `low`, the flags in `results/engine.json`), same grader (`grade.py`), same arm B file `arm-b/SKILL.md`. Run 1 is the recorded n=1 row in `results/scores.json`. Runs 2 and 3 are new calls on three cells only: `ff-usage-green-unused`, `f1-ready-to-merge`, and `ff-trigger-06`, both arms. No infra retry fired. Every exit code is 0.
-
-`grade.py --check-fixture` is false on this tree because d8c-a2 already replaced live `skills/finish-flow/SKILL.md` line 130 with the arm B sentence (live sha `efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498`, the same as arm B). This repetition did not edit that file and did not use it as the arm A prompt. Arm A prompts used the recorded arm A blob `e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2` (`git show 0506b25d3:skills/finish-flow/SKILL.md`), which is the text run 1 graded. Arm B prompts used `arm-b/SKILL.md`.
+Kept. They were not rerun. Arm A in `results/reps/run-2.json` and `run-3.json` is sha `e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2`, the same bytes as frozen `arm-a/SKILL.md` (`1dfef70d8054875ad96b665bbfcdc4db6beb3c72`, also `0506b25d3:skills/finish-flow/SKILL.md`). `live_skill_used_as_prompt` is false. The runner on this branch, before this fix, would have read the live skill for arm A; these repetition calls did not. `results/scores.json` above is the path-proof rerun and is not run 1 of this table. Run 1 is the graded row stored in `results/reps/run-1.json`.
 
 | case | arm | run 1 | run 2 | run 3 | pass count |
 |---|---|---|---|---|---|
@@ -68,16 +68,6 @@ On top of eval/d8c-a2. Same instrument (`run-ab.py` `grok_call`: `grok-4.7`, rea
 | `ff-trigger-06` | A | PASS | PASS | PASS | 3/3 |
 | `ff-trigger-06` | B | PASS | PASS | PASS | 3/3 |
 
-Arm B synthetic lines: run 1 `Used: n/a no person has used the merged result and there is no end-to-end run` (graded fields only; raw text was not retained); run 2 `Used: n/a no person has used the merged result and there is no end-to-end run`; run 3 `Used: n/a no person has used the merged result and there is no end-to-end run`.
-
 Arm B passes the synthetic case in at least 2 of 3 runs: **yes** (3/3).
 
-Raw outputs: `results/reps/run-1.json`, `results/reps/run-2.json`, `results/reps/run-3.json`. Pass counts: `results/reps/summary.json`. Runs 2 and 3 store the model text. Run 1 stores the graded row from `results/scores.json` because the original `arm-*.jsonl` files are gitignored and are not in the tree.
-
-New model calls: 12 (3 cases, 2 arms, 2 new runs).
-
-## Out of scope
-
-No edit to `skills/finish-flow/SKILL.md`, frozen `packs/`, or the Codex plugin mirror. Session end (lite) item (3) still says staging. No commit in this run. Intended commit message, for the harness: `eval(finish-flow): A/B Staging verify vs Usage evidence for step 7 (PM 01M78GBW, D8c part A evidence)`.
-
-This repetition also did not edit `skills/finish-flow/SKILL.md`, `arm-b/SKILL.md`, `grade.py`, `cases.json`, `prompt-wrapper.md`, or `run-ab.py`. The other ten cases were not repeated. Intended commit message, for the harness: `eval(finish-flow): step7-usage-ab reps to 3 runs on the synthetic and two existing cases (PM 01M78M9M)`.
+Raw outputs: `results/reps/run-1.json`, `results/reps/run-2.json`, `results/reps/run-3.json`. Pass counts: `results/reps/summary.json`.

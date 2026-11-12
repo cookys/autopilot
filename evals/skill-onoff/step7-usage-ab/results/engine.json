@@ -19,5 +19,10 @@
   "skill_sha256": {
     "a": "e325a789b907fd8ece916402e5b8777e58c06decdaa29813c70e0169342484e2",
     "b": "efdc7cad8fbab9656fb4443e62121151a1801e5841e2e3f1cbffdcdccf869498"
-  }
+  },
+  "arm_files": {
+    "a": "evals/skill-onoff/step7-usage-ab/arm-a/SKILL.md",
+    "b": "evals/skill-onoff/step7-usage-ab/arm-b/SKILL.md"
+  },
+  "live_skill_equals_arm_b": true
 }

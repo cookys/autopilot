@@ -20,11 +20,15 @@
 #     replacement object can make a later content check inspect a benign substitute (round 6,
 #     2026-09-13) — except this dispatch's own branch and MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES.
 #     MAIN_CHECKOUT_FP_REF_SCOPE=round (dispatch-hetero, fleet 01M788GD) keeps that same
-#     working-tree / index / config / hooks measurement and, of the refs, only: non-branch refs
+#     working-tree / index / hooks measurement and, of the refs, only: non-branch refs
 #     (tags, remotes, replace, notes), the branch HEAD is attached to, and the ref --base names
-#     when --base is a ref. This round's own --branch stays exempt (the round creates and moves
-#     it) unless that ref IS the checkout branch or the --base ref. Creation, move or deletion
-#     of any other refs/heads/* is not a mutation. Another worktree is not a mutation either:
+#     when --base is a ref. Of the config, round scope drops per-branch branch.<name>.<var>
+#     entries unless <name> is that checkout branch or the --base branch (a refs/heads name);
+#     two-level branch.<var> and every other section stay. This round's own --branch stays
+#     exempt (the round creates and moves it) unless that ref IS the checkout branch or the
+#     --base ref. Creation, move or deletion of any other refs/heads/* is not a mutation, and
+#     neither is git writing or deleting that other branch's tracking keys (branch.autoSetupMerge
+#     does this for a remote-tracking start point). Another worktree is not a mutation either:
 #     its files live under .git/worktrees or under the already-pruned .claude/worktrees, and
 #     its branch is one of those other refs/heads/*.
 #
@@ -67,20 +71,24 @@ main_checkout_fingerprint() {
   # Round scope (below) then drops every other refs/heads/*; worktrees share this ref store.
   refs="$(git -C "$MAIN_CHECKOUT" for-each-ref --format='%(refname)=%(objectname)=%(symref)' 2>/dev/null)" \
     || { _fp_unverifiable refs; return 0; }
-  # FP_ROUND_SCOPE_BEGIN — the three `scope = round` comparisons are the narrow fingerprint.
-  # Negative control: sed 's/ = round/ = allrefs/g' makes all three fail and restores the
-  # all-refs fingerprint (this dispatch's own branch still exempt; every other ref is
-  # measured). Creating another branch or adding another worktree then changes the digest,
-  # which is main_checkout_mutated. Deleting this whole region is not that control: it would
-  # also drop the own-branch exemption.
-  local _head_ref="" _base_ref=""
+  # FP_ROUND_SCOPE_BEGIN — each ` = round` comparison is the narrow fingerprint (the ref
+  # filters here, and the config filter below). Negative control: sed 's/ = round/ = allrefs/g'
+  # makes every one fail and restores the all-refs fingerprint (this dispatch's own branch still
+  # exempt; every other ref is measured) and the full config hash. Creating another branch or
+  # adding another worktree then changes the digest, which is main_checkout_mutated. Deleting
+  # this whole region is not that control: it would also drop the own-branch exemption.
+  local _head_ref="" _base_ref="" _head_branch="" _base_branch=""
   if [ "${MAIN_CHECKOUT_FP_REF_SCOPE:-}" = round ]; then
     case "$sym" in
       refs/*) _head_ref="$sym" ;;
     esac
+    case "$_head_ref" in
+      refs/heads/*) _head_branch="${_head_ref#refs/heads/}" ;;
+    esac
     if [ -n "${BASE:-}" ]; then
       _base_ref="$(git -C "$MAIN_CHECKOUT" rev-parse --verify --symbolic-full-name "$BASE" 2>/dev/null || true)"
       case "$_base_ref" in
+        refs/heads/*) _base_branch="${_base_ref#refs/heads/}" ;;
         refs/*) ;;
         *) _base_ref="" ;;
       esac
@@ -143,6 +151,34 @@ main_checkout_fingerprint() {
   # Administrative surfaces the walk prunes (round 7, 2026-09-13): the shared config at every
   # scope (a brief saying "configure the remote" lands here) and the hooks directory.
   cfg="$(git -C "$MAIN_CHECKOUT" config --list --show-origin --show-scope 2>/dev/null)" || { _fp_unverifiable config; return 0; }
+  # Round scope drops per-branch branch.<name>.<var> unless <name> is the checkout branch or
+  # the --base branch. branch.autoSetupMerge (default true) writes and deletes those keys for
+  # any other branch started at a remote-tracking ref (`git branch -f`, `git branch`,
+  # `git worktree add -b`, `git branch -D`). Two-level branch.<var> and every other section stay.
+  # cfgfilter=round
+  # Negative control: sed 's/cfgfilter=round/cfgfilter=fullcfg/' restores the full config hash
+  # while ref scope stays round. With origin/develop present, `git branch -f other origin/develop`
+  # then changes the digest, which is main_checkout_mutated.
+  local cfgfilter=round
+  if [ "${MAIN_CHECKOUT_FP_REF_SCOPE:-}" = round ] && [ "$cfgfilter" = round ]; then
+    cfg="$(printf '%s\n' "$cfg" | awk -v headbranch="$_head_branch" -v basebranch="$_base_branch" '
+      {
+        line = $0
+        keypart = line
+        sub(/^[^\t]*\t/, "", keypart)
+        sub(/^[^\t]*\t/, "", keypart)
+        key = keypart
+        sub(/=.*/, "", key)
+        if (key !~ /^branch\./) { print line; next }
+        rest = substr(key, 8)
+        if (index(rest, ".") == 0) { print line; next }
+        subname = rest
+        sub(/\.[^.]*$/, "", subname)
+        if (headbranch != "" && subname == headbranch) { print line; next }
+        if (basebranch != "" && subname == basebranch) print line
+      }
+    ')" || { _fp_unverifiable config-scope; return 0; }
+  fi
   gitdir="$(git -C "$MAIN_CHECKOUT" rev-parse --git-common-dir 2>/dev/null)" || { _fp_unverifiable gitdir; return 0; }
   case "$gitdir" in /*) ;; *) gitdir="$MAIN_CHECKOUT/$gitdir" ;; esac
   # -H/-L: follow a symlinked hooks dir to the live targets and record link targets (round 8).

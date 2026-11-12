@@ -33,13 +33,17 @@
   "agyclaude": {
     "key": "agyclaude",
     "runner": "agy",
-    "model": null,
-    "max_parallel": 2
+    "model": "claude-opus-5-5-medium",
+    "max_parallel": 2,
+    "verified_at": "2026-11-12T12:05:00+08:00",
+    "verified_by": "agy -p --output-format stream-json init.model = claude-opus-5-5-medium (live call 2026-11-12, conversation 076ce0da-9ac0-4ea4-ab9e-0d3aaaabf434)"
   },
   "agyclaude(alias 2)": {
     "key": "agyclaude",
     "runner": "agy",
-    "model": null,
-    "max_parallel": 2
+    "model": "claude-opus-5-5-medium",
+    "max_parallel": 2,
+    "verified_at": "2026-11-12T12:05:00+08:00",
+    "verified_by": "agy -p --output-format stream-json init.model = claude-opus-5-5-medium (live call 2026-11-12, conversation 076ce0da-9ac0-4ea4-ab9e-0d3aaaabf434)"
   }
 }

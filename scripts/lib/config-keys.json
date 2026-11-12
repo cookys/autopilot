@@ -1413,6 +1413,17 @@
       "note": "Directory containing stub dispatch-author.sh / dispatch-review.sh for scripts/noncq.js tests. Default: the scripts/ directory next to noncq.js."
     },
     {
+      "name": "AUTOPILOT_NONCQ_POOLS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/noncq.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_NONCQ_DIR"],
+      "note": "Pool map file for scripts/noncq.js drain, replacing scripts/lib/noncq-pools.json. Test seam: noncq.test.js (h) uses a fixture map with a null-model entry."
+    },
+    {
       "name": "AUTOPILOT_RELAY_SEND_BUDGET_MS",
       "kind": "env",
       "audience": "internal",

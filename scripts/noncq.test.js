@@ -607,7 +607,11 @@ test('(h) null-model engine (agyclaude) skipped with stderr note', () => {
   });
   assert.equal(add.status, 0, add.stderr);
   const pace = writePace(work, [paceRow({ pool: 'agyclaude' })]);
-  const d = drain(q, pace, rails.dir, fleet.bin);
+  const poolsFixture = path.join(work, 'pools.json');
+  write(poolsFixture, JSON.stringify({
+    agyclaude: { key: 'agyclaude', runner: 'agy', model: null, max_parallel: 2 },
+  }, null, 2));
+  const d = drain(q, pace, rails.dir, fleet.bin, [], { AUTOPILOT_NONCQ_POOLS: poolsFixture });
   assert.equal(d.status, 0, d.stderr);
   const out = JSON.parse(d.stdout);
   assert.equal(out.dispatched.length, 0);

@@ -70,7 +70,9 @@ Pace file schema `capacity.pace/1` with `rows[]`. A pool qualifies only when:
 
 Rows that share an engine key (aliases) merge. A pool whose map entry has
 `model: null` is skipped with a stderr note (not verified — do not guess a
-model id).
+model id). Pool entries may also carry optional `verified_at` (ISO-8601) and
+`verified_by` (free text naming the live call) as provenance only; drain does
+not read them, and unknown pool keys are not rejected.
 
 Per drain:
 

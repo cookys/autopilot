@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0434 -->
+<!-- next-id: BL-0435 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1550,3 +1550,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM report via hangar 2026-11-12
 - **Pointer**: project/backlog/test-tmux-claude-teardown.md
+
+### affected-suites counts a skipped suite as green and does not report skips
+- **Id**: BL-0434
+- **Status**: open
+- **Since**: 2026-11-12
+- **Origin**: peer
+- **Reporter**: autopilot lane
+- **Report**: 2026-11-12 fleet (PM ruling)
+- **Reply**: 2026-11-12 01M76P6G6F17DHRDCYB61HRK6H
+- **Problem**: The affected-suites runner decides pass or fail only from each suite exit code, so a suite that prints SKIP and exits 0 counts as green and the summary never says how many were skipped. The full-suite runner does list skips, so the two runners disagree.
+- **Impact**: A run where the hippo suites skipped because hippo is absent reads as fully verified, though nothing was asserted.
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: found 2026-11-12 while fixing the hippo suites (merge 6e96e90a1); PM ruling fleet 01M76P6G6F17DHRDCYB61HRK6H
+- **Pointer**: project/backlog/affected-suites-skip-count.md

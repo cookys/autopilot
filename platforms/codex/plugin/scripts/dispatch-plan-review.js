@@ -111,13 +111,15 @@ function usage() {
     --repo-root <repo> --plan-file <plan> --rubric-file <rubric> \\
     --ticket <id> --session-id <id> --generation <1|2> \\
     --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
-    [--context-file <repo-source-file>]... [--state-dir <dir>] [--now <ISO-8601>] \\
+    [--context-file <repo-source-file>]... [--timeout <Ns|Nm>] [--state-dir <dir>] [--now <ISO-8601>] \\
     [--allow-unregistered] [--no-topology-fallbacks] [--expect-revision <git-rev>] \\
     [--same-family-exception "<d-xxxxxxxx|fleet message id>: <reason>"]
 
 --plan-file: a relative path resolves against --repo-root (never the cwd) and must stay inside
   it (an absolute path may point elsewhere but then carries no git provenance); a warning is printed if the cwd has a same-named file with different content. Artifacts
   record plan_path, plan_git_blob_sha, repo_head_sha, plan_dirty_vs_head next to plan_sha256.
+
+--timeout <Ns|Nm>: per-seat timeout; default is the effort tier scaled by payload size.
 
 --expect-revision: refuse to start (exit 2, 0 seats dispatched) unless the plan file's git blob
   sha equals that of <git-rev>:<plan path>; the message names both shas.
@@ -267,8 +269,8 @@ function parseArgs(argv) {
     throw new CliError('provide --manifest-file or the legacy --runner and --model tuple');
   }
   opts.repoRoot = canonicalDirectory(opts.repoRoot, '--repo-root');
-  opts.planFile = resolvePlanFile(opts.planFile, opts.repoRoot);
-  opts.rubricFile = canonicalFile(opts.rubricFile, '--rubric-file');
+  opts.planFile = resolvePlanFile(opts.planFile, opts.repoRoot, '--plan-file');
+  opts.rubricFile = resolvePlanFile(opts.rubricFile, opts.repoRoot, '--rubric-file');
   if (opts.manifestFile) opts.manifestFile = canonicalFile(opts.manifestFile, '--manifest-file');
   if (opts.dispositionFile) {
     opts.dispositionFile = canonicalFile(opts.dispositionFile, '--disposition-file');
@@ -323,17 +325,18 @@ function canonicalFile(raw, label) {
   return resolved;
 }
 
-// --plan-file resolves against --repo-root (like --context-file), never the cwd: a relative path
-// read from the wrong checkout silently reviewed a stale plan (2026-11-04). The resolved file
-// must live inside --repo-root. If cwd holds a same-named file with different bytes, warn.
-function resolvePlanFile(raw, repoRoot) {
+// --plan-file and --rubric-file resolve against --repo-root (like --context-file), never the cwd:
+// a relative path read from the wrong checkout silently reviewed a stale file (2026-11-04). The
+// resolved file must live inside --repo-root. If cwd holds a same-named file with different bytes,
+// warn.
+function resolvePlanFile(raw, repoRoot, label = '--plan-file') {
   const wasRelative = !path.isAbsolute(raw);
-  const resolved = canonicalFile(wasRelative ? path.join(repoRoot, raw) : raw, '--plan-file');
+  const resolved = canonicalFile(wasRelative ? path.join(repoRoot, raw) : raw, label);
   const rel = path.relative(repoRoot, resolved);
   // Only a RELATIVE path is held to containment (it cannot name the other checkout by accident);
   // an explicit absolute path outside --repo-root stays allowed, but carries no git provenance.
   if (wasRelative && (rel === '' || rel.startsWith('..') || path.isAbsolute(rel))) {
-    throw new CliError(`--plan-file must be inside --repo-root: ${resolved}`);
+    throw new CliError(`${label} must be inside --repo-root: ${resolved}`);
   }
   if (wasRelative) {
     try {
@@ -1480,6 +1483,7 @@ function reviewSeat({
   contextBundle = null,
   timeoutSeconds,
   timeoutExplicit,
+  warnedTimeoutEfforts = new Set(),
   panel,
   sequence,
   selectedTargets,
@@ -1546,6 +1550,18 @@ function reviewSeat({
         };
       }
     }
+    const contextBytes = contextBundle && Array.isArray(contextBundle.files)
+      ? contextBundle.files.reduce((sum, file) => sum + file.bytes, 0)
+      : 0;
+    const payloadBytes = planBytes.length + rubricBytes.length + contextBytes;
+    const scaledTimeoutSeconds = effortSeatTimeoutSeconds(selected.effort, null, payloadBytes);
+    if (timeoutExplicit && timeoutSeconds < scaledTimeoutSeconds
+        && !warnedTimeoutEfforts.has(selected.effort)) {
+      warnedTimeoutEfforts.add(selected.effort);
+      process.stderr.write(
+        `dispatch-plan-review: warning: --timeout ${timeoutSeconds}s is below the payload-scaled default ${scaledTimeoutSeconds}s for effort ${selected.effort} (${payloadBytes} bytes)\n`,
+      );
+    }
     const bounded = {
       ...selected,
       // The transport retry overrides ONLY the pipe. effort, role, family and id come from
@@ -1556,7 +1572,7 @@ function reviewSeat({
         endpoint: transportRetry.endpoint,
       } : {}),
       timeoutSeconds: Math.min(
-        effortSeatTimeoutSeconds(selected.effort, timeoutExplicit ? timeoutSeconds : null),
+        effortSeatTimeoutSeconds(selected.effort, timeoutExplicit ? timeoutSeconds : null, payloadBytes),
         remainingSeconds,
       ),
     };
@@ -2212,6 +2228,7 @@ function main() {
       now: clock.now,
     });
     const seatReviews = [];
+    const warnedTimeoutEfforts = new Set();
     for (const seat of manifest.seats) {
       const seatReview = reviewSeat({
         panel,
@@ -2224,6 +2241,7 @@ function main() {
         contextBundle,
         timeoutSeconds: opts.timeoutSeconds,
         timeoutExplicit: opts.timeoutExplicit === true,
+        warnedTimeoutEfforts,
         sequence,
         selectedTargets,
         deadlineMs,

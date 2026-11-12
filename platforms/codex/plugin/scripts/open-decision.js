@@ -30,6 +30,10 @@
  * every reader asks the status (src/status/scope-key.js cardState; readFile() returns open questions only, { live: true } adds awaiting_operator_action and pending_dispatch, { all: true } also closed). The watcher reads the file into the job page / live pane (src/status/decision-input.js).
  * `show` and `close --id` cover EVERY scope file of the project (unbound + each root), since a session's root can change mid-way; `open` writes only the current scope.
  * Scope root: --root-run-id > $AUTOPILOT_ROOT_RUN_ID > this session's marker root > unbound.
+ * BL-0337: `open` with no `--cwd`, when the process cwd's git repo differs from the live session marker's repo, still
+ * writes the card (exit 0) and warns on stderr naming both repos. The marker repo's panel does not list it. An explicit
+ * `--cwd` is the caller choosing that destination and does not warn. A dead marker (expired, no live turn file) is not
+ * this session, so it does not warn.
  *
  * --not-authorized is REQUIRED (mechanism behind the "inside the DOA, decide yourself" rule). <boundary> is one of
  * read_only | reversible | external | irreversible (the action classes of scripts/resolve-doa.sh) or goal-change | scope-expansion |
@@ -136,15 +140,46 @@ function parse(argv) {
 
 function sessionRoot() {
   const raw = process.env.AUTOPILOT_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || process.env.CODEX_THREAD_ID;
-  if (!raw) return { root: null, session: null, why: 'no session id in the environment' };
+  if (!raw) return { root: null, session: null, why: 'no session id in the environment', marker: null };
   const session = String(raw).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
   // One shared judgement (session-mode.js readSessionRoot): an expired marker whose session is still alive keeps its root.
   try {
     const r = require('./session-mode.js').readSessionRoot(session);
-    return { root: r.root, session, why: r.root ? null : (!r.found ? 'no session marker' : (r.expired ? 'session marker expired and no live turn file' : 'marker has no root_run_id')) };
+    // Only a live marker names "this session's repo" (BL-0337). An expired marker with no turn file is not it.
+    const marker = r.live_via && r.marker && typeof r.marker === 'object' ? r.marker : null;
+    return { root: r.root, session, marker, why: r.root ? null : (!r.found ? 'no session marker' : (r.expired ? 'session marker expired and no live turn file' : 'marker has no root_run_id')) };
   } catch (_error) {
-    return { root: null, session, why: 'session marker unreadable' };
+    return { root: null, session, marker: null, why: 'session marker unreadable' };
   }
+}
+
+// The working tree the card file is written under. Used only to name the repo in the BL-0337 warning.
+function repoTop(dir) {
+  try {
+    const r = spawnSync('git', ['-C', dir, 'rev-parse', '--path-format=absolute', '--show-toplevel'], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'pipe'] });
+    if (r.status === 0 && r.stdout.trim()) return r.stdout.trim();
+  } catch (_error) { /* not a repo: the path itself */ }
+  return path.resolve(dir);
+}
+
+// BL-0337. null when there is nothing to warn about (no live marker, same git repo, or the marker names no repo).
+// Otherwise { cardRepo, markerRepo }: the two repo paths to print. Comparison is repo_identity (git-common-dir),
+// so a linked worktree of the marker repo is the same repo and does not warn.
+function cardRepoMismatch(cardCwd, marker) {
+  if (!marker || typeof marker !== 'object') return null;
+  const markerRoot = typeof marker.repo_root === 'string' && path.isAbsolute(marker.repo_root) ? marker.repo_root : null;
+  let markerIdentity = null;
+  if (markerRoot) {
+    try { markerIdentity = scopeFromCwd(markerRoot).repo_identity; } catch (_error) { markerIdentity = null; }
+  }
+  if (!markerIdentity && typeof marker.repo_identity === 'string' && marker.repo_identity) markerIdentity = marker.repo_identity;
+  if (!markerIdentity) return null;
+  const cardAbs = path.resolve(cardCwd);
+  let cardIdentity = null;
+  try { cardIdentity = scopeFromCwd(cardAbs).repo_identity; } catch (_error) { cardIdentity = null; }
+  if (!cardIdentity || cardIdentity === markerIdentity) return null;
+  const markerLabel = markerRoot || (markerIdentity.startsWith('git-common-dir:') ? markerIdentity.slice('git-common-dir:'.length) : markerIdentity);
+  return { cardRepo: repoTop(cardAbs), markerRepo: markerLabel };
 }
 
 // ---- --not-authorized: the DOA check (BL-0309 item 3) ----
@@ -581,6 +616,11 @@ function main(argv) {
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker, title: ex.title,
   });
+  if (r.status === 'ok' && args.cwd === undefined) {
+    // No --cwd: the card followed the process cwd. A different live session repo will not show it (BL-0337).
+    const mis = cardRepoMismatch(process.cwd(), sess.marker);
+    if (mis) process.stderr.write(`open-decision: WARNING: card ${r.id} was written into repo ${mis.cardRepo} but this session's marker repo is ${mis.markerRepo}; the panel of the marker repo will not show it. The card stays written. Run from the marker repo, or pass --cwd <marker repo>.\n`);
+  }
   if (r.status === 'ok' && !root) {
     // The card is in the unbound scope. Every panel of the project lists it (src/status/decision-input.js reads all scope files), so this is
     // information, not a loss: say once on stderr where it went (stdout stays the bare id).

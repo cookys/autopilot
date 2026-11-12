@@ -1216,11 +1216,13 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // Otherwise the label keeps the cells the indicator's narrowest form leaves it (at most FORGE_LABEL_MAX); none while no request was timed.
     let forge: ForgeSegment[] | null = null
     const steps = validSteps(await read($, STEPS))
-    // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest (at most FORGE_LABEL_MAX)
+    // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest.
+    // Console mode stays at FORGE_LABEL_MAX and never draws the pet (the console band's bytes stay what they were). Outside it, 48 holds a 5-step spark plus the pet: that label is 31 cells and 30 drops the pet.
     const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
     const con = consoleOn ? { ...consoleNav(), cols: columns } : null // the console mode's band strip (consoletabs.ts), null = the tabs the band always had
     const usageOn = con !== null || usageTabFits(columns, t, GLYPHS.structure.speed) // no 用量 tab in the console mode, so it is never hidden behind the `›`
-    const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn, con).width - 1 - 2)
+    const labelMax = consoleOn ? FORGE_LABEL_MAX : 48
+    const labelCols = Math.min(labelMax, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn, con).width - 1 - 2)
     // forgeMore: something was timed but the band has no room for the label (its smallest form) and its tab; the strip then ends in a dim `›` Button (key 'more') that opens the forge view, so the keyboard still reaches it
     let forgeMore = false
     let bandPreset: { segs: Seg[]; width: number } | null = null
@@ -1239,7 +1241,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
         return Math.max(1, columns - stripW - 1 - moreW)
       }
-      let fitted = layoutBandLine(withFleet, roomFor(false, parts !== null), parts)
+      // `!usageOn` draws the dim `›` (the 用量 tab had no room) even when the speed label itself fits, so the first pass has to reserve those 2 cells too
+      let fitted = layoutBandLine(withFleet, roomFor(!usageOn, parts !== null), parts)
       if (parts !== null && fitted.speed === null) {
         forgeMore = true
         fitted = layoutBandLine(withFleet, roomFor(true, false), parts)
@@ -1247,7 +1250,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       forge = fitted.speed
       bandPreset = { segs: fitted.band.segs, width: fitted.band.width }
     } else if (rows >= 1) {
-      const parts = speedLabelParts(steps, petText)
+      const parts = speedLabelParts(steps, consoleOn ? null : petText)
       if (parts !== null) {
         if (labelCols >= FORGE_LABEL_MIN) forge = forgeFit(parts, labelCols)
         forgeMore = forge === null

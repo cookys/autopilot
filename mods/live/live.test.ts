@@ -6604,6 +6604,100 @@ for (const surface of SURFACES) {
     expect(d.speedText).toMatch(/^│ ϟ /)
   })
 
+  // five timed main-agent steps: the spark is 5 cells. `│ ϟ NNN tok/s █████ · Ferris Lv.1` is 33 cells, so the parts alone are 31 and FORGE_LABEL_MAX (30) drops the pet.
+  const FIVE_FAST: Plan[] = [
+    { before: 300, after: 200, tokens: 200 },
+    { before: 300, after: 200, tokens: 200 },
+    { before: 300, after: 200, tokens: 200 },
+    { before: 300, after: 200, tokens: 200 },
+    { before: 300, after: 200, tokens: 200 },
+  ]
+  // ~40 tokens over >= 700 ms stays two digits, so the same 5-cell spark plus the pet is 30 cells and still fits the console cap. Passing the pet would draw it.
+  const FIVE_SLOW: Plan[] = [
+    { before: 400, after: 300, tokens: 40 },
+    { before: 400, after: 300, tokens: 40 },
+    { before: 400, after: 300, tokens: 40 },
+    { before: 400, after: 300, tokens: 40 },
+    { before: 400, after: 300, tokens: 40 },
+  ]
+  const PET_FILE = j({ schema: 'codeforge.pet-view/1', pet: { name: 'Ferris', level: 1 } })
+
+  test('speed label: five timed steps keep the pet outside the console mode (' + surface + ')', async ($, on) => {
+    const files = richWorld()
+    files[LIVE + '/codeforge/pet.json'] = PET_FILE
+    world(on, files)
+    const d = await draw($, on, FIVE_FAST, [], { bodyColumns: 240 })
+    expect(d.speedText).toMatch(/ϟ \d{3,} tok\/s [▁▂▃▄▅▆▇█]{5} · Ferris Lv\.1$/)
+  })
+
+  test('speed label: the console mode draws no pet when pet.json and five timed steps exist (' + surface + ')', async ($, on) => {
+    const files = consoleFiles()
+    files[LIVE + '/codeforge/pet.json'] = PET_FILE
+    g33Ran(on)
+    const w = world(on, files)
+    await start($, surface)
+    await w.clock.advance(5_000) // the tick reads .claude/console.json; consoleOn is false until then
+    TURN_PLAN = FIVE_SLOW; TURN_AT = 0
+    await runPlan($, FIVE_SLOW.map(() => undefined))
+    const ui = await mount($, { bodyColumns: 240 })
+    const tree = (await ui.drawn()) as Node
+    const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
+    const speed = buttons.find(b => b.props?.key === 'speed')
+    const speedText = speed === undefined ? '' : walkTexts(speed).map(textOf).join('')
+    const text = cellsOf(tree).map(c => c.text).join('')
+    await ui.unmount()
+    expect(speedText).toMatch(/ϟ \d{2} tok\/s [▁▂▃▄▅▆▇█]{5}/)
+    expect(speedText).not.toContain('Ferris')
+    expect(speedText).not.toContain('Lv.')
+    expect(text).toContain('指揮')
+    expect(text).not.toContain('艦隊')
+  })
+
+  // the drawn band row's cells, summed with displayWidth. A row that wraps is wider than the columns the band was given.
+  const drawnRow = async ($: any, bodyColumns: number) => {
+    const ui = await mount($, { bodyColumns })
+    const tree = (await ui.drawn()) as Node
+    await ui.unmount()
+    const cells = cellsOf(tree)
+    const last = cells[cells.length - 1]
+    return { tree, text: cells.map(c => c.text).join(''), width: last === undefined ? 0 : last.start + last.width }
+  }
+
+  test('band row: a fetched fleet on a 79-column terminal keeps the › inside the row (' + surface + ')', async ($, on) => {
+    g33Ran(on)
+    const files = base()
+    const quiet = { runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 } }
+    files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope(quiet))
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope(quiet, null))
+    const w = world(on, files)
+    await start($, surface)
+    TURN_PLAN = FIVE_FAST; TURN_AT = 0
+    await runPlan($, FIVE_FAST.map(() => undefined))
+    await w.clock.advance(5_000)
+    const row = await drawnRow($, 79)
+    expect((row.tree.props as { flexDirection?: string } | undefined)?.flexDirection).toBeUndefined()
+    expect(row.width, row.text).toBeLessThanOrEqual(79)
+    // 79 columns drop the fleet word (the [fleetRun, fleetWord] step); the stuck count is the fetched fleet that stays on the line.
+    expect(row.text).toContain('⊘ 2')
+    expect(row.text).toContain('ϟ')
+    expect(row.text).toContain(ui.GLYPHS.structure.goto)
+  })
+
+  test('band row: richWorld with a fetched fleet stays on one line at 120 and the tab strip is in the row (' + surface + ')', async ($, on) => {
+    g33Ran(on)
+    const w = world(on, richWorld())
+    await start($, surface)
+    await w.clock.advance(5_000)
+    const row = await drawnRow($, 120)
+    const t = makeT('zh-TW')
+    expect((row.tree.props as { flexDirection?: string } | undefined)?.flexDirection).toBeUndefined()
+    expect(row.width, row.text).toBeLessThanOrEqual(120)
+    expect(row.text).toContain('疑似卡住')
+    expect(row.text).toContain('⊘ 2')
+    expect(row.text).toContain(' ' + t('tab.now') + ' ')
+    expect(row.text).toContain(' ' + t('tab.review') + ' ')
+  })
+
   test('speed tab: the label does not time from the first visible chunk: hidden thinking counts from send (hook level, ' + surface + ')', async ($, on) => {
     worldEn(on, richWorld())
     const d = await draw($, on, [{ before: 400, after: 150, tokens: 100 }])

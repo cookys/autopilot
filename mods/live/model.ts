@@ -1650,21 +1650,37 @@ export type BandLineLayout = { band: BandLayout; speed: ForgeSegment[] | null; a
 // `columns` is the room for the indicator AND the speed label together (the caller already removed the tab strip, the one-cell gap and the more-glyph).
 // The width table is shown at least 120 columns, so it cannot hide `$N`, the 5-cell bar or the quota window before the steps above take them; from 160 up it
 // sees the real width, so the 10-cell bar and the percent appear. A candidate whose verdict word was shortened is refused and the next step is tried.
-// The stuck count is not a step, so it is still on the line when every step has been applied. The last candidate is returned even when it still overflows.
+// The stuck count is not a step, so it is still on the line when every step has been applied.
+// An active session also carries position, unit, dispatch, review, decisions and hygiene. Those are outside the narrow steps, and the width table still lays
+// them out at 120 columns, so after every step the line can still be wider than `columns`. They are then dropped one at a time, lowest priority first, and the
+// steps run again (a dropped slot frees room, so the speed label can come back). Verdict, fleet and spend stay. The last candidate is returned even when it still overflows.
+const BAND_OPTIONAL: readonly SlotId[] = ['hygiene', 'decisions', 'review', 'dispatch', 'unit', 'position']
 export function layoutBandLine(slots: readonly Slot[], columns: number, speed: readonly ForgeSegment[] | null, steps: readonly (readonly BandNarrowId[])[] = BAND_NARROW_STEPS): BandLineLayout {
   const verdict = slots.find(s => s.id === 'verdict')?.segs[0]?.text ?? null
   const speedWidth = (parts: readonly ForgeSegment[] | null): number => (parts === null || parts.length === 0 ? 0 : ui.forgeBar(parts).width)
-  let last: BandLineLayout | null = null
-  for (let n = 0; n <= steps.length; n++) {
-    const drop = new Set<BandNarrowId>()
-    for (const step of steps.slice(0, n)) for (const id of step) drop.add(id)
-    const band = layoutBand(narrowSlots(slots, drop), columns >= 160 ? columns : Math.max(columns, 120))
-    const nextSpeed = narrowSpeed(speed, drop)
-    const candidate: BandLineLayout = { band, speed: nextSpeed, applied: n }
-    last = candidate
-    if ((verdict === null || band.segs[0]?.text === verdict) && band.width + speedWidth(nextSpeed) <= columns) return candidate
+  const bandCols = columns >= 160 ? columns : Math.max(columns, 120)
+  const fits = (c: BandLineLayout) => (verdict === null || c.band.segs[0]?.text === verdict) && c.band.width + speedWidth(c.speed) <= columns
+  const search = (list: readonly Slot[]): BandLineLayout => {
+    let last: BandLineLayout | null = null
+    for (let n = 0; n <= steps.length; n++) {
+      const drop = new Set<BandNarrowId>()
+      for (const step of steps.slice(0, n)) for (const id of step) drop.add(id)
+      const band = layoutBand(narrowSlots(list, drop), bandCols)
+      const nextSpeed = narrowSpeed(speed, drop)
+      last = { band, speed: nextSpeed, applied: n }
+      if (fits(last)) return last
+    }
+    return last as BandLineLayout
   }
-  return last as BandLineLayout
+  let list = slots.slice()
+  let last = search(list)
+  for (const id of BAND_OPTIONAL) {
+    if (fits(last)) break
+    if (!list.some(s => s.id === id)) continue
+    list = list.filter(s => s.id !== id)
+    last = search(list)
+  }
+  return last
 }
 
 // a non-ok snapshot: one dim line `<reason> │ ⓘ `, the reason cut to fit

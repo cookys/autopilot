@@ -12,3 +12,14 @@ Description=Refresh the local fleet.quota/1 mirror
 Type=oneshot
 ExecStart=/usr/bin/env node <repo>/scripts/quota-mirror-tick.js
 TimeoutStartSec=360
+
+# Shared producer (another OS account that holds the minimax/glm tokens).
+# Writes only percentages and reset times into a group-readable directory.
+# The reader account lists that directory's quota/ in quota_mirror_dirs
+# (or AUTOPILOT_QUOTA_MIRROR_DIRS). No token is copied.
+# [Service]
+# Type=oneshot
+# EnvironmentFile=%h/.autopilot/endpoints.env
+# UMask=0027
+# ExecStart=/usr/bin/env node <repo>/scripts/quota-mirror-tick.js --steps sync-provider-minimax,sync-provider-glm --out-dir <shared-dir>
+# TimeoutStartSec=360

@@ -57,6 +57,7 @@ const quota = require('./lib/account-quota');
 const cooldown = require('./lib/account-cooldown');
 const { pick, judge } = require('./lib/account-pick');
 const observation = require('./lib/account-observation');
+const quotaMirrors = require('./lib/quota-mirror-dirs');
 const capture = require('./lib/account-capture');
 const probe = require('./lib/account-probe');
 const reporter = require('./quota-reporter');
@@ -370,16 +371,19 @@ function claudeManifest() {
   return manifestCache === null ? undefined : manifestCache;
 }
 
-// The usable rows of <live>/quota/claude/<alias>.json, or [] for anything that is not a plain readable view
-// (absent file, null liveDir, damaged file, wrong schema). There is no hub this wave: configuredNamespace is null,
-// so selectView keeps the local row only and every peer row is ignored (fail closed).
+// The usable rows of the claude alias, local quota dir first then quota_mirror_dirs (see quota-mirror-dirs.js).
+// There is no hub this wave: configuredNamespace is null, so selectView keeps the local row only and every peer
+// row is ignored (fail closed). With no extra dir the view is the local file, same as readView.
 function mirrorRows(ctx, alias, binding) {
   if (!ctx.liveDir) return [];
   try {
-    const r = observation.readView(ctx.liveDir, 'claude', alias);
-    if (!r.view) return [];
+    const merged = quotaMirrors.readMerged({
+      liveDir: ctx.liveDir, env: ctx.env, home: ctx.realHome, provider: 'claude', alias,
+    });
+    const hit = merged.records.find((r) => r && r.alias === alias);
+    if (!hit || !hit.view) return [];
     const b = binding || observation.readNamespaceBinding(ctx.liveDir);
-    return interpret.selectView(r.view, { configuredNamespace: null, boundNamespace: b.namespace }).rows
+    return interpret.selectView(hit.view, { configuredNamespace: null, boundNamespace: b.namespace }).rows
       .filter((row) => row.writer_courier === observation.LOCAL_COURIER); // only the local courier's row counts here
   } catch (_) { return []; }
 }

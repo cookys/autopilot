@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const Module = require('module');
+const { spawnSync } = require('child_process');
 
 const SRC = path.join(__dirname, 'quota-provider-sync.js');
 const real = require('./quota-provider-sync');
@@ -440,7 +441,7 @@ test('attempt cap: a failed query (500, bad JSON, missing fields, expired, hung)
   assert.deepStrictEqual([r.reason, c.n], ['too_soon', 0]);
 });
 test('planted: the old success-only cap (no attempt stamp) re-queries after a 500 (red)', async () => {
-  const bug = mutant([["const claim = observation.claimAttempt(liveDir, provider, alias, { nowMs: startMs, minIntervalS: MIN_INTERVAL_S, lastObservedAt: lastAt });",
+  const bug = mutant([["const claim = observation.claimAttempt(liveDir, provider, alias, { nowMs: startMs, minIntervalS: MIN_INTERVAL_S, lastObservedAt: lastAt, shared });",
     'const claim = { ok: true, claimed: lastAt === null || startMs / 1000 - lastAt >= MIN_INTERVAL_S };']]);
   const liveDir = tmpLive();
   await bug.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: fakeFetch(500, {}), nowMs: () => NOW });
@@ -455,7 +456,7 @@ test('attempt cap: a fresh mirror row alone (no stamp file) still blocks; droppi
   const c = counter(200, { model_remains: [mm()] });
   const r = await real.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: c.fetch, nowMs: () => NOW + 1800e3 });
   assert.deepStrictEqual([r.reason, c.n], ['too_soon', 0]);
-  const bug = mutant([['minIntervalS: MIN_INTERVAL_S, lastObservedAt: lastAt }', 'minIntervalS: MIN_INTERVAL_S }']]);
+  const bug = mutant([['minIntervalS: MIN_INTERVAL_S, lastObservedAt: lastAt, shared }', 'minIntervalS: MIN_INTERVAL_S, shared }']]);
   const c2 = counter(200, { model_remains: [mm()] });
   await bug.syncProvider('minimax', { liveDir, env: MM_ENV, fetch: c2.fetch, nowMs: () => NOW + 1800e3 });
   assert.strictEqual(c2.n, 1, 'the mutant ignores the mirror row');
@@ -1210,4 +1211,50 @@ test('static scan: planted secret reads and token prints are red', () => {
     'console.error(token);',
     'process.stderr.write(`bad ${token}`);',
   ]) assert.ok(violations(`${src}\n${planted}\n`).length > 0, planted);
+});
+
+test('shared out dir: file mode 0640 and no token, header or URL query in the record', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qps-shared-'));
+  const outDir = path.join(root, 'shared');
+  fs.mkdirSync(outDir, { mode: 0o750 });
+  fs.chmodSync(outDir, 0o750);
+  const seen = {};
+  const body = { model_remains: [mm({ model_name: `${FAKE_TOKEN}?token=${FAKE_TOKEN}` })] };
+  const env = { MINIMAX_API_KEY: FAKE_TOKEN };
+  const r = await real.syncProvider('minimax', {
+    liveDir: outDir, shared: true, env, fetch: fakeFetch(200, body, seen), nowMs: () => NOW,
+  });
+  assert.deepStrictEqual([r.wrote, r.reason], [true, null]);
+  const file = path.join(outDir, 'quota', 'minimax', 'minimax.json');
+  assert.strictEqual(fs.statSync(file).mode & 0o777, 0o640);
+  assert.strictEqual(fs.statSync(path.join(outDir, 'quota', 'minimax')).mode & 0o070, 0o050);
+  const text = fs.readFileSync(file, 'utf8');
+  assert.ok(!text.includes(FAKE_TOKEN), 'token value reached the mirror');
+  assert.ok(!text.includes('Bearer'));
+  assert.ok(!text.includes('Authorization'));
+  assert.ok(!text.includes('minimax.io'));
+  assert.ok(!text.includes('?token='));
+  const view = JSON.parse(text);
+  const rec = view.rows[0].record;
+  for (const k of Object.keys(rec)) assert.ok(['schema', 'provider', 'alias', 'visibility', 'windows', 'refusal', 'token_state', 'token_state_at', 'host_role'].includes(k), k);
+  for (const w of rec.windows) {
+    for (const k of Object.keys(w)) assert.ok(['kind', 'utilization', 'resets_at', 'source', 'observed_at', 'clamped'].includes(k), k);
+  }
+  assert.strictEqual(seen.init.headers.Authorization, `Bearer ${FAKE_TOKEN}`);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('--out-dir refuses a world-writable directory before any request', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qps-ww-'));
+  const outDir = path.join(root, 'shared');
+  fs.mkdirSync(outDir);
+  fs.chmodSync(outDir, 0o777);
+  const r = spawnSync(process.execPath, [SRC, 'sync-provider', '--provider', 'minimax', '--out-dir', outDir], {
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH, HOME: root, TMPDIR: root },
+  });
+  assert.strictEqual(r.status, 2, r.stderr);
+  assert.match(r.stderr, /out_dir_refused:world_writable/);
+  assert.ok(!fs.existsSync(path.join(outDir, 'quota')));
+  fs.rmSync(root, { recursive: true, force: true });
 });

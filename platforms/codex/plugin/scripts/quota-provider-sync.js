@@ -7,7 +7,7 @@
 // No hub, no resident process, no retry. A failure is a result object with a fixed reason code, never an exception,
 // and the token never appears in a result, an error or the output.
 //
-//   node scripts/quota-provider-sync.js sync-provider --provider minimax|glm [--alias NAME]
+//   node scripts/quota-provider-sync.js sync-provider --provider minimax|glm [--alias NAME] [--out-dir DIR]
 //   2xx success writes an L3 row with token_state 'ok' and token_state_at in epoch seconds; HTTP 401 writes an
 //   empty-windows L1 row with token_state 'invalid' and returns reason `token_invalid` (exit 1); other non-2xx: `http_status`.
 //   exit 0 = a row was written or is already current (`wrote` / `superseded`); 1 = nothing written (reason code on stderr); 2 = usage.
@@ -61,6 +61,7 @@ const { spawnSync } = require('child_process');
 const observation = require('./lib/account-observation');
 const { resolveLiveDir } = require('./lib/live-state-dir');
 const { ensurePrivateDir } = require('./lib/runtime-paths');
+const mirrors = require('./lib/quota-mirror-dirs');
 
 const DEFAULT_TIMEOUT_MS = 10000;
 const MIN_INTERVAL_S = 3600; // one query per provider/alias per hour (PM): a calibration, not a poll
@@ -247,7 +248,8 @@ function tokenOf(spec, env) {
   return null;
 }
 
-// o: { alias, env, fetch, nowMs (function), liveDir, hostRole, timeoutMs (test seam) }. Never throws; the result carries no token.
+// o: { alias, env, fetch, nowMs (function), liveDir, hostRole, timeoutMs (test seam), shared, outDir }.
+// outDir (or shared) writes <dir>/quota at 0640 and does not tighten that dir. Never throws; the result carries no token.
 async function syncProvider(provider, o) {
   const opts = o || {};
   const alias = typeof opts.alias === 'string' && opts.alias !== '' ? opts.alias : provider;
@@ -258,7 +260,14 @@ async function syncProvider(provider, o) {
     const env = opts.env || process.env;
     const token = tokenOf(spec, env);
     if (token === null) return out(false, 'token_missing');
+    let shared = opts.shared === true;
     let liveDir = opts.liveDir;
+    if (opts.outDir !== undefined) {
+      const problem = mirrors.sharedOutDirProblem(opts.outDir);
+      if (problem) return out(false, 'out_dir_refused');
+      liveDir = path.resolve(opts.outDir);
+      shared = true;
+    }
     if (liveDir === undefined) {
       try { liveDir = resolveLiveDir({ env, warn: () => {} }).base; } catch (_) { return out(false, 'live_dir_refused'); }
     }
@@ -267,7 +276,7 @@ async function syncProvider(provider, o) {
     const startMs = typeof opts.nowMs === 'function' ? opts.nowMs() : Date.now();
     // The gate counts ATTEMPTS: claimAttempt stamps the attempt (no token) under the per-alias lock before any request,
     // so a failing endpoint or a missing mirror row cannot turn a poller into one query per call.
-    const claim = observation.claimAttempt(liveDir, provider, alias, { nowMs: startMs, minIntervalS: MIN_INTERVAL_S, lastObservedAt: lastAt });
+    const claim = observation.claimAttempt(liveDir, provider, alias, { nowMs: startMs, minIntervalS: MIN_INTERVAL_S, lastObservedAt: lastAt, shared });
     if (!claim.ok) return out(false, typeof claim.code === 'string' ? claim.code : 'write_failed');
     if (!claim.claimed) return out(false, 'too_soon');
     const doFetch = opts.fetch || globalThis.fetch;
@@ -287,7 +296,7 @@ async function syncProvider(provider, o) {
       if (typeof opts.hostRole === 'string' && opts.hostRole) bad.host_role = opts.hostRole;
       const bv = observation.validateRecord(bad, { provider, alias, secrets: [token] });
       if (!bv.ok) return out(false, 'quota_invalid');
-      const bw = observation.writeLocalRow(liveDir, bad, { secrets: [token] });
+      const bw = observation.writeLocalRow(liveDir, bad, { secrets: [token], shared });
       if (bw.ok !== true) return out(false, typeof bw.code === 'string' ? bw.code : 'write_failed');
       return out(false, 'token_invalid');
     }
@@ -304,7 +313,7 @@ async function syncProvider(provider, o) {
     if (typeof opts.hostRole === 'string' && opts.hostRole) record.host_role = opts.hostRole;
     const v = observation.validateRecord(record, { provider, alias, secrets: [token] });
     if (!v.ok) return out(false, 'quota_invalid', { shape });
-    const w = observation.writeLocalRow(liveDir, record, { secrets: [token] });
+    const w = observation.writeLocalRow(liveDir, record, { secrets: [token], shared });
     const extra = provider === 'glm' ? { assumed: true, shape } : { tightest: scrubSecret(conv.tightest, token), shape };
     if (w.ok === true) return w.superseded ? out(false, 'superseded', extra) : out(true, null, extra);
     return out(false, typeof w.code === 'string' ? w.code : 'write_failed', { shape });
@@ -361,14 +370,16 @@ function sendExitedZero(r) {
   return false;
 }
 
-function writeWatchMarker(markerPath, payload) {
-  const made = ensurePrivateDir(path.dirname(markerPath));
+function writeWatchMarker(markerPath, payload, opts) {
+  const shared = opts && opts.shared === true;
+  const made = shared ? observation.ensureSharedMirrorDir(path.dirname(markerPath)) : ensurePrivateDir(path.dirname(markerPath));
   if (!made.ok) return false;
+  const mode = shared ? 0o640 : 0o600;
   const tmp = `${markerPath}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
   let fd = -1;
   try {
-    fd = fs.openSync(tmp, 'wx', 0o600);
-    fs.fchmodSync(fd, 0o600);
+    fd = fs.openSync(tmp, 'wx', mode);
+    fs.fchmodSync(fd, mode);
     const body = `${JSON.stringify(payload)}\n`;
     fs.writeSync(fd, body, null, 'utf8');
     fs.closeSync(fd);
@@ -423,7 +434,7 @@ function watchFirstUsed5h(result, o) {
     }
     const rawNow = typeof opts.nowMs === 'function' ? opts.nowMs() : (num(opts.nowMs) ? opts.nowMs : Date.now());
     const at = Math.floor(rawNow / 1000);
-    if (!writeWatchMarker(markerPath, { at, alias, entry })) {
+    if (!writeWatchMarker(markerPath, { at, alias, entry }, { shared: opts.shared === true })) {
       process.stderr.write(`quota-watch glm/${alias}: marker write failed\n`);
       return { fired: false, reason: 'write_failed' };
     }
@@ -433,17 +444,28 @@ function watchFirstUsed5h(result, o) {
 
 async function main(argv, env) {
   const a = argv.slice();
-  if (a.shift() !== 'sync-provider') { process.stderr.write('usage: quota-provider-sync.js sync-provider --provider minimax|glm [--alias NAME]\n'); return 2; }
-  let provider = null; let alias;
+  if (a.shift() !== 'sync-provider') { process.stderr.write('usage: quota-provider-sync.js sync-provider --provider minimax|glm [--alias NAME] [--out-dir DIR]\n'); return 2; }
+  let provider = null; let alias; let outDir;
   while (a.length) {
     const k = a.shift();
     if (k === '--provider') provider = a.shift();
     else if (k === '--alias') alias = a.shift();
+    else if (k === '--out-dir') {
+      outDir = a.shift();
+      if (outDir === undefined || outDir === '') { process.stderr.write('quota-provider-sync: --out-dir needs a directory\n'); return 2; }
+    }
     else { process.stderr.write(`quota-provider-sync: unknown argument\n`); return 2; }
   }
   if (!provider) { process.stderr.write('quota-provider-sync: --provider required\n'); return 2; }
-  const r = await syncProvider(provider, { alias, env });
-  if (provider === 'glm' && r && r.shape) watchFirstUsed5h(r, { env });
+  const syncOpts = { alias, env };
+  if (outDir !== undefined) {
+    const problem = mirrors.sharedOutDirProblem(outDir);
+    if (problem) { process.stderr.write(`quota-provider-sync: out_dir_refused:${problem}\n`); return 2; }
+    syncOpts.liveDir = path.resolve(outDir);
+    syncOpts.shared = true;
+  }
+  const r = await syncProvider(provider, syncOpts);
+  if (provider === 'glm' && r && r.shape) watchFirstUsed5h(r, syncOpts);
   const shapePart = r.shape ? ` shape=${JSON.stringify(r.shape)}` : '';
   if (r.wrote) { process.stdout.write(`sync-provider ${r.provider}/${r.alias}: wrote${shapePart}\n`); return 0; }
   if (r.reason === 'superseded') { process.stdout.write(`sync-provider ${r.provider}/${r.alias}: superseded${shapePart}\n`); return 0; }

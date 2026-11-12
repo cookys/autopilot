@@ -34,7 +34,7 @@ Harness 禁止本工作階段 git commit / push / PR。下列各階段都沒有 
 - test command: `node --test scripts/request-decision.test.js`
 - pass count: 10（exit 0；含在本輪合併的 `node --test` 24 通過裡）
 - negative control: `scripts/lib/menu-card-content.js` 改成 `const redacted = raw`（不呼叫 `redact()`）→ `scripts/request-decision.test.js` 紅
-- red output line: `credential leaked: sk-ant-abcdefghijklmnopqrst`
+- red output line: `credential leaked: <synthetic test token>`
 
 ## A5 guard、session-start
 

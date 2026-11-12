@@ -10,6 +10,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -72,6 +73,31 @@ exit ${exitCode}
 `, 0o755);
   fs.chmodSync(bin, 0o755);
   return { bin, log };
+}
+
+/** Fleet stub that prints a sha256 on `upload` and records `send` bodies. */
+function makeUploadFleet(dir, { uploadExit = 0 } = {}) {
+  const sha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const bin = path.join(dir, `fake-fleet-upload-${uploadExit}`);
+  const nul = path.join(dir, `upload-fleet-${uploadExit}.nul`);
+  const msgLog = path.join(dir, `upload-fleet-msgs-${uploadExit}.txt`);
+  const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+  const uploadBody = uploadExit === 0
+    ? `printf '%s\\n' ${q(sha)}\nexit 0`
+    : `echo upload_refused >&2\nexit ${Number(uploadExit)}`;
+  write(bin, `#!/usr/bin/env bash
+printf '%s\\0' "$@" >> ${q(nul)}
+if [ "$1" = upload ]; then
+  ${uploadBody}
+fi
+if [ "$1" = send ]; then
+  printf '%s\\n' "$3" >> ${q(msgLog)}
+  exit 0
+fi
+exit 0
+`, 0o755);
+  fs.chmodSync(bin, 0o755);
+  return { bin, nul, msgLog, sha };
 }
 
 function makeRails(dir, {
@@ -807,4 +833,315 @@ test('(trap-order) load-endpoints-env.sh that exits still records rail.exit and 
   assert.equal(d.status, 0, d.stderr);
   const item = JSON.parse(fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8'));
   assert.notEqual(item.state, 'dispatched', 'item must be reaped, not stuck dispatched');
+});
+
+// ---------------------------------------------------------------------------
+// (1) inputs stay on disk; assembled prompt is size-gated; stdin ceiling is terminal
+// ---------------------------------------------------------------------------
+test('(1) inputs listed by path, oversized prompt refused, agy_stdin_ceiling is terminal', () => {
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  const fleet = makeFleetBin(work);
+  const envBase = {
+    AUTOPILOT_NONCQ_DIR: q,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: fleet.bin,
+  };
+  const brief = briefFile(work, 'Short brief.\n');
+  const inputBody = 'SECRET_LEDGER_BODY_DO_NOT_INLINE\n';
+  const input = path.join(work, 'ledger.md');
+  write(input, inputBody);
+  const sha = crypto.createHash('sha256').update(inputBody).digest('hex');
+
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'cites the ledger', '--prefer', 'grok', '--input', input,
+  ], envBase);
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const pace = writePace(work, [paceRow()]);
+  const d = drain(q, pace, rails.dir, fleet.bin);
+  assert.equal(d.status, 0, d.stderr);
+  assert.equal(JSON.parse(d.stdout).dispatched.length, 1);
+  const promptPath = path.join(q, 'items', id, 'assembled-prompt.md');
+  assert.ok(fs.existsSync(promptPath), 'assembled prompt must exist after dispatch');
+  const prompt = fs.readFileSync(promptPath, 'utf8');
+  const abs = path.join(q, 'items', id, 'inputs', 'ledger.md');
+  assert.equal(prompt.includes('SECRET_LEDGER_BODY_DO_NOT_INLINE'), false, 'input bytes must not be inlined');
+  assert.ok(prompt.includes(abs), `prompt must list absolute path ${abs}`);
+  assert.ok(prompt.includes(`bytes: ${Buffer.byteLength(inputBody)}`), 'prompt must list byte size');
+  assert.ok(prompt.includes(`sha256: ${sha}`), 'prompt must list sha256');
+  assert.match(prompt, /read-only/);
+  assert.match(prompt, /file tools/);
+  assert.equal(fs.readFileSync(abs, 'utf8'), inputBody);
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', id, 'rail.exit')), 8000));
+
+  // A large input is accepted: only the listing is measured, not the file body.
+  const qBigIn = mkTmp('noncq-q-bigin-');
+  const bigInput = path.join(work, 'big-ledger.md');
+  write(bigInput, `L${'x'.repeat(199999)}`);
+  const addBigIn = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok', '--input', bigInput,
+  ], { ...envBase, AUTOPILOT_NONCQ_DIR: qBigIn });
+  assert.equal(addBigIn.status, 0, addBigIn.stderr);
+
+  // Brief alone over the 150000-byte gate is refused and leaves no item.
+  const bigBrief = path.join(work, 'big-brief.md');
+  write(bigBrief, 'B'.repeat(150001));
+  const before = fs.readdirSync(path.join(q, 'items')).sort();
+  const badBrief = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', bigBrief,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], envBase);
+  assert.equal(badBrief.status, 2, badBrief.stderr);
+  assert.match(badBrief.stderr, /150000/);
+  assert.deepEqual(fs.readdirSync(path.join(q, 'items')).sort(), before);
+
+  // review-seat1 counts diff and spec bytes toward the same gate.
+  const bigDiff = path.join(work, 'big.patch');
+  write(bigDiff, 'D'.repeat(160000));
+  const spec = path.join(work, 'spec.md');
+  write(spec, 'spec\n');
+  const badReview = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'review-seat1', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok', '--diff', bigDiff, '--spec', spec,
+  ], envBase);
+  assert.equal(badReview.status, 2, badReview.stderr);
+  assert.match(badReview.stderr, /150000/);
+  assert.deepEqual(fs.readdirSync(path.join(q, 'items')).sort(), before);
+
+  // agy_stdin_ceiling on stderr is terminal: one attempt, no requeue.
+  const qCeil = mkTmp('noncq-q-ceil-');
+  const ceilRails = mkTmp('noncq-ceil-rails-');
+  const author = path.join(ceilRails, 'dispatch-author.sh');
+  write(author, `#!/usr/bin/env bash
+echo 'agy-stream-json.js: agy_stdin_ceiling: encoded prompt over stdin ceiling' >&2
+echo '{"runner":"stub","model":"stub","status":"runner_failed","raw_log":null,"error":"agy_stdin_ceiling"}'
+exit 3
+`, 0o755);
+  fs.chmodSync(author, 0o755);
+  const addCeil = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'agy',
+  ], {
+    ...envBase,
+    AUTOPILOT_NONCQ_DIR: qCeil,
+    AUTOPILOT_NONCQ_RAIL_DIR: ceilRails,
+    AUTOPILOT_NOW: new Date(NOW_MS + 120_000).toISOString(),
+  });
+  assert.equal(addCeil.status, 0, addCeil.stderr);
+  const idCeil = addCeil.stdout.trim();
+  const paceAgy = writePace(work, [paceRow({ pool: 'agy', waste_pct_if_unused: 9 })], 'pace-ceil.json');
+  let cd = drain(qCeil, paceAgy, ceilRails, fleet.bin, [], {
+    AUTOPILOT_NOW: new Date(NOW_MS + 121_000).toISOString(),
+  });
+  assert.equal(cd.status, 0, cd.stderr);
+  assert.equal(JSON.parse(cd.stdout).dispatched.filter((x) => x.id === idCeil).length, 1);
+  assert.ok(waitFor(() => fs.existsSync(path.join(qCeil, 'items', idCeil, 'rail.exit')), 8000));
+  cd = drain(qCeil, paceAgy, ceilRails, fleet.bin, [], {
+    AUTOPILOT_NOW: new Date(NOW_MS + 122_000).toISOString(),
+  });
+  assert.equal(cd.status, 0, cd.stderr);
+  const reapOut = JSON.parse(cd.stdout);
+  assert.equal(reapOut.requeued.includes(idCeil), false, 'stdin ceiling must not requeue');
+  const ceilItem = JSON.parse(fs.readFileSync(path.join(qCeil, 'items', idCeil, 'item.json'), 'utf8'));
+  assert.equal(ceilItem.state, 'failed');
+  assert.equal(ceilItem.attempts, 1);
+  cd = drain(qCeil, paceAgy, ceilRails, fleet.bin, [], {
+    AUTOPILOT_NOW: new Date(NOW_MS + 123_000).toISOString(),
+  });
+  assert.equal(JSON.parse(cd.stdout).dispatched.filter((x) => x.id === idCeil).length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// (2) same basename inputs must not overwrite each other
+// ---------------------------------------------------------------------------
+test('(2) duplicate input basenames are refused at add', () => {
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const fleet = makeFleetBin(work);
+  const brief = briefFile(work);
+  const env = { AUTOPILOT_NONCQ_DIR: q, AUTOPILOT_FLEET_BIN: fleet.bin };
+  const a = path.join(work, 'one', 'ledger.md');
+  const b = path.join(work, 'two', 'ledger.md');
+  write(a, 'alpha-ledger\n');
+  write(b, 'beta-ledger\n');
+  const r = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok', '--input', a, '--input', b,
+  ], env);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /ledger\.md/);
+  const itemsRoot = path.join(q, 'items');
+  const names = fs.existsSync(itemsRoot) ? fs.readdirSync(itemsRoot) : [];
+  assert.deepEqual(names, []);
+
+  const notes = path.join(work, 'notes.txt');
+  write(notes, 'notes\n');
+  const ok = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok', '--input', a, '--input', notes,
+  ], env);
+  assert.equal(ok.status, 0, ok.stderr);
+  const id = ok.stdout.trim();
+  assert.equal(fs.readFileSync(path.join(q, 'items', id, 'inputs', 'ledger.md'), 'utf8'), 'alpha-ledger\n');
+  assert.equal(fs.readFileSync(path.join(q, 'items', id, 'inputs', 'notes.txt'), 'utf8'), 'notes\n');
+});
+
+// ---------------------------------------------------------------------------
+// (3) needs-shell is stored, listed, and not handed to an agy runner
+// ---------------------------------------------------------------------------
+test('(3) --needs-shell is stored, listed, and never assigned to an agy runner', () => {
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  const fleet = makeFleetBin(work);
+  const brief = briefFile(work);
+  const env = {
+    AUTOPILOT_NONCQ_DIR: q,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: fleet.bin,
+  };
+
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'sha256 matches', '--prefer', 'agy,grok', '--needs-shell',
+  ], env);
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const item = JSON.parse(fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8'));
+  assert.equal(item.needs_shell, true);
+
+  const plain = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'agy',
+  ], { ...env, AUTOPILOT_NOW: new Date(NOW_MS + 1000).toISOString() });
+  assert.equal(plain.status, 0, plain.stderr);
+  const plainId = plain.stdout.trim();
+  const plainItem = JSON.parse(fs.readFileSync(path.join(q, 'items', plainId, 'item.json'), 'utf8'));
+  assert.equal(plainItem.needs_shell, false);
+
+  const listed = cli(['list'], env);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.match(listed.stdout, new RegExp(`${id}\\tqueued\\tresearch\\tns/courier/lane-a\\tprefer=agy,grok\\tneeds_shell=true`));
+  assert.match(listed.stdout, new RegExp(`${plainId}\\tqueued\\tresearch\\tns/courier/lane-a\\tprefer=agy\\tneeds_shell=false`));
+  const listedJson = JSON.parse(cli(['list', '--json'], env).stdout);
+  assert.equal(listedJson.items.find((it) => it.id === id).needs_shell, true);
+
+  const paceAgy = writePace(work, [paceRow({ pool: 'agy' })], 'pace-agy-only.json');
+  let d = drain(q, paceAgy, rails.dir, fleet.bin, [], {
+    AUTOPILOT_NOW: new Date(NOW_MS + 5000).toISOString(),
+  });
+  assert.equal(d.status, 0, d.stderr);
+  const out = JSON.parse(d.stdout);
+  assert.deepEqual(out.dispatched.map((x) => x.id), [plainId], 'agy must take the plain item only');
+  assert.equal(out.dispatched[0].engine, 'agy');
+  const still = JSON.parse(fs.readFileSync(path.join(q, 'items', id, 'item.json'), 'utf8'));
+  assert.equal(still.state, 'queued');
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', plainId, 'rail.exit')), 8000));
+
+  const paceGrok = writePace(work, [paceRow()], 'pace-grok-only.json');
+  d = drain(q, paceGrok, rails.dir, fleet.bin, [], {
+    AUTOPILOT_NOW: new Date(NOW_MS + 6000).toISOString(),
+  });
+  assert.equal(d.status, 0, d.stderr);
+  const hit = JSON.parse(d.stdout).dispatched.find((x) => x.id === id);
+  assert.ok(hit, 'a qualifying non-agy engine from prefer must take the item');
+  assert.equal(hit.engine, 'grok');
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', id, 'rail.exit')), 8000));
+});
+
+// ---------------------------------------------------------------------------
+// (4) completion notice uploads a 0640 copy and cites the sha
+// ---------------------------------------------------------------------------
+test('(4) notify uploads share/result.md and puts ref= next to the path', () => {
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work, { authorRawContent: 'SHARE_ME\n' });
+  const brief = briefFile(work);
+  const up = makeUploadFleet(work, { uploadExit: 0 });
+
+  const q = mkTmp('noncq-q-');
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'draft', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], {
+    AUTOPILOT_NONCQ_DIR: q,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: up.bin,
+  });
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const pace = writePace(work, [paceRow()]);
+  let d = drain(q, pace, rails.dir, up.bin);
+  assert.equal(JSON.parse(d.stdout).dispatched.length, 1);
+  assert.ok(waitFor(() => fs.existsSync(path.join(q, 'items', id, 'rail.exit')), 8000));
+  d = drain(q, pace, rails.dir, up.bin);
+  assert.equal(d.status, 0, d.stderr);
+  const resultPath = path.join(q, 'items', id, 'result.md');
+  const share = path.join(q, 'items', id, 'share', 'result.md');
+  assert.equal(fs.readFileSync(resultPath, 'utf8'), 'SHARE_ME\n');
+  assert.ok(fs.existsSync(share), 'share copy must exist');
+  assert.equal(fs.statSync(share).mode & 0o777, 0o640);
+  assert.equal(fs.readFileSync(share, 'utf8'), 'SHARE_ME\n');
+  const args = fs.readFileSync(up.nul).toString('utf8').split('\0').filter((s) => s.length > 0);
+  const at = args.indexOf('upload');
+  assert.ok(at >= 0, 'fleet upload must be invoked');
+  assert.equal(args[at + 1], share);
+  assert.equal(args[at + 2], '--name');
+  assert.equal(args[at + 3], `${id}-result.md`);
+  assert.equal(args[at + 4], '--summary');
+  assert.equal(args[at + 5], `${id} done`);
+  const msg = fs.readFileSync(up.msgLog, 'utf8');
+  assert.ok(msg.includes(`${id} done ${resultPath} ref=${up.sha}`), msg);
+
+  const failFleet = makeUploadFleet(work, { uploadExit: 1 });
+  const q2 = mkTmp('noncq-q2-');
+  const add2 = cli([
+    'add', '--lane', 'ns/courier/lane-b', '--kind', 'draft', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], {
+    AUTOPILOT_NONCQ_DIR: q2,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: failFleet.bin,
+    AUTOPILOT_NOW: new Date(NOW_MS + 30_000).toISOString(),
+  });
+  assert.equal(add2.status, 0, add2.stderr);
+  const id2 = add2.stdout.trim();
+  const pace2 = writePace(work, [paceRow()], 'pace-up-fail.json');
+  drain(q2, pace2, rails.dir, failFleet.bin, [], {
+    AUTOPILOT_NOW: new Date(NOW_MS + 30_000).toISOString(),
+  });
+  assert.ok(waitFor(() => fs.existsSync(path.join(q2, 'items', id2, 'rail.exit')), 8000));
+  const d2 = drain(q2, pace2, rails.dir, failFleet.bin, [], {
+    AUTOPILOT_NOW: new Date(NOW_MS + 31_000).toISOString(),
+  });
+  assert.equal(d2.status, 0, d2.stderr);
+  const result2 = path.join(q2, 'items', id2, 'result.md');
+  const msg2 = fs.readFileSync(failFleet.msgLog, 'utf8');
+  assert.ok(msg2.includes(`${id2} done ${result2} upload_failed`), msg2);
+  assert.equal(msg2.includes('ref='), false);
+  const item2 = JSON.parse(fs.readFileSync(path.join(q2, 'items', id2, 'item.json'), 'utf8'));
+  assert.equal(item2.notified, true);
+  assert.equal(fs.statSync(path.join(q2, 'items', id2, 'share', 'result.md')).mode & 0o777, 0o640);
+});
+
+// ---------------------------------------------------------------------------
+// (5) empty report names the suggested source, without scanning other repos
+// ---------------------------------------------------------------------------
+test('(5) empty report names lane backlog items tagged noncq-ok', () => {
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  const fleet = makeFleetBin(work);
+  const pace = writePace(work, [paceRow({ waste_pct_if_unused: 55 })]);
+  const d = drain(q, pace, rails.dir, fleet.bin, [], {
+    AUTOPILOT_NONCQ_REPORT_TO: 'ns/courier/pm-bot',
+  });
+  assert.equal(d.status, 0, d.stderr);
+  const log = fs.readFileSync(fleet.log, 'utf8');
+  assert.match(log, /\[noncq-empty\] grok waste_pct_if_unused=55\nlane backlog items tagged `noncq-ok`/);
+  assert.equal(log.includes('project/backlog'), false);
+  assert.equal(log.includes('/home/'), false);
 });

@@ -12,9 +12,19 @@
  * An empty qualifying pool is reported once per 6 h; the queue is never filled
  * with busy-work.
  *
+ * Author prompts list each input by absolute path, byte size and sha256.
+ * Input contents are never inlined. `add` refuses (exit 2) when that prompt,
+ * plus diff and spec bytes for review-seat1, exceeds 150000 bytes, and when
+ * two `--input` files share a basename. `--needs-shell` stores
+ * `needs_shell: true`; drain will not assign that item to a runner of `agy`.
+ * Notify copies `result.md` to `share/result.md` (0640), uploads it with the
+ * fleet bin, and puts `ref=<sha256>` on the line (`upload_failed` if upload
+ * fails). A rail failure whose stderr or raw log contains `agy_stdin_ceiling`
+ * is terminal.
+ *
  * USAGE:
  *   scripts/noncq.js add --lane A --kind K --brief F --accept S [--accept S]...
- *     --prefer k1,k2 [--input F]... [--wall 20m] [--expires 72h]
+ *     --prefer k1,k2 [--input F]... [--needs-shell] [--wall 20m] [--expires 72h]
  *     [--diff F --spec F]   # required for review-seat1; refused otherwise
  *   scripts/noncq.js list [--state S] [--json]
  *   scripts/noncq.js drain --pace <pace.v1.json> [--dry-run] [--json]
@@ -25,7 +35,8 @@
  * withWriteLock.
  *
  * Env: AUTOPILOT_NONCQ_DIR, AUTOPILOT_NONCQ_REPORT_TO (empty reports; falls back
- * to AUTOPILOT_PM_ADDRESS), AUTOPILOT_FLEET_BIN (default fleet). Test seams:
+ * to AUTOPILOT_PM_ADDRESS), AUTOPILOT_FLEET_BIN (default fleet; send and upload).
+ * Test seams:
  * AUTOPILOT_NONCQ_RAIL_DIR (fake dispatch-*.sh), AUTOPILOT_NOW (ISO clock).
  *
  * EXIT: 0 ok · 2 bad input / usage.
@@ -50,7 +61,9 @@ const PACE_SCHEMA = 'capacity.pace/1';
 const KINDS = Object.freeze(['review-seat1', 'research', 'replay', 'data', 'draft']);
 const STATES = Object.freeze(['queued', 'dispatched', 'done', 'failed', 'expired']);
 const MAX_ATTEMPTS = 2;
+const PROMPT_MAX_BYTES = 150000;
 const EMPTY_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const EMPTY_SOURCE_LINE = 'lane backlog items tagged `noncq-ok`';
 const DEFAULT_WALL_MIN = 20;
 const DEFAULT_EXPIRES_H = 72;
 const LANE_RE = /^[^/\s]+\/[^/\s]+\/[^/\s]+$/;
@@ -60,7 +73,7 @@ function usage(msg) {
   if (msg) process.stderr.write(`noncq.js: ${msg}\n`);
   process.stderr.write(
     'usage: noncq.js add --lane A --kind K --brief F --accept S [--accept S]...\n'
-    + '                --prefer k1,k2 [--input F]... [--wall 20m] [--expires 72h]\n'
+    + '                --prefer k1,k2 [--input F]... [--needs-shell] [--wall 20m] [--expires 72h]\n'
     + '                [--diff F --spec F]\n'
     + '       noncq.js list [--state S] [--json]\n'
     + '       noncq.js drain --pace <pace.v1.json> [--dry-run] [--json]\n',
@@ -208,11 +221,82 @@ function copyFileInto(src, dest) {
   try { fs.chmodSync(dest, 0o600); } catch { /* best-effort */ }
 }
 
+function sha256Hex(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+/** Prompt text for an author rail. Input files are named, never inlined. */
+function renderAuthorPrompt({ briefText, accept, inputs }) {
+  const parts = [];
+  parts.push('# Brief\n');
+  parts.push(briefText);
+  if (!briefText.endsWith('\n')) parts.push('\n');
+  parts.push('\n# Acceptance\n');
+  for (const a of accept) parts.push(`- ${a}\n`);
+  if (inputs && inputs.length) {
+    parts.push('\n# Inputs\n');
+    parts.push('The input files are read-only and must be opened with the file tools.\n');
+    for (const inp of inputs) {
+      parts.push(`- ${inp.absPath}\n`);
+      parts.push(`  bytes: ${inp.bytes}\n`);
+      parts.push(`  sha256: ${inp.sha256}\n`);
+    }
+  }
+  return parts.join('');
+}
+
+/**
+ * Byte size of the author prompt, plus raw diff/spec bytes for review-seat1.
+ * Input file bodies are not included — only the path listing.
+ */
+function measureAssembledBytes({ briefText, accept, inputs, diffBuf, specBuf }) {
+  let n = Buffer.byteLength(renderAuthorPrompt({ briefText, accept, inputs }), 'utf8');
+  if (diffBuf) {
+    n += Buffer.byteLength('\n# Diff\n', 'utf8') + diffBuf.length;
+    if (diffBuf.length === 0 || diffBuf[diffBuf.length - 1] !== 0x0a) n += 1;
+  }
+  if (specBuf) {
+    n += Buffer.byteLength('\n# Spec\n', 'utf8') + specBuf.length;
+    if (specBuf.length === 0 || specBuf[specBuf.length - 1] !== 0x0a) n += 1;
+  }
+  return n;
+}
+
+function refuseDuplicateInputBasenames(files) {
+  const seen = new Set();
+  for (const inp of files) {
+    const base = path.basename(inp);
+    if (seen.has(base)) usage(`duplicate input basename ${base}`);
+    seen.add(base);
+  }
+}
+
+function inputMetaFromFiles(files, destDir) {
+  return files.map((inp) => {
+    const buf = fs.readFileSync(inp);
+    return {
+      absPath: path.join(destDir, 'inputs', path.basename(inp)),
+      bytes: buf.length,
+      sha256: sha256Hex(buf),
+    };
+  });
+}
+
+function listInputMeta(dir) {
+  const inDir = path.join(dir, 'inputs');
+  if (!fs.existsSync(inDir)) return [];
+  return fs.readdirSync(inDir).sort().map((name) => {
+    const absPath = path.join(inDir, name);
+    const buf = fs.readFileSync(absPath);
+    return { absPath, bytes: buf.length, sha256: sha256Hex(buf) };
+  });
+}
+
 function parseArgs(argv) {
   const out = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    if (a === '--json' || a === '--dry-run') {
+    if (a === '--json' || a === '--dry-run' || a === '--needs-shell') {
       out[a.slice(2)] = true;
     } else if (a.startsWith('--')) {
       const key = a.slice(2);
@@ -295,10 +379,29 @@ function cmdAdd(flags, env = process.env) {
   for (const inp of inputs) {
     if (!fs.existsSync(inp) || !fs.statSync(inp).isFile()) usage(`--input file not found: ${inp}`);
   }
+  // Basename is the on-disk name under inputs/. Two sources with the same
+  // basename would copy onto one path; refuse before any item dir is created.
+  refuseDuplicateInputBasenames(inputs);
 
-  const root = ensureQueue(queueRoot(env));
+  const root = queueRoot(env);
   const id = makeId(at);
   const dir = itemDir(root, id);
+  const inputMeta = inputMetaFromFiles(inputs, dir);
+  const briefText = fs.readFileSync(brief, 'utf8');
+  const diffBuf = kind === 'review-seat1' ? fs.readFileSync(diff) : null;
+  const specBuf = kind === 'review-seat1' ? fs.readFileSync(spec) : null;
+  const promptBytes = measureAssembledBytes({
+    briefText,
+    accept,
+    inputs: inputMeta,
+    diffBuf,
+    specBuf,
+  });
+  if (promptBytes > PROMPT_MAX_BYTES) {
+    usage(`assembled prompt is ${promptBytes} bytes, over the ${PROMPT_MAX_BYTES}-byte limit`);
+  }
+
+  ensureQueue(root);
 
   withQueueLock(root, () => {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -326,6 +429,7 @@ function cmdAdd(flags, env = process.env) {
       expires_at: new Date(at + expiresMs).toISOString(),
       state: 'queued',
       attempts: 0,
+      needs_shell: flags['needs-shell'] === true,
       result: null,
       notified: false,
     };
@@ -351,7 +455,9 @@ function cmdList(flags, env = process.env) {
     process.stdout.write(`${JSON.stringify({ items: rows }, null, 2)}\n`);
   } else {
     for (const it of rows) {
-      process.stdout.write(`${it.id}\t${it.state}\t${it.kind}\t${it.lane}\tprefer=${(it.prefer || []).join(',')}\n`);
+      process.stdout.write(
+        `${it.id}\t${it.state}\t${it.kind}\t${it.lane}\tprefer=${(it.prefer || []).join(',')}\tneeds_shell=${it.needs_shell ? 'true' : 'false'}\n`,
+      );
     }
   }
   return 0;
@@ -402,27 +508,32 @@ function railDir(env = process.env) {
 }
 
 function assembleAuthorPrompt(dir, item) {
-  const parts = [];
-  parts.push('# Brief\n');
-  parts.push(fs.readFileSync(path.join(dir, 'brief.md'), 'utf8'));
-  if (!parts[parts.length - 1].endsWith('\n')) parts.push('\n');
-  parts.push('\n# Acceptance\n');
-  for (const a of item.accept) parts.push(`- ${a}\n`);
-  const inDir = path.join(dir, 'inputs');
-  if (fs.existsSync(inDir)) {
-    const names = fs.readdirSync(inDir).sort();
-    if (names.length) {
-      parts.push('\n# Inputs\n');
-      for (const name of names) {
-        parts.push(`\n## ${name}\n`);
-        parts.push(fs.readFileSync(path.join(inDir, name), 'utf8'));
-        if (!parts[parts.length - 1].endsWith('\n')) parts.push('\n');
-      }
-    }
-  }
+  const briefText = fs.readFileSync(path.join(dir, 'brief.md'), 'utf8');
+  const text = renderAuthorPrompt({
+    briefText,
+    accept: item.accept,
+    inputs: listInputMeta(dir),
+  });
   const promptPath = path.join(dir, 'assembled-prompt.md');
-  fs.writeFileSync(promptPath, parts.join(''), { mode: 0o600 });
+  fs.writeFileSync(promptPath, text, { mode: 0o600 });
   return promptPath;
+}
+
+/** True when a failed rail's stderr or raw log names the agy stdin ceiling. */
+function mentionsStdinCeiling(dir, parsed, stdoutText) {
+  const chunks = [];
+  if (stdoutText) chunks.push(String(stdoutText));
+  try { chunks.push(fs.readFileSync(path.join(dir, 'rail.stderr'), 'utf8')); } catch { /* none */ }
+  if (parsed && typeof parsed.error === 'string') chunks.push(parsed.error);
+  if (parsed && typeof parsed.raw_log === 'string') {
+    chunks.push(parsed.raw_log);
+    try {
+      if (parsed.raw_log && fs.existsSync(parsed.raw_log) && fs.statSync(parsed.raw_log).isFile()) {
+        chunks.push(fs.readFileSync(parsed.raw_log, 'utf8'));
+      }
+    } catch { /* unreadable raw log */ }
+  }
+  return chunks.some((c) => c.includes('agy_stdin_ceiling'));
 }
 
 function buildRailCommand(dir, item, profile, runId, env) {
@@ -567,10 +678,11 @@ function reapOne(dir, item, atIso) {
     return { id: item.id, lane: item.lane, outcome: 'done', path: resultPath };
   }
 
-  // failure path
+  // failure path. agy_stdin_ceiling is terminal: the same prompt will be refused again.
   const attempts = (item.attempts || 0) + 1;
   item.attempts = attempts;
-  const failed = attempts >= MAX_ATTEMPTS;
+  const ceiling = mentionsStdinCeiling(dir, parsed, stdout);
+  const failed = ceiling || attempts >= MAX_ATTEMPTS;
   item.state = failed ? 'failed' : 'queued';
   const resultPath = path.join(dir, 'result.md');
   const errBody = [
@@ -615,7 +727,7 @@ function reapDispatched(entries, atIso, dryRun, actions) {
   return { finished, requeuedIds };
 }
 
-function pickForEngine(entries, engineKey, maxParallel, alreadyDispatchedCount, atMs, skipIds = new Set()) {
+function pickForEngine(entries, engineKey, maxParallel, alreadyDispatchedCount, atMs, skipIds = new Set(), runner = null) {
   const slots = Math.max(0, maxParallel - alreadyDispatchedCount);
   if (slots === 0) return [];
   const eligible = entries
@@ -623,7 +735,9 @@ function pickForEngine(entries, engineKey, maxParallel, alreadyDispatchedCount, 
       && !skipIds.has(item.id)
       && Array.isArray(item.prefer)
       && item.prefer.includes(engineKey)
-      && Date.parse(item.expires_at) > atMs) // safety; expire pass already ran
+      && Date.parse(item.expires_at) > atMs // safety; expire pass already ran
+      // agy under dispatch-author has no usable shell. Leave the item queued.
+      && !(item.needs_shell === true && runner === 'agy'))
     .map(({ dir, item }) => ({
       dir,
       item,
@@ -691,17 +805,55 @@ function dispatchOne(dir, item, profile, engineKey, env, dryRun, actions) {
   return true;
 }
 
-function fleetSend(lane, message, env = process.env) {
+function fleetSpawn(args, env = process.env) {
   const bin = env.AUTOPILOT_FLEET_BIN || 'fleet';
   const childEnv = { ...env };
   delete childEnv.FLEET_FYI;
-  const r = spawnSync(bin, ['send', lane, message], {
+  return spawnSync(bin, args, {
     encoding: 'utf8',
     timeout: 30000,
     env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
+
+function fleetSend(lane, message, env = process.env) {
+  const r = fleetSpawn(['send', lane, message], env);
   return r.status === 0;
+}
+
+function parsePrintedSha256(text) {
+  const m = /[0-9a-fA-F]{64}/.exec(String(text || ''));
+  return m ? m[0].toLowerCase() : null;
+}
+
+/** Upload the 0640 share copy. Same AUTOPILOT_FLEET_BIN seam as fleetSend. */
+function fleetUpload(file, name, summary, env = process.env) {
+  const r = fleetSpawn(['upload', file, '--name', name, '--summary', summary], env);
+  if (!r || r.error || r.status !== 0) return null;
+  return parsePrintedSha256(r.stdout);
+}
+
+/**
+ * Copy result.md to items/<id>/share/result.md (0640) and upload it.
+ * The notice keeps the local path and adds ref=<sha> or upload_failed.
+ */
+function resultNoticeLine(row, env) {
+  const src = row.path;
+  let tag = 'upload_failed';
+  try {
+    if (src && fs.existsSync(src) && fs.statSync(src).isFile()) {
+      const share = path.join(path.dirname(src), 'share', 'result.md');
+      fs.mkdirSync(path.dirname(share), { recursive: true, mode: 0o750 });
+      fs.copyFileSync(src, share);
+      fs.chmodSync(share, 0o640);
+      const sha = fleetUpload(share, `${row.id}-result.md`, `${row.id} ${row.outcome}`, env);
+      if (sha) tag = `ref=${sha}`;
+    }
+  } catch {
+    tag = 'upload_failed';
+  }
+  return `${row.id} ${row.outcome} ${src} ${tag}`;
 }
 
 function notifyLanes(finished, entriesById, dryRun, actions, env) {
@@ -727,7 +879,10 @@ function notifyLanes(finished, entriesById, dryRun, actions, env) {
   }
 
   for (const [lane, rows] of pending) {
-    const lines = ['[noncq-result]', ...rows.map((r) => `${r.id} ${r.outcome} ${r.path}`)];
+    const body = rows.map((r) => (dryRun
+      ? `${r.id} ${r.outcome} ${r.path}`
+      : resultNoticeLine(r, env)));
+    const lines = ['[noncq-result]', ...body];
     const msg = `${lines.join('\n')}\n`;
     actions.notified.push({ lane, ids: rows.map((r) => r.id) });
     if (dryRun) continue;
@@ -765,7 +920,7 @@ function reportEmpty(root, engineKey, waste, atMs, dryRun, actions, env) {
     actions.empty_suppressed.push(engineKey);
     return;
   }
-  const msg = `[noncq-empty] ${engineKey} waste_pct_if_unused=${waste}`;
+  const msg = `[noncq-empty] ${engineKey} waste_pct_if_unused=${waste}\n${EMPTY_SOURCE_LINE}`;
   actions.empty_reported.push({ engine: engineKey, waste_pct_if_unused: waste });
   if (dryRun) return;
 
@@ -841,7 +996,7 @@ function cmdDrain(flags, env = process.env, opts = {}) {
       }
       const dispatchedCount = countDispatched(entries, engineKey);
       const picks = pickForEngine(
-        entries, engineKey, profile.max_parallel || 1, dispatchedCount, atMs, pickedIds,
+        entries, engineKey, profile.max_parallel || 1, dispatchedCount, atMs, pickedIds, profile.runner,
       );
       if (picks.length === 0) {
         // eligible queued count for empty report: prefer contains key and queued

@@ -88,4 +88,52 @@ mutate_context drop-show "$TEST_TMP/show-removed.json"
 check_pointer "$TEST_TMP/show-removed.json"
 assert_exit_code "$?" 1 "negative control: missing show-tool sentence is rejected"
 
+# Role branch. The run above had no team file, so it stayed solo.
+mkdir -p "$HOOK_HOME/.autopilot"
+printf '%s\n' '{"role":"lane"}' > "$HOOK_HOME/.autopilot/team.json"
+run_hook session-start.js
+assert_exit_code "$__RUN_EXIT" 0 "lane session-start exits 0"
+assert_not_contains "$__RUN_STDOUT" "open a card" "lane context has no open-card line"
+assert_not_contains "$__RUN_STDOUT" "open-decision.js" "lane context does not name open-decision.js"
+assert_contains "$__RUN_STDOUT" "request-decision.js" "lane context names request-decision.js"
+assert_contains "$__RUN_STDOUT" "(r- + 8 hex)" "lane context names an r- id"
+printf '%s\n' '{"role":"lead"}' > "$HOOK_HOME/.autopilot/team.json"
+run_hook session-start.js
+assert_not_contains "$__RUN_STDOUT" "open a card" "lead context has no open-card line"
+printf '%s\n' '{"role":"pm"}' > "$HOOK_HOME/.autopilot/team.json"
+run_hook session-start.js
+assert_contains "$__RUN_STDOUT" "$OPEN" "pm keeps the open-card line"
+REPO_ROOT="$REPO_ROOT" node <<'JS'
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const repo = process.env.REPO_ROOT;
+const loaded = [
+  ['src', require(path.join(repo, 'src/hooks/handlers/session-start.js'))],
+  ['codex', require(path.join(repo, 'platforms/codex/plugin/src/hooks/handlers/session-start.js'))],
+];
+function setRole(role) {
+  const dir = path.join(process.env.HOME, '.autopilot');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'team.json'), JSON.stringify({ role }) + '\n');
+}
+setRole('lane');
+for (const [name, mod] of loaded) {
+  const text = mod.buildBaseContext(repo);
+  assert.ok(!text.includes('open a card'), name + ' non-PM context contains the open-card line');
+  assert.ok(!text.includes('open-decision.js'), name + ' non-PM context names open-decision.js');
+  assert.ok(text.includes('request-decision.js'), name + ' non-PM context missing request-decision.js');
+}
+setRole('pm');
+for (const [name, mod] of loaded) {
+  assert.ok(mod.buildBaseContext(repo).includes('open a card'), name + ' PM context lost the open-card line');
+}
+setRole('solo');
+for (const [name, mod] of loaded) {
+  assert.ok(mod.buildBaseContext(repo).includes('open a card'), name + ' solo context lost the open-card line');
+}
+JS
+assert_exit_code "$?" 0 "both trees branch by role"
+rm -f "$HOOK_HOME/.autopilot/team.json"
+
 finalize_test

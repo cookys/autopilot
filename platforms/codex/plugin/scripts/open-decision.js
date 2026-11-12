@@ -82,6 +82,11 @@
  * Node built-ins only. This script writes nothing outside the decisions directory.
  * The library functions openDecision / closeDecisionById are also called by hooks/ask-decision.js (depth-0 AskUserQuestion
  * adds an entry with `origin: "ask_user_question"`; mods P1W HOOKQ).
+ * Role gate: a team session that is not PM (lane or lead) does not open an owner card. The CLI and openDecision both
+ * refuse before any write (exit 4, message names scripts/request-decision.js). --not-authorized irreversible, and the
+ * bare alias --irreversible, are the one boundary that still opens; the CLI then tells the lane on stderr to send that
+ * card id to the PM. Both flags may be given; one field is stored. origin permission_prompt is exempt.
+ * --from-request <r-id> stores from_request on the entry.
  *
  * `open` also ensures a watcher publishes the card (src/status/card-visibility.js: the autostart hook's start path, plus the plain session marker).
  * verify: the hub compares, this host never sees the stored hash. It probes the fleet CLI, then calls lib/fleet-decision.js verify() (local call first,
@@ -89,7 +94,7 @@
  * hub's STORED answer as JSON: act on that, never on the relayed text. Needs no git repo. Never exits 0 on anything else (fail closed).
  * Verify exits: 9 no fleet binary or no `fleet decision` | 10 hub unreachable | 11 other error / probe failed | 12 unverified (card, answer id or content does not match; the hub does not say which) |
  *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
- * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure |
+ * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure, or a non-PM team session refused by the role gate (nothing written) |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
  *       7 open refused: --kind is not decide|go (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
@@ -112,7 +117,7 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
+  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id>\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       (open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters>)\n');
   return 2;
 }
@@ -355,8 +360,8 @@ function takeFreeText(argv) {
 
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', from, dispatched, title, all, apply } } | { error }
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'dispatched', 'title'];
-const EXTRA_SWITCH = ['all', 'apply'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'dispatched', 'title', 'from-request'];
+const EXTRA_SWITCH = ['all', 'apply', 'irreversible'];
 function takeExtra(argv) {
   const rest = [];
   const extra = {};
@@ -474,7 +479,7 @@ function main(argv) {
   const stray = (names) => names.find((n) => ex[n] !== undefined);
   if (cmd === 'show' || cmd === 'list') {
     if (cmd === 'list' && args.id !== undefined) return usage('list takes no --id (use `show --id <id>`)');
-    const bad = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched']);
+    const bad = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched', 'irreversible', 'from-request']);
     if (bad) return usage(`--${bad} is not a ${cmd} argument`);
     if (args.id !== undefined) { // show --id: ONE card, closed ones too
       if (!SAFE_ID.test(args.id)) return usage('show --id <id> needs a card id (see `list --all`)');
@@ -505,14 +510,14 @@ function main(argv) {
   }
   if (cmd === 'backfill') return backfill(args, sf, root || null);
   if (cmd === 'redeliver') {
-    const badR = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched', 'all']);
+    const badR = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched', 'all', 'irreversible', 'from-request']);
     if (badR) return usage(`--${badR} is not a redeliver argument`);
     if (args.id !== undefined && !SAFE_ID.test(args.id)) return usage('redeliver --id <id> needs a card id');
     return redeliver(args);
   }
   if (cmd === 'close') {
     if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('close needs --id <id> (see `show`)');
-    const bad = stray(['all', 'apply', 'from']);
+    const bad = stray(['all', 'apply', 'from', 'irreversible', 'from-request']);
     if (bad) return usage(`--${bad} is not a close argument`);
     if (ex.dispatched !== undefined) return markDispatched(args, ex);
     const viaOption = args.option.length > 0 || args.closeFreeText !== undefined;
@@ -573,13 +578,19 @@ function main(argv) {
     const t = checkTarget(path.resolve(args.cwd || process.cwd()), args['doa-role'] || 'manager', args['doa-tier'] || 'sonnet', args.target);
     if (t.refused) { process.stderr.write(`open-decision: refused: ${t.refused}\n`); return 6; }
   }
+  const aliasErr = applyIrreversibleAlias(args, ex);
+  if (aliasErr) return usage(aliasErr);
+  if (ex['from-request'] !== undefined && !/^r-[0-9a-f]{8}$/.test(String(ex['from-request']))) return usage('--from-request needs an id r- plus 8 hex');
   const gate = checkNotAuthorized(args['not-authorized'], { cwd: path.resolve(args.cwd || process.cwd()), role: args['doa-role'] || 'manager', tier: args['doa-tier'] || 'sonnet', autonomous: isAutonomous() });
   if (gate.code === 2) return usage(gate.message);
   if (gate.code === 3) { process.stderr.write(`open-decision: refused: ${gate.message}\n`); return 3; }
   if (gate.warning) process.stderr.write(`open-decision: warning: ${gate.warning}\n`);
+  const routed = roleGate({ not_authorized: args['not-authorized'] });
+  if (routed && routed.code === 4) { process.stderr.write(`open-decision: ${routed.message}\n`); return 4; }
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker, title: ex.title,
+    from_request: ex['from-request'],
   });
   if (r.status === 'ok' && !root) {
     // The card is in the unbound scope. Every panel of the project lists it (src/status/decision-input.js reads all scope files), so this is
@@ -589,6 +600,7 @@ function main(argv) {
   if (r.status === 'ok') {
     notifyPm('open', { card_id: r.id, question: args.question, state: 'open', ...(ex.title !== undefined ? { title: ex.title } : {}) });
     process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`);
+    if (routed && routed.allow) process.stderr.write(`open-decision: 把卡片編號 ${r.id} 送給 PM。\n`);
     // A card written is not a card seen: make sure a watcher publishes it. The card stays written and its id printed either way.
     const vis = require('../src/status/card-visibility').ensureCardVisible({ cwd: path.resolve(args.cwd || process.cwd()), sessionId: sess.session || '', env: process.env });
     if (!vis.ok) {
@@ -601,11 +613,40 @@ function main(argv) {
   return 4;
 }
 
+function boundaryIdOf(raw) {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (!value) return '';
+  const at = value.indexOf(':');
+  return (at < 0 ? value : value.slice(0, at)).trim().toLowerCase();
+}
+
+// --irreversible is a bare alias of --not-authorized irreversible. Both may be given; one field is stored.
+// A different boundary next to the alias is usage (the caller must not get a silent second value).
+function applyIrreversibleAlias(args, extra) {
+  if (!extra || !extra.irreversible) return null;
+  const current = typeof args['not-authorized'] === 'string' ? args['not-authorized'].trim() : '';
+  if (!current) { args['not-authorized'] = 'irreversible'; return null; }
+  if (boundaryIdOf(current) !== 'irreversible') return '`--irreversible` is `--not-authorized irreversible`; it conflicts with --not-authorized ' + current;
+  return null;
+}
+
+// permission-prompt path is out of scope of card routing; PM ruling 2026-11-12
+function roleGate({ not_authorized, origin } = {}) {
+  if (origin === 'permission_prompt') return null;
+  let role = 'solo';
+  try { role = require('./lib/team.js').resolve().role; } catch { role = 'lane'; }
+  if (role === 'solo' || role === 'pm') return null;
+  if (boundaryIdOf(not_authorized) === 'irreversible') return { allow: true, role };
+  return { code: 4, role, message: `refused: a ${role} session does not open an owner card; send the question with scripts/request-decision.js; nothing written` };
+}
+
 // Library entry (also used by hooks/ask-decision.js — mods P1W HOOKQ): append one entry to the scope file through the same
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
-// Returns { status: 'ok'|'error', id, file, scope_key, message }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker, title }) {
+// Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker, title, from_request }) {
+  const routed = roleGate({ not_authorized, origin });
+  if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
   if (!sf) return { status: 'error', message: 'not inside a git repository' };
   const entry = {
@@ -619,6 +660,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
   };
   if (text(executor)) entry.executor = executor.trim(); // who executes the answer / who asked: close --answer puts them in the dispatch JSON (BL cardtrail)
   if (text(asker)) entry.asker = asker.trim();
+  if (text(from_request)) entry.from_request = from_request.trim();
   if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
   if (origin) entry.origin = origin;

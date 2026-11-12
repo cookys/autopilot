@@ -53,6 +53,7 @@ function openBlockedCard({ cwd, sessionId, paneId, socket, summary }) {
   try { root = require('./ask-decision.js').markerRoot(sessionId); } catch { /* unbound scope */ }
   const { openDecision } = require('../scripts/open-decision.js');
   const where = whereOf(paneId, cwd, sessionId, socket);
+  // permission-prompt path is out of scope of card routing; PM ruling 2026-11-12
   const r = openDecision({
     cwd, root, session: sanitizeSessionId(sessionId),
     question: `工作階段卡在權限確認框，等你本人回應：${summary || '(指令不明)'}`,

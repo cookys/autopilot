@@ -33,6 +33,11 @@ function shellQuotePath(p) {
 const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
 
 const CARD_ID = /\bd-[0-9a-f]{8}\b/i;
+const REQUEST_ID = /\br-[0-9a-f]{8}\b/i;
+
+function teamRole() {
+  try { return require('../scripts/lib/team.js').resolve().role; } catch { return 'lane'; }
+}
 
 // Phrases that mean "I am waiting for the owner to answer or decide". One list on purpose:
 // add a pattern here, never a new if. Matched per sentence (see sentences()).
@@ -184,6 +189,18 @@ function decide(input) {
   const hit = findOwnerQuestion(text);
   if (!hit) return null;
   const shown = hit.length > 120 ? `${hit.slice(0, 120)}…` : hit;
+  const role = teamRole();
+  if (role !== 'solo' && role !== 'pm') {
+    if (REQUEST_ID.test(text)) return null;
+    const req = shellQuotePath(path.join(__dirname, '..', 'scripts', 'request-decision.js'));
+    return {
+      decision: 'block',
+      reason: `偵測到這則回覆在等 owner 回答，但沒有請求編號。偵測到的句子：「${shown}」。`
+        + `請用 node ${req} send --question <問題> --option <標籤>::<說明> --option <標籤>::<說明> --recommendation <建議> --boundary <邊界> 把問題、選項與建議送給 PM。`
+        + '不可逆還要帶 --snapshot 與 --blast-radius。回覆必須寫出請求編號（r- 加 8 個 hex）。'
+        + '若這句不是要 owner 回答（修辭、轉述別人的問題、列舉選項），請改寫句子避免誤判。',
+    };
+  }
   const autonomous = isAutonomous(input.session_id);
   const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
   return {

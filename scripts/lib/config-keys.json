@@ -1347,6 +1347,17 @@
       "note": "Path of the fleet binary used by fleet-decision.js, profile-health.js, quota-provider-sync.js and noncq.js send/upload (default: fleet on PATH). Tests point it at a stub."
     },
     {
+      "name": "AUTOPILOT_FLEET_TASK",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/request-decision.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_FLEET_BIN"],
+      "note": "Fleet task id for scripts/request-decision.js when --task is omitted. After a successful send it runs fleet task progress <id> blocked_human with the waiting_on_operator status."
+    },
+    {
       "name": "AUTOPILOT_QUOTA_WATCH_TO",
       "kind": "env",
       "audience": "internal",

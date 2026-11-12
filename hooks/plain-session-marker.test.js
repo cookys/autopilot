@@ -219,9 +219,9 @@ test('readMarker / root: a plain marker is not an orchestrator marker; its root 
 
 // ---------------------------------------------------------------- reader: dispatch-hetero.sh
 
-function hetero(f, markerDir, extra = []) {
+function hetero(f, markerDir, extra = [], branch = 'feat/plain') {
   fs.writeFileSync(path.join(f.base, 'prompt.txt'), 'p\n');
-  return spawnSync(HETERO, ['--branch', 'feat/plain', '--prompt-file', path.join(f.base, 'prompt.txt'), '--agy-bin', '/bin/true', ...extra], {
+  return spawnSync(HETERO, ['--branch', branch, '--prompt-file', path.join(f.base, 'prompt.txt'), '--agy-bin', '/bin/true', ...extra], {
     cwd: f.repo, encoding: 'utf8', env: { ...f.env, AUTOPILOT_SESSION_ID: '', AUTOPILOT_SESSION_MODE_DIR: markerDir },
   });
 }
@@ -233,8 +233,10 @@ test('dispatch-hetero classifier: a plain marker is skipped as if absent; the ru
   fs.writeFileSync(path.join(plainDir, 'p.json'), JSON.stringify({
     session_id: 'p', level: null, repo_root: f.repo, started_at: iso(Date.now()), expires_at: iso(Date.now() + 36e5), root_run_id: null,
   }));
-  const a = hetero(f, absentDir);
-  const p = hetero(f, plainDir);
+  // ec731f986 made the default model a literal carbon id (no early alias fail), so each
+  // call can create the branch; distinct names keep the two runs from colliding.
+  const a = hetero(f, absentDir, [], 'feat/plain-absent');
+  const p = hetero(f, plainDir, [], 'feat/plain-marker');
   assert.doesNotMatch(p.stdout + p.stderr, /session-mode marker is invalid|marker level is invalid/);
   assert.strictEqual(p.status, a.status, 'plain marker must not change the exit code versus no marker');
   const err = (r) => { try { return JSON.parse(r.stdout).error; } catch (_e) { return r.stdout; } };

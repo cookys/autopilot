@@ -213,7 +213,7 @@ lib_rc=0
 # A read-only config is not enough: git config replaces the file via the
 # directory. The wrapper refuses --unset-all and --add so the replay cannot land.
 GITCONFIG_BREAK_WRITES=1 PATH="$FAKE_BIN:$PATH" \
-  gitconfig_containment_restore "$FAIL_REPO" "$GITCONFIG_SNAPSHOT_FILE" >/tmp/gc-restore-out.txt 2>"$FAIL_ERR" || lib_rc=$?
+  gitconfig_containment_restore "$FAIL_REPO" "$GITCONFIG_SNAPSHOT_FILE" >"$TEST_TMP/gc-restore-out.txt" 2>"$FAIL_ERR" || lib_rc=$?
 if [ "$lib_rc" -eq 0 ]; then
   fail "library restore returned 0 after a failed replay"
 fi

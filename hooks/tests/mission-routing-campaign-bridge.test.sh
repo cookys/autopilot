@@ -643,24 +643,34 @@ function dispatch(extraEnv = {}) {
   ], {
     cwd: repo,
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      ENGINE_SCORECARD_DIR: scores,
-      ENGINE_CAPABILITY_DIR: caps,
-      AUTOPILOT_SESSION_MODE_DIR: markerDir,
-      // Managed admission runs ahead of the bridge and needs a live level to
-      // compare the sealed marker against; the session id decides which single
-      // marker file it resolves.
-      AUTOPILOT_LEVEL: 'l6',
-      CLAUDE_CODE_SESSION_ID: BRIDGE_SESSION_ID,
-      AUTOPILOT_DISPATCH_MANIFEST: '0',
-      DISPATCH_QUIET: '1',
-      AUTOPILOT_ROOT_RUN_ID: contract.mission_runtime.root_run_id,
-      AUTOPILOT_PARENT_RUN_ID: 'foreman-bridge',
-      AUTOPILOT_DISPATCH_DEPTH: '1',
-      TMPDIR: tmpDir,
-      ...extraEnv,
-    },
+    env: (() => {
+      // Host/canary shells often export AUTOPILOT_PARENT_SESSION_ID. Under that
+      // flag an inherited AUTOPILOT_SESSION_ID is read-only (session-mode.js),
+      // so no_session_id_* cases die at dev_flow_admission before the marker
+      // bridge under test. Scrub parent/child session leaks; keep explicit
+      // extraEnv overrides.
+      const env = {
+        ...process.env,
+        ENGINE_SCORECARD_DIR: scores,
+        ENGINE_CAPABILITY_DIR: caps,
+        AUTOPILOT_SESSION_MODE_DIR: markerDir,
+        // Managed admission runs ahead of the bridge and needs a live level to
+        // compare the sealed marker against; the session id decides which single
+        // marker file it resolves.
+        AUTOPILOT_LEVEL: 'l6',
+        CLAUDE_CODE_SESSION_ID: BRIDGE_SESSION_ID,
+        AUTOPILOT_DISPATCH_MANIFEST: '0',
+        DISPATCH_QUIET: '1',
+        AUTOPILOT_ROOT_RUN_ID: contract.mission_runtime.root_run_id,
+        AUTOPILOT_PARENT_RUN_ID: 'foreman-bridge',
+        AUTOPILOT_DISPATCH_DEPTH: '1',
+        TMPDIR: tmpDir,
+        ...extraEnv,
+      };
+      delete env.AUTOPILOT_PARENT_SESSION_ID;
+      delete env.AUTOPILOT_CHILD_SESSION_ID;
+      return env;
+    })(),
   });
   return {
     status: result.status,
@@ -963,15 +973,20 @@ const offNoMarker = spawnSync('bash', [
 ], {
   cwd: offRepo,
   encoding: 'utf8',
-  env: {
-    ...process.env,
-    ENGINE_SCORECARD_DIR: scores,
-    ENGINE_CAPABILITY_DIR: caps,
-    AUTOPILOT_SESSION_MODE_DIR: path.join(temp, 'empty-session'),
-    AUTOPILOT_DISPATCH_MANIFEST: '0',
-    DISPATCH_QUIET: '1',
-    TMPDIR: path.join(temp, 'off-tmp'),
-  },
+  env: (() => {
+    const env = {
+      ...process.env,
+      ENGINE_SCORECARD_DIR: scores,
+      ENGINE_CAPABILITY_DIR: caps,
+      AUTOPILOT_SESSION_MODE_DIR: path.join(temp, 'empty-session'),
+      AUTOPILOT_DISPATCH_MANIFEST: '0',
+      DISPATCH_QUIET: '1',
+      TMPDIR: path.join(temp, 'off-tmp'),
+    };
+    delete env.AUTOPILOT_PARENT_SESSION_ID;
+    delete env.AUTOPILOT_CHILD_SESSION_ID;
+    return env;
+  })(),
 });
 check('off_mode_without_managed_marker_compatible',
   offNoMarker.status === 0 && runnerCount() === 1);

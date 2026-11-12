@@ -133,11 +133,12 @@ test('wiring: PostToolUse(Bash) spawns no awaiting-owner process; audit-log is t
   assert.strictEqual(cmds.length, 5, `5 default-on PostToolUse processes (was 7 before the chain, 8 with awaiting-owner): ${cmds.join(' | ')}`);
 });
 
-test('wiring: UserPromptSubmit spawns ONE process (advisory-relay, timeout 10); autostart + awaiting-owner are hosted; SessionStart keeps its own autostart', () => {
+test('wiring: UserPromptSubmit spawns ONE process (advisory-relay, timeout 70); autostart + awaiting-owner are hosted; SessionStart keeps its own autostart', () => {
   const ups = entries('UserPromptSubmit', null);
   assert.deepStrictEqual(ups.map((c) => path.basename(c.split(' ')[1])), ['advisory-relay.js']);
   const g = HOOKS.UserPromptSubmit.find((x) => x.hooks.some((h) => h.command.includes('/hooks/advisory-relay.js')));
-  assert.strictEqual(g.hooks[0].timeout, 10);
+  // 1859f6241 raised hooks.json timeout 10 -> 70 (probe + card verifies + margin)
+  assert.strictEqual(g.hooks[0].timeout, 70);
   assert.ok(HOOKS.SessionStart.some((x) => x.hooks.some((h) => h.command.includes('/hooks/runs-watch-autostart.js'))));
 });
 
@@ -297,7 +298,9 @@ function structuralFakeWatcher(dir, live, key, { render = true } = {}) {
   return child;
 }
 function fakeWatcher(live) {
-  return structuralFakeWatcher(path.dirname(live), live, KEY);
+  // Under the per-run live dir (not dirname(live)=/dev/shm): a host-owned leftover
+  // /dev/shm/fakebin makes writeFileSync EACCES when the suite runs as another uid.
+  return structuralFakeWatcher(live, live, KEY);
 }
 // the writer block a current-install watcher records (the stand-in's argv names another root, so the record must carry ours)
 function ownPluginIdentity() {

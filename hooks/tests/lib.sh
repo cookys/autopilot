@@ -906,6 +906,58 @@ JSON
   _hermetic_scorecard_row GLM-5.3 cc-shim zhipu verification_author
 }
 
+# Prefer a node on PATH that can load .ts via native type stripping. A PATH that
+# puts a non-TS node first (e.g. /usr/bin ahead of a user install) would otherwise
+# turn ERR_UNKNOWN_FILE_EXTENSION into a false "N expectations red" count when a
+# suite merges the driver's stderr into stdout. Echoes the absolute path, or
+# returns 1 when none on PATH can load TypeScript.
+# Probe: process.features.typescript is "strip"/"transform" when built-in stripping
+# is available, and false on a node built without it.
+pick_ts_node() {
+  local p c feat
+  local oifs="$IFS"
+  IFS=:
+  for p in $PATH; do
+    IFS="$oifs"
+    c="${p}/node"
+    [ -x "$c" ] || continue
+    feat="$("$c" -p 'process.features.typescript' 2>/dev/null)" || continue
+    case "$feat" in
+      strip|transform) printf '%s\n' "$c"; return 0 ;;
+    esac
+  done
+  IFS="$oifs"
+  return 1
+}
+
+# Put pick_ts_node()'s binary first on PATH via a one-entry bin dir under TEST_TMP.
+# Suites that import real mods/live/*.ts must call this after sourcing lib.sh.
+prefer_ts_node() {
+  local n bin
+  n="$(pick_ts_node)" || { fail "need a Node that can load .ts (type stripping); none on PATH"; return 1; }
+  bin="$TEST_TMP/ts-node-bin"
+  mkdir -p "$bin"
+  ln -sfn "$n" "$bin/node"
+  export PATH="$bin:$PATH"
+}
+
+# First PATH entry that holds both node and npm (install-opencode preflights both).
+# Echoes the directory, or returns 1.
+pick_node_npm_dir() {
+  local p
+  local oifs="$IFS"
+  IFS=:
+  for p in $PATH; do
+    IFS="$oifs"
+    if [ -x "${p}/node" ] && [ -x "${p}/npm" ]; then
+      printf '%s\n' "$p"
+      return 0
+    fi
+  done
+  IFS="$oifs"
+  return 1
+}
+
 # Call once at end of each *.test.sh file.
 # Terminates the suite — it EXITS, it does not return. Anything appended after
 # the finalize_test call never runs, and the suite still reports PASS, so a new

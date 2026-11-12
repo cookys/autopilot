@@ -294,7 +294,7 @@ L0 狀態帶／冷區頂 (1 列) ▲ 要你決定 (2) │ M·l4·verify │ ● 
 
 ### 6.2 資料只來自 fleet.console/1
 
-Pane 只讀 `fleet.console/1` 的 `quota`。現有形狀以 `mods/live/fixtures/console/c0/console-full.json` 為準。不讀 `out/pace.v1.json`，不讀 `capacity.quota-pane/1`，不讀 `codeforge.panel/1`。上游要把 capacity 的對照或 forge-stats 的 token 送進來，由 fleet 加進這一份契約。`alias` 對 `acct` 也一樣：提議欄 `accounts[].acct` 由 fleet 填，上游對照是 capacity 的 `accounts[]`，Pane 不自己去讀那份檔。
+Pane 只讀一份 `fleet.console/1`。額度與用量讀這份的 `quota`；急迫徽章與到點浮出讀同一份文件裡卡片物件（`cards[]`）上的 `urgent` 與 `due_text`，不另讀第二份契約。現有形狀以 `mods/live/fixtures/console/c0/console-full.json` 為準。不讀 `out/pace.v1.json`，不讀 `capacity.quota-pane/1`，不讀 `codeforge.panel/1`。上游要把 capacity 的對照或 forge-stats 的 token 送進來，由 fleet 加進這一份契約。`alias` 對 `acct` 也一樣：提議欄 `accounts[].acct` 由 fleet 填，上游對照是 capacity 的 `accounts[]`，Pane 不自己去讀那份檔。
 
 `weekly.pct` 與 `five_hour.pct` 在契約裡是 0–1 小數。capacity 文件用整數百分比，是同一事實，不另存一份。畫面四捨五入成整數百分比；比較與門檻仍用原小數。`null` 畫 `—`（`GLYPHS.structure.empty`），禁止畫成 0 或 100。
 
@@ -325,6 +325,8 @@ Pane 只讀 `fleet.console/1` 的 `quota`。現有形狀以 `mods/live/fixtures/
 | `pools[].triggers` `rebalance_sig` `excluded_hosts` | 提議 | `rebalance_sig` 相同則不重送。`excluded_hosts` 的主機不計入燒速，該列標「下限」。 |
 | `usage.lanes[]` | 提議 | `address`、`pool_alias`、`model`、`tokens_24h`、`tokens_7d`、`cache_read_24h`、`usd_24h_est`。`cache_read_24h` 單獨一欄，禁止加進 `tokens_24h` 或 `tokens_7d`。token 不寫進 `top_lines`（那裡只有現有的 `share`）。 |
 | `usage.tasks[]` | 提議 | 稍後才有。`task_id`、`pool_alias`、`tokens`、`usd`。沒有 task id 的不列；未歸線只留一筆總量。欄位未到之前畫 `—`。本版 mockup 不畫這列，因為 fixture 沒有可對的列。 |
+| `cards[].urgent` | 提議 | 布林。在同一份 `fleet.console/1` 的卡片物件上，不在 `quota`。`true` 才進 §6.5 急迫徽章；不是 `need_you`。fixture 沒有這欄。 |
+| `cards[].due_text` | 提議 | 到點原文。在同一份文件的卡片物件上，不在 `quota`。時刻到了該卡才浮出熱區（§6.5）；未到不畫。fixture 沒有這欄。 |
 
 mockup 裡的差距是提議樣本，用來把配速畫出來。算法只寫在這裡：假設 `window_h = 168`（樣本，fixture 沒有這欄），`gap = round(pct×100 − (168−reset_h)/168×100)`。`pool-b-main` 為 91−70＝+21，`pool-b-spare` 為 88−70＝+18，`pool-a-team` 為 48−76＝−28，`pool-a-new` 為 2−1＝+1。超過 +10 的正差距在差距欄寫成 `▴` 加點數（`▴21`、`▴18`），箭頭不著色；未過門檻的 `+1` 與落後的 `-28` 仍用正負號。契約缺 `gap_pts` 時實作必須畫 `—`，不得用這個 168 補。`tok12.4M`、`讀3.1M`、`7d80M`、`usd4.2` 也是提議樣本。`讀` 是 `cache_read_24h`。
 
@@ -365,15 +367,15 @@ codeforge 的 `warn` 與上表可能不同。兩者都要時必須標來源，�
 | 徽章「久」 | idle | 與不新鮮同一個「沒有新鮮訊號」 |
 | 徽章「▲急」 | attention | 要你動手 |
 
-kind 的優先序是 `a`、`c`、`a*`、`b`。`a`：token 已在那台主機，lane 直接換池，不需操作員。`c`：改派非 Claude 引擎；資格由 autopilot 定，capacity 只給剩餘。`a*`：要複製 token 或重新登入，需操作員同意，帶 `card`。`b`：操作員親自 `/login`。熱區只把第一則畫成全文，欄位是 `lane`、`from`、`to`、`kind`、`reason`，不寫百分比。其餘則數若大於 0，收成 `▸ 另 N`，不展開第二則。mockup 只有一則，不畫 `▸ 另 0`。那一則是提議樣本：kind `a`、lane `recovery`（fixture 的 `top_lines`）、from `pool-b-main`、to `pool-a-new`、主機 `fx-host-d`（fixture 的 `hosts`）、沒有 `card`。
+kind 的優先序是 `a`、`c`、`a*`、`b`。`a`：token 已在那台主機，lane 直接換池，不需操作員。`c`：改派非 Claude 引擎；資格由 autopilot 定，capacity 只給剩餘。`a*`：要複製 token 或重新登入，需操作員同意，帶 `card`。`b`：操作員親自 `/login`。熱區只把第一則畫成全文，欄位是 `lane`、`from`、`to`、`kind`、`reason`，不寫百分比。其餘則數若大於 0，收成 `▸ 另 N`，不展開第二則。mockup 只有一則，不畫 `▸ 另 0`。那一則是提議樣本：kind `a`、lane `recovery`（fixture 的 `top_lines`）、from `pool-b-main`、to `pool-a-new`、主機 `fx-host-d`（fixture 的 `hosts`）、沒有 `card`。建議列畫成 `[a]`、lane、接著 `from>to`（`pool-b-main>pool-a-new`）、再寫 reason。來源池在 120、160、200 都不省略。
 
 熱區告警句只提升最嚴重的一池。本 fixture 是 `pool-b-main`（耗盡 14h，早於 spare 的 20h）。沒有告警句的狀態（1 與 2）把 `耗14h` 寫在 main 的數字列；狀態 3 改寫在左欄 `剩14h`，數字列不再寫。spare 沒有自己的告警句，所以 `耗20h` 一直在它的數字列。`└ recovery 佔52%` 是 pool-b（main 與 spare）的 `share`，全表只此一次；它貼在 spare 下面，是為了讓 main 那一列跟告警對齊，不表示這 52% 只屬於 spare。
 
 ### 6.5 同一熱區的三條卡片規則
 
 1. **新卡或更新的卡**：一次短動畫，或一次高亮，然後停住。禁止連續閃爍，禁止 `blink`，禁止用計時器反覆開關高亮。mockup 畫的是高亮那一幀：`✦`（`GLYPHS.structure.fresh`）著 `PALETTE.here`。下一幀拿掉 `✦`，標題留著，顏色回到預設。本 fixture 最新的卡是 `card:d-fe000003`（`since_ms` 距 `generated_at_ms` 6 分），列上用它的 `title`。
-2. **待決徽章**：三個互斥的桶，三個色。一張卡只進一桶，優先序是急迫、到點、逾 4 時。急迫是提議欄 `urgent: true`，不是每個 `need_you`（fixture 四張卡都是 `need_you`，若用那個當急迫，另外兩色永遠是 0）。到點是提議欄 `due_text` 的時刻已到。逾 4 時是 `generated_at_ms − since_ms > 4h`，且沒有前兩項。不進桶的張數仍只在 L0 的 `(N)`。mockup 的 `▲急1` 是 `d-fe000003`（示意標成急迫），`期1` 是下一條的到點卡，`久1` 是 fixture `card:d-fe000002`（`facts.age_h = 18`，未標急迫、無 `due_text`）。三個 id 只在本段點名，徽章上只留計數。
-3. **到點提醒**：`due_text` 的時刻一到，卡自己出現在熱區，不必打開佇列。未到不畫。mockup 的「明天到公司後」是操作者給的例句，fixture 沒有這欄。列上寫 `到期` 與那句話，不寫 `期1`。
+2. **待決徽章**：三個互斥的桶，三個色。一張卡只進一桶，優先序是急迫、到點、逾 4 時。急迫是卡片物件上的提議欄 `cards[].urgent` 為 `true`，不是每個 `need_you`（fixture 四張卡都是 `need_you`，若用那個當急迫，另外兩色永遠是 0）。到點是卡片物件上的提議欄 `cards[].due_text` 的時刻已到。逾 4 時是 `generated_at_ms − since_ms > 4h`，且沒有前兩項。不進桶的張數仍只在 L0 的 `(N)`。mockup 的 `▲急1` 是 `d-fe000003`（示意標成急迫），`期1` 是下一條的到點卡，`久1` 是 fixture `card:d-fe000002`（`facts.age_h = 18`，未標急迫、無 `due_text`）。三個 id 只在本段點名，徽章上只留計數。
+3. **到點提醒**：`cards[].due_text` 的時刻一到，卡自己出現在熱區，不必打開佇列。未到不畫。mockup 的「明天到公司後」是操作者給的例句，fixture 沒有這欄。列上寫 `到期` 與那句話，不寫 `期1`。
 
 這三條在九張 mockup 都在。有建議時，告警與建議佔最底兩列，三條卡片往上讓一列，仍在熱區，不回到冷區。
 
@@ -471,7 +473,7 @@ kind 的優先序是 `a`、`c`、`a*`、`b`。`a`：token 已在那台主機，l
 │▲急1 期1 久1                                              │  └ recovery     佔52%                                     │
 │到期 明天到公司後                                         │  pool-a-new     2%   +1  166h    2%·4h 正常               │
 │✗ 重置前耗盡 剩14h                                        │  pool-b-main   91%  ▴21   51h   40%·3h                    │
-│[a] recovery>pool-a-new token已在主機                     │                                                           │
+│[a] recovery pool-b-main>pool-a-new token已在主機         │                                                           │
 └──────────────────────────────────────────────────────────┴───────────────────────────────────────────────────────────┘
 ```
 
@@ -531,7 +533,7 @@ kind 的優先序是 `a`、`c`、`a*`、`b`。`a`：token 已在那台主機，l
 │▲急1 期1 久1                                                                │  └ recovery     佔52% tok12.4M 讀3.1M                                           │
 │到期 明天到公司後                                                           │  pool-a-new     2%   +1  166h    2%·4h 正常                                     │
 │✗ 重置前耗盡 剩14h                                                          │  pool-b-main   91%  ▴21   51h   40%·3h                                          │
-│[a] recovery>pool-a-new token已在fx-host-d 不必登入                         │                                                                                 │
+│[a] recovery pool-b-main>pool-a-new token已在fx-host-d 不必登入             │                                                                                 │
 └────────────────────────────────────────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -591,7 +593,7 @@ kind 的優先序是 `a`、`c`、`a*`、`b`。`a`：token 已在那台主機，l
 │▲急1 期1 久1                                                                                │  └ recovery     佔52% tok12.4M 讀3.1M 7d80M usd4.2                                                      │
 │到期 明天到公司後                                                                           │  pool-a-new     2%   +1  166h    2%·4h 正常                                                             │
 │✗ L3 重置前耗盡 剩14h                                                                       │  pool-b-main   91%  ▴21   51h   40%·3h                                                                  │
-│[a] recovery>pool-a-new token已在fx-host-d 不必登入 無card                                  │                                                                                                         │
+│[a] recovery pool-b-main>pool-a-new token已在fx-host-d 不必登入 無card                      │                                                                                                         │
 └────────────────────────────────────────────────────────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 

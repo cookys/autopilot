@@ -1,5 +1,5 @@
 // hooks/askpm-log.test.js — PM-session ask/reply log. The hook must stay silent and fail open.
-// Negative control: a real operator prompt is recorded; an injected prompt in the same session is not.
+// Negative control: a real operator prompt is an ask; an injected prompt is a turn marker, not an ask.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -41,7 +41,7 @@ function run(payload, env, files) {
   return { status: r.status, stdout: r.stdout, stderr: r.stderr, lines };
 }
 
-test('injected message is not recorded; a real operator prompt is', () => {
+test('injected message is a turn marker, not an ask; a real operator prompt is', () => {
   const pm = { '.claude/console.json': CONSOLE_OK };
   const real = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt: '記憶線要不要合併？' }, {}, pm);
   assert.equal(real.status, 0, real.stderr);
@@ -59,7 +59,12 @@ test('injected message is not recorded; a real operator prompt is', () => {
     const inj = run({ hook_event_name: 'UserPromptSubmit', session_id: 's', prompt }, {}, pm);
     assert.equal(inj.status, 0, inj.stderr);
     assert.equal(inj.stdout, '');
-    assert.equal(inj.lines.length, 0, 'injected recorded: ' + prompt.slice(0, 40));
+    assert.equal(inj.lines.length, 1, 'injected turn marker missing: ' + prompt.slice(0, 40));
+    const row = JSON.parse(inj.lines[0]);
+    assert.equal(row.kind, 'turn', 'injected recorded as an ask: ' + prompt.slice(0, 40));
+    assert.equal(row.injected, true);
+    assert.equal(row.schema, 'autopilot.askpm/1');
+    assert.equal(row.text, undefined);
   }
 });
 
@@ -341,6 +346,160 @@ test('last_assistant_message wins when the transcript still ends on a previous t
   assert.equal(stop.status, 0, stop.stderr);
   assert.equal(replies.length, 1);
   assert.deepEqual(replies[0].lines, ['這一輪回覆', '現在的']);
+});
+
+function pmSession() {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-own-'));
+  const state = path.join(home, 'state');
+  fs.mkdirSync(state, { recursive: true });
+  fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.claude', 'console.json'), CONSOLE_OK);
+  const env = {
+    PATH: process.env.PATH,
+    HOME: home,
+    TMPDIR: home,
+    AUTOPILOT_STATE_DIR: state,
+    AUTOPILOT_HOOK_ASKPM_LOG: '1',
+  };
+  function send(payload) {
+    return spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ cwd: home, session_id: 's', ...payload }),
+      encoding: 'utf8',
+      env,
+    });
+  }
+  function transcript(entries) {
+    const p = path.join(home, 't.jsonl');
+    fs.writeFileSync(p, entries.join('\n') + '\n');
+    return p;
+  }
+  function rows() {
+    const file = path.join(state, 'askpm.jsonl');
+    if (!fs.existsSync(file)) return [];
+    return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  }
+  return { home, send, transcript, rows, cleanup: () => fs.rmSync(home, { recursive: true, force: true }) };
+}
+
+function entry(role, content) {
+  return JSON.stringify({ type: role, message: { role, content } });
+}
+
+test('transcript fallback records the last assistant text of the turn, not an earlier one', () => {
+  const s = pmSession();
+  try {
+    const ask = '問題甲';
+    const tp = s.transcript([
+      entry('user', ask),
+      entry('assistant', [{ type: 'text', text: 'mid' }]),
+      entry('assistant', [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }]),
+      entry('user', [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }]),
+      entry('assistant', [{ type: 'text', text: 'final' }]),
+    ]);
+    const prompted = s.send({ hook_event_name: 'UserPromptSubmit', prompt: ask });
+    const stop = s.send({ hook_event_name: 'Stop', transcript_path: tp });
+    const replies = s.rows().filter((r) => r.kind === 'reply');
+    assert.equal(prompted.status, 0, prompted.stderr);
+    assert.equal(stop.status, 0, stop.stderr);
+    assert.equal(stop.stdout, '');
+    assert.equal(replies.length, 1);
+    assert.equal(replies[0].text, 'final');
+    assert.deepEqual(replies[0].lines, ['final']);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('an injected prompt closes the open ask, so its Stop records no reply', () => {
+  const s = pmSession();
+  try {
+    const prompted = s.send({ hook_event_name: 'UserPromptSubmit', prompt: '記憶線要不要合併？' });
+    const injected = s.send({ hook_event_name: 'UserPromptSubmit', prompt: '[待決回覆]\n甲' });
+    const stop = s.send({ hook_event_name: 'Stop', last_assistant_message: 'x' });
+    const rows = s.rows();
+    assert.equal(prompted.status, 0, prompted.stderr);
+    assert.equal(injected.status, 0, injected.stderr);
+    assert.equal(stop.status, 0, stop.stderr);
+    assert.equal(stop.stdout, '');
+    assert.equal(rows.filter((r) => r.kind === 'reply').length, 0);
+    assert.equal(rows.filter((r) => r.kind === 'ask').length, 1);
+    const turn = rows.find((r) => r.kind === 'turn');
+    assert.ok(turn, 'injected prompt must append a turn row');
+    assert.equal(turn.injected, true);
+    assert.equal(turn.schema, 'autopilot.askpm/1');
+    assert.equal(typeof turn.at, 'string');
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('a channel turn whose last real user is not the ask records no reply', () => {
+  const s = pmSession();
+  try {
+    const ask = '記憶線要不要合併？';
+    const channel = '<channel source="fleet" from="ns/host-a/other@1" message_id="m" kind="chat">請看這則</channel>';
+    const tp = s.transcript([
+      entry('user', ask),
+      entry('assistant', [{ type: 'text', text: '上一輪的回覆' }]),
+      entry('user', channel),
+      entry('assistant', [{ type: 'text', text: 'Now a card for the operator to listen.' }]),
+    ]);
+    const prompted = s.send({ hook_event_name: 'UserPromptSubmit', prompt: ask });
+    const stop = s.send({ hook_event_name: 'Stop', transcript_path: tp, last_assistant_message: 'y' });
+    const rows = s.rows();
+    assert.equal(prompted.status, 0, prompted.stderr);
+    assert.equal(stop.status, 0, stop.stderr);
+    assert.equal(stop.stdout, '');
+    assert.equal(rows.filter((r) => r.kind === 'reply').length, 0);
+    assert.equal(rows.filter((r) => r.kind === 'ask').length, 1);
+    assert.equal(rows.some((r) => r.kind === 'turn'), false);
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('an unreadable transcript still records the reply for the open ask', () => {
+  const s = pmSession();
+  try {
+    const prompted = s.send({ hook_event_name: 'UserPromptSubmit', prompt: '記憶線要不要合併？' });
+    const stop = s.send({
+      hook_event_name: 'Stop',
+      transcript_path: path.join(s.home, 'missing.jsonl'),
+      last_assistant_message: '還在',
+    });
+    const replies = s.rows().filter((r) => r.kind === 'reply');
+    assert.equal(prompted.status, 0, prompted.stderr);
+    assert.equal(stop.status, 0, stop.stderr);
+    assert.equal(replies.length, 1);
+    assert.equal(replies[0].text, '還在');
+  } finally {
+    s.cleanup();
+  }
+});
+
+test('ask then its own Stop still records the reply', () => {
+  const s = pmSession();
+  try {
+    const prompt = '問\r\n題';
+    const tp = s.transcript([
+      entry('user', '問\n題'),
+      entry('assistant', [{ type: 'text', text: '舊的' }]),
+    ]);
+    const prompted = s.send({ hook_event_name: 'UserPromptSubmit', prompt });
+    const stop = s.send({ hook_event_name: 'Stop', transcript_path: tp, last_assistant_message: '新的回覆\n第二行' });
+    const rows = s.rows();
+    const replies = rows.filter((r) => r.kind === 'reply');
+    assert.equal(prompted.status, 0, prompted.stderr);
+    assert.equal(stop.status, 0, stop.stderr);
+    assert.equal(stop.stdout, '');
+    assert.equal(rows.filter((r) => r.kind === 'ask').length, 1);
+    assert.equal(rows.find((r) => r.kind === 'ask').text, '問\n題');
+    assert.equal(replies.length, 1);
+    assert.equal(replies[0].text, '新的回覆\n第二行');
+    assert.deepEqual(replies[0].lines, ['新的回覆', '第二行']);
+  } finally {
+    s.cleanup();
+  }
 });
 
 test('two Stops in one turn record one reply', () => {

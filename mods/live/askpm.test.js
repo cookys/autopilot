@@ -70,6 +70,20 @@ test('a narrow panel shows three entries', () => {
   assert.equal(wide.entries.length, 5);
 });
 
+test('a turn row is ignored and does not take the reply', () => {
+  const raw = [
+    ask('2026-11-10T01:00:00.000Z', '記憶線合併了嗎'),
+    { schema: 'autopilot.askpm/1', kind: 'turn', at: '2026-11-10T01:00:01.000Z', injected: true },
+    reply('2026-11-10T01:00:05.000Z', '好\n第二行'),
+  ].map((r) => JSON.stringify(r)).join('\n');
+  const rows = A.parseAskpm(raw);
+  assert.deepEqual(rows.map((r) => r.kind), ['ask', 'reply']);
+  const view = A.askpmView(rows, { cols: 120 });
+  assert.equal(view.entries.length, 1);
+  assert.equal(view.entries[0].status, 'replied');
+  assert.deepEqual(view.entries[0].replyLines, ['好', '第二行']);
+});
+
 test('summary is the first 40 code points and the section renders beside a wide queue', () => {
   const text = '甲'.repeat(50);
   const rows = [ask('2026-11-10T01:00:00.000Z', text), reply('2026-11-10T01:00:05.000Z', '好\n第二行')];

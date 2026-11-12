@@ -56,7 +56,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Shared JSON & store primitives (cont.)** — `lib/hippo.js`, `project-record.js` `lib/lane-manifest.js` `lib/switch-journal.js`
 
-**Test helpers** — `lib/test-reaper.js`
+**Test helpers** — `lib/test-reaper.js` `lib/test-tmux-claude-teardown.sh` `check-test-tmux-claude-teardown.js`
 
 
 ## When adding a new script

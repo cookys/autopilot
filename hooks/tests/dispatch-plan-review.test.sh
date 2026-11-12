@@ -197,6 +197,7 @@ childProcess.spawnSync = function authorProbe(command, args, options) {
     cwd,
     repo_root: argValue(args, '--repo-root'),
     runner: argValue(args, '--runner'),
+    timeout: argValue(args, '--timeout'),
     prompt_dir: fs.realpathSync(path.dirname(prompt)),
     prompt_dir_mode: (fs.statSync(path.dirname(prompt)).mode & 0o777).toString(8),
     prompt_mode: (fs.statSync(prompt).mode & 0o777).toString(8),
@@ -1660,5 +1661,230 @@ REG_OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 node "$SCRIPT" --repo-root "
   --plan-file "$REG_PLAN" --rubric-file "$RUBRIC_FILE" --ticket reg-ok --session-id s-reg-ok \
   --generation 1 --state-dir "$STATE_DIR" --runner cc-shim --model MiniMax-M3 --effort high 2>&1)"
 assert_not_contains "$REG_OUT" "plan_unregistered" "a plan with an active INDEX row is never refused"
+
+# --- payload-scaled seat timeout, --timeout usage, and --rubric-file from --repo-root (2026-11-12) ---
+TIMEOUT_UNIT="$(node - "$REPO_ROOT" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const mod = require(path.join(root, 'scripts/lib/plan-review-timeout.js'));
+const { effortSeatTimeoutSeconds, EFFORT_DEFAULT_SECONDS } = mod;
+const checks = [
+  ['exports', Object.keys(mod).sort().join(','), 'EFFORT_DEFAULT_SECONDS,effortSeatTimeoutSeconds'],
+  ['defaults', `${EFFORT_DEFAULT_SECONDS.max}:${EFFORT_DEFAULT_SECONDS.xhigh}:${EFFORT_DEFAULT_SECONDS.high}:${EFFORT_DEFAULT_SECONDS.default}`, '1200:1200:600:1200'],
+  ['high_omitted', String(effortSeatTimeoutSeconds('high', null)), '600'],
+  ['high_0', String(effortSeatTimeoutSeconds('high', null, 0)), '600'],
+  ['max_0', String(effortSeatTimeoutSeconds('max', null, 0)), '1200'],
+  ['low_0', String(effortSeatTimeoutSeconds('low', null, 0)), '300'],
+  ['high_32k', String(effortSeatTimeoutSeconds('high', null, 32768)), '1200'],
+  ['max_32k', String(effortSeatTimeoutSeconds('max', null, 32768)), '2400'],
+  ['low_32k', String(effortSeatTimeoutSeconds('low', null, 32768)), '600'],
+  ['high_64k', String(effortSeatTimeoutSeconds('high', null, 65536)), '1800'],
+  ['max_64k', String(effortSeatTimeoutSeconds('max', null, 65536)), '3600'],
+  ['low_64k', String(effortSeatTimeoutSeconds('low', null, 65536)), '900'],
+  ['explicit_wins', String(effortSeatTimeoutSeconds('high', 120, 65536)), '120'],
+  ['mirror_timeout', String(
+    fs.readFileSync(path.join(root, 'scripts/lib/plan-review-timeout.js'))
+      .equals(fs.readFileSync(path.join(root, 'platforms/codex/plugin/scripts/lib/plan-review-timeout.js'))),
+  ), 'true'],
+  ['mirror_dispatch', String(
+    fs.readFileSync(path.join(root, 'scripts/dispatch-plan-review.js'))
+      .equals(fs.readFileSync(path.join(root, 'platforms/codex/plugin/scripts/dispatch-plan-review.js'))),
+  ), 'true'],
+];
+const bad = checks.filter(([, got, want]) => got !== want);
+if (bad.length > 0) {
+  process.stderr.write(`${JSON.stringify(bad)}\n`);
+  process.exit(1);
+}
+process.stdout.write('ok');
+NODE
+)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "plan-review-timeout scales 0B / 32KiB / 64KiB payloads and preserves explicit timeout + codex mirrors"
+assert_eq "$TIMEOUT_UNIT" "ok" "plan-review-timeout unit checks all pass"
+
+HELP_OUT="$(node "$SCRIPT" --help 2>&1)"; HELP_RC=$?
+assert_exit_code "$HELP_RC" "0" "dispatch-plan-review --help exits 0"
+assert_contains "$HELP_OUT" "--timeout <Ns|Nm>" "usage lists --timeout <Ns|Nm>"
+assert_contains "$HELP_OUT" "effort tier scaled by payload size" \
+  "usage documents effort-tier timeout scaled by payload size"
+
+SCALE_REPO="$TEST_TMP/scale-repo"
+mkdir -p "$SCALE_REPO/src" "$SCALE_REPO/nested"
+git -C "$SCALE_REPO" init -q
+node - "$SCALE_REPO" "$MANIFEST" "$TEST_TMP" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [repo, manifestPath, tmp] = process.argv.slice(2);
+const rubric = '# Rubric\n- R1: readiness\n'; // 25 bytes
+const ctxHeader = 'const ready = true;\n';
+const ctx = ctxHeader + '//'.padEnd(4096 - Buffer.byteLength(ctxHeader) - 1, 'x') + '\n'; // 4096 bytes
+if (Buffer.byteLength(rubric) !== 25 || Buffer.byteLength(ctx) !== 4096) process.exit(2);
+fs.writeFileSync(path.join(repo, 'rubric.md'), rubric);
+fs.writeFileSync(path.join(repo, 'src/ctx.js'), ctx);
+const makePlan = (totalBytes) => {
+  const need = totalBytes - 25 - 4096;
+  const head = '# Plan\n';
+  const body = head + 'p'.repeat(need - Buffer.byteLength(head) - 1) + '\n';
+  if (Buffer.byteLength(body) !== need) process.exit(2);
+  return body;
+};
+fs.writeFileSync(path.join(repo, 'plan-32k.md'), makePlan(32768));
+fs.writeFileSync(path.join(repo, 'plan-64k.md'), makePlan(65536));
+fs.writeFileSync(path.join(repo, 'plan-small.md'), '# Plan\nVerify relative rubric resolution.\n');
+
+const base = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const writeSingle = (id, outName) => {
+  const m = {
+    ...base,
+    logical_plan_id: id,
+    minimum_distinct_families: 1,
+    seats: [{ ...base.seats[0], effort: 'high', fallbacks: [] }],
+  };
+  fs.writeFileSync(path.join(tmp, outName), `${JSON.stringify(m, null, 2)}\n`);
+};
+writeSingle('scale-32k-plan', 'scale-32k-manifest.json');
+writeSingle('scale-64k-plan', 'scale-64k-manifest.json');
+writeSingle('scale-cap-plan', 'scale-cap-manifest.json');
+writeSingle('scale-explicit-low-plan', 'scale-explicit-low-manifest.json');
+writeSingle('scale-explicit-eq-plan', 'scale-explicit-eq-manifest.json');
+writeSingle('rubric-rel-plan', 'rubric-rel-manifest.json');
+writeSingle('rubric-twin-plan', 'rubric-twin-manifest.json');
+writeSingle('rubric-outside-plan', 'rubric-outside-manifest.json');
+writeSingle('rubric-abs-plan', 'rubric-abs-manifest.json');
+NODE
+assert_exit_code "$?" "0" "scale/rubric fixture files constructed with exact byte counts"
+
+run_scale_probe() {
+  local ticket="$1" plan_arg="$2" rubric_arg="$3" manifest_file="$4" stderr_file="$5"
+  shift 5
+  PLAN_REVIEW_PROBE_AUTHOR="$REPO_ROOT/scripts/dispatch-author.sh" \
+  PLAN_REVIEW_PROBE_LOG="$AUTHOR_PROBE_LOG" \
+  PLAN_REVIEW_PROBE_RAW="$AUTHOR_PROBE_RAW" \
+  PLAN_REVIEW_PROBE_RESPONSE="$READY" \
+  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require=$AUTHOR_PROBE_PRELOAD" \
+    node "$SCRIPT" \
+      --repo-root "$SCALE_REPO" --plan-file "$plan_arg" --rubric-file "$rubric_arg" \
+      --ticket "$ticket" --session-id "$ticket" --generation 1 \
+      --manifest-file "$manifest_file" --state-dir "$TEST_TMP/scale-state" "$@" 2>"$stderr_file"
+}
+
+# 32 KiB total payload (plan + rubric + context = 32768 bytes) on effort=high (600s) -> 1200s.
+rm -f "$AUTHOR_PROBE_LOG"
+SCALE_ERR="$TEST_TMP/scale-32k.err"
+OUT="$(run_scale_probe scale-32k plan-32k.md rubric.md "$TEST_TMP/scale-32k-manifest.json" "$SCALE_ERR" \
+  --context-file src/ctx.js)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "32 KiB payload review succeeds"
+AUTHOR_RECORD="$(tail -n 1 "$AUTHOR_PROBE_LOG")"
+assert_eq "$(json_field "$AUTHOR_RECORD" timeout)" "1200s" \
+  "32 KiB payload (plan + rubric + context) scales high-effort seat timeout from 600s to 1200s"
+assert_not_contains "$(cat "$SCALE_ERR")" "below the payload-scaled default" \
+  "omitted --timeout emits no low-timeout warning"
+
+# 64 KiB total payload (plan + rubric + context = 65536 bytes) on effort=high (600s) -> 1800s.
+rm -f "$AUTHOR_PROBE_LOG"
+SCALE_ERR="$TEST_TMP/scale-64k.err"
+OUT="$(run_scale_probe scale-64k plan-64k.md rubric.md "$TEST_TMP/scale-64k-manifest.json" "$SCALE_ERR" \
+  --context-file src/ctx.js)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "64 KiB payload review succeeds"
+AUTHOR_RECORD="$(tail -n 1 "$AUTHOR_PROBE_LOG")"
+assert_eq "$(json_field "$AUTHOR_RECORD" timeout)" "1800s" \
+  "64 KiB payload (plan + rubric + context) scales high-effort seat timeout from 600s to 1800s"
+
+# Wall-clock cap still bounds the payload-scaled default.
+rm -f "$AUTHOR_PROBE_LOG"
+SCALE_ERR="$TEST_TMP/scale-cap.err"
+OUT="$(run_scale_probe scale-cap plan-32k.md rubric.md "$TEST_TMP/scale-cap-manifest.json" "$SCALE_ERR" \
+  --context-file src/ctx.js --max-wall-seconds 900)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "wall-capped scaled payload review succeeds"
+AUTHOR_RECORD="$(tail -n 1 "$AUTHOR_PROBE_LOG")"
+CAP_OK="$(node -e '
+const raw = process.argv[1];
+const m = /^(\d+)s$/.exec(raw);
+const secs = m ? Number(m[1]) : -1;
+process.stdout.write(secs >= 895 && secs <= 900 ? "capped" : `bad:${raw}`);
+' "$(json_field "$AUTHOR_RECORD" timeout)")"
+assert_eq "$CAP_OK" "capped" "payload-scaled default is still capped by remaining wall-clock budget"
+
+# Explicit --timeout below scaled default keeps explicit value and prints one stderr warning.
+rm -f "$AUTHOR_PROBE_LOG"
+SCALE_ERR="$TEST_TMP/scale-explicit-low.err"
+OUT="$(run_scale_probe scale-explicit-low plan-32k.md rubric.md "$TEST_TMP/scale-explicit-low-manifest.json" "$SCALE_ERR" \
+  --context-file src/ctx.js --timeout 120s)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "explicit --timeout below scaled default still executes"
+AUTHOR_RECORD="$(tail -n 1 "$AUTHOR_PROBE_LOG")"
+assert_eq "$(json_field "$AUTHOR_RECORD" timeout)" "120s" \
+  "explicit --timeout is kept unchanged when below payload-scaled default"
+assert_contains "$(cat "$SCALE_ERR")" \
+  "dispatch-plan-review: warning: --timeout 120s is below the payload-scaled default 1200s for effort high (32768 bytes)" \
+  "explicit --timeout below scaled default prints the exact stderr warning"
+
+# Explicit --timeout at or above scaled default prints no warning.
+rm -f "$AUTHOR_PROBE_LOG"
+SCALE_ERR="$TEST_TMP/scale-explicit-eq.err"
+OUT="$(run_scale_probe scale-explicit-eq plan-32k.md rubric.md "$TEST_TMP/scale-explicit-eq-manifest.json" "$SCALE_ERR" \
+  --context-file src/ctx.js --timeout 1200s)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "explicit --timeout equal to scaled default succeeds"
+assert_not_contains "$(cat "$SCALE_ERR")" "below the payload-scaled default" \
+  "explicit --timeout equal to scaled default prints no warning"
+
+# Relative --rubric-file resolves against --repo-root while cwd is elsewhere.
+ELSEWHERE_CWD="$TEST_TMP/elsewhere-cwd"
+mkdir -p "$ELSEWHERE_CWD/nested"
+printf '%s\n' '# Repo Rubric' '- R1: repo-root-criterion' '- R2: repo-root-integrity' \
+  >"$SCALE_REPO/nested/rubric.md"
+EXPECTED_REPO_RUBRIC_SHA="$(node -e '
+const crypto = require("crypto"), fs = require("fs");
+process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+' "$SCALE_REPO/nested/rubric.md")"
+
+rm -f "$AUTHOR_PROBE_LOG"
+RUBRIC_REL_ERR="$TEST_TMP/rubric-rel.err"
+OUT="$(
+  cd "$ELSEWHERE_CWD" && run_scale_probe rubric-rel plan-small.md nested/rubric.md \
+    "$TEST_TMP/rubric-rel-manifest.json" "$RUBRIC_REL_ERR"
+)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "relative --rubric-file resolves from --repo-root when cwd is elsewhere"
+assert_eq "$(json_field "$OUT" rubric_sha256)" "$EXPECTED_REPO_RUBRIC_SHA" \
+  "artifact binds the --repo-root rubric sha256"
+AUTHOR_RECORD="$(tail -n 1 "$AUTHOR_PROBE_LOG")"
+assert_contains "$(json_field "$AUTHOR_RECORD" prompt_text)" "- R1: repo-root-criterion" \
+  "seat prompt receives the --repo-root rubric content"
+
+# Cwd-twin warning for relative --rubric-file when cwd holds different bytes.
+printf '%s\n' '# Stale CWD Rubric' '- R1: stale-cwd-copy' >"$ELSEWHERE_CWD/nested/rubric.md"
+rm -f "$AUTHOR_PROBE_LOG"
+RUBRIC_TWIN_ERR="$TEST_TMP/rubric-twin.err"
+OUT="$(
+  cd "$ELSEWHERE_CWD" && run_scale_probe rubric-twin plan-small.md nested/rubric.md \
+    "$TEST_TMP/rubric-twin-manifest.json" "$RUBRIC_TWIN_ERR"
+)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "relative --rubric-file with differing cwd twin still reviews --repo-root copy"
+assert_eq "$(json_field "$OUT" rubric_sha256)" "$EXPECTED_REPO_RUBRIC_SHA" \
+  "cwd twin never overrides --repo-root rubric bytes"
+assert_contains "$(cat "$RUBRIC_TWIN_ERR")" \
+  "dispatch-plan-review: warning: nested/rubric.md also exists under the cwd with different content; reviewing the --repo-root copy" \
+  "differing cwd twin for relative --rubric-file prints warning"
+
+# Containment: relative --rubric-file escaping --repo-root is refused; explicit absolute path is allowed.
+OUTSIDE_RUBRIC="$TEST_TMP/outside-rubric.md"
+printf '%s\n' '# Outside Rubric' '- R1: explicit-absolute-allowed' >"$OUTSIDE_RUBRIC"
+rm -f "$AUTHOR_PROBE_LOG"
+RUBRIC_OUT_ERR="$TEST_TMP/rubric-outside.err"
+OUT="$(
+  cd "$ELSEWHERE_CWD" && run_scale_probe rubric-outside plan-small.md ../outside-rubric.md \
+    "$TEST_TMP/rubric-outside-manifest.json" "$RUBRIC_OUT_ERR"
+)"; EXIT=$?
+assert_exit_code "$EXIT" "2" "relative --rubric-file outside --repo-root is refused"
+assert_contains "$(cat "$RUBRIC_OUT_ERR")" "--rubric-file must be inside --repo-root:" \
+  "relative --rubric-file containment refusal names --rubric-file"
+assert_file_absent "$AUTHOR_PROBE_LOG" "refused relative --rubric-file dispatches no seat"
+
+RUBRIC_ABS_ERR="$TEST_TMP/rubric-abs.err"
+OUT="$(
+  cd "$ELSEWHERE_CWD" && run_scale_probe rubric-abs plan-small.md "$OUTSIDE_RUBRIC" \
+    "$TEST_TMP/rubric-abs-manifest.json" "$RUBRIC_ABS_ERR"
+)"; EXIT=$?
+assert_exit_code "$EXIT" "0" "explicit absolute --rubric-file outside --repo-root remains allowed"
 
 finalize_test

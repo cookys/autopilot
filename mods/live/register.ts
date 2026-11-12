@@ -102,7 +102,7 @@ const FLEET_SHOWN_MS = 15_000
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
 const FLEET = atom({ plugin: 'autopilot', key: 'fleet' } as const, { v: FLEET_SUMMARY_V, fetchedMs: null, error: null, capped: 0, totals: { needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }, lanes: [], topStuck: null } as FleetSummary)
-const fleetState = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null }).id
+const fleetState = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null, stale: task.stale }).id
 function kickFleet($: EngineInterface, nowMs: number): void {
   void fleetFeed.refresh(argv => $.process.run(argv, { timeoutMs: 5000 }), nowMs).then(async ran => {
     if (!ran) return

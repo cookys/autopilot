@@ -13,6 +13,8 @@ export type FleetRow = {
   state: string // the hub's own word, lower-cased: open, task_accepted, running, waiting, result_reported, done, failed, suspect, lost, blocked_human, unknown, ...
   createdMs: number | null
   observedMs: number | null
+  // last progress stamp the hub published (progress_at, else updated_at, else activity_at, else numeric updated_ms); null when the row carries none
+  progressMs: number | null
   // what a waiting row waits on: a linked watch (`watch_ids`), else a live child (a row of any kind, observed runs included, that is not finished and names it as parent);
   // null for a row that is not waiting
   waitsOn: 'watch' | 'child' | null
@@ -20,14 +22,16 @@ export type FleetRow = {
 
 // why a row is flagged: open over an hour with nobody accepting it, a seat not observed for four hours, or a state the hub itself classifies as stuck
 export type StuckReason = 'unaccepted' | 'quiet' | 'hub'
-export type FleetTask = FleetRow & { inflight: boolean; stuck: StuckReason | null; ageMs: number | null; quietMs: number | null }
-export type FleetLane = { lane: string; host: string; inflight: FleetTask[]; upcoming: FleetTask[]; stuck: number }
+export type FleetTask = FleetRow & { inflight: boolean; stuck: StuckReason | null; stale: boolean; ageMs: number | null; quietMs: number | null }
+export type FleetLane = { lane: string; host: string; inflight: FleetTask[]; upcoming: FleetTask[]; stale: FleetTask[]; stuck: number }
 // what the pane draws: the lanes as of `nowMs`, when the data was last fetched and the last fetch's error (null while it worked)
 export type FleetView = { lanes: FleetLane[]; fetchedMs: number | null; error: string | null; nowMs: number; capped: number; others?: OthersView | null } // capped: work rows past FLEET_MAX_ROWS, not drawn
 
 export const FLEET_TTL_MS = 30_000
 export const OPEN_UNACCEPTED_MS = 3_600_000
 export const QUIET_MS = 4 * 3_600_000
+// a running or stalled row with no progress newer than this is drawn stale, after the other rows, and left out of those counts (PM 01M78C2N)
+export const STALE_NO_PROGRESS_MS = 24 * 3_600_000
 export const FLEET_ARGV = ['fleet', 'tasks', '--tree', '--json'] as const
 // bounds on what one fetch may cost a render (G23 review g1): an output over FLEET_MAX_BYTES (or one the engine cut at its 4 MiB) is refused and the last rows stay;
 // past FLEET_MAX_ROWS work rows the rest are counted, not kept. Today's hub: ~180 KB, ~260 rows of which ~20 are work rows.
@@ -51,6 +55,9 @@ export function utf8Bytes(s: string): number {
 }
 
 const TERMINAL = new Set(['done', 'declined', 'cancelled', 'canceled'])
+const RUNNING_STATES = new Set(['running', 'in_progress'])
+// failed, lost and blocked_human keep their own groups even when the row is old
+const STALE_EXEMPT = new Set(['failed', 'lost', 'blocked_human'])
 // a child that failed or was lost is not something its parent waits on (its own row still shows, as failed)
 const CHILD_ENDED = new Set([...TERMINAL, 'failed', 'lost'])
 const HUB_STUCK = new Set(['suspect', 'lost', 'blocked_human'])
@@ -80,6 +87,9 @@ const timeOf = (v: unknown): number | null => {
   const ms = typeof v === 'string' ? Date.parse(v) : NaN
   return Number.isFinite(ms) ? ms : null
 }
+const numMs = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+// the hub has no progress field today; read one when a later feed adds it. First ISO wins, then a numeric updated_ms.
+const progressMsOf = (o: Record<string, unknown>): number | null => timeOf(o.progress_at) ?? timeOf(o.updated_at) ?? timeOf(o.activity_at) ?? numMs(o.updated_ms)
 
 // The hub's JSON (a list of rows) to work rows: observed runs (`kind: observed_run`, a process the courier saw, not a task anyone was given) and finished rows are left
 // out. Throws on JSON that is not a list, so the feed can say the data is unreadable instead of drawing an empty fleet.
@@ -110,6 +120,7 @@ export function parseFleetTasks(json: string, maxRows = FLEET_MAX_ROWS): { rows:
       progress: firstLine(str(o.progress)),
       createdMs: ulidMs(id),
       observedMs: timeOf(o.observed_at),
+      progressMs: progressMsOf(o),
       waitsOn: state !== 'waiting' ? null : Array.isArray(o.watch_ids) && o.watch_ids.length > 0 ? 'watch' : liveParents.has(id) ? 'child' : null,
     })
   }
@@ -123,23 +134,39 @@ export function stuckOf(r: FleetRow, nowMs: number): StuckReason | null {
   return null
 }
 
-// Grouped by lane: a lane's in-flight rows first (stuck ones on top, then the newest), then its open rows, the upcoming work (oldest first: the queue's order). Lanes
-// with a stuck row come first, then the busiest, then by name.
-export function fleetLanes(rows: readonly FleetRow[], nowMs: number): FleetLane[] {
+// A row the pane would draw as running or stalled, whose last progress (or its creation, when the hub sent no progress time) is older than `staleMs`.
+// `nowMs - at > staleMs` with no special case: `x > Infinity` is false, so a caller can turn the rule off by passing Infinity.
+function noProgressStale(r: FleetRow, nowMs: number, staleMs: number): boolean {
+  if (STALE_EXEMPT.has(r.state)) return false
+  if (!RUNNING_STATES.has(r.state) && stuckOf(r, nowMs) === null) return false
+  const at = r.progressMs ?? r.createdMs
+  return at !== null && nowMs - at > staleMs
+}
+
+// Grouped by lane: a lane's in-flight rows first (stuck ones on top, then the newest), then its open rows, the upcoming work (oldest first: the queue's order),
+// then rows with no progress past `staleMs` (oldest progress first). Those last rows are not stuck and are not in the running or stuck counts. Lanes with a
+// stuck row come first, then the busiest, then by name.
+export function fleetLanes(rows: readonly FleetRow[], nowMs: number, staleMs = STALE_NO_PROGRESS_MS): FleetLane[] {
   const by = new Map<string, FleetLane>()
   for (const r of rows) {
     const key = r.host + '/' + r.lane
     let lane = by.get(key)
-    if (lane === undefined) by.set(key, (lane = { lane: r.lane, host: r.host, inflight: [], upcoming: [], stuck: 0 }))
+    if (lane === undefined) by.set(key, (lane = { lane: r.lane, host: r.host, inflight: [], upcoming: [], stale: [], stuck: 0 }))
     const stuck = stuckOf(r, nowMs)
-    const task: FleetTask = { ...r, inflight: r.state !== 'open', stuck, ageMs: r.createdMs === null ? null : Math.max(0, nowMs - r.createdMs), quietMs: r.observedMs === null ? null : Math.max(0, nowMs - r.observedMs) }
-    if (stuck !== null) lane.stuck++
-    ;(task.inflight ? lane.inflight : lane.upcoming).push(task)
+    const stale = noProgressStale(r, nowMs, staleMs)
+    const task: FleetTask = { ...r, inflight: r.state !== 'open', stuck: stale ? null : stuck, stale, ageMs: r.createdMs === null ? null : Math.max(0, nowMs - r.createdMs), quietMs: r.observedMs === null ? null : Math.max(0, nowMs - r.observedMs) }
+    if (stale) lane.stale.push(task)
+    else {
+      if (stuck !== null) lane.stuck++
+      ;(task.inflight ? lane.inflight : lane.upcoming).push(task)
+    }
   }
   const created = (t: FleetTask): number => t.createdMs ?? 0
+  const progressed = (t: FleetTask): number => t.progressMs ?? t.createdMs ?? 0
   for (const l of by.values()) {
     l.inflight.sort((a, b) => Number(b.stuck !== null) - Number(a.stuck !== null) || created(b) - created(a))
     l.upcoming.sort((a, b) => created(a) - created(b))
+    l.stale.sort((a, b) => progressed(a) - progressed(b))
   }
   return [...by.values()].sort((a, b) => Number(b.stuck > 0) - Number(a.stuck > 0) || b.inflight.length - a.inflight.length || a.lane.localeCompare(b.lane))
 }

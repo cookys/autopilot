@@ -1,9 +1,12 @@
 // mods/live/fleet.test.ts — the Fleet tab's data, pure half (fleet.ts): parsing the hub's task tree, the stuck rules, the lane grouping and the feed's TTL.
 // The mounted half (the tab drawn from a mocked `fleet tasks --tree --json`) is in live.test.ts ("G23 Fleet tab"). Run through `bash mods/live/run-tests.sh`.
 import { test, expect } from 'claude-code/testing'
-import { FLEET_ARGV, FLEET_MAX_BYTES, FLEET_TITLE_MAX, capTitle, fleetLanes, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes, OPEN_UNACCEPTED_MS, parseFleetTasks, QUIET_MS, stuckOf, taskTitle, ulidMs } from './fleet'
-import type { FleetRow, FleetTask } from './fleet'
+import { FLEET_ARGV, FLEET_MAX_BYTES, FLEET_TITLE_MAX, capTitle, fleetLanes, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes, OPEN_UNACCEPTED_MS, parseFleetTasks, QUIET_MS, STALE_NO_PROGRESS_MS, stuckOf, taskTitle, ulidMs } from './fleet'
+import type { FleetLane, FleetRow, FleetTask } from './fleet'
 import { stateOf } from './ui'
+import { fleetTabLines } from './tabs'
+import { makeT, T_EN } from './i18n'
+import type { LiveSnapshot } from './model'
 
 const NOW = Date.parse('2026-11-03T00:00:00.000Z')
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -110,7 +113,7 @@ test('utf8Bytes counts UTF-8 bytes: ASCII 1, Latin-1 and Greek 2, CJK 3, an astr
   expect(utf8Bytes('\ud800x')).toBe(4)
 })
 
-const r = (o: Partial<FleetRow>): FleetRow => ({ id: ulid(NOW - 60_000), lane: 'a--claude', host: 'h', title: 't', progress: '', state: 'running', createdMs: NOW - 60_000, observedMs: NOW - 60_000, ...o })
+const r = (o: Partial<FleetRow>): FleetRow => ({ id: ulid(NOW - 60_000), lane: 'a--claude', host: 'h', title: 't', progress: '', state: 'running', createdMs: NOW - 60_000, observedMs: NOW - 60_000, progressMs: null, ...o })
 
 test('stuck: open past the hour unaccepted, a seat quiet past four hours, the hub own suspect / lost / blocked_human; each just inside its bound is not', () => {
   expect(stuckOf(r({ state: 'open', createdMs: NOW - OPEN_UNACCEPTED_MS - 1 }), NOW)).toBe('unaccepted')
@@ -138,6 +141,82 @@ test('lanes: in flight (stuck first, then newest) before upcoming (oldest first)
   expect(lanes[0].stuck).toBe(2)
   expect(lanes[1].inflight.map(t => t.id)).toEqual(['b2', 'b1'])
   expect(lanes[0].upcoming[0]).toMatchObject({ stuck: 'unaccepted', ageMs: OPEN_UNACCEPTED_MS + 5, inflight: false })
+})
+
+// A task the pane would draw as running or stalled, with no progress for more than a day, is stale: after the other rows, and out of those counts.
+// `x > Infinity` is false, so passing Infinity is the negative control (the 25h row stays where it was). No special case for Infinity.
+const H = 3_600_000
+const DAY = 24 * H
+const H25 = 25 * H
+const H23 = 23 * H
+const lanesAt = (rows: readonly FleetRow[], staleMs?: number): FleetLane[] =>
+  (fleetLanes as (rows: readonly FleetRow[], nowMs: number, staleMs?: number) => FleetLane[])(rows, NOW, staleMs)
+const staleOf = (lane: FleetLane): FleetTask[] => (lane as FleetLane & { stale?: FleetTask[] }).stale ?? []
+const fleetTexts = (lanes: FleetLane[], t = T_EN): string[] => fleetTabLines({ pending: [] } as LiveSnapshot, {
+  t, cols: 100, fleet: { lanes, fetchedMs: NOW, error: null, nowMs: NOW, capped: 0 },
+}).map(l => l.text)
+const atTitle = (lines: string[], title: string): number => lines.findIndex(l => l.includes(title))
+
+test('a task with no progress for more than 24h is stale and last; 23h stays; Infinity leaves the 25h row running', () => {
+  expect(STALE_NO_PROGRESS_MS).toBe(DAY)
+  const old = r({ id: 'old25', state: 'running', createdMs: NOW - H25, title: 'old work' })
+  const young = r({ id: 'young23', state: 'running', createdMs: NOW - H23, title: 'young work' })
+  const soon = r({ id: 'soon', state: 'open', createdMs: NOW - 60_000, title: 'soon work' })
+  const older = r({ id: 'older', state: 'running', createdMs: NOW - H25 - 5_000, title: 'older work' })
+  const open25 = r({ id: 'open25', state: 'open', createdMs: NOW - H25, title: 'old open' })
+  const quiet23 = r({ id: 'quiet23', state: 'running', createdMs: NOW - H23, observedMs: NOW - H23, title: 'quiet seat' })
+  const failed25 = r({ id: 'failed25', state: 'failed', createdMs: NOW - H25, title: 'old failure' })
+  const waiting25 = r({ id: 'wait25', state: 'waiting', createdMs: NOW - H25, title: 'old wait' })
+  const exact = r({ id: 'exact24', state: 'running', createdMs: NOW - DAY, title: 'exact day' })
+  const lanes = lanesAt([older, old, young, soon, open25, quiet23, failed25, waiting25, exact])
+  const lane = lanes[0]
+  expect(staleOf(lane).map(t => t.id)).toEqual(['older', 'old25', 'open25'])
+  expect(lane.inflight.map(t => t.id)).toEqual(['quiet23', 'young23', 'exact24', 'failed25', 'wait25'])
+  expect(lane.upcoming.map(t => t.id)).toEqual(['soon'])
+  expect(lane.stuck).toBe(1) // quiet23 only; failed stays failed, and the 25h open row is stale, not stuck
+  for (const t of staleOf(lane)) {
+    expect(t.stuck).toBe(null)
+    expect(stateOf('fleetTask', { state: t.state, stuck: false, stale: true } as { state: string; stuck: boolean }).id).toBe('stale')
+  }
+  expect(lane.inflight.find(t => t.id === 'quiet23')?.stuck).toBe('quiet')
+  expect(lane.inflight.find(t => t.id === 'young23')?.stuck).toBe(null)
+  const counted = summaryOf([old, young, open25, quiet23])
+  expect(counted.totals.running).toBe(1) // young23; old is stale
+  expect(counted.totals.stuck).toBe(1) // quiet23; open25 is stale
+  const en = fleetTexts(lanesAt([old, young, soon]))
+  const oldLine = en[atTitle(en, 'old work')]
+  const youngAt = atTitle(en, 'young work')
+  const soonAt = atTitle(en, 'soon work')
+  const oldAt = atTitle(en, 'old work')
+  expect(oldLine.includes('stale')).toBe(true)
+  expect(youngAt).toBeLessThan(soonAt)
+  expect(soonAt).toBeLessThan(oldAt)
+  const zh = fleetTexts(lanesAt([old]), makeT('zh-TW'))
+  expect(zh[atTitle(zh, 'old work')].includes('過期')).toBe(true)
+  // progress stamp beats the created time: updated an hour ago stays; a fresh id with progress 25h ago is stale
+  const saved = { ...r({ id: 'saved', state: 'running', createdMs: NOW - H25, title: 'saved work' }), progressMs: NOW - H }
+  const aged = { ...r({ id: 'aged', state: 'running', createdMs: NOW - H, title: 'aged work' }), progressMs: NOW - H25 }
+  const stamped = lanesAt([saved, aged])
+  expect(stamped[0].inflight.map(t => t.id)).toEqual(['saved'])
+  expect(staleOf(stamped[0]).map(t => t.id)).toEqual(['aged'])
+  const { rows } = parseFleetTasks(JSON.stringify([
+    row({ task_id: ulid(NOW - H25, 'A'.repeat(16)), state: 'running', title: 'iso saved', assignee: 'h/a--claude', updated_at: new Date(NOW - H).toISOString() }),
+    row({ task_id: ulid(NOW - H, 'B'.repeat(16)), state: 'running', title: 'progress wins', assignee: 'h/a--claude', progress_at: new Date(NOW - H25 - 3_000).toISOString(), updated_at: new Date(NOW - H).toISOString(), activity_at: new Date(NOW - H).toISOString(), updated_ms: NOW - H }),
+    row({ task_id: ulid(NOW - H, 'C'.repeat(16)), state: 'running', title: 'activity only', assignee: 'h/a--claude', activity_at: new Date(NOW - H25 - 2_000).toISOString() }),
+    row({ task_id: ulid(NOW - H, 'D'.repeat(16)), state: 'running', title: 'millis only', assignee: 'h/a--claude', updated_ms: NOW - H25 - 1_000 }),
+  ]))
+  const parsed = lanesAt(rows)
+  expect(parsed[0].inflight.map(t => t.title)).toEqual(['iso saved'])
+  expect(staleOf(parsed[0]).map(t => t.title)).toEqual(['progress wins', 'activity only', 'millis only'])
+  // negative control: Infinity is not a cutoff. The 25h row stays running, and its line does not say stale.
+  const inf = lanesAt([old, soon], Infinity)
+  expect(inf[0].inflight.map(t => t.id)).toEqual(['old25'])
+  expect(staleOf(inf[0])).toEqual([])
+  expect(inf[0].upcoming.map(t => t.id)).toEqual(['soon'])
+  const infLines = fleetTexts(inf)
+  const infOld = infLines[atTitle(infLines, 'old work')]
+  expect(infOld.includes('running')).toBe(true)
+  expect(infOld.includes('stale')).toBe(false)
 })
 
 test('the feed runs the CLI once per TTL and never twice at once; a failed run keeps the last rows and their time and reports the error', async () => {
@@ -174,7 +253,7 @@ test('the feed runs the CLI once per TTL and never twice at once; a failed run k
 })
 
 // ---- G33a: the published summary ----
-const drawn = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null }).id // what register.ts passes
+const drawn = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null, stale: task.stale }).id // what register.ts passes
 const summaryOf = (rows: FleetRow[], extra: { fetchedMs?: number | null; error?: string | null; capped?: number } = {}) =>
   fleetSummary({ lanes: fleetLanes(rows, NOW), fetchedMs: extra.fetchedMs === undefined ? NOW : extra.fetchedMs, error: extra.error ?? null, nowMs: NOW, capped: extra.capped ?? 0 }, drawn)
 

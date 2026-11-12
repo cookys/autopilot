@@ -3287,7 +3287,8 @@ fi
 # rail packed a new file, that file too. Refuse before any runner. current_runner_name
 # is the resolved engine (RUNNER may still be the literal auto).
 _vg_runner="$(current_runner_name)"
-_vg_args=(--runner "$_vg_runner" --model "$MODEL" --file "$VISION_PROMPT_FILE")
+_vg_args=(--runner "$_vg_runner" --model "$MODEL")
+[ -n "${VISION_PROMPT_FILE:-}" ] && _vg_args+=(--file "$VISION_PROMPT_FILE")
 if [ -n "${PROMPT_FILE:-}" ] && [ "$PROMPT_FILE" != "$VISION_PROMPT_FILE" ]; then
   _vg_args+=(--file "$PROMPT_FILE")
 fi

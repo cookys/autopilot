@@ -222,7 +222,7 @@ emit() {
 
 [ -n "$QUESTION_FILE" ] && [ -r "$QUESTION_FILE" ] || { echo "dispatch-consult: --question-file is required and must be readable" >&2; exit 2; }
 [ "${#ARTIFACTS[@]}" -gt 0 ] || { echo "dispatch-consult: at least one --artifact is required" >&2; exit 2; }
-for _a in "${ARTIFACTS[@]}"; do
+for _a in "${ARTIFACTS[@]+"${ARTIFACTS[@]}"}"; do
   [ -r "$_a" ] || { echo "dispatch-consult: --artifact not readable: $_a" >&2; exit 2; }
 done
 [ -x "$AUTHOR_BIN" ] || { echo "dispatch-consult: --dispatch-author-bin not executable: $AUTHOR_BIN" >&2; exit 2; }
@@ -286,7 +286,7 @@ fi
 # transport spawn. Never fed the implementer's self-report/summary/verdict —
 # only the question baseline + artifacts.
 BLIND_PAYLOAD_ARGS=(--payload "$QUESTION_FILE")
-for _a in "${ARTIFACTS[@]}"; do BLIND_PAYLOAD_ARGS+=(--payload "$_a"); done
+for _a in "${ARTIFACTS[@]+"${ARTIFACTS[@]}"}"; do BLIND_PAYLOAD_ARGS+=(--payload "$_a"); done
 BLIND_OUT="$("$SCRIPT_DIR/check-blind-evidence.sh" "${BLIND_PAYLOAD_ARGS[@]}" 2>&1)"
 BLIND_RC=$?
 if [ "$BLIND_RC" -ne 0 ]; then
@@ -336,7 +336,7 @@ fi
   echo "=== QUESTION ==="
   cat "$QUESTION_FILE"
   echo
-  for _a in "${ARTIFACTS[@]}"; do
+  for _a in "${ARTIFACTS[@]+"${ARTIFACTS[@]}"}"; do
     echo "=== ARTIFACT: $_a ==="
     cat "$_a"
     echo
@@ -385,9 +385,11 @@ fi
 # vision-guard (scripts/lib/vision-guard.js): question, artifacts, and the assembled
 # prompt. An image for a non-supported engine never reaches the author rail.
 # Checked after endpoint retreat so the message names the engine that would run.
-_vg_args=(--runner "$CONSULT_RUNNER" --model "$CONSULT_ENGINE" --file "$QUESTION_FILE" --file "$PROMPT_FILE")
-for _a in "${ARTIFACTS[@]}"; do
-  _vg_args+=(--file "$_a")
+_vg_args=(--runner "$CONSULT_RUNNER" --model "$CONSULT_ENGINE")
+[ -n "${QUESTION_FILE:-}" ] && _vg_args+=(--file "$QUESTION_FILE")
+[ -n "${PROMPT_FILE:-}" ] && _vg_args+=(--file "$PROMPT_FILE")
+for _a in "${ARTIFACTS[@]+"${ARTIFACTS[@]}"}"; do
+  [ -n "$_a" ] && _vg_args+=(--file "$_a")
 done
 _vg_msg="$(node "$SCRIPT_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null)" || {
   echo "dispatch-consult: ${_vg_msg:-vision-guard refused an image for engine ${CONSULT_RUNNER}/${CONSULT_ENGINE} file ${QUESTION_FILE}}" >&2

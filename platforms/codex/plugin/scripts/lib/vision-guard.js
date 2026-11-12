@@ -9,14 +9,21 @@
 // Detection is magic bytes (PNG, JPEG, GIF, WEBP, BMP), not the file extension.
 // Text is never an image. BMP needs "BM", a header of at least 26 bytes, and
 // reserved bytes 6..9 all NUL. WEBP needs "RIFF" at 0 and "WEBP" at 8.
-// Images are detected before the capability store is opened, so a text dispatch
-// does not read the store.
+// Files are classified before runner and model are required. No image means
+// ok, even when runner or model is empty (a rail may leave MODEL empty so the
+// runner uses its default). An empty-string path is not an input and is
+// skipped. A non-empty path that cannot be read still refuses. An image
+// requires runner and model, and refuses unless vision is "supported" (empty
+// runner or model refuses; unknown refuses). The capability store is opened
+// only when an image is present, so a text dispatch does not read it.
 //
 // CLI:
-//   node scripts/lib/vision-guard.js --runner <r> --model <m> --file <path> [--file <path> ...]
+//   node scripts/lib/vision-guard.js [--runner <r>] [--model <m>] [--file <path> ...]
 //     [--capability-state <jsonl>] [--static-table <json>]
-// Exit: 0 allow (no stdout). 1 refuse (reason on stderr; names the engine and the file).
-//       2 usage.
+// Exit: 0 allow (no stdout), including text-only input with an empty runner or model.
+//       1 refuse (reason on stderr; names the engine and the file) when an image
+//         is not supported, or a non-empty path cannot be read.
+//       2 usage, or an image is present while runner or model is empty.
 //
 // Library: guardVision({ runner, model, files, capabilityStatePath, staticTablePath })
 //          refuseNonTextBlocks({ runner, model, blocks, capabilityStatePath, staticTablePath })
@@ -234,18 +241,21 @@ function resolveVision(runner, model, capabilityStatePath, staticTablePath) {
 }
 
 function engineLabel(runner, model) {
-  return `${runner}/${model}`;
+  const r = typeof runner === 'string' ? runner : '';
+  const m = typeof model === 'string' ? model : '';
+  return `${r}/${m}`;
 }
 
 function guardVision(opts) {
   const runner = opts && opts.runner;
   const model = opts && opts.model;
-  if (typeof runner !== 'string' || !runner || typeof model !== 'string' || !model) {
-    return { ok: false, code: 2, message: 'vision-guard: --runner and --model are required' };
-  }
   const files = opts && Array.isArray(opts.files) ? opts.files : [];
   const images = [];
   for (const file of files) {
+    // Skip an empty path. Rails used to pass --file "" for an unset variable,
+    // and classifying "" is an ENOENT refusal of a text dispatch. A non-empty
+    // path that does not exist still fails closed in classifyFile.
+    if (file === '') continue;
     const found = classifyFile(file);
     if (found.error) {
       return {
@@ -257,7 +267,19 @@ function guardVision(opts) {
     }
     if (found.image) images.push(file);
   }
+  // Text-only (and empty) input is never refused, including an empty MODEL
+  // that means "runner default". Runner and model are required only for an image.
   if (images.length === 0) return { ok: true, code: 0, input_image: null, images: [] };
+  if (typeof runner !== 'string' || !runner || typeof model !== 'string' || !model) {
+    const file = images[0];
+    return {
+      ok: false,
+      code: 2,
+      message: `vision-guard: refusing image ${file} for engine (runner and model required)`,
+      file,
+      images,
+    };
+  }
   const resolved = resolveVision(runner, model, opts.capabilityStatePath, opts.staticTablePath);
   if (resolved.input_image === 'supported') {
     return {
@@ -334,11 +356,12 @@ function refuseNonTextBlocks(opts) {
 
 function printHelp() {
   process.stdout.write(
-    'Usage: node scripts/lib/vision-guard.js --runner <runner> --model <model> --file <path> [--file <path> ...]\n'
+    'Usage: node scripts/lib/vision-guard.js [--runner <runner>] [--model <model>] [--file <path> ...]\n'
     + '       [--capability-state <jsonl>] [--static-table <json>]\n'
-    + 'Exit 0 when every file is non-image, or the engine vision is supported.\n'
-    + 'Exit 1 when an image (magic bytes) would be handed to an engine whose vision is not supported.\n'
-    + 'Exit 2 on usage. unknown refuses (fail closed).\n',
+    + 'Exit 0 when no file is an image, even if runner or model is empty. An empty-string --file is skipped.\n'
+    + 'Exit 1 when an image (magic bytes) would be handed to an engine whose vision is not supported,\n'
+    + 'or a non-empty path cannot be read.\n'
+    + 'Exit 2 on usage, and when an image is present but runner or model is empty. unknown refuses (fail closed).\n',
   );
 }
 

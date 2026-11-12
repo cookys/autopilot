@@ -1150,7 +1150,10 @@ write_author_manifest
 
 # vision-guard (scripts/lib/vision-guard.js): an image prompt to an engine that is
 # not vision-supported never reaches the runner. MODEL is already alias-resolved.
-_vg_msg="$(node "$_AUTHOR_SELF_DIR/lib/vision-guard.js" --runner "$RUNNER" --model "$MODEL" --file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+# --file is added only when the path is non-empty; an empty path is not an input.
+_vg_args=(--runner "$RUNNER" --model "$MODEL")
+[ -n "${PROMPT_FILE:-}" ] && _vg_args+=(--file "$PROMPT_FILE")
+_vg_msg="$(node "$_AUTHOR_SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null)" \
   || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${RUNNER}/${MODEL} file ${PROMPT_FILE}}"
 
 # Context-window gate — runs BEFORE any runner spawns, so an over-budget authoring

@@ -59,7 +59,8 @@ const BMP = Buffer.from([
 const REVIEW_GUARD = [
   '# vision-guard (scripts/lib/vision-guard.js): image magic bytes to a',
   '# non-supported engine refuse here, before any runner is invoked.',
-  '_vg_args=(--runner "$RUNNER" --model "$MODEL" --file "$DIFF_FILE")',
+  '_vg_args=(--runner "$RUNNER" --model "$MODEL")',
+  '[ -n "${DIFF_FILE:-}" ] && _vg_args+=(--file "$DIFF_FILE")',
   '[ -n "${SPEC_FILE:-}" ] && _vg_args+=(--file "$SPEC_FILE")',
   '_vg_msg="$(node "$_REVIEW_SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null)" \\',
   '  || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${RUNNER}/${MODEL} file ${DIFF_FILE}${SPEC_FILE:+ ${SPEC_FILE}}}"',
@@ -322,6 +323,80 @@ test('text inputs do not refuse GLM-5.3', () => {
   assert.strictEqual(result.ok, true);
 });
 
+test('empty --model with a text file is ok', () => {
+  // Negative control: move the runner/model check back above classification
+  // in guardVision and this test is red (code 2, "--runner and --model are required").
+  const dir = mk('vg-empty-model-text-');
+  const file = writeBytes(dir, 'notes.txt', 'plain text, not an image\n');
+  const result = guardVision({
+    runner: 'grok',
+    model: '',
+    files: [file],
+    capabilityStatePath: null,
+  });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.code, 0);
+  assert.strictEqual(result.input_image, null);
+  const cli = cp.spawnSync(process.execPath, [
+    GUARD_JS, '--runner', 'grok', '--model', '', '--file', file,
+  ], { encoding: 'utf8', env: childEnv({ ENGINE_CAPABILITY_DIR: dir }) });
+  assert.strictEqual(cli.status, 0, cli.stderr);
+  assert.strictEqual(cli.stdout, '');
+});
+
+test('empty --model with a PNG is refused', () => {
+  const dir = mk('vg-empty-model-png-');
+  const file = writeBytes(dir, 'shot.png', PNG);
+  const result = guardVision({
+    runner: 'grok',
+    model: '',
+    files: [file],
+    capabilityStatePath: null,
+  });
+  assert.strictEqual(result.ok, false);
+  assert.notStrictEqual(result.code, 0);
+  assert.ok(result.message.includes(file), result.message);
+  assert.match(result.message, /runner and model required/);
+  const cli = cp.spawnSync(process.execPath, [
+    GUARD_JS, '--runner', 'grok', '--model', '', '--file', file,
+  ], { encoding: 'utf8', env: childEnv({ ENGINE_CAPABILITY_DIR: dir }) });
+  assert.notStrictEqual(cli.status, 0, cli.stderr);
+  assert.ok(cli.stderr.includes(file), cli.stderr);
+});
+
+test('empty --file with a text file is ok and a missing path is refused', () => {
+  const dir = mk('vg-empty-file-');
+  const text = writeBytes(dir, 'notes.txt', 'plain text, not an image\n');
+  const skipped = guardVision({
+    runner: 'grok',
+    model: '',
+    files: ['', text],
+    capabilityStatePath: null,
+  });
+  assert.strictEqual(skipped.ok, true);
+  assert.strictEqual(skipped.code, 0);
+  const cli = cp.spawnSync(process.execPath, [
+    GUARD_JS, '--runner', 'grok', '--model', '', '--file', '', '--file', text,
+  ], { encoding: 'utf8', env: childEnv({ ENGINE_CAPABILITY_DIR: dir }) });
+  assert.strictEqual(cli.status, 0, cli.stderr);
+
+  const missing = path.join(dir, 'no-such-input.txt');
+  const unread = guardVision({
+    runner: 'grok',
+    model: '',
+    files: ['', missing],
+    capabilityStatePath: null,
+  });
+  assert.strictEqual(unread.ok, false);
+  assert.strictEqual(unread.code, 1);
+  assert.ok(unread.message.includes(missing), unread.message);
+  const cliMissing = cp.spawnSync(process.execPath, [
+    GUARD_JS, '--runner', 'grok', '--model', '', '--file', missing,
+  ], { encoding: 'utf8', env: childEnv({ ENGINE_CAPABILITY_DIR: dir }) });
+  assert.notStrictEqual(cliMissing.status, 0, cliMissing.stderr);
+  assert.ok(cliMissing.stderr.includes(missing), cliMissing.stderr);
+});
+
 test('a supported engine with an image passes via capability state', () => {
   const dir = mk('vg-sup-');
   const spec = writeBytes(dir, 'spec.png', PNG);
@@ -498,8 +573,13 @@ test('CLI refuses a PNG for GLM-5.3 on stderr and exits non-zero', () => {
 });
 
 test('CLI usage is exit 2', () => {
-  const res = cp.spawnSync(process.execPath, [GUARD_JS], { encoding: 'utf8' });
+  // No files and an empty model is not usage: there is no image, so the guard
+  // allows it. A flag the parser does not know is still usage.
+  const bare = cp.spawnSync(process.execPath, [GUARD_JS], { encoding: 'utf8' });
+  assert.strictEqual(bare.status, 0, bare.stderr);
+  const res = cp.spawnSync(process.execPath, [GUARD_JS, '--nope'], { encoding: 'utf8' });
   assert.strictEqual(res.status, 2);
+  assert.match(res.stderr, /unknown argument/);
 });
 
 test('record accepts vision and rejects a bad vision object', () => {
@@ -595,11 +675,20 @@ test('hetero, author, and consult call the guard on their input files', () => {
   assert.ok(hetero.includes('VISION_PROMPT_FILE="$PROMPT_FILE"'));
   assert.ok(hetero.indexOf('VISION_PROMPT_FILE="$PROMPT_FILE"') < hetero.indexOf('lib/vision-guard.js'));
   assert.ok(hetero.includes('current_runner_name'));
+  assert.ok(hetero.includes('[ -n "${VISION_PROMPT_FILE:-}" ] && _vg_args+=(--file "$VISION_PROMPT_FILE")'));
+  assert.ok(!hetero.includes('--model "$MODEL" --file "$VISION_PROMPT_FILE"'));
   assert.ok(author.includes('lib/vision-guard.js'));
-  assert.ok(author.includes('--file "$PROMPT_FILE"'));
+  assert.ok(author.includes('[ -n "${PROMPT_FILE:-}" ] && _vg_args+=(--file "$PROMPT_FILE")'));
+  assert.ok(!author.includes('--model "$MODEL" --file "$PROMPT_FILE"'));
   assert.ok(consult.includes('lib/vision-guard.js'));
   assert.ok(consult.includes('vision_refused'));
-  assert.ok(consult.includes('--file "$QUESTION_FILE"'));
+  assert.ok(consult.includes('[ -n "${QUESTION_FILE:-}" ] && _vg_args+=(--file "$QUESTION_FILE")'));
+  assert.ok(consult.includes('[ -n "${PROMPT_FILE:-}" ] && _vg_args+=(--file "$PROMPT_FILE")'));
+  assert.ok(consult.includes('${ARTIFACTS[@]+"${ARTIFACTS[@]}"}'));
+  assert.ok(!consult.includes('for _a in "${ARTIFACTS[@]}";'));
+  const review = fs.readFileSync(REVIEW_SH, 'utf8');
+  assert.ok(review.includes('[ -n "${DIFF_FILE:-}" ] && _vg_args+=(--file "$DIFF_FILE")'));
+  assert.ok(!review.includes('--model "$MODEL" --file "$DIFF_FILE"'));
 });
 
 function writeStub(dir) {

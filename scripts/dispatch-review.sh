@@ -1733,7 +1733,8 @@ if [ "${FAMILY_GUARD_REFUSE:-0}" -eq 1 ]; then
 fi
 # vision-guard (scripts/lib/vision-guard.js): image magic bytes to a
 # non-supported engine refuse here, before any runner is invoked.
-_vg_args=(--runner "$RUNNER" --model "$MODEL" --file "$DIFF_FILE")
+_vg_args=(--runner "$RUNNER" --model "$MODEL")
+[ -n "${DIFF_FILE:-}" ] && _vg_args+=(--file "$DIFF_FILE")
 [ -n "${SPEC_FILE:-}" ] && _vg_args+=(--file "$SPEC_FILE")
 _vg_msg="$(node "$_REVIEW_SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null)" \
   || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${RUNNER}/${MODEL} file ${DIFF_FILE}${SPEC_FILE:+ ${SPEC_FILE}}}"

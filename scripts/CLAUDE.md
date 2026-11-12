@@ -25,6 +25,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `qualification-review-provider.js` `lib/qualification-panel-schema.json` `lib/qualification-mode-schemas.json` `lib/agy-containment.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-todo-tools-pin.js` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js`
 `probe-skill-frontmatter-portability.sh` `platform-capability-claims.js` `bench-engine-capability.sh` `import-aa-capabilities.js` `evaluate-profile-cutover.js` `build-qualification-defaults.js` `adopt-qualification-defaults.js` `lib/qualification-feed.js` `qualification-sweep.sh` `lib/qualification-asset-seals.js` `lib/qualification-applicability-scope.js` `qualification-metrics.js` `lib/qualification-metrics.js` `qualification-feed-trust.js` `lib/qualification-confirm.js` `qualification-prices.js` `lib/qualification-prices.js` `qualification-send-queue.js` `lib/qualification-record-v2.js` `lib/qualification-usage.js` `lib/qualification-effort-label.js` `lib/qualify-stage-credentials.sh`
+**Engine capability & qualification (cont.)** — `lib/vision-guard.js` `lib/engine-vision.json`
 
 **Execution profiles** — `build-profile-payload.js` `profile-session.js` `check-profile-isolation.js` `measure-profile-context.js`
 

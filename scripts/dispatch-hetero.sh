@@ -2614,6 +2614,8 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+# Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
+VISION_PROMPT_FILE="$PROMPT_FILE"
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
 # changes the exit code. A ../ counts only at a word start ( ../x, (../x, "../x), not a/../b.
 _DOTDOT_RE='(^|[][:space:]("'"'"'=,<])\.\./[^][:space:]()"'"'"'<>,;]+'
@@ -3280,6 +3282,18 @@ if [ "$SCAFFOLD_TIER_ARG" != "off" ] \
   SCAFFOLD_TIER_EFFECTIVE="$_effective_tier"
   unset _resolved_tier _effective_tier
 fi
+
+# vision-guard (scripts/lib/vision-guard.js): the original prompt and, when the
+# rail packed a new file, that file too. Refuse before any runner. current_runner_name
+# is the resolved engine (RUNNER may still be the literal auto).
+_vg_runner="$(current_runner_name)"
+_vg_args=(--runner "$_vg_runner" --model "$MODEL")
+[ -n "${VISION_PROMPT_FILE:-}" ] && _vg_args+=(--file "$VISION_PROMPT_FILE")
+if [ -n "${PROMPT_FILE:-}" ] && [ "$PROMPT_FILE" != "$VISION_PROMPT_FILE" ]; then
+  _vg_args+=(--file "$PROMPT_FILE")
+fi
+_vg_msg="$(node "$SELF_DIR/lib/vision-guard.js" "${_vg_args[@]}" 2>&1 >/dev/null)" \
+  || die_precondition "${_vg_msg:-vision-guard refused an image for engine ${_vg_runner}/${MODEL} file ${VISION_PROMPT_FILE}}"
 
 # --- context-window gate ---
 # Placed AFTER skill-pack concatenation (the pack inflates PROMPT_FILE, and the engine

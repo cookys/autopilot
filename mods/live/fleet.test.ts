@@ -219,6 +219,30 @@ test('a task with no progress for more than 24h is stale and last; 23h stays; In
   expect(infOld.includes('stale')).toBe(false)
 })
 
+// Name order would put the stale-only lane first (a--claude before b--claude). Both have no in-flight row and nothing stuck, so only
+// "has fresh upcoming work" keeps the 1m open row above the 25h stale row in the pane.
+test('a lane with only stale tasks sorts after a lane with fresh open work', () => {
+  const fresh = r({ id: 'fresh1m', lane: 'b--claude', state: 'open', createdMs: NOW - 60_000, title: 'fresh open' })
+  const old = r({ id: 'stale25', lane: 'a--claude', state: 'running', createdMs: NOW - H25, title: 'stale only' })
+  const lanes = lanesAt([old, fresh])
+  const a = lanes.filter(l => l.lane === 'a--claude')[0]
+  const b = lanes.filter(l => l.lane === 'b--claude')[0]
+  expect(a.stuck).toBe(0)
+  expect(b.stuck).toBe(0)
+  expect(a.inflight).toEqual([])
+  expect(b.inflight).toEqual([])
+  expect(a.upcoming).toEqual([])
+  expect(b.upcoming.map(t => t.id)).toEqual(['fresh1m'])
+  expect(staleOf(a).map(t => t.id)).toEqual(['stale25'])
+  expect(staleOf(b)).toEqual([])
+  expect(lanes.map(l => l.lane)).toEqual(['b--claude', 'a--claude'])
+  const lines = fleetTexts(lanes)
+  const freshAt = atTitle(lines, 'fresh open')
+  const staleAt = atTitle(lines, 'stale only')
+  expect(freshAt).toBeGreaterThanOrEqual(0)
+  expect(staleAt).toBeGreaterThan(freshAt)
+})
+
 test('the feed runs the CLI once per TTL and never twice at once; a failed run keeps the last rows and their time and reports the error', async () => {
   const calls: string[] = []
   let reply: { exitCode: number; stdout: string; stderr: string } = { exitCode: 0, stdout: JSON.stringify([row({ task_id: ulid(NOW), state: 'running', title: 'x', assignee: 'h/a--claude' })]), stderr: '' }

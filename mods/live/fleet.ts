@@ -168,7 +168,7 @@ export function fleetLanes(rows: readonly FleetRow[], nowMs: number, staleMs = S
     l.upcoming.sort((a, b) => created(a) - created(b))
     l.stale.sort((a, b) => progressed(a) - progressed(b))
   }
-  return [...by.values()].sort((a, b) => Number(b.stuck > 0) - Number(a.stuck > 0) || b.inflight.length - a.inflight.length || a.lane.localeCompare(b.lane))
+  return [...by.values()].sort((a, b) => Number(b.stuck > 0) - Number(a.stuck > 0) || b.inflight.length - a.inflight.length || Number(b.upcoming.length > 0) - Number(a.upcoming.length > 0) || a.lane.localeCompare(b.lane))
 }
 
 // ---- the feed: one CLI run at a time, at most once per TTL, never awaited by a render ----

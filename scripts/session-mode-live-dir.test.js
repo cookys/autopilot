@@ -4,7 +4,12 @@
  * rejected (non-RAM) override fell through to $XDG_RUNTIME_DIR/autopilot — in the leak the REAL
  * /run/user/<uid>/autopilot — and the detached watcher lived on after the probe.
  * Isolation: XDG_RUNTIME_DIR points at a scratch dir under /dev/shm, so a fall-through lands there
- * (asserted empty), never in the real store; the review server autostart is off.
+ * (asserted empty), never in the real store; the review server autostart is off. The dispatch
+ * runs directory is a private dir under the temp root. The watcher refuses a host
+ * /tmp/autopilot-dispatch-runs owned by another uid and then never publishes an envelope;
+ * that refusal is not what this test measures. The child env is built from scratch, so it does
+ * not inherit NODE_TEST_CONTEXT; AUTOPILOT_RUNS_WATCH_AUTOSTART is set to '' anyway, which the
+ * gate treats as enabled, so a later spread of process.env cannot turn the watcher off.
  * RED before the fix (w/livedir@297ab2e0; run-w/livedir/red-repro.txt):
  *   2 of 2 failing: the detached watcher published under the scratch XDG dir (override ignored),
  *   and a symlink override started a watcher instead of being refused.
@@ -82,6 +87,9 @@ function setup() {
     CLAUDE_CODE_SESSION_ID: 's2',
     XDG_RUNTIME_DIR: xdg,
     AUTOPILOT_REVIEW_SERVER_AUTOSTART: '0',
+    AUTOPILOT_DISPATCH_RUNS_DIR: path.join(T, 'dispatch-runs'),
+    // empty string: drive the watcher for real under node --test (autostart-gate.js)
+    AUTOPILOT_RUNS_WATCH_AUTOSTART: '',
   };
   return { T, xdg, env, repo: path.join(T, 'r') };
 }
@@ -90,6 +98,25 @@ function runSet(ctx, liveDir) {
   const env = { ...ctx.env, AUTOPILOT_LIVE_DIR: liveDir };
   return spawnSync(process.execPath, [SM, 'set'], { cwd: ctx.repo, env, encoding: 'utf8', timeout: 30000 });
 }
+
+test('plain `set` with AUTOPILOT_RUNS_WATCH_AUTOSTART=0: no watcher envelope',
+  { skip: !SHM_OK && '/dev/shm not writable' }, () => {
+    const ctx = setup();
+    ctx.env.AUTOPILOT_RUNS_WATCH_AUTOSTART = '0';
+    const live = path.join(ctx.T, 'l');
+    try {
+      const r = runSet(ctx, live);
+      assert.strictEqual(r.status, 0, r.stderr);
+      sleep(1500);
+      const env = listFiles(path.join(live, 'runs')).filter((x) => /\/runs\/[0-9a-f]{16}\.json$/.test(x));
+      assert.deepStrictEqual(env, [], 'autostart off must not publish an envelope');
+    } finally {
+      reapWatchers([live, path.join(ctx.xdg, 'autopilot')]);
+      reapByEnv(ctx.T);
+      fs.rmSync(ctx.T, { recursive: true, force: true });
+      fs.rmSync(ctx.xdg, { recursive: true, force: true });
+    }
+  });
 
 test('plain `set`, disk-backed override, autostart ON: the watcher writes only under the override, XDG scratch stays empty',
   { skip: !SHM_OK && '/dev/shm not writable' }, (t) => {

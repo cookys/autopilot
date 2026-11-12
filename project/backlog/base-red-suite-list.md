@@ -1,6 +1,13 @@
 # Suites red on base at every pre-push run: one list
 
-BL-0313. Seen in the pre-push suite runs of 2026-10-26 to 10-27. Each of these was also red on the base commit, so none is introduced by a lane; confirm each against the base before relying on it.
+BL-0313. The bullets below are still open. They were not re-run on 2026-11-13.
+
+Cleared the same day, run alone, and not part of the bullets below:
+
+- Green: `external-lifecycle-witness`, `manifest-repo-identity`, `p2-batch-env`, `p2-batch-lifecycle`, `p2-batch-loop`, `p2-batch-wrapper`, `review-server`, `skill-onoff-d0gate-cc`, `suite-residue-reaper`, `qualification-consult-discuss-transport`, `session-mode-live-dir`.
+- Host SKIP, not a product green: `post-tool-chain-differential`. The harness re-execs under flock on `/tmp/ptc-fixed-harness.lock`. When that file exists and this user cannot open it, flock exits 66 (Permission denied) before any case. The suite prints SKIP and does not run the corpus.
+
+Seen in the pre-push suite runs of 2026-10-26 to 10-27. Each of these was also red on the base commit, so none is introduced by a lane; confirm each against the base before relying on it.
 
 - `dispatch-author-strict-roster` Case 8 still asserts `-p`, `--model` and `--effort` in argv (red on base since BL-0298).
 - `child-parent-record`, `child-session-identity`

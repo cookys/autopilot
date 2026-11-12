@@ -702,14 +702,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-27
 - **Origin**: self
-- **Problem**: 推送前跑套件，有十幾支在 base 上本來就紅（非新引入），每次都要人工判讀；清單與各自的紅法見旁檔。
+- **Problem**: 推送前跑套件，旁檔裡較早的那批在 base 上本來就紅（非新引入），每次都要人工判讀。2026-11-13 點名的 12 支已單獨跑過：11 支轉綠；post-tool-chain-differential 在固定 flock 鎖不可寫時改為 SKIP（主機環境，鏈本身沒跑）。
 - **Impact**: 真正的新紅會被淹沒，每次推送都得重新分辨。
 - **Trigger**: next pre-push suite run, or a lane touches one of the listed suites
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: pre-push suite runs 2026-10-26 to 10-27 (noexpiry, agyargv2, fbland, fbv3)
 - **Pointer**: project/backlog/base-red-suite-list.md
-- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here.
+- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here. The 2026-11-13 twelve are in the Pointer: eleven green alone, one host SKIP. BL-0428 is closed.
 
 ### The library path openDecision() skips the --not-authorized and DOA checks
 - **Id**: BL-0320
@@ -1505,19 +1505,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PM 01M74K28MQ (2026-11-11)
 - **Pointer**: project/backlog/parallel-by-default-for-leads.md
-
-### Two suites red on clean develop: skill-onoff-d0gate-cc and qualification-consult-discuss-transport
-- **Id**: BL-0428
-- **Status**: open
-- **Since**: 2026-11-11
-- **Origin**: self
-- **Problem**: Two test suites already fail on a clean develop before any change, so every merge has to compare against them. Root cause not looked at yet.
-- **Impact**: A real regression in either suite would hide behind the known failures.
-- **Trigger**: ready
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: stack4 merge 66fc4f426 (2026-11-11)
-- **Pointer**: project/backlog/baseline-reds-d0gate-consult.md
 
 ### Quota cache is empty after a reboot until the next session writes it
 - **Id**: BL-0430

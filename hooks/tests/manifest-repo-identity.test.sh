@@ -34,10 +34,13 @@ _ks_scan() {
 kill_stragglers() {
   # Guard: an empty/odd TEST_TMP would make the pattern match every process. Scan only for a real,
   # mktemp-shaped directory (trailing slash normalised away).
-  local tt="${1-$TEST_TMP}"
+  # lib.sh redirects TMPDIR to $TEST_TMP/tmp after creating TEST_TMP under the original temp root,
+  # so the live TMPDIR is not a parent of TEST_TMP. Match the original root too.
+  local tt="${1-$TEST_TMP}" root="${__TEST_ORIG_TMPDIR:-/tmp}"
   tt="${tt%/}"
+  root="${root%/}"
   [ -n "$tt" ] && [ -d "$tt" ] || return 0
-  case "$tt" in /tmp/?*|/dev/shm/?*|"${TMPDIR:-/nonexistent}"/?*) : ;; *) return 0 ;; esac
+  case "$tt" in /tmp/?*|/dev/shm/?*|"${root}"/?*|"${TMPDIR:-/nonexistent}"/?*) : ;; *) return 0 ;; esac
   [ "${#tt}" -ge 12 ] || return 0
   _ks_scan "$tt"
 }

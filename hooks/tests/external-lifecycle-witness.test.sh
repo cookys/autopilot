@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
+# A session can leave XDG_RUNTIME_DIR unset while the per-user runtime dir
+# still exists. /tmp is not a substitute: mode 1777 makes every journal
+# ancestor unsafe and the daemon refuses. Use the per-user dir when it is a
+# real directory. Shown red with the variable unset and no fallback: the node
+# program exits 1 and every receipt assert fails.
+if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+  _elw_run="/run/user/$(id -u)"
+  if [ -d "$_elw_run" ] && [ ! -L "$_elw_run" ]; then
+    export XDG_RUNTIME_DIR="$_elw_run"
+  else
+    echo "SKIP [$TEST_NAME] XDG_RUNTIME_DIR is unset and the per-user runtime directory is not a real directory. The witness refuses a /tmp fallback (mode 1777). Host environment."
+    finalize_test
+  fi
+fi
+case "$XDG_RUNTIME_DIR" in
+  /tmp|/tmp/*)
+    fail "XDG_RUNTIME_DIR must not be under /tmp"
+    ;;
+esac
+assert_neq "$XDG_RUNTIME_DIR" /tmp "XDG_RUNTIME_DIR is not /tmp"
+
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const childProcess = require('child_process');
 const crypto = require('crypto');

@@ -1,5 +1,5 @@
 # Plan — BL-0372 measurement: are the claude `--output-format json` and `stream-json --verbose` results byte-identical?
-> Status: Tasks 0–3 merged in 05a70bf82; Tasks 4–5 parked on operator card d-85f5c883（接手 d-2a19fdb5） (waiting for a registered alias), tracked by the PM as bl-ap-sj45. Backlog row: BL-0372 (`project/backlog/bl-ap-streamjson-result-bytes.md`). Owner: PM program. Size: S (instrument and measurement; no change to dispatch behaviour). Frame: baseline autopilot develop `a44ea9a6a`; this plan was written by reading the repo only, no claude call was made. Upstream: `project/plans/2026-11-03-g40-agent-lane-quota.md` section 5.1 (C1/C2/C3), section 18.6, section 19.4 step E7, and N9 in section 14.
+> Status: Tasks 0–3 merged in 05a70bf82; Tasks 4–5 are unblocked (aliases registered under d-74c79fc4（已完成，2026-11-11；接手 d-2a19fdb5）) and waiting to be scheduled, tracked by the PM as bl-ap-sj45. Backlog row: BL-0372 (`project/backlog/bl-ap-streamjson-result-bytes.md`). Owner: PM program. Size: S (instrument and measurement; no change to dispatch behaviour). Frame: baseline autopilot develop `a44ea9a6a`; this plan was written by reading the repo only, no claude call was made. Upstream: `project/plans/2026-11-03-g40-agent-lane-quota.md` section 5.1 (C1/C2/C3), section 18.6, section 19.4 step E7, and N9 in section 14.
 
 ## 0. Context / thesis
 

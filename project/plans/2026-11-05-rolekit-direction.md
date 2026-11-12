@@ -64,10 +64,10 @@ foreman／owner 先不做成套件（它是強模型的位置，不在「弱模�
   - verified（S1）：一次性 `CLAUDE_CONFIG_DIR` 裡的 CLAUDE.md 與 skills/ 在預設 setting sources 下會被讀；加 `--setting-sources project` 後兩者都不會被讀。結論限於空目錄加預設 sources；在 seed-claude-config 播了憑證的目錄裡再放 CLAUDE.md 是否被重設沒測。
   - verified（S2）：`--setting-sources project` 時 cwd 的 CLAUDE.md 會被讀。
   - verified（S5，claude 實跑）：`--setting-sources project --system-prompt "$(cat role.md)" --plugin-dir <kit plugin> --tools "Read,Grep"` 生效：init.tools 只剩 Grep、Read，plugin skill 出現在 init.skills（內建 plugin 與內建 skills 仍在）。`--allowedTools` 是權限規則不是縮面，縮面用 `--tools`。
-  - unverified：模型實際有沒有照角色卡做。現有派工路徑沒有放角色卡的旋鈕，自己處理憑證又不被允許；待 G37 帳號註冊（d-2a19fdb5）或 rail 加旋鈕之後驗證。
+  - unverified：模型實際有沒有照角色卡做。現有派工路徑沒有放角色卡的旋鈕，自己處理憑證又不被允許；待 G37 帳號註冊（d-74c79fc4，2026-11-11 已完成）或 rail 加旋鈕之後驗證。
 - codex（codex-cli 0.166.0）：
   - verified（只驗 `codex debug prompt-input`）：專案 `.agents/skills`、`CODEX_HOME/skills`、專案 AGENTS.md 與 `CODEX_HOME/AGENTS.md` 都進了 prompt-input。
-  - unverified：`codex exec` 實跑（需要憑證；排在 G37 帳號註冊 d-2a19fdb5 之後，在那之前記為 blocked，不算完成，驗證時只用最便宜的模型、say OK 等級）；工具白名單：codex 沒有 `--tools` 等價旗標，只有 `-s` 沙箱與 `-c`（具體 key 未驗）。換 `CODEX_HOME` 會連 auth 一起換掉，需 rail 另行處理。
+  - unverified：`codex exec` 實跑（需要憑證；排在 G37 帳號註冊（d-74c79fc4，2026-11-11 已完成）之後，在那之前記為 blocked，不算完成，驗證時只用最便宜的模型、say OK 等級）；工具白名單：codex 沒有 `--tools` 等價旗標，只有 `-s` 沙箱與 `-c`（具體 key 未驗）。換 `CODEX_HOME` 會連 auth 一起換掉，需 rail 另行處理。
 - agy（agy 1.5.0）：unverified。`--help` 沒有 system-prompt 旗標，也沒有工具白名單；HOME 下的 GEMINI.md 會不會被讀尚未驗證（先前 1.4.4 的實測見附錄）。`agy -p` 不讀 skill（verified negative，見附錄），所以方法論要寫進角色卡；隔離靠 worktree。
 - opencode：`--agent` 加上 `{file:}`，`OPENCODE_DISABLE_PROJECT_CONFIG=1` 實測有效。
 BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
@@ -88,7 +88,7 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
   1. layout-lint 的頂層白名單和匯出白名單，預留 `roles/` 這個位置（空目錄加 README）。
   2. BL-0388 的使用端那半邊（規則改由 skill、hook 或 reference 帶），因為它影響 public 版的使用者。
 - 跟 3.0.0 並行、現在就能做（便宜、不動定稿）：五個 spike——一次性 config dir 或 cwd 裡的 CLAUDE.md 會不會被讀、`--append-system-prompt`、`--setting-sources project` 下 cwd 的 CLAUDE.md、`codex exec` 讀不讀 skill、套件編譯器的雛形。每個 spike 只用 haiku 跑幾次。
-- `codex exec` 的真模型驗證排在 G37 帳號註冊（d-2a19fdb5）之後；在那之前 S 階段對這一項記為 blocked，不算完成。驗證時仍只用最便宜的模型、say OK 等級。
+- `codex exec` 的真模型驗證排在 G37 帳號註冊（d-74c79fc4，2026-11-11 已完成）之後；在那之前 S 階段對這一項記為 blocked，不算完成。驗證時仍只用最便宜的模型、say OK 等級。
 - 3.0.0.x：套件內容加 A/B 評測；評測成立才把 dispatch 預設改成走套件。
 - 不建議塞進 3.0.0 的理由：7/15 的前例是負面結果，套件效果還沒證明；改 skill 內容依規要先有 eval；把它混進重排，會讓 3.0.0 的完成條件多一個未知數。
 
@@ -172,7 +172,7 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
 
 **Spike 結果 2026-11-05（rolekit-probe，0 次模型呼叫；claude 2.1.318、codex-cli 0.166.0、agy 1.5.0）**：S1 一次性 CLAUDE_CONFIG_DIR 的 CLAUDE.md 與 skills 預設會讀、`--setting-sources project` 下不讀（verified，請求形狀）；S2 `--setting-sources project` 讀 cwd 的 CLAUDE.md（verified）；S3 `--append-system-prompt` 可用，且沒有 `--system-prompt-file`（verified）；S4 codex 的 `.agents/skills`、`CODEX_HOME/skills`、兩處 AGENTS.md 進 prompt-input（verified，`codex exec` 未實跑）；S5 claude 角色套件 argv 全數 verified，codex 部分 verified、無工具白名單旗標，agy unverified。
 
-**仍未驗證**：(1) 模型實際有沒有照角色卡做（現有派工路徑沒有放角色卡的旋鈕，待 G37 帳號註冊 d-2a19fdb5 或 rail 加旋鈕之後驗證）；(2) `codex exec` 實跑；(3) agy 的 GEMINI.md 載入與工具限制；(4) 先前 H1/H2 的否定結果只涵蓋 skill 本文 prompt-pack，「角色卡 + 縮窄 skill + 縮小工具面」整組套件從未被測過；套件編譯器雛形尚未做。
+**仍未驗證**：(1) 模型實際有沒有照角色卡做（現有派工路徑沒有放角色卡的旋鈕，待 G37 帳號註冊（d-74c79fc4，2026-11-11 已完成）或 rail 加旋鈕之後驗證）；(2) `codex exec` 實跑；(3) agy 的 GEMINI.md 載入與工具限制；(4) 先前 H1/H2 的否定結果只涵蓋 skill 本文 prompt-pack，「角色卡 + 縮窄 skill + 縮小工具面」整組套件從未被測過；套件編譯器雛形尚未做。
 
 ## 附錄：G25 role-bundle 實驗併入（2026-11-05 PM 裁示）
 

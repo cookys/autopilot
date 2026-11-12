@@ -1344,7 +1344,7 @@
       "readers": ["scripts/lib/fleet-decision.js", "scripts/noncq.js", "scripts/profile-health.js", "scripts/quota-provider-sync.js"],
       "doc": null,
       "relates": [],
-      "note": "Path of the fleet binary used by fleet-decision.js, profile-health.js and quota-provider-sync.js (default: fleet on PATH). Tests point it at a stub."
+      "note": "Path of the fleet binary used by fleet-decision.js, profile-health.js, quota-provider-sync.js and noncq.js send/upload (default: fleet on PATH). Tests point it at a stub."
     },
     {
       "name": "AUTOPILOT_QUOTA_WATCH_TO",
@@ -1399,7 +1399,7 @@
       "readers": ["scripts/noncq.js"],
       "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_PM_ADDRESS", "AUTOPILOT_NONCQ_DIR", "AUTOPILOT_FLEET_BIN"],
-      "summary": "Fleet address for [noncq-empty] reports from scripts/noncq.js drain. Falls back to AUTOPILOT_PM_ADDRESS; with neither, drain prints one stderr line only."
+      "summary": "Fleet address for [noncq-empty] reports from scripts/noncq.js drain. The report's second line names lane backlog items tagged noncq-ok. Falls back to AUTOPILOT_PM_ADDRESS; with neither, drain prints one stderr line only."
     },
     {
       "name": "AUTOPILOT_NONCQ_RAIL_DIR",

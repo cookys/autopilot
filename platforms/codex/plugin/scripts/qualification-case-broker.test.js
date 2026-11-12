@@ -363,7 +363,53 @@ async function main() {
   equal(requestTooLarge.code, 'request_too_large', 'oversized request has a stable error name');
 
   equal(CLIENT_PROTOCOL, 'qualification-case-client-v2', 'client protocol is v2');
-  if (assertions !== 98) throw new Error(`qualification-case-broker: expected exactly 98 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
+
+  // finish_reason is optional telemetry: forwarded when present, omitted when absent.
+  {
+    const frScript = path.join(tempRoot, 'fake-provider-finish-reason.js');
+    fs.writeFileSync(frScript, [
+      "'use strict';",
+      "let source = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (chunk) => { source += chunk; });",
+      "process.stdin.on('end', () => {",
+      '  process.stdout.write(JSON.stringify({',
+      '    schema_version: 1,',
+      '    provider: process.env.FAKE_BROKER_PROVIDER,',
+      '    model: process.env.FAKE_BROKER_MODEL,',
+      "    output: JSON.stringify({ verdict: 'pass', findings: [] }),",
+      "    finish_reason: process.env.FAKE_BROKER_FINISH_REASON === 'null'",
+      "      ? null : process.env.FAKE_BROKER_FINISH_REASON,",
+      '  }));',
+      '});',
+      '',
+    ].join('\n'));
+    process.env.FAKE_BROKER_MODE = 'pass';
+    process.env.FAKE_BROKER_FINISH_REASON = 'max_tokens';
+    const frOpts = brokerOptions(frScript, {
+      providerEnvironment: [
+        'FAKE_BROKER_LOG', 'FAKE_BROKER_MODE', 'FAKE_BROKER_MODEL',
+        'FAKE_BROKER_PROVIDER', 'FAKE_BROKER_SECRET', 'FAKE_BROKER_FINISH_REASON',
+      ],
+    });
+    const withFr = await runBrokerCase(frOpts, firstDiff);
+    equal(withFr.status, 'ok', 'provider response with finish_reason completes');
+    equal(withFr.finish_reason, 'max_tokens',
+      'broker forwards finish_reason=max_tokens onto the case response');
+    process.env.FAKE_BROKER_FINISH_REASON = 'null';
+    const nullFr = await runBrokerCase(frOpts, firstDiff);
+    equal(nullFr.status, 'ok', 'provider response with finish_reason=null completes');
+    equal(nullFr.finish_reason, null,
+      'broker forwards finish_reason=null when the server sent none');
+    // Historic adapter without the key: response stays valid and omits the field.
+    process.env.FAKE_BROKER_MODE = 'pass';
+    const legacy = await runBrokerCase(brokerOptions(providerScript), firstDiff);
+    equal(legacy.status, 'ok', 'adapter without finish_reason still completes');
+    equal(Object.hasOwn(legacy, 'finish_reason'), false,
+      'absent finish_reason stays omitted on the broker response');
+  }
+
+  if (assertions !== 104) throw new Error(`qualification-case-broker: expected exactly 104 assertions (count pin moved here from hooks/tests/qualification-case-broker.test.sh so the L1 run enforces it), got ${assertions}`);
   process.stdout.write(`qualification case broker: ${assertions} assertions passed\n`);
 }
 

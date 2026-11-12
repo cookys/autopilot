@@ -2861,6 +2861,140 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   equal(both.child.status, 0, 'delta.reasoning followed by content still parses the answer');
 }
 
+// ── finish_reason on the provider wire row (messages stop_reason / chat finish_reason) ──
+// Readers must see the server's stop/finish reason verbatim on every exchange row so
+// truncation is proven without inferring from token counts. null when the server sent none.
+{
+  const { spawn, execFileSync } = require('child_process');
+  const frServerFile = path.join(tempRoot, 'stub-finish-reason.js');
+  const frPortFile = path.join(tempRoot, 'stub-finish-reason-port');
+  const frReqFile = path.join(tempRoot, 'stub-finish-reason-req.json');
+  fs.writeFileSync(frServerFile, `
+const http = require('http');
+const fs = require('fs');
+const mode = process.env.STUB_MODE;
+const reply = process.env.STUB_REPLY ? JSON.parse(process.env.STUB_REPLY) : null;
+const server = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (c) => { body += c; });
+  req.on('end', () => {
+    fs.writeFileSync(process.env.STUB_REQ_FILE, JSON.stringify({ url: req.url, raw: body }));
+    if (mode === 'sse') {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(process.env.STUB_SSE);
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(reply));
+  });
+});
+server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE, String(server.address().port)));
+`);
+  const startFr = (envExtra) => {
+    for (const f of [frPortFile, frReqFile]) if (fs.existsSync(f)) fs.rmSync(f);
+    const proc = spawn(process.execPath, [frServerFile], {
+      env: { ...process.env, STUB_PORT_FILE: frPortFile, STUB_REQ_FILE: frReqFile, ...envExtra },
+      stdio: 'ignore',
+    });
+    for (let i = 0; i < 100 && !fs.existsSync(frPortFile); i += 1) {
+      try { execFileSync('sleep', ['0.05']); } catch { /* keep polling */ }
+    }
+    return { proc, port: fs.readFileSync(frPortFile, 'utf8').trim() };
+  };
+  const runFr = (protocol, stubEnv) => {
+    const stub = startFr(stubEnv);
+    const { child } = runProvider({
+      request: reviewerRequest(),
+      env: {
+        QRP_HTTP_PROTOCOL: protocol,
+        QRP_BASE_URL: `http://127.0.0.1:${stub.port}`,
+        QRP_AUTH_TOKEN: 'stub-token',
+      },
+    });
+    stub.proc.kill();
+    equal(child.status, 0, `finish_reason case (${protocol}/${stubEnv.STUB_MODE || 'json'}) exits 0`);
+    return JSON.parse(child.stdout);
+  };
+
+  // messages non-streaming: stop_reason "max_tokens" lands as finish_reason
+  {
+    const row = runFr('messages', {
+      STUB_MODE: 'json',
+      STUB_REPLY: JSON.stringify({
+        model: 'fake-model-exact',
+        stop_reason: 'max_tokens',
+        content: [{ type: 'text', text: REVIEWER_MODEL_OUTPUT }],
+      }),
+    });
+    equal(row.finish_reason, 'max_tokens',
+      'messages stop_reason=max_tokens is recorded as finish_reason on the wire row');
+  }
+  // messages: absent stop_reason -> null
+  {
+    const row = runFr('messages', {
+      STUB_MODE: 'json',
+      STUB_REPLY: JSON.stringify({
+        model: 'fake-model-exact',
+        content: [{ type: 'text', text: REVIEWER_MODEL_OUTPUT }],
+      }),
+    });
+    equal(row.finish_reason, null,
+      'messages with no stop_reason records finish_reason=null');
+  }
+  // chat streaming: finish_reason "length"
+  {
+    const payload = JSON.stringify(REVIEWER_MODEL_OUTPUT);
+    const sse = 'data: ' + JSON.stringify({ choices: [{ delta: { content: payload }, finish_reason: null }] }) + '\n\n'
+      + 'data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] }) + '\n\n'
+      + 'data: [DONE]\n';
+    const row = runFr('chat_completions', { STUB_MODE: 'sse', STUB_SSE: sse });
+    equal(row.finish_reason, 'length',
+      'chat stream finish_reason=length is recorded on the wire row');
+  }
+  // chat non-streaming: finish_reason "length"
+  {
+    const row = runFr('chat_completions', {
+      STUB_MODE: 'json',
+      STUB_REPLY: JSON.stringify({
+        model: 'fake-model-exact',
+        choices: [{
+          finish_reason: 'length',
+          message: { role: 'assistant', content: REVIEWER_MODEL_OUTPUT },
+        }],
+      }),
+    });
+    equal(row.finish_reason, 'length',
+      'chat non-stream finish_reason=length is recorded on the wire row');
+  }
+  // chat: absent finish_reason -> null
+  {
+    const row = runFr('chat_completions', {
+      STUB_MODE: 'json',
+      STUB_REPLY: JSON.stringify({
+        model: 'fake-model-exact',
+        choices: [{
+          message: { role: 'assistant', content: REVIEWER_MODEL_OUTPUT },
+        }],
+      }),
+    });
+    equal(row.finish_reason, null,
+      'chat with no finish_reason records finish_reason=null');
+  }
+  // CLI transport: no server finish signal -> null
+  {
+    const { child } = runProvider({
+      env: {
+        QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_CLI_BIN: stubCodex,
+      },
+      request: reviewerRequest(),
+      stubOutput: REVIEWER_MODEL_OUTPUT,
+    });
+    equal(child.status, 0, 'cli transport still succeeds');
+    equal(JSON.parse(child.stdout).finish_reason, null,
+      'cli transport records finish_reason=null (no server finish signal)');
+  }
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 797) throw new Error(`qualification-review-provider: expected exactly 797 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 809) throw new Error(`qualification-review-provider: expected exactly 809 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

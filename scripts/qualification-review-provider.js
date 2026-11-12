@@ -916,6 +916,8 @@ async function callResponses(baseUrl, token, model, maxTokens, systemPrompt, use
     return {
       text,
       resolvedModel: typeof payload.model === 'string' ? payload.model : model,
+      // Responses has no stop_reason/finish_reason; status is a different signal.
+      finish_reason: null,
       usage: {
         input_tokens: u.input_tokens,
         output_tokens: u.output_tokens,
@@ -995,6 +997,8 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
     return {
       text,
       resolvedModel: typeof payload.model === 'string' ? payload.model : model,
+      // Server's stop_reason verbatim; null when absent (never inferred).
+      finish_reason: typeof payload.stop_reason === 'string' ? payload.stop_reason : null,
       usage: { input_tokens: u.input_tokens, output_tokens: u.output_tokens },
     };
   } finally {
@@ -1131,6 +1135,8 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
       return {
         text: chatContentOrThrow(assembled.content, observed, assembled.finish, assembled.reasoningChars, assembled.usage),
         resolvedModel: assembled.resolvedModel || model,
+        // Server's finish_reason verbatim from the stream; null when absent.
+        finish_reason: typeof assembled.finish === 'string' ? assembled.finish : null,
         usage: assembled.usage,
       };
     }
@@ -1139,6 +1145,7 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
     const message = choice && choice.message && typeof choice.message === 'object' ? choice.message : {};
     const text = typeof message.content === 'string' ? message.content : '';
     const usage = payload.usage || {};
+    const chatFinish = choice && typeof choice.finish_reason === 'string' ? choice.finish_reason : null;
     const observed = [
       'stream=false',
       `finish_reason=${choice && choice.finish_reason != null ? choice.finish_reason : 'unknown'}`,
@@ -1150,6 +1157,7 @@ async function callChatCompletions(baseUrl, token, model, maxTokens, systemPromp
     return {
       text: chatContentOrThrow(text, observed, choice && choice.finish_reason),
       resolvedModel: typeof payload.model === 'string' ? payload.model : model,
+      finish_reason: chatFinish,
       usage: {
         input_tokens: usage.prompt_tokens ?? usage.input_tokens,
         output_tokens: usage.completion_tokens ?? usage.output_tokens,
@@ -2293,6 +2301,10 @@ async function main() {
     // Optional wire key. HTTP transports report what the endpoint returned; the
     // CLI transports report all-null (not measured); claude's identity is checked, not usage.
     usage: qualificationUsage.normalizeUsage(result.usage),
+    // Server stop/finish reason verbatim (messages stop_reason / chat finish_reason).
+    // null when the server sent none or the transport has no such signal (CLI).
+    // Telemetry only: never graded, never an identity/fingerprint input.
+    finish_reason: typeof result.finish_reason === 'string' ? result.finish_reason : null,
     // lead mode only: the claude CLI envelope's own usage block, passed through as the CLI printed it
     // (null when the CLI gave none). The shared `usage` key above stays all-null for CLI transports.
     ...(promptMode === 'lead' ? { cli_usage: result.cliUsage || null } : {}),

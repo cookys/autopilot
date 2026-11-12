@@ -325,13 +325,15 @@ function parseProviderResponse(stdout, expected) {
   } catch {
     throw new BrokerError('provider response is not JSON', 'malformed_provider_response');
   }
-  // `usage` is an OPTIONAL fifth key: an adapter that predates it keeps working.
-  // When present it is validated strictly and travels with the response; it is
-  // telemetry, never an input to the identity check below.
+  // `usage` and `finish_reason` are OPTIONAL telemetry keys: an adapter that
+  // predates them keeps working. When present they are validated strictly and
+  // travel with the response; they are never an input to the identity check.
   const hasUsage = value && typeof value === 'object' && Object.hasOwn(value, 'usage');
-  if (!hasExactKeys(value, hasUsage
-        ? ['schema_version', 'provider', 'model', 'output', 'usage']
-        : ['schema_version', 'provider', 'model', 'output'])
+  const hasFinishReason = value && typeof value === 'object' && Object.hasOwn(value, 'finish_reason');
+  const providerKeys = ['schema_version', 'provider', 'model', 'output'];
+  if (hasUsage) providerKeys.push('usage');
+  if (hasFinishReason) providerKeys.push('finish_reason');
+  if (!hasExactKeys(value, providerKeys)
       || value.schema_version !== SCHEMA_VERSION
       || typeof value.output !== 'string'
       || Buffer.byteLength(value.output) > MAX_PROVIDER_OUTPUT_BYTES) {
@@ -349,6 +351,14 @@ function parseProviderResponse(stdout, expected) {
         'malformed_provider_response',
       );
     }
+  }
+  if (hasFinishReason
+      && value.finish_reason !== null
+      && typeof value.finish_reason !== 'string') {
+    throw new BrokerError(
+      'provider response has an invalid finish_reason',
+      'malformed_provider_response',
+    );
   }
   requireToken(value.provider, 'returned provider');
   requireModelId(value.model, 'returned model');
@@ -627,7 +637,7 @@ function failedResponse(error, receipt = null) {
   });
 }
 
-function successfulResponse(output, receipt, usage) {
+function successfulResponse(output, receipt, usage, finishReason) {
   return Object.freeze({
     schema_version: SCHEMA_VERSION,
     status: 'ok',
@@ -635,6 +645,7 @@ function successfulResponse(output, receipt, usage) {
     error: null,
     receipt,
     ...(usage === undefined ? {} : { usage }),
+    ...(finishReason === undefined ? {} : { finish_reason: finishReason }),
   });
 }
 
@@ -753,7 +764,14 @@ async function runBrokerCase(rawOptions, rawDiff) {
             responseHash: providerResult.responseHash,
             returnedIdentityHash: providerResult.returnedIdentityHash,
           });
-          respond(successfulResponse(providerResult.value.output, receipt, providerResult.value.usage));
+          respond(successfulResponse(
+            providerResult.value.output,
+            receipt,
+            providerResult.value.usage,
+            Object.hasOwn(providerResult.value, 'finish_reason')
+              ? providerResult.value.finish_reason
+              : undefined,
+          ));
         }).catch((error) => {
           const receipt = receiptFor(options, policyHash, requestHash, {
             status: 'failed',

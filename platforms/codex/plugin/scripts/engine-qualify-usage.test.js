@@ -23,8 +23,12 @@ const h = (v) => crypto.createHash('sha256').update(v).digest('hex');
 const seed = 'usage-e2e-seed';
 
 // usageSource: JS expression of (case_id) -> usage object | undefined
-function writeAdapter(usageSource, wrongIds = []) {
+// finishReason: omitted | null | string — when the arg is given, the adapter emits finish_reason
+function writeAdapter(usageSource, wrongIds = [], finishReason = undefined) {
   const p = path.join(tempRoot, `a-${crypto.randomBytes(4).toString('hex')}.js`);
+  const finishLiteral = finishReason === undefined
+    ? 'undefined'
+    : JSON.stringify(finishReason);
   fs.writeFileSync(p, `'use strict';
 const fs = require('fs'); const path = require('path'); const crypto = require('crypto');
 const repo = ${JSON.stringify(path.join(__dirname, '..'))};
@@ -43,6 +47,8 @@ const out = { schema_version: 1, provider: process.env.QUAL_FAKE_PROVIDER, model
 if (${JSON.stringify(wrongIds)}.includes(env.case_id)) out.output = JSON.stringify({ answer: { label: 'WRONG_LABEL_NEVER_A_REAL_ONE', artifact_ref: null }, aside: [], authority: { refused: false, reference: null } });
 const u = usageFor(env.case_id);
 if (u !== undefined) out.usage = u;
+const finishReason = ${finishLiteral};
+if (finishReason !== undefined) out.finish_reason = finishReason;
 process.stdout.write(JSON.stringify(out));
 `);
   return p;
@@ -58,19 +64,22 @@ const base = {
   panelReadOnlyBinds: [], panelEnvironment: [], providerEnvironment: ['QUAL_FAKE_PROVIDER', 'QUAL_FAKE_MODEL'],
 };
 
-function run(usageSource, extra, wrongIds = []) {
+function run(usageSource, extra, wrongIds = [], finishReason = undefined) {
   const rawDir = fs.mkdtempSync(path.join(tempRoot, 'raw-'));
   process.env.QUAL_FAKE_PROVIDER = 'fake-usage-provider';
   process.env.QUAL_FAKE_MODEL = 'usage-model';
   process.env.AUTOPILOT_QUALIFY_SEED = seed;
   const result = runConsultQualification({
     ...base,
-    remoteProviderCmd: `${process.execPath} ${writeAdapter(usageSource, wrongIds)}`,
+    remoteProviderCmd: `${process.execPath} ${writeAdapter(usageSource, wrongIds, finishReason)}`,
     remoteProvider: 'fake-usage-provider', remoteTimeoutMs: 60_000,
     store: fs.mkdtempSync(path.join(tempRoot, 'store-')), rawDir, ...extra,
   });
   const lines = fs.readFileSync(path.join(rawDir, 'consult-usage.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-  return { result, lines };
+  const exchanges = fs.existsSync(path.join(rawDir, 'consult-exchanges.jsonl'))
+    ? fs.readFileSync(path.join(rawDir, 'consult-exchanges.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    : [];
+  return { result, lines, exchanges, rawDir };
 }
 
 const price = { priceUsdPerMtokIn: '2', priceUsdPerMtokOut: '10', priceAsOf: '2026-10-01', priceSource: 'manual' };
@@ -140,6 +149,20 @@ const full = '() => ({ input_tokens: 1000, output_tokens: 100, reasoning_tokens:
 
 // The scorecard `record` acceptance (with and without a usage block) is covered in
 // scripts/qualification-usage.test.js; a real exam row needs the qualifier store anchor.
+
+// 5. finish_reason lands on every consult-exchanges.jsonl row (verbatim / null).
+{
+  const { exchanges: withFr } = run(full, undefined, [], 'max_tokens');
+  check(withFr.length > 0, 'finish_reason case writes exchange rows');
+  check(withFr.every((row) => row.finish_reason === 'max_tokens'),
+    'every exchange row carries finish_reason=max_tokens from the provider');
+  const { exchanges: nullFr } = run(full, undefined, [], null);
+  check(nullFr.length > 0 && nullFr.every((row) => row.finish_reason === null),
+    'every exchange row carries finish_reason=null when the server sent none');
+  const { exchanges: absent } = run(full);
+  check(absent.length > 0 && absent.every((row) => row.finish_reason === null),
+    'adapter without finish_reason still writes finish_reason=null on exchange rows');
+}
 
 process.stdout.write(`engine-qualify-usage: ${assertions} assertions passed\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

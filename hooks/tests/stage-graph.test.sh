@@ -78,5 +78,22 @@ eq "validate schema error exits 1" "1" "$rc"
 rc=0; node "$SG" nodes --size ZZ >/dev/null 2>&1 || rc=$?
 eq "unknown size exits 2" "2" "$rc"
 
+# --- explore entry (L/XL brainstorm path only; the 84 default cells stay put) --
+# `--explore` slices the non-bug L/XL walk at plan and prepends explore.
+# Sizes without that spec, and any bug walk, ignore the flag.
+entry_of() { node "$SG" nodes "$@" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).entry))'; }
+eq "L explore entry" "explore" "$(entry_of --size L --explore)"
+eq "XL explore entry" "explore" "$(entry_of --size XL --explore)"
+eq "L explore walk starts explore, plan" '["explore","plan"]' "$(node "$SG" nodes --size L --explore | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const w=JSON.parse(s).walk;console.log(JSON.stringify(w.slice(0,2)))})')"
+eq "L explore next is plan" '["plan"]' "$(node "$SG" next --from explore --size L --explore)"
+eq "explore without the flag has no edge" '[]' "$(node "$SG" next --from explore --size L)"
+eq "L default entry stays intent" "intent" "$(entry_of --size L)"
+eq "next intent L unchanged" '["proposal","research"]' "$(node "$SG" next --from intent --size L)"
+eq "next intent L --explore is empty" '[]' "$(node "$SG" next --from intent --size L --explore)"
+eq "L bug ignores explore" "$(node "$SG" nodes --size L --bug)" "$(node "$SG" nodes --size L --bug --explore)"
+eq "M ignores explore" "$(node "$SG" nodes --size M)" "$(node "$SG" nodes --size M --explore)"
+eq "S ignores explore" "$(node "$SG" nodes --size S)" "$(node "$SG" nodes --size S --explore)"
+eq "XS ignores explore" "$(node "$SG" nodes --size XS)" "$(node "$SG" nodes --size XS --explore)"
+
 echo "stage-graph.test: pass=$PASS fail=$FAILS"
 [ "$FAILS" -eq 0 ]

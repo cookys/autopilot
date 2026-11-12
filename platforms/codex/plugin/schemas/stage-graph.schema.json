@@ -85,6 +85,12 @@
           "additionalProperties": false,
           "required": ["mode"],
           "properties": { "mode": { "enum": ["prepend", "replace"] }, "target": { "type": "string" } }
+        },
+        "explore": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["node", "before"],
+          "properties": { "node": { "type": "string" }, "before": { "type": "string" } }
         }
       }
     },

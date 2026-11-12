@@ -40,7 +40,19 @@ const WEBP = Buffer.concat([
   Buffer.from([0x18, 0x00, 0x00, 0x00]),
   Buffer.from('WEBP', 'ascii'),
 ]);
-const BMP = Buffer.from([0x42, 0x4d, 0x00, 0x00, 0x00, 0x00]);
+// BITMAPFILEHEADER (14) + BITMAPCOREHEADER (12) = 26. Reserved bytes 6..9 are NUL.
+// A 2-byte "BM" is not this header.
+const BMP = Buffer.from([
+  0x42, 0x4d,
+  0x1a, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00,
+  0x1a, 0x00, 0x00, 0x00,
+  0x0c, 0x00, 0x00, 0x00,
+  0x01, 0x00,
+  0x01, 0x00,
+  0x01, 0x00,
+  0x18, 0x00,
+]);
 
 // Exact block in dispatch-review.sh. The wired negative control deletes this
 // and only this; removing the guard call makes the wired test red.
@@ -130,10 +142,75 @@ test('magic bytes identify PNG JPEG GIF WEBP and BMP', () => {
   assert.strictEqual(magicIsImage(GIF), true);
   assert.strictEqual(magicIsImage(Buffer.from('GIF87a', 'ascii')), true);
   assert.strictEqual(magicIsImage(WEBP), true);
+  assert.strictEqual(BMP.length, 26);
+  assert.deepStrictEqual([BMP[6], BMP[7], BMP[8], BMP[9]], [0, 0, 0, 0]);
   assert.strictEqual(magicIsImage(BMP), true);
   assert.strictEqual(magicIsImage(Buffer.from('this is plain text\n')), false);
   assert.strictEqual(magicIsImage(Buffer.alloc(0)), false);
   assert.strictEqual(magicIsImage(Buffer.from([0x89, 0x50, 0x4e, 0x47])), false);
+  assert.strictEqual(magicIsImage(Buffer.from('BM', 'ascii')), false);
+  assert.strictEqual(magicIsImage(Buffer.from([0x42, 0x4d, 0x00, 0x00, 0x00, 0x00])), false);
+  assert.strictEqual(magicIsImage(Buffer.from('RIFF....WAVE', 'ascii')), false);
+  assert.strictEqual(magicIsImage(Buffer.from('GIF notes\n', 'ascii')), false);
+});
+
+test('BMAD and BMW text are not images and pass for GLM-5.3', () => {
+  // Negative control: revert the BMP check to the 2-byte form
+  // (`buf.length >= 2 && buf[0] === 0x42 && buf[1] === 0x4d`) and this test is red.
+  const texts = [
+    'BMAD plan\n',
+    'BMW fleet notes\n',
+    'BMAD plan\n' + 'scope: text prompt, not a bitmap.\n',
+  ];
+  assert.ok(Buffer.byteLength(texts[2]) >= 26);
+  for (const text of texts) {
+    assert.strictEqual(magicIsImage(Buffer.from(text, 'utf8')), false, text);
+    const dir = mk('vg-bmtext-');
+    const file = writeBytes(dir, 'notes.txt', text);
+    const result = guardVision({
+      runner: 'grok',
+      model: 'GLM-5.3',
+      files: [file],
+      capabilityStatePath: null,
+    });
+    assert.strictEqual(result.ok, true, text);
+    assert.strictEqual(result.input_image, null, text);
+  }
+});
+
+test('a real minimal BMP header is still refused for GLM-5.3', () => {
+  const dir = mk('vg-bmp26-');
+  const file = writeBytes(dir, 'tiny.bmp', BMP);
+  const result = guardVision({
+    runner: 'grok',
+    model: 'GLM-5.3',
+    files: [file],
+    capabilityStatePath: null,
+  });
+  assert.strictEqual(result.ok, false);
+  assert.match(result.message, /GLM-5\.3/);
+  assert.match(result.message, /input_image=unsupported/);
+  assert.ok(result.message.includes(file));
+});
+
+test('RIFF WAVE is not an image', () => {
+  assert.strictEqual(magicIsImage(Buffer.from('RIFF....WAVE', 'ascii')), false);
+  const wave = Buffer.concat([
+    Buffer.from('RIFF', 'ascii'),
+    Buffer.from([0x24, 0x00, 0x00, 0x00]),
+    Buffer.from('WAVE', 'ascii'),
+  ]);
+  assert.strictEqual(magicIsImage(wave), false);
+  const dir = mk('vg-wave-');
+  const file = writeBytes(dir, 'notes.txt', 'RIFF....WAVE');
+  const result = guardVision({
+    runner: 'grok',
+    model: 'GLM-5.3',
+    files: [file],
+    capabilityStatePath: null,
+  });
+  assert.strictEqual(result.ok, true);
+  assert.strictEqual(result.input_image, null);
 });
 
 test('PNG bytes as a spec file to GLM-5.3 are refused as unsupported', () => {

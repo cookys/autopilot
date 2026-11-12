@@ -7,6 +7,8 @@
 // unknown refuses: fail closed.
 //
 // Detection is magic bytes (PNG, JPEG, GIF, WEBP, BMP), not the file extension.
+// Text is never an image. BMP needs "BM", a header of at least 26 bytes, and
+// reserved bytes 6..9 all NUL. WEBP needs "RIFF" at 0 and "WEBP" at 8.
 // Images are detected before the capability store is opened, so a text dispatch
 // does not read the store.
 //
@@ -43,23 +45,36 @@ function defaultCapabilityStatePath() {
   return path.join(os.homedir(), '.autopilot', 'engine-capability', 'capability.jsonl');
 }
 
+// BMP's reserved NULs sit at bytes 6..9 of a header that is at least 26 bytes
+// (BITMAPFILEHEADER + BITMAPCOREHEADER). The file sniff must cover that window.
+const MAGIC_SNIFF_LEN = 26;
+
+function startsWithAscii(buf, offset, text) {
+  if (buf.length < offset + text.length) return false;
+  for (let i = 0; i < text.length; i += 1) {
+    if (buf[offset + i] !== text.charCodeAt(i)) return false;
+  }
+  return true;
+}
+
 function magicIsImage(buf) {
+  // PNG and JPEG begin with non-text bytes, so a text file cannot match them.
   if (buf.length >= 8
       && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
       && buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) {
     return true;
   }
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
-  if (buf.length >= 6) {
-    const head = buf.subarray(0, 6).toString('ascii');
-    if (head === 'GIF87a' || head === 'GIF89a') return true;
-  }
-  if (buf.length >= 12
-      && buf.subarray(0, 4).toString('ascii') === 'RIFF'
-      && buf.subarray(8, 12).toString('ascii') === 'WEBP') {
+  // Full token only. "GIF" alone is text ("GIF notes"), not an image.
+  if (startsWithAscii(buf, 0, 'GIF87a') || startsWithAscii(buf, 0, 'GIF89a')) return true;
+  // "RIFF" at 0 is shared with WAVE and AVI. An image also needs "WEBP" at 8.
+  if (startsWithAscii(buf, 0, 'RIFF') && startsWithAscii(buf, 8, 'WEBP')) return true;
+  // "BM" alone is text ("BMAD", "BMW"). Real BMPs store NUL in reserved bytes 6..9.
+  if (buf.length >= MAGIC_SNIFF_LEN
+      && buf[0] === 0x42 && buf[1] === 0x4d
+      && buf[6] === 0x00 && buf[7] === 0x00 && buf[8] === 0x00 && buf[9] === 0x00) {
     return true;
   }
-  if (buf.length >= 2 && buf[0] === 0x42 && buf[1] === 0x4d) return true;
   return false;
 }
 
@@ -69,8 +84,8 @@ function classifyFile(filePath) {
     const st = fs.statSync(filePath);
     if (!st.isFile()) return { image: false };
     fd = fs.openSync(filePath, 'r');
-    const buf = Buffer.alloc(12);
-    const n = fs.readSync(fd, buf, 0, 12, 0);
+    const buf = Buffer.alloc(MAGIC_SNIFF_LEN);
+    const n = fs.readSync(fd, buf, 0, MAGIC_SNIFF_LEN, 0);
     return { image: magicIsImage(buf.subarray(0, n)) };
   } catch (err) {
     return { error: err && err.message ? err.message : String(err) };

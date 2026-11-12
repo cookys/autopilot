@@ -18,7 +18,7 @@ import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, state
 const GS = GLYPHS.state
 const GT = GLYPHS.structure
 const GC = GLYPHS.chart
-import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
+import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, ForgeSegment, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
 
 // ---- the snapshot the tick builds and the band / pane draw (module state in register.ts) ----
@@ -1160,9 +1160,9 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 // ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged'
-export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
-// tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
-export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
+export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
+// tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text). fleet* tags are the one-line band's own drops (layoutBandLine).
+export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck'
 export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId; press?: string } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 export type Slot = { id: SlotId; segs: Seg[] }
 
@@ -1363,6 +1363,20 @@ export function slotVerdict(v: { mark: string; word: string; key: ThemeKey | und
   return { id: 'verdict', segs }
 }
 
+// The fleet summary on the band's own line, right after the verdict: `艦隊 ⊘ N  ● N  ⋯ N`. The word is dim; each count is a chip whose glyph carries the
+// theme key (stuck broken, running running, waiting idle) and whose number is plain. Both the glyph and the number carry the drop tag, so a width step
+// that removes a count removes the number with it. Zeros stay (a fetched summary always names all three). Null hides the slot: nothing has been fetched.
+export function slotFleet(c: { stuck: number; running: number; waiting: number } | null | undefined, t: T = T_EN): Slot | null {
+  if (c == null) return null
+  const chip = (glyph: string, n: number, color: ThemeKey, tag: SegTag): Seg[] => ui.chipSegs([sp(glyph, { color, tag })], [sp(String(n), { tag })])
+  const chips = ui.chipsJoin([
+    chip(GS.stalled, c.stuck, PALETTE.broken, 'fleetStuck'),
+    chip(GS.running, c.running, PALETTE.running, 'fleetRun'),
+    chip(GS.waiting, c.waiting, PALETTE.idle, 'fleetWait'),
+  ], 'next')
+  return { id: 'fleet', segs: [sp(t('shell.fleet'), { dim: true, tag: 'fleetWord' }), ui.gapSeg(ui.CHIP_LEAD, 'fleetWord'), ...chips] }
+}
+
 // The stage walk as `✓─✓─◐─○─○` (done `✓` done, current `◐` here, later `○` idle, links structure; the same marks as the pane's walk); null = nothing to draw
 // (no walk published, the current stage is not on it, or it is longer than the band can carry).
 export const WALK_MAX = 9
@@ -1510,12 +1524,13 @@ export type BandFacts = {
   stage?: StageWalkView | null
   reason?: string | null
   quota?: readonly QuotaWindow[] | null
+  fleet?: { stuck: number; running: number; waiting: number } | null
   nowMs: number
 }
-// Slots in priority order; an empty slot is left out.
+// Slots in priority order; an empty slot is left out. The fleet slot sits immediately after the verdict.
 export function bandSlots(f: BandFacts, t: T = T_EN): Slot[] {
   return [
-    slotVerdict(f.verdict, f.reason ?? null), slotPosition(f.marker, f.nowMs, f.stage ?? null), slotUnit(f.marker, t), slotDispatch(f.live, f.stalled),
+    slotVerdict(f.verdict, f.reason ?? null), slotFleet(f.fleet, t), slotPosition(f.marker, f.nowMs, f.stage ?? null), slotUnit(f.marker, t), slotDispatch(f.live, f.stalled),
     slotReview(f.review, f.qc), slotDecisions(f.decisions), slotSpend(f.spend), slotQuota(f.quota), slotHygiene(f.loadSource, f.residue),
   ].filter((s): s is Slot => s !== null)
 }
@@ -1528,7 +1543,7 @@ export const BAND_INFO_LABEL = BAND_ICON + ' '
 export type BandLayout = { segs: Seg[]; text: string; width: number }
 
 // slots in one group read as one thing (single space between): the dispatch count with the review round and QC chip; every other slot is its own group; groups are separated by ` │ `
-const GROUP: Record<SlotId, number> = { verdict: 0, position: 1, unit: 2, dispatch: 3, review: 3, decisions: 4, spend: 5, quota: 6, hygiene: 7 }
+const GROUP: Record<SlotId, number> = { verdict: 0, fleet: 1, position: 2, unit: 3, dispatch: 4, review: 4, decisions: 5, spend: 6, quota: 7, hygiene: 8 }
 const REASON_MAX = 48
 const REASON_MIN = 8
 
@@ -1599,6 +1614,59 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   return { segs, text: segs.map(g => g.text).join('') + BAND_INFO_LABEL, width: widthOf(segs) }
 }
 
+// What layoutBandLine may drop as the one line gets narrower (PM 01M78CB8). Order is the array order. `fleetStuck` is a legal id so a test can put the
+// stuck count on a drop list; BAND_NARROW_STEPS does not contain it, and the verdict is not a drop id at all.
+export type BandNarrowId = 'pet' | 'trend' | 'speed' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck' | 'quota' | 'bar10' | 'bar5' | 'bar3' | 'pct'
+export const BAND_NARROW_STEPS: readonly (readonly BandNarrowId[])[] = [
+  ['pet'],
+  ['fleetWait'],
+  ['fleetRun', 'fleetWord'],
+  ['trend'],
+  ['speed'],
+  ['quota'],
+  ['bar10', 'bar5', 'bar3', 'pct'],
+]
+
+const SPEED_DROP: ReadonlySet<BandNarrowId> = new Set(['pet', 'trend', 'speed'])
+function narrowSpeed(speed: readonly ForgeSegment[] | null, drop: ReadonlySet<BandNarrowId>): ForgeSegment[] | null {
+  if (speed === null || drop.has('speed')) return null
+  const kept = speed.filter(g => {
+    if (drop.has('pet') && (g.role === 'pet' || g.role === 'sep')) return false
+    if (drop.has('trend') && (g.role === 'trend' || g.role === 'gap')) return false
+    return true
+  })
+  return kept.length === 0 ? null : kept
+}
+function narrowSlots(slots: readonly Slot[], drop: ReadonlySet<BandNarrowId>): Slot[] {
+  const segDrop = new Set<string>()
+  for (const id of drop) if (!SPEED_DROP.has(id) && id !== 'quota') segDrop.add(id)
+  const base = drop.has('quota') ? slots.filter(s => s.id !== 'quota') : slots.slice()
+  if (segDrop.size === 0) return base
+  return base.map(s => ({ ...s, segs: s.segs.filter(g => g.tag === undefined || !segDrop.has(g.tag)) })).filter(s => s.segs.length > 0)
+}
+
+export type BandLineLayout = { band: BandLayout; speed: ForgeSegment[] | null; applied: number }
+
+// `columns` is the room for the indicator AND the speed label together (the caller already removed the tab strip, the one-cell gap and the more-glyph).
+// The width table is shown at least 120 columns, so it cannot hide `$N`, the 5-cell bar or the quota window before the steps above take them; from 160 up it
+// sees the real width, so the 10-cell bar and the percent appear. A candidate whose verdict word was shortened is refused and the next step is tried.
+// The stuck count is not a step, so it is still on the line when every step has been applied. The last candidate is returned even when it still overflows.
+export function layoutBandLine(slots: readonly Slot[], columns: number, speed: readonly ForgeSegment[] | null, steps: readonly (readonly BandNarrowId[])[] = BAND_NARROW_STEPS): BandLineLayout {
+  const verdict = slots.find(s => s.id === 'verdict')?.segs[0]?.text ?? null
+  const speedWidth = (parts: readonly ForgeSegment[] | null): number => (parts === null || parts.length === 0 ? 0 : ui.forgeBar(parts).width)
+  let last: BandLineLayout | null = null
+  for (let n = 0; n <= steps.length; n++) {
+    const drop = new Set<BandNarrowId>()
+    for (const step of steps.slice(0, n)) for (const id of step) drop.add(id)
+    const band = layoutBand(narrowSlots(slots, drop), columns >= 160 ? columns : Math.max(columns, 120))
+    const nextSpeed = narrowSpeed(speed, drop)
+    const candidate: BandLineLayout = { band, speed: nextSpeed, applied: n }
+    last = candidate
+    if ((verdict === null || band.segs[0]?.text === verdict) && band.width + speedWidth(nextSpeed) <= columns) return candidate
+  }
+  return last as BandLineLayout
+}
+
 // a non-ok snapshot: one dim line `<reason> │ ⓘ `, the reason cut to fit
 export function plainBandText(reason: string, columns: number): string {
   return truncateToWidth(reason.replace(/\s*\n\s*/g, ' '), Math.max(1, columns - displayWidth(BAND_SEP) - displayWidth(BAND_INFO_LABEL)))
@@ -1608,7 +1676,7 @@ export function plainBandText(reason: string, columns: number): string {
 export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'decide', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
+const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', fleet: 'fleet', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'decide', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
 export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id]
 export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.limits : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)

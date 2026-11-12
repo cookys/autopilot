@@ -57,7 +57,7 @@ import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
-import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
+import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BarTabId, ScrollView } from './tabs'
 import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
@@ -70,11 +70,11 @@ import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
+  layoutBand, layoutBandLine, slotFleet, displayWidth, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, Manifest, PaneLine, PaneTab, SlotId, QuotaWindow, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, Manifest, PaneLine, PaneTab, Seg, SlotId, QuotaWindow, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -92,13 +92,11 @@ const STEPS = atom({ plugin: 'autopilot', key: 'steps' } as const, [] as Step[],
 const DECIDE_KEEP_MS = 24 * 3600 * 1000 // a sent question the session never closed is forgotten after a day
 let timer: { cancel: () => void } | undefined
 let liveBaseSeen: string | null = null // the live base the pointer named on the last tick (codeforge's pet.json sits under it)
-let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read each tick only while SPEED_LABEL_PET is on
+let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read every refresh; null draws no pet
 let paneTab: PaneTab = 'now'
-// the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, run only while the tab is showing and at most once per TTL, never awaited by a render. fleetShownMs is
-// when the Fleet tab was last drawn (the tick stops fetching 15 s after the tab is left).
+// the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, kicked on every tick and when the Fleet tab is drawn. The TTL inside the feed keeps the runs 30 s apart.
+// Never awaited by a render.
 const fleetFeed = makeFleetFeed()
-let fleetShownMs = -Infinity
-const FLEET_SHOWN_MS = 15_000
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
 const FLEET = atom({ plugin: 'autopilot', key: 'fleet' } as const, { v: FLEET_SUMMARY_V, fetchedMs: null, error: null, capped: 0, totals: { needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }, lanes: [], topStuck: null } as FleetSummary)
@@ -110,40 +108,9 @@ function kickFleet($: EngineInterface, nowMs: number): void {
     void $.ui.invalidate('ui.render')
   }, () => {}).catch(() => {})
 }
-// codeforge's forge-stats band is drawn in this session: its heartbeat `<live_base>/codeforge/mod-alive/<sid>.json` (schema codeforge.mod-alive/1, written every 2 s) is this
-// session's, at most FORGE_ALIVE_MS old and says layout `band`. The same file and threshold codeforge's statusline reads; a file over FORGE_ALIVE_MAX_BYTES is not read.
-// `summaryRow`: the heartbeat also says `summary_row: true`, the forge-stats that draws the one-line summary on the band's second row. An older one answers a one-row ask
-// with its own speed label, so it is never handed that row (one speed on the band, BL-0359).
-const FORGE_ALIVE_MS = 10_000
-const FORGE_ALIVE_MAX_BYTES = 4096
-// The file is stat'ed before it is read: only a regular file, not itself a symbolic link, at most FORGE_ALIVE_MAX_BYTES; then the text is held to the same bound in UTF-8
-// bytes. A link, a directory, a FIFO or device (`other`), a big file or any error (EISDIR, ELOOP, EACCES, a session id that will not come) is no heartbeat: no fetch,
-// no second row, and the tick goes on. `$.fs` has no lstat and no bounded read, so a file swapped between the stat and the read is held only by the size check after.
-async function forgeBand($: EngineInterface, nowMs: number): Promise<{ alive: boolean; summaryRow: boolean }> {
-  const no = { alive: false, summaryRow: false }
-  try {
-    if (liveBaseSeen === null) return no
-    const sid = await $.session.id()
-    const path = liveBaseSeen + '/codeforge/mod-alive/' + sanitizeSid(sid) + '.json'
-    const st = await $.fs.stat(path)
-    if (st.kind !== 'file' || st.isLink || !(st.size <= FORGE_ALIVE_MAX_BYTES)) return no
-    const text = await $.fs.read(path)
-    if (typeof text !== 'string' || text.length > FORGE_ALIVE_MAX_BYTES || utf8Bytes(text) > FORGE_ALIVE_MAX_BYTES) return no
-    const parsed = parseJson(text)
-    if (!parsed.ok || !isObject(parsed.value)) return no
-    const v = parsed.value
-    const age = typeof v.written_at_ms === 'number' ? nowMs - v.written_at_ms : NaN
-    const alive = v.schema === 'codeforge.mod-alive/1' && v.session_id === sid && v.layout === 'band' && age >= 0 && age < FORGE_ALIVE_MS
-    return { alive, summaryRow: alive && v.summary_row === true }
-  } catch (_e) {
-    return no
-  }
-}
-let forgeSummaryRow = false // set by the tick from the heartbeat; the band's draw reads it, never the file
 async function fleetFor($: EngineInterface): Promise<FleetView | null> {
   if (paneTab !== 'fleet') return null
   const nowMs = await $.clock.now()
-  fleetShownMs = nowMs
   kickFleet($, nowMs)
   return fleetView(fleetFeed, nowMs, await readOthers($, nowMs))
 }
@@ -168,17 +135,13 @@ export function liveTick($: EngineInterface): Promise<void> {
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   await consoleTick($).catch(() => undefined) // the console mode and its snapshot (below); the tick is the only place either is read
-  // fetch while someone looks: the Fleet tab was drawn in the last FLEET_SHOWN_MS, or forge-stats' band (which reads the summary) is drawn in this session
-  const forge = await forgeBand($, nowMs)
-  forgeSummaryRow = forge.summaryRow
-  if ((paneTab === 'fleet' && nowMs - fleetShownMs < FLEET_SHOWN_MS) || forge.alive || (shellWantsFleet && nowMs - shellDrawnMs < SHELL_SEEN_MS)) kickFleet($, nowMs)
+  kickFleet($, nowMs) // the band's own fleet segment reads the summary this publishes; the feed's TTL spaces the runs
   await shellTick($, nowMs).catch(() => undefined)
 }
 // ---- the O4 shell (shell.ts): the render never reads a file; the tick keeps what it draws from while the shell is on screen ----
 const SHELL_SEEN_MS = 15_000 // the shell counts as open while it was drawn this recently
 const PANEL_OPEN_EVERY_MS = 15_000 // forge-stats reads `autopilot.panel_open_at_ms` and refreshes the quota mirror only while it is within a minute
 let shellDrawnMs = -Infinity
-let shellWantsFleet = false // the 240 tier has a fleet column: the Fleet feed runs while it is drawn
 let shellRoom: { rows: RoomRow[]; raw: string } = { rows: [], raw: '' }
 let shellBaseline: number | undefined // the newest roundtable seq when the shell opened (✦ counts what came after); undefined = taken at the next read
 let panelOpenWrittenMs = -Infinity
@@ -845,7 +808,7 @@ async function refresh($: EngineInterface): Promise<void> {
     } catch (_e) {
       // garnish too: keep the previous rows
     }
-    if (SPEED_LABEL_PET) petText = petTag(liveBaseSeen === null ? null : await readText($, liveBaseSeen + '/codeforge/pet.json'))
+    petText = petTag(liveBaseSeen === null ? null : await readText($, liveBaseSeen + '/codeforge/pet.json'))
     snapshot = { ...built.snap, recent, activity, account: { account, quota } }
     await pruneDecide($, new Set(built.snap.pending.flatMap(d => (d.id === null ? [] : [d.id]))), built.snap.state === 'ok', nowMs).catch(() => undefined)
     $.ui.invalidate('ui.render')
@@ -1084,9 +1047,8 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
 const FORGE_LABEL_MAX = 30
 const FORGE_FULL_ROWS = 12
 const FORGE_BELOW_MIN_COLS = 26 // the narrowest the mod below is asked for its view (forge-stats draws a one-row summary under this)
-// Owner previews (BL-0359), two choices open until the owner picks: where the speed view sits against the mod below, and whether the label carries the pet (read from codeforge's pet.json).
+// Owner preview (BL-0359): the speed view sits beside the mod below. The label's pet is always read (codeforge's pet.json); a null pet draws nothing.
 const SPEED_PLACEMENT: SpeedPlacement = 'beside'
-const SPEED_LABEL_PET = false
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
 
@@ -1250,7 +1212,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
       return next({ ...e, props: { ...e.props, maxRows, bodyColumns, ...(scroll === undefined ? {} : { scroll: { ...scroll, bodyRows: Math.max(0, scroll.bodyRows - (e.props.maxRows - maxRows)) } }) } })
     }
     // The speed label (BL-0359): the live mod measures it itself (speed.ts), so the mod below is no longer asked for a one-row label and two speeds can never stand on the band.
-    // One row, as wide as the room the other tabs and the indicator leave (at most FORGE_LABEL_MAX); none while no request was timed.
+    // One row. With a fetched fleet summary (and not in the console mode) the fleet segment is fitted onto that line, right after the verdict, and the speed shares its room.
+    // Otherwise the label keeps the cells the indicator's narrowest form leaves it (at most FORGE_LABEL_MAX); none while no request was timed.
     let forge: ForgeSegment[] | null = null
     const steps = validSteps(await read($, STEPS))
     // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest (at most FORGE_LABEL_MAX)
@@ -1260,8 +1223,31 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn, con).width - 1 - 2)
     // forgeMore: something was timed but the band has no room for the label (its smallest form) and its tab; the strip then ends in a dim `›` Button (key 'more') that opens the forge view, so the keyboard still reaches it
     let forgeMore = false
-    if (rows >= 1) {
-      const parts = speedLabelParts(steps, SPEED_LABEL_PET ? petText : null)
+    let bandPreset: { segs: Seg[]; width: number } | null = null
+    const fleetNow = await read($, FLEET)
+    const snap = snapshot
+    const fleetSlot = snap !== null && snap.band !== null && !consoleOn && fleetNow.fetchedMs !== null
+      ? slotFleet({ stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting }, t)
+      : null
+    if (fleetSlot !== null && snap !== null && snap.band !== null) {
+      const base = snap.band.slots
+      const atV = base.findIndex(s => s.id === 'verdict')
+      const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...base.slice(atV + 1)]
+      const parts = rows >= 1 ? speedLabelParts(steps, petText) : null
+      const roomFor = (more: boolean, speedTab: boolean) => {
+        const stripW = barStrip(snap, t, null, speedTab ? GLYPHS.structure.speed : null, usageOn, con).width
+        const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
+        return Math.max(1, columns - stripW - 1 - moreW)
+      }
+      let fitted = layoutBandLine(withFleet, roomFor(false, parts !== null), parts)
+      if (parts !== null && fitted.speed === null) {
+        forgeMore = true
+        fitted = layoutBandLine(withFleet, roomFor(true, false), parts)
+      }
+      forge = fitted.speed
+      bandPreset = { segs: fitted.band.segs, width: fitted.band.width }
+    } else if (rows >= 1) {
+      const parts = speedLabelParts(steps, petText)
       if (parts !== null) {
         if (labelCols >= FORGE_LABEL_MIN) forge = forgeFit(parts, labelCols)
         forgeMore = forge === null
@@ -1273,7 +1259,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const hidden: BarTabId[] = [...(usageOn ? [] : ['usage' as const]), ...(forgeMore ? ['forge' as const] : [])]
     const at = active === null ? -1 : hidden.indexOf(active)
     const moreTo: BarTabId | null = hidden.length === 0 ? null : at < 0 ? hidden[0] : (hidden[at + 1] ?? active)
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con, bandPreset)
     const open = (tab: PaneTab) => { void openOn(tab) }
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
@@ -1319,7 +1305,6 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (plan0 !== null) {
         let plan: ShellPlan = plan0
         shellDrawnMs = nowMs
-        shellWantsFleet = plan.geo.tier === 240
         const mainCols = plan.geo.main - 1
         const tabIds = strip.tabs.map(b => b.id).filter(id => id !== 'forge')
         const redraw = () => { void $.ui.invalidate('ui.render') }
@@ -1433,13 +1418,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: open })
     }
     if (active !== 'forge' && rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
-    // No tab open, a second row to spare and a forge-stats that draws the summary row (its heartbeat says so): that row goes to the mod below (PM G33a, TUI guideline
-    // §1.1 rule 3). A mod that passes it on (the engine's own element comes back) leaves the band one row high, never a blank row.
-    // The console mode never hands it over: its second row is not forge-stats' summary (that line is the fleet counts, which the tab badges already say; plan §3.1), so `next(e)` is not called here.
-    if (active === null && rows >= 2 && forgeSummaryRow && !consoleOn) {
-      const answer = await lower(1, columns)
-      if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') return stackBand(el, bar.node, [answer])
-    }
+    // The fleet counts are on the band's own line (slotFleet). Nothing is handed to the mod below for a second row.
     if (content.length === 0) return bar.node
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })

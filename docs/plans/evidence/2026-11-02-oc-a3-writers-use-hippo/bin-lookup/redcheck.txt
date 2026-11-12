@@ -1,0 +1,15 @@
+# bin() lookup fix: HIPPO_BIN -> PATH -> $HOME/.local/bin/hippo -> one line in ~/.autopilot/logs/hippo.log
+## green: HIPPO_BIN=~/.local/bin/hippo bash hooks/tests/hippo-lib.test.sh
+PASS [hippo-lib] 126 assertions
+## red 1: bin() reverted to `HIPPO_BIN || "hippo"`
+FAIL [hippo-lib] lookup: the miss is logged to hippo.log: 'hippo binary not found: HIPPO_BIN unset, not on PATH, not at <tmp>/hs/home/.local/bin/hippo' not found in output
+FAIL [hippo-lib] lookup: hippo only in ~/.local/bin -> found, state hippo: expected 'hippo', got 'spool'
+FAIL [hippo-lib] lookup: bin is the ~/.local/bin path: expected '<tmp>/hs/home/.local/bin/hippo', got 'hippo'
+FAIL [hippo-lib] lookup: PATH wins over ~/.local/bin: expected '<tmp>/hs/path-hippo/hippo', got 'hippo'
+FAIL [hippo-lib] 122 passed, 4 failed
+## red 2: the hippo.log append removed
+FAIL [hippo-lib] lookup: the miss is logged to hippo.log: 'hippo binary not found: HIPPO_BIN unset, not on PATH, not at <tmp>/hs/home/.local/bin/hippo' not found in output
+FAIL [hippo-lib] 125 passed, 1 failed
+## restored; related suites
+PASS [project-record] 252 assertions
+PASS [backlog-reconcile] 28 assertions

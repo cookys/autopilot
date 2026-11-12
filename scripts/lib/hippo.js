@@ -25,6 +25,7 @@
 // process exit 70 at that point. Counts actual writes only, so a rerun that skips existing steps does not re-trigger early points.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
@@ -40,7 +41,29 @@ class HippoError extends Error {
   }
 }
 
-function bin() { return process.env.HIPPO_BIN || 'hippo'; }
+// The binary: HIPPO_BIN, else `hippo` on PATH, else $HOME/.local/bin/hippo (the installer's link). tmux windows of the team
+// lanes start without ~/.local/bin on PATH, so PATH alone missed an installed hippo. When none is found, one line goes to
+// $HOME/.autopilot/logs/hippo.log and the bare name is returned, so the caller still sees ENOENT and spools.
+let missingLogged = false;
+function isExec(p) { try { fs.accessSync(p, fs.constants.X_OK); return fs.statSync(p).isFile(); } catch { return false; } }
+function bin() {
+  if (process.env.HIPPO_BIN) return process.env.HIPPO_BIN;
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (dir && isExec(path.join(dir, 'hippo'))) return path.join(dir, 'hippo');
+  }
+  const local = path.join(os.homedir(), '.local', 'bin', 'hippo');
+  if (isExec(local)) return local;
+  if (!missingLogged) {
+    missingLogged = true;
+    const line = `${new Date().toISOString()} hippo binary not found: HIPPO_BIN unset, not on PATH, not at ${local}\n`;
+    try {
+      const log = path.join(os.homedir(), '.autopilot', 'logs', 'hippo.log');
+      fs.mkdirSync(path.dirname(log), { recursive: true });
+      fs.appendFileSync(log, line);
+    } catch (e) { process.stderr.write(`autopilot: cannot write hippo.log: ${e.message}\n`); }
+  }
+  return 'hippo';
+}
 
 function git(dir, args) {
   return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();

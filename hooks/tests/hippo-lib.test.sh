@@ -83,6 +83,27 @@ D="$(HIPPO_BIN="$STUB5" detect_json "$R_HIP")"
 eq spool "$(echo "$D" | jf d.state)" "detect: store + hippo exit 5 -> spool"
 assert_contains "$(echo "$D" | jf d.reason)" "no actor" "detect: spool reason names the exit-5 cause"
 
+# --- binary lookup with HIPPO_BIN unset: PATH, then $HOME/.local/bin/hippo, else one line in $HOME/.autopilot/logs/hippo.log.
+# Team-lane tmux windows start without ~/.local/bin on PATH; PATH alone missed the installed hippo there.
+NB="$HS_ROOT/path-nohippo"; mkdir -p "$NB"
+for t in node git; do ln -s "$(command -v "$t")" "$NB/$t"; done
+lookup() { env -u HIPPO_BIN PATH="$NB${1:+:$1}" "$NB/node" "$LIB" detect --target "$R_HIP" --json; }
+HLOG="$HOME/.autopilot/logs/hippo.log"
+rm -f "$HLOG"
+D="$(lookup)"
+eq spool "$(echo "$D" | jf d.state)" "lookup: no hippo on PATH or in ~/.local/bin -> spool"
+assert_contains "$(cat "$HLOG" 2>/dev/null)" "hippo binary not found: HIPPO_BIN unset, not on PATH, not at $HOME/.local/bin/hippo" "lookup: the miss is logged to hippo.log"
+mkdir -p "$HOME/.local/bin" && ln -s "$HIPPO_BIN" "$HOME/.local/bin/hippo"
+rm -f "$HLOG"
+D="$(lookup)"
+eq hippo "$(echo "$D" | jf d.state)" "lookup: hippo only in ~/.local/bin -> found, state hippo"
+eq "$HOME/.local/bin/hippo" "$(echo "$D" | jf d.bin)" "lookup: bin is the ~/.local/bin path"
+assert_file_absent "$HLOG" "lookup: a found binary logs nothing"
+PD="$HS_ROOT/path-hippo"; mkdir -p "$PD" && ln -s "$HIPPO_BIN" "$PD/hippo"
+D="$(lookup "$PD")"
+eq "$PD/hippo" "$(echo "$D" | jf d.bin)" "lookup: PATH wins over ~/.local/bin"
+rm -f "$HOME/.local/bin/hippo"
+
 # --- plugin install directory refused (a temp copy of the module placed at <root>/scripts/lib, so <root> is its plugin root)
 PLG="$TEST_TMP/plugin-copy"; mkdir -p "$PLG/scripts/lib"; cp "$LIB" "$PLG/scripts/lib/hippo.js"
 git init -q "$PLG" && git -C "$PLG" add -A && git -C "$PLG" commit -q -m copy

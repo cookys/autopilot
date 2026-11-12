@@ -34,9 +34,30 @@ assert_eq "$(T high null)"   "600"  "high defaults to 10m"
 assert_eq "$(T medium null)" "300"  "unknown/medium keeps 5m"
 assert_eq "$(T max 300)"     "300"  "explicit timeout overrides the effort default"
 
-# L1 drift guard: the dispatcher actually consults the policy at the bounded-seat site.
-assert_contains "$(grep -c 'effortSeatTimeoutSeconds(selected.effort' "$REPO_ROOT/scripts/dispatch-plan-review.js")" "1" \
-  "dispatch-plan-review wires the per-seat timeout policy"
+# L1 drift guard: the dispatcher consults the per-seat timeout policy at the
+# bounded-seat site. Call count is not pinned — payload scaling consults the
+# policy more than once. Required: at least one consultation, and the
+# timeoutSeconds on `bounded` (the value dispatchSeat passes as
+# `--timeout ${target.timeoutSeconds}s`) is computed from that policy.
+DISPATCH_JS="$REPO_ROOT/scripts/dispatch-plan-review.js"
+GUARD_OUT="$(node -e '
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[1], "utf8");
+const needle = "effortSeatTimeoutSeconds(selected.effort";
+const calls = src.split("\n").filter((line) => line.includes(needle)).length;
+const start = src.indexOf("const bounded = {");
+const closeAt = start < 0 ? -1 : src.indexOf("\n    };", start);
+const slice = start < 0 || closeAt < 0 ? "" : src.slice(start, closeAt);
+const at = slice.indexOf("timeoutSeconds:");
+const usesPolicy = at >= 0 && slice.slice(at).includes("effortSeatTimeoutSeconds(");
+console.log(calls + " " + (usesPolicy ? "yes" : "no"));
+' "$DISPATCH_JS")" || fail "bounded-seat timeout guard could not read $DISPATCH_JS"
+POLICY_HITS="${GUARD_OUT%% *}"
+BOUNDED_USES="${GUARD_OUT#* }"
+assert_neq "$POLICY_HITS" "0" \
+  "dispatch-plan-review consults the per-seat timeout policy (calls=$POLICY_HITS)"
+assert_eq "$BOUNDED_USES" "yes" \
+  "bounded-seat timeout passed to the runner comes from effortSeatTimeoutSeconds"
 
 # ── 3: unratified salvage on the envelope rail (verdict-bytes preservation, v2.34.33) ──
 # Frozen admission matrix (plan R3 §3 + g2-adjudication #0/#3/#5): salvage runs the SAME

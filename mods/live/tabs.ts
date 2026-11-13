@@ -979,7 +979,7 @@ function fleetRow(u: UiCtx, task: FleetTask): U.RowSpec {
     if (task.progress !== '' && task.progress !== task.title) children.push(...ui.detail(u, t('fleet.progress', { p: task.progress }), { fact: F }))
     children.push(...ui.detail(u, t('fleet.task_id', { state: task.state, id: task.id }), { fact: F }))
   }
-  return { group: task.id, ts: task.createdMs ?? 0, state: ui.stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null }), fact: F, body: task.title, meta, toggle, children, word: true }
+  return { group: task.id, ts: task.createdMs ?? 0, state: ui.stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null, stale: task.stale }), fact: F, body: task.title, meta, toggle, children, word: true }
 }
 function fleetLanesLines(u: UiCtx, ctx: PaneCtx, f: FleetView | null): PaneLine[] {
   const t = u.t
@@ -988,10 +988,11 @@ function fleetLanesLines(u: UiCtx, ctx: PaneCtx, f: FleetView | null): PaneLine[
   if (f.lanes.length === 0) return [ui.empty(t('fleet.none'), F)]
   const out: PaneLine[] = []
   for (const l of f.lanes) {
-    const rows = [...l.inflight, ...l.upcoming]
+    const active = [...l.inflight, ...l.upcoming]
     const id = fleetLaneId(l)
     const open = U.sectionOpen(ctx.folded, id, false)
-    const chip = ui.countChip(u, U.worst(rows.map(r => ui.stateOf('fleetTask', { state: r.state, stuck: r.stuck !== null }))), rows.length, F)
+    const chipRows = active.length > 0 ? active : l.stale
+    const chip = ui.countChip(u, U.worst(chipRows.map(r => ui.stateOf('fleetTask', { state: r.state, stuck: r.stuck !== null, stale: r.stale }))), chipRows.length, F)
     out.push(ui.header(u, l.lane, { id, open }, { right: chip, fact: F }))
     if (!open) continue
     if (l.inflight.length > 0) out.push(...ui.list(u, 'fleet.inflight.' + l.host + '/' + l.lane, t('fleet.noun_inflight'), l.inflight.map(x => fleetRow(u, x)), { keepOrder: true, cap: FLEET_CAP }))
@@ -999,6 +1000,7 @@ function fleetLanesLines(u: UiCtx, ctx: PaneCtx, f: FleetView | null): PaneLine[
       out.push(...ui.detail(u, t('fleet.upcoming', { n: l.upcoming.length }), { fact: F }))
       out.push(...ui.list(u, 'fleet.upcoming.' + l.host + '/' + l.lane, t('fleet.noun_upcoming'), l.upcoming.map(x => fleetRow(u, x)), { keepOrder: true, cap: FLEET_CAP }))
     }
+    if (l.stale.length > 0) out.push(...ui.list(u, 'fleet.stale.' + l.host + '/' + l.lane, t('ui.state.stale'), l.stale.map(x => fleetRow(u, x)), { keepOrder: true, cap: FLEET_CAP }))
   }
   return out
 }

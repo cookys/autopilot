@@ -56,14 +56,14 @@ const padLeft = (text: string, width: number): string => ' '.repeat(Math.max(0, 
 export const GRID = [0, 2, 4, 12] as const // the four columns a body line may start at (§3.1)
 export const KEY_W = 12 // the key column of a key/value row, in display cells
 
-export const STATE_IDS = ['need_you', 'failed', 'stalled', 'findings', 'running', 'done', 'pending', 'waiting', 'stopped', 'skipped', 'unknown'] as const // waiting: accepted, its seat idle on something (a fleet hub task, G23 / PM ruling)
+export const STATE_IDS = ['need_you', 'failed', 'stalled', 'findings', 'running', 'done', 'pending', 'waiting', 'stopped', 'skipped', 'unknown', 'stale'] as const // waiting: accepted, its seat idle on something (a fleet hub task, G23 / PM ruling); stale: no progress for more than a day (PM 01M78C2N)
 export type StateId = (typeof STATE_IDS)[number]
 
 // The glyph tables (§3.2, §3.4). Three groups that do not cross: state glyphs, structure glyphs, chart glyphs. `verified` records, per glyph that is new to
 // the vocabulary, where it was checked to draw in ONE cell: confirmed 2026-10-13 by the owner (ssh + tmux, all ten single-cell); was `pending-owner` until the owner ran `node mods/live/glyph-check.js` in the real ssh + tmux
 // terminal (P0 b). `↓` is East Asian Ambiguous and its width is still unchecked (`pending-owner`); the owner's 2026-10-14 ruling settled only its meaning (behind upstream, nothing else), see the plan §8. `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
-  state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?' },
+  state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?', stale: '~' },
   structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★', fresh: '✦', frameTL: '╭', frameTR: '╮', frameBL: '╰', frameBR: '╯', frameDown: '┬', frameUp: '┴', frameLeftT: '├', frameRightT: '┤', answer: '→' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
@@ -114,9 +114,10 @@ export const STATES: Record<StateId, { glyph: string; key: ThemeKey | undefined;
   stopped: { glyph: GLYPHS.state.stopped, key: PALETTE.idle, wordKey: PALETTE.idle },
   skipped: { glyph: GLYPHS.state.skipped, key: PALETTE.idle, wordKey: PALETTE.idle },
   unknown: { glyph: GLYPHS.state.unknown, key: PALETTE.idle, wordKey: PALETTE.idle },
+  stale: { glyph: GLYPHS.state.stale, key: PALETTE.idle, wordKey: PALETTE.idle },
 }
-// the one total order of "worse" (§3.3); `unknown` ranks last so a missing mapping never hides a real finding
-export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'waiting', 'stopped', 'pending', 'done', 'skipped', 'unknown']
+// the one total order of "worse" (§3.3); `unknown` ranks last so a missing mapping never hides a real finding. `stale` is after that: a lane that still has a live row stays that row.
+export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'waiting', 'stopped', 'pending', 'done', 'skipped', 'unknown', 'stale']
 
 // freshness thresholds (§2.5), ms; dispatch = a finished run older than 6 h is counted in the chip, not listed (BL-0149); abandonedPlan = a non-terminal plan review untouched for 7 d fades to one line; every comparison is strict (`>`): exactly at the threshold is still fresh
 export const FRESH_MS = { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, abandonedPlan: 604_800_000, codeReview: 86_400_000, dispatch: 21_600_000 } as const
@@ -280,7 +281,7 @@ export type BackgroundSubject = { exit: number | null; quietMs: number }
 export type LoadSourceSubject = { source: string; behind: number; flags: number }
 export type AttentionSubject = { source: Stated | null } // null = the one item of its own: task acceptance
 export type CleanupSubject = { errors: number; done: number }
-export type FleetTaskSubject = { state: string; stuck: boolean } // a fleet hub task row (fleet.ts): the hub's state word and whether a stuck rule fired
+export type FleetTaskSubject = { state: string; stuck: boolean; stale?: boolean } // a fleet hub task row (fleet.ts): the hub's state word, whether a stuck rule fired, and whether the row has had no progress past a day
 export type Subject = {
   verdict: string; run: RunSubject; seat: SeatSubject; round: RoundSubject; gate: string; qc: string; background: BackgroundSubject; task: string
   loadSource: LoadSourceSubject; attention: AttentionSubject; residueGroup: string; cleanup: CleanupSubject; fleetTask: FleetTaskSubject; console: string
@@ -337,7 +338,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
   residueGroup: c => norm(c).toLowerCase(),
   cleanup: c => (c.errors > 0 ? 'errors' : c.done > 0 ? 'done' : 'nothing'),
   console: s => norm(s), // the operator-console feed's own state word (fleet.console/1 items[].state, counts.summary.lines keys)
-  fleetTask: f => (f.stuck && !['FAILED', 'LOST', 'BLOCKED_HUMAN'].includes(norm(f.state)) ? 'STUCK' : norm(f.state)),
+  fleetTask: f => (f.stale === true ? 'STALE' : f.stuck && !['FAILED', 'LOST', 'BLOCKED_HUMAN'].includes(norm(f.state)) ? 'STUCK' : norm(f.state)),
 }
 const ATTENTION_FROM = Object.fromEntries(STATE_IDS.map(id => ['from:' + id, id])) as Record<string, StateId>
 export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
@@ -361,7 +362,7 @@ export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   // the fleet hub's task states (fleet.ts); a stuck rule (open an hour unaccepted, a seat quiet four hours, the hub's own suspect) is `stalled`. A word the hub adds later is `unknown`.
   fleetTask: {
     OPEN: 'pending', TASK_ACCEPTED: 'pending', ACCEPTED: 'pending', RUNNING: 'running', IN_PROGRESS: 'running', WAITING: 'waiting', RESULT_REPORTED: 'findings',
-    FAILED: 'failed', LOST: 'failed', SUSPECT: 'stalled', BLOCKED_HUMAN: 'need_you', STUCK: 'stalled',
+    FAILED: 'failed', LOST: 'failed', SUSPECT: 'stalled', BLOCKED_HUMAN: 'need_you', STUCK: 'stalled', STALE: 'stale',
   },
 }
 export function classify<D extends Domain>(domain: D, subject: Subject[D]): string {

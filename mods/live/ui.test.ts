@@ -90,7 +90,7 @@ test('classify: run precedence is failed > done > weird > stall > fresh running 
 })
 
 test('worst: follows SEVERITY; empty is skipped; unknown never hides a finding', () => {
-  expect([...SEVERITY]).toEqual(['need_you', 'failed', 'stalled', 'findings', 'running', 'waiting', 'stopped', 'pending', 'done', 'skipped', 'unknown'])
+  expect([...SEVERITY]).toEqual(['need_you', 'failed', 'stalled', 'findings', 'running', 'waiting', 'stopped', 'pending', 'done', 'skipped', 'unknown', 'stale'])
   expect(worst([stateOf('qc', 'ok'), stateOf('qc', 'owed')]).id).toBe('need_you')
   expect(worst([stateOf('qc', 'unknown'), stateOf('qc', 'ok')]).id).toBe('done')
   expect(worst([]).id).toBe('skipped')

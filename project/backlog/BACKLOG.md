@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0443 -->
+<!-- next-id: BL-0455 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1547,14 +1547,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-11-13
 - **Origin**: self
-- **Problem**: grok 提交失敗時，回報的失敗種類寫成認證失敗。這列要先抓到一次可重現，完成條件是留下那次重現。
+- **Problem**: grok 提交失敗時，回報的失敗種類寫成認證失敗；agy 的空跑（工具遭禁用、未改任何檔案）也被標成同一種。這列要先抓到一次可重現，完成條件是留下那次重現。
 - **Impact**: 人會去查登入，真正讓提交失敗的原因被放掉。
 - **Trigger**: ready
 - **Trigger-Type**: ready
 - **Effort**: S
-- **Source**: autopilot lane（PM 01M78BH1）
+- **Source**: autopilot lane（PM 01M78BH1；hangar 01M78MZQ）
 - **Pointer**: none
-- **Context**: Seen label: auth_failed. Done-Check: repro captured.
+- **Context**: Seen label: auth_failed. agy -p no_op (run_command prohibited, Changed files: None) run hetero-1794510260-1465192-0a69 also labelled auth_failed (hangar 01M78MZQ); agy review rc=3 was upstream GOAWAY server_shutting_down, transient.
 
 ### 新複本預設強制模式讓異質派工無法開工
 - **Id**: BL-0442
@@ -1569,3 +1569,171 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: autopilot lane（PM 01M78BH1）
 - **Pointer**: none
 - **Context**: Precondition: Mission enforce mode requires a sealed campaign strict projection. Stashing the governance-file change re-enables enforce.
+
+### qualification-sweep Stage-0 probe writes outputs into the measured project and gets boundary-rejected
+- **Id**: BL-0443
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 資格掃描的第零階段探測會把錯誤與輸出檔寫進正在被量的專案目錄裡，掃描於是把那次測量判成越界而作廢。修法是把輸出改寫到被量目錄之外。
+- **Impact**: 掃描一跑就被判越界作廢，引擎資格測量全部白跑。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: Stage-0 probe writes .dispatch.err/.out inside the measured probe project dir; the first 2026-11-13 sweep was judged boundary_rejected for it. Fix: write outputs outside the measured dir.
+
+### agy reviewer bundle README effort label medium rejected by checkEffortLabel
+- **Id**: BL-0444
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: agy 審查包的說明檔把心力標成 medium，檢查只接受 none，等於審查包內容過期，資格流程會在這關被擋下。
+- **Impact**: agy 的審查資格流程每次都卡在這關，做不完。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: Bundle README effort label medium refused by checkEffortLabel (scripts/lib/qualification-effort-label.js); only none passes. Bundle out of date.
+
+### qualification sweep prints DONE: row-parse-error although qualify-out.json is valid
+- **Id**: BL-0445
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 資格掃描對實作角色印出列解析錯誤的完成訊息，但產出的資格輸出檔本身是好的，是掃描自己解析錯了。
+- **Impact**: 完好的測量被當成失敗，結論要人工開檔確認。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: Sweep prints DONE: row-parse-error for the implementer row; qualify-out.json is valid on inspection.
+
+### GLM registry has two engine names differing only by case (glm-5.3 / GLM-5.3)
+- **Id**: BL-0446
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 引擎登錄資料裡同一個 GLM 引擎出現兩個名字，只差大小寫，沒有統一。
+- **Impact**: 繞路與統計把同一個引擎當成兩個，名額與紀錄都會算錯。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: glm-5.3 in scripts/lib/noncq-pools.json vs GLM-5.3 in src/readiness/provider-bootstrap.js; unify.
+
+### open-decision close misses free_text_source local when only the option is stored
+- **Id**: BL-0447
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 決策卡收單時，快遞回報成功但答案只存了選項，自由文字來源欄位不會被標成本地，欄位留空。
+- **Impact**: 事後分不清自由文字是沒有還是漏標，決策軌跡不完整。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: Courier exit 0, option-only answer (drop): answer_free_text not marked free_text_source local in scripts/open-decision.js close.
+
+### dispatch-anthropic-review validateBaseUrl and endpoint transport rule disagree on plaintext-private
+- **Id**: BL-0448
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 審查派工的網址檢查只接受 https 或本機回環位址，無視端點設定已標明走私有明文傳輸，兩套規則不一致。
+- **Impact**: 走私有明文傳輸的審查端點每次都在呼叫模型前就失敗，那條路線完全不能用。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: validateBaseUrl takes https/loopback only and ignores AUTOPILOT_ENDPOINT_<X>_TRANSPORT=plaintext-private; anthropic-compatible + qwen_local fails rc=2 before any model call; cc-shim works.
+
+### Manual cc-shim dispatch lacks pre-probe and cloud fallback
+- **Id**: BL-0449
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 手動指定繞路器的審查派工沒有事前探測，也沒有備援；端點故障時要等約三分鐘才以無結論收場。
+- **Impact**: 端點壞掉時每次手動審查都白等三分鐘，結果仍是無結論。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M79W9B）
+- **Pointer**: none
+- **Context**: dispatch-review --runner cc-shim --endpoint <X>: no pre-probe, no cloud fallback; qwen down -> ~3 min to no_verdict. Add the roster reviewer's probe + one fallback.
+
+### Roster review cloud-fallback rung rejects endpoint runners, blocking GLM fallback
+- **Id**: BL-0450
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 名冊審查的雲端備援只接受雲端繞路器，用端點跑的引擎被排除在外，本地端點故障時換不上另一家引擎。
+- **Impact**: 本地審查端點故障時沒有備援可換，審查迴圈停擺。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M79WDM）
+- **Pointer**: none
+- **Context**: resolve-review-loop.sh rejects cc-shim and anthropic-compatible for the cloud-fallback rung (current rung: agyclaude); allow GLM (endpoint runner) as fallback when qwen_local is down.
+
+### Pane look-press fallback would open an https attachment as a local path
+- **Id**: BL-0451
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 面板查看按鍵在卡片沒有查看目標時，會把第一個附件當成本地路徑打開；附件若是網址就會開錯。目前走不到這條路，先加過濾。
+- **Impact**: 日後一旦走到，網址附件會被當本地檔案路徑開啟而失敗。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M7A0JM）
+- **Pointer**: none
+- **Context**: LOOK_PRESS falls back to showPath(attachments[0]) when a look card has no look_target; an https attachment would open as a path. Unreachable today; filter with isLocalAttachPath.
+
+### LookTarget type and cleaning logic exist in three places; consolidate
+- **Id**: BL-0452
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 查看目標的型別定義有兩份、清理邏輯也有兩份，散在不同檔案，改一處其他處不會跟著一致。
+- **Impact**: 三邊遲早行為不一致，同一張查看卡在不同入口被清成不同結果。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane（PM 01M7A0JM）
+- **Pointer**: none
+- **Context**: LookTarget type in mods/viewer/show.ts and mods/live/model.ts; cleaning in model.ts parseLookTarget and src/status/decision-input.js cleanLookTarget.
+
+### pace-select emits reviewer_exclude for every role instead of implementer only
+- **Id**: BL-0453
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 配速選擇對每一個角色都發出審查排除條件，而不是只對實作角色發。
+- **Impact**: 非實作角色被多餘的排除條件綁住，選出的配置不符預期。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: scripts/pace-select.js emits reviewer_exclude for every role; restrict to implementer.
+
+### pace-select lacks a test that --exclude removes a key from the priority walk
+- **Id**: BL-0454
+- **Status**: open
+- **Since**: 2026-11-13
+- **Origin**: self
+- **Problem**: 配速選擇缺少一個測試，證明排除參數會把對應的鍵從優先序走訪中移除。
+- **Impact**: 排除與優先序的互動壞掉時，測試抓不到。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: Add a test that --exclude removes a key from the priority walk in scripts/pace-select.js.

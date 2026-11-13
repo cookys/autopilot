@@ -2,7 +2,7 @@
   "schema": "capacity.pace/1",
   "rows": [
     {
-      "pool": "cookys",
+      "pool": "claude-pool-a",
       "class": "claude",
       "status": "ok",
       "stale": false,
@@ -10,7 +10,7 @@
       "used_pct": 4
     },
     {
-      "pool": "twgame.net",
+      "pool": "claude-pool-b",
       "class": "claude",
       "status": "ok",
       "stale": false,
@@ -18,7 +18,7 @@
       "used_pct": 1
     },
     {
-      "pool": "singularaion",
+      "pool": "claude-pool-c",
       "class": "claude",
       "status": "WARN_ahead",
       "stale": false,
@@ -26,7 +26,7 @@
       "used_pct": 35
     },
     {
-      "pool": "Stranity 團隊",
+      "pool": "claude-pool-d",
       "class": "claude",
       "status": "WARN_ahead",
       "stale": false,
@@ -34,7 +34,7 @@
       "used_pct": 90
     },
     {
-      "pool": "stranity-personal",
+      "pool": "claude-pool-e",
       "class": "claude",
       "status": "ok",
       "stale": false,
@@ -58,7 +58,7 @@
       "used_pct": 81
     },
     {
-      "pool": "codex A",
+      "pool": "scarce-pool-a",
       "class": "scarce",
       "status": "WARN_ahead",
       "stale": false,
@@ -66,7 +66,7 @@
       "used_pct": 87
     },
     {
-      "pool": "codex B",
+      "pool": "scarce-pool-b",
       "class": "scarce",
       "status": "WARN_ahead+stale",
       "stale": true,
@@ -90,7 +90,7 @@
       "used_pct": 1
     },
     {
-      "pool": "minimax:general",
+      "pool": "other-pool-a",
       "class": "other",
       "status": "behind_early",
       "stale": false,

@@ -527,12 +527,13 @@ const plan = sf.reviewerFallbackPlan({
   failedModel: process.argv[4],
   failedEndpoint: process.argv[5],
 });
-const demJson = JSON.stringify(plan.demoted || []);
+const clean = (v) => String(v || "").replace(/[|\r\n]/g, " ").trim();
+const demJson = JSON.stringify(plan.demoted || []).replace(/[\r\n]/g, " ");
 for (const r of plan.chain) {
-  process.stdout.write([r.model, r.effort, r.runner, r.endpoint || "", demJson].join("\t") + "\n");
+  process.stdout.write([clean(r.model), clean(r.effort), clean(r.runner), clean(r.endpoint), demJson].join("|") + "\n");
 }
 ' "$_REVIEW_SELF_DIR/lib/seat-fallback.js" "${IMPLEMENTER_FAMILY:-unknown}" "${RUNNER:-}" "${MODEL:-}" "${ENDPOINT:-}" 2>/dev/null)" || _chain_lines=""
-  while IFS=$'\t' read -r e f r ep dem; do
+  while IFS='|' read -r e f r ep dem; do
     [ -n "${e:-}" ] && [ -n "${r:-}" ] || continue
     [ "$r" = "codex" ] && continue
     _FG_ENGINE="$e"

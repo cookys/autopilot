@@ -202,6 +202,8 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_REVIEW_SELF_DIR/lib/repo-identity.sh" ] && . "$_REVIEW_SELF_DIR/lib/repo-identity.sh" || true
+# shellcheck source=lib/token-seat.sh
+. "$_REVIEW_SELF_DIR/lib/token-seat.sh"
 # shellcheck source=lib/codeforge-collect.sh
 # Best-effort: a missing helper skips usage collect; it never changes the review result.
 [ -r "$_REVIEW_SELF_DIR/lib/codeforge-collect.sh" ] && . "$_REVIEW_SELF_DIR/lib/codeforge-collect.sh" || true
@@ -2244,6 +2246,7 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   fi
   PARSE_INPUT="$OPENCODE_OUT"
 elif [[ "$RUNNER" = "cc-shim" ]]; then
+  _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
   # Make CC_BIN ABSOLUTE before the inner shell cd's to the scratch dir (a relative --bin would
@@ -2319,6 +2322,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
     emit_no_verdict "cc-shim exited non-zero (rc=$CCSHIM_RC) — fail-closed, partial output not parsed"
   fi
 elif [[ "$RUNNER" = "claude-native" ]]; then
+  _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (claude-native drives the local Claude Code CLI with its own ambient/native auth)"
   case "$CC_BIN" in

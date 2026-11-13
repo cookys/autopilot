@@ -328,6 +328,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # G37: the one reading of `claude-account.js env-check` (legacy | active | invalid). Sourced hard (no fail-open):
 # a missing copy makes account_layer_state print nothing, and every caller treats anything but legacy/active as invalid.
 . "$SELF_DIR/lib/account-state.sh"
+# shellcheck source=lib/token-seat.sh
+. "$SELF_DIR/lib/token-seat.sh"
 # --role-kit: validator wrapper (claude-native only). Sourced hard like account-state.sh.
 . "$SELF_DIR/lib/role-kit.sh"
 # A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
@@ -3101,6 +3103,7 @@ if [ "$IS_CODEX" -eq 1 ]; then
     die_precondition "resolved codex ($_cx_path, $_cx_ver) does not support --dangerously-bypass-hook-trust — it is too old / the wrong binary. Update it, fix PATH so the newer codex wins, or pass --codex-bin <path>."
   fi
 elif [ "$IS_CCSHIM" -eq 1 ]; then
+  _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   command -v "claude" >/dev/null 2>&1 || die_precondition "claude binary not found (cc-shim drives the Claude Code CLI)"
   # cc-shim is a base-url SHIM by design: without ANTHROPIC_BASE_URL it would dispatch to
   # vanilla Claude (homogeneous, and burning the user's own quota). Require it + the token.
@@ -3140,6 +3143,7 @@ elif [ "$IS_CNATIVE" -eq 1 ]; then
   # `node scripts/run-approval.js confirm-claude-native`. Checked BEFORE the binary so a refusal never spawns.
   node "$SELF_DIR/run-approval.js" claude-native-status >/dev/null 2>&1 \
     || die_precondition "--runner claude-native needs a one-time owner confirmation: depth 0 must ask the owner once (first-party Claude implementer on native auth), and after a yes run 'node scripts/run-approval.js confirm-claude-native'. No flag on this command grants it."
+  _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   command -v claude >/dev/null 2>&1 || die_precondition "claude binary not found (claude-native drives the Claude Code CLI)"
   case "$(cnative_account_state)" in
     active) : ;;  # G37: the account registry is the only auth; the seeded .credentials.json path is not touched
@@ -4720,6 +4724,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # an env-check output nobody recognises) is not spawned. The push/fetch block (HANDS_GIT_ENV) is not on
     # the account allowlist, so it rides in the inner argv through env(1). --settings (gate-rules) is kept.
     if [ "$_CN_STATE" = active ]; then
+      _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
       CNATIVE_ARGV=(env ${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"} claude -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL"
         --strict-mcp-config --dangerously-skip-permissions ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"}
         ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json
@@ -4736,16 +4741,18 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # With a kit the gate-settings slot ($8) is always passed (empty when there is no gate), then the kit argv ($9...).
     _CN_TAIL=()
     if [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ]; then _CN_TAIL=("${GATE_ARGV[0]-}" "${ROLE_KIT_ARGV[@]}"); else _CN_TAIL=(${GATE_ARGV[@]+"${GATE_ARGV[0]}"}); fi
+    _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
     if CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
       # Scrub every alternate provider / credential selector so the seeded .credentials.json is the SOLE auth.
       # Names verified by strings(1) on the installed claude 2.1.309 binary (none invented). Cleared: provider
       # switches (BEDROCK/VERTEX/FOUNDRY/MANTLE/ANTHROPIC_AWS/ANTHROPIC_GOOGLE_CLOUD/GATEWAY), alternate keys and
-      # tokens (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_FOUNDRY_API_KEY,
+      # tokens (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_FOUNDRY_API_KEY,
       # ANTHROPIC_FOUNDRY_AUTH_TOKEN, AWS_BEARER_TOKEN_BEDROCK), every endpoint override (ANTHROPIC_BASE_URL and the
       # BEDROCK/BEDROCK_MANTLE/VERTEX/FOUNDRY base URLs, ANTHROPIC_FOUNDRY_RESOURCE) and ANTHROPIC_CUSTOM_HEADERS (can
-      # inject auth). NOT cleared: CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
+      # inject auth). NOT cleared: CLAUDE_CODE_OAUTH_TOKEN (PM 01M7975S: a seat token must reach the child;
+      # the seeded dir is still the only config dir), CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
       # region/project tuning vars (inert without a selector).
-      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
+      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
           --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${8:+--settings "$8"} --output-format json "${@:9}" < "$3" >"$6"' \
           _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${_CN_TAIL[@]+"${_CN_TAIL[@]}"}
     else
@@ -4755,6 +4762,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     fi
     reap_cnative_config_dir
   else
+    _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
     run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
         _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" ${GATE_ARGV[@]+"${GATE_ARGV[@]}"}

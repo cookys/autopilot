@@ -35,6 +35,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const { tokenSeatError } = require('./token-seat');
 
 function fail(msg) {
   process.stderr.write(`seed-claude-config: ${msg}\n`);
@@ -97,6 +98,10 @@ if (sweepParent !== null) {
 
 if (execMode && (!cmd || cmd.length === 0)) fail('--exec requires -- <cmd> [args...]');
 if (!execMode && cmd) fail('unknown or incomplete argument "--"');
+
+// A declared token seat with no token must not copy host credentials or spawn.
+const seatErr = tokenSeatError(process.env);
+if (seatErr) fail(seatErr);
 
 const realDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const src = path.join(realDir, '.credentials.json');

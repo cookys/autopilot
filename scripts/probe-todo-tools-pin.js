@@ -21,6 +21,7 @@
 // cwd whose settings do not set it AND with the env var unset) — the probe does not mutate
 // the environment it is measuring.
 const { spawnSync } = require('child_process');
+const { tokenSeatError } = require('./lib/token-seat');
 
 const PROMPT = 'If a tool exists that creates a task (for example TaskCreate), call it to '
   + 'create one task titled pin-probe-task and report the tool\'s exact name. If none '
@@ -67,6 +68,11 @@ if (layer.state === 'active') {
   const w = accountRail.wrapClaude(opts.claudeBin, claudeArgv, { purpose: 'todo-pin', cwd: opts.cwd });
   spawnCmd = w.command;
   spawnArgs = w.args;
+}
+const seatErr = tokenSeatError(childEnv);
+if (seatErr) {
+  console.error(seatErr);
+  process.exit(78);
 }
 const run = spawnSync(spawnCmd, spawnArgs, { cwd: opts.cwd, env: childEnv, encoding: 'utf8', timeout: opts.timeoutSeconds * 1000, maxBuffer: 64 * 1024 * 1024 });
 

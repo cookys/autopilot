@@ -6509,6 +6509,21 @@
       "summary": "Overrides accounts.mode for one shell (auto or off)."
     },
     {
+      "name": "AUTOPILOT_TOKEN_SEAT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/token-seat.js",
+        "scripts/lib/token-seat.sh",
+        "scripts/lib/account-env.js"
+      ],
+      "doc": "docs/guide/accounts.md",
+      "relates": [],
+      "note": "Exported as 1 by an external seat launcher together with CLAUDE_CODE_OAUTH_TOKEN. A claude child started while this is 1 and CLAUDE_CODE_OAUTH_TOKEN is empty exits non-zero instead of falling back to the host login. Unset means an ordinary seat (PM 01M7975S)."
+    },
+    {
       "name": "AUTOPILOT_DISPATCH_USAGE",
       "kind": "env",
       "audience": "internal",

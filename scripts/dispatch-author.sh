@@ -139,6 +139,8 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" ] && . "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" || true
+# shellcheck source=lib/token-seat.sh
+. "$_AUTHOR_SELF_DIR/lib/token-seat.sh"
 # shellcheck source=lib/codeforge-collect.sh
 # Best-effort: a missing helper skips usage collect; it never changes the author result.
 [ -r "$_AUTHOR_SELF_DIR/lib/codeforge-collect.sh" ] && . "$_AUTHOR_SELF_DIR/lib/codeforge-collect.sh" || true
@@ -1449,6 +1451,7 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
 elif [[ "$RUNNER" = "cc-shim" ]]; then
+  _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
   # Make CC_BIN absolute before running from a scratch cwd (`cd` changes CWD).
@@ -1481,6 +1484,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && codeforge_collect_claude_dir "$CCSHIM_CWD/.claude" || true
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
 elif [[ "$RUNNER" = "claude-native" ]]; then
+  _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (claude-native drives the local Claude Code CLI with ambient/native auth)"
   case "$CC_BIN" in

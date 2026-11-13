@@ -136,6 +136,63 @@ for badst in open pending_dispatch bogus ""; do
   od show --id d-good0001; assert_eq "$RC" 1 "NC4 status \"$badst\": the GOOD line was not written"; od show --id d-bad00002; assert_eq "$RC" 1 "NC4 status \"$badst\": the bad line was not written"
 done
 
+# 7. PM 01M79X7T: done --note closes pending_dispatch executed without a dispatch; check order keeps open vs pending_dispatch distinct
+od done --id d-dddd4444 >/dev/null
+opencard "Q-PD?" --executor "$EXEC"; assert_eq "$RC" 0 "open pending_dispatch test card: exit 0"; CP="$OUT"
+od close --id "$CP" --answer "executed directly outside dispatch" >/dev/null; assert_eq "$RC" 0 "park CP in pending_dispatch: exit 0"
+assert_eq "$(field "$CP" status)" "pending_dispatch" "CP parked in pending_dispatch"
+has_live() { node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));const {hasOpenDecision}=require(process.argv[1]);process.stdout.write(String(hasOpenDecision({identity:v.repo_identity,key:v.project_key})))' "$REPO_ROOT/src/status/decision-input.js" "$(ls "$D"/*.json | head -1)"; }
+assert_eq "$(has_live)" "true" "patrol/panel reader sees pending_dispatch card as live before done --note"
+od close --id "$CP"; assert_eq "$RC" 2 "plain close on pending_dispatch: refused (exit 2)"
+assert_contains "$ERR" "--dispatched" "close refusal on pending_dispatch still names --dispatched"
+assert_contains "$ERR" "done --id $CP --note" "close refusal on pending_dispatch also names done --id <id> --note"
+# (a) done on pending_dispatch without --note (or blank --note) -> exit 2, card unchanged
+SNAP_PD="$(cat "$D"/*.json)"
+od done --id "$CP"; assert_eq "$RC" 2 "(a) done on pending_dispatch without --note: exit 2"
+assert_contains "$ERR" "pending_dispatch" "(a) done without --note names pending_dispatch"
+assert_contains "$ERR" "--note" "(a) done without --note tells caller to pass --note"
+assert_contains "$ERR" "--dispatched" "(a) done without --note also names close --dispatched"
+assert_not_contains "$ERR" "is open," "(a) done on pending_dispatch does not misreport card as open"
+assert_eq "$(cat "$D"/*.json)" "$SNAP_PD" "(a) card unchanged after done without --note"
+od done --id "$CP" --note "   "; assert_eq "$RC" 2 "(a) done on pending_dispatch with blank --note: exit 2"
+assert_contains "$ERR" "--note" "(a) blank --note tells caller to pass non-empty --note"
+assert_eq "$(cat "$D"/*.json)" "$SNAP_PD" "(a) card unchanged after blank --note"
+# (b) done on pending_dispatch with --note -> closed, closed_via done_without_dispatch, done_note stored, show hides it, show --all shows it closed
+od done --id "$CP" --note "  executed directly in commit abc1234  "; assert_eq "$RC" 0 "(b) done on pending_dispatch with --note: exit 0"
+assert_eq "$(field "$CP" status)" "closed" "(b) card status is closed"
+case "$(field "$CP" closed_at)" in 20??-??-??T??:??:??.???Z) assert_eq 1 1 "(b) closed_at is ISO UTC";; *) fail "(b) closed_at not ISO UTC: $(field "$CP" closed_at)";; esac
+assert_eq "$(field "$CP" closed_via)" "done_without_dispatch" "(b) closed_via is done_without_dispatch"
+assert_eq "$(field "$CP" done_note)" "executed directly in commit abc1234" "(b) done_note stores trimmed note"
+assert_eq "$(field "$CP" dispatched_task_id)" "<undef>" "(b) no dispatched_task_id fabricated"
+od show; assert_eq "$RC" 1 "(b) show exits 1 when no live cards remain"; assert_not_contains "$OUT" "$CP" "(b) show no longer lists closed card"
+od show --all; assert_eq "$RC" 0 "(b) show --all: exit 0"; assert_contains "$OUT" "$CP" "(b) show --all lists the card"
+assert_contains "$OUT" "status: closed" "(b) show --all shows status closed"
+assert_contains "$OUT" "closed_via: done_without_dispatch" "(b) show --all shows closed_via"
+assert_contains "$OUT" "done_note: executed directly in commit abc1234" "(b) show --all shows done_note"
+assert_eq "$(has_live)" "false" "(b) patrol/panel reader treats done_without_dispatch card as closed"
+od redeliver --id "$CP"; assert_eq "$RC" 0 "(b) redeliver ignores card closed via done --note"; assert_contains "$OUT" "nothing to redeliver" "(b) redeliver says nothing to redeliver"
+# (c) done on an open card -> refused with the open message (negative control for the reorder)
+opencard "Q-OPEN?"; CO="$OUT"
+od done --id "$CO"; assert_eq "$RC" 2 "(c) done on open card: refused (exit 2)"
+assert_contains "$ERR" "$CO is open, not awaiting_operator_action" "(c) done on open card prints the open message"
+assert_not_contains "$ERR" "pending_dispatch" "(c) done on open card does not mention pending_dispatch"
+assert_eq "$(field "$CO" status)" "open" "(c) open card stays open"
+od done --id "$CO" --note "try bypass"; assert_eq "$RC" 2 "(c) done --note on open card: still refused (exit 2)"
+assert_contains "$ERR" "$CO is open, not awaiting_operator_action" "(c) done --note on open card still prints the open message"
+assert_eq "$(field "$CO" status)" "open" "(c) open card stays open even with --note"
+od close --id "$CO" >/dev/null
+# (d) awaiting_operator_action done unchanged (--note optional; if given, stored as done_note)
+opencard "Q-AW1?" --executor "$EXEC"; CAW1="$OUT"
+od close --id "$CAW1" --answer "op step 1" --awaiting-operator "run step 1" >/dev/null
+od done --id "$CAW1"; assert_eq "$RC" 0 "(d) awaiting_operator_action done without --note: exit 0"
+assert_eq "$(field "$CAW1" status)" "closed" "(d) awaiting card closed"; assert_eq "$(field "$CAW1" done_note)" "<undef>" "(d) no done_note when --note omitted"; assert_eq "$(field "$CAW1" closed_via)" "<undef>" "(d) no closed_via on awaiting done"
+opencard "Q-AW2?" --executor "$EXEC"; CAW2="$OUT"
+od close --id "$CAW2" --answer "op step 2" --awaiting-operator "run step 2" >/dev/null
+od done --id "$CAW2" --note "  operator ran step 2  "; assert_eq "$RC" 0 "(d) awaiting_operator_action done with --note: exit 0"
+assert_eq "$(field "$CAW2" status)" "closed" "(d) awaiting card closed with --note"; assert_eq "$(field "$CAW2" done_note)" "operator ran step 2" "(d) awaiting done_note trimmed and stored"; assert_eq "$(field "$CAW2" closed_via)" "<undef>" "(d) awaiting done with --note keeps closed_via unset"
+od show --note x; assert_eq "$RC" 2 "stray --note on show: exit 2"
+od close --id "$CAW2" --note x; assert_eq "$RC" 2 "stray --note on close: exit 2"
+
 # NC2: a copy of the script whose close --executor goes straight to closed must fail the assertion above (the test sees that mutation)
 M="$TEST_TMP/mut"; mkdir -p "$M/scripts"; ln -s "$REPO_ROOT/src" "$M/src"
 for f in "$REPO_ROOT"/scripts/*; do [ "$(basename "$f")" = open-decision.js ] || ln -s "$f" "$M/scripts/$(basename "$f")"; done

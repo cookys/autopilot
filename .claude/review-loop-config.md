@@ -13,19 +13,19 @@
 - implementer_runner: agy
 - implementer_ladder: gemini-4-carbon-low/low@agy, grok-4.7/low@grok
 
-- override: reviewer | until 2026-11-15 | PM 01M747R1N0 codex quota: qwen_local stays the loop reviewer; its cloud fallback rung moves from gpt-6.1-sol@codex to grok-4.7/high@grok (PM 01M74FDC5Z: the agy carbon rung shared the family of the agy implementer) and the family-conflict fallback preference puts grok-4.7 before gpt-6.1-sol. All other fields copy the roster.
+- override: reviewer | until 2026-11-15 | PM 01M747R1N0 codex quota: qwen_local stays the loop reviewer. Cloud fallback rung: claude-opus-5-5-medium@agy (agyclaude) (PM 01M79W9B replaces the grok-4.7 rung of PM 01M74FDC5Z; no grok reviews). PM asked for agy carbon, but the roster implementer is agy carbon (google) and the resolver refuses a same-family rung; a rung must be a cloud runner, so GLM (an endpoint runner) cannot be one. The family-conflict preference puts GLM-5.3 first. All other fields copy the roster.
 - reviewer_engine: Qwen3.8-27B-QUASAR-NVFP4
 - reviewer_effort: default
 - reviewer_runner: anthropic-compatible
 - reviewer_endpoint: qwen_local
 - reviewer_on_engine_unavailable: cloud-fallback
-- reviewer_cloud_fallback_rung: grok-4.7/high@grok
+- reviewer_cloud_fallback_rung: claude-opus-5-5-medium/medium@agy
 - reviewer_limitation:
 - reviewer_limitation_required: false
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
-- reviewer_fallback_preference: grok-4.7, gpt-6.1-sol, GLM-5.3
-- reviewer_fallback_preference_low_risk: grok-4.7, gpt-6.1-sol, GLM-5.3
+- reviewer_fallback_preference: GLM-5.3, gpt-6.1-sol
+- reviewer_fallback_preference_low_risk: GLM-5.3, gpt-6.1-sol
 
 - override: verification_author | until 2026-11-15 | PM 01M74FDC5Z codex window; implementer is agy (google) and the ladder climbs to grok (xai), so the VA must be a third family; GLM quota is ample. The VA seat is GLM-5.3 via cc-shim, endpoint glm (high). Earlier note (PM 01M6Z8P87Y): qodercn quota is out until 2026-11-21, so on 2026-11-16 do not simply delete this block (that returns to Qwen3.8-Max@qoderclicn): replace it with gemini-4-argon-high@agy (high) until qodercn is usable (~11-21), then delete. An expired override still applies (roster-overlay.js TTL only warns, never blocks or auto-reverts).
 - verification_author_present: true

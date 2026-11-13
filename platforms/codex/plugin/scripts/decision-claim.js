@@ -6,6 +6,7 @@
  *
  *   node scripts/decision-claim.js <card_id> --option <label>      # the picked option's label
  *   node scripts/decision-claim.js <card_id> --free-text <text>    # a typed answer
+ *   node scripts/decision-claim.js <card_id> --option <label> --free-text <note>   # an option plus a note (補充); stdout adds note_dropped_by_courier:true when an old courier kept only the option
  * (the same pair as mods/live/model.ts decideAnswer: {option} | {freeText}.)
  *
  * stdout, one JSON line, exit 0 whenever it answered: { "ok": boolean, "answer_id": string|null, "reason": string|null }
@@ -26,14 +27,15 @@ const out = (o, rc) => { require('fs').writeSync(1, JSON.stringify(o) + '\n'); p
 
 function main(argv) {
   const [card, flag, value, ...rest] = argv;
-  if (!card || rest.length || value === undefined || (flag !== '--option' && flag !== '--free-text')) {
-    return out({ ok: false, answer_id: null, reason: 'usage: decision-claim.js <card_id> --option <label> | --free-text <text>' }, 2);
+  const both = flag === '--option' && rest.length === 2 && rest[0] === '--free-text' && rest[1] !== undefined;
+  if (!card || (rest.length && !both) || value === undefined || (flag !== '--option' && flag !== '--free-text')) {
+    return out({ ok: false, answer_id: null, reason: 'usage: decision-claim.js <card_id> --option <label> [--free-text <note>] | --free-text <text>' }, 2);
   }
   const state = fd.probe();
   if (state === 'unsupported') return out({ ok: true, answer_id: null, reason: null }, 0);
   if (state !== 'supported') return out({ ok: false, answer_id: null, reason: 'courier probe failed' }, 0);
-  const r = fd.claim(card, flag === '--option' ? { option: value } : { freeText: value });
-  if (r.outcome === 'claimed') return out({ ok: true, answer_id: r.answer_id, reason: null }, 0);
+  const r = fd.claim(card, flag === '--option' ? (both ? { option: value, freeText: rest[1] } : { option: value }) : { freeText: value });
+  if (r.outcome === 'claimed') return out({ ok: true, answer_id: r.answer_id, reason: null, ...(r.note_dropped_by_courier ? { note_dropped_by_courier: true } : {}) }, 0);
   const reason = REASON[r.outcome] || (r.detail ? r.detail.split('\n')[0].slice(0, 120) : 'claim failed');
   return out({ ok: false, answer_id: null, reason }, 0);
 }

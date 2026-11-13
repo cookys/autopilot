@@ -5,7 +5,7 @@
  *
  *   probe()      'unsupported' | 'supported' | 'probe_error' (see the function). Only 'unsupported' (no fleet binary, or a fleet whose usage has
  *                no `fleet decision`) keeps today's behaviour; 'probe_error' is a failure: callers must not close or act.
- *   claim(...)   `fleet decision claim <card_id> [--option L | --free-text T]`. Exit map (plan "CLI"):
+ *   claim(...)   `fleet decision claim <card_id> [--option L] [--free-text T]` (both together = an option plus a note; an old courier exits 2 on that, so claim retries once with the option only and returns note_dropped_by_courier:true + note). Exit map (plan "CLI"):
  *                0 claimed (stdout JSON {answer_id, card_id, via, ...}; the same card + same answer again is idempotent: exit 0, same answer_id)
  *                3 already answered (stdout = the winning answer JSON) | 4 unknown card | 10 card closed | 9 courier unreachable.
  *                Exit 9 is retried here, bounded (AUTOPILOT_CLAIM_RETRIES, default 3 attempts; AUTOPILOT_CLAIM_RETRY_MS, default 10000).
@@ -58,20 +58,29 @@ function sleepMs(ms) { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBu
 
 // -> { outcome: 'claimed'|'already_answered'|'card_closed'|'unknown'|'unreachable'|'error', json, answer_id, attempts, detail }
 function claim(cardId, { option, freeText } = {}) {
+  const has = (x) => typeof x === 'string' && x !== '';
   const args = ['decision', 'claim', cardId];
-  if (option !== undefined) args.push('--option', option);
-  else if (freeText !== undefined) args.push('--free-text', freeText);
+  if (has(option)) args.push('--option', option);
+  if (has(freeText)) args.push('--free-text', freeText);
   const attempts = Math.max(1, Number(process.env.AUTOPILOT_CLAIM_RETRIES) || 3);
   const delay = process.env.AUTOPILOT_CLAIM_RETRY_MS !== undefined ? Number(process.env.AUTOPILOT_CLAIM_RETRY_MS) : 10000;
   let r;
+  let noteDropped = false;
   for (let i = 1; i <= attempts; i++) {
     r = run(args);
+    // an old courier answers `--option` + `--free-text` together with exit 2 (usage): retry once with the option only and hand the note back to the caller
+    if (r.status === 2 && has(option) && has(freeText)) {
+      noteDropped = true;
+      args.splice(args.indexOf('--free-text'), 2);
+      r = run(args);
+    }
     if (r.status !== 9) { r.attempts = i; break; }
     r.attempts = i;
     if (i < attempts) sleepMs(delay);
   }
   const json = parseJson(r.stdout);
   const base = { json, attempts: r.attempts, detail: (r.stderr || r.error || '').trim() };
+  if (noteDropped && r.status === 0) { base.note_dropped_by_courier = true; base.note = freeText; }
   if (r.status === 0) return json && typeof json.answer_id === 'string' && json.answer_id
     ? { ...base, outcome: 'claimed', answer_id: json.answer_id }
     : { ...base, outcome: 'error', detail: 'claim exit 0 but stdout carries no answer_id' };

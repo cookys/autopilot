@@ -76,9 +76,11 @@
 #                               #   raw env still used when omitted (byte-identical).
 #                               #   The roster reviewer tuple, and only that tuple, pre-probes
 #                               #   the endpoint when its effective policy is cloud-fallback
-#                               #   (reviewer_on_engine_unavailable, else the global) and may
-#                               #   retreat once to the cloud rung. AUTOPILOT_ENDPOINT_PREPROBE=off
-#                               #   skips the probe. Other seats are unchanged.
+#                               #   (reviewer_on_engine_unavailable, else global on_engine_unavailable,
+#                               #   which defaults to cloud-fallback) and retreats once along
+#                               #   pace-roles.json fallback.reviewer (hydrogen -> glm -> agyclaude,
+#                               #   skipping implementer_family when known, never codex).
+#                               #   AUTOPILOT_ENDPOINT_PREPROBE=off skips the probe. Other seats are unchanged.
 #                               #   An agy reviewer whose call matches that tuple (model + runner
 #                               #   + endpoint) and whose effective policy is cloud-fallback
 #                               #   retreats ONCE after a no_verdict classified quota_exhausted,

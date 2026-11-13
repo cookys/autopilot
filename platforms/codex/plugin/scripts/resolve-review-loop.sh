@@ -1827,7 +1827,7 @@ if [[ "$VER_AUTH_PRESENT" == "true" && "$VER_AUTH_FAMILY" != "unknown" && -n "${
     exit 3
   fi
 fi
-if [[ "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" != "null" && "$IMPL_LADDER_RAW" != "auto" && "${IMPL_LADDER_JSON:-[]}" != "[]" ]]; then
+if [[ "$REVIEWER_CLOUD_FALLBACK_RUNG_JSON" != "null" && -n "$IMPL_LADDER_RAW" && "$IMPL_LADDER_RAW" != "auto" && "${IMPL_LADDER_JSON:-[]}" != "[]" ]]; then
   _r0_engine="$(node -e '
 const j = JSON.parse(process.argv[1]);
 const r = Array.isArray(j) && j[0] && typeof j[0] === "object" ? j[0] : null;

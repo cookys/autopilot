@@ -303,7 +303,7 @@ function inferImplementerFamily(opts = {}) {
 
   // 2. Dispatch run manifests in runsDir matched by runId / diffFile / worktree / branch
   const rDir = opts.runsDir || defaultRunsDir(env);
-  const runId = opts.runId || env.AUTOPILOT_RUN_ID || '';
+  const runId = opts.runId || '';
   const normDiff = resolveMaybe(opts.diffFile);
   const normWt = resolveMaybe(opts.worktree);
   const branch = opts.branch ? String(opts.branch).trim() : '';

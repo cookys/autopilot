@@ -82,12 +82,18 @@ EOF
   printf '%s' "$p"
 }
 # hetero <scripts-dir> <stub> <branch>: prints the last JSON line of a dispatch to endpoint gpu1.
+# The rail runs under an explicit `ask` policy: since PM 01M7AHAM the global default is cloud-fallback,
+# which makes dispatch-hetero re-exec onto the picker rung itself (hetero-endpoint-fallback.test.sh).
+# This suite pins the probe-failure RESULT and lets the engine below own the retreat.
+HETERO_ASK_CFG="$TEST_TMP/hetero-ask.md"
+printf -- '- on_engine_unavailable: ask\n' > "$HETERO_ASK_CFG"
 hetero() {
   local sdir="$1" stub="$2" branch="$3"
   local bindir="$TEST_TMP/bin-$branch"
   mkdir -p "$bindir" "$TEST_TMP/cap-$branch"
   ln -sfn "$stub" "$bindir/claude"
   (cd "$SBX" && env PATH="$bindir:$PATH" ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-$branch" \
+      REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_ASK_CFG" \
       "$sdir/dispatch-hetero.sh" --runner cc-shim --model mini --branch "$branch" \
       --prompt-file "$PROMPT" --context-window off --endpoint gpu1 2>"$TEST_TMP/err-${branch//\//_}" < /dev/null) | grep '^{' | tail -n 1
 }
@@ -260,15 +266,16 @@ assert_contains "$R_A_ENG" "parse=ok" "(a) the real runner parse accepts the pro
 assert_contains "$R_A_ENG" "parsed_status=engine_unavailable" "(a) the parsed result is engine_unavailable"
 assert_contains "$R_A_ENG" "calls=2" "(a) the engine retreats once"
 assert_contains "$R_A_ENG" "status=committed" "(a) the cloud double's result is the run result"
-assert_contains "$R_A_ENG" "second_runner=codex second_endpoint=false" "(a) the retreat goes to the cloud rung without --endpoint"
-assert_contains "$R_A_ENG" "log=endpoint_unreachable|gpu1|gpt-5.6-sol/high@codex|committed|probe=unreachable/null|served_by=gpt-5.6-sol/high@codex" "(a) the log row names the probe and the cloud rung that answered"
+# PM 01M7AHAM: the roster's codex rung is ignored; the engine retreats to the first pace-roles implementer rung.
+assert_contains "$R_A_ENG" "second_runner=agy second_endpoint=false" "(a) the retreat goes to the picker rung (never codex) without --endpoint"
+assert_contains "$R_A_ENG" "log=endpoint_unreachable|gpu1|gemini-4-hydrogen-high/high@agy|committed|probe=unreachable/null|served_by=gemini-4-hydrogen-high/high@agy" "(a) the log row names the probe and the rung that answered"
 # --- (b) -------------------------------------------------------------------------------------------------
 assert_contains "$R_B_ERR" "engine unavailable (endpoint_busy)" "(b) 503 + Retry-After is endpoint_busy"
 assert_eq "busy" "$R_B_PROBE" "(b) probe decision busy"
 assert_contains "$R_B_REASON" "retry-after 1" "(b) the Retry-After is in the probe reason"
 assert_eq "no" "$R_B_WORKER" "(b) no worker was started"
 assert_contains "$R_B_ENG" "calls=2" "(b) busy retreats to the cloud rung"
-assert_contains "$R_B_ENG" "log=endpoint_busy|gpu1|gpt-5.6-sol/high@codex|committed|probe=busy/503|served_by=gpt-5.6-sol/high@codex" "(b) the log row carries busy/503"
+assert_contains "$R_B_ENG" "log=endpoint_busy|gpu1|gemini-4-hydrogen-high/high@agy|committed|probe=busy/503|served_by=gemini-4-hydrogen-high/high@agy" "(b) the log row carries busy/503"
 assert_contains "$R_M_ERR" "engine unavailable (endpoint_unreachable)" "model not in /models: unreachable"
 assert_contains "$R_M_REASON" "model mini is not in the /models list" "model not in /models: the reason says why"
 assert_eq "no" "$R_M_WORKER" "model not in /models: no worker"
@@ -354,13 +361,13 @@ sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-
   's/^          served_by: toRung,$/          served_by: null,/'
 use_endpoint "$DEAD_PORT"
 N6_ENG="$(engine_run "$T" "$TEST_TMP/first-good-dead.json" cloud-fallback mutN6)"
-case "$N6_ENG" in *"served_by=gpt-5.6-sol/high@codex"*) fail "mutant N6 must lose served_by in the log row" ;; esac
+case "$N6_ENG" in *"served_by=gemini-4-hydrogen-high/high@agy"*) fail "mutant N6 must lose served_by in the log row" ;; esac
 # N7: the log writer drops the probe object
 T="$(mk_tree mutN7)"
 sed_mutant "$REPO_ROOT/scripts/engine-capability-state.js" "$T/scripts/engine-capability-state.js" \
   's/^        served_by: str(input.served_by) ? input.served_by : null,$/        served_by: null,/'
 N7_ENG="$(engine_run "$T" "$TEST_TMP/first-good-dead.json" cloud-fallback mutN7)"
-case "$N7_ENG" in *"served_by=gpt-5.6-sol/high@codex"*) fail "mutant N7 (writer drops served_by) must be visible in the log row" ;; esac
+case "$N7_ENG" in *"served_by=gemini-4-hydrogen-high/high@agy"*) fail "mutant N7 (writer drops served_by) must be visible in the log row" ;; esac
 
 # N8: the probe-failure result carries an empty containment -> the real runner parse rejects it
 T="$(mk_tree mutN8)"

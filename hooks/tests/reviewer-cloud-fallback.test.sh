@@ -50,6 +50,8 @@ export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:$SRV_PORT"
 
 DIFF="$TEST_TMP/diff.txt"
 printf 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n' > "$DIFF"
+command -v bwrap >/dev/null 2>&1 || fail "bwrap is required"
+REAL_BWRAP="$(command -v bwrap)"
 RESOLVE="$REPO_ROOT/scripts/resolve-review-loop.sh"
 REVIEW="$REPO_ROOT/scripts/dispatch-review.sh"
 TEMPLATE="$REPO_ROOT/project-config-template/review-loop-config.md"
@@ -81,7 +83,9 @@ cat >> "$CFG_FB" <<'EOF'
 - implementer_ladder:
 EOF
 CFG_ASK="$TEST_TMP/reviewer-ask.md"
-write_reviewer_cfg "$CFG_ASK" ""
+# The reviewer field is omitted (follows the global); the global is pinned to ask because the
+# shipped global default is cloud-fallback since PM 01M7AHAM.
+write_reviewer_cfg "$CFG_ASK" "- on_engine_unavailable: ask"
 
 jget() {
   node -e 'let v=JSON.parse(process.argv[1]); for (const k of process.argv[2].split(".")) v = v == null ? v : v[k]; process.stdout.write(v === null || v === undefined ? "null" : (typeof v === "object" ? JSON.stringify(v) : String(v)));' "$1" "$2"
@@ -104,14 +108,29 @@ review_run() {
   local bindir="$TEST_TMP/bin-$tag"
   mkdir -p "$bindir"
   RUN_ARGV="$TEST_TMP/codex-argv-$tag"
+  RUN_BWRAP="$TEST_TMP/bwrap-argv-$tag"
   rm -f "$RUN_ARGV"
+  : > "$RUN_BWRAP"
   cat > "$bindir/codex" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$RUN_ARGV"
 printf 'not a review\n'
 exit 0
 EOF
-  chmod +x "$bindir/codex"
+  # PM 01M7AHAM: the retreat walks pace-roles fallback.reviewer (hydrogen@agy first), never codex.
+  # agy is a stub; bwrap is wrapped so the agy launch argv is recorded outside the sandbox.
+  cat > "$bindir/agy" <<'EOF'
+#!/usr/bin/env bash
+printf 'agy-stub-ran\n' >&2
+exit 2
+EOF
+  cat > "$bindir/bwrap" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$RUN_BWRAP"
+exec ${REAL_BWRAP} "\$@"
+EOF
+  chmod +x "$bindir/codex" "$bindir/agy" "$bindir/bwrap"
+  make_agy_stub_versioned "$bindir/agy"
   : > "$HITS_FILE"
   local out="$TEST_TMP/out-$tag" err="$TEST_TMP/err-$tag"
   set +e
@@ -163,37 +182,38 @@ bad_cfg "$BAD_MISSING" "- reviewer_on_engine_unavailable: cloud-fallback" ""
 assert_eq "$(resolve_rc "$BAD_MISSING")" "3" "cloud-fallback without a rung exits 3"
 assert_eq "$(resolve_rc "$CFG_FB")" "0" "openai cloud rung against the qwen reviewer resolves"
 
-# --- shipped template: reviewer retreat on, global ask unchanged -----------------------
+# --- shipped template: reviewer retreat on, global default cloud-fallback (PM 01M7AHAM) ---
 SHIP_POLICY="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE" bash "$RESOLVE" --field reviewer_on_engine_unavailable 2>/dev/null)"
 SHIP_RC=$?
 assert_eq "$SHIP_RC" "0" "shipped template resolves reviewer_on_engine_unavailable"
 assert_eq "$SHIP_POLICY" "cloud-fallback" "shipped qwen reviewer retreats to cloud"
 SHIP_RUNG="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE" bash "$RESOLVE" --field reviewer_cloud_fallback_rung 2>/dev/null)"
-assert_contains "$SHIP_RUNG" "gpt-6.1-sol" "shipped rung engine is gpt-6.1-sol"
-assert_contains "$SHIP_RUNG" "codex" "shipped rung runner is codex"
+assert_contains "$SHIP_RUNG" "gemini-4-hydrogen-high" "shipped rung engine is the first picker rung gemini-4-hydrogen-high"
+assert_contains "$SHIP_RUNG" "agy" "shipped rung runner is agy"
+assert_not_contains "$SHIP_RUNG" "codex" "shipped rung is never codex"
 SHIP_GLOBAL="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE" bash "$RESOLVE" --field on_engine_unavailable 2>/dev/null)"
-assert_eq "$SHIP_GLOBAL" "ask" "global on_engine_unavailable stays ask"
+assert_eq "$SHIP_GLOBAL" "cloud-fallback" "global on_engine_unavailable defaults to cloud-fallback"
 SHIP_GLOBAL_RUNG="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE" bash "$RESOLVE" --field cloud_fallback_rung 2>/dev/null)"
 assert_eq "$SHIP_GLOBAL_RUNG" "" "global cloud_fallback_rung stays empty"
 ASK_POLICY="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ASK" bash "$RESOLVE" --field reviewer_on_engine_unavailable 2>/dev/null)"
 assert_eq "$ASK_POLICY" "" "an override that omits the field follows the global (empty)"
 
-# --- (1) 503 -> one retreat onto the cloud rung ---------------------------------------
+# --- (1) 503 -> one retreat onto the first picker rung (never codex) ------------------
 printf 'busy' > "$MODE_FILE"
 review_run "$CFG_FB" "busy" "on"
-assert_eq "$(jget "$RUN_OUT" runner)" "codex" "503 retreat lands on the codex runner"
-assert_eq "$(jget "$RUN_OUT" model)" "gpt-6.1-sol" "503 retreat lands on gpt-6.1-sol"
-assert_eq "$(jget "$RUN_OUT" served_by)" "gpt-6.1-sol/high@codex" "503 served_by is the cloud rung"
+assert_eq "$(jget "$RUN_OUT" runner)" "agy" "503 retreat lands on the agy runner (configured codex rung is never used)"
+assert_eq "$(jget "$RUN_OUT" model)" "gemini-4-hydrogen-high" "503 retreat lands on gemini-4-hydrogen-high"
+assert_eq "$(jget "$RUN_OUT" served_by)" "gemini-4-hydrogen-high/high@agy" "503 served_by is the picker rung"
 assert_eq "$(jget "$RUN_OUT" probe.decision)" "busy" "503 probe decision is busy"
-assert_contains "$(cat "$RUN_ARGV")" "exec --model gpt-6.1-sol" "codex stub saw the cloud model"
-assert_contains "$(cat "$RUN_ARGV")" 'model_reasoning_effort="high"' "codex stub saw effort high"
+assert_contains "$(cat "$RUN_BWRAP")" "--model gemini-4-hydrogen-high" "agy was launched with the picker model"
+[ ! -s "$RUN_ARGV" ] || fail "503 retreat must never invoke the codex stub"
 assert_not_contains "$RUN_HITS" "POST /v1/messages" "503 retreat sends nothing to the local endpoint"
 BUSY_ROWS="$(row_count "$RUN_CAP")"
 assert_eq "$BUSY_ROWS" "1" "503 writes one cloud-fallbacks.jsonl row"
 BUSY_ROW="$(head -n 1 "$RUN_CAP/cloud-fallbacks.jsonl")"
 assert_eq "$(jget "$BUSY_ROW" error_class)" "endpoint_busy" "row error_class is endpoint_busy"
 assert_eq "$(jget "$BUSY_ROW" from_endpoint)" "qwen_local" "row from_endpoint is qwen_local"
-assert_eq "$(jget "$BUSY_ROW" to_rung)" "gpt-6.1-sol/high@codex" "row to_rung is the cloud rung"
+assert_eq "$(jget "$BUSY_ROW" to_rung)" "gemini-4-hydrogen-high/high@agy" "row to_rung is the picker rung"
 assert_eq "$(jget "$BUSY_ROW" outcome)" "$(jget "$RUN_OUT" status)" "row outcome is the dispatch status"
 assert_eq "$(jget "$BUSY_ROW" probe.decision)" "busy" "row probe.decision is busy"
 

@@ -353,9 +353,14 @@ try {
     fi
   fi
 fi
+# implementer_family is retreat evidence: it is emitted only when this run probed,
+# retreated, or was refused by the family guard. A plain review keeps the result
+# shape unchanged (no family inference runs on that path either).
 review_probe_suffix() {
   local _s=""
-  if [ -n "${IMPLEMENTER_FAMILY:-}" ]; then
+  if [ -n "${IMPLEMENTER_FAMILY:-}" ] \
+    && { [ -n "${FALLBACK_JSON:-}" ] || [ -n "${PROBE_JSON:-}" ] || [ -n "${SERVED_BY:-}" ] \
+      || [ "${FAMILY_GUARD_REFUSE:-0}" = "1" ]; }; then
     _s="${_s}, \"implementer_family\": \"$(_rv_esc "$IMPLEMENTER_FAMILY")\""
   fi
   if [ -n "${FALLBACK_JSON:-}" ]; then
@@ -539,7 +544,6 @@ for (const r of chain) {
 }
 
 die_precondition() {
-  family_guard_bind "${_rv_resolved:-}" 2>/dev/null || true
   local _dp_json
   _dp_json="$(printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null%s }' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")" "$(review_probe_suffix)")"
   printf '%s\n' "$_dp_json"
@@ -1472,7 +1476,6 @@ emit_no_verdict() {
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && nv_json="$nv_json, \"role_kit\": $ROLE_KIT_JSON"
   passive_capture "no_verdict"
   salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
-  family_guard_bind "${_rv_resolved:-}" 2>/dev/null || true
   local _rv_json
   _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s%s%s }' \
     "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json" "$nv_json" "$(review_probe_suffix)")"
@@ -2827,7 +2830,6 @@ if [ "$VERDICT" = "SHIP-AS-IS" ]; then
   NO_FINDING_PROOF="$BATTERY_PROOF"
 fi
 
-family_guard_bind "${_rv_resolved:-}" 2>/dev/null || true
 _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s, "frame_closed_by": "%s"%s%s }' \
   "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" \
   "$([ -n "$NO_FINDING_PROOF" ] && printf '"%s"' "$(json_escape "$NO_FINDING_PROOF")" || printf 'null')" \

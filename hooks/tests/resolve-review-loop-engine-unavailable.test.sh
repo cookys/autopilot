@@ -14,20 +14,20 @@ SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
 # not on this repo's own .claude/review-loop-config.md (which a canary may set to cloud-fallback).
 NOCFG="$TEST_TMP/nocfg"; mkdir -p "$NOCFG"
 
-# --- Test 1: Default (no config) --field on_engine_unavailable prints ask ---
+# --- Test 1: Default (no config) --field on_engine_unavailable prints cloud-fallback (PM 01M7AHAM) ---
 unset REVIEW_LOOP_CONFIG_OVERRIDE
 val=$(cd "$NOCFG" && bash "$SCRIPT" --field on_engine_unavailable)
-assert_eq "ask" "$val" "default --field on_engine_unavailable is ask"
-# Negative control: a project cloud-fallback config in that cwd must turn the same read away from ask.
-mkdir -p "$NOCFG/.claude"; printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' > "$NOCFG/.claude/review-loop-config.md"
+assert_eq "cloud-fallback" "$val" "default --field on_engine_unavailable is cloud-fallback"
+# Negative control: a project ask config in that cwd must turn the same read away from cloud-fallback.
+mkdir -p "$NOCFG/.claude"; printf -- '- on_engine_unavailable: ask\n' > "$NOCFG/.claude/review-loop-config.md"
 val_nc=$(cd "$NOCFG" && bash "$SCRIPT" --field on_engine_unavailable)
-[ "$val_nc" != "ask" ] || fail "negative control: a project cloud-fallback config must not read as the default ask"
+[ "$val_nc" != "cloud-fallback" ] || fail "negative control: a project ask config must not read as the default cloud-fallback"
 mv "$NOCFG/.claude" "$TEST_TMP/nocfg-claude-trash"
 
 # --- Test 2: Default JSON contains the key and it appears AFTER min_panel_size ---
 unset REVIEW_LOOP_CONFIG_OVERRIDE
 json=$(cd "$NOCFG" && bash "$SCRIPT")
-assert_contains "$json" '"on_engine_unavailable": "ask"' "default JSON has on_engine_unavailable=ask"
+assert_contains "$json" '"on_engine_unavailable": "cloud-fallback"' "default JSON has on_engine_unavailable=cloud-fallback"
 min_pos=$(printf '%s' "$json" | grep -bo '"min_panel_size"' | head -1 | cut -d: -f1)
 on_pos=$(printf '%s' "$json" | grep -bo '"on_engine_unavailable"' | head -1 | cut -d: -f1)
 if [ -z "$min_pos" ] || [ -z "$on_pos" ]; then
@@ -51,11 +51,11 @@ printf -- '- on_engine_unavailable: solo-fallback\n' > "$CFG"
 val=$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field on_engine_unavailable)
 assert_eq "solo-fallback" "$val" "solo-fallback --field on_engine_unavailable"
 
-# --- Test 5: Garbage override falls back to ask with a stderr warning ---
+# --- Test 5: Garbage override falls back to the default (cloud-fallback) with a stderr warning ---
 CFG="$TEST_TMP/cfg-yolo.md"
 printf -- '- on_engine_unavailable: yolo\n' > "$CFG"
 val=$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field on_engine_unavailable)
-assert_eq "ask" "$val" "garbage override falls back to ask"
+assert_eq "cloud-fallback" "$val" "garbage override falls back to the default cloud-fallback"
 ERR="$( { REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" >/dev/null; } 2>&1 )"
 assert_contains "$ERR" 'on_engine_unavailable' "garbage override warns on stderr mentioning on_engine_unavailable"
 assert_contains "$ERR" 'yolo' "garbage override stderr contains the offending value"

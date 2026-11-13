@@ -212,13 +212,14 @@ resolver_all() {
 resolver_all "$REPO_ROOT"
 assert_contains "$RES_OK" '"runner": "codex"' "valid cloud rung is emitted"
 assert_contains "$RES_SHIM" "rc=3" "cc-shim rung exits 3"
-assert_contains "$RES_NORUNG" "rc=3" "cloud-fallback without a rung exits 3"
+# PM 01M7AHAM: an unset rung is no longer an error; the retreat walks pace-roles priority.implementer.
+assert_contains "$RES_NORUNG" "rc=0" "cloud-fallback without a rung resolves (the picker supplies the rung)"
 # Closed: run from a cwd with no project config and outside the repo, so the ladder lands on the roster template, not on this repo's own .claude config.
 NOCFG="$TEST_TMP/nocfg"; mkdir -p "$NOCFG"
-assert_eq "ask" "$(cd "$NOCFG" && REVIEW_LOOP_CONFIG_OVERRIDE=/nonexistent bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field on_engine_unavailable < /dev/null)" "default stays ask"
-# Negative control: a project config saying cloud-fallback in that cwd must turn the same read red.
-mkdir -p "$NOCFG/.claude"; printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' > "$NOCFG/.claude/review-loop-config.md"
-[ "$(cd "$NOCFG" && REVIEW_LOOP_CONFIG_OVERRIDE=/nonexistent bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field on_engine_unavailable < /dev/null)" != "ask" ] || fail "negative control: a project cloud-fallback config must not read as the default ask"
+assert_eq "cloud-fallback" "$(cd "$NOCFG" && REVIEW_LOOP_CONFIG_OVERRIDE=/nonexistent bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field on_engine_unavailable < /dev/null)" "default is cloud-fallback (PM 01M7AHAM)"
+# Negative control: a project config saying ask in that cwd must turn the same read red.
+mkdir -p "$NOCFG/.claude"; printf -- '- on_engine_unavailable: ask\n' > "$NOCFG/.claude/review-loop-config.md"
+[ "$(cd "$NOCFG" && REVIEW_LOOP_CONFIG_OVERRIDE=/nonexistent bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field on_engine_unavailable < /dev/null)" != "cloud-fallback" ] || fail "negative control: a project ask config must not read as the default cloud-fallback"
 mv "$NOCFG/.claude" "$TEST_TMP/nocfg-claude-trash"
 T="$(mk_tree mutR)"
 sed_mutant "$REPO_ROOT/scripts/resolve-review-loop.sh" "$T/scripts/resolve-review-loop.sh" \
@@ -298,9 +299,10 @@ engine_all() {
 engine_all "$REPO_ROOT" good
 assert_contains "$E_UNREACH" "calls=2" "cloud-fallback: unreachable endpoint death is dispatched twice"
 assert_contains "$E_UNREACH" "status=committed" "cloud-fallback: the fallback result is the run result"
-assert_contains "$E_UNREACH" "second_runner=codex second_model=gpt-5.6-sol second_endpoint=false" "cloud-fallback: second dispatch goes to the cloud rung without --endpoint"
+# PM 01M7AHAM: the roster's codex rung is ignored; the retreat takes the first pace-roles implementer rung.
+assert_contains "$E_UNREACH" "second_runner=agy second_model=gemini-4-hydrogen-high second_endpoint=false" "cloud-fallback: second dispatch goes to the picker rung (never codex) without --endpoint"
 assert_contains "$E_UNREACH" "log_rows=1" "cloud-fallback: exactly one log row"
-assert_contains "$E_UNREACH" "log=run-cf-1|cc-shim|gpu1|endpoint_unreachable|gpt-5.6-sol/high@codex|committed|string" "cloud-fallback: log row fields"
+assert_contains "$E_UNREACH" "log=run-cf-1|cc-shim|gpu1|endpoint_unreachable|gemini-4-hydrogen-high/high@agy|committed|string" "cloud-fallback: log row fields"
 assert_contains "$E_BUSY" "calls=2" "cloud-fallback: endpoint_busy (429) also retreats"
 assert_contains "$E_BUSY" "|endpoint_busy|" "cloud-fallback: busy is logged as endpoint_busy"
 assert_contains "$E_ASK" "calls=1" "ask: stops after the endpoint death, no second dispatch"
@@ -456,7 +458,7 @@ const out = engine.implementTask({
     implementer_engine: 'GLM-5.3', implementer_effort: 'high', implementer_runner: 'cc-shim',
     implementer_endpoint: 'gpu1', implementer_family: 'zhipu', on_engine_unavailable: 'cloud-fallback',
     cross_family_required: true, cross_family_satisfied: true,
-    qc_panel: [{ model: 'gpt-5.6-sol', family: 'openai' }],
+    qc_panel: [{ model: 'gemini-4-argon-high', family: 'google' }],
     cloud_fallback_rung: { engine: 'gpt-5.6-sol', effort: 'high', runner: 'codex' },
   },
 });
@@ -476,7 +478,8 @@ I_GOOD="$(ident_case "$REPO_ROOT" good)"
 assert_contains "$I_GOOD" "ids=run-id-1|implement>run-id-1-cloudfb|implement-cloudfb" "fallback gets its own run id and stage suffix"
 assert_contains "$I_GOOD" "branches=impl-branch>impl-branch-cloudfb bases=1111111111111111111111111111111111111111>1111111111111111111111111111111111111111" "fallback branch is -cloudfb off the original base"
 assert_contains "$I_GOOD" "result_branch=impl-branch-cloudfb parent=run-id-1" "result carries the branch actually used and the parent run id"
-assert_contains "$I_GOOD" "family=openai cross_family_satisfied=false" "fallback roster takes the rung's family and recomputes cross_family_satisfied"
+# The picker rung (gemini-4-hydrogen-high) is google; the panel is google, so the recompute flips to false.
+assert_contains "$I_GOOD" "family=google cross_family_satisfied=false" "fallback roster takes the rung's family and recomputes cross_family_satisfied"
 assert_contains "$I_GOOD" "row=run-id-1|run-id-1-cloudfb|impl-branch-cloudfb" "log row binds the fallback run id to the original"
 T="$(mk_tree mutI1)"
 sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
@@ -485,7 +488,7 @@ case "$(ident_case "$T" mutI1)" in *"run-id-1-cloudfb|implement-cloudfb"*) fail 
 T="$(mk_tree mutI2)"
 sed_mutant "$REPO_ROOT/src/engine/autopilot-engine.js" "$T/src/engine/autopilot-engine.js" \
   '/^          implementer_family: rungFamily,$/d'
-case "$(ident_case "$T" mutI2)" in *"family=openai"*) fail "mutant I2 (stale implementer_family) must keep the old family" ;; esac
+case "$(ident_case "$T" mutI2)" in *"family=google"*) fail "mutant I2 (stale implementer_family) must keep the old family" ;; esac
 
 # --- 5. real dispatch-hetero + stub runners: the retreat must not collide with the kept worktree ---
 cat > "$TEST_TMP/real-case.js" <<'NODE'
@@ -531,7 +534,19 @@ case "$*" in
 esac
 touch cloud_fallback_edit.txt
 EOF
-chmod +x "$TEST_TMP/real-bin/claude" "$TEST_TMP/real-bin/codex"
+# PM 01M7AHAM: the roster's codex rung is ignored, so the retreat lands on the first pace-roles
+# implementer rung (gemini-4-hydrogen-high@agy). The agy stub edits the worktree like the codex stub.
+cat > "$TEST_TMP/real-bin/agy" <<'EOF'
+#!/usr/bin/env bash
+case "${*}" in
+  *--input-format*) cat >/dev/null ;;
+esac
+touch cloud_fallback_edit.txt
+printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"ok"}}'
+exit 0
+EOF
+chmod +x "$TEST_TMP/real-bin/claude" "$TEST_TMP/real-bin/codex" "$TEST_TMP/real-bin/agy"
+make_agy_stub_versioned "$TEST_TMP/real-bin/agy"
 real_case() {
   local root="$1" sbx="$TEST_TMP/real-repo-$2"
   mkdir -p "$sbx"
@@ -744,7 +759,7 @@ const out = engine.implementTask({
     implementer_engine: 'GLM-5.3', implementer_effort: 'high', implementer_runner: 'cc-shim',
     implementer_endpoint: 'gpu1', implementer_family: 'zhipu', on_engine_unavailable: 'cloud-fallback',
     cross_family_required: true, cross_family_satisfied: true,
-    qc_panel: [{ model: 'gpt-5.6-sol', family: 'openai' }],
+    qc_panel: [{ model: 'gemini-4-argon-high', family: 'google' }],
     cloud_fallback_rung: { engine: 'gpt-5.6-sol', effort: 'high', runner: 'codex' },
   },
 });

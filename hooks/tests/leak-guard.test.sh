@@ -512,4 +512,103 @@ OUT="$(rguard "$A..nonexistent-1.2")"; assert_eq "$?" "2" "range end: an unknown
 git -C "$R" checkout -q -f rv; OUT="$(rguard "$A..")"; assert_eq "$?" "0" "range end: 'base..' means HEAD"
 back_to_master
 
+# ── pre-push: an annotated tag on a commit already on the remote must pass ──
+# The published commit's tree contains a leak. origin/HEAD is a different ref, which is the
+# old base. Pushing the annotated tag (right end is the tag object, not the commit) must not
+# re-scan that already-public history.
+LP="$TEST_TMP/lgpush"
+git init -q "$LP"
+git -C "$LP" config core.hooksPath /dev/null
+git -C "$LP" config commit.gpgsign false
+mkdir -p "$LP/src"
+echo clean > "$LP/src/u.txt"
+git -C "$LP" add src/u.txt
+git -C "$LP" commit -q -m unrelated
+UNREL="$(git -C "$LP" rev-parse HEAD)"
+git -C "$LP" checkout -q --orphan develop
+git -C "$LP" rm -qrf .
+mkdir -p "$LP/src"
+printf 'legacy %s/x\n' "$PERSONAL" > "$LP/src/oldleak.txt"
+git -C "$LP" add src/oldleak.txt
+git -C "$LP" commit -q -m published
+PUB="$(git -C "$LP" rev-parse HEAD)"
+git -C "$LP" update-ref refs/remotes/origin/develop "$PUB"
+git -C "$LP" update-ref refs/remotes/origin/unrelated "$UNREL"
+git -C "$LP" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/unrelated
+git -C "$LP" tag -a live-20261113-2 "$PUB" -m live
+TAG="$(git -C "$LP" rev-parse refs/tags/live-20261113-2)"
+ZERO="$(printf '%040d' 0)"
+# scripts stay untracked: the hook reads them from the work tree, and they must not be part of either commit
+mkdir -p "$LP/scripts/lib" "$LP/hooks/_shared"
+cp "$REPO_ROOT/scripts/leak-guard.js" "$LP/scripts/leak-guard.js"
+cp "$REPO_ROOT/scripts/lib/personal-data-patterns.js" "$LP/scripts/lib/personal-data-patterns.js"
+cp "$REPO_ROOT/scripts/lib/leak-guard-hosts.json" "$LP/scripts/lib/leak-guard-hosts.json"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$LP/hooks/_shared/secret-patterns.js"
+printf '{"version":1,"entries":[]}\n' > "$LP/scripts/leak-guard-registry.json"
+assert_neq "$TAG" "$PUB" "push-tag: annotated tag object is not the commit"
+LG_PUSH_OUT="$(cd "$LP" && printf '%s\n' "refs/tags/live-20261113-2 $TAG refs/tags/live-20261113-2 $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "0" "push-tag: annotated tag on a commit already on the remote passes"
+assert_not_contains "$LG_PUSH_OUT" "oldleak.txt" "push-tag: the published leak is not scanned"
+
+# ── a branch push that carries a new leak commit is still blocked ──
+printf 'new %s/y\n' "$PERSONAL" > "$LP/src/newleak.txt"
+git -C "$LP" add src/newleak.txt
+git -C "$LP" commit -q -m "add leak"
+NEW="$(git -C "$LP" rev-parse HEAD)"
+git -C "$LP" update-ref refs/remotes/origin/feature "$PUB"
+LG_PUSH_OUT="$(cd "$LP" && printf '%s\n' "refs/heads/feature $NEW refs/heads/feature $PUB" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "1" "push-branch: a new commit that adds a leak is blocked"
+assert_contains "$LG_PUSH_OUT" "newleak.txt" "push-branch: the new leak is named"
+assert_contains "$LG_PUSH_OUT" "refs/heads/feature" "push-branch: the block names the pushed ref"
+assert_not_contains "$LG_PUSH_OUT" "oldleak.txt" "push-branch: the published leak is not part of the new commit's diff"
+
+# ── a tag on a new, not-yet-pushed commit that adds a leak is blocked ──
+git -C "$LP" tag -a live-new "$NEW" -m new
+TAGNEW="$(git -C "$LP" rev-parse refs/tags/live-new)"
+assert_neq "$TAGNEW" "$NEW" "push-new-tag: annotated tag object is not the new commit"
+LG_PUSH_OUT="$(cd "$LP" && printf '%s\n' "refs/tags/live-new $TAGNEW refs/tags/live-new $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "1" "push-new-tag: a tag on a not-yet-pushed leak commit is blocked"
+assert_contains "$LG_PUSH_OUT" "newleak.txt" "push-new-tag: the new leak is named"
+assert_contains "$LG_PUSH_OUT" "refs/tags/live-new" "push-new-tag: the block names the tag"
+assert_not_contains "$LG_PUSH_OUT" "oldleak.txt" "push-new-tag: the published leak is not scanned"
+
+# Negative control: the old range (origin/HEAD .. the annotated tag object) flags the published
+# leak on the same tag as case 1. Case 1 is green only because that range is no longer scanned.
+OLD_BASE="$(git -C "$LP" rev-parse --verify --quiet origin/HEAD)"
+OLD_RANGE="${OLD_BASE}..${TAG}"
+OLD_OUT="$(cd "$LP" && node "$REPO_ROOT/scripts/leak-guard.js" --range "$OLD_RANGE" 2>&1)"
+OLD_RC=$?
+assert_neq "$OLD_BASE" "$PUB" "push-tag NC: the old base is an unrelated ref, not the published commit"
+assert_contains "$OLD_RANGE" "$TAG" "push-tag NC: the old right end is the tag object"
+assert_eq "$OLD_RC" "1" "push-tag NC: old range origin/HEAD..tag-object is red"
+assert_contains "$OLD_OUT" "oldleak.txt" "push-tag NC: old range flags the leak already on the remote"
+
+# A deletion and a tag that does not point at a commit are skipped.
+LG_PUSH_OUT="$(cd "$LP" && printf '%s\n' "refs/heads/feature $ZERO refs/heads/feature $PUB" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "0" "push-delete: an all-zero local sha is skipped"
+assert_not_contains "$LG_PUSH_OUT" "blocked" "push-delete: nothing is scanned"
+printf 'blob\n' > "$LP/src/blob-src.txt"
+BLOB="$(git -C "$LP" hash-object -w "$LP/src/blob-src.txt")"
+git -C "$LP" tag -a blobtag "$BLOB" -m blob
+BLOBTAG="$(git -C "$LP" rev-parse refs/tags/blobtag)"
+LG_PUSH_OUT="$(cd "$LP" && printf '%s\n' "refs/tags/blobtag $BLOBTAG refs/tags/blobtag $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "0" "push-blob-tag: a tag that does not point at a commit is skipped"
+assert_not_contains "$LG_PUSH_OUT" "blocked" "push-blob-tag: nothing is scanned"
+
+# No remote name falls back to --remotes, so the published tag still passes.
+LG_PUSH_OUT="$(cd "$LP" && printf '%s\n' "refs/tags/live-20261113-2 $TAG refs/tags/live-20261113-2 $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "0" "push-tag: no remote name uses --remotes and the published tag passes"
+assert_not_contains "$LG_PUSH_OUT" "oldleak.txt" "push-tag: no remote name does not scan the published leak"
+# A different remote name has no tracking refs, so the same published commit is not known there.
+LG_PUSH_OUT="$(cd "$LP" && printf '%s\n' "refs/tags/live-20261113-2 $TAG refs/tags/live-20261113-2 $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" other 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "1" "push-tag: remote name from argv is the one whose tracking refs count"
+assert_contains "$LG_PUSH_OUT" "oldleak.txt" "push-tag: with no tracking refs for that remote the published leak is scanned"
+
 finalize_test

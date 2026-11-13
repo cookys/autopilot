@@ -27,26 +27,73 @@ if [ -r "$__TIG_LIB" ]; then
   fi
 fi
 
-# --- leak-guard: no personal data in lines the pushed range adds ---
+# --- leak-guard: no personal data in commits the remote does not already have ---
 # pre-commit already runs leak-guard --staged, but cherry-picks, merges, rebases and commits made in
-# another clone never pass through it. This checks the same range the gates below use. Exit 1 blocks;
-# exit 2 (git failure, bad registry) also blocks, since leak-guard treats it as "never a pass".
+# another clone never pass through it. Peel each pushed object to a commit (<new>^{commit}). A
+# deletion (all-zero sha) or a tag that does not point at a commit is skipped. Scan only
+# `git rev-list <peeled> --not --remotes=<remote>` (no remote name: `--remotes`). An empty list
+# passes without scanning, so a tag on a commit already on the remote does not re-judge published
+# history. The remote sha on the push line is not the base: a new tag's is all zeros, and using
+# origin/HEAD instead scanned an unrelated ref up to the tag object. One published parent is one
+# two-dot diff, the same net change a linear branch push scanned before. Exit 1 blocks; exit 2
+# (git failure, bad registry) also blocks, since leak-guard treats it as "never a pass".
 __LG="$REPO_ROOT/scripts/leak-guard.js"
 if [ -r "$__LG" ] && command -v node >/dev/null 2>&1; then
   __lg_fail=0
+  if [ -n "${__PUSH_REMOTE:-}" ]; then
+    __lg_not=(--not "--remotes=${__PUSH_REMOTE}")
+  else
+    __lg_not=(--not --remotes)
+  fi
+  __lg_scan() {
+    if ! __lg_out="$(cd "$REPO_ROOT" && node "$__LG" --range "$1" 2>&1)"; then
+      printf '\n\033[1mleak-guard: %s (%s) blocked\033[0m\n%s\n' "${__lg_lref:-HEAD}" "$1" "$__lg_out" >&2
+      __lg_fail=1
+    fi
+  }
   while read -r __lg_lref __lg_lsha __lg_rref __lg_rsha; do
     [ -z "${__lg_lsha:-}" ] && continue
     echo "$__lg_lsha" | grep -qE '^0+$' && continue
-    if echo "${__lg_rsha:-}" | grep -qE '^0+$' || ! git cat-file -e "${__lg_rsha}^{commit}" 2>/dev/null; then
-      __lg_base="$(git rev-parse --verify --quiet origin/HEAD 2>/dev/null || true)"
-      [ -n "$__lg_base" ] || { printf 'leak-guard: %s: no base to diff against - push blocked (git fetch first)\n' "${__lg_lref:-HEAD}" >&2; __lg_fail=1; continue; }
-      __lg_range="${__lg_base}..${__lg_lsha}"
-    else
-      __lg_range="${__lg_rsha}..${__lg_lsha}"
-    fi
-    if ! __lg_out="$(cd "$REPO_ROOT" && node "$__LG" --range "$__lg_range" 2>&1)"; then
-      printf '\n\033[1mleak-guard: %s (%s) blocked\033[0m\n%s\n' "${__lg_lref:-HEAD}" "$__lg_range" "$__lg_out" >&2
+    # __lg_rref / __lg_rsha are this line's remote side. Exclusion is every remote-tracking
+    # ref of the push remote, not this sha (a new tag's remote sha is all zeros).
+    __lg_new="$(git rev-parse --verify --quiet "${__lg_lsha}^{commit}" 2>/dev/null || true)"
+    [ -n "$__lg_new" ] || continue
+    if ! __lg_raw="$(git rev-list --boundary "$__lg_new" "${__lg_not[@]}" 2>/dev/null)"; then
+      printf 'leak-guard: %s: could not list commits not already on the remote - push blocked\n' "${__lg_lref:-HEAD}" >&2
       __lg_fail=1
+      continue
+    fi
+    [ -n "$__lg_raw" ] || continue
+    __lg_commits=""
+    __lg_bounds=""
+    while read -r __lg_line; do
+      [ -n "$__lg_line" ] || continue
+      case "$__lg_line" in
+        -*) __lg_bounds="${__lg_bounds}${__lg_line#-}"$'\n' ;;
+        *)  __lg_commits="${__lg_commits}${__lg_line}"$'\n' ;;
+      esac
+    done <<< "$__lg_raw"
+    [ -n "$__lg_commits" ] || continue
+    __lg_bn=0
+    __lg_b=""
+    while read -r __lg_line; do
+      [ -n "$__lg_line" ] || continue
+      __lg_bn=$((__lg_bn + 1))
+      __lg_b="$__lg_line"
+    done <<< "$__lg_bounds"
+    if [ "$__lg_bn" -eq 1 ]; then
+      __lg_scan "${__lg_b}..${__lg_new}"
+    else
+      while read -r __lg_c; do
+        [ -n "$__lg_c" ] || continue
+        __lg_p="$(git rev-parse --verify --quiet "${__lg_c}^" 2>/dev/null || true)"
+        if [ -n "$__lg_p" ]; then
+          __lg_scan "${__lg_p}..${__lg_c}"
+        else
+          __lg_empty="$(git hash-object -t tree /dev/null)"
+          __lg_scan "${__lg_empty}..${__lg_c}"
+        fi
+      done <<< "$__lg_commits"
     fi
   done <<< "$__PUSH_STDIN"
   if [ "$__lg_fail" -ne 0 ]; then

@@ -1,0 +1,126 @@
+{
+  "existing": [
+    {
+      "id": "f1-ready-to-merge",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "f1b-ready-to-merge-docs",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-01",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-02",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-03",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-04",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-05",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-06",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-07",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-08",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-09",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "ff-trigger-10",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    },
+    {
+      "id": "g7-close",
+      "rubric": "trigger",
+      "a_pass": true,
+      "b_pass": true,
+      "a_exit": 0,
+      "b_exit": 0
+    }
+  ],
+  "usage": {
+    "id": "ff-usage-green-unused",
+    "rubric": "usage",
+    "a_pass": false,
+    "b_pass": true,
+    "a_exit": 0,
+    "b_exit": 0,
+    "a_usage_pass": false,
+    "b_usage_pass": true,
+    "a_trigger_pass": true,
+    "b_trigger_pass": true,
+    "a_used_lines": [],
+    "b_used_lines": [
+      "Used: n/a no person has used the merged result and there is no end-to-end run"
+    ]
+  },
+  "b_no_worse_on_existing": true,
+  "b_better_on_usage": true
+}

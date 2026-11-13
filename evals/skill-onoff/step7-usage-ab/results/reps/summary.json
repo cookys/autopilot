@@ -1,0 +1,154 @@
+{
+  "campaign": "PM 01M78M9M",
+  "on_top_of": "eval/d8c-a2",
+  "instrument": "evals/skill-onoff/step7-usage-ab/run-ab.py grok_call flags",
+  "grader": "evals/skill-onoff/step7-usage-ab/grade.py",
+  "model": "grok-4.7",
+  "reasoning_effort": "low",
+  "cells": [
+    {
+      "id": "ff-usage-green-unused",
+      "arm": "a",
+      "runs": [
+        {
+          "run": 1,
+          "pass": false,
+          "exit_code": 0
+        },
+        {
+          "run": 2,
+          "pass": false,
+          "exit_code": 0
+        },
+        {
+          "run": 3,
+          "pass": false,
+          "exit_code": 0
+        }
+      ],
+      "pass_count": 0,
+      "n": 3
+    },
+    {
+      "id": "ff-usage-green-unused",
+      "arm": "b",
+      "runs": [
+        {
+          "run": 1,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 2,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 3,
+          "pass": true,
+          "exit_code": 0
+        }
+      ],
+      "pass_count": 3,
+      "n": 3
+    },
+    {
+      "id": "f1-ready-to-merge",
+      "arm": "a",
+      "runs": [
+        {
+          "run": 1,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 2,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 3,
+          "pass": true,
+          "exit_code": 0
+        }
+      ],
+      "pass_count": 3,
+      "n": 3
+    },
+    {
+      "id": "f1-ready-to-merge",
+      "arm": "b",
+      "runs": [
+        {
+          "run": 1,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 2,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 3,
+          "pass": true,
+          "exit_code": 0
+        }
+      ],
+      "pass_count": 3,
+      "n": 3
+    },
+    {
+      "id": "ff-trigger-06",
+      "arm": "a",
+      "runs": [
+        {
+          "run": 1,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 2,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 3,
+          "pass": true,
+          "exit_code": 0
+        }
+      ],
+      "pass_count": 3,
+      "n": 3
+    },
+    {
+      "id": "ff-trigger-06",
+      "arm": "b",
+      "runs": [
+        {
+          "run": 1,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 2,
+          "pass": true,
+          "exit_code": 0
+        },
+        {
+          "run": 3,
+          "pass": true,
+          "exit_code": 0
+        }
+      ],
+      "pass_count": 3,
+      "n": 3
+    }
+  ],
+  "bar": {
+    "statement": "arm B passes ff-usage-green-unused in at least 2 of 3 runs",
+    "pass_count": 3,
+    "n": 3,
+    "met": true
+  }
+}

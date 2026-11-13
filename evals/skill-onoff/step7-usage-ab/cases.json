@@ -1,0 +1,26 @@
+{
+  "repeat": 1,
+  "seed": null,
+  "note": "repeat is 1 because this prose instrument has no seed flag. This is not the skill-onoff prereg repeat (w1b-t2 reps 5, g67 cell timeout 8m).",
+  "existing": [
+    {"id": "ff-trigger-01", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 0, "rubric": "trigger"},
+    {"id": "ff-trigger-02", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 1, "rubric": "trigger"},
+    {"id": "ff-trigger-03", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 2, "rubric": "trigger"},
+    {"id": "ff-trigger-04", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 3, "rubric": "trigger"},
+    {"id": "ff-trigger-05", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 4, "rubric": "trigger"},
+    {"id": "ff-trigger-06", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 5, "rubric": "trigger"},
+    {"id": "ff-trigger-07", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 6, "rubric": "trigger"},
+    {"id": "ff-trigger-08", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 7, "rubric": "trigger"},
+    {"id": "ff-trigger-09", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 8, "rubric": "trigger"},
+    {"id": "ff-trigger-10", "source": "skill-creator-workspace/evals/finish-flow-evals.json", "index": 9, "rubric": "trigger"},
+    {"id": "f1-ready-to-merge", "source": "evals/skill-onoff/tasks/f1-ready-to-merge/task.md", "rubric": "trigger", "should_trigger": true},
+    {"id": "f1b-ready-to-merge-docs", "source": "evals/skill-onoff/tasks/f1b-ready-to-merge-docs/task.md", "rubric": "trigger", "should_trigger": true},
+    {"id": "g7-close", "source": "evals/skill-onoff/tasks/g7-close/task.md", "prefix": "Use finish-flow:", "rubric": "trigger", "should_trigger": true}
+  ],
+  "synthetic": {
+    "id": "ff-usage-green-unused",
+    "rubric": "usage",
+    "should_trigger": true,
+    "query": "The feature just merged into develop. bash run-tests.sh is green and the review verdict is PASS. No person has used the merged result, and there is no end-to-end run. Produce Session end (full) checklist item 7 only."
+  }
+}

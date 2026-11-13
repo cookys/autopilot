@@ -127,7 +127,7 @@ resolve_finish_flow_package_root() {
 6. **Triggered BACKLOG pickup**: items whose trigger condition this session's work met, scoped by
    `git log --oneline $(cat .claude/session-start-sha 2>/dev/null || echo "HEAD~10")..HEAD`. Normal mode: present
    to the user. CEO mode: decide autonomously and record in the CEO Report.
-7. **Staging verify** (skip mid-implementation, docs-only, or no staging environment).
+7. **Usage evidence** (one line `Used: user`, `Used: e2e`, or `Used: n/a <reason>` for the thing just merged; green tests and review PASS do not count).
 8. **Escalation events** exist for every triggered quality-floor emission point (or none fired).
 9. **Four-surface sweep (skill/doc/memory/knowledge)** — for EACH surface output either "updated: <what>" or "not
    needed: <reason>"; the user must never have to ask 該補的都處理了嗎.

@@ -1,0 +1,95 @@
+{
+  "run": 1,
+  "source": "results/scores.json",
+  "note": "Recorded n=1 from the first instrument pass. Raw arm jsonl is gitignored (*.jsonl) and is not in this tree, so run 1 keeps the graded fields only.",
+  "rows": [
+    {
+      "id": "ff-trigger-06",
+      "arm": "a",
+      "rubric": "trigger",
+      "should_trigger": false,
+      "exit_code": 0,
+      "trigger_pass": true,
+      "usage_pass": null,
+      "pass": true,
+      "label": "NO-TRIGGER",
+      "used_lines": [],
+      "run": 1,
+      "text_retained": false
+    },
+    {
+      "id": "f1-ready-to-merge",
+      "arm": "a",
+      "rubric": "trigger",
+      "should_trigger": true,
+      "exit_code": 0,
+      "trigger_pass": true,
+      "usage_pass": null,
+      "pass": true,
+      "label": "TRIGGER",
+      "used_lines": [],
+      "run": 1,
+      "text_retained": false
+    },
+    {
+      "id": "ff-usage-green-unused",
+      "arm": "a",
+      "rubric": "usage",
+      "should_trigger": true,
+      "exit_code": 0,
+      "trigger_pass": true,
+      "usage_pass": false,
+      "pass": false,
+      "label": "TRIGGER",
+      "used_lines": [],
+      "run": 1,
+      "text_retained": false
+    },
+    {
+      "id": "ff-trigger-06",
+      "arm": "b",
+      "rubric": "trigger",
+      "should_trigger": false,
+      "exit_code": 0,
+      "trigger_pass": true,
+      "usage_pass": null,
+      "pass": true,
+      "label": "NO-TRIGGER",
+      "used_lines": [],
+      "run": 1,
+      "text_retained": false
+    },
+    {
+      "id": "f1-ready-to-merge",
+      "arm": "b",
+      "rubric": "trigger",
+      "should_trigger": true,
+      "exit_code": 0,
+      "trigger_pass": true,
+      "usage_pass": null,
+      "pass": true,
+      "label": "TRIGGER",
+      "used_lines": [
+        "Used: n/a tests green only, no user or e2e use recorded"
+      ],
+      "run": 1,
+      "text_retained": false
+    },
+    {
+      "id": "ff-usage-green-unused",
+      "arm": "b",
+      "rubric": "usage",
+      "should_trigger": true,
+      "exit_code": 0,
+      "trigger_pass": true,
+      "usage_pass": true,
+      "pass": true,
+      "label": "TRIGGER",
+      "used_lines": [
+        "Used: n/a no person has used the merged result and there is no end-to-end run"
+      ],
+      "run": 1,
+      "text_retained": false
+    }
+  ]
+}

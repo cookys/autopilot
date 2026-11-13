@@ -85,7 +85,11 @@ class Cell {
   }
   env(extra = {}) {
     const keep = {};
-    for (const k of ['PATH', 'LANG', 'TERM', 'TMPDIR']) if (process.env[k]) keep[k] = process.env[k];
+    // These two are forwarded when the parent set them. Unset, each means the
+    // opposite of isolation: the account layer reads the operator registry (passwd
+    // home, not HOME), so the hand's sessions land outside the cell and the wrapper
+    // will not copy them; codeforge usage collect runs and probes other runners.
+    for (const k of ['PATH', 'LANG', 'TERM', 'TMPDIR', 'AUTOPILOT_ACCOUNTS_DIR', 'AUTOPILOT_CODEFORGE_COLLECT']) if (process.env[k]) keep[k] = process.env[k];
     const base = {
       ...keep, HOME: this.home, CLAUDE_CONFIG_DIR: path.join(this.home, '.claude'), D0GATE_CELL: this.root, D0GATE_LIVE: this.live,
       AUTOPILOT_LIVE_DIR: this.live, AUTOPILOT_CONFIG_FILE: path.join(this.root, 'config.json'), ANTHROPIC_BASE_URL: 'http://127.0.0.1:9',

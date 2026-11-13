@@ -47,7 +47,7 @@ cat >"$MANIFEST" <<'JSON'
       }]
     },
     {
-      "id": "skeptic", "runner": "qoderclicn", "model": "qwen-fixture",
+      "id": "skeptic", "runner": "cc-shim", "model": "qwen-fixture",
       "effort": "high", "endpoint": "default", "role": "skeptic",
       "family": "qwen", "readiness_status": "ready",
       "qualification_status": "qualified", "required": true,

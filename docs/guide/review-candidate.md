@@ -324,7 +324,7 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
   declared `author_family` is excluded from that family count. A panel that cannot meet this is refused
   before spend (`review_candidate_panel_incomplete`).
 - **Which runners may hold a `qc_panel` seat.** A `qc_panel` seat must be able to run a no-tools blind
-  review. Allowed runners: `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn` (no-tools
+  review. Allowed runners: `anthropic-compatible`, `cc-shim`, `claude-native` (no-tools
   tier), and `codex`, `kimi`, `agy` (cleanroom tier, which is probed before spend). Any other runner,
   `grok` for example, is refused (`final_panel_seat_blind_incompatible`).
 - **Each seat must also be qualified.** A seat passes only if it is the exact tuple (runner, model, effort,
@@ -342,7 +342,7 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
   node bin/autopilot.js endpoints doctor
   ```
 
-  Seats on OAuth runners (`claude-native`, `codex`, `agy`, `grok`, `qoderclicn`) use their own CLI
+  Seats on OAuth runners (`claude-native`, `codex`, `agy`, `grok`) use their own CLI
   login and need nothing there. Full details: [installation.md](installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster).
 
 ## 5. Read the receipt

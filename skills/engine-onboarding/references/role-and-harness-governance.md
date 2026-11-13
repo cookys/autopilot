@@ -205,7 +205,7 @@ event under a prompt without that sentence, and any real connection/launcher/HTT
 tool-call encoding on the wire other than a non-empty tool list), agy (a transcript tool call). Not
 tagged, because they do not prove the model attempted a tool: kimi's unexpected loop events and
 snapshot/agent-binding problems, agy's fallback/deny-rule/unverified findings (configuration, kept
-`transport_fail`). codex/claude/grok/qoderclicn/cursor have no post-run tool audit, so there is nothing to detect.
+`transport_fail`). codex/claude/grok/cursor have no post-run tool audit, so there is nothing to detect.
 brain and verification_author exams carry the same reason on the raw exchange row.
 
 ### Reviewer

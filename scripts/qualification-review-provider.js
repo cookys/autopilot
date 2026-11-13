@@ -27,9 +27,6 @@
  *                                 wildcard tool-deny argv — NOT an enumerated
  *                                 per-tool list, promptViaFile mode — avoids
  *                                 ARG_MAX);
- *                                 QRP_CLI_KIND=qoderclicn → `qoderclicn -p --model
- *                                 --tools "" --permission-mode dont_ask`, prompt on
- *                                 stdin;
  *                                 QRP_CLI_KIND=cursor → ALWAYS REFUSES. cursor-agent
  *                                 exposes no verified tool-deny/sandbox mechanism —
  *                                 see the callCli() cursor branch for the full
@@ -216,7 +213,7 @@ const REQUEST_TIMEOUT_MS = (() => {
   return parsed;
 })();
 const MAX_DIFF_BYTES = 2 * 1024 * 1024;
-// CLI harnesses this adapter can drive. codex/claude/qoderclicn take the prompt on
+// CLI harnesses this adapter can drive. codex/claude take the prompt on
 // stdin (agy as a stream-json line); kimi takes it on argv; grok takes it via --prompt-file (see callCli).
 // `cursor` is a KNOWN but ALWAYS-REFUSING kind (cursor-agent has no verified
 // tool-deny/sandbox mechanism — see the callCli() cursor branch) — it stays in this
@@ -224,7 +221,7 @@ const MAX_DIFF_BYTES = 2 * 1024 * 1024;
 // the generic "QRP_CLI_KIND must be one of" message. Kept as one list so the
 // validation message and the dispatch switch can never disagree about what is
 // supported.
-const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi', 'grok', 'qoderclicn', 'cursor', 'opencode'];
+const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi', 'grok', 'cursor', 'opencode'];
 // A credential-only QRP_CLI_HOME seed is ~16 KB; 8 MB leaves room for a config
 // tree while still refusing a real home.
 const CLI_HOME_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
@@ -1530,53 +1527,6 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       '--permission-mode', 'dontAsk', '--no-subagents', '--deny', '*',
     ];
     if (effort) args.push('--reasoning-effort', grokEffortClamp(effort, model, bin));
-  } else if (kind === 'qoderclicn') {
-    // CONTAINMENT (probed live, qoderclicn 1.1.35, 2026-08-29 + 2026-08-29 security-
-    // review follow-up): `--tools ""` is qoderclicn's own documented "disable all
-    // built-in tools" value, and it is genuinely ALLOWLIST-EMPTY-EQUALS-DENY-ALL —
-    // not allow-by-omission — verified two ways:
-    //   1. Structural: with `--tools ""` the model does not receive a "permission
-    //      denied" refusal from a runtime check (contrast grok's `--deny "*"`, which
-    //      DOES produce that) — it instead HALLUCINATES a fake `<tool_calls>`/XML-ish
-    //      text block, because the tool schema was never registered with it at all.
-    //      That is the observable signature of allowlist-empty (nothing to call),
-    //      not runtime denial (something to call, then refused).
-    //   2. Behavioral, across FIVE live probes, two of them a security-review
-    //      follow-up using tools NOVEL to this file's own earlier probes (never named
-    //      in the original hostname/Read checks, chosen specifically so the property
-    //      being verified is "empty allowlist" and not "these particular names are
-    //      denied"): two `hostname` prompts, one `Read /etc/hostname` prompt, one
-    //      `TodoWrite` prompt (model self-reported its OWN available-tools list —
-    //      Bash/Read/Write/Edit/MultiEdit/Grep/Glob/Task*/Skill/Agent/EnterWorktree/
-    //      ExitWorktree — none of which fired), and one `Agent` (subagent-spawn)
-    //      prompt asking it to spawn a child to run `hostname`. In every case the
-    //      model either fabricated a plausible-looking FAKE value or printed a fake
-    //      tool-call block as inert text — the CLI's own real hostname
-    //      ("<host>") never appeared in any response, and no subagent ever
-    //      actually ran.
-    //
-    // 🔴 CRITICAL FINDING that makes the comment below load-bearing: combining
-    // `--disallowed-tools Bash` (the OTHER deny mechanism qoderclicn exposes) with
-    // `--dangerously-skip-permissions` DID let the model actually execute `hostname`
-    // and return the REAL host's hostname — skip-permissions overrides
-    // --disallowed-tools for this CLI, the exact failure class this whole file
-    // exists to prevent. `--tools ""` PLUS `--dangerously-skip-permissions` was
-    // separately probed and did NOT leak (the model reported the shell tool
-    // unavailable) — but the safe, load-bearing rule here is simpler and stronger:
-    // **NEVER pass --dangerously-skip-permissions for this kind, full stop** — it is
-    // not in this branch's args and must never be added. Containment is `--tools ""`
-    // alone, plus `--permission-mode dont_ask` (headless-safe: never hangs on an
-    // unanswerable confirmation) with no bypass flag anywhere in the invocation.
-    //
-    // VERSION-DRIFT CAVEAT: re-run the probes above (`hostname` x2, `Read
-    // /etc/hostname`, `TodoWrite`, `Agent`/subagent-spawn, and the skip-permissions/
-    // disallowed-tools combination) on any qoderclicn upgrade — this is the same
-    // class of silent regression agy's REQUIRED_DENY comment warns about. If a future
-    // qoderclicn version makes `--tools ""` mean "all DEFAULT tools" rather than
-    // "zero tools", this containment silently degrades and must be re-probed before
-    // shipping.
-    args = ['-p', '--model', model, '--tools', '', '--permission-mode', 'dont_ask', '--no-session-persistence'];
-    if (effort) args.push('--reasoning-effort', effort); // qoder tolerates all 5 levels, no clamp (see lib/grok-effort.sh header)
   } else if (kind === 'cursor') {
     // REFUSAL, not containment — cursor-agent exposes NO verified tool-deny or
     // sandbox mechanism this adapter can force. The only permission-shaped surface
@@ -1591,8 +1541,8 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     // has every incentive to reach for a tool to "help"), so this adapter inherits
     // that same unresolved risk. There is also no `--allow`/`--deny`/`--sandbox`
     // flag documented or probed anywhere in this repo for cursor-agent (unlike
-    // agy/grok/qoderclicn, all of which have a real, verified deny mechanism this
-    // file forces). Per this file's own safety contract: "if it has no such model,
+    // agy/grok, which have a real, verified deny mechanism this file forces).
+    // Per this file's own safety contract: "if it has no such model,
     // the adapter must refuse to run rather than expose the host." So this branch
     // NEVER builds args and NEVER spawns — it throws before anything else runs,
     // unconditionally, regardless of QRP_CLI_HOME/model/effort. Lifting this refusal

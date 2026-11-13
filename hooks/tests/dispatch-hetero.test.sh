@@ -267,23 +267,20 @@ OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
 assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
 assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
 
-# 3c. qoder routing: a Qwen model auto-routes to qoderclicn (not agy). Route via auto and make
-# qoder absent (PATH without ~/.local/bin) — the qoder precondition must fire, proving routing.
+# 3c. retired qoderclicn / auto Qwen routing: --runner auto with a Qwen model is refused
+# (names --runner cc-shim --endpoint <name>); --runner qoderclicn is rejected as unknown.
 OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
   --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "auto-detect routes Qwen3.8-Max-Preview to qoder (not agy)"
-assert_contains "$OUT" "qoder binary not found" "qwen routing does not fall through to agy"
+assert_eq "2" "$EXIT" "auto-detect refuses Qwen3.8-Max-Preview (qoderclicn retired)"
+assert_contains "$OUT" "--runner cc-shim --endpoint" "auto-detect Qwen refusal names cc-shim --endpoint"
 
-# 3d. qoder committed path: --runner qoderclicn + stub via --qoder-bin → committed, runner
-# reported qoderclicn (proves runner-select + qoder exec branch + committed status + label;
-# STUB_OK self-commits, so the wrapper-commit fallback itself is covered by the real-qwen
-# e2e, not this stub).
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/qoder-smoke --prompt-file "$PROMPT" --runner qoderclicn --model Qwen3.8-Max-Preview --qoder-bin "$STUB_OK" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "qoder committed path exit code"
-assert_contains "$OUT" '"status": "committed"' "qoder committed status"
-assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
+# 3d. negative: --runner qoderclicn is rejected as an unknown runner.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/qoder-retired --prompt-file "$PROMPT" --runner qoderclicn --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "retired qoderclicn runner rejected (exit 2)"
+assert_contains "$OUT" '"status": "precondition_failed"' "retired qoderclicn runner -> precondition_failed"
+assert_contains "$OUT" "must be one of" "retired qoderclicn runner rejected as unknown runner"
 
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
 # First run that places a worktree, in a fresh sandbox (earlier cases already placed some in $SBX):

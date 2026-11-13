@@ -588,69 +588,12 @@ EOF
 chmod +x "$STUB_AGY_JSON"
 make_agy_stub_versioned "$STUB_AGY_JSON"
 export AGY_TEXT_STUB="$STUB_MARKER"
-STUB_QODERCN_MARKER="$TEST_TMP/qoderclicn-marker"
-cat > "$STUB_QODERCN_MARKER" <<'EOF'
-#!/usr/bin/env bash
-[ -z "${QODER_ARGV_FILE:-}" ] || printf '%s\n' "$@" > "$QODER_ARGV_FILE"
-PROMPT="$(cat)"
-begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
-end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
-[ -n "$begin" ] && [ -n "$end" ] || exit 0
-echo "$begin"
-echo "VERDICT: SHIP-AS-IS"
-echo "FINDINGS: none"
-echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
-echo "$end"
-EOF
-chmod +x "$STUB_QODERCN_MARKER"
-
-# Qoder substituted the requested model ("using auto instead") on STDERR yet
-# printed a complete, valid SHIP block on stdout: the verdict is from a model
-# nobody asked for, so the review must be rejected (2026-10-16 Qwen3.8-Max-Preview).
-STUB_QODERCN_SUBST="$TEST_TMP/qoderclicn-subst"
-cat > "$STUB_QODERCN_SUBST" <<'EOF2'
-#!/usr/bin/env bash
-PROMPT="$(cat)"
-begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
-end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
-[ -n "$begin" ] && [ -n "$end" ] || exit 0
-echo 'Model "Qwen3.8-Max-Preview" is not available right now; using "auto" instead. Use /model to choose another model.' >&2
-echo "$begin"
-echo "VERDICT: SHIP-AS-IS"
-echo "FINDINGS: none"
-echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
-echo "$end"
-EOF2
-chmod +x "$STUB_QODERCN_SUBST"
-
-# A WELL-FORMED verdict block on stdout AND the engine process exits non-zero
-# (an engine that answers correctly then crashes on teardown) — no runner
-# previously exercised this combination end-to-end. Pins current production
-# behaviour: the RC check runs BEFORE the parser on every rail, so a
-# non-zero exit is fail-closed to no_verdict regardless of stdout content
-# (verdict-bytes go through salvage_unratified_verdict, but status/exit are
-# unchanged).
-STUB_QODERCN_NONZERO="$TEST_TMP/qoderclicn-nonzero"
-cat > "$STUB_QODERCN_NONZERO" <<'EOF'
-#!/usr/bin/env bash
-PROMPT="$(cat)"
-begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
-end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
-[ -n "$begin" ] && [ -n "$end" ] || exit 0
-echo "$begin"
-echo "VERDICT: SHIP-AS-IS"
-echo "FINDINGS: none"
-echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
-echo "$end"
-exit 9
-EOF
-chmod +x "$STUB_QODERCN_NONZERO"
 
 # OpenCode --format json shape: newline-delimited JSON events, final assistant text in
 # the last {"type":"text",...} event's .part.text (probe-verified 2026-09-07, opencode
-# 1.18.27 — see scripts/dispatch-review.sh header comment). Mirrors the plain-text
-# qoderclicn stub above but wraps the wrapped block inside the real NDJSON envelope so
-# the dedicated Node extraction scriptlet in the opencode branch is actually exercised.
+# 1.18.27 — see scripts/dispatch-review.sh header comment). Wraps the framed block inside
+# the real NDJSON envelope so the dedicated Node extraction scriptlet in the opencode
+# branch is actually exercised.
 STUB_OPENCODE_JSON="$TEST_TMP/opencode-json-marker"
 cat > "$STUB_OPENCODE_JSON" <<'EOF'
 #!/usr/bin/env bash
@@ -669,7 +612,7 @@ echo '{"type":"step_finish","timestamp":3,"sessionID":"ses_fixture","part":{"id"
 EOF
 chmod +x "$STUB_OPENCODE_JSON"
 
-# Same well-formed-block-then-die combination as qoderclicn above, NDJSON-wrapped.
+# Same well-formed-block-then-die combination, NDJSON-wrapped.
 STUB_OPENCODE_NONZERO="$TEST_TMP/opencode-json-nonzero"
 cat > "$STUB_OPENCODE_NONZERO" <<'EOF'
 #!/usr/bin/env bash

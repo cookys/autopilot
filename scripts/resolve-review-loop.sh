@@ -138,7 +138,7 @@ DEF_REVIEW_FRESH_CONTEXT="on"
 # about on stderr, and recorded in override_admitted_seats.
 #
 # WHY A DECLARED LIST RATHER THAN A DERIVATION. There is no 1:1 map from runner
-# token to harness capability record: cc-shim, anthropic-compatible, qoderclicn,
+# token to harness capability record: cc-shim, anthropic-compatible,
 # kimi and pi have no record at all, so "absent record => unqualified" would
 # refuse rosters that ship today, and "absent record => qualified" would mean
 # DELETING cursor.json opens the gate. The list is therefore explicit AND
@@ -343,9 +343,9 @@ else
     exit 3
   fi
   case "$VER_AUTH_RUNNER" in
-    codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|kimi|cursor|opencode) ;;
+    codex|agy|grok|cc-shim|anthropic-compatible|kimi|cursor|opencode) ;;
     *)
-      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|kimi|cursor|opencode): $VER_AUTH_RUNNER" >&2
+      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible|kimi|cursor|opencode): $VER_AUTH_RUNNER" >&2
       exit 3
       ;;
   esac
@@ -449,11 +449,11 @@ case "$HETERO_REVIEW" in auto|on|off) ;; *)
   echo "resolve-review-loop: invalid hetero_review (must be auto|on|off): $HETERO_REVIEW" >&2
   exit 3
 esac
-case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *)
+case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode) ;; *)
   echo "resolve-review-loop: invalid plan_reviewer_runner: $PLAN_REV_RUNNER" >&2
   exit 3
 esac
-case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *)
+case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode) ;; *)
   echo "resolve-review-loop: invalid plan_deep_reviewer_runner: $PLAN_DEEP_RUNNER" >&2
   exit 3
 esac
@@ -481,7 +481,7 @@ for _seat in consult discuss; do
     discuss) _s_eng="$DISCUSS_ENGINE"; _s_eff="$DISCUSS_EFFORT"; _s_run="$DISCUSS_RUNNER"; _s_ep="$DISCUSS_ENDPOINT" ;;
   esac
   case "$_s_run" in
-    ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
+    ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode) ;;
     *) echo "resolve-review-loop: invalid ${_seat}_runner: $_s_run" >&2; exit 3 ;;
   esac
   case "$_s_eff" in
@@ -832,10 +832,10 @@ fi
 if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
   for _i in "${!QC_PANEL[@]}"; do
     case "${QC_PANEL_RUNNERS[$_i]}" in
-      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
+      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode) ;;
       *)
         QC_PANEL_SEATS_COMPLETE="false"
-        echo "resolve-review-loop: invalid qc_panel_runners[$_i] (must be codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode): ${QC_PANEL_RUNNERS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
+        echo "resolve-review-loop: invalid qc_panel_runners[$_i] (must be codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode): ${QC_PANEL_RUNNERS[$_i]:-<empty>} — qc_panel_seats_complete=false, readiness fails closed" >&2
         ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
@@ -881,18 +881,18 @@ fi
 # Runner identity selects the actual transport. Unknown or blank explicit values
 # fail loudly: silently substituting a different runner misattributes the review.
 case "$REV_RUNNER" in
-  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;;
+  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode) ;;
   *)
-    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode): ${REV_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode): ${REV_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac
 case "$REV_EFFORT" in default|low|medium|high|xhigh|max) ;; *) echo "resolve-review-loop: invalid reviewer_effort (must be default|low|medium|high|xhigh|max): ${REV_EFFORT:-<empty>}" >&2; exit 3 ;; esac
 case "$IMPL_EFFORT" in default|low|medium|high|xhigh|max) ;; *) echo "resolve-review-loop: invalid implementer_effort (must be default|low|medium|high|xhigh|max): ${IMPL_EFFORT:-<empty>}" >&2; exit 3 ;; esac
 case "$IMPL_RUNNER" in
-  auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode|kimi) ;;
+  auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode|kimi) ;;
   *)
-    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode|kimi): ${IMPL_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode|kimi): ${IMPL_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac
@@ -914,7 +914,7 @@ if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   # whole output anyway, this just names the rung and the fix).
   _auto_ladder="$(node -e '
 const fs = require("fs");
-const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","claude-native","qoderclicn","cursor","opencode"]);
+const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","claude-native","cursor","opencode"]);
 const VALID_EFFORTS = new Set(["default","low","medium","high","xhigh","max"]);
 const file = process.argv[1];
 let raw;
@@ -940,7 +940,7 @@ const rungs = doc.implementer_ladder.map((r) => ({
 for (const r of rungs) {
   if (!VALID_RUNNERS.has(r.runner)) {
     process.stdout.write(
-      "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode): " +
+      "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode): " +
       r.engine + "/" + r.effort + "@" + r.runner
     );
     process.exit(3);
@@ -1014,9 +1014,9 @@ elif [[ -n "$IMPL_LADDER_RAW" ]]; then
         ;;
     esac
     case "$_lr" in
-      auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode) ;;
+      auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode) ;;
       *)
-        echo "resolve-review-loop: invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode): ${_item}" >&2
+        echo "resolve-review-loop: invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode): ${_item}" >&2
         exit 3
         ;;
     esac
@@ -1060,8 +1060,8 @@ if [[ -n "$CLOUD_FALLBACK_RUNGS_RAW" ]]; then
     *) echo "resolve-review-loop: invalid cloud_fallback_rung effort (must be default|low|medium|high|xhigh|max): ${CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
   esac
   case "$_cfr" in
-    codex|agy|grok|cursor|kimi|qoderclicn) ;;
-    *) echo "resolve-review-loop: invalid cloud_fallback_rung runner (must be a cloud runner: codex|agy|grok|cursor|kimi|qoderclicn; cc-shim, anthropic-compatible and other local-endpoint runners are refused): ${CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
+    codex|agy|grok|cursor|kimi) ;;
+    *) echo "resolve-review-loop: invalid cloud_fallback_rung runner (must be a cloud runner: codex|agy|grok|cursor|kimi; cc-shim, anthropic-compatible and other local-endpoint runners are refused): ${CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
   esac
   CLOUD_FALLBACK_RUNG_JSON="{\"engine\": \"$(json_escape "$_cfe")\", \"effort\": \"${_cff}\", \"runner\": \"${_cfr}\"}"
 fi
@@ -1115,8 +1115,8 @@ if [[ -n "$REVIEWER_CLOUD_FALLBACK_RUNGS_RAW" ]]; then
     *) echo "resolve-review-loop: invalid reviewer_cloud_fallback_rung effort (must be default|low|medium|high|xhigh|max): ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
   esac
   case "$_rcfr" in
-    codex|agy|grok|cursor|kimi|qoderclicn) ;;
-    *) echo "resolve-review-loop: invalid reviewer_cloud_fallback_rung runner (must be a cloud runner: codex|agy|grok|cursor|kimi|qoderclicn; cc-shim, anthropic-compatible and other local-endpoint runners are refused): ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
+    codex|agy|grok|cursor|kimi) ;;
+    *) echo "resolve-review-loop: invalid reviewer_cloud_fallback_rung runner (must be a cloud runner: codex|agy|grok|cursor|kimi; cc-shim, anthropic-compatible and other local-endpoint runners are refused): ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW}" >&2; exit 3 ;;
   esac
   REVIEWER_CLOUD_FALLBACK_RUNG_JSON="{\"engine\": \"$(json_escape "$_rcfe")\", \"effort\": \"${_rcff}\", \"runner\": \"${_rcfr}\"}"
 fi
@@ -2645,7 +2645,7 @@ done
 # (parity test keeps the JS table, dispatch-review.sh, and this copy equal).
 review_seat_tier() {
   case "$1" in
-    anthropic-compatible|cc-shim|claude-native|qoderclicn|opencode) printf '%s\n' packet ;;
+    anthropic-compatible|cc-shim|claude-native|opencode) printf '%s\n' packet ;;
     codex|kimi|agy) printf '%s\n' cleanroom ;;
     *) printf '%s\n' none ;;
   esac

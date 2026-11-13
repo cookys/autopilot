@@ -77,10 +77,10 @@ const runtimePaths = require('./lib/runtime-paths');
 
 const DEFAULT_STALL_SECS = 180;
 const FILES_TOUCHED_CAP = 50;
-// Runners whose CLI prints nothing until it finishes (`claude -p`, qoder `-p`, kimi `-p --output-format text`, anthropic-compatible / claude-native review calls): a quiet log is normal for them, so "quiet for stallSecs" proves nothing.
+// Runners whose CLI prints nothing until it finishes (`claude -p`, kimi `-p --output-format text`, anthropic-compatible / claude-native review calls): a quiet log is normal for them, so "quiet for stallSecs" proves nothing.
 // A review-role dispatch on any runner but codex also writes its plain log at the end (dispatch-review.sh declares log_format plain
 // for every non-codex runner). opencode / grok / cursor implementers stream events and keep the quiet-log rule.
-const ONE_SHOT_RUNNERS = new Set(['cc-shim', 'claude-native', 'anthropic-compatible', 'qoderclicn', 'kimi']);
+const ONE_SHOT_RUNNERS = new Set(['cc-shim', 'claude-native', 'anthropic-compatible', 'kimi']);
 // Wall used when the manifest records no timeout_seconds (dispatch-review manifests carry none): the observed 5-15 minute range.
 const ONE_SHOT_DEFAULT_WALL_SECS = 900;
 function isOneShotRunner(manifest) {

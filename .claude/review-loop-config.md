@@ -1,8 +1,8 @@
 # Review-Loop Config — autopilot (self-hosting)
 
 > Follows the roster (`project-config-template/review-loop-config.md`) for every seat; the override blocks below are temporary.
-> Codex window (PM 01M747R1N0, codex quota nearly gone until its 2026-11-16 reset): implementer, loop-reviewer cloud rung, verification author and plan-review seats are routed away from codex until 2026-11-15; the roster itself is unchanged, and allow_same_runner_dual_seat is on for the window. On 2026-11-16 delete those blocks (see BACKLOG).
-> Older: the qodercn-out note on the VA seat (until 2026-11-21; after that date the resolver only warns); the grok implementer block is replaced by the agy one for the codex window.
+> Codex window (PM 01M747R1N0, codex quota nearly gone until its 2026-11-16 reset): implementer, loop-reviewer cloud rung and plan-review seats are routed away from codex until 2026-11-15; the roster itself is unchanged, and allow_same_runner_dual_seat is on for the window. On 2026-11-16 delete those blocks (see BACKLOG).
+> Older: the grok implementer block is replaced by the agy one for the codex window.
 > Seat history before 2026-11-06 is in git; roster changes are logged in the template's changelog. Consumed by `scripts/resolve-review-loop.sh` (precedence slot 3).
 
 ## Settings
@@ -27,18 +27,11 @@
 - reviewer_fallback_preference: GLM-5.3, gpt-6.1-sol
 - reviewer_fallback_preference_low_risk: GLM-5.3, gpt-6.1-sol
 
-- override: verification_author | until 2026-11-15 | PM 01M74FDC5Z codex window; implementer is agy (google) and the ladder climbs to grok (xai), so the VA must be a third family; GLM quota is ample. The VA seat is GLM-5.3 via cc-shim, endpoint glm (high). Earlier note (PM 01M6Z8P87Y): qodercn quota is out until 2026-11-21, so on 2026-11-16 do not simply delete this block (that returns to Qwen3.8-Max@qoderclicn): replace it with gemini-4-argon-high@agy (high) until qodercn is usable (~11-21), then delete. An expired override still applies (roster-overlay.js TTL only warns, never blocks or auto-reverts).
-- verification_author_present: true
-- verification_author_engine: GLM-5.3
-- verification_author_runner: cc-shim
-- verification_author_effort: high
-- verification_author_endpoint: glm
-
 - override: qc_panel | until 2026-11-30 | operator card d-b155785a 2026-11-09:same panel as cookys account (10-16 owner instruction)
-- qc_panel: gpt-5.6-sol, claude-fable-5-1, Qwen3.8-Max, GLM-5.3, opencode-go/muse-spark-1.3-contributor
-- qc_panel_runners: codex, claude-native, qoderclicn, cc-shim, opencode
-- qc_panel_efforts: max, high, high, high, high
-- qc_panel_endpoints: @none, @none, @none, glm, @none
+- qc_panel: gpt-5.6-sol, claude-fable-5-1, GLM-5.3, opencode-go/muse-spark-1.3-contributor
+- qc_panel_runners: codex, claude-native, cc-shim, opencode
+- qc_panel_efforts: max, high, high, high
+- qc_panel_endpoints: @none, @none, glm, @none
 - qc_panel_aggregation: union-on-verified-critical
 
 - override: plan_reviewer | until 2026-11-15 | PM 01M747R1N0 codex quota: plan-review chair is gemini-4-carbon-high@agy (high) until the codex reset on 2026-11-16.

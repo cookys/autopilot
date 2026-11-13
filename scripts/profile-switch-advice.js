@@ -517,7 +517,7 @@ function advise(opts, deps) {
       state.lanes[laneRec.lane] = nextState;
       stateDirty = true;
     }
-    if (advice) advices.push(advice);
+    if (advice) advices.push({ ...advice, lane: laneRec.lane, prevState: prev });
   }
 
   return { advices, state, stateFile, stateDirty, readingsFile };
@@ -544,10 +544,18 @@ function main(argv, deps) {
     const env = { ...process.env };
     delete env.FLEET_FYI;
     const bin = fleetBin(d);
-    for (const a of res.advices) {
+    for (let i = 0; i < res.advices.length; i += 1) {
+      const a = res.advices[i];
       const r = run(bin, ['send', opts.sendTo, a.message], { encoding: 'utf8', env });
       if (!r || r.error || r.status !== 0) {
         err(`傳送建議至 ${opts.sendTo} 失敗（${(r && (r.stderr || (r.error && r.error.message))) || `exit ${r && r.status}`}）`);
+        // Lanes already sent keep their cooldown; this lane and the rest are rolled back so the
+        // next run retries them instead of staying silent for 24 h.
+        for (const u of res.advices.slice(i)) {
+          if (u.prevState === undefined) delete res.state.lanes[u.lane];
+          else res.state.lanes[u.lane] = u.prevState;
+        }
+        saveState(f, res.stateFile, res.state);
         return 1;
       }
     }

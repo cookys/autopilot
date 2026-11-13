@@ -318,3 +318,26 @@ test('g: --send-to calls fleet send once and runner is never called with lane-sw
     fx.cleanup();
   }
 });
+
+test('h: a failed send mid-batch keeps the cooldown of lanes already sent and retries the rest', () => {
+  const fx = makeFx(['home', 'work']);
+  try {
+    addLane(fx, 'l1', 'home');
+    addLane(fx, 'l2', 'home');
+    const resetSec = Math.floor((BASE_NOW + 12 * HOUR_MS) / 1000);
+    writeSnap(fx, 'home', { writtenAtMs: BASE_NOW - 1000, pct: 0.95, resetsAtSec: resetSec });
+    writeSnap(fx, 'work', { writtenAtMs: BASE_NOW - 1000, pct: 0.20, resetsAtSec: resetSec + 3600 });
+    let n = 0;
+    const failSecond = () => { n += 1; return n === 1 ? { status: 0, stdout: '', stderr: '' } : { status: 1, stdout: '', stderr: 'down' }; };
+    const r1 = runAdvice(fx, { argv: ['--send-to', 'autopilot/courier/pm'], runImpl: failSecond });
+    assert.strictEqual(r1.code, 1);
+    assert.strictEqual(r1.runCalls.length, 2);
+    const sentLane = r1.runCalls[0].args[2].includes('--lane l1 ') ? 'l1' : 'l2';
+    const r2 = runAdvice(fx, { argv: ['--send-to', 'autopilot/courier/pm'], nowMs: BASE_NOW + 60 * 1000 });
+    assert.strictEqual(r2.code, 0);
+    assert.strictEqual(r2.runCalls.length, 1, 'only the lane whose send failed is retried');
+    assert.ok(!r2.runCalls[0].args[2].includes(`--lane ${sentLane} `), 'the lane already sent stays in cooldown');
+  } finally {
+    fx.cleanup();
+  }
+});

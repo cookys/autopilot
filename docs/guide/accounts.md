@@ -219,3 +219,12 @@ Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) t
 - 回滾：同一個指令，`--profile` 改成原本的 profile。
 - 事後確認（計畫步驟 8）：`node scripts/lib/lane-switch-confirm.js --lane <lane> --since <切換時間 ISO> --alias <目標別名> --profile <目標 profile>`。帳本是目標 profile 的 `metrics/costs.jsonl`：`--profile` 決定路徑，省略時用車道紀錄裡的 profile。`home` 讀 `~/.claude/metrics/costs.jsonl`，其他 profile 讀 `~/.claude-profiles/<profile>/metrics/costs.jsonl`。它找這個 session 比切換時間新的第一列，最多等到下一輪之後 30 分鐘；account 等於目標別名才算數。不符或這段時間沒有列，回傳一行給 PM 的報告，不送信。別名仍只由 `scripts/lib/account-alias.js` 算出後傳入，這個工具不開 `.claude.json`，也不碰 `.credentials.json`。`lane-switch.js` 印出的確認指令帶 `--profile`。
 - 計畫與步驟：`project/plans/2026-11-10-profile-switch.md`。
+
+## Switching advice
+
+切換建議腳本 `node scripts/profile-switch-advice.js [--send-to <address>]` 只做建議、不自行執行 `lane-switch`：
+
+- **移出條件**：該訂閱池 7 天用量達到 `90%`（`TIGHT_THRESHOLD = 0.90`），或同一 `resets_at` 視窗內有 2 筆以上間隔至少 1 小時（最新讀數在 6 小時內）的讀數、依線性消耗速率預估將於 `resets_at` 前用完。目標池須 7 天用量低於 `70%` 且讀數在 6 小時內；若無合格目標，仍輸出 `[建議]` 說明無可用目標，不附切換指令。
+- **移回條件**：原訂閱池 `resets_at` 已過，或已進入較新視窗且 7 天用量低於 `70%` 時，建議切回原池。
+- **靜默與冷卻**：沒有可用讀數（缺失或超過 6 小時）時不輸出任何建議；每條車道每 24 小時最多建議一次（狀態存於讀數紀錄同目錄的 `profile-switch-advice-state.json`）。
+- **紀錄與輸出**：每次將使用到的讀數透過 `scripts/lib/jsonl-store.js` 的 `appendRow` 附加至 `~/.config/autopilot/quota-readings.jsonl`（僅寫入時間戳、別名、profile、百分比與 `resets_at`）。訊息第一行為 `[建議]`、時間使用台北時間（`+08`）；預設印到 stdout，加 `--send-to <address>` 則透過 `fleet send` 送出。

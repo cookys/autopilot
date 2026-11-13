@@ -23,6 +23,7 @@
 const path = require('path');
 const { appendJournal, checkRow } = require('./switch-journal');
 const { defaultBase } = require('./lane-manifest');
+const { parsePeers, matchingSeats, isOffline } = require('./fleet-peers');
 
 const DEFAULT_TIMEOUT_MS = 15 * 60 * 1000;
 const DEFAULT_POLL_MS = 2000;
@@ -53,22 +54,6 @@ function fileNewer(fs, file, sinceMs) {
   return typeof st.mtimeMs === 'number' && st.mtimeMs > sinceMs;
 }
 
-function memberMatches(member, seat) {
-  if (!member || typeof member.member !== 'string') return false;
-  if (member.member === seat) return true;
-  if (typeof member.courier === 'string' && `${member.courier}/${member.member}` === seat) return true;
-  if (typeof member.namespace === 'string' && typeof member.courier === 'string'
-    && `${member.namespace}/${member.courier}/${member.member}` === seat) return true;
-  return false;
-}
-
-function laneIdle(parsed, seat) {
-  const members = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.members) ? parsed.members : null);
-  if (!members) return false;
-  const hits = members.filter((m) => memberMatches(m, seat));
-  return hits.length === 1 && hits[0].activity === 'idle';
-}
-
 function iso(ms) { return new Date(ms).toISOString(); }
 
 function journal(base, opts, step, outcome, nowIso, detail) {
@@ -83,7 +68,10 @@ function peersIdle(deps, bin, seat) {
   let r;
   try { r = deps.run(bin, ['peers', '--json'], { encoding: 'utf8' }); } catch { return false; }
   if (!r || r.status !== 0 || r.error) return false;
-  try { return laneIdle(JSON.parse(String(r.stdout || '')), seat); } catch { return false; }
+  const members = parsePeers(r.stdout);
+  if (!members) return false;
+  const hits = matchingSeats(members, seat);
+  return hits.length === 1 && hits[0].activity === 'idle' && !isOffline(hits[0]);
 }
 
 async function requestHandoff(opts, deps) {

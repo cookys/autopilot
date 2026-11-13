@@ -31,7 +31,7 @@ function fx(over) {
   const base = path.join(home, 'lane-base');
   const paneCwd = '/work/x';
   writeManifest(base, {
-    lane: 'l1', pane: 'lanes:1.0', cwd: '/work/stale', seat: 'x--claude', session_id: 'sid-123',
+    lane: 'l1', pane: 'lanes:1.0', cwd: '/work/stale', seat: o.seat || 'x--claude', session_id: 'sid-123',
     model: 'opus', launch_flags: ['--mcp-config=/shared/fleet.json'], profile: 'stranity',
   });
   const fromDir = path.join(home, '.claude-profiles', 'stranity');
@@ -73,9 +73,18 @@ function fx(over) {
   function run(bin, args, opts) {
     calls.push({ bin, args: [...args], env: { ...(opts && opts.env) } });
     if (bin === 'fleet') {
-      const members = [
-        { member: 'x--claude-2', state: 'live' },
-        { member: 'x--claude', state: seatState },
+      // Shape of `fleet peers --json`: { members: [{ member, namespace, courier, state, activity? }] }.
+      // Names here are fake. Live rows carry state "live"; a session row also carries activity.
+      const members = o.members || [
+        {
+          member: 'x--claude-2', namespace: 'ns', courier: 'box', channels: ['ns'],
+          message_kinds: ['chat'], state: 'live', activity: 'idle', lifetime: 'durable',
+        },
+        {
+          member: 'x--claude', namespace: 'ns', courier: 'box', channels: ['ns'],
+          message_kinds: ['chat', 'dispatch'], state: seatState, lifetime: 'durable',
+          ...(seatState === 'offline' ? {} : { activity: 'idle' }),
+        },
       ];
       return { status: 0, stdout: JSON.stringify({ members }), stderr: '' };
     }
@@ -139,6 +148,41 @@ test('all-pass: six checks, alias, latest cost account, pane cwd recorded, journ
   assert.ok(rows.some((r) => r.step === 'before:cost-row' && r.detail === 'account=acct-22222222'));
   assert.ok(!JSON.stringify(rows).includes('@'));
   assert.strictEqual(fs.statSync(journalFile(w.base)).mode & 0o777, 0o600);
+});
+
+test('seat matches the full address when the row has activity and no state', () => {
+  const w = fx({
+    seat: 'ns/box/x--claude',
+    members: [{
+      member: 'x--claude', namespace: 'ns', courier: 'box', channels: ['ns'],
+      message_kinds: ['chat', 'dispatch'], activity: 'idle', lifetime: 'durable',
+    }],
+  });
+  const seat = checkNamed(preflight(w.opts, w.deps), 'seat');
+  assert.strictEqual(seat.ok, true, seat.detail);
+  assert.strictEqual(seat.detail, 'live');
+});
+
+test('seat activity offline is offline even when state is live', () => {
+  const w = fx({
+    members: [{
+      member: 'x--claude', namespace: 'ns', courier: 'box', channels: ['ns'],
+      message_kinds: ['chat', 'dispatch'], state: 'live', activity: 'offline', lifetime: 'durable',
+    }],
+  });
+  const seat = checkNamed(preflight(w.opts, w.deps), 'seat');
+  assert.strictEqual(seat.ok, false);
+  assert.strictEqual(seat.detail, 'seat_offline');
+});
+
+test('deps.now as a function is the journal clock', () => {
+  const w = fx();
+  w.deps.now = () => NOW_MS;
+  const res = preflight(w.opts, w.deps);
+  assert.strictEqual(res.ok, true, JSON.stringify(res.checks));
+  const rows = rowsOf(w.base);
+  assert.ok(rows.length > 0);
+  assert.ok(rows.every((r) => r.ts === NOW));
 });
 
 test('seat offline: directory row present but offline is not live', () => {

@@ -28,6 +28,7 @@ const { spawnSync } = require('child_process');
 const { readManifest, writeManifest } = require('./lane-manifest');
 const { appendJournal, checkRow } = require('./switch-journal');
 const { claudeAccount } = require('./account-alias');
+const { parsePeers, matchingSeats, isLive, isOffline } = require('./fleet-peers');
 
 const DAY = 86400000;
 const THRESHOLD_DAYS = 10; // profile-health.js THRESHOLD_DAYS
@@ -67,6 +68,14 @@ function resolveNow(d) {
   if (d && typeof d.now === 'string') {
     const t = Date.parse(d.now);
     if (Number.isFinite(t)) return t;
+  }
+  if (d && typeof d.now === 'function') {
+    const v = d.now();
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string') {
+      const t = Date.parse(v);
+      if (Number.isFinite(t)) return t;
+    }
   }
   if (process.env.AUTOPILOT_NOW) {
     const t = Date.parse(process.env.AUTOPILOT_NOW);
@@ -134,17 +143,12 @@ function seatCheck(run, home, manifest) {
   if (!manifest.seat) return { ok: false, detail: 'seat_missing' };
   const r = invoke(run, process.env.AUTOPILOT_FLEET_BIN || 'fleet', ['peers', '--json'], childEnv(home, null));
   if (r.status !== 0) return { ok: false, detail: 'seat_unreadable' };
-  let members = null;
-  try {
-    const j = JSON.parse(r.stdout);
-    if (j && Array.isArray(j.members)) members = j.members;
-    else if (Array.isArray(j)) members = j;
-  } catch { /* unreadable */ }
+  const members = parsePeers(r.stdout);
   if (!members) return { ok: false, detail: 'seat_unreadable' };
-  const row = members.find((m) => m && m.member === manifest.seat);
+  const row = matchingSeats(members, manifest.seat)[0];
   if (!row) return { ok: false, detail: 'seat_absent' };
-  if (row.state === 'offline') return { ok: false, detail: 'seat_offline' };
-  if (typeof row.state !== 'string' || row.state.length === 0) return { ok: false, detail: 'seat_state_unknown' };
+  if (isOffline(row)) return { ok: false, detail: 'seat_offline' };
+  if (!isLive(row)) return { ok: false, detail: 'seat_state_unknown' };
   return { ok: true, detail: 'live' };
 }
 

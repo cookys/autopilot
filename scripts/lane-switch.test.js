@@ -196,6 +196,16 @@ function marker(c) {
 function journalRows(base) {
   return fs.readFileSync(journalFile(base), 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
+// Shape of `fleet peers --json`. Names are fake: live rows have state "live";
+// a session row also carries activity; an offline row omits activity.
+function peerRow(state, activity) {
+  const row = {
+    member: 'x--claude', namespace: 'ns', courier: 'box', channels: ['ns'],
+    message_kinds: ['chat', 'dispatch'], state, lifetime: 'durable',
+  };
+  if (activity) row.activity = activity;
+  return row;
+}
 // One stubbed world. phase before: seat live. /exit moves to release (directory row gone,
 // shell is bash). A --resume send moves to up (same seat, no -2). shellNever keeps the
 // command on claude so a skipped shell wait would still start, because the seat is already gone.
@@ -215,10 +225,10 @@ function world(f, opt) {
     if (base === 'fleet' && argv[0] === 'peers') {
       peersN += 1;
       if (options.seatOffline && phase === 'before' && peersN === 1) {
-        return { status: 0, stdout: JSON.stringify({ members: [{ member: 'x--claude', state: 'offline' }] }), stderr: '' };
+        return { status: 0, stdout: JSON.stringify({ members: [peerRow('offline')] }), stderr: '' };
       }
       if (phase === 'release') return { status: 0, stdout: JSON.stringify({ members: [] }), stderr: '' };
-      return { status: 0, stdout: JSON.stringify({ members: [{ member: 'x--claude', state: 'live', activity: 'idle' }] }), stderr: '' };
+      return { status: 0, stdout: JSON.stringify({ members: [peerRow('live', 'idle')] }), stderr: '' };
     }
     if (base === 'fleet' && argv[0] === 'send') return { status: 0, stdout: '', stderr: '' };
     if (base === 'tmux' && argv[0] === 'display' && line.includes('pane_current_path')) return { status: 0, stdout: '/work/x\n', stderr: '' };
@@ -321,7 +331,7 @@ test('execute: happy path runs steps in order and prints the confirm command', {
   const acc = w.calls.find((c) => marker(c) === 'accept');
   assert.deepStrictEqual(acc.args, ['--pane', 'lanes:1.0', '--timeout', '90']);
   const alias = claudeAccount({ HOME: f.home, CLAUDE_CONFIG_DIR: cookysDir });
-  assert.match(w.lines.join('\n'), new RegExp(`lane-switch-confirm\\.js --lane l1 --since ${T0.replace(/[.]/g, '\\.')} --alias ${alias}`));
+  assert.match(w.lines.join('\n'), new RegExp(`lane-switch-confirm\\.js --lane l1 --since ${T0.replace(/[.]/g, '\\.')} --alias ${alias} --profile cookys`));
   assert.deepStrictEqual(journalRows(f.base).map((r) => r.step), [
     'before:seat', 'before:pane-cwd', 'before:transcript', 'before:current-auth', 'before:cost-row', 'before:target-auth',
     'handoff-send', 'handoff-wait', 'stop', 'seat-release', 'collect-copy', 'start', 'dev-channel', 'after', 'confirm',

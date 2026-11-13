@@ -5,9 +5,11 @@
  *
  * After a lane switch, poll the ledger hooks/cost-tracker.js appends:
  *   path.join(metricsDirOf(), 'costs.jsonl')
- * which is <CLAUDE_CONFIG_DIR or ~/.claude>/metrics/costs.jsonl.
+ * which is <target profile>/metrics/costs.jsonl.
  * The writer does not consult AUTOPILOT_COSTS_FILE, so this reader does not either.
- * Run it with the target profile's CLAUDE_CONFIG_DIR (unset for home).
+ * The target profile comes from --profile, or from the lane manifest when that
+ * flag is omitted. home is ~/.claude; any other name is ~/.claude-profiles/<name>.
+ * The caller's CLAUDE_CONFIG_DIR is not consulted.
  *
  * confirmSwitch(opts, deps) waits for the first row of this session whose ts is
  * strictly newer than the switch (`opts.since`). The wait ends 30 min after the
@@ -25,7 +27,7 @@
  * through deps.run. Clock and wait are deps.now / deps.sleep. File IO is deps.fs
  * (defaults to fs). Tests pass stubs.
  *
- * CLI: node scripts/lib/lane-switch-confirm.js --lane L --since <iso> --alias A
+ * CLI: node scripts/lib/lane-switch-confirm.js --lane L --since <iso> --alias A [--profile P]
  * Exit: 0 confirmed, 1 mismatch or no row in the window, 2 usage.
  * Node >= 20.10, built-ins only.
  */
@@ -39,17 +41,18 @@ const CONFIRM_WINDOW_MS = 30 * 60 * 1000;
 const DEFAULT_INTERVAL_MS = 2000;
 const ALIAS_RE = /^[a-z0-9-]{1,24}$/;
 const LANE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const SESSION_RE = /^[^@\s]{1,128}$/;
 const REFUSED_BASENAMES = new Set(['.credentials.json', '.claude.json', 'credentials.json']);
 
 const HELP = [
-  '用法：node scripts/lib/lane-switch-confirm.js --lane L --since <iso> --alias A',
-  '切換之後確認：讀 cost-tracker 寫入的 metrics/costs.jsonl，找這個 session 比 --since 新的第一列。',
+  '用法：node scripts/lib/lane-switch-confirm.js --lane L --since <iso> --alias A [--profile P]',
+  '切換之後確認：讀目標 profile 的 metrics/costs.jsonl，找這個 session 比 --since 新的第一列。',
+  '帳本路徑由 --profile 決定；省略時用車道紀錄的 profile。home 讀 ~/.claude/metrics/costs.jsonl，其他 profile 讀 ~/.claude-profiles/<profile>/metrics/costs.jsonl。',
   '等待上限是下一輪起 30 分鐘（此命令啟動的時刻當下一輪；--since 是切換時間）。',
   'account 必須等於 --alias。失敗時 JSON 含一行 report，不送信。',
   '結束碼：0 確認，1 不符或窗內無列，2 用法錯誤。',
-  '執行時的 CLAUDE_CONFIG_DIR 必須是目標 profile（home 則不要設），否則讀到別份帳本。',
 ].join('\n') + '\n';
 
 function fail(code) {
@@ -81,11 +84,41 @@ function defaultSleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+function laneBase(opts, deps, home) {
+  return opts.baseDir || deps.baseDir || process.env.AUTOPILOT_LANE_BASE_DIR || path.join(home, '.config', 'autopilot');
+}
+
+function readLane(opts, deps, home) {
+  let rec;
+  try {
+    rec = readManifest(laneBase(opts, deps, home), opts.lane);
+  } catch (e) {
+    throw fail(e.message === 'lane_invalid' ? 'lane_invalid' : 'manifest_unreadable');
+  }
+  return rec;
+}
+
+// Target profile: --profile / opts.profile wins; otherwise the lane manifest.
+// home has no CLAUDE_CONFIG_DIR (metricsDirOf then uses ~/.claude). Any other
+// name is ~/.claude-profiles/<profile>. The caller's env is not read.
+function resolveProfile(opts, deps, home) {
+  if (typeof opts.profile === 'string' && opts.profile) {
+    if (!PROFILE_RE.test(opts.profile)) throw fail('profile_invalid');
+    return opts.profile;
+  }
+  const rec = readLane(opts, deps, home);
+  if (!rec || typeof rec.profile !== 'string' || !rec.profile) throw fail('profile_unknown');
+  return rec.profile;
+}
+
 function costsPath(opts, deps) {
   if (opts.costsFile) return opts.costsFile;
   if (deps.costsFile) return deps.costsFile;
-  const env = deps.env || process.env;
   const home = deps.home || os.homedir();
+  const profile = resolveProfile(opts, deps, home);
+  const dir = profile === 'home' ? undefined : path.join(home, '.claude-profiles', profile);
+  const env = {};
+  if (dir) env.CLAUDE_CONFIG_DIR = dir;
   return path.join(metricsDirOf({ env, home }), 'costs.jsonl');
 }
 
@@ -96,13 +129,7 @@ function assertCostsPath(file) {
 function resolveSession(opts, deps) {
   if (opts.session != null) return opts.session;
   const home = deps.home || os.homedir();
-  const base = opts.baseDir || deps.baseDir || process.env.AUTOPILOT_LANE_BASE_DIR || path.join(home, '.config', 'autopilot');
-  let rec;
-  try {
-    rec = readManifest(base, opts.lane);
-  } catch (e) {
-    throw fail(e.message === 'lane_invalid' ? 'lane_invalid' : 'manifest_unreadable');
-  }
+  const rec = readLane(opts, deps, home);
   if (!rec || !rec.session_id) throw fail('session_unknown');
   return rec.session_id;
 }
@@ -191,7 +218,7 @@ function parse(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') o.help = true;
-    else if (a === '--lane' || a === '--since' || a === '--alias') {
+    else if (a === '--lane' || a === '--since' || a === '--alias' || a === '--profile') {
       if (i + 1 >= argv.length || String(argv[i + 1]).startsWith('--')) return { error: `${a} 需要值` };
       o[a.slice(2)] = argv[++i];
     } else if (a.startsWith('--')) return { error: `不明的參數 ${a}` };
@@ -213,6 +240,7 @@ function main(argv, deps) {
       lane: o.lane,
       since: o.since,
       alias: o.alias,
+      profile: o.profile,
       baseDir: d.baseDir,
       costsFile: d.costsFile,
     }, d);
@@ -224,6 +252,7 @@ function main(argv, deps) {
     return code === 'alias_invalid' || code === 'since_invalid' || code === 'lane_invalid'
       || code === 'session_unknown' || code === 'session_invalid' || code === 'manifest_unreadable'
       || code === 'turn_invalid' || code === 'costs_path_refused'
+      || code === 'profile_invalid' || code === 'profile_unknown'
       ? 2 : 1;
   }
 }

@@ -28,6 +28,7 @@ const { requestHandoff } = require('./lib/lane-switch-handoff');
 const { collectAndCopy, cwdKey } = require('./lib/lane-switch-transcript');
 const { claudeAccount } = require('./lib/account-alias');
 const { handoffPath } = require('./resolve-repo-placement');
+const { parsePeers, rowMatchesSeat, isLive, isOffline } = require('./lib/fleet-peers');
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ORDER_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$/;
@@ -150,19 +151,10 @@ function isShell(name) {
 
 function okRun(r) { return !!(r && r.status === 0 && !r.error); }
 
-function parseMembers(stdout) {
-  try {
-    const j = JSON.parse(stdout);
-    if (Array.isArray(j)) return j;
-    if (j && Array.isArray(j.members)) return j.members;
-  } catch { /* unreadable directory */ }
-  return null;
-}
-
 function seatRow(stdout, seat) {
-  const members = parseMembers(stdout);
+  const members = parsePeers(stdout);
   if (!members) return { members: null, row: null };
-  return { members, row: members.find((m) => m && m.member === seat) || null };
+  return { members, row: members.find((m) => rowMatchesSeat(m, seat)) || null };
 }
 
 // Directory row gone, or present and offline. An unreadable listing is not a release.
@@ -170,14 +162,13 @@ function released(stdout, seat) {
   const { members, row } = seatRow(stdout, seat);
   if (!members) return false;
   if (!row) return true;
-  return row.state === 'offline' || row.activity === 'offline';
+  return isOffline(row);
 }
 
 function addressSame(stdout, seat) {
   const { members, row } = seatRow(stdout, seat);
-  if (!members || !row) return false;
-  if (row.state === 'offline' || row.activity === 'offline') return false;
-  const doubled = members.some((m) => m && m.member === `${seat}-2` && m.state !== 'offline' && m.activity !== 'offline');
+  if (!members || !row || !isLive(row)) return false;
+  const doubled = members.some((m) => m && m.member === `${seat}-2` && isLive(m));
   return !doubled;
 }
 
@@ -462,7 +453,7 @@ async function execute(o, d, home, base) {
     writeManifest(base, { ...cur, profile: o.profile });
   } catch (e) { err(e.message); return 4; }
   const confirm = path.join(__dirname, 'lib', 'lane-switch-confirm.js');
-  out(['node', q(confirm), '--lane', q(o.lane), '--since', q(since), '--alias', q(recorded)].join(' '));
+  out(['node', q(confirm), '--lane', q(o.lane), '--since', q(since), '--alias', q(recorded), '--profile', q(o.profile)].join(' '));
   j = note(from, o.profile, 'confirm', 'printed');
   if (j) return j;
   return 0;

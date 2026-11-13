@@ -271,28 +271,79 @@ test('cli usage: missing args and a bad alias exit 2 without echoing the value',
   assert.strictEqual(err.join('').includes(bad), false);
   err.length = 0;
   assert.strictEqual(main(['--help'], sink), 0);
-  assert.match(out.join(''), /--lane L --since <iso> --alias A/);
+  assert.match(out.join(''), /--lane L --since <iso> --alias A \[--profile P\]/);
 });
 
-test('cli subprocess reads the cost-tracker path under CLAUDE_CONFIG_DIR', () => {
+function plantLedgers(home, base, rec) {
+  writeManifest(base, rec);
+  const oldDir = path.join(home, '.claude-profiles', 'stranity');
+  const targetDir = path.join(home, '.claude-profiles', 'cookys');
+  const homeDir = path.join(home, '.claude');
+  const oldCosts = path.join(oldDir, 'metrics', 'costs.jsonl');
+  const targetCosts = path.join(targetDir, 'metrics', 'costs.jsonl');
+  const homeCosts = path.join(homeDir, 'metrics', 'costs.jsonl');
+  for (const file of [oldCosts, targetCosts, homeCosts]) fs.mkdirSync(path.dirname(file), { recursive: true });
+  // The old profile's row would mismatch if confirm followed the caller's env.
+  fs.writeFileSync(oldCosts, `${line(iso(SINCE_MS + 5000), OTHER)}\n`);
+  fs.writeFileSync(targetCosts, `${line(iso(SINCE_MS + 5000), ALIAS)}\n`);
+  fs.writeFileSync(homeCosts, `${line(iso(SINCE_MS + 5000), ALIAS)}\n`);
+  return { oldDir, targetDir, homeDir, oldCosts, targetCosts, homeCosts };
+}
+
+test('caller env on the old profile still reads the target ledger', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lsc-cli-'));
   const base = path.join(home, 'cfg');
-  const configDir = path.join(home, 'profile');
-  const costs = path.join(configDir, 'metrics', 'costs.jsonl');
-  writeManifest(base, REC);
-  fs.mkdirSync(path.dirname(costs), { recursive: true });
-  fs.writeFileSync(costs, `${line(iso(SINCE_MS + 5000), ALIAS)}\n`);
+  const planted = plantLedgers(home, base, REC);
   const r = cp.spawnSync(process.execPath, [TOOL, '--lane', 'l1', '--since', SINCE, '--alias', ALIAS], {
     env: {
       PATH: process.env.PATH,
       HOME: home,
       AUTOPILOT_LANE_BASE_DIR: base,
-      CLAUDE_CONFIG_DIR: configDir,
+      CLAUDE_CONFIG_DIR: planted.oldDir,
     },
     encoding: 'utf8',
     timeout: 5000,
   });
   assert.strictEqual(r.error && r.error.code, undefined, r.stderr || String(r.error));
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.deepStrictEqual(JSON.parse(r.stdout), { ok: true, account: ALIAS });
+});
+
+test('--profile selects the target ledger when the manifest and the caller env still name the old profile', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lsc-arg-'));
+  const base = path.join(home, 'cfg');
+  const planted = plantLedgers(home, base, { ...REC, profile: 'stranity' });
+  const r = cp.spawnSync(process.execPath, [
+    TOOL, '--lane', 'l1', '--since', SINCE, '--alias', ALIAS, '--profile', 'cookys',
+  ], {
+    env: {
+      PATH: process.env.PATH,
+      HOME: home,
+      AUTOPILOT_LANE_BASE_DIR: base,
+      CLAUDE_CONFIG_DIR: planted.oldDir,
+    },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.deepStrictEqual(JSON.parse(r.stdout), { ok: true, account: ALIAS });
+});
+
+test('home profile reads ~/.claude even when CLAUDE_CONFIG_DIR points at another profile', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lsc-home-'));
+  const base = path.join(home, 'cfg');
+  const planted = plantLedgers(home, base, { ...REC, profile: 'home' });
+  fs.writeFileSync(planted.targetCosts, `${line(iso(SINCE_MS + 5000), OTHER)}\n`);
+  const r = cp.spawnSync(process.execPath, [TOOL, '--lane', 'l1', '--since', SINCE, '--alias', ALIAS], {
+    env: {
+      PATH: process.env.PATH,
+      HOME: home,
+      AUTOPILOT_LANE_BASE_DIR: base,
+      CLAUDE_CONFIG_DIR: planted.oldDir,
+    },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
   assert.strictEqual(r.status, 0, r.stderr);
   assert.deepStrictEqual(JSON.parse(r.stdout), { ok: true, account: ALIAS });
 });

@@ -52,7 +52,10 @@ function scripted(timeline, { sendStatus = 0, timeoutMs, pollMs = 1000 } = {}) {
       if (args[0] === 'send') return { status: sendStatus, stdout: '', stderr: sendStatus === 0 ? '' : 'refused' };
       if (args[0] === 'peers') {
         const row = at(step - 1);
-        return { status: 0, stdout: JSON.stringify({ members: [{ namespace: 'ns', courier: 'c', member: 'lane--claude', activity: row.activity }] }) };
+        return { status: 0, stdout: JSON.stringify({ members: [{
+          namespace: 'ns', courier: 'c', member: 'lane--claude', channels: ['ns'],
+          message_kinds: ['chat', 'dispatch'], state: 'live', activity: row.activity, lifetime: 'durable',
+        }] }) };
       }
       throw new Error(`unexpected argv ${args.join(' ')}`);
     },

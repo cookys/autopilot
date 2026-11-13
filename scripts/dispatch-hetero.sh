@@ -127,6 +127,13 @@
 #                                              #   --endpoint with a non-cc-shim runner. Also a
 #                                              #   die_precondition together with a --model that
 #                                              #   already names a full id (mapper bypassed there).
+#       [--no-campaign]                        # ordinary backlog work outside any campaign.
+#                                              #   Under Mission enforce this admits the dispatch
+#                                              #   and records campaign_scope=none_declared plus
+#                                              #   the enforcement_mode seen. Refused together
+#                                              #   with any --campaign-* flag, and refused while
+#                                              #   an active l5/l6 session marker says a campaign
+#                                              #   is in scope for this repo (PM 01M794CK).
 #       [--campaign-contract <path>]            # sealed ICC boundary, prepended to prompt
 #       [--campaign-contract-sha256 <digest>]    # intake-bound digest for private snapshot
 #       [--campaign-seal <path>]                # intake-validated seal, rechecked at leaf admission
@@ -285,6 +292,10 @@ CONTINUATION_DURABLE=""
 CAMPAIGN_CONTRACT_FILE=""
 CAMPAIGN_CONTRACT_SHA256=""
 CAMPAIGN_SEAL_FILE=""
+NO_CAMPAIGN=0
+# Set only when enforce admits --no-campaign. Empty otherwise, so the manifest
+# and the branch ledger stay byte-identical for every other dispatch.
+MISSION_ENFORCEMENT_MODE_SEEN=""
 CAMPAIGN_CONTRACT_SNAPSHOT=""
 CAMPAIGN_ID=""
 MISSION_CAMPAIGN_ID=""
@@ -1179,6 +1190,11 @@ NODE
       die_precondition "authoritative session-mode marker is invalid: ${marker_state:-marker could not be classified}"
     fi
     if [[ "$marker_state" == ACTIVE:* ]]; then
+      # --no-campaign does not skip this gate: an active l5/l6 marker means a
+      # campaign is in scope for this repo, and the flag cannot leave it.
+      if [ "${NO_CAMPAIGN:-0}" -eq 1 ]; then
+        die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo). --no-campaign does not leave an active campaign. To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=\$(mktemp -d)"
+      fi
       die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo). To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=\$(mktemp -d)"
     fi
   done
@@ -1765,7 +1781,14 @@ NODE
   case "$mission_mode" in
     off|shadow) ;;
     enforce)
-      die_precondition "Mission enforce mode requires a sealed campaign strict projection"
+      # Sealed campaign flags never reach here with --no-campaign (that pair is
+      # a precondition error). An active l5/l6 marker was already refused by
+      # check_session_mode_gate; this return does not skip that gate.
+      if [ "${NO_CAMPAIGN:-0}" -eq 1 ]; then
+        MISSION_ENFORCEMENT_MODE_SEEN="$mission_mode"
+        return 0
+      fi
+      die_precondition "Mission enforce mode requires a sealed campaign strict projection, or pass --no-campaign for ordinary backlog work outside any campaign"
       ;;
     *)
       die_precondition "authoritative Mission governance returned invalid mode: $mission_mode"
@@ -2308,14 +2331,20 @@ write_manifest() {
     mf_timeout_enforced="true"
   fi
   [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && mf_timeout_enforced="false"
+  # Present only for an enforce admission via --no-campaign. Absent otherwise,
+  # so a sealed campaign or an off/shadow run stays byte-identical.
+  local campaign_scope_fields=""
+  if [ "${NO_CAMPAIGN:-0}" -eq 1 ] && [ -n "${MISSION_ENFORCEMENT_MODE_SEEN:-}" ]; then
+    campaign_scope_fields=", \"campaign_scope\": \"none_declared\", \"enforcement_mode\": \"$(_flat_json_escape "$MISSION_ENFORCEMENT_MODE_SEEN")\""
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" \
-      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$role_kit_manifest_fields" "$REPO_IDENTITY_FIELDS" \
+      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
@@ -2338,6 +2367,7 @@ while [ $# -gt 0 ]; do
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
     --scaffold-tier) SCAFFOLD_TIER_ARG="${2:-}"; shift 2 ;;
+    --no-campaign) NO_CAMPAIGN=1; shift ;;
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
@@ -2770,6 +2800,10 @@ if [ -n "$RESUME_SESSION_ID" ]; then
     || die_precondition "--resume-session is only verified for --runner grok"
   [[ "$RESUME_SESSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] \
     || die_precondition "--resume-session must be a lowercase UUID"
+fi
+if [ "$NO_CAMPAIGN" -eq 1 ] && { [ -n "$CAMPAIGN_CONTRACT_FILE" ] \
+    || [ -n "$CAMPAIGN_CONTRACT_SHA256" ] || [ -n "$CAMPAIGN_SEAL_FILE" ]; }; then
+  die_precondition "--no-campaign cannot be combined with --campaign-contract, --campaign-contract-sha256, or --campaign-seal"
 fi
 [ -z "$CAMPAIGN_CONTRACT_FILE" ] || [ -r "$CAMPAIGN_CONTRACT_FILE" ] \
   || die_precondition "campaign contract file not readable: $CAMPAIGN_CONTRACT_FILE"
@@ -3843,8 +3877,17 @@ if [ "$WORKTREE_REUSED" -eq 0 ] \
   _wt_lock_fail "git worktree add failed"
 fi
 # Branch->session ledger row (close-out ownership). Fail-open: never fails the dispatch.
+# An enforce --no-campaign admission adds campaign_scope and the mode seen to that
+# same appended line. Every other dispatch passes empty args and the row is unchanged.
+_LEDGER_CAMPAIGN_SCOPE=""
+_LEDGER_ENFORCEMENT_MODE=""
+if [ "${NO_CAMPAIGN:-0}" -eq 1 ] && [ -n "${MISSION_ENFORCEMENT_MODE_SEEN:-}" ]; then
+  _LEDGER_CAMPAIGN_SCOPE="none_declared"
+  _LEDGER_ENFORCEMENT_MODE="$MISSION_ENFORCEMENT_MODE_SEEN"
+fi
 [ "$WORKTREE_REUSED" -eq 1 ] \
-  || dispatch_branch_ledger_append "$_wt_common_dir" "$BRANCH" "$WT_RUN_ID" "$WORKTREE_ROOT_RUN_ID" "$BASE_SHA"
+  || dispatch_branch_ledger_append "$_wt_common_dir" "$BRANCH" "$WT_RUN_ID" "$WORKTREE_ROOT_RUN_ID" "$BASE_SHA" \
+       "$_LEDGER_CAMPAIGN_SCOPE" "$_LEDGER_ENFORCEMENT_MODE"
 [ "$WORKTREE_REUSED" -eq 1 ] || _wt_creation_test_checkpoint after-add
 # Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
 # (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).
@@ -6137,7 +6180,7 @@ dispatch_detached_run() {
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
-      CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND \
+      CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND NO_CAMPAIGN MISSION_ENFORCEMENT_MODE_SEEN \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \
       CLASSIFIED_ERROR \

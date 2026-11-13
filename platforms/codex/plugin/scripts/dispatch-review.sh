@@ -438,14 +438,15 @@ family_guard_same() {
 }
 
 # $1 engine  $2 effort  $3 runner  $4 resolved JSON
-# Sets _FG_ENGINE _FG_EFFORT _FG_RUNNER _FG_ENDPOINT. return 0 when a cross-family rung is chosen.
+# Sets _FG_ENGINE _FG_EFFORT _FG_RUNNER _FG_ENDPOINT _FG_DEMOTED_JSON. return 0 when a cross-family rung is chosen.
 family_guard_select() {
-  local eng="$1" eff="$2" run="$3" resolved="$4" prefs item e f r ep fam
+  local eng="$1" eff="$2" run="$3" resolved="$4" prefs item e f r ep fam dem
   local has_override="0" custom_prefs="0" custom_rung="0"
   _FG_ENGINE=""
   _FG_EFFORT=""
   _FG_RUNNER=""
   _FG_ENDPOINT=""
+  _FG_DEMOTED_JSON="[]"
   family_guard_bind "$resolved"
 
   # Detect explicit non-template reviewer overrides (preserves custom test/repo pins without ever picking codex).
@@ -520,23 +521,25 @@ for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
   local _chain_lines=""
   _chain_lines="$(node -e '
 const sf = require(process.argv[1]);
-const chain = sf.reviewerFallbackChain({
+const plan = sf.reviewerFallbackPlan({
   implementerFamily: process.argv[2],
   failedRunner: process.argv[3],
   failedModel: process.argv[4],
   failedEndpoint: process.argv[5],
 });
-for (const r of chain) {
-  process.stdout.write([r.model, r.effort, r.runner, r.endpoint || ""].join("\t") + "\n");
+const demJson = JSON.stringify(plan.demoted || []);
+for (const r of plan.chain) {
+  process.stdout.write([r.model, r.effort, r.runner, r.endpoint || "", demJson].join("\t") + "\n");
 }
 ' "$_REVIEW_SELF_DIR/lib/seat-fallback.js" "${IMPLEMENTER_FAMILY:-unknown}" "${RUNNER:-}" "${MODEL:-}" "${ENDPOINT:-}" 2>/dev/null)" || _chain_lines=""
-  while IFS=$'\t' read -r e f r ep; do
+  while IFS=$'\t' read -r e f r ep dem; do
     [ -n "${e:-}" ] && [ -n "${r:-}" ] || continue
     [ "$r" = "codex" ] && continue
     _FG_ENGINE="$e"
     _FG_EFFORT="${f:-high}"
     _FG_RUNNER="$r"
     _FG_ENDPOINT="${ep:-}"
+    _FG_DEMOTED_JSON="${dem:-[]}"
     return 0
   done <<< "$_chain_lines"
   echo "family-guard: no cross-family reviewer for implementer family ${IMPLEMENTER_FAMILY}" >&2
@@ -955,8 +958,16 @@ process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_e
                 _rv_to_rung="${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}${_FG_ENDPOINT:+#${_FG_ENDPOINT}}"
                 _rv_fb_reason="${PROBE_CLASS:-endpoint_${PROBE_DECISION}}"
                 FALLBACK_JSON="$(node -e '
-process.stdout.write(JSON.stringify({ from: process.argv[1], to: process.argv[2], reason: process.argv[3] }));
-' "$_rv_from_seat" "$_rv_to_rung" "$_rv_fb_reason")"
+const sf = require(process.argv[1]);
+let demoted = [];
+try { demoted = JSON.parse(process.argv[5] || "[]"); } catch { demoted = []; }
+process.stdout.write(JSON.stringify(sf.buildFallbackRecord({
+  from: process.argv[2],
+  to: process.argv[3],
+  reason: process.argv[4],
+  demoted,
+})));
+' "$_REVIEW_SELF_DIR/lib/seat-fallback.js" "$_rv_from_seat" "$_rv_to_rung" "$_rv_fb_reason" "${_FG_DEMOTED_JSON:-[]}")"
                 FALLBACK_LOG_ROW="$(node -e '
 process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: process.argv[3], error_class: process.argv[4], to_rung: process.argv[5], branch: null, served_by: process.argv[5], probe: JSON.parse(process.argv[6]), fallback: JSON.parse(process.argv[7]) }));
 ' "${RUN_ID:-}" "$RUNNER" "$ENDPOINT" "${PROBE_CLASS:-}" "$_rv_to_rung" "$PROBE_JSON" "$FALLBACK_JSON")"
@@ -1384,8 +1395,16 @@ process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_e
   local _from_seat="${MODEL}@${RUNNER}${ENDPOINT:+#${ENDPOINT}}"
   local _fb_json=""
   _fb_json="$(node -e '
-process.stdout.write(JSON.stringify({ from: process.argv[1], to: process.argv[2], reason: process.argv[3] }));
-' "$_from_seat" "$served" "${classification:-unavailable}")"
+const sf = require(process.argv[1]);
+let demoted = [];
+try { demoted = JSON.parse(process.argv[5] || "[]"); } catch { demoted = []; }
+process.stdout.write(JSON.stringify(sf.buildFallbackRecord({
+  from: process.argv[2],
+  to: process.argv[3],
+  reason: process.argv[4],
+  demoted,
+})));
+' "$_REVIEW_SELF_DIR/lib/seat-fallback.js" "$_from_seat" "$served" "${classification:-unavailable}" "${_FG_DEMOTED_JSON:-[]}")"
   FALLBACK_LOG_ROW="$(node -e '
 process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: null, error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: null, fallback: JSON.parse(process.argv[5]), implementer_family: process.argv[6] || "unknown" }));
 ' "${RUN_ID:-}" "$RUNNER" "$classification" "$served" "$_fb_json" "${IMPLEMENTER_FAMILY:-unknown}")"

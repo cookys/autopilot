@@ -15,7 +15,7 @@ scrub_session_env
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \
   AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
   REVIEW_LOOP_CONFIG_OVERRIDE AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_AGY_REVIEW_RETREATED \
-  AUTOPILOT_AGY_RETREAT_SERVED_BY AUTOPILOT_AGY_RETREAT_LOG_ROW 2>/dev/null || true
+  AUTOPILOT_AGY_RETREAT_SERVED_BY AUTOPILOT_AGY_RETREAT_LOG_ROW AUTOPILOT_PACE_FILE 2>/dev/null || true
 export AUTOPILOT_STRIKE_WRITER=off
 export DISPATCH_QUIET=1
 export AUTOPILOT_SETTLE_MS=0
@@ -547,6 +547,7 @@ assert_eq "$(jget "$RUN_OUT" runner)" "cc-shim" "fb-a: google implementer skips 
 assert_eq "$(jget "$RUN_OUT" model)" "glm-5.3" "fb-a: glm model is glm-5.3"
 assert_eq "$(jget "$RUN_OUT" served_by)" "glm-5.3/high@cc-shim#glm" "fb-a: served_by names glm rung"
 assert_eq "$(jget "$RUN_OUT" fallback.to)" "glm-5.3/high@cc-shim#glm" "fb-a: fallback.to records glm rung"
+assert_eq "$(jget "$RUN_OUT" fallback.demoted)" "null" "fb-a: no demoted field when order unchanged"
 assert_eq "$(jget "$RUN_OUT" implementer_family)" "google" "fb-a: receipt keeps implementer_family google"
 assert_contains "$(cat "$FB_CLAUDE")" "--model glm-5.3" "fb-a: claude shim invoked with glm-5.3"
 assert_contains "$(cat "$FB_CLAUDE")" "https://127.0.0.1:1/glm-stub" "fb-a: glm endpoint URL wired into cc-shim"
@@ -588,5 +589,18 @@ fb_review_run "fbe" "$CFG_FB_CODEX_OV" "--implementer-family google"
 assert_neq "$(jget "$RUN_OUT" runner)" "codex" "fb-e: codex reviewer_cloud_fallback_rung never spawns codex"
 assert_eq "$(jget "$RUN_OUT" runner)" "cc-shim" "fb-e: falls back to next eligible picker rung (glm)"
 assert_eq "$(line_count "$FB_CODEX")" "0" "fb-e: codex stub never called"
+
+# (fb-low) pace file marking hydrogen low demotes hydrogen behind agyclaude for zhipu implementer,
+# keeping fallback.reason as endpoint_busy and recording fallback.demoted: ["hydrogen"].
+PACE_HYD_LOW="$TEST_TMP/pace-hydrogen-low.json"
+cat > "$PACE_HYD_LOW" <<'EOF'
+{"schema":"capacity.pace/1","generated_at":"2026-11-13T04:00:00Z","rows":[{"pool":"hydrogen","class":"other","status":"WARN_hydrogen_low","stale":false,"used_pct":92,"expected_pct":40,"left_pts":2},{"pool":"agyclaude","class":"other","status":"ok","stale":false,"used_pct":20,"expected_pct":40}]}
+EOF
+AUTOPILOT_PACE_FILE="$PACE_HYD_LOW" fb_review_run "fblow" "$CFG_FB_DFLT" "--implementer-family zhipu"
+assert_eq "$(jget "$RUN_OUT" runner)" "agy" "fb-low: zhipu implementer with hydrogen low retreats to agyclaude@agy"
+assert_eq "$(jget "$RUN_OUT" model)" "claude-opus-5-5-medium" "fb-low: model is claude-opus-5-5-medium"
+assert_eq "$(jget "$RUN_OUT" fallback.reason)" "endpoint_busy" "fb-low: fallback.reason stays endpoint_busy"
+assert_eq "$(jget "$RUN_OUT" fallback.demoted)" '["hydrogen"]' "fb-low: fallback.demoted records [\"hydrogen\"]"
+assert_eq "$(line_count "$FB_CODEX")" "0" "fb-low: codex is never spawned"
 
 finalize_test

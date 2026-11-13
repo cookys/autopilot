@@ -24,17 +24,26 @@
  *   - Missing/null used_pct or expected_pct, or stale !== false, is unknown
  *     (never treated as 0) via scripts/lib/pace-reading.js.
  *   - Alias pools sharing an engine key merge by largest fresh slack.
+ *   - A key whose fresh reading has a `status` matching /^WARN_.*_low$/ is "low".
+ *     In both the priority walk and the largest-slack fallback, a low key is
+ *     chosen only when no non-low eligible key qualifies (low keys go after all
+ *     others, keeping their relative order). Output gains `low_keys: [...]` (keys
+ *     seen low in this run) and, when the chosen key is low,
+ *     `demoted_last_resort: true`.
  *   - Roles with a `priority` list in pace-roles.json (`priority.<role>`)
- *     walk that list in order and choose the first key that is eligible for
- *     the role, passes the endpoint check, has a fresh reading and
+ *     walk that list in order and choose the first non-low key that is eligible
+ *     for the role, passes the endpoint check, has a fresh reading and
  *     slack >= 0 (selected_by: "priority"). A later priority entry is
- *     reached only when every earlier one is ineligible, unready, unknown
- *     or behind pace. When no priority entry qualifies — and for roles
- *     without a priority list — the largest-slack rule below decides
- *     (selected_by: "slack").
- *   - Among keys with slack >= -10, pick the largest slack (over_pace: false).
+ *     reached only when every earlier one is ineligible, unready, unknown,
+ *     behind pace, or low. When no non-low priority entry qualifies — and for
+ *     roles without a priority list — non-low keys with slack >= 0 are picked by
+ *     largest slack; only when no non-low key has slack >= 0 does the priority
+ *     walk / largest-slack fallback choose among low keys (with
+ *     demoted_last_resort: true).
+ *   - Among remaining keys with slack >= -10, pick the largest slack
+ *     (over_pace: false), preferring non-low over low keys.
  *   - If none has slack >= -10 but at least one key has a fresh reading, pick
- *     the largest slack anyway with over_pace: true.
+ *     the largest slack anyway (non-low before low) with over_pace: true.
  *   - The emitted `model` comes from pace-roles.json `role_models.<role>.<key>`
  *     when present (implementer + agy -> gemini-4-hydrogen-high; reviewer and
  *     author keep the pool's model), else the pool entry's model.
@@ -43,7 +52,7 @@
  *     anthropic), so choosing agy emits ["agy"] and never excludes agyclaude;
  *     callers pass it to a follow-up `--role reviewer --exclude <joined>`.
  *   - If no candidate key has a known fresh reading, emit
- *     { engine: null, reason: "pace_unknown", ... } and exit 3.
+ *     { engine: null, reason: "pace_unknown", low_keys: [], ... } and exit 3.
  *
  * USAGE:
  *   node scripts/pace-select.js --role <reviewer|implementer|author>
@@ -111,11 +120,53 @@ function expandHome(raw, env = process.env) {
   return raw;
 }
 
+const LOW_STATUS_RE = /^WARN_.*_low$/;
+
+function isLowStatus(status) {
+  return typeof status === 'string' && LOW_STATUS_RE.test(status.trim());
+}
+
 function defaultPacePath(env = process.env) {
   if (typeof env.AUTOPILOT_PACE_FILE === 'string' && env.AUTOPILOT_PACE_FILE.trim() !== '') {
     return path.resolve(expandHome(env.AUTOPILOT_PACE_FILE.trim(), env));
   }
   return path.join(resolveHome(env), 'projects', 'capacity', 'out', 'pace.v1.json');
+}
+
+function resolvePacePath(pacePath, env = process.env) {
+  if (typeof pacePath === 'string' && pacePath.trim() !== '') {
+    return path.resolve(expandHome(pacePath.trim(), env));
+  }
+  return defaultPacePath(env);
+}
+
+function readPaceFile(pacePath, env = process.env) {
+  const resolvedPath = resolvePacePath(pacePath, env);
+  let raw;
+  try {
+    raw = fs.readFileSync(resolvedPath, 'utf8');
+  } catch (err) {
+    return {
+      ok: false,
+      path: resolvedPath,
+      status: err && err.code === 'ENOENT' ? 'missing' : 'unreadable',
+      error: err && err.message ? err.message : 'unreadable',
+      pace: null,
+    };
+  }
+  let pace;
+  try {
+    pace = JSON.parse(raw);
+  } catch (err) {
+    return {
+      ok: false,
+      path: resolvedPath,
+      status: 'invalid_json',
+      error: err && err.message ? err.message : 'invalid JSON',
+      pace: null,
+    };
+  }
+  return { ok: true, path: resolvedPath, status: 'ok', error: null, pace };
 }
 
 function defaultQualifiedPath(env = process.env) {
@@ -387,10 +438,15 @@ function selectEngine({
     const key = entry.key;
     const reading = freshReading(row);
     if (!reading) continue;
+    const low = isLowStatus(row.status);
 
     const prev = bestByKey.get(key);
-    if (!prev || reading.slack > prev.reading.slack) {
-      bestByKey.set(key, { key, entry, reading });
+    if (
+      !prev
+      || (prev.low && !low)
+      || (prev.low === low && reading.slack > prev.reading.slack)
+    ) {
+      bestByKey.set(key, { key, entry, reading, low });
     }
   }
 
@@ -400,6 +456,7 @@ function selectEngine({
 
   const candidates = [];
   const known = [];
+  const lowKeys = [];
   for (const key of allowedKeys) {
     if (keyHadPool.has(key) && !keyHadReadyPool.has(key)) {
       candidates.push({
@@ -416,6 +473,7 @@ function selectEngine({
         slack_pts: hit.reading.slack,
       });
       known.push(hit);
+      if (hit.low) lowKeys.push(key);
     } else {
       candidates.push({
         engine: key,
@@ -428,6 +486,7 @@ function selectEngine({
     return {
       engine: null,
       reason: 'pace_unknown',
+      low_keys: [],
       role,
       qualified_source: resolvedQualifiedSource,
       pace_generated_at: paceGeneratedAt,
@@ -439,10 +498,10 @@ function selectEngine({
   const poolToPick = qualifying.length > 0 ? qualifying : known;
   const overPace = qualifying.length === 0;
 
-  // Priority walk (pace-roles.json `priority.<role>`): first key that is
-  // eligible, endpoint-ready, fresh and not behind pace wins; a priority pick
-  // always has slack >= 0 so overPace stays false. Otherwise the largest-slack
-  // rule decides, unchanged.
+  // Priority walk + low-quota demotion:
+  // 1) non-low priority key (slack >= 0) -> 2) non-low slack key (slack >= 0)
+  // 3) low priority key (slack >= 0)     -> 4) low slack key (slack >= 0)
+  // 5) remaining poolToPick (non-low before low, largest slack).
   const priorityList = (
     resolvedRoles.priority
     && typeof resolvedRoles.priority === 'object'
@@ -451,31 +510,52 @@ function selectEngine({
   )
     ? resolvedRoles.priority[role].filter((k) => typeof k === 'string' && k.trim() !== '')
     : null;
-  let priorityPick = null;
-  if (priorityList) {
+
+  const findPriorityHit = (wantLow) => {
+    if (!priorityList) return null;
     for (const key of priorityList) {
       if (!allowedSet.has(key)) continue;
       if (keyHadPool.has(key) && !keyHadReadyPool.has(key)) continue;
       const hit = bestByKey.get(key);
-      if (!hit) continue;
-      if (hit.reading.slack < 0) continue;
-      priorityPick = hit;
-      break;
+      if (!hit || hit.low !== wantLow || hit.reading.slack < 0) continue;
+      return hit;
     }
-  }
-
-  let chosen;
-  let selectedBy;
-  if (priorityPick) {
-    chosen = priorityPick;
-    selectedBy = 'priority';
-  } else {
-    selectedBy = 'slack';
-    chosen = poolToPick[0];
-    for (let i = 1; i < poolToPick.length; i += 1) {
-      if (poolToPick[i].reading.slack > chosen.reading.slack) {
-        chosen = poolToPick[i];
+    return null;
+  };
+  const pickLargestSlack = (items) => {
+    let best = items[0];
+    for (let i = 1; i < items.length; i += 1) {
+      if (items[i].reading.slack > best.reading.slack) {
+        best = items[i];
       }
+    }
+    return best;
+  };
+
+  let chosen = null;
+  let selectedBy = null;
+  const nonLowOnPace = known.filter((item) => !item.low && item.reading.slack >= 0);
+  const lowOnPace = known.filter((item) => item.low && item.reading.slack >= 0);
+
+  const priorityNonLow = findPriorityHit(false);
+  if (priorityNonLow) {
+    chosen = priorityNonLow;
+    selectedBy = 'priority';
+  } else if (nonLowOnPace.length > 0) {
+    chosen = pickLargestSlack(nonLowOnPace);
+    selectedBy = 'slack';
+  } else {
+    const priorityLow = findPriorityHit(true);
+    if (priorityLow) {
+      chosen = priorityLow;
+      selectedBy = 'priority';
+    } else if (lowOnPace.length > 0) {
+      chosen = pickLargestSlack(lowOnPace);
+      selectedBy = 'slack';
+    } else {
+      const nonLowPool = poolToPick.filter((item) => !item.low);
+      chosen = pickLargestSlack(nonLowPool.length > 0 ? nonLowPool : poolToPick);
+      selectedBy = 'slack';
     }
   }
 
@@ -505,12 +585,16 @@ function selectEngine({
     expected_pct: chosen.reading.expected_pct,
     over_pace: overPace,
     selected_by: selectedBy,
+    low_keys: lowKeys,
     reviewer_exclude: REVIEWER_FAMILY_EXCLUDE[chosen.key] || [chosen.key],
     role,
     qualified_source: resolvedQualifiedSource,
     pace_generated_at: paceGeneratedAt,
     candidates,
   };
+  if (chosen.low) {
+    out.demoted_last_resort = true;
+  }
   if (typeof chosen.entry.endpoint === 'string' && chosen.entry.endpoint.trim() !== '') {
     out.endpoint = chosen.entry.endpoint.trim();
   }
@@ -630,16 +714,10 @@ function main(argv = process.argv.slice(2), env = process.env) {
   }
 
   const checkEndpoint = (ep) => defaultCheckEndpoint(ep, env);
-  const pacePath = flags.pace !== null
-    ? path.resolve(expandHome(flags.pace, env))
-    : defaultPacePath(env);
-
-  let rawPace;
-  try {
-    rawPace = fs.readFileSync(pacePath, 'utf8');
-  } catch (err) {
-    if (err && err.code === 'ENOENT') {
-      process.stderr.write(`pace-select.js: pace file not found: ${pacePath}\n`);
+  const paceRead = readPaceFile(flags.pace, env);
+  if (!paceRead.ok) {
+    if (paceRead.status === 'missing') {
+      process.stderr.write(`pace-select.js: pace file not found: ${paceRead.path}\n`);
       const unknownResult = selectEngine({
         pace: { schema: PACE_SCHEMA, generated_at: null, rows: [] },
         pools,
@@ -653,17 +731,14 @@ function main(argv = process.argv.slice(2), env = process.env) {
       process.stdout.write(`${JSON.stringify(unknownResult, null, 2)}\n`);
       return EXIT_PACE_UNKNOWN;
     }
-    process.stderr.write(`pace-select.js: cannot read pace file (${pacePath}): ${err.message}\n`);
+    if (paceRead.status === 'invalid_json') {
+      process.stderr.write(`pace-select.js: pace file is not JSON (${paceRead.path}): ${paceRead.error}\n`);
+      return EXIT_USAGE;
+    }
+    process.stderr.write(`pace-select.js: cannot read pace file (${paceRead.path}): ${paceRead.error}\n`);
     return EXIT_USAGE;
   }
-
-  let pace;
-  try {
-    pace = JSON.parse(rawPace);
-  } catch (err) {
-    process.stderr.write(`pace-select.js: pace file is not JSON (${pacePath}): ${err.message}\n`);
-    return EXIT_USAGE;
-  }
+  const pace = paceRead.pace;
 
   let result;
   try {
@@ -697,6 +772,10 @@ module.exports = {
   mergePools,
   defaultCheckEndpoint,
   defaultPacePath,
+  resolvePacePath,
+  readPaceFile,
+  isLowStatus,
+  LOW_STATUS_RE,
   defaultQualifiedPath,
   main,
   POOLS_PATH,

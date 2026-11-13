@@ -261,4 +261,138 @@ assert_eq "$(field "$P5" last_answer)" "現在不方便" "courier decline record
 assert_not_contains "$(cat "$STUBLOG")" "send " "a decline is not sent"
 assert_contains "$HERR" "稍後再問" "the hook says the card stays open"
 
+# leaving open (answered or closed) clears reask_at and stops "re-ask due" + list priority
+node -e '
+const { reaskDue } = require(process.argv[1]);
+const past = "2020-01-01T00:00:00.000Z";
+if (!reaskDue({ status: "open", reask_at: past })) process.exit(1);
+if (!reaskDue({ reask_at: past })) process.exit(2);
+if (reaskDue({ status: "closed", reask_at: past })) process.exit(3);
+if (reaskDue({ status: "awaiting_operator_action", reask_at: past })) process.exit(4);
+if (reaskDue({ status: "pending_dispatch", reask_at: past })) process.exit(5);
+if (reaskDue(null)) process.exit(6);
+' "$OD"
+assert_eq "$?" 0 "reaskDue is true only for open entries with a past reask_at"
+
+# $DU was declined above with --reask-after 0m (past due); answering it clears reask_at and "re-ask due"
+od close --id "$DU" --answer "兩個都換"
+assert_eq "$RC" 0 "due card answered: exit 0"
+assert_eq "$(field "$DU" status)" "awaiting_operator_action" "answered due card is awaiting_operator_action"
+assert_eq "$(field "$DU" reask_at)" "<undef>" "answering drops reask_at from stored entry"
+od show --id "$DU"
+assert_not_contains "$OUT" "re-ask due" "show --id on answered card prints no re-ask due"
+assert_not_contains "$OUT" "reask_at:" "show --id on answered card prints no reask_at"
+od show
+assert_not_contains "$OUT" "re-ask due" "show prints no re-ask due after the due card is answered"
+assert_neq "$(first_id "$OUT")" "$DU" "answered card is no longer sorted ahead as re-ask due"
+od done --id "$DU"
+assert_eq "$RC" 0 "done on answered due card: exit 0"
+assert_eq "$(field "$DU" status)" "closed" "done closes answered due card"
+assert_eq "$(field "$DU" reask_at)" "<undef>" "closed entry still has no reask_at"
+
+# plain close (withdrawal) and pending_dispatch transitions on past-due declined cards
+od open --executor "$EXEC" --question "撤回到期卡？" --free-text --not-authorized irreversible
+assert_eq "$RC" 0 "withdraw-due open: exit 0"; DW="$OUT"
+od close --id "$DW" --answer "稍後" --reask-after 0m
+assert_eq "$RC" 0 "withdraw-due 0m decline: exit 0"
+od show
+assert_contains "$OUT" "re-ask due" "withdraw-due is due before close"
+assert_eq "$(first_id "$OUT")" "$DW" "withdraw-due sorts first while open"
+od close --id "$DW"
+assert_eq "$RC" 0 "withdraw-due plain close: exit 0"
+assert_eq "$(field "$DW" status)" "closed" "withdraw-due status closed"
+assert_eq "$(field "$DW" reask_at)" "<undef>" "plain close drops reask_at"
+od show --id "$DW"
+assert_not_contains "$OUT" "re-ask due" "show --id on withdrawn due card prints no re-ask due"
+od show --all
+assert_not_contains "$OUT" "re-ask due" "show --all prints no re-ask due for closed card"
+assert_neq "$(first_id "$OUT")" "$DW" "closed card does not sort first in show --all"
+
+od open --executor "$EXEC" --question "待派工到期卡？" --free-text --not-authorized irreversible
+assert_eq "$RC" 0 "park-due open: exit 0"; DPK="$OUT"
+od close --id "$DPK" --answer "稍後" --reask-after 0m
+assert_eq "$RC" 0 "park-due 0m decline: exit 0"
+od close --id "$DPK" --answer "照辦"
+assert_eq "$RC" 0 "park-due answer: exit 0"
+assert_eq "$(field "$DPK" status)" "pending_dispatch" "park-due is pending_dispatch"
+assert_eq "$(field "$DPK" reask_at)" "<undef>" "pending_dispatch transition drops reask_at"
+od show
+assert_not_contains "$OUT" "re-ask due" "pending_dispatch card is not re-ask due"
+assert_neq "$(first_id "$OUT")" "$DPK" "pending_dispatch card does not sort first"
+od close --id "$DPK" --dispatched task-due-1
+assert_eq "$RC" 0 "park-due dispatched: exit 0"
+assert_eq "$(field "$DPK" status)" "closed" "park-due closed"
+assert_eq "$(field "$DPK" reask_at)" "<undef>" "dispatched close keeps reask_at absent"
+
+# closePanelAnswer (awaiting) and closeDecisionById (closed) on past-due declined cards
+export NO_DECISION=1
+libcard "面板到期三步？" "" "登入"; DP1="$OUT"
+od close --id "$DP1" --answer "晚點" --reask-after 0m
+assert_eq "$RC" 0 "panel-await-due 0m decline: exit 0"
+hook "$(printf '[待決回覆]\n%s\n' "$(pane_line "$DP1" "面板到期三步？" "兩個都換")")"
+assert_eq "$HRC" 0 "panel-await-due hook: exit 0"
+assert_eq "$(field "$DP1" status)" "awaiting_operator_action" "panel-await-due is awaiting"
+assert_eq "$(field "$DP1" reask_at)" "<undef>" "closePanelAnswer awaiting drops reask_at"
+od show --id "$DP1"
+assert_not_contains "$OUT" "re-ask due" "panel-await-due prints no re-ask due"
+
+libcard "面板到期普通？"; DP2="$OUT"
+od close --id "$DP2" --answer "晚點" --reask-after 0m
+assert_eq "$RC" 0 "panel-close-due 0m decline: exit 0"
+hook "$(printf '[待決回覆]\n%s\n' "$(pane_line "$DP2" "面板到期普通？" "甲")")"
+assert_eq "$HRC" 0 "panel-close-due hook: exit 0"
+assert_eq "$(field "$DP2" status)" "closed" "panel-close-due is closed"
+assert_eq "$(field "$DP2" reask_at)" "<undef>" "closeDecisionById drops reask_at"
+od show --id "$DP2"
+assert_not_contains "$OUT" "re-ask due" "panel-close-due prints no re-ask due"
+
+# parkAnswer / sendParked (courier panel, awaiting and closed) on past-due declined cards
+unset NO_DECISION
+: > "$STUBLOG"
+export STUB_OPTION="兩個都換"
+AID2="BCDEFGHIJK0123456789BCDE"
+od open --executor "$EXEC" --question "派工到期三步？" --free-text --not-authorized irreversible --operator-step 登入
+assert_eq "$RC" 0 "courier-await-due open: exit 0"; DP3="$OUT"
+od close --id "$DP3" --answer "晚點" --reask-after 0m
+assert_eq "$RC" 0 "courier-await-due 0m decline: exit 0"
+hook "$(printf '[待決回覆]\n%s\n' "$(pane_line "$DP3" "派工到期三步？" "兩個都換" "$AID2")")"
+assert_eq "$HRC" 0 "courier-await-due hook: exit 0"
+assert_eq "$(field "$DP3" status)" "awaiting_operator_action" "courier-await-due is awaiting"
+assert_eq "$(field "$DP3" reask_at)" "<undef>" "sendParked awaiting drops reask_at"
+od show --id "$DP3"
+assert_not_contains "$OUT" "re-ask due" "courier-await-due prints no re-ask due"
+
+AID3="CDEFGHIJKL0123456789CDEF"
+od open --executor "$EXEC" --question "派工到期普通？" --free-text --not-authorized irreversible
+assert_eq "$RC" 0 "courier-close-due open: exit 0"; DP4="$OUT"
+od close --id "$DP4" --answer "晚點" --reask-after 0m
+assert_eq "$RC" 0 "courier-close-due 0m decline: exit 0"
+hook "$(printf '[待決回覆]\n%s\n' "$(pane_line "$DP4" "派工到期普通？" "兩個都換" "$AID3")")"
+assert_eq "$HRC" 0 "courier-close-due hook: exit 0"
+assert_eq "$(field "$DP4" status)" "closed" "courier-close-due is closed"
+assert_eq "$(field "$DP4" reask_at)" "<undef>" "sendParked closed drops reask_at"
+od show --id "$DP4"
+assert_not_contains "$OUT" "re-ask due" "courier-close-due prints no re-ask due"
+
+# pre-existing non-open records on disk that still carry a past reask_at do not print re-ask due or sort first
+node -e '
+const fs = require("fs");
+const f = process.argv[1];
+const v = JSON.parse(fs.readFileSync(f, "utf8"));
+for (const id of [process.argv[2], process.argv[3]]) {
+  const e = v.decisions.find((d) => d.id === id);
+  e.reask_at = "2020-01-01T00:00:00.000Z";
+}
+fs.writeFileSync(f, JSON.stringify(v, null, 2) + "\n");
+' "$(ls "$STORE"/*.json | head -1)" "$EO" "$W"
+od show
+assert_not_contains "$OUT" "re-ask due" "legacy reask_at on awaiting card is not shown as re-ask due"
+assert_neq "$(first_id "$OUT")" "$EO" "legacy reask_at on awaiting card does not sort first"
+od show --all
+assert_not_contains "$OUT" "re-ask due" "legacy reask_at on closed card is not shown as re-ask due"
+assert_neq "$(first_id "$OUT")" "$W" "legacy reask_at on closed card does not sort first in --all"
+od show --id "$W"
+assert_not_contains "$OUT" "re-ask due" "show --id on legacy closed card prints no re-ask due"
+assert_not_contains "$OUT" "reask_at:" "show --id on legacy closed card prints no reask_at"
+
 finalize_test

@@ -150,7 +150,8 @@ function reaskAt(ms, nowMs = Date.now()) {
   return new Date(nowMs + ms).toISOString();
 }
 function reaskDue(e, nowMs = Date.now()) {
-  const t = e && Date.parse(e.reask_at);
+  if (!e || typeof e !== 'object' || !isOpenEntry(e)) return false;
+  const t = Date.parse(e.reask_at);
   return Number.isFinite(t) && t <= nowMs;
 }
 function joinedOperatorSteps(entry) {
@@ -380,7 +381,7 @@ function showText(entries, { all = false } = {}) {
     }
     if (e.answer) out.push(`    answer: ${e.answer}`);
     if (e.last_answer) out.push(`    last_answer: ${e.last_answer}`);
-    if (e.reask_at) out.push(`    reask_at: ${e.reask_at}`);
+    if (isOpenEntry(e) && e.reask_at) out.push(`    reask_at: ${e.reask_at}`);
     if (reaskDue(e)) out.push('    re-ask due');
     if (e.answered_at) out.push(`    answered_at: ${e.answered_at}`);
     if (e.closed_at) out.push(`    closed_at: ${e.closed_at}`);
@@ -581,7 +582,7 @@ function main(argv) {
     if (isClosedEntry(hit.entry)) { process.stdout.write(`already closed: ${args.id}\n`); return 0; }
     if (!isAwaitingEntry(hit.entry)) return usage(`${args.id} is open, not awaiting_operator_action; \`done\` only ends that state (answer the card with \`close --answer\`)`);
     if (isPendingDispatchEntry(hit.entry)) return usage(`${args.id} is pending_dispatch, not awaiting_operator_action; dispatch it, then \`close --id ${args.id} --dispatched <task_id>\``);
-    const r = patchDecision(hit.file, args.id, { status: 'closed', closed_at: new Date().toISOString() }, { any: true, isOurs: isAwaitingEntry });
+    const r = patchDecision(hit.file, args.id, { status: 'closed', closed_at: new Date().toISOString(), reask_at: undefined }, { any: true, isOurs: isAwaitingEntry });
     if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
     process.stdout.write(`closed ${args.id} (operator step done)\n`);
     return 0;
@@ -633,8 +634,8 @@ function main(argv) {
     const awaiting = awaitingText !== null;
     const parked = !awaiting && answerText !== null && !!executor; // answered with an executor: the caller still has to dispatch
     const patch = awaiting
-      ? { status: 'awaiting_operator_action', answered_at: now, answer: answerText, awaiting_operator: awaitingText }
-      : (parked ? { status: 'pending_dispatch', pending_dispatch_at: now, answer: answerText } : { status: 'closed', closed_at: now, answer: answerText });
+      ? { status: 'awaiting_operator_action', answered_at: now, answer: answerText, awaiting_operator: awaitingText, reask_at: undefined }
+      : (parked ? { status: 'pending_dispatch', pending_dispatch_at: now, answer: answerText, reask_at: undefined } : { status: 'closed', closed_at: now, answer: answerText, reask_at: undefined });
     if (executor && answerText !== null) patch.executor = executor;
     if (asker && answerText !== null) patch.asker = asker;
     let r = { status: 'absent' };
@@ -754,6 +755,7 @@ function patchDecision(file, id, patch, { isOurs, any } = {}) {
       const hit = entries.find((e) => e.id === id && (any || isOpenEntry(e)));
       if (!hit || (isOurs && !isOurs(hit))) return { status: 'absent' };
       const next = { ...hit, ...(typeof patch === 'function' ? patch(hit) : patch) }; // a function patch sees the stored entry under the lock (appending to an array field)
+      if (!isOpenEntry(next)) delete next.reask_at;
       const v = JSON.parse(fs.readFileSync(file, 'utf8'));
       writeEntries({ file, scope: { repo_identity: v.repo_identity, project_key: v.project_key } }, v.root_run_id, entries.map((e) => (e === hit ? next : e)));
       return { status: 'updated', entry: next };
@@ -774,7 +776,7 @@ function recordCorrection(file, id, correction) {
 // This stays a plain close. Auto-await and decline live in the answer paths (CLI close --answer, parkAnswer/sendParked, closePanelAnswer), never here:
 // ask-decision and permission-block withdraw their own cards through this function.
 function closeDecisionById(file, id, isOurs, answer) {
-  const r = patchDecision(file, id, { status: 'closed', closed_at: new Date().toISOString(), answer: typeof answer === 'string' ? answer : null }, { isOurs });
+  const r = patchDecision(file, id, { status: 'closed', closed_at: new Date().toISOString(), answer: typeof answer === 'string' ? answer : null, reask_at: undefined }, { isOurs });
   return r.status === 'updated' ? { status: 'closed' } : r;
 }
 
@@ -828,7 +830,7 @@ function closePanelAnswer(file, id, line) {
   const awaitingText = answerText !== null ? awaitingTextFor(hit, null) : null;
   if (awaitingText) {
     const r = patchDecision(file, id, {
-      status: 'awaiting_operator_action', answered_at: new Date().toISOString(), answer: answerText, awaiting_operator: awaitingText,
+      status: 'awaiting_operator_action', answered_at: new Date().toISOString(), answer: answerText, awaiting_operator: awaitingText, reask_at: undefined,
     });
     return r.status === 'updated' ? { status: 'awaiting' } : r;
   }
@@ -981,8 +983,8 @@ function sendParked(file, id, sender = sendFleet, { deadline = Date.now() + SEND
       const everyDecline = a.length > 0 && a.every((x) => isDeclineAnswer(typeof x.answer === 'string' ? x.answer : ''));
       if (everyDecline) return { status: 'open', last_answer: answerText, reask_at: reaskAt(REASK_DEFAULT_MS), ...delivered };
       const awaitingText = awaitingTextFor(h, null);
-      if (awaitingText) return { status: 'awaiting_operator_action', answered_at: new Date().toISOString(), awaiting_operator: awaitingText, ...delivered };
-      return { status: 'closed', closed_at: new Date().toISOString(), ...delivered };
+      if (awaitingText) return { status: 'awaiting_operator_action', answered_at: new Date().toISOString(), awaiting_operator: awaitingText, reask_at: undefined, ...delivered };
+      return { status: 'closed', closed_at: new Date().toISOString(), reask_at: undefined, ...delivered };
     }, { any: true });
     if (pick.status !== 'updated') return { status: 'error', id, executor: seen.executor, error: `could not read or close the card: ${pick.message || pick.status}`, message_id: last ? last.sent_message_id : undefined };
     if (allSent) { const l = last || lastSent(answersOf(card)); return { status: last ? 'sent' : 'already', id, executor: card.executor, message_id: l.sent_message_id }; }
@@ -1032,9 +1034,9 @@ function parkAnswer(file, id, v) {
   const entry = { answer_id: v.answer_id, answer: option !== null ? option : ft, answer_option: option, answer_free_text: ft, answer_digest: courierDigest !== null ? courierDigest : answerDigest(id, v.answer_id, a.free_text, a.option), sent_message_id: null, sent_at: null };
   const p = patchDecision(file, id, (h) => {
     const cur = answersOf(h);
-    if (cur.some((x) => x.answer_id === v.answer_id)) return withAnswers(cur);
+    if (cur.some((x) => x.answer_id === v.answer_id)) return { ...withAnswers(cur), ...(isOpenEntry(h) ? {} : { reask_at: undefined }) };
     const { sent_message_id: _s, sent_at: _t, ...fields } = entry;
-    return { ...withAnswers([...cur, entry]), status: 'pending_dispatch', pending_dispatch_at: isPendingDispatchEntry(h) && h.pending_dispatch_at ? h.pending_dispatch_at : now, ...fields, dispatch_error: undefined };
+    return { ...withAnswers([...cur, entry]), status: 'pending_dispatch', pending_dispatch_at: isPendingDispatchEntry(h) && h.pending_dispatch_at ? h.pending_dispatch_at : now, ...fields, dispatch_error: undefined, reask_at: undefined };
   }, { any: true, isOurs: (h) => isOpenEntry(h) || isPendingDispatchEntry(h) });
   if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
   if (p.status === 'absent') return { status: 'not_parked', id, executor: c.executor };
@@ -1055,7 +1057,7 @@ function parkUndelivered(file, id, reason) {
   if (!c) return { status: 'absent', id };
   if (!c.executor || !(isOpenEntry(c) || isPendingDispatchEntry(c))) return { status: 'no_executor', id };
   const now = new Date().toISOString();
-  const p = patchDecision(file, id, (h) => ({ status: 'pending_dispatch', pending_dispatch_at: h.pending_dispatch_at || now, dispatch_error: reason, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now }), { any: true, isOurs: (h) => isOpenEntry(h) || isPendingDispatchEntry(h) });
+  const p = patchDecision(file, id, (h) => ({ status: 'pending_dispatch', pending_dispatch_at: h.pending_dispatch_at || now, dispatch_error: reason, dispatch_attempts: (h.dispatch_attempts || 0) + 1, last_dispatch_attempt_at: now, reask_at: undefined }), { any: true, isOurs: (h) => isOpenEntry(h) || isPendingDispatchEntry(h) });
   if (p.status === 'error') return { status: 'error', id, executor: c.executor, error: p.message };
   if (p.status === 'absent') return { status: 'no_executor', id };
   return { status: 'parked', id, executor: c.executor, error: reason, attempts: p.entry.dispatch_attempts };
@@ -1091,7 +1093,7 @@ function markDispatched(args, ex) {
   const hit = findCard(args.cwd, args.id, { all: true });
   if (!hit) return usage(`no such decision: ${args.id}; --dispatched only closes a pending_dispatch card`);
   if (!isPendingDispatchEntry(hit.entry)) return usage(`${args.id} is ${cardState(hit.entry)}, not pending_dispatch; --dispatched only closes a card whose answer is waiting to be dispatched`);
-  const r = patchDecision(hit.file, args.id, { status: 'closed', closed_at: new Date().toISOString(), dispatched_task_id: ex.dispatched }, { any: true, isOurs: isPendingDispatchEntry });
+  const r = patchDecision(hit.file, args.id, { status: 'closed', closed_at: new Date().toISOString(), dispatched_task_id: ex.dispatched, reask_at: undefined }, { any: true, isOurs: isPendingDispatchEntry });
   if (r.status === 'error') { process.stderr.write(`open-decision: ${r.message}\n`); return 4; }
   if (r.status === 'absent') return usage(`${args.id} changed state meanwhile; run show --id ${args.id}`);
   process.stdout.write(`closed ${args.id} (dispatched ${ex.dispatched})\n`);
@@ -1165,4 +1167,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, closePanelAnswer, panelAnswerText, recordDecline, isDeclineAnswer, awaitingTextFor, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, closePanelAnswer, panelAnswerText, recordDecline, isDeclineAnswer, reaskDue, awaitingTextFor, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };

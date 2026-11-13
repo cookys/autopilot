@@ -611,4 +611,68 @@ LG_PUSH_RC=$?
 assert_eq "$LG_PUSH_RC" "1" "push-tag: remote name from argv is the one whose tracking refs count"
 assert_contains "$LG_PUSH_OUT" "oldleak.txt" "push-tag: with no tracking refs for that remote the published leak is scanned"
 
+# rev-list failure is fail-closed. The same published tag passes above (green twin).
+# A PATH git that exits non-zero only for rev-list must block the push, and must not
+# fall through into a scan of the already-published leak.
+LG_WRAP="$TEST_TMP/lg-git-wrap"
+mkdir -p "$LG_WRAP"
+LG_REAL_GIT="$(command -v git)"
+cat > "$LG_WRAP/git" << EOF
+#!/bin/bash
+if [ "\${1-}" = "rev-list" ]; then
+  printf '%s\n' 'rev-list refused' >&2
+  exit 1
+fi
+exec $(printf '%q' "$LG_REAL_GIT") "\$@"
+EOF
+chmod +x "$LG_WRAP/git"
+LG_PUSH_OUT="$(cd "$LP" && printf '%s\n' "refs/tags/live-20261113-2 $TAG refs/tags/live-20261113-2 $ZERO" | PATH="$LG_WRAP:$PATH" bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "1" "push-rev-list-fail: a failed rev-list blocks the push"
+assert_contains "$LG_PUSH_OUT" "could not list commits" "push-rev-list-fail: the block says the commit list failed"
+assert_not_contains "$LG_PUSH_OUT" "oldleak.txt" "push-rev-list-fail: the published tree is not scanned when the list fails"
+
+# A brand-new history whose only commit is a root, pushed at an empty remote
+# (no remote-tracking refs). leak-guard --range is git diff/log on A..B; both accept
+# the empty tree on the left, and there is no single-commit mode.
+LR="$TEST_TMP/lgroot"
+git init -q "$LR"
+git -C "$LR" config core.hooksPath /dev/null
+git -C "$LR" config commit.gpgsign false
+mkdir -p "$LR/src" "$LR/scripts/lib" "$LR/hooks/_shared"
+cp "$REPO_ROOT/scripts/leak-guard.js" "$LR/scripts/leak-guard.js"
+cp "$REPO_ROOT/scripts/lib/personal-data-patterns.js" "$LR/scripts/lib/personal-data-patterns.js"
+cp "$REPO_ROOT/scripts/lib/leak-guard-hosts.json" "$LR/scripts/lib/leak-guard-hosts.json"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$LR/hooks/_shared/secret-patterns.js"
+printf '{"version":1,"entries":[]}\n' > "$LR/scripts/leak-guard-registry.json"
+printf 'root %s/r\n' "$PERSONAL" > "$LR/src/rootleak.txt"
+git -C "$LR" add src/rootleak.txt
+git -C "$LR" commit -q -m "root with a leak"
+ROOTLEAK="$(git -C "$LR" rev-parse HEAD)"
+assert_eq "$(git -C "$LR" rev-list --max-parents=0 HEAD)" "$ROOTLEAK" "push-root: the leak commit is a root"
+EMPTY_TREE="$(git -C "$LR" hash-object -t tree /dev/null)"
+LG_RANGE_OUT="$(cd "$LR" && node "$REPO_ROOT/scripts/leak-guard.js" --range "${EMPTY_TREE}..${ROOTLEAK}" 2>&1)"
+LG_RANGE_RC=$?
+assert_eq "$LG_RANGE_RC" "1" "push-root: leak-guard --range accepts empty-tree..root and flags the leak"
+assert_contains "$LG_RANGE_OUT" "rootleak.txt" "push-root: the range names the root leak"
+LG_PUSH_OUT="$(cd "$LR" && printf '%s\n' "refs/heads/main $ROOTLEAK refs/heads/main $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "1" "push-root: a root commit that adds a leak, pushed to an empty remote, is blocked"
+assert_contains "$LG_PUSH_OUT" "rootleak.txt" "push-root: the leak in the root commit is named"
+
+# Green twin: a different root with no leak, still an empty remote, passes.
+git -C "$LR" checkout -q --orphan cleanroot
+git -C "$LR" rm -rfq .
+mkdir -p "$LR/src"
+echo clean > "$LR/src/clean.txt"
+git -C "$LR" add src/clean.txt
+git -C "$LR" commit -q -m "clean root"
+ROOTCLEAN="$(git -C "$LR" rev-parse HEAD)"
+assert_eq "$(git -C "$LR" rev-parse --verify --quiet "${ROOTCLEAN}^" 2>/dev/null || true)" "" "push-root twin: the clean commit has no parent"
+LG_PUSH_OUT="$(cd "$LR" && printf '%s\n' "refs/heads/main $ROOTCLEAN refs/heads/main $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LG_PUSH_RC=$?
+assert_eq "$LG_PUSH_RC" "0" "push-root twin: a clean root commit pushed to an empty remote passes"
+assert_not_contains "$LG_PUSH_OUT" "blocked" "push-root twin: a clean root is not blocked"
+assert_not_contains "$LG_PUSH_OUT" "rootleak.txt" "push-root twin: the other root's leak is not scanned"
+
 finalize_test

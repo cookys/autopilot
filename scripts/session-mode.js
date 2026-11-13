@@ -22,11 +22,16 @@
  *   without --level creates a plain marker or merges into the live one (level preserved), under the marker lock;
  *   --size only moves up; base_ref defaults to `git merge-base HEAD develop|main|master` (null + stderr note when
  *   underivable). stage/stage_set_at/unit/review_families/high_risk are written by scripts/stage-advance.js.
- *   `set --new-task [--size ...] [--urgent] [--bug] [--base-ref <sha>] [--level <the live level>]` starts a SECOND task
- *   in the same live session: it clears stage, stage_set_at, unit, review_families, high_risk and the task-scoped
+ *   fleet_task_id (D8a): `set --fleet-task <id>` stores it on the same lock + atomic rename, alone or with --size /
+ *   --new-task. The id is non-empty, has no whitespace, and is at most 64 characters (exit 2, marker untouched,
+ *   otherwise). A later merge `set` without the flag keeps it; a different id replaces it. `status` JSON includes it.
+ *   coarse_stage is written only by `stage-advance.js --coarse` and is cleared by --new-task with the other position
+ *   fields. A bare plain `set` or `set --level` rebuilds the marker (same as size): the id is kept only when passed.
+ *   `set --new-task [--size ...] [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] [--level <the live level>]` starts a SECOND task
+ *   in the same live session: it clears stage, stage_set_at, unit, review_families, high_risk, coarse_stage and the task-scoped
  *   size/urgent/bug/base_ref (re-sent or re-derived, so a new task never inherits the previous task's flags or diff
  *   base), keeps level, entry_level, fallback_reason, mission_*, root_run_id, repo_root, started_at, expires_at,
- *   campaign_roots and every other session-scoped field, and records task_seq (1 for a session's first task, +1 per
+ *   campaign_roots, fleet_task_id (unless --fleet-task replaces it) and every other session-scoped field, and records task_seq (1 for a session's first task, +1 per
  *   --new-task) and task_started_at. Size may go down (the upward-only rule is per task). Choice: allowed from ANY
  *   stage; when the previous task is not at `finish` a one-line stderr warning says so (a refusal would strand a
  *   session whose task was abandoned or finished off-graph; the warning keeps the abandonment visible). --level, when
@@ -52,7 +57,7 @@
  * Usage:
  *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6]
  *     [--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N]
- *   node scripts/session-mode.js set [--level none] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>]
+ *   node scripts/session-mode.js set [--level none] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] [--fleet-task <id>]
  *     (no --level, or --level none: write a PLAIN-session marker, level null, replacing this session's plain or
  *     expired marker — exit 2 when an unexpired l3-l6 marker exists (use `clear`); no Mission routing, no entry_level. `status` prints it as level "none" with active:false.)
  *   node scripts/session-mode.js bind-campaign-root --root <id> (--repo-identity <git-common-dir:...> | --repo-root <dir>)
@@ -846,7 +851,22 @@ function cmdSetPlain(args) {
 
 // ---- stage-graph P2a: size / urgent / bug / base_ref init fields (plan §2.9) --------------------------------
 const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
-const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task'];
+const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task', 'fleet-task'];
+const FLEET_TASK_ID_MAX = 64;
+
+// non-empty, no whitespace, at most 64 characters. null when the value is legal.
+function fleetTaskIdError(raw) {
+  const text = typeof raw === 'string' ? raw : '';
+  if (typeof raw !== 'string' || text.length === 0 || /\s/u.test(text) || [...text].length > FLEET_TASK_ID_MAX) {
+    const shown = raw === undefined ? '' : raw;
+    return `invalid --fleet-task ${JSON.stringify(shown)} (want a non-empty id with no whitespace, at most ${FLEET_TASK_ID_MAX} characters)`;
+  }
+  return null;
+}
+
+function assignFleetTaskId(marker, args) {
+  if (Object.prototype.hasOwnProperty.call(args, 'fleet-task')) marker.fleet_task_id = args['fleet-task'];
+}
 const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
 // Default-branch pairs, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main), then
 // master. Each local branch is paired with its origin/* spelling so a stale local branch never wins over a newer
@@ -919,7 +939,7 @@ function newTaskAdvisory(repoRoot) {
 }
 
 // Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
-const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'size', 'urgent', 'bug', 'base_ref']);
+const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'coarse_stage', 'size', 'urgent', 'bug', 'base_ref']);
 
 function hasInitFlags(args) {
   return INIT_FLAGS.some((k) => Object.prototype.hasOwnProperty.call(args, k));
@@ -1003,6 +1023,7 @@ function cmdSetInit(args) {
         for (const k of NEW_TASK_CLEARED) delete next[k];
         followRepoRoot(next, repoRoot);
         applyInitFields(next, init, next.repo_root || repoRoot, null);
+        assignFleetTaskId(next, args);
         next.task_seq = seqPrev + 1;
         next.task_started_at = new Date().toISOString();
         writeMarkerFile(file, next);
@@ -1017,6 +1038,7 @@ function cmdSetInit(args) {
         const next = { ...current };
         followRepoRoot(next, repoRoot);
         applyInitFields(next, init, next.repo_root || repoRoot, current);
+        assignFleetTaskId(next, args);
         writeMarkerFile(file, next);
         result = { marker: next, created: false };
         return;
@@ -1034,6 +1056,7 @@ function cmdSetInit(args) {
         sessionId: target.id, repoRoot, scope, now, ttlHours,
         rootRunId: resolveJobRoot({ explicit: explicitRoot, now }),
       }), init, repoRoot, null);
+      assignFleetTaskId(marker, args);
       if (newTask) { marker.task_seq = 1; marker.task_started_at = new Date(now).toISOString(); }
       writeMarkerFile(file, marker);
       result = { marker, created: true };
@@ -1061,6 +1084,10 @@ function cmdSet(args) {
   if (Object.prototype.hasOwnProperty.call(args, 'phase')) {
     process.stderr.write(`session-mode: ${PHASE_REMOVED_MESSAGE}\n`);
     return 2;
+  }
+  if (Object.prototype.hasOwnProperty.call(args, 'fleet-task')) {
+    const fleetErr = fleetTaskIdError(args['fleet-task']);
+    if (fleetErr) { process.stderr.write(`session-mode: ${fleetErr}\n`); return 2; }
   }
   // Stage-graph P2a: size/urgent/bug/base-ref without an orchestrator level is the create-or-merge init
   // (an existing marker keeps its level).
@@ -1173,6 +1200,7 @@ function cmdSet(args) {
     }
   }
   if (hasInitFlags(args)) applyInitFields(marker, initParsed.init, repoRoot, null);
+  assignFleetTaskId(marker, args);
   fs.mkdirSync(markerDir(), { recursive: true });
   const tmp = `${target.file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
@@ -1489,8 +1517,8 @@ function main() {
         'Usage: session-mode.js set [--level none] [--root-run-id <id>] (plain session) | ' +
         'set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
-        'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] (create-or-merge; size only moves up) | ' +
-        'set --new-task [--size XS|S|M|L|XL] [--urgent] [--bug] [--base-ref <sha>] (restart the stage walk for a second task) | ' +
+        'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] (create-or-merge; size only moves up) | ' +
+        'set --new-task [--size XS|S|M|L|XL] [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] (restart the stage walk for a second task) | ' +
         'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | ensure-child (SessionStart payload on stdin) | write-target [--rail] | status | root\n',
       );
       return 2;

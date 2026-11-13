@@ -5,12 +5,23 @@
 //
 //   stage-advance.js --to <node> [--unit kind:i/N:label] [--review-families a,b]
 //                    [--session-id <id>] [--repo-root <dir>]
+//   stage-advance.js --coarse <explore|plan|build|review|merged|shipped|used>
+//                    [--session-id <id>] [--repo-root <dir>]
 //   stage-advance.js --resume-from <old-session-id> [--session-id <id>]
 //
 // Writes `stage`, `stage_set_at`, `unit`, `review_families`, `high_risk` into the session marker found the
 // same way session-mode.js finds it (AUTOPILOT_SESSION_MODE_DIR + the session id), under the marker lock with
 // an atomic rename. Legality comes from scripts/stage-graph.js (CLI); this script owns no graph rules.
 // The marker is telemetry (ADR-0001): gates re-derive, never trust a stage claim.
+//
+// Fleet (D8a): after a `--to` write succeeds, a marker with `fleet_task_id` gets one progress line
+// `[stage:<coarse>/<node>]` plus ` <unit>` when the marker has a unit (`scripts/lib/fleet-task.js`,
+// `$FLEET_BIN task update`). Coarse map: plan -> plan; implement, verify -> build; code-review, qc-gate -> review;
+// finish -> merged; intent, diagnose, research, proposal -> explore; plan-review -> plan. No fleet_task_id: no call
+// and no extra output. A fleet failure is one stderr line; the exit code stays the marker write's code.
+// `--coarse <stage>` is mutually exclusive with --to / --unit / --review-families / --resume-from. It writes only
+// `coarse_stage` (no graph check). The progress line is `[stage:<stage>]`. Without fleet_task_id the marker is
+// still written and one stderr line says so. An unknown stage exits 2 and writes nothing.
 //
 // Rules, in order:
 //   - first write (no `stage` yet) must target an entry node for (size, bug). L/XL non-bug
@@ -47,7 +58,8 @@
 //
 // Resume (`--resume-from <old-id>`, takes no --to): a session that came back with a NEW id (compaction, `claude
 // --resume`) has an empty marker (`session-mode.js set --size ..` first) and would have to re-walk from the entry
-// node. This copies size / bug / urgent / stage / unit / base_ref / high_risk / review_families from the OLD id's
+// node. This copies size / bug / urgent / stage / unit / base_ref / high_risk / review_families / fleet_task_id /
+// coarse_stage from the OLD id's
 // marker instead, so the position is re-read from a record, never taken from the caller's word (ADR-0001). Fail closed
 // (exit 6, nothing written, no downgrade to a bare `--to`): the new marker already has a stage; the old marker is
 // absent / expired / unreadable / has no stage or size; the old id is the current id; the two markers do not share a
@@ -59,10 +71,12 @@
 // Test injection: AUTOPILOT_STAGE_ADVANCE_CLASSIFY / AUTOPILOT_STAGE_ADVANCE_RESOLVE replace the two sampling
 // scripts (executable paths receiving the same arguments).
 //
-// Exit codes: 0 written; 1 usage / unreadable marker write; 2 no marker; 3 illegal transition or unit-rule
+// Exit codes: 0 written; 1 usage / unreadable marker write; 2 no marker, or an invalid --coarse (stderr lists the
+// legal stages); 3 illegal transition or unit-rule
 // violation (stdout {allowed:false, from, to, legal_next, reason}); 6 `--resume-from` refused; 4 bump required (stdout {bump_to, files,
-// lines}); 5 either `size` missing from the marker (stderr only, no stdout JSON) or leaving `explore` without
-// a synthesis (stdout {allowed:false, code:"UNSYNTHESIZED", from, to, conventional, reason}; nothing written).
+// lines}); 5 `size` missing from the marker (stderr only, no stdout JSON), or leaving `explore` without
+// a synthesis (stdout {allowed:false, code:"UNSYNTHESIZED", from, to, conventional, reason}; nothing written),
+// or leaving `plan` with declared `## Inputs` not yet landed on target.
 // One JSON object on stdout when there is one, diagnostics on stderr.
 // Node >= 20.10, built-ins only.
 
@@ -72,6 +86,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { withWriteLock } = require('./lib/jsonl-store');
 const sessionMode = require('./session-mode');
+const fleetTask = require('./lib/fleet-task');
 const { scopeFromCwd } = require('../src/status/project-key');
 const { pathFor } = require('./lib/repo-layout');
 
@@ -79,11 +94,29 @@ const SYNTHESIS_NAME = 'explore-synthesis.md';
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const STAGE_GRAPH = path.join(__dirname, 'stage-graph.js');
+const CHECK_INPUTS_LANDED = path.join(__dirname, 'check-inputs-landed.js');
 const GRAPH_JSON = path.join(REPO_ROOT, 'references', 'stage-graph.json');
 const LABEL_MAX = 64;
 const UNIT_RE = /^(phase|deliverable):(\d+)\/(\d+)(?::(.*))?$/su;
 const FAMILY_RE = /^[A-Za-z0-9._-]+$/u;
-const VALUED = new Set(['--to', '--resume-from', '--unit', '--review-families', '--session-id', '--repo-root', '--synthesis']);
+const VALUED = new Set(['--to', '--resume-from', '--unit', '--review-families', '--session-id', '--repo-root', '--synthesis', '--coarse']);
+const COARSE_STAGES = Object.freeze(['explore', 'plan', 'build', 'review', 'merged', 'shipped', 'used']);
+// Stated default: plan; implement+verify -> build; code-review+qc-gate -> review; finish -> merged.
+// Added default so every graph node has a coarse name: pre-plan nodes -> explore; plan-review stays plan.
+const COARSE_OF_NODE = Object.freeze({
+  explore: 'explore',
+  intent: 'explore',
+  diagnose: 'explore',
+  research: 'explore',
+  proposal: 'explore',
+  plan: 'plan',
+  'plan-review': 'plan',
+  implement: 'build',
+  verify: 'build',
+  'code-review': 'review',
+  'qc-gate': 'review',
+  finish: 'merged',
+});
 
 class Usage extends Error {}
 
@@ -95,12 +128,60 @@ function parseArgs(argv) {
     if (argv[i + 1] === undefined) throw new Usage(`${a} needs a value`);
     o[a.slice(2)] = argv[++i];
   }
+  if (o.coarse !== undefined && (o.to || o.unit || o['review-families'] || o.synthesis || o['resume-from'] !== undefined)) {
+    throw new Usage('--coarse is mutually exclusive with --to, --unit, --review-families, --synthesis and --resume-from');
+  }
   if (o['resume-from'] !== undefined) {
     if (o.to) throw new Usage('--resume-from takes no --to (the stage comes from the old marker)');
     if (o.unit || o['review-families']) throw new Usage('--resume-from takes no --unit / --review-families');
     if (o.synthesis) throw new Usage('--resume-from takes no --synthesis');
-  } else if (!o.to) throw new Usage('--to <node> is required');
+  } else if (!o.to && o.coarse === undefined) throw new Usage('--to <node> is required');
   return o;
+}
+
+function formatUnit(unit) {
+  if (!unit || typeof unit !== 'object' || typeof unit.kind !== 'string') return '';
+  const base = `${unit.kind}:${unit.index}/${unit.total}`;
+  return unit.label ? `${base}:${unit.label}` : base;
+}
+
+function stageProgressText(marker) {
+  const node = marker && marker.stage;
+  const coarse = COARSE_OF_NODE[node];
+  if (typeof node !== 'string' || !coarse) return null;
+  const unit = formatUnit(marker.unit);
+  return unit ? `[stage:${coarse}/${node}] ${unit}` : `[stage:${coarse}/${node}]`;
+}
+
+// One stderr line. The marker write already happened; the exit code is not this call's.
+function reportFleet(taskId, text) {
+  let result;
+  try {
+    result = fleetTask.progress(taskId, text);
+  } catch (error) {
+    result = { ok: false, status: null, error: error.message };
+  }
+  if (result.ok) return;
+  const why = result.status === null || result.status === undefined
+    ? (result.error || 'spawn failed')
+    : `exit ${result.status}`;
+  process.stderr.write(`stage-advance: fleet progress failed (${why}); marker write kept\n`);
+}
+
+function afterWrite(result, marker, text, coarse) {
+  if (!result || result.code !== 0 || !marker) return result;
+  const id = typeof marker.fleet_task_id === 'string' ? marker.fleet_task_id : '';
+  if (!id) {
+    if (coarse) {
+      process.stderr.write(
+        `stage-advance: recorded coarse_stage ${marker.coarse_stage}; no fleet_task_id, so no fleet progress line\n`,
+      );
+    }
+    return result;
+  }
+  if (text) reportFleet(id, text);
+  else process.stderr.write(`stage-advance: no coarse stage for node ${marker.stage}; no fleet progress line\n`);
+  return result;
 }
 
 function parseUnit(raw) {
@@ -295,8 +376,212 @@ function sessionRepoRoot(marker) {
   return identity === marker.repo_identity ? dir : null;
 }
 
-// Pure decision over one marker snapshot. -> { code, out } | { write: patch, out }
-function decide(marker, opts, repoRootArg) {
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// D8b Open Q2 default: "## Inputs" section containing a fenced JSON block `{"inputs":[{"id","sha"}]}`.
+// Empty `{"inputs":[]}` or absent section/fence => null (no declared inputs, no check).
+function extractPlanInputsJson(markdown) {
+  if (typeof markdown !== 'string' || !markdown) return null;
+  const norm = markdown.replace(/\r\n/g, '\n');
+  const heading = /^##[ \t]+Inputs[ \t]*$/im.exec(norm);
+  if (!heading) return null;
+  const rest = norm.slice(heading.index + heading[0].length).replace(/^\n/, '');
+  const nextHeading = /^#{1,2}[ \t]+\S/m.exec(rest);
+  const section = nextHeading ? rest.slice(0, nextHeading.index) : rest;
+  const fence = /```(?:json|jsonc)?[ \t]*\n([\s\S]*?)```/i.exec(section);
+  if (!fence) return null;
+  const raw = fence[1].trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.inputs) && parsed.inputs.length === 0) {
+      return null;
+    }
+  } catch (_e) {
+    // Malformed JSON is handed to check-inputs-landed.js so it fails closed rather than skipping.
+  }
+  return raw;
+}
+
+function readTaskCardPlan(repoRoot, sid) {
+  if (!sid) return null;
+  const cardDir = process.env.AUTOPILOT_TASK_CARD_DIR || path.join(os.homedir(), '.autopilot', 'task-card');
+  const safeId = String(sid).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+  if (!safeId) return null;
+  try {
+    const card = JSON.parse(fs.readFileSync(path.join(cardDir, `${safeId}.json`), 'utf8'));
+    if (!card || card.schema !== 'autopilot.task-card/1' || typeof card.plan !== 'string' || !card.plan.trim()) return null;
+    const p = path.isAbsolute(card.plan) ? card.plan : path.join(repoRoot, card.plan);
+    return fs.existsSync(p) && fs.statSync(p).isFile() ? fs.readFileSync(p, 'utf8') : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function candidatePlanDirs(repoRoot) {
+  const dirs = [];
+  for (const cfgName of ['project-lifecycle-config.md', 'next-config.md', 'dev-flow-config.md']) {
+    try {
+      const txt = fs.readFileSync(path.join(repoRoot, '.claude', cfgName), 'utf8');
+      const m = /(?:Plans directory|Where plans live)\s*:\s*`?([^`\r\n]+?)`?\s*$/im.exec(txt);
+      if (m && m[1] && !path.isAbsolute(m[1])) dirs.push(m[1].replace(/\/+$/, ''));
+    } catch (_e) { /* optional */ }
+  }
+  for (const d of ['project/plans', 'docs/plans']) {
+    if (!dirs.includes(d)) dirs.push(d);
+  }
+  return dirs;
+}
+
+function findPlanFromIndex(repoRoot, branch) {
+  if (!branch) return null;
+  const bRe = new RegExp(`(?:^|\\||\\s)\`?${escapeRegExp(branch)}\`?(?:\\s|\\||$)`);
+  for (const idxRel of ['project/projects/INDEX.md', 'docs/projects/INDEX.md']) {
+    let txt;
+    try { txt = fs.readFileSync(path.join(repoRoot, idxRel), 'utf8'); } catch (_e) { continue; }
+    for (const line of txt.split('\n')) {
+      if (!line.includes('|') || !bRe.test(line)) continue;
+      const link = /\(([^)\s]+\.md)\)/.exec(line);
+      if (!link) continue;
+      const resolved = path.resolve(path.dirname(path.join(repoRoot, idxRel)), link[1]);
+      try {
+        if (fs.statSync(resolved).isFile()) return fs.readFileSync(resolved, 'utf8');
+      } catch (_e) { /* try next */ }
+    }
+  }
+  return null;
+}
+
+function findBranchPlanMarkdown(repoRoot, branch) {
+  const fromIdx = findPlanFromIndex(repoRoot, branch);
+  if (fromIdx !== null) return fromIdx;
+
+  const IGNORED = new Set(['README.md', 'TEMPLATE.md', 'INDEX.md']);
+  const entries = [];
+  for (const relDir of candidatePlanDirs(repoRoot)) {
+    const absDir = path.join(repoRoot, relDir);
+    let names;
+    try { names = fs.readdirSync(absDir); } catch (_e) { continue; }
+    for (const name of names.sort()) {
+      if (!name.endsWith('.md') || IGNORED.has(name)) continue;
+      const full = path.join(absDir, name);
+      try {
+        if (fs.statSync(full).isFile()) entries.push({ name, full });
+      } catch (_e) { /* ignore */ }
+    }
+  }
+  if (entries.length === 0) return null;
+
+  if (branch) {
+    const branchMetaRe = new RegExp(`\\bBranch\\*\\*?\\s*:\\s*\`?${escapeRegExp(branch)}(?:\`|[\\s,;|)]|$)`, 'i');
+    for (const e of entries) {
+      try {
+        const text = fs.readFileSync(e.full, 'utf8');
+        const head = text.split('\n', 40).join('\n');
+        if (branchMetaRe.test(head)) return text;
+      } catch (_e) { /* ignore */ }
+    }
+    const slug = branch.includes('/') ? branch.slice(branch.indexOf('/') + 1) : branch;
+    const flat = branch.replace(/\//g, '-');
+    const namePatterns = [slug, flat].filter(Boolean).map((s) => new RegExp(`^(?:\\d{4}-\\d{2}-\\d{2}-)?${escapeRegExp(s)}\\.md$`, 'i'));
+    for (const e of entries) {
+      if (namePatterns.some((re) => re.test(e.name))) {
+        try { return fs.readFileSync(e.full, 'utf8'); } catch (_e) { /* ignore */ }
+      }
+    }
+  }
+
+  if (entries.length === 1) {
+    try { return fs.readFileSync(entries[0].full, 'utf8'); } catch (_e) { return null; }
+  }
+  return null;
+}
+
+function findSessionPlanMarkdown(repoRoot, sid) {
+  const cardPlan = readTaskCardPlan(repoRoot, sid);
+  if (cardPlan !== null) return cardPlan;
+  const headOut = gitOut(repoRoot, ['symbolic-ref', '--quiet', '--short', 'HEAD']);
+  const branch = headOut === null ? '' : headOut.toString('utf8').trim();
+  return findBranchPlanMarkdown(repoRoot, branch);
+}
+
+function readConfiguredInputsTarget(repoRoot) {
+  const files = [];
+  if (process.env.DEV_FLOW_CONFIG_OVERRIDE) files.push(process.env.DEV_FLOW_CONFIG_OVERRIDE);
+  if (repoRoot) {
+    files.push(path.join(repoRoot, '.claude', 'dev-flow-config.md'));
+    files.push(path.join(repoRoot, '.claude', 'qc-gate-config.md'));
+  }
+  for (const f of files) {
+    let txt;
+    try { txt = fs.readFileSync(f, 'utf8'); } catch (_e) { continue; }
+    for (const line of txt.split('\n')) {
+      const m = /^\s*-\s*inputs_target\s*:\s*(.*?)\s*$/.exec(line);
+      if (!m) continue;
+      const val = m[1].replace(/^`+|`+$/g, '').replace(/^['"]+|['"]+$/g, '').trim();
+      if (val) return val;
+    }
+  }
+  return '';
+}
+
+function resolveInputsTarget(repoRoot, marker) {
+  const configured = readConfiguredInputsTarget(repoRoot);
+  if (configured) return configured;
+  if (marker && typeof marker.base_branch === 'string' && marker.base_branch.trim()) {
+    return marker.base_branch.trim();
+  }
+  const pairs = [['develop', 'origin/develop'], ['main', 'origin/main'], ['master', 'origin/master']];
+  for (const [local, remote] of pairs) {
+    if (gitOut(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/remotes/${remote}^{commit}`]) !== null) {
+      return remote;
+    }
+    if (gitOut(repoRoot, ['rev-parse', '--verify', '--quiet', `refs/heads/${local}^{commit}`]) !== null) {
+      return local;
+    }
+  }
+  if (marker && typeof marker.base_ref === 'string' && marker.base_ref.trim()) {
+    return marker.base_ref.trim();
+  }
+  return 'origin/develop';
+}
+
+function checkPlanInputsLanded(repoRoot, marker, sid) {
+  const rawInputs = extractPlanInputsJson(findSessionPlanMarkdown(repoRoot, sid));
+  if (rawInputs === null) return null;
+  const target = resolveInputsTarget(repoRoot, marker);
+  const inputsFile = path.join(os.tmpdir(), `stage-advance-diff-inputs-${process.pid}-${Date.now()}.json`);
+  fs.writeFileSync(inputsFile, `${rawInputs}\n`);
+  let r;
+  try {
+    r = spawnSync(process.execPath, [CHECK_INPUTS_LANDED, '--inputs', inputsFile, '--target', target, '--repo', repoRoot], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+  } finally {
+    try { fs.unlinkSync(inputsFile); } catch (_e) { /* best effort */ }
+  }
+  if (r.status === 0) return null;
+  const stderrText = String(r.stderr || '').trim();
+  const failingIds = [];
+  for (const line of stderrText.split('\n')) {
+    const m = /^NOT-LANDED id=(\S+)/.exec(line.trim());
+    if (m) failingIds.push(m[1]);
+  }
+  const detail = failingIds.length > 0
+    ? `inputs not landed on ${target}: ${failingIds.join(', ')}`
+    : `inputs check failed against ${target}${stderrText ? `: ${stderrText}` : ''}`;
+  return {
+    code: 5,
+    err: `stage-advance: ${detail}${failingIds.length > 0 && stderrText ? `\n${stderrText}` : ''}`,
+    out: { allowed: false, from: 'plan', target, failing_inputs: failingIds, reason: detail },
+  };
+}
+
+// Pure decision over one marker snapshot. -> { code, err?, out } | { patch, out }
+function decide(marker, opts, repoRootArg, sid) {
   const to = opts.to;
   const ids = JSON.parse(fs.readFileSync(GRAPH_JSON, 'utf8')).node_ids;
   if (!ids.includes(to)) throw new Usage(`unknown node "${to}" (want one of ${ids.join('|')})`);
@@ -333,6 +618,12 @@ function decide(marker, opts, repoRootArg) {
   if (uv) {
     const legal = from === null ? entries : legalFrom(from);
     return deny(legal, uv);
+  }
+
+  // D8b Open Q1 default: leaving `plan` runs check-inputs-landed when the session's plan declares `## Inputs`.
+  if (from === 'plan' && to !== 'plan') {
+    const il = checkPlanInputsLanded(repoRoot, marker, sid);
+    if (il) return { code: il.code, err: il.err, out: { ...il.out, from, to } };
   }
 
   // E1 bump: entering verify or qc-gate.
@@ -384,7 +675,7 @@ function fingerprint(m) {
 }
 
 const RESUME_HINT = 'fall back to the re-walk in skills/dev-flow/references/context-continuation.md (session-mode.js set, then stage-advance --to from the entry node)';
-const RESUME_COPY = ['size', 'bug', 'urgent', 'stage', 'unit', 'base_ref', 'high_risk', 'review_families'];
+const RESUME_COPY = ['size', 'bug', 'urgent', 'stage', 'unit', 'base_ref', 'high_risk', 'review_families', 'fleet_task_id', 'coarse_stage'];
 
 // -> { code, err } | { patch }. Pure over the two marker snapshots.
 function decideResume(marker, old, oldId, currentId = sessionMode.getSessionId()) {
@@ -430,6 +721,27 @@ function runResume(opts, file, sid) {
   return result;
 }
 
+function runCoarse(opts, file, sid) {
+  const stage = opts.coarse;
+  const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
+    ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : sessionMode.PHASE_LOCK_TIMEOUT_MS;
+  let result = null;
+  let written = null;
+  try {
+    withWriteLock({ storeDir: sessionMode.markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
+      const current = sessionMode.readSessionRecord(sid);
+      if (!current) { result = { code: 2, err: 'stage-advance: no unexpired session marker for this session (run `session-mode.js set --size <S>` first)', out: null }; return; }
+      const next = { ...current, coarse_stage: stage };
+      sessionMode.writeMarkerFile(file, next);
+      written = next;
+      result = { code: 0, out: { allowed: true, coarse_stage: stage, marker_path: file } };
+    });
+  } catch (e) {
+    return { code: 1, err: `stage-advance: marker not written: ${e.message}`, out: null };
+  }
+  return afterWrite(result, written, `[stage:${stage}]`, true);
+}
+
 function run(argv) {
   let opts;
   try {
@@ -440,6 +752,9 @@ function run(argv) {
     if (e instanceof Usage) return { code: 1, err: `stage-advance: ${e.message}`, out: null };
     throw e;
   }
+  if (opts.coarse !== undefined && !COARSE_STAGES.includes(opts.coarse)) {
+    return { code: 2, err: `stage-advance: invalid --coarse "${opts.coarse}" (want ${COARSE_STAGES.join('|')})`, out: null };
+  }
   if (opts['session-id']) process.env.AUTOPILOT_SESSION_ID = opts['session-id'];
   const repoRootArg = opts['repo-root'] ? path.resolve(opts['repo-root']) : null;
   // dispatch-tree 3b: the marker this process writes comes from the one resolver (--session-id is the explicit id).
@@ -447,6 +762,7 @@ function run(argv) {
   if (target.refused) return { code: 3, err: `stage-advance: marker write refused (source ${target.source}): ${target.reason}; no file touched`, out: null };
   const sid = target.id;
   const file = path.join(sessionMode.markerDir(), `${sid}.json`);
+  if (opts.coarse !== undefined) return runCoarse(opts, file, sid);
   if (opts['resume-from'] !== undefined) return runResume(opts, file, sid);
 
   const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
@@ -456,12 +772,13 @@ function run(argv) {
     if (!marker) return { code: 2, err: 'stage-advance: no unexpired session marker for this session (run `session-mode.js set --size <S>` first)', out: null };
     if (!sessionMode.SIZES.includes(marker.size)) return { code: 5, err: 'stage-advance: the marker has no size (run `session-mode.js set --size <S>`)', out: null };
     let d;
-    try { d = decide(marker, opts, repoRootArg); } catch (e) {
+    try { d = decide(marker, opts, repoRootArg, sid); } catch (e) {
       if (e instanceof Usage) return { code: 1, err: `stage-advance: ${e.message}`, out: null };
       return { code: 1, err: `stage-advance: ${e.message}`, out: null };
     }
-    if (!d.patch) return { code: d.code, out: d.out };
+    if (!d.patch) return { code: d.code, err: d.err, out: d.out };
     let result = null;
+    let written = null;
     try {
       withWriteLock({ storeDir: sessionMode.markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
         const current = sessionMode.readSessionRecord(sid);
@@ -469,12 +786,13 @@ function run(argv) {
         if (fingerprint(current) !== fingerprint(marker)) { result = { retry: true }; return; }
         const next = { ...current, ...d.patch };
         sessionMode.writeMarkerFile(file, next);
+        written = next;
         result = { code: 0, out: { ...d.out, marker_path: file, stage: next.stage, stage_set_at: next.stage_set_at, unit: next.unit, review_families: next.review_families, high_risk: next.high_risk } };
       });
     } catch (e) {
       return { code: 1, err: `stage-advance: marker not written: ${e.message}`, out: null };
     }
-    if (result && !result.retry) return result;
+    if (result && !result.retry) return afterWrite(result, written, written ? stageProgressText(written) : null, false);
   }
   return { code: 1, err: 'stage-advance: marker kept changing; nothing written', out: null };
 }
@@ -487,4 +805,11 @@ function main() {
 }
 
 if (require.main === module) process.exit(main());
-module.exports = { run, parseUnit, unitViolation };
+module.exports = {
+  run,
+  parseUnit,
+  unitViolation,
+  extractPlanInputsJson,
+  findSessionPlanMarkdown,
+  resolveInputsTarget,
+};

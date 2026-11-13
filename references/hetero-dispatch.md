@@ -80,6 +80,16 @@ scripts/dispatch-hetero.sh --pace-role implementer --branch feat/x --prompt-file
 - **Linear-pace slack (`slack = expected_pct - used_pct`)**: positive slack means the pool is behind linear
   pace (spare capacity before reset); negative slack means it is ahead of pace. Alias pools sharing one engine
   key merge by their largest fresh slack.
+- **Role priority walk** (`implementer`): `priority.implementer` in
+  [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) (`agy` → `glm` → `agyclaude`) is walked
+  in order; the first key that is role-eligible, endpoint-ready, fresh and `slack >= 0` wins with
+  `selected_by: "priority"` — a later entry is reached only when every earlier one is ineligible,
+  unready, unknown or behind pace. Via `role_models`, the implementer `agy` key emits
+  `gemini-4-hydrogen-high` (same agy pool and quota as carbon); reviewer and author keep carbon.
+  When no priority entry qualifies — and for roles without a priority list — the `-10` rule decides with
+  `selected_by: "slack"`. The selector output also carries `reviewer_exclude` (the chosen key's family
+  keys; `agy` and `agyclaude` are different families, google vs anthropic, so one never excludes the
+  other) — pass it to a follow-up `pace-select.js --role reviewer --exclude <joined>`.
 - **The `-10` rule**: among candidates with `slack >= -10`, the selector picks the largest slack with
   `over_pace: false`. Only when every known candidate has `slack < -10` does it fall back to the largest
   (least negative) slack, setting `over_pace: true`.

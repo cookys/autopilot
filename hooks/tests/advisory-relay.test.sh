@@ -550,7 +550,11 @@ if node -e '
   const src = fs.readFileSync(process.argv[1], "utf8");
   const show = src.split("if (cmd === '\''show'\'' || cmd === '\''list'\'')")[1].split("if (cmd === '\''done'\'')")[0];
   const close = src.split("if (cmd === '\''close'\'')")[1].split("// open")[0];
-  if (!show.includes("projectScopeFiles") || !close.includes("projectScopeFiles")) process.exit(1);
+  // findCard walks every scope file through projectScopeFiles (pickCards winner), so a block that locates the card
+  // through findCard covers all scope files too.
+  const fc = src.split("function findCard(")[1].split("\nfunction ")[0];
+  const walks = (blk) => blk.includes("projectScopeFiles") || (blk.includes("findCard(") && fc.includes("projectScopeFiles"));
+  if (!walks(show) || !walks(close)) process.exit(1);
 ' "$REPO_ROOT/scripts/open-decision.js"; then
   assert_eq 1 1 "show and close --id use projectScopeFiles"
 else

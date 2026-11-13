@@ -133,7 +133,36 @@
           },
           "origin": {
             "enum": [
-              "ask_user_question"
+              "ask_user_question",
+              "permission_prompt"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "decide",
+              "go",
+              "step",
+              "look"
+            ]
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "look_target": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "from_request": {
+            "type": [
+              "string",
+              "null"
             ]
           },
           "turn_tracked": {

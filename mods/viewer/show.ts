@@ -36,6 +36,13 @@ let current: Current | null = null
 export const currentView = (): Current | null => current
 export const setCurrentView = (c: Current): void => { current = c }
 
+export type LookTarget =
+  | { kind: 'path'; path: string; start: number | null; end: number | null; tail?: boolean }
+  | { kind: 'diff'; args: string[] }
+export type ShowRecorder = ($: EngineInterface, req: ShowRequest) => Promise<void>
+let showRecorder: ShowRecorder | null = null
+export const setShowRecorder = (fn: ShowRecorder | null): void => { showRecorder = fn }
+
 // Same inputs as the live mod's resolveT (config ui.locale > AUTOPILOT_LOCALE > Claude Code language > LC_ALL / LANG > en), with the literal names the engine's analysis wants.
 async function localeOf($: EngineInterface): Promise<Locale> {
   const home = await $.env.get('HOME').catch(() => undefined)
@@ -82,7 +89,7 @@ const WINDOW_ROWS = 30
 const WINDOW_COLUMNS = 100
 
 export type ShowOutcome = { ok: true; summary: string; title: string; placed: boolean } | { ok: false; why: string }
-export type ShowOpts = { openFirst?: boolean } // true for a press: open the window before the first await (see openWindow)
+export type ShowOpts = { openFirst?: boolean; reopen?: boolean } // openFirst: open the window before the first await (see openWindow); reopen: pressed from a pane row, do not record again
 
 const titleOf = (req: ShowRequest): string => (req.kind === 'path' ? req.path : 'git diff ' + req.args.join(' '))
 
@@ -108,6 +115,9 @@ export async function show($: EngineInterface, req: ShowRequest, opts: ShowOpts 
     resetAssist() // a new content: the previous answer and any running call go
     $.ui.invalidate('ui.render')
     const placed = await (early ?? openWindow($, title))
+    if (opts.reopen !== true && showRecorder !== null) {
+      try { await showRecorder($, req) } catch (_e) { /* recording never blocks showing */ }
+    }
     return { ok: true, summary: placed ? summary : summary + ' ' + WAITING_FOR_MODEL, title, placed }
   }
   const locale = await localeOf($)
@@ -144,7 +154,16 @@ export const WAITING_FOR_MODEL = 'The window did not open because the terminal i
 
 // A file named by something the owner pressed (the live mod): open it a few lines above `line` (startAbove, so the line has something above it), or from the top. The window opens first (see openWindow); a failure is a toast.
 export async function showPath($: EngineInterface, path: string, line: number | 'end' | null): Promise<void> {
-  const out = await show($, { kind: 'path', path, start: typeof line === 'number' ? startAbove(line) : null, end: null, ...(line === 'end' ? { tail: true } : {}) }, { openFirst: true })
+  const out = await show($, { kind: 'path', path, start: typeof line === 'number' ? startAbove(line) : null, end: null, ...(line === 'end' ? { tail: true } : {}) }, { openFirst: true, reopen: true })
+  if (!out.ok) $.ui.toast(makeVT(current === null ? 'en' : current.locale)('viewer.failed', { why: out.why }))
+}
+
+// A `給你看` row pressed on the live pane: reopen the file or diff it recorded without adding a second row.
+export async function reopenLook($: EngineInterface, target: LookTarget): Promise<void> {
+  const req: ShowRequest = target.kind === 'path'
+    ? { kind: 'path', path: target.path, start: target.start, end: target.end, ...(target.tail === true ? { tail: true } : {}) }
+    : { kind: 'diff', args: [...target.args] }
+  const out = await show($, req, { openFirst: true, reopen: true })
   if (!out.ok) $.ui.toast(makeVT(current === null ? 'en' : current.locale)('viewer.failed', { why: out.why }))
 }
 

@@ -13,13 +13,22 @@
 // The marker is telemetry (ADR-0001): gates re-derive, never trust a stage claim.
 //
 // Rules, in order:
-//   - first write (no `stage` yet) must target the entry node for (size, bug);
+//   - first write (no `stage` yet) must target an entry node for (size, bug). L/XL non-bug
+//     also accepts `explore` (brainstorm entry: stage-graph.js --explore, sliced in before plan);
+//     every other size and every bug walk still has one entry;
 //   - otherwise `--to` must be in `stage-graph.js next --from <stage> --size .. [--bug] [--urgent] [--high-risk]`;
 //     `--to <current stage>` is a same-node update: legal, records unit / review_families, and KEEPS stage_set_at
 //     (the time the stage was entered, not the time it was last annotated);
 //   - unit: kind and total are fixed once set; index never regresses and never exceeds total; verify -> implement
 //     keeps the index (repair) or adds one; leaving the loop (verify -> anything but implement) needs index = total;
 //     a unit kind must match the size's unit kind when it has one;
+//   - leaving `explore` (any other `--to`) needs a synthesis markdown. Pass `--synthesis <path>`, or put the
+//     file at `<plans_evidence_dir>/explore-synthesis.md` (repo-layout key `plans_evidence_dir`:
+//     `docs/plans/evidence/explore-synthesis.md` in this repo and in a consumer repo). Either file passes when
+//     it exists and one trimmed line starts with `Decision:` and the remainder, trimmed, is non-empty
+//     (`Decision: ship X` and `Decision:\tship X` pass; `Decision:` and `Decision:` plus spaces do not).
+//     No hash and no signature (ADR-0001). Both missing or empty -> exit 5, code UNSYNTHESIZED, nothing
+//     written. `--to explore` while already there is not leaving. `--resume-from` takes no `--synthesis`;
 //   - high_risk: when the marker is urgent and the move leaves the LAST verify toward code-review / qc-gate, the
 //     diff is sampled once (classify-diff-risk.sh -> resolve-review-loop.sh --field review_risk) and stored as
 //     `high_risk = (review_risk == "high")`, used for that move's legality. A sampling failure counts as high
@@ -52,7 +61,9 @@
 //
 // Exit codes: 0 written; 1 usage / unreadable marker write; 2 no marker; 3 illegal transition or unit-rule
 // violation (stdout {allowed:false, from, to, legal_next, reason}); 6 `--resume-from` refused; 4 bump required (stdout {bump_to, files,
-// lines}); 5 `size` missing from the marker. One JSON object on stdout, diagnostics on stderr.
+// lines}); 5 either `size` missing from the marker (stderr only, no stdout JSON) or leaving `explore` without
+// a synthesis (stdout {allowed:false, code:"UNSYNTHESIZED", from, to, conventional, reason}; nothing written).
+// One JSON object on stdout when there is one, diagnostics on stderr.
 // Node >= 20.10, built-ins only.
 
 const fs = require('fs');
@@ -62,6 +73,9 @@ const { spawnSync } = require('child_process');
 const { withWriteLock } = require('./lib/jsonl-store');
 const sessionMode = require('./session-mode');
 const { scopeFromCwd } = require('../src/status/project-key');
+const { pathFor } = require('./lib/repo-layout');
+
+const SYNTHESIS_NAME = 'explore-synthesis.md';
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const STAGE_GRAPH = path.join(__dirname, 'stage-graph.js');
@@ -69,7 +83,7 @@ const GRAPH_JSON = path.join(REPO_ROOT, 'references', 'stage-graph.json');
 const LABEL_MAX = 64;
 const UNIT_RE = /^(phase|deliverable):(\d+)\/(\d+)(?::(.*))?$/su;
 const FAMILY_RE = /^[A-Za-z0-9._-]+$/u;
-const VALUED = new Set(['--to', '--resume-from', '--unit', '--review-families', '--session-id', '--repo-root']);
+const VALUED = new Set(['--to', '--resume-from', '--unit', '--review-families', '--session-id', '--repo-root', '--synthesis']);
 
 class Usage extends Error {}
 
@@ -84,6 +98,7 @@ function parseArgs(argv) {
   if (o['resume-from'] !== undefined) {
     if (o.to) throw new Usage('--resume-from takes no --to (the stage comes from the old marker)');
     if (o.unit || o['review-families']) throw new Usage('--resume-from takes no --unit / --review-families');
+    if (o.synthesis) throw new Usage('--resume-from takes no --synthesis');
   } else if (!o.to) throw new Usage('--to <node> is required');
   return o;
 }
@@ -105,15 +120,39 @@ function parseFamilies(raw) {
   return fams;
 }
 
+// A synthesis passes on one trimmed line `Decision:` plus non-empty remainder. Nothing else is checked.
+function decisionBody(text) {
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line.startsWith('Decision:')) continue;
+    const rest = line.slice('Decision:'.length).trim();
+    if (rest.length > 0) return rest;
+  }
+  return null;
+}
+
+function fileHasDecision(file) {
+  try {
+    return decisionBody(fs.readFileSync(file, 'utf8')) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function conventionalSynthesis(repoRoot) {
+  return path.join(repoRoot, pathFor(repoRoot, 'plans_evidence_dir'), SYNTHESIS_NAME);
+}
+
 function graphJson(args) {
   const r = spawnSync(process.execPath, [STAGE_GRAPH, ...args], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`stage-graph.js ${args.join(' ')} exited ${r.status}: ${(r.stderr || '').trim()}`);
   return JSON.parse(r.stdout);
 }
 
-function variantFlags(marker, highRisk, research) {
+function variantFlags(marker, highRisk, research, explore) {
   const f = ['--size', marker.size];
   if (research) f.push('--research');
+  if (explore) f.push('--explore');
   if (marker.bug === true) f.push('--bug');
   if (marker.urgent === true) f.push('--urgent');
   if (highRisk) f.push('--high-risk');
@@ -276,16 +315,23 @@ function decide(marker, opts, repoRootArg) {
   }
 
   const deny = (legalNext, reason) => ({ code: 3, out: { allowed: false, from, to, legal_next: legalNext, reason } });
-  const nodes = graphJson(['nodes', ...variantFlags(marker, highRisk)]);
+  const plain = graphJson(['nodes', ...variantFlags(marker, highRisk)]);
+  const explored = graphJson(['nodes', ...variantFlags(marker, highRisk, false, true)]);
+  const entries = [...new Set([plain.entry, explored.entry])].sort();
+  // `explore` is absent from the plain walk. Ask stage-graph for that walk only
+  // while the session is sitting on it (same pattern as --research).
+  const onExplore = from !== null && !plain.nodes.includes(from) && explored.nodes.includes(from);
+  const nodes = onExplore ? explored : plain;
+  const legalFrom = (node) => graphJson(['next', '--from', node, ...variantFlags(marker, highRisk, node === 'research', onExplore)]);
   if (from === null) {
-    if (to !== nodes.entry) return deny([nodes.entry], `first write must target the entry node ${nodes.entry} for size ${marker.size}${marker.bug ? ' (bug)' : ''}`);
+    if (!entries.includes(to)) return deny(entries, `first write must target an entry node (${entries.join('|')}) for size ${marker.size}${marker.bug ? ' (bug)' : ''}`);
   } else if (to !== from) {
-    const legal = graphJson(['next', '--from', from, ...variantFlags(marker, highRisk, from === 'research')]);
+    const legal = legalFrom(from);
     if (!legal.includes(to)) return deny(legal, `${from} -> ${to} is not an edge for size ${marker.size}`);
   }
   const uv = unitViolation(marker, from, to, unitArg, nodes.unit_kind);
   if (uv) {
-    const legal = from === null ? [nodes.entry] : graphJson(['next', '--from', from, ...variantFlags(marker, highRisk, from === 'research')]);
+    const legal = from === null ? entries : legalFrom(from);
     return deny(legal, uv);
   }
 
@@ -301,6 +347,26 @@ function decide(marker, opts, repoRootArg) {
         const bumpTo = sessionMode.SIZES[sessionMode.SIZES.indexOf(marker.size) + 1];
         return { code: 4, out: { bump_to: bumpTo, files: d.files, lines: d.lines } };
       }
+    }
+  }
+
+  // Leaving explore. Same-node `--to explore` is not a leave. Either cited file or the conventional
+  // file is enough; block only when both lack a non-empty Decision line. Nothing is written on refusal.
+  if (from === 'explore' && to !== from) {
+    const conventional = conventionalSynthesis(repoRoot);
+    const cited = opts.synthesis ? path.resolve(opts.synthesis) : null;
+    if (!((cited && fileHasDecision(cited)) || fileHasDecision(conventional))) {
+      return {
+        code: 5,
+        out: {
+          allowed: false,
+          code: 'UNSYNTHESIZED',
+          from,
+          to,
+          conventional,
+          reason: 'leaving explore needs a synthesis file with a non-empty Decision: line',
+        },
+      };
     }
   }
 

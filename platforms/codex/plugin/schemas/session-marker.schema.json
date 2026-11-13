@@ -25,7 +25,7 @@
     "base_ref": { "type": ["string", "null"], "pattern": "^[0-9a-f]{7,64}$" },
     "stage": {
       "type": "string",
-      "enum": ["intent", "diagnose", "research", "proposal", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"]
+      "enum": ["intent", "diagnose", "research", "proposal", "explore", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"]
     },
     "stage_set_at": { "$ref": "#/$defs/isoUtcMs" },
     "unit": {

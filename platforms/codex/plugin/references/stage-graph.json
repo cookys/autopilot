@@ -1,7 +1,7 @@
 {
   "schema": "autopilot.stage-graph/1",
   "source": "project/plans/2026-10-06-dev-flow-stage-graph.md section 2.7",
-  "node_ids": ["intent", "diagnose", "research", "proposal", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"],
+  "node_ids": ["intent", "diagnose", "research", "proposal", "explore", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"],
   "sizes": {
     "XS": {
       "base": ["implement", "qc-gate", "finish"],
@@ -21,12 +21,14 @@
     "L": {
       "base": ["intent", { "optional": "research" }, "proposal", "plan", "plan-review", { "unit_loop": ["implement", "verify"] }, "code-review", "qc-gate", "finish"],
       "unit_kind": "phase",
-      "bug": { "mode": "replace", "target": "intent" }
+      "bug": { "mode": "replace", "target": "intent" },
+      "explore": { "node": "explore", "before": "plan" }
     },
     "XL": {
       "base": ["intent", { "optional": "research" }, "proposal", "plan", "plan-review", { "unit_loop": ["implement", "verify"] }, "code-review", "qc-gate", "finish"],
       "unit_kind": "deliverable",
-      "bug": { "mode": "replace", "target": "intent" }
+      "bug": { "mode": "replace", "target": "intent" },
+      "explore": { "node": "explore", "before": "plan" }
     }
   },
   "bug_node": "diagnose",
@@ -53,6 +55,7 @@
     "diagnose": "prose:debug",
     "research": "prose:probe-unknown.js recommendation caller",
     "proposal": "prose:dev-flow",
+    "explore": "prose:brainstorm",
     "plan": "prose:dev-flow",
     "plan-review": "rail:dispatch-plan-review.js main()",
     "implement": "rail at l5/l6: bin/autopilot.js engine implement-review (with unit); prose at l3/l4: dev-flow, foreman",

@@ -103,9 +103,14 @@ function srcNext(ctx) {
   const graph = JSON.parse(fs.readFileSync(sg.DEFAULT_GRAPH, 'utf8'));
   if (!graph.sizes[size]) return absent('next legal node', `unknown size ${clip(size, 12)}`);
   if (!graph.node_ids.includes(stage)) return absent('next legal node', `unknown stage ${clip(stage, 20)}`);
-  const next = sg.nextNodes(graph, {
+  const base = {
     size, bug: !!flags.bug, urgent: !!flags.urgent, highRisk: !!flags.high_risk, research: false, units: 1,
-  }, stage);
+  };
+  // explore is off the default walk. Pass it only when the stage sits on that
+  // entry (L/XL non-bug) so a plain stage's next node does not change.
+  const plain = sg.buildWalk(graph, { ...base, explore: false });
+  const explore = !plain.nodes.includes(stage) && sg.buildWalk(graph, { ...base, explore: true }).nodes.includes(stage);
+  const next = sg.nextNodes(graph, { ...base, explore }, stage);
   return ok('next legal node', [`next legal node after ${stage}: ${next.length ? next.join(', ') : '(none, terminal)'} (from ${from})`]);
 }
 

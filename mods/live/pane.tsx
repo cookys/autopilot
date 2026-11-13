@@ -106,25 +106,27 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 
 // how one PaneLine is drawn (shared by the tabs and the console's 指揮 page): plain segments, a press row of Buttons, a text field, a toggle Button, a goto Button
 function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, decide: DecideActs | null, onToggle: (id: string) => void, onTab: (t: PaneTab) => void) {
-  const { Box, Text, Button, Input } = el
+  const { Box, Text, Link, Button, Input } = el
   const segsOf = (l: PaneLine): Seg[] => l.segs ?? [{ text: l.text }]
   const drawn = (l: PaneLine) => segsOf(l).map((x, j) => <Text key={'g' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)
   // a line with no segments is the blank (drawn as a one-cell Text: an empty Text takes no row); every other line is a row of segments
   const plainLine = (l: PaneLine, i: number, k = '') => l.segs !== undefined
     ? <Box key={k + 'l' + i} flexWrap={l.wrap === true ? 'wrap' : undefined}>{l.segs.map((s, j) => <Text key={'g' + j} {...drawSeg(s)} wrap={l.wrap === true ? 'wrap' : 'truncate'}>{s.text}</Text>)}</Box>
     : <Text key={k + 'l' + i} wrap="truncate">{l.text === '' ? ' ' : l.text}</Text>
-  // a line with pressable segments (the 待決 option row and send row): consecutive segments of one `press` id are one Button, the rest plain Text. Without Button it is plain.
+  // a line with pressable or link segments (option row, send row, attachment row, 給你看 row): consecutive segments of one `press` id are one Button, `href` is a Link, the rest plain Text.
   const pressLine = (l: PaneLine, i: number, k: string) => {
-    const runs: { press: string | undefined; segs: Seg[] }[] = []
+    const runs: { press: string | undefined; href: string | undefined; segs: Seg[] }[] = []
     for (const s of l.segs as Seg[]) {
       const last = runs[runs.length - 1]
-      if (last !== undefined && last.press === s.press) last.segs.push(s)
-      else runs.push({ press: s.press, segs: [s] })
+      if (last !== undefined && last.press === s.press && last.href === s.href) last.segs.push(s)
+      else runs.push({ press: s.press, href: s.href, segs: [s] })
     }
+    const runId = runs.find(r => r.press !== undefined)?.press ?? runs.find(r => r.href !== undefined)?.href
     return (
-      <Box key={k + 'p' + (runs.find(r => r.press !== undefined)?.press ?? i)} flexWrap="wrap">
+      <Box key={k + 'p' + (runId ?? i)} flexWrap="wrap">
         {runs.map((r, j) => {
           const texts = r.segs.map((s, n) => <Text key={'g' + n} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
+          if (r.href !== undefined && Link !== undefined) return <Link key={'lnk:' + j + ':' + r.href} href={r.href} label={r.segs.map(s => s.text).join('')} />
           return r.press === undefined || Button === undefined || decide === null
             ? <Box key={'r' + j}>{texts}</Box>
             : <Button key={r.press.replace(/^pick:/, 'opt:')} plain onPress={() => decide.onPress(r.press as string)}>{texts}</Button>
@@ -145,7 +147,7 @@ function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, 
   // a line that carries a `toggle` id is a Button when the surface has them (a press expands / collapses its group), the plain line otherwise
   const line = (l: PaneLine, i: number, k = '') => l.field !== undefined && l.segs !== undefined
     ? fieldLine(l, i, k)
-    : l.segs !== undefined && (l.kind === 'choice' || l.segs.some(x => x.press !== undefined))
+    : l.segs !== undefined && (l.kind === 'choice' || l.segs.some(x => x.press !== undefined || x.href !== undefined))
     ? pressLine(l, i, k)
     : l.toggle !== undefined && Button !== undefined
     ? <Button key={k + 'b' + i} plain onPress={() => onToggle(l.toggle as string)}>{drawn(l)}</Button>
@@ -186,7 +188,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   if (tab === 'decide' && scroll !== null && win !== null && snap.band !== null) {
     const cards = body.filter(l => l.bar !== true)
     const barLines = body.filter(l => l.bar === true)
-    keyedGrow(win, decide !== null && decide.batch !== undefined ? decide.batch.order : snap.pending.map(d => d.id ?? d.question))
+    keyedGrow(win, decide !== null && decide.batch !== undefined ? [...decide.batch.order, ...snap.pending.filter(d => d.kind === 'step' || d.kind === 'look').map(d => d.id ?? d.question)] : snap.pending.map(d => d.id ?? d.question))
     return scrollFrame(el, {
       rows: scroll.bodyRows, cols, head: [strip, ...plainHead.map((l, i) => line(l, i, 'h'))], headRows: stripH.rows + plainHead.length,
       total: cards.length, window: (off, room) => cards.slice(off, off + room).map((l, i) => line(l, off + i)),

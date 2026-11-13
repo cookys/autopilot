@@ -7,8 +7,10 @@
  *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
- *                                       [--title <short card title, <= 20 characters>]
+ *                                       [--title <short card title, <= 20 characters>] [--kind <decide|go|step|look>] [--attach <path-or-URL>]...
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
+ *   node scripts/open-decision.js open  --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
+ *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (operator action step: no --option, --executor or --not-authorized needed)
  *   node scripts/open-decision.js open ... --executor <address> [--asker <address>]  (--executor is REQUIRED: who carries out the answer; the PM's own cards name the PM; --asker: who asked)
  *   node scripts/open-decision.js open ... [--due <ISO time | +N(m|h|d|w), e.g. +4h, +1d>] [--kind decide|go|remind]   (dated card / reminder: see "Dated cards" below)
  *   node scripts/open-decision.js due-sweep [--cwd <dir>]   (prints `DUE <id> <title>` once per card that became due since the last sweep; exit 0)
@@ -45,8 +47,11 @@
  * the session do alone (autonomous / logged) is refused: exit 3, decide it yourself. Plain sessions only need a known boundary.
  * If resolve-doa cannot be run, the DOA-independent boundaries (irreversible + the Board rows, `escalate` in every preset) are
  * still accepted with a stderr warning, and the other classes are refused (a gate that cannot verify must not wave them through).
- * --kind <decide|go|remind> (optional): the card's kind, stored as `kind` on the entry (decide|go: same names as fleet's DecisionKind). Absent = an ordinary
- * decision card (the 'decision' default is NOT written: entries without `kind` read as before). Any other value -> exit 7, nothing is written.
+ * --kind <decide|go|remind|step|look> (optional): the card's kind, stored as `kind` on the entry (`decide|go` = decision cards with options/reply under 要你決定;
+ * `step` = an operator step under 要你做或看, no options, --executor or --not-authorized needed, --question is the step text, --attach allowed;
+ * `look` = a persistent 給你看 viewer item under 要你做或看, optional --look-target JSON). Absent = unspecified; entries without it read as before.
+ * Any other value -> exit 7, nothing is written.
+ * --attach <path-or-URL> (repeatable on `open`): stored on the entry in array `attachments`; rendered on the decision pane as a clickable file or Link.
  * Dated cards (PM 01M78866 item c). Stored fields: `due_at` (ISO UTC; set by `open --due`, absent = no date) and `kind` ('remind' for a reminder;
  * absent = 'decision'). --due takes an ISO date/time (no offset = local time) or +N followed by m|h|d|w (from now); anything else -> exit 2, nothing written.
  * A card whose due_at is still in the future is "not yet due": `show` lists it LAST, marks it "due <local time>" and leaves it out of the pending count
@@ -121,7 +126,7 @@
  *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
  * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure, or a non-PM team session refused by the role gate (nothing written) |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
- *       7 open refused: --kind is not decide|go|remind (nothing is written) |
+ *       7 open refused: --kind is not decide|go|remind|step|look (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
  *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
  *       Library callers (openDecision) are unaffected: only the CLI `open` ensures and reports. AUTOPILOT_RUNS_WATCH_AUTOSTART=0 skips the ensure (the hook's own switch).
@@ -142,8 +147,9 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
-    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)> --kind <decide|go|remind>; a remind card takes no --option/--free-text)\n');
+  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
+    + '       open-decision.js open --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
+    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (decision open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)>; a remind card takes no --option/--free-text)\n');
   return 2;
 }
 
@@ -399,6 +405,7 @@ function showText(entries, { all = false, nowMs = Date.now() } = {}) {
     if (e.blocks) out.push(`    blocks: ${e.blocks}`);
     if (e.not_authorized) out.push(`    not_authorized: ${e.not_authorized}`);
     if (e.kind) out.push(`    kind: ${e.kind}`);
+    if (Array.isArray(e.attachments) && e.attachments.length) out.push(`    attach: ${e.attachments.join(', ')}`);
     if (e.source) out.push(`    source: ${e.source}`);
     out.push(`    opened: ${e.opened_at}`);
   });
@@ -407,7 +414,7 @@ function showText(entries, { all = false, nowMs = Date.now() } = {}) {
 
 // --target is lifted out before parse(): the flag set of parse() is pinned byte-for-byte by the frozen ask stub of the
 // d0gate-v2 evaluation (hooks/tests/skill-onoff-d0gate-v2.test.sh), which must not change.
-const KINDS = ['decide', 'go', 'remind'];
+const KINDS = ['decide', 'go', 'remind', 'step', 'look'];
 const TITLE_MAX = 20; // code points (Array.from), same unit as cardTitle
 // --kind is lifted out the same way (same frozen-stub reason): { rest, kind } | { error }.
 function takeKind(argv) {
@@ -447,6 +454,23 @@ function localTime(iso) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} ${off >= 0 ? '+' : '-'}${p(Math.floor(Math.abs(off) / 60))}:${p(Math.abs(off) % 60)}`;
 }
 
+// Repeatable --attach <path-or-URL>, lifted before parse() for the same frozen-stub reason.
+function takeAttach(argv) {
+  const rest = [];
+  const attachments = [];
+  const ctl = /[\x00-\x1f\x7f]/;
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--attach') {
+      if (i + 1 >= argv.length) return { error: '--attach needs a path or URL' };
+      const v = String(argv[i + 1]).trim();
+      if (!v || ctl.test(v)) return { error: '--attach needs a non-empty path or URL without control characters' };
+      attachments.push(v);
+      i += 1;
+    } else rest.push(argv[i]);
+  }
+  return { rest, attachments };
+}
+
 // close only: `--free-text <text>` takes a value there (on `open` it is a bare switch, so parse() must keep seeing it unchanged).
 function takeFreeText(argv) {
   if (argv[0] !== 'close') return { rest: argv };
@@ -458,7 +482,7 @@ function takeFreeText(argv) {
 
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', from, dispatched, title, note, all, apply } } | { error }
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'dispatched', 'title', 'from-request', 'note'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'dispatched', 'title', 'from-request', 'note', 'look-target'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible'];
 function takeExtra(argv) {
   const rest = [];
@@ -554,7 +578,9 @@ function main(argv) {
   if (kd.error) return usage(kd.error);
   const kk = takeKind(kd.rest);
   if (kk.error) return usage(kk.error);
-  const ft = takeFreeText(kk.rest);
+  const at = takeAttach(kk.rest);
+  if (at.error) return usage(at.error);
+  const ft = takeFreeText(at.rest);
   if (ft.error) return usage(ft.error);
   const tk = takeTarget(ft.rest);
   if (tk.error) return usage(tk.error);
@@ -562,12 +588,15 @@ function main(argv) {
   if (xt.error) return usage(xt.error);
   const args = parse(xt.rest);
   args.extra = xt.extra;
+  args.attachments = at.attachments;
   if (kk.kind !== undefined) args.kind = kk.kind;
   if (ft.freeText !== undefined) args.closeFreeText = ft.freeText;
   if (args.error) return usage(args.error);
   if (tk.target !== undefined) args.target = tk.target;
   const cmd = args._[0];
   if (kd.due !== undefined && cmd !== 'open') return usage('--due is an `open` argument');
+  if (args.attachments.length > 0 && cmd !== 'open') return usage('--attach is only an open argument');
+  if (args.extra['look-target'] !== undefined && cmd !== 'open') return usage('--look-target is only an open argument');
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
   if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver', 'due-sweep'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
@@ -705,15 +734,18 @@ function main(argv) {
 
   // open
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
+  if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   const remind = args.kind === 'remind';
+  const isStepKind = args.kind === 'step' || args.kind === 'look';
   if (remind) {
     if (args.option.length || args['free-text']) return usage('a --kind remind card is a reminder, not a question: no --option and no --free-text (it is answered with `done --id <id>`)');
+  } else if (isStepKind) {
+    if (args.option.length) return usage(`--kind ${args.kind} takes no --option (--question is the step text)`);
   } else {
     if (args['free-text'] && args.option.length) return usage('--free-text and --option are mutually exclusive: a free-text card has no options');
     if (args.option.length === 1) return usage('--option needs at least two options');
-    if (!args.option.length && !args['free-text']) return usage('a decision card needs at least two --option <label>::<description>; for a question answered in typed text pass --free-text; a reminder passes --kind remind');
+    if (!args.option.length && !args['free-text']) return usage('a decision card needs at least two --option <label>::<description>; for a question answered in typed text pass --free-text');
   }
-  if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
   let dueAt = null;
   if (kd.due !== undefined) {
     const ms = parseDue(kd.due, Date.now());
@@ -722,10 +754,16 @@ function main(argv) {
   }
   const bad = ['answer', 'awaiting-operator', 'from', 'all', 'apply', 'dispatched', 'note'].find((n) => ex[n] !== undefined);
   if (bad) return usage(`--${bad} is not an open argument`);
-  if (ex.executor === undefined) return usage('open needs --executor <address> (namespace/courier/member): the program delivers the operator\'s answer to it; a card the PM handles itself names the PM address');
+  let lookTarget = null;
+  if (ex['look-target'] !== undefined) {
+    if (args.kind !== 'look') return usage('--look-target requires --kind look');
+    try { lookTarget = JSON.parse(ex['look-target']); } catch (_e) { return usage('--look-target must be valid JSON'); }
+    if (!lookTarget || typeof lookTarget !== 'object' || Array.isArray(lookTarget)) return usage('--look-target must be a JSON object');
+  }
+  if (!isStepKind && ex.executor === undefined) return usage('open needs --executor <address> (namespace/courier/member): the program delivers the operator\'s answer to it; a card the PM handles itself names the PM address');
   if (ex.title !== undefined && (!ex.title.trim() || Array.from(ex.title).length > TITLE_MAX || require('./lib/card-notice.js').CONTROL.test(ex.title))) { process.stderr.write(`open-decision: refused: --title must be non-empty, free of control characters, and at most ${TITLE_MAX} characters (got ${Array.from(ex.title).length}); it is never cut for you; nothing written\n`); return 2; }
   for (const k of ['executor', 'asker']) if (ex[k] !== undefined && !require('./lib/fleet-decision.js').isAddress(ex[k])) return usage(`--${k} "${ex[k]}" is not an address (namespace/courier/member)`);
-  const options = args.option.length ? parseOptions(args.option) : null;
+  const options = !isStepKind && args.option.length ? parseOptions(args.option) : null;
   if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');
   if (args.target !== undefined) {
     const t = checkTarget(path.resolve(args.cwd || process.cwd()), args['doa-role'] || 'manager', args['doa-tier'] || 'sonnet', args.target);
@@ -734,16 +772,19 @@ function main(argv) {
   const aliasErr = applyIrreversibleAlias(args, ex);
   if (aliasErr) return usage(aliasErr);
   if (ex['from-request'] !== undefined && !/^r-[0-9a-f]{8}$/.test(String(ex['from-request']))) return usage('--from-request needs an id r- plus 8 hex');
-  const gate = checkNotAuthorized(args['not-authorized'], { cwd: path.resolve(args.cwd || process.cwd()), role: args['doa-role'] || 'manager', tier: args['doa-tier'] || 'sonnet', autonomous: isAutonomous() });
-  if (gate.code === 2) return usage(gate.message);
-  if (gate.code === 3) { process.stderr.write(`open-decision: refused: ${gate.message}\n`); return 3; }
-  if (gate.warning) process.stderr.write(`open-decision: warning: ${gate.warning}\n`);
-  const routed = roleGate({ not_authorized: args['not-authorized'] });
-  if (routed && routed.code === 4) { process.stderr.write(`open-decision: ${routed.message}\n`); return 4; }
+  let routed = null;
+  if (!isStepKind || args['not-authorized'] !== undefined) {
+    const gate = checkNotAuthorized(args['not-authorized'], { cwd: path.resolve(args.cwd || process.cwd()), role: args['doa-role'] || 'manager', tier: args['doa-tier'] || 'sonnet', autonomous: isAutonomous() });
+    if (gate.code === 2) return usage(gate.message);
+    if (gate.code === 3) { process.stderr.write(`open-decision: refused: ${gate.message}\n`); return 3; }
+    if (gate.warning) process.stderr.write(`open-decision: warning: ${gate.warning}\n`);
+    routed = roleGate({ not_authorized: args['not-authorized'], kind: args.kind });
+    if (routed && routed.code === 4) { process.stderr.write(`open-decision: ${routed.message}\n`); return 4; }
+  }
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
-    from_request: ex['from-request'],
+    from_request: ex['from-request'], attachments: args.attachments, look_target: lookTarget,
   });
   if (r.status === 'ok' && args.cwd === undefined) {
     // No --cwd: the card followed the process cwd. A different live session repo will not show it (BL-0337).
@@ -788,9 +829,10 @@ function applyIrreversibleAlias(args, extra) {
   return null;
 }
 
-// permission-prompt path is out of scope of card routing; PM ruling 2026-11-12
-function roleGate({ not_authorized, origin } = {}) {
+// permission-prompt path and operator step/look items without a DOA boundary are out of scope of card routing; PM ruling 2026-11-12
+function roleGate({ not_authorized, origin, kind } = {}) {
   if (origin === 'permission_prompt') return null;
+  if ((kind === 'step' || kind === 'look') && !text(not_authorized)) return null;
   let role = 'solo';
   try { role = require('./lib/team.js').resolve().role; } catch { role = 'lane'; }
   if (role === 'solo' || role === 'pm') return null;
@@ -802,8 +844,8 @@ function roleGate({ not_authorized, origin } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker, title, from_request, due_at }) {
-  const routed = roleGate({ not_authorized, origin });
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker, title, from_request, due_at, attachments, look_target }) {
+  const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
   if (!sf) return { status: 'error', message: 'not inside a git repository' };
@@ -822,6 +864,11 @@ function openDecision({ cwd, root, session, question, background, options, recom
   if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
   if (typeof due_at === 'string' && Number.isFinite(Date.parse(due_at))) entry.due_at = new Date(Date.parse(due_at)).toISOString(); // additive: absent = no date (dueState 'none')
+  if (Array.isArray(attachments)) {
+    const clean = attachments.map((a) => (typeof a === 'string' ? a.trim() : '')).filter((a) => a && !/[\x00-\x1f\x7f]/.test(a));
+    if (clean.length > 0) entry.attachments = clean;
+  }
+  if (look_target && typeof look_target === 'object' && !Array.isArray(look_target)) entry.look_target = look_target;
   if (origin) entry.origin = origin;
   if (turn_tracked === true) entry.turn_tracked = true; // the asker's turn file existed at open time (hooks/ask-decision.js): only then is its absence later evidence the session ended
   try {

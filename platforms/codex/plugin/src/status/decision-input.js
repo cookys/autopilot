@@ -51,6 +51,28 @@ function sessionGone(e, liveBase) {
   }
 }
 
+function cleanAttachments(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((x) => typeof x === 'string' && x.trim() && !TITLE_CONTROL.test(x)).map((x) => x.trim());
+}
+
+function cleanLookTarget(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.kind === 'path' && typeof raw.path === 'string' && raw.path.trim() && !TITLE_CONTROL.test(raw.path)) {
+    return {
+      kind: 'path',
+      path: raw.path.trim(),
+      start: Number.isInteger(raw.start) && raw.start >= 1 ? raw.start : null,
+      end: Number.isInteger(raw.end) && raw.end >= 1 ? raw.end : null,
+      ...(raw.tail === true ? { tail: true } : {}),
+    };
+  }
+  if (raw.kind === 'diff' && Array.isArray(raw.args)) {
+    return { kind: 'diff', args: raw.args.filter((x) => typeof x === 'string' && !TITLE_CONTROL.test(x)) };
+  }
+  return null;
+}
+
 function viewOf(e, nowMs, liveBase) {
   if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !e.id || typeof e.question !== 'string' || !e.question) return null;
   if (isClosedEntry(e)) return null; // a kept closed card is a record, not an open card
@@ -62,7 +84,8 @@ function viewOf(e, nowMs, liveBase) {
     id: e.id, title: str(e.title) && !TITLE_CONTROL.test(str(e.title)) ? str(e.title) : null, question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
     blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
-    orphaned: sessionGone(e, liveBase), origin: str(e.origin),
+    orphaned: sessionGone(e, liveBase), origin: str(e.origin), kind: str(e.kind),
+    attachments: cleanAttachments(e.attachments), look_target: cleanLookTarget(e.look_target),
     status: cardState(e),
     answer: str(e.answer), awaiting_operator: str(e.awaiting_operator), executor: str(e.executor), asker: str(e.asker), pending_dispatch_at: str(e.pending_dispatch_at),
     // additive, and only on a card that has them: an ordinary card's view stays byte-identical

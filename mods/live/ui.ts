@@ -387,7 +387,7 @@ export const FACT_OWNER = {
   'dispatch.runs': 'dispatch', 'dispatch.counts': 'dispatch',
   'review.round': 'review', 'review.seats': 'review', 'review.qc': 'review', 'review.gates': 'review', 'review.plan': 'review',
   'review.decisions': 'review', 'review.ladder': 'review', 'review.undocumented': 'review',
-  'decide.cards': 'decide',
+  'decide.cards': 'decide', 'decide.steps': 'decide',
   'now.attention': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
   'usage.limit_max': 'spend', 'usage.brain': 'spend', 'usage.window5h': 'spend', 'usage.window7d': 'spend', 'usage.today': 'spend', 'usage.history': 'spend', 'usage.account': 'spend',
   'spend.session': 'spend', 'spend.local_today': 'spend',
@@ -404,7 +404,7 @@ export type FactId = keyof typeof FACT_OWNER
 // the order of sections inside each tab (§2.1), as data; and the sections that start folded (要你處理 never does)
 export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
   now: ['attention', 'where', 'tabs', 'background', 'tasks', 'recent'],
-  decide: ['cards'],
+  decide: ['cards', 'steps'],
   dispatch: ['running', 'finished', 'other'],
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],
@@ -438,13 +438,15 @@ export const isFrag = (v: unknown): v is Frag => typeof v === 'object' && v !== 
 
 export type FmtKind = 'money' | 'pct' | 'dur' | 'ago' | 'clock' | 'size' | 'sha' | 'id' | 'count'
 export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab' | 'title' | 'pick' | 'send' | 'act'
-type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string }
+type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string; href?: string }
 const sg = (text: string, o: SegOpts = {}): Seg => ({ text, ...o })
 const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true })
 
 // ---- pressable file paths: a press opens the viewer window (mods/viewer) on the file ----
 // A press id of the form `show:<path>[:<line>|:end]`. The pane routes it to the viewer; the segment is drawn in the `action` role, the one colour that means "press this".
 export const SHOW_PRESS = 'show:'
+export const LOOK_PRESS = 'look:'
+export const DISMISS_PRESS = 'dismiss:'
 export const showPress = (path: string, at?: number | 'end'): string => SHOW_PRESS + path + (at === undefined ? '' : ':' + at)
 export function showTarget(id: string): { path: string; line: number | 'end' | null } | null {
   if (!id.startsWith(SHOW_PRESS)) return null
@@ -745,6 +747,64 @@ export function actionRow(u: Ctx, label: string, o: { press?: string; note?: str
 // line, nothing to press). Used by the 殘留 tab: one per entry, always the entry's last row, and one for the whole section, always the section's first row.
 export function buttonRow(u: Ctx, label: string, o: { press: string; fact: FactId }): PaneLine {
   return lineOf('choice', [sg('  '), sg(cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2)), { role: 'act', color: PALETTE.action, press: o.press })], { fact: o.fact })
+}
+// Links on mod surfaces follow the mods Link rule: https URLs, or http on localhost / 127.0.0.1 only.
+export function isAllowedLinkHref(raw: string): boolean {
+  const s = raw.trim()
+  if (s === '' || /[\s\x00-\x1f\x7f]/.test(s)) return false
+  return /^https:\/\/[^/?#\s]+/i.test(s) || /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?(?:[/?#]\S*)?$/i.test(s)
+}
+// Local file attachment (absolute or repo-relative path, optional :<line> or :end); any URI scheme (`http:`, `file:`, `javascript:`, `data:`) is excluded.
+export function isLocalAttachPath(raw: string): boolean {
+  const s = raw.trim()
+  if (s === '' || /[\x00-\x1f\x7f]/.test(s)) return false
+  return !/^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d+$)/.test(s)
+}
+// Attachments (`--attach`) on a card: local file paths open in the viewer via `show:<path>[:<line>|:end]`; https / localhost URLs render as `<Link>`; other schemes are inert dim text.
+export function cardAttachRows(u: Ctx, key: string, attachments: readonly string[], o: { fact: FactId }): PaneLine[] {
+  const room = Math.max(1, u.cols - 1 - KEY_W)
+  const rows: PaneLine[] = []
+  for (const raw of attachments) {
+    const att = raw.trim()
+    if (att === '') continue
+    if (isAllowedLinkHref(att)) {
+      const lead = rows.length === 0 ? cardLead(key) : [cardHang()]
+      rows.push(lineOf('kv', [...lead, sg(cutProse(att, room), { role: 'prose', color: PALETTE.action, href: att })], { hang: KEY_W, fact: o.fact }))
+      continue
+    }
+    const local = isLocalAttachPath(att)
+    const lineMatch = local ? /^(.+?):(\d+|end)$/.exec(att) : null
+    const press = local
+      ? showPress(lineMatch === null ? att : lineMatch[1], lineMatch === null ? undefined : lineMatch[2] === 'end' ? 'end' : Number(lineMatch[2]))
+      : undefined
+    const pieces = wrapPlain(att, room, room)
+    ;(pieces.length === 0 ? [att] : pieces).forEach(piece => {
+      const lead = rows.length === 0 ? cardLead(key) : [cardHang()]
+      const shown = cutProse(piece, room)
+      const seg = press !== undefined ? sg(shown, { role: 'prose', color: PALETTE.action, press }) : dim(shown, { role: 'prose' })
+      rows.push(lineOf('kv', [...lead, seg], { hang: KEY_W, fact: o.fact }))
+    })
+  }
+  return rows
+}
+// One persistent `給你看：<檔名>（<來源 lane>）` row in `要你做或看`: clicking the row reopens the item in the viewer, and `[ 關閉 ]` dismisses it.
+export function lookItemRows(u: Ctx, s: Stated, text: string, o: { reopenPress?: string; dismissLabel: string; dismissPress?: string; fact: FactId }): PaneLine[] {
+  const room = Math.max(1, u.cols - 1 - 2)
+  const btnText = cutProse('[ ' + o.dismissLabel + ' ]', room)
+  const btnSeg = o.dismissPress === undefined ? dim(btnText, { role: 'prose' }) : sg(btnText, { role: 'act', color: PALETTE.action, press: o.dismissPress })
+  const bodyOpts: SegOpts = o.reopenPress === undefined ? { role: 'prose' } : { role: 'prose', color: PALETTE.action, press: o.reopenPress }
+  const pieces = wrapPlain(text, room, room)
+  const lines = (pieces.length === 0 ? [''] : pieces).map((piece, i) => {
+    const lead = i === 0 ? [...stateLead(u, s, { word: false }).segs, sg(' ')] : [sg('  ')]
+    return lineOf('item', [...lead, sg(cutProse(piece, room), bodyOpts)], { fact: o.fact, hang: 2 })
+  })
+  const last = lines[lines.length - 1]
+  if (displayWidth(last.text) + 2 + displayWidth(btnText) <= u.cols - 1) {
+    lines[lines.length - 1] = lineOf('item', [...(last.segs as Seg[]), sg('  '), btnSeg], { fact: o.fact, hang: 2 })
+  } else {
+    lines.push(lineOf('choice', [sg('  '), btnSeg], { fact: o.fact }))
+  }
+  return lines
 }
 // lines meant for a scrolling window's fixed action strip (§12.10): pane.tsx draws them under the rule, not among the scrolling rows
 // one free-form row of fragments (the console page's summary and data-age lines): cut from the right so it never passes `cols - 1`

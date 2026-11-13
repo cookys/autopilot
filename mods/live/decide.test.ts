@@ -39,7 +39,7 @@ test('DECIDE card: a section header with the count, then per question the title,
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view()))
   const t = texts(ls)
   expect(ls[0].kind).toBe('header')
-  expect(t[0]).toMatch(/^▾ 待你回答  3 ─+$/) // the section header every other tab has, the count on its right
+  expect(t[0]).toMatch(/^▾ 要你決定  3 ─+$/) // the section header every other tab has, the count on its right
   expect(ui.displayWidth(ls[0].text)).toBe(75)
   expect(t[1]).toBe('▲ 1. P5 殘留分頁要不要把已清掉的也列出來')
   const at = (prefix: string, from = 0): number => t.findIndex((x, i) => i >= from && x.startsWith(prefix))

@@ -241,11 +241,14 @@ function buildJobModel(inputs) {
     id: optText(d.id), question: d.question, answer: optText(d.answer), executor: optText(d.executor), asker: optText(d.asker), pending_dispatch_at: optText(d.pending_dispatch_at), opened_at: optText(d.opened_at),
   }));
   const decisions = allCards.filter((d) => d.status !== 'awaiting_operator_action' && d.status !== 'pending_dispatch').map((d) => ({
-    id: optText(d.id), question: d.question, background: optText(d.background),
+    id: optText(d.id), ...(optText(d.title) ? { title: optText(d.title) } : {}), question: d.question, background: optText(d.background),
     options: (Array.isArray(d.options) ? d.options : []).filter(isObject)
       .map((x) => ({ label: String(x.label == null ? '' : x.label), description: String(x.description == null ? '' : x.description) })),
     recommendation: optText(d.recommendation), why: optText(d.why), blocks: optText(d.blocks), not_authorized: optText(d.not_authorized), source: optText(d.source), opened_at: optText(d.opened_at),
     stale: d.stale === true, age_s: Number.isFinite(d.age_s) ? d.age_s : null, orphaned: d.orphaned === true, origin: optText(d.origin),
+    ...(optText(d.kind) ? { kind: optText(d.kind) } : {}),
+    ...(Array.isArray(d.attachments) && d.attachments.length > 0 ? { attachments: d.attachments.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()) } : {}),
+    ...(isObject(d.look_target) ? { look_target: d.look_target } : {}),
   }));
 
   const progress = buildProgress(o.progressReceipt, root);

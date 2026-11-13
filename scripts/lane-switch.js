@@ -21,7 +21,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { readManifest, writeManifest } = require('./lib/lane-manifest');
+const { readManifest, writeManifest, NAME_RE } = require('./lib/lane-manifest');
 const { appendJournal } = require('./lib/switch-journal');
 const { preflight } = require('./lib/lane-switch-preflight');
 const { requestHandoff } = require('./lib/lane-switch-handoff');
@@ -30,7 +30,6 @@ const { claudeAccount } = require('./lib/account-alias');
 const { handoffPath } = require('./resolve-repo-placement');
 const { parsePeers, rowMatchesSeat, isLive, isOffline } = require('./lib/fleet-peers');
 
-const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ORDER_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{3,63}$/;
 const ALIAS_RE = /^(?:acct-[0-9a-f]{8}|[a-z0-9-]{1,24})$/;
 // Same list as scripts/profile-health.js DROP_ENV, plus AUTOPILOT_ACCOUNT (tier 1 would defeat attribution).

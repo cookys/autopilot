@@ -86,7 +86,7 @@ function tracingFs(log) {
 }
 
 test('cwdKey is the Claude Code project slug', () => {
-  assert.strictEqual(cwdKey('/home/u/proj'), '-home-u-proj');
+  assert.strictEqual(cwdKey('/work/proj'), '-work-proj');
   assert.strictEqual(cwdKey('/tmp/a.b_c d'), '-tmp-a-b-c-d');
   assert.strictEqual(cwdKey(CWD), KEY);
 });

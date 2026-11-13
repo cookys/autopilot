@@ -574,19 +574,31 @@ A_ROOT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(pr
 _CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $A_ROOT"
 A_FX_HOME="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).home)' "$A_META")"
 A_FX_LIVE="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).live)' "$A_META")"
+_CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $A_FX_LIVE"
 A_FX_COLLECT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).collect)' "$A_META")"
 A_FX_FS="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).fstype)' "$A_META")"
 A_FX_PROJECTS="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).projects ? "yes" : "no")' "$A_META")"
 assert_eq "off" "$A_FX_COLLECT" "a fixture: collect off"
 assert_eq "tmpfs" "$A_FX_FS" "a fixture: live dir is tmpfs"
 assert_eq "no" "$A_FX_PROJECTS" "a fixture: fake HOME has no transcript dir"
-case "$A_FX_LIVE" in
-  /dev/shm/g37-fix-*/live) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
-  *) fail "a fixture: live dir is not under a /dev/shm g37-fix- root" ;;
+# The live dir is its own mkdtemp on tmpfs. The fixture root stays on os.tmpdir()
+# so TMPDIR can hardlink a local git clone; putting the root on /dev/shm breaks that.
+case "$A_ROOT" in
+  /dev/shm/*) fail "a fixture: root is on /dev/shm (TMPDIR would be tmpfs)" ;;
+  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
 esac
 case "$A_FX_HOME" in
-  /dev/shm/g37-fix-*/fakehome) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
-  *) fail "a fixture: HOME is not the fixture fakehome on /dev/shm" ;;
+  "$A_ROOT"/fakehome) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  *) fail "a fixture: HOME is not the fixture fakehome under the fixture root" ;;
+esac
+case "$A_FX_LIVE" in
+  /dev/shm/g37-fix-live-*/*) fail "a fixture: live dir is not its own /dev/shm mkdtemp" ;;
+  /dev/shm/g37-fix-live-*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  *) fail "a fixture: live dir is not its own /dev/shm mkdtemp" ;;
+esac
+case "$A_FX_LIVE" in
+  "$A_ROOT"|"$A_ROOT"/*) fail "a fixture: live dir is inside the fixture root" ;;
+  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
 esac
 assert_neq "$A_FX_LIVE" "$A_UID" "a fixture: live dir is not the uid live dir"
 assert_neq "$A_FX_LIVE" "$A_SENT" "a fixture: live dir is not the sentinel"

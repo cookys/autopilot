@@ -17,30 +17,47 @@ process.stdout.write(JSON.stringify({ root: f.root, regFile: f.regFile, decoy: f
   accountsDir: f.accountsDir, env: f.env, tokens: f.tokens, log: f.shim.log }));
 EOF
 jget() { node -e 'const o=JSON.parse(process.argv[1]);const v=process.argv[2].split(".").reduce((a,k)=>a&&a[k],o);process.stdout.write(typeof v==="string"?v:JSON.stringify(v))' "$1" "$2"; }
-# makeFixture roots sit on /dev/shm. Callers use F="$(fx)", so a shell array would
-# die with that subshell. Record each root and remove it only from the top-level
-# EXIT trap: the trap is inherited, and a subshell must not delete the fixtures
-# the suite is still reading (same BASHPID guard as cleanup_test_tmp).
+# makeFixture's live dir is its own mkdtemp on /dev/shm; the root is under os.tmpdir().
+# Callers use F="$(fx)", so a shell array would die with that subshell. Record each
+# path and remove it only from the top-level EXIT trap: the trap is inherited, and a
+# subshell must not delete the fixtures the suite is still reading (same BASHPID guard
+# as cleanup_test_tmp). A recorded path is removed only when it is one directory
+# component under a literal prefix this fixture uses.
 _FX_ROOTS_FILE="$TEST_TMP/fx-roots.txt"
+_FX_OS_TMP="$(node -e 'process.stdout.write(require("fs").realpathSync(require("os").tmpdir()))')"
 _fx_roots_clean() {
   [ "$BASHPID" = "$__TEST_TOP_BASHPID" ] || return 0
-  local root
+  local root base
   [ -f "$_FX_ROOTS_FILE" ] || return 0
   while IFS= read -r root || [ -n "$root" ]; do
     case "$root" in
-      /dev/shm/g37-fix-*)
-        if [ -d "$root" ] && [ ! -L "$root" ]; then rm -rf -- "$root"; fi
+      /dev/shm/g37-fix-live-*) base="${root#/dev/shm/}" ;;
+      "$_FX_OS_TMP"/g37-fix-*)
+        [ -n "$_FX_OS_TMP" ] && [ "$_FX_OS_TMP" != / ] || continue
+        base="${root#"$_FX_OS_TMP"/}"
+        case "$base" in g37-fix-live-*) continue ;; esac
         ;;
+      *) continue ;;
     esac
+    case "$base" in
+      g37-fix-*|g37-fix-live-*) ;;
+      *) continue ;;
+    esac
+    case "$base" in */*) continue ;; esac
+    if [ -d "$root" ] && [ ! -L "$root" ]; then rm -rf -- "$root"; fi
   done < "$_FX_ROOTS_FILE"
 }
 trap '_fx_roots_clean; cleanup_test_tmp' EXIT
 fx() {
-  local j root
+  local j root live
   j="$(node "$TEST_TMP/fix.js" "$REPO_ROOT")"
   root="$(jget "$j" root)"
+  live="$(jget "$j" env.AUTOPILOT_LIVE_DIR)"
   case "$root" in
-    /dev/shm/g37-fix-*) printf '%s\n' "$root" >> "$_FX_ROOTS_FILE" ;;
+    "$_FX_OS_TMP"/g37-fix-*) printf '%s\n' "$root" >> "$_FX_ROOTS_FILE" ;;
+  esac
+  case "$live" in
+    /dev/shm/g37-fix-live-*) printf '%s\n' "$live" >> "$_FX_ROOTS_FILE" ;;
   esac
   printf '%s' "$j"
 }

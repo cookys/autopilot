@@ -7,12 +7,14 @@
  *   makeFixture(opts) -> a complete tempdir world: fake passwd home with a DECOY credentials file,
  *     accounts dir + registry + per-alias dirs/tokens, live dir, state dir, config file, shim, and
  *     the caller env (PATH with the shim first, TMPDIR, XDG_RUNTIME_DIR, AUTOPILOT_* locators).
- *     The root is mkdtemp on /dev/shm so AUTOPILOT_LIVE_DIR is tmpfs (codeforge rejects any
- *     other filesystem and would fall through to the uid live dir). AUTOPILOT_CODEFORGE_COLLECT
- *     is off. cleanup() removes the root, live dir included.
+ *     The fixture root is mkdtemp under os.tmpdir() so TMPDIR stays on that filesystem (git
+ *     clone --local hardlinks into it). Only the live dir is its own mkdtemp under /dev/shm:
+ *     codeforge rejects any other filesystem and would fall through to the uid live dir.
+ *     AUTOPILOT_CODEFORGE_COLLECT is off. cleanup() removes the root and the live dir.
  * Test-only. Tokens are FAKE- literals. Built-ins only.
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const SHIM_SRC = path.join(__dirname, 'claude-shim.js');
@@ -90,9 +92,12 @@ function pinProbeOff(config, probeFromManifest) {
 function makeFixture(opts) {
   const o = opts || {};
   // No disk fallback: a non-tmpfs live dir is rejected by codeforge and the collect
-  // lands on the uid directory. /dev/shm is tmpfs; cleanup() removes this root.
+  // lands on the uid directory. /dev/shm is tmpfs. The fixture root stays on os.tmpdir()
+  // so TMPDIR can hardlink; only the live dir is on tmpfs. cleanup() removes both.
   if (!fs.existsSync('/dev/shm')) throw new Error('makeFixture: /dev/shm is required so the live dir stays on tmpfs');
-  const root = fs.realpathSync(fs.mkdtempSync(path.join('/dev/shm', 'g37-fix-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'g37-fix-')));
+  const liveDir = fs.realpathSync(fs.mkdtempSync(path.join('/dev/shm', 'g37-fix-live-')));
+  fs.chmodSync(liveDir, 0o700);
   const realHome = path.join(root, 'fakehome');
   const decoy = path.join(realHome, '.claude', '.credentials.json');
   fs.mkdirSync(path.dirname(decoy), { recursive: true });
@@ -100,11 +105,10 @@ function makeFixture(opts) {
   const accountsDir = path.join(realHome, '.config', 'autopilot', 'accounts');
   fs.mkdirSync(accountsDir, { recursive: true, mode: 0o700 });
   fs.chmodSync(accountsDir, 0o700);
-  const liveDir = path.join(root, 'live');
   const stateDir = path.join(root, 'state');
   const runtimeDir = path.join(root, 'run');
   const tmpDir = path.join(root, 'tmp');
-  for (const d of [liveDir, stateDir, runtimeDir, tmpDir]) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+  for (const d of [stateDir, runtimeDir, tmpDir]) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
   const configFile = path.join(root, 'config.json');
   fs.writeFileSync(configFile, JSON.stringify(pinProbeOff(o.config, o.probeFromManifest)));
 
@@ -149,7 +153,10 @@ function makeFixture(opts) {
     tokens, shim, env, auditFile: path.join(stateDir, 'accounts-audit.jsonl'),
     cooldownDir: path.join(liveDir, 'accounts', 'cooldown'),
     writeConfig(c) { fs.writeFileSync(configFile, JSON.stringify(pinProbeOff(c, o.probeFromManifest))); },
-    cleanup() { fs.rmSync(root, { recursive: true, force: true }); },
+    cleanup() {
+      try { fs.rmSync(root, { recursive: true, force: true }); }
+      finally { fs.rmSync(liveDir, { recursive: true, force: true }); }
+    },
   };
 }
 

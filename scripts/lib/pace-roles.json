@@ -1,0 +1,20 @@
+{
+  "_why": "Follows engine-scorecard current (glm: reviewer provisional, implementer not qualified; agyclaude/minimax: no evidence).",
+  "reviewer": [
+    "agy",
+    "glm",
+    "codex",
+    "grok"
+  ],
+  "implementer": [
+    "agy",
+    "codex",
+    "grok"
+  ],
+  "author": [
+    "agy",
+    "glm",
+    "codex",
+    "grok"
+  ]
+}

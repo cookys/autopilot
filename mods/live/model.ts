@@ -1052,7 +1052,7 @@ function parseLookTarget(v: unknown): LookTarget | null {
   return null
 }
 
-// Direct read of <git-common-dir>/autopilot/decisions/*.json (the durable store scripts/open-decision.js writes), so cards and `給你看` items appear at once and survive
+// Direct read of <git-common-dir>/autopilot/decisions/<scope>.json (the durable store scripts/open-decision.js writes), so cards and `給你看` items appear at once and survive
 // pane reload even before the watcher republishes model.json; closed entries shadow any older open copy in model.json.
 export function readDurableDecisionFiles(texts: readonly string[], want: { project_key: string; repo_identity: unknown }, nowMs: number): { open: LiveDecision[]; closedIds: Set<string> } {
   const optText = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)

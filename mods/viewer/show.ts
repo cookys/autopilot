@@ -6,6 +6,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { resolveLocale } from '../live/i18n'
 import type { Locale } from '../live/i18n'
+import { recordShowLook } from '../live/register'
 import { MAX_FILE_BYTES, TAIL_LINES, diffView, startAbove, fileView, gitDiffArgv, nextStart, prevStart, splitLines, summaryOfDiff, summaryOfEmpty, summaryOfFile } from './model'
 import type { DiffView, FileView, ShowRequest } from './model'
 import type { Shown } from './pane'
@@ -39,9 +40,6 @@ export const setCurrentView = (c: Current): void => { current = c }
 export type LookTarget =
   | { kind: 'path'; path: string; start: number | null; end: number | null; tail?: boolean }
   | { kind: 'diff'; args: string[] }
-export type ShowRecorder = ($: EngineInterface, req: ShowRequest) => Promise<void>
-let showRecorder: ShowRecorder | null = null
-export const setShowRecorder = (fn: ShowRecorder | null): void => { showRecorder = fn }
 
 // Same inputs as the live mod's resolveT (config ui.locale > AUTOPILOT_LOCALE > Claude Code language > LC_ALL / LANG > en), with the literal names the engine's analysis wants.
 async function localeOf($: EngineInterface): Promise<Locale> {
@@ -115,8 +113,8 @@ export async function show($: EngineInterface, req: ShowRequest, opts: ShowOpts 
     resetAssist() // a new content: the previous answer and any running call go
     $.ui.invalidate('ui.render')
     const placed = await (early ?? openWindow($, title))
-    if (opts.reopen !== true && showRecorder !== null) {
-      try { await showRecorder($, req) } catch (_e) { /* recording never blocks showing */ }
+    if (opts.reopen !== true) {
+      try { await recordShowLook($, req) } catch (_e) { /* recording never blocks showing */ }
     }
     return { ok: true, summary: placed ? summary : summary + ' ' + WAITING_FOR_MODEL, title, placed }
   }

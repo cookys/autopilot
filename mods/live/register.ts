@@ -68,7 +68,7 @@ import { Pane } from './pane'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
-import { reopenLook, setShowRecorder, showPath } from '../viewer/show'
+import { reopenLook, showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   isStepCard, layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
@@ -981,7 +981,7 @@ function showItemLabel(req: ShowRequest, lane: string): { text: string; lookTarg
   }
 }
 
-async function recordShowLook($: EngineInterface, req: ShowRequest): Promise<void> {
+export async function recordShowLook($: EngineInterface, req: ShowRequest): Promise<void> {
   if (!(await $.fs.exists($.plugin.root + '/' + DECISION_SCRIPTS[0]).catch(() => false))) return
   const cwd = await $.session.cwd()
   const common = await commonDirAt($, cwd)
@@ -1002,7 +1002,6 @@ async function recordShowLook($: EngineInterface, req: ShowRequest): Promise<voi
   await execScript($, DECISION_SCRIPTS[0], args)
   await refresh($)
 }
-setShowRecorder(recordShowLook)
 
 async function dismissCard($: EngineInterface, id: string): Promise<void> {
   if (id === '' || !/^[A-Za-z0-9._-]+$/.test(id)) return

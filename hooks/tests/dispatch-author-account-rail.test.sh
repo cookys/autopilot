@@ -16,8 +16,34 @@ const f = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }] });
 process.stdout.write(JSON.stringify({ root: f.root, regFile: f.regFile, decoy: f.decoy, realHome: f.realHome,
   accountsDir: f.accountsDir, env: f.env, tokens: f.tokens, log: f.shim.log }));
 EOF
-fx() { node "$TEST_TMP/fix.js" "$REPO_ROOT"; }
 jget() { node -e 'const o=JSON.parse(process.argv[1]);const v=process.argv[2].split(".").reduce((a,k)=>a&&a[k],o);process.stdout.write(typeof v==="string"?v:JSON.stringify(v))' "$1" "$2"; }
+# makeFixture roots sit on /dev/shm. Callers use F="$(fx)", so a shell array would
+# die with that subshell. Record each root and remove it only from the top-level
+# EXIT trap: the trap is inherited, and a subshell must not delete the fixtures
+# the suite is still reading (same BASHPID guard as cleanup_test_tmp).
+_FX_ROOTS_FILE="$TEST_TMP/fx-roots.txt"
+_fx_roots_clean() {
+  [ "$BASHPID" = "$__TEST_TOP_BASHPID" ] || return 0
+  local root
+  [ -f "$_FX_ROOTS_FILE" ] || return 0
+  while IFS= read -r root || [ -n "$root" ]; do
+    case "$root" in
+      /dev/shm/g37-fix-*)
+        if [ -d "$root" ] && [ ! -L "$root" ]; then rm -rf -- "$root"; fi
+        ;;
+    esac
+  done < "$_FX_ROOTS_FILE"
+}
+trap '_fx_roots_clean; cleanup_test_tmp' EXIT
+fx() {
+  local j root
+  j="$(node "$TEST_TMP/fix.js" "$REPO_ROOT")"
+  root="$(jget "$j" root)"
+  case "$root" in
+    /dev/shm/g37-fix-*) printf '%s\n' "$root" >> "$_FX_ROOTS_FILE" ;;
+  esac
+  printf '%s' "$j"
+}
 shim_calls() { local n=0; [ -f "$1" ] && n="$(grep -c . "$1")" || true; echo "${n:-0}"; }
 
 SCRIPT_UNDER_TEST="$SCRIPT"
@@ -27,6 +53,7 @@ run_author() { # $1 = fixture json; extra VAR=val args are passed to env
     XDG_RUNTIME_DIR="$(jget "$F" env.XDG_RUNTIME_DIR)" \
     AUTOPILOT_ACCOUNTS_DIR="$(jget "$F" env.AUTOPILOT_ACCOUNTS_DIR)" AUTOPILOT_LIVE_DIR="$(jget "$F" env.AUTOPILOT_LIVE_DIR)" \
     AUTOPILOT_STATE_DIR="$(jget "$F" env.AUTOPILOT_STATE_DIR)" AUTOPILOT_CONFIG="$(jget "$F" env.AUTOPILOT_CONFIG)" \
+    AUTOPILOT_CODEFORGE_COLLECT="$(jget "$F" env.AUTOPILOT_CODEFORGE_COLLECT)" \
     DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 \
     G37_STUB_LOG="$TEST_TMP/stub.log" "$@" "$SCRIPT_UNDER_TEST" --runner claude-native --model claude-fable-5 --prompt-file "$PROMPT" --bin claude --timeout 20s
 }

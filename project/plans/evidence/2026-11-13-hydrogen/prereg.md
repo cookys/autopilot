@@ -18,4 +18,8 @@ If all four pass: pace-select puts hydrogen first for implementer, others only w
 
 Review of the result: agyclaude (PM; not grok, not codex), glm as fallback.
 
+## Addendum (2026-11-13 14:51 Taipei, before the carbon receipt landed)
+
+PM ruling (fleet 01M79TS38TBVA45E0GMH8P6PTD, reply to 01M79TRGEEPHSKDSS77PGGW96W): "the best incumbent" in bars 2 and 3 is the same engine, the incumbent with the most SWE34 resolved. This reading was fixed after the hydrogen and opus results (table sha16 dad034d7) and before carbon's; the verdict waits for carbon's full run.
+
 Fleet-Task: 01M79J89A09KAGP4HCM8KC3G0J

@@ -99,7 +99,7 @@ if touch "$HOME/.claude/should-fail" 2>/dev/null; then
   exit 19
 fi
 echo edited >> sandbox-edit.txt
-printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"ok","usage":{"input_tokens":10,"output_tokens":5}}}'
+printf '%s\n' '{"event":"result","result":{"conversation_id":"stub-conv","duration_seconds":0.1,"num_turns":1,"status":"SUCCESS","response":"ok","usage":{"cache_read_tokens":0,"input_tokens":10,"output_tokens":5,"thinking_tokens":0,"total_tokens":15}}}'
 exit 0
 EOS
 chmod +x "$BINDIR/claude" "$BINDIR/agy"
@@ -163,6 +163,7 @@ assert_eq "$(jget "$CASE_JSON" fallback.to)" "gemini-4-hydrogen-high/high@agy" "
 assert_eq "$(jget "$CASE_JSON" sandbox.mode)" "bwrap" "(1) sandbox.mode is bwrap"
 assert_eq "$(jget "$CASE_JSON" usage.input_tokens)" "10" "(1) agy native envelope and usage parsed"
 assert_not_contains "$CASE_LOG" "native envelope and usage NOT parsed" "(1) log has no envelope-NOT-parsed failure"
+assert_not_contains "$CASE_LOG" "native JSON envelope invalid" "(1) log has no invalid-envelope warning"
 assert_not_contains "$CASE_LOG" "Read-only file system" "(1) log has no Read-only file system error"
 assert_file_exists "$H1/.gemini/antigravity-cli/agy-reached.txt" "(1) agy stub ran inside bwrap and wrote under \$HOME/.gemini"
 assert_file_exists "$H1/.gemini/antigravity-cli/state.tmp" "(1) agy stub wrote state under \$HOME/.gemini"

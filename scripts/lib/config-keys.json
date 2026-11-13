@@ -6430,6 +6430,37 @@
       "type": "string"
     },
     {
+      "name": "quota_mirror_dirs",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "default": [],
+      "readers": [
+        "scripts/lib/quota-mirror-dirs.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_QUOTA_MIRROR_DIRS"
+      ],
+      "summary": "Extra fleet.quota mirror directories merged with this account's live quota directory. Each entry is a directory shaped like <live_dir>/quota.",
+      "type": "array"
+    },
+    {
+      "name": "AUTOPILOT_QUOTA_MIRROR_DIRS",
+      "kind": "env",
+      "audience": "user",
+      "group": "accounts",
+      "default": null,
+      "readers": [
+        "scripts/lib/quota-mirror-dirs.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "quota_mirror_dirs"
+      ],
+      "summary": "Colon-separated extra mirror directories. When set, even to empty, it replaces quota_mirror_dirs."
+    },
+    {
       "name": "AUTOPILOT_ACCOUNT_MODE",
       "kind": "env",
       "audience": "user",

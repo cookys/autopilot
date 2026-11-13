@@ -53,6 +53,8 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Review family gate** — `lib/review-family-gate.js` `lib/qc-panel-codex-fallback.js` (cross-family rule and codex quota runtime seat substitute helper shared by `hetero-review-loop.js`, `check-phase-review-receipt.js`, and `src/engine/autopilot-engine.js`)
 
+**Shared JSON & store primitives (cont.)** — `lib/quota-mirror-dirs.js`
+
 **Shared JSON & store primitives (cont.)** — `lib/claude-stream-envelope.js` `lib/account-observation.js` `lib/repo-layout.js` `lib/seat-model-id.js` `lib/roster-overlay.js` `lib/fleet-decision.js` `lib/decide-line.js` `lib/agy-timeout.sh` `lib/events-fixture.js` `lib/account-registry.js` `lib/account-quota.js` `lib/account-cooldown.js` `lib/account-pick.js` `lib/account-interpret.js` `lib/account-capture.js` `lib/account-probe.js` `lib/account-audit.js` `lib/account-env.js` `lib/account-fixtures/claude-shim.js` `lib/account-fixtures/shim-install.js` `lib/account-fixtures/os-lock-holder.js` `lib/account-rail.js` `lib/account-state.sh` `lib/role-kit.js` `lib/role-kit-kimi.js` `lib/role-kit.sh` `lib/eval-account.sh` `lib/eval-account.js` `lib/fixtures/gen-account-pick-g37-golden.js`
 
 **Shared JSON & store primitives (cont.)** — `lib/hippo.js` `project-record.js` `lib/lane-manifest.js` `lib/switch-journal.js` `lib/lane-switch-preflight.js` `lib/lane-switch-handoff.js` `lib/lane-switch-transcript.js` `lib/lane-switch-confirm.js` `lib/fleet-peers.js`

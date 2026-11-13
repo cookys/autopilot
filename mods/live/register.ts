@@ -967,7 +967,7 @@ const CLAIM_MS = 8000
 let claimCard: ClaimCard | null = null
 export function setClaimCard(fn: ClaimCard | null): void { claimCard = fn }
 const claimWith = ($: EngineInterface): ClaimCard => async (card, answer) => {
-  const args = [card.id, ...('option' in answer ? ['--option', answer.option] : ['--free-text', answer.freeText])]
+  const args = [card.id, ...('option' in answer ? ['--option', answer.option, ...(answer.freeText ? ['--free-text', answer.freeText] : [])] : ['--free-text', answer.freeText])]
   let j: unknown
   try { j = JSON.parse((await execScript($, CLAIM_SCRIPTS[0], args, undefined, CLAIM_MS)).trim().split('\n').pop() ?? '') } catch (_e) { return { ok: false, answer_id: null, reason: 'claim failed' } }
   const r = j as { ok?: unknown; answer_id?: unknown; reason?: unknown } | null

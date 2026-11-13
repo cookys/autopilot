@@ -59,7 +59,7 @@
  * <decisions dir>/<project_key>.due-sweep.state (schema autopilot.due-sweep/1, { fired: { <id>: <due_at> } }; under a lock), so each card fires once
  * per due_at (a re-dated card fires again; closed cards are pruned). Nothing due -> no output, nothing written. The runs watcher calls the same
  * dueSweep() on every tick (src/status/runs-watch.js) and writes the lines to its log; whichever sweeps first fires the card. No daemon, no timer.
- * close [--option <label> | --free-text <text>] (F4 claim-before-act): when the owner's answer is given, close first runs `fleet decision claim` for
+ * close [--option <label> [--free-text <note>] | --free-text <text>] (F4 claim-before-act): when the owner's answer is given, close first runs `fleet decision claim` for
  * the card (scripts/lib/fleet-decision.js). Already answered on the console (claim exit 3) -> the printed console answer is what to act on, and the
  * card is closed; courier unreachable (exit 9) -> retried a bounded number of times, then exit 8 and the card stays open. A host with no fleet
  * binary, or one without `fleet decision`, closes as before. Without --option/--free-text close is a plain ledger close (a withdrawal, not an answer).
@@ -485,8 +485,8 @@ function claimBeforeClose(args) {
     process.stderr.write(`open-decision: ERROR: ${args.id} NOT closed and NOT answered: could not tell whether this host has a fleet courier (\`fleet --help\` probe failed); the answer is held. Run the same close again\n`);
     return { code: 8 };
   }
-  const c = fd.claim(args.id, args.option.length ? { option: args.option[0] } : { freeText: args.closeFreeText });
-  if (c.outcome === 'claimed') return { code: 0 };
+  const c = fd.claim(args.id, args.option.length ? { option: args.option[0], freeText: args.closeFreeText } : { freeText: args.closeFreeText });
+  if (c.outcome === 'claimed') return { code: 0, noteDropped: c.note_dropped_by_courier === true };
   if (c.outcome === 'already_answered') {
     process.stderr.write(`open-decision: ${args.id} was already answered on the console; act on that answer, not on yours, and tell the owner\n`);
     process.stdout.write(`already answered on the console: ${JSON.stringify(c.json)}\n`);
@@ -637,7 +637,7 @@ function main(argv) {
     if (bad) return usage(`--${bad} is not a close argument`);
     if (ex.dispatched !== undefined) return markDispatched(args, ex);
     const viaOption = args.option.length > 0 || args.closeFreeText !== undefined;
-    if (args.option.length > 1 || (args.option.length && args.closeFreeText !== undefined)) return usage('close takes one --option <label> or one --free-text <text>');
+    if (args.option.length > 1) return usage('close takes one --option <label>, optionally with --free-text <note>, or one --free-text <text>');
     if (ex.answer !== undefined && (viaOption || !ex.answer.trim())) return usage('close --answer <text> is the whole answer: not with --option/--free-text, and not empty');
     if (ex.answer === undefined && (ex['awaiting-operator'] !== undefined || ex.executor !== undefined || ex.asker !== undefined)) return usage('--executor/--asker/--awaiting-operator belong to `close --answer <text>`');
     if (ex['awaiting-operator'] !== undefined && !ex['awaiting-operator'].trim()) return usage('--awaiting-operator needs the step the operator must do');
@@ -645,9 +645,11 @@ function main(argv) {
     const found = findCard(args.cwd, args.id, { live: true });
     if (found && isAwaitingEntry(found.entry)) return usage(`${args.id} is awaiting_operator_action: the operator's step ends it (\`done --id ${args.id}\`), not close`);
     if (found && isPendingDispatchEntry(found.entry)) return usage(`${args.id} is pending_dispatch: it is closed by \`close --id ${args.id} --dispatched <task_id>\` once the dispatch is really sent, not by another close`);
+    let noteDropped = false;
     if (viaOption) {
       const g = claimBeforeClose(args);
       if (g.code !== 0) return g.code;
+      noteDropped = g.noteDropped === true;
     }
     const answerText = ex.answer !== undefined ? ex.answer : (args.option.length ? args.option[0] : (args.closeFreeText !== undefined ? args.closeFreeText : null));
     const executor = ex.executor || (found && found.entry.executor) || null;
@@ -658,6 +660,7 @@ function main(argv) {
     const patch = awaiting
       ? { status: 'awaiting_operator_action', answered_at: now, answer: answerText, awaiting_operator: ex['awaiting-operator'].trim() }
       : (parked ? { status: 'pending_dispatch', pending_dispatch_at: now, answer: answerText } : { status: 'closed', closed_at: now, answer: answerText });
+    if (args.option.length && args.closeFreeText) { patch.answer_free_text = args.closeFreeText; if (noteDropped) patch.free_text_source = 'local'; } // the note beside an option is never lost; local when the courier kept only the option
     if (executor && answerText !== null) patch.executor = executor;
     if (asker && answerText !== null) patch.asker = asker;
     let r = { status: 'absent' };
@@ -960,6 +963,7 @@ function deliveryText(c) {
   const optionLine = c.answer_option === null || c.answer_option === undefined ? '(none)' : (opt && opt.description ? `${c.answer_option} — ${opt.description}` : c.answer_option);
   const lines = [`[操作員答覆] ${c.id}`, `answer_id: ${c.answer_id}`, `executor: ${c.executor}`, `question: ${c.question}`, `option: ${optionLine}`,
     `free_text: ${nonEmpty(c.answer_free_text) === null ? '(none)' : c.answer_free_text}`, `answer_digest: ${c.answer_digest}`];
+  if (c.free_text_source === 'local' && nonEmpty(c.answer_free_text) !== null) lines.push('free_text_source: local (the owner\'s note, relayed from the panel line; the courier did not store it, so answer_digest does not cover it)');
   if (nonEmpty(c.request_id)) lines.push(`request_id: ${c.request_id}`);
   return lines.join('\n');
 }
@@ -977,11 +981,11 @@ function answersOf(h) {
   if (Array.isArray(h.answers)) return h.answers;
   const sentBefore = new Map((Array.isArray(h.sent_answers) ? h.sent_answers : []).map((s) => [s.answer_id, s]));
   const out = [];
-  const add = (f, sentId, sentAt) => { if (!out.some((x) => x.answer_id === f.answer_id)) out.push({ answer_id: f.answer_id, answer: f.answer, answer_option: f.answer_option, answer_free_text: f.answer_free_text, answer_digest: f.answer_digest, sent_message_id: sentId || null, sent_at: sentAt || null }); };
+  const add = (f, sentId, sentAt) => { if (!out.some((x) => x.answer_id === f.answer_id)) out.push({ answer_id: f.answer_id, answer: f.answer, answer_option: f.answer_option, answer_free_text: f.answer_free_text, ...(f.free_text_source ? { free_text_source: f.free_text_source } : {}), answer_digest: f.answer_digest, sent_message_id: sentId || null, sent_at: sentAt || null }); };
   for (const s of sentBefore.values()) add({ answer_id: s.answer_id }, s.message_id, s.at);
   if (h.answer_id || h.dispatched_message_id) {
     const s = sentBefore.get(h.answer_id);
-    add({ answer_id: h.answer_id || null, answer: h.answer, answer_option: h.answer_option, answer_free_text: h.answer_free_text, answer_digest: h.answer_digest }, h.dispatched_message_id || (s && s.message_id), h.dispatched_at || (s && s.at));
+    add({ answer_id: h.answer_id || null, answer: h.answer, answer_option: h.answer_option, answer_free_text: h.answer_free_text, free_text_source: h.free_text_source, answer_digest: h.answer_digest }, h.dispatched_message_id || (s && s.message_id), h.dispatched_at || (s && s.at));
   }
   if (h.next_answer && h.next_answer.answer_id) add(h.next_answer);
   return out;
@@ -1060,10 +1064,13 @@ function parkAnswer(file, id, v) {
   if (isClosedEntry(c) && c.dispatched_message_id) return { status: 'ok', id, executor: c.executor };
   const a = v.answer;
   const option = nonEmpty(a.option);
-  const ft = nonEmpty(a.free_text);
+  const courierFt = nonEmpty(a.free_text);
+  // an option answer whose note the courier did not keep: the panel line's note (v.local_note), marked local; the courier's own free text always wins
+  const localNote = option !== null && courierFt === null ? nonEmpty(v.local_note) : null;
+  const ft = courierFt !== null ? courierFt : localNote;
   const now = new Date().toISOString();
   const courierDigest = nonEmpty(a.answer_digest);
-  const entry = { answer_id: v.answer_id, answer: option !== null ? option : ft, answer_option: option, answer_free_text: ft, answer_digest: courierDigest !== null ? courierDigest : answerDigest(id, v.answer_id, a.free_text, a.option), sent_message_id: null, sent_at: null };
+  const entry = { answer_id: v.answer_id, answer: option !== null ? option : ft, answer_option: option, answer_free_text: ft, ...(localNote !== null ? { free_text_source: 'local' } : {}), answer_digest: courierDigest !== null ? courierDigest : answerDigest(id, v.answer_id, a.free_text, a.option), sent_message_id: null, sent_at: null };
   const p = patchDecision(file, id, (h) => {
     const cur = answersOf(h);
     if (cur.some((x) => x.answer_id === v.answer_id)) return withAnswers(cur);

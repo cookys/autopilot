@@ -111,7 +111,10 @@ function closeDecideReply(payload) {
       try { for (const f of files) { const e = readEntries(f, { all: true }).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
       const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
       if (!bound.ok) { if (parkExecutorCard(id, 'content_mismatch')) continue; unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
-      delivery.set(id, { answer: v.answer, answer_id: aid });
+      // the note beside the picked option (`｜補充：<note>`): kept as local_note in case the courier stored the option only (parkAnswer decides)
+      const dl = require('../scripts/lib/decide-line.js').parseDecideLine(line);
+      const localNote = dl && dl.note ? dl.note.slice('補充：'.length).trim() : null;
+      delivery.set(id, { answer: v.answer, answer_id: aid, local_note: localNote });
     }
     if (delivery.has(id)) {
       // a card with an executor: park the verified answer now (every answered card first), send later in order under one deadline

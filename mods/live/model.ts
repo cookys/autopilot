@@ -1795,11 +1795,12 @@ export function decideFillText(d: LiveDecision, st: DecideState): string | null 
 }
 // what `fleet decision claim` is given for this card: the picked option's label, or the typed text (a free card, or an option card where none was picked and a note was typed).
 // Both are the same strings decideLine writes into the line (before `wire`), because the hook compares the line's answer with what the courier stored.
-export type ClaimAnswer = { option: string } | { freeText: string }
+export type ClaimAnswer = { option: string; freeText?: string } | { freeText: string }
 export function decideAnswer(d: LiveDecision, st: DecideState): ClaimAnswer | null {
   if (decideLine(d, st) === null) return null
   const pick = decidePick(d, st)
-  return d.options.length > 0 && pick !== null ? { option: d.options[pick].label } : { freeText: decideNote(d, st) }
+  if (d.options.length > 0 && pick !== null) { const note = decideNote(d, st); return note === '' ? { option: d.options[pick].label } : { option: d.options[pick].label, freeText: note } } // option + note (補充): both reach the courier
+  return { freeText: decideNote(d, st) }
 }
 // the correction line of a reopened card: `[待決回覆·更正] <id> → <answer>[｜補充：<note>]`; no excerpt, no answer id (the courier takes one claim per card, so a correction is not claimed)
 export function decideCorrectionLine(d: LiveDecision, st: DecideState): string | null {

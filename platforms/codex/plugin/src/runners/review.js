@@ -27,8 +27,10 @@ const REVIEW_RESULT_FIELDS = [
 // `status`, and non-null is admitted only on status:no_verdict. Consumers deriving
 // authority from it are rejected by the check-canonical-invariants reader guard.
 // BL-0246: transport-failure detail on a no_verdict (exit_code, stage, masked stderr_tail).
+// PM 01M7AHAM: a retreated seat records implementer_family and fallback {from,to,reason}.
 const REVIEW_RESULT_OPTIONAL_FIELDS = [
   'unratified_verdict', 'frame_closed_by', 'exit_code', 'stage', 'stderr_tail',
+  'implementer_family', 'fallback',
 ];
 const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
 const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
@@ -125,6 +127,19 @@ function validateReviewResult(value) {
   if (Object.prototype.hasOwnProperty.call(value, 'stderr_tail')
       && typeof value.stderr_tail !== 'string') {
     throw new Error('review output JSON stderr_tail must be a string');
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'implementer_family')
+      && (typeof value.implementer_family !== 'string' || value.implementer_family.length === 0)) {
+    throw new Error('review output JSON implementer_family must be a non-empty string');
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'fallback')) {
+    const fb = value.fallback;
+    const ok = fb && typeof fb === 'object' && !Array.isArray(fb)
+      && JSON.stringify(Object.keys(fb).sort()) === JSON.stringify(['from', 'reason', 'to'])
+      && ['from', 'to', 'reason'].every((k) => typeof fb[k] === 'string');
+    if (!ok) {
+      throw new Error('review output JSON fallback must be an object {from, to, reason} of strings');
+    }
   }
   if (Object.prototype.hasOwnProperty.call(value, 'frame_closed_by')) {
     if (!['end-marker', 'begin-marker'].includes(value.frame_closed_by)) {

@@ -19,9 +19,12 @@ const {
   loadRoles,
   mergePools,
   defaultPacePath,
+  defaultQualifiedPath,
+  QUALIFIED_SCHEMA,
 } = require('./pace-select.js');
 
 const CLI = path.join(__dirname, 'pace-select.js');
+const SCORECARD_CLI = path.join(__dirname, 'engine-scorecard.js');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
 const allEndpointsReady = () => true;
 
@@ -40,13 +43,20 @@ function cli(args, envExtra = {}) {
   delete env.AUTOPILOT_PACE_ROLES;
   delete env.ANTHROPIC_COMPATIBLE_BASE_URL;
   delete env.ANTHROPIC_COMPATIBLE_AUTH_TOKEN;
-  // Hermetic default: isolate from host ~/.autopilot/endpoints.env while keeping glm ready
-  // unless a test explicitly overrides AUTOPILOT_ENDPOINT_GLM_*.
+  // Hermetic default: isolate from host ~/.autopilot/qualified.v1.json and endpoints.env
+  // unless a test explicitly overrides AUTOPILOT_QUALIFIED_FILE or AUTOPILOT_ENDPOINT_GLM_*.
+  env.AUTOPILOT_QUALIFIED_FILE = path.join(FIXTURES_DIR, '__missing_qualified__.json');
   env.AUTOPILOT_ENDPOINTS_ENV = '/nonexistent';
   env.AUTOPILOT_ENDPOINT_GLM_URL = 'https://glm.example.invalid/v1';
   env.AUTOPILOT_ENDPOINT_GLM_TOKEN = 'test-glm-token';
   delete env.AUTOPILOT_ENDPOINT_GLM_TRANSPORT;
   Object.assign(env, envExtra);
+  if (
+    Object.prototype.hasOwnProperty.call(envExtra, 'AUTOPILOT_QUALIFIED_FILE')
+    && envExtra.AUTOPILOT_QUALIFIED_FILE === undefined
+  ) {
+    delete env.AUTOPILOT_QUALIFIED_FILE;
+  }
   return spawnSync(process.execPath, [CLI, ...args], {
     encoding: 'utf8',
     env,
@@ -184,6 +194,7 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
     expected_pct: 40,
     over_pace: false,
     role: 'implementer',
+    qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:00:00Z',
     candidates: [
       { engine: 'agy', pool: 'agy', slack_pts: -25 },
@@ -343,6 +354,7 @@ test('(d) all unknown -> exit 3 with engine: null and reason: pace_unknown', () 
   assert.equal(out.engine, null);
   assert.equal(out.reason, 'pace_unknown');
   assert.equal(out.role, 'reviewer');
+  assert.equal(out.qualified_source, 'pace-roles.json');
   assert.equal(out.pace_generated_at, '2026-11-13T02:15:00Z');
   assert.deepEqual(out.candidates, [
     { engine: 'agy', reason: 'unknown' },
@@ -417,6 +429,7 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
     expected_pct: 40,
     over_pace: false,
     role: 'implementer',
+    qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:20:00Z',
     candidates: [
       { engine: 'agy', pool: 'agy(alias 2)', slack_pts: 28 },
@@ -455,6 +468,7 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
     expected_pct: 40,
     over_pace: true,
     role: 'implementer',
+    qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:25:00Z',
     candidates: [
       { engine: 'agy', reason: 'unknown' },
@@ -556,4 +570,172 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     cliOut.candidates.find((c) => c.engine === 'glm'),
     { engine: 'glm', reason: 'endpoint_not_ready' },
   );
+});
+
+test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed, missing file falls back', () => {
+  let tmpDir;
+  try {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-select-qualified-'));
+    const paceFile = fixturePath('ahead-vs-behind.json');
+    const pace = readFixture('ahead-vs-behind.json');
+    const pools = loadPools();
+    const roles = loadRoles();
+
+    // 1. Fail-only key (grok, +14 slack) is excluded; provisional key (glm, -3 slack) is allowed
+    // and wins over pass key (agy, -25 slack); qualified_source reports the file path.
+    const qPath = path.join(tmpDir, 'qualified.v1.json');
+    const qualifiedDoc = {
+      schema: QUALIFIED_SCHEMA,
+      generated_at: '2026-11-13T03:00:00.000Z',
+      rows: [
+        { engine: 'grok-4.7', runner: 'grok', role: 'reviewer', result: 'fail', date: '2026-11-12', event_id: 1 },
+        { engine: 'glm-5.3', runner: 'cc-shim', role: 'reviewer', result: 'provisional', date: '2026-11-11', event_id: 2 },
+        { engine: 'gemini-4-carbon-high', runner: 'agy', role: 'reviewer', result: 'pass', date: '2026-11-10', event_id: 3 },
+      ],
+    };
+    fs.writeFileSync(qPath, `${JSON.stringify(qualifiedDoc, null, 2)}\n`, 'utf8');
+
+    const viaFlag = cli(['--role', 'reviewer', '--pace', paceFile, '--qualified', qPath, '--json']);
+    assert.equal(viaFlag.status, 0, viaFlag.stderr);
+    const flagOut = JSON.parse(viaFlag.stdout);
+    assert.equal(flagOut.engine, 'glm');
+    assert.equal(flagOut.runner, 'cc-shim');
+    assert.equal(flagOut.model, 'glm-5.3');
+    assert.equal(flagOut.slack_pts, -3);
+    assert.equal(flagOut.over_pace, false);
+    assert.equal(flagOut.qualified_source, qPath);
+    assert.equal(flagOut.candidates.some((c) => c.engine === 'grok'), false);
+    assert.deepEqual(flagOut.candidates, [
+      { engine: 'agy', pool: 'agy', slack_pts: -25 },
+      { engine: 'glm', pool: 'glm', slack_pts: -3 },
+    ]);
+
+    const viaEnv = cli(['--role', 'reviewer', '--pace', paceFile, '--json'], {
+      AUTOPILOT_QUALIFIED_FILE: qPath,
+    });
+    assert.equal(viaEnv.status, 0, viaEnv.stderr);
+    assert.deepEqual(JSON.parse(viaEnv.stdout), flagOut);
+
+    // 2. Role eligibility comes from qualified.v1.json (not intersected with pace-roles.json):
+    // glm is absent from pace-roles.json implementer, yet a provisional row in qualified.v1.json admits it.
+    const implQualified = {
+      schema: QUALIFIED_SCHEMA,
+      generated_at: '2026-11-13T03:05:00.000Z',
+      rows: [
+        { engine: 'grok-4.7', runner: 'grok', role: 'implementer', result: 'fail', date: '2026-11-12', event_id: 1 },
+        { engine: 'glm-5.3', runner: 'cc-shim', role: 'implementer', result: 'provisional', date: '2026-11-13', event_id: 2 },
+      ],
+    };
+    const implRes = selectEngine({
+      pace,
+      pools,
+      roles,
+      role: 'implementer',
+      qualified: implQualified,
+      qualifiedSource: qPath,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(implRes.engine, 'glm');
+    assert.equal(implRes.qualified_source, qPath);
+    assert.deepEqual(implRes.candidates, [{ engine: 'glm', pool: 'glm', slack_pts: -3 }]);
+
+    // 3. Missing qualified file falls back to scripts/lib/pace-roles.json with qualified_source: "pace-roles.json".
+    const missingPath = path.join(tmpDir, 'does-not-exist.json');
+    const viaMissingFlag = cli(['--role', 'reviewer', '--pace', paceFile, '--qualified', missingPath, '--json']);
+    assert.equal(viaMissingFlag.status, 0, viaMissingFlag.stderr);
+    const missingFlagOut = JSON.parse(viaMissingFlag.stdout);
+    assert.equal(missingFlagOut.engine, 'grok');
+    assert.equal(missingFlagOut.qualified_source, 'pace-roles.json');
+
+    assert.equal(
+      defaultQualifiedPath({ HOME: tmpDir }),
+      path.join(tmpDir, '.autopilot', 'qualified.v1.json'),
+    );
+    const viaMissingDefault = cli(['--role', 'reviewer', '--pace', paceFile, '--json'], {
+      HOME: tmpDir,
+      AUTOPILOT_QUALIFIED_FILE: undefined,
+    });
+    assert.equal(viaMissingDefault.status, 0, viaMissingDefault.stderr);
+    const missingDefaultOut = JSON.parse(viaMissingDefault.stdout);
+    assert.equal(missingDefaultOut.engine, 'grok');
+    assert.equal(missingDefaultOut.qualified_source, 'pace-roles.json');
+
+    // 4. End-to-end round-trip: engine-scorecard.js export-qualified -> pace-select.js --role author
+    // (canonical verification_author role in export matches --role author).
+    const scDir = path.join(tmpDir, 'scorecard');
+    const capDir = path.join(tmpDir, 'cap');
+    const outboxDir = path.join(tmpDir, 'outbox');
+    const exportedPath = path.join(tmpDir, 'exported-qualified.v1.json');
+    fs.mkdirSync(scDir, { recursive: true });
+    fs.mkdirSync(capDir, { recursive: true });
+    fs.mkdirSync(outboxDir, { recursive: true });
+    const scEnv = {
+      ...process.env,
+      HOME: tmpDir,
+      ENGINE_SCORECARD_DIR: scDir,
+      ENGINE_CAPABILITY_DIR: capDir,
+      AUTOPILOT_OUTBOX_DIR: outboxDir,
+      AUTOPILOT_STRIKE_WRITER: 'off',
+    };
+    const makeRow = (engine, runner, family, status, date) => JSON.stringify({
+      engine,
+      runner,
+      family,
+      role: 'verification_author',
+      model_version: 'v1',
+      version_source: 'manual',
+      corpus_version: 'c@1',
+      harness_version: 'h@1',
+      runner_version: 'rv1',
+      prompt_config_hash: 'sha256:x',
+      date,
+      quality: { corpus_pass: '10/10', false_pass_critical: 0, specificity: '3/3' },
+      capability_score: 0.85,
+      cost: { source: 'manual', usd_per_mtok_input: 1, usd_per_mtok_output: 1, sample_tokens: 100 },
+      latency: { sample_wall_time_s: 1 },
+      status,
+      qualified_at: date,
+    });
+    const rFail = spawnSync(process.execPath, [SCORECARD_CLI, 'record'], {
+      encoding: 'utf8',
+      env: scEnv,
+      input: `${makeRow('grok-4.7', 'grok', 'xai', 'failed', '2026-11-12')}\n`,
+    });
+    assert.equal(rFail.status, 0, rFail.stderr);
+    const rPass = spawnSync(process.execPath, [SCORECARD_CLI, 'record'], {
+      encoding: 'utf8',
+      env: scEnv,
+      input: `${makeRow('gemini-4-carbon-high', 'agy', 'google', 'qualified', '2026-11-13')}\n`,
+    });
+    assert.equal(rPass.status, 0, rPass.stderr);
+    const expRes = spawnSync(process.execPath, [SCORECARD_CLI, 'export-qualified', '--out', exportedPath], {
+      encoding: 'utf8',
+      env: scEnv,
+      input: '',
+    });
+    assert.equal(expRes.status, 0, expRes.stderr);
+
+    const authorPick = cli(['--role', 'author', '--pace', paceFile, '--qualified', exportedPath, '--json']);
+    assert.equal(authorPick.status, 0, authorPick.stderr);
+    const authorOut = JSON.parse(authorPick.stdout);
+    assert.equal(authorOut.engine, 'agy');
+    assert.equal(authorOut.qualified_source, exportedPath);
+    assert.deepEqual(authorOut.candidates, [{ engine: 'agy', pool: 'agy', slack_pts: -25 }]);
+
+    // 5. Negative control: invalid schema or invented result in an existing qualified file fails closed (exit 2).
+    const badPath = path.join(tmpDir, 'bad-qualified.json');
+    fs.writeFileSync(
+      badPath,
+      JSON.stringify({
+        schema: QUALIFIED_SCHEMA,
+        generated_at: '2026-11-13T03:00:00Z',
+        rows: [{ engine: 'grok-4.7', runner: 'grok', role: 'reviewer', result: 'invented', date: '2026-11-13', event_id: 1 }],
+      }),
+      'utf8',
+    );
+    const badCli = cli(['--role', 'reviewer', '--pace', paceFile, '--qualified', badPath, '--json']);
+    assert.equal(badCli.status, 2);
+  } finally {
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

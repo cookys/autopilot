@@ -1442,7 +1442,7 @@
       "default": null,
       "readers": ["scripts/pace-select.js"],
       "doc": "references/hetero-dispatch.md",
-      "relates": ["AUTOPILOT_NONCQ_POOLS", "AUTOPILOT_PACE_ROLES"],
+      "relates": ["AUTOPILOT_NONCQ_POOLS", "AUTOPILOT_PACE_ROLES", "AUTOPILOT_QUALIFIED_FILE"],
       "note": "Override path to capacity.pace/1 JSON read by scripts/pace-select.js (and via dispatch-hetero.sh --pace-role). Default: $HOME/projects/capacity/out/pace.v1.json."
     },
     {
@@ -1453,8 +1453,19 @@
       "default": null,
       "readers": ["scripts/pace-select.js"],
       "doc": null,
-      "relates": ["AUTOPILOT_PACE_FILE", "AUTOPILOT_NONCQ_POOLS"],
+      "relates": ["AUTOPILOT_PACE_FILE", "AUTOPILOT_NONCQ_POOLS", "AUTOPILOT_QUALIFIED_FILE"],
       "note": "Role allowlist and scarce-pool map JSON override for scripts/pace-select.js, replacing scripts/lib/pace-roles.json in tests."
+    },
+    {
+      "name": "AUTOPILOT_QUALIFIED_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/engine-scorecard.js", "scripts/pace-select.js"],
+      "doc": "references/hetero-dispatch.md",
+      "relates": ["AUTOPILOT_PACE_FILE", "AUTOPILOT_PACE_ROLES", "AUTOPILOT_NONCQ_POOLS"],
+      "note": "Override path to autopilot.qualified/1 JSON written by engine-scorecard.js export-qualified and read by scripts/pace-select.js (falls back to scripts/lib/pace-roles.json when absent). Default: $HOME/.autopilot/qualified.v1.json."
     },
     {
       "name": "AUTOPILOT_RELAY_SEND_BUDGET_MS",

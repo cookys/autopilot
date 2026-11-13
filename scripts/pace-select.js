@@ -7,8 +7,10 @@
  * Reads a capacity.pace/1 file, maps pools to engine keys via
  * scripts/lib/noncq-pools.json merged with scripts/lib/pace-roles.json `pools`
  * (which supplies scarce pools such as "codex A" / "codex B" excluded from
- * noncq drain), filters to engines allowed for --role in pace-roles.json
- * (minus --exclude), checks endpoint readiness for any candidate pool with an
+ * noncq drain), determines role eligibility from an autopilot.qualified/1 file
+ * when present (pass or provisional row matching pool runner + model; falls
+ * back to pace-roles.json when missing, reporting qualified_source) minus
+ * --exclude, checks endpoint readiness for any candidate pool with an
  * `endpoint` field via scripts/resolve-endpoint.sh, and selects the engine
  * whose best fresh pool has the largest linear-pace slack
  * (expected_pct - used_pct).
@@ -30,9 +32,11 @@
  *
  * USAGE:
  *   node scripts/pace-select.js --role <reviewer|implementer|author>
- *     [--pace <pace.v1.json>] [--exclude k1,k2] [--json]
+ *     [--pace <pace.v1.json>] [--qualified <qualified.v1.json>]
+ *     [--exclude k1,k2] [--json]
  *
  * Default --pace: $AUTOPILOT_PACE_FILE, else $HOME/projects/capacity/out/pace.v1.json.
+ * Default --qualified: $AUTOPILOT_QUALIFIED_FILE, else $HOME/.autopilot/qualified.v1.json.
  *
  * EXIT: 0 engine selected · 2 bad flags / invalid schema · 3 pace_unknown.
  * Node >= 20.10, built-ins only.
@@ -43,20 +47,24 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { PACE_SCHEMA, freshReading } = require('./lib/pace-reading.js');
+const { sameEngine } = require('./lib/engine-spelling.js');
 
 const EXIT_OK = 0;
 const EXIT_USAGE = 2;
 const EXIT_PACE_UNKNOWN = 3;
 const OVER_PACE_SLACK_FLOOR = -10;
+const QUALIFIED_SCHEMA = 'autopilot.qualified/1';
+const VALID_QUALIFIED_RESULTS = new Set(['pass', 'fail', 'provisional']);
 
 const POOLS_PATH = path.join(__dirname, 'lib', 'noncq-pools.json');
 const ROLES_PATH = path.join(__dirname, 'lib', 'pace-roles.json');
 const RESOLVE_ENDPOINT_SH = path.join(__dirname, 'resolve-endpoint.sh');
 
 const USAGE_TEXT = [
-  'usage: pace-select.js --role <role> [--pace <pace.v1.json>] [--exclude k1,k2] [--json]',
+  'usage: pace-select.js --role <role> [--pace <pace.v1.json>] [--qualified <qualified.v1.json>] [--exclude k1,k2] [--json]',
   '  --role R        Role to select for (reviewer|implementer|author; required)',
   '  --pace F        capacity.pace/1 file (default: $AUTOPILOT_PACE_FILE, else $HOME/projects/capacity/out/pace.v1.json)',
+  '  --qualified F   autopilot.qualified/1 file (default: $AUTOPILOT_QUALIFIED_FILE, else $HOME/.autopilot/qualified.v1.json; falls back to pace-roles.json when missing)',
   '  --exclude k1,k2 Comma-separated engine keys to exclude',
   '  --json          Emit JSON output (default)',
   '',
@@ -89,6 +97,13 @@ function defaultPacePath(env = process.env) {
     return path.resolve(expandHome(env.AUTOPILOT_PACE_FILE.trim(), env));
   }
   return path.join(resolveHome(env), 'projects', 'capacity', 'out', 'pace.v1.json');
+}
+
+function defaultQualifiedPath(env = process.env) {
+  if (typeof env.AUTOPILOT_QUALIFIED_FILE === 'string' && env.AUTOPILOT_QUALIFIED_FILE.trim() !== '') {
+    return path.resolve(expandHome(env.AUTOPILOT_QUALIFIED_FILE.trim(), env));
+  }
+  return path.join(resolveHome(env), '.autopilot', 'qualified.v1.json');
 }
 
 function readJsonObject(filePath, label) {
@@ -181,7 +196,75 @@ function normalizeExclude(exclude) {
   throw usageError('--exclude must be a comma-separated string, array, or Set');
 }
 
-function selectEngine({ pace, pools, roles, role, exclude, checkEndpoint } = {}) {
+function normRunner(r) {
+  if (typeof r !== 'string') return '';
+  const trimmed = r.trim();
+  return trimmed === 'codex-cli' ? 'codex' : trimmed;
+}
+
+function qualifiedRoleMatches(rowRole, requestedRole) {
+  if (rowRole === requestedRole) return true;
+  if (requestedRole === 'author' && rowRole === 'verification_author') return true;
+  return false;
+}
+
+function validateQualified(qualified) {
+  if (
+    !qualified
+    || typeof qualified !== 'object'
+    || Array.isArray(qualified)
+    || qualified.schema !== QUALIFIED_SCHEMA
+    || !Array.isArray(qualified.rows)
+  ) {
+    throw usageError(`qualified input must have schema ${JSON.stringify(QUALIFIED_SCHEMA)} and rows[]`);
+  }
+  for (let i = 0; i < qualified.rows.length; i += 1) {
+    const row = qualified.rows[i];
+    if (
+      !row
+      || typeof row !== 'object'
+      || Array.isArray(row)
+      || typeof row.engine !== 'string'
+      || row.engine.trim() === ''
+      || typeof row.runner !== 'string'
+      || row.runner.trim() === ''
+      || typeof row.role !== 'string'
+      || row.role.trim() === ''
+      || !VALID_QUALIFIED_RESULTS.has(row.result)
+    ) {
+      throw usageError(
+        `qualified.rows[${i}] must have non-empty engine, runner, role, and result in pass|fail|provisional`,
+      );
+    }
+  }
+}
+
+function poolEntryEligibleInQualified(entry, role, qualifiedRows) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+  if (typeof entry.runner !== 'string' || typeof entry.model !== 'string') return false;
+  const entryRunner = normRunner(entry.runner);
+  const entryModel = entry.model.trim();
+  if (!entryRunner || !entryModel) return false;
+
+  for (const row of qualifiedRows) {
+    if (row.result !== 'pass' && row.result !== 'provisional') continue;
+    if (!qualifiedRoleMatches(row.role.trim(), role)) continue;
+    if (normRunner(row.runner) !== entryRunner) continue;
+    if (sameEngine(row.engine.trim(), entryModel)) return true;
+  }
+  return false;
+}
+
+function selectEngine({
+  pace,
+  pools,
+  roles,
+  role,
+  exclude,
+  checkEndpoint,
+  qualified,
+  qualifiedSource,
+} = {}) {
   const resolvedPools = pools === undefined ? loadPools() : pools;
   const resolvedRoles = roles === undefined ? loadRoles() : roles;
   if (!resolvedPools || typeof resolvedPools !== 'object' || Array.isArray(resolvedPools)) {
@@ -195,6 +278,16 @@ function selectEngine({ pace, pools, roles, role, exclude, checkEndpoint } = {})
   }
   assertValidRole(resolvedRoles, role);
 
+  const useQualified = qualified !== undefined && qualified !== null;
+  if (useQualified) {
+    validateQualified(qualified);
+  }
+  const resolvedQualifiedSource = useQualified
+    ? (typeof qualifiedSource === 'string' && qualifiedSource.trim() !== ''
+      ? qualifiedSource
+      : 'qualified.v1.json')
+    : 'pace-roles.json';
+
   if (
     !pace
     || typeof pace !== 'object'
@@ -207,9 +300,36 @@ function selectEngine({ pace, pools, roles, role, exclude, checkEndpoint } = {})
 
   const mergedPools = mergePools(resolvedPools, resolvedRoles);
   const excluded = normalizeExclude(exclude);
-  const allowedKeys = resolvedRoles[role].filter(
-    (k) => typeof k === 'string' && k.length > 0 && !excluded.has(k),
-  );
+  let allowedKeys;
+  if (useQualified) {
+    const eligibleKeys = new Set();
+    for (const entry of Object.values(mergedPools)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      if (typeof entry.key !== 'string' || entry.key.length === 0) continue;
+      if (excluded.has(entry.key)) continue;
+      if (poolEntryEligibleInQualified(entry, role, qualified.rows)) {
+        eligibleKeys.add(entry.key);
+      }
+    }
+    allowedKeys = [];
+    const seen = new Set();
+    for (const k of resolvedRoles[role]) {
+      if (typeof k === 'string' && eligibleKeys.has(k) && !seen.has(k)) {
+        seen.add(k);
+        allowedKeys.push(k);
+      }
+    }
+    for (const k of eligibleKeys) {
+      if (!seen.has(k)) {
+        seen.add(k);
+        allowedKeys.push(k);
+      }
+    }
+  } else {
+    allowedKeys = resolvedRoles[role].filter(
+      (k) => typeof k === 'string' && k.length > 0 && !excluded.has(k),
+    );
+  }
   const allowedSet = new Set(allowedKeys);
 
   const endpointProbe = checkEndpoint || defaultCheckEndpoint;
@@ -228,6 +348,7 @@ function selectEngine({ pace, pools, roles, role, exclude, checkEndpoint } = {})
   for (const [poolName, entry] of Object.entries(mergedPools)) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     if (typeof entry.key !== 'string' || !allowedSet.has(entry.key)) continue;
+    if (useQualified && !poolEntryEligibleInQualified(entry, role, qualified.rows)) continue;
     keyHadPool.add(entry.key);
     const endpoint = typeof entry.endpoint === 'string' ? entry.endpoint.trim() : '';
     if (endpoint !== '' && !isEndpointReady(endpoint)) {
@@ -289,6 +410,7 @@ function selectEngine({ pace, pools, roles, role, exclude, checkEndpoint } = {})
       engine: null,
       reason: 'pace_unknown',
       role,
+      qualified_source: resolvedQualifiedSource,
       pace_generated_at: paceGeneratedAt,
       candidates,
     };
@@ -315,6 +437,7 @@ function selectEngine({ pace, pools, roles, role, exclude, checkEndpoint } = {})
     expected_pct: chosen.reading.expected_pct,
     over_pace: overPace,
     role,
+    qualified_source: resolvedQualifiedSource,
     pace_generated_at: paceGeneratedAt,
     candidates,
   };
@@ -329,6 +452,7 @@ function parseArgs(argv) {
     help: false,
     role: null,
     pace: null,
+    qualified: null,
     exclude: [],
     json: false,
   };
@@ -342,14 +466,15 @@ function parseArgs(argv) {
       out.json = true;
       continue;
     }
-    if (a === '--role' || a === '--pace' || a === '--exclude') {
+    if (a === '--role' || a === '--pace' || a === '--qualified' || a === '--exclude') {
       const val = argv[i + 1];
-      if (val === undefined || val.startsWith('--')) {
+      if (val === undefined || val === '' || val.startsWith('--')) {
         throw usageError(`flag ${a} requires a value`);
       }
       i += 1;
       if (a === '--role') out.role = val;
       else if (a === '--pace') out.pace = val;
+      else if (a === '--qualified') out.qualified = val;
       else out.exclude.push(val);
       continue;
     }
@@ -358,7 +483,15 @@ function parseArgs(argv) {
       continue;
     }
     if (a.startsWith('--pace=')) {
-      out.pace = a.slice('--pace='.length);
+      const val = a.slice('--pace='.length);
+      if (val === '') throw usageError('flag --pace requires a value');
+      out.pace = val;
+      continue;
+    }
+    if (a.startsWith('--qualified=')) {
+      const val = a.slice('--qualified='.length);
+      if (val === '') throw usageError('flag --qualified requires a value');
+      out.qualified = val;
       continue;
     }
     if (a.startsWith('--exclude=')) {
@@ -400,6 +533,32 @@ function main(argv = process.argv.slice(2), env = process.env) {
     return EXIT_USAGE;
   }
 
+  const qualifiedPath = flags.qualified !== null
+    ? path.resolve(expandHome(flags.qualified, env))
+    : defaultQualifiedPath(env);
+
+  let qualified = null;
+  let qualifiedSource = 'pace-roles.json';
+  let rawQualified = null;
+  try {
+    rawQualified = fs.readFileSync(qualifiedPath, 'utf8');
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') {
+      process.stderr.write(`pace-select.js: cannot read qualified file (${qualifiedPath}): ${err.message}\n`);
+      return EXIT_USAGE;
+    }
+  }
+  if (rawQualified !== null) {
+    try {
+      qualified = JSON.parse(rawQualified);
+      validateQualified(qualified);
+    } catch (err) {
+      process.stderr.write(`pace-select.js: invalid qualified file (${qualifiedPath}): ${err.message}\n`);
+      return EXIT_USAGE;
+    }
+    qualifiedSource = qualifiedPath;
+  }
+
   const checkEndpoint = (ep) => defaultCheckEndpoint(ep, env);
   const pacePath = flags.pace !== null
     ? path.resolve(expandHome(flags.pace, env))
@@ -418,6 +577,8 @@ function main(argv = process.argv.slice(2), env = process.env) {
         role: flags.role,
         exclude: flags.exclude,
         checkEndpoint,
+        qualified,
+        qualifiedSource,
       });
       process.stdout.write(`${JSON.stringify(unknownResult, null, 2)}\n`);
       return EXIT_PACE_UNKNOWN;
@@ -443,6 +604,8 @@ function main(argv = process.argv.slice(2), env = process.env) {
       role: flags.role,
       exclude: flags.exclude,
       checkEndpoint,
+      qualified,
+      qualifiedSource,
     });
   } catch (err) {
     process.stderr.write(`pace-select.js: ${err.message}\n`);
@@ -464,11 +627,13 @@ module.exports = {
   mergePools,
   defaultCheckEndpoint,
   defaultPacePath,
+  defaultQualifiedPath,
   main,
   POOLS_PATH,
   ROLES_PATH,
   RESOLVE_ENDPOINT_SH,
   OVER_PACE_SLACK_FLOOR,
+  QUALIFIED_SCHEMA,
   EXIT_OK,
   EXIT_USAGE,
   EXIT_PACE_UNKNOWN,

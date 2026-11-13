@@ -59,7 +59,7 @@ and [`scripts/dispatch-hetero.sh`](../scripts/dispatch-hetero.sh) exposes it via
 
 ```bash
 # Standalone selector (exit 0 = chosen, 2 = usage/schema error, 3 = pace_unknown)
-node scripts/pace-select.js --role implementer --json
+node scripts/pace-select.js --role implementer [--qualified ~/.autopilot/qualified.v1.json] --json
 
 # Dispatch rail (only when --runner is NOT passed; explicit --runner always wins)
 scripts/dispatch-hetero.sh --pace-role implementer --branch feat/x --prompt-file brief.md
@@ -67,10 +67,16 @@ scripts/dispatch-hetero.sh --pace-role implementer --branch feat/x --prompt-file
 
 - **Pool + qualification map**: merges [`scripts/lib/noncq-pools.json`](../scripts/lib/noncq-pools.json)
   with `pools` in [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) (which maps `class: "scarce"`
-  rows such as `codex A` / `codex B` that `noncq` drain intentionally skips), filters to keys qualified for
-  `--role` (`reviewer` | `implementer` | `author`, minus `--exclude`), never considers `class: "claude"` rows,
-  and probes any candidate pool carrying `"endpoint"` via `scripts/resolve-endpoint.sh <endpoint>` (an unconfigured
-  endpoint is listed in `candidates` as `{engine, reason: "endpoint_not_ready"}` and never chosen).
+  rows such as `codex A` / `codex B` that `noncq` drain intentionally skips). Role eligibility for `--role`
+  (`reviewer` | `implementer` | `author`, minus `--exclude`) comes from `autopilot.qualified/1` (`--qualified <path>`
+  or `$AUTOPILOT_QUALIFIED_FILE`, default `$HOME/.autopilot/qualified.v1.json`, exported by
+  `node scripts/engine-scorecard.js export-qualified`) when that file exists: an engine key is eligible when some row
+  with `result` `"pass"` or `"provisional"` matches its pool `runner` and `model` (`"qualified_source": "<path>"`).
+  When the file is missing, `pace-select.js` falls back to the role lists in
+  [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) and sets `"qualified_source": "pace-roles.json"`.
+  It never considers `class: "claude"` rows, and probes any candidate pool carrying `"endpoint"` via
+  `scripts/resolve-endpoint.sh <endpoint>` (an unconfigured endpoint is listed in `candidates` as
+  `{engine, reason: "endpoint_not_ready"}` and never chosen).
 - **Linear-pace slack (`slack = expected_pct - used_pct`)**: positive slack means the pool is behind linear
   pace (spare capacity before reset); negative slack means it is ahead of pace. Alias pools sharing one engine
   key merge by their largest fresh slack.

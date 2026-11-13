@@ -2772,6 +2772,7 @@ chmod 700 "$PACE_RUNS_DIR"
 # (1) --pace-role without --runner selects codex from scarce-codex.json and records engine_choice in manifest.
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/scarce-codex.json" \
+  AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
   DISPATCH_QUIET=1 \
   "$SCRIPT" --pace-role implementer --codex-bin "$STUB_CODEX_ARGV" \
   --run-id pace-codex-pick --branch feat/pace-codex-pick --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-codex.err")"; EXIT=$?
@@ -2829,6 +2830,7 @@ assert_eq "absent" "$PACE_EXPLICIT_CHECK" "manifest omits engine_choice when exp
 # (4) --pace-role fails closed (exit 2, precondition_failed) on pace_unknown (exit 3) with no silent default.
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
+  AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
   DISPATCH_QUIET=1 \
   "$SCRIPT" --pace-role implementer --agy-bin "$TEST_TMP/nonexistent-agy-bin" \
   --run-id pace-unknown-fail --branch feat/pace-unknown-fail --prompt-file "$PROMPT" 2>&1)"; EXIT=$?

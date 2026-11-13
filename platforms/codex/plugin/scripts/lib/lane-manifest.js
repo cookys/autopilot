@@ -11,8 +11,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const LANE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const LANE_RE = NAME_RE;
+const PROFILE_RE = NAME_RE;
 // Prompt-carrying flags are never stored: a manifest holds launch shape, not prompt text.
 const PROMPT_FLAG_RE = /^(-p|--print|--prompt|--system-prompt|--append-system-prompt)(=|$)/;
 const FIELDS = ['lane', 'pane', 'cwd', 'seat', 'session_id', 'model', 'launch_flags', 'profile'];
@@ -59,4 +60,4 @@ function readManifest(base, lane) {
   return validate(JSON.parse(fs.readFileSync(file, 'utf8')));
 }
 
-module.exports = { FIELDS, defaultBase, lanePath, validate, writeManifest, readManifest };
+module.exports = { NAME_RE, FIELDS, defaultBase, lanePath, validate, writeManifest, readManifest };

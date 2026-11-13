@@ -2777,6 +2777,26 @@ _DOTDOT_TOKEN="$({ grep -oE "$_DOTDOT_RE" "$PROMPT_FILE" 2>/dev/null || true; } 
 if [ -n "$_DOTDOT_TOKEN" ]; then
   echo "dispatch-hetero: warn: brief has a ../ path outside the worktree: $_DOTDOT_TOKEN" >&2
 fi
+# PADDED_DEADLINE (PM 01M78CC2): a due longer than 2x Effort with no checkable
+# dependency is refused on the original brief, before skill-pack or scaffold
+# rewrite, and returned to the dispatcher. A fleet reply calls the same
+# paddedDeadline export from scripts/lib/backlog-rules.js. Exit 3 from the
+# checker is the rule; any other non-zero means the checker did not run.
+_pd_rc=0
+_pd_msg="$(node -e '
+const fs = require("fs");
+const rules = require(process.argv[1]);
+const v = rules.paddedDeadline(fs.readFileSync(process.argv[2], "utf8"));
+if (v) {
+  process.stdout.write(String(v.code) + (v.detail ? ": " + v.detail : ""));
+  process.exit(3);
+}
+' "$SELF_DIR/lib/backlog-rules.js" "$PROMPT_FILE" 2>&1)" || _pd_rc=$?
+if [ "$_pd_rc" -eq 3 ]; then
+  die_precondition "${_pd_msg:-PADDED_DEADLINE}"
+elif [ "$_pd_rc" -ne 0 ]; then
+  die_precondition "PADDED_DEADLINE check failed to run: ${_pd_msg:-rc ${_pd_rc}}"
+fi
 if [ "$KEEP" -eq 1 ]; then
   [[ "$RETENTION_OWNER" =~ ^[A-Za-z0-9._-]+$ ]] \
     || die_precondition "--keep-worktree requires --retain-owner matching [A-Za-z0-9._-]+"

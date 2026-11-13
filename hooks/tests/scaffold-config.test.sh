@@ -203,4 +203,44 @@ assert_eq "12" "$(query_json "$SUMMARY5" "written.length")" "dry-run reports pro
 assert_file_absent "$DRY_TARGET/.claude"
 assert_file_absent "$DRY_TARGET/.gitignore"
 
+# --- --init-backlog: create a missing backlog, never overwrite, dry-run writes nothing ---
+assert_file_absent "$TARGET/docs/BACKLOG.md" "scaffold without --init-backlog does not create a backlog"
+
+INIT="$TEST_TMP/init-empty"
+mkdir -p "$INIT"
+git -C "$INIT" init -q
+OUT_INIT="$(node "$SCRIPT" "$INIT" --init-backlog)"
+SUMMARY_INIT="$(printf '%s\n' "$OUT_INIT" | tail -n 1)"
+assert_file_exists "$INIT/docs/BACKLOG.md" "empty repo --init-backlog creates the backlog"
+assert_eq "$(cat "$INIT/docs/BACKLOG.md")" "$(printf '%s\n' '<!-- next-id: BL-0001 -->' '<!-- queue-form backlog; schema: references/backlog-entry.md -->')" "scaffolded backlog is the next-id mark plus one comment"
+assert_file_exists "$INIT/.claude/backlog-config.md" "--init-backlog ensures backlog-config.md"
+assert_contains "$(cat "$INIT/.claude/backlog-config.md")" "- mode: warn" "scaffolded backlog-config mode is warn"
+assert_contains "$(query_json "$SUMMARY_INIT" "written")" "docs/BACKLOG.md" "summary reports the created backlog"
+set +e
+INIT_GATE="$(node "$REPO_ROOT/scripts/check-backlog-entries.js" --backlog "$INIT/docs/BACKLOG.md" --mode block --json 2>/dev/null)"
+INIT_RC=$?
+set -e
+assert_eq "$INIT_RC" "0" "scaffolded backlog passes the gate in block mode"
+assert_eq "$(query_json "$INIT_GATE" "violations.length")" "0" "scaffolded backlog has no violations"
+BEFORE="$(cat "$INIT/docs/BACKLOG.md")"
+node "$SCRIPT" "$INIT" --init-backlog --force >/dev/null
+assert_eq "$(cat "$INIT/docs/BACKLOG.md")" "$BEFORE" "--force does not overwrite an existing backlog"
+
+EXIST="$TEST_TMP/init-exist"
+mkdir -p "$EXIST/docs"
+printf 'keep-me\n' > "$EXIST/docs/BACKLOG.md"
+OUT_EXIST="$(node "$SCRIPT" "$EXIST" --init-backlog)"
+SUMMARY_EXIST="$(printf '%s\n' "$OUT_EXIST" | tail -n 1)"
+assert_eq "$(cat "$EXIST/docs/BACKLOG.md")" "keep-me" "existing backlog is unchanged"
+assert_contains "$(query_json "$SUMMARY_EXIST" "skipped")" "docs/BACKLOG.md" "existing backlog is skipped"
+
+DRY_INIT="$TEST_TMP/init-dry"
+mkdir -p "$DRY_INIT"
+OUT_DRY="$(node "$SCRIPT" "$DRY_INIT" --init-backlog --dry-run)"
+SUMMARY_DRY="$(printf '%s\n' "$OUT_DRY" | tail -n 1)"
+assert_contains "$OUT_DRY" "docs/BACKLOG.md: would write" "dry-run prints the backlog it would create"
+assert_contains "$(query_json "$SUMMARY_DRY" "written")" "docs/BACKLOG.md" "dry-run reports the backlog as a prospective write"
+assert_file_absent "$DRY_INIT/docs" "--init-backlog --dry-run writes no backlog"
+assert_file_absent "$DRY_INIT/.claude" "--init-backlog --dry-run writes no config"
+
 finalize_test

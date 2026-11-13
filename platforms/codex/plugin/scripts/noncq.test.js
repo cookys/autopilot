@@ -1284,3 +1284,130 @@ test('(6) needs_shell item preferring agy,grok reports [noncq-empty] for agy and
   assert.equal(still.state, 'queued');
   assert.equal(still.needs_shell, true);
 });
+
+// ---------------------------------------------------------------------------
+// PM 01M7968P — stale/missing is unknown, not zero; status ok still has quota
+// ---------------------------------------------------------------------------
+test('a stale quota reading is not treated as 0 / no quota', () => {
+  const pools = loadPools();
+  // Stale row looks exhausted (used_pct 100). That reading is unknown: it must
+  // not qualify by itself and must not cancel a fresh sibling that has headroom.
+  const staleLooksExhausted = {
+    pool: 'grok-cli',
+    class: 'other',
+    status: 'ok+stale',
+    stale: true,
+    hours_to_reset: 6,
+    used_pct: 100,
+  };
+  const missingReading = {
+    pool: 'agy',
+    class: 'other',
+    status: 'no_source',
+  };
+  const freshHeadroom = {
+    pool: 'grok-cli(alias 2)',
+    class: 'other',
+    status: 'ok',
+    stale: false,
+    hours_to_reset: 6,
+    used_pct: 40,
+  };
+  const freshAgy = {
+    pool: 'agy',
+    class: 'other',
+    status: 'ok',
+    stale: false,
+    hours_to_reset: 22.9,
+    used_pct: 69,
+  };
+
+  const staleOnly = qualifyingEngines(
+    { schema: 'capacity.pace/1', rows: [staleLooksExhausted] },
+    pools,
+  );
+  assert.equal(staleOnly.size, 0, 'a stale reading is unknown, not a qualifying quota of 0');
+
+  const missingOnly = qualifyingEngines(
+    { schema: 'capacity.pace/1', rows: [missingReading] },
+    pools,
+  );
+  assert.equal(missingOnly.size, 0, 'a missing reading is unknown, not exhausted');
+
+  const combined = qualifyingEngines(
+    { schema: 'capacity.pace/1', rows: [staleLooksExhausted, missingReading, freshHeadroom, freshAgy] },
+    pools,
+  );
+  assert.ok(combined.has('grok'), 'stale used_pct 100 must not block the fresh grok headroom row');
+  assert.ok(combined.get('grok').waste_pct_if_unused > 0, 'fresh headroom must not be stored as waste 0');
+  assert.equal(combined.get('grok').waste_pct_if_unused, 60);
+  assert.ok(combined.has('agy'), 'no_source duplicate must not block the fresh agy row');
+  assert.equal(combined.get('agy').waste_pct_if_unused, 31);
+});
+
+test('root cause: status ok with remaining used_pct is quota, not only ALERT_behind', () => {
+  const pools = loadPools();
+  // 2026-11-12 23:07 agyclaude(alias 2): in use, 19 points left, 7.7h to reset.
+  // Drain required status === ALERT_behind (scripts/noncq.js qualifyingEngines)
+  // and dropped this row, so the 23:00 dry-run logged qualifying [].
+  const row = {
+    pool: 'agyclaude(alias 2)',
+    class: 'other',
+    status: 'ok',
+    stale: false,
+    hours_to_reset: 7.7,
+    used_pct: 81,
+  };
+  const got = qualifyingEngines({ schema: 'capacity.pace/1', rows: [row] }, pools);
+  assert.ok(got.has('agyclaude'), 'fresh status ok with used_pct 81 must qualify');
+  assert.equal(got.get('agyclaude').waste_pct_if_unused, 19);
+
+  const exhausted = qualifyingEngines({
+    schema: 'capacity.pace/1',
+    rows: [{ ...row, used_pct: 100 }],
+  }, pools);
+  assert.equal(exhausted.size, 0, 'used_pct 100 is exhausted and does not qualify');
+
+  const unmapped = qualifyingEngines({
+    schema: 'capacity.pace/1',
+    rows: [{ pool: 'grok', class: 'other', status: 'no_source' }],
+  }, pools);
+  assert.equal(unmapped.size, 0, 'an unmapped no_source name is not a quota verdict');
+});
+
+test('replay 2026-11-12 23:00 pace dry-run dispatches to a pool with quota', () => {
+  const pace = path.join(__dirname, 'fixtures', 'noncq-replay', 'pace-2026-11-12T2300.json');
+  const raw = JSON.parse(fs.readFileSync(pace, 'utf8'));
+  const agyClaude = raw.rows.find((r) => r.pool === 'agyclaude(alias 2)');
+  assert.ok(agyClaude, 'fixture must keep the night agyclaude row');
+  assert.ok(agyClaude.used_pct < 100, 'that pool still had quota');
+  assert.equal(agyClaude.stale, false);
+  assert.ok(agyClaude.hours_to_reset < 24);
+
+  const q = mkTmp('noncq-q-');
+  const work = mkTmp('noncq-w-');
+  const rails = makeRails(work);
+  const fleet = makeFleetBin(work);
+  const brief = briefFile(work);
+  const add = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', brief,
+    '--accept', 'ok', '--prefer', 'agyclaude,agy,grok,glm',
+  ], {
+    AUTOPILOT_NONCQ_DIR: q,
+    AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
+    AUTOPILOT_FLEET_BIN: fleet.bin,
+  });
+  assert.equal(add.status, 0, add.stderr);
+  const id = add.stdout.trim();
+  const before = snapshotTree(q);
+
+  const d = drain(q, pace, rails.dir, fleet.bin, ['--dry-run']);
+  assert.equal(d.status, 0, d.stderr);
+  const out = JSON.parse(d.stdout);
+  assert.ok(out.dispatched.length >= 1, `expected a dispatch, qualifying=${JSON.stringify(out.qualifying)}`);
+  assert.equal(out.dispatched[0].id, id);
+  assert.equal(out.dispatched[0].engine, 'agyclaude');
+  assert.ok(!out.qualifying.includes('grok'), 'stale grok row must not be read as quota');
+  const after = snapshotTree(q);
+  assertTreeUnchanged(before, after, 'dry-run replay');
+});

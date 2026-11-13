@@ -1,8 +1,8 @@
 # noncq — non-Claude work queue
 
 Lanes put work any engine can do into a per-account queue. When a capacity
-pacing file shows a non-Claude pool behind pace and resetting within 24 h, a
-drain dispatches queued items to that pool's engine through the existing
+pacing file shows a non-Claude pool with quota left and resetting within 24 h,
+a drain dispatches queued items to that pool's engine through the existing
 read-only rails and returns results to the lane that filed them. An empty
 queue is reported; it is never filled with busy-work.
 
@@ -76,10 +76,19 @@ is measured. Over 150000 bytes refuses with exit 2.
 Pace file schema `capacity.pace/1` with `rows[]`. A pool qualifies only when:
 
 1. its `class` is not `claude` or `scarce`
-2. `status === 'ALERT_behind'`
-3. `hours_to_reset < 24`
-4. `stale === false`
-5. the pool name maps to an engine key in `scripts/lib/noncq-pools.json`
+2. the pool name maps to an engine key in `scripts/lib/noncq-pools.json`
+   (an unmapped name is not a verdict — it is not "no quota")
+3. `stale === false` (missing, null, or true is unknown: that row does not
+   qualify and does not cancel another row for the same engine that shows
+   headroom). A missing `used_pct` / `waste_pct_if_unused` is the same kind of
+   unknown, never the number 0
+4. `hours_to_reset` is a finite number `< 24` (a missing value is unknown, not 0)
+5. the row shows remaining quota: `used_pct < 100`, or `status === 'ALERT_behind'`
+   with a numeric `waste_pct_if_unused > 0`. `used_pct >= 100` is exhausted: it
+   does not qualify and does not clear a sibling row that still has headroom
+6. `status` is `ALERT_behind` or `ok`. `ok` is a pool in use that still has
+   quota. `behind_early`, `no_source`, `unknown`, `window_unknown`, and
+   `reset_passed` do not qualify
 
 Rows that share an engine key (aliases) merge. A pool whose map entry has
 `model: null` is skipped with a stderr note (not verified — do not guess a

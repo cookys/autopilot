@@ -5,10 +5,14 @@
  * noncq.js — queue of work any non-Claude engine can do (noncq W1).
  *
  * Lanes file items (review-seat1 / research / replay / data / draft). When a
- * capacity.pace/1 file shows a non-Claude pool ALERT_behind with hours_to_reset
- * under 24 h and not stale, `drain` dispatches queued items whose prefer list
- * names that pool's engine key through the read-only rails (dispatch-review /
- * dispatch-author), then reaps finished runs and notifies the filing lane.
+ * capacity.pace/1 row for a mapped non-Claude pool is fresh (stale === false),
+ * hours_to_reset is under 24 h, and the row still has quota (used_pct < 100,
+ * or ALERT_behind with waste_pct_if_unused > 0), `drain` dispatches queued
+ * items whose prefer list names that pool's engine key through the read-only
+ * rails (dispatch-review / dispatch-author), then reaps finished runs and
+ * notifies the filing lane. A stale or missing reading is unknown: it does
+ * not qualify and it does not cancel another row that shows headroom. Status
+ * `ok` (in use, not only `ALERT_behind`) still counts when quota remains.
  * An empty qualifying pool is reported once per 6 h; the queue is never filled
  * with busy-work.
  *
@@ -463,6 +467,24 @@ function cmdList(flags, env = process.env) {
   return 0;
 }
 
+/** A JSON number, or null when the field is missing. null is unknown, never 0. */
+function finiteNum(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/**
+ * Remaining quota points on one pace row, or null when this row does not say.
+ * used_pct is the producer's percent-used (capacity pace.py). waste_pct_if_unused
+ * is set only on ALERT_behind and is the same remainder. A missing field is
+ * null, not 0.
+ */
+function rowRemaining(row, status) {
+  const used = finiteNum(row.used_pct);
+  if (used !== null) return 100 - used;
+  if (status === 'ALERT_behind') return finiteNum(row.waste_pct_if_unused);
+  return null;
+}
+
 /** Qualifying pace rows → Map engineKey → { profile, waste_pct_if_unused, pools[] } */
 function qualifyingEngines(pace, pools, opts = {}) {
   const requireHoursLt24 = opts.requireHoursLt24 !== false;
@@ -474,28 +496,35 @@ function qualifyingEngines(pace, pools, opts = {}) {
     if (!row || typeof row !== 'object') continue;
     const poolName = row.pool;
     const entry = pools[poolName];
+    // Unmapped pool name: not a verdict. It must not be read as "no quota".
     if (!entry) continue;
     if (row.class === 'claude' || row.class === 'scarce') continue;
-    if (row.status !== 'ALERT_behind') continue;
-    // Fail-closed on stale: only stale === false qualifies (missing / null / true skipped).
+    // stale missing / null / true: unknown. Do not qualify and do not cancel
+    // a sibling row that has a fresh headroom reading (aliases share an engine key).
     if (row.stale !== false) continue;
-    const hours = Number(row.hours_to_reset);
-    if (!Number.isFinite(hours)) continue;
+    const status = typeof row.status === 'string' ? row.status : '';
+    // `ok` is in-use with quota still left. ALERT_behind is the waste alert.
+    // behind_early / no_source / unknown are not a quota reading.
+    if (status !== 'ALERT_behind' && status !== 'ok') continue;
+    const hours = finiteNum(row.hours_to_reset);
+    if (hours === null) continue;
     if (requireHoursLt24 && !(hours < 24)) continue;
+    const remaining = rowRemaining(row, status);
+    if (remaining === null) continue;
+    // Known exhaustion does not qualify and does not clear another alias.
+    if (!(remaining > 0)) continue;
 
     const key = entry.key;
-    const waste = Number(row.waste_pct_if_unused);
-    const wasteN = Number.isFinite(waste) ? waste : 0;
     const cur = byKey.get(key);
     if (!cur) {
       byKey.set(key, {
         key,
         profile: entry,
-        waste_pct_if_unused: wasteN,
+        waste_pct_if_unused: remaining,
         pools: [poolName],
       });
     } else {
-      cur.waste_pct_if_unused = Math.max(cur.waste_pct_if_unused, wasteN);
+      cur.waste_pct_if_unused = Math.max(cur.waste_pct_if_unused, remaining);
       cur.pools.push(poolName);
     }
   }

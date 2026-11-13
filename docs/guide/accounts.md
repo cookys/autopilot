@@ -211,6 +211,7 @@ Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) t
 
 - 帳號別名只由 `scripts/lib/account-alias.js` 算出，工具不會自己開 `.claude.json`，也不碰任何 `.credentials.json`。
 - 切換前檢查在 `scripts/lib/lane-switch-preflight.js`：`preflight(opts, deps)` 確認 fleet 席位在線、轉錄檔存在、窗格 cwd 已寫進車道紀錄、目前 profile 已登入與其別名、該 session 最新 cost 列的帳號，以及目標 profile 已登入且未進入到期窗口。外部指令都走可注入的 runner。`lane-switch.js` 尚未呼叫它。
+- 步驟 2（請 lane 執行 `autopilot:handoff`，等到交接檔比請求新、且該 lane 的 fleet `activity` 為 idle，預設最多 15 分鐘）在 `scripts/lib/lane-switch-handoff.js`。`lane-switch.js` 尚未呼叫它。
 - 車道紀錄放 `~/.config/autopilot/lanes/<lane>.json`（權限 0600，欄位同上面的 Lane manifest 表，加 pane 與 session id；不得含提示詞）。
 - 回滾：同一個指令，`--profile` 改成原本的 profile。
 - 計畫與步驟：`project/plans/2026-11-10-profile-switch.md`。

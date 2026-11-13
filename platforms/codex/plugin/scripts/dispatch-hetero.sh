@@ -5104,12 +5104,6 @@ else
     if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then
       sandbox_setup || { echo "sandbox: could not set up the bwrap scratch dir; worker not started" > "$LOG"; sandbox_teardown; AGENT_EXIT=1; return 0; }
     fi
-    if [ -z "${SANDBOX_TMP:-}" ] || [ ! -d "$SANDBOX_TMP" ] || [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then
-      echo "sandbox: no bwrap scratch dir or argv; worker not started" > "$LOG"
-      sandbox_teardown
-      AGENT_EXIT=1
-      return 0
-    fi
     AGY_ENVELOPE="$(mktemp "${SANDBOX_TMP}/dispatch-hetero-agy-envelope-XXXXXX")"
     AGY_STDERR="$(mktemp "${SANDBOX_TMP}/dispatch-hetero-agy-stderr-XXXXXX")"
   else
@@ -6420,7 +6414,7 @@ dispatch_detached_run() {
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
     declare -p WT_GITFILE_EXPECTED WT_GITFILE_ERROR 2>/dev/null || true
-    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_ARGV SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
@@ -6428,7 +6422,7 @@ dispatch_detached_run() {
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f wt_gitfile_check _wt_git 2>/dev/null || true
-    declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
+    declare -f current_runner_name sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
     # token_seat_guard (lib/token-seat.sh) is called inside run_agent's claude branches; without it the
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true

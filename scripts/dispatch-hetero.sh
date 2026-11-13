@@ -5104,12 +5104,6 @@ else
     if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then
       sandbox_setup || { echo "sandbox: could not set up the bwrap scratch dir; worker not started" > "$LOG"; sandbox_teardown; AGENT_EXIT=1; return 0; }
     fi
-    if [ -z "${SANDBOX_TMP:-}" ] || [ ! -d "$SANDBOX_TMP" ] || [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then
-      echo "sandbox: no bwrap scratch dir or argv; worker not started" > "$LOG"
-      sandbox_teardown
-      AGENT_EXIT=1
-      return 0
-    fi
     AGY_ENVELOPE="$(mktemp "${SANDBOX_TMP}/dispatch-hetero-agy-envelope-XXXXXX")"
     AGY_STDERR="$(mktemp "${SANDBOX_TMP}/dispatch-hetero-agy-stderr-XXXXXX")"
   else

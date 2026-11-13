@@ -215,4 +215,5 @@ Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) t
 - 步驟 4 由 `scripts/lib/lane-switch-transcript.js` 的 `collectAndCopy` 做：先對舊 profile 收集用量，再把該場次逐字稿與 `subagents/` 複製到新 profile 的同一專案目錄（只複製、不移動；目的端已有不同內容就拒絕）。`home` 的目錄是 `~/.claude`。
 - 車道紀錄放 `~/.config/autopilot/lanes/<lane>.json`（權限 0600，欄位同上面的 Lane manifest 表，加 pane 與 session id；不得含提示詞）。
 - 回滾：同一個指令，`--profile` 改成原本的 profile。
+- 事後確認（計畫步驟 8）：`node scripts/lib/lane-switch-confirm.js --lane <lane> --since <切換時間 ISO> --alias <目標別名>`。讀的是 cost-tracker 寫進 `<CLAUDE_CONFIG_DIR 或 ~/.claude>/metrics/costs.jsonl` 的那份帳本（執行時的 `CLAUDE_CONFIG_DIR` 要指到目標 profile，home 就不要設）。它找這個 session 比切換時間新的第一列，最多等到下一輪之後 30 分鐘；account 等於目標別名才算數。不符或這段時間沒有列，回傳一行給 PM 的報告，不送信。別名仍只由 `scripts/lib/account-alias.js` 算出後傳入，這個工具不開 `.claude.json`，也不碰 `.credentials.json`。
 - 計畫與步驟：`project/plans/2026-11-10-profile-switch.md`。

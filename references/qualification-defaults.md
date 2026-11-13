@@ -301,6 +301,21 @@ chat) report tokens; CLI transports and rails with no usage output report null, 
 rail is never priced (output accounting unverified). Rows without a `usage` block (older
 administrations) are still valid. Library: `scripts/lib/qualification-usage.js`.
 
+The same `--raw-dir` also receives `<role>-progress.jsonl`, one JSON line appended
+(`fs.appendFileSync`) after each case returns, so a wall-cap kill keeps the cases
+that finished. The directory is created when the exam starts, after the preconditions
+that refuse to create it (corpus, seat, role disagreement, and the consult/discuss
+`--execute` guard). Fields, in order: `ts` (ISO), `role`, `trial`, `case_id`,
+`requests` (provider calls for this case), `input_tokens`, `output_tokens`, `wall_s`
+(this case), `cumulative_wall_s`. Numbers and ids only — no prompts, responses, or
+envelopes. An unmeasured token count or wall stays `null`, never 0. `requests` is 1
+for a panel case and, for the implementer, 1 only when the dispatcher process started.
+Brain progress is one line per round (`case_id` `round-<id>`); `brain-usage.jsonl`
+stays one row per trial. Filenames match the usage files (`reviewer`, `owner`,
+`verification_author`, `brain`, `implementer`, `consult`, `discuss`). The end-of-run
+`<role>-usage.jsonl` and exchanges files are unchanged and still appear only when
+the cell finishes.
+
 ## Sending results to the registry (outbox)
 
 `engine-scorecard.js record` keeps writing the local scorecard. With `qualification_outbox.enqueue` on (default off) it also queues the completed record in `~/.autopilot/qualification-outbox` (one `enqueued` line per `record_id`, fsynced; an administration that did not complete writes nothing). `node scripts/qualification-send-queue.js flush` sends un-acked ids; with `qualification_outbox.transport` off (default) it sends nothing. The `git` transport works in a dedicated clone (`qualification_outbox.registry_repo`): ingest on a `bot/qualification-<id12>` branch, push that branch, open a pull request. It never pushes the default branch. An id is acked only when the record file is on the registry's default branch with identical bytes; the ack sha is the first commit on its first-parent chain that holds it. `engine-scorecard.js status` and `qualification-send-queue.js status` list pending, rejected and older-than-24h items. Strikes use the same queue (`enqueue --kind strike`). Plan: `project/plans/2026-10-16-bl0194-qualification-registry-move.md` section 4.

@@ -309,7 +309,10 @@ const HELP = `Usage:
   seat-preview exit codes: 0 success, 2 derivation or precondition failure,
   4 seat file missing or schema-invalid.
     [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory;
-      also <role>-usage.jsonl, one row per case: wall_s, token counts, solved)
+      also <role>-usage.jsonl, one row per case: wall_s, token counts, solved;
+      also <role>-progress.jsonl, one line appended after each case: ids,
+      request count, tokens, wall_s only — no prompts or answers. The directory
+      is created when the exam starts, after the preconditions that refuse it)
       Implementer impl-dispatch-ledger.jsonl and impl-exchanges.jsonl add, for a
       non-pass case whose dispatch status is not committed: dispatch_error_class
       (the dispatch JSON error_category, or null when that field is absent — never the
@@ -1617,7 +1620,7 @@ function snapshotPanelConfiguration(options) {
     } catch (error) {
       throw new Error(`remote provider configuration is invalid: ${error.message}`);
     }
-    return deepFreeze({
+    const remoteConfig = deepFreeze({
       transport: 'remote',
       providerCmd: broker.providerCmd,
       provider: broker.provider,
@@ -1639,6 +1642,9 @@ function snapshotPanelConfiguration(options) {
         max_attempts: 1,
       })),
     });
+    // After broker validation. A thrown config must not create --raw-dir.
+    armCaseProgress(options);
+    return remoteConfig;
   }
   if (typeof options.panelCmd !== 'string' || options.panelCmd.trim().length === 0
       || options.panelCmd.length > 16_384 || options.panelCmd.includes('\0')) {
@@ -1667,7 +1673,7 @@ function snapshotPanelConfiguration(options) {
     }
     environment[name] = process.env[name];
   }
-  return deepFreeze({
+  const localConfig = deepFreeze({
     transport: 'local',
     panelCmd: options.panelCmd,
     binds,
@@ -1687,6 +1693,9 @@ function snapshotPanelConfiguration(options) {
       environment_names: Object.keys(environment).sort(),
     })),
   });
+  // After local-panel validation. A thrown config must not create --raw-dir.
+  armCaseProgress(options);
+  return localConfig;
 }
 
 function sandboxDirectories(binds) {
@@ -2238,6 +2247,14 @@ function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed, rawSink
         usageSource: result.telemetry.usage ? 'provider' : null,
       }));
     }
+    appendCaseProgress({
+      role: usageRole,
+      trial: trialId,
+      caseId: result.artifact_id,
+      requests: 1,
+      usage: result.telemetry.usage,
+      wallS: result.telemetry.wall_s,
+    });
     if (!result.transport_ok) {
       return {
         transportAbort: `transport failure on ${trialId} case ${result.artifact_id}`,
@@ -2327,6 +2344,14 @@ function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed, ra
         usageSource: result.telemetry.usage ? 'provider' : null,
       }));
     }
+    appendCaseProgress({
+      role: usageRole,
+      trial: trialId,
+      caseId: result.artifact_id,
+      requests: 1,
+      usage: result.telemetry.usage,
+      wallS: result.telemetry.wall_s,
+    });
     if (!result.transport_ok) {
       return {
         transportAbort: `transport failure on ${trialId} case ${result.artifact_id}`,
@@ -2758,6 +2783,57 @@ function parseVaPlanOutput(stdout) {
   return null;
 }
 
+// Per-case progress (<raw-dir>/<role>-progress.jsonl). One appendFileSync after each
+// case returns, so a wall-cap SIGKILL keeps every case that already finished.
+// Ids, request count, tokens and wall only — never prompts or answers.
+// Sums are per raw dir: a later exam in this process must not inherit them,
+// and a run with no raw dir disarms so it cannot append into the previous one.
+const caseProgress = { rawDir: null, sums: new Map() };
+
+function armCaseProgress(options) {
+  const dir = options && typeof options.rawDir === 'string' && options.rawDir.length > 0
+    ? options.rawDir : null;
+  if (dir === caseProgress.rawDir) return;
+  caseProgress.rawDir = dir;
+  caseProgress.sums = new Map();
+  if (dir) fs.mkdirSync(dir, { recursive: true });
+}
+
+function roundProgressWall(n) {
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 1000) / 1000;
+}
+
+function appendCaseProgress({ role, trial, caseId, requests, usage, wallS }) {
+  if (!caseProgress.rawDir) return;
+  const measured = qualUsage.normalizeUsage(usage);
+  const wall = roundProgressWall(wallS);
+  const key = String(role);
+  const seen = caseProgress.sums.has(key);
+  const prev = seen ? caseProgress.sums.get(key) : 0;
+  const cumulative = wall === null
+    ? (seen ? prev : null)
+    : roundProgressWall(prev + wall);
+  if (wall !== null) caseProgress.sums.set(key, cumulative);
+  const requestsN = Number.isSafeInteger(requests) && requests >= 0 ? requests : 0;
+  const line = {
+    ts: new Date().toISOString(),
+    role,
+    trial: trial == null ? null : String(trial),
+    case_id: caseId == null ? null : String(caseId),
+    requests: requestsN,
+    input_tokens: measured.input_tokens,
+    output_tokens: measured.output_tokens,
+    wall_s: wall,
+    cumulative_wall_s: cumulative,
+  };
+  fs.appendFileSync(
+    path.join(caseProgress.rawDir, `${role}-progress.jsonl`),
+    `${JSON.stringify(line)}\n`,
+    { mode: 0o600 },
+  );
+}
+
 // Raw-answer sinks (--raw-dir *.jsonl): zero rows => an EMPTY file (a lone newline is a blank
 // line, not a JSONL row, and breaks naive readers); otherwise one JSON row per line, each
 // terminated by a newline. Every raw sink routes through here (BL-0172).
@@ -2822,6 +2898,14 @@ function runVaQualification(options) {
     const plans = {};
     for (const caseData of trial.cases) {
       const execution = executePanelCase(panelConfig, caseData.envelope);
+      appendCaseProgress({
+        role: 'verification_author',
+        trial: trial.trial_id,
+        caseId: caseData.case_id,
+        requests: 1,
+        usage: execution.usage,
+        wallS: execution.wall_s,
+      });
       execTelemetry.set(`${trial.trial_id}|${caseData.case_id}`, {
         wall_s: execution.wall_s, usage: execution.usage,
       });
@@ -3140,6 +3224,14 @@ function runBrainQualification(options) {
         action_receipts: realizedActions.slice(),
       });
       const execution = executePanelCase(panelConfig, input);
+      appendCaseProgress({
+        role: 'brain',
+        trial: trial.trial_id,
+        caseId: `round-${round.round_id}`,
+        requests: 1,
+        usage: execution.usage,
+        wallS: execution.wall_s,
+      });
       roundTelemetry.push(qualUsage.caseRecord({
         role: 'brain', unit: 'round', trialId: trial.trial_id, caseId: `round-${round.round_id}`,
         wallS: execution.wall_s, usage: execution.usage, solved: false,
@@ -3725,6 +3817,7 @@ function runImplQualification(options) {
   let startedCases = 0;
   const trialResults = [];
   try {
+    armCaseProgress(options);
     for (const trial of administration.trials) {
       const cases = [];
       for (const caseSpec of trial.cases) {
@@ -4267,6 +4360,8 @@ function runImplCase(context) {
   let dispatchJson = null;
   let collection = null;
   let spawnMessage = '';
+  let dispatchWallS = null;
+  let railUsage = null;
   try {
     const baseSha = implGenerator.materializeExamRepo(caseSpec, repoDir);
     const promptDir = path.join(repoDir, '.impl-exam');
@@ -4331,7 +4426,7 @@ function runImplCase(context) {
     // allowlist misses pre-exec failures (EAGAIN/ENOMEM/E2BIG) and would
     // charge the seat for a process that never started, while ETIMEDOUT is
     // the one spawnSync error that PROVES the process ran (it was killed).
-    const dispatchWallS = Number(process.hrtime.bigint() - dispatchStartedAt) / 1e9;
+    dispatchWallS = Number(process.hrtime.bigint() - dispatchStartedAt) / 1e9;
     const timedOut = Boolean(run.error) && run.error.code === 'ETIMEDOUT';
     const spawnFailed = Boolean(run.error) && !timedOut;
     ledgerRow.dispatcher_called = !spawnFailed;
@@ -4341,6 +4436,8 @@ function runImplCase(context) {
       try { dispatchJson = JSON.parse(run.stdout.trim().split('\n').filter(Boolean).pop()); } catch { dispatchJson = null; }
     }
     ledgerRow.dispatch_status = dispatchJson ? dispatchJson.status : null;
+    railUsage = dispatchJson && dispatchJson.usage && typeof dispatchJson.usage === 'object'
+      ? dispatchJson.usage : null;
     rawExchanges.push({
       trial_id: ledgerRow.trial_id,
       case_id: caseSpec.case_id,
@@ -4401,8 +4498,6 @@ function runImplCase(context) {
       // Rail-reported usage only (dispatch-hetero's `usage`, parsed from the harness
       // event stream): codex reports a total with no in/out split, cc-shim/plain/kimi/
       // qoder report null. Whatever the rail did not report stays null.
-      const railUsage = dispatchJson && dispatchJson.usage && typeof dispatchJson.usage === 'object'
-        ? dispatchJson.usage : null;
       usageRecords.push(qualUsage.caseRecord({
         role: 'implementer',
         trialId: ledgerRow.trial_id,
@@ -4442,7 +4537,20 @@ function runImplCase(context) {
     ledger.push(ledgerRow);
     return { outcome: 'infra_fail', administration_abort: 'infra_abort' };
   } finally {
-    fs.rmSync(repoDir, { recursive: true, force: true });
+    try {
+      if (ledgerRow.outcome !== null) {
+        appendCaseProgress({
+          role: 'implementer',
+          trial: ledgerRow.trial_id,
+          caseId: caseSpec.case_id,
+          requests: ledgerRow.dispatcher_called ? 1 : 0,
+          usage: railUsage,
+          wallS: dispatchWallS,
+        });
+      }
+    } finally {
+      fs.rmSync(repoDir, { recursive: true, force: true });
+    }
   }
 }
 
@@ -5182,6 +5290,14 @@ function runConsultDiscussQualification(options) {
           solved: outcome === 'pass',
           usageSource: execution.usage ? 'provider' : null,
         }));
+        appendCaseProgress({
+          role,
+          trial: `run-${runIndex}/trial-${trial.trial}`,
+          caseId: caseSpec.case_id,
+          requests: 1,
+          usage: execution.usage,
+          wallS: execution.wall_s,
+        });
         rawExchanges.push({
           run: runIndex,
           trial: trial.trial,

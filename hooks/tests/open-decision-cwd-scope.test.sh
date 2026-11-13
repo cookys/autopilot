@@ -65,7 +65,7 @@ njson() { find "$1/.git/autopilot/decisions" -name '*.json' 2>/dev/null | wc -l 
 # 1. The bug: bound root (marker root_run_id), other repo, no --cwd. Card lands in OTHER, exit 0, both repos named.
 open_at "$OTHER"
 assert_eq "$RC" 0 "mismatch: exit 0 (warn, do not refuse)"
-printf '%s' "$OUT" | grep -Eq '^d-[0-9a-f]{8}$'
+grep -Eq '^d-[0-9a-f]{8}$' <<<"$OUT"
 assert_eq "$?" 0 "mismatch: stdout is only the card id"
 MIS="$OUT"
 assert_contains "$ERR" "open-decision: WARNING: card" "mismatch: loud warning"

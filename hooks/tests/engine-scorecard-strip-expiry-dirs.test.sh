@@ -73,8 +73,8 @@ assert_refused() {
   pins_after="$(sha_of "$pins")"
   backups="$(find "$(dirname "$sc")" "$(dirname "$pins")" -name '*.bak-strip-expiry-*' -print 2>/dev/null || true)"
   if [ "$rc" != "0" ] \
-    && printf '%s\n' "$msg" | grep -q "exactly one of the two store directories is overridden" \
-    && printf '%s\n' "$msg" | grep -q "nothing written" \
+    && grep -q "exactly one of the two store directories is overridden" <<<"$msg" \
+    && grep -q "nothing written" <<<"$msg" \
     && [ "$sc_after" = "$5" ] && [ "$pins_after" = "$6" ] \
     && [ -z "$backups" ]; then
     ok "$label"

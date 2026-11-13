@@ -44,6 +44,11 @@
       "reason": "Case-pattern guard that restricts rm -rf to the registered (test-lockgated) autopilot-managed-codex-home-* family; allocates nothing."
     },
     {
+      "file": "scripts/dispatch-hetero.sh",
+      "match": "mktemp -d \"${SANDBOX_TMP}/autopilot-managed-codex-home-XXXXXX\"",
+      "reason": "Allocates the registered (test-lockgated) autopilot-managed-codex-home-* prefix inside the bwrap sandbox scratch dir; the ${SANDBOX_TMP}/ root shape is not prefix-extractable by the gate. Removed by cleanup_managed_codex_home after the worker and in abort_dispatch."
+    },
+    {
       "file": "src/runners/kimi.js",
       "match": "options.cwd || os.tmpdir()",
       "reason": "os.tmpdir() as the spawned CLI's default working directory; allocates nothing."

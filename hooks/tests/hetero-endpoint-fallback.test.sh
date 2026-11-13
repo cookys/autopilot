@@ -63,8 +63,9 @@ BINDIR="$TEST_TMP/bin"
 mkdir -p "$BINDIR"
 BWRAP_ARGV_LOG="$TEST_TMP/bwrap-argv.log"
 CODEX_ARGV_LOG="$TEST_TMP/codex-argv.log"
+AGY_ARGV_LOG="$TEST_TMP/agy-argv.log"
 CLAUDE_CALLS="$TEST_TMP/claude.calls"
-export BWRAP_ARGV_LOG CODEX_ARGV_LOG CLAUDE_CALLS
+export BWRAP_ARGV_LOG CODEX_ARGV_LOG AGY_ARGV_LOG CLAUDE_CALLS
 
 cat > "$BINDIR/bwrap" <<'EOS'
 #!/usr/bin/env bash
@@ -98,12 +99,23 @@ echo x >> "$CLAUDE_CALLS"
 echo edited >> sandbox-edit.txt
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOS
-chmod +x "$BINDIR/bwrap" "$BINDIR/codex" "$BINDIR/claude"
+cat > "$BINDIR/agy" <<'EOS'
+#!/usr/bin/env bash
+case "${*}" in
+  *--input-format*) cat >/dev/null ;;
+esac
+printf '%s\n' "$*" >> "${AGY_ARGV_LOG:?}"
+echo edited >> sandbox-edit.txt
+printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"ok"}}'
+exit 0
+EOS
+chmod +x "$BINDIR/bwrap" "$BINDIR/codex" "$BINDIR/claude" "$BINDIR/agy"
+make_agy_stub_versioned "$BINDIR/agy"
 
 CFG_FB="$TEST_TMP/cfg-fb.md"
-printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' > "$CFG_FB"
+printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gemini-4-carbon-high/high@agy\n' > "$CFG_FB"
 CFG_ASK="$TEST_TMP/cfg-ask.md"
-printf -- '- on_engine_unavailable: ask\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' > "$CFG_ASK"
+printf -- '- on_engine_unavailable: ask\n- cloud_fallback_rung: gemini-4-carbon-high/high@agy\n' > "$CFG_ASK"
 
 jget() {
   node -e 'let v=JSON.parse(process.argv[1]); for (const k of process.argv[2].split(".")) v = v == null ? v : v[k]; console.log(v === null || v === undefined ? "null" : String(v));' "$1" "$2"
@@ -132,6 +144,7 @@ dispatch_case() {
   seed_dogfood_implementer_pin "$CASE_CAP" >/dev/null
   : > "$BWRAP_ARGV_LOG"
   : > "$CODEX_ARGV_LOG"
+  : > "$AGY_ARGV_LOG"
   : > "$CLAUDE_CALLS"
   printf '%s' "$mode" > "$MODE_FILE"
   export AUTOPILOT_ENDPOINT_GPU1_URL="http://127.0.0.1:${port}"
@@ -163,26 +176,24 @@ bwrap_worker_line() {
 # --- (1) 503 re-dispatches to the named cloud seat, same bwrap, fell_back written ---
 dispatch_case busy "$SRV_PORT" busy "$CFG_FB"
 assert_neq "$(jget "$CASE_JSON" status)" "engine_unavailable" "(1) 503 must not end as engine_unavailable (rc=$CASE_RC stderr=$(printf '%s' "$CASE_ERR" | tail -c 500))"
-assert_eq "$(jget "$CASE_JSON" runner)" "codex" "(1) the result runner is the cloud rung"
-assert_eq "$(jget "$CASE_JSON" fell_back.to_rung)" "gpt-5.6-sol/high@codex" "(1) fell_back names the cloud rung"
+assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(1) the result runner is the cloud rung"
+assert_eq "$(jget "$CASE_JSON" fell_back.to_rung)" "gemini-4-carbon-high/high@agy" "(1) fell_back names the cloud rung"
 assert_eq "$(jget "$CASE_JSON" fell_back.from_endpoint)" "gpu1" "(1) fell_back names the endpoint that failed"
 assert_eq "$(jget "$CASE_JSON" fell_back.error_class)" "endpoint_busy" "(1) fell_back class is endpoint_busy"
 assert_eq "$(jget "$CASE_JSON" fell_back.probe.decision)" "busy" "(1) fell_back keeps the probe"
-assert_contains "$CASE_ERR" "retreating once to cloud rung gpt-5.6-sol/high@codex" "(1) the retreat is printed, never silent"
-[ -s "$CODEX_ARGV_LOG" ] || fail "(1) the cloud seat was not invoked"
+assert_contains "$CASE_ERR" "retreating once to cloud rung gemini-4-carbon-high/high@agy" "(1) the retreat is printed, never silent"
+[ -s "$AGY_ARGV_LOG" ] || fail "(1) the cloud seat was not invoked"
+[ ! -s "$CODEX_ARGV_LOG" ] || fail "(1) codex stub must not be invoked"
 BWRAP_WORKER="$(bwrap_worker_line)"
-assert_contains "$BWRAP_WORKER" "codex" "(1) the cloud worker ran under bwrap"
-case "$BWRAP_WORKER" in
-  *dispatch-hetero-sandbox-*/autopilot-managed-codex-home-*) ;;
-  *) fail "(1) the managed Codex home is not inside the bwrap scratch" ;;
-esac
+assert_contains "$BWRAP_WORKER" "agy" "(1) the cloud worker ran under bwrap"
+assert_contains "$BWRAP_WORKER" "gemini-4-carbon-high" "(1) the agy model ran inside bwrap"
 assert_not_contains "$BWRAP_WORKER" "--endpoint" "(1) the retreat drops --endpoint"
 [ ! -s "$CLAUDE_CALLS" ] || fail "(1) the local cc-shim worker must not run after a busy probe"
 ROWS="$(grep -c . "$CASE_CAP/cloud-fallbacks.jsonl" 2>/dev/null || true)"
 assert_eq "$ROWS" "1" "(1) one cloud-fallbacks row"
 assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"from_endpoint":"gpu1"' "(1) the row names the endpoint"
 assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"error_class":"endpoint_busy"' "(1) the row names the class"
-assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"to_rung":"gpt-5.6-sol/high@codex"' "(1) the row names the rung"
+assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"to_rung":"gemini-4-carbon-high/high@agy"' "(1) the row names the rung"
 BUSY_STATUS="$(jget "$CASE_JSON" status)"
 assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" "\"outcome\":\"$BUSY_STATUS\"" "(1) the row outcome is the result status"
 MANIFESTS="$(find "$TEST_TMP/runs-busy" -name '*.manifest.json' -type f 2>/dev/null | wc -l | tr -d ' ')"
@@ -194,8 +205,9 @@ assert_eq "$(jget "$(cat "$MF")" fell_back.from_endpoint)" "gpu1" "(1) the manif
 dispatch_case dead "$DEAD_PORT" ok "$CFG_FB"
 assert_eq "$(jget "$CASE_JSON" fell_back.error_class)" "endpoint_unreachable" "(1b) closed port: fell_back class is endpoint_unreachable (rc=$CASE_RC stderr=$(printf '%s' "$CASE_ERR" | tail -c 400))"
 assert_eq "$(jget "$CASE_JSON" fell_back.probe.decision)" "unreachable" "(1b) probe decision unreachable"
-[ -s "$CODEX_ARGV_LOG" ] || fail "(1b) closed port: the cloud seat was not invoked"
-assert_contains "$(bwrap_worker_line)" "codex" "(1b) closed port: the cloud worker ran under bwrap"
+[ -s "$AGY_ARGV_LOG" ] || fail "(1b) closed port: the cloud seat was not invoked"
+[ ! -s "$CODEX_ARGV_LOG" ] || fail "(1b) closed port: codex stub must not be invoked"
+assert_contains "$(bwrap_worker_line)" "agy" "(1b) closed port: the cloud worker ran under bwrap"
 
 # --- (ask) policy ask stays engine_unavailable, no cloud seat, no row ---
 dispatch_case ask "$SRV_PORT" busy "$CFG_ASK"
@@ -203,6 +215,7 @@ assert_eq "$(jget "$CASE_JSON" status)" "engine_unavailable" "(ask) policy ask s
 assert_eq "$(jget "$CASE_JSON" fell_back)" "null" "(ask) no fell_back record"
 assert_eq "$(jget "$CASE_JSON" probe.decision)" "busy" "(ask) the probe is still on the result"
 [ ! -s "$CODEX_ARGV_LOG" ] || fail "(ask) the cloud seat must not run"
+[ ! -s "$AGY_ARGV_LOG" ] || fail "(ask) the agy cloud seat must not run"
 [ ! -e "$CASE_CAP/cloud-fallbacks.jsonl" ] || fail "(ask) no cloud-fallbacks row"
 assert_not_contains "$CASE_ERR" "retreating once" "(ask) ask does not announce a retreat"
 
@@ -213,6 +226,7 @@ assert_eq "$(jget "$CASE_JSON" fell_back)" "null" "(healthy) no fell_back"
 assert_neq "$(jget "$CASE_JSON" status)" "engine_unavailable" "(healthy) not engine_unavailable"
 [ -s "$CLAUDE_CALLS" ] || fail "(healthy) the local worker did not run"
 [ ! -s "$CODEX_ARGV_LOG" ] || fail "(healthy) the cloud seat must not run"
+[ ! -s "$AGY_ARGV_LOG" ] || fail "(healthy) the agy cloud seat must not run"
 [ ! -e "$CASE_CAP/cloud-fallbacks.jsonl" ] || fail "(healthy) no cloud-fallbacks row"
 
 # --- (3) manifest reconciliation counts fell_back separately ---
@@ -385,19 +399,19 @@ mut_engine() {
 SILENT="$(mut_hetero silent 's/fell_back_json_suffix() {/fell_back_json_suffix() { return 0;/')" || fail "N-silent mutant did not apply"
 HETERO_SCRIPT="$SILENT" dispatch_case nsilent "$SRV_PORT" busy "$CFG_FB"
 NS_RUNG="$(jget "$CASE_JSON" fell_back.to_rung)"
-[ -s "$CODEX_ARGV_LOG" ] || fail "N-silent mutant did not reach the cloud seat"
-[ "$NS_RUNG" = "gpt-5.6-sol/high@codex" ] && fail "N-silent mutant still wrote fell_back.to_rung"
+[ -s "$AGY_ARGV_LOG" ] || fail "N-silent mutant did not reach the cloud seat"
+[ "$NS_RUNG" = "gemini-4-carbon-high/high@agy" ] && fail "N-silent mutant still wrote fell_back.to_rung"
 echo "mutant-red N-silent fell_back.to_rung=$NS_RUNG"
 unset HETERO_SCRIPT
 
 # N-bwrap: the keep arm no longer matches, so the re-exec drops --sandbox and --worktree-parent.
 BWRAP_MUT="$(mut_hetero bwrap 's@--sandbox|--worktree-parent) # BL-0435 keep the caller bwrap on this one re-exec@--not-sandbox|--not-worktree-parent) # BL-0435 keep the caller bwrap on this one re-exec@')" || fail "N-bwrap mutant did not apply"
 HETERO_SCRIPT="$BWRAP_MUT" dispatch_case nbwrap "$SRV_PORT" busy "$CFG_FB"
-[ -s "$CODEX_ARGV_LOG" ] || fail "N-bwrap mutant did not reach the cloud seat"
+[ -s "$AGY_ARGV_LOG" ] || fail "N-bwrap mutant did not reach the cloud seat"
 case "$(bwrap_worker_line)" in
-  *codex*) fail "N-bwrap mutant still ran codex under bwrap" ;;
+  *agy*) fail "N-bwrap mutant still ran agy under bwrap" ;;
 esac
-echo "mutant-red N-bwrap worker_has_codex=no"
+echo "mutant-red N-bwrap worker_has_agy=no"
 unset HETERO_SCRIPT
 
 # N-count: every fell_back manifest is counted as ordinary.
@@ -451,5 +465,108 @@ esac
 REV_MUT_PLAIN="$(node "$TEST_TMP/review.js" "$REV_TREE" "$TEST_TMP/rev-mut-plain" plain 2>"$TEST_TMP/rev-mut-plain.err")" || fail "N-review plain threw: $(tail -c 400 "$TEST_TMP/rev-mut-plain.err")"
 assert_contains "$REV_MUT_PLAIN" "reviews=1" "N-review mutant still reviews a commit without fell_back ($REV_MUT_PLAIN)"
 echo "mutant-red N-review fell=$REV_MUT_FELL plain=$REV_MUT_PLAIN"
+
+# --- (fb-d / fb-e) Default policy retreats automatically along pace-roles priority.implementer, never codex ---
+CFG_DFLT="$TEST_TMP/cfg-default.md"
+printf '# default policy (unset on_engine_unavailable & cloud_fallback_rung)\n- consult_dispatch: off\n- discuss_dispatch: off\n' > "$CFG_DFLT"
+
+dispatch_case dflt_busy "$SRV_PORT" busy "$CFG_DFLT"
+assert_eq "$(jget "$CASE_JSON" status)" "committed" "(fb-d) busy endpoint with default policy retreats and commits (rc=$CASE_RC stderr=$(printf '%s' "$CASE_ERR" | tail -c 400))"
+assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(fb-d) default retreat chooses first picker runner agy"
+assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-d) default retreat chooses gemini-4-hydrogen-high"
+assert_eq "$(jget "$CASE_JSON" fallback.from)" "mini@cc-shim#gpu1" "(fb-d) fallback.from records original seat"
+assert_eq "$(jget "$CASE_JSON" fallback.to)" "gemini-4-hydrogen-high/high@agy" "(fb-d) fallback.to records picker rung"
+assert_eq "$(jget "$CASE_JSON" fallback.reason)" "endpoint_busy" "(fb-d) fallback.reason records error class"
+assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"fallback":{' "(fb-d) cloud-fallbacks row carries fallback object"
+assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"reason":"endpoint_busy"' "(fb-d) cloud-fallbacks row records reason"
+[ -s "$AGY_ARGV_LOG" ] || fail "(fb-d) agy stub was not invoked"
+[ ! -s "$CODEX_ARGV_LOG" ] || fail "(fb-e) codex must never be invoked by default retreat"
+
+dispatch_case dflt_dead "$DEAD_PORT" ok "$CFG_DFLT"
+assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(fb-d2) unreachable endpoint with default policy chooses agy"
+assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-d2) unreachable endpoint chooses hydrogen"
+assert_eq "$(jget "$CASE_JSON" fallback.reason)" "endpoint_unreachable" "(fb-d2) fallback.reason records endpoint_unreachable"
+[ ! -s "$CODEX_ARGV_LOG" ] || fail "(fb-e2) codex must never be invoked on unreachable retreat"
+
+# --- (fb-codex) explicit codex cloud_fallback_rung is ignored; retreats to picker agy rung ---
+CFG_FB_CODEX="$TEST_TMP/cfg-fb-codex.md"
+printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' > "$CFG_FB_CODEX"
+
+dispatch_case fbcodex "$SRV_PORT" busy "$CFG_FB_CODEX"
+assert_eq "$(jget "$CASE_JSON" status)" "committed" "(fb-codex) busy endpoint with explicit codex rung retreats and commits (rc=$CASE_RC stderr=$(printf '%s' "$CASE_ERR" | tail -c 400))"
+assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(fb-codex) explicit codex rung retreats to picker runner agy"
+assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-codex) explicit codex rung retreats to gemini-4-hydrogen-high"
+assert_eq "$(jget "$CASE_JSON" fell_back.to_rung)" "gemini-4-hydrogen-high/high@agy" "(fb-codex) fell_back.to_rung records picker rung"
+[ -s "$AGY_ARGV_LOG" ] || fail "(fb-codex) agy stub was not invoked"
+[ ! -s "$CODEX_ARGV_LOG" ] || fail "(fb-codex) codex stub must never be invoked"
+
+cat > "$TEST_TMP/once-default.js" <<'NODE'
+const path = require('path');
+const [root, mode] = process.argv.slice(2);
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const calls = [];
+const base = '1111111111111111111111111111111111111111';
+const engine = new AutopilotEngine({
+  clock: () => 1782864000000,
+  implementationDispatcher(args) {
+    calls.push(args);
+    return {
+      error: null,
+      status: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'engine_unavailable',
+        runner: calls.length === 1 ? 'cc-shim' : 'agy',
+        model: calls.length === 1 ? 'Qwen3.8-27B-QUASAR-NVFP4' : 'gemini-4-hydrogen-high',
+        commit: null,
+        base,
+        branch: 'feat/default-retreat',
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: null,
+        agent_log: null,
+        error: 'engine unavailable (endpoint_unreachable): refused',
+      },
+    };
+  },
+});
+const roster = {
+  implementer_engine: 'Qwen3.8-27B-QUASAR-NVFP4',
+  implementer_effort: 'high',
+  implementer_runner: 'cc-shim',
+  implementer_endpoint: 'qwen_local',
+};
+if (mode === 'codex-rung') {
+  roster.on_engine_unavailable = 'cloud-fallback';
+  roster.cloud_fallback_rung = { engine: 'gpt-5.6-sol', effort: 'high', runner: 'codex' };
+}
+const out = engine.implementTask({
+  promptFile: path.join(root, 'hooks', 'tests', 'hetero-endpoint-fallback.test.sh'),
+  branch: 'feat/default-retreat',
+  base,
+  runId: mode === 'codex-rung' ? 'run-fb-codex-rung' : 'run-fb-default',
+  implementationRound: 1,
+  extraImplementationArgs: ['--endpoint', 'qwen_local'],
+  roster,
+});
+const flagOf = (argv, flag) => {
+  if (!Array.isArray(argv)) return '';
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === flag && i + 1 < argv.length) return argv[i + 1];
+    if (typeof argv[i] === 'string' && argv[i].startsWith(`${flag}=`)) return argv[i].slice(flag.length + 1);
+  }
+  return '';
+};
+const d = out.engine_unavailable || {};
+process.stdout.write(`calls=${calls.length} policy=${d.policy || ''} runner2=${flagOf(calls[1], '--runner')} model2=${flagOf(calls[1], '--model')} exhausted=${d.cloud_fallback_exhausted === true}\n`);
+NODE
+ONCE_DFLT="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" 2>"$TEST_TMP/once-dflt.err")" || fail "(fb-d) once-default threw: $(cat "$TEST_TMP/once-dflt.err")"
+assert_eq "$ONCE_DFLT" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-d) AutopilotEngine default policy retreats to picker implementer without codex"
+ONCE_CODEX_RUNG="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" codex-rung 2>"$TEST_TMP/once-codex-rung.err")" || fail "(fb-codex) once-default codex-rung threw: $(cat "$TEST_TMP/once-codex-rung.err")"
+assert_eq "$ONCE_CODEX_RUNG" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-codex) AutopilotEngine ignores explicit codex cloud_fallback_rung and retreats to picker agy"
 
 finalize_test

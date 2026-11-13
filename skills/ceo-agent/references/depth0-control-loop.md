@@ -136,7 +136,9 @@ merge authority, and it is absent on non-CC hosts — never a dependency of the 
 `bash scripts/resolve-review-loop.sh --field on_engine_unavailable` — read it,
 never hand-type the policy): this
 auto-wakeup path only runs when the resolved key is `solo-fallback` or
-`wait-reset`. Under `ask` (the shipped default), the run stops at the quota death
+`wait-reset`. Under `cloud-fallback` (the shipped default, which retreats only
+on `endpoint_busy`/`endpoint_unreachable` along `pace-roles.json` `priority.implementer`
+and never retreats to `codex`) or explicit `ask`, the run stops at the quota death
 and escalates to the user immediately — report which engine died and the parsed
 reset time if available; do **not** schedule a wakeup or silently fall back to
 inline/`--solo` labor on the expensive depth-0 session model.
@@ -197,7 +199,7 @@ a JSON outcome.
 | `dirty` | Escalate (worker committed then left the tree dirty — not reviewable). |
 | `failure` | Escalate (clean commit but abnormal exit — run not trustworthy). |
 | `question_suspected` | Escalate (worker likely paused on a clarifying question). |
-| `precondition_failed` | **Gated on `on_engine_unavailable`** (from `resolve-review-loop.sh`): `ask` / `wait-reset` → escalate to the user (record in ledger; do **not** auto-`--solo`); `solo-fallback` → run `session-mode.js set --level l3 --entry-level lN --fallback precondition_failed --repo-root <repo>` and fall back inline only if the same Mission admission digest remains. For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
+| `precondition_failed` | **Gated on `on_engine_unavailable`** (from `resolve-review-loop.sh`): `cloud-fallback` (default) / `ask` / `wait-reset` → escalate to the user (record in ledger; do **not** auto-`--solo`); `solo-fallback` → run `session-mode.js set --level l3 --entry-level lN --fallback precondition_failed --repo-root <repo>` and fall back inline only if the same Mission admission digest remains. For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
 | `killed` (budget cap — CEO state, not a script status) | Escalate (see §1). |
 | `failed`/`killed` (foreman died before normal outcome emission) | run `run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>` and let it perform recovery: locate last ledger stage, bump generation (`stage-acquire --allow-reopen`), hold resource lock, reconcile by `stage-reconcile` before any redo, adopt git-truth when available, and report `review_round_owed`. If `status=already_applied`, caller must treat as a true no-op recovery replay. On `quarantined`/D resources, resume must refuse the old resource and request a new resource path. |
 

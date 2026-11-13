@@ -2,7 +2,7 @@
 # The agy reviewer default resolves to gemini-4-carbon-high, and the existing
 # reviewer_cloud_fallback_rung (empty in the config) is filled with
 # gemini-4-argon-high/high@agy. The roster loop reviewer stays the local qwen
-# and its rung stays gpt-6.1-sol/high@codex. The roster qc google seat is carbon-high.
+# and its rung is gemini-4-hydrogen-high/high@agy (never codex). The roster qc google seat is carbon-high.
 . "$(dirname "$0")/lib.sh"
 
 unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR AUTOPILOT_QUALIFICATION_OVERRIDE
@@ -35,8 +35,8 @@ assert_eq "$(printf '%s' "$OUT" | jget reviewer_cloud_fallback_rung)" \
   "empty rung is filled with argon-high@agy"
 assert_eq "$(printf '%s' "$OUT" | jget reviewer_on_engine_unavailable)" "cloud-fallback" \
   "empty reviewer policy becomes cloud-fallback so the existing retreat uses the rung"
-assert_eq "$(printf '%s' "$OUT" | jget on_engine_unavailable)" "ask" \
-  "global on_engine_unavailable stays ask"
+assert_eq "$(printf '%s' "$OUT" | jget on_engine_unavailable)" "cloud-fallback" \
+  "global on_engine_unavailable defaults to cloud-fallback"
 
 # An explicit rung is not replaced. A different-family rung still passes the family check.
 KEEP="$TEST_TMP/agy-reviewer-keep.md"
@@ -66,8 +66,8 @@ assert_eq "$STUB_RC" "0" "roster stub resolves"
 assert_eq "$(printf '%s' "$STUB_OUT" | jget reviewer_engine)" "Qwen3.8-27B-QUASAR-NVFP4" \
   "roster loop reviewer stays the local qwen"
 assert_eq "$(printf '%s' "$STUB_OUT" | jget reviewer_cloud_fallback_rung)" \
-  '{"engine":"gpt-6.1-sol","effort":"high","runner":"codex"}' \
-  "qwen reviewer_cloud_fallback_rung stays gpt-6.1-sol/high@codex"
+  '{"engine":"gemini-4-hydrogen-high","effort":"high","runner":"agy"}' \
+  "qwen reviewer_cloud_fallback_rung follows picker order gemini-4-hydrogen-high/high@agy"
 assert_eq "$(printf '%s' "$STUB_OUT" | jget qc_panel)" \
   '["gpt-6-astra","gpt-6.1-sol","GLM-5.3","gemini-4-carbon-high"]' \
   "roster qc google seat is carbon-high"

@@ -6679,6 +6679,17 @@
       "note": "Set by dispatch-review.sh on the agy carbon-to-argon retreat child: the cloud-fallbacks.jsonl row the child carries onto its result."
     },
     {
+      "name": "AUTOPILOT_CHAIN_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/lib/seat-fallback.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Optional override path to a review-loop chain.json read by seat-fallback.js when inferring implementer_family."
+    },
+    {
       "name": "qc_panel.codex_quota_substitutes",
       "kind": "config_key",
       "audience": "user",

@@ -1834,10 +1834,30 @@ current_runner_name() {
   printf '%s' "$runner"
 }
 
-# BL-0435: the cloud-seat re-exec carries this object. Empty on the first attempt and on ask.
+# BL-0435 / PM 01M7AHAM: the cloud-seat re-exec carries fell_back + fallback {from,to,reason}.
 fell_back_json_suffix() {
   [ -n "${FELL_BACK_JSON:-}" ] || return 0
-  printf ', "fell_back": %s' "$FELL_BACK_JSON"
+  local fb_obj=""
+  fb_obj="$(node -e '
+let j = null; try { j = JSON.parse(process.argv[1]); } catch {}
+if (!j || typeof j !== "object") process.exit(0);
+if (j.fallback && typeof j.fallback === "object") {
+  process.stdout.write(JSON.stringify(j.fallback));
+  process.exit(0);
+}
+const from = [j.from_model || "", j.from_runner || ""].filter(Boolean).join("@")
+  + (j.from_endpoint ? `#${j.from_endpoint}` : "");
+process.stdout.write(JSON.stringify({
+  from: from || j.from_endpoint || j.from_runner || "unknown",
+  to: j.to_rung || "",
+  reason: j.error_class || "engine_unavailable",
+}));
+' "$FELL_BACK_JSON" 2>/dev/null)" || fb_obj=""
+  if [ -n "$fb_obj" ]; then
+    printf ', "fell_back": %s, "fallback": %s' "$FELL_BACK_JSON" "$fb_obj"
+  else
+    printf ', "fell_back": %s' "$FELL_BACK_JSON"
+  fi
 }
 # One cloud-fallbacks.jsonl row, written when the re-exec ends so the outcome is the result.
 hetero_log_fallback() { # $1 outcome
@@ -1848,6 +1868,11 @@ hetero_log_fallback() { # $1 outcome
 let fb;
 try { fb = JSON.parse(process.argv[1]); } catch { process.exit(0); }
 if (!fb || typeof fb !== "object" || Array.isArray(fb)) process.exit(0);
+const from = [fb.from_model || "", fb.from_runner || ""].filter(Boolean).join("@")
+  + (fb.from_endpoint ? `#${fb.from_endpoint}` : "");
+const fallback = (fb.fallback && typeof fb.fallback === "object")
+  ? fb.fallback
+  : { from: from || fb.from_endpoint || fb.from_runner || "unknown", to: fb.to_rung || "", reason: fb.error_class || "engine_unavailable" };
 process.stdout.write(JSON.stringify({
   ts: new Date().toISOString(),
   run_id: process.argv[3] ? process.argv[3] : null,
@@ -1855,6 +1880,7 @@ process.stdout.write(JSON.stringify({
   from_endpoint: fb.from_endpoint == null || fb.from_endpoint === "" ? null : String(fb.from_endpoint),
   error_class: fb.error_class,
   to_rung: fb.to_rung,
+  fallback,
   outcome: process.argv[2],
   probe: fb.probe && typeof fb.probe === "object" && !Array.isArray(fb.probe) ? fb.probe : null,
   served_by: fb.to_rung,
@@ -2122,13 +2148,15 @@ die_probe_unavailable() {
   exit 1
 }
 
-# BL-0435: one re-exec onto cloud_fallback_rung when the pre-probe is unreachable or busy.
+# BL-0435 / PM 01M7AHAM: one re-exec onto cloud_fallback_rung (or pace-roles priority.implementer
+# when cloud_fallback_rung is unset; never codex) when pre-probe is unreachable or busy.
 # Returns 1 when this death stays engine_unavailable (ask, no rung, campaign, already retreated).
 # Does not return on a retreat: the child process's stdout is the result. Never invents a seat.
 hetero_endpoint_cloud_fallback() {
   [ "${AUTOPILOT_HETERO_FELL_BACK:-}" = "1" ] && return 1
   [ -n "${CAMPAIGN_CONTRACT_FILE:-}" ] && return 1
-  local errf resolved rc parsed policy engine effort runner to_rung
+  local errf resolved rc parsed policy engine effort runner target_endpoint to_rung cur_runner
+  cur_runner="$(current_runner_name)"
   errf="$(mktemp -t dispatch-hetero-fb-resolve-XXXXXX)" || return 1
   resolved="$("$SELF_DIR/resolve-review-loop.sh" 2>"$errf")"
   rc=$?
@@ -2137,43 +2165,78 @@ hetero_endpoint_cloud_fallback() {
   parsed="$(node -e '
 let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(2); }
 const s = (v) => (v == null ? "" : String(v));
-const policy = s(j.on_engine_unavailable);
+const policy = s(j.on_engine_unavailable) || "cloud-fallback";
 const rung = j.cloud_fallback_rung;
-let re = "", rf = "", rr = "";
+let re = "", rf = "", rr = "", ep = "";
 if (rung && typeof rung === "object" && !Array.isArray(rung)) {
-  re = s(rung.engine); rf = s(rung.effort); rr = s(rung.runner);
+  re = s(rung.engine); rf = s(rung.effort); rr = s(rung.runner); ep = s(rung.endpoint);
 }
 const clean = (v) => String(v).replace(/[|\n\r]/g, " ");
-process.stdout.write([policy, re, rf, rr].map(clean).join("|"));
+process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
 ' "$resolved" 2>/dev/null)" || return 1
-  IFS='|' read -r policy engine effort runner <<< "$parsed"
+  IFS='|' read -r policy engine effort runner target_endpoint <<< "$parsed"
   [ "$policy" = "cloud-fallback" ] || return 1
+  case "$(printf '%s' "${runner:-}" | tr '[:upper:]' '[:lower:]')" in
+    codex)
+      engine=""
+      effort=""
+      runner=""
+      target_endpoint=""
+      ;;
+  esac
+  if [ -z "$engine" ] || [ -z "$effort" ] || [ -z "$runner" ]; then
+    local pick_parsed=""
+    pick_parsed="$(node -e '
+const sf = require(process.argv[1]);
+const rung = sf.selectImplementerFallback({
+  failedRunner: process.argv[2],
+  failedModel: process.argv[3],
+  failedEndpoint: process.argv[4],
+});
+if (!rung) process.exit(1);
+process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || ""].join("|"));
+' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" 2>/dev/null)" || return 1
+    IFS='|' read -r engine effort runner target_endpoint <<< "$pick_parsed"
+  fi
   [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
   case "$runner" in
-    codex|agy|grok|cursor|kimi|qoderclicn) ;;
+    agy|grok|cursor|kimi|qoderclicn) ;;
+    cc-shim) [ -n "${target_endpoint:-}" ] || return 1 ;;
     *) return 1 ;;
   esac
-  to_rung="${engine}/${effort}@${runner}"
+  to_rung="${engine}/${effort}@${runner}${target_endpoint:+#${target_endpoint}}"
   FELL_BACK_JSON="$(node -e '
 let probe = null;
 try { probe = JSON.parse(process.argv[1]); } catch { probe = null; }
+const from = [process.argv[6] || "", process.argv[2] || ""].filter(Boolean).join("@")
+  + (process.argv[3] ? `#${process.argv[3]}` : "");
 process.stdout.write(JSON.stringify({
   from_runner: process.argv[2],
+  from_model: process.argv[6] || null,
   from_endpoint: process.argv[3] || null,
   error_class: process.argv[4],
   to_rung: process.argv[5],
+  fallback: { from: from || process.argv[3] || process.argv[2], to: process.argv[5], reason: process.argv[4] || "engine_unavailable" },
   probe,
 }));
-' "$PROBE_JSON" "$(current_runner_name)" "$ENDPOINT" "$PROBE_CLASS" "$to_rung")" || return 1
+' "$PROBE_JSON" "$cur_runner" "$ENDPOINT" "$PROBE_CLASS" "$to_rung" "${MODEL:-}")" || return 1
   [ -n "$FELL_BACK_JSON" ] || return 1
   echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION}; retreating once to cloud rung ${to_rung} (on_engine_unavailable: cloud-fallback)" >&2
   local -a args=()
-  local i=0 a saw_runner=0 saw_model=0 saw_effort=0
+  local i=0 a saw_runner=0 saw_model=0 saw_effort=0 saw_ep=0
   while [ "$i" -lt "${#ORIG_ARGS[@]}" ]; do
     a="${ORIG_ARGS[$i]}"
     case "$a" in
-      --endpoint) i=$((i + 2)) ;;
-      --endpoint=*) i=$((i + 1)) ;;
+      --endpoint)
+        if [ -n "${target_endpoint:-}" ]; then
+          args+=(--endpoint "$target_endpoint"); saw_ep=1
+        fi
+        i=$((i + 2)) ;;
+      --endpoint=*)
+        if [ -n "${target_endpoint:-}" ]; then
+          args+=(--endpoint "$target_endpoint"); saw_ep=1
+        fi
+        i=$((i + 1)) ;;
       --runner) args+=(--runner "$runner"); saw_runner=1; i=$((i + 2)) ;;
       --model) args+=(--model "$engine"); saw_model=1; i=$((i + 2)) ;;
       --effort) args+=(--effort "$effort"); saw_effort=1; i=$((i + 2)) ;;
@@ -2191,6 +2254,9 @@ process.stdout.write(JSON.stringify({
   [ "$saw_runner" -eq 1 ] || args+=(--runner "$runner")
   [ "$saw_model" -eq 1 ] || args+=(--model "$engine")
   [ "$saw_effort" -eq 1 ] || args+=(--effort "$effort")
+  if [ -n "${target_endpoint:-}" ] && [ "$saw_ep" -eq 0 ]; then
+    args+=(--endpoint "$target_endpoint")
+  fi
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
   export AUTOPILOT_HETERO_FELL_BACK=1
   export AUTOPILOT_HETERO_FELL_BACK_JSON="$FELL_BACK_JSON"

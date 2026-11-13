@@ -157,11 +157,13 @@ const problems = [];
 // asserted against the exact new values below (same values resolve-review-loop-b pins).
 // reviewer_effort moved on purpose (2026-11-09, the roster loop reviewer is the local qwen at effort `default`,
 // a value the frozen resolver does not accept): asserted against the exact new value, not the old output.
-const INTENTIONAL_DEFAULT_MOVE = new Set(['qc_panel', 'qc_panel_seats', 'reviewer_effort']);
+// on_engine_unavailable moved on purpose (PM 01M7AHAM, 2026-11-13: the global default is cloud-fallback,
+// retreating along pace-roles priority.implementer): asserted against the exact new value.
+const INTENTIONAL_DEFAULT_MOVE = new Set(['qc_panel', 'qc_panel_seats', 'reviewer_effort', 'on_engine_unavailable']);
 for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
   if (INTENTIONAL_DEFAULT_MOVE.has(key)) {
-    const want = key === 'reviewer_effort' ? 'default' : key === 'qc_panel'
+    const want = key === 'reviewer_effort' ? 'default' : key === 'on_engine_unavailable' ? 'cloud-fallback' : key === 'qc_panel'
       ? ['gpt-6-astra', 'gpt-6.1-sol', 'GLM-5.3', 'gemini-4-carbon-high']
       : [{role:'qc',runner:'codex',model:'gpt-6-astra',effort:'low',endpoint:null,family:'openai'},
          {role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'medium',endpoint:null,family:'openai'},

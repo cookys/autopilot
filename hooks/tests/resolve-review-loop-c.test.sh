@@ -266,7 +266,7 @@ assert_eq "$(json_get "$ENUM_OUT" spec_review)" "on" "invalid spec_review falls 
 assert_eq "$(json_get "$ENUM_OUT" independent_harness)" "on" "invalid independent_harness falls back to on"
 assert_eq "$(json_get "$ENUM_OUT" qc_panel_aggregation)" "union-on-verified-critical" "invalid qc_panel_aggregation falls back to union"
 assert_eq "$(json_get "$ENUM_OUT" review_diff_scope)" "full" "invalid review_diff_scope falls back to full"
-assert_eq "$(json_get "$ENUM_OUT" on_engine_unavailable)" "ask" "invalid on_engine_unavailable falls back to ask"
+assert_eq "$(json_get "$ENUM_OUT" on_engine_unavailable)" "cloud-fallback" "invalid on_engine_unavailable falls back to the default cloud-fallback (PM 01M7AHAM)"
 assert_eq "$(json_get "$ENUM_OUT" on_family_conflict)" "block" "invalid on_family_conflict fails closed to block"
 assert_eq "$(json_get "$ENUM_OUT" provider_readiness_fallback_family_constraint)" "different" "invalid readiness family constraint falls back to different"
 

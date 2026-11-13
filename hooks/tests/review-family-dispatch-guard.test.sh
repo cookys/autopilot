@@ -145,19 +145,15 @@ assert_eq "$(line_count "$RUN_AGY")" "0" "a1: agy is not spawned"
 assert_contains "$(cat "$RUN_GROK")" "--model grok-4.7" "a1: grok stub saw grok-4.7"
 assert_not_contains "$(cat "$RUN_GROK")" "__autopilot_probe__" "a1: grok effort probe did not run"
 
-# (a2) flag absent: resolver implementer_family google (override) skips the same way.
+# (a2) flag absent: recorded dispatch implementer (google) is inferred and skips the same way.
 CFG_IMPL="$TEST_TMP/impl-google.md"
 write_reviewer_cfg "$CFG_IMPL" "- reviewer_fallback_preference: grok-4.7@grok"
-cat >> "$CFG_IMPL" <<'EOF'
-- override: implementer | until 2099-01-01 | flag-absent family comes from the resolver
-- implementer_engine: gemini-4-argon-high
-- implementer_runner: grok
-- implementer_effort: low
-- implementer_ladder:
-EOF
-review_run "$CFG_IMPL" "implfb" "" ""
-assert_eq "$(jget "$RUN_OUT" runner)" "grok" "a2: absent flag falls back to resolver implementer_family"
+A2_CHAIN="$TEST_TMP/a2-chain.json"
+printf '{"implementer_engine":"gemini-4-argon-high"}\n' > "$A2_CHAIN"
+review_run "$CFG_IMPL" "implfb" "AUTOPILOT_CHAIN_FILE=$A2_CHAIN" ""
+assert_eq "$(jget "$RUN_OUT" runner)" "grok" "a2: absent flag infers recorded implementer_family"
 assert_eq "$(jget "$RUN_OUT" model)" "grok-4.7" "a2: preference model is grok-4.7"
+assert_eq "$(jget "$RUN_OUT" implementer_family)" "google" "a2: receipt records inferred implementer_family"
 assert_contains "$RUN_ERR" "family-guard: skipping rung $AGY_RUNG" "a2: stderr names the skipped agy rung"
 assert_eq "$(line_count "$RUN_AGY")" "0" "a2: agy is not spawned"
 
@@ -266,7 +262,7 @@ assert_contains "$(cat "$RUN_GROK")" "--model grok-4.7" "a4: grok stub saw grok-
 assert_not_contains "$(cat "$RUN_LOG")" "--bin " "a4: bwrap log is the agy attempt only"
 
 CFG_AGY_NONE="$TEST_TMP/agy-none.md"
-write_agy_cfg "$CFG_AGY_NONE" ""
+write_agy_cfg "$CFG_AGY_NONE" "- reviewer_fallback_preference: gemini-4-argon-high/high@agy"
 agy_review_run "$CFG_AGY_NONE" "agy-none"
 assert_eq "$RUN_RC" "1" "a5: no cross-family retreat exits 1"
 assert_eq "$(jget "$RUN_OUT" status)" "no_verdict" "a5: status is no_verdict"
@@ -390,14 +386,35 @@ cat > "$CFG_R0" <<'EOF'
 - consult_dispatch: off
 - discuss_dispatch: off
 - override: implementer | until 2099-01-01 | rung 0 matches the reviewer cloud rung
-- implementer_engine: gpt-6.1-sol
-- implementer_runner: codex
+- implementer_engine: gemini-4-hydrogen-high
+- implementer_runner: agy
 - implementer_effort: high
-- implementer_ladder: gpt-6.1-sol/high@codex, grok-4.7/low@grok
+- implementer_ladder: gemini-4-hydrogen-high/high@agy, grok-4.7/low@grok
+- override: reviewer | until 2099-01-01 | explicit reviewer cloud rung off the picker list
+- reviewer_engine: grok-4.7
+- reviewer_runner: grok
+- reviewer_effort: low
+- reviewer_cloud_fallback_rung: gemini-4-argon-high/high@agy
 EOF
 resolve_of r0 "$CFG_R0"
-assert_eq "$RESOLVE_RC" "3" "c4: reviewer cloud rung sharing implementer rung 0 exits 3"
-assert_contains "$(cat "$RESOLVE_ERR")" "reviewer_cloud_fallback_rung gpt-6.1-sol/high@codex shares implementer rung 0 family (openai)" "c4: the message names rung 0"
+assert_eq "$RESOLVE_RC" "3" "c4: an explicit reviewer cloud rung off the picker list sharing implementer rung 0 exits 3"
+assert_contains "$(cat "$RESOLVE_ERR")" "reviewer_cloud_fallback_rung gemini-4-argon-high/high@agy shares implementer rung 0 family (google)" "c4: the message names rung 0"
+
+# c4b: the shipped picker-head rung (hydrogen) with a google rung 0 is not a dead config; the
+# picker walk skips the implementer family at dispatch time (red before: exit 3).
+CFG_R0_PICK="$TEST_TMP/r0-pick.md"
+cat > "$CFG_R0_PICK" <<'EOF'
+- allow_same_runner_dual_seat: on
+- consult_dispatch: off
+- discuss_dispatch: off
+- override: implementer | until 2099-01-01 | rung 0 shares the shipped picker-head reviewer rung
+- implementer_engine: gemini-4-hydrogen-high
+- implementer_runner: agy
+- implementer_effort: high
+- implementer_ladder: gemini-4-hydrogen-high/high@agy, grok-4.7/low@grok
+EOF
+resolve_of r0pick "$CFG_R0_PICK"
+assert_eq "$RESOLVE_RC" "0" "c4b: shipped picker-head reviewer rung with a google rung 0 resolves"
 
 CFG_R0_OK="$TEST_TMP/r0-ok.md"
 cat > "$CFG_R0_OK" <<'EOF'
@@ -446,5 +463,130 @@ AUTOPILOT_TOPOLOGY_FILE="$TOPO_AUTO" resolve_of auto "$CFG_AUTO"
 assert_eq "$RESOLVE_RC" "0" "c6: auto ladder with VA-family and reviewer-cloud-family rungs resolves"
 AUTO_LADDER="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8").split("\n")[0]); process.stdout.write(j.implementer_ladder.map((r)=>r.engine).join(","));' "$TEST_TMP/resolve-auto.out")"
 assert_eq "$AUTO_LADDER" "grok-4.7,gpt-6.1-sol" "c6: VA family dropped, reviewer cloud family moved off rung 0"
+
+# --- (fb-a/b/c/e) default reviewer retreat follows picker order hydrogen -> glm -> agyclaude, never codex ---
+FB_CLEAN_REPO="$TEST_TMP/fb-clean-repo"
+mkdir -p "$FB_CLEAN_REPO"
+git -C "$FB_CLEAN_REPO" init -q -b feat/fb-clean
+git -C "$FB_CLEAN_REPO" config user.email "t@t"
+git -C "$FB_CLEAN_REPO" config user.name "t"
+git -C "$FB_CLEAN_REPO" commit -q --allow-empty -m init
+
+CFG_FB_DFLT="$TEST_TMP/fb-default.md"
+cat > "$CFG_FB_DFLT" <<'EOF'
+# Default template reviewer retreat (no reviewer override)
+- consult_dispatch: off
+- discuss_dispatch: off
+EOF
+
+fb_review_run() { # $1 tag  $2 config  $3 extra args
+  local tag="$1" cfg="$2" extra_args="${3:-}"
+  RUN_CAP="$TEST_TMP/cap-fb-$tag"
+  local empty_runs="$TEST_TMP/runs-fb-$tag"
+  mkdir -p "$RUN_CAP" "$empty_runs"
+  local bindir="$TEST_TMP/bin-fb-$tag"
+  mkdir -p "$bindir"
+  FB_CLAUDE="$TEST_TMP/fb-claude-$tag.log"
+  FB_CODEX="$TEST_TMP/fb-codex-$tag.log"
+  FB_AGY="$TEST_TMP/fb-agy-$tag.log"
+  FB_BWRAP="$TEST_TMP/fb-bwrap-$tag.log"
+  rm -f "$FB_CLAUDE" "$FB_CODEX" "$FB_AGY" "$FB_BWRAP"
+  : > "$FB_BWRAP"
+
+  cat > "$bindir/claude" <<EOF
+#!/usr/bin/env bash
+printf '%s|%s\n' "\$*" "\${ANTHROPIC_BASE_URL:-}" >> "$FB_CLAUDE"
+printf 'not a review\n'
+exit 0
+EOF
+  cat > "$bindir/codex" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$FB_CODEX"
+printf 'codex-must-not-run\n' >&2
+exit 1
+EOF
+  cat > "$bindir/bwrap" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$FB_BWRAP"
+exec ${REAL_BWRAP} "\$@"
+EOF
+  cat > "$bindir/agy" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$FB_AGY"
+printf 'agy-stub-ran\n' >&2
+exit 2
+EOF
+  chmod +x "$bindir/claude" "$bindir/codex" "$bindir/bwrap" "$bindir/agy"
+  make_agy_stub_versioned "$bindir/agy"
+
+  printf 'busy' > "$MODE_FILE"
+  local out="$TEST_TMP/out-fb-$tag" err="$TEST_TMP/err-fb-$tag"
+  set +e
+  # shellcheck disable=SC2086
+  (cd "$FB_CLEAN_REPO" && env -u AUTOPILOT_CHAIN_FILE \
+    REVIEW_LOOP_CONFIG_OVERRIDE="$cfg" \
+    ENGINE_CAPABILITY_DIR="$RUN_CAP" \
+    AUTOPILOT_DISPATCH_RUNS_DIR="$empty_runs" \
+    AUTOPILOT_ENDPOINT_PREPROBE=on \
+    AUTOPILOT_ENDPOINT_GLM_URL="https://127.0.0.1:1/glm-stub" \
+    AUTOPILOT_ENDPOINT_GLM_TOKEN="fake-glm-token" \
+    PATH="$bindir:$PATH" \
+    "$REVIEW" --runner anthropic-compatible --model "$MODEL_ID" --effort default \
+      --endpoint qwen_local --diff-file "$DIFF" --context-window off --timeout 30s \
+      $extra_args \
+      >"$out" 2>"$err" < /dev/null)
+  RUN_RC=$?
+  set -uo pipefail
+  RUN_OUT="$(json_line "$(cat "$out")")"
+  RUN_ERR="$(cat "$err")"
+}
+
+# (fb-a) qwen busy/unreachable + implementer family google -> skips hydrogen, picks glm, never codex.
+fb_review_run "fba" "$CFG_FB_DFLT" "--implementer-family google"
+assert_eq "$(jget "$RUN_OUT" runner)" "cc-shim" "fb-a: google implementer skips hydrogen and retreats to cc-shim"
+assert_eq "$(jget "$RUN_OUT" model)" "glm-5.3" "fb-a: glm model is glm-5.3"
+assert_eq "$(jget "$RUN_OUT" served_by)" "glm-5.3/high@cc-shim#glm" "fb-a: served_by names glm rung"
+assert_eq "$(jget "$RUN_OUT" fallback.to)" "glm-5.3/high@cc-shim#glm" "fb-a: fallback.to records glm rung"
+assert_eq "$(jget "$RUN_OUT" implementer_family)" "google" "fb-a: receipt keeps implementer_family google"
+assert_contains "$(cat "$FB_CLAUDE")" "--model glm-5.3" "fb-a: claude shim invoked with glm-5.3"
+assert_contains "$(cat "$FB_CLAUDE")" "https://127.0.0.1:1/glm-stub" "fb-a: glm endpoint URL wired into cc-shim"
+assert_eq "$(line_count "$FB_AGY")" "0" "fb-a: hydrogen/agy is skipped for google implementer"
+assert_not_contains "$(cat "$FB_BWRAP")" "--model gemini-4-hydrogen-high" "fb-a: hydrogen/agy is not wrapped by bwrap for google implementer"
+assert_eq "$(line_count "$FB_CODEX")" "0" "fb-a: codex is never spawned"
+
+# (fb-b) qwen busy/unreachable + implementer family anthropic (agyclaude) -> picks hydrogen first, never codex.
+fb_review_run "fbb" "$CFG_FB_DFLT" "--implementer-family anthropic"
+assert_eq "$(jget "$RUN_OUT" runner)" "agy" "fb-b: anthropic implementer retreats to hydrogen/agy"
+assert_eq "$(jget "$RUN_OUT" model)" "gemini-4-hydrogen-high" "fb-b: hydrogen model is gemini-4-hydrogen-high"
+assert_eq "$(jget "$RUN_OUT" served_by)" "gemini-4-hydrogen-high/high@agy" "fb-b: served_by names hydrogen"
+assert_eq "$(jget "$RUN_OUT" fallback.to)" "gemini-4-hydrogen-high/high@agy" "fb-b: fallback.to records hydrogen"
+assert_contains "$(cat "$FB_BWRAP")" "--model gemini-4-hydrogen-high" "fb-b: agy invoked with gemini-4-hydrogen-high"
+assert_eq "$(line_count "$FB_CODEX")" "0" "fb-b: codex is never spawned"
+
+# (fb-c) no --implementer-family and nothing to infer -> family unknown, picks hydrogen first, no openai assumption.
+fb_review_run "fbc" "$CFG_FB_DFLT" ""
+assert_eq "$(jget "$RUN_OUT" implementer_family)" "unknown" "fb-c: unrecorded implementer defaults to unknown, not openai"
+assert_eq "$(jget "$RUN_OUT" runner)" "agy" "fb-c: unknown implementer picks hydrogen first (agy)"
+assert_eq "$(jget "$RUN_OUT" model)" "gemini-4-hydrogen-high" "fb-c: hydrogen model chosen first"
+assert_not_contains "$RUN_ERR" "family openai" "fb-c: no openai assumption in logs"
+assert_eq "$(line_count "$FB_CODEX")" "0" "fb-c: codex is never spawned"
+
+# (fb-e) even an override specifying reviewer_cloud_fallback_rung on codex never retreats to codex.
+CFG_FB_CODEX_OV="$TEST_TMP/fb-codex-ov.md"
+cat > "$CFG_FB_CODEX_OV" <<'EOF'
+- consult_dispatch: off
+- discuss_dispatch: off
+- override: reviewer | until 2099-01-01 | verify codex rung is never chosen on retreat
+- reviewer_engine: Qwen3.8-27B-QUASAR-NVFP4
+- reviewer_runner: anthropic-compatible
+- reviewer_effort: default
+- reviewer_endpoint: qwen_local
+- reviewer_on_engine_unavailable: cloud-fallback
+- reviewer_cloud_fallback_rung: gpt-6.1-sol/high@codex
+EOF
+fb_review_run "fbe" "$CFG_FB_CODEX_OV" "--implementer-family google"
+assert_neq "$(jget "$RUN_OUT" runner)" "codex" "fb-e: codex reviewer_cloud_fallback_rung never spawns codex"
+assert_eq "$(jget "$RUN_OUT" runner)" "cc-shim" "fb-e: falls back to next eligible picker rung (glm)"
+assert_eq "$(line_count "$FB_CODEX")" "0" "fb-e: codex stub never called"
 
 finalize_test

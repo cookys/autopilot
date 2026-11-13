@@ -2260,6 +2260,13 @@ function main() {
           }
           : null,
         served_by: str(input.served_by) ? input.served_by : null,
+        fallback: input.fallback && typeof input.fallback === 'object' && !Array.isArray(input.fallback)
+          ? {
+            from: str(input.fallback.from) ? input.fallback.from : null,
+            to: str(input.fallback.to) ? input.fallback.to : null,
+            reason: str(input.fallback.reason) ? input.fallback.reason : null,
+          }
+          : null,
       };
       appendRow(file, written);
       return written;

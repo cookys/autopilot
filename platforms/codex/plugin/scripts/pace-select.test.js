@@ -23,6 +23,17 @@ const {
   QUALIFIED_SCHEMA,
 } = require('./pace-select.js');
 
+const {
+  normalizeFamily,
+  reviewerFallbackChain,
+  implementerFallbackChain,
+  selectReviewerFallback,
+  selectImplementerFallback,
+  inferImplementerFamily,
+  formatRung,
+  isCodexRung,
+} = require('./lib/seat-fallback.js');
+const { AutopilotEngine } = require('../src/engine');
 const CLI = path.join(__dirname, 'pace-select.js');
 const SCORECARD_CLI = path.join(__dirname, 'engine-scorecard.js');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
@@ -866,4 +877,320 @@ test('(priority f) agy reading stale -> skipped by the priority walk, glm chosen
   });
   assert.equal(res.engine, 'glm');
   assert.equal(res.selected_by, 'priority');
+});
+
+// ---------------------------------------------------------------------------
+// Seat fallback order & implementer family inference (PM 01M7AHAM)
+// ---------------------------------------------------------------------------
+
+test('(seat-fallback a) reviewer retreat skips google/hydrogen and picks glm, never codex', () => {
+  const roles = loadRoles();
+  assert.deepEqual(
+    roles.fallback.reviewer.map((r) => r.key),
+    ['hydrogen', 'glm', 'agyclaude']
+  );
+
+  const chain = reviewerFallbackChain({ implementerFamily: 'google' });
+  assert.deepEqual(chain.map((r) => r.key), ['glm', 'agyclaude']);
+  const first = selectReviewerFallback({ implementerFamily: 'google' });
+  assert.equal(first.key, 'glm');
+  assert.equal(first.runner, 'cc-shim');
+  assert.equal(first.endpoint, 'glm');
+  assert.equal(first.model, 'glm-5.3');
+  assert.equal(chain.some((r) => r.runner === 'codex' || isCodexRung(r)), false);
+});
+
+test('(seat-fallback b) reviewer retreat for anthropic/agyclaude implementer picks hydrogen first', () => {
+  for (const imp of ['anthropic', 'agyclaude', 'claude-opus-5-5-medium']) {
+    const first = selectReviewerFallback({ implementerFamily: imp });
+    assert.equal(first.key, 'hydrogen');
+    assert.equal(first.runner, 'agy');
+    assert.equal(first.model, 'gemini-4-hydrogen-high');
+    const chain = reviewerFallbackChain({ implementerFamily: imp });
+    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'glm']);
+    assert.equal(chain.some((r) => r.runner === 'codex'), false);
+  }
+});
+
+test('(seat-fallback c) unknown implementer family never assumes openai and keeps glm eligible', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-infer-'));
+  try {
+    const emptyRuns = path.join(tmpDir, 'runs');
+    fs.mkdirSync(emptyRuns, { recursive: true });
+    const inferred = inferImplementerFamily({
+      cwd: tmpDir,
+      runsDir: emptyRuns,
+      chainFile: path.join(tmpDir, 'missing-chain.json'),
+      branchLedgerFile: path.join(tmpDir, 'missing-branches.jsonl'),
+      diffFile: path.join(tmpDir, 'diff.patch'),
+      branch: 'feat/unknown',
+      env: {},
+    });
+    assert.equal(inferred.family, 'unknown');
+    assert.equal(inferred.source, 'none');
+
+    const chain = reviewerFallbackChain({ implementerFamily: inferred.family });
+    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'glm', 'agyclaude']);
+    assert.equal(chain[0].model, 'gemini-4-hydrogen-high');
+    assert.equal(chain.some((r) => r.key === 'glm'), true);
+
+    // Inference from runsDir when recorded: matches by branch/diff without defaulting to openai.
+    const runsFile = path.join(emptyRuns, 'impl-run-1.manifest.json');
+    fs.writeFileSync(runsFile, JSON.stringify({
+      run_id: 'impl-run-1',
+      role: 'implementer',
+      branch: 'feat/glm-work',
+      model: 'glm-5.3',
+    }));
+    const fromRuns = inferImplementerFamily({
+      cwd: tmpDir,
+      runsDir: emptyRuns,
+      branch: 'feat/glm-work',
+      env: {},
+    });
+    assert.equal(fromRuns.family, 'zhipu');
+    assert.equal(fromRuns.source, 'runs_dir');
+
+    // Inference from chainFile takes precedence cleanly.
+    const chainFile = path.join(tmpDir, 'chain.json');
+    fs.writeFileSync(chainFile, JSON.stringify({ implementer_family: 'anthropic' }));
+    const fromChain = inferImplementerFamily({
+      cwd: tmpDir,
+      chainFile,
+      runsDir: emptyRuns,
+      branch: 'feat/glm-work',
+      env: {},
+    });
+    assert.equal(fromChain.family, 'anthropic');
+    assert.equal(fromChain.source, 'chain_file');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('(seat-fallback d) implementer default policy retreats along priority.implementer without codex', () => {
+  const chainAll = implementerFallbackChain({});
+  assert.deepEqual(chainAll.map((r) => r.key), ['agy', 'glm', 'agyclaude']);
+  assert.equal(chainAll[0].model, 'gemini-4-hydrogen-high');
+  assert.equal(chainAll[1].endpoint, 'glm');
+
+  const afterAgy = selectImplementerFallback({
+    failedRunner: 'agy',
+    failedModel: 'gemini-4-hydrogen-high',
+  });
+  assert.equal(afterAgy.key, 'glm');
+  assert.equal(afterAgy.runner, 'cc-shim');
+  assert.equal(afterAgy.endpoint, 'glm');
+  assert.equal(afterAgy.model, 'glm-5.3');
+
+  const flagOf = (argv, flag) => {
+    if (!Array.isArray(argv)) return '';
+    for (let i = 0; i < argv.length; i += 1) {
+      if (argv[i] === flag && i + 1 < argv.length) return argv[i + 1];
+      if (typeof argv[i] === 'string' && argv[i].startsWith(`${flag}=`)) return argv[i].slice(flag.length + 1);
+    }
+    return '';
+  };
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-engine-'));
+  try {
+    const promptFile = path.join(tmpDir, 'prompt.txt');
+    fs.writeFileSync(promptFile, 'implementer task\n');
+    const base = '1111111111111111111111111111111111111111';
+
+    // Case 1: local qwen endpoint unavailable with unset on_engine_unavailable -> agy/hydrogen first.
+    const callsQwen = [];
+    const engineQwen = new AutopilotEngine({
+      clock: () => 1782864000000,
+      implementationDispatcher(args) {
+        callsQwen.push(args);
+        return {
+          error: null,
+          status: 1,
+          signal: null,
+          stdout: '',
+          stderr: '',
+          parseError: null,
+          result: {
+            status: 'engine_unavailable',
+            runner: callsQwen.length === 1 ? 'cc-shim' : 'agy',
+            model: callsQwen.length === 1 ? 'Qwen3.8-27B-QUASAR-NVFP4' : 'gemini-4-hydrogen-high',
+            commit: null,
+            base,
+            branch: 'feat/qwen-down',
+            files_changed: 0,
+            insertions: 0,
+            deletions: 0,
+            worktree: null,
+            agent_log: null,
+            error: 'engine unavailable (endpoint_unreachable): endpoint pre-probe qwen_local: refused',
+          },
+        };
+      },
+    });
+    const outQwen = engineQwen.implementTask({
+      promptFile,
+      branch: 'feat/qwen-down',
+      base,
+      runId: 'run-fb-d1',
+      implementationRound: 1,
+      extraImplementationArgs: ['--endpoint', 'qwen_local'],
+      roster: {
+        implementer_engine: 'Qwen3.8-27B-QUASAR-NVFP4',
+        implementer_effort: 'high',
+        implementer_runner: 'cc-shim',
+        implementer_endpoint: 'qwen_local',
+      },
+    });
+    assert.equal(callsQwen.length, 2);
+    assert.equal(outQwen.engine_unavailable.policy, 'cloud-fallback');
+    assert.equal(outQwen.engine_unavailable.cloud_fallback_exhausted, true);
+    assert.equal(flagOf(callsQwen[1], '--runner'), 'agy');
+    assert.equal(flagOf(callsQwen[1], '--model'), 'gemini-4-hydrogen-high');
+    assert.notEqual(flagOf(callsQwen[1], '--runner'), 'codex');
+
+    // Case 2: agy seat unavailable with unset policy -> retreats to glm (cc-shim --endpoint glm).
+    const callsAgy = [];
+    const engineAgy = new AutopilotEngine({
+      clock: () => 1782864000000,
+      implementationDispatcher(args) {
+        callsAgy.push(args);
+        return {
+          error: null,
+          status: 1,
+          signal: null,
+          stdout: '',
+          stderr: '',
+          parseError: null,
+          result: {
+            status: 'engine_unavailable',
+            runner: 'agy',
+            model: 'gemini-4-hydrogen-high',
+            commit: null,
+            base,
+            branch: 'feat/agy-down',
+            files_changed: 0,
+            insertions: 0,
+            deletions: 0,
+            worktree: null,
+            agent_log: null,
+            error: 'engine unavailable (endpoint_busy): agy overloaded',
+          },
+        };
+      },
+    });
+    engineAgy.implementTask({
+      promptFile,
+      branch: 'feat/agy-down',
+      base,
+      runId: 'run-fb-d2',
+      implementationRound: 1,
+      roster: {
+        implementer_engine: 'gemini-4-hydrogen-high',
+        implementer_effort: 'high',
+        implementer_runner: 'agy',
+      },
+    });
+    assert.equal(callsAgy.length, 2);
+    assert.equal(flagOf(callsAgy[1], '--runner'), 'cc-shim');
+    assert.equal(flagOf(callsAgy[1], '--model'), 'glm-5.3');
+    assert.equal(flagOf(callsAgy[1], '--endpoint'), 'glm');
+
+    // Case 3: explicit roster.on_engine_unavailable = 'ask' still escalates without retreating.
+    const callsAsk = [];
+    const engineAsk = new AutopilotEngine({
+      clock: () => 1782864000000,
+      implementationDispatcher(args) {
+        callsAsk.push(args);
+        return {
+          error: null,
+          status: 1,
+          signal: null,
+          stdout: '',
+          stderr: '',
+          parseError: null,
+          result: {
+            status: 'engine_unavailable',
+            runner: 'cc-shim',
+            model: 'Qwen3.8-27B-QUASAR-NVFP4',
+            commit: null,
+            base,
+            branch: 'feat/explicit-ask',
+            files_changed: 0,
+            insertions: 0,
+            deletions: 0,
+            worktree: null,
+            agent_log: null,
+            error: 'engine unavailable (endpoint_unreachable): refused',
+          },
+        };
+      },
+    });
+    const outAsk = engineAsk.implementTask({
+      promptFile,
+      branch: 'feat/explicit-ask',
+      base,
+      runId: 'run-fb-d3',
+      implementationRound: 1,
+      roster: {
+        implementer_engine: 'Qwen3.8-27B-QUASAR-NVFP4',
+        implementer_effort: 'high',
+        implementer_runner: 'cc-shim',
+        on_engine_unavailable: 'ask',
+      },
+    });
+    assert.equal(callsAsk.length, 1);
+    assert.equal(outAsk.engine_unavailable.policy, 'ask');
+    assert.equal(outAsk.engine_unavailable.action, 'escalate');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('(seat-fallback e) codex never appears as a retreat target in reviewer or implementer chains', () => {
+  for (const fam of ['google', 'anthropic', 'zhipu', 'xai', 'openai', 'unknown', '']) {
+    const rev = reviewerFallbackChain({ implementerFamily: fam });
+    assert.equal(
+      rev.some((r) => r.runner === 'codex' || r.key === 'codex' || r.endpoint === 'codex' || isCodexRung(r)),
+      false,
+      `codex leaked into reviewerFallbackChain for ${fam}`
+    );
+  }
+  for (const failed of [
+    {},
+    { failedRunner: 'cc-shim', failedEndpoint: 'qwen_local', failedModel: 'Qwen3.8-27B-QUASAR-NVFP4' },
+    { failedRunner: 'agy', failedModel: 'gemini-4-hydrogen-high' },
+    { failedRunner: 'cc-shim', failedEndpoint: 'glm', failedModel: 'glm-5.3' },
+  ]) {
+    const imp = implementerFallbackChain(failed);
+    assert.equal(
+      imp.some((r) => r.runner === 'codex' || r.key === 'codex' || r.endpoint === 'codex' || isCodexRung(r)),
+      false,
+      'codex leaked into implementerFallbackChain'
+    );
+  }
+
+  // Even a custom roles file injecting codex must have codex filtered out by seat-fallback.js.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-nocodex-'));
+  try {
+    const customRoles = path.join(tmpDir, 'roles.json');
+    fs.writeFileSync(customRoles, JSON.stringify({
+      priority: { implementer: ['codex', 'agy', 'glm'] },
+      fallback: {
+        reviewer: [
+          { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol', effort: 'high', family: 'openai' },
+          { key: 'hydrogen', runner: 'agy', model: 'gemini-4-hydrogen-high', effort: 'high', family: 'google' },
+        ],
+      },
+      role_models: { implementer: { agy: 'gemini-4-hydrogen-high' } },
+    }));
+    const rev = reviewerFallbackChain({ rolesPath: customRoles, implementerFamily: 'unknown' });
+    assert.deepEqual(rev.map((r) => r.runner), ['agy']);
+    const imp = implementerFallbackChain({ rolesPath: customRoles });
+    assert.deepEqual(imp.map((r) => r.key), ['agy', 'glm']);
+    assert.equal(formatRung(imp[0]), 'gemini-4-hydrogen-high/high@agy');
+    assert.equal(normalizeFamily('agyclaude'), 'anthropic');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

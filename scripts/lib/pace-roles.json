@@ -1,5 +1,5 @@
 {
-  "_why": "Follows engine-scorecard current (glm: reviewer provisional, implementer qualified 2026-11-13, scorecard event 34, 24/24, integrity 0; agyclaude: reviewer and implementer pass 2026-11-13, events 30/29; minimax: failed both 2026-11-13). Implementer priority agy -> glm -> agyclaude, with role_models giving the implementer agy key gemini-4-hydrogen-high (same agy pool and quota as carbon; reviewer and author keep carbon): hydrogen passed all four prereg bars (develop d40e9ad43). Scarce codex pools use gpt-6.1-sol from project-config-template/review-loop-config.md implementer_engine (dispatch-config.md configures methodology chains, not engine model ids).",
+  "_why": "Follows engine-scorecard current (glm: reviewer provisional, implementer qualified 2026-11-13, scorecard event 34, 24/24, integrity 0; agyclaude: reviewer and implementer pass 2026-11-13, events 30/29; minimax: failed both 2026-11-13). Implementer priority agy -> glm -> agyclaude, with role_models giving the implementer agy key gemini-4-hydrogen-high (same agy pool and quota as carbon; reviewer and author keep carbon): hydrogen passed all four prereg bars (develop d40e9ad43). fallback.reviewer pins the automatic reviewer retreat order hydrogen -> glm -> agyclaude so endpoint-outage retreat matches picker order and never retreats to scarce codex pools (gpt-6.1-sol).",
   "reviewer": [
     "agy",
     "glm",
@@ -26,6 +26,32 @@
       "agy",
       "glm",
       "agyclaude"
+    ]
+  },
+  "fallback": {
+    "reviewer": [
+      {
+        "key": "hydrogen",
+        "runner": "agy",
+        "model": "gemini-4-hydrogen-high",
+        "effort": "high",
+        "family": "google"
+      },
+      {
+        "key": "glm",
+        "runner": "cc-shim",
+        "endpoint": "glm",
+        "model": "glm-5.3",
+        "effort": "high",
+        "family": "zhipu"
+      },
+      {
+        "key": "agyclaude",
+        "runner": "agy",
+        "model": "claude-opus-5-5-medium",
+        "effort": "high",
+        "family": "anthropic"
+      }
     ]
   },
   "role_models": {

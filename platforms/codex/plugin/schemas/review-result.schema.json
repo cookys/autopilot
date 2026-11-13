@@ -68,6 +68,20 @@
     },
     "served_by": {
       "type": "string"
+    },
+    "implementer_family": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "reason"],
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "reason": { "type": "string" }
+      }
     }
   },
   "oneOf": [

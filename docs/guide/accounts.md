@@ -45,6 +45,8 @@ It never runs `setup-token` itself and never prints a token or e-mail. Re-runnin
 - **Run every command yourself.** `claude setup-token` below is for you to run in your own terminal. Do not ask an agent to run it.
 - Placeholders: `<A>` is your first alias, `<B>` the second (lowercase letters, digits and `-`, at most 24 characters; not shaped like `acct-` or `codex-` followed by 8 hex digits). Paths use `~`. Run the `node scripts/...` commands from the autopilot repository root.
 
+A seat whose login is a token in the environment, rather than an alias file, is started by the fleet host's seat launcher, which is not a script in this repository. That launcher declares the seat by exporting `AUTOPILOT_TOKEN_SEAT=1` in the same environment as `CLAUDE_CODE_OAUTH_TOKEN`. Spawn sites in this repo pass that token through to the `claude` child. When the flag is `1` and the token is empty, the spawn refuses and does not fall back to the host login. Leaving the flag unset is an ordinary seat.
+
 ## O1. Create the directories (no secret yet)
 
 ```

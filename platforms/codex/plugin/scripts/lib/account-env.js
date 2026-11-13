@@ -68,7 +68,7 @@ function buildEnv(args) {
   const a = args || {};
   const caller = a.callerEnv || {};
   const exists = a.exists || fs.existsSync;
-  // A declared token seat (lane-token-resume) must hand the parent's
+  // A declared token seat (AUTOPILOT_TOKEN_SEAT=1 from the external launcher) must hand the parent's
   // CLAUDE_CODE_OAUTH_TOKEN to the child. An empty parent token refuses even when
   // the alias file has a token. Ordinary callers keep the alias-file token.
   const tokenSeat = caller.AUTOPILOT_TOKEN_SEAT === '1';

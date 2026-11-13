@@ -1,6 +1,6 @@
 'use strict';
 /**
- * token-seat.js — declared token seats (AUTOPILOT_TOKEN_SEAT=1, set by lane-token-resume).
+ * token-seat.js — declared token seats (AUTOPILOT_TOKEN_SEAT=1, exported by the external seat launcher).
  *
  * tokenSeatError(env) returns a refusal string when the seat is declared and
  * CLAUDE_CODE_OAUTH_TOKEN is missing or empty, otherwise null. Ordinary seats

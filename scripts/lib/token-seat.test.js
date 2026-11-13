@@ -133,44 +133,6 @@ test('seed-claude-config --exec passes the parent token and refuses a declared s
   assert.ok(fs.existsSync(s.invoked));
 });
 
-test('lane-token-resume --exec puts the file token in the child and dry-run does not print it', () => {
-  const s = scratch();
-  const mod = require('../lane-token-resume.js');
-  const file = path.join(s.root, 'seat.tok');
-  fs.writeFileSync(file, TOKEN + '\n', { mode: 0o600 });
-  const cmd = mod.buildCommand({ tokenFile: file, cmd: [s.stub, '--version'] });
-  assert.ok(!cmd.includes(TOKEN));
-  const printed = [];
-  const dry = mod.main(['--token-file', file, '--cwd', s.root, '--dry-run', '--', s.stub], {
-    out: (line) => printed.push(line),
-    err: (line) => printed.push(line),
-    spawnSync: () => { throw new Error('tmux must not run'); },
-  });
-  assert.equal(dry, 0);
-  assert.ok(!printed.join('\n').includes(TOKEN));
-
-  reset(s);
-  const inherit = spawnSync(process.execPath, [path.join(REPO, 'scripts/lane-token-resume.js'), '--exec', '--token-file', file, '--', s.stub], {
-    env: baseEnv(s, {}), encoding: 'utf8',
-  });
-  assert.equal(inherit.status, 0, inherit.stderr);
-  assert.equal(shaOf(s), EXPECT);
-  assert.equal(fs.readFileSync(s.flag, 'utf8'), '1');
-
-  reset(s);
-  const gone = spawnSync(process.execPath, [path.join(REPO, 'scripts/lane-token-resume.js'), '--exec', '--token-file', path.join(s.root, 'missing.tok'), '--', s.stub], {
-    env: baseEnv(s, {}), encoding: 'utf8',
-  });
-  assert.equal(gone.status, 2);
-  assert.ok(!fs.existsSync(s.invoked));
-  fs.writeFileSync(file, '\n');
-  const empty = spawnSync(process.execPath, [path.join(REPO, 'scripts/lane-token-resume.js'), '--exec', '--token-file', file, '--', s.stub], {
-    env: baseEnv(s, {}), encoding: 'utf8',
-  });
-  assert.equal(empty.status, 2);
-  assert.ok(!fs.existsSync(s.invoked));
-});
-
 test('probe-todo-tools-pin passes the token and refuses a declared seat before spawn', () => {
   const s = scratch();
   const probe = path.join(REPO, 'scripts/probe-todo-tools-pin.js');

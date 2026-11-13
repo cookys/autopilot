@@ -12,7 +12,7 @@
  * tmux, claude, fleet, codeforge and accept-dev-channel-prompt.sh all go through one runner
  * (deps.run in tests, spawnSync otherwise).
  * Overrides for tests: AUTOPILOT_LANE_BASE_DIR (manifest + journal base), deps.home, deps.run,
- * deps.now, deps.sleep, deps.fs.
+ * deps.now, deps.sleep, deps.fs, deps.handoffTimeoutMs (requestHandoff bound; default 15 min).
  *
  * Exit codes: 0 ok / dry-run, 1 a step failed, 2 usage, 4 manifest or journal error.
  * Node >= 20.10, built-ins only.
@@ -133,6 +133,9 @@ function makeClock(deps) {
       const ext = readExternal();
       if (ext !== null) return ext + extra;
     }
+    // No injected clock: read the wall clock every call. A one-shot Date.now()
+    // (manual) ignores synchronous subprocess time, so a bounded wait overruns.
+    if (deps.now == null) return Date.now() + extra;
     return manual + extra;
   };
   const sleep = async (ms) => {
@@ -350,10 +353,12 @@ async function execute(o, d, home, base) {
 
   let ho;
   try {
-    ho = await requestHandoff({
+    const handoffOpts = {
       order: o.order, lane: o.lane, seat, handoffPath: handoffPath(cwd, 'manual', home),
       base, from, to: o.profile,
-    }, { run, now: () => clock.now(), sleep: (ms) => clock.sleep(ms), fs: fsys });
+    };
+    if (Number.isFinite(d.handoffTimeoutMs)) handoffOpts.timeoutMs = d.handoffTimeoutMs;
+    ho = await requestHandoff(handoffOpts, { run, now: () => clock.now(), sleep: (ms) => clock.sleep(ms), fs: fsys });
   } catch { ho = { ok: false, reason: 'timeout' }; }
   if (!ho.ok) {
     err('handoff');

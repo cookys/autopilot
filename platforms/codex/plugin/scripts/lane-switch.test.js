@@ -216,6 +216,7 @@ function world(f, opt) {
   const errs = [];
   let phase = 'before';
   let peersN = 0;
+  let waitPeers = 0;
   let t = Date.parse(T0);
   const run = (bin, args, opts) => {
     const argv = [...args];
@@ -224,6 +225,10 @@ function world(f, opt) {
     const base = path.basename(String(bin));
     if (base === 'fleet' && argv[0] === 'peers') {
       peersN += 1;
+      if (options.blockWaitMs && peersN > 1) {
+        waitPeers += 1;
+        blockMs(options.blockWaitMs);
+      }
       if (options.seatOffline && phase === 'before' && peersN === 1) {
         return { status: 0, stdout: JSON.stringify({ members: [peerRow('offline')] }), stderr: '' };
       }
@@ -254,6 +259,7 @@ function world(f, opt) {
   };
   return {
     calls, lines, errs,
+    get waitPeers() { return waitPeers; },
     go(argv) {
       return lockEnv(async () => {
         const saved = {};
@@ -264,10 +270,16 @@ function world(f, opt) {
         process.env.AUTOPILOT_ACCOUNT = 'team';
         process.env.CODEFORGE_DATA_DIR = '/tmp/cf-data';
         try {
-          return await main(argv, {
+          const deps = {
             home: f.home, baseDir: f.base, out: (s) => lines.push(s), err: (s) => errs.push(s),
-            now: () => t, sleep: async (ms) => { t += ms; }, fs, run,
-          });
+            fs, run,
+          };
+          if (!options.realClock) {
+            deps.now = () => t;
+            deps.sleep = async (ms) => { t += ms; };
+          }
+          if (Number.isFinite(options.handoffTimeoutMs)) deps.handoffTimeoutMs = options.handoffTimeoutMs;
+          return await main(argv, deps);
         } finally {
           for (const k of DROP_KEYS) {
             if (saved[k] === undefined) delete process.env[k];
@@ -277,6 +289,9 @@ function world(f, opt) {
       });
     },
   };
+}
+function blockMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 function assertScrubbed(f, w) {
   const pub = w.lines.join('\n') + w.errs.join('\n') + fs.readFileSync(journalFile(f.base), 'utf8');
@@ -309,6 +324,37 @@ test('negative control: shell never returns exits 1 and does not start', { timeo
   assert.ok(w.calls.some((c) => c.args.includes('/exit')));
   assert.ok(!w.calls.some((c) => c.args.join(' ').includes('--resume')), 'must not start');
   assert.ok(!w.calls.some((c) => marker(c) === 'collect' || marker(c) === 'accept'));
+  assert.strictEqual(readManifest(f.base, 'l1').profile, 'stranity');
+  assertScrubbed(f, w);
+});
+// Real clock: deps.now and deps.sleep are not injected. The handoff file is older than
+// the request, so the lane never becomes ready. Each handoff-wait `fleet peers` blocks
+// longer than the 2s bound, standing in for a synchronous subprocess.
+// Negative control (evidence-discipline §58), shown red first. Restore the frozen clock
+// in makeClock — when deps.now is omitted, now() returns `manual + extra` (manual is the
+// single Date.now() taken at makeClock; extra advances only inside sleep) — then:
+//   node --test --test-name-pattern 'real clock expires' scripts/lane-switch.test.js
+// Captured red: exited 1, cancelled 1, 'test timed out after 4000ms' (reported 4001.9ms).
+// The 2s bound ignores the 2.5s block, sleep waits another poll, and the 4000ms limit
+// fires during that sleep.
+const REAL_BOUND_MS = 2000;
+const STUB_BLOCK_MS = 2500;
+test('execute: real clock expires a short handoff bound when the stub never becomes ready', { timeout: 4000 }, async () => {
+  const f = fx();
+  plant(f);
+  const hp = handoffPath('/work/x', 'manual', f.home);
+  fs.utimesSync(hp, new Date(0), new Date(0));
+  const w = world(f, { realClock: true, blockWaitMs: STUB_BLOCK_MS, handoffTimeoutMs: REAL_BOUND_MS });
+  const t0 = Date.now();
+  const code = await w.go(SWITCH_ARGV);
+  const elapsed = Date.now() - t0;
+  assert.strictEqual(code, 1);
+  assert.ok(w.errs.includes('handoff'), w.errs.join('\n'));
+  assert.strictEqual(w.waitPeers, 1);
+  assert.ok(!w.calls.some((c) => c.args.includes('/exit')), 'must not stop');
+  const wait = journalRows(f.base).find((r) => r.step === 'handoff-wait');
+  assert.ok(wait && wait.outcome === 'timeout', JSON.stringify(wait));
+  assert.ok(elapsed < 3900, `elapsed ${elapsed}`);
   assert.strictEqual(readManifest(f.base, 'l1').profile, 'stranity');
   assertScrubbed(f, w);
 });

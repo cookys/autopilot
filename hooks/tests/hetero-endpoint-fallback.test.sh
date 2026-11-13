@@ -63,8 +63,9 @@ BINDIR="$TEST_TMP/bin"
 mkdir -p "$BINDIR"
 BWRAP_ARGV_LOG="$TEST_TMP/bwrap-argv.log"
 CODEX_ARGV_LOG="$TEST_TMP/codex-argv.log"
+AGY_ARGV_LOG="$TEST_TMP/agy-argv.log"
 CLAUDE_CALLS="$TEST_TMP/claude.calls"
-export BWRAP_ARGV_LOG CODEX_ARGV_LOG CLAUDE_CALLS
+export BWRAP_ARGV_LOG CODEX_ARGV_LOG AGY_ARGV_LOG CLAUDE_CALLS
 
 cat > "$BINDIR/bwrap" <<'EOS'
 #!/usr/bin/env bash
@@ -98,7 +99,18 @@ echo x >> "$CLAUDE_CALLS"
 echo edited >> sandbox-edit.txt
 printf '%s' '{"type":"result","is_error":false,"result":"ok"}'
 EOS
-chmod +x "$BINDIR/bwrap" "$BINDIR/codex" "$BINDIR/claude"
+cat > "$BINDIR/agy" <<'EOS'
+#!/usr/bin/env bash
+case "${*}" in
+  *--input-format*) cat >/dev/null ;;
+esac
+printf '%s\n' "$*" >> "${AGY_ARGV_LOG:?}"
+echo edited >> sandbox-edit.txt
+printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"ok"}}'
+exit 0
+EOS
+chmod +x "$BINDIR/bwrap" "$BINDIR/codex" "$BINDIR/claude" "$BINDIR/agy"
+make_agy_stub_versioned "$BINDIR/agy"
 
 CFG_FB="$TEST_TMP/cfg-fb.md"
 printf -- '- on_engine_unavailable: cloud-fallback\n- cloud_fallback_rung: gpt-5.6-sol/high@codex\n' > "$CFG_FB"
@@ -132,6 +144,7 @@ dispatch_case() {
   seed_dogfood_implementer_pin "$CASE_CAP" >/dev/null
   : > "$BWRAP_ARGV_LOG"
   : > "$CODEX_ARGV_LOG"
+  : > "$AGY_ARGV_LOG"
   : > "$CLAUDE_CALLS"
   printf '%s' "$mode" > "$MODE_FILE"
   export AUTOPILOT_ENDPOINT_GPU1_URL="http://127.0.0.1:${port}"
@@ -451,5 +464,81 @@ esac
 REV_MUT_PLAIN="$(node "$TEST_TMP/review.js" "$REV_TREE" "$TEST_TMP/rev-mut-plain" plain 2>"$TEST_TMP/rev-mut-plain.err")" || fail "N-review plain threw: $(tail -c 400 "$TEST_TMP/rev-mut-plain.err")"
 assert_contains "$REV_MUT_PLAIN" "reviews=1" "N-review mutant still reviews a commit without fell_back ($REV_MUT_PLAIN)"
 echo "mutant-red N-review fell=$REV_MUT_FELL plain=$REV_MUT_PLAIN"
+
+# --- (fb-d / fb-e) Default policy retreats automatically along pace-roles priority.implementer, never codex ---
+CFG_DFLT="$TEST_TMP/cfg-default.md"
+printf '# default policy (unset on_engine_unavailable & cloud_fallback_rung)\n- consult_dispatch: off\n- discuss_dispatch: off\n' > "$CFG_DFLT"
+
+dispatch_case dflt_busy "$SRV_PORT" busy "$CFG_DFLT"
+assert_eq "$(jget "$CASE_JSON" status)" "committed" "(fb-d) busy endpoint with default policy retreats and commits (rc=$CASE_RC stderr=$(printf '%s' "$CASE_ERR" | tail -c 400))"
+assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(fb-d) default retreat chooses first picker runner agy"
+assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-d) default retreat chooses gemini-4-hydrogen-high"
+assert_eq "$(jget "$CASE_JSON" fallback.from)" "mini@cc-shim#gpu1" "(fb-d) fallback.from records original seat"
+assert_eq "$(jget "$CASE_JSON" fallback.to)" "gemini-4-hydrogen-high/high@agy" "(fb-d) fallback.to records picker rung"
+assert_eq "$(jget "$CASE_JSON" fallback.reason)" "endpoint_busy" "(fb-d) fallback.reason records error class"
+assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"fallback":{' "(fb-d) cloud-fallbacks row carries fallback object"
+assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"reason":"endpoint_busy"' "(fb-d) cloud-fallbacks row records reason"
+[ -s "$AGY_ARGV_LOG" ] || fail "(fb-d) agy stub was not invoked"
+[ ! -s "$CODEX_ARGV_LOG" ] || fail "(fb-e) codex must never be invoked by default retreat"
+
+dispatch_case dflt_dead "$DEAD_PORT" ok "$CFG_DFLT"
+assert_eq "$(jget "$CASE_JSON" runner)" "agy" "(fb-d2) unreachable endpoint with default policy chooses agy"
+assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-d2) unreachable endpoint chooses hydrogen"
+assert_eq "$(jget "$CASE_JSON" fallback.reason)" "endpoint_unreachable" "(fb-d2) fallback.reason records endpoint_unreachable"
+[ ! -s "$CODEX_ARGV_LOG" ] || fail "(fb-e2) codex must never be invoked on unreachable retreat"
+
+cat > "$TEST_TMP/once-default.js" <<'NODE'
+const path = require('path');
+const [root] = process.argv.slice(2);
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const calls = [];
+const base = '1111111111111111111111111111111111111111';
+const engine = new AutopilotEngine({
+  clock: () => 1782864000000,
+  implementationDispatcher(args) {
+    calls.push(args);
+    return {
+      error: null,
+      status: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'engine_unavailable',
+        runner: calls.length === 1 ? 'cc-shim' : 'agy',
+        model: calls.length === 1 ? 'Qwen3.8-27B-QUASAR-NVFP4' : 'gemini-4-hydrogen-high',
+        commit: null,
+        base,
+        branch: 'feat/default-retreat',
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: null,
+        agent_log: null,
+        error: 'engine unavailable (endpoint_unreachable): refused',
+      },
+    };
+  },
+});
+const out = engine.implementTask({
+  promptFile: path.join(root, 'hooks', 'tests', 'hetero-endpoint-fallback.test.sh'),
+  branch: 'feat/default-retreat',
+  base,
+  runId: 'run-fb-default',
+  implementationRound: 1,
+  extraImplementationArgs: ['--endpoint', 'qwen_local'],
+  roster: {
+    implementer_engine: 'Qwen3.8-27B-QUASAR-NVFP4',
+    implementer_effort: 'high',
+    implementer_runner: 'cc-shim',
+    implementer_endpoint: 'qwen_local',
+  },
+});
+const d = out.engine_unavailable || {};
+process.stdout.write(`calls=${calls.length} policy=${d.policy || ''} runner2=${calls[1] && calls[1].implementerRunner || ''} model2=${calls[1] && calls[1].implementerEngine || ''} exhausted=${d.cloud_fallback_exhausted === true}\n`);
+NODE
+ONCE_DFLT="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" 2>"$TEST_TMP/once-dflt.err")" || fail "(fb-d) once-default threw: $(cat "$TEST_TMP/once-dflt.err")"
+assert_eq "$ONCE_DFLT" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-d) AutopilotEngine default policy retreats to picker implementer without codex"
 
 finalize_test

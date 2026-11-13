@@ -58,8 +58,13 @@
 #       [--implementer-family <family>]
 #                               # family of the engine that wrote this diff
 #                               #   (comma-separated when there are several).
-#                               #   A cloud-fallback or agy retreat onto that
-#                               #   family is skipped. Absent: resolved implementer_family.
+#                               #   A retreat rung onto that family is skipped.
+#                               #   When omitted, inferred from recorded dispatch
+#                               #   metadata (chain.json / runsDir / branch ledger),
+#                               #   never assuming openai; when nothing can be
+#                               #   inferred, defaults to `unknown`, and with
+#                               #   `unknown` the family guard skips nothing
+#                               #   (including GLM, which remains eligible).
 #       [--checklists <c1,c2>]  # optional adversarial checklist
 #       [--context-window off|warn|block]  # pre-dispatch context-window gate (default: block;
 #                               #   also AUTOPILOT_CONTEXT_WINDOW_GATE). Sizes diff+spec+pack
@@ -272,7 +277,7 @@ RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT
 REVIEW_USAGE_JSON="null"
 MAX_TOKENS=""; MAX_TOKENS_SUPPLIED=0; MAX_TOKENS_PARSE_ERROR=""
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
-IMPLEMENTER_FAMILY=""     # --implementer-family; empty falls back to resolved implementer_family
+IMPLEMENTER_FAMILY=""     # --implementer-family; empty infers from dispatch records, else unknown (never openai)
 FAMILY_GUARD_REFUSE=0     # 1 when a retreat has no cross-family rung left
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND
 # DISPATCH_DETACH!=0 (default on), the review runs inside a kill-surviving setsid session that
@@ -324,19 +329,42 @@ _rv_esc() { if declare -F json_escape >/dev/null 2>&1; then json_escape "$(print
 # byte-identical.
 PROBE_JSON=""
 SERVED_BY=""
+FALLBACK_JSON=""
 FALLBACK_LOG_ROW=""
-# A retreated child is a fresh process and the three assignments above clear the
+# A retreated child is a fresh process and the four assignments above clear the
 # parent's values. Restore from env the parent set for this one re-run only.
 if [ "${AUTOPILOT_AGY_REVIEW_RETREATED:-}" = "1" ]; then
   SERVED_BY="${AUTOPILOT_AGY_RETREAT_SERVED_BY:-}"
   FALLBACK_LOG_ROW="${AUTOPILOT_AGY_RETREAT_LOG_ROW:-}"
+  if [ -n "$FALLBACK_LOG_ROW" ]; then
+    IFS=$'\t' read -r _retreat_fb _retreat_fam <<< "$(node -e '
+try {
+  const j = JSON.parse(process.argv[1]);
+  const fb = j && j.fallback ? JSON.stringify(j.fallback) : "";
+  const fam = j && j.implementer_family ? String(j.implementer_family) : "";
+  process.stdout.write(fb + "\t" + fam);
+} catch {}
+' "$FALLBACK_LOG_ROW" 2>/dev/null)" || true
+    FALLBACK_JSON="${_retreat_fb:-}"
+    if [ -z "${IMPLEMENTER_FAMILY:-}" ] && [ -n "${_retreat_fam:-}" ]; then
+      IMPLEMENTER_FAMILY="$_retreat_fam"
+    fi
+  fi
 fi
 review_probe_suffix() {
-  if [ -n "${PROBE_JSON:-}" ]; then
-    printf ', "probe": %s, "served_by": "%s"' "$PROBE_JSON" "$(_rv_esc "${SERVED_BY:-}")"
-  elif [ -n "${SERVED_BY:-}" ]; then
-    printf ', "served_by": "%s"' "$(_rv_esc "$SERVED_BY")"
+  local _s=""
+  if [ -n "${IMPLEMENTER_FAMILY:-}" ]; then
+    _s="${_s}, \"implementer_family\": \"$(_rv_esc "$IMPLEMENTER_FAMILY")\""
   fi
+  if [ -n "${FALLBACK_JSON:-}" ]; then
+    _s="${_s}, \"fallback\": ${FALLBACK_JSON}"
+  fi
+  if [ -n "${PROBE_JSON:-}" ]; then
+    _s="${_s}, \"probe\": ${PROBE_JSON}, \"served_by\": \"$(_rv_esc "${SERVED_BY:-}")\""
+  elif [ -n "${SERVED_BY:-}" ]; then
+    _s="${_s}, \"served_by\": \"$(_rv_esc "$SERVED_BY")\""
+  fi
+  printf '%s' "$_s"
 }
 # One cloud-fallbacks.jsonl row per retreat, written when the review ends so the row carries
 # how it ended. Same writer as consult and the implementer retreat.
@@ -350,27 +378,38 @@ let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
 });' "$status" 2>/dev/null | node "$_REVIEW_SELF_DIR/engine-capability-state.js" cloud-fallback-log >/dev/null 2>&1 || true
 }
 
-# Famguard (PM 01M74FDC5Z). The diff's implementer family is --implementer-family when
-# the caller passed it, otherwise the resolved implementer_family. A retreat rung whose
-# family matches is skipped; the next runnable reviewer_fallback_preference entry of
-# another family is taken. None left refuses. Unknown families do not match.
-# familyOfEngine in lib/stage-write.js is the only family table used here.
+# Famguard (PM 01M74FDC5Z / PM 01M7AHAM). The diff's implementer family is
+# --implementer-family when passed; otherwise inferred from recorded dispatch artifacts
+# via lib/seat-fallback.js (chain.json / runsDir / dispatch-branches.jsonl), never
+# assuming openai. When nothing can be inferred it defaults to `unknown`, and with
+# `unknown` the family guard skips nothing (GLM remains eligible). A retreat walks
+# pace-roles.json fallback.reviewer (hydrogen -> glm -> agyclaude), never choosing codex.
 family_guard_bind() {
-  [ -n "${IMPLEMENTER_FAMILY:-}" ] && return 0
-  [ -n "${1:-}" ] || return 0
-  local fam
-  fam="$(node -e '
-let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(0); }
-const v = j && j.implementer_family;
-process.stdout.write(typeof v === "string" ? v : "");
-' "$1" 2>/dev/null)" || fam=""
-  IMPLEMENTER_FAMILY="$fam"
+  if [ -n "${IMPLEMENTER_FAMILY:-}" ]; then
+    return 0
+  fi
+  local _br="" _wt="" _gdir="" _inf_json="" _fam=""
+  _wt="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  _br="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  _gdir="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+  local -a _args=(infer-family --cwd "$PWD")
+  [ -n "${DIFF_FILE:-}" ] && _args+=(--diff-file "$DIFF_FILE")
+  [ -n "$_wt" ] && _args+=(--worktree "$_wt")
+  [ -n "$_br" ] && [ "$_br" != "HEAD" ] && _args+=(--branch "$_br")
+  [ -n "$_gdir" ] && _args+=(--git-common-dir "$_gdir")
+  [ -n "${RUN_ID:-}" ] && _args+=(--run-id "$RUN_ID")
+  _inf_json="$(node "$_REVIEW_SELF_DIR/lib/seat-fallback.js" "${_args[@]}" 2>/dev/null)" || _inf_json=""
+  _fam="$(node -e '
+try { const j = JSON.parse(process.argv[1]); process.stdout.write(String(j && j.family ? j.family : "unknown")); }
+catch { process.stdout.write("unknown"); }
+' "$_inf_json" 2>/dev/null)" || _fam="unknown"
+  IMPLEMENTER_FAMILY="${_fam:-unknown}"
 }
 
 _review_family_of() {
   local fam
-  fam="$(node -e 'process.stdout.write(require(process.argv[1]).familyOfEngine(process.argv[2]))' \
-    "$_REVIEW_SELF_DIR/lib/stage-write.js" "${1:-}" 2>/dev/null)" || fam=""
+  fam="$(node -e 'process.stdout.write(require(process.argv[1]).normalizeFamily(process.argv[2]))' \
+    "$_REVIEW_SELF_DIR/lib/seat-fallback.js" "${1:-}" 2>/dev/null)" || fam=""
   printf '%s' "${fam:-unknown}"
 }
 
@@ -384,7 +423,7 @@ family_guard_same() {
   while [[ "$rest" == *,* ]]; do
     part="${rest%%,*}"
     rest="${rest#*,}"
-    part="$(printf '%s' "$part" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    part="$(_review_family_of "$part")"
     [ -z "$part" ] || [ "$part" = "unknown" ] && continue
     [ "$part" = "$tfam" ] && return 0
   done
@@ -392,61 +431,113 @@ family_guard_same() {
 }
 
 # $1 engine  $2 effort  $3 runner  $4 resolved JSON
-# Sets _FG_ENGINE _FG_EFFORT _FG_RUNNER. return 0 when a cross-family rung is chosen.
+# Sets _FG_ENGINE _FG_EFFORT _FG_RUNNER _FG_ENDPOINT. return 0 when a cross-family rung is chosen.
 family_guard_select() {
-  local eng="$1" eff="$2" run="$3" resolved="$4" prefs item e f r fam
+  local eng="$1" eff="$2" run="$3" resolved="$4" prefs item e f r ep fam
+  local has_override="0" custom_prefs="0" custom_rung="0"
   _FG_ENGINE=""
   _FG_EFFORT=""
   _FG_RUNNER=""
+  _FG_ENDPOINT=""
   family_guard_bind "$resolved"
-  if family_guard_same "$eng"; then
-    fam="$(_review_family_of "$eng")"
-    echo "family-guard: skipping rung ${eng}/${eff}@${run} (family ${fam} equals implementer family ${IMPLEMENTER_FAMILY})" >&2
-  else
-    _FG_ENGINE="$eng"
-    _FG_EFFORT="$eff"
-    _FG_RUNNER="$run"
-    return 0
+
+  # Detect explicit non-template reviewer overrides (preserves custom test/repo pins without ever picking codex).
+  IFS='|' read -r has_override custom_rung custom_prefs <<< "$(node -e '
+let j = null; try { j = JSON.parse(process.argv[1]); } catch {}
+const overrides = Array.isArray(j && j.roster_overrides) ? j.roster_overrides : [];
+const hasOv = overrides.some(o => o && o.group === "reviewer") ? "1" : "0";
+const rung = j && j.reviewer_cloud_fallback_rung;
+const rungCustom = (rung && rung.runner && rung.runner !== "codex" && rung.engine !== "gemini-4-hydrogen-high") ? "1" : "0";
+const prefs = Array.isArray(j && j.reviewer_fallback_preference) ? j.reviewer_fallback_preference : [];
+const dfltNew = ["gemini-4-hydrogen-high", "GLM-5.3", "claude-opus-5-5-medium"];
+const dfltOld = ["gpt-6.1-sol", "GLM-5.3"];
+const eq = (a, b) => a.length === b.length && a.every((v, i) => String(v) === b[i]);
+const prefsCustom = (prefs.length > 0 && !eq(prefs, dfltNew) && !eq(prefs, dfltOld) && prefs.some(x => String(x).includes("@"))) ? "1" : "0";
+process.stdout.write([hasOv, rungCustom, prefsCustom].join("|"));
+' "$resolved" 2>/dev/null)" || true
+
+  if [[ "$has_override" == "1" && "$custom_rung" == "1" && "$run" != "codex" && -n "$eng" && -n "$eff" && -n "$run" ]]; then
+    if ! family_guard_same "$eng"; then
+      _FG_ENGINE="$eng"
+      _FG_EFFORT="$eff"
+      _FG_RUNNER="$run"
+      _FG_ENDPOINT=""
+      return 0
+    else
+      fam="$(_review_family_of "$eng")"
+      echo "family-guard: skipping rung ${eng}/${eff}@${run} (family ${fam} equals implementer family ${IMPLEMENTER_FAMILY})" >&2
+    fi
   fi
-  prefs="$(node -e '
+
+  if [[ "$has_override" == "1" && "$custom_prefs" == "1" ]]; then
+    prefs="$(node -e '
 let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(0); }
 const a = j && j.reviewer_fallback_preference;
 if (!Array.isArray(a)) process.exit(0);
 for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
 ' "$resolved" 2>/dev/null)" || prefs=""
-  while IFS= read -r item || [ -n "${item:-}" ]; do
-    [ -z "${item:-}" ] && continue
-    e=""; f=""; r=""
-    if [[ "$item" =~ ^([^@[:space:]]+)/([^/@[:space:]]+)@([^/@[:space:]]+)$ ]]; then
-      e="${BASH_REMATCH[1]}"; f="${BASH_REMATCH[2]}"; r="${BASH_REMATCH[3]}"
-    elif [[ "$item" =~ ^([^@[:space:]]+)@([^/@[:space:]]+)$ ]]; then
-      e="${BASH_REMATCH[1]}"; f="low"; r="${BASH_REMATCH[2]}"
-    else
-      continue
-    fi
-    case "$f" in
-      default|low|medium|high|xhigh|max) ;;
-      *) continue ;;
-    esac
-    case "$r" in
-      codex|agy|grok|cursor|kimi|qoderclicn) ;;
-      *) continue ;;
-    esac
-    if family_guard_same "$e"; then
-      fam="$(_review_family_of "$e")"
-      echo "family-guard: skipping rung ${e}/${f}@${r} (family ${fam} equals implementer family ${IMPLEMENTER_FAMILY})" >&2
-      continue
-    fi
+    while IFS= read -r item || [ -n "${item:-}" ]; do
+      [ -z "${item:-}" ] && continue
+      e=""; f=""; r=""; ep=""
+      if [[ "$item" =~ ^([^@[:space:]]+)/([^/@[:space:]]+)@([^/@#[:space:]]+)(#([^[:space:]]+))?$ ]]; then
+        e="${BASH_REMATCH[1]}"; f="${BASH_REMATCH[2]}"; r="${BASH_REMATCH[3]}"; ep="${BASH_REMATCH[5]:-}"
+      elif [[ "$item" =~ ^([^@[:space:]]+)@([^/@#[:space:]]+)(#([^[:space:]]+))?$ ]]; then
+        e="${BASH_REMATCH[1]}"; f="low"; r="${BASH_REMATCH[2]}"; ep="${BASH_REMATCH[4]:-}"
+      else
+        continue
+      fi
+      case "$f" in
+        default|low|medium|high|xhigh|max) ;;
+        *) continue ;;
+      esac
+      case "$r" in
+        agy|grok|cursor|kimi|qoderclicn|cc-shim) ;;
+        *) continue ;;
+      esac
+      if family_guard_same "$e"; then
+        fam="$(_review_family_of "$e")"
+        echo "family-guard: skipping rung ${e}/${f}@${r} (family ${fam} equals implementer family ${IMPLEMENTER_FAMILY})" >&2
+        continue
+      fi
+      _FG_ENGINE="$e"
+      _FG_EFFORT="$f"
+      _FG_RUNNER="$r"
+      _FG_ENDPOINT="$ep"
+      return 0
+    done <<< "$prefs"
+    echo "family-guard: no cross-family reviewer for implementer family ${IMPLEMENTER_FAMILY}" >&2
+    return 1
+  fi
+
+  # Canonical pace-roles.json fallback.reviewer chain (hydrogen -> glm -> agyclaude; never codex).
+  local _chain_lines=""
+  _chain_lines="$(node -e '
+const sf = require(process.argv[1]);
+const chain = sf.reviewerFallbackChain({
+  implementerFamily: process.argv[2],
+  failedRunner: process.argv[3],
+  failedModel: process.argv[4],
+  failedEndpoint: process.argv[5],
+});
+for (const r of chain) {
+  process.stdout.write([r.model, r.effort, r.runner, r.endpoint || ""].join("\t") + "\n");
+}
+' "$_REVIEW_SELF_DIR/lib/seat-fallback.js" "${IMPLEMENTER_FAMILY:-unknown}" "${RUNNER:-}" "${MODEL:-}" "${ENDPOINT:-}" 2>/dev/null)" || _chain_lines=""
+  while IFS=$'\t' read -r e f r ep; do
+    [ -n "${e:-}" ] && [ -n "${r:-}" ] || continue
+    [ "$r" = "codex" ] && continue
     _FG_ENGINE="$e"
-    _FG_EFFORT="$f"
+    _FG_EFFORT="${f:-high}"
     _FG_RUNNER="$r"
+    _FG_ENDPOINT="${ep:-}"
     return 0
-  done <<< "$prefs"
+  done <<< "$_chain_lines"
   echo "family-guard: no cross-family reviewer for implementer family ${IMPLEMENTER_FAMILY}" >&2
   return 1
 }
 
 die_precondition() {
+  family_guard_bind "${_rv_resolved:-}" 2>/dev/null || true
   local _dp_json
   _dp_json="$(printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null%s }' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")" "$(review_probe_suffix)")"
   printf '%s\n' "$_dp_json"
@@ -846,7 +937,7 @@ const clean = (v) => String(v).replace(/[|\n]/g, " ");
 process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_endpoint), policy, re, rf, rr].map(clean).join("|"));
 ' "$_rv_resolved" 2>/dev/null)" || _rv_parsed=""
       IFS='|' read -r _rv_eng _rv_run _rv_ep _rv_pol _rv_re _rv_rf _rv_rr <<< "${_rv_parsed}"
-      if [[ "$_rv_pol" == "cloud-fallback" && "$MODEL" == "$_rv_eng" && "$RUNNER" == "$_rv_run" && "$ENDPOINT" == "$_rv_ep" && -n "$_rv_re" && -n "$_rv_rf" && -n "$_rv_rr" ]]; then
+      if [[ "$_rv_pol" == "cloud-fallback" && "$MODEL" == "$_rv_eng" && "$RUNNER" == "$_rv_run" && "$ENDPOINT" == "$_rv_ep" ]]; then
         endpoint_preprobe "$ENDPOINT" "$MODEL"
         if [[ -n "$PROBE_JSON" ]]; then
           SERVED_BY="$ENDPOINT"
@@ -854,10 +945,16 @@ process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_e
             unreachable|busy)
               echo "dispatch-review: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (status ${PROBE_STATUS:-none}, ${PROBE_MS:-0} ms, ${PROBE_REASON}); nothing sent" >&2
               if family_guard_select "$_rv_re" "$_rv_rf" "$_rv_rr" "$_rv_resolved"; then
+                _rv_from_seat="${MODEL}@${RUNNER}${ENDPOINT:+#${ENDPOINT}}"
+                _rv_to_rung="${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}${_FG_ENDPOINT:+#${_FG_ENDPOINT}}"
+                _rv_fb_reason="${PROBE_CLASS:-endpoint_${PROBE_DECISION}}"
+                FALLBACK_JSON="$(node -e '
+process.stdout.write(JSON.stringify({ from: process.argv[1], to: process.argv[2], reason: process.argv[3] }));
+' "$_rv_from_seat" "$_rv_to_rung" "$_rv_fb_reason")"
                 FALLBACK_LOG_ROW="$(node -e '
-process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: process.argv[3], error_class: process.argv[4], to_rung: process.argv[5], branch: null, served_by: process.argv[5], probe: JSON.parse(process.argv[6]) }));
-' "${RUN_ID:-}" "$RUNNER" "$ENDPOINT" "${PROBE_CLASS:-}" "${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}" "$PROBE_JSON")"
-                echo "dispatch-review: retreating once to cloud rung ${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
+process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: process.argv[3], error_class: process.argv[4], to_rung: process.argv[5], branch: null, served_by: process.argv[5], probe: JSON.parse(process.argv[6]), fallback: JSON.parse(process.argv[7]) }));
+' "${RUN_ID:-}" "$RUNNER" "$ENDPOINT" "${PROBE_CLASS:-}" "$_rv_to_rung" "$PROBE_JSON" "$FALLBACK_JSON")"
+                echo "dispatch-review: retreating once to cloud rung ${_rv_to_rung} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
                 if [[ "$_FG_RUNNER" != "$RUNNER" ]]; then
                   BIN=""
                 fi
@@ -865,13 +962,29 @@ process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] 
                 MODEL="$_FG_ENGINE"
                 EFFORT="$_FG_EFFORT"
                 EFFORT_EXPLICIT=1
-                ENDPOINT=""
+                ENDPOINT="${_FG_ENDPOINT:-}"
                 EP_URL=""
                 EP_TOKEN_ENV=""
                 ANTHROPIC_BASE_URL=""
                 ANTHROPIC_TOKEN_ENV=""
                 unset ANTHROPIC_AUTH_TOKEN
-                SERVED_BY="${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}"
+                if [[ -n "$ENDPOINT" ]]; then
+                  _ep_json="$("$_REVIEW_SELF_DIR/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null)"; _ep_rc=$?
+                  [ "$_ep_rc" -eq 0 ] || die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')"
+                  EP_URL="$(printf '%s' "$_ep_json" | sed -n 's/.*"base_url":"\([^"]*\)".*/\1/p')"
+                  EP_TOKEN_ENV="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
+                  { [[ -n "$EP_URL" ]] && [[ -n "$EP_TOKEN_ENV" ]]; } || die_precondition "--endpoint '$ENDPOINT' resolved an empty base_url/token_env"
+                  if [[ "$RUNNER" = "cc-shim" ]]; then
+                    set +x
+                    export ANTHROPIC_BASE_URL="$EP_URL"
+                    export ANTHROPIC_AUTH_TOKEN="${!EP_TOKEN_ENV-}"
+                  else
+                    ANTHROPIC_BASE_URL="$EP_URL"
+                    ANTHROPIC_TOKEN_ENV="$EP_TOKEN_ENV"
+                  fi
+                  unset _ep_json
+                fi
+                SERVED_BY="$_rv_to_rung"
               else
                 FAMILY_GUARD_REFUSE=1
               fi
@@ -1256,19 +1369,24 @@ process.stdout.write([s(j.reviewer_engine), s(j.reviewer_runner), s(j.reviewer_e
 ' "$_rv_resolved" 2>/dev/null)" || _rv_parsed=""
   local _rv_eng _rv_run _rv_ep _rv_pol _rv_re _rv_rf _rv_rr
   IFS='|' read -r _rv_eng _rv_run _rv_ep _rv_pol _rv_re _rv_rf _rv_rr <<< "${_rv_parsed}"
-  [[ "$_rv_pol" == "cloud-fallback" && "$MODEL" == "$_rv_eng" && "$RUNNER" == "$_rv_run" && "$ENDPOINT" == "$_rv_ep" && -n "$_rv_re" && -n "$_rv_rf" && -n "$_rv_rr" ]] || return 0
+  [[ "$_rv_pol" == "cloud-fallback" && "$MODEL" == "$_rv_eng" && "$RUNNER" == "$_rv_run" && "$ENDPOINT" == "$_rv_ep" ]] || return 0
   if ! family_guard_select "$_rv_re" "$_rv_rf" "$_rv_rr" "$_rv_resolved"; then
     return 0
   fi
   passive_capture "no_verdict"
-  local served="${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}"
+  local served="${_FG_ENGINE}/${_FG_EFFORT}@${_FG_RUNNER}${_FG_ENDPOINT:+#${_FG_ENDPOINT}}"
+  local _from_seat="${MODEL}@${RUNNER}${ENDPOINT:+#${ENDPOINT}}"
+  local _fb_json=""
+  _fb_json="$(node -e '
+process.stdout.write(JSON.stringify({ from: process.argv[1], to: process.argv[2], reason: process.argv[3] }));
+' "$_from_seat" "$served" "${classification:-unavailable}")"
   FALLBACK_LOG_ROW="$(node -e '
-process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: null, error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: null }));
-' "${RUN_ID:-}" "$RUNNER" "$classification" "$served")"
+process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: null, error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: null, fallback: JSON.parse(process.argv[5]), implementer_family: process.argv[6] || "unknown" }));
+' "${RUN_ID:-}" "$RUNNER" "$classification" "$served" "$_fb_json" "${IMPLEMENTER_FAMILY:-unknown}")"
   echo "dispatch-review: retreating once to cloud rung ${served} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
   echo "dispatch-review: agy retreat kept first-attempt raw log ${RAW_LOG}" >&2
   local -a _agy_retreat_args=()
-  local _i=0 _saw_effort=0 _a _drop_bin=0
+  local _i=0 _saw_effort=0 _saw_endpoint=0 _a _drop_bin=0
   [[ "$_FG_RUNNER" != "agy" ]] && _drop_bin=1
   while [ "$_i" -lt "${#ORIG_ARGS[@]}" ]; do
     _a="${ORIG_ARGS[$_i]}"
@@ -1276,6 +1394,12 @@ process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] 
       --model)  _agy_retreat_args+=(--model "$_FG_ENGINE"); _i=$((_i + 2)) ;;
       --runner) _agy_retreat_args+=(--runner "$_FG_RUNNER"); _i=$((_i + 2)) ;;
       --effort) _agy_retreat_args+=(--effort "$_FG_EFFORT"); _saw_effort=1; _i=$((_i + 2)) ;;
+      --endpoint)
+        if [ -n "${_FG_ENDPOINT:-}" ]; then
+          _agy_retreat_args+=(--endpoint "$_FG_ENDPOINT"); _saw_endpoint=1
+        fi
+        _i=$((_i + 2))
+        ;;
       --bin)
         if [ "$_drop_bin" -eq 1 ]; then
           _i=$((_i + 2))
@@ -1287,6 +1411,9 @@ process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] 
     esac
   done
   [ "$_saw_effort" -eq 1 ] || _agy_retreat_args+=(--effort "$_FG_EFFORT")
+  if [ -n "${_FG_ENDPOINT:-}" ] && [ "$_saw_endpoint" -eq 0 ]; then
+    _agy_retreat_args+=(--endpoint "$_FG_ENDPOINT")
+  fi
   local _child_out _child_err _child_rc _child_json
   _child_out="$(mktemp -t dispatch-review-retreat-out-XXXXXX)"
   _child_err="$(mktemp -t dispatch-review-retreat-err-XXXXXX)"
@@ -1343,6 +1470,7 @@ emit_no_verdict() {
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && nv_json="$nv_json, \"role_kit\": $ROLE_KIT_JSON"
   passive_capture "no_verdict"
   salvage_unratified_verdict "${SALVAGE_CAPTURE:-${PARSE_INPUT:-}}" "${BEGIN:-}" "${END:-}"
+  family_guard_bind "${_rv_resolved:-}" 2>/dev/null || true
   local _rv_json
   _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s, "unratified_verdict": %s%s%s%s }' \
     "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON" "$UNRATIFIED_VERDICT" "$format_reject_json" "$nv_json" "$(review_probe_suffix)")"
@@ -2697,6 +2825,7 @@ if [ "$VERDICT" = "SHIP-AS-IS" ]; then
   NO_FINDING_PROOF="$BATTERY_PROOF"
 fi
 
+family_guard_bind "${_rv_resolved:-}" 2>/dev/null || true
 _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s, "frame_closed_by": "%s"%s%s }' \
   "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" \
   "$([ -n "$NO_FINDING_PROOF" ] && printf '"%s"' "$(json_escape "$NO_FINDING_PROOF")" || printf 'null')" \

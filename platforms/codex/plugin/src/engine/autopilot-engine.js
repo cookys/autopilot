@@ -12,6 +12,7 @@ const {
 } = require('../../scripts/check-repair-scope');
 const { portableRawLog, resolveRawLog } = require('../../scripts/lib/raw-log-path');
 const codexFallback = require('../../scripts/lib/qc-panel-codex-fallback');
+const seatFallback = require('../../scripts/lib/seat-fallback');
 
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const {
@@ -712,19 +713,29 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   if (dispatchStatus !== 'engine_unavailable' && dispatchStatus !== 'precondition_failed') {
     return null;
   }
-  const raw = roster && typeof roster.on_engine_unavailable === 'string'
-    ? roster.on_engine_unavailable
+  const raw = roster && typeof roster.on_engine_unavailable === 'string' && roster.on_engine_unavailable.trim() !== ''
+    ? roster.on_engine_unavailable.trim()
     : null;
+  // Default policy (PM 01M7AHAM): automatic retreat along pace-roles priority.implementer
+  // (never codex). Explicit roster.on_engine_unavailable values keep their meaning.
   const policy = (raw === 'ask' || raw === 'solo-fallback' || raw === 'wait-reset' || raw === 'cloud-fallback')
-    ? raw : 'ask';
+    ? raw : 'cloud-fallback';
   let action = 'escalate';
   if (dispatchStatus === 'engine_unavailable') {
     const errorClass = parseEngineUnavailableClass(errorText);
-    // cloud-fallback: a local endpoint that is busy (429/503) or unreachable is retried ONCE on
-    // roster.cloud_fallback_rung. Every other class (auth, quota, cloud capacity) escalates as
-    // under ask, and so does a death of the fallback attempt itself (cloud_fallback_attempted).
+    // cloud-fallback: an endpoint that is busy (429/503) or unreachable is retried ONCE.
+    // Unset policy (default) or empty cloud_fallback_rung walks pace-roles priority.implementer
+    // (never codex); explicit roster.cloud_fallback_rung under explicit cloud-fallback keeps
+    // its meaning. Auth/quota/exhausted retry escalates cleanly.
     if (policy === 'cloud-fallback') {
-      const rung = roster && roster.cloud_fallback_rung;
+      const explicitRung = raw === 'cloud-fallback' && roster && roster.cloud_fallback_rung && typeof roster.cloud_fallback_rung === 'object'
+        ? roster.cloud_fallback_rung
+        : null;
+      const rung = explicitRung || seatFallback.toContractRung(seatFallback.selectImplementerFallback({
+        failedRunner: roster && roster.implementer_runner ? String(roster.implementer_runner) : '',
+        failedModel: roster && roster.implementer_engine ? String(roster.implementer_engine) : '',
+        failedEndpoint: roster && roster.implementer_endpoint ? String(roster.implementer_endpoint) : '',
+      }));
       const endpointClass = errorClass === 'endpoint_busy' || errorClass === 'endpoint_unreachable';
       const attempted = Boolean(roster && roster.cloud_fallback_attempted);
       if (endpointClass && !attempted && rung && typeof rung === 'object') {
@@ -5024,19 +5035,25 @@ class AutopilotEngine {
         const rung = engineUnavailable.cloud_fallback_rung;
         const fromEndpoint = endpointFromImplementationArgs(input.extraImplementationArgs)
           || (typeof roster.implementer_endpoint === 'string' && roster.implementer_endpoint) || null;
-        const toRung = `${rung.engine}/${rung.effort}@${rung.runner}`;
+        const rungEndpoint = rung && typeof rung.endpoint === 'string' && rung.endpoint ? rung.endpoint : null;
+        const toRung = `${rung.engine}/${rung.effort}@${rung.runner}${rungEndpoint ? `#${rungEndpoint}` : ''}`;
+        const fromSeat = (roster && roster.implementer_engine
+          ? `${roster.implementer_engine}${fromEndpoint ? `@${fromEndpoint}` : ''}`
+          : (fromEndpoint || 'unknown'));
+        const fallbackInfo = {
+          from: fromSeat,
+          to: toRung,
+          reason: engineUnavailable.error_class || 'engine_unavailable',
+        };
         const rungFamily = modelFamilyOfEngine(rung.engine);
         const fallbackRoster = {
           ...roster,
           implementer_engine: rung.engine,
           implementer_effort: rung.effort,
           implementer_runner: rung.runner,
-          // Drop the local name. After extra --endpoint flags are stripped,
-          // a still-set roster endpoint would be emitted onto this rung, and
-          // a listed name would also add --sandbox bwrap. That flag is not
-          // harmless here: codex refuses it, and a cloud cc-shim has no local
-          // seat to sandbox. null is not a name, so neither is emitted.
-          implementer_endpoint: null,
+          // Keep target endpoint (e.g. glm) when retreating to a named endpoint pool;
+          // otherwise null drops the failed local endpoint and its --sandbox bwrap flag.
+          implementer_endpoint: rungEndpoint,
           implementer_family: rungFamily,
           implementer_ladder: [],
           cloud_fallback_attempted: true,
@@ -5068,6 +5085,7 @@ class AutopilotEngine {
           error_class: engineUnavailable.error_class,
           dispatch_status: engineUnavailable.dispatch_status,
           to_rung: toRung,
+          fallback: fallbackInfo,
           branch: fallbackBranch,
           stage: fallbackStage,
         }));
@@ -5094,6 +5112,7 @@ class AutopilotEngine {
           from_endpoint: fromEndpoint,
           error_class: engineUnavailable.error_class,
           to_rung: toRung,
+          fallback: fallbackInfo,
           branch: fallbackBranchUsed,
           outcome: fallback && fallback.status ? String(fallback.status) : 'unknown',
           probe: parsed && parsed.probe ? parsed.probe : null,
@@ -5101,10 +5120,12 @@ class AutopilotEngine {
         });
         return {
           ...fallback,
+          fallback: fallbackInfo,
           cloud_fallback: {
             from_endpoint: fromEndpoint,
             error_class: engineUnavailable.error_class,
             to_rung: toRung,
+            fallback: fallbackInfo,
             branch: fallbackBranchUsed,
             worktree: fallbackWorktree,
             run_id: fallbackRunId || null,

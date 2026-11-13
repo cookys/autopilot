@@ -95,7 +95,7 @@ DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT="different"
 #                           FULL suite, not just touched-file tests.
 DEF_DIFF_SCOPE="full"
 DEF_MIN_PANEL_SIZE="3"
-DEF_ON_ENGINE_UNAVAILABLE="ask"
+DEF_ON_ENGINE_UNAVAILABLE="cloud-fallback"
 # consult_dispatch / discuss_dispatch (v2.34.44+, D6): whether the consult/discuss
 # RAIL is live (scripts/dispatch-consult.sh / dispatch-discuss.js), independent of
 # whether the seat tuple above is configured. DEFAULT OFF on both — off is today's
@@ -1065,10 +1065,7 @@ if [[ -n "$CLOUD_FALLBACK_RUNGS_RAW" ]]; then
   esac
   CLOUD_FALLBACK_RUNG_JSON="{\"engine\": \"$(json_escape "$_cfe")\", \"effort\": \"${_cff}\", \"runner\": \"${_cfr}\"}"
 fi
-if [[ "$ON_ENGINE_UNAVAILABLE" == "cloud-fallback" && -z "$CLOUD_FALLBACK_RUNG_JSON" ]]; then
-  echo "resolve-review-loop: on_engine_unavailable: cloud-fallback requires cloud_fallback_rung (engine/effort@runner)" >&2
-  exit 3
-fi
+# Empty cloud_fallback_rung under cloud-fallback automatically walks pace-roles.json priority.implementer.
 
 # reviewer_on_engine_unavailable: empty follows the global on_engine_unavailable, except an
 # agy gemini-4-carbon-* reviewer (below). cloud-fallback is this seat only — dispatch-review.sh

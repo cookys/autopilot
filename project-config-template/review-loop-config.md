@@ -140,7 +140,7 @@ Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
 - reviewer_runner: anthropic-compatible
 - reviewer_endpoint: qwen_local
 - reviewer_on_engine_unavailable: cloud-fallback
-- reviewer_cloud_fallback_rung: gpt-6.1-sol/high@codex
+- reviewer_cloud_fallback_rung: gemini-4-hydrogen-high/high@agy
 - reviewer_limitation:
 - reviewer_limitation_required: false
 - reviewer_engine_low_risk:
@@ -156,12 +156,12 @@ Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
 - verification_author_runner: qoderclicn
 - verification_author_effort: high
 - verification_author_endpoint:
-- on_engine_unavailable: ask
+- on_engine_unavailable: cloud-fallback
 - cloud_fallback_rung:
 - on_family_conflict: fallback
 - review_fresh_context: on
-- reviewer_fallback_preference: gpt-6.1-sol, GLM-5.3
-- reviewer_fallback_preference_low_risk: gpt-6.1-sol, GLM-5.3
+- reviewer_fallback_preference: gemini-4-hydrogen-high, GLM-5.3, claude-opus-5-5-medium
+- reviewer_fallback_preference_low_risk: gemini-4-hydrogen-high, GLM-5.3, claude-opus-5-5-medium
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on

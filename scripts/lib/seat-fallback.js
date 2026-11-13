@@ -231,13 +231,28 @@ function toContractRung(rung) {
 function extractFamiliesFromChain(chain) {
   if (!chain || typeof chain !== 'object') return [];
   const fams = [];
-  if (typeof chain.implementer_family === 'string') {
-    for (const f of splitFamilies(chain.implementer_family)) fams.push(f);
+  if (!Array.isArray(chain)) {
+    if (typeof chain.implementer_family === 'string') {
+      for (const f of splitFamilies(chain.implementer_family)) fams.push(f);
+    }
+    if (chain.implementer && typeof chain.implementer.family === 'string') {
+      for (const f of splitFamilies(chain.implementer.family)) fams.push(f);
+    }
+    for (const eng of [
+      chain.implementer_engine,
+      chain.engine,
+      chain.model,
+      chain.implementer && chain.implementer.engine,
+      chain.implementer && chain.implementer.model,
+    ]) {
+      const f = normalizeFamily(eng);
+      if (f !== 'unknown') fams.push(f);
+    }
   }
-  if (chain.implementer && typeof chain.implementer.family === 'string') {
-    for (const f of splitFamilies(chain.implementer.family)) fams.push(f);
-  }
-  for (const eng of recordedImplementerEngines(chain)) {
+  const entries = Array.isArray(chain)
+    ? chain
+    : (Array.isArray(chain.entries) ? [chain, ...chain.entries] : [chain]);
+  for (const eng of recordedImplementerEngines(entries)) {
     const f = normalizeFamily(eng);
     if (f !== 'unknown') fams.push(f);
   }

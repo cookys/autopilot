@@ -535,8 +535,16 @@ const out = engine.implementTask({
     implementer_endpoint: 'qwen_local',
   },
 });
+const flagOf = (argv, flag) => {
+  if (!Array.isArray(argv)) return '';
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === flag && i + 1 < argv.length) return argv[i + 1];
+    if (typeof argv[i] === 'string' && argv[i].startsWith(`${flag}=`)) return argv[i].slice(flag.length + 1);
+  }
+  return '';
+};
 const d = out.engine_unavailable || {};
-process.stdout.write(`calls=${calls.length} policy=${d.policy || ''} runner2=${calls[1] && calls[1].implementerRunner || ''} model2=${calls[1] && calls[1].implementerEngine || ''} exhausted=${d.cloud_fallback_exhausted === true}\n`);
+process.stdout.write(`calls=${calls.length} policy=${d.policy || ''} runner2=${flagOf(calls[1], '--runner')} model2=${flagOf(calls[1], '--model')} exhausted=${d.cloud_fallback_exhausted === true}\n`);
 NODE
 ONCE_DFLT="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" 2>"$TEST_TMP/once-dflt.err")" || fail "(fb-d) once-default threw: $(cat "$TEST_TMP/once-dflt.err")"
 assert_eq "$ONCE_DFLT" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-d) AutopilotEngine default policy retreats to picker implementer without codex"

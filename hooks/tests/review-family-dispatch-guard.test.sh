@@ -530,6 +530,7 @@ assert_eq "$(jget "$RUN_OUT" implementer_family)" "google" "fb-a: receipt keeps 
 assert_contains "$(cat "$FB_CLAUDE")" "--model glm-5.3" "fb-a: claude shim invoked with glm-5.3"
 assert_contains "$(cat "$FB_CLAUDE")" "https://127.0.0.1:1/glm-stub" "fb-a: glm endpoint URL wired into cc-shim"
 assert_eq "$(line_count "$FB_AGY")" "0" "fb-a: hydrogen/agy is skipped for google implementer"
+assert_not_contains "$(cat "$FB_BWRAP")" "--model gemini-4-hydrogen-high" "fb-a: hydrogen/agy is not wrapped by bwrap for google implementer"
 assert_eq "$(line_count "$FB_CODEX")" "0" "fb-a: codex is never spawned"
 
 # (fb-b) qwen busy/unreachable + implementer family anthropic (agyclaude) -> picks hydrogen first, never codex.
@@ -538,7 +539,7 @@ assert_eq "$(jget "$RUN_OUT" runner)" "agy" "fb-b: anthropic implementer retreat
 assert_eq "$(jget "$RUN_OUT" model)" "gemini-4-hydrogen-high" "fb-b: hydrogen model is gemini-4-hydrogen-high"
 assert_eq "$(jget "$RUN_OUT" served_by)" "gemini-4-hydrogen-high/high@agy" "fb-b: served_by names hydrogen"
 assert_eq "$(jget "$RUN_OUT" fallback.to)" "gemini-4-hydrogen-high/high@agy" "fb-b: fallback.to records hydrogen"
-assert_contains "$(cat "$FB_AGY")" "--model gemini-4-hydrogen-high" "fb-b: agy invoked with gemini-4-hydrogen-high"
+assert_contains "$(cat "$FB_BWRAP")" "--model gemini-4-hydrogen-high" "fb-b: agy invoked with gemini-4-hydrogen-high"
 assert_eq "$(line_count "$FB_CODEX")" "0" "fb-b: codex is never spawned"
 
 # (fb-c) no --implementer-family and nothing to infer -> family unknown, picks hydrogen first, no openai assumption.

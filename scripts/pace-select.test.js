@@ -983,6 +983,15 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
   assert.equal(afterAgy.endpoint, 'glm');
   assert.equal(afterAgy.model, 'glm-5.3');
 
+  const flagOf = (argv, flag) => {
+    if (!Array.isArray(argv)) return '';
+    for (let i = 0; i < argv.length; i += 1) {
+      if (argv[i] === flag && i + 1 < argv.length) return argv[i + 1];
+      if (typeof argv[i] === 'string' && argv[i].startsWith(`${flag}=`)) return argv[i].slice(flag.length + 1);
+    }
+    return '';
+  };
+
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-engine-'));
   try {
     const promptFile = path.join(tmpDir, 'prompt.txt');
@@ -1036,9 +1045,9 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
     assert.equal(callsQwen.length, 2);
     assert.equal(outQwen.engine_unavailable.policy, 'cloud-fallback');
     assert.equal(outQwen.engine_unavailable.cloud_fallback_exhausted, true);
-    assert.equal(callsQwen[1].implementerRunner, 'agy');
-    assert.equal(callsQwen[1].implementerEngine, 'gemini-4-hydrogen-high');
-    assert.notEqual(callsQwen[1].implementerRunner, 'codex');
+    assert.equal(flagOf(callsQwen[1], '--runner'), 'agy');
+    assert.equal(flagOf(callsQwen[1], '--model'), 'gemini-4-hydrogen-high');
+    assert.notEqual(flagOf(callsQwen[1], '--runner'), 'codex');
 
     // Case 2: agy seat unavailable with unset policy -> retreats to glm (cc-shim --endpoint glm).
     const callsAgy = [];
@@ -1083,9 +1092,9 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
       },
     });
     assert.equal(callsAgy.length, 2);
-    assert.equal(callsAgy[1].implementerRunner, 'cc-shim');
-    assert.equal(callsAgy[1].implementerEngine, 'glm-5.3');
-    assert.equal(callsAgy[1].roster.implementer_endpoint, 'glm');
+    assert.equal(flagOf(callsAgy[1], '--runner'), 'cc-shim');
+    assert.equal(flagOf(callsAgy[1], '--model'), 'glm-5.3');
+    assert.equal(flagOf(callsAgy[1], '--endpoint'), 'glm');
 
     // Case 3: explicit roster.on_engine_unavailable = 'ask' still escalates without retreating.
     const callsAsk = [];

@@ -2176,6 +2176,14 @@ process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
 ' "$resolved" 2>/dev/null)" || return 1
   IFS='|' read -r policy engine effort runner target_endpoint <<< "$parsed"
   [ "$policy" = "cloud-fallback" ] || return 1
+  case "$(printf '%s' "${runner:-}" | tr '[:upper:]' '[:lower:]')" in
+    codex)
+      engine=""
+      effort=""
+      runner=""
+      target_endpoint=""
+      ;;
+  esac
   if [ -z "$engine" ] || [ -z "$effort" ] || [ -z "$runner" ]; then
     local pick_parsed=""
     pick_parsed="$(node -e '
@@ -2192,7 +2200,7 @@ process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || ""]
   fi
   [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
   case "$runner" in
-    codex|agy|grok|cursor|kimi|qoderclicn) ;;
+    agy|grok|cursor|kimi|qoderclicn) ;;
     cc-shim) [ -n "${target_endpoint:-}" ] || return 1 ;;
     *) return 1 ;;
   esac

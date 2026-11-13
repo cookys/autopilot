@@ -724,12 +724,15 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   if (dispatchStatus === 'engine_unavailable') {
     const errorClass = parseEngineUnavailableClass(errorText);
     // cloud-fallback: an endpoint that is busy (429/503) or unreachable is retried ONCE.
-    // Unset policy (default) or empty cloud_fallback_rung walks pace-roles priority.implementer
-    // (never codex); explicit roster.cloud_fallback_rung under explicit cloud-fallback keeps
-    // its meaning. Auth/quota/exhausted retry escalates cleanly.
+    // Unset policy (default), empty cloud_fallback_rung, or any codex runner rung walks
+    // pace-roles priority.implementer (never codex); non-codex roster.cloud_fallback_rung
+    // under explicit cloud-fallback keeps its meaning. Auth/quota/exhausted retry escalates cleanly.
     if (policy === 'cloud-fallback') {
-      const explicitRung = raw === 'cloud-fallback' && roster && roster.cloud_fallback_rung && typeof roster.cloud_fallback_rung === 'object'
+      const candidateRung = raw === 'cloud-fallback' && roster && roster.cloud_fallback_rung && typeof roster.cloud_fallback_rung === 'object'
         ? roster.cloud_fallback_rung
+        : null;
+      const explicitRung = candidateRung && String(candidateRung.runner || '').trim().toLowerCase() !== 'codex'
+        ? candidateRung
         : null;
       const rung = explicitRung || seatFallback.toContractRung(seatFallback.selectImplementerFallback({
         failedRunner: roster && roster.implementer_runner ? String(roster.implementer_runner) : '',

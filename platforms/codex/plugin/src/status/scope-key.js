@@ -57,8 +57,8 @@ function readScopeFile(file, { schema, projectKey, identity }) {
 
 // Card status (BL cardtrail). A card entry is kept after `open-decision.js close`: `status` is 'open' (or absent on cards written before this
 // field), 'awaiting_operator_action' (answered, but the operator must still do one step; shown on the panel, differently from a question),
-// 'pending_dispatch' (answered with an executor: close printed the dispatch JSON, nobody has confirmed the dispatch yet; `close --dispatched <task_id>`
-// ends it) or 'closed' (kept with closed_at + answer). "The entry is in the file" never means "the card is open": every reader that lists cards asks this.
+// 'pending_dispatch' (answered with an executor: close printed the dispatch JSON, nobody has confirmed the dispatch yet; `close --dispatched <task_id>`,
+// `close --dispatched-msg <message_id>`, or `done --note <evidence>` ends it) or 'closed' (kept with closed_at + answer). "The entry is in the file" never means "the card is open": every reader that lists cards asks this.
 // Only 'open' is a pending question (待決). awaiting_operator_action and pending_dispatch are LIVE (still shown, still need someone) but never counted
 // as a question. cardState() is the one place that maps a stored status to a state (absent or unknown = open, the pre-field behaviour).
 // operator_steps, last_answer and reask_at are optional entry fields. cardState does not read them. No status value was added for them.

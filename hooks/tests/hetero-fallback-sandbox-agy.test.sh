@@ -99,7 +99,7 @@ if touch "$HOME/.claude/should-fail" 2>/dev/null; then
   exit 19
 fi
 echo edited >> sandbox-edit.txt
-printf '%s\n' '{"event":"result","result":{"conversation_id":"stub-conv","duration_seconds":0.1,"num_turns":1,"status":"SUCCESS","response":"ok","usage":{"cache_read_tokens":0,"input_tokens":10,"output_tokens":5,"thinking_tokens":0,"total_tokens":15}}}'
+printf '%s\n' '{"conversation_id":"stub-conv","duration_seconds":0.1,"num_turns":1,"status":"SUCCESS","response":"ok","usage":{"cache_read_tokens":0,"input_tokens":10,"output_tokens":5,"thinking_tokens":0,"total_tokens":15}}'
 exit 0
 EOS
 chmod +x "$BINDIR/claude" "$BINDIR/agy"

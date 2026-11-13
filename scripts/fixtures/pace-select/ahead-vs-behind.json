@@ -49,8 +49,8 @@
     {
       "pool": "agyclaude(alias 2)",
       "class": "other",
-      "status": "ALERT_behind",
-      "stale": false,
+      "status": "ok+stale",
+      "stale": true,
       "used_pct": 10,
       "expected_pct": 80,
       "gap_pts": -70,

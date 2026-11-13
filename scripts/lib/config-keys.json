@@ -1429,10 +1429,32 @@
       "audience": "internal",
       "class": "path_seam",
       "default": null,
-      "readers": ["scripts/noncq.js"],
+      "readers": ["scripts/noncq.js", "scripts/pace-select.js"],
       "doc": null,
-      "relates": ["AUTOPILOT_NONCQ_DIR"],
-      "note": "Pool map file for scripts/noncq.js drain, replacing scripts/lib/noncq-pools.json. Test seam: noncq.test.js (h) uses a fixture map with a null-model entry."
+      "relates": ["AUTOPILOT_NONCQ_DIR", "AUTOPILOT_PACE_FILE", "AUTOPILOT_PACE_ROLES"],
+      "note": "Pool map file for scripts/noncq.js drain and scripts/pace-select.js, replacing scripts/lib/noncq-pools.json. Test seam: noncq.test.js (h) uses a fixture map with a null-model entry."
+    },
+    {
+      "name": "AUTOPILOT_PACE_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/pace-select.js"],
+      "doc": "references/hetero-dispatch.md",
+      "relates": ["AUTOPILOT_NONCQ_POOLS", "AUTOPILOT_PACE_ROLES"],
+      "note": "Override path to capacity.pace/1 JSON read by scripts/pace-select.js (and via dispatch-hetero.sh --pace-role). Default: $HOME/projects/capacity/out/pace.v1.json."
+    },
+    {
+      "name": "AUTOPILOT_PACE_ROLES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/pace-select.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_PACE_FILE", "AUTOPILOT_NONCQ_POOLS"],
+      "note": "Role allowlist and scarce-pool map JSON override for scripts/pace-select.js, replacing scripts/lib/pace-roles.json in tests."
     },
     {
       "name": "AUTOPILOT_RELAY_SEND_BUDGET_MS",

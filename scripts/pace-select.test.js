@@ -17,11 +17,13 @@ const {
   selectEngine,
   loadPools,
   loadRoles,
+  mergePools,
   defaultPacePath,
 } = require('./pace-select.js');
 
 const CLI = path.join(__dirname, 'pace-select.js');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
+const allEndpointsReady = () => true;
 
 function fixturePath(name) {
   return path.join(FIXTURES_DIR, name);
@@ -36,6 +38,14 @@ function cli(args, envExtra = {}) {
   delete env.AUTOPILOT_PACE_FILE;
   delete env.AUTOPILOT_NONCQ_POOLS;
   delete env.AUTOPILOT_PACE_ROLES;
+  delete env.ANTHROPIC_COMPATIBLE_BASE_URL;
+  delete env.ANTHROPIC_COMPATIBLE_AUTH_TOKEN;
+  // Hermetic default: isolate from host ~/.autopilot/endpoints.env while keeping glm ready
+  // unless a test explicitly overrides AUTOPILOT_ENDPOINT_GLM_*.
+  env.AUTOPILOT_ENDPOINTS_ENV = '/nonexistent';
+  env.AUTOPILOT_ENDPOINT_GLM_URL = 'https://glm.example.invalid/v1';
+  env.AUTOPILOT_ENDPOINT_GLM_TOKEN = 'test-glm-token';
+  delete env.AUTOPILOT_ENDPOINT_GLM_TRANSPORT;
   Object.assign(env, envExtra);
   return spawnSync(process.execPath, [CLI, ...args], {
     encoding: 'utf8',
@@ -120,25 +130,33 @@ test('freshReading: returns slack for fresh finite rows and null for stale or mi
   }
 });
 
-test('pace-roles.json: matches scorecard qualification allowlists and excludes _why as a role', () => {
+test('pace-roles.json: matches scorecard qualification allowlists, codex pools, and excludes non-role keys', () => {
   const roles = loadRoles();
   assert.equal(typeof roles._why, 'string');
   assert.match(roles._why, /engine-scorecard current/);
-  assert.match(roles._why, /glm/);
-  assert.match(roles._why, /agyclaude/);
-  assert.match(roles._why, /minimax/);
+  assert.match(roles._why, /glm: reviewer provisional, implementer not qualified/);
+  assert.match(roles._why, /agyclaude: reviewer and implementer pass 2026-11-13/);
+  assert.match(roles._why, /minimax: failed both 2026-11-13/);
 
-  assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok']);
-  assert.deepEqual(roles.implementer, ['agy', 'codex', 'grok']);
-  assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok']);
+  assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
+  assert.deepEqual(roles.implementer, ['agy', 'codex', 'grok', 'agyclaude']);
+  assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
 
   for (const r of ['reviewer', 'implementer', 'author']) {
-    assert.equal(roles[r].includes('agyclaude'), false);
+    assert.equal(roles[r].includes('agyclaude'), true);
     assert.equal(roles[r].includes('minimax'), false);
   }
 
-  const badRole = cli(['--role', '_why', '--pace', fixturePath('ahead-vs-behind.json')]);
-  assert.equal(badRole.status, 2);
+  assert.deepEqual(roles.pools, {
+    'codex A': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
+    'codex B': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
+  });
+
+  const badWhy = cli(['--role', '_why', '--pace', fixturePath('ahead-vs-behind.json')]);
+  assert.equal(badWhy.status, 2);
+
+  const badPools = cli(['--role', 'pools', '--pace', fixturePath('ahead-vs-behind.json')]);
+  assert.equal(badPools.status, 2);
 
   const missingRole = cli(['--pace', fixturePath('ahead-vs-behind.json')]);
   assert.equal(missingRole.status, 2);
@@ -149,7 +167,13 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
   const pools = loadPools();
   const roles = loadRoles();
 
-  const res = selectEngine({ pace, pools, roles, role: 'implementer' });
+  const res = selectEngine({
+    pace,
+    pools,
+    roles,
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
   assert.deepEqual(res, {
     engine: 'grok',
     runner: 'grok',
@@ -165,6 +189,7 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
       { engine: 'agy', pool: 'agy', slack_pts: -25 },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
+      { engine: 'agyclaude', reason: 'unknown' },
     ],
   });
 
@@ -175,19 +200,36 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
   // Even if a pool map entry mapped claude-pool-a (+80 slack) to codex, class "claude" is rejected.
   const poolsWithClaudeMapped = {
     ...pools,
-    'claude-pool-a': { key: 'codex', runner: 'codex', model: 'gpt-5.4' },
+    'claude-pool-a': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
   };
   const withClaude = selectEngine({
     pace,
     pools: poolsWithClaudeMapped,
     roles,
     role: 'implementer',
+    checkEndpoint: allEndpointsReady,
   });
   assert.equal(withClaude.engine, 'grok');
   assert.deepEqual(
     withClaude.candidates.find((c) => c.engine === 'codex'),
     { engine: 'codex', reason: 'unknown' },
   );
+
+  // Qualified agyclaude wins when its pool row is fresh and has the largest slack.
+  const agyClaudeFresh = structuredClone(pace);
+  agyClaudeFresh.rows.find((row) => row.pool === 'agyclaude(alias 2)').stale = false;
+  const agyClaudeWin = selectEngine({
+    pace: agyClaudeFresh,
+    pools,
+    roles,
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(agyClaudeWin.engine, 'agyclaude');
+  assert.equal(agyClaudeWin.runner, 'agy');
+  assert.equal(agyClaudeWin.model, 'claude-opus-5-5-medium');
+  assert.equal(agyClaudeWin.pool, 'agyclaude(alias 2)');
+  assert.equal(agyClaudeWin.slack_pts, 70);
 });
 
 test('(b) stale row and null expected_pct/used_pct rows are reported as unknown and never selected', () => {
@@ -210,17 +252,36 @@ test('(b) stale row and null expected_pct/used_pct rows are reported as unknown 
     { engine: 'glm', reason: 'unknown' },
     { engine: 'codex', reason: 'unknown' },
     { engine: 'grok', pool: 'grok-cli(alias 2)', slack_pts: -6 },
+    { engine: 'agyclaude', reason: 'unknown' },
   ]);
 
   // Negative controls: coalescing null expected_pct -> 0 makes glm win (0 > -6);
   // ignoring stale on agy makes agy win (76 > -6).
   const nullAsZeroPace = structuredClone(pace);
   nullAsZeroPace.rows.find((row) => row.pool === 'glm').expected_pct = 0;
-  assert.equal(selectEngine({ pace: nullAsZeroPace, pools, roles, role: 'reviewer' }).engine, 'glm');
+  assert.equal(
+    selectEngine({
+      pace: nullAsZeroPace,
+      pools,
+      roles,
+      role: 'reviewer',
+      checkEndpoint: allEndpointsReady,
+    }).engine,
+    'glm',
+  );
 
   const staleIgnoredPace = structuredClone(pace);
   staleIgnoredPace.rows.find((row) => row.pool === 'agy').stale = false;
-  assert.equal(selectEngine({ pace: staleIgnoredPace, pools, roles, role: 'reviewer' }).engine, 'agy');
+  assert.equal(
+    selectEngine({
+      pace: staleIgnoredPace,
+      pools,
+      roles,
+      role: 'reviewer',
+      checkEndpoint: allEndpointsReady,
+    }).engine,
+    'agy',
+  );
 });
 
 test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: true', () => {
@@ -229,6 +290,7 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
   const out = JSON.parse(r.stdout);
   assert.equal(out.engine, 'glm');
   assert.equal(out.runner, 'cc-shim');
+  assert.equal(out.endpoint, 'glm');
   assert.equal(out.model, 'glm-5.3');
   assert.equal(out.pool, 'glm');
   assert.equal(out.slack_pts, -15);
@@ -240,6 +302,7 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
   const impl = selectEngine({
     pace: readFixture('only-ahead.json'),
     role: 'implementer',
+    checkEndpoint: allEndpointsReady,
   });
   assert.equal(impl.engine, 'grok');
   assert.equal(impl.slack_pts, -22);
@@ -253,6 +316,7 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
       rows: [{ pool: 'agy', class: 'other', status: 'WARN_ahead', stale: false, used_pct: 50, expected_pct: 40 }],
     },
     role: 'implementer',
+    checkEndpoint: allEndpointsReady,
   });
   assert.equal(atFloor.engine, 'agy');
   assert.equal(atFloor.slack_pts, -10);
@@ -265,6 +329,7 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
       rows: [{ pool: 'agy', class: 'other', status: 'WARN_ahead', stale: false, used_pct: 51, expected_pct: 40 }],
     },
     role: 'implementer',
+    checkEndpoint: allEndpointsReady,
   });
   assert.equal(belowFloor.engine, 'agy');
   assert.equal(belowFloor.slack_pts, -11);
@@ -284,6 +349,7 @@ test('(d) all unknown -> exit 3 with engine: null and reason: pace_unknown', () 
     { engine: 'glm', reason: 'unknown' },
     { engine: 'codex', reason: 'unknown' },
     { engine: 'grok', reason: 'unknown' },
+    { engine: 'agyclaude', reason: 'unknown' },
   ]);
 
   // Default --pace resolution: AUTOPILOT_PACE_FILE, else $HOME/projects/capacity/out/pace.v1.json.
@@ -356,6 +422,138 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
       { engine: 'agy', pool: 'agy(alias 2)', slack_pts: 28 },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli(alias 2)', slack_pts: 11 },
+      { engine: 'agyclaude', reason: 'unknown' },
     ],
   });
+});
+
+test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not unknown', () => {
+  const pace = readFixture('scarce-codex.json');
+  const pools = loadPools();
+  const roles = loadRoles();
+
+  // noncq-pools.json has no codex pool; mergePools supplies codex A / codex B from pace-roles.json.
+  assert.equal(Object.prototype.hasOwnProperty.call(pools, 'codex A'), false);
+  const merged = mergePools(pools, roles);
+  assert.deepEqual(merged['codex A'], { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' });
+  assert.deepEqual(merged['codex B'], { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' });
+
+  const res = selectEngine({
+    pace,
+    pools,
+    roles,
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.deepEqual(res, {
+    engine: 'codex',
+    runner: 'codex',
+    model: 'gpt-6.1-sol',
+    pool: 'codex A',
+    slack_pts: -35,
+    used_pct: 75,
+    expected_pct: 40,
+    over_pace: true,
+    role: 'implementer',
+    pace_generated_at: '2026-11-13T02:25:00Z',
+    candidates: [
+      { engine: 'agy', reason: 'unknown' },
+      { engine: 'codex', pool: 'codex A', slack_pts: -35 },
+      { engine: 'grok', reason: 'unknown' },
+      { engine: 'agyclaude', reason: 'unknown' },
+    ],
+  });
+
+  // Both codex A (-35) and codex B (-8) fresh scarce rows -> larger slack (-8) wins, over_pace: false.
+  const bothCodex = {
+    schema: 'capacity.pace/1',
+    generated_at: '2026-11-13T02:26:00Z',
+    rows: [
+      ...pace.rows,
+      {
+        pool: 'codex B',
+        class: 'scarce',
+        status: 'ok',
+        stale: false,
+        used_pct: 48,
+        expected_pct: 40,
+      },
+    ],
+  };
+  const bothRes = selectEngine({
+    pace: bothCodex,
+    pools,
+    roles,
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(bothRes.engine, 'codex');
+  assert.equal(bothRes.pool, 'codex B');
+  assert.equal(bothRes.slack_pts, -8);
+  assert.equal(bothRes.over_pace, false);
+});
+
+test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready -> another engine is chosen', () => {
+  const pace = readFixture('glm-best-slack.json');
+  const pools = loadPools();
+  const roles = loadRoles();
+
+  // Control: when endpoint is ready (injected, no shell spawn), glm (+30) beats grok (+14).
+  const checkedReady = [];
+  const whenReady = selectEngine({
+    pace,
+    pools,
+    roles,
+    role: 'reviewer',
+    checkEndpoint: (ep) => {
+      checkedReady.push(ep);
+      return true;
+    },
+  });
+  assert.deepEqual(checkedReady, ['glm']);
+  assert.equal(whenReady.engine, 'glm');
+  assert.equal(whenReady.slack_pts, 30);
+
+  // When glm endpoint is not ready (injected, no shell spawn), glm is listed as
+  // { engine: "glm", reason: "endpoint_not_ready" } and grok (+14) is chosen instead.
+  const checkedUnready = [];
+  const whenNotReady = selectEngine({
+    pace,
+    pools,
+    roles,
+    role: 'reviewer',
+    checkEndpoint: (ep) => {
+      checkedUnready.push(ep);
+      return ep !== 'glm';
+    },
+  });
+  assert.deepEqual(checkedUnready, ['glm']);
+  assert.equal(whenNotReady.engine, 'grok');
+  assert.equal(whenNotReady.runner, 'grok');
+  assert.equal(whenNotReady.model, 'grok-4.7');
+  assert.equal(whenNotReady.slack_pts, 14);
+  assert.equal(whenNotReady.over_pace, false);
+  assert.deepEqual(whenNotReady.candidates, [
+    { engine: 'agy', pool: 'agy', slack_pts: -15 },
+    { engine: 'glm', reason: 'endpoint_not_ready' },
+    { engine: 'codex', reason: 'unknown' },
+    { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
+    { engine: 'agyclaude', reason: 'unknown' },
+  ]);
+
+  // End-to-end CLI check through resolve-endpoint.sh when GLM credentials are unconfigured.
+  const unconfiguredCli = cli(
+    ['--role', 'reviewer', '--pace', fixturePath('glm-best-slack.json'), '--json'],
+    {
+      AUTOPILOT_ENDPOINT_GLM_URL: '',
+      AUTOPILOT_ENDPOINT_GLM_TOKEN: '',
+    },
+  );
+  assert.equal(unconfiguredCli.status, 0, unconfiguredCli.stderr);
+  const cliOut = JSON.parse(unconfiguredCli.stdout);
+  assert.equal(cliOut.engine, 'grok');
+  assert.deepEqual(
+    cliOut.candidates.find((c) => c.engine === 'glm'),
+    { engine: 'glm', reason: 'endpoint_not_ready' },
+  );
 });

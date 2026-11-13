@@ -1,20 +1,35 @@
 {
-  "_why": "Follows engine-scorecard current (glm: reviewer provisional, implementer not qualified; agyclaude/minimax: no evidence).",
+  "_why": "Follows engine-scorecard current (glm: reviewer provisional, implementer not qualified; agyclaude: reviewer and implementer pass 2026-11-13, events 30/29; minimax: failed both 2026-11-13). Scarce codex pools use gpt-6.1-sol from project-config-template/review-loop-config.md implementer_engine (dispatch-config.md configures methodology chains, not engine model ids).",
   "reviewer": [
     "agy",
     "glm",
     "codex",
-    "grok"
+    "grok",
+    "agyclaude"
   ],
   "implementer": [
     "agy",
     "codex",
-    "grok"
+    "grok",
+    "agyclaude"
   ],
   "author": [
     "agy",
     "glm",
     "codex",
-    "grok"
-  ]
+    "grok",
+    "agyclaude"
+  ],
+  "pools": {
+    "codex A": {
+      "key": "codex",
+      "runner": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    "codex B": {
+      "key": "codex",
+      "runner": "codex",
+      "model": "gpt-6.1-sol"
+    }
+  }
 }

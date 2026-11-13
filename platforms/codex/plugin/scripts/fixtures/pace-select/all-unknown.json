@@ -1,0 +1,72 @@
+{
+  "schema": "capacity.pace/1",
+  "generated_at": "2026-11-13T02:15:00Z",
+  "rows": [
+    {
+      "pool": "claude-pool-a",
+      "class": "claude",
+      "status": "ok",
+      "stale": false,
+      "used_pct": 12,
+      "expected_pct": 50,
+      "gap_pts": -38,
+      "hours_to_reset": 84,
+      "window_h": 168
+    },
+    {
+      "pool": "agy",
+      "class": "other",
+      "status": "ok+stale",
+      "stale": true,
+      "used_pct": 10,
+      "expected_pct": 50,
+      "gap_pts": -40,
+      "hours_to_reset": 60,
+      "window_h": 120
+    },
+    {
+      "pool": "agy(alias 2)",
+      "class": "other",
+      "status": "no_source",
+      "stale": null,
+      "used_pct": null,
+      "expected_pct": null,
+      "gap_pts": null,
+      "hours_to_reset": null,
+      "window_h": null
+    },
+    {
+      "pool": "glm",
+      "class": "other",
+      "status": "window_unknown",
+      "stale": false,
+      "used_pct": 15,
+      "expected_pct": null,
+      "gap_pts": null,
+      "hours_to_reset": null,
+      "window_h": null
+    },
+    {
+      "pool": "grok-cli",
+      "class": "other",
+      "status": "no_source",
+      "stale": false,
+      "used_pct": null,
+      "expected_pct": 40,
+      "gap_pts": null,
+      "hours_to_reset": 100.8,
+      "window_h": 168
+    },
+    {
+      "pool": "other-pool-a",
+      "class": "other",
+      "status": "ok",
+      "stale": false,
+      "used_pct": 5,
+      "expected_pct": 60,
+      "gap_pts": -55,
+      "hours_to_reset": 67.2,
+      "window_h": 168
+    }
+  ]
+}

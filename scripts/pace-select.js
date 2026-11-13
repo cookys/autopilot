@@ -5,12 +5,20 @@
  * pace-select.js — pace-aware non-Claude engine selector (PM 01M79D2S).
  *
  * Reads a capacity.pace/1 file, maps pools to engine keys via
- * scripts/lib/noncq-pools.json, filters to engines allowed for --role in
- * scripts/lib/pace-roles.json (minus --exclude), and selects the engine whose
- * best fresh pool has the largest linear-pace slack (expected_pct - used_pct).
+ * scripts/lib/noncq-pools.json merged with scripts/lib/pace-roles.json `pools`
+ * (which supplies scarce pools such as "codex A" / "codex B" excluded from
+ * noncq drain), filters to engines allowed for --role in pace-roles.json
+ * (minus --exclude), checks endpoint readiness for any candidate pool with an
+ * `endpoint` field via scripts/resolve-endpoint.sh, and selects the engine
+ * whose best fresh pool has the largest linear-pace slack
+ * (expected_pct - used_pct).
  *
  * Rules:
- *   - Rows with class === "claude" are never candidates.
+ *   - Rows with class === "claude" are never candidates; class === "scarce"
+ *     and class === "other" rows are read.
+ *   - Candidate pools with `endpoint` must pass `resolve-endpoint.sh <endpoint>`
+ *     (`ready === true`); otherwise the candidate is listed as
+ *     `{ engine, reason: "endpoint_not_ready" }` and never chosen.
  *   - Missing/null used_pct or expected_pct, or stale !== false, is unknown
  *     (never treated as 0) via scripts/lib/pace-reading.js.
  *   - Alias pools sharing an engine key merge by largest fresh slack.
@@ -33,6 +41,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { PACE_SCHEMA, freshReading } = require('./lib/pace-reading.js');
 
 const EXIT_OK = 0;
@@ -42,6 +51,7 @@ const OVER_PACE_SLACK_FLOOR = -10;
 
 const POOLS_PATH = path.join(__dirname, 'lib', 'noncq-pools.json');
 const ROLES_PATH = path.join(__dirname, 'lib', 'pace-roles.json');
+const RESOLVE_ENDPOINT_SH = path.join(__dirname, 'resolve-endpoint.sh');
 
 const USAGE_TEXT = [
   'usage: pace-select.js --role <role> [--pace <pace.v1.json>] [--exclude k1,k2] [--json]',
@@ -102,6 +112,36 @@ function loadRoles(rolesPath = ROLES_PATH) {
   return readJsonObject(rolesPath, 'pace-roles.json');
 }
 
+function mergePools(pools, roles) {
+  const rolePools = (
+    roles
+    && typeof roles.pools === 'object'
+    && roles.pools !== null
+    && !Array.isArray(roles.pools)
+  )
+    ? roles.pools
+    : {};
+  return { ...rolePools, ...pools };
+}
+
+function defaultCheckEndpoint(endpoint, env = process.env) {
+  if (typeof endpoint !== 'string' || endpoint.trim() === '') return false;
+  const res = spawnSync('bash', [RESOLVE_ENDPOINT_SH, endpoint.trim()], {
+    encoding: 'utf8',
+    env,
+    input: '',
+  });
+  if (res.error || res.status !== 0 || typeof res.stdout !== 'string') {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(res.stdout);
+    return Boolean(parsed && parsed.ready === true);
+  } catch (_err) {
+    return false;
+  }
+}
+
 function validRoleNames(roles) {
   return Object.keys(roles)
     .filter((k) => !k.startsWith('_') && Array.isArray(roles[k]))
@@ -141,7 +181,7 @@ function normalizeExclude(exclude) {
   throw usageError('--exclude must be a comma-separated string, array, or Set');
 }
 
-function selectEngine({ pace, pools, roles, role, exclude } = {}) {
+function selectEngine({ pace, pools, roles, role, exclude, checkEndpoint } = {}) {
   const resolvedPools = pools === undefined ? loadPools() : pools;
   const resolvedRoles = roles === undefined ? loadRoles() : roles;
   if (!resolvedPools || typeof resolvedPools !== 'object' || Array.isArray(resolvedPools)) {
@@ -149,6 +189,9 @@ function selectEngine({ pace, pools, roles, role, exclude } = {}) {
   }
   if (!resolvedRoles || typeof resolvedRoles !== 'object' || Array.isArray(resolvedRoles)) {
     throw usageError('roles must be an object');
+  }
+  if (checkEndpoint !== undefined && typeof checkEndpoint !== 'function') {
+    throw usageError('checkEndpoint must be a function');
   }
   assertValidRole(resolvedRoles, role);
 
@@ -162,22 +205,46 @@ function selectEngine({ pace, pools, roles, role, exclude } = {}) {
     throw usageError(`pace input must have schema ${JSON.stringify(PACE_SCHEMA)} and rows[]`);
   }
 
+  const mergedPools = mergePools(resolvedPools, resolvedRoles);
   const excluded = normalizeExclude(exclude);
   const allowedKeys = resolvedRoles[role].filter(
     (k) => typeof k === 'string' && k.length > 0 && !excluded.has(k),
   );
   const allowedSet = new Set(allowedKeys);
 
+  const endpointProbe = checkEndpoint || defaultCheckEndpoint;
+  const endpointCache = new Map();
+  const isEndpointReady = (ep) => {
+    if (endpointCache.has(ep)) return endpointCache.get(ep);
+    const ready = Boolean(endpointProbe(ep));
+    endpointCache.set(ep, ready);
+    return ready;
+  };
+
+  // Determine endpoint readiness per candidate pool before scanning pace rows.
+  const readyPools = new Map();
+  const keyHadPool = new Set();
+  const keyHadReadyPool = new Set();
+  for (const [poolName, entry] of Object.entries(mergedPools)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    if (typeof entry.key !== 'string' || !allowedSet.has(entry.key)) continue;
+    keyHadPool.add(entry.key);
+    const endpoint = typeof entry.endpoint === 'string' ? entry.endpoint.trim() : '';
+    if (endpoint !== '' && !isEndpointReady(endpoint)) {
+      continue;
+    }
+    keyHadReadyPool.add(entry.key);
+    readyPools.set(poolName, entry);
+  }
+
   const bestByKey = new Map();
   for (const row of pace.rows) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
     if (row.class === 'claude') continue;
     const poolName = typeof row.pool === 'string' ? row.pool : '';
-    if (!poolName || !Object.prototype.hasOwnProperty.call(resolvedPools, poolName)) continue;
-    const entry = resolvedPools[poolName];
-    if (!entry || typeof entry !== 'object' || typeof entry.key !== 'string') continue;
+    if (!poolName || !readyPools.has(poolName)) continue;
+    const entry = readyPools.get(poolName);
     const key = entry.key;
-    if (!allowedSet.has(key)) continue;
     const reading = freshReading(row);
     if (!reading) continue;
 
@@ -194,6 +261,13 @@ function selectEngine({ pace, pools, roles, role, exclude } = {}) {
   const candidates = [];
   const known = [];
   for (const key of allowedKeys) {
+    if (keyHadPool.has(key) && !keyHadReadyPool.has(key)) {
+      candidates.push({
+        engine: key,
+        reason: 'endpoint_not_ready',
+      });
+      continue;
+    }
     const hit = bestByKey.get(key);
     if (hit) {
       candidates.push({
@@ -231,7 +305,7 @@ function selectEngine({ pace, pools, roles, role, exclude } = {}) {
     }
   }
 
-  return {
+  const out = {
     engine: chosen.key,
     runner: chosen.entry.runner ?? null,
     model: chosen.entry.model ?? null,
@@ -244,6 +318,10 @@ function selectEngine({ pace, pools, roles, role, exclude } = {}) {
     pace_generated_at: paceGeneratedAt,
     candidates,
   };
+  if (typeof chosen.entry.endpoint === 'string' && chosen.entry.endpoint.trim() !== '') {
+    out.endpoint = chosen.entry.endpoint.trim();
+  }
+  return out;
 }
 
 function parseArgs(argv) {
@@ -322,6 +400,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
     return EXIT_USAGE;
   }
 
+  const checkEndpoint = (ep) => defaultCheckEndpoint(ep, env);
   const pacePath = flags.pace !== null
     ? path.resolve(expandHome(flags.pace, env))
     : defaultPacePath(env);
@@ -338,6 +417,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
         roles,
         role: flags.role,
         exclude: flags.exclude,
+        checkEndpoint,
       });
       process.stdout.write(`${JSON.stringify(unknownResult, null, 2)}\n`);
       return EXIT_PACE_UNKNOWN;
@@ -362,6 +442,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
       roles,
       role: flags.role,
       exclude: flags.exclude,
+      checkEndpoint,
     });
   } catch (err) {
     process.stderr.write(`pace-select.js: ${err.message}\n`);
@@ -380,10 +461,13 @@ module.exports = {
   selectEngine,
   loadPools,
   loadRoles,
+  mergePools,
+  defaultCheckEndpoint,
   defaultPacePath,
   main,
   POOLS_PATH,
   ROLES_PATH,
+  RESOLVE_ENDPOINT_SH,
   OVER_PACE_SLACK_FLOOR,
   EXIT_OK,
   EXIT_USAGE,

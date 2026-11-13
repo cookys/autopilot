@@ -1990,6 +1990,23 @@ sandbox_setup() {
   [ -f "$WT/.git" ] && SANDBOX_ARGV+=(--ro-bind "$WT/.git" "$WT/.git")
   [ -d "${HOME:-/nonexistent}/.claude" ] && SANDBOX_ARGV+=(--ro-bind "$SANDBOX_TMP/empty" "$HOME/.claude")
   [ -f "${HOME:-/nonexistent}/.claude.json" ] && SANDBOX_ARGV+=(--ro-bind /dev/null "$HOME/.claude.json")
+  if [ "$(current_runner_name)" = "agy" ]; then
+    # agy writes its own state under $HOME/.gemini (conversation cache, auth refresh).
+    # Only bind $HOME/.gemini writable for the agy runner; keep $HOME/.claude masked/read-only.
+    [ -n "${HOME:-}" ] || return 1
+    local _home_real _gemini_real
+    _home_real="$(readlink -m -- "$HOME")" || return 1
+    _gemini_real="$(readlink -m -- "$HOME/.gemini")" || return 1
+    case "$_gemini_real" in
+      "$_home_real/.gemini") ;;
+      *) return 1 ;;
+    esac
+    if [ -e "$_gemini_real" ] && [ ! -d "$_gemini_real" ]; then
+      return 1
+    fi
+    mkdir -p "$_gemini_real" || return 1
+    SANDBOX_ARGV+=(--bind "$_gemini_real" "$_gemini_real")
+  fi
   SANDBOX_ARGV+=(--setenv TMPDIR "$SANDBOX_TMP/tmp" --setenv CLAUDE_CONFIG_DIR "$SANDBOX_TMP/claude-config"
     --setenv XDG_CACHE_HOME "$SANDBOX_TMP/cache" --chdir "$WT" --)
   return 0
@@ -5080,8 +5097,6 @@ else
   # $(...) strips trailing newlines, so the directive's terminating blank line is re-appended
   # here: it is what separates the directive from the task prompt in the bytes agy receives.
   AGY_EDIT_ONLY="$(agy_edit_only_directive "$WT")"$'\n\n'
-  AGY_ENVELOPE="$(mktemp -t dispatch-hetero-agy-envelope-XXXXXX)"
-  AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
   AGY_PARSED="$(mktemp -t dispatch-hetero-agy-parsed-XXXXXX)"
   AGY_USAGE_JSON="null"
   # --new-project is the MECHANISM behind the directive above. Measured 2026-09-13 (308-8f's
@@ -5094,6 +5109,17 @@ else
   # lands in "$1". Evidence: docs/plans/evidence/2026-09-13-agy-worktree-escape/.
   AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$AGY_PRINT_TIMEOUT"
   _AGY_HOME_CHECK="$(agy_assert_disposable_home)" || die_precondition "$_AGY_HOME_CHECK"
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    # The inner shell opens AGY_ENVELOPE and AGY_STDERR inside bwrap, so they must live in SANDBOX_TMP.
+    if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then
+      sandbox_setup || { echo "sandbox: could not set up the bwrap scratch dir; worker not started" > "$LOG"; sandbox_teardown; AGENT_EXIT=1; return 0; }
+    fi
+    AGY_ENVELOPE="$(mktemp "${SANDBOX_TMP}/dispatch-hetero-agy-envelope-XXXXXX")"
+    AGY_STDERR="$(mktemp "${SANDBOX_TMP}/dispatch-hetero-agy-stderr-XXXXXX")"
+  else
+    AGY_ENVELOPE="$(mktemp -t dispatch-hetero-agy-envelope-XXXXXX)"
+    AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
+  fi
   AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
   AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
   if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
@@ -5114,13 +5140,13 @@ else
       _ "$WT" "$AGY_BIN" "$AGY_EDIT_ONLY" "$MODEL" "$AGY_PRINT_TIMEOUT" \
       "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT" \
       "$SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE"
+  local _agy_early_return=0
   if [ "$AGENT_EXIT" -ne 0 ]; then
     cat "$AGY_STDERR" >> "$LOG"
     printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \
       "$AGENT_EXIT" >> "$LOG"
-    return 0
-  fi
-  if ! node "$SELF_DIR/dispatch-status.js" --log "$AGY_ENVELOPE" --agy-envelope \
+    _agy_early_return=1
+  elif ! node "$SELF_DIR/dispatch-status.js" --log "$AGY_ENVELOPE" --agy-envelope \
       > "$AGY_PARSED" 2>/dev/null; then
     # TELEMETRY LOSS, NOT A VERDICT (2026-09-03, Board). The envelope is the usage channel;
     # when it does not parse, usage stays null and the run is classified from git
@@ -5138,17 +5164,23 @@ else
     printf '\n[dispatch-hetero: end of raw envelope]\n' >> "$LOG"
     [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: agy native JSON envelope invalid — usage null; status from git artifacts (see $LOG)" >&2
     AGY_USAGE_JSON="null"
-    return 0
-  fi
-  node - "$AGY_PARSED" "$LOG" <<'NODE'
+    _agy_early_return=1
+  else
+    node - "$AGY_PARSED" "$LOG" <<'NODE'
 const fs = require('fs');
 const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 fs.writeFileSync(process.argv[3], parsed.response);
 NODE
-  AGY_USAGE_JSON="$(node -e '
-    const fs = require("fs");
-    process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).usage));
-  ' "$AGY_PARSED")"
+    AGY_USAGE_JSON="$(node -e '
+      const fs = require("fs");
+      process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).usage));
+    ' "$AGY_PARSED")"
+  fi
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    sandbox_count_denied
+    sandbox_teardown
+  fi
+  [ "$_agy_early_return" -eq 0 ] || return 0
 fi
 capture_structured_provider_error
 }
@@ -6392,7 +6424,7 @@ dispatch_detached_run() {
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
     declare -p WT_GITFILE_EXPECTED WT_GITFILE_ERROR 2>/dev/null || true
-    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_ARGV SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
@@ -6400,7 +6432,7 @@ dispatch_detached_run() {
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f wt_gitfile_check _wt_git 2>/dev/null || true
-    declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
+    declare -f current_runner_name sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
     # token_seat_guard (lib/token-seat.sh) is called inside run_agent's claude branches; without it the
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true

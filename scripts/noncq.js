@@ -59,9 +59,14 @@ const {
   ensureDir,
   withWriteLock,
 } = require('./lib/jsonl-store.js');
+const {
+  PACE_SCHEMA,
+  finiteNum,
+  isFreshRow,
+  rowRemaining,
+} = require('./lib/pace-reading.js');
 
 const SCHEMA = 'noncq/1';
-const PACE_SCHEMA = 'capacity.pace/1';
 const KINDS = Object.freeze(['review-seat1', 'research', 'replay', 'data', 'draft']);
 const STATES = Object.freeze(['queued', 'dispatched', 'done', 'failed', 'expired']);
 const MAX_ATTEMPTS = 2;
@@ -467,24 +472,6 @@ function cmdList(flags, env = process.env) {
   return 0;
 }
 
-/** A JSON number, or null when the field is missing. null is unknown, never 0. */
-function finiteNum(v) {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
-}
-
-/**
- * Remaining quota points on one pace row, or null when this row does not say.
- * used_pct is the producer's percent-used (capacity pace.py). waste_pct_if_unused
- * is set only on ALERT_behind and is the same remainder. A missing field is
- * null, not 0.
- */
-function rowRemaining(row, status) {
-  const used = finiteNum(row.used_pct);
-  if (used !== null) return 100 - used;
-  if (status === 'ALERT_behind') return finiteNum(row.waste_pct_if_unused);
-  return null;
-}
-
 /** Qualifying pace rows → Map engineKey → { profile, waste_pct_if_unused, pools[] } */
 function qualifyingEngines(pace, pools, opts = {}) {
   const requireHoursLt24 = opts.requireHoursLt24 !== false;
@@ -493,15 +480,14 @@ function qualifyingEngines(pace, pools, opts = {}) {
   }
   const byKey = new Map();
   for (const row of pace.rows) {
-    if (!row || typeof row !== 'object') continue;
+    // stale missing / null / true or non-object row: unknown (shared pace-reading).
+    // Do not qualify and do not cancel a sibling alias row with fresh headroom.
+    if (!isFreshRow(row)) continue;
     const poolName = row.pool;
-    const entry = pools[poolName];
+    const entry = Object.prototype.hasOwnProperty.call(pools, poolName) ? pools[poolName] : null;
     // Unmapped pool name: not a verdict. It must not be read as "no quota".
     if (!entry) continue;
     if (row.class === 'claude' || row.class === 'scarce') continue;
-    // stale missing / null / true: unknown. Do not qualify and do not cancel
-    // a sibling row that has a fresh headroom reading (aliases share an engine key).
-    if (row.stale !== false) continue;
     const status = typeof row.status === 'string' ? row.status : '';
     // `ok` is in-use with quota still left. ALERT_behind is the waste alert.
     // behind_early / no_source / unknown are not a quota reading.

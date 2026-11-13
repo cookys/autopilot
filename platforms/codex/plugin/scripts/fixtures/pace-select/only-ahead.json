@@ -1,0 +1,39 @@
+{
+  "schema": "capacity.pace/1",
+  "generated_at": "2026-11-13T02:10:00Z",
+  "rows": [
+    {
+      "pool": "agy",
+      "class": "other",
+      "status": "WARN_ahead",
+      "stale": false,
+      "used_pct": 62,
+      "expected_pct": 30,
+      "gap_pts": 32,
+      "hours_to_reset": 84,
+      "window_h": 120
+    },
+    {
+      "pool": "glm",
+      "class": "other",
+      "status": "WARN_ahead",
+      "stale": false,
+      "used_pct": 45,
+      "expected_pct": 30,
+      "gap_pts": 15,
+      "hours_to_reset": 16.8,
+      "window_h": 24
+    },
+    {
+      "pool": "grok-cli",
+      "class": "other",
+      "status": "WARN_ahead",
+      "stale": false,
+      "used_pct": 52,
+      "expected_pct": 30,
+      "gap_pts": 22,
+      "hours_to_reset": 117.6,
+      "window_h": 168
+    }
+  ]
+}

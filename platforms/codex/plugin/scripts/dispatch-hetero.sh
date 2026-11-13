@@ -51,6 +51,11 @@
 #                                              #   one OAuth login over ~60 models. --model names a
 #                                              #   family alias (grok46|codex53) resolved by
 #                                              #   lib/cursor-model.sh, or a full model id verbatim.
+#       [--pace-role <role>]                   # pace-aware engine choice when --runner is omitted:
+#                                              #   runs scripts/pace-select.js --role <role> --json,
+#                                              #   sets RUNNER and MODEL, and records the selector
+#                                              #   JSON as engine_choice in the run manifest; exit 3
+#                                              #   or any selector failure fails closed (exit 2).
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--endpoint <name>]                    # cc-shim only (also --endpoint=<name>; last one
 #                                              #   wins; @none clears; empty is refused): resolve
@@ -311,6 +316,8 @@ MISSION_NOOP_GRAPH_NODE=""
 CAMPAIGN_STRICT_AUTHORITY=0
 CAMPAIGN_PROJECTION_BOUND=0
 RUNNER="auto"
+PACE_ROLE=""
+ENGINE_CHOICE_JSON=""
 EFFORT="xhigh"
 EFFORT_EXPLICIT=0
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
@@ -2328,6 +2335,7 @@ write_manifest() {
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
   [ -n "${FELL_BACK_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"fell_back\": $FELL_BACK_JSON"
+  [ -n "${ENGINE_CHOICE_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"engine_choice\": $ENGINE_CHOICE_JSON"
   local mf_timeout_secs="" mf_timeout_source="default" mf_timeout_enforced="false"
   mf_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   [ -n "$mf_timeout_secs" ] || mf_timeout_secs="null"
@@ -2378,6 +2386,14 @@ while [ $# -gt 0 ]; do
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; MODEL_IS_DEFAULT=0; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
+    --pace-role)
+      [ $# -ge 2 ] && [ -n "${2:-}" ] && [[ "${2:-}" != --* ]] \
+        || die_precondition "--pace-role requires a non-empty role"
+      PACE_ROLE="$2"; shift 2 ;;
+    --pace-role=*)
+      PACE_ROLE="${1#--pace-role=}"
+      [ -n "$PACE_ROLE" ] || die_precondition "--pace-role requires a non-empty role"
+      shift ;;
     --effort) EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
@@ -2730,7 +2746,7 @@ case "$EFFORT" in
 esac
 # `default` = no effort sent, the endpoint default runs. Only a runner whose effort is optional can honour that;
 # a runner that consumes --effort would be handed the literal word "default".
-if [ "$EFFORT" = "default" ]; then
+if [ "$EFFORT" = "default" ] && { [ -z "$PACE_ROLE" ] || [ "$RUNNER_SUPPLIED" -eq 1 ]; }; then
   case "$RUNNER" in
     anthropic-compatible|cc-shim|claude-native|kimi|opencode) ;;
     *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi|opencode); runner '$RUNNER' takes an explicit effort" ;;
@@ -2768,6 +2784,65 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+if [ -n "$PACE_ROLE" ] && [ "$RUNNER_SUPPLIED" -eq 0 ]; then
+  command -v node >/dev/null 2>&1 || die_precondition "--pace-role requires node"
+  _ps_rc=0
+  _ps_stdout="$(node "$SELF_DIR/pace-select.js" --role "$PACE_ROLE" --json 2>/dev/null)" || _ps_rc=$?
+  if [ "$_ps_rc" -ne 0 ]; then
+    _ps_detail="$(printf '%s' "$_ps_stdout" | node -e '
+      let s = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (c) => { s += c; });
+      process.stdin.on("end", () => {
+        try {
+          const j = JSON.parse(s);
+          if (j && typeof j.reason === "string" && j.reason) {
+            process.stdout.write(j.reason);
+          }
+        } catch {}
+      });
+    ' 2>/dev/null || true)"
+    if [ -n "$_ps_detail" ]; then
+      die_precondition "--pace-role '$PACE_ROLE' could not select an engine (exit $_ps_rc: $_ps_detail)"
+    else
+      die_precondition "--pace-role '$PACE_ROLE' failed (pace-select.js exit $_ps_rc)"
+    fi
+  fi
+  _ps_parsed="$(printf '%s' "$_ps_stdout" | node -e '
+    let s = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => { s += c; });
+    process.stdin.on("end", () => {
+      let j;
+      try { j = JSON.parse(s); } catch { process.exit(1); }
+      if (!j || typeof j !== "object" || Array.isArray(j)) process.exit(1);
+      if (typeof j.runner !== "string" || !j.runner.trim()) process.exit(1);
+      if (typeof j.model !== "string" || !j.model.trim()) process.exit(1);
+      const ep = typeof j.endpoint === "string" ? j.endpoint.trim() : "";
+      if (/[\r\n]/.test(j.runner) || /[\r\n]/.test(j.model) || /[\r\n]/.test(ep)) process.exit(1);
+      process.stdout.write(`${j.runner.trim()}\n${j.model.trim()}\n${ep}\n${JSON.stringify(j)}\n`);
+    });
+  ' 2>/dev/null)" || die_precondition "--pace-role '$PACE_ROLE' returned invalid selector JSON"
+  {
+    IFS= read -r RUNNER
+    IFS= read -r MODEL
+    IFS= read -r _ps_endpoint
+    IFS= read -r ENGINE_CHOICE_JSON
+  } <<< "$_ps_parsed"
+  [ -n "$RUNNER" ] && [ -n "$MODEL" ] && [ -n "$ENGINE_CHOICE_JSON" ] \
+    || die_precondition "--pace-role '$PACE_ROLE' failed to extract runner and model"
+  MODEL_IS_DEFAULT=0
+  if [ -n "$_ps_endpoint" ] && [ -z "$ENDPOINT" ]; then
+    ENDPOINT="$_ps_endpoint"
+  fi
+  unset _ps_rc _ps_stdout _ps_detail _ps_parsed _ps_endpoint
+  if [ "$EFFORT" = "default" ]; then
+    case "$RUNNER" in
+      anthropic-compatible|cc-shim|claude-native|kimi|opencode) ;;
+      *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi|opencode); runner '$RUNNER' takes an explicit effort" ;;
+    esac
+  fi
+fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
@@ -6202,7 +6277,7 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT CLAUDE_EFFORT_ARG \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER PACE_ROLE ENGINE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \

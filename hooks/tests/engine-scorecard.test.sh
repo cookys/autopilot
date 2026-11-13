@@ -1000,6 +1000,120 @@ else
 fi
 rm -rf "$OUT26" "$HOME26"
 
+# 27: export-qualified writes autopilot.qualified/1 atomically (mode 0644, no expiry field)
+# across all current --role roles, mapping pass/fail/provisional verdicts with YYYY-MM-DD dates,
+# and honoring --out > $AUTOPILOT_QUALIFIED_FILE > $HOME/.autopilot/qualified.v1.json.
+SC27="$TESTDIR/export27-scorecard"
+CAP27="$TESTDIR/export27-cap"
+HOME27="$TESTDIR/export27-home"
+OUT27="$TESTDIR/export27-outbox"
+mkdir -p "$SC27" "$CAP27" "$HOME27" "$OUT27"
+row27() {
+  local engine="$1" runner="$2" family="$3" role="$4" status="$5" dt="$6"
+  printf '{"engine":"%s","runner":"%s","family":"%s","role":"%s","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"%s","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.8,"cost":{"source":"manual","usd_per_mtok_input":1,"usd_per_mtok_output":1,"sample_tokens":100},"latency":{"sample_wall_time_s":1},"status":"%s","qualified_at":"%s"}\n' \
+    "$engine" "$runner" "$family" "$role" "$dt" "$status" "$dt"
+}
+rec27_ok=1
+rec27() {
+  HOME="$HOME27" AUTOPILOT_OUTBOX_DIR="$OUT27" ENGINE_SCORECARD_DIR="$SC27" \
+    ENGINE_CAPABILITY_DIR="$CAP27" AUTOPILOT_STRIKE_WRITER=off \
+    node "$CLI" record >/dev/null 2>&1 || rec27_ok=0
+}
+# Event 1 (superseded by event 2 on same configured identity)
+row27 "claude-opus-5-5-medium" "agy" "anthropic" "reviewer" "failed" "2026-11-01" | rec27
+# Event 2: pass (reviewer)
+row27 "claude-opus-5-5-medium" "agy" "anthropic" "reviewer" "qualified" "2026-11-13" | rec27
+# Event 3: pass (implementer)
+row27 "gpt-6.1-sol" "codex" "openai" "implementer" "qualified" "2026-11-10" | rec27
+# Event 4: pass (verification_author)
+row27 "gemini-4-carbon-high" "agy" "google" "verification_author" "qualified" "2026-11-11" | rec27
+# Event 5: fail (reviewer)
+row27 "MiniMax-M3" "cc-shim" "minimax" "reviewer" "failed" "2026-11-12" | rec27
+# Event 6: provisional (pre-narrowing disk row, like 8c)
+row27 "glm-5.3" "cc-shim" "zhipu" "reviewer" "failed" "2026-11-09" | rec27
+node - "$SC27/scorecard.jsonl" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const lines = fs.readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+const glm = lines.find((r) => r.engine === 'glm-5.3');
+glm.status = 'provisional';
+fs.writeFileSync(file, `${lines.map((r) => JSON.stringify(r)).join('\n')}\n`);
+NODE
+# Event 7: pass (owner)
+row27 "grok-4.7" "grok" "xai" "owner" "qualified" "2026-11-07" | rec27
+
+EXP27_OUT="$TESTDIR/export27-out/explicit.json"
+EXP27_ENV="$TESTDIR/export27-env/env.json"
+EXP27_DEF="$HOME27/.autopilot/qualified.v1.json"
+
+(
+  umask 0077
+  env -u AUTOPILOT_QUALIFIED_FILE HOME="$HOME27" ENGINE_SCORECARD_DIR="$SC27" ENGINE_CAPABILITY_DIR="$CAP27" \
+    node "$CLI" export-qualified --out "$EXP27_OUT" --now 2026-11-13T12:00:00Z >"$TESTDIR/export27-stdout.json"
+)
+ec27_out=$?
+(
+  umask 0077
+  HOME="$HOME27" AUTOPILOT_QUALIFIED_FILE="$EXP27_ENV" ENGINE_SCORECARD_DIR="$SC27" ENGINE_CAPABILITY_DIR="$CAP27" \
+    node "$CLI" export-qualified --now 2026-11-13T12:00:00Z >/dev/null
+)
+ec27_env=$?
+(
+  umask 0077
+  env -u AUTOPILOT_QUALIFIED_FILE HOME="$HOME27" ENGINE_SCORECARD_DIR="$SC27" ENGINE_CAPABILITY_DIR="$CAP27" \
+    node "$CLI" export-qualified >/dev/null
+)
+ec27_def=$?
+node "$CLI" export-qualified --bogus >/dev/null 2>&1; ec27_bad=$?
+
+check27="$(node - "$EXP27_OUT" "$EXP27_ENV" "$EXP27_DEF" "$TESTDIR/export27-stdout.json" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [outFile, envFile, defFile, stdoutFile] = process.argv.slice(2);
+const rawOut = fs.readFileSync(outFile, 'utf8');
+const rawEnv = fs.readFileSync(envFile, 'utf8');
+const rawDef = fs.readFileSync(defFile, 'utf8');
+const rawStdout = fs.readFileSync(stdoutFile, 'utf8');
+const doc = JSON.parse(rawOut);
+const envDoc = JSON.parse(rawEnv);
+const defDoc = JSON.parse(rawDef);
+
+const modeOk = [outFile, envFile, defFile].every((f) => (fs.statSync(f).mode & 0o777) === 0o644);
+const noTmpLeft = [outFile, envFile, defFile].every((f) => (
+  !fs.readdirSync(path.dirname(f)).some((n) => n.includes('.tmp-'))
+));
+const noExpiry = ![rawOut, rawEnv, rawDef].some((s) => /expir/i.test(s));
+const schemaOk = doc.schema === 'autopilot.qualified/1'
+  && doc.generated_at === '2026-11-13T12:00:00.000Z'
+  && Number.isFinite(Date.parse(defDoc.generated_at))
+  && rawOut === rawStdout
+  && rawOut === rawEnv
+  && JSON.stringify(doc.rows) === JSON.stringify(defDoc.rows);
+
+const expectedKeys = 'date,engine,event_id,result,role,runner';
+const shapeOk = Array.isArray(doc.rows)
+  && doc.rows.length === 6
+  && doc.rows.every((r) => Object.keys(r).sort().join(',') === expectedKeys);
+
+const expected = [
+  { engine: 'grok-4.7', runner: 'grok', role: 'owner', result: 'pass', date: '2026-11-07', event_id: 7 },
+  { engine: 'gpt-6.1-sol', runner: 'codex', role: 'implementer', result: 'pass', date: '2026-11-10', event_id: 3 },
+  { engine: 'MiniMax-M3', runner: 'cc-shim', role: 'reviewer', result: 'fail', date: '2026-11-12', event_id: 5 },
+  { engine: 'claude-opus-5-5-medium', runner: 'agy', role: 'reviewer', result: 'pass', date: '2026-11-13', event_id: 2 },
+  { engine: 'glm-5.3', runner: 'cc-shim', role: 'reviewer', result: 'provisional', date: '2026-11-09', event_id: 6 },
+  { engine: 'gemini-4-carbon-high', runner: 'agy', role: 'verification_author', result: 'pass', date: '2026-11-11', event_id: 4 },
+];
+const rowsOk = JSON.stringify(doc.rows) === JSON.stringify(expected);
+process.stdout.write([modeOk, noTmpLeft, noExpiry, schemaOk, shapeOk, rowsOk].join(':'));
+NODE
+)"
+if [ "$rec27_ok" = "1" ] && [ "$ec27_out" = "0" ] && [ "$ec27_env" = "0" ] && [ "$ec27_def" = "0" ] && [ "$ec27_bad" = "2" ] \
+  && [ "$check27" = "true:true:true:true:true:true" ]; then
+  ok "27: export-qualified emits pass/fail/provisional rows with dates, mode 0644, atomic write, and no expiry"
+else
+  bad "27: rec=$rec27_ok ec=$ec27_out/$ec27_env/$ec27_def/$ec27_bad check=$check27"
+fi
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

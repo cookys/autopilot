@@ -51,6 +51,47 @@ agentic harness. The generic transport contract has fake-server coverage; no liv
 row or local agentic runner is claimed in this release. A `finish_reason=length` reply with no
 content fails closed as `output_budget_exhausted`, the same name as the anthropic-compatible rail.
 
+## Pace-aware engine choice
+
+[`scripts/pace-select.js`](../scripts/pace-select.js) picks a role-qualified non-Claude engine from
+`capacity.pace/1` telemetry (`$AUTOPILOT_PACE_FILE`, default `$HOME/projects/capacity/out/pace.v1.json`),
+and [`scripts/dispatch-hetero.sh`](../scripts/dispatch-hetero.sh) exposes it via `--pace-role <role>`:
+
+```bash
+# Standalone selector (exit 0 = chosen, 2 = usage/schema error, 3 = pace_unknown)
+node scripts/pace-select.js --role implementer [--qualified ~/.autopilot/qualified.v1.json] --json
+
+# Dispatch rail (only when --runner is NOT passed; explicit --runner always wins)
+scripts/dispatch-hetero.sh --pace-role implementer --branch feat/x --prompt-file brief.md
+```
+
+- **Pool + qualification map**: merges [`scripts/lib/noncq-pools.json`](../scripts/lib/noncq-pools.json)
+  with `pools` in [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) (which maps `class: "scarce"`
+  rows such as `codex A` / `codex B` that `noncq` drain intentionally skips). Role eligibility for `--role`
+  (`reviewer` | `implementer` | `author`, minus `--exclude`) comes from `autopilot.qualified/1` (`--qualified <path>`
+  or `$AUTOPILOT_QUALIFIED_FILE`, default `$HOME/.autopilot/qualified.v1.json`, exported by
+  `node scripts/engine-scorecard.js export-qualified`) when that file exists: an engine key is eligible when some row
+  with `result` `"pass"` or `"provisional"` matches its pool `runner` and `model` (`"qualified_source": "<path>"`).
+  When the file is missing, `pace-select.js` falls back to the role lists in
+  [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) and sets `"qualified_source": "pace-roles.json"`.
+  It never considers `class: "claude"` rows, and probes any candidate pool carrying `"endpoint"` via
+  `scripts/resolve-endpoint.sh <endpoint>` (an unconfigured endpoint is listed in `candidates` as
+  `{engine, reason: "endpoint_not_ready"}` and never chosen).
+- **Linear-pace slack (`slack = expected_pct - used_pct`)**: positive slack means the pool is behind linear
+  pace (spare capacity before reset); negative slack means it is ahead of pace. Alias pools sharing one engine
+  key merge by their largest fresh slack.
+- **The `-10` rule**: among candidates with `slack >= -10`, the selector picks the largest slack with
+  `over_pace: false`. Only when every known candidate has `slack < -10` does it fall back to the largest
+  (least negative) slack, setting `over_pace: true`.
+- **`unknown != 0`**: via [`scripts/lib/pace-reading.js`](../scripts/lib/pace-reading.js), any row with
+  `stale !== false` or missing/`null`/non-finite `used_pct` or `expected_pct` is `unknown` — never coerced to
+  `0` (an explicit numeric `0` on a `stale: false` row is valid). If no candidate has a fresh reading,
+  `pace-select.js` emits `{engine: null, reason: "pace_unknown", ...}` and exits `3`; `dispatch-hetero.sh --pace-role`
+  refuses with `precondition_failed` (exit `2`) rather than silently defaulting.
+- **Manifest provenance**: when `--pace-role` chooses the runner/model, `dispatch-hetero.sh` records the full
+  selector JSON as `"engine_choice"` in the run's `.manifest.json`; when `--pace-role` is omitted (or `--runner`
+  was supplied), the manifest is unchanged.
+
 ## Context-window gate
 
 [`scripts/check-context-window.js`](../scripts/check-context-window.js) (+ the sourceable wrapper [`scripts/lib/context-window.sh`](../scripts/lib/context-window.sh)) answers one question before anything is spent: **does the input we are about to feed this engine fit its context window?**

@@ -1,0 +1,61 @@
+{
+  "schema": "capacity.pace/1",
+  "generated_at": "2026-11-13T02:00:00Z",
+  "rows": [
+    {
+      "pool": "claude-pool-a",
+      "class": "claude",
+      "status": "ALERT_behind",
+      "stale": false,
+      "used_pct": 5,
+      "expected_pct": 85,
+      "gap_pts": -80,
+      "hours_to_reset": 25.2,
+      "window_h": 168
+    },
+    {
+      "pool": "agy",
+      "class": "other",
+      "status": "WARN_ahead",
+      "stale": false,
+      "used_pct": 65,
+      "expected_pct": 40,
+      "gap_pts": 25,
+      "hours_to_reset": 72,
+      "window_h": 120
+    },
+    {
+      "pool": "grok-cli",
+      "class": "other",
+      "status": "behind_early",
+      "stale": false,
+      "used_pct": 26,
+      "expected_pct": 40,
+      "gap_pts": -14,
+      "hours_to_reset": 100.8,
+      "window_h": 168
+    },
+    {
+      "pool": "glm",
+      "class": "other",
+      "status": "ok",
+      "stale": false,
+      "used_pct": 43,
+      "expected_pct": 40,
+      "gap_pts": 3,
+      "hours_to_reset": 14.4,
+      "window_h": 24
+    },
+    {
+      "pool": "agyclaude(alias 2)",
+      "class": "other",
+      "status": "ok+stale",
+      "stale": true,
+      "used_pct": 10,
+      "expected_pct": 80,
+      "gap_pts": -70,
+      "hours_to_reset": 7.2,
+      "window_h": 36
+    }
+  ]
+}

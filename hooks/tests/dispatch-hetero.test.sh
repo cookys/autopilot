@@ -2770,4 +2770,78 @@ assert_eq "2" "$EXIT" "hetero cc-shim invalid --effort ultra exits 2"
 assert_contains "$OUT" "precondition_failed" "hetero cc-shim invalid effort is a precondition failure"
 assert_file_absent "$HETERO_CC_ARGV" "hetero cc-shim invalid effort never launched claude"
 
+# --- --pace-role: pace-aware engine selection & manifest engine_choice ---
+PACE_RUNS_DIR="$TEST_TMP/pace-runs"
+mkdir -p "$PACE_RUNS_DIR"
+chmod 700 "$PACE_RUNS_DIR"
+
+# (1) --pace-role without --runner selects codex from scarce-codex.json and records engine_choice in manifest.
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
+  AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/scarce-codex.json" \
+  AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
+  DISPATCH_QUIET=1 \
+  "$SCRIPT" --pace-role implementer --codex-bin "$STUB_CODEX_ARGV" \
+  --run-id pace-codex-pick --branch feat/pace-codex-pick --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-codex.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (--pace-role codex): out=%s err=%s\n' "$OUT" "$(cat "$TEST_TMP/pace-codex.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero --pace-role implementer selects codex and exits 0"
+assert_contains "$OUT" '"runner": "codex"' "hetero --pace-role stdout reports chosen runner codex"
+assert_contains "$OUT" '"model": "gpt-6.1-sol"' "hetero --pace-role stdout reports chosen model gpt-6.1-sol"
+assert_contains "$(tr '\n' ' ' < "$HETERO_CODEX_ARGV")" "--model gpt-6.1-sol " "hetero --pace-role passes chosen model to codex"
+PACE_MF_CHECK="$(node -e '
+  const fs = require("fs");
+  const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const ec = mf.engine_choice;
+  if (!ec || typeof ec !== "object") process.exit(2);
+  const ok = mf.runner === "codex"
+    && mf.model === "gpt-6.1-sol"
+    && ec.engine === "codex"
+    && ec.runner === "codex"
+    && ec.model === "gpt-6.1-sol"
+    && ec.pool === "codex A"
+    && ec.slack_pts === -35
+    && ec.over_pace === true
+    && ec.role === "implementer"
+    && Array.isArray(ec.candidates);
+  process.stdout.write(ok ? "ok" : JSON.stringify(mf));
+' "$PACE_RUNS_DIR/pace-codex-pick.manifest.json")"
+assert_eq "ok" "$PACE_MF_CHECK" "manifest records full selector JSON as engine_choice when --pace-role is used"
+
+# (2) Without --pace-role, manifest has no engine_choice field.
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
+  DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  --run-id pace-absent --branch feat/pace-absent --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-absent.err")"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero without --pace-role exits 0"
+PACE_ABSENT_CHECK="$(node -e '
+  const fs = require("fs");
+  const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(Object.prototype.hasOwnProperty.call(mf, "engine_choice") ? "present" : "absent");
+' "$PACE_RUNS_DIR/pace-absent.manifest.json")"
+assert_eq "absent" "$PACE_ABSENT_CHECK" "manifest omits engine_choice when --pace-role is absent"
+
+# (3) Explicit --runner wins over --pace-role (selector not invoked, manifest omits engine_choice).
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
+  AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
+  DISPATCH_QUIET=1 \
+  "$SCRIPT" --pace-role implementer --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  --run-id pace-explicit-runner --branch feat/pace-explicit-runner --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-explicit.err")"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero explicit --runner overrides --pace-role"
+PACE_EXPLICIT_CHECK="$(node -e '
+  const fs = require("fs");
+  const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(Object.prototype.hasOwnProperty.call(mf, "engine_choice") ? "present" : "absent");
+' "$PACE_RUNS_DIR/pace-explicit-runner.manifest.json")"
+assert_eq "absent" "$PACE_EXPLICIT_CHECK" "manifest omits engine_choice when explicit --runner overrides --pace-role"
+
+# (4) --pace-role fails closed (exit 2, precondition_failed) on pace_unknown (exit 3) with no silent default.
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
+  AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
+  AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
+  DISPATCH_QUIET=1 \
+  "$SCRIPT" --pace-role implementer --agy-bin "$TEST_TMP/nonexistent-agy-bin" \
+  --run-id pace-unknown-fail --branch feat/pace-unknown-fail --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero --pace-role with pace_unknown exits 2 (no silent default)"
+assert_contains "$OUT" '"status": "precondition_failed"' "hetero --pace-role pace_unknown emits precondition_failed"
+assert_contains "$OUT" "pace_unknown" "hetero --pace-role failure message names pace_unknown"
+
 finalize_test

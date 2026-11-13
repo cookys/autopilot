@@ -1252,6 +1252,7 @@ const { grokEffortClamp } = require('./lib/grok-effort');
 
 // Tool-less agent + post-run audit: single owner shared with dispatch-review.sh.
 const accountRail = require('./lib/account-rail');
+const { tokenSeatError } = require('./lib/token-seat');
 const agyContainment = require('./lib/agy-containment');
 const agyStream = require('./lib/agy-stream-json');
 const kimiContainment = require('./lib/kimi-containment');
@@ -1838,6 +1839,14 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     const w = accountRail.wrapClaude(bin, args, { purpose: 'qualify', stdinFile });
     spawnBin = w.command;
     spawnArgs = w.args;
+  }
+  if (kind === 'claude') {
+    const seatErr = tokenSeatError(childEnv);
+    if (seatErr) {
+      if (cloneHome) { try { fs.rmSync(cloneHome, { recursive: true, force: true }); } catch { /* gone */ } }
+      if (accountStdinDir) { try { fs.rmSync(accountStdinDir, { recursive: true, force: true }); } catch { /* gone */ } }
+      throw new Error(seatErr);
+    }
   }
   return new Promise((resolve, reject) => {
     const child = spawn(spawnBin, spawnArgs, {

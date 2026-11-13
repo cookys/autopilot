@@ -34,6 +34,7 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const authStop = require('./lib/auth-stop.js');
 const accountRail = require('./lib/account-rail.js');
+const { tokenSeatError } = require('./lib/token-seat');
 
 const TOOL_CALLS = 20;
 const MARKER_CMD = 'sleep 0.2';
@@ -222,6 +223,12 @@ function cleanEnv(home, configDir) {
 }
 
 function runOnce(ctx, arm, remainingUsd) {
+  const seatErr = tokenSeatError(process.env);
+  if (seatErr) {
+    const err = new Error(seatErr);
+    err.code = 'TOKEN_SEAT_MISSING';
+    throw err;
+  }
   let runDir;
   try {
     runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-latency-run-'));
@@ -264,6 +271,11 @@ function runOnce(ctx, arm, remainingUsd) {
 }
 
 function main() {
+  const seatErr = tokenSeatError(process.env);
+  if (seatErr) {
+    process.stderr.write(`${seatErr}\n`);
+    return 78;
+  }
   const o = parseArgs(process.argv.slice(2));
   const totalRuns = o.samples * ARMS.length;
   if (o.dryRun) {

@@ -68,7 +68,15 @@ function buildEnv(args) {
   const a = args || {};
   const caller = a.callerEnv || {};
   const exists = a.exists || fs.existsSync;
-  if (typeof a.token !== 'string' || a.token.length === 0) throw new EnvError('token_missing');
+  // A declared token seat (lane-token-resume) must hand the parent's
+  // CLAUDE_CODE_OAUTH_TOKEN to the child. An empty parent token refuses even when
+  // the alias file has a token. Ordinary callers keep the alias-file token.
+  const tokenSeat = caller.AUTOPILOT_TOKEN_SEAT === '1';
+  const parentToken = typeof caller.CLAUDE_CODE_OAUTH_TOKEN === 'string' ? caller.CLAUDE_CODE_OAUTH_TOKEN : '';
+  if (tokenSeat && parentToken.length === 0) {
+    throw new EnvError('token_seat_missing', 'AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)');
+  }
+  if (!tokenSeat && (typeof a.token !== 'string' || a.token.length === 0)) throw new EnvError('token_missing');
   const loc = a.locators || {};
   const realHome = mustBeAbsolute('realHome', a.realHome);
   const homeDir = mustBeAbsolute('homeDir', a.homeDir);
@@ -89,7 +97,12 @@ function buildEnv(args) {
   const ghDir = path.join(realHome, '.config', 'gh');
   if (exists(ghDir)) env.GH_CONFIG_DIR = ghDir;
 
-  env.CLAUDE_CODE_OAUTH_TOKEN = a.token;
+  if (tokenSeat) {
+    env.CLAUDE_CODE_OAUTH_TOKEN = parentToken;
+    env.AUTOPILOT_TOKEN_SEAT = '1';
+  } else {
+    env.CLAUDE_CODE_OAUTH_TOKEN = a.token;
+  }
   env.CLAUDE_CONFIG_DIR = configDir;
   env.HOME = homeDir;
   env.AUTOPILOT_ACCOUNT = a.alias;

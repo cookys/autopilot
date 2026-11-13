@@ -27,7 +27,12 @@ _EA_LIB="$AUTOPILOT_DIR/scripts/lib/eval-account.sh"
 . "$_EA_LIB"
 eval_account_probe skill-opt || exit $?
 
-if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
+if [[ "${AUTOPILOT_TOKEN_SEAT:-}" == 1 ]]; then
+  if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    printf '%s\n' 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)' >&2
+    exit 78
+  fi
+elif [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
 # Extract OAuth token
 if [[ ! -f "$CRED_FILE" ]]; then
   echo "ERROR: $CRED_FILE not found. Are you logged into Claude Code?" >&2
@@ -77,7 +82,7 @@ echo "Skill: $SKILL_PATH" >&2
 echo "Results: $RESULTS_DIR" >&2
 echo "" >&2
 
-if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
+if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 && "${AUTOPILOT_TOKEN_SEAT:-}" != 1 ]]; then
   export ANTHROPIC_API_KEY="$TOKEN"
 fi
 
@@ -99,6 +104,10 @@ trap 'rm -rf "$WRAPPER_DIR"' EXIT
 mkdir -p "$WRAPPER_DIR"
 cat > "$WRAPPER_DIR/claude" <<'EOF'
 #!/usr/bin/env bash
+if [ "${AUTOPILOT_TOKEN_SEAT:-}" = 1 ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  printf '%s\n' 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)' >&2
+  exit 78
+fi
 WRAPPER_DIR=$(cd "$(dirname "$0")" && pwd -P)
 # -ef compares inodes: a TMPDIR with a trailing slash or a symlink makes the PATH spelling differ from pwd, and a string compare would find this wrapper as the "real" claude and exec itself forever
 REAL_CLAUDE=""
@@ -144,9 +153,14 @@ _orig = imp.improve_description
 _cred_file = os.path.expanduser('~/.claude/.credentials.json')
 # Under claude-account.js exec (AUTOPILOT_ACCOUNT set) the token is the alias token in this process env; no credentials file is read
 # and ANTHROPIC_API_KEY is not exported (the claude children must authenticate with the OAuth token, not with an API-key variable).
-_acct = bool(os.environ.get('AUTOPILOT_ACCOUNT'))
+# A declared token seat uses the same env token and never opens the host credentials file.
+_seat = os.environ.get('AUTOPILOT_TOKEN_SEAT') == '1'
+_acct = bool(os.environ.get('AUTOPILOT_ACCOUNT')) or _seat
 
 def _patched(*args, **kwargs):
+    if _seat and not os.environ.get('CLAUDE_CODE_OAUTH_TOKEN'):
+        sys.stderr.write('token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)\n')
+        sys.exit(78)
     if _acct:
         token = os.environ['CLAUDE_CODE_OAUTH_TOKEN']
     else:

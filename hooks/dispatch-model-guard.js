@@ -34,7 +34,17 @@
 
 const fs = require('fs');
 const path = require('path');
-const { headerDenialSuffix, missingCostLine, costLineFor } = require('./lib/brief-header-template.js');
+const {
+  BRIEF_HEADER_TEMPLATE,
+  hasBriefLane,
+  briefSizeFromHead,
+  hasValidUsedBy,
+  hasStagesHeader,
+  stagesLineForSize,
+  headerDenialSuffix,
+  missingCostLine,
+  costLineFor,
+} = require('./lib/brief-header-template.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). The 2026-09-04 cuda quota digest:
 // subagents inherited the session's [1m] Fable model because nothing asked.
@@ -77,6 +87,7 @@ const DEFAULTS = {
   on_missing_model: 'deny', // v2.36.2: was 'ask' — see the comment at the missing-model branch
   require_engine_header: 'on',
   require_cost_line: 'on',
+  brief_size_used_by: 'warn', // D8b: warn by default; deny only after the PM flips it
   mode: 'remind', // v2.36.9: was 'ask' — remind the agent, never open a dialog
 };
 
@@ -154,6 +165,13 @@ function loadConfig(cwd) {
     requireCostLine = (v === 'on' || v === 'off') ? v : 'on';
   }
 
+  // brief_size_used_by: warn | deny; default warn (deny only after the PM flips it)
+  let briefSizeUsedBy = DEFAULTS.brief_size_used_by;
+  if (Object.prototype.hasOwnProperty.call(parsed, 'brief_size_used_by')) {
+    const v = String(parsed.brief_size_used_by || '').trim().toLowerCase();
+    briefSizeUsedBy = (v === 'warn' || v === 'deny') ? v : 'warn';
+  }
+
   // mode: remind | ask | warn | off; garbage → remind (fail-closed, no dialog)
   let mode = DEFAULTS.mode;
   if (Object.prototype.hasOwnProperty.call(parsed, 'mode')) {
@@ -167,6 +185,7 @@ function loadConfig(cwd) {
     on_missing_model: onMissing,
     require_engine_header: requireEngineHeader,
     require_cost_line: requireCostLine,
+    brief_size_used_by: briefSizeUsedBy,
     mode,
   };
 }
@@ -199,7 +218,7 @@ function emitDeny(reason) {
 // `Engine: fable (intentional: plan-mode critique needs the strongest reader)`.
 const INTENTIONAL_RE = /\(intentional\b[^)]*\)/i;
 
-function handleGuard(reason, mode, { acknowledged = false } = {}) {
+function handleGuard(reason, mode, { acknowledged = false, onAllow = null } = {}) {
   if (mode === 'warn') {
     process.stderr.write(reason + '\n');
     process.stdout.write(`${JSON.stringify({
@@ -219,6 +238,7 @@ function handleGuard(reason, mode, { acknowledged = false } = {}) {
   // re-dispatches spelled out.
   if (acknowledged) {
     process.stderr.write(reason + ' — acknowledged as intentional, allowing\n');
+    if (typeof onAllow === 'function') onAllow();
     process.exit(0);
   }
   emitDeny(
@@ -270,6 +290,38 @@ function handleDeny(reason, mode) {
   emitDeny(reason);
 }
 
+// Autopilot dispatch briefs (Lane: present in the first 5 lines) must carry
+// `Size: XS|S|M|L|XL` and `Used-by: user|e2e|n/a <reason>` in the head lines,
+// gated behind `brief_size_used_by: warn|deny` (default `warn`).
+// PreToolUse hooks cannot rewrite tool_input.prompt; when `Stages:` is absent
+// and `Size:` is present, do not deny — emit the computed `Stages: <list>` line
+// in the allow-path additionalContext so the dispatcher can paste it.
+function checkBriefSizeUsedByStages(config, prompt, advisories) {
+  if (!hasBriefLane(prompt)) return;
+  const size = briefSizeFromHead(prompt);
+  const usedByOk = hasValidUsedBy(prompt);
+  const missing = [];
+  if (!size) missing.push('Size: XS|S|M|L|XL');
+  if (!usedByOk) missing.push('Used-by: user|e2e|n/a <reason>');
+  if (missing.length > 0) {
+    const reason = 'dispatch-model-guard: brief_size_used_by: autopilot brief (Lane: present) is missing '
+      + missing.join(' and ') + '.\n' + BRIEF_HEADER_TEMPLATE;
+    if (config.brief_size_used_by === 'deny') {
+      handleDeny(reason, config.mode);
+    } else {
+      advisories.push(reason);
+    }
+  }
+  if (size && !hasStagesHeader(prompt)) {
+    const stagesLine = stagesLineForSize(size);
+    if (stagesLine) {
+      advisories.push(
+        `dispatch-model-guard: Stages: absent for Size: ${size} — paste into brief header:\n${stagesLine}`,
+      );
+    }
+  }
+}
+
 try {
   let input;
   try {
@@ -306,12 +358,15 @@ try {
   }
 
   const toolInput = input.tool_input || {};
+  const advisories = [];
   const briefWarning = briefLintWarning(typeof toolInput.prompt === 'string' ? toolInput.prompt : '');
-  // Advisory exit: the dispatch proceeds; the warning rides additionalContext (and stderr).
+  if (briefWarning) advisories.push(briefWarning);
+  // Advisory exit: the dispatch proceeds; warnings/hints ride additionalContext (and stderr).
   const exitAllow = () => {
-    if (briefWarning) {
-      process.stderr.write(briefWarning + '\n');
-      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: briefWarning } })}\n`);
+    if (advisories.length > 0) {
+      const msg = advisories.join('\n');
+      process.stderr.write(msg + '\n');
+      process.stdout.write(`${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: msg } })}\n`);
     }
     process.exit(0);
   };
@@ -330,6 +385,7 @@ try {
     const engineTok = engineTokenFromPrompt(promptAbsent);
     denyIfMissingCostLine(config, promptAbsent, engineTok);
     if (config.on_missing_model === 'allow') {
+      checkBriefSizeUsedByStages(config, promptAbsent, advisories);
       exitAllow();
     }
     // v2.36.2: default is DENY, not ask. A missing model: is never a judgment for the
@@ -386,6 +442,9 @@ try {
   // `(intentional: …)` does not skip it: handleGuard's allow path is below.
   denyIfMissingCostLine(config, promptRaw, modelRaw);
 
+  // Size / Used-by / Stages check for autopilot briefs (Lane: present).
+  checkBriefSizeUsedByStages(config, promptRaw, advisories);
+
   // guarded models check
   const isPlan = toolInput.mode === 'plan';
   const effectiveGuarded = isPlan
@@ -400,7 +459,7 @@ try {
     handleGuard(
       `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine`,
       config.mode,
-      { acknowledged },
+      { acknowledged, onAllow: exitAllow },
     );
   }
   exitAllow();

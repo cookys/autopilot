@@ -46,7 +46,8 @@ function readWatchInputs({ env, key, identity, root, nowMs, liveBase, autopilotH
     },
     sources,
     signature: JSON.stringify({
-      planned: planned ? planned.sha256 : null, decision: decision ? `${decision.sha256}:${decision.value.map((d) => `${Math.floor(d.age_s / 86400)}${d.orphaned ? 'o' : ''}`).join(',')}` : null, compare: cmp.signature,
+      // due_state is folded in so a dated card that becomes due re-renders the page (float-up) though the file did not change; '' for an ordinary card.
+      planned: planned ? planned.sha256 : null, decision: decision ? `${decision.sha256}:${decision.value.map((d) => `${Math.floor(d.age_s / 86400)}${d.orphaned ? 'o' : ''}${d.due_state === 'due' ? 'D' : d.due_state === 'not_due' ? 'N' : ''}`).join(',')}` : null, compare: cmp.signature,
       stage: markerStage ? `${markerStage.stage}@${markerStage.stage_set_at}|${markerStage.size}${markerStage.urgent ? '!' : ''}|${markerStage.level}|${markerStage.unit ? `${markerStage.unit.index}/${markerStage.unit.total}` : ''}|${markerStage.review_families.length}` : null,
       task_phase: taskPhase ? `${taskPhase.session_id}#${taskPhase.id}:${taskPhase.subject}` : null, manifest: sha(manifestText),
     }),

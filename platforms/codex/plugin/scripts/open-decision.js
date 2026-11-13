@@ -10,12 +10,14 @@
  *                                       [--title <short card title, <= 20 characters>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
  *   node scripts/open-decision.js open ... --executor <address> [--asker <address>]  (--executor is REQUIRED: who carries out the answer; the PM's own cards name the PM; --asker: who asked)
+ *   node scripts/open-decision.js open ... [--due <ISO time | +N(m|h|d|w), e.g. +4h, +1d>] [--kind decide|go|remind]   (dated card / reminder: see "Dated cards" below)
+ *   node scripts/open-decision.js due-sweep [--cwd <dir>]   (prints `DUE <id> <title>` once per card that became due since the last sweep; exit 0)
  *   node scripts/open-decision.js redeliver [--id <id>] [--cwd <dir>]   (resend the panel answer of every pending_dispatch card the program parked, see "Panel answer delivery")
  *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn; the card is KEPT, status closed)
  *   node scripts/open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]
  *                                       (with an executor: prints the dispatch JSON and parks the card in pending_dispatch; nothing is sent)
  *   node scripts/open-decision.js close --id <id> --dispatched <task_id>   (pending_dispatch -> closed, once the caller really dispatched)
- *   node scripts/open-decision.js done  --id <id>      (ends awaiting_operator_action: the operator's own step is done)
+ *   node scripts/open-decision.js done  --id <id>      (ends awaiting_operator_action: the operator's own step is done; on an open --kind remind card: the reminder is done)
  *   node scripts/open-decision.js show  [--root-run-id <id>] [--all] [--json] [--cwd <dir>]    (lists every live card: open questions, awaiting_operator_action, pending_dispatch; --all: closed ones too)
  *   node scripts/open-decision.js show  --id <id> [--json]     (ONE card, closed or not)      list = show without --id
  *   node scripts/open-decision.js backfill --from <file.jsonl> [--apply]   (dry run unless --apply)
@@ -43,8 +45,20 @@
  * the session do alone (autonomous / logged) is refused: exit 3, decide it yourself. Plain sessions only need a known boundary.
  * If resolve-doa cannot be run, the DOA-independent boundaries (irreversible + the Board rows, `escalate` in every preset) are
  * still accepted with a stderr warning, and the other classes are refused (a gate that cannot verify must not wave them through).
- * --kind <decide|go> (optional): the card's kind, stored as `kind` on the entry (same names as fleet's DecisionKind). Absent = unspecified;
- * entries without it read as before. Any other value -> exit 7, nothing is written.
+ * --kind <decide|go|remind> (optional): the card's kind, stored as `kind` on the entry (decide|go: same names as fleet's DecisionKind). Absent = an ordinary
+ * decision card (the 'decision' default is NOT written: entries without `kind` read as before). Any other value -> exit 7, nothing is written.
+ * Dated cards (PM 01M78866 item c). Stored fields: `due_at` (ISO UTC; set by `open --due`, absent = no date) and `kind` ('remind' for a reminder;
+ * absent = 'decision'). --due takes an ISO date/time (no offset = local time) or +N followed by m|h|d|w (from now); anything else -> exit 2, nothing written.
+ * A card whose due_at is still in the future is "not yet due": `show` lists it LAST, marks it "due <local time>" and leaves it out of the pending count
+ * (it is counted on its own line, `not yet due: N`); once due_at has passed it is listed FIRST, marked "due now", and counted. The one judgement is
+ * src/status/scope-key.js dueState(card, now) -> 'none' | 'not_due' | 'due' (decision-input.js and the pane use the same function).
+ * --kind remind: a reminder, not a question. It takes no --option and no --free-text (either -> exit 2) and is answered with `done --id <id>`
+ * (closed, answer "done"). --not-authorized and --executor are still required, like every card.
+ * due-sweep: reads every scope file of the project, and for each live card that is due and has not fired for its current due_at, prints ONE line
+ * `DUE <id> <title>` (title = the card title, see cardTitle in src/status/decision-input.js) and records it in
+ * <decisions dir>/<project_key>.due-sweep.state (schema autopilot.due-sweep/1, { fired: { <id>: <due_at> } }; under a lock), so each card fires once
+ * per due_at (a re-dated card fires again; closed cards are pruned). Nothing due -> no output, nothing written. The runs watcher calls the same
+ * dueSweep() on every tick (src/status/runs-watch.js) and writes the lines to its log; whichever sweeps first fires the card. No daemon, no timer.
  * close [--option <label> | --free-text <text>] (F4 claim-before-act): when the owner's answer is given, close first runs `fleet decision claim` for
  * the card (scripts/lib/fleet-decision.js). Already answered on the console (claim exit 3) -> the printed console answer is what to act on, and the
  * card is closed; courier unreachable (exit 9) -> retried a bounded number of times, then exit 8 and the card stays open. A host with no fleet
@@ -59,7 +73,8 @@
  * absent = open), answer (the answer text), closed_at (ISO UTC, set when status becomes closed), answered_at (set on awaiting_operator_action),
  * pending_dispatch_at (ISO UTC, set when status becomes pending_dispatch: patrol's "answered but not dispatched for 30 minutes" reads status + this),
  * dispatched_task_id (set by close --dispatched), executor and asker (fleet addresses, set at `open --executor/--asker` or at close),
- * awaiting_operator (the step the operator must do), backfilled (true on a record made by backfill). Field list: this comment and
+ * awaiting_operator (the step the operator must do), backfilled (true on a record made by backfill), kind (decide | go | remind; absent = decision),
+ * due_at (ISO UTC; absent = no date; see "Dated cards"). Field list: this comment and
  * references/review-page.md (decisions); schemas/decision.schema.json validates them.
  * Panel answer delivery (PM 01M6ZXJYTQ, 2026-11-09; overrides the earlier PM ruling 01M6RV0Y02 "open-decision never sends"): when the hook verifies an operator answer
  * from the live panel and the card has an executor, PROGRAM code (hooks/advisory-relay.js -> deliverAnswer here, no model) parks the card in pending_dispatch with the
@@ -100,7 +115,7 @@
  *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
  * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure, or a non-PM team session refused by the role gate (nothing written) |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
- *       7 open refused: --kind is not decide|go (nothing is written) |
+ *       7 open refused: --kind is not decide|go|remind (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
  *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
  *       Library callers (openDecision) are unaffected: only the CLI `open` ensures and reports. AUTOPILOT_RUNS_WATCH_AUTOSTART=0 skips the ensure (the hook's own switch).
@@ -112,7 +127,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { scopeFromCwd } = require('../src/status/project-key');
-const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, cardState, pickCards, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry } = require('../src/status/scope-key');
+const { scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, cardState, pickCards, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, dueState, dueRank } = require('../src/status/scope-key');
 const { withWriteLock } = require('./lib/jsonl-store');
 
 const SCHEMA = 'autopilot.decision/2';
@@ -122,7 +137,7 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
   process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
-    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id>\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       (open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters>)\n');
+    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js done --id <id>\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)> --kind <decide|go|remind>; a remind card takes no --option/--free-text)\n');
   return 2;
 }
 
@@ -342,13 +357,23 @@ function parseOptions(raw) {
   });
 }
 
-function showText(entries, { all = false } = {}) {
+function showText(entries, { all = false, nowMs = Date.now() } = {}) {
   const n = (st) => entries.filter((e) => cardState(e) === st).length;
-  // "open decisions" counts the pending questions only; awaiting_operator_action / pending_dispatch / closed cards are counted apart, never as 待決
-  const out = [all ? `decisions: ${entries.length}` : `open decisions: ${n('open')}`];
+  // "open decisions" counts the pending questions only; awaiting_operator_action / pending_dispatch / closed cards are counted apart, never as 待決.
+  // A dated card that is not yet due (dueState 'not_due') is not pending either: it is counted on its own line.
+  const live = (e) => !isClosedEntry(e);
+  const pending = entries.filter((e) => cardState(e) === 'open' && dueState(e, nowMs) !== 'not_due').length;
+  const notDue = entries.filter((e) => live(e) && dueState(e, nowMs) === 'not_due').length;
+  const out = [all ? `decisions: ${entries.length}` : `open decisions: ${pending}`];
   for (const st of ['awaiting_operator_action', 'pending_dispatch', ...(all ? ['closed'] : [])]) if (n(st)) out.push(`${st}: ${n(st)}`);
+  if (notDue) out.push(`not yet due: ${notDue}`);
   entries.forEach((e, i) => {
     out.push('', `[${i + 1}] ${e.id}  ${e.question}`);
+    const ds = live(e) ? dueState(e, nowMs) : 'none';
+    if (ds === 'due') out.push(`    due now (due_at ${e.due_at})`);
+    else if (ds === 'not_due') out.push(`    due ${localTime(e.due_at)} (not yet due)`);
+    else if (e.due_at) out.push(`    due_at: ${e.due_at}`);
+    if (e.kind === 'remind' && cardState(e) === 'open') out.push(`    reminder: answer with \`done --id ${e.id}\``);
     if (e.title) out.push(`    title: ${e.title}`);
     if (e.status && e.status !== 'open') out.push(`    status: ${e.status}`);
     if (e.awaiting_operator) out.push(`    awaiting_operator: ${e.awaiting_operator}`);
@@ -374,7 +399,7 @@ function showText(entries, { all = false } = {}) {
 
 // --target is lifted out before parse(): the flag set of parse() is pinned byte-for-byte by the frozen ask stub of the
 // d0gate-v2 evaluation (hooks/tests/skill-onoff-d0gate-v2.test.sh), which must not change.
-const KINDS = ['decide', 'go'];
+const KINDS = ['decide', 'go', 'remind'];
 const TITLE_MAX = 20; // code points (Array.from), same unit as cardTitle
 // --kind is lifted out the same way (same frozen-stub reason): { rest, kind } | { error }.
 function takeKind(argv) {
@@ -382,6 +407,36 @@ function takeKind(argv) {
   if (i < 0) return { rest: argv };
   if (i + 1 >= argv.length) return { error: '--kind needs a value' };
   return { rest: [...argv.slice(0, i), ...argv.slice(i + 2)], kind: argv[i + 1] };
+}
+
+// --due is lifted out the same way (frozen-stub reason): { rest, due } | { error }.
+function takeDue(argv) {
+  const i = argv.indexOf('--due');
+  if (i < 0) return { rest: argv };
+  if (i + 1 >= argv.length) return { error: '--due needs a value (ISO time, or +N followed by m|h|d|w)' };
+  return { rest: [...argv.slice(0, i), ...argv.slice(i + 2)], due: argv[i + 1] };
+}
+
+// --due value -> epoch ms, or null when it is neither +N(m|h|d|w) nor an ISO date / date-time (no offset = local time, Date.parse's rule).
+const DUE_REL = /^\+(\d{1,6})([mhdw])$/;
+const DUE_ISO = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})?)?$/;
+const DUE_UNIT_MS = { m: 60000, h: 3600000, d: 86400000, w: 604800000 };
+function parseDue(raw, nowMs) {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  const rel = DUE_REL.exec(s);
+  if (rel) return nowMs + Number(rel[1]) * DUE_UNIT_MS[rel[2]];
+  if (!DUE_ISO.test(s)) return null;
+  const ms = Date.parse(s);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// ISO -> "YYYY-MM-DD HH:MM +hh:mm" in this host's local time (the `show` marker of a card that is not yet due).
+function localTime(iso) {
+  const d = new Date(Date.parse(iso));
+  if (!Number.isFinite(d.getTime())) return String(iso);
+  const p = (x) => String(x).padStart(2, '0');
+  const off = -d.getTimezoneOffset();
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} ${off >= 0 ? '+' : '-'}${p(Math.floor(Math.abs(off) / 60))}:${p(Math.abs(off) % 60)}`;
 }
 
 // close only: `--free-text <text>` takes a value there (on `open` it is a bare switch, so parse() must keep seeing it unchanged).
@@ -487,7 +542,9 @@ function sessionForNotice() {
 }
 
 function main(argv) {
-  const kk = takeKind(argv);
+  const kd = takeDue(argv);
+  if (kd.error) return usage(kd.error);
+  const kk = takeKind(kd.rest);
   if (kk.error) return usage(kk.error);
   const ft = takeFreeText(kk.rest);
   if (ft.error) return usage(ft.error);
@@ -502,8 +559,9 @@ function main(argv) {
   if (args.error) return usage(args.error);
   if (tk.target !== undefined) args.target = tk.target;
   const cmd = args._[0];
+  if (kd.due !== undefined && cmd !== 'open') return usage('--due is an `open` argument');
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
-  if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
+  if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver', 'due-sweep'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);
   if (root && (!SAFE_ROOT.test(root) || root === '.' || root === '..')) return usage('--root-run-id must match [A-Za-z0-9._-]+');
@@ -524,11 +582,25 @@ function main(argv) {
       return 0;
     }
     const all = ex.all === true;
+    const nowMs = Date.now();
+    // Oldest first, except dated cards: due ones float to the top, not-yet-due ones sink to the bottom (scope-key.js dueRank / dueState).
     const entries = pickCards(projectScopeFiles(args.cwd, { all: true }).flatMap((file) => readFile(file, { all: true }).map((e) => ({ file, e })))).map((w) => w.e)
       .filter((e) => (all ? true : !isClosedEntry(e)))
-      .sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0));
+      .sort((a, b) => dueRank(a, nowMs) - dueRank(b, nowMs) || (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0));
     if (entries.length === 0) { if (!args.json) process.stdout.write(all ? 'no decision\n' : 'no open decision\n'); return 1; }
-    process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries, { all }));
+    process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries, { all, nowMs }));
+    return 0;
+  }
+  if (cmd === 'due-sweep') {
+    const badS = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched', 'all', 'title']);
+    if (badS) return usage(`--${badS} is not a due-sweep argument`);
+    if (args.id !== undefined) return usage('due-sweep takes no --id');
+    try {
+      for (const d of dueSweep({ dir: sf.dir, projectKey: sf.scope.project_key, identity: sf.scope.repo_identity, nowMs: Date.now() })) process.stdout.write(`DUE ${d.id} ${d.title}\n`);
+    } catch (error) {
+      process.stderr.write(`open-decision: due-sweep failed: ${error.message}\n`);
+      return 4;
+    }
     return 0;
   }
   if (cmd === 'done') {
@@ -536,6 +608,15 @@ function main(argv) {
     const hit = findCard(args.cwd, args.id, { all: true });
     if (!hit) { process.stdout.write(`no such decision: ${args.id}\n`); return 1; }
     if (isClosedEntry(hit.entry)) { process.stdout.write(`already closed: ${args.id}\n`); return 0; }
+    if (isOpenEntry(hit.entry) && hit.entry.kind === 'remind') { // a reminder is answered with `done`
+      const isRemind = (e) => isOpenEntry(e) && e.kind === 'remind';
+      const rr = patchDecision(hit.file, args.id, { status: 'closed', closed_at: new Date().toISOString(), answer: 'done' }, { isOurs: isRemind });
+      if (rr.status === 'error') { process.stderr.write(`open-decision: ${rr.message}\n`); return 4; }
+      if (rr.status === 'absent') return usage(`${args.id} changed state meanwhile; run show --id ${args.id}`);
+      notifyPm('close', { card_id: args.id, question: rr.entry.question, state: 'closed' });
+      process.stdout.write(`closed ${args.id} (reminder done)\n`);
+      return 0;
+    }
     if (!isAwaitingEntry(hit.entry)) return usage(`${args.id} is open, not awaiting_operator_action; \`done\` only ends that state (answer the card with \`close --answer\`)`);
     if (isPendingDispatchEntry(hit.entry)) return usage(`${args.id} is pending_dispatch, not awaiting_operator_action; dispatch it, then \`close --id ${args.id} --dispatched <task_id>\``);
     const r = patchDecision(hit.file, args.id, { status: 'closed', closed_at: new Date().toISOString() }, { any: true, isOurs: isAwaitingEntry });
@@ -598,10 +679,21 @@ function main(argv) {
 
   // open
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
-  if (args['free-text'] && args.option.length) return usage('--free-text and --option are mutually exclusive: a free-text card has no options');
-  if (args.option.length === 1) return usage('--option needs at least two options');
-  if (!args.option.length && !args['free-text']) return usage('a decision card needs at least two --option <label>::<description>; for a question answered in typed text pass --free-text');
+  const remind = args.kind === 'remind';
+  if (remind) {
+    if (args.option.length || args['free-text']) return usage('a --kind remind card is a reminder, not a question: no --option and no --free-text (it is answered with `done --id <id>`)');
+  } else {
+    if (args['free-text'] && args.option.length) return usage('--free-text and --option are mutually exclusive: a free-text card has no options');
+    if (args.option.length === 1) return usage('--option needs at least two options');
+    if (!args.option.length && !args['free-text']) return usage('a decision card needs at least two --option <label>::<description>; for a question answered in typed text pass --free-text; a reminder passes --kind remind');
+  }
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
+  let dueAt = null;
+  if (kd.due !== undefined) {
+    const ms = parseDue(kd.due, Date.now());
+    if (ms === null) return usage(`--due "${kd.due}" is neither an ISO date/time (e.g. 2026-11-14T09:00:00Z) nor +N followed by m|h|d|w (e.g. +4h, +1d); nothing written`);
+    dueAt = new Date(ms).toISOString();
+  }
   const bad = ['answer', 'awaiting-operator', 'from', 'all', 'apply', 'dispatched'].find((n) => ex[n] !== undefined);
   if (bad) return usage(`--${bad} is not an open argument`);
   if (ex.executor === undefined) return usage('open needs --executor <address> (namespace/courier/member): the program delivers the operator\'s answer to it; a card the PM handles itself names the PM address');
@@ -624,7 +716,7 @@ function main(argv) {
   if (routed && routed.code === 4) { process.stderr.write(`open-decision: ${routed.message}\n`); return 4; }
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
-    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker, title: ex.title,
+    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
     from_request: ex['from-request'],
   });
   if (r.status === 'ok' && args.cwd === undefined) {
@@ -684,7 +776,7 @@ function roleGate({ not_authorized, origin } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker, title, from_request }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker, title, from_request, due_at }) {
   const routed = roleGate({ not_authorized, origin });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
@@ -703,6 +795,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
   if (text(from_request)) entry.from_request = from_request.trim();
   if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
+  if (typeof due_at === 'string' && Number.isFinite(Date.parse(due_at))) entry.due_at = new Date(Date.parse(due_at)).toISOString(); // additive: absent = no date (dueState 'none')
   if (origin) entry.origin = origin;
   if (turn_tracked === true) entry.turn_tracked = true; // the asker's turn file existed at open time (hooks/ask-decision.js): only then is its absence later evidence the session ended
   try {
@@ -714,6 +807,52 @@ function openDecision({ cwd, root, session, question, background, options, recom
   } catch (error) {
     return { status: 'error', message: error.message };
   }
+}
+
+// ---- due-sweep (PM 01M78866 item c; header "Dated cards") ----
+// The cards of one project (every scope file in `dir`, bound by readScopeFile, one record per id via pickCards) that are live and due at nowMs
+// and have not fired for their current due_at. Each is recorded in <dir>/<projectKey>.due-sweep.state under a lock, so it fires once.
+// -> [{ id, title, due_at }] (oldest due_at first). Nothing due -> [] and nothing is written (no dir, no lock file). Throws on a lock/write failure.
+// Shared by the `due-sweep` CLI and the runs watcher's tick (src/status/runs-watch.js); Node built-ins only.
+const DUE_SWEEP_SCHEMA = 'autopilot.due-sweep/1';
+const dueSweepFile = (dir, projectKey) => path.join(dir, `${projectKey}.due-sweep.state`); // not *.json: never mistaken for a scope file
+function dueSweep({ dir, projectKey, identity, nowMs = Date.now() }) {
+  if (!dir || !projectKey) return [];
+  const items = [];
+  for (const file of listScopeFiles(dir, projectKey)) {
+    const sf = readScopeFile(file, { schema: SCHEMA, projectKey, identity });
+    if (sf) for (const e of sf.value.decisions) if (validEntry(e)) items.push({ file, e });
+  }
+  const live = pickCards(items).map((w) => w.e).filter((e) => !isClosedEntry(e));
+  const due = live.filter((e) => dueState(e, nowMs) === 'due')
+    .sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at) || (a.id < b.id ? -1 : 1));
+  if (due.length === 0) return [];
+  const stateFile = dueSweepFile(dir, projectKey);
+  const { cardTitle } = require('../src/status/decision-input');
+  return withWriteLock({ storeDir: dir, lockFile: `${stateFile}.lock`, name: path.basename(stateFile), timeoutMs: 3000 }, () => {
+    let fired = {};
+    try {
+      const v = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+      if (v && v.schema === DUE_SWEEP_SCHEMA && v.fired && typeof v.fired === 'object' && !Array.isArray(v.fired)) fired = v.fired;
+    } catch (_error) { /* no state yet (or unreadable): nothing has fired */ }
+    const liveIds = new Set(live.map((e) => e.id));
+    const next = {};
+    for (const [id, at] of Object.entries(fired)) if (liveIds.has(id)) next[id] = at; // a closed / vanished card is forgotten
+    const out = [];
+    for (const e of due) {
+      const at = new Date(Date.parse(e.due_at)).toISOString();
+      if (next[e.id] === at) continue; // already fired for this due_at
+      next[e.id] = at;
+      out.push({ id: e.id, title: String(cardTitle(e)).replace(/[\r\n\t]+/g, ' '), due_at: at });
+    }
+    const changed = out.length > 0 || Object.keys(next).length !== Object.keys(fired).length;
+    if (changed) {
+      const tmp = `${stateFile}.tmp-${process.pid}`;
+      fs.writeFileSync(tmp, `${JSON.stringify({ schema: DUE_SWEEP_SCHEMA, project_key: projectKey, last_sweep_at: new Date(nowMs).toISOString(), fired: next }, null, 2)}\n`, { mode: 0o600 });
+      fs.renameSync(tmp, stateFile);
+    }
+    return out;
+  });
 }
 
 // Apply `patch` to the entry `id` of the scope `file` under the same lock. Only an OPEN question matches (`any: true`: a card in any state);
@@ -1060,4 +1199,4 @@ function backfill(args, sf, root) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, deliverAnswer, parkAnswer, parkUndelivered, sendParked, receiptLine, redeliver, recordCorrection, patchDecision, findCard, projectScopeFiles, unboundCardsOf, readEntries: readFile, dueSweep, parseDue, SAFE_ROOT, SCHEMA };

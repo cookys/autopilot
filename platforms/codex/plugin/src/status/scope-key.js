@@ -78,6 +78,26 @@ function isAwaitingEntry(e) {
   return !!e && typeof e === 'object' && e.status === 'awaiting_operator_action';
 }
 
+// Dated cards (`open-decision.js open --due`, PM 01M78866 item c): `due_at` is an ISO UTC instant. dueState() is the ONE place that says
+// whether it has come; `show`, the job-page reader (decision-input.js), due-sweep, and the pane badge / float-up all ask it, never Date.parse themselves.
+//   'none'    no due_at (or one that is not a date): an ordinary card, nothing changes
+//   'not_due' due_at still in the future: listed LAST, marked "due <local time>", NOT counted as pending
+//   'due'     due_at reached: listed FIRST, marked "due now", counted
+// `now` is epoch ms or a Date; an unusable `now` reads as 'due' (fail visible: a clock problem never hides a card). Pure: reads nothing else.
+function dueState(card, now) {
+  const at = card && typeof card === 'object' && typeof card.due_at === 'string' ? Date.parse(card.due_at) : NaN;
+  if (!Number.isFinite(at)) return 'none';
+  const n = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(n)) return 'due';
+  return at <= n ? 'due' : 'not_due';
+}
+// List order key from dueState: due first (0), ordinary cards (1), not yet due last (2). A closed card is a record: 1.
+function dueRank(card, now) {
+  if (isClosedEntry(card)) return 1;
+  const s = dueState(card, now);
+  return s === 'due' ? 0 : s === 'not_due' ? 2 : 1;
+}
+
 // True when the scope file holds at least one entry that is not closed (it needs a string id and question like every reader requires).
 function scopeFileHasLive(file) {
   const fs = require('fs');
@@ -112,4 +132,4 @@ function pickCards(items) {
   return out;
 }
 
-module.exports = { cardRank, pickCards, safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, scopeFileHasLive };
+module.exports = { cardRank, pickCards, safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, scopeFileHasLive, dueState, dueRank };

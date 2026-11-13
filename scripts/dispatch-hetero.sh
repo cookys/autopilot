@@ -2184,19 +2184,21 @@ process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
       target_endpoint=""
       ;;
   esac
+  local fb_demoted_json="[]"
   if [ -z "$engine" ] || [ -z "$effort" ] || [ -z "$runner" ]; then
     local pick_parsed=""
     pick_parsed="$(node -e '
 const sf = require(process.argv[1]);
-const rung = sf.selectImplementerFallback({
+const plan = sf.implementerFallbackPlan({
   failedRunner: process.argv[2],
   failedModel: process.argv[3],
   failedEndpoint: process.argv[4],
 });
+const rung = plan.chain[0];
 if (!rung) process.exit(1);
-process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || ""].join("|"));
+process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || [])].join("|"));
 ' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" 2>/dev/null)" || return 1
-    IFS='|' read -r engine effort runner target_endpoint <<< "$pick_parsed"
+    IFS='|' read -r engine effort runner target_endpoint fb_demoted_json <<< "$pick_parsed"
   fi
   [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
   case "$runner" in
@@ -2206,8 +2208,11 @@ process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || ""]
   esac
   to_rung="${engine}/${effort}@${runner}${target_endpoint:+#${target_endpoint}}"
   FELL_BACK_JSON="$(node -e '
+const sf = require(process.argv[7]);
 let probe = null;
 try { probe = JSON.parse(process.argv[1]); } catch { probe = null; }
+let demoted = [];
+try { demoted = JSON.parse(process.argv[8] || "[]"); } catch { demoted = []; }
 const from = [process.argv[6] || "", process.argv[2] || ""].filter(Boolean).join("@")
   + (process.argv[3] ? `#${process.argv[3]}` : "");
 process.stdout.write(JSON.stringify({
@@ -2216,10 +2221,15 @@ process.stdout.write(JSON.stringify({
   from_endpoint: process.argv[3] || null,
   error_class: process.argv[4],
   to_rung: process.argv[5],
-  fallback: { from: from || process.argv[3] || process.argv[2], to: process.argv[5], reason: process.argv[4] || "engine_unavailable" },
+  fallback: sf.buildFallbackRecord({
+    from: from || process.argv[3] || process.argv[2],
+    to: process.argv[5],
+    reason: process.argv[4] || "engine_unavailable",
+    demoted,
+  }),
   probe,
 }));
-' "$PROBE_JSON" "$cur_runner" "$ENDPOINT" "$PROBE_CLASS" "$to_rung" "${MODEL:-}")" || return 1
+' "$PROBE_JSON" "$cur_runner" "$ENDPOINT" "$PROBE_CLASS" "$to_rung" "${MODEL:-}" "$SELF_DIR/lib/seat-fallback.js" "${fb_demoted_json:-[]}")" || return 1
   [ -n "$FELL_BACK_JSON" ] || return 1
   echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION}; retreating once to cloud rung ${to_rung} (on_engine_unavailable: cloud-fallback)" >&2
   local -a args=()

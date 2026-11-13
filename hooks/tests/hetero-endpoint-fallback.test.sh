@@ -10,7 +10,9 @@ unset AUTOPILOT_SESSION_ID CLAUDE_CODE_SESSION_ID AUTOPILOT_LEVEL AUTOPILOT_ROOT
   AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT \
   AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH REVIEW_LOOP_CONFIG_OVERRIDE \
   AUTOPILOT_QUALIFICATION_OVERRIDE AUTOPILOT_HETERO_FELL_BACK AUTOPILOT_HETERO_FELL_BACK_JSON \
-  ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY 2>/dev/null || true
+  AUTOPILOT_PACE_FILE ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY 2>/dev/null || true
+# Never read the host's live capacity pace file: a WARN_*_low there would reorder the retreat walks.
+export AUTOPILOT_PACE_FILE=/nonexistent/autopilot-test-no-pace.json
 export AUTOPILOT_STRIKE_WRITER=off
 export DISPATCH_QUIET=1
 export AUTOPILOT_ENDPOINT_PREPROBE=on
@@ -477,6 +479,7 @@ assert_eq "$(jget "$CASE_JSON" model)" "gemini-4-hydrogen-high" "(fb-d) default 
 assert_eq "$(jget "$CASE_JSON" fallback.from)" "mini@cc-shim#gpu1" "(fb-d) fallback.from records original seat"
 assert_eq "$(jget "$CASE_JSON" fallback.to)" "gemini-4-hydrogen-high/high@agy" "(fb-d) fallback.to records picker rung"
 assert_eq "$(jget "$CASE_JSON" fallback.reason)" "endpoint_busy" "(fb-d) fallback.reason records error class"
+assert_eq "$(jget "$CASE_JSON" fallback.demoted)" "null" "(fb-d) no fallback.demoted without pace file"
 assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"fallback":{' "(fb-d) cloud-fallbacks row carries fallback object"
 assert_contains "$(cat "$CASE_CAP/cloud-fallbacks.jsonl")" '"reason":"endpoint_busy"' "(fb-d) cloud-fallbacks row records reason"
 [ -s "$AGY_ARGV_LOG" ] || fail "(fb-d) agy stub was not invoked"
@@ -568,5 +571,13 @@ ONCE_DFLT="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/
 assert_eq "$ONCE_DFLT" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-d) AutopilotEngine default policy retreats to picker implementer without codex"
 ONCE_CODEX_RUNG="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" codex-rung 2>"$TEST_TMP/once-codex-rung.err")" || fail "(fb-codex) once-default codex-rung threw: $(cat "$TEST_TMP/once-codex-rung.err")"
 assert_eq "$ONCE_CODEX_RUNG" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-codex) AutopilotEngine ignores explicit codex cloud_fallback_rung and retreats to picker agy"
+
+# --- (fb-low) AUTOPILOT_PACE_FILE marking agy low demotes agy behind glm in AutopilotEngine ---
+PACE_AGY_LOW="$TEST_TMP/pace-agy-low.json"
+cat > "$PACE_AGY_LOW" <<'EOF'
+{"schema":"capacity.pace/1","generated_at":"2026-11-13T04:00:00Z","rows":[{"pool":"agy","class":"other","status":"WARN_agy_low","stale":false,"used_pct":92,"expected_pct":40,"left_pts":2},{"pool":"glm","class":"other","status":"ok","stale":false,"used_pct":20,"expected_pct":40}]}
+EOF
+ONCE_AGY_LOW="$(AUTOPILOT_PACE_FILE="$PACE_AGY_LOW" ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" 2>"$TEST_TMP/once-agy-low.err")" || fail "(fb-low) once-default with agy low threw: $(cat "$TEST_TMP/once-agy-low.err")"
+assert_eq "$ONCE_AGY_LOW" "calls=2 policy=cloud-fallback runner2=cc-shim model2=glm-5.3 exhausted=true" "(fb-low) AutopilotEngine demotes low agy behind glm"
 
 finalize_test

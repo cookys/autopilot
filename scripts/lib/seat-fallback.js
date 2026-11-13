@@ -19,6 +19,11 @@
  *     remains eligible).
  *   - `inferImplementerFamily` never assumes `openai` when no dispatch record
  *     exists; it returns `unknown`.
+ *   - Both walks read the pace file via `pace-select.js` (`--pace` /
+ *     `AUTOPILOT_PACE_FILE` / `$HOME/projects/capacity/out/pace.v1.json`) and
+ *     demote keys with a fresh `WARN_<key>_low` status behind non-low keys
+ *     (keeping relative order). A missing or unreadable pace file changes
+ *     nothing. `fallback.demoted` records demoted keys only when the order changed.
  *
  * Node >= 20.10, built-ins only.
  */
@@ -29,6 +34,8 @@ const { familyOfEngine } = require('./stage-write');
 const { runsDir: defaultRunsDir } = require('./runtime-paths');
 const { recordedImplementerEngines } = require('./review-family-gate');
 const { sameEngine } = require('./engine-spelling');
+const { PACE_SCHEMA, freshReading } = require('./pace-reading');
+const { readPaceFile, isLowStatus, mergePools } = require('../pace-select');
 
 const DEFAULT_ROLES_PATH = path.join(__dirname, 'pace-roles.json');
 const DEFAULT_POOLS_PATH = path.join(__dirname, 'noncq-pools.json');
@@ -143,35 +150,130 @@ function buildPoolIndex(roles, poolsDoc) {
   return index;
 }
 
+function readLowKeys(opts = {}, roles = {}, poolsDoc = {}) {
+  const paceRes = readPaceFile(opts.pacePath, opts.env);
+  if (!paceRes.ok) return new Set();
+  const pace = paceRes.pace;
+  if (!pace || typeof pace !== 'object' || Array.isArray(pace)) return new Set();
+  if (pace.schema !== PACE_SCHEMA || !Array.isArray(pace.rows)) return new Set();
+
+  const mergedPools = mergePools(
+    poolsDoc && typeof poolsDoc === 'object' && !Array.isArray(poolsDoc) ? poolsDoc : {},
+    roles && typeof roles === 'object' && !Array.isArray(roles) ? roles : {},
+  );
+
+  // Per key: true if all fresh readings are low, false if any fresh reading is non-low.
+  const keyLow = new Map();
+  for (const row of pace.rows) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+    if (row.class === 'claude') continue;
+    if (!freshReading(row)) continue;
+    const poolName = typeof row.pool === 'string' ? row.pool.trim() : '';
+    if (!poolName) continue;
+    const poolEntry = mergedPools[poolName];
+    const mappedKey = poolEntry && typeof poolEntry.key === 'string' && poolEntry.key.trim() !== ''
+      ? poolEntry.key.trim()
+      : poolName;
+    const low = isLowStatus(row.status);
+    if (!keyLow.has(mappedKey)) {
+      keyLow.set(mappedKey, low);
+    } else if (!low) {
+      keyLow.set(mappedKey, false);
+    }
+  }
+
+  const lowKeys = new Set();
+  for (const [k, isLow] of keyLow.entries()) {
+    if (isLow) lowKeys.add(k);
+  }
+  // `hydrogen` (gemini-4-hydrogen-high) shares the `agy` pool/quota per pace-roles.json
+  // unless an explicit fresh `hydrogen` reading says otherwise.
+  if (lowKeys.has('agy') && !keyLow.has('hydrogen')) {
+    lowKeys.add('hydrogen');
+  }
+  return lowKeys;
+}
+
+function demoteLowRungs(eligible, lowKeys) {
+  if (!Array.isArray(eligible) || eligible.length === 0 || !lowKeys || lowKeys.size === 0) {
+    return { chain: eligible, demoted: [] };
+  }
+  let lastNonLowIndex = -1;
+  for (let i = 0; i < eligible.length; i += 1) {
+    if (!lowKeys.has(eligible[i].key)) {
+      lastNonLowIndex = i;
+    }
+  }
+  if (lastNonLowIndex < 0) {
+    return { chain: eligible, demoted: [] };
+  }
+  const nonLow = [];
+  const low = [];
+  const demoted = [];
+  for (let i = 0; i < eligible.length; i += 1) {
+    const rung = eligible[i];
+    if (lowKeys.has(rung.key)) {
+      low.push(rung);
+      if (i < lastNonLowIndex) {
+        demoted.push(rung.key);
+      }
+    } else {
+      nonLow.push(rung);
+    }
+  }
+  if (demoted.length === 0) {
+    return { chain: eligible, demoted: [] };
+  }
+  return { chain: [...nonLow, ...low], demoted };
+}
+
+function buildFallbackRecord({ from, to, reason, demoted } = {}) {
+  const record = { from, to, reason };
+  if (Array.isArray(demoted) && demoted.length > 0) {
+    record.demoted = demoted.slice();
+  }
+  return record;
+}
+
 /**
- * Ordered reviewer fallback rungs from pace-roles.json `fallback.reviewer`.
- * Never returns `codex`; skips rungs whose family matches `implementerFamily`.
- * When `implementerFamily` is `unknown`, skips nothing (GLM stays eligible).
+ * Ordered reviewer fallback rungs from pace-roles.json `fallback.reviewer`
+ * plus demotion metadata.
  */
-function reviewerFallbackChain(opts = {}) {
+function reviewerFallbackPlan(opts = {}) {
   const roles = readJsonSafe(opts.rolesPath || DEFAULT_ROLES_PATH);
+  const poolsDoc = readJsonSafe(opts.poolsPath || DEFAULT_POOLS_PATH) || {};
   const rawList = roles && roles.fallback && Array.isArray(roles.fallback.reviewer)
     ? roles.fallback.reviewer
     : [];
   const forbidden = splitFamilies(opts.implementerFamily);
   const excluded = new Set(Array.isArray(opts.excludeKeys) ? opts.excludeKeys : []);
-  const out = [];
+  const eligible = [];
   for (const raw of rawList) {
     const rung = normalizeRung(raw);
     if (!rung) continue;
     if (excluded.has(rung.key)) continue;
     if (matchesFailedSeat(rung, opts)) continue;
     if (rung.family !== 'unknown' && forbidden.has(rung.family)) continue;
-    out.push(rung);
+    eligible.push(rung);
   }
-  return out;
+  const lowKeys = readLowKeys(opts, roles || {}, poolsDoc);
+  return demoteLowRungs(eligible, lowKeys);
+}
+
+/**
+ * Ordered reviewer fallback rungs from pace-roles.json `fallback.reviewer`.
+ * Never returns `codex`; skips rungs whose family matches `implementerFamily`.
+ * When `implementerFamily` is `unknown`, skips nothing (GLM stays eligible).
+ */
+function reviewerFallbackChain(opts = {}) {
+  return reviewerFallbackPlan(opts).chain;
 }
 
 /**
  * Ordered implementer fallback rungs from pace-roles.json `priority.implementer`
- * joined with noncq-pools.json + `role_models.implementer`. Never returns `codex`.
+ * plus demotion metadata.
  */
-function implementerFallbackChain(opts = {}) {
+function implementerFallbackPlan(opts = {}) {
   const roles = readJsonSafe(opts.rolesPath || DEFAULT_ROLES_PATH) || {};
   const poolsDoc = readJsonSafe(opts.poolsPath || DEFAULT_POOLS_PATH) || {};
   const poolIndex = buildPoolIndex(roles, poolsDoc);
@@ -180,7 +282,7 @@ function implementerFallbackChain(opts = {}) {
     : (Array.isArray(roles.implementer) ? roles.implementer : []);
   const roleModels = (roles.role_models && roles.role_models.implementer) || {};
   const excluded = new Set(Array.isArray(opts.excludeKeys) ? opts.excludeKeys : []);
-  const out = [];
+  const eligible = [];
   for (const key of keys) {
     const k = String(key || '').trim();
     if (!k || k === 'codex' || excluded.has(k)) continue;
@@ -197,9 +299,18 @@ function implementerFallbackChain(opts = {}) {
     });
     if (!rung) continue;
     if (matchesFailedSeat(rung, opts)) continue;
-    out.push(rung);
+    eligible.push(rung);
   }
-  return out;
+  const lowKeys = readLowKeys(opts, roles, poolsDoc);
+  return demoteLowRungs(eligible, lowKeys);
+}
+
+/**
+ * Ordered implementer fallback rungs from pace-roles.json `priority.implementer`
+ * joined with noncq-pools.json + `role_models.implementer`. Never returns `codex`.
+ */
+function implementerFallbackChain(opts = {}) {
+  return implementerFallbackPlan(opts).chain;
 }
 
 function selectImplementerFallback(opts = {}) {
@@ -380,7 +491,9 @@ function parseCliArgs(argv) {
       case '--worktree': opts.worktree = next(); break;
       case '--cwd': opts.cwd = next(); break;
       case '--run-id': opts.runId = next(); break;
+      case '--pace': opts.pacePath = next(); break;
       case '--all': opts.all = true; break;
+      case '--meta': opts.meta = true; break;
       default: break;
     }
   }
@@ -390,11 +503,17 @@ function parseCliArgs(argv) {
 if (require.main === module) {
   const { cmd, opts } = parseCliArgs(process.argv);
   if (cmd === 'reviewer') {
-    const chain = reviewerFallbackChain(opts);
-    process.stdout.write(JSON.stringify(opts.all ? chain : (chain[0] || null)) + '\n');
+    const plan = reviewerFallbackPlan(opts);
+    const out = opts.meta
+      ? (opts.all ? plan : { rung: plan.chain[0] || null, demoted: plan.demoted })
+      : (opts.all ? plan.chain : (plan.chain[0] || null));
+    process.stdout.write(JSON.stringify(out) + '\n');
   } else if (cmd === 'implementer') {
-    const chain = implementerFallbackChain(opts);
-    process.stdout.write(JSON.stringify(opts.all ? chain : (chain[0] || null)) + '\n');
+    const plan = implementerFallbackPlan(opts);
+    const out = opts.meta
+      ? (opts.all ? plan : { rung: plan.chain[0] || null, demoted: plan.demoted })
+      : (opts.all ? plan.chain : (plan.chain[0] || null));
+    process.stdout.write(JSON.stringify(out) + '\n');
   } else if (cmd === 'infer-family') {
     process.stdout.write(JSON.stringify(inferImplementerFamily(opts)) + '\n');
   } else {
@@ -406,10 +525,13 @@ if (require.main === module) {
 module.exports = {
   normalizeFamily,
   splitFamilies,
+  reviewerFallbackPlan,
   reviewerFallbackChain,
+  implementerFallbackPlan,
   implementerFallbackChain,
   selectReviewerFallback,
   selectImplementerFallback,
+  buildFallbackRecord,
   inferImplementerFamily,
   formatRung,
   toContractRung,

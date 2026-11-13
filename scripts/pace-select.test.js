@@ -25,19 +25,41 @@ const {
 
 const {
   normalizeFamily,
+  reviewerFallbackPlan,
   reviewerFallbackChain,
+  implementerFallbackPlan,
   implementerFallbackChain,
   selectReviewerFallback,
   selectImplementerFallback,
+  buildFallbackRecord,
   inferImplementerFamily,
   formatRung,
   isCodexRung,
 } = require('./lib/seat-fallback.js');
 const { AutopilotEngine } = require('../src/engine');
 const CLI = path.join(__dirname, 'pace-select.js');
+const SEAT_FALLBACK_CLI = path.join(__dirname, 'lib', 'seat-fallback.js');
 const SCORECARD_CLI = path.join(__dirname, 'engine-scorecard.js');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
+const MISSING_PACE = path.join(FIXTURES_DIR, '__missing_pace__.json');
 const allEndpointsReady = () => true;
+
+function withEnv(vars, fn) {
+  const prev = {};
+  for (const [k, v] of Object.entries(vars)) {
+    prev[k] = Object.prototype.hasOwnProperty.call(process.env, k) ? process.env[k] : undefined;
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
 
 // Inline-pace builders for the (priority a)-(priority f) tests.
 const priorityPace = (rows) => ({
@@ -230,6 +252,7 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
     expected_pct: 40,
     over_pace: false,
     selected_by: 'slack',
+    low_keys: [],
     reviewer_exclude: ['grok'],
     role: 'implementer',
     qualified_source: 'pace-roles.json',
@@ -470,6 +493,7 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
     expected_pct: 40,
     over_pace: false,
     selected_by: 'priority',
+    low_keys: [],
     reviewer_exclude: ['agy'],
     role: 'implementer',
     qualified_source: 'pace-roles.json',
@@ -512,6 +536,7 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
     expected_pct: 40,
     over_pace: true,
     selected_by: 'slack',
+    low_keys: [],
     reviewer_exclude: ['codex'],
     role: 'implementer',
     qualified_source: 'pace-roles.json',
@@ -883,7 +908,7 @@ test('(priority f) agy reading stale -> skipped by the priority walk, glm chosen
 // Seat fallback order & implementer family inference (PM 01M7AHAM)
 // ---------------------------------------------------------------------------
 
-test('(seat-fallback a) reviewer retreat skips google/hydrogen and picks glm, never codex', () => {
+test('(seat-fallback a) reviewer retreat skips google/hydrogen and picks glm, never codex', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   const roles = loadRoles();
   assert.deepEqual(
     roles.fallback.reviewer.map((r) => r.key),
@@ -898,9 +923,9 @@ test('(seat-fallback a) reviewer retreat skips google/hydrogen and picks glm, ne
   assert.equal(first.endpoint, 'glm');
   assert.equal(first.model, 'glm-5.3');
   assert.equal(chain.some((r) => r.runner === 'codex' || isCodexRung(r)), false);
-});
+}));
 
-test('(seat-fallback b) reviewer retreat for anthropic/agyclaude implementer picks hydrogen first', () => {
+test('(seat-fallback b) reviewer retreat for anthropic/agyclaude implementer picks hydrogen first', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   for (const imp of ['anthropic', 'agyclaude', 'claude-opus-5-5-medium']) {
     const first = selectReviewerFallback({ implementerFamily: imp });
     assert.equal(first.key, 'hydrogen');
@@ -910,9 +935,9 @@ test('(seat-fallback b) reviewer retreat for anthropic/agyclaude implementer pic
     assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'glm']);
     assert.equal(chain.some((r) => r.runner === 'codex'), false);
   }
-});
+}));
 
-test('(seat-fallback c) unknown implementer family never assumes openai and keeps glm eligible', () => {
+test('(seat-fallback c) unknown implementer family never assumes openai and keeps glm eligible', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-infer-'));
   try {
     const emptyRuns = path.join(tmpDir, 'runs');
@@ -966,9 +991,9 @@ test('(seat-fallback c) unknown implementer family never assumes openai and keep
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-});
+}));
 
-test('(seat-fallback d) implementer default policy retreats along priority.implementer without codex', () => {
+test('(seat-fallback d) implementer default policy retreats along priority.implementer without codex', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   const chainAll = implementerFallbackChain({});
   assert.deepEqual(chainAll.map((r) => r.key), ['agy', 'glm', 'agyclaude']);
   assert.equal(chainAll[0].model, 'gemini-4-hydrogen-high');
@@ -1145,9 +1170,9 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-});
+}));
 
-test('(seat-fallback e) codex never appears as a retreat target in reviewer or implementer chains', () => {
+test('(seat-fallback e) codex never appears as a retreat target in reviewer or implementer chains', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   for (const fam of ['google', 'anthropic', 'zhipu', 'xai', 'openai', 'unknown', '']) {
     const rev = reviewerFallbackChain({ implementerFamily: fam });
     assert.equal(
@@ -1190,6 +1215,258 @@ test('(seat-fallback e) codex never appears as a retreat target in reviewer or i
     assert.deepEqual(imp.map((r) => r.key), ['agy', 'glm']);
     assert.equal(formatRung(imp[0]), 'gemini-4-hydrogen-high/high@agy');
     assert.equal(normalizeFamily('agyclaude'), 'anthropic');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}));
+
+// ---------------------------------------------------------------------------
+// Low-quota warning demotion (PM 01M7AVE2 item 3)
+// ---------------------------------------------------------------------------
+
+test('(low 3a) low agyclaude loses to codex in slack fallback, but wins with demoted_last_resort when codex/grok absent', () => {
+  const withCodex = priorityPace([
+    paceRow('agy', 45, 40),
+    {
+      pool: 'agyclaude(alias 2)',
+      id: 'agyclaude-2',
+      class: 'other',
+      status: 'WARN_agyclaude_low',
+      stale: false,
+      used_pct: 36,
+      expected_pct: 40,
+      left_pts: 4,
+    },
+    { pool: 'codex A', class: 'scarce', status: 'ok', stale: false, used_pct: 20, expected_pct: 40 },
+  ]);
+
+  const resWithCodex = selectEngine({
+    pace: withCodex,
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(resWithCodex.engine, 'codex');
+  assert.equal(resWithCodex.selected_by, 'slack');
+  assert.equal(resWithCodex.over_pace, false);
+  assert.deepEqual(resWithCodex.low_keys, ['agyclaude']);
+  assert.equal(resWithCodex.demoted_last_resort, undefined);
+
+  // Without codex/grok, no non-low key is >= 0 slack -> agyclaude wins as last resort.
+  const withoutCodexOrGrok = priorityPace([
+    paceRow('agy', 45, 40),
+    {
+      pool: 'agyclaude(alias 2)',
+      id: 'agyclaude-2',
+      class: 'other',
+      status: 'WARN_agyclaude_low',
+      stale: false,
+      used_pct: 36,
+      expected_pct: 40,
+      left_pts: 4,
+    },
+  ]);
+
+  const resLastResort = selectEngine({
+    pace: withoutCodexOrGrok,
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(resLastResort.engine, 'agyclaude');
+  assert.equal(resLastResort.demoted_last_resort, true);
+  assert.deepEqual(resLastResort.low_keys, ['agyclaude']);
+
+  // CLI path using a temp fixture pace file also respects low demotion and emits low_keys / demoted_last_resort.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-low-3a-'));
+  try {
+    const f1 = path.join(tmpDir, 'pace-codex.json');
+    const f2 = path.join(tmpDir, 'pace-last-resort.json');
+    fs.writeFileSync(f1, JSON.stringify(withCodex));
+    fs.writeFileSync(f2, JSON.stringify(withoutCodexOrGrok));
+
+    const r1 = cli(['--role', 'implementer', '--pace', f1, '--json']);
+    assert.equal(r1.status, 0, r1.stderr);
+    const out1 = JSON.parse(r1.stdout);
+    assert.equal(out1.engine, 'codex');
+    assert.equal(out1.selected_by, 'slack');
+    assert.deepEqual(out1.low_keys, ['agyclaude']);
+    assert.equal(out1.demoted_last_resort, undefined);
+
+    const r2 = cli(['--role', 'implementer', '--pace', f2, '--json']);
+    assert.equal(r2.status, 0, r2.stderr);
+    const out2 = JSON.parse(r2.stdout);
+    assert.equal(out2.engine, 'agyclaude');
+    assert.equal(out2.demoted_last_resort, true);
+    assert.deepEqual(out2.low_keys, ['agyclaude']);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('(low 3b) low agy is skipped in priority walk when glm is fresh with slack >= 0', () => {
+  const res = selectEngine({
+    pace: priorityPace([
+      paceRow('agy', 10, 40, { status: 'WARN_agy_low', left_pts: 2 }),
+      paceRow('glm', 38, 40),
+    ]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'glm');
+  assert.equal(res.selected_by, 'priority');
+  assert.deepEqual(res.low_keys, ['agy']);
+  assert.equal(res.demoted_last_resort, undefined);
+
+  // When both priority keys are low and no non-low key qualifies, relative priority order holds (agy before agyclaude).
+  const bothLow = selectEngine({
+    pace: priorityPace([
+      paceRow('agy', 38, 40, { status: 'WARN_agy_low', left_pts: 2 }),
+      paceRow('agyclaude', 20, 40, { status: 'WARN_agyclaude_low', left_pts: 3 }),
+    ]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(bothLow.engine, 'agy');
+  assert.equal(bothLow.selected_by, 'priority');
+  assert.equal(bothLow.demoted_last_resort, true);
+  assert.deepEqual(bothLow.low_keys, ['agy', 'agyclaude']);
+
+  // Largest-slack role (reviewer): low agyclaude (+30) loses to non-low grok (+5).
+  const reviewerRes = selectEngine({
+    pace: priorityPace([
+      paceRow('agyclaude', 10, 40, { status: 'WARN_agyclaude_low', left_pts: 2 }),
+      paceRow('grok-cli', 35, 40),
+    ]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'reviewer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(reviewerRes.engine, 'grok');
+  assert.equal(reviewerRes.selected_by, 'slack');
+  assert.deepEqual(reviewerRes.low_keys, ['agyclaude']);
+  assert.equal(reviewerRes.demoted_last_resort, undefined);
+});
+
+test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs and records fallback.demoted only when order changed', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-low-'));
+  try {
+    // 1. google implementer + GLM unavailable + agyclaude low -> still returns agyclaude (last resort, order unchanged -> demoted []).
+    const agyclaudeLowPace = path.join(tmpDir, 'pace-agyclaude-low.json');
+    fs.writeFileSync(agyclaudeLowPace, JSON.stringify(priorityPace([
+      {
+        pool: 'agyclaude(alias 2)',
+        id: 'agyclaude-2',
+        class: 'other',
+        status: 'WARN_agyclaude_low',
+        stale: false,
+        used_pct: 90,
+        expected_pct: 40,
+        left_pts: 3,
+      },
+    ])));
+    const planGoogleLastResort = reviewerFallbackPlan({
+      implementerFamily: 'google',
+      excludeKeys: ['glm'],
+      pacePath: agyclaudeLowPace,
+    });
+    assert.deepEqual(planGoogleLastResort.chain.map((r) => r.key), ['agyclaude']);
+    assert.deepEqual(planGoogleLastResort.demoted, []);
+
+    const recNoReorder = buildFallbackRecord({
+      from: 'Qwen3.8-27B@anthropic-compatible#qwen_local',
+      to: formatRung(planGoogleLastResort.chain[0]),
+      reason: 'endpoint_busy',
+      demoted: planGoogleLastResort.demoted,
+    });
+    assert.equal(recNoReorder.reason, 'endpoint_busy');
+    assert.equal(Object.prototype.hasOwnProperty.call(recNoReorder, 'demoted'), false);
+
+    // 2. hydrogen low + zhipu implementer -> agyclaude before hydrogen, demoted: ['hydrogen'].
+    const hydrogenLowPace = path.join(tmpDir, 'pace-hydrogen-low.json');
+    fs.writeFileSync(hydrogenLowPace, JSON.stringify(priorityPace([
+      paceRow('hydrogen', 92, 40, { status: 'WARN_hydrogen_low', left_pts: 2 }),
+      paceRow('agyclaude', 20, 40),
+    ])));
+    const planZhipu = reviewerFallbackPlan({
+      implementerFamily: 'zhipu',
+      pacePath: hydrogenLowPace,
+    });
+    assert.deepEqual(planZhipu.chain.map((r) => r.key), ['agyclaude', 'hydrogen']);
+    assert.deepEqual(planZhipu.demoted, ['hydrogen']);
+
+    // Shared agy quota (WARN_agy_low) also demotes hydrogen behind agyclaude.
+    const agyLowPace = path.join(tmpDir, 'pace-agy-low.json');
+    fs.writeFileSync(agyLowPace, JSON.stringify(priorityPace([
+      paceRow('agy', 92, 40, { status: 'WARN_agy_low', left_pts: 2 }),
+      paceRow('glm', 20, 40),
+      paceRow('agyclaude', 25, 40),
+    ])));
+    const planZhipuViaAgy = reviewerFallbackPlan({
+      implementerFamily: 'zhipu',
+      pacePath: agyLowPace,
+    });
+    assert.deepEqual(planZhipuViaAgy.chain.map((r) => r.key), ['agyclaude', 'hydrogen']);
+    assert.deepEqual(planZhipuViaAgy.demoted, ['hydrogen']);
+
+    const recDemoted = buildFallbackRecord({
+      from: 'Qwen3.8-27B@anthropic-compatible#qwen_local',
+      to: formatRung(planZhipu.chain[0]),
+      reason: 'endpoint_busy',
+      demoted: planZhipu.demoted,
+    });
+    assert.equal(recDemoted.reason, 'endpoint_busy');
+    assert.deepEqual(recDemoted.demoted, ['hydrogen']);
+
+    // 3. Implementer walk with agy low moves agy behind glm and agyclaude.
+    const implPlan = implementerFallbackPlan({ pacePath: agyLowPace });
+    assert.deepEqual(implPlan.chain.map((r) => r.key), ['glm', 'agyclaude', 'agy']);
+    assert.deepEqual(implPlan.demoted, ['agy']);
+
+    // 4. CLI supports --pace and AUTOPILOT_PACE_FILE.
+    const cliFlag = spawnSync(process.execPath, [
+      SEAT_FALLBACK_CLI, 'reviewer', '--implementer-family', 'zhipu', '--pace', hydrogenLowPace, '--all',
+    ], { encoding: 'utf8', env: { ...process.env } });
+    assert.equal(cliFlag.status, 0, cliFlag.stderr);
+    assert.deepEqual(JSON.parse(cliFlag.stdout).map((r) => r.key), ['agyclaude', 'hydrogen']);
+
+    const cliEnv = spawnSync(process.execPath, [
+      SEAT_FALLBACK_CLI, 'implementer', '--all',
+    ], { encoding: 'utf8', env: { ...process.env, AUTOPILOT_PACE_FILE: agyLowPace } });
+    assert.equal(cliEnv.status, 0, cliEnv.stderr);
+    assert.deepEqual(JSON.parse(cliEnv.stdout).map((r) => r.key), ['glm', 'agyclaude', 'agy']);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('(seat-fallback g / 3d) missing or unreadable pace file leaves fallback order unchanged', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-nopace-'));
+  try {
+    const missing = path.join(tmpDir, 'does-not-exist.json');
+    const badJson = path.join(tmpDir, 'not-json.json');
+    fs.writeFileSync(badJson, '{ broken json');
+
+    for (const pacePath of [missing, badJson]) {
+      const revZhipu = reviewerFallbackPlan({ implementerFamily: 'zhipu', pacePath });
+      assert.deepEqual(revZhipu.chain.map((r) => r.key), ['hydrogen', 'agyclaude']);
+      assert.deepEqual(revZhipu.demoted, []);
+
+      const revGoogle = reviewerFallbackPlan({ implementerFamily: 'google', pacePath });
+      assert.deepEqual(revGoogle.chain.map((r) => r.key), ['glm', 'agyclaude']);
+      assert.deepEqual(revGoogle.demoted, []);
+
+      const imp = implementerFallbackPlan({ pacePath });
+      assert.deepEqual(imp.chain.map((r) => r.key), ['agy', 'glm', 'agyclaude']);
+      assert.deepEqual(imp.demoted, []);
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

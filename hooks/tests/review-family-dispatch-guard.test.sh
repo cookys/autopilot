@@ -390,10 +390,31 @@ cat > "$CFG_R0" <<'EOF'
 - implementer_runner: agy
 - implementer_effort: high
 - implementer_ladder: gemini-4-hydrogen-high/high@agy, grok-4.7/low@grok
+- override: reviewer | until 2099-01-01 | explicit reviewer cloud rung off the picker list
+- reviewer_engine: grok-4.7
+- reviewer_runner: grok
+- reviewer_effort: low
+- reviewer_cloud_fallback_rung: gemini-4-argon-high/high@agy
 EOF
 resolve_of r0 "$CFG_R0"
-assert_eq "$RESOLVE_RC" "3" "c4: reviewer cloud rung sharing implementer rung 0 exits 3"
-assert_contains "$(cat "$RESOLVE_ERR")" "reviewer_cloud_fallback_rung gemini-4-hydrogen-high/high@agy shares implementer rung 0 family (google)" "c4: the message names rung 0"
+assert_eq "$RESOLVE_RC" "3" "c4: an explicit reviewer cloud rung off the picker list sharing implementer rung 0 exits 3"
+assert_contains "$(cat "$RESOLVE_ERR")" "reviewer_cloud_fallback_rung gemini-4-argon-high/high@agy shares implementer rung 0 family (google)" "c4: the message names rung 0"
+
+# c4b: the shipped picker-head rung (hydrogen) with a google rung 0 is not a dead config; the
+# picker walk skips the implementer family at dispatch time (red before: exit 3).
+CFG_R0_PICK="$TEST_TMP/r0-pick.md"
+cat > "$CFG_R0_PICK" <<'EOF'
+- allow_same_runner_dual_seat: on
+- consult_dispatch: off
+- discuss_dispatch: off
+- override: implementer | until 2099-01-01 | rung 0 shares the shipped picker-head reviewer rung
+- implementer_engine: gemini-4-hydrogen-high
+- implementer_runner: agy
+- implementer_effort: high
+- implementer_ladder: gemini-4-hydrogen-high/high@agy, grok-4.7/low@grok
+EOF
+resolve_of r0pick "$CFG_R0_PICK"
+assert_eq "$RESOLVE_RC" "0" "c4b: shipped picker-head reviewer rung with a google rung 0 resolves"
 
 CFG_R0_OK="$TEST_TMP/r0-ok.md"
 cat > "$CFG_R0_OK" <<'EOF'

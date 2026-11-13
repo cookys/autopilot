@@ -1834,7 +1834,14 @@ const r = Array.isArray(j) && j[0] && typeof j[0] === "object" ? j[0] : null;
 process.stdout.write(r && r.engine ? String(r.engine) : "");
 ' "$IMPL_LADDER_JSON" 2>/dev/null)" || _r0_engine=""
   _r0_fam="$(family_of "${_r0_engine:-}")"
-  if [[ -n "${_r0_engine:-}" && "$_r0_fam" != "unknown" && "$_r0_fam" == "$_rcf_family" ]]; then
+  # A rung on pace-roles.json fallback.reviewer is the head of the picker walk, which skips
+  # the implementer's family at dispatch time (scripts/lib/seat-fallback.js), so a collision
+  # there is not a dead config: the shipped hydrogen rung with an agy implementer walks on to GLM.
+  _rcf_on_picker="$(node -e '
+const f = (require(process.argv[1]).fallback || {}).reviewer || [];
+process.stdout.write(f.some((r) => r && r.model === process.argv[2]) ? "1" : "0");
+' "$SCRIPT_DIR/lib/pace-roles.json" "$_rcfe" 2>/dev/null)" || _rcf_on_picker="0"
+  if [[ -n "${_r0_engine:-}" && "$_r0_fam" != "unknown" && "$_r0_fam" == "$_rcf_family" && "$_rcf_on_picker" != "1" ]]; then
     echo "resolve-review-loop: reviewer_cloud_fallback_rung ${REVIEWER_CLOUD_FALLBACK_RUNGS_RAW} shares implementer rung 0 family (${_r0_fam})" >&2
     exit 3
   fi

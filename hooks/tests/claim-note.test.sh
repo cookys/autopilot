@@ -30,6 +30,7 @@ const shape = (r, outcome) => ({ outcome, card_id: r.card_id, answer_id: r.answe
 if (sub === 'claim') {
   const i = a.indexOf('--option'); const j = a.indexOf('--free-text');
   if (mode() === 'old' && i >= 0 && j >= 0) { process.stderr.write('Invalid usage\n'); process.exit(2); }
+  if (mode() === 'flaky') { const n = (fs.existsSync(D + '/n') ? Number(fs.readFileSync(D + '/n', 'utf8')) : 0) + 1; fs.writeFileSync(D + '/n', String(n)); if (n === 1 && i >= 0 && j >= 0) process.exit(2); if (n === 2) process.exit(9); if (n === 3) process.exit(2); }
   const r = { card_id: card, answer_id: 'A' + crypto.createHash('sha256').update(card + a.join('|')).digest('hex').slice(0, 25).toUpperCase(), option: i >= 0 ? a[i + 1] : null, free_text: j >= 0 && mode() !== 'drop' ? a[j + 1] : null };
   fs.appendFileSync(D + '/answers', JSON.stringify(r) + '\n'); out(shape(r, 'claimed')); process.exit(0);
 }
@@ -56,6 +57,10 @@ reset old; J="$(claimjs)"
 assert_eq "$(node -e 'const j=JSON.parse(process.argv[1]);console.log(j.outcome,j.note_dropped_by_courier,j.note)' "$J")" "claimed true $NOTE" "(b) fallback returns claimed + note_dropped_by_courier + the note"
 assert_eq "$(grep -c 'decision claim' "$STUB/calls")" 2 "(b) exactly one retry"
 assert_eq "$(grep 'decision claim' "$STUB/calls" | tail -1)" "decision claim d-00000001 --option Alpha" "(b) the retry is option only"
+# (b2) the fallback fires once only: pair exit 2, option-only exit 9, a later exit 2 must not strip the option label
+reset flaky; rm -f "$STUB/n"; claimjs >/dev/null
+assert_eq "$(grep -c -E 'decision claim d-00000001 --option$' "$STUB/calls")" 0 "(b2) no claim is sent with a bare --option"
+assert_eq "$(grep -c 'decision claim' "$STUB/calls")" 3 "(b2) pair, option-only, one exit-9 retry: three calls, no second fallback"
 reset ok; J="$(claimjs)"
 assert_eq "$(node -e 'console.log(JSON.parse(process.argv[1]).note_dropped_by_courier===true)' "$J")" false "(b) control: a courier that takes both flags is not flagged"
 

@@ -69,7 +69,7 @@ function claim(cardId, { option, freeText } = {}) {
   for (let i = 1; i <= attempts; i++) {
     r = run(args);
     // an old courier answers `--option` + `--free-text` together with exit 2 (usage): retry once with the option only and hand the note back to the caller
-    if (r.status === 2 && has(option) && has(freeText)) {
+    if (!noteDropped && r.status === 2 && has(option) && has(freeText)) {
       noteDropped = true;
       args.splice(args.indexOf('--free-text'), 2);
       r = run(args);

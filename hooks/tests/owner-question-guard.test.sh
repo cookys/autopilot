@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Test for owner-question-guard.js — Stop hook that blocks (once) a reply that waits for the owner
-# without naming a decision card id. Transcript fixtures live in TEST_TMP only.
+# Test for owner-question-guard.js — Stop hook that checks every reply and repeated Stop.
+# Transcript and live-card fixtures live in TEST_TMP only.
 . "$(dirname "$0")/lib.sh"
 
 mkdir -p "$TEST_TMP/t"
+CARD_REPO="$TEST_TMP/cards"
+mkdir -p "$CARD_REPO"
+git -C "$CARD_REPO" init -q
+LIVE_ID="$(node -e 'const r=require(process.argv[1]).openDecision({cwd:process.argv[2],question:"Synthetic choice?",options:null}); if(r.status!=="ok")process.exit(1); process.stdout.write(r.id)' "$REPO_ROOT/scripts/open-decision.js" "$CARD_REPO")"
 # mk <name> <assistant text> : transcript with one user turn then one assistant text entry.
 mk() {
   node -e '
@@ -14,7 +18,7 @@ mk() {
     fs.writeFileSync(f,JSON.stringify(u)+"\n"+JSON.stringify(a)+"\n");
   ' "$TEST_TMP/t/$1.jsonl" "$2"
 }
-payload() { printf '{"session_id":"s","transcript_path":"%s","stop_hook_active":%s}' "$TEST_TMP/t/$1.jsonl" "${2:-false}"; }
+payload() { printf '{"session_id":"s","cwd":"%s","transcript_path":"%s","stop_hook_active":%s}' "$CARD_REPO" "$TEST_TMP/t/$1.jsonl" "${2:-false}"; }
 expect_block() { run_hook owner-question-guard.js "$(payload "$1" "${3:-false}")"; assert_eq 0 "$__RUN_EXIT" "$2: exit 0"; assert_contains "$__RUN_STDOUT" '"decision":"block"' "$2: blocks"; }
 expect_pass() { run_hook owner-question-guard.js "$(payload "$1" "${3:-false}")"; assert_eq 0 "$__RUN_EXIT" "$2: exit 0"; assert_eq "" "$__RUN_STDOUT" "$2: silent"; }
 
@@ -32,13 +36,17 @@ mk please '請決定要不要刪。'
 expect_block please "please-decide without 你"
 mk look '請看 hooks/README.md 第三段，結果如下。'
 expect_pass look "請看 is not a wait"
-mk cardup '可以刪嗎？見 D-4290499D。'
-expect_pass cardup "uppercase card id"
-mk card '可以強制刪嗎？見待決 d-4290499d。'
-expect_pass card "question with card id"
+mk cardup "${LIVE_ID^^} 可以刪嗎？"
+expect_pass cardup "uppercase live card id in the same sentence"
+mk card "$LIVE_ID 可以強制刪嗎？"
+expect_pass card "question with live card id in the same sentence"
+mk card_elsewhere "可以強制刪嗎？見待決 $LIVE_ID。"
+expect_block card_elsewhere "live card in another sentence exempts nothing"
+mk unknown_card 'd-4290499d 可以強制刪嗎？'
+expect_block unknown_card "unknown card exempts nothing"
 
 mk active '可以強制刪嗎？你說可以我再刪。'
-expect_pass active "stop_hook_active=true" true
+expect_block active "stop_hook_active=true still blocks" true
 
 mk report '已完成。測試全綠，共 12 項，沒有待決事項。'
 expect_pass report "report without question"

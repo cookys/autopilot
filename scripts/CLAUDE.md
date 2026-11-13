@@ -36,6 +36,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 `lib/exclude-allowlist.js` `lib/seat-id-guard.js` `lib/raw-log-path.js` `review-ledger-archive.js` `lib/review-ledger-copy.js` `lib/review-ledger-tar.js`
 
 **Verification & review synthesis (cont.)** — `review-jury.js`
+`replay-stop-guard.js`
 
 **Task tree & risk** — `tree.js` `risk-counter.js` `hook-harness-matrix.js` `lib/chain-command.js`
 

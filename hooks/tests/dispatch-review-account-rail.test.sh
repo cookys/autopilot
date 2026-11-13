@@ -136,5 +136,10 @@ sed_mutate "$OLD3/lib/account-state.sh" 's/^    \*) echo invalid ;;/    *) echo 
 check_unrecognised "$OLD3" "G37_STUB_OUT=garbage" >/dev/null; NR=$?
 assert_neq "0" "$NR" "N9 mutation: negative control: account-state.sh default arm legacy instead of invalid is detected"
 
+case "$FX_LIVE" in
+  /dev/shm/g37-fix-live-*)
+    if [ -d "$FX_LIVE" ] && [ ! -L "$FX_LIVE" ]; then rm -rf -- "$FX_LIVE"; fi
+    ;;
+esac
 rm -rf "$FX_ROOT"
 finalize_test

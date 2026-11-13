@@ -56,14 +56,14 @@ const padLeft = (text: string, width: number): string => ' '.repeat(Math.max(0, 
 export const GRID = [0, 2, 4, 12] as const // the four columns a body line may start at (§3.1)
 export const KEY_W = 12 // the key column of a key/value row, in display cells
 
-export const STATE_IDS = ['need_you', 'failed', 'stalled', 'findings', 'running', 'done', 'pending', 'waiting', 'stopped', 'skipped', 'unknown'] as const // waiting: accepted, its seat idle on something (a fleet hub task, G23 / PM ruling)
+export const STATE_IDS = ['need_you', 'failed', 'stalled', 'findings', 'running', 'done', 'pending', 'waiting', 'stopped', 'skipped', 'unknown', 'stale'] as const // waiting: accepted, its seat idle on something (a fleet hub task, G23 / PM ruling); stale: no progress for more than a day (PM 01M78C2N)
 export type StateId = (typeof STATE_IDS)[number]
 
 // The glyph tables (§3.2, §3.4). Three groups that do not cross: state glyphs, structure glyphs, chart glyphs. `verified` records, per glyph that is new to
 // the vocabulary, where it was checked to draw in ONE cell: confirmed 2026-10-13 by the owner (ssh + tmux, all ten single-cell); was `pending-owner` until the owner ran `node mods/live/glyph-check.js` in the real ssh + tmux
 // terminal (P0 b). `↓` is East Asian Ambiguous and its width is still unchecked (`pending-owner`); the owner's 2026-10-14 ruling settled only its meaning (behind upstream, nothing else), see the plan §8. `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
-  state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?' },
+  state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?', stale: '~' },
   structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★', fresh: '✦', frameTL: '╭', frameTR: '╮', frameBL: '╰', frameBR: '╯', frameDown: '┬', frameUp: '┴', frameLeftT: '├', frameRightT: '┤', answer: '→' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
@@ -114,9 +114,10 @@ export const STATES: Record<StateId, { glyph: string; key: ThemeKey | undefined;
   stopped: { glyph: GLYPHS.state.stopped, key: PALETTE.idle, wordKey: PALETTE.idle },
   skipped: { glyph: GLYPHS.state.skipped, key: PALETTE.idle, wordKey: PALETTE.idle },
   unknown: { glyph: GLYPHS.state.unknown, key: PALETTE.idle, wordKey: PALETTE.idle },
+  stale: { glyph: GLYPHS.state.stale, key: PALETTE.idle, wordKey: PALETTE.idle },
 }
-// the one total order of "worse" (§3.3); `unknown` ranks last so a missing mapping never hides a real finding
-export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'waiting', 'stopped', 'pending', 'done', 'skipped', 'unknown']
+// the one total order of "worse" (§3.3); `unknown` ranks last so a missing mapping never hides a real finding. `stale` is after that: a lane that still has a live row stays that row.
+export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'waiting', 'stopped', 'pending', 'done', 'skipped', 'unknown', 'stale']
 
 // freshness thresholds (§2.5), ms; dispatch = a finished run older than 6 h is counted in the chip, not listed (BL-0149); abandonedPlan = a non-terminal plan review untouched for 7 d fades to one line; every comparison is strict (`>`): exactly at the threshold is still fresh
 export const FRESH_MS = { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, abandonedPlan: 604_800_000, codeReview: 86_400_000, dispatch: 21_600_000 } as const
@@ -280,7 +281,7 @@ export type BackgroundSubject = { exit: number | null; quietMs: number }
 export type LoadSourceSubject = { source: string; behind: number; flags: number }
 export type AttentionSubject = { source: Stated | null } // null = the one item of its own: task acceptance
 export type CleanupSubject = { errors: number; done: number }
-export type FleetTaskSubject = { state: string; stuck: boolean } // a fleet hub task row (fleet.ts): the hub's state word and whether a stuck rule fired
+export type FleetTaskSubject = { state: string; stuck: boolean; stale?: boolean } // a fleet hub task row (fleet.ts): the hub's state word, whether a stuck rule fired, and whether the row has had no progress past a day
 export type Subject = {
   verdict: string; run: RunSubject; seat: SeatSubject; round: RoundSubject; gate: string; qc: string; background: BackgroundSubject; task: string
   loadSource: LoadSourceSubject; attention: AttentionSubject; residueGroup: string; cleanup: CleanupSubject; fleetTask: FleetTaskSubject; console: string
@@ -337,7 +338,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
   residueGroup: c => norm(c).toLowerCase(),
   cleanup: c => (c.errors > 0 ? 'errors' : c.done > 0 ? 'done' : 'nothing'),
   console: s => norm(s), // the operator-console feed's own state word (fleet.console/1 items[].state, counts.summary.lines keys)
-  fleetTask: f => (f.stuck && !['FAILED', 'LOST', 'BLOCKED_HUMAN'].includes(norm(f.state)) ? 'STUCK' : norm(f.state)),
+  fleetTask: f => (f.stale === true ? 'STALE' : f.stuck && !['FAILED', 'LOST', 'BLOCKED_HUMAN'].includes(norm(f.state)) ? 'STUCK' : norm(f.state)),
 }
 const ATTENTION_FROM = Object.fromEntries(STATE_IDS.map(id => ['from:' + id, id])) as Record<string, StateId>
 export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
@@ -361,7 +362,7 @@ export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   // the fleet hub's task states (fleet.ts); a stuck rule (open an hour unaccepted, a seat quiet four hours, the hub's own suspect) is `stalled`. A word the hub adds later is `unknown`.
   fleetTask: {
     OPEN: 'pending', TASK_ACCEPTED: 'pending', ACCEPTED: 'pending', RUNNING: 'running', IN_PROGRESS: 'running', WAITING: 'waiting', RESULT_REPORTED: 'findings',
-    FAILED: 'failed', LOST: 'failed', SUSPECT: 'stalled', BLOCKED_HUMAN: 'need_you', STUCK: 'stalled',
+    FAILED: 'failed', LOST: 'failed', SUSPECT: 'stalled', BLOCKED_HUMAN: 'need_you', STUCK: 'stalled', STALE: 'stale',
   },
 }
 export function classify<D extends Domain>(domain: D, subject: Subject[D]): string {
@@ -386,7 +387,7 @@ export const FACT_OWNER = {
   'dispatch.runs': 'dispatch', 'dispatch.counts': 'dispatch',
   'review.round': 'review', 'review.seats': 'review', 'review.qc': 'review', 'review.gates': 'review', 'review.plan': 'review',
   'review.decisions': 'review', 'review.ladder': 'review', 'review.undocumented': 'review',
-  'decide.cards': 'decide',
+  'decide.cards': 'decide', 'decide.steps': 'decide',
   'now.attention': 'now', 'now.position': 'now', 'now.background': 'now', 'now.tasks': 'now', 'now.recent': 'now',
   'usage.limit_max': 'spend', 'usage.brain': 'spend', 'usage.window5h': 'spend', 'usage.window7d': 'spend', 'usage.today': 'spend', 'usage.history': 'spend', 'usage.account': 'spend',
   'spend.session': 'spend', 'spend.local_today': 'spend',
@@ -403,7 +404,7 @@ export type FactId = keyof typeof FACT_OWNER
 // the order of sections inside each tab (§2.1), as data; and the sections that start folded (要你處理 never does)
 export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
   now: ['attention', 'where', 'tabs', 'background', 'tasks', 'recent'],
-  decide: ['cards'],
+  decide: ['cards', 'steps'],
   dispatch: ['running', 'finished', 'other'],
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],
@@ -437,13 +438,15 @@ export const isFrag = (v: unknown): v is Frag => typeof v === 'object' && v !== 
 
 export type FmtKind = 'money' | 'pct' | 'dur' | 'ago' | 'clock' | 'size' | 'sha' | 'id' | 'count'
 export type SegRole = 'glyph' | 'state' | 'value' | 'prose' | 'key' | 'rule' | 'tab' | 'title' | 'pick' | 'send' | 'act'
-type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string }
+type SegOpts = { color?: ThemeKey; bold?: boolean; dim?: boolean; role?: SegRole; here?: boolean; fmt?: FmtKind; press?: string; href?: string }
 const sg = (text: string, o: SegOpts = {}): Seg => ({ text, ...o })
 const dim = (text: string, o: SegOpts = {}): Seg => sg(text, { ...o, dim: true })
 
 // ---- pressable file paths: a press opens the viewer window (mods/viewer) on the file ----
 // A press id of the form `show:<path>[:<line>|:end]`. The pane routes it to the viewer; the segment is drawn in the `action` role, the one colour that means "press this".
 export const SHOW_PRESS = 'show:'
+export const LOOK_PRESS = 'look:'
+export const DISMISS_PRESS = 'dismiss:'
 export const showPress = (path: string, at?: number | 'end'): string => SHOW_PRESS + path + (at === undefined ? '' : ':' + at)
 export function showTarget(id: string): { path: string; line: number | 'end' | null } | null {
   if (!id.startsWith(SHOW_PRESS)) return null
@@ -744,6 +747,64 @@ export function actionRow(u: Ctx, label: string, o: { press?: string; note?: str
 // line, nothing to press). Used by the 殘留 tab: one per entry, always the entry's last row, and one for the whole section, always the section's first row.
 export function buttonRow(u: Ctx, label: string, o: { press: string; fact: FactId }): PaneLine {
   return lineOf('choice', [sg('  '), sg(cutProse('[ ' + label + ' ]', Math.max(1, u.cols - 1 - 2)), { role: 'act', color: PALETTE.action, press: o.press })], { fact: o.fact })
+}
+// Links on mod surfaces follow the mods Link rule: https URLs, or http on localhost / 127.0.0.1 only.
+export function isAllowedLinkHref(raw: string): boolean {
+  const s = raw.trim()
+  if (s === '' || /[\s\x00-\x1f\x7f]/.test(s)) return false
+  return /^https:\/\/[^/?#\s]+/i.test(s) || /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?(?:[/?#]\S*)?$/i.test(s)
+}
+// Local file attachment (absolute or repo-relative path, optional :<line> or :end); any URI scheme (`http:`, `file:`, `javascript:`, `data:`) is excluded.
+export function isLocalAttachPath(raw: string): boolean {
+  const s = raw.trim()
+  if (s === '' || /[\x00-\x1f\x7f]/.test(s)) return false
+  return !/^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\d+$)/.test(s)
+}
+// Attachments (`--attach`) on a card: local file paths open in the viewer via `show:<path>[:<line>|:end]`; https / localhost URLs render as `<Link>`; other schemes are inert dim text.
+export function cardAttachRows(u: Ctx, key: string, attachments: readonly string[], o: { fact: FactId }): PaneLine[] {
+  const room = Math.max(1, u.cols - 1 - KEY_W)
+  const rows: PaneLine[] = []
+  for (const raw of attachments) {
+    const att = raw.trim()
+    if (att === '') continue
+    if (isAllowedLinkHref(att)) {
+      const lead = rows.length === 0 ? cardLead(key) : [cardHang()]
+      rows.push(lineOf('kv', [...lead, sg(cutProse(att, room), { role: 'prose', color: PALETTE.action, href: att })], { hang: KEY_W, fact: o.fact }))
+      continue
+    }
+    const local = isLocalAttachPath(att)
+    const lineMatch = local ? /^(.+?):(\d+|end)$/.exec(att) : null
+    const press = local
+      ? showPress(lineMatch === null ? att : lineMatch[1], lineMatch === null ? undefined : lineMatch[2] === 'end' ? 'end' : Number(lineMatch[2]))
+      : undefined
+    const pieces = wrapPlain(att, room, room)
+    ;(pieces.length === 0 ? [att] : pieces).forEach(piece => {
+      const lead = rows.length === 0 ? cardLead(key) : [cardHang()]
+      const shown = cutProse(piece, room)
+      const seg = press !== undefined ? sg(shown, { role: 'prose', color: PALETTE.action, press }) : dim(shown, { role: 'prose' })
+      rows.push(lineOf('kv', [...lead, seg], { hang: KEY_W, fact: o.fact }))
+    })
+  }
+  return rows
+}
+// One persistent `給你看：<檔名>（<來源 lane>）` row in `要你做或看`: clicking the row reopens the item in the viewer, and `[ 關閉 ]` dismisses it.
+export function lookItemRows(u: Ctx, s: Stated, text: string, o: { reopenPress?: string; dismissLabel: string; dismissPress?: string; fact: FactId }): PaneLine[] {
+  const room = Math.max(1, u.cols - 1 - 2)
+  const btnText = cutProse('[ ' + o.dismissLabel + ' ]', room)
+  const btnSeg = o.dismissPress === undefined ? dim(btnText, { role: 'prose' }) : sg(btnText, { role: 'act', color: PALETTE.action, press: o.dismissPress })
+  const bodyOpts: SegOpts = o.reopenPress === undefined ? { role: 'prose' } : { role: 'prose', color: PALETTE.action, press: o.reopenPress }
+  const pieces = wrapPlain(text, room, room)
+  const lines = (pieces.length === 0 ? [''] : pieces).map((piece, i) => {
+    const lead = i === 0 ? [...stateLead(u, s, { word: false }).segs, sg(' ')] : [sg('  ')]
+    return lineOf('item', [...lead, sg(cutProse(piece, room), bodyOpts)], { fact: o.fact, hang: 2 })
+  })
+  const last = lines[lines.length - 1]
+  if (displayWidth(last.text) + 2 + displayWidth(btnText) <= u.cols - 1) {
+    lines[lines.length - 1] = lineOf('item', [...(last.segs as Seg[]), sg('  '), btnSeg], { fact: o.fact, hang: 2 })
+  } else {
+    lines.push(lineOf('choice', [sg('  '), btnSeg], { fact: o.fact }))
+  }
+  return lines
 }
 // lines meant for a scrolling window's fixed action strip (§12.10): pane.tsx draws them under the rule, not among the scrolling rows
 // one free-form row of fragments (the console page's summary and data-age lines): cut from the right so it never passes `cols - 1`

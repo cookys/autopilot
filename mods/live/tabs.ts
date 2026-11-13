@@ -13,8 +13,8 @@ import { actionable, cardKey } from './decidebatch'
 import { consoleBarStrip, consoleStrip } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { cardTitleOf } from './cardtitle'
-import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, DECIDE_UNDO_MS, decideDialog, decideFixing, decideHeld, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
-import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
+import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, DECIDE_UNDO_MS, decideDialog, decideFixing, decideHeld, decideLine, decideOpen, decidePick, isStepCard, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
+import type { AccountSnap, BandView, CodeReviewView, LiveDecision, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
 // ================= Now =================
@@ -365,7 +365,8 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const F = 'decide.cards' as const
   const id0 = 'sec:decide.cards'
   const dv = ctx.decide ?? { ...NO_DECIDE, inputs: false }
-  const list = dv.batch === undefined ? snap.pending : actionable(snap.pending, dv.batch, dv)
+  const decisionPending = snap.pending.filter(d => !isStepCard(d))
+  const list = dv.batch === undefined ? decisionPending : actionable(decisionPending, dv.batch, dv)
   const open0 = U.sectionOpen(ctx.folded, id0)
   const needYou = ui.stateOf('verdict', 'DECIDE')
   if (list.length === 0) return [ui.header(u, t('decide.title'), { id: id0, open: open0 }), ...(open0 ? [ui.empty(t('decide.none'), F)] : [])]
@@ -396,6 +397,7 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     if (cardTitleOf(d) !== d.question) out.push(...ui.cardParaRows(u, t('decide.k_question'), ui.cardParas(d.question), { fact: F })) // the heading is the short title: the full question stays on the card
     if (d.background !== null) out.push(...ui.cardParaRows(u, t('decide.k_background'), ui.cardParas(d.background), { fact: F, subtle: true }))
     if (d.blocks !== null) out.push(...ui.cardRow(u, t('decide.k_blocks'), d.blocks, { fact: F }))
+    if ((d.attachments?.length ?? 0) > 0) out.push(...ui.cardAttachRows(u, t('decide.k_attach'), d.attachments as string[], { fact: F }))
     const pick = decidePick(d, dv)
     const rec = recommendedIndex(d)
     const dialog = decideDialog(d)
@@ -428,11 +430,54 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   else out.push(...ui.asBar(ui.actionRow(u, t('decide.submit', { n: answered, total: open.length }), { fact: F, note: t('decide.submit_note'), ...(answered > 0 ? { press: 'submit' } : {}) })))
   return out
 }
+// Step cards (`--kind step`) and persistent `給你看` rows (`--kind look`): listed under `要你做或看` until dismissed.
+function decideSteps(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
+  const t = ctx.t
+  const F = 'decide.steps' as const
+  const id1 = 'sec:decide.steps'
+  const steps = snap.pending.filter(isStepCard)
+  if (steps.length === 0) return []
+  const open1 = U.sectionOpen(ctx.folded, id1)
+  const needYou = ui.stateOf('verdict', 'DECIDE')
+  const head = ui.header(u, t('decide.steps_title'), { id: id1, open: open1 }, { right: ui.countChip(u, needYou, steps.length, F), fact: F })
+  if (!open1) return [head]
+  const out: PaneLine[] = [head]
+  let stepIndex = 0
+  for (const d of steps) {
+    if (d.kind === 'look') {
+      out.push(...ui.lookItemRows(u, needYou, d.question + staleSuffix(d, t), {
+        reopenPress: d.id !== null ? ui.LOOK_PRESS + d.id : undefined,
+        dismissLabel: t('decide.dismiss'),
+        dismissPress: d.id !== null ? ui.DISMISS_PRESS + d.id : undefined,
+        fact: F,
+      }))
+      out.push(ui.blank())
+      continue
+    }
+    stepIndex += 1
+    out.push(...ui.cardTitle(u, needYou, stepIndex + '. ' + cardTitleOf(d) + staleSuffix(d, t), undefined, { fact: F, sent: false }))
+    if (cardTitleOf(d) !== d.question) out.push(...ui.cardParaRows(u, t('decide.k_question'), ui.cardParas(d.question), { fact: F }))
+    if (d.background !== null) out.push(...ui.cardParaRows(u, t('decide.k_background'), ui.cardParas(d.background), { fact: F, subtle: true }))
+    if (d.blocks !== null) out.push(...ui.cardRow(u, t('decide.k_blocks'), d.blocks, { fact: F }))
+    if ((d.attachments?.length ?? 0) > 0) out.push(...ui.cardAttachRows(u, t('decide.k_attach'), d.attachments as string[], { fact: F }))
+    if (d.id !== null) out.push(ui.buttonRow(u, t('decide.dismiss'), { press: ui.DISMISS_PRESS + d.id, fact: F }))
+    out.push(ui.blank())
+  }
+  if (out[out.length - 1]?.kind === 'blank') out.pop()
+  return out
+}
 // the 指揮 page's queue (commandtab.ts): the same cards as the 待決 tab, built from the live snapshot, header line first
 export const consoleDecideCards = (snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] => wrapLines(decideCards(uiCtxOf(ctx), ctx, snap), ctx.cols)
 function decideLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   if (snap.band === null) return [] // a non-ok snapshot: the header line is the state text, there is no body
-  return U.sections('decide', { cards: decideCards(uiCtxOf(ctx), ctx, snap) })
+  const u = uiCtxOf(ctx)
+  const rawCards = decideCards(u, ctx, snap)
+  const rawSteps = decideSteps(u, ctx, snap)
+  if (rawSteps.length === 0) return U.sections('decide', { cards: rawCards, steps: rawSteps })
+  const cardBody = rawCards.filter(l => l.bar !== true)
+  const bars = rawCards.filter(l => l.bar === true)
+  const withGap = cardBody[cardBody.length - 1]?.kind === 'blank' ? rawSteps : [ui.blank(), ...rawSteps]
+  return [...U.sections('decide', { cards: cardBody, steps: withGap }), ...bars]
 }
 export const decideTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(decideLinesRaw(snap, ctx), ctx.cols)
 // The 待決 band's compact form (band.tsx draws it): the first open question's title rows and option rows (the pane's own lines, wrapped at `ctx.cols`, never cut), a pointer row,
@@ -450,7 +495,7 @@ export function decideBandPlan(snap: LiveSnapshot, ctx: PaneCtx, maxRows?: numbe
   const bars = lines.filter(l => l.bar === true)
   if (rows.length === 0) return { rows, pointer: null, bars, empty: true } // no card at all: the only case the band says there is nothing to answer
   const first = snap.pending[0]
-  const hasMore = first !== undefined && (first.background !== null || first.options.some(o => o.description !== ''))
+  const hasMore = first !== undefined && (first.background !== null || first.options.some(o => o.description !== '') || (first.attachments?.length ?? 0) > 0)
   const room = maxRows === undefined ? Infinity : Math.max(0, maxRows - bars.length)
   if (rows.length + (hasMore ? 1 : 0) <= room) return { rows, pointer: hasMore ? 'decide.band_bg' : null, bars, empty: false }
   return { rows: rows.slice(0, Math.max(0, room - 1)), pointer: room > 0 ? 'decide.band_more' : null, bars, empty: false } // a card exists but the room is small: the pointer row (and the send row) stay, never the `none` line
@@ -979,7 +1024,7 @@ function fleetRow(u: UiCtx, task: FleetTask): U.RowSpec {
     if (task.progress !== '' && task.progress !== task.title) children.push(...ui.detail(u, t('fleet.progress', { p: task.progress }), { fact: F }))
     children.push(...ui.detail(u, t('fleet.task_id', { state: task.state, id: task.id }), { fact: F }))
   }
-  return { group: task.id, ts: task.createdMs ?? 0, state: ui.stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null }), fact: F, body: task.title, meta, toggle, children, word: true }
+  return { group: task.id, ts: task.createdMs ?? 0, state: ui.stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null, stale: task.stale }), fact: F, body: task.title, meta, toggle, children, word: true }
 }
 function fleetLanesLines(u: UiCtx, ctx: PaneCtx, f: FleetView | null): PaneLine[] {
   const t = u.t
@@ -988,10 +1033,11 @@ function fleetLanesLines(u: UiCtx, ctx: PaneCtx, f: FleetView | null): PaneLine[
   if (f.lanes.length === 0) return [ui.empty(t('fleet.none'), F)]
   const out: PaneLine[] = []
   for (const l of f.lanes) {
-    const rows = [...l.inflight, ...l.upcoming]
+    const active = [...l.inflight, ...l.upcoming]
     const id = fleetLaneId(l)
     const open = U.sectionOpen(ctx.folded, id, false)
-    const chip = ui.countChip(u, U.worst(rows.map(r => ui.stateOf('fleetTask', { state: r.state, stuck: r.stuck !== null }))), rows.length, F)
+    const chipRows = active.length > 0 ? active : l.stale
+    const chip = ui.countChip(u, U.worst(chipRows.map(r => ui.stateOf('fleetTask', { state: r.state, stuck: r.stuck !== null, stale: r.stale }))), chipRows.length, F)
     out.push(ui.header(u, l.lane, { id, open }, { right: chip, fact: F }))
     if (!open) continue
     if (l.inflight.length > 0) out.push(...ui.list(u, 'fleet.inflight.' + l.host + '/' + l.lane, t('fleet.noun_inflight'), l.inflight.map(x => fleetRow(u, x)), { keepOrder: true, cap: FLEET_CAP }))
@@ -999,6 +1045,7 @@ function fleetLanesLines(u: UiCtx, ctx: PaneCtx, f: FleetView | null): PaneLine[
       out.push(...ui.detail(u, t('fleet.upcoming', { n: l.upcoming.length }), { fact: F }))
       out.push(...ui.list(u, 'fleet.upcoming.' + l.host + '/' + l.lane, t('fleet.noun_upcoming'), l.upcoming.map(x => fleetRow(u, x)), { keepOrder: true, cap: FLEET_CAP }))
     }
+    if (l.stale.length > 0) out.push(...ui.list(u, 'fleet.stale.' + l.host + '/' + l.lane, t('ui.state.stale'), l.stale.map(x => fleetRow(u, x)), { keepOrder: true, cap: FLEET_CAP }))
   }
   return out
 }

@@ -6,6 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const o = require('./account-observation');
 const { makeFixture } = require('./account-fixtures/shim-install');
@@ -787,4 +788,32 @@ test('G40-D1 guard ignores a future basis: a local row stamped an hour ahead doe
     writeViewFile(fx, { schema: o.VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [{ writer_courier: 'local', host_role: 'agent', observed_at_hub: null, skewed: false, record: near }] });
     assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.2, observed_at: nowS, resets_at: nowS + 3600 })] }), clock).superseded, true);
   });
+});
+
+test('shared 02750 out-dir: created quota dirs keep setgid and a later mkdir inherits it', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'obs-sgid-'));
+  try {
+    const shared = path.join(root, 'shared');
+    fs.mkdirSync(shared, { mode: 0o750 });
+    fs.chmodSync(shared, 0o2750);
+    const parent = fs.lstatSync(shared);
+    assert.strictEqual(parent.mode & 0o2000, 0o2000);
+    const provider = path.join(shared, 'quota', 'claude');
+    const made = o.ensureSharedMirrorDir(provider);
+    assert.deepStrictEqual([made.ok, made.reason], [true, null]);
+    for (const dir of [path.join(shared, 'quota'), provider]) {
+      const st = fs.lstatSync(dir);
+      assert.strictEqual(st.mode & 0o2000, 0o2000, dir);
+      assert.strictEqual(st.mode & 0o777, 0o750, dir);
+      assert.strictEqual(st.gid, parent.gid, dir);
+    }
+    const later = path.join(provider, 'later');
+    fs.mkdirSync(later, { mode: 0o750 });
+    const lst = fs.lstatSync(later);
+    assert.strictEqual(lst.mode & 0o2000, 0o2000, 'a dir created under the provider dir must inherit setgid');
+    assert.strictEqual(lst.gid, parent.gid);
+    const file = path.join(provider, 'a.json');
+    fs.writeFileSync(file, '{}\n', { mode: 0o640 });
+    assert.strictEqual(fs.statSync(file).gid, parent.gid);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

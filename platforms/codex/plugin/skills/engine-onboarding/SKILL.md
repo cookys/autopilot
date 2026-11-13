@@ -33,7 +33,7 @@ filters, not an intuitive preference for one model. Among applicable identities,
 - **capability**: strongest qualified engine for role.
 - **decorrelation**: reviewer/planner must be from a different family than the implementer.
 - **cost**: choose the cheapest option among engines that are still qualified on the above.
-  Exam rows carry per-case `usage` (`solved_per_hour`, `tok_per_solved`, `usd_per_solved` when a price is supplied); `usage_complete=false` means tokens were not fully measured and the figures are null, never 0. See `references/qualification-defaults.md` (Usage telemetry).
+  Exam rows carry per-case `usage` (`solved_per_hour`, `tok_per_solved`, `usd_per_solved` when a price is supplied); `usage_complete=false` means tokens were not fully measured and the figures are null, never 0. A `--raw-dir` run also appends `<role>-progress.jsonl` after each case (ids, request count, tokens, wall only). See `references/qualification-defaults.md` (Usage telemetry).
 
 Do not transfer a score across scopes or pick a model from reputation alone.
 

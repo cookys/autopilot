@@ -5,7 +5,7 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } from './model'
+import { BAND_INFO_LABEL, BAND_SEP, displayWidth, fittedBandWidth, layoutBand, plainBandText } from './model'
 import { PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
@@ -75,19 +75,22 @@ function drawSegs(el: { Text: El; Button?: El }, segs: Seg[], onSlot: (id: SlotI
 }
 
 // the band's own cells (the line and the ⓘ), and the width they take
-function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void): { nodes: unknown[]; width: number } {
+function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null): { nodes: unknown[]; width: number } {
   const { Text, Button } = el
   // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
   const icon = Button === undefined
     ? <Text>{BAND_INFO_LABEL}</Text>
     : <Button key="info" plain autoFocus onPress={onInfo}>{BAND_INFO_LABEL}</Button>
+  // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + ⓘ), never preset.width on its own.
+  const segW = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
+  if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: fittedBandWidth(segW(preset.segs), null, false) }
   if (snap === null || snap.band === null) {
     const reason = snap === null ? t('band.waiting') : snap.text
     const line = plainBandText(reason, columns) + BAND_SEP
-    return { nodes: [<Text key="w" {...dimProps()} wrap="truncate">{line}</Text>, icon], width: displayWidth(line) + displayWidth(BAND_INFO_LABEL) }
+    return { nodes: [<Text key="w" {...dimProps()} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) }
   }
   const line = layoutBand(snap.band.slots, columns)
-  return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: line.width }
+  return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: fittedBandWidth(segW(line.segs), null, false) }
 }
 
 export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T = T_EN, onSlot: (id: SlotId) => void = () => {}) {
@@ -100,7 +103,7 @@ export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot 
 export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; onTab: (id: BarTabId | ConsoleTab) => void }
 
 // the row, and the column its tabs start in (the rule under it is built from that)
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null): { node: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null): { node: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
   const fb = forge === null ? null : forgeBar(forge)
@@ -109,8 +112,10 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab
   const more = moreTo !== null
   const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
-  const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot)
-  const gap = Math.max(1, columns - left.width - forgeW - strip.width - moreW)
+  const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot, preset)
+  // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
+  const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
+  const gap = Math.max(1, columns - fittedBandWidth(segW, forge, more) - strip.width)
   const moreText = <Text key="m" {...drawSeg(moreSeg())} wrap="truncate">{GLYPHS.structure.goto}</Text>
   const moreNode = !more ? [] : [<Box key="more">{Button === undefined ? moreText : <Button key="more" plain onPress={() => hd.onTab(moreTo as BarTabId)}>{moreText}</Button>}<Text> </Text></Box>]
   const texts = fb === null ? [] : fb.segs.map((s, i) => <Text key={'f' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
@@ -124,7 +129,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       </Box>
     )
   })
-  return { node: <Box>{left.nodes}{speed}<Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>, strip, tabsAt: left.width + forgeW + gap }
+  return { node: <Box>{left.nodes}{speed}<Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>, strip, tabsAt: fittedBandWidth(segW, forge, false) + gap }
 }
 
 // the rule under the bar

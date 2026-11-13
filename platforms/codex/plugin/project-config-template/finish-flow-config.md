@@ -27,6 +27,7 @@
 # - Merge target branch for the `finish` node's merge step (e.g., `develop` vs `main`)
 # - Merge target branch + flags for urgent (`!`) work (e.g., `main` with `--no-ff`)
 # - Archive procedure during the `finish` node's archive step (where to move project dir, how to update INDEX)
+# - Usage evidence → N/A (<reason>)   # Session end (full) item 7; key name matches the skill row. The reason stays project-specific.
 
 ## Per-phase quality pipeline
 # If your project runs quality-pipeline at every unit advance (not only at the final `qc-gate`),

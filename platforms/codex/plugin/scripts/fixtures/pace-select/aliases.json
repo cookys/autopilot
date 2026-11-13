@@ -1,0 +1,50 @@
+{
+  "schema": "capacity.pace/1",
+  "generated_at": "2026-11-13T02:20:00Z",
+  "rows": [
+    {
+      "pool": "agy",
+      "class": "other",
+      "status": "WARN_ahead",
+      "stale": false,
+      "used_pct": 55,
+      "expected_pct": 40,
+      "gap_pts": 15,
+      "hours_to_reset": 72,
+      "window_h": 120
+    },
+    {
+      "pool": "agy(alias 2)",
+      "class": "other",
+      "status": "ALERT_behind",
+      "stale": false,
+      "used_pct": 12,
+      "expected_pct": 40,
+      "gap_pts": -28,
+      "hours_to_reset": 72,
+      "window_h": 120
+    },
+    {
+      "pool": "grok-cli",
+      "class": "other",
+      "status": "ok+stale",
+      "stale": true,
+      "used_pct": 1,
+      "expected_pct": 90,
+      "gap_pts": -89,
+      "hours_to_reset": 18,
+      "window_h": 168
+    },
+    {
+      "pool": "grok-cli(alias 2)",
+      "class": "other",
+      "status": "behind_early",
+      "stale": false,
+      "used_pct": 29,
+      "expected_pct": 40,
+      "gap_pts": -11,
+      "hours_to_reset": 100.8,
+      "window_h": 168
+    }
+  ]
+}

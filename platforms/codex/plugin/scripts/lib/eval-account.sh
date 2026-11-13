@@ -61,6 +61,10 @@ eval_account_install_wrapper() {
   case "$pinned" in ""|/*) ;; *) echo "eval-account: the pinned claude must be an absolute path: $pinned" >&2; return 2 ;; esac
   cat > "$dir/claude" <<'WRAP'
 #!/usr/bin/env bash
+if [ "${AUTOPILOT_TOKEN_SEAT:-}" = 1 ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  printf '%s\n' 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)' >&2
+  exit 78
+fi
 WRAPPER_DIR=$(cd "$(dirname "$0")" && pwd -P)
 REAL_CLAUDE=""
 #PINNED#

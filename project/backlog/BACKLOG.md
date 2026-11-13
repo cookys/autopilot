@@ -702,14 +702,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-27
 - **Origin**: self
-- **Problem**: 推送前跑套件，有十幾支在 base 上本來就紅（非新引入），每次都要人工判讀；清單與各自的紅法見旁檔。
+- **Problem**: 推送前跑套件，旁檔裡較早的那批在 base 上本來就紅（非新引入），每次都要人工判讀。2026-11-13 點名的 12 支已單獨跑過：11 支轉綠；post-tool-chain-differential 在固定 flock 鎖不可寫時改為 SKIP（主機環境，鏈本身沒跑）。
 - **Impact**: 真正的新紅會被淹沒，每次推送都得重新分辨。
 - **Trigger**: next pre-push suite run, or a lane touches one of the listed suites
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: pre-push suite runs 2026-10-26 to 10-27 (noexpiry, agyargv2, fbland, fbv3)
 - **Pointer**: project/backlog/base-red-suite-list.md
-- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here.
+- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here. The 2026-11-13 twelve are in the Pointer: eleven green alone, one host SKIP. BL-0428 is closed.
 
 ### The library path openDecision() skips the --not-authorized and DOA checks
 - **Id**: BL-0320
@@ -783,23 +783,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/backlog/missing-path-assumptions.md
 - **Context**: Widened by owner (second Report). Eg runs-watch.js:1059 aborts on missing /tmp/autopilot-dispatch-runs. Design doc first (inventory, ensureDir helper, unavailable reason, doctor, empty-HOME test).
 
-### Decision card opened from another repo's cwd lands in that repo and the panel never shows it
-- **Id**: BL-0337
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: peer
-- **Reporter**: hangar session (openclaw)
-- **Report**: 01M66YRNXRT5SNRXF6QDRV3JGF
-- **Reply**: none
-- **Problem**: 從別的專案目錄執行開決策卡指令時，卡片會寫進該目錄所在的專案，操作者的面板讀的是另一個專案，所以看不到卡，指令卻照常回傳編號、毫無警告。
-- **Impact**: 操作者漏看一張待決卡；這次改口頭回答，沒有損害，但可能再發生。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PEER-REPORTED hangar 2026-10-31
-- **Pointer**: project/backlog/open-decision-cwd-scope.md
-- **Context**: Scope from process cwd git-common-dir; only unbound warns (~L275). Options: warn/refuse on repo mismatch, derive from session marker, fix SessionStart hint wording.
-
 ### SessionStart agent-brief hint is not copyable and the two dispatch guards reject it one at a time
 - **Id**: BL-0338
 - **Status**: open
@@ -816,23 +799,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED <host> 2026-10-31, owner asked; depth-0 verified
 - **Pointer**: project/backlog/brief-header-hint-guards.md
 - **Context**: hooks/lib/brief-header-template.js:76 joins lines with " | "; hooks/subagent-budget.js:498; dispatch-model-guard. Fix: copyable 3-line template incl. intentional form, one merged message, regression test.
-
-### engine-scorecard strip-expiry silently writes the real engine-capability store when only one directory is overridden
-- **Id**: BL-0339
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: peer
-- **Reporter**: peace (<host>)
-- **Report**: 01M67HZPT918GAWJG237T0JG8N
-- **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
-- **Problem**: 成績單工具的去除期限指令同時動到兩個資料夾，一個放席位成績列，一個放證據與釘選。只改道其中一個時，另一個會悄悄寫進真實的資料夾。
-- **Impact**: 回報者的子代理對副本跑時，真實的證據與釘選被改寫，事後靠備份還原；資料安全問題。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PEER-REPORTED peace (<host>) 2026-10-31, priority high (data safety)
-- **Pointer**: project/backlog/engine-scorecard-strip-expiry-store-split.md
-- **Context**: Fix direction: refuse when only one of the two dirs is overridden, or list every path about to be written before writing. Add a negative control (one override only must be refused).
 
 ### dispatch-review.sh cannot read only the last message and has no REWORK or STOP verdict
 - **Id**: BL-0340
@@ -1489,19 +1455,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PM 01M74K28MQ (2026-11-11)
 - **Pointer**: project/backlog/parallel-by-default-for-leads.md
 
-### Two suites red on clean develop: skill-onoff-d0gate-cc and qualification-consult-discuss-transport
-- **Id**: BL-0428
-- **Status**: open
-- **Since**: 2026-11-11
-- **Origin**: self
-- **Problem**: Two test suites already fail on a clean develop before any change, so every merge has to compare against them. Root cause not looked at yet.
-- **Impact**: A real regression in either suite would hide behind the known failures.
-- **Trigger**: ready
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: stack4 merge 66fc4f426 (2026-11-11)
-- **Pointer**: project/backlog/baseline-reds-d0gate-consult.md
-
 ### Quota cache is empty after a reboot until the next session writes it
 - **Id**: BL-0430
 - **Status**: open
@@ -1518,53 +1471,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: hangar report after the 2026-11-12 power cut (fleet message 01M767AX)
 - **Pointer**: project/backlog/quota-cache-after-reboot.md
 
-### Test harnesses leave their own tmux socket and claude process running
-- **Id**: BL-0433
-- **Status**: open
-- **Since**: 2026-11-12
-- **Origin**: peer
-- **Reporter**: PM (pm--claude) via hangar
-- **Report**: 2026-11-12 fleet (PM via hangar)
-- **Reply**: unknown
-- **Problem**: Test harnesses that start their own tmux socket and a claude process (the modscroll repro harness) are not torn down; one was still running on the PM host after 25 days, hangar stopped it on PM go.
-- **Impact**: Orphan claude processes and tmux servers keep running after the test, with a deleted exe and a gone plugin worktree.
-- **Trigger**: ready
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PM report via hangar 2026-11-12
-- **Pointer**: project/backlog/test-tmux-claude-teardown.md
-
-### affected-suites counts a skipped suite as green and does not report skips
-- **Id**: BL-0434
-- **Status**: open
-- **Since**: 2026-11-12
-- **Origin**: peer
-- **Reporter**: autopilot lane
-- **Report**: 2026-11-12 fleet (PM ruling)
-- **Reply**: 2026-11-12 01M76P6G6F17DHRDCYB61HRK6H
-- **Problem**: The affected-suites runner decides pass or fail only from each suite exit code, so a suite that prints SKIP and exits 0 counts as green and the summary never says how many were skipped. The full-suite runner does list skips, so the two runners disagree.
-- **Impact**: A run where the hippo suites skipped because hippo is absent reads as fully verified, though nothing was asserted.
-- **Trigger**: ready
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: found 2026-11-12 while fixing the hippo suites (merge 6e96e90a1); PM ruling fleet 01M76P6G6F17DHRDCYB61HRK6H
-- **Pointer**: project/backlog/affected-suites-skip-count.md
-
-### dispatch-hetero --endpoint has no fallback when the local endpoint is unavailable
-- **Id**: BL-0435
-- **Status**: open
-- **Since**: 2026-11-12
-- **Origin**: peer
-- **Reporter**: autopilot lane
-- **Report**: 2026-11-12 fleet (qwen canary final report)
-- **Reply**: 2026-11-12 01M76WDT193M2A7QRQ9X5YFWVZ
-- **Problem**: With an explicit --endpoint, a failed pre-probe or 503 ends the dispatch as engine_unavailable with no automatic re-dispatch, so unattended lanes cannot use the local seat.
-- **Impact**: The canary's 0 fallbacks did not test fallback at all; qwen implementer is restricted to attended lanes.
-- **Trigger**: ready
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: qwen canary final report 2026-11-12, PM ruling fleet 01M76WDT193M2A7QRQ9X5YFWVZ
-- **Pointer**: project/backlog/hetero-endpoint-fallback.md
 
 ### Stop hook 在最終回覆重列超過兩張未開未關的決策卡時警告
 - **Id**: BL-0436

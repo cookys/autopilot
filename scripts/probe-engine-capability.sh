@@ -8,6 +8,8 @@ STATE_CLI="$SELF_DIR/engine-capability-state.js"
 # dispatch-tree 3b rule 3: the probe's `claude -p` children get this process's write target as the parent id.
 # shellcheck source=lib/repo-identity.sh
 [ -r "$SELF_DIR/lib/repo-identity.sh" ] && . "$SELF_DIR/lib/repo-identity.sh" || true
+# shellcheck source=lib/token-seat.sh
+. "$SELF_DIR/lib/token-seat.sh"
 # shellcheck source=lib/runner-fallback-bin.sh
 . "$SELF_DIR/lib/runner-fallback-bin.sh"
 # dispatch-tree 3d: no probe invocation mints a child id (no manifest, no --session-id), so an inherited AUTOPILOT_CHILD_SESSION_ID must not reach any runner,
@@ -216,12 +218,14 @@ case "$RUNNER" in
     fi
     ;;
   cc-shim)
+    _ts_msg="$(token_seat_guard)" || { printf '%s\n' "$_ts_msg" >&2; exit 78; }
     if command -v claude >/dev/null 2>&1; then
       BINARY_FOUND=1
       RUNNER_VERSION="$(claude --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
   claude-native)
+    _ts_msg="$(token_seat_guard)" || { printf '%s\n' "$_ts_msg" >&2; exit 78; }
     # Drives the local Claude Code CLI with its own ambient auth. The dispatcher resolves
     # `command -v "${BIN:-claude}"`; this probe has no --bin input, so BIN is always unset
     # here and the two resolutions are identical. Matches the cc-shim branch below, which
@@ -476,6 +480,7 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       else
         child_session_env_setup "$SELF_DIR" 2>/dev/null || true
         declare -F child_session_mint >/dev/null 2>&1 && child_session_mint probe   # BL-0251 fleet contract
+        _ts_msg="$(token_seat_guard)" || { printf '%s\n' "$_ts_msg" >&2; exit 78; }
         env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} claude -p "Respond only with OK" --model "$MODEL" --strict-mcp-config --tools "" >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi
       ;;
@@ -488,6 +493,7 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       # token in the child env only); no registry -> the ambient path below, unchanged. A broken
       # registry is a hard stop: nothing is spawned and no capability row is recorded.
       . "$SELF_DIR/lib/account-state.sh"
+      _ts_msg="$(token_seat_guard)" || { printf '%s\n' "$_ts_msg" >&2; exit 78; }
       case "$(account_layer_state "$SELF_DIR/claude-account.js" probe)" in
         legacy)
           env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \

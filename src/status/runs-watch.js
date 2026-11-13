@@ -905,6 +905,14 @@ function createWatcher({
     try { spendHistory.publish({ nowMs, usd: cost.host_today_brain_usd }); } catch (error) { log(`spend history failed: ${error.message}`); }
     try { stageWalkSidecar.publish({ markers: allMarkers, nowMs }); } catch (error) { log(`stage walk failed: ${error.message}`); }
     try { publishTurnEffective({ liveBase: live, key, nowMs, log }); } catch (error) { log(`turn-effective failed: ${error.message}`); }
+    // Dated cards (open-decision.js --due): the same once-only sweep as `open-decision.js due-sweep`, one `DUE <id> <title>` log line per card that
+    // became due. The page float-up itself comes from the decision signature (watch-inputs.js folds in due_state). No timer: it rides this tick.
+    const dueCommon = commonDirOf(identity);
+    if (dueCommon) {
+      try {
+        for (const d of require('../../scripts/open-decision.js').dueSweep({ dir: path.join(dueCommon, 'autopilot', 'decisions'), projectKey: key, identity, nowMs })) log(`DUE ${d.id} ${d.title}`);
+      } catch (error) { log(`due sweep failed: ${error.message}`); }
+    }
     if (render) {
       try { renderPass(rows, nowMs, roots); } catch (error) { log(`render pass failed: ${error.message}`); }
     }

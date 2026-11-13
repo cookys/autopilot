@@ -18,7 +18,7 @@ import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, state
 const GS = GLYPHS.state
 const GT = GLYPHS.structure
 const GC = GLYPHS.chart
-import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
+import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, ForgeSegment, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
 
 
 // ---- the snapshot the tick builds and the band / pane draw (module state in register.ts) ----
@@ -50,14 +50,23 @@ export type LiveGateRow = {
   status: string | null
 }
 
-// one open owner question (autopilot.decision/2 entry, as the job model carries it): the full context the owner needs to answer without scrolling back
+export type LookTarget =
+  | { kind: 'path'; path: string; start: number | null; end: number | null; tail?: boolean }
+  | { kind: 'diff'; args: string[] }
+
+// one open owner question or operator step/look item (autopilot.decision/2 entry, as the job model or durable store carries it): the full context the owner needs without scrolling back
 export type LiveDecision = {
   id: string | null; title: string | null; question: string; background: string | null; options: { label: string; description: string }[]
   recommendation: string | null; why: string | null; blocks: string | null; not_authorized: string | null; source: string | null; opened_at: string | null
   stale: boolean; age_s: number | null
   origin: string | null // `ask_user_question`: hooks/ask-decision.js opened it, the asker's own dialog answers it (the pane never does)
   orphaned: boolean // the asking session left no turn file: it ended (or crashed) without answering; the watcher derives it, the entry is never removed by it
+  kind?: string | null // `decide` | `go` -> 要你決定; `step` | `look` -> 要你做或看
+  attachments?: string[]
+  look_target?: LookTarget | null
 }
+
+export const isStepCard = (d: LiveDecision): boolean => d.kind === 'step' || d.kind === 'look'
 
 // `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, project/plans/2026-10-13-live-pane-design-system.md §6.1); `kind` and
 // `fact` are required: a line no component made does not type-check.
@@ -996,6 +1005,9 @@ export function readJobModel(text: string | null): JobModel | null {
     age_s: finite(d.age_s) ? d.age_s : null,
     orphaned: d.orphaned === true,
     origin: optText(d.origin),
+    kind: optText(d.kind),
+    attachments: parseAttachments(d.attachments),
+    look_target: parseLookTarget(d.look_target),
   }))
   const awaiting_operator: LiveAwaiting[] = (Array.isArray(m.awaiting_operator) ? m.awaiting_operator : []).filter(isObject).filter(d => typeof d.question === 'string' && d.question !== '').map(d => ({
     id: optText(d.id), question: d.question as string, answer: optText(d.answer), awaiting_operator: optText(d.awaiting_operator), executor: optText(d.executor), asker: optText(d.asker),
@@ -1015,6 +1027,117 @@ export function readJobModel(text: string | null): JobModel | null {
   const ph = m.phase
   const phase = isObject(ph) && typeof ph.label === 'string' && ph.label ? { code: typeof ph.code === 'string' ? ph.code : null, label: ph.label, source: typeof ph.source === 'string' ? ph.source : null } : null
   return { acceptance, gates, needs_decision: m.needs_decision === true, conclusion: typeof m.conclusion === 'string' && m.conclusion ? m.conclusion : null, decisions, awaiting_operator, pending_dispatch, progress, phase, sources_manifest: m.sources_manifest }
+}
+
+export const DECISION_STORE_SCHEMA = 'autopilot.decision/2'
+
+function parseAttachments(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map(a => a.trim()) : []
+}
+
+function parseLookTarget(v: unknown): LookTarget | null {
+  if (!isObject(v)) return null
+  if (v.kind === 'path' && typeof v.path === 'string' && v.path !== '') {
+    return {
+      kind: 'path',
+      path: v.path,
+      start: Number.isInteger(v.start) && (v.start as number) >= 1 ? (v.start as number) : null,
+      end: Number.isInteger(v.end) && (v.end as number) >= 1 ? (v.end as number) : null,
+      ...(v.tail === true ? { tail: true } : {}),
+    }
+  }
+  if (v.kind === 'diff' && Array.isArray(v.args)) {
+    return { kind: 'diff', args: v.args.filter((a): a is string => typeof a === 'string') }
+  }
+  return null
+}
+
+// Direct read of <git-common-dir>/autopilot/decisions/<scope>.json (the durable store scripts/open-decision.js writes), so cards and `給你看` items appear at once and survive
+// pane reload even before the watcher republishes model.json; closed entries shadow any older open copy in model.json.
+export function readDurableDecisionFiles(texts: readonly string[], want: { project_key: string; repo_identity: unknown }, nowMs: number): { open: LiveDecision[]; closedIds: Set<string> } {
+  const optText = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
+  const rankOf = (status: string): number => (status === 'closed' ? 3 : status !== 'open' ? 2 : 1)
+  const bestById = new Map<string, { rank: number; card: LiveDecision | null; order: number }>()
+  const unnamed: { card: LiveDecision; order: number }[] = []
+  let seq = 0
+  for (const text of texts) {
+    const parsed = parseJson(text)
+    if (!parsed.ok || !isObject(parsed.value) || parsed.value.schema !== DECISION_STORE_SCHEMA) continue
+    if (parsed.value.project_key !== want.project_key) continue
+    if (typeof want.repo_identity === 'string' && want.repo_identity !== '' && typeof parsed.value.repo_identity === 'string' && parsed.value.repo_identity !== '' && parsed.value.repo_identity !== want.repo_identity) continue
+    const list = Array.isArray(parsed.value.decisions) ? parsed.value.decisions : []
+    for (const d of list) {
+      if (!isObject(d) || typeof d.question !== 'string' || d.question.trim() === '') continue
+      const status = typeof d.status === 'string' && d.status !== '' ? d.status : 'open'
+      const rank = rankOf(status)
+      const id = optText(d.id)
+      const openedAt = optText(d.opened_at)
+      const openedMs = openedAt === null ? NaN : Date.parse(openedAt)
+      const ageS = Number.isFinite(openedMs) ? Math.max(0, Math.round((nowMs - openedMs) / 1000)) : null
+      const card: LiveDecision | null = status === 'open' ? {
+        id,
+        title: optText(d.title),
+        question: d.question,
+        background: optText(d.background),
+        options: (Array.isArray(d.options) ? d.options : []).filter(isObject).map(o => ({
+          label: typeof o.label === 'string' ? o.label : '',
+          description: typeof o.description === 'string' ? o.description : '',
+        })).filter(o => o.label !== ''),
+        recommendation: optText(d.recommendation),
+        why: optText(d.why),
+        blocks: optText(d.blocks),
+        not_authorized: optText(d.not_authorized),
+        source: optText(d.source),
+        opened_at: openedAt,
+        stale: ageS !== null && ageS > 24 * 3600,
+        age_s: ageS,
+        origin: optText(d.origin),
+        orphaned: false,
+        kind: optText(d.kind),
+        attachments: parseAttachments(d.attachments),
+        look_target: parseLookTarget(d.look_target),
+      } : null
+      const order = seq++
+      if (id === null) {
+        if (card !== null) unnamed.push({ card, order })
+        continue
+      }
+      const prev = bestById.get(id)
+      if (prev === undefined || rank > prev.rank || (rank === prev.rank && card !== null)) bestById.set(id, { rank, card, order: prev === undefined ? order : prev.order })
+    }
+  }
+  const closedIds = new Set<string>()
+  const openOrdered: { card: LiveDecision; order: number }[] = [...unnamed]
+  for (const [id, v] of bestById) {
+    if (v.rank > 1 || v.card === null) closedIds.add(id)
+    else openOrdered.push({ card: v.card, order: v.order })
+  }
+  openOrdered.sort((a, b) => a.order - b.order)
+  return { open: openOrdered.map(x => x.card), closedIds }
+}
+
+export function mergeDurableDecisions(base: readonly LiveDecision[], durable: { open: readonly LiveDecision[]; closedIds: ReadonlySet<string> }, dismissed: Readonly<Record<string, number>> = {}): LiveDecision[] {
+  const isGone = (d: LiveDecision): boolean => d.id !== null && (durable.closedIds.has(d.id) || dismissed[d.id] !== undefined)
+  const byId = new Map<string, LiveDecision>()
+  for (const d of durable.open) if (d.id !== null) byId.set(d.id, d)
+  const out: LiveDecision[] = base.filter(d => !isGone(d)).map(d => {
+    const hit = d.id === null ? undefined : byId.get(d.id)
+    if (hit === undefined) return d
+    return {
+      ...d,
+      kind: d.kind ?? hit.kind ?? null,
+      attachments: (d.attachments?.length ?? 0) > 0 ? d.attachments : hit.attachments,
+      look_target: d.look_target ?? hit.look_target ?? null,
+    }
+  })
+  const seen = new Set(out.flatMap(d => (d.id === null ? [] : [d.id])))
+  for (const d of durable.open) {
+    if (isGone(d)) continue
+    if (d.id !== null && seen.has(d.id)) continue
+    if (d.id !== null) seen.add(d.id)
+    out.push(d)
+  }
+  return out
 }
 
 // Axis words follow the review page's chip mapping (plan A12).
@@ -1160,10 +1283,10 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 // ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
 export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged'
-export type SlotId = 'verdict' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
-// tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text)
-export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx'
-export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId; press?: string } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
+export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
+// tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text). fleet* tags are the one-line band's own drops (layoutBandLine).
+export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck'
+export type Seg = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean; tag?: SegTag; slot?: SlotId; role?: SegRole; here?: boolean; fmt?: FmtKind; fact?: FactId; press?: string; href?: string } // slot: set by layoutBand on the band line (the Button it presses); a separator has none
 export type Slot = { id: SlotId; segs: Seg[] }
 
 // displayWidth / cellWidth live in ui.ts (the design system owns the width rules); displayWidth is re-exported for the band and the tests.
@@ -1363,6 +1486,20 @@ export function slotVerdict(v: { mark: string; word: string; key: ThemeKey | und
   return { id: 'verdict', segs }
 }
 
+// The fleet summary on the band's own line, right after the verdict: `艦隊 ⊘ N  ● N  ⋯ N`. The word is dim; each count is a chip whose glyph carries the
+// theme key (stuck broken, running running, waiting idle) and whose number is plain. Both the glyph and the number carry the drop tag, so a width step
+// that removes a count removes the number with it. Zeros stay (a fetched summary always names all three). Null hides the slot: nothing has been fetched.
+export function slotFleet(c: { stuck: number; running: number; waiting: number } | null | undefined, t: T = T_EN): Slot | null {
+  if (c == null) return null
+  const chip = (glyph: string, n: number, color: ThemeKey, tag: SegTag): Seg[] => ui.chipSegs([sp(glyph, { color, tag })], [sp(String(n), { tag })])
+  const chips = ui.chipsJoin([
+    chip(GS.stalled, c.stuck, PALETTE.broken, 'fleetStuck'),
+    chip(GS.running, c.running, PALETTE.running, 'fleetRun'),
+    chip(GS.waiting, c.waiting, PALETTE.idle, 'fleetWait'),
+  ], 'next')
+  return { id: 'fleet', segs: [sp(t('shell.fleet'), { dim: true, tag: 'fleetWord' }), ui.gapSeg(ui.CHIP_LEAD, 'fleetWord'), ...chips] }
+}
+
 // The stage walk as `✓─✓─◐─○─○` (done `✓` done, current `◐` here, later `○` idle, links structure; the same marks as the pane's walk); null = nothing to draw
 // (no walk published, the current stage is not on it, or it is longer than the band can carry).
 export const WALK_MAX = 9
@@ -1510,12 +1647,13 @@ export type BandFacts = {
   stage?: StageWalkView | null
   reason?: string | null
   quota?: readonly QuotaWindow[] | null
+  fleet?: { stuck: number; running: number; waiting: number } | null
   nowMs: number
 }
-// Slots in priority order; an empty slot is left out.
+// Slots in priority order; an empty slot is left out. The fleet slot sits immediately after the verdict.
 export function bandSlots(f: BandFacts, t: T = T_EN): Slot[] {
   return [
-    slotVerdict(f.verdict, f.reason ?? null), slotPosition(f.marker, f.nowMs, f.stage ?? null), slotUnit(f.marker, t), slotDispatch(f.live, f.stalled),
+    slotVerdict(f.verdict, f.reason ?? null), slotFleet(f.fleet, t), slotPosition(f.marker, f.nowMs, f.stage ?? null), slotUnit(f.marker, t), slotDispatch(f.live, f.stalled),
     slotReview(f.review, f.qc), slotDecisions(f.decisions), slotSpend(f.spend), slotQuota(f.quota), slotHygiene(f.loadSource, f.residue),
   ].filter((s): s is Slot => s !== null)
 }
@@ -1528,7 +1666,7 @@ export const BAND_INFO_LABEL = BAND_ICON + ' '
 export type BandLayout = { segs: Seg[]; text: string; width: number }
 
 // slots in one group read as one thing (single space between): the dispatch count with the review round and QC chip; every other slot is its own group; groups are separated by ` │ `
-const GROUP: Record<SlotId, number> = { verdict: 0, position: 1, unit: 2, dispatch: 3, review: 3, decisions: 4, spend: 5, quota: 6, hygiene: 7 }
+const GROUP: Record<SlotId, number> = { verdict: 0, fleet: 1, position: 2, unit: 3, dispatch: 4, review: 4, decisions: 5, spend: 6, quota: 7, hygiene: 8 }
 const REASON_MAX = 48
 const REASON_MIN = 8
 
@@ -1599,6 +1737,101 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   return { segs, text: segs.map(g => g.text).join('') + BAND_INFO_LABEL, width: widthOf(segs) }
 }
 
+// What layoutBandLine may drop as the one line gets narrower (PM 01M78CB8). Order is the array order. `fleetStuck` is a legal id so a test can put the
+// stuck count on a drop list; BAND_NARROW_STEPS does not contain it, and the verdict is not a drop id at all.
+export type BandNarrowId = 'pet' | 'trend' | 'speed' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck' | 'quota' | 'bar10' | 'bar5' | 'bar3' | 'pct'
+export const BAND_NARROW_STEPS: readonly (readonly BandNarrowId[])[] = [
+  ['pet'],
+  ['fleetWait'],
+  ['fleetRun', 'fleetWord'],
+  ['trend'],
+  ['speed'],
+  ['quota'],
+  ['bar10', 'bar5', 'bar3', 'pct'],
+]
+
+const SPEED_DROP: ReadonlySet<BandNarrowId> = new Set(['pet', 'trend', 'speed'])
+function narrowSpeed(speed: readonly ForgeSegment[] | null, drop: ReadonlySet<BandNarrowId>): ForgeSegment[] | null {
+  if (speed === null || drop.has('speed')) return null
+  const kept = speed.filter(g => {
+    if (drop.has('pet') && (g.role === 'pet' || g.role === 'sep')) return false
+    if (drop.has('trend') && (g.role === 'trend' || g.role === 'gap')) return false
+    return true
+  })
+  return kept.length === 0 ? null : kept
+}
+function narrowSlots(slots: readonly Slot[], drop: ReadonlySet<BandNarrowId>): Slot[] {
+  const segDrop = new Set<string>()
+  for (const id of drop) if (!SPEED_DROP.has(id) && id !== 'quota') segDrop.add(id)
+  const base = drop.has('quota') ? slots.filter(s => s.id !== 'quota') : slots.slice()
+  if (segDrop.size === 0) return base
+  return base.map(s => ({ ...s, segs: s.segs.filter(g => g.tag === undefined || !segDrop.has(g.tag)) })).filter(s => s.segs.length > 0)
+}
+
+export type BandLineLayout = { band: BandLayout; speed: ForgeSegment[] | null; applied: number }
+
+function segTextWidth(segs: readonly { text: string }[]): number {
+  return segs.reduce((n, s) => n + displayWidth(s.text), 0)
+}
+
+// The one width the one-line band shares. `segWidth` is the slot texts only (no ⓘ: layoutBand.width already added it, so callers pass the segs).
+// The ⓘ label is 2 cells, the speed label is forgeBar's own width, and `more` is the dim `›` plus the space after it.
+export function fittedBandWidth(segWidth: number, speed: readonly ForgeSegment[] | null, more: boolean): number {
+  const speedW = speed === null || speed.length === 0 ? 0 : ui.forgeBar(speed).width
+  const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
+  return segWidth + displayWidth(BAND_INFO_LABEL) + speedW + moreW
+}
+
+// The row (register.ts) shortens the segs until `fittedBandWidth` fits the room. layoutBandLine does not: its last candidate is returned even when it
+// overflows, so a pure caller at width 20 still has the verdict, the stuck count and the spend.
+export function shrinkToFitted(segs: readonly Seg[], speed: readonly ForgeSegment[] | null, more: boolean, room: number): Seg[] {
+  const out = segs.map(s => ({ ...s }))
+  while (fittedBandWidth(segTextWidth(out), speed, more) > room && out.length > 0) {
+    const last = out[out.length - 1]
+    const w = displayWidth(last.text)
+    if (w <= 1) { out.pop(); continue }
+    const cut = truncateToWidth(last.text, w - 1)
+    if (cut === last.text || displayWidth(cut) >= w) { out.pop(); continue }
+    out[out.length - 1] = { ...last, text: cut }
+  }
+  return out
+}
+
+// `columns` is the room for the indicator, the ⓘ, the speed label and, when `more` is set, the `›` cell (the caller already removed the tab strip and the one-cell gap).
+// The width table is shown at least 120 columns, so it cannot hide `$N`, the 5-cell bar or the quota window before the steps above take them; from 160 up it
+// sees the real width, so the 10-cell bar and the percent appear. A candidate whose verdict word was shortened is refused and the next step is tried.
+// The stuck count is not a step, so it is still on the line when every step has been applied.
+// An active session also carries position, unit, dispatch, review, decisions and hygiene. Those are outside the narrow steps, and the width table still lays
+// them out at 120 columns, so after every step the line can still be wider than `columns`. They are then dropped one at a time, lowest priority first, and the
+// steps run again (a dropped slot frees room, so the speed label can come back). Verdict, fleet and spend stay. The last candidate is returned even when it still overflows.
+const BAND_OPTIONAL: readonly SlotId[] = ['hygiene', 'decisions', 'review', 'dispatch', 'unit', 'position']
+export function layoutBandLine(slots: readonly Slot[], columns: number, speed: readonly ForgeSegment[] | null, steps: readonly (readonly BandNarrowId[])[] = BAND_NARROW_STEPS, more = false): BandLineLayout {
+  const verdict = slots.find(s => s.id === 'verdict')?.segs[0]?.text ?? null
+  const bandCols = columns >= 160 ? columns : Math.max(columns, 120)
+  const fits = (c: BandLineLayout) => (verdict === null || c.band.segs[0]?.text === verdict) && fittedBandWidth(segTextWidth(c.band.segs), c.speed, more) <= columns
+  const search = (list: readonly Slot[]): BandLineLayout => {
+    let last: BandLineLayout | null = null
+    for (let n = 0; n <= steps.length; n++) {
+      const drop = new Set<BandNarrowId>()
+      for (const step of steps.slice(0, n)) for (const id of step) drop.add(id)
+      const band = layoutBand(narrowSlots(list, drop), bandCols)
+      const nextSpeed = narrowSpeed(speed, drop)
+      last = { band, speed: nextSpeed, applied: n }
+      if (fits(last)) return last
+    }
+    return last as BandLineLayout
+  }
+  let list = slots.slice()
+  let last = search(list)
+  for (const id of BAND_OPTIONAL) {
+    if (fits(last)) break
+    if (!list.some(s => s.id === id)) continue
+    list = list.filter(s => s.id !== id)
+    last = search(list)
+  }
+  return last
+}
+
 // a non-ok snapshot: one dim line `<reason> │ ⓘ `, the reason cut to fit
 export function plainBandText(reason: string, columns: number): string {
   return truncateToWidth(reason.replace(/\s*\n\s*/g, ' '), Math.max(1, columns - displayWidth(BAND_SEP) - displayWidth(BAND_INFO_LABEL)))
@@ -1608,7 +1841,7 @@ export function plainBandText(reason: string, columns: number): string {
 export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'decide', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
+const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', fleet: 'fleet', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'decide', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
 export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id]
 export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.limits : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
@@ -1622,7 +1855,7 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 // in the locale tables and do not change with the language. ----
 // `hold`: cards the owner pressed send on that still sit in the undo window (id -> the clock time the window ends); nothing is claimed or sent until then.
 // `fixing`: sent cards the owner reopened with 改答案 (id -> the clock time it was reopened); their next send is a correction line, not a first answer.
-export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult>; hold?: Record<string, number>; fixing?: Record<string, number> }
+export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult>; hold?: Record<string, number>; fixing?: Record<string, number>; dismissed?: Record<string, number> }
 // the undo window between pressing send and the send (operator, 2026-11-08): the card stays on the pane and shows 撤回 with the seconds left
 export const DECIDE_UNDO_MS = 10_000
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }
@@ -1639,8 +1872,8 @@ const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
 const excerptOf = (q: string): string => { const cs = [...flat(q)]; return cs.length <= DECIDE_EXCERPT ? cs.join('') : cs.slice(0, DECIDE_EXCERPT).join('') + '…' }
 // a question the dialog of the asking session answers itself: the pane shows it but never answers it (a second answer would be a duplicate)
 export const decideDialog = (d: LiveDecision): boolean => d.origin === 'ask_user_question'
-// a question the owner can answer from the pane: it has an id, the pane is the way to answer it, and it was not sent yet
-export const decideOpen = (d: LiveDecision, st: DecideState): boolean => d.id !== null && !decideDialog(d) && (st.sent[d.id] === undefined || st.fixing?.[d.id] !== undefined)
+// a question the owner can answer from the pane: it has an id, is a decision card (not a step/look card), the pane is the way to answer it, and it was not sent yet
+export const decideOpen = (d: LiveDecision, st: DecideState): boolean => d.id !== null && !isStepCard(d) && !decideDialog(d) && (st.sent[d.id] === undefined || st.fixing?.[d.id] !== undefined)
 // a card whose send was pressed and whose undo window is still running
 export const decideHeld = (d: LiveDecision, st: DecideState): boolean => d.id !== null && st.hold?.[d.id] !== undefined
 // a sent card the owner reopened to correct
@@ -1667,7 +1900,7 @@ export function recommendedIndex(d: LiveDecision): number | null {
 // `answerId` (F4): the id the fleet courier returned when this card's answer was claimed (mods/live/decideundo.ts). It is the LAST `｜` field of the line, which is where hooks/advisory-relay.js
 // reads it (scripts/lib/decide-line.js parseDecideLine); fleet ids are alphanumeric and the hook only accepts [0-9A-Za-z]{20,40}. No id (claim failed, timed out, no courier): no field.
 export function decideLine(d: LiveDecision, st: DecideState, answerId?: string | null): string | null {
-  if (d.id === null || decideDialog(d)) return null
+  if (d.id === null || isStepCard(d) || decideDialog(d)) return null
   const note = decideNote(d, st)
   const pick = decidePick(d, st)
   const notePart = note === '' ? '' : DECIDE_NOTE_MARK + wire(note)
@@ -1678,18 +1911,19 @@ export function decideLine(d: LiveDecision, st: DecideState, answerId?: string |
 // An option card ends in `｜補充：` after the picked label (`都不選` when none is picked); a free-text card ends after the arrow. The text before the cursor is byte-for-byte what decideLine writes
 // for the same card, so the owner pressing Enter sends a line the relay reads like the pane's own. Null: the card has no id or belongs to a dialog (nothing to answer from here).
 export function decideFillText(d: LiveDecision, st: DecideState): string | null {
-  if (d.id === null || decideDialog(d)) return null
+  if (d.id === null || isStepCard(d) || decideDialog(d)) return null
   const pick = decidePick(d, st)
   const head = d.id + '｜' + wire(excerptOf(d.question)) + ' ' + DECIDE_ARROW + ' '
   return DECIDE_REPLY_HEAD + '\n' + (d.options.length === 0 ? head : head + (pick === null ? DECIDE_NONE : wire(d.options[pick].label)) + DECIDE_NOTE_MARK)
 }
 // what `fleet decision claim` is given for this card: the picked option's label, or the typed text (a free card, or an option card where none was picked and a note was typed).
 // Both are the same strings decideLine writes into the line (before `wire`), because the hook compares the line's answer with what the courier stored.
-export type ClaimAnswer = { option: string } | { freeText: string }
+export type ClaimAnswer = { option: string; freeText?: string } | { freeText: string }
 export function decideAnswer(d: LiveDecision, st: DecideState): ClaimAnswer | null {
   if (decideLine(d, st) === null) return null
   const pick = decidePick(d, st)
-  return d.options.length > 0 && pick !== null ? { option: d.options[pick].label } : { freeText: decideNote(d, st) }
+  if (d.options.length > 0 && pick !== null) { const note = decideNote(d, st); return note === '' ? { option: d.options[pick].label } : { option: d.options[pick].label, freeText: note } } // option + note (補充): both reach the courier
+  return { freeText: decideNote(d, st) }
 }
 // the correction line of a reopened card: `[待決回覆·更正] <id> → <answer>[｜補充：<note>]`; no excerpt, no answer id (the courier takes one claim per card, so a correction is not claimed)
 export function decideCorrectionLine(d: LiveDecision, st: DecideState): string | null {

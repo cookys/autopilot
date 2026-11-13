@@ -1,0 +1,356 @@
+[
+  {
+    "id": "ff-trigger-01",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-02",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-03",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-04",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-05",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-06",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-07",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-08",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-09",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-10",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "f1-ready-to-merge",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "f1b-ready-to-merge-docs",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "g7-close",
+    "arm": "a",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-usage-green-unused",
+    "arm": "a",
+    "rubric": "usage",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": false,
+    "pass": false,
+    "label": "TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-01",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a no user or e2e use recorded for cross-tenant-allowance"
+    ]
+  },
+  {
+    "id": "ff-trigger-02",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a \u672c\u8f2a\u53ea\u6709\u6536\u5c3e\u8981\u6c42\uff0c\u6c92\u6709\u5df2\u5408\u4f75\u3001\u53ef\u88ab\u4f7f\u7528\u8005\u6216 e2e \u4f7f\u7528\u7684\u4ea4\u4ed8"
+    ]
+  },
+  {
+    "id": "ff-trigger-03",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a hotfix has no user-use or e2e evidence yet"
+    ]
+  },
+  {
+    "id": "ff-trigger-04",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a no merge and no user or e2e run recorded for this session"
+    ]
+  },
+  {
+    "id": "ff-trigger-05",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a \u672c\u56de\u5408\u53ea\u6709\u6536\u5c3e\u5224\u5b9a\uff0c\u6c92\u6709\u5df2\u5408\u4f75\u7522\u7269\u88ab\u4f7f\u7528\u8005\u6216 e2e \u8dd1\u904e"
+    ]
+  },
+  {
+    "id": "ff-trigger-06",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-07",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-08",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-09",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "ff-trigger-10",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": false,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "NO-TRIGGER",
+    "used_lines": []
+  },
+  {
+    "id": "f1-ready-to-merge",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a tests green only, no user or e2e use recorded"
+    ]
+  },
+  {
+    "id": "f1b-ready-to-merge-docs",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a green tests are not a real user on the real build"
+    ]
+  },
+  {
+    "id": "g7-close",
+    "arm": "b",
+    "rubric": "trigger",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": null,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a no user or e2e run recorded; green tests do not count"
+    ]
+  },
+  {
+    "id": "ff-usage-green-unused",
+    "arm": "b",
+    "rubric": "usage",
+    "should_trigger": true,
+    "exit_code": 0,
+    "trigger_pass": true,
+    "usage_pass": true,
+    "pass": true,
+    "label": "TRIGGER",
+    "used_lines": [
+      "Used: n/a no person has used the merged result and there is no end-to-end run"
+    ]
+  }
+]

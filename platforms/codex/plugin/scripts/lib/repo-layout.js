@@ -162,6 +162,11 @@ const DEFAULT_REGISTRY = {
 
   allowlists: {
     // Every entry says what it is for. `since` (default bootstrap) lets a later stage add a directory.
+    // The public export list is not this allowlist. It is the C2 publish set in
+    // project/plans/2026-10-31-repo-relayout-3-0-0.md (tools/release/export-public.js): an explicit
+    // include list that does not name `.hippo/` or `.gitattributes`. Names below only let layout-lint
+    // accept the tracked internal store; they do not publish it, and the hippo lines of `.gitattributes`
+    // are not on that include list either.
     top_dirs: [
       { name: '.agents', purpose: 'Codex/agents marketplace manifest and skills link' },
       { name: '.autopilot', purpose: 'two tracked benchmark evidence files that plans and missions cite' },
@@ -169,6 +174,7 @@ const DEFAULT_REGISTRY = {
       { name: '.claude-plugin', purpose: 'Claude Code plugin and marketplace manifests' },
       { name: '.githooks', purpose: 'git hooks installed by install-hooks.sh (pre-commit, pre-push, ...)' },
       { name: '.github', purpose: 'CI workflows' },
+      { name: '.hippo', purpose: 'this dev repo\'s internal hippo store (backlog trial only; not on the public export list)' },
       { name: '.opencode', purpose: 'opencode plugin package and agent bodies' },
       { name: '.qc', purpose: 'QC verdict files read by the pre-push qc gate' },
       { name: 'agents', purpose: 'methodology agent prompts' },
@@ -195,6 +201,7 @@ const DEFAULT_REGISTRY = {
       { name: 'migrate', purpose: 'one-off relayout generators and the suite baseline' },
     ],
     root_files: [
+      { name: '.gitattributes', purpose: 'merge and eol attributes; the hippo lines are internal and are not on the public export list' },
       { name: '.gitignore', purpose: 'git ignore rules' },
       { name: '.mailmap', purpose: 'author identity mapping' },
       { name: 'AGENTS.md', purpose: 'agents.md readme for non-Claude-Code agents' },

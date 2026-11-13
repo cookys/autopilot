@@ -10,6 +10,8 @@ lib/account-cooldown.js
 lib/account-env.js
 lib/account-interpret.js
 lib/account-observation.js
+lib/quota-mirror-dirs.js
+lib/config-path.js
 lib/account-pick.js
 lib/account-probe.js
 lib/account-quota.js
@@ -23,3 +25,5 @@ lib/account-rail.js
 lib/eval-account.js
 lib/eval-account.sh
 lib/account-state.sh
+lib/token-seat.js
+lib/token-seat.sh

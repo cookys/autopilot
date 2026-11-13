@@ -5,6 +5,7 @@
 //   sent   decision id -> clock ms the answer was submitted (the card says "sent" until the id leaves the decisions file)
 //   hold   decision id -> clock ms its undo window ends (send pressed, nothing sent yet)
 //   fixing decision id -> clock ms a sent card was reopened with 改答案 to correct
+//   dismissed decision id -> clock ms a step / 給你看 card was dismissed from the pane
 //   clean  residue worktree path -> what the 殘留 tab's cleanup button reported (ok, or the reason it was kept)
 // mods/live/model.ts `DecideState` is the same shape; keep the two equal.
 export type LiveDecideState = {
@@ -13,6 +14,7 @@ export type LiveDecideState = {
   sent: Record<string, number>
   hold?: Record<string, number>
   fixing?: Record<string, number>
+  dismissed?: Record<string, number>
   clean?: Record<string, { ok: boolean; note: string }>
 }
 

@@ -278,8 +278,8 @@ assert_eq "$(line_count "$RUN_GROK")" "0" "a5: grok is not spawned"
 
 # (b) negative control: same-family VA dies with the existing message.
 DIE_MSG="strict roster requires distinct verification_author_family and implementer_family"
-assert_contains "$(sed -n '697p' "$AUTHOR")" "$DIE_MSG" "b: line 697 keeps the existing die"
-assert_contains "$(sed -n '884p' "$AUTHOR")" "$DIE_MSG" "b: line 884 keeps the existing die"
+assert_contains "$(sed -n '699p' "$AUTHOR")" "$DIE_MSG" "b: line 699 keeps the existing die"
+assert_contains "$(sed -n '886p' "$AUTHOR")" "$DIE_MSG" "b: line 886 keeps the existing die"
 AUTH_REPO="$TEST_TMP/author-same"
 mkdir -p "$AUTH_REPO/.claude"
 cat > "$AUTH_REPO/.claude/review-loop-config.md" <<'EOF'

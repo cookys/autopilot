@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { tokenSeatError } = require('../../scripts/lib/token-seat');
 const { TextDecoder } = require('util');
 const {
   canonicalJson,
@@ -593,6 +594,8 @@ function invokeClaude(binary, args, input, cwd, timeoutMs) {
   runnerEnv.FLEET_ROLE = 'profile-run';
   const fleetParent = process.env.FLEET_PARENT || process.env.CLAUDE_CODE_SESSION_ID || '';
   if (fleetParent) runnerEnv.FLEET_PARENT = fleetParent; else delete runnerEnv.FLEET_PARENT;
+  const seatErr = tokenSeatError(runnerEnv);
+  if (seatErr) runtimeError(seatErr, 'TOKEN_SEAT_MISSING');
   const result = spawnSync(binary, args, {
     cwd,
     input,

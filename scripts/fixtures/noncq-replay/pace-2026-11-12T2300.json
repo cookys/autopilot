@@ -1,0 +1,101 @@
+{
+  "schema": "capacity.pace/1",
+  "rows": [
+    {
+      "pool": "claude-pool-a",
+      "class": "claude",
+      "status": "ok",
+      "stale": false,
+      "hours_to_reset": 156.7,
+      "used_pct": 4
+    },
+    {
+      "pool": "claude-pool-b",
+      "class": "claude",
+      "status": "ok",
+      "stale": false,
+      "hours_to_reset": 151.7,
+      "used_pct": 1
+    },
+    {
+      "pool": "claude-pool-c",
+      "class": "claude",
+      "status": "WARN_ahead",
+      "stale": false,
+      "hours_to_reset": 128.7,
+      "used_pct": 35
+    },
+    {
+      "pool": "claude-pool-d",
+      "class": "claude",
+      "status": "WARN_ahead",
+      "stale": false,
+      "hours_to_reset": 76.7,
+      "used_pct": 90
+    },
+    {
+      "pool": "claude-pool-e",
+      "class": "claude",
+      "status": "ok",
+      "stale": false,
+      "hours_to_reset": 150.7,
+      "used_pct": 7
+    },
+    {
+      "pool": "agy(alias 2)",
+      "class": "other",
+      "status": "behind_early",
+      "stale": false,
+      "hours_to_reset": 32.4,
+      "used_pct": 58
+    },
+    {
+      "pool": "agyclaude(alias 2)",
+      "class": "other",
+      "status": "ok",
+      "stale": false,
+      "hours_to_reset": 7.7,
+      "used_pct": 81
+    },
+    {
+      "pool": "scarce-pool-a",
+      "class": "scarce",
+      "status": "WARN_ahead",
+      "stale": false,
+      "hours_to_reset": 82.8,
+      "used_pct": 87
+    },
+    {
+      "pool": "scarce-pool-b",
+      "class": "scarce",
+      "status": "WARN_ahead+stale",
+      "stale": true,
+      "hours_to_reset": 82.8,
+      "used_pct": 81
+    },
+    {
+      "pool": "grok-cli(alias 2)",
+      "class": "other",
+      "status": "ok+stale",
+      "stale": true,
+      "hours_to_reset": 156.4,
+      "used_pct": 5
+    },
+    {
+      "pool": "glm",
+      "class": "other",
+      "status": "ok",
+      "stale": false,
+      "hours_to_reset": 154.8,
+      "used_pct": 1
+    },
+    {
+      "pool": "other-pool-a",
+      "class": "other",
+      "status": "behind_early",
+      "stale": false,
+      "hours_to_reset": 80.7,
+      "used_pct": 0
+    }
+  ]
+}

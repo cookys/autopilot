@@ -1,0 +1,16 @@
+# autopilot:fleet-card-mirror/1
+# Opt-in systemd user timer. Every 5 minutes. A missed elapse while the machine
+# was off runs once on the next start (Persistent=true). RandomizedDelaySec is
+# small so hosts do not share one instant.
+[Unit]
+Description=Refresh the fleet card mirror every 5 minutes
+
+[Timer]
+Unit=fleet-card-mirror.service
+OnCalendar=*:0/5
+Persistent=true
+RandomizedDelaySec=30
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

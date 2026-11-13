@@ -217,6 +217,7 @@ for (const [sourceRel, destinationRel] of [
   ['hooks/live-session-lib.js', 'hooks/live-session-lib.js'],
   ['hooks/permission-block-lib.js', 'hooks/permission-block-lib.js'],
   ['hooks/ask-decision.js', 'hooks/ask-decision.js'],
+  ['hooks/owner-question-guard.js', 'hooks/owner-question-guard.js'],
   ['platforms/codex/skill-adapters/lifecycle.md', 'skill-adapters/lifecycle.md'],
 ]) {
   const sourcePath = path.join(root, sourceRel);
@@ -246,7 +247,7 @@ const hookEntries = fs.existsSync(path.join(pluginDir, 'hooks'))
   ? fs.readdirSync(path.join(pluginDir, 'hooks')).sort() : [];
 if (JSON.stringify(hookEntries) !== JSON.stringify([
   '_shared', 'ask-decision.js', 'dirty-protected-paths.js', 'hooks.json', 'lib', 'live-session-lib.js', 'orchestrator-edit-gate-lib.js',
-  'permission-block-lib.js', 'post-compact.js', 'pre-effect.js',
+  'owner-question-guard.js', 'permission-block-lib.js', 'post-compact.js', 'pre-effect.js',
 ])) {
   failures.push(`hooks entries ${hookEntries.join(',')}`);
 }
@@ -452,7 +453,7 @@ printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/dirty-protected-paths.js"
-for hook_lib in live-session-lib.js permission-block-lib.js ask-decision.js; do
+for hook_lib in live-session-lib.js permission-block-lib.js ask-decision.js owner-question-guard.js; do
   printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/$hook_lib"
   cp "$SYNC_SANDBOX/hooks/$hook_lib" "$SYNC_SANDBOX/platforms/codex/plugin/hooks/$hook_lib"
 done

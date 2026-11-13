@@ -18,13 +18,14 @@
 // It only labels: the entry stays listed until `open-decision.js close --id`. Not judged (false) when no entry names a session, the entry is
 // hand-opened (no origin), or the live dir itself is unavailable. A session killed hard with its live dir intact still has its turn file: not detected.
 // Returns { value, sha256, file } where value is the list shaped for the renderer, oldest first:
-//   [{ id, question, background, options: [{label, description}], recommendation, why, blocks, not_authorized, source, opened_at, stale, age_s, orphaned, status, answer, awaiting_operator, executor, asker }]
-// or null when no entry counts.
+//   [{ id, question, background, options: [{label, description}], recommendation, why, blocks, not_authorized, source, opened_at, stale, age_s, orphaned, status, answer, awaiting_operator, executor, asker, [kind], [due_at, due_state] }]
+// or null when no entry counts. kind is present only when stored; due_at + due_state only on a dated card (open --due): due_state is scope-key.js dueState at nowMs ('not_due' | 'due'); a 'due' card is listed
+// first and a 'not_due' card last (scope-key.js dueRank), oldest first inside each group. A consumer that counts pending questions leaves 'not_due' cards out.
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry, cardState, pickCards } = require('./scope-key');
+const { scopeKeyOf, listScopeFiles, readScopeFile, isClosedEntry, cardState, pickCards, dueState, dueRank } = require('./scope-key');
 
 const STALE_MS = 7 * 86400 * 1000;
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
@@ -50,6 +51,28 @@ function sessionGone(e, liveBase) {
   }
 }
 
+function cleanAttachments(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((x) => typeof x === 'string' && x.trim() && !TITLE_CONTROL.test(x)).map((x) => x.trim());
+}
+
+function cleanLookTarget(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.kind === 'path' && typeof raw.path === 'string' && raw.path.trim() && !TITLE_CONTROL.test(raw.path)) {
+    return {
+      kind: 'path',
+      path: raw.path.trim(),
+      start: Number.isInteger(raw.start) && raw.start >= 1 ? raw.start : null,
+      end: Number.isInteger(raw.end) && raw.end >= 1 ? raw.end : null,
+      ...(raw.tail === true ? { tail: true } : {}),
+    };
+  }
+  if (raw.kind === 'diff' && Array.isArray(raw.args)) {
+    return { kind: 'diff', args: raw.args.filter((x) => typeof x === 'string' && !TITLE_CONTROL.test(x)) };
+  }
+  return null;
+}
+
 function viewOf(e, nowMs, liveBase) {
   if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !e.id || typeof e.question !== 'string' || !e.question) return null;
   if (isClosedEntry(e)) return null; // a kept closed card is a record, not an open card
@@ -61,9 +84,13 @@ function viewOf(e, nowMs, liveBase) {
     id: e.id, title: str(e.title) && !TITLE_CONTROL.test(str(e.title)) ? str(e.title) : null, question: e.question, background: str(e.background), options, recommendation: str(e.recommendation), why: str(e.why),
     blocks: str(e.blocks), not_authorized: str(e.not_authorized), source: str(e.source), opened_at: new Date(opened).toISOString(),
     stale: nowMs - opened > STALE_MS, age_s: Math.max(0, Math.floor((nowMs - opened) / 1000)),
-    orphaned: sessionGone(e, liveBase), origin: str(e.origin),
+    orphaned: sessionGone(e, liveBase), origin: str(e.origin), kind: str(e.kind),
+    attachments: cleanAttachments(e.attachments), look_target: cleanLookTarget(e.look_target),
     status: cardState(e),
     answer: str(e.answer), awaiting_operator: str(e.awaiting_operator), executor: str(e.executor), asker: str(e.asker), pending_dispatch_at: str(e.pending_dispatch_at),
+    // additive, and only on a card that has them: an ordinary card's view stays byte-identical
+    ...(str(e.kind) ? { kind: str(e.kind) } : {}),
+    ...(dueState(e, nowMs) !== 'none' ? { due_at: new Date(Date.parse(e.due_at)).toISOString(), due_state: dueState(e, nowMs) } : {}),
   };
 }
 
@@ -101,7 +128,7 @@ function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
       if (!first) first = file;
     }
     if (value.length === 0) return null;
-    value.sort((a, b) => Date.parse(a.opened_at) - Date.parse(b.opened_at) || (a.id < b.id ? -1 : 1));
+    value.sort((a, b) => dueRank(a, nowMs) - dueRank(b, nowMs) || Date.parse(a.opened_at) - Date.parse(b.opened_at) || (a.id < b.id ? -1 : 1));
     return { value, sha256: hashes.length === 1 ? hashes[0] : crypto.createHash('sha256').update(hashes.join('\n')).digest('hex'), file: first };
   } catch (_error) {
     return null;

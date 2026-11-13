@@ -25,7 +25,7 @@
     "base_ref": { "type": ["string", "null"], "pattern": "^[0-9a-f]{7,64}$" },
     "stage": {
       "type": "string",
-      "enum": ["intent", "diagnose", "research", "proposal", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"]
+      "enum": ["intent", "diagnose", "research", "proposal", "explore", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"]
     },
     "stage_set_at": { "$ref": "#/$defs/isoUtcMs" },
     "unit": {
@@ -42,7 +42,9 @@
     "review_families": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "high_risk": { "type": "boolean" },
     "task_seq": { "type": "integer", "minimum": 1 },
-    "task_started_at": { "$ref": "#/$defs/isoUtcMs" }
+    "task_started_at": { "$ref": "#/$defs/isoUtcMs" },
+    "fleet_task_id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^\\S+$" },
+    "coarse_stage": { "type": "string", "enum": ["explore", "plan", "build", "review", "merged", "shipped", "used"] }
   },
   "$defs": {
     "isoUtcMs": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$" }

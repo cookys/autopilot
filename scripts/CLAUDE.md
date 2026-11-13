@@ -16,13 +16,13 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 `lib/endpoint-probe.js` `lib/endpoint-probe.sh` `lib/worker-containment.sh` `lib/idle-watch.sh` `lib/plan-review-panel.js` `lib/plan-review-context.js` `lib/review-fanout.js` `lib/repo-identity.sh` `lib/dispatch-branch-ledger.sh` `lib/gitconfig-containment.sh` `lib/seed-claude-config.js` `lib/codeforge-collect.sh`
 
 **Routing & config resolution** — `lib/dispatch-usage.js` `lib/account-alias.js` `resolve-dispatch.sh` `resolve-dispatch-topology.js` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-knowledge-routing.sh` `resolve-project-paths.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `lib/config-audit.js` `lib/autocompact-window.js` `lib/runtime-paths.js` `load-endpoints-env.sh` `lib/load-endpoints-env.js` `claude-account.js` `quota-reporter.js` `quota-provider-sync.js` `quota-mirror-tick.js` `lane-reopen.js`
-`lib/local-sandbox-endpoints.json` `lib/local-sandbox-endpoint.sh` `lib/local-sandbox-parent.js`
+`lib/local-sandbox-endpoints.json` `lib/local-sandbox-endpoint.sh` `lib/local-sandbox-parent.js` `pace-select.js` `pace-select.test.js` `lib/pace-reading.js` `lib/pace-roles.json`
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `accept-dev-channel-prompt.sh` `reap-scratch-checkouts.js` `scratch-closeout.sh` `repo-residue-sweep.js` `prune-plugin-cache.js` `resolve-repo-placement.js` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `write-task-status-input.js` `record-integration.js` `check-inputs-landed.js` `check-containment.js` `lib/worktree-reap.sh` `lib/worktree-intent.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js` `lib/tmp-residue.js` `lib/tmp-residue-registry.json` `register-external-run.js`
 
 **Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `open-decision.js` `decision-claim.js` `fleet-card-mirror.js` `lib/card-notice.js` `probe-unknown.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js`
-**Mission, campaign & session state (cont.)** — `request-decision.js` `lib/team.js` `lib/menu-card-content.js` `lib/team.test.js` `open-decision-role-gate.test.js` `request-decision.test.js`
-`mission-routing-admission.js` `mission-execution-graph-check.js` `scaffold-mission.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `session-ctx-report.js` `noncq.js` `noncq.test.js` `lib/noncq-pools.json` `stage-advance.js` `run-approval.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `agent-liveness-check.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js` `stage-graph.js` `lib/stage-write.js` `task-card.js`
+**Mission, campaign & session state (cont.)** — `request-decision.js` `lib/team.js` `lib/menu-card-content.js` `lib/team.test.js` `open-decision-role-gate.test.js` `open-decision-attach-step.test.js` `request-decision.test.js`
+`mission-routing-admission.js` `mission-execution-graph-check.js` `scaffold-mission.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `session-ctx-report.js` `noncq.js` `noncq.test.js` `lib/noncq-pools.json` `stage-advance.js` `lib/fleet-task.js` `run-approval.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `agent-liveness-check.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js` `stage-graph.js` `lib/stage-write.js` `lib/urgent-review-follow-up.js` `task-card.js`
 
 **Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `qualification-review-provider.js` `lib/qualification-panel-schema.json` `lib/qualification-mode-schemas.json` `lib/agy-containment.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-todo-tools-pin.js` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js`
 `probe-skill-frontmatter-portability.sh` `platform-capability-claims.js` `bench-engine-capability.sh` `import-aa-capabilities.js` `evaluate-profile-cutover.js` `build-qualification-defaults.js` `adopt-qualification-defaults.js` `lib/qualification-feed.js` `qualification-sweep.sh` `lib/qualification-asset-seals.js` `lib/qualification-applicability-scope.js` `qualification-metrics.js` `lib/qualification-metrics.js` `qualification-feed-trust.js` `lib/qualification-confirm.js` `qualification-prices.js` `lib/qualification-prices.js` `qualification-send-queue.js` `lib/qualification-record-v2.js` `lib/qualification-usage.js` `lib/qualification-effort-label.js` `lib/qualify-stage-credentials.sh`
@@ -36,6 +36,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 `lib/exclude-allowlist.js` `lib/seat-id-guard.js` `lib/raw-log-path.js` `review-ledger-archive.js` `lib/review-ledger-copy.js` `lib/review-ledger-tar.js`
 
 **Verification & review synthesis (cont.)** — `review-jury.js`
+`replay-stop-guard.js`
 
 **Task tree & risk** — `tree.js` `risk-counter.js` `hook-harness-matrix.js` `lib/chain-command.js`
 
@@ -45,7 +46,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json`
 
-**Setup & install** — `dev-setup.sh` `dev-update.sh` `accounts-onboard.sh` `profile-health.js` `profile-link.js` `lane-switch.js` `login-checklist.js` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `install-token-discipline.js` `install-quota-mirror.js` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js` `statusline-live-tee.js` `lib/opencode-discovery-probe.js` `lib/test-git-env.js` `lib/test-git-env.sh` `lib/test-gitconfig` `lib/runner-fallback-bin.sh`
+**Setup & install** — `dev-setup.sh` `dev-update.sh` `accounts-onboard.sh` `profile-health.js` `profile-link.js` `lane-switch.js` `login-checklist.js` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `install-token-discipline.js` `install-quota-mirror.js` `install-fleet-card-mirror.js` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js` `statusline-live-tee.js` `lib/opencode-discovery-probe.js` `lib/test-git-env.js` `lib/test-git-env.sh` `lib/test-gitconfig` `lib/runner-fallback-bin.sh`
 
 **Skills tooling, evals & measurement** — `cost-digest.js` `benchmark-hook-latency.js` `status-events-bench.js` `distill-scan.js` `identifier-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh` `roundtable-window.js` `permission-prompt-watch.js` `lib/permission-prompt-detect.js`
 
@@ -53,11 +54,13 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Review family gate** — `lib/review-family-gate.js` `lib/qc-panel-codex-fallback.js` (cross-family rule and codex quota runtime seat substitute helper shared by `hetero-review-loop.js`, `check-phase-review-receipt.js`, and `src/engine/autopilot-engine.js`)
 
+**Shared JSON & store primitives (cont.)** — `lib/quota-mirror-dirs.js`
+
 **Shared JSON & store primitives (cont.)** — `lib/claude-stream-envelope.js` `lib/account-observation.js` `lib/repo-layout.js` `lib/seat-model-id.js` `lib/roster-overlay.js` `lib/fleet-decision.js` `lib/decide-line.js` `lib/agy-timeout.sh` `lib/events-fixture.js` `lib/account-registry.js` `lib/account-quota.js` `lib/account-cooldown.js` `lib/account-pick.js` `lib/account-interpret.js` `lib/account-capture.js` `lib/account-probe.js` `lib/account-audit.js` `lib/account-env.js` `lib/account-fixtures/claude-shim.js` `lib/account-fixtures/shim-install.js` `lib/account-fixtures/os-lock-holder.js` `lib/account-rail.js` `lib/account-state.sh` `lib/role-kit.js` `lib/role-kit-kimi.js` `lib/role-kit.sh` `lib/eval-account.sh` `lib/eval-account.js` `lib/fixtures/gen-account-pick-g37-golden.js`
 
-**Shared JSON & store primitives (cont.)** — `lib/hippo.js`, `project-record.js` `lib/lane-manifest.js` `lib/switch-journal.js`
+**Shared JSON & store primitives (cont.)** — `lib/hippo.js` `project-record.js` `lib/lane-manifest.js` `lib/switch-journal.js` `lib/lane-switch-preflight.js` `lib/lane-switch-handoff.js` `lib/lane-switch-transcript.js` `lib/lane-switch-confirm.js` `lib/fleet-peers.js` `lib/token-seat.js` `lib/token-seat.sh`
 
-**Test helpers** — `lib/test-reaper.js`
+**Test helpers** — `lib/test-reaper.js` `lib/test-tmux-claude-teardown.sh` `check-test-tmux-claude-teardown.js`
 
 
 ## When adding a new script

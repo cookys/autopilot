@@ -7,11 +7,12 @@
  * a question that lives only in the chat gets scrolled away. hooks/ask-decision.js covers the
  * AskUserQuestion tool; this hook covers the plain-text question that nobody else watches.
  *
- * Behaviour: read the LAST assistant text of the turn from the transcript (text blocks only;
- * fenced and inline code removed). If it waits for the owner (OWNER_WAIT_PATTERNS) and carries
- * no card id, emit a Stop `{"decision":"block","reason":...}` so the model must open a card
- * (or reword a sentence that was not addressed to the owner). `stop_hook_active` true => allow,
- * so it blocks at most once per stop: a strong reminder, never a deadlock.
+ * Behaviour: read the LAST assistant text of the turn. HIT_PATTERNS detects questions,
+ * operator steps and reminder promises. Each hit needs a same-sentence live local card
+ * (open / awaiting_operator_action) or a fleet task with an explicit due date.
+ * Repeated Stops are checked again. False positives may be named individually using
+ * OWNER-GUARD-FALSE-POSITIVE [class,...] exact sentence :: reason (at most 8 per reply).
+ * Full syntax, quote exclusions and replay contract: references/owner-question-guard.md.
  *
  * Opt-out: AUTOPILOT_OWNER_QUESTION_GUARD=off (false/0/no) or `owner_question_guard: false`
  * in ~/.autopilot/config.json. Fail-open: any error -> one stderr line, exit 0.
@@ -32,16 +33,21 @@ function shellQuotePath(p) {
 }
 const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
 
-const CARD_ID = /\bd-[0-9a-f]{8}\b/i;
 const REQUEST_ID = /\br-[0-9a-f]{8}\b/i;
 
 function teamRole() {
   try { return require('../scripts/lib/team.js').resolve().role; } catch { return 'lane'; }
 }
+const CARD_ID = /\bd-[0-9a-f]{8}\b/gi;
+// A textual scheduling reference, not a claim that this hook queried the fleet.
+// ISO calendar day, optionally a UTC/offset timestamp; invalid calendar days do not qualify.
+const FLEET_DUE = /\b(?:fleet\s+task\s+[^\n]*?\s--due(?:=|\s+)|task_id=[A-Za-z0-9][A-Za-z0-9_-]{2,63}\s+due=)["']?(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2}))?)(?=["'\s)\],.;:?!，。；：、）？！】]|$)/g;
+const ESCAPE_PREFIX = 'OWNER-GUARD-FALSE-POSITIVE';
+const MAX_ESCAPES = 8;
 
-// Phrases that mean "I am waiting for the owner to answer or decide". One list on purpose:
-// add a pattern here, never a new if. Matched per sentence (see sentences()).
-const OWNER_WAIT_PATTERNS = [
+// All positive phrase patterns live in this table, matched per clause.
+const HIT_PATTERNS = {
+  question: [
   // explicit waiting phrases (zh)
   /請(?:你|您)?(?:決定|確認|選|回覆|核准|批准|同意|授權|回答|指示)/, /你說可以我再/, /等你(回答|決定|回覆|確認|說)/, /請你(決定|確認|回答|選)/, /你選好我就/, /你(決定|確認)後我再/,
   // "needs / waits for your <approval verb>": 要你批准、會等你批准、需要您同意、待你授權、等你點頭
@@ -59,7 +65,25 @@ const OWNER_WAIT_PATTERNS = [
   /\b(?:awaiting|pending|need|needs|require|requires|waiting (?:on|for))\s+(?:your|the owner'?s?)\s+(?:approval|go-?ahead|decision|confirmation|sign-?off|ok|okay|permission)\b/i,
   /\b(?:waiting|waits) (?:on|for) (?:the )?owner\b/i,
   /\b(?:may I|can I (?:go ahead|proceed|push|merge)|ok(?:ay)? to (?:push|merge|proceed))\b/i,
-];
+  // Additional asks from the retired PM Stop hook (bare 要不要 is only a question with ?).
+  /你覺得(?:可以|如何|呢|怎樣)|請你(?:看|回)|你(?:同意|決定|選)(?:嗎|哪)/,
+  /跟我說一聲|告訴我你|你看(?:要|是)|等你(?:回|選)|你希望.{0,20}(?:就|再)|你點頭|你拍板|由你決定/,
+  ],
+  'operator-step': [
+    /要[你您]本人|[你您]自己(?:執行|做|登入|操作)|有空時照做|[你您]要做的事|[你您]只要(?:貼|輸入|執行)/,
+    /(?:輸入|打)\s*\/login\b|下次(?:到場|到公司)|登入[^。？！\n]{0,30}一次/,
+    /(?:需要|要|等)[你您](?:重新)?登入|[你您](?:親手|親自)(?:執行|登入|操作)/,
+    /\b(?:you|please)\s+(?:run|execute|log\s*in|sign\s*in|enter|type|click|install)\b/i,
+  ],
+  promise: [
+    /(?:我會|會提前|到時|再|我)(?:先|再|提前)?開(?:一張)?卡|會提醒[你您]/,
+    /(?:併進|加進|列入)[^。？！\n]{0,40}清單|明(?:天|早)[^。？！\n]{0,40}[你您]/,
+    /我會(?:集中|收成)[^。？！\n]{0,20}(?:卡|清單)|我收成一張卡給[你您]/,
+    /\bI(?:['’]ll| will)\s+(?:open\s+(?:a\s+)?(?:decision\s+)?card|remind\s+you)\b/i,
+  ],
+};
+// Preserve the existing exported question-pattern API; there is only one source table.
+const OWNER_WAIT_PATTERNS = HIT_PATTERNS.question;
 // Decision order (recall-biased: a missed owner question costs far more than one extra card prompt):
 //   1. strip quotes, code, quote lines, source-comment lines and markdown headings (stripCode); `* ` / `- ` list markers are body text and stay;
 //   2. split into sentences, then each sentence into clauses;
@@ -90,10 +114,13 @@ function loadCfg() {
 
 // Drop fenced blocks and inline code: a question mark inside code is not a question to the owner.
 // Also drop quoted text (「」 『』 “” "") and Markdown quote lines (> ...): a relayed question is not ours to the owner.
-const QUOTED = [/「[^」\n]*」/g, /『[^』\n]*』/g, /“[^”\n]*”/g, /"[^"\n]*"/g];
+const QUOTED = [/「[^」]*」/g, /『[^』]*』/g, /“[^”]*”/g, /"[^"]*"/g];
 const HEADING_MARK = '\u0001';
 function stripCode(text) {
-  let t = text.replace(/```[\s\S]*?(```|$)/g, ' ').replace(/`[^`\n]*`/g, ' ');
+  let t = text.replace(/```[\s\S]*?(```|$)/g, ' ').replace(/`([^`\n]*)`/g,
+    (_, code) => /^(?:\/login\b|d-[0-9a-f]{8}$|fleet\s+task\s|task_id=)/i.test(code) ? code : ' ');
+  // Quoting a due value is shell syntax, not a relayed lane quote.
+  t = t.replace(/((?:--due(?:=|\s+)|due=))["'](\d{4}-\d{2}-\d{2}(?:T[\d:+Z-]+)?)["']/g, '$1$2');
   // quote lines, `//` comment lines, markdown headings, and the lines of a real (unclosed-until-`*/`) block comment; list bullets `* ` / `- ` stay
   let inBlock = false;
   t = t.split('\n').filter((l) => {
@@ -107,23 +134,72 @@ function stripCode(text) {
 
 // ASCII ? ! . end a sentence before whitespace, the end of text, or a CJK / full-width character ("嗎?如果"); a URL query "a?b=1" and "v1.2" are not sentence ends.
 function sentences(text) {
-  return stripCode(text).split(/(?<=[。？！])\s*|(?<=[?!.])(?=\s|$|[\u3000-\u9fff\uff00-\uffef])\s*|\n+/).map((s) => s.trim()).filter(Boolean);
+  const body = stripCode(text).split('\n').filter((line) => !parseEscape(line.trim())).join('\n');
+  return body.split(/(?<=[。？！])\s*|(?<=[?!.])(?=\s|$|[\u3000-\u9fff\uff00-\uffef])\s*|\n+/).map((s) => s.trim()).filter(Boolean);
 }
 
-// Returns the first sentence that waits for the owner, or null.
-function findOwnerQuestion(text) {
+// One hit per sentence, with every matching class. Exemptions are evaluated separately.
+function findHits(text) {
+  const hits = [];
   for (const raw of sentences(text)) {
     const heading = raw.startsWith(HEADING_MARK);
     const s = heading ? raw.slice(1).trim() : raw;
     // exclusions are scoped to the question-mark rule only; the wait rule below always runs
-    if (!heading && !TITLE_STYLE.test(s) && ENDS_WITH_QUESTION.test(s) && !RHETORICAL.some((re) => re.test(s))) return s;
+    const classes = new Set();
+    if (!heading && !TITLE_STYLE.test(s) && ENDS_WITH_QUESTION.test(s) && !RHETORICAL.some((re) => re.test(s))) classes.add('question');
     for (const clause of s.split(CLAUSE_SPLIT)) {
-      if (CONDITION_ON_OWNER.test(clause)) return s;
+      if (CONDITION_ON_OWNER.test(clause)) classes.add('question');
       if (NEGATED.test(clause)) continue;
-      if (OWNER_WAIT_PATTERNS.some((re) => re.test(clause))) return s;
+      for (const [kind, patterns] of Object.entries(HIT_PATTERNS)) {
+        if (patterns.some((re) => re.test(clause))) classes.add(kind);
+      }
     }
+    if (classes.size) hits.push({ sentence: s, classes: [...classes] });
   }
-  return null;
+  return hits;
+}
+
+function findOwnerQuestion(text) { return findHits(text)[0]?.sentence || null; }
+
+function hasDueTask(sentence) {
+  return [...sentence.matchAll(FLEET_DUE)].some(([, due]) => {
+    const day = due.slice(0, 10);
+    const date = new Date(`${day}T00:00:00Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day
+      && Number.isFinite(Date.parse(due));
+  });
+}
+
+function hasLiveCard(sentence, cwd, excludedIds = null) {
+  const ids = [...sentence.matchAll(CARD_ID)];
+  if (!ids.length) return false;
+  try {
+    const { findCard } = require('../scripts/open-decision.js');
+    const { cardState } = require('../src/status/scope-key.js');
+    return ids.some(([id]) => {
+      const norm = id.toLowerCase();
+      if (excludedIds && excludedIds.has(norm)) return false;
+      const card = findCard(cwd, norm, { all: true });
+      return card && ['open', 'awaiting_operator_action'].includes(cardState(card.entry));
+    });
+  } catch {
+    return false;
+  }
+}
+
+function parseEscape(line) {
+  const m = line.match(/^OWNER-GUARD-FALSE-POSITIVE \[([a-z,-]+)\] (.+) :: (\S.{0,239})$/);
+  if (!m) return null;
+  const classes = m[1].split(',');
+  if (classes.some((c) => !Object.hasOwn(HIT_PATTERNS, c))) return null;
+  return { sentence: m[2], classes: [...new Set(classes)].sort().join(',') };
+}
+
+function unresolvedHits(text, cwd = process.cwd(), excludedIds = null) {
+  const lines = stripCode(text).split('\n').map((l) => l.trim()).filter((l) => l.startsWith(ESCAPE_PREFIX));
+  const escapes = lines.length > MAX_ESCAPES ? [] : lines.map(parseEscape).filter(Boolean);
+  return findHits(text).filter(({ sentence, classes }) => !hasLiveCard(sentence, cwd, excludedIds) && !hasDueTask(sentence)
+    && !escapes.some((e) => e.sentence === sentence && e.classes === [...classes].sort().join(',')));
 }
 
 // Text of the last assistant entry that has text, after the last real user turn.
@@ -169,55 +245,56 @@ function isAutonomous(sessionId) {
 }
 
 function decide(input) {
-  if (input.stop_hook_active === true) return null;
   const tp = input.transcript_path;
   if (typeof tp !== 'string' || !tp) return null;
   const text = lastAssistantText(fs.readFileSync(tp, 'utf8'));
   if (!text) return null;
   const rs = rootState(input);
-  if (CARD_ID.test(text)) {
-    // The reply names a card. If this session has a root and the named card sits in the UNBOUND scope, a root-scoped panel
-    // will not list it: block once and say how to re-open it under the root.
-    const named = rs.unbound.filter((c) => text.includes(c.id));
-    if (!rs.root || named.length === 0) return null;
-    return {
-      decision: 'block',
-      reason: `回覆裡的待決卡片 ${named.map((c) => c.id).join('、')} 落在未綁定範圍（${named[0].file}），這個 session 的 root 是 ${rs.root}，以 root 為範圍的面板看不到它。`
-        + `請 node ${OPEN_DECISION_CMD} close --id ${named[0].id} 關掉，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} ... 重開同一題，並在回覆寫出新卡片編號。`,
-    };
-  }
-  const hit = findOwnerQuestion(text);
-  if (!hit) return null;
-  const shown = hit.length > 120 ? `${hit.slice(0, 120)}…` : hit;
+  const unboundIds = rs.root && rs.unbound.length ? new Set(rs.unbound.map((u) => u.id.toLowerCase())) : null;
+  const hits = unresolvedHits(text, input.cwd || process.cwd(), unboundIds);
+  const mentioned = unboundIds ? new Set([...stripCode(text).matchAll(CARD_ID)].map(([id]) => id.toLowerCase())) : null;
+  const namedUnbound = mentioned ? rs.unbound.filter((u) => mentioned.has(u.id.toLowerCase())) : [];
+  if (!hits.length && !namedUnbound.length) return null;
   const role = teamRole();
-  if (role !== 'solo' && role !== 'pm') {
-    if (REQUEST_ID.test(text)) return null;
+  if (!namedUnbound.length && role !== 'solo' && role !== 'pm') {
+    // Non-PM lane sessions keep the pre-v2 rule: a request id or any d- card id in the reply silences the guard.
+    if (REQUEST_ID.test(text) || /\bd-[0-9a-f]{8}\b/i.test(text)) return null;
+    const first = hits[0].sentence;
+    const quoted = first.length > 120 ? `${first.slice(0, 120)}…` : first;
     const req = shellQuotePath(path.join(__dirname, '..', 'scripts', 'request-decision.js'));
     return {
       decision: 'block',
-      reason: `偵測到這則回覆在等 owner 回答，但沒有請求編號。偵測到的句子：「${shown}」。`
+      reason: `偵測到這則回覆在等 owner 回答，但沒有請求編號。偵測到的句子：「${quoted}」。`
         + `請用 node ${req} send --question <問題> --option <標籤>::<說明> --option <標籤>::<說明> --recommendation <建議> --boundary <邊界> 把問題、選項與建議送給 PM。`
         + '不可逆還要帶 --snapshot 與 --blast-radius。回覆必須寫出請求編號（r- 加 8 個 hex）。'
         + '若這句不是要 owner 回答（修辭、轉述別人的問題、列舉選項），請改寫句子避免誤判。',
     };
   }
+  const shown = hits.map((h) => `[${h.classes.join(',')}] ${h.sentence}`).join('\n');
   const autonomous = isAutonomous(input.session_id);
   const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
+  const unboundNote = namedUnbound.map((u) =>
+    `回覆提到的卡片 ${u.id} 落在未綁定範圍（本 session 的 root 是 ${rs.root}，root 面板看不到未綁定卡片）：請先執行 node ${OPEN_DECISION_CMD} close --id ${u.id}，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} 重新開卡並更新回覆中的卡號。`
+  ).join('\n');
+  const lead = [
+    ...(unboundNote ? [unboundNote] : []),
+    ...(hits.length ? [`以下句子需要 owner 回答、操作或後續提醒，但同句沒有本地 live 卡片或有 due 的 fleet task：\n${shown}`] : []),
+  ].join('\n');
   return {
     decision: 'block',
-    reason: `偵測到這則回覆在等 owner 回答，但沒有待決卡片編號。偵測到的句子：「${shown}」。`
+    reason: `${lead}\n`
       + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --executor <執行者位址> --question <問題> [--background <背景>] --option <標籤>::<說明> --option <標籤>::<說明> [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] --not-authorized <邊界>[:<為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
       + '--not-authorized 必填，邊界只能是 read_only、reversible、external、irreversible（resolve-doa 的行動類別）或 goal-change、scope-expansion、resources-2x、red-line（董事會批准項）；'
       + '本 session 的 DOA 內會自動放行的類別，open 會拒絕（exit 3）。'
       + (autonomous ? '本 session 是自主模式（l3–l6）：若這件事在 DOA 內請自行決定，不要開卡，直接改寫回覆、不要再問 owner。' : '')
       + (rs.root
-        ? `本 session 的 root 是 ${rs.root}，務必照上面帶 --root-run-id，否則卡片會落在未綁定範圍、面板看不到。`
-          + (rs.unbound.length ? `注意：本 session 先前開的卡片 ${rs.unbound.map((c) => c.id).join('、')} 已落在未綁定範圍（${rs.unbound[0].file}），請一併用 close --id 關掉並以 --root-run-id 重開。` : '')
-        : '本 session 沒有可用的 root（open 會在 stderr 警告卡片落在未綁定範圍）。')
+        ? `本 session 的 root 是 ${rs.root}，帶 --root-run-id 可將卡片綁定此 root。`
+        : '本 session 沒有可用的 root，卡片會放在本專案的未綁定範圍。')
       + 'open 必填 --executor（執行答覆的位址，沒帶 exit 2）、非空的 --question 與至少兩個 --option（沒有或只有一個會被擋，exit 2；純打字回答的問題改帶 --free-text 且不能同時帶 --option）；其餘旗標可省略。'
-      + '回覆必須寫出卡片編號（d- 加 8 個 hex）。'
+      + '每個命中句必須寫出自己的 live 卡片編號（d- 加 8 個 hex，狀態 open 或 awaiting_operator_action）；closed、pending_dispatch、未知卡號及其他句的卡號都不算。'
+      + '或在同句寫 fleet task <args> --due YYYY-MM-DD（可帶 ISO 時間），或 task_id=<id> due=YYYY-MM-DD。'
       + `owner 從即時面板回答後，會送來第一行是 [待決回覆] 的訊息，卡片會自動關閉；手動關閉用 node ${OPEN_DECISION_CMD} close --id <id>。`
-      + '若這句不是要 owner 回答（修辭、轉述別人的問題、列舉選項），請改寫句子避免誤判。',
+      + '再次 Stop 仍會檢查。若為誤判，可改寫、引用，或每個命中各加一行 OWNER-GUARD-FALSE-POSITIVE [class,...] 完整命中句 :: 理由（照上面句子與所有 class；理由 1–240 字元，每則回覆最多 8 行，不接受萬用字元）。',
   };
 }
 
@@ -233,4 +310,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { findOwnerQuestion, lastAssistantText, decide, OWNER_WAIT_PATTERNS };
+module.exports = { findOwnerQuestion, findHits, unresolvedHits, lastAssistantText, decide, OWNER_WAIT_PATTERNS, HIT_PATTERNS };

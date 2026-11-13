@@ -39,7 +39,7 @@ import { makeT, resolveLocale, T_EN } from './i18n'
 import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
-import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
+import { DISMISS_PRESS, forgeFit, GLYPHS, LOOK_PRESS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
 import { cardNameOf } from './cardtitle'
 import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
@@ -57,7 +57,7 @@ import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
-import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
+import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BarTabId, ScrollView } from './tabs'
 import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
@@ -67,14 +67,15 @@ import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane } from './pane'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
-import { showPath } from '../viewer/show'
+import type { ShowRequest } from '../viewer/model'
+import { reopenLook, showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
+  isStepCard, BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, shrinkToFitted, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
-import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, Manifest, PaneLine, PaneTab, SlotId, QuotaWindow, Sources } from './model'
+import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, SlotId, QuotaWindow, Sources } from './model'
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
@@ -92,17 +93,15 @@ const STEPS = atom({ plugin: 'autopilot', key: 'steps' } as const, [] as Step[],
 const DECIDE_KEEP_MS = 24 * 3600 * 1000 // a sent question the session never closed is forgotten after a day
 let timer: { cancel: () => void } | undefined
 let liveBaseSeen: string | null = null // the live base the pointer named on the last tick (codeforge's pet.json sits under it)
-let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read each tick only while SPEED_LABEL_PET is on
+let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read every refresh; null draws no pet
 let paneTab: PaneTab = 'now'
-// the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, run only while the tab is showing and at most once per TTL, never awaited by a render. fleetShownMs is
-// when the Fleet tab was last drawn (the tick stops fetching 15 s after the tab is left).
+// the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, kicked on every tick and when the Fleet tab is drawn. The TTL inside the feed keeps the runs 30 s apart.
+// Never awaited by a render.
 const fleetFeed = makeFleetFeed()
-let fleetShownMs = -Infinity
-const FLEET_SHOWN_MS = 15_000
 // The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
 // by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
 const FLEET = atom({ plugin: 'autopilot', key: 'fleet' } as const, { v: FLEET_SUMMARY_V, fetchedMs: null, error: null, capped: 0, totals: { needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }, lanes: [], topStuck: null } as FleetSummary)
-const fleetState = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null }).id
+const fleetState = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null, stale: task.stale }).id
 function kickFleet($: EngineInterface, nowMs: number): void {
   void fleetFeed.refresh(argv => $.process.run(argv, { timeoutMs: 5000 }), nowMs).then(async ran => {
     if (!ran) return
@@ -110,40 +109,9 @@ function kickFleet($: EngineInterface, nowMs: number): void {
     void $.ui.invalidate('ui.render')
   }, () => {}).catch(() => {})
 }
-// codeforge's forge-stats band is drawn in this session: its heartbeat `<live_base>/codeforge/mod-alive/<sid>.json` (schema codeforge.mod-alive/1, written every 2 s) is this
-// session's, at most FORGE_ALIVE_MS old and says layout `band`. The same file and threshold codeforge's statusline reads; a file over FORGE_ALIVE_MAX_BYTES is not read.
-// `summaryRow`: the heartbeat also says `summary_row: true`, the forge-stats that draws the one-line summary on the band's second row. An older one answers a one-row ask
-// with its own speed label, so it is never handed that row (one speed on the band, BL-0359).
-const FORGE_ALIVE_MS = 10_000
-const FORGE_ALIVE_MAX_BYTES = 4096
-// The file is stat'ed before it is read: only a regular file, not itself a symbolic link, at most FORGE_ALIVE_MAX_BYTES; then the text is held to the same bound in UTF-8
-// bytes. A link, a directory, a FIFO or device (`other`), a big file or any error (EISDIR, ELOOP, EACCES, a session id that will not come) is no heartbeat: no fetch,
-// no second row, and the tick goes on. `$.fs` has no lstat and no bounded read, so a file swapped between the stat and the read is held only by the size check after.
-async function forgeBand($: EngineInterface, nowMs: number): Promise<{ alive: boolean; summaryRow: boolean }> {
-  const no = { alive: false, summaryRow: false }
-  try {
-    if (liveBaseSeen === null) return no
-    const sid = await $.session.id()
-    const path = liveBaseSeen + '/codeforge/mod-alive/' + sanitizeSid(sid) + '.json'
-    const st = await $.fs.stat(path)
-    if (st.kind !== 'file' || st.isLink || !(st.size <= FORGE_ALIVE_MAX_BYTES)) return no
-    const text = await $.fs.read(path)
-    if (typeof text !== 'string' || text.length > FORGE_ALIVE_MAX_BYTES || utf8Bytes(text) > FORGE_ALIVE_MAX_BYTES) return no
-    const parsed = parseJson(text)
-    if (!parsed.ok || !isObject(parsed.value)) return no
-    const v = parsed.value
-    const age = typeof v.written_at_ms === 'number' ? nowMs - v.written_at_ms : NaN
-    const alive = v.schema === 'codeforge.mod-alive/1' && v.session_id === sid && v.layout === 'band' && age >= 0 && age < FORGE_ALIVE_MS
-    return { alive, summaryRow: alive && v.summary_row === true }
-  } catch (_e) {
-    return no
-  }
-}
-let forgeSummaryRow = false // set by the tick from the heartbeat; the band's draw reads it, never the file
 async function fleetFor($: EngineInterface): Promise<FleetView | null> {
   if (paneTab !== 'fleet') return null
   const nowMs = await $.clock.now()
-  fleetShownMs = nowMs
   kickFleet($, nowMs)
   return fleetView(fleetFeed, nowMs, await readOthers($, nowMs))
 }
@@ -168,17 +136,13 @@ export function liveTick($: EngineInterface): Promise<void> {
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   await consoleTick($).catch(() => undefined) // the console mode and its snapshot (below); the tick is the only place either is read
-  // fetch while someone looks: the Fleet tab was drawn in the last FLEET_SHOWN_MS, or forge-stats' band (which reads the summary) is drawn in this session
-  const forge = await forgeBand($, nowMs)
-  forgeSummaryRow = forge.summaryRow
-  if ((paneTab === 'fleet' && nowMs - fleetShownMs < FLEET_SHOWN_MS) || forge.alive || (shellWantsFleet && nowMs - shellDrawnMs < SHELL_SEEN_MS)) kickFleet($, nowMs)
+  kickFleet($, nowMs) // the band's own fleet segment reads the summary this publishes; the feed's TTL spaces the runs
   await shellTick($, nowMs).catch(() => undefined)
 }
 // ---- the O4 shell (shell.ts): the render never reads a file; the tick keeps what it draws from while the shell is on screen ----
 const SHELL_SEEN_MS = 15_000 // the shell counts as open while it was drawn this recently
 const PANEL_OPEN_EVERY_MS = 15_000 // forge-stats reads `autopilot.panel_open_at_ms` and refreshes the quota mirror only while it is within a minute
 let shellDrawnMs = -Infinity
-let shellWantsFleet = false // the 240 tier has a fleet column: the Fleet feed runs while it is drawn
 let shellRoom: { rows: RoomRow[]; raw: string } = { rows: [], raw: '' }
 let shellBaseline: number | undefined // the newest roundtable seq when the shell opened (✦ counts what came after); undefined = taken at the next read
 let panelOpenWrittenMs = -Infinity
@@ -700,11 +664,23 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const review = readReview(await readText($, liveBase + '/runs/' + scope.key + '.review.json'), scope.key)
   const src: Sources = { tasks, attention, turn, decisions, manifest, foreman, loadSource, marker, review, qc, residue, stage, quota, startMs: startMsOf(receiptRoot, env, tasks, scope.marker === null ? null : scope.marker.started_at, receiptMs) }
   const ctx = ctxShown(ctxText(await readText($, liveBase + '/context/' + fileSid + '.json'), nowMs), manifest, t)
-  const band = bandView(env, jobModel, scope.key, nowMs, src, t)
+  const commonDir = commonDirOf(identity) ?? await commonDirAt($, await $.session.cwd().catch(() => ''))
+  const durable = await readDurableDecisions($, commonDir, scope.key, identity, nowMs)
+  const dismissed = (await read($, DECIDE).catch(() => NO_DECIDE)).dismissed ?? {}
+  const baseDecisions = jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions
+  const mergedPending = mergeDurableDecisions(baseDecisions, durable, dismissed)
+  const effectiveJobModel: JobModel | null = mergedPending.length > 0
+    ? (jobModel === null
+        ? { acceptance: 'unknown', gates: [], needs_decision: true, conclusion: null, decisions: mergedPending, progress: null, phase: null, sources_manifest: null }
+        : { ...jobModel, needs_decision: true, decisions: mergedPending })
+    : baseDecisions.length > 0 && jobModel !== null
+      ? { ...jobModel, needs_decision: false, decisions: [] }
+      : jobModel
+  const band = bandView(env, effectiveJobModel, scope.key, nowMs, src, t)
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
       ...common, watcher_note: typeof env.exit_reason === 'string' && env.exit_reason !== '' && env.writer === null ? STATE_TEXT.watcherNote(env.exit_reason) : null,
-      band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions, awaiting: jobModel === null ? [] : (jobModel.awaiting_operator ?? []), dispatching: jobModel === null ? [] : (jobModel.pending_dispatch ?? []),
+      band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: mergedPending, awaiting: jobModel === null ? [] : (jobModel.awaiting_operator ?? []), dispatching: jobModel === null ? [] : (jobModel.pending_dispatch ?? []),
       sections: buildSections(src, foreman),
       review,
       detail: {
@@ -845,7 +821,7 @@ async function refresh($: EngineInterface): Promise<void> {
     } catch (_e) {
       // garnish too: keep the previous rows
     }
-    if (SPEED_LABEL_PET) petText = petTag(liveBaseSeen === null ? null : await readText($, liveBaseSeen + '/codeforge/pet.json'))
+    petText = petTag(liveBaseSeen === null ? null : await readText($, liveBaseSeen + '/codeforge/pet.json'))
     snapshot = { ...built.snap, recent, activity, account: { account, quota } }
     await pruneDecide($, new Set(built.snap.pending.flatMap(d => (d.id === null ? [] : [d.id]))), built.snap.state === 'ok', nowMs).catch(() => undefined)
     $.ui.invalidate('ui.render')
@@ -876,10 +852,17 @@ async function refresh($: EngineInterface): Promise<void> {
 // A press on the 待決 tab: `pick:<id>:<k>` only SELECTS option k of question id (pressing the chosen one again unselects it; nothing is sent and the card stays editable), `submit` starts the
 // undo window for every answered question (DECIDE_UNDO_MS, then the send), `undo:<id>` takes a card back out of it, `fix:<id>` reopens a sent card to correct its answer.
 async function decidePress($: EngineInterface, id: string): Promise<void> {
-  // a pressed file path (ui.ts linkSegs, the background tail): the viewer window has to open in THIS turn, before any await (mods/viewer/show.ts openWindow)
+  // a pressed file path (ui.ts linkSegs / cardAttachRows, the background tail) or a `給你看` row: the viewer window has to open in THIS turn, before any await (mods/viewer/show.ts openWindow)
   if (id.startsWith(SHOW_PRESS)) {
     const at = showTarget(id)
     if (at !== null) await showPath($, at.path, at.line).catch(() => undefined)
+    return
+  }
+  if (id.startsWith(LOOK_PRESS)) {
+    const lid = id.slice(LOOK_PRESS.length)
+    const card = snapshot?.pending.find(d => d.id === lid)
+    if (card?.look_target !== undefined && card.look_target !== null) await reopenLook($, card.look_target).catch(() => undefined)
+    else if ((card?.attachments?.length ?? 0) > 0) await showPath($, (card?.attachments as string[])[0], null).catch(() => undefined)
     return
   }
   try {
@@ -891,6 +874,7 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
     } else if (id === 'submit') await holdDecide($)
     else if (id.startsWith('undo:')) await undoDecide($, id.slice(5))
     else if (id.startsWith('fix:')) await reopen(undoDeps($), id.slice(4))
+    else if (id.startsWith(DISMISS_PRESS)) await dismissCard($, id.slice(DISMISS_PRESS.length))
     else if (id.startsWith('clean:')) await cleanPress($, id)
   } catch (_e) {
     // a press never takes the session down
@@ -904,14 +888,93 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
 export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const
 // The undo window's claim (F4) is the one other script the pane runs, from its own list: it only wraps `fleet decision claim` and prints JSON (PM ruling 2026-11-07).
 export const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const
+// Durable card store writer (scripts/open-decision.js): records `show` items (`--kind look`) and closes dismissed step / look rows.
+export const DECISION_SCRIPTS = ['scripts/open-decision.js'] as const
 type CleanRun = (argv: string[]) => Promise<{ exitCode: number; stdout: string }>
-// the one exec path for both lists: argv is node + a whitelisted script (ui-lint.test.js pins this); the only place `$.process` is used
-async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[number] | (typeof CLAIM_SCRIPTS)[number], args: string[], run?: CleanRun, timeoutMs = 120_000): Promise<string> {
-  const allowed: readonly string[] = [...CLEAN_SCRIPTS, ...CLAIM_SCRIPTS]
+// the one exec path for the whitelisted script lists: argv is node + a whitelisted script (ui-lint.test.js pins this); the only place `$.process` is used
+async function execScript($: EngineInterface, script: (typeof CLEAN_SCRIPTS)[number] | (typeof CLAIM_SCRIPTS)[number] | (typeof DECISION_SCRIPTS)[number], args: string[], run?: CleanRun, timeoutMs = 120_000): Promise<string> {
+  const allowed: readonly string[] = [...CLEAN_SCRIPTS, ...CLAIM_SCRIPTS, ...DECISION_SCRIPTS]
   if (!allowed.includes(script)) throw new Error('script not allowed')
   const argv = ['node', $.plugin.root + '/' + script, ...args]
   const r = run === undefined ? await $.process.run(argv, { timeoutMs }) : await run(argv)
   return r.stdout
+}
+
+async function readDurableDecisions($: EngineInterface, commonDir: string | null, projectKey: string, identity: unknown, nowMs: number): Promise<{ open: LiveDecision[]; closedIds: Set<string> }> {
+  if (commonDir === null) return { open: [], closedIds: new Set() }
+  const dir = commonDir + '/autopilot/decisions'
+  let names: string[] = []
+  try {
+    names = (await $.fs.list(dir))
+      .filter(e => e.kind === 'file' && e.name.endsWith('.json') && (e.name === projectKey + '.json' || e.name.startsWith(projectKey + '--')))
+      .map(e => e.name)
+      .sort()
+      .slice(0, MAX_PATH_FILES)
+  } catch (_e) {
+    return { open: [], closedIds: new Set() }
+  }
+  const texts: string[] = []
+  for (const name of names) {
+    const text = await readText($, dir + '/' + name)
+    if (text !== null) texts.push(text)
+  }
+  return readDurableDecisionFiles(texts, { project_key: projectKey, repo_identity: identity }, nowMs)
+}
+
+function showItemLabel(req: ShowRequest, lane: string): { text: string; lookTarget: LookTarget; attach: string[] } {
+  if (req.kind === 'path') {
+    const trimmed = req.path.replace(/\/+$/, '')
+    const base = trimmed.slice(trimmed.lastIndexOf('/') + 1) || req.path
+    return {
+      text: '給你看：' + base + '（' + lane + '）',
+      lookTarget: { kind: 'path', path: req.path, start: req.start, end: req.end, ...(req.tail === true ? { tail: true } : {}) },
+      attach: [req.path],
+    }
+  }
+  const dash = req.args.indexOf('--')
+  const tailArgs = dash >= 0 ? req.args.slice(dash + 1) : []
+  const firstTail = tailArgs.length === 1 ? tailArgs[0].replace(/\/+$/, '') : ''
+  const name = firstTail !== ''
+    ? (firstTail.slice(firstTail.lastIndexOf('/') + 1) || tailArgs[0])
+    : req.args.length > 0 ? 'diff ' + req.args.join(' ') : 'diff'
+  return {
+    text: '給你看：' + name + '（' + lane + '）',
+    lookTarget: { kind: 'diff', args: [...req.args] },
+    attach: [],
+  }
+}
+
+export async function recordShowLook($: EngineInterface, req: ShowRequest): Promise<void> {
+  if (!(await $.fs.exists($.plugin.root + '/' + DECISION_SCRIPTS[0]).catch(() => false))) return
+  const cwd = await $.session.cwd()
+  const common = await commonDirAt($, cwd)
+  const fromSnap = snapshot !== null && snapshot.detail.project !== '' && snapshot.detail.project !== '—' ? snapshot.detail.project : null
+  const derived = common !== null ? projectNameOf('git-common-dir:' + common, '') : ''
+  const cwdBase = cwd.replace(/\/+$/, '').split('/').pop() ?? ''
+  const lane = fromSnap ?? (derived !== '' && derived !== '—' ? derived : cwdBase !== '' ? cwdBase : 'repo')
+  const item = showItemLabel(req, lane)
+  const rootRunId = snapshot !== null && typeof snapshot.root_run_id === 'string' && /^[A-Za-z0-9._-]+$/.test(snapshot.root_run_id) ? snapshot.root_run_id : null
+  const args = [
+    'open', '--cwd', cwd, '--kind', 'look',
+    '--question', item.text,
+    '--source', lane,
+    '--look-target', JSON.stringify(item.lookTarget),
+    ...item.attach.flatMap(a => ['--attach', a]),
+    ...(rootRunId === null ? [] : ['--root-run-id', rootRunId]),
+  ]
+  await execScript($, DECISION_SCRIPTS[0], args)
+  await refresh($)
+}
+
+async function dismissCard($: EngineInterface, id: string): Promise<void> {
+  if (id === '' || !/^[A-Za-z0-9._-]+$/.test(id)) return
+  const nowMs = await $.clock.now()
+  await update($, DECIDE, s => ({ ...s, dismissed: { ...(s.dismissed ?? {}), [id]: nowMs } }))
+  if (await $.fs.exists($.plugin.root + '/' + DECISION_SCRIPTS[0]).catch(() => false)) {
+    const cwd = await $.session.cwd().catch(() => '')
+    if (cwd !== '') await execScript($, DECISION_SCRIPTS[0], ['close', '--cwd', cwd, '--id', id]).catch(() => '')
+  }
+  await refresh($)
 }
 let cleaning = false
 // the common git dir of the checkout a path belongs to: the first `.git` met walking up (a directory holds HEAD, a gitfile names the gitdir); null when there is none (a directory that is gone)
@@ -1004,7 +1067,7 @@ const CLAIM_MS = 8000
 let claimCard: ClaimCard | null = null
 export function setClaimCard(fn: ClaimCard | null): void { claimCard = fn }
 const claimWith = ($: EngineInterface): ClaimCard => async (card, answer) => {
-  const args = [card.id, ...('option' in answer ? ['--option', answer.option] : ['--free-text', answer.freeText])]
+  const args = [card.id, ...('option' in answer ? ['--option', answer.option, ...(answer.freeText ? ['--free-text', answer.freeText] : [])] : ['--free-text', answer.freeText])]
   let j: unknown
   try { j = JSON.parse((await execScript($, CLAIM_SCRIPTS[0], args, undefined, CLAIM_MS)).trim().split('\n').pop() ?? '') } catch (_e) { return { ok: false, answer_id: null, reason: 'claim failed' } }
   const r = j as { ok?: unknown; answer_id?: unknown; reason?: unknown } | null
@@ -1016,7 +1079,7 @@ const undoDeps = ($: EngineInterface): UndoDeps => ({
   now: () => $.clock.now(),
   read: () => read($, DECIDE),
   update: fn => update($, DECIDE, fn),
-  pool: st => actionable(snapshot === null ? [] : snapshot.pending, decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
+  pool: st => actionable(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), decideBatch.order.length > 0 ? decideBatch : bandBatch, st), // a reopened card the session already closed is kept in whichever batch is open
   claim: claimCard ?? claimWith($),
 })
 async function stopHoldTimerIfIdle($: EngineInterface): Promise<void> {
@@ -1045,7 +1108,7 @@ async function holdTick($: EngineInterface): Promise<void> {
 // The one prompt.submit of the mod (ui-lint allowlist): the window of `only` ended, so its answers go out (decideundo.ts sendNow). The prompt starts a turn once the session is idle: it is not awaited.
 async function sendDecide($: EngineInterface, only: ReadonlySet<string>): Promise<void> {
   const ids = await sendNow({ ...undoDeps($), post: text => $.prompt.submit({ text }) }, only)
-  const typed = submitSuccessor(snapshot === null ? [] : snapshot.pending, ids)
+  const typed = submitSuccessor(snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), ids)
   if (typed !== null) await decideAnswered($, typed) // a typed-only card is answered by sending it: the focus goes to its successor even though the send button is gone
 }
 
@@ -1072,21 +1135,24 @@ async function decideKeep($: EngineInterface, key: string, value: string): Promi
 async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: boolean, nowMs: number): Promise<void> {
   const st: DecideState = await read($, DECIDE)
   const busy = (id: string): boolean => st.hold?.[id] !== undefined || (st.fixing?.[id] !== undefined && nowMs - st.fixing[id] <= DECIDE_KEEP_MS) // in an undo window, or reopened to correct: its pick and note are still wanted
-  const gone = (id: string): boolean => !listed.has(id) && !busy(id) && (st.sent[id] !== undefined ? nowMs - st.sent[id] > DECIDE_KEEP_MS : ok)
-  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent), ...Object.keys(st.hold ?? {}), ...Object.keys(st.fixing ?? {})])
+  const gone = (id: string): boolean => !listed.has(id) && !busy(id) && (
+    st.dismissed?.[id] !== undefined
+      ? nowMs - st.dismissed[id] > DECIDE_KEEP_MS
+      : st.sent[id] !== undefined ? nowMs - st.sent[id] > DECIDE_KEEP_MS : ok
+  )
+  const ids = new Set([...Object.keys(st.picks), ...Object.keys(st.notes), ...Object.keys(st.sent), ...Object.keys(st.hold ?? {}), ...Object.keys(st.fixing ?? {}), ...Object.keys(st.dismissed ?? {})])
   const drop = [...ids].filter(gone)
   if (drop.length === 0) return
   const keep = <V,>(o: Record<string, V>): Record<string, V> => Object.fromEntries(Object.entries(o).filter(([id]) => !drop.includes(id)))
-  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent), hold: keep(s.hold ?? {}), fixing: keep(s.fixing ?? {}) }))
+  await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent), hold: keep(s.hold ?? {}), fixing: keep(s.fixing ?? {}), dismissed: keep(s.dismissed ?? {}) }))
 }
 
 // the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs
 const FORGE_LABEL_MAX = 30
 const FORGE_FULL_ROWS = 12
 const FORGE_BELOW_MIN_COLS = 26 // the narrowest the mod below is asked for its view (forge-stats draws a one-row summary under this)
-// BL-0359 closed. The speed view stays `beside` the mod below, as shipped. The pet on the speed label stays as shipped (`SPEED_LABEL_PET` false) unless the owner asks.
+// BL-0359 closed. The speed view sits `beside` the mod below, as shipped. The label's pet is always read (codeforge's pet.json); a null pet draws nothing.
 const SPEED_PLACEMENT: SpeedPlacement = 'beside'
-const SPEED_LABEL_PET = false
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
 
@@ -1250,18 +1316,48 @@ export function registerLive(on: Parameters<Register>[0]): void {
       return next({ ...e, props: { ...e.props, maxRows, bodyColumns, ...(scroll === undefined ? {} : { scroll: { ...scroll, bodyRows: Math.max(0, scroll.bodyRows - (e.props.maxRows - maxRows)) } }) } })
     }
     // The speed label (BL-0359): the live mod measures it itself (speed.ts), so the mod below is no longer asked for a one-row label and two speeds can never stand on the band.
-    // One row, as wide as the room the other tabs and the indicator leave (at most FORGE_LABEL_MAX); none while no request was timed.
+    // One row. With a fetched fleet summary (and not in the console mode) the fleet segment is fitted onto that line, right after the verdict, and the speed shares its room.
+    // Otherwise the label keeps the cells the indicator's narrowest form leaves it (at most FORGE_LABEL_MAX); none while no request was timed.
     let forge: ForgeSegment[] | null = null
     const steps = validSteps(await read($, STEPS))
-    // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest (at most FORGE_LABEL_MAX)
+    // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest.
+    // Console mode stays at FORGE_LABEL_MAX and never draws the pet (the console band's bytes stay what they were). Outside it, 48 holds a 5-step spark plus the pet: that label is 31 cells and 30 drops the pet.
     const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
     const con = consoleOn ? { ...consoleNav(), cols: columns } : null // the console mode's band strip (consoletabs.ts), null = the tabs the band always had
     const usageOn = con !== null || usageTabFits(columns, t, GLYPHS.structure.speed) // no 用量 tab in the console mode, so it is never hidden behind the `›`
-    const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn, con).width - 1 - 2)
+    const labelMax = consoleOn ? FORGE_LABEL_MAX : 48
+    const labelCols = Math.min(labelMax, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn, con).width - 1 - 2)
     // forgeMore: something was timed but the band has no room for the label (its smallest form) and its tab; the strip then ends in a dim `›` Button (key 'more') that opens the forge view, so the keyboard still reaches it
     let forgeMore = false
-    if (rows >= 1) {
-      const parts = speedLabelParts(steps, SPEED_LABEL_PET ? petText : null)
+    let bandPreset: { segs: Seg[]; width: number } | null = null
+    const fleetNow = await read($, FLEET)
+    const snap = snapshot
+    const fleetSlot = snap !== null && snap.band !== null && !consoleOn && fleetNow.fetchedMs !== null
+      ? slotFleet({ stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting }, t)
+      : null
+    if (fleetSlot !== null && snap !== null && snap.band !== null) {
+      const base = snap.band.slots
+      const atV = base.findIndex(s => s.id === 'verdict')
+      const withFleet = [...base.slice(0, atV + 1), fleetSlot, ...base.slice(atV + 1)]
+      const parts = rows >= 1 ? speedLabelParts(steps, petText) : null
+      // room is the cells left after the strip and the one-cell gap. The › is not subtracted here: fittedBandWidth counts it when `more` is set.
+      const roomFor = (speedTab: boolean) => {
+        const stripW = barStrip(snap, t, null, speedTab ? GLYPHS.structure.speed : null, usageOn, con).width
+        return Math.max(1, columns - stripW - 1)
+      }
+      // `!usageOn` draws the dim `›` (the 用量 tab had no room) even when the speed label itself fits, so the first pass counts those 2 cells
+      let fitted = layoutBandLine(withFleet, roomFor(parts !== null), parts, BAND_NARROW_STEPS, !usageOn)
+      if (parts !== null && fitted.speed === null) {
+        forgeMore = true
+        // null speed: the wider room (no forge tab) must not put the label back beside the › that stands in for it
+        fitted = layoutBandLine(withFleet, roomFor(false), null, BAND_NARROW_STEPS, true)
+      }
+      const drawMore = !usageOn || forgeMore
+      const segs = shrinkToFitted(fitted.band.segs, fitted.speed, drawMore, roomFor(fitted.speed !== null))
+      forge = fitted.speed
+      bandPreset = { segs, width: fittedBandWidth(segs.reduce((n, s) => n + displayWidth(s.text), 0), null, false) }
+    } else if (rows >= 1) {
+      const parts = speedLabelParts(steps, consoleOn ? null : petText)
       if (parts !== null) {
         if (labelCols >= FORGE_LABEL_MIN) forge = forgeFit(parts, labelCols)
         forgeMore = forge === null
@@ -1273,7 +1369,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const hidden: BarTabId[] = [...(usageOn ? [] : ['usage' as const]), ...(forgeMore ? ['forge' as const] : [])]
     const at = active === null ? -1 : hidden.indexOf(active)
     const moreTo: BarTabId | null = hidden.length === 0 ? null : at < 0 ? hidden[0] : (hidden[at + 1] ?? active)
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con, bandPreset)
     const open = (tab: PaneTab) => { void openOn(tab) }
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
@@ -1286,7 +1382,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const strip = barStrip(snapshot, t, active, null) // the shell's menu lists every tab, the 用量 one too
       // ux-v7: the 待決 tab is a card view. One card in the main window (decideCursor), the card list on the left, the progress row and the four quick slots under it.
       const st = active === 'decide' ? await read($, DECIDE) : null
-      const pending = active === 'decide' ? snapshot.pending : []
+      const pending = active === 'decide' ? snapshot.pending.filter(d => !isStepCard(d)) : []
       // The pane's batch (decidebatch.ts batchSync, the same pure function and the same DecideState): the card list keeps its order and its numbers, a card the session or the CLI closed stays greyed in place
       // (`answered elsewhere`), and a sent card is greyed. The batch is the band's own variable (the pane's closes with the pane's tab), synced at every draw of the 待決 tab and closed on any other.
       bandBatch = st === null ? NO_BATCH : batchSync(bandBatch, pending, st, t('decide.elsewhere'))
@@ -1319,7 +1415,6 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (plan0 !== null) {
         let plan: ShellPlan = plan0
         shellDrawnMs = nowMs
-        shellWantsFleet = plan.geo.tier === 240
         const mainCols = plan.geo.main - 1
         const tabIds = strip.tabs.map(b => b.id).filter(id => id !== 'forge')
         const redraw = () => { void $.ui.invalidate('ui.render') }
@@ -1433,13 +1528,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: open })
     }
     if (active !== 'forge' && rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
-    // No tab open, a second row to spare and a forge-stats that draws the summary row (its heartbeat says so): that row goes to the mod below (PM G33a, TUI guideline
-    // §1.1 rule 3). A mod that passes it on (the engine's own element comes back) leaves the band one row high, never a blank row.
-    // The console mode never hands it over: its second row is not forge-stats' summary (that line is the fleet counts, which the tab badges already say; plan §3.1), so `next(e)` is not called here.
-    if (active === null && rows >= 2 && forgeSummaryRow && !consoleOn) {
-      const answer = await lower(1, columns)
-      if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') return stackBand(el, bar.node, [answer])
-    }
+    // The fleet counts are on the band's own line (slotFleet). Nothing is handed to the mod below for a second row.
     if (content.length === 0) return bar.node
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
@@ -1473,7 +1562,7 @@ let decideInputs = false // whether the surface being drawn has text fields: the
 let decideFocus: string | null = null // the element key the owner last pressed, typed in or was sent to; the host has no call that reads the focus
 function decideSync(st: DecideState): void {
   decideState = st
-  decideBatch = paneTab === 'decide' ? batchSync(decideBatch, snapshot === null ? [] : snapshot.pending, st, tr('decide.elsewhere')) : NO_BATCH
+  decideBatch = paneTab === 'decide' ? batchSync(decideBatch, snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d)), st, tr('decide.elsewhere')) : NO_BATCH
 }
 // The card lines the plans count: the same ones the pane draws (same inputs flag), without the fixed send strip.
 function decideCardLines(snap: LiveSnapshot, st: DecideState): PaneLine[] {
@@ -1492,12 +1581,13 @@ async function decideRepair($: EngineInterface, st: DecideState): Promise<void> 
   const prev = decideBatch
   decideSync(st)
   if (snapshot === null || paneTab !== 'decide') return
-  const plan = focusRepair({ prev, batch: decideBatch, focus: decideFocus, lines: decideCardLines(snapshot, st), pending: snapshot.pending, st, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
+  const decisionPending = snapshot.pending.filter(d => !isStepCard(d))
+  const plan = focusRepair({ prev, batch: decideBatch, focus: decideFocus, lines: decideCardLines(snapshot, st), pending: decisionPending, st, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
   if (plan !== null) await decideFocusTo($, plan)
 }
 async function decideAnswered($: EngineInterface, id: string): Promise<void> {
   const st = await read($, DECIDE)
-  const pending = snapshot === null ? [] : snapshot.pending
+  const pending = snapshot === null ? [] : snapshot.pending.filter(d => !isStepCard(d))
   decideSync(st)
   const d = pending.find(x => x.id === id)
   if (d === undefined || answerOf(d, st) === null || snapshot === null) return

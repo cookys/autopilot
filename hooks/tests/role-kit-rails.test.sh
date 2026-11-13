@@ -286,6 +286,11 @@ for KIND in review author hetero; do
   assert_eq "2" "$RC" "(e) $KIND account layer: invalid kit refused"
   assert_eq "0" "$(grep -c . "$FX_LOG")" "(e) $KIND account layer: invalid kit spawned nothing"
 done
+case "$FX_LIVE" in
+  /dev/shm/g37-fix-live-*)
+    if [ -d "$FX_LIVE" ] && [ ! -L "$FX_LIVE" ]; then rm -rf -- "$FX_LIVE"; fi
+    ;;
+esac
 rm -rf "$FX_ROOT"
 
 # (f) negative controls

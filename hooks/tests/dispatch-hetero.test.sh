@@ -2295,8 +2295,9 @@ assert_eq "0" "$EXIT" "22g: cooperative self-committing stub still committed"
 assert_file_exists "$HOOK_MARK" "22g: the repo's own pre-commit hook fired for the worker's commit (no hook shadowing)"
 rm -f "$SBX/.git/hooks/pre-commit"
 
-# 22h. Fingerprint coverage: an UNCOMMITTED edit to a main-checkout file, and a move of a
-#      NON-current branch, each reject (review, 2026-09-13).
+# 22h. Fingerprint coverage: an UNCOMMITTED edit to a main-checkout file rejects
+#      (review, 2026-09-13). 22i: moving a NON-current branch does not (fleet 01M788GD) —
+#      other refs/heads/* are outside the round fingerprint.
 STUB_MAINEDIT="$TEST_TMP/agy-mainedit"
 cat > "$STUB_MAINEDIT" <<'EOF'
 #!/usr/bin/env bash
@@ -2318,16 +2319,18 @@ git -C "$MAIN_SBX" branch -f other-branch HEAD~1
 EOF
 chmod +x "$STUB_BRANCHMOVE"; make_agy_stub_versioned "$STUB_BRANCHMOVE"
 git -C "$SBX" branch other-branch >/dev/null 2>&1 || true
+OTHER_BEFORE_22I="$(git -C "$SBX" rev-parse refs/heads/other-branch)"
 OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22i --prompt-file "$PROMPT" --agy-bin "$STUB_BRANCHMOVE" 2>&1)"; EXIT=$?
-assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22i: moving a NON-current branch rejects"
+assert_eq "0" "$EXIT" "22i: moving a NON-current branch is not a mutation — exit 0"
+assert_contains "$OUT" '"status": "committed"' "22i: …and the round is committed"
+assert_not_contains "$OUT" 'main_checkout_mutated' "22i: …no boundary_code"
+assert_neq "$OTHER_BEFORE_22I" "$(git -C "$SBX" rev-parse refs/heads/other-branch)" "22i fixture: other-branch really moved"
 git -C "$SBX" branch -D other-branch >/dev/null 2>&1 || true
 
-# 22q. Concurrent sibling dispatch (308-8f, 2026-09-14): three dispatch-hetero runs on one
-#      repo, each committing on hands/kr1/c{1,2,3}, all rejected each other because the
-#      fingerprint counts EVERY ref and only this dispatch's own --branch is exempt. The stub
-#      stands in for the sibling: it creates refs/heads/hands/kr1/c2 in the main checkout
-#      mid-round. Without the flag that is (correctly, by the old rule) a mutation; with
-#      `--sibling-ref-prefix refs/heads/hands/kr1/` the caller has declared the namespace.
+# 22q. Concurrent sibling dispatch (308-8f, 2026-09-14; fleet 01M788GD): the stub stands in
+#      for the sibling and creates refs/heads/hands/kr1/c2 mid-round. That heads ref is not a
+#      mutation, with or without `--sibling-ref-prefix`. The flag remains and still drops the
+#      declared namespace from whatever the fingerprint measures.
 STUB_SIBLING="$TEST_TMP/agy-sibling"
 cat > "$STUB_SIBLING" <<'EOF2'
 #!/usr/bin/env bash
@@ -2339,20 +2342,23 @@ git -C "$MAIN_SBX" update-ref "$SIBLING_REF" "$(git -C "$MAIN_SBX" rev-parse HEA
 EOF2
 chmod +x "$STUB_SIBLING"; make_agy_stub_versioned "$STUB_SIBLING"
 OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 "$SCRIPT" --branch hands/kr1/c1a --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "22q control: a sibling hands/ ref appearing mid-round rejects WITHOUT the flag (the 308 shape)"
-assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22q control: …as main_checkout_mutated"
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22q control): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "22q control: a sibling heads ref appearing mid-round is not a mutation"
+assert_contains "$OUT" '"status": "committed"' "22q control: …and the round is committed"
+assert_not_contains "$OUT" 'main_checkout_mutated' "22q control: …no boundary_code"
+assert_eq "0" "$(git -C "$SBX" rev-parse --verify --quiet refs/heads/hands/kr1/c2 >/dev/null; echo $?)" "22q control fixture: the sibling branch was created"
 git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
 OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 "$SCRIPT" --branch hands/kr1/c1b --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22q): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "22q: with --sibling-ref-prefix the declared namespace is exempt — round exit 0"
 assert_contains "$OUT" '"status": "committed"' "22q: …and the round is committed"
 git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
-# 22r. The exemption is the declared namespace and nothing else: the same stub planting a
-#      ref OUTSIDE the prefix still rejects with the flag present.
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/other/c9 "$SCRIPT" --branch hands/kr1/c1c --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "22r: a ref outside the declared namespace still rejects"
+# 22r. Other refs/heads/* are not a mutation even outside the declared prefix. A non-branch
+#      ref still is: the same stub planting a tag rejects with the flag present.
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/tags/outside-22r "$SCRIPT" --branch hands/kr1/c1c --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "22r: a tag planted mid-round still rejects"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22r: …as main_checkout_mutated"
-git -C "$SBX" update-ref -d refs/heads/hands/other/c9 2>/dev/null || true
+git -C "$SBX" update-ref -d refs/tags/outside-22r 2>/dev/null || true
 # 22s. Argument validation: refs/heads/ alone and a non-namespace value are refused pre-spawn.
 OUT="$(cd "$SBX" && "$SCRIPT" --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/ 2>&1)"; EXIT=$?
 assert_neq "0" "$EXIT" "22s: --sibling-ref-prefix refs/heads/ is refused"
@@ -2763,5 +2769,79 @@ OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
 assert_eq "2" "$EXIT" "hetero cc-shim invalid --effort ultra exits 2"
 assert_contains "$OUT" "precondition_failed" "hetero cc-shim invalid effort is a precondition failure"
 assert_file_absent "$HETERO_CC_ARGV" "hetero cc-shim invalid effort never launched claude"
+
+# --- --pace-role: pace-aware engine selection & manifest engine_choice ---
+PACE_RUNS_DIR="$TEST_TMP/pace-runs"
+mkdir -p "$PACE_RUNS_DIR"
+chmod 700 "$PACE_RUNS_DIR"
+
+# (1) --pace-role without --runner selects codex from scarce-codex.json and records engine_choice in manifest.
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
+  AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/scarce-codex.json" \
+  AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
+  DISPATCH_QUIET=1 \
+  "$SCRIPT" --pace-role implementer --codex-bin "$STUB_CODEX_ARGV" \
+  --run-id pace-codex-pick --branch feat/pace-codex-pick --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-codex.err")"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (--pace-role codex): out=%s err=%s\n' "$OUT" "$(cat "$TEST_TMP/pace-codex.err" 2>/dev/null)" >&2
+assert_eq "0" "$EXIT" "hetero --pace-role implementer selects codex and exits 0"
+assert_contains "$OUT" '"runner": "codex"' "hetero --pace-role stdout reports chosen runner codex"
+assert_contains "$OUT" '"model": "gpt-6.1-sol"' "hetero --pace-role stdout reports chosen model gpt-6.1-sol"
+assert_contains "$(tr '\n' ' ' < "$HETERO_CODEX_ARGV")" "--model gpt-6.1-sol " "hetero --pace-role passes chosen model to codex"
+PACE_MF_CHECK="$(node -e '
+  const fs = require("fs");
+  const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const ec = mf.engine_choice;
+  if (!ec || typeof ec !== "object") process.exit(2);
+  const ok = mf.runner === "codex"
+    && mf.model === "gpt-6.1-sol"
+    && ec.engine === "codex"
+    && ec.runner === "codex"
+    && ec.model === "gpt-6.1-sol"
+    && ec.pool === "codex A"
+    && ec.slack_pts === -35
+    && ec.over_pace === true
+    && ec.role === "implementer"
+    && Array.isArray(ec.candidates);
+  process.stdout.write(ok ? "ok" : JSON.stringify(mf));
+' "$PACE_RUNS_DIR/pace-codex-pick.manifest.json")"
+assert_eq "ok" "$PACE_MF_CHECK" "manifest records full selector JSON as engine_choice when --pace-role is used"
+
+# (2) Without --pace-role, manifest has no engine_choice field.
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
+  DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  --run-id pace-absent --branch feat/pace-absent --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-absent.err")"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero without --pace-role exits 0"
+PACE_ABSENT_CHECK="$(node -e '
+  const fs = require("fs");
+  const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(Object.prototype.hasOwnProperty.call(mf, "engine_choice") ? "present" : "absent");
+' "$PACE_RUNS_DIR/pace-absent.manifest.json")"
+assert_eq "absent" "$PACE_ABSENT_CHECK" "manifest omits engine_choice when --pace-role is absent"
+
+# (3) Explicit --runner wins over --pace-role (selector not invoked, manifest omits engine_choice).
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
+  AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
+  DISPATCH_QUIET=1 \
+  "$SCRIPT" --pace-role implementer --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  --run-id pace-explicit-runner --branch feat/pace-explicit-runner --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-explicit.err")"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero explicit --runner overrides --pace-role"
+PACE_EXPLICIT_CHECK="$(node -e '
+  const fs = require("fs");
+  const mf = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(Object.prototype.hasOwnProperty.call(mf, "engine_choice") ? "present" : "absent");
+' "$PACE_RUNS_DIR/pace-explicit-runner.manifest.json")"
+assert_eq "absent" "$PACE_EXPLICIT_CHECK" "manifest omits engine_choice when explicit --runner overrides --pace-role"
+
+# (4) --pace-role fails closed (exit 2, precondition_failed) on pace_unknown (exit 3) with no silent default.
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
+  AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
+  AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
+  DISPATCH_QUIET=1 \
+  "$SCRIPT" --pace-role implementer --agy-bin "$TEST_TMP/nonexistent-agy-bin" \
+  --run-id pace-unknown-fail --branch feat/pace-unknown-fail --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "hetero --pace-role with pace_unknown exits 2 (no silent default)"
+assert_contains "$OUT" '"status": "precondition_failed"' "hetero --pace-role pace_unknown emits precondition_failed"
+assert_contains "$OUT" "pace_unknown" "hetero --pace-role failure message names pace_unknown"
 
 finalize_test

@@ -24,7 +24,7 @@ eq() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1: expected [$2] got [$3]"; 
 has() { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1: [$3] lacks [$2]" ;; esac; }
 
 # Environment hygiene: no inherited git plumbing vars, no watcher, sandboxed HOME + marker dir.
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID CODEX_THREAD_ID
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID CODEX_THREAD_ID AUTOPILOT_PARENT_SESSION_ID
 export GIT_CEILING_DIRECTORIES="$TEST_TMP:/tmp"
 export AUTOPILOT_RUNS_WATCH_AUTOSTART=0 AUTOPILOT_REVIEW_SERVER_AUTOSTART=0
 export HOME="$TEST_TMP/home"; mkdir -p "$HOME"
@@ -142,7 +142,7 @@ eq "marker without size -> exit 5" "5" "$RC"
 
 newsess; sm set --size L --repo-root "$R4" >/dev/null 2>&1
 adv --to plan; eq "L first write plan -> 3" "3" "$RC"
-has "first-write denial names the entry node" '"legal_next":["intent"]' "$OUT"
+has "first-write denial names the entry nodes" '"legal_next":["explore","intent"]' "$OUT"
 has "denial carries allowed:false and a reason" '"allowed":false' "$OUT"
 adv --to intent; eq "L first write intent -> 0" "0" "$RC"
 eq "stage written" '"intent"' "$(jf stage)"
@@ -153,6 +153,17 @@ adv --to implement; eq "illegal plan -> implement on L -> 3" "3" "$RC"
 has "illegal move lists plan-review" 'plan-review' "$OUT"
 eq "illegal move leaves stage untouched" '"plan"' "$(jf stage)"
 adv --to nonsense; eq "unknown node -> 1" "1" "$RC"
+
+newsess; sm set --size L --repo-root "$R4" >/dev/null 2>&1
+adv --to explore; eq "L first write explore -> 0" "0" "$RC"
+eq "explore stage written" '"explore"' "$(jf stage)"
+schema_ok "marker at explore"
+newsess; sm set --size L --bug --repo-root "$R4" >/dev/null 2>&1
+adv --to explore; eq "L bug first write explore -> 3" "3" "$RC"
+has "L bug entry stays diagnose" '"legal_next":["diagnose"]' "$OUT"
+newsess; sm set --size M --repo-root "$R4" >/dev/null 2>&1
+adv --to explore; eq "M first write explore -> 3" "3" "$RC"
+has "M entry stays plan" '"legal_next":["plan"]' "$OUT"
 
 newsess; sm set --size S --repo-root "$R4" >/dev/null 2>&1
 adv --to plan; eq "S first write plan -> 3" "3" "$RC"
@@ -660,6 +671,192 @@ adv --resume-from "$HR_OLD"; eq "high-risk resume (rc)" "0" "$RC"
 eq "high_risk copied" "true" "$(jf high_risk)"
 eq "review_families copied" '["fam-a"]' "$(jf review_families)"
 STUB_RISK=high adv --to qc-gate; eq "high-risk resume: code-review -> qc-gate accepted (rc)" "0" "$RC"
+
+# ---------------------------------------------------------------- leaving explore needs a Decision synthesis
+# Negative control: with the `from === 'explore'` refusal removed, the no-file
+# case below exits 0 and writes stage plan. With it present, exit is 5 and the
+# marker is unchanged. Shown red (exit 0) before this gate, then green (exit 5).
+RX="$TEST_TMP/r-explore"; mkrepo "$RX"
+newsess; sm set --size L --repo-root "$RX" >/dev/null 2>&1
+adv --to explore --repo-root "$RX"; eq "explore entry for synthesis cases" "0" "$RC"
+BEFORE=$(cksum <"$MARKER")
+adv --to plan --repo-root "$RX"; eq "explore -> plan without synthesis -> 5" "5" "$RC"
+has "UNSYNTHESIZED code" '"code":"UNSYNTHESIZED"' "$OUT"
+has "refusal names the conventional file" "explore-synthesis.md" "$OUT"
+eq "unsynthesized leaves stage at explore" '"explore"' "$(jf stage)"
+eq "unsynthesized leaves the marker bytes" "$BEFORE" "$(cksum <"$MARKER")"
+mkdir -p "$RX/docs/plans/evidence"
+printf 'Decision:\n' > "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to plan --repo-root "$RX"; eq "empty Decision: still blocked" "5" "$RC"
+printf 'Decision:   \n' > "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to plan --repo-root "$RX"; eq "whitespace Decision: still blocked" "5" "$RC"
+eq "empty Decision leaves stage" '"explore"' "$(jf stage)"
+printf 'note\nDecision: ship X\n' > "$TEST_TMP/synth-ok.md"
+adv --to plan --repo-root "$RX" --synthesis "$TEST_TMP/synth-ok.md"; eq "Decision: ship X via --synthesis -> 0" "0" "$RC"
+eq "cited Decision moves stage to plan" '"plan"' "$(jf stage)"
+newsess; sm set --size L --repo-root "$RX" >/dev/null 2>&1
+adv --to explore --repo-root "$RX"
+printf 'Decision:\n' > "$TEST_TMP/synth-empty.md"
+printf 'Decision: ship X\n' > "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to plan --repo-root "$RX" --synthesis "$TEST_TMP/synth-empty.md"; eq "empty --synthesis still passes via conventional file" "0" "$RC"
+newsess; sm set --size L --repo-root "$RX" >/dev/null 2>&1
+adv --to explore --repo-root "$RX"
+printf 'Decision:\tship X\n' > "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to plan --repo-root "$RX"; eq "tab Decision on the conventional path -> 0" "0" "$RC"
+newsess; sm set --size XL --repo-root "$RX" >/dev/null 2>&1
+adv --to explore --repo-root "$RX"
+rm -f "$RX/docs/plans/evidence/explore-synthesis.md"
+adv --to explore --repo-root "$RX"; eq "same-node explore needs no synthesis" "0" "$RC"
+eq "same-node stays explore" '"explore"' "$(jf stage)"
+adv --resume-from nope --synthesis "$TEST_TMP/synth-ok.md"; eq "--resume-from with --synthesis -> 1" "1" "$RC"
+adv --coarse plan --synthesis "$TEST_TMP/synth-ok.md"; eq "--coarse with --synthesis -> 1" "1" "$RC"
+
+# ---------------------------------------------------------------- fleet task bind (D8a)
+FLEET_STUB="$TEST_TMP/stubs/fleet"
+cat >"$FLEET_STUB" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FLEET_LOG:?}"
+exit "${FLEET_RC:-0}"
+EOF
+chmod +x "$FLEET_STUB"
+export FLEET_BIN="$FLEET_STUB" FLEET_LOG="$TEST_TMP/fleet.log" FLEET_RC=0
+: >"$FLEET_LOG"
+RF="$TEST_TMP/r-fleet"; mkrepo "$RF"
+
+newsess
+sm set --size M --fleet-task task-synth-d8a --repo-root "$RF" >/dev/null 2>&1
+eq "set --fleet-task stores the id" '"task-synth-d8a"' "$(jf fleet_task_id)"
+: >"$FLEET_LOG"
+adv --to plan --repo-root "$RF"
+eq "advance plan with a fleet id (rc)" "0" "$RC"
+eq "exactly one fleet progress call" "1" "$(grep -c . "$FLEET_LOG" || true)"
+eq "progress line is [stage:plan/plan]" "task update task-synth-d8a [stage:plan/plan]" "$(cat "$FLEET_LOG")"
+schema_ok "marker with fleet_task_id"
+
+# negative: a marker without the id does not call fleet
+newsess
+sm set --size M --repo-root "$RF" >/dev/null 2>&1
+eq "marker without the id has no fleet_task_id" "<absent>" "$(jf fleet_task_id)"
+: >"$FLEET_LOG"
+adv --to plan --repo-root "$RF"
+eq "no fleet_task_id: advance still 0" "0" "$RC"
+eq "no fleet_task_id: stub log empty" "" "$(cat "$FLEET_LOG")"
+
+# stub exits 1: the marker write's exit code stays 0 and the stage is written
+newsess
+sm set --size M --fleet-task task-synth-d8a --repo-root "$RF" >/dev/null 2>&1
+: >"$FLEET_LOG"
+FLEET_RC=1 adv --to plan --repo-root "$RF"
+eq "fleet exit 1: stage-advance rc unchanged" "0" "$RC"
+eq "fleet exit 1: stage still written" '"plan"' "$(jf stage)"
+has "fleet exit 1: one stderr line" "fleet progress failed (exit 1)" "$ERR"
+eq "fleet exit 1: stderr is a single line" "1" "$(printf '%s\n' "$ERR" | grep -c . || true)"
+FLEET_RC=0
+
+# --coarse shipped writes coarse_stage and one [stage:shipped] line
+newsess
+sm set --size M --fleet-task task-synth-d8a --repo-root "$RF" >/dev/null 2>&1
+: >"$FLEET_LOG"
+adv --coarse shipped
+eq "--coarse shipped (rc)" "0" "$RC"
+eq "--coarse shipped sets coarse_stage" '"shipped"' "$(jf coarse_stage)"
+eq "--coarse shipped leaves the graph stage unset" "<absent>" "$(jf stage)"
+eq "--coarse shipped progress line" "task update task-synth-d8a [stage:shipped]" "$(cat "$FLEET_LOG")"
+schema_ok "coarse shipped marker"
+
+# negative: an unknown coarse stage exits 2 and writes nothing
+newsess
+sm set --size M --fleet-task task-synth-d8a --repo-root "$RF" >/dev/null 2>&1
+COARSE_BEFORE=$(cksum <"$MARKER")
+: >"$FLEET_LOG"
+adv --coarse bogus
+eq "--coarse bogus (rc)" "2" "$RC"
+has "--coarse bogus names the legal stages" "explore|plan|build|review|merged|shipped|used" "$ERR"
+eq "--coarse bogus writes nothing" "$COARSE_BEFORE" "$(cksum <"$MARKER")"
+eq "--coarse bogus does not call fleet" "" "$(cat "$FLEET_LOG")"
+
+# without a fleet id, --coarse still writes the marker and says so
+newsess
+sm set --size M --repo-root "$RF" >/dev/null 2>&1
+: >"$FLEET_LOG"
+adv --coarse used
+eq "--coarse without an id (rc)" "0" "$RC"
+eq "--coarse without an id sets coarse_stage" '"used"' "$(jf coarse_stage)"
+has "--coarse without an id says so" "no fleet_task_id" "$ERR"
+eq "--coarse without an id does not call fleet" "" "$(cat "$FLEET_LOG")"
+
+# --resume-from copies fleet_task_id; a fresh id without resume does not have it
+newsess; FLEET_OLD="$AUTOPILOT_SESSION_ID"
+sm set --size M --fleet-task task-synth-d8a --repo-root "$RF" >/dev/null 2>&1
+adv --to plan --repo-root "$RF"; eq "resume setup: old session reaches plan (rc)" "0" "$RC"
+newsess
+sm set --size M --repo-root "$RF" >/dev/null 2>&1
+eq "resume negative: new session has no fleet id yet" "<absent>" "$(jf fleet_task_id)"
+adv --resume-from "$FLEET_OLD"
+eq "resume copies fleet_task_id (rc)" "0" "$RC"
+eq "resume copies fleet_task_id" '"task-synth-d8a"' "$(jf fleet_task_id)"
+
+# ---------------------------------------------------------------- D8b: leaving plan checks declared ## Inputs
+RI="$TEST_TMP/r-inputs"; mkrepo "$RI"
+git -C "$RI" checkout -q -b wrong-tree
+echo "side" >"$RI/side.txt"; git -C "$RI" add side.txt; git -C "$RI" commit -q -m "wrong-tree commit"
+UNLANDED_SHA="$(git -C "$RI" rev-parse HEAD)"
+git -C "$RI" checkout -q -b feat/d8b develop
+mkdir -p "$RI/docs/plans"
+
+# Plan without ## Inputs -> leaving plan succeeds with no check
+cat >"$RI/docs/plans/2026-11-13-d8b.md" <<'EOF'
+# Plan without inputs
+
+## Context
+No inputs declared here.
+EOF
+newsess; sm set --size M --repo-root "$RI" >/dev/null 2>&1
+adv --to plan --repo-root "$RI"; eq "inputs-none: enter plan (rc)" "0" "$RC"
+adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-none: leaving plan without ## Inputs advances (rc)" "0" "$RC"
+eq "inputs-none: stage is implement" '"implement"' "$(jf stage)"
+
+# Plan with unlanded input -> leaving plan exits 5 naming the failing id, marker unchanged
+cat >"$RI/docs/plans/2026-11-13-d8b.md" <<EOF
+# Plan with inputs
+
+## Inputs
+
+\`\`\`json
+{"inputs":[{"id":"inp-unlanded","sha":"$UNLANDED_SHA"}]}
+\`\`\`
+EOF
+newsess; sm set --size M --repo-root "$RI" >/dev/null 2>&1
+adv --to plan --repo-root "$RI"; eq "inputs-bad: enter plan (rc)" "0" "$RC"
+adv --to plan --repo-root "$RI"; eq "inputs-bad: staying on plan does not block (rc)" "0" "$RC"
+PLAN_SUM="$(cksum <"$MARKER")"
+adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-bad: leaving plan with unlanded input exits 5" "5" "$RC"
+has "inputs-bad: stderr names failing id" "inp-unlanded" "$ERR"
+has "inputs-bad: stdout names failing id" "inp-unlanded" "$OUT"
+eq "inputs-bad: stage unchanged" '"plan"' "$(jf stage)"
+eq "inputs-bad: marker bytes untouched" "$PLAN_SUM" "$(cksum <"$MARKER")"
+
+# Land the input onto target branch (develop) -> leaving plan advances
+git -C "$RI" update-ref refs/heads/develop "$UNLANDED_SHA"
+adv --to implement --unit phase:1/1:impl --repo-root "$RI"; eq "inputs-good: leaving plan after input lands advances (rc)" "0" "$RC"
+eq "inputs-good: stage is implement" '"implement"' "$(jf stage)"
+
+# Config inputs_target override (.claude/dev-flow-config.md): blocks when absent from configured target, advances when landed
+git -C "$RI" branch release HEAD~0
+# Point release back to the initial commit (without UNLANDED_SHA)
+INIT_SHA="$(git -C "$RI" rev-list --max-parents=0 HEAD | head -n1)"
+git -C "$RI" update-ref refs/heads/release "$INIT_SHA"
+mkdir -p "$RI/.claude"
+printf '%s\n' "- inputs_target: release" >"$RI/.claude/dev-flow-config.md"
+newsess; sm set --size L --repo-root "$RI" >/dev/null 2>&1
+adv --to intent --repo-root "$RI"; adv --to proposal --repo-root "$RI"; adv --to plan --repo-root "$RI"
+eq "inputs-cfg: reached plan on L (rc)" "0" "$RC"
+adv --to plan-review --repo-root "$RI"; eq "inputs-cfg: unlanded on configured inputs_target exits 5" "5" "$RC"
+has "inputs-cfg: names failing id" "inp-unlanded" "$ERR"
+eq "inputs-cfg: stage still plan" '"plan"' "$(jf stage)"
+git -C "$RI" update-ref refs/heads/release "$UNLANDED_SHA"
+adv --to plan-review --repo-root "$RI"; eq "inputs-cfg: landed on configured inputs_target advances (rc)" "0" "$RC"
+eq "inputs-cfg: stage is plan-review" '"plan-review"' "$(jf stage)"
 
 echo "stage-advance.test: pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

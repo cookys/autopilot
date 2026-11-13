@@ -51,6 +51,11 @@
 #                                              #   one OAuth login over ~60 models. --model names a
 #                                              #   family alias (grok46|codex53) resolved by
 #                                              #   lib/cursor-model.sh, or a full model id verbatim.
+#       [--pace-role <role>]                   # pace-aware engine choice when --runner is omitted:
+#                                              #   runs scripts/pace-select.js --role <role> --json,
+#                                              #   sets RUNNER and MODEL, and records the selector
+#                                              #   JSON as engine_choice in the run manifest; exit 3
+#                                              #   or any selector failure fails closed (exit 2).
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--endpoint <name>]                    # cc-shim only (also --endpoint=<name>; last one
 #                                              #   wins; @none clears; empty is refused): resolve
@@ -127,6 +132,13 @@
 #                                              #   --endpoint with a non-cc-shim runner. Also a
 #                                              #   die_precondition together with a --model that
 #                                              #   already names a full id (mapper bypassed there).
+#       [--no-campaign]                        # ordinary backlog work outside any campaign.
+#                                              #   Under Mission enforce this admits the dispatch
+#                                              #   and records campaign_scope=none_declared plus
+#                                              #   the enforcement_mode seen. Refused together
+#                                              #   with any --campaign-* flag, and refused while
+#                                              #   an active l5/l6 session marker says a campaign
+#                                              #   is in scope for this repo (PM 01M794CK).
 #       [--campaign-contract <path>]            # sealed ICC boundary, prepended to prompt
 #       [--campaign-contract-sha256 <digest>]    # intake-bound digest for private snapshot
 #       [--campaign-seal <path>]                # intake-validated seal, rechecked at leaf admission
@@ -138,14 +150,16 @@
 #                                               #   check-blueprint-conformance.js preflight
 #       [--keep-worktree]                      # keep worktree even on success
 #       [--sibling-ref-prefix refs/heads/x/]   # repeatable: a ref namespace the CALLER owns
-#                                              #   (sibling dispatches running concurrently on
-#                                              #   this repo, e.g. refs/heads/hands/kr1/). Refs
-#                                              #   created or moved there are not counted as a
-#                                              #   main-checkout mutation. Must start with
+#                                              #   (e.g. refs/heads/hands/kr1/). Must start with
 #                                              #   refs/heads/ and end with /; refs/heads/ alone
-#                                              #   is refused. Default: only this dispatch's own
-#                                              #   --branch is exempt, so concurrent dispatches
-#                                              #   on one repo reject each other (308, 2026-09-14).
+#                                              #   is refused. The round fingerprint (fleet
+#                                              #   01M788GD) already ignores every other
+#                                              #   refs/heads/*, so two dispatch-hetero runs no
+#                                              #   longer reject each other for each other's
+#                                              #   branches. The flag still drops that namespace
+#                                              #   from whatever is measured (the checkout's
+#                                              #   branch, --base, and — for a caller that leaves
+#                                              #   the scope unset — every ref).
 #       [--sibling-path-prefix <dir>/]         # repeatable: a checkout-relative directory the
 #                                              #   CALLER writes its own rail I/O into (hand
 #                                              #   stderr/result under the checkout, 308-8f).
@@ -267,6 +281,9 @@ KIMI_BIN="kimi"            # Kimi Code CLI runner (Moonshot); test seam via --ki
 KEEP=0
 MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()  # --sibling-ref-prefix; read by main_checkout_fingerprint (lib/main-checkout-boundary.sh)
 MAIN_CHECKOUT_FP_EXCLUDE_PATHS=()     # --sibling-path-prefix; pruned from the fingerprint's stat walk
+# Round scope (fleet 01M788GD): this rail's fingerprint watches the main checkout and this
+# round's own refs, not every refs/heads/* in the shared ref store. Foreman leaves it unset.
+MAIN_CHECKOUT_FP_REF_SCOPE=round
 WRAPPER_COMMITTED=0  # set when the rail's own capture commit is made; gates --expect-wrapper-subject
 RETENTION_OWNER=""
 RETENTION_REASON=""
@@ -285,6 +302,10 @@ CONTINUATION_DURABLE=""
 CAMPAIGN_CONTRACT_FILE=""
 CAMPAIGN_CONTRACT_SHA256=""
 CAMPAIGN_SEAL_FILE=""
+NO_CAMPAIGN=0
+# Set only when enforce admits --no-campaign. Empty otherwise, so the manifest
+# and the branch ledger stay byte-identical for every other dispatch.
+MISSION_ENFORCEMENT_MODE_SEEN=""
 CAMPAIGN_CONTRACT_SNAPSHOT=""
 CAMPAIGN_ID=""
 MISSION_CAMPAIGN_ID=""
@@ -295,6 +316,8 @@ MISSION_NOOP_GRAPH_NODE=""
 CAMPAIGN_STRICT_AUTHORITY=0
 CAMPAIGN_PROJECTION_BOUND=0
 RUNNER="auto"
+PACE_ROLE=""
+ENGINE_CHOICE_JSON=""
 EFFORT="xhigh"
 EFFORT_EXPLICIT=0
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
@@ -305,6 +328,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # G37: the one reading of `claude-account.js env-check` (legacy | active | invalid). Sourced hard (no fail-open):
 # a missing copy makes account_layer_state print nothing, and every caller treats anything but legacy/active as invalid.
 . "$SELF_DIR/lib/account-state.sh"
+# shellcheck source=lib/token-seat.sh
+. "$SELF_DIR/lib/token-seat.sh"
 # --role-kit: validator wrapper (claude-native only). Sourced hard like account-state.sh.
 . "$SELF_DIR/lib/role-kit.sh"
 # A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
@@ -388,8 +413,11 @@ SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 CCSHIM_ENVELOPE=""    # private claude -p --output-format json stdout; result text is what reaches LOG
-SANDBOX="off"          # --sandbox off|bwrap (cc-shim only)
+SANDBOX="off"          # --sandbox off|bwrap (cc-shim, or the one cloud fallback re-exec)
 SANDBOX_TMP=""         # bwrap: this dispatch's own writable scratch dir (made by the cc-shim arm, removed after the worker)
+# BL-0435: set on the cloud-seat re-exec after a failed endpoint pre-probe. Empty on the first attempt.
+FELL_BACK_JSON="${AUTOPILOT_HETERO_FELL_BACK_JSON:-}"
+FELL_BACK_LOGGED=0
 SANDBOX_ARGV=()        # bwrap: the argv prefix run_worker puts in front of the worker
 SANDBOX_DENIED="unknown"  # bwrap: EROFS lines seen in the worker output, else unknown
 WORKTREE_PARENT=""     # --worktree-parent: directory the new worktree is created under
@@ -1068,6 +1096,9 @@ NODE
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local sandbox_fields=""
   [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json), \"sandbox_blocked_writes\": ${SANDBOX_BLOCKED:-0}, \"sandbox_blocked_samples\": ${SANDBOX_BLOCKED_SAMPLES:-[]}"
+  local fell_back_fields=""
+  fell_back_fields="$(fell_back_json_suffix)"
+  hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
@@ -1080,7 +1111,7 @@ NODE
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields")"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields")"
   printf '%s\n' "$_emit_json"
   # dispatch_usage/1 ledger row (never affects the result or the exit code; see lib/dispatch-usage.js).
   printf '%s' "$_emit_json" | node "$SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-implementer}" \
@@ -1173,6 +1204,11 @@ NODE
       die_precondition "authoritative session-mode marker is invalid: ${marker_state:-marker could not be classified}"
     fi
     if [[ "$marker_state" == ACTIVE:* ]]; then
+      # --no-campaign does not skip this gate: an active l5/l6 marker means a
+      # campaign is in scope for this repo, and the flag cannot leave it.
+      if [ "${NO_CAMPAIGN:-0}" -eq 1 ]; then
+        die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo). --no-campaign does not leave an active campaign. To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=\$(mktemp -d)"
+      fi
       die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo). To run a non-strict dispatch in this session, prefix that one command with: AUTOPILOT_SESSION_MODE_DIR=\$(mktemp -d)"
     fi
   done
@@ -1759,7 +1795,14 @@ NODE
   case "$mission_mode" in
     off|shadow) ;;
     enforce)
-      die_precondition "Mission enforce mode requires a sealed campaign strict projection"
+      # Sealed campaign flags never reach here with --no-campaign (that pair is
+      # a precondition error). An active l5/l6 marker was already refused by
+      # check_session_mode_gate; this return does not skip that gate.
+      if [ "${NO_CAMPAIGN:-0}" -eq 1 ]; then
+        MISSION_ENFORCEMENT_MODE_SEEN="$mission_mode"
+        return 0
+      fi
+      die_precondition "Mission enforce mode requires a sealed campaign strict projection, or pass --no-campaign for ordinary backlog work outside any campaign"
       ;;
     *)
       die_precondition "authoritative Mission governance returned invalid mode: $mission_mode"
@@ -1791,6 +1834,35 @@ current_runner_name() {
   printf '%s' "$runner"
 }
 
+# BL-0435: the cloud-seat re-exec carries this object. Empty on the first attempt and on ask.
+fell_back_json_suffix() {
+  [ -n "${FELL_BACK_JSON:-}" ] || return 0
+  printf ', "fell_back": %s' "$FELL_BACK_JSON"
+}
+# One cloud-fallbacks.jsonl row, written when the re-exec ends so the outcome is the result.
+hetero_log_fallback() { # $1 outcome
+  [ -n "${FELL_BACK_JSON:-}" ] || return 0
+  [ "${FELL_BACK_LOGGED:-0}" = "1" ] && return 0
+  FELL_BACK_LOGGED=1
+  node -e '
+let fb;
+try { fb = JSON.parse(process.argv[1]); } catch { process.exit(0); }
+if (!fb || typeof fb !== "object" || Array.isArray(fb)) process.exit(0);
+process.stdout.write(JSON.stringify({
+  ts: new Date().toISOString(),
+  run_id: process.argv[3] ? process.argv[3] : null,
+  from_runner: fb.from_runner,
+  from_endpoint: fb.from_endpoint == null || fb.from_endpoint === "" ? null : String(fb.from_endpoint),
+  error_class: fb.error_class,
+  to_rung: fb.to_rung,
+  outcome: process.argv[2],
+  probe: fb.probe && typeof fb.probe === "object" && !Array.isArray(fb.probe) ? fb.probe : null,
+  served_by: fb.to_rung,
+}));
+' "$FELL_BACK_JSON" "$1" "${DISPATCH_RUN_ID:-}" \
+    | node "$SELF_DIR/engine-capability-state.js" cloud-fallback-log >/dev/null 2>&1 || true
+}
+
 die_precondition() {
   local runner
   runner="$(current_runner_name)"
@@ -1798,9 +1870,10 @@ die_precondition() {
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null }\n' \
+  hetero_log_fallback "precondition_failed"
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null%s }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json" "$(fell_back_json_suffix)"
   exit 2
 }
 
@@ -2032,19 +2105,97 @@ sandbox_json() {
 
 # The endpoint pre-probe (scripts/lib/endpoint-probe.sh) found the local endpoint down or busy BEFORE any
 # worker or worktree was opened. Same result the post-hoc classifier gives a dead worker
-# (status engine_unavailable, "engine unavailable (<class>)"), so the engine applies on_engine_unavailable
-# (ask / cloud-fallback) unchanged. Exit 1 like every engine_unavailable. dispatcher_called stays true (the
-# engine rejects dispatcher_called:false on a non-committed result before it reads engine_unavailable);
-# model_calls 0 and resources_created 0 say that no worker ran.
+# (status engine_unavailable, "engine unavailable (<class>)"). Exit 1 like every engine_unavailable.
+# dispatcher_called stays true (the engine rejects dispatcher_called:false on a non-committed result
+# before it reads engine_unavailable); model_calls 0 and resources_created 0 say that no worker ran.
+# A configured cloud-fallback already re-exec'd before this runs. This die is the ask path, a missing
+# rung, or a retreat that could not start — and a failed retreat still carries fell_back.
 die_probe_unavailable() {
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
-  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "probe": %s }\n' \
+  hetero_log_fallback "engine_unavailable"
+  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "probe": %s%s }\n' \
     "$(current_runner_name)" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$([ "${CONTAINED:-0}" -eq 1 ] && echo true || echo false)" \
     "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$PROBE_CLASS" "$(_flat_json_escape "$ENDPOINT")" "$(_flat_json_escape "$PROBE_REASON")" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$PROBE_JSON"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$PROBE_JSON" "$(fell_back_json_suffix)"
   exit 1
+}
+
+# BL-0435: one re-exec onto cloud_fallback_rung when the pre-probe is unreachable or busy.
+# Returns 1 when this death stays engine_unavailable (ask, no rung, campaign, already retreated).
+# Does not return on a retreat: the child process's stdout is the result. Never invents a seat.
+hetero_endpoint_cloud_fallback() {
+  [ "${AUTOPILOT_HETERO_FELL_BACK:-}" = "1" ] && return 1
+  [ -n "${CAMPAIGN_CONTRACT_FILE:-}" ] && return 1
+  local errf resolved rc parsed policy engine effort runner to_rung
+  errf="$(mktemp -t dispatch-hetero-fb-resolve-XXXXXX)" || return 1
+  resolved="$("$SELF_DIR/resolve-review-loop.sh" 2>"$errf")"
+  rc=$?
+  rm -f "$errf"
+  [ "$rc" -eq 0 ] && [ -n "$resolved" ] || return 1
+  parsed="$(node -e '
+let j; try { j = JSON.parse(process.argv[1]); } catch { process.exit(2); }
+const s = (v) => (v == null ? "" : String(v));
+const policy = s(j.on_engine_unavailable);
+const rung = j.cloud_fallback_rung;
+let re = "", rf = "", rr = "";
+if (rung && typeof rung === "object" && !Array.isArray(rung)) {
+  re = s(rung.engine); rf = s(rung.effort); rr = s(rung.runner);
+}
+const clean = (v) => String(v).replace(/[|\n\r]/g, " ");
+process.stdout.write([policy, re, rf, rr].map(clean).join("|"));
+' "$resolved" 2>/dev/null)" || return 1
+  IFS='|' read -r policy engine effort runner <<< "$parsed"
+  [ "$policy" = "cloud-fallback" ] || return 1
+  [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
+  case "$runner" in
+    codex|agy|grok|cursor|kimi|qoderclicn) ;;
+    *) return 1 ;;
+  esac
+  to_rung="${engine}/${effort}@${runner}"
+  FELL_BACK_JSON="$(node -e '
+let probe = null;
+try { probe = JSON.parse(process.argv[1]); } catch { probe = null; }
+process.stdout.write(JSON.stringify({
+  from_runner: process.argv[2],
+  from_endpoint: process.argv[3] || null,
+  error_class: process.argv[4],
+  to_rung: process.argv[5],
+  probe,
+}));
+' "$PROBE_JSON" "$(current_runner_name)" "$ENDPOINT" "$PROBE_CLASS" "$to_rung")" || return 1
+  [ -n "$FELL_BACK_JSON" ] || return 1
+  echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION}; retreating once to cloud rung ${to_rung} (on_engine_unavailable: cloud-fallback)" >&2
+  local -a args=()
+  local i=0 a saw_runner=0 saw_model=0 saw_effort=0
+  while [ "$i" -lt "${#ORIG_ARGS[@]}" ]; do
+    a="${ORIG_ARGS[$i]}"
+    case "$a" in
+      --endpoint) i=$((i + 2)) ;;
+      --endpoint=*) i=$((i + 1)) ;;
+      --runner) args+=(--runner "$runner"); saw_runner=1; i=$((i + 2)) ;;
+      --model) args+=(--model "$engine"); saw_model=1; i=$((i + 2)) ;;
+      --effort) args+=(--effort "$effort"); saw_effort=1; i=$((i + 2)) ;;
+      --sandbox|--worktree-parent) # BL-0435 keep the caller bwrap on this one re-exec
+        args+=("$a" "${ORIG_ARGS[$((i + 1))]}")
+        i=$((i + 2)) ;;
+      *)
+        # Dropped here only when the keep arm above does not match, so a broken keep is visible.
+        case "$a" in
+          --sandbox|--worktree-parent) i=$((i + 2)) ;;
+          *) args+=("$a"); i=$((i + 1)) ;;
+        esac ;;
+    esac
+  done
+  [ "$saw_runner" -eq 1 ] || args+=(--runner "$runner")
+  [ "$saw_model" -eq 1 ] || args+=(--model "$engine")
+  [ "$saw_effort" -eq 1 ] || args+=(--effort "$effort")
+  unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
+  export AUTOPILOT_HETERO_FELL_BACK=1
+  export AUTOPILOT_HETERO_FELL_BACK_JSON="$FELL_BACK_JSON"
+  exec "$0" "${args[@]}" < /dev/null
+  return 1
 }
 
 die_dev_flow_admission() {
@@ -2185,6 +2336,8 @@ write_manifest() {
   local role_kit_manifest_fields=""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   [ "${SANDBOX:-off}" = "bwrap" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"sandbox\": $(sandbox_json)"
+  [ -n "${FELL_BACK_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"fell_back\": $FELL_BACK_JSON"
+  [ -n "${ENGINE_CHOICE_JSON:-}" ] && role_kit_manifest_fields="$role_kit_manifest_fields, \"engine_choice\": $ENGINE_CHOICE_JSON"
   local mf_timeout_secs="" mf_timeout_source="default" mf_timeout_enforced="false"
   mf_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   [ -n "$mf_timeout_secs" ] || mf_timeout_secs="null"
@@ -2193,14 +2346,20 @@ write_manifest() {
     mf_timeout_enforced="true"
   fi
   [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && mf_timeout_enforced="false"
+  # Present only for an enforce admission via --no-campaign. Absent otherwise,
+  # so a sealed campaign or an off/shadow run stays byte-identical.
+  local campaign_scope_fields=""
+  if [ "${NO_CAMPAIGN:-0}" -eq 1 ] && [ -n "${MISSION_ENFORCEMENT_MODE_SEEN:-}" ]; then
+    campaign_scope_fields=", \"campaign_scope\": \"none_declared\", \"enforcement_mode\": \"$(_flat_json_escape "$MISSION_ENFORCEMENT_MODE_SEEN")\""
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" \
-      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$role_kit_manifest_fields" "$REPO_IDENTITY_FIELDS" \
+      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
@@ -2217,16 +2376,26 @@ manifest_finalize() {
   write_manifest
 }
 
+ORIG_ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
     --scaffold-tier) SCAFFOLD_TIER_ARG="${2:-}"; shift 2 ;;
+    --no-campaign) NO_CAMPAIGN=1; shift ;;
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; MODEL_IS_DEFAULT=0; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
+    --pace-role)
+      [ $# -ge 2 ] && [ -n "${2:-}" ] && [[ "${2:-}" != --* ]] \
+        || die_precondition "--pace-role requires a non-empty role"
+      PACE_ROLE="$2"; shift 2 ;;
+    --pace-role=*)
+      PACE_ROLE="${1#--pace-role=}"
+      [ -n "$PACE_ROLE" ] || die_precondition "--pace-role requires a non-empty role"
+      shift ;;
     --effort) EFFORT="${2:-}"; EFFORT_EXPLICIT=1; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
@@ -2522,7 +2691,10 @@ set_runner_flags() {
   case "$SANDBOX" in
     off) ;;
     bwrap)
-      [ "$IS_CCSHIM" -eq 1 ] || die_precondition "--sandbox bwrap applies only to --runner cc-shim (got runner: $RUNNER)"
+      # The one cloud fallback re-exec keeps the caller's bwrap. Any other runner still refuses it.
+      if [ "$IS_CCSHIM" -ne 1 ] && [ "${AUTOPILOT_HETERO_FELL_BACK:-}" != "1" ]; then
+        die_precondition "--sandbox bwrap applies only to --runner cc-shim (got runner: $RUNNER)"
+      fi
       sandbox_preflight || die_precondition "$SANDBOX_PREFLIGHT_ERROR"
       ;;
     *) die_precondition "--sandbox must be off or bwrap (got: $SANDBOX)" ;;
@@ -2576,7 +2748,7 @@ case "$EFFORT" in
 esac
 # `default` = no effort sent, the endpoint default runs. Only a runner whose effort is optional can honour that;
 # a runner that consumes --effort would be handed the literal word "default".
-if [ "$EFFORT" = "default" ]; then
+if [ "$EFFORT" = "default" ] && { [ -z "$PACE_ROLE" ] || [ "$RUNNER_SUPPLIED" -eq 1 ]; }; then
   case "$RUNNER" in
     anthropic-compatible|cc-shim|claude-native|kimi|opencode) ;;
     *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi|opencode); runner '$RUNNER' takes an explicit effort" ;;
@@ -2614,6 +2786,65 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+if [ -n "$PACE_ROLE" ] && [ "$RUNNER_SUPPLIED" -eq 0 ]; then
+  command -v node >/dev/null 2>&1 || die_precondition "--pace-role requires node"
+  _ps_rc=0
+  _ps_stdout="$(node "$SELF_DIR/pace-select.js" --role "$PACE_ROLE" --json 2>/dev/null)" || _ps_rc=$?
+  if [ "$_ps_rc" -ne 0 ]; then
+    _ps_detail="$(printf '%s' "$_ps_stdout" | node -e '
+      let s = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (c) => { s += c; });
+      process.stdin.on("end", () => {
+        try {
+          const j = JSON.parse(s);
+          if (j && typeof j.reason === "string" && j.reason) {
+            process.stdout.write(j.reason);
+          }
+        } catch {}
+      });
+    ' 2>/dev/null || true)"
+    if [ -n "$_ps_detail" ]; then
+      die_precondition "--pace-role '$PACE_ROLE' could not select an engine (exit $_ps_rc: $_ps_detail)"
+    else
+      die_precondition "--pace-role '$PACE_ROLE' failed (pace-select.js exit $_ps_rc)"
+    fi
+  fi
+  _ps_parsed="$(printf '%s' "$_ps_stdout" | node -e '
+    let s = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => { s += c; });
+    process.stdin.on("end", () => {
+      let j;
+      try { j = JSON.parse(s); } catch { process.exit(1); }
+      if (!j || typeof j !== "object" || Array.isArray(j)) process.exit(1);
+      if (typeof j.runner !== "string" || !j.runner.trim()) process.exit(1);
+      if (typeof j.model !== "string" || !j.model.trim()) process.exit(1);
+      const ep = typeof j.endpoint === "string" ? j.endpoint.trim() : "";
+      if (/[\r\n]/.test(j.runner) || /[\r\n]/.test(j.model) || /[\r\n]/.test(ep)) process.exit(1);
+      process.stdout.write(`${j.runner.trim()}\n${j.model.trim()}\n${ep}\n${JSON.stringify(j)}\n`);
+    });
+  ' 2>/dev/null)" || die_precondition "--pace-role '$PACE_ROLE' returned invalid selector JSON"
+  {
+    IFS= read -r RUNNER
+    IFS= read -r MODEL
+    IFS= read -r _ps_endpoint
+    IFS= read -r ENGINE_CHOICE_JSON
+  } <<< "$_ps_parsed"
+  [ -n "$RUNNER" ] && [ -n "$MODEL" ] && [ -n "$ENGINE_CHOICE_JSON" ] \
+    || die_precondition "--pace-role '$PACE_ROLE' failed to extract runner and model"
+  MODEL_IS_DEFAULT=0
+  if [ -n "$_ps_endpoint" ] && [ -z "$ENDPOINT" ]; then
+    ENDPOINT="$_ps_endpoint"
+  fi
+  unset _ps_rc _ps_stdout _ps_detail _ps_parsed _ps_endpoint
+  if [ "$EFFORT" = "default" ]; then
+    case "$RUNNER" in
+      anthropic-compatible|cc-shim|claude-native|kimi|opencode) ;;
+      *) die_precondition "--effort default (no effort sent) is only for runners whose effort is optional (anthropic-compatible|cc-shim|claude-native|kimi|opencode); runner '$RUNNER' takes an explicit effort" ;;
+    esac
+  fi
+fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
@@ -2622,6 +2853,26 @@ _DOTDOT_RE='(^|[][:space:]("'"'"'=,<])\.\./[^][:space:]()"'"'"'<>,;]+'
 _DOTDOT_TOKEN="$({ grep -oE "$_DOTDOT_RE" "$PROMPT_FILE" 2>/dev/null || true; } | head -n 1 | sed -E 's/^[^.]*//')"
 if [ -n "$_DOTDOT_TOKEN" ]; then
   echo "dispatch-hetero: warn: brief has a ../ path outside the worktree: $_DOTDOT_TOKEN" >&2
+fi
+# PADDED_DEADLINE (PM 01M78CC2): a due longer than 2x Effort with no checkable
+# dependency is refused on the original brief, before skill-pack or scaffold
+# rewrite, and returned to the dispatcher. A fleet reply calls the same
+# paddedDeadline export from scripts/lib/backlog-rules.js. Exit 3 from the
+# checker is the rule; any other non-zero means the checker did not run.
+_pd_rc=0
+_pd_msg="$(node -e '
+const fs = require("fs");
+const rules = require(process.argv[1]);
+const v = rules.paddedDeadline(fs.readFileSync(process.argv[2], "utf8"));
+if (v) {
+  process.stdout.write(String(v.code) + (v.detail ? ": " + v.detail : ""));
+  process.exit(3);
+}
+' "$SELF_DIR/lib/backlog-rules.js" "$PROMPT_FILE" 2>&1)" || _pd_rc=$?
+if [ "$_pd_rc" -eq 3 ]; then
+  die_precondition "${_pd_msg:-PADDED_DEADLINE}"
+elif [ "$_pd_rc" -ne 0 ]; then
+  die_precondition "PADDED_DEADLINE check failed to run: ${_pd_msg:-rc ${_pd_rc}}"
 fi
 if [ "$KEEP" -eq 1 ]; then
   [[ "$RETENTION_OWNER" =~ ^[A-Za-z0-9._-]+$ ]] \
@@ -2651,6 +2902,10 @@ if [ -n "$RESUME_SESSION_ID" ]; then
     || die_precondition "--resume-session is only verified for --runner grok"
   [[ "$RESUME_SESSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] \
     || die_precondition "--resume-session must be a lowercase UUID"
+fi
+if [ "$NO_CAMPAIGN" -eq 1 ] && { [ -n "$CAMPAIGN_CONTRACT_FILE" ] \
+    || [ -n "$CAMPAIGN_CONTRACT_SHA256" ] || [ -n "$CAMPAIGN_SEAL_FILE" ]; }; then
+  die_precondition "--no-campaign cannot be combined with --campaign-contract, --campaign-contract-sha256, or --campaign-seal"
 fi
 [ -z "$CAMPAIGN_CONTRACT_FILE" ] || [ -r "$CAMPAIGN_CONTRACT_FILE" ] \
   || die_precondition "campaign contract file not readable: $CAMPAIGN_CONTRACT_FILE"
@@ -2806,6 +3061,7 @@ if [ -n "$ENDPOINT" ]; then
   endpoint_preprobe "$ENDPOINT" "$MODEL"
   case "$PROBE_DECISION" in
     unreachable|busy)
+      hetero_endpoint_cloud_fallback
       echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ${PROBE_DECISION} (status ${PROBE_STATUS:-none}, ${PROBE_MS:-0} ms, ${PROBE_REASON}); no worker started" >&2
       die_probe_unavailable ;;
     ok) echo "dispatch-hetero: endpoint pre-probe ${ENDPOINT}: ok (status ${PROBE_STATUS}, ${PROBE_MS} ms); served by local endpoint ${ENDPOINT}" >&2 ;;
@@ -2847,6 +3103,7 @@ if [ "$IS_CODEX" -eq 1 ]; then
     die_precondition "resolved codex ($_cx_path, $_cx_ver) does not support --dangerously-bypass-hook-trust — it is too old / the wrong binary. Update it, fix PATH so the newer codex wins, or pass --codex-bin <path>."
   fi
 elif [ "$IS_CCSHIM" -eq 1 ]; then
+  _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   command -v "claude" >/dev/null 2>&1 || die_precondition "claude binary not found (cc-shim drives the Claude Code CLI)"
   # cc-shim is a base-url SHIM by design: without ANTHROPIC_BASE_URL it would dispatch to
   # vanilla Claude (homogeneous, and burning the user's own quota). Require it + the token.
@@ -2886,6 +3143,7 @@ elif [ "$IS_CNATIVE" -eq 1 ]; then
   # `node scripts/run-approval.js confirm-claude-native`. Checked BEFORE the binary so a refusal never spawns.
   node "$SELF_DIR/run-approval.js" claude-native-status >/dev/null 2>&1 \
     || die_precondition "--runner claude-native needs a one-time owner confirmation: depth 0 must ask the owner once (first-party Claude implementer on native auth), and after a yes run 'node scripts/run-approval.js confirm-claude-native'. No flag on this command grants it."
+  _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
   command -v claude >/dev/null 2>&1 || die_precondition "claude binary not found (claude-native drives the Claude Code CLI)"
   case "$(cnative_account_state)" in
     active) : ;;  # G37: the account registry is the only auth; the seeded .credentials.json path is not touched
@@ -3695,14 +3953,18 @@ fi
 #     preserved by continuing the index. This is an accident guard, not a sandbox: a worker
 #     that `env -i`s or unsets the variable is evading, and detection is the backstop.
 #   detection — the main checkout is fingerprinted before hands and re-read after, on EVERY
-#     outcome: HEAD, the symbolic-ref target (measured with rev-parse, whose rc separates
-#     "detached" from "could not measure"), every refs/heads/* except this dispatch's own
-#     branch, every refs/tags/* and refs/remotes/* with symref targets, and the index +
-#     worktree dirty inventory. Any delta rejects the round as `main_checkout_mutated`. A
-#     measurement that fails yields UNVERIFIABLE-<nonce> and never compares equal. This
-#     CANNOT attribute: a concurrent operator fetch, edit, or a second dispatch creating its
-#     branch trips it too, and the honest answer is a discarded round with the worktree
-#     retained, not a guess. Re-dispatch once the main checkout is quiescent.
+#     outcome (MAIN_CHECKOUT_FP_REF_SCOPE=round, fleet 01M788GD): HEAD sha and symbolic
+#     target (rev-parse, whose rc separates "detached" from "could not measure"), the branch
+#     that checkout is on, this round's --base when it names a ref, this round's own --branch
+#     exempt unless it is that branch or the --base ref, every non-branch ref (tags, remotes,
+#     replace, notes), and the index + worktree dirty inventory. Creating, moving or deleting
+#     any other refs/heads/* is not a mutation, and adding or removing another worktree is
+#     not one either. A real main-checkout change (HEAD moved, its branch moved, the working
+#     tree dirtied, a tag/remote/replace/config/hook change) still rejects as
+#     `main_checkout_mutated`. A measurement that fails yields UNVERIFIABLE-<nonce> and
+#     never compares equal. This CANNOT attribute a real change: a concurrent edit of this
+#     checkout discards the round with the worktree retained. Re-dispatch once the main
+#     checkout is quiescent.
 MAIN_CHECKOUT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 # The fingerprint and the env block are ONE implementation shared with dispatch-foreman.sh:
 # scripts/lib/main-checkout-boundary.sh (extracted 2026-09-13, behaviour unchanged).
@@ -3723,8 +3985,17 @@ if [ "$WORKTREE_REUSED" -eq 0 ] \
   _wt_lock_fail "git worktree add failed"
 fi
 # Branch->session ledger row (close-out ownership). Fail-open: never fails the dispatch.
+# An enforce --no-campaign admission adds campaign_scope and the mode seen to that
+# same appended line. Every other dispatch passes empty args and the row is unchanged.
+_LEDGER_CAMPAIGN_SCOPE=""
+_LEDGER_ENFORCEMENT_MODE=""
+if [ "${NO_CAMPAIGN:-0}" -eq 1 ] && [ -n "${MISSION_ENFORCEMENT_MODE_SEEN:-}" ]; then
+  _LEDGER_CAMPAIGN_SCOPE="none_declared"
+  _LEDGER_ENFORCEMENT_MODE="$MISSION_ENFORCEMENT_MODE_SEEN"
+fi
 [ "$WORKTREE_REUSED" -eq 1 ] \
-  || dispatch_branch_ledger_append "$_wt_common_dir" "$BRANCH" "$WT_RUN_ID" "$WORKTREE_ROOT_RUN_ID" "$BASE_SHA"
+  || dispatch_branch_ledger_append "$_wt_common_dir" "$BRANCH" "$WT_RUN_ID" "$WORKTREE_ROOT_RUN_ID" "$BASE_SHA" \
+       "$_LEDGER_CAMPAIGN_SCOPE" "$_LEDGER_ENFORCEMENT_MODE"
 [ "$WORKTREE_REUSED" -eq 1 ] || _wt_creation_test_checkpoint after-add
 # Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
 # (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).
@@ -3875,8 +4146,17 @@ trap abort_dispatch INT TERM
 # subshell cwd surviving the container boundary).
 prepare_managed_codex_home() {
   local controller_home="${CODEX_HOME:-$HOME/.codex}"
-  MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
-    || die_precondition "cannot allocate isolated managed Codex home"
+  # bwrap makes / read-only except the worktree and this scratch dir. The managed home has to be created inside it.
+  if [ "${SANDBOX:-off}" = "bwrap" ] && [ -z "${SANDBOX_TMP:-}" ]; then
+    sandbox_setup || die_precondition "cannot allocate the bwrap scratch dir for the managed Codex home"
+  fi
+  if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    MANAGED_CODEX_HOME="$(mktemp -d "${SANDBOX_TMP}/autopilot-managed-codex-home-XXXXXX")" \
+      || die_precondition "cannot allocate isolated managed Codex home"
+  else
+    MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
+      || die_precondition "cannot allocate isolated managed Codex home"
+  fi
   chmod 700 "$MANAGED_CODEX_HOME" \
     || die_precondition "cannot protect isolated managed Codex home"
   # Codex documents that --ignore-user-config still reads authentication from
@@ -3894,7 +4174,7 @@ prepare_managed_codex_home() {
 cleanup_managed_codex_home() {
   [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
   case "$MANAGED_CODEX_HOME" in
-    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*)
+    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*|"${SANDBOX_TMP:-/nonexistent}"/autopilot-managed-codex-home-*)
       rm -rf -- "$MANAGED_CODEX_HOME"
       ;;
     *)
@@ -4291,8 +4571,12 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   if declare -F child_session_env_setup >/dev/null 2>&1; then child_session_env_setup "$SELF_DIR"; else CHILD_SESSION_UNSET=(-u AUTOPILOT_SESSION_ID -u AUTOPILOT_CHILD_SESSION_ID); CHILD_SESSION_PARENT=""; fi
   # 3d: only the cc-shim claude child gets the C the rail minted for it (after every -u in the env argv); every other runner has C removed above.
   CHILD_SESSION_CLAUDE_ENV=(); if ( [ "${IS_CCSHIM:-0}" -eq 1 ] || [ "${IS_CNATIVE:-0}" -eq 1 ] ) && [ -n "${CHILD_SESSION_ID:-}" ]; then CHILD_SESSION_CLAUDE_ENV=("AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"); fi
-  # --sandbox bwrap: the whole worker argv runs inside the sandbox (SANDBOX_ARGV built by the cc-shim arm).
+  # --sandbox bwrap: the whole worker argv runs inside the sandbox. The cc-shim arm builds
+  # SANDBOX_ARGV itself; a cloud fallback re-exec builds it here, before the worker starts.
   if [ "${SANDBOX:-off}" = "bwrap" ]; then
+    if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then
+      sandbox_setup || { echo "sandbox: could not set up the bwrap scratch dir; worker not started" >"$LOG"; AGENT_EXIT=1; return 0; }
+    fi
     if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then echo "sandbox: no bwrap argv; worker not started" >"$LOG"; AGENT_EXIT=1; return 0; fi
     set -- "${SANDBOX_ARGV[@]}" "$@"
   fi
@@ -4440,6 +4724,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # an env-check output nobody recognises) is not spawned. The push/fetch block (HANDS_GIT_ENV) is not on
     # the account allowlist, so it rides in the inner argv through env(1). --settings (gate-rules) is kept.
     if [ "$_CN_STATE" = active ]; then
+      _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
       CNATIVE_ARGV=(env ${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"} claude -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL"
         --strict-mcp-config --dangerously-skip-permissions ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"}
         ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json
@@ -4456,16 +4741,18 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     # With a kit the gate-settings slot ($8) is always passed (empty when there is no gate), then the kit argv ($9...).
     _CN_TAIL=()
     if [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ]; then _CN_TAIL=("${GATE_ARGV[0]-}" "${ROLE_KIT_ARGV[@]}"); else _CN_TAIL=(${GATE_ARGV[@]+"${GATE_ARGV[0]}"}); fi
+    _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
     if CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
       # Scrub every alternate provider / credential selector so the seeded .credentials.json is the SOLE auth.
       # Names verified by strings(1) on the installed claude 2.1.309 binary (none invented). Cleared: provider
       # switches (BEDROCK/VERTEX/FOUNDRY/MANTLE/ANTHROPIC_AWS/ANTHROPIC_GOOGLE_CLOUD/GATEWAY), alternate keys and
-      # tokens (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_FOUNDRY_API_KEY,
+      # tokens (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_FOUNDRY_API_KEY,
       # ANTHROPIC_FOUNDRY_AUTH_TOKEN, AWS_BEARER_TOKEN_BEDROCK), every endpoint override (ANTHROPIC_BASE_URL and the
       # BEDROCK/BEDROCK_MANTLE/VERTEX/FOUNDRY base URLs, ANTHROPIC_FOUNDRY_RESOURCE) and ANTHROPIC_CUSTOM_HEADERS (can
-      # inject auth). NOT cleared: CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
+      # inject auth). NOT cleared: CLAUDE_CODE_OAUTH_TOKEN (PM 01M7975S: a seat token must reach the child;
+      # the seeded dir is still the only config dir), CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
       # region/project tuning vars (inert without a selector).
-      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
+      run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
           --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${8:+--settings "$8"} --output-format json "${@:9}" < "$3" >"$6"' \
           _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${_CN_TAIL[@]+"${_CN_TAIL[@]}"}
     else
@@ -4475,6 +4762,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     fi
     reap_cnative_config_dir
   else
+    _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
     run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
         _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" ${GATE_ARGV[@]+"${GATE_ARGV[@]}"}
@@ -5997,14 +6285,14 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT CLAUDE_EFFORT_ARG \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER PACE_ROLE ENGINE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR IS_OPENCODE IS_KIMI IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
-      CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND \
+      CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND NO_CAMPAIGN MISSION_ENFORCEMENT_MODE_SEEN \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \
       CLASSIFIED_ERROR \
@@ -6016,8 +6304,10 @@ dispatch_detached_run() {
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
     declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE MAIN_CHECKOUT_BEFORE_PARTS HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true
-    # The after-fingerprint in the detached child must exempt the same sibling namespaces
-    # the parent's before-fingerprint did, or every --sibling-ref-prefix run rejects itself.
+    # The after-fingerprint in the detached child must use the same scope and the same
+    # sibling namespaces the parent's before-fingerprint did. Without the scope, the child
+    # measures every ref and every detached round rejects (fleet 01M788GD).
+    declare -p MAIN_CHECKOUT_FP_REF_SCOPE 2>/dev/null || true
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES 2>/dev/null || true
     declare -p MAIN_CHECKOUT_FP_EXCLUDE_PATHS 2>/dev/null || true
     declare -p WRAPPER_COMMITTED 2>/dev/null || true
@@ -6026,7 +6316,7 @@ dispatch_detached_run() {
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
     declare -p WT_GITFILE_EXPECTED WT_GITFILE_ERROR 2>/dev/null || true
-    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT 2>/dev/null || true
+    declare -p SANDBOX SANDBOX_TMP SANDBOX_TMP_PATH SANDBOX_WT_PATH SANDBOX_DENIED SANDBOX_BLOCKED SANDBOX_BLOCKED_SAMPLES SANDBOX_FAIL WORKTREE_PARENT FELL_BACK_JSON FELL_BACK_LOGGED 2>/dev/null || true
     declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
@@ -6035,7 +6325,10 @@ dispatch_detached_run() {
     declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f wt_gitfile_check _wt_git 2>/dev/null || true
     declare -f sandbox_preflight sandbox_nested_repo sandbox_setup sandbox_teardown sandbox_count_denied sandbox_count_blocked sandbox_json reap_cnative_config_dir reap_sandbox_config_dir codeforge_collect_claude_dir 2>/dev/null || true
-    declare -f agy_print_timeout agy_assert_disposable_home die_precondition child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
+    # token_seat_guard (lib/token-seat.sh) is called inside run_agent's claude branches; without it the
+    # detached child dies with "command not found" before the claude worker starts.
+    declare -f token_seat_guard 2>/dev/null || true
+    declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
       _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

@@ -136,8 +136,12 @@ for SIGNAME in TERM HUP INT; do
 done
 
 # i. negative control: neutralising fs.rmSync must leave a dir (the leftover check can fail)
-MUT="$TEST_TMP/seed-noclean.js"
+# The mutant sits in its own lib dir next to a copy of token-seat.js: seed-claude-config.js requires './token-seat'.
+MUTDIR="$TEST_TMP/seed-noclean-lib"
+mkdir -p "$MUTDIR"
+MUT="$MUTDIR/seed-noclean.js"
 cp "$SCRIPT" "$MUT"
+cp "$REPO_ROOT/scripts/lib/token-seat.js" "$MUTDIR/"
 sed_mutate "$MUT" 's/fs\.rmSync(/(()=>{})(/'
 reset_parent
 node "$MUT" --exec --parent "$PARENT" -- true >/dev/null

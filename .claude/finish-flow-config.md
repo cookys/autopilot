@@ -56,7 +56,7 @@ Re-read critical files on develop (pick 1-3 highest-risk files that were changed
 ### Session end (full) (L, XL)
 
 Run the finish-flow Session end (full) checklist. autopilot-specific adaptations:
-- Staging verify → N/A (plugin, no staging)
+- Usage evidence → N/A (plugin, no staging)
 - Knowledge extraction → record to the user's cross-session memory (not autopilot's own `.claude/`, which is gitignored)
 - Deferred items → evidence-backed candidates are deduped into `project/backlog/BACKLOG.md` with Source,
   Context, and Trigger; preference-only/unsupported suggestions stay out

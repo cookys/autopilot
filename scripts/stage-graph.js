@@ -3,7 +3,7 @@
 
 // stage-graph.js — query the dev-flow stage graph (references/stage-graph.json).
 //
-//   nodes  --size S [--bug] [--urgent] [--high-risk] [--research] [--units N]
+//   nodes  --size S [--bug] [--urgent] [--high-risk] [--research] [--explore] [--units N]
 //          -> {"nodes":[...],"walk":[...],"entry":"..","terminal":"..","unit_kind":..}
 //   next   --from <node> --size S [same flags]
 //          -> JSON array of legal next nodes, sorted (e.g. ["code-review","implement"])
@@ -14,6 +14,10 @@
 //
 // `--urgent` without `--high-risk` is urgent-low: code-review moves after finish
 // and is terminal (no loop-back). `--urgent --high-risk` keeps the normal order.
+// `--explore` is the L/XL brainstorm entry: on a non-bug walk whose size names
+// `explore: {node, before}`, the walk is sliced at `before` and `node` is prepended
+// (entry becomes explore, next is plan). Bug walks and sizes without that spec
+// ignore the flag, so the default 84 cells do not move.
 //
 // Exit codes: 0 ok; 1 validate failed; 2 usage / unreadable graph / unknown size or node.
 // One JSON value on stdout; diagnostics on stderr. Node >= 20.10, built-ins only.
@@ -50,7 +54,7 @@ function parseArgs(argv) {
     if (valued.has(a)) {
       if (argv[i + 1] === undefined) die(2, `${a} needs a value`);
       o.vals[a] = argv[++i];
-    } else if (['--bug', '--urgent', '--high-risk', '--research'].includes(a)) {
+    } else if (['--bug', '--urgent', '--high-risk', '--research', '--explore'].includes(a)) {
       o.flags.add(a);
     } else {
       die(2, `unknown argument ${a}`);
@@ -68,6 +72,7 @@ function variantFrom(o) {
     urgent: o.flags.has('--urgent'),
     highRisk: o.flags.has('--high-risk'),
     research: o.flags.has('--research'),
+    explore: o.flags.has('--explore'),
     units,
   };
 }
@@ -93,6 +98,13 @@ function buildWalk(graph, v) {
       walk = [graph.bug_node, ...walk];
     }
   }
+  // Optional entry before `plan` (L/XL brainstorm path). Not a second `optional`
+  // gate: that flag is `research` and would move the frozen 84 cells. Bug walks
+  // keep diagnose as the entry (the replace already ran).
+  if (v.explore && !v.bug && cfg.explore && cfg.explore.node && cfg.explore.before) {
+    const i = walk.indexOf(cfg.explore.before);
+    if (i >= 0) walk = [cfg.explore.node, ...walk.slice(i)];
+  }
   const urgentLow = v.urgent && !v.highRisk;
   let terminal = graph.terminal;
   if (urgentLow && walk.includes(graph.urgency.low.move_after.node)) {
@@ -109,11 +121,15 @@ function buildWalk(graph, v) {
 function nextNodes(graph, v, from) {
   if (!graph.node_ids.includes(from)) die(2, `unknown node ${from}`);
   const edges = new Set();
-  // Forward edges: union over research taken / skipped and a repeated unit, so
-  // both optional paths and the next-unit edge are legal.
+  // Forward edges: union over research taken / skipped, explore taken / skipped,
+  // and a repeated unit, so both optional paths and the next-unit edge are legal.
+  // A node that is not on THIS variant's walk still returns [] below (explore
+  // without --explore, same as research without --research).
   for (const research of [true, false]) {
-    const w = buildWalk(graph, { ...v, research, units: 2 }).walk;
-    for (let i = 0; i + 1 < w.length; i++) if (w[i] === from) edges.add(w[i + 1]);
+    for (const explore of [true, false]) {
+      const w = buildWalk(graph, { ...v, research, explore, units: 2 }).walk;
+      for (let i = 0; i + 1 < w.length; i++) if (w[i] === from) edges.add(w[i + 1]);
+    }
   }
   const base = buildWalk(graph, v);
   if (!base.nodes.includes(from)) return [];
@@ -147,16 +163,18 @@ function validateGraph(graph) {
     for (const bug of [false, true]) {
       for (const urgent of [false, true]) {
         for (const research of [false, true]) {
-          let w;
-          try {
-            w = buildWalk(graph, { size, bug, urgent, highRisk: false, research, units: 2 });
-          } catch (e) {
-            errors.push(`walk build failed for ${size}: ${e.message}`);
-            continue;
-          }
-          for (const n of w.walk) {
-            if (!ids.has(n)) errors.push(`size ${size} references undeclared node ${n}`);
-            seen.add(n);
+          for (const explore of [false, true]) {
+            let w;
+            try {
+              w = buildWalk(graph, { size, bug, urgent, highRisk: false, research, explore, units: 2 });
+            } catch (e) {
+              errors.push(`walk build failed for ${size}: ${e.message}`);
+              continue;
+            }
+            for (const n of w.walk) {
+              if (!ids.has(n)) errors.push(`size ${size} references undeclared node ${n}`);
+              seen.add(n);
+            }
           }
         }
       }

@@ -54,6 +54,18 @@ else
     printf 'FD3 missing\n' >> "$CF_DIR_STATE"
   fi
 fi
+# Stand-in for codeforge rewriting <live>/codeforge/usage with an empty collect.
+# Tests set CF_CLOBBER_LIVE to the sentinel they seeded. Never the uid live dir.
+if [ -n "${CF_CLOBBER_LIVE:-}" ]; then
+  _uid_live="/dev/shm/autopilot-$(id -u)"
+  if [ "$CF_CLOBBER_LIVE" = "$_uid_live" ] || [ "$CF_CLOBBER_LIVE" = "/tmp/autopilot-$(id -u)" ]; then
+    printf 'REFUSED_REAL_LIVE\n' >> "$CF_DIR_STATE"
+    exit 99
+  fi
+  mkdir -p "$CF_CLOBBER_LIVE/codeforge/usage"
+  printf '%s\n' '{"schema":"codeforge.usage-summary/1","days":[]}' > "$CF_CLOBBER_LIVE/codeforge/usage/summary.json"
+  printf '%s\n' '{"schema":"codeforge.usage-sessions/1","rows":[]}' > "$CF_CLOBBER_LIVE/codeforge/usage/usage-sessions.json"
+fi
 exit "${CF_RC:-0}"
 EOF
 chmod +x "$CF_BIN/codeforge"
@@ -379,6 +391,167 @@ else
     env PATH="$HETERO_BIN:$PATH" ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" \
     bash -c 'cd "$1" && exec "$2" --runner cc-shim --model MiniMax-M3 --prompt-file "$3" --context-window off --branch feat/cf-sbx --sandbox bwrap --worktree-parent "$4"' \
     _ "$HETERO_REPO" "$HETERO" "$HETERO_PROMPT" "$HETERO_WT"
+fi
+
+# Extra tmpfs dirs this file creates. The lib.sh trap only removes its own live dir.
+_CF_EXTRA_CLEAN=""
+_cf_extra_clean() {
+  [ "$BASHPID" = "$__TEST_TOP_BASHPID" ] || return 0
+  # shellcheck disable=SC2086
+  [ -n "$_CF_EXTRA_CLEAN" ] && rm -rf $_CF_EXTRA_CLEAN
+}
+trap '_cf_extra_clean; cleanup_test_tmp' EXIT
+
+# Seven-row usage pair used as a sentinel. No host, path, or email.
+seed_seven() {
+  local dest="$1/codeforge/usage"
+  mkdir -p "$dest"
+  python3 -c '
+import json, sys
+dest = sys.argv[1]
+days = [{"day": "2026-01-0%d" % i, "source": "claude", "requests": i} for i in range(1, 8)]
+rows = [{"session": "s%d" % i, "requests": i} for i in range(1, 8)]
+open(dest + "/summary.json", "w", encoding="utf-8").write(json.dumps({"schema": "codeforge.usage-summary/1", "days": days}) + "\n")
+open(dest + "/usage-sessions.json", "w", encoding="utf-8").write(json.dumps({"schema": "codeforge.usage-sessions/1", "rows": rows}) + "\n")
+' "$dest"
+}
+sum_usage() {
+  sha256sum "$1/codeforge/usage/summary.json" "$1/codeforge/usage/usage-sessions.json" | sha256sum | awk '{print $1}'
+}
+
+# (a) Fake HOME, and the caller sets no live dir of its own. The sentinel is
+# the directory the resolver would use ($XDG_RUNTIME_DIR/autopilot) and it
+# already holds 7 rows. Entering the shared test env must not change it.
+A_SENT_XDG="$(mktemp -d -p /dev/shm "autopilot-test-cfa-XXXXXX")"
+_CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $A_SENT_XDG"
+A_SENT="$A_SENT_XDG/autopilot"
+seed_seven "$A_SENT"
+A_BEFORE="$(sum_usage "$A_SENT")"
+A_UID="/dev/shm/autopilot-$(id -u)"
+
+A_OUT="$(env -u AUTOPILOT_LIVE_DIR -u AUTOPILOT_CODEFORGE_COLLECT \
+  XDG_RUNTIME_DIR="$A_SENT_XDG" \
+  bash --noprofile --norc -c '
+    set -euo pipefail
+    . "$1"
+    fs="$(findmnt -T "$AUTOPILOT_LIVE_DIR" -o FSTYPE -n 2>/dev/null | head -n 1 | tr -d "[:space:]")"
+    printf "LIVE=%s\nCOLLECT=%s\nFSTYPE=%s\n" "$AUTOPILOT_LIVE_DIR" "${AUTOPILOT_CODEFORGE_COLLECT:-}" "$fs"
+  ' _ "$REPO_ROOT/hooks/tests/lib.sh")"
+A_LIVE_SH="$(printf '%s\n' "$A_OUT" | sed -n 's/^LIVE=//p')"
+A_COLLECT_SH="$(printf '%s\n' "$A_OUT" | sed -n 's/^COLLECT=//p')"
+A_FS_SH="$(printf '%s\n' "$A_OUT" | sed -n 's/^FSTYPE=//p')"
+assert_eq "off" "$A_COLLECT_SH" "a shell env: collect off"
+assert_eq "tmpfs" "$A_FS_SH" "a shell env: live dir is tmpfs"
+case "$A_LIVE_SH" in
+  /dev/shm/autopilot-test-live-*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  *) fail "a shell env: live dir is not a private /dev/shm dir" ;;
+esac
+assert_neq "$A_LIVE_SH" "$A_SENT" "a shell env: live dir is not the sentinel"
+assert_neq "$A_LIVE_SH" "$A_UID" "a shell env: live dir is not the uid live dir"
+assert_eq "$A_BEFORE" "$(sum_usage "$A_SENT")" "a shell env: sentinel 7-row file unchanged"
+
+A_META="$TEST_TMP/a-fx.json"
+node -e '
+  const { makeFixture } = require(process.argv[1]);
+  const { spawnSync } = require("child_process");
+  const fs = require("fs");
+  const fx = makeFixture({ aliases: [{ alias: "a" }] });
+  const live = fx.env.AUTOPILOT_LIVE_DIR;
+  const r = spawnSync("findmnt", ["-T", live, "-o", "FSTYPE", "-n"], { encoding: "utf8" });
+  const fstype = (r.stdout || "").trim().split(/\s+/)[0] || "";
+  fs.writeFileSync(process.argv[2], JSON.stringify({
+    root: fx.root,
+    home: fx.env.HOME,
+    live: live,
+    collect: fx.env.AUTOPILOT_CODEFORGE_COLLECT || "",
+    fstype: fstype,
+    projects: fs.existsSync(fx.env.HOME + "/.claude/projects"),
+  }));
+' "$REPO_ROOT/scripts/lib/account-fixtures/shim-install.js" "$A_META"
+A_ROOT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).root)' "$A_META")"
+_CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $A_ROOT"
+A_FX_HOME="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).home)' "$A_META")"
+A_FX_LIVE="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).live)' "$A_META")"
+_CF_EXTRA_CLEAN="$_CF_EXTRA_CLEAN $A_FX_LIVE"
+A_FX_COLLECT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).collect)' "$A_META")"
+A_FX_FS="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).fstype)' "$A_META")"
+A_FX_PROJECTS="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).projects ? "yes" : "no")' "$A_META")"
+assert_eq "off" "$A_FX_COLLECT" "a fixture: collect off"
+assert_eq "tmpfs" "$A_FX_FS" "a fixture: live dir is tmpfs"
+assert_eq "no" "$A_FX_PROJECTS" "a fixture: fake HOME has no transcript dir"
+# The live dir is its own mkdtemp on tmpfs. The fixture root stays on os.tmpdir()
+# so TMPDIR can hardlink a local git clone; putting the root on /dev/shm breaks that.
+case "$A_ROOT" in
+  /dev/shm/*) fail "a fixture: root is on /dev/shm (TMPDIR would be tmpfs)" ;;
+  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
+case "$A_FX_HOME" in
+  "$A_ROOT"/fakehome) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  *) fail "a fixture: HOME is not the fixture fakehome under the fixture root" ;;
+esac
+case "$A_FX_LIVE" in
+  /dev/shm/g37-fix-live-*/*) fail "a fixture: live dir is not its own /dev/shm mkdtemp" ;;
+  /dev/shm/g37-fix-live-*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  *) fail "a fixture: live dir is not its own /dev/shm mkdtemp" ;;
+esac
+case "$A_FX_LIVE" in
+  "$A_ROOT"|"$A_ROOT"/*) fail "a fixture: live dir is inside the fixture root" ;;
+  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
+assert_neq "$A_FX_LIVE" "$A_UID" "a fixture: live dir is not the uid live dir"
+assert_neq "$A_FX_LIVE" "$A_SENT" "a fixture: live dir is not the sentinel"
+if grep -q 'AUTOPILOT_CODEFORGE_COLLECT="$(jget "$F" env.AUTOPILOT_CODEFORGE_COLLECT)"' \
+  "$REPO_ROOT/hooks/tests/dispatch-author-account-rail.test.sh"; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "a author rail: env -i does not forward AUTOPILOT_CODEFORGE_COLLECT"
+fi
+
+# The suite's own env (no extra live-dir override). A call is safe only when
+# collect is off or the fixture live dir is already tmpfs; otherwise the
+# resolver would fall through to the uid directory, which this file must not touch.
+A_TARGET="$TEST_TMP/case-a-target"
+mkdir -p "$A_TARGET"
+if [ "$A_FX_COLLECT" = off ] || [ "$A_FX_FS" = tmpfs ] || [ "$A_FX_FS" = ramfs ]; then
+  reset_cf
+  : > "$TEST_TMP/unit-err"
+  PATH="$CF_BIN:/usr/bin:/bin" \
+    HOME="$A_FX_HOME" \
+    AUTOPILOT_LIVE_DIR="$A_FX_LIVE" \
+    AUTOPILOT_CODEFORGE_COLLECT="$A_FX_COLLECT" \
+    XDG_RUNTIME_DIR="$A_SENT_XDG" \
+    CF_CLOBBER_LIVE="$A_SENT" \
+    bash -c '
+      set -euo pipefail
+      . "$1"
+      codeforge_collect_claude_dir "$2"
+      exit 7
+    ' _ "$HELPER" "$A_TARGET" 2>"$TEST_TMP/unit-err"
+  UNIT_RC=$?
+  UNIT_ERR="$(cat "$TEST_TMP/unit-err")"
+  assert_eq "7" "$UNIT_RC" "a fixture env: caller rc stays 7"
+  assert_eq "" "$UNIT_ERR" "a fixture env: collect off is silent"
+  assert_file_absent_content "a fixture env"
+  assert_eq "$A_BEFORE" "$(sum_usage "$A_SENT")" "a fixture env: sentinel 7-row file unchanged"
+  # Knob dropped, live dir kept: the private tmpfs dir absorbs the empty write.
+  if [ "$A_FX_FS" = tmpfs ] || [ "$A_FX_FS" = ramfs ]; then
+    reset_cf
+    PATH="$CF_BIN:/usr/bin:/bin" \
+      HOME="$A_FX_HOME" \
+      AUTOPILOT_LIVE_DIR="$A_FX_LIVE" \
+      XDG_RUNTIME_DIR="$A_SENT_XDG" \
+      CF_CLOBBER_LIVE="$A_FX_LIVE" \
+      bash -c '
+        set -euo pipefail
+        unset AUTOPILOT_CODEFORGE_COLLECT
+        . "$1"
+        codeforge_collect_claude_dir "$2"
+        exit 7
+      ' _ "$HELPER" "$A_TARGET" 2>"$TEST_TMP/unit-err"
+    UNIT_RC=$?
+    assert_eq "7" "$UNIT_RC" "a fixture live dir only: caller rc stays 7"
+    assert_eq "$A_BEFORE" "$(sum_usage "$A_SENT")" "a fixture live dir only: sentinel unchanged"
+  fi
 fi
 
 finalize_test

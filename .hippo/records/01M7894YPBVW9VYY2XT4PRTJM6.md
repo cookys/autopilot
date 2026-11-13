@@ -1,0 +1,12 @@
+---
+id: 01M7894YPBVW9VYY2XT4PRTJM6
+kind: issue
+created: 2026-10-12T00:00:00.000Z
+---
+- **Since**: 2026-10-12
+- **Problem**: 使用者通常不知道要設定自動壓縮視窗（autoCompactWindow），偵測功能和 T2 新提示文字都已完成，剩下是在下一版發布標題寫出這個設定，讓使用者知道要設。 (draft)
+- **Impact**: 使用者會被不必要地要求停下重開；擁有者已驗證 Claude Code 的摘要夠用，改文字屬指引，需評測證據。 (draft)
+- **Trigger**: next alpha or 3.0.0 release cut
+- **Source**: context reset cost analysis, 2026-10-12
+- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
+- **Context**: detection and T2 wording shipped (BL-0124 merge, ON/OFF eval docs/plans/evidence/2026-10-14-t2-wording-onoff/). Left: name autoCompactWindow in the next release heading so users learn to set it.

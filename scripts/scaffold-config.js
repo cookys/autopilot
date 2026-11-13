@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const HELP_TEXT = `Usage: node scripts/scaffold-config.js <target-dir> [--detect <json-file>] [--force] [--dry-run] [--help]
+const HELP_TEXT = `Usage: node scripts/scaffold-config.js <target-dir> [--detect <json-file>] [--force] [--dry-run] [--init-backlog] [--help]
 
 <target-dir>
   Required target repository directory to scaffold.
@@ -15,9 +15,14 @@ const HELP_TEXT = `Usage: node scripts/scaffold-config.js <target-dir> [--detect
 
 --force
   Overwrite existing generated configs even when they differ from scaffold output.
+  Never overwrites an existing backlog file.
 
 --dry-run
   Show what WOULD be written/skipped without writing anything.
+
+--init-backlog
+  When the resolved backlog file does not exist, create it (next-id mark plus one
+  comment) and ensure .claude/backlog-config.md. Never overwrites an existing backlog.
 
 --help
   Show this help text and exit 0.
@@ -60,6 +65,7 @@ function resolveDetectionTarget(rawArgs) {
   let detectFile = null;
   let force = false;
   let dryRun = false;
+  let initBacklog = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -79,6 +85,11 @@ function resolveDetectionTarget(rawArgs) {
 
     if (arg === '--dry-run') {
       dryRun = true;
+      continue;
+    }
+
+    if (arg === '--init-backlog') {
+      initBacklog = true;
       continue;
     }
 
@@ -102,6 +113,7 @@ function resolveDetectionTarget(rawArgs) {
     detectFile,
     force,
     dryRun,
+    initBacklog,
   };
 }
 
@@ -291,6 +303,63 @@ function generateTaskClassConfig() {
   );
 }
 
+const BACKLOG_SCAFFOLD = '<!-- next-id: BL-0001 -->\n<!-- queue-form backlog; schema: references/backlog-entry.md -->\n';
+
+function resolveField(targetDir, field) {
+  try {
+    return execFileSync('bash', [
+      path.join(__dirname, 'resolve-project-paths.sh'),
+      '--target', targetDir,
+      '--field', field,
+    ], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'none';
+  }
+}
+
+// A backlog path the scaffolder may create: relative, no escape, not `none`.
+function safeBacklogRel(rel) {
+  const s = String(rel || '').trim();
+  if (!s || s === 'none') return null;
+  if (path.isAbsolute(s) || s.includes('\0') || /^[A-Za-z]:/.test(s)) return null;
+  const norm = path.posix.normalize(s.split(path.sep).join('/'));
+  if (!norm || norm === '.' || norm.startsWith('../') || norm === '..' || path.posix.isAbsolute(norm)) return null;
+  return norm;
+}
+
+// Create the backlog only when --init-backlog is set and the file is absent.
+// --force does not overwrite. --dry-run records the prospective path and writes nothing.
+function initBacklogFile(state, fallbackRel) {
+  let rel = resolveField(state.targetDir, 'backlog');
+  const existsFlag = resolveField(state.targetDir, 'backlog_exists');
+  if (!rel || rel === 'none') rel = fallbackRel || DEFAULT_PATHS.backlog;
+  const safe = safeBacklogRel(rel);
+  if (!safe) {
+    console.error(`backlog: refused path ${rel}`);
+    state.skipped.push(String(rel || 'backlog'));
+    return;
+  }
+  const root = path.resolve(state.targetDir);
+  const abs = path.resolve(root, safe);
+  if (abs !== root && !abs.startsWith(root + path.sep)) {
+    console.error(`backlog: refused path ${safe}`);
+    state.skipped.push(safe);
+    return;
+  }
+  if (existsFlag === 'true' || fs.existsSync(abs)) {
+    state.skipped.push(safe);
+    console.log(`${safe}: skipped (backlog already exists)`);
+    return;
+  }
+  if (!state.dryRun) {
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, BACKLOG_SCAFFOLD);
+  } else {
+    console.log(`${safe}: would write`);
+  }
+  state.written.push(safe);
+}
+
 function writeOrSkipFile(filePath, relativeName, content, state) {
   const current = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
   if (current !== null && current === content) {
@@ -466,6 +535,10 @@ function main() {
     });
 
     const settingsEnvPinned = ensureSettingsEnvPin(claudeDir, state);
+
+    // After the config write, so a real run's project-lifecycle-config can answer
+    // the backlog path. A dry-run has nothing on disk; `none` falls back to paths.backlog.
+    if (parsed.initBacklog) initBacklogFile(state, paths.backlog);
 
     const gitignoreUpdated = updateGitignore(state.targetDir, state.dryRun);
     if (gitignoreUpdated) {

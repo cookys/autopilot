@@ -5,10 +5,14 @@
  * noncq.js — queue of work any non-Claude engine can do (noncq W1).
  *
  * Lanes file items (review-seat1 / research / replay / data / draft). When a
- * capacity.pace/1 file shows a non-Claude pool ALERT_behind with hours_to_reset
- * under 24 h and not stale, `drain` dispatches queued items whose prefer list
- * names that pool's engine key through the read-only rails (dispatch-review /
- * dispatch-author), then reaps finished runs and notifies the filing lane.
+ * capacity.pace/1 row for a mapped non-Claude pool is fresh (stale === false),
+ * hours_to_reset is under 24 h, and the row still has quota (used_pct < 100,
+ * or ALERT_behind with waste_pct_if_unused > 0), `drain` dispatches queued
+ * items whose prefer list names that pool's engine key through the read-only
+ * rails (dispatch-review / dispatch-author), then reaps finished runs and
+ * notifies the filing lane. A stale or missing reading is unknown: it does
+ * not qualify and it does not cancel another row that shows headroom. Status
+ * `ok` (in use, not only `ALERT_behind`) still counts when quota remains.
  * An empty qualifying pool is reported once per 6 h; the queue is never filled
  * with busy-work.
  *
@@ -55,9 +59,14 @@ const {
   ensureDir,
   withWriteLock,
 } = require('./lib/jsonl-store.js');
+const {
+  PACE_SCHEMA,
+  finiteNum,
+  isFreshRow,
+  rowRemaining,
+} = require('./lib/pace-reading.js');
 
 const SCHEMA = 'noncq/1';
-const PACE_SCHEMA = 'capacity.pace/1';
 const KINDS = Object.freeze(['review-seat1', 'research', 'replay', 'data', 'draft']);
 const STATES = Object.freeze(['queued', 'dispatched', 'done', 'failed', 'expired']);
 const MAX_ATTEMPTS = 2;
@@ -471,31 +480,37 @@ function qualifyingEngines(pace, pools, opts = {}) {
   }
   const byKey = new Map();
   for (const row of pace.rows) {
-    if (!row || typeof row !== 'object') continue;
+    // stale missing / null / true or non-object row: unknown (shared pace-reading).
+    // Do not qualify and do not cancel a sibling alias row with fresh headroom.
+    if (!isFreshRow(row)) continue;
     const poolName = row.pool;
-    const entry = pools[poolName];
+    const entry = Object.prototype.hasOwnProperty.call(pools, poolName) ? pools[poolName] : null;
+    // Unmapped pool name: not a verdict. It must not be read as "no quota".
     if (!entry) continue;
     if (row.class === 'claude' || row.class === 'scarce') continue;
-    if (row.status !== 'ALERT_behind') continue;
-    // Fail-closed on stale: only stale === false qualifies (missing / null / true skipped).
-    if (row.stale !== false) continue;
-    const hours = Number(row.hours_to_reset);
-    if (!Number.isFinite(hours)) continue;
+    const status = typeof row.status === 'string' ? row.status : '';
+    // `ok` is in-use with quota still left. ALERT_behind is the waste alert.
+    // behind_early / no_source / unknown are not a quota reading.
+    if (status !== 'ALERT_behind' && status !== 'ok') continue;
+    const hours = finiteNum(row.hours_to_reset);
+    if (hours === null) continue;
     if (requireHoursLt24 && !(hours < 24)) continue;
+    const remaining = rowRemaining(row, status);
+    if (remaining === null) continue;
+    // Known exhaustion does not qualify and does not clear another alias.
+    if (!(remaining > 0)) continue;
 
     const key = entry.key;
-    const waste = Number(row.waste_pct_if_unused);
-    const wasteN = Number.isFinite(waste) ? waste : 0;
     const cur = byKey.get(key);
     if (!cur) {
       byKey.set(key, {
         key,
         profile: entry,
-        waste_pct_if_unused: wasteN,
+        waste_pct_if_unused: remaining,
         pools: [poolName],
       });
     } else {
-      cur.waste_pct_if_unused = Math.max(cur.waste_pct_if_unused, wasteN);
+      cur.waste_pct_if_unused = Math.max(cur.waste_pct_if_unused, remaining);
       cur.pools.push(poolName);
     }
   }

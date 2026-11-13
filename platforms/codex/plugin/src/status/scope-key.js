@@ -61,6 +61,7 @@ function readScopeFile(file, { schema, projectKey, identity }) {
 // ends it) or 'closed' (kept with closed_at + answer). "The entry is in the file" never means "the card is open": every reader that lists cards asks this.
 // Only 'open' is a pending question (待決). awaiting_operator_action and pending_dispatch are LIVE (still shown, still need someone) but never counted
 // as a question. cardState() is the one place that maps a stored status to a state (absent or unknown = open, the pre-field behaviour).
+// operator_steps, last_answer and reask_at are optional entry fields. cardState does not read them. No status value was added for them.
 const CARD_STATUS = ['open', 'awaiting_operator_action', 'pending_dispatch', 'closed'];
 function cardState(e) {
   return e && typeof e === 'object' && CARD_STATUS.includes(e.status) ? e.status : 'open';
@@ -76,6 +77,26 @@ function isClosedEntry(e) {
 }
 function isAwaitingEntry(e) {
   return !!e && typeof e === 'object' && e.status === 'awaiting_operator_action';
+}
+
+// Dated cards (`open-decision.js open --due`, PM 01M78866 item c): `due_at` is an ISO UTC instant. dueState() is the ONE place that says
+// whether it has come; `show`, the job-page reader (decision-input.js), due-sweep, and the pane badge / float-up all ask it, never Date.parse themselves.
+//   'none'    no due_at (or one that is not a date): an ordinary card, nothing changes
+//   'not_due' due_at still in the future: listed LAST, marked "due <local time>", NOT counted as pending
+//   'due'     due_at reached: listed FIRST, marked "due now", counted
+// `now` is epoch ms or a Date; an unusable `now` reads as 'due' (fail visible: a clock problem never hides a card). Pure: reads nothing else.
+function dueState(card, now) {
+  const at = card && typeof card === 'object' && typeof card.due_at === 'string' ? Date.parse(card.due_at) : NaN;
+  if (!Number.isFinite(at)) return 'none';
+  const n = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(n)) return 'due';
+  return at <= n ? 'due' : 'not_due';
+}
+// List order key from dueState: due first (0), ordinary cards (1), not yet due last (2). A closed card is a record: 1.
+function dueRank(card, now) {
+  if (isClosedEntry(card)) return 1;
+  const s = dueState(card, now);
+  return s === 'due' ? 0 : s === 'not_due' ? 2 : 1;
 }
 
 // True when the scope file holds at least one entry that is not closed (it needs a string id and question like every reader requires).
@@ -112,4 +133,4 @@ function pickCards(items) {
   return out;
 }
 
-module.exports = { cardRank, pickCards, safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, scopeFileHasLive };
+module.exports = { cardRank, pickCards, safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, cardState, isOpenEntry, isClosedEntry, isAwaitingEntry, isPendingDispatchEntry, scopeFileHasLive, dueState, dueRank };

@@ -16,6 +16,7 @@
  * their opt-outs are AUTOPILOT_AWAITING_OWNER / AUTOPILOT_RUNS_WATCH_AUTOSTART=0. Their failures never
  * change this hook's output. A live-panel answer whose first line is [待決回覆] closes the named
  * decision cards here too (opt-out AUTOPILOT_DECIDE_REPLY_CLOSE=off); that step is also fail-open.
+ * A card with operator_steps and a non-decline answer becomes awaiting_operator_action instead of closed; a decline stays open with reask_at and is not sent.
  * A one-line `[待決回覆·更正]` prompt (the pane's 改答案) closes nothing: it appends the new answer to the card's answer_corrections and says it was not courier-verified.
  * An id found in no scope file of the project is reported (systemMessage + stderr), never skipped silently.
  *
@@ -54,7 +55,7 @@ function closeDecideReply(payload) {
     idLine.set(m[0], line);
   }
   if (ids.length === 0) return;
-  let closeDecisionById;
+  let closePanelAnswer;
   let projectScopeFiles;
   let readEntries;
   let parkAnswer;
@@ -62,7 +63,7 @@ function closeDecideReply(payload) {
   let parkUndelivered;
   let receiptLine;
   try {
-    ({ closeDecisionById, projectScopeFiles, readEntries, parkAnswer, sendParked, receiptLine, parkUndelivered } = require('../scripts/open-decision.js'));
+    ({ closePanelAnswer, projectScopeFiles, readEntries, parkAnswer, sendParked, receiptLine, parkUndelivered } = require('../scripts/open-decision.js'));
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
@@ -111,7 +112,10 @@ function closeDecideReply(payload) {
       try { for (const f of files) { const e = readEntries(f, { all: true }).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
       const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
       if (!bound.ok) { if (parkExecutorCard(id, 'content_mismatch')) continue; unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
-      delivery.set(id, { answer: v.answer, answer_id: aid });
+      // the note beside the picked option (`｜補充：<note>`): kept as local_note in case the courier stored the option only (parkAnswer decides)
+      const dl = require('../scripts/lib/decide-line.js').parseDecideLine(line);
+      const localNote = dl && dl.note ? dl.note.slice('補充：'.length).trim() : null;
+      delivery.set(id, { answer: v.answer, answer_id: aid, local_note: localNote });
     }
     if (delivery.has(id)) {
       // a card with an executor: park the verified answer now (every answered card first), send later in order under one deadline
@@ -124,24 +128,30 @@ function closeDecideReply(payload) {
         if (r.status === 'absent' || r.status === 'not_parked') continue;
         handled = true;
         if (r.status === 'error') { const line = receiptLine({ status: 'failed', id, executor: r.executor, error: r.error, attempts: 1 }); ctxLines.push(line); process.stderr.write(`advisory-relay: ${line}\n`); break; }
+        if (r.status === 'reask') {
+          const line = `[稍後再問] ${id} reask_at=${r.reask_at}（卡片仍開著）`;
+          ctxLines.push(line); process.stderr.write(`advisory-relay: ${line}\n`);
+          break;
+        }
         toSend.push({ file, id });
         break;
       }
       if (handled) continue;
     }
     if (!fd && parkExecutorCard(id, 'no_courier')) continue;
-    // closeDecisionById locks before it looks up the id, so a locked scope file
+    // closePanelAnswer (and the closeDecisionById it calls for a normal answer) locks before it looks up the id, so a locked scope file
     // returns status error even when this card is not in it. Keep every error
     // and keep walking; a later scope file may still hold the card. One line is
-    // written only when the card was not closed in any scope file and at least
+    // written only when the card was not handled in any scope file and at least
     // one error was collected. Each error is prefixed with that file's basename.
+    // `closed` here means handled: a decline (reask) or an operator-step card (awaiting) is not closed, and is not reported missing.
     const failures = [];
     let closed = false;
     for (const file of files) {
       let r;
       const note = (msg) => { failures.push(`${path.basename(file)}: ${msg}`); };
       try {
-        r = closeDecisionById(file, id);
+        r = closePanelAnswer(file, id, idLine.get(id));
       } catch (e) {
         note(e && e.message ? e.message : String(e));
         continue;

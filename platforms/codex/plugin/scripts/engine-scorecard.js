@@ -56,6 +56,7 @@ const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted',
 // strikes (references/strike-decay.md).
 const VALID_STATUSES = new Set(['qualified', 'failed']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
+const QUALIFIED_EXPORT_SCHEMA = 'autopilot.qualified/1';
 // --- strike-decay projection (2026-08-22 no-confidence-decay P1) ------------------
 // Closed registries, frozen contract §2.7.3. The strike STORE (write path,
 // validation-at-write, dedup-idempotent append, invalidation) is owned by
@@ -132,6 +133,7 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js status   (registry outbox: pending, rejected, older than 24h)\n\
   node scripts/engine-scorecard.js record --supersede-provisional --supersedes-event-id <N> --reason <string> [--file <path>]\n\
   node scripts/engine-scorecard.js current --role <role> [--now <ISO-date>] [--require-evidence] [--scope-file <path>] [--role-default-scope] [--identity-file <path>]\n\
+  node scripts/engine-scorecard.js export-qualified [--out <path>] [--now <ISO-date>]\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
@@ -181,7 +183,12 @@ const HELP_TEXT = `Usage:\n\
   strip-expiry is the one-time migration for stores written before qualification lost its expiry\n\
     (2026-10-26): it re-seals each evidence record without its expiry field (ids change, references follow),\n\
     drops the expiry field from scorecard rows and pins, and backs every store up (<file>.bak-strip-expiry-<UTC>)\n\
-    first. Qualification has no calendar: standing ends only through strikes. --dry-run plans only.\n\
+    first. It refuses when exactly one of the two store directories is overridden\n\
+    (ENGINE_SCORECARD_DIR versus ENGINE_CAPABILITY_DIR or ENGINE_CAPABILITY_FILE): the other would be the real store.\n\
+    Set both or neither. Qualification has no calendar: standing ends only through strikes. --dry-run plans only.\n\
+  export-qualified writes schema autopilot.qualified/1 across every capability role accepted by current --role\n\
+    (result: pass|fail|provisional, date: YYYY-MM-DD, event_id; no expiry field) atomically (mode 0644) to --out\n\
+    (default: $AUTOPILOT_QUALIFIED_FILE, else $HOME/.autopilot/qualified.v1.json).\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -211,16 +218,18 @@ function isHelpToken(token) {
   return token === '-h' || token === '--help' || token === 'help';
 }
 
-const SCORECARD_DIR = path.resolve(
-  expandTilde(process.env.ENGINE_SCORECARD_DIR || path.join('~', '.autopilot', 'engine-scorecard')),
-);
+const DEFAULT_SCORECARD_DIR = path.resolve(expandTilde(path.join('~', '.autopilot', 'engine-scorecard')));
+const DEFAULT_CAPABILITY_DIR = path.resolve(expandTilde(path.join('~', '.autopilot', 'engine-capability')));
+const SCORECARD_DIR = process.env.ENGINE_SCORECARD_DIR
+  ? path.resolve(expandTilde(process.env.ENGINE_SCORECARD_DIR))
+  : DEFAULT_SCORECARD_DIR;
 const SCORECARD_FILE = path.join(SCORECARD_DIR, 'scorecard.jsonl');
 const LOCK_FILE = path.join(SCORECARD_DIR, '.lock');
 const CAPABILITY_DIR = process.env.ENGINE_CAPABILITY_DIR
   ? path.resolve(expandTilde(process.env.ENGINE_CAPABILITY_DIR))
   : process.env.ENGINE_CAPABILITY_FILE
     ? path.dirname(path.resolve(expandTilde(process.env.ENGINE_CAPABILITY_FILE)))
-    : path.resolve(expandTilde(path.join('~', '.autopilot', 'engine-capability')));
+    : DEFAULT_CAPABILITY_DIR;
 const CAPABILITY_EVIDENCE_FILE = path.join(CAPABILITY_DIR, 'qualification-evidence.jsonl');
 
 function readTextLines(filePath) {
@@ -1500,7 +1509,7 @@ function cmdImportTranscripts(args) {
   process.stdout.write(serialized);
 }
 
-function currentRowsForRole(role, nowMs, options = {}) {
+function selectCurrentRowsForRole(role, nowMs, options = {}) {
   const partition = readStorePartition(false, options.requireEvidence === true);
   const rows = partition.ordinaryRows;
   const supersededEventIds = partition.supersededEventIds;
@@ -1652,51 +1661,62 @@ function currentRowsForRole(role, nowMs, options = {}) {
     ).projection;
 
     output.push({
-      engine: row.engine,
-      runner: row.runner,
-      role: row.role,
-      corpus_version: row.corpus_version,
-      harness_version: row.harness_version,
-      runner_version: row.runner_version,
-      prompt_config_hash: row.prompt_config_hash,
-      status: rowStatus,
-      capability_score: row.capability_score,
-      family: row.family,
-      cost: row.cost,
-      model_version: row.model_version,
-      // optional invocation-tuple fields (v2.32.25) — carried so ladder can project them
-      ...(row.effort !== undefined ? { effort: row.effort } : {}),
-      ...(row.model !== undefined ? { model: row.model } : {}),
-      // Additive pooled-verdict fields (plan 2026-08-29 D5).
-      ...projectPooledFields(row),
-      ...(outputEvidenceReceipt ? {
-        evidence_receipt: outputEvidenceReceipt,
-        evidence_observed_state: evidenceReceipt.state,
-      } : {}),
-      authority_status: 'untrusted_telemetry',
-      admissible: false,
-      observed_status: evidenceBackedStatus,
-      event_id: toEventId(row.event_id) || 0,
-      // §2.7.5 projection fields.
-      admission_status: seatProjection.admission_status,
-      strikes_since_pass: seatProjection.strikes_since_pass,
-      critical_trigger: seatProjection.critical_trigger,
-      would_requalify: seatProjection.would_requalify,
-      strike_threshold: seatProjection.strike_threshold,
-      strike_policy_version: seatProjection.strike_policy_version,
-      rejected_strikes: seatProjection.rejected_strikes,
-      // Present only when this seat's baseline is an adopted official default
-      // AND the seat is requalify_required. Advisory operator guidance; no
-      // consumer gates on it (dispatch-contract.js reads admission_status).
-      ...(seatProjection.remedy === undefined ? {} : { remedy: seatProjection.remedy }),
+      row,
+      projected: {
+        engine: row.engine,
+        runner: row.runner,
+        role: row.role,
+        corpus_version: row.corpus_version,
+        harness_version: row.harness_version,
+        runner_version: row.runner_version,
+        prompt_config_hash: row.prompt_config_hash,
+        status: rowStatus,
+        capability_score: row.capability_score,
+        family: row.family,
+        cost: row.cost,
+        model_version: row.model_version,
+        // optional invocation-tuple fields (v2.32.25) — carried so ladder can project them
+        ...(row.effort !== undefined ? { effort: row.effort } : {}),
+        ...(row.model !== undefined ? { model: row.model } : {}),
+        // Additive pooled-verdict fields (plan 2026-08-29 D5).
+        ...projectPooledFields(row),
+        ...(outputEvidenceReceipt ? {
+          evidence_receipt: outputEvidenceReceipt,
+          evidence_observed_state: evidenceReceipt.state,
+        } : {}),
+        authority_status: 'untrusted_telemetry',
+        admissible: false,
+        observed_status: evidenceBackedStatus,
+        event_id: toEventId(row.event_id) || 0,
+        // §2.7.5 projection fields.
+        admission_status: seatProjection.admission_status,
+        strikes_since_pass: seatProjection.strikes_since_pass,
+        critical_trigger: seatProjection.critical_trigger,
+        would_requalify: seatProjection.would_requalify,
+        strike_threshold: seatProjection.strike_threshold,
+        strike_policy_version: seatProjection.strike_policy_version,
+        rejected_strikes: seatProjection.rejected_strikes,
+        // Present only when this seat's baseline is an adopted official default
+        // AND the seat is requalify_required. Advisory operator guidance; no
+        // consumer gates on it (dispatch-contract.js reads admission_status).
+        ...(seatProjection.remedy === undefined ? {} : { remedy: seatProjection.remedy }),
+      },
     });
   }
 
   return output.sort((a, b) => {
-    if (a.engine !== b.engine) return a.engine < b.engine ? -1 : 1;
-    if (a.runner !== b.runner) return a.runner < b.runner ? -1 : 1;
+    if (a.projected.engine !== b.projected.engine) {
+      return a.projected.engine < b.projected.engine ? -1 : 1;
+    }
+    if (a.projected.runner !== b.projected.runner) {
+      return a.projected.runner < b.projected.runner ? -1 : 1;
+    }
     return 0;
   });
+}
+
+function currentRowsForRole(role, nowMs, options = {}) {
+  return selectCurrentRowsForRole(role, nowMs, options).map((entry) => entry.projected);
 }
 
 // `resolvedRecordState`: the stored state of the record a ledger-resolved receipt chose, when that
@@ -2736,6 +2756,166 @@ function cmdCurrent(args) {
   process.stdout.write(`${JSON.stringify(rows)}\n`);
 }
 
+function resolveHomeDir(env = process.env) {
+  if (typeof env.HOME === 'string' && env.HOME.trim() !== '') {
+    return env.HOME.trim();
+  }
+  return require('os').homedir();
+}
+
+function expandHomePath(raw, env = process.env) {
+  if (typeof raw !== 'string' || raw === '') return raw;
+  const home = resolveHomeDir(env);
+  if (raw === '~') return home;
+  if (raw.startsWith('~/') || raw.startsWith(`~${path.sep}`)) {
+    return path.join(home, raw.slice(2));
+  }
+  return raw;
+}
+
+function defaultQualifiedOutPath(env = process.env) {
+  if (typeof env.AUTOPILOT_QUALIFIED_FILE === 'string' && env.AUTOPILOT_QUALIFIED_FILE.trim() !== '') {
+    return path.resolve(expandHomePath(env.AUTOPILOT_QUALIFIED_FILE.trim(), env));
+  }
+  return path.join(resolveHomeDir(env), '.autopilot', 'qualified.v1.json');
+}
+
+function parseExportQualifiedArgs(args) {
+  let out = null;
+  let now;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (isHelpToken(arg)) usage(0);
+
+    if (arg === '--out') {
+      if (i + 1 >= args.length || args[i + 1] === '' || args[i + 1].startsWith('--')) {
+        failUsage('--out requires a path');
+      }
+      out = args[++i];
+      continue;
+    }
+    if (arg.startsWith('--out=')) {
+      const val = arg.slice('--out='.length);
+      if (val === '') failUsage('--out requires a path');
+      out = val;
+      continue;
+    }
+    if (arg === '--now') {
+      if (i + 1 >= args.length || args[i + 1] === '' || args[i + 1].startsWith('--')) {
+        failUsage('--now requires a value');
+      }
+      now = args[++i];
+      continue;
+    }
+    if (arg.startsWith('--now=')) {
+      const val = arg.slice('--now='.length);
+      if (val === '') failUsage('--now requires a value');
+      now = val;
+      continue;
+    }
+
+    failUsage(`unknown option: ${arg}`);
+  }
+
+  return {
+    outPath: out !== null
+      ? path.resolve(expandHomePath(out, process.env))
+      : defaultQualifiedOutPath(process.env),
+    nowMs: nowArgToMs(now),
+  };
+}
+
+function mapCurrentVerdictToResult(projected) {
+  // Strike-decay or newer failed exam demotion overrides any stored pass.
+  if (projected.admission_status === 'requalify_required') {
+    return 'fail';
+  }
+  // Disk-backed `current` projects stored `qualified` rows with status="provisional"
+  // and observed_status="qualified" (lines 1634, 1678).
+  if (projected.observed_status === 'qualified') {
+    return 'pass';
+  }
+  // Pre-narrowing provisional scorecard rows (observed_status="provisional") or
+  // provisional capability-evidence priors (evidence_observed_state="provisional").
+  if (projected.observed_status === 'provisional'
+      || projected.evidence_observed_state === 'provisional') {
+    return 'provisional';
+  }
+  if (projected.observed_status === 'failed') {
+    return 'fail';
+  }
+  return failValidation(
+    `unsupported scorecard verdict '${String(projected.observed_status)}' on event ${projected.event_id}`,
+  );
+}
+
+function extractRowDate(row, eventId) {
+  const { tsUtc } = require('./lib/qualification-record-v2.js');
+  const candidates = [
+    row && row.date,
+    row && row.qualified_at,
+    row && row.evidence && row.evidence.issued_at,
+    row && row.evidence && row.evidence.observed_at,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string' || candidate.trim().length < 10) continue;
+    const datePart = candidate.trim().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) continue;
+    try {
+      tsUtc(datePart);
+      return datePart;
+    } catch {
+      // keep scanning candidates or fail closed below
+    }
+  }
+  return failValidation(`missing or invalid YYYY-MM-DD date on scorecard event ${eventId}`);
+}
+
+function writeAtomic0644(outPath, serialized) {
+  const dir = path.dirname(outPath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmpPath = `${outPath}.tmp-${process.pid}-${process.hrtime.bigint()}`;
+  try {
+    fs.writeFileSync(tmpPath, serialized, { encoding: 'utf8', mode: 0o644 });
+    fs.chmodSync(tmpPath, 0o644);
+    fs.renameSync(tmpPath, outPath);
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch { /* best-effort cleanup */ }
+    throw err;
+  }
+}
+
+function cmdExportQualified(args) {
+  const { outPath, nowMs } = parseExportQualifiedArgs(args);
+  const exportedRows = [];
+  for (const role of CAPABILITY_ROLE_IDS) {
+    const entries = selectCurrentRowsForRole(role, nowMs);
+    for (const { row, projected } of entries) {
+      exportedRows.push({
+        engine: projected.engine,
+        runner: projected.runner,
+        role: projected.role,
+        result: mapCurrentVerdictToResult(projected),
+        date: extractRowDate(row, projected.event_id),
+        event_id: projected.event_id,
+      });
+    }
+  }
+  const payload = {
+    schema: QUALIFIED_EXPORT_SCHEMA,
+    generated_at: new Date(nowMs).toISOString(),
+    rows: exportedRows,
+  };
+  const serialized = `${JSON.stringify(payload, null, 2)}\n`;
+  try {
+    writeAtomic0644(outPath, serialized);
+  } catch (err) {
+    failValidation(`cannot write qualified export (${outPath}): ${err.message}`);
+  }
+  process.stdout.write(serialized);
+}
+
 function cmdReport(args) {
   const {
     role,
@@ -3198,6 +3378,8 @@ function cmdRelabelEffort(args) {
 // rewrites the embedded copies and anchors. Rows carrying `expires`, status `expired`, and pin rows
 // carrying `expires: null` lose the field. Planned fully in memory first (all-or-nothing), every
 // store backed up, then rewritten atomically under both locks. --dry-run only plans.
+// Refuses when exactly one resolved directory is still the real ~/.autopilot store (BL-0339):
+// a copy of one store must not rewrite the other.
 // ---------------------------------------------------------------------------------------------
 function parseStripExpiryArgs(args) {
   const out = { dryRun: false };
@@ -3336,8 +3518,25 @@ function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
   };
 }
 
+// Overridden means the resolved directory is not the default ~/.autopilot location.
+// An env var set to that default is not an override: it would still write the real store.
+function refuseSplitStripExpiryStores() {
+  const scorecardIsDefault = SCORECARD_DIR === DEFAULT_SCORECARD_DIR;
+  const capabilityIsDefault = CAPABILITY_DIR === DEFAULT_CAPABILITY_DIR;
+  if (scorecardIsDefault === capabilityIsDefault) return;
+  const overriddenName = scorecardIsDefault ? 'the capability directory' : 'ENGINE_SCORECARD_DIR';
+  const realName = scorecardIsDefault ? 'ENGINE_SCORECARD_DIR' : 'the capability directory';
+  const realPath = scorecardIsDefault ? SCORECARD_DIR : CAPABILITY_DIR;
+  failValidation(
+    'strip-expiry refused, nothing written: exactly one of the two store directories is overridden'
+    + ` (${overriddenName} is overridden; ${realName} is still the real store at ${realPath}).`
+    + ' Set both ENGINE_SCORECARD_DIR and ENGINE_CAPABILITY_DIR (ENGINE_CAPABILITY_FILE also selects the capability directory), or set neither',
+  );
+}
+
 function cmdStripExpiry(args) {
   const opts = parseStripExpiryArgs(args);
+  refuseSplitStripExpiryStores();
   const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
   const pinsFile = path.join(CAPABILITY_DIR, 'pins.jsonl');
   const evidenceLock = { storeDir: CAPABILITY_DIR, lockFile: path.join(CAPABILITY_DIR, '.lock'), name: 'capability' };
@@ -3435,6 +3634,7 @@ function main() {
 
   if (command === 'record') cmdRecord(commandArgs);
   else if (command === 'current') cmdCurrent(commandArgs);
+  else if (command === 'export-qualified') cmdExportQualified(commandArgs);
   else if (command === 'report') cmdReport(commandArgs);
   else if (command === 'ladder') cmdLadder(commandArgs);
   else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);

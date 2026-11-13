@@ -125,7 +125,7 @@ const scanMods = (rule, except = [], root = MODS_ROOT) => modSources(root).filte
 const code = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, '')).split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n')
 const hits = (src, re) => code(src).split('\n').flatMap((l, i) => (re.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : []))
 const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle|merged'
-const STATE_IDS_RE = 'need_you|failed|stalled|findings|running|done|pending|waiting|stopped|skipped|unknown'
+const STATE_IDS_RE = 'need_you|failed|stalled|findings|running|done|pending|waiting|stopped|skipped|unknown|stale'
 
 const L1 = src => [
   ...hits(src, new RegExp(`['"\`](${THEME_KEYS})['"\`]`)),
@@ -433,6 +433,8 @@ const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => (e
 const ALLOWED_CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js']
 // PM ruling 2026-11-07 (panel claim, F4): the send step may run ONE more script through the same exec path, from its own list: scripts/decision-claim.js (wraps `fleet decision claim`, prints JSON). The two lists are checked apart.
 const ALLOWED_CLAIM_SCRIPTS = ['scripts/decision-claim.js']
+// Operator ruling (persistent pane items): `show` and step/look dismiss persist through the durable decision store via scripts/open-decision.js, using the same single `$.process.run(argv, ...)` exec path.
+const ALLOWED_DECISION_SCRIPTS = ['scripts/open-decision.js']
 // every way to reach the `process` member of `$`: `$.process`, `$?.process`, `$['process']`, `$["process"]`, `$[`process`]`, and a destructuring `const { process } = $` / `const { process: p } = $`.
 // Counting the ACCESS, not the `.run` call, is what makes an alias (`const p = $.process; p.run(...)`, `const { run } = $.process`) show up: the access is still there.
 const PROCESS_ACCESS = [/\$\s*\??\.\s*process\b/g, /\$\s*\[\s*['"`]process['"`]\s*\]/g, /\{[^}]*\bprocess\b[^}]*\}\s*=\s*\$(?![\w$])/g]
@@ -471,6 +473,8 @@ function processRunOffenders(src, where) {
   if (clean === null || clean.length !== ALLOWED_CLEAN_SCRIPTS.length || clean.some((n, i) => n !== ALLOWED_CLEAN_SCRIPTS[i])) out.push('CLEAN_SCRIPTS is not exactly the two allowed scripts')
   const claim = listOf('CLAIM_SCRIPTS')
   if (claim === null || claim.length !== ALLOWED_CLAIM_SCRIPTS.length || claim.some((n, i) => n !== ALLOWED_CLAIM_SCRIPTS[i])) out.push('CLAIM_SCRIPTS is not exactly the one allowed script')
+  const decision = listOf('DECISION_SCRIPTS')
+  if (decision === null || decision.length !== ALLOWED_DECISION_SCRIPTS.length || decision.some((n, i) => n !== ALLOWED_DECISION_SCRIPTS[i])) out.push('DECISION_SCRIPTS is not exactly the one allowed script')
   return out
 }
 // THE rule (main net): the whole word `process` appears in the code of mods/ (comments stripped, string literals KEPT) exactly as often as the one allowed use,
@@ -497,7 +501,7 @@ test('process allowlist, word count, controls: an alias, a helper argument, a ne
   assert.equal(processWords(code('const processing = 1; // a process')).length, 0, 'a longer identifier and a comment are not counted')
 })
 test('process allowlist controls: an alias, a destructuring, a bracket access, another file, a second use and a changed script list are each reported (negative controls)', () => {
-  const list = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\nexport const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const\n"
+  const list = "export const CLEAN_SCRIPTS = ['scripts/repo-residue-sweep.js', 'scripts/prune-plugin-cache.js'] as const\nexport const CLAIM_SCRIPTS = ['scripts/decision-claim.js'] as const\nexport const DECISION_SCRIPTS = ['scripts/open-decision.js'] as const\n"
   const ok = list + 'const r = await $.process.run(argv, { timeoutMs: 1 })'
   assert.deepEqual(processRunOffenders(code(ok), true), [])
   assert.equal(processRunOffenders(code('await $.process.run(argv, {})'), false).length, 1)
@@ -511,12 +515,14 @@ test('process allowlist controls: an alias, a destructuring, a bracket access, a
   assert.ok(processRunOffenders(code(list + "const p = $['process']; p.run(argv, {})"), true).length > 0, 'the only access is not the allowed call')
   assert.equal(processRunOffenders(code(list.replace(']', ", 'scripts/other.js']") + 'await $.process.run(argv, {})'), true).length, 1)
   assert.equal(processRunOffenders(code(list.replace("'scripts/prune-plugin-cache.js'", '') + 'await $.process.run(argv, {})'), true).length, 1)
-  // the two lists are checked apart: a script added to EITHER one, or a missing CLAIM_SCRIPTS, fails the lint (negative controls)
-  assert.deepEqual(processRunOffenders(code(ok), true), [], 'exactly two clean scripts and one claim script pass')
+  // the lists are checked apart: a script added to ANY one, or a missing CLAIM_SCRIPTS / DECISION_SCRIPTS, fails the lint (negative controls)
+  assert.deepEqual(processRunOffenders(code(ok), true), [], 'clean, claim and decision script lists pass')
   assert.deepEqual(processRunOffenders(code(ok.replace("'scripts/prune-plugin-cache.js']", "'scripts/prune-plugin-cache.js', 'scripts/other.js']")), true), ['CLEAN_SCRIPTS is not exactly the two allowed scripts'], 'a third clean script')
   assert.deepEqual(processRunOffenders(code(ok.replace("['scripts/decision-claim.js']", "['scripts/decision-claim.js', 'scripts/other.js']")), true), ['CLAIM_SCRIPTS is not exactly the one allowed script'], 'a second claim script')
   assert.deepEqual(processRunOffenders(code(ok.replace("['scripts/decision-claim.js']", "['scripts/other.js']")), true), ['CLAIM_SCRIPTS is not exactly the one allowed script'], 'a different claim script')
   assert.deepEqual(processRunOffenders(code(ok.replace(/export const CLAIM_SCRIPTS[^\n]*\n/, '')), true), ['CLAIM_SCRIPTS is not exactly the one allowed script'], 'no claim list')
+  assert.deepEqual(processRunOffenders(code(ok.replace("['scripts/open-decision.js']", "['scripts/open-decision.js', 'scripts/other.js']")), true), ['DECISION_SCRIPTS is not exactly the one allowed script'], 'a second decision script')
+  assert.deepEqual(processRunOffenders(code(ok.replace(/export const DECISION_SCRIPTS[^\n]*\n/, '')), true), ['DECISION_SCRIPTS is not exactly the one allowed script'], 'no decision list')
 })
 test('process allowlist, roundtable: the one send argv includes -- before the room; a missing --, a second use, another script and a missing send are each reported (negative controls)', () => {
   const ok = "const argv = ['node', root + '/scripts/roundtable-window.js', 'send', '--', room, body]\nconst ran = await $.process.run(argv, { timeoutMs: 1 })\n"

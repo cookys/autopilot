@@ -45,6 +45,8 @@ It never runs `setup-token` itself and never prints a token or e-mail. Re-runnin
 - **Run every command yourself.** `claude setup-token` below is for you to run in your own terminal. Do not ask an agent to run it.
 - Placeholders: `<A>` is your first alias, `<B>` the second (lowercase letters, digits and `-`, at most 24 characters; not shaped like `acct-` or `codex-` followed by 8 hex digits). Paths use `~`. Run the `node scripts/...` commands from the autopilot repository root.
 
+A seat whose login is a token in the environment, rather than an alias file, is started by the fleet host's seat launcher, which is not a script in this repository. That launcher declares the seat by exporting `AUTOPILOT_TOKEN_SEAT=1` in the same environment as `CLAUDE_CODE_OAUTH_TOKEN`. Spawn sites in this repo pass that token through to the `claude` child. When the flag is `1` and the token is empty, the spawn refuses and does not fall back to the host login. Leaving the flag unset is an ordinary seat.
+
 ## O1. Create the directories (no secret yet)
 
 ```
@@ -166,7 +168,7 @@ node scripts/claude-account.js set-default --restore <accounts-dir>/registry.jso
 ## Day to day
 
 - `node scripts/claude-account.js status` shows each alias, its class and used fraction, any cooldown, and the last audit lines.
-- The local `fleet.quota/1` mirror is refreshed by an opt-in systemd user timer, every 10 minutes: `node scripts/install-quota-mirror.js install`, then `systemctl --user daemon-reload && systemctl --user enable --now quota-mirror.timer`. `uninstall` removes those two units. Templates: [`examples/quota-mirror.service`](examples/quota-mirror.service) and [`examples/quota-mirror.timer`](examples/quota-mirror.timer). The timer is not part of the default install. Autopilot writes the mirror; codeforge only reads it.
+- The local `fleet.quota/1` mirror is refreshed by an opt-in systemd user timer, every 10 minutes: `node scripts/install-quota-mirror.js install`, then `systemctl --user daemon-reload && systemctl --user enable --now quota-mirror.timer`. `uninstall` removes those two units. Templates: [`examples/quota-mirror.service`](examples/quota-mirror.service) and [`examples/quota-mirror.timer`](examples/quota-mirror.timer). The timer is not part of the default install. Autopilot writes the mirror; codeforge only reads it. A second OS account that holds the minimax and glm provider tokens can run the same tick as a shared producer (`--steps sync-provider-minimax,sync-provider-glm --out-dir <shared-dir>`): the directory must already exist, must not be world-writable, and must be owned by that user or a group they are in. It writes only percentages and reset times under `<shared-dir>/quota` at mode 0640, and it never copies a token. Readers merge that quota directory by listing it in `quota_mirror_dirs` (entries are directories shaped like `<live_dir>/quota`) or in `AUTOPILOT_QUOTA_MIRROR_DIRS` (colon-separated; the environment wins, and an empty value means no extra directories). Per provider, account and window, the newest `observed_at` wins; a tie keeps the local live directory. A missing or unreadable extra directory is skipped, and a row that fails the fleet.quota/1 check is dropped.
 - `node scripts/lane-reopen.js --pick --cwd <dir>` reopens a lane on the alias with the most headroom.
 - Adding an account later: repeat O1 to O4 for the new alias and add a row to `registry.json`. Disabling one: set `"enabled": false`.
 - Eight frozen evaluation runners are replay-only and keep using the logged-in credentials; see the `frozen_legacy` paragraph in the reference above.
@@ -207,9 +209,13 @@ Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) t
 
 ## Switching a lane between subscriptions
 
-目前只有預演（P2a）：`node scripts/lane-switch.js --lane <lane> --profile <profile> --order <fleet 訊息 id> --dry-run` 會依序印出計畫的步驟 1 到 8 和回滾指令，並在 `~/.config/autopilot/lane-switch-journal.jsonl` 記一列，不執行任何事。不加 `--dry-run` 會拒絕（結束碼 3，「P2 execution not enabled in P2a」）。`--order` 必填：只有 PM 下令才換，工具不會自己換。
+換訂閱已可執行：`node scripts/lane-switch.js --lane <lane> --profile <profile> --order <fleet 訊息 id>` 依序做步驟 1 到 7，每步寫進 `~/.config/autopilot/lane-switch-journal.jsonl`，最後印出步驟 8 的確認指令，不等它跑完。`--dry-run` 仍只印出步驟 1 到 8 和回滾指令。`--order` 必填：只有 PM 下令才換，工具不會自己換。切換前檢查失敗、交接逾時，或殼層沒有回來，結束碼 1，不啟動新的工作階段。開發頻道提示失敗，或事後檢查（fleet 位址、工作目錄、session、登入狀態、別名）不符，會停掉新的工作階段並改回原本的 profile，結束碼 1。結束碼 0 成功、1 執行失敗、2 用法、4 紀錄或日誌錯誤。
 
 - 帳號別名只由 `scripts/lib/account-alias.js` 算出，工具不會自己開 `.claude.json`，也不碰任何 `.credentials.json`。
+- 切換前檢查在 `scripts/lib/lane-switch-preflight.js`：`preflight(opts, deps)` 確認 fleet 席位在線、轉錄檔存在、窗格 cwd 已寫進車道紀錄、目前 profile 已登入與其別名、該 session 最新 cost 列的帳號，以及目標 profile 已登入且未進入到期窗口。外部指令都走可注入的 runner。`lane-switch.js` 在步驟 1 呼叫它；任一項失敗就結束，不停止舊工作階段。
+- 步驟 2（請 lane 執行 `autopilot:handoff`，等到交接檔比請求新、且該 lane 的 fleet `activity` 為 idle，預設最多 15 分鐘）在 `scripts/lib/lane-switch-handoff.js`。`lane-switch.js` 在步驟 2 呼叫它；逾時結束碼 1，什麼都沒改。
+- 步驟 4 由 `scripts/lib/lane-switch-transcript.js` 的 `collectAndCopy` 做：先對舊 profile 收集用量，再把該場次逐字稿與 `subagents/` 複製到新 profile 的同一專案目錄（只複製、不移動；目的端已有不同內容就拒絕）。`home` 的目錄是 `~/.claude`。
 - 車道紀錄放 `~/.config/autopilot/lanes/<lane>.json`（權限 0600，欄位同上面的 Lane manifest 表，加 pane 與 session id；不得含提示詞）。
 - 回滾：同一個指令，`--profile` 改成原本的 profile。
+- 事後確認（計畫步驟 8）：`node scripts/lib/lane-switch-confirm.js --lane <lane> --since <切換時間 ISO> --alias <目標別名> --profile <目標 profile>`。帳本是目標 profile 的 `metrics/costs.jsonl`：`--profile` 決定路徑，省略時用車道紀錄裡的 profile。`home` 讀 `~/.claude/metrics/costs.jsonl`，其他 profile 讀 `~/.claude-profiles/<profile>/metrics/costs.jsonl`。它找這個 session 比切換時間新的第一列，最多等到下一輪之後 30 分鐘；account 等於目標別名才算數。不符或這段時間沒有列，回傳一行給 PM 的報告，不送信。別名仍只由 `scripts/lib/account-alias.js` 算出後傳入，這個工具不開 `.claude.json`，也不碰 `.credentials.json`。`lane-switch.js` 印出的確認指令帶 `--profile`。
 - 計畫與步驟：`project/plans/2026-11-10-profile-switch.md`。

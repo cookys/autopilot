@@ -1,0 +1,17 @@
+{
+  "schema": "capacity.pace/1",
+  "generated_at": "2026-11-13T02:25:00Z",
+  "rows": [
+    {
+      "pool": "codex A",
+      "class": "scarce",
+      "status": "WARN_ahead",
+      "stale": false,
+      "used_pct": 75,
+      "expected_pct": 40,
+      "gap_pts": 35,
+      "hours_to_reset": 96,
+      "window_h": 168
+    }
+  ]
+}

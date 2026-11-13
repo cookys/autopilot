@@ -23,6 +23,7 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { streamToEnvelope } = require('./lib/claude-stream-envelope.js');
 const quota = require('./lib/account-quota.js');
+const { tokenSeatError } = require('./lib/token-seat');
 const { resolveLiveDir } = require('./lib/live-state-dir.js');
 const { parseEnvelope } = require('./claude-account.js');
 const { verifyClaudeRuntimeIdentity } = require('./qualification-review-provider.js');
@@ -461,6 +462,12 @@ function quotaGate(liveBase, alias, maxUtil) {
 
 function writeJson(f, o) { fs.writeFileSync(f, JSON.stringify(o, null, 1) + '\n'); }
 function claudeVersion(env) {
+  const seatErr = tokenSeatError(env || {});
+  if (seatErr) {
+    const err = new Error(seatErr);
+    err.code = 'TOKEN_SEAT_MISSING';
+    throw err;
+  }
   const r = spawnSync('claude', ['--version'], { encoding: 'utf8', env });
   return (r.stdout || '').trim().slice(0, 200);
 }

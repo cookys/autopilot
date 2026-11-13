@@ -48,6 +48,20 @@ test('git/gh references point at the real files only when they exist', () => {
   assert.ok(!('GIT_CONFIG_GLOBAL' in none) && !('GH_CONFIG_DIR' in none));
 });
 
+test('token seat: parent token replaces the alias token; a missing parent token refuses', () => {
+  const seat = E.buildEnv(base({ callerEnv: { AUTOPILOT_TOKEN_SEAT: '1', CLAUDE_CODE_OAUTH_TOKEN: 'test-token-A' } }));
+  assert.strictEqual(seat.CLAUDE_CODE_OAUTH_TOKEN, 'test-token-A');
+  assert.strictEqual(seat.AUTOPILOT_TOKEN_SEAT, '1');
+  assert.strictEqual(seat.CLAUDE_CONFIG_DIR, '/acc/a/claude');
+  assert.throws(
+    () => E.buildEnv(base({ callerEnv: { AUTOPILOT_TOKEN_SEAT: '1', CLAUDE_CODE_OAUTH_TOKEN: '' } })),
+    { reason: 'token_seat_missing' },
+  );
+  const ordinary = E.buildEnv(base({ callerEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'test-token-A' } }));
+  assert.strictEqual(ordinary.CLAUDE_CODE_OAUTH_TOKEN, 'FAKE-t');
+  assert.ok(!('AUTOPILOT_TOKEN_SEAT' in ordinary));
+});
+
 test('fail closed: missing token, relative locator, HOME equal to real home', () => {
   assert.throws(() => E.buildEnv(base({ token: '' })), { reason: 'token_missing' });
   assert.throws(() => E.buildEnv(base({ locators: Object.assign({}, loc, { liveDir: 'rel' }) })), { reason: 'locator_unresolved' });

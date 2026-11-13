@@ -29,6 +29,7 @@ node $G/check.js <上一行印出的目錄>
 tmux 的細節（兩個 session 同時開時最容易出錯）：
 - 目標一律寫成 `-t <名稱>:`，結尾要有冒號。只寫 `-t c` 時，tmux 會把它當成前綴去配對，另一個叫 `df` 的 session 可能收到你的按鍵（pilot 實際發生過）。不要依賴預設目標。
 - 用私有 tmux server 的話（agent 驅動就是這樣，見 `DRIVER.md`），啟動時設 `GATE_TMUX_SOCKET=gate`：`GATE_TMUX_SOCKET=gate bash $G/capture.sh <cell> gate-l5:`，它會改用 `tmux -L gate`。
+- 私人 tmux server（`tmux -L <name>`）和它啟動的 claude 必須在結束時拆掉：在第一個 `new-session` 之前 source `scripts/lib/test-tmux-claude-teardown.sh`，呼叫 `ap_arm_tmux_claude_teardown <name>`（EXIT 時對同一個 `-L` 做 `kill-server`），claude 的 PID 用 `ap_record_claude_pid` 記下並只 kill 那個 PID。不要用 pkill。
 - 第一次在測試 repo 啟動 `claude` 會跳出信任資料夾的對話框，預設選項是「No, exit」：按 Down 再按 Enter 才是信任。
 - 被驅動的 session 裡，Bash 工具會擋掉單獨的前景 `sleep N`。要等就寫成迴圈（`for i in 1 2 3; do echo tick $i; sleep 6; done`），迴圈第一次會問權限，核准即可。
 - 叫 depth-0 派工時，把腳本的絕對路徑一起給它（例如 `/home/cookys/projects/autopilot/scripts/dispatch-hetero.sh`），否則它會自己 `find /` 去找。

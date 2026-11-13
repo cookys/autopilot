@@ -116,7 +116,7 @@ reset noid; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "claim ex
 # no answer given: plain close, no claim
 reset ok; C="$(open_card)"; close "$C"; assert_eq "$RC" 0 "plain close: exit 0"; assert_eq "$(count 'decision claim')" 0 "plain close: no claim"
 # usage
-close "x-1" --option A --free-text z; assert_eq "$RC" 2 "--option with --free-text: usage"
+close "x-1" --option A --option B; assert_eq "$RC" 2 "two --option: usage"
 
 # --- hosts without a courier keep today's behaviour
 reset ok; C="$(open_card_x)"; AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" close "$C" --option A

@@ -32,6 +32,7 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 
 | Script | Replaces LLM-judgment for | When invoked |
 |--------|---------------------------|--------------|
+| [`scripts/replay-stop-guard.js`](../../scripts/replay-stop-guard.js) | Classifies final replies with the owner Stop guard | Replaying transcript regressions; [contract](../../references/owner-question-guard.md) |
 | [`scripts/check-backlog-entries.js`](../../scripts/check-backlog-entries.js) | Per-entry schema/caps/pointer/reporter-field gate; `--range` is the pre-push peer-report guard | After writing a backlog row; pre-merge checklist |
 | [`scripts/affected-suites.js`](../../scripts/affected-suites.js) | "Which suites can this diff break?" — static reference graph; `mode: full` when the diff cannot be judged. The gate's test step (BL-0001) | Tests step, M/L/XL and urgent: before running any test; with --run --record when the outcome stage is on |
 | [`scripts/check-test-outcome.js`](../../scripts/check-test-outcome.js) | Opt-in pre-push outcome check that re-derives "tests ran green for this SHA" | Only when qc-gate outcome is warn or block; pointer: [test-policy.md](references/test-policy.md) selector section |

@@ -140,8 +140,18 @@ MAN_PROBE="$CLONE/prereg/manifest-probe-mutant.json"; make_manifest "$TEST_TMP/m
 MAN="$CLONE/prereg/manifest.json"; make_manifest "$WRAP" "$MAN"
 MAN_MUT="$CLONE/prereg/manifest-audit-mutant.json"; make_manifest "$AUD_MUT" "$MAN_MUT"
 MAN_POST="$CLONE/prereg/manifest-post-mutant.json"; make_manifest "$POST_MUT" "$MAN_POST"
-mkdir -p "$TEST_TMP/mut-prevwrap"; git -C "$REPO_ROOT" show 33bf07df4:evals/orchestration/run-p2-batch.js >"$TEST_TMP/mut-prevwrap/run-p2-batch.js" || fail "previous wrapper unavailable"
-MAN_PREV="$CLONE/prereg/manifest-prevwrap.json"; make_manifest "$TEST_TMP/mut-prevwrap/run-p2-batch.js" "$MAN_PREV"
+# Blob 33bf07df4 is not in this repository (the pin was added in 2c8c71e590 against a
+# short name that never resolved). Rebuild that generation from the current wrapper:
+# an invalid expiresAt was not judged, --first/--last were not range-checked, and the
+# audit's git inherited the parent environment. Strict audit layers stay on, so the
+# git-env control still reaches the real spawnSync calls.
+mkdir -p "$TEST_TMP/mut-prevwrap"; cp "$WRAP_SRC" "$TEST_TMP/mut-prevwrap/run-p2-batch.js"
+PREV="$TEST_TMP/mut-prevwrap/run-p2-batch.js"
+mutate "$PREV" "if (typeof e !== 'number' || !Number.isFinite(e) || e <= 0) return 0;" "if (typeof e !== 'number' || !Number.isFinite(e) || e <= 0) return null;" || fail "prevwrap expiresAt mutant"
+mutate "$PREV" "const rangeArg = (name) => { if (opt[name] === undefined) return 0; const v = Number(opt[name]); return Number.isInteger(v) && v >= 1 && v <= nIds ? v : -1; };" "const rangeArg = (name) => { if (opt[name] === undefined) return 0; const v = Number(opt[name]); return Number.isInteger(v) ? v : -1; };" || fail "prevwrap range mutant"
+mutate "$PREV" "env: scrubEnv(process.env)" "env: process.env" || fail "prevwrap git env mutant"
+mutate "$PREV" "env: scrubEnv(process.env)" "env: process.env" || fail "prevwrap git env mutant 2"
+MAN_PREV="$CLONE/prereg/manifest-prevwrap.json"; make_manifest "$PREV" "$MAN_PREV"
 mk_mut nowinchk "if (!Number.isFinite(w0) || w0 <= 0) throw new Exit(3, 'ABORT window.start is not a positive number');" ""
 MAN_NOWIN="$CLONE/prereg/manifest-nowinchk-mutant.json"; make_manifest "$TEST_TMP/mut-nowinchk/run-p2-batch.js" "$MAN_NOWIN"
 MAN_W0="$CLONE/prereg/manifest-window0.json"; MAN_WINDOW=0 make_manifest "$WRAP" "$MAN_W0"

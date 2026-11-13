@@ -1,0 +1,48 @@
+{
+  "_why": "Follows engine-scorecard current (glm: reviewer provisional, implementer qualified 2026-11-13, scorecard event 34, 24/24, integrity 0; agyclaude: reviewer and implementer pass 2026-11-13, events 30/29; minimax: failed both 2026-11-13). Implementer priority agy -> glm -> agyclaude, with role_models giving the implementer agy key gemini-4-hydrogen-high (same agy pool and quota as carbon; reviewer and author keep carbon): hydrogen passed all four prereg bars (develop d40e9ad43). Scarce codex pools use gpt-6.1-sol from project-config-template/review-loop-config.md implementer_engine (dispatch-config.md configures methodology chains, not engine model ids).",
+  "reviewer": [
+    "agy",
+    "glm",
+    "codex",
+    "grok",
+    "agyclaude"
+  ],
+  "implementer": [
+    "agy",
+    "glm",
+    "agyclaude",
+    "codex",
+    "grok"
+  ],
+  "author": [
+    "agy",
+    "glm",
+    "codex",
+    "grok",
+    "agyclaude"
+  ],
+  "priority": {
+    "implementer": [
+      "agy",
+      "glm",
+      "agyclaude"
+    ]
+  },
+  "role_models": {
+    "implementer": {
+      "agy": "gemini-4-hydrogen-high"
+    }
+  },
+  "pools": {
+    "codex A": {
+      "key": "codex",
+      "runner": "codex",
+      "model": "gpt-6.1-sol"
+    },
+    "codex B": {
+      "key": "codex",
+      "runner": "codex",
+      "model": "gpt-6.1-sol"
+    }
+  }
+}

@@ -63,7 +63,7 @@
 // in-memory tree; a missing file makes the bottom hook throw, which the mod sees as a rejected read.
 import type { On } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, readLoadSource, PANE_TABS, verdictOf, wrapLines, bandView, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, redactSecrets, scanBackground, lastOutputLine, NO_SECTIONS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION, proxySegments } from './model'
+import { readQc, qcChip, readReview, reviewSlot, displayWidth, truncateToWidth, layoutBand, layoutBandLine, fittedBandWidth, BAND_NARROW_STEPS, readMarker, readResidue, readStageWalk, bandSlots, slotUnit, slotPosition, slotDispatch, slotDecisions, slotSpend, slotHygiene, slotReview, slotFleet, slotVerdict, readLoadSource, PANE_TABS, verdictOf, wrapLines, bandView, readSpendHistory, hourlySpend, sparkText, SPARK_BARS, INJECTED_PREFIXES, RECENT_EXPANDED_LINES, collapsedPrompt, groupRecent, makeRecentTracker, redactSecrets, scanBackground, lastOutputLine, NO_SECTIONS, readQuota, readAccount, slotQuota, slotTab, slotUnfolds, SECTION, proxySegments } from './model'
 import { reviewTabLines, legendLines, hygieneTabLines, dispatchLines, spendTabLines, recentLines } from './tabs'
 import type { SessionMsg, QuotaWindow, AccountSnap } from './model'
 import { makeT, resolveLocale, localeFromLanguage } from './i18n'
@@ -3343,8 +3343,8 @@ const g33Put = (w: World, text: string, stat: Record<string, unknown> = {}) => {
   ;(w.stats as Record<string, unknown>)[path] = { size: new TextEncoder().encode(text).length, mtimeMs: 0, ...stat }
 }
 const g33Asks = (w: World) => w.writes.filter(p => p.startsWith('/g33-reader/')).map(p => p.slice('/g33-reader/'.length))
-const g33Band = async ($: any, maxRows = BAND_PROPS.maxRows) => {
-  const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-g33', props: { ...BAND_PROPS, maxRows }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+const g33Band = async ($: any, maxRows = BAND_PROPS.maxRows, bodyColumns = BAND_PROPS.bodyColumns) => {
+  const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-g33', props: { ...BAND_PROPS, maxRows, bodyColumns }, viewport: { columns: Math.max(bodyColumns, 120), rows: 50, isFullscreen: true } })
   const texts = walkTexts((await ui.drawn()) as Node).map(textOf)
   await ui.unmount()
   return texts
@@ -3354,37 +3354,39 @@ const g33Ran = (on: On) => {
   on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } } })
   return ran
 }
-test('G33a: with forge-stats\' band alive the feed runs without the Fleet tab, publishes `autopilot.fleet` v 1, and the band hands its second row to the reader beneath (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())
-  g33Put(w, g33Alive())
+  g33Put(w, g33Alive()) // a heartbeat is not what starts the fetch anymore
   await start($, 'terminal')
-  await w.clock.advance(5_000) // one tick: the heartbeat is 6 s old, so the feed runs although the pane shows another tab
-  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 })) // forge-stats rewrites it every 2 s
-  await w.clock.advance(5_000) // the run's write settled; this tick is inside the TTL: no second run
+  await w.clock.advance(5_000) // one tick: the feed runs although no Fleet tab is open
+  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
+  await w.clock.advance(5_000) // inside the TTL: no second run
   expect(ran).toEqual(['fleet tasks --tree --json'])
-  const texts = await g33Band($)
-  // the fixture: one running row, one waiting row, two stalled (an open row nobody accepted for two hours, a seat quiet five hours); the first flagged row in the tab order
-  expect(texts.at(-1)).toBe('FLEET ▲0 ✗0 ⊘2 ●1 ⋯1 top [REG a2] DOA class (unaccepted)')
-  expect(g33Asks(w).at(-1)).toBe('1/1') // asked for exactly one row, read v 1
-  // one row granted: the band row alone, the reader is not asked
+  const texts = await g33Band($, BAND_PROPS.maxRows, 240)
+  // the fixture: one running row, one waiting row, two stalled
+  expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
+  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
   const asked = g33Asks(w).length
-  await g33Band($, 1)
-  expect(g33Asks(w).length).toBe(asked)
+  await g33Band($, 1, 240)
+  expect(g33Asks(w).length).toBe(asked) // one row granted or six: the reader is not asked either way
 })
-test('G33a: an alive forge-stats without `summary_row` (an older one) still gets the feed but is never asked for the second row; before any run the reader finds nothing and passes (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('G33a: the feed runs with no summary_row heartbeat, and before any run the band has no fleet counts; the reader is never asked (terminal)', { plugins: [G33_READER] }, async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())
   g33Put(w, g33Alive({ summary_row: undefined }))
   await start($, 'terminal')
-  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([]) // no tick yet: not asked
+  expect((await g33Band($, BAND_PROPS.maxRows, 240)).join('')).not.toContain('⋯')
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
   await w.clock.advance(5_000)
-  expect(ran).toEqual(['fleet tasks --tree --json']) // alive: the summary is kept fresh
-  const texts = await g33Band($)
+  expect(ran).toEqual(['fleet tasks --tree --json'])
+  const texts = await g33Band($, BAND_PROPS.maxRows, 240)
+  expect(texts.join('')).toContain('⋯ 1')
   expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
-  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([]) // never handed the one-row ask
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
 })
-test('G33a: no fetch for a heartbeat that is stale, another session\'s, the pane layout, another schema, unreadable or too big; the band stays one row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('G33a: a stale, foreign, unreadable or oversized heartbeat does not stop the fetch, and the band stays one row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())
   await start($, 'terminal')
@@ -3392,8 +3394,9 @@ test('G33a: no fetch for a heartbeat that is stale, another session\'s, the pane
     g33Put(w, bad)
     await w.clock.advance(5_000)
   }
-  expect(ran).toEqual([])
-  const texts = await g33Band($)
+  expect(ran).toEqual(['fleet tasks --tree --json']) // the first tick fetches; the later ones are inside the TTL. The file is not the gate.
+  const texts = await g33Band($, BAND_PROPS.maxRows, 240)
+  expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
   expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
   expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
 })
@@ -3416,8 +3419,11 @@ test('C1 U7: console mode: an alive forge-stats with summary_row is never asked 
   expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
   const row = texts.join(' ')
   for (const name of ['指揮', '團隊', '額度', '主機', '本席']) expect(row.includes(name)).toBe(true)
+  const flat = texts.join('')
+  expect(flat.includes('艦隊')).toBe(false) // the console band does not grow a fleet segment
+  expect(flat.includes('⋯')).toBe(false)
 })
-test('C1 U7 control: the same alive heartbeat without the console config still hands the second row to the mod below (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
   g33Ran(on)
   const w = world(on, base())
   g33Put(w, g33Alive())
@@ -3425,11 +3431,12 @@ test('C1 U7 control: the same alive heartbeat without the console config still h
   await w.clock.advance(5_000)
   g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 }))
   await w.clock.advance(5_000)
-  const texts = await g33Band($)
+  const texts = await g33Band($, BAND_PROPS.maxRows, 240)
   const asks = g33Asks(w).filter(a => a.startsWith('1/'))
   console.log('non-console mode next(e) asks for the second row: ' + asks.length)
-  expect(asks.length).toBeGreaterThan(0)
-  expect(texts.at(-1)?.startsWith('FLEET')).toBe(true)
+  expect(asks).toEqual([])
+  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
+  expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
 })
 // C1 fix: a band tab that is open (barTab) when the console mode turns on must not stay: the strip is highlighted with the console tab, so the body under it has to be the console's too.
 test('C1 fix: a 待決 band tab left open when console.json appears is closed; the band body is the one a fresh console-mode band draws (terminal)', async ($, on) => {
@@ -3511,57 +3518,36 @@ test('C1 U8 KR2 + KR5: the console mode refresh (ticks and a redraw of every pag
   expect(ran.filter(a => RUNNER_ARGV.test(a))).toEqual([])
   expect(unexpectedWrites(w.writes)).toEqual([])
 })
-test('G33a review g1: the heartbeat is stat-checked and bounded: a link, a non-file, a size over 4 KiB in UTF-8 bytes (CJK under it in length) or a read error is no heartbeat, and the tick goes on (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+test('G33a review g1: the heartbeat file is not the gate: a link, a non-file, an oversized body or a stat error still lets the tick fetch once, and no second row is handed over (terminal)', { plugins: [G33_READER] }, async ($, on) => {
   const ran = g33Ran(on)
   const w = worldEn(on, base())
   await start($, 'terminal')
   const path = LIVE + '/codeforge/mod-alive/' + SID_A + '.json'
   const at = (ms: number) => g33Alive({ written_at_ms: NOW_FRESH + ms })
-  // a symbolic link (to /dev/zero, a FIFO, a big file, …): not read at all
   g33Put(w, at(4_000), { isLink: true })
   await w.clock.advance(5_000)
-  // what the path leads to is not a regular file
+  expect(ran).toEqual(['fleet tasks --tree --json'])
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
   g33Put(w, at(9_000), { kind: 'other' })
-  await w.clock.advance(5_000)
-  // the stat says too big: not read
-  g33Put(w, at(14_000), { size: 4097 })
-  await w.clock.advance(5_000)
-  // the stat lied (swapped after it): the text is over 4 KiB in UTF-8 bytes though under 4096 UTF-16 units
-  const cjk = at(19_000).replace('"band"', '"band","pad":"' + '中'.repeat(1400) + '"')
-  expect(cjk.length).toBeLessThan(4096)
-  w.files[path] = cjk
-  ;(w.stats as Record<string, unknown>)[path] = { size: 100, mtimeMs: 0 }
-  await w.clock.advance(5_000)
-  // the stat fails (EACCES, ELOOP, …)
+  await w.clock.advance(5_000) // inside the TTL: the bad file does not cause another run, and does not cancel the one that happened
+  expect(ran).toEqual(['fleet tasks --tree --json'])
+  const texts = await g33Band($, BAND_PROPS.maxRows, 240)
+  expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
   w.statErrors[path] = 'EACCES: permission denied, stat'
   await w.clock.advance(5_000)
-  delete w.statErrors[path]
-  // the read fails (EISDIR, …): the file is gone after the stat
-  ;(w.stats as Record<string, unknown>)[path] = { size: 10, mtimeMs: 0 }
-  delete w.files[path]
-  await w.clock.advance(5_000)
-  expect(ran).toEqual([])
-  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
-  // and the ticks went on: a good heartbeat now is seen on the next tick
-  g33Put(w, at(34_000))
-  await w.clock.advance(5_000)
   expect(ran).toEqual(['fleet tasks --tree --json'])
-  await g33Band($)
-  expect(g33Asks(w).filter(a => a.startsWith('1/')).length).toBe(1) // handed the second row
-  // an error after a good beat takes the row back (the last answer is not kept)
-  w.statErrors[path] = 'ELOOP: too many symbolic links, stat'
-  await w.clock.advance(5_000)
-  await g33Band($)
-  expect(g33Asks(w).filter(a => a.startsWith('1/')).length).toBe(1)
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
 })
-test('G23 Fleet tab: a failing `fleet` says so, and the tab is not fetched while another tab shows (terminal)', async ($, on) => {
+test('G23 Fleet tab: a failing `fleet` says so; a tick while another tab shows still runs the CLI and the tab stays never-fetched (terminal)', async ($, on) => {
   const ran: string[] = []
   on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 1, stdout: '', stderr: 'fleet: hub unreachable' } } })
   const w = worldEn(on, base())
   await start($, 'terminal')
   await paneParts($, 'terminal', 'now')
   await w.clock.advance(60_000)
-  expect(ran.length).toBe(0)
+  expect(ran.length).toBeGreaterThan(0)
+  expect(ran.every(a => a === 'fleet tasks --tree --json')).toBe(true)
   await paneParts($, 'terminal', 'fleet')
   const texts = (await paneParts($, 'terminal', 'fleet')).texts
   expect(texts.some(t => t.includes('the last fetch failed: fleet: hub unreachable'))).toBe(true)
@@ -3580,6 +3566,149 @@ test('P7 model: displayWidth counts East Asian wide as 2, combining as 0 and the
   expect(displayWidth(truncateToWidth('要你決定要你決定', 7))).toBeLessThanOrEqual(7)
   expect(truncateToWidth('short', 10)).toBe('short')
   expect(truncateToWidth('abcdef', 4)).toBe('abc…')
+})
+
+// PM 01M78CAT / 01M78CB8: the band's own line carries the fleet counts and the pet. `columns` here is the room for the indicator and the speed together.
+function bandOneLine(cols: number, steps: readonly (readonly ('pet' | 'trend' | 'speed' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck' | 'quota' | 'bar10' | 'bar5' | 'bar3' | 'pct')[])[] = BAND_NARROW_STEPS) {
+  const t = makeT('zh-TW')
+  const fleet = slotFleet({ stuck: 2, running: 12, waiting: 16 }, t)
+  const spend = slotSpend({ brain: 97, cap: 162 })
+  const quota = slotQuota([{ kind: 'seven_day', pct: 7, resetsAtMs: null }])
+  const slots = [slotVerdict(verdictOf('decide', t)), fleet, spend, quota].filter((s): s is Slot => s !== null)
+  const speed = [
+    { role: 'bolt' as const, text: ui.GLYPHS.structure.speed + ' ' },
+    { role: 'value' as const, text: '44' },
+    { role: 'unit' as const, text: ' tok/s' },
+    { role: 'gap' as const, text: ' ' },
+    { role: 'trend' as const, text: '█▅▇▂▅' },
+    { role: 'sep' as const, text: ' · ' },
+    { role: 'pet' as const, text: 'Ferris Lv.1' },
+  ]
+  const r = layoutBandLine(slots, cols, speed, steps)
+  const segW = r.band.segs.reduce((n, s) => n + displayWidth(s.text), 0)
+  const width = fittedBandWidth(segW, r.speed, false)
+  const text = r.band.text + (r.speed === null ? '' : ui.forgeBar(r.speed).segs.map(g => g.text).join(''))
+  return { applied: r.applied, text, width }
+}
+const STUCK_ON_LAST = BAND_NARROW_STEPS.map((step, i) => (i === BAND_NARROW_STEPS.length - 1 ? [...step, 'fleetStuck' as const] : step))
+
+test('band one line: the fleet slot is `艦隊 ⊘ N  ● N  ⋯ N` after the verdict, glyph coloured and number plain, and null draws nothing', () => {
+  const t = makeT('zh-TW')
+  const slot = slotFleet({ stuck: 2, running: 12, waiting: 16 }, t)
+  expect(slot).not.toBeNull()
+  const segs = slot?.segs ?? []
+  expect(segs.map(g => g.text).join('')).toBe('艦隊 ⊘ 2  ● 12  ⋯ 16')
+  expect(segs.find(g => g.text === '艦隊')?.dim).toBe(true)
+  expect(segs.find(g => g.text === '⊘')?.color).toBe(ui.PALETTE.broken)
+  expect(segs.find(g => g.text === '●')?.color).toBe(ui.PALETTE.running)
+  expect(segs.find(g => g.text === '⋯')?.color).toBe(ui.PALETTE.idle)
+  expect(segs.find(g => g.text === '2')?.color).toBeUndefined()
+  expect(segs.find(g => g.text === '2')?.tag).toBe('fleetStuck')
+  expect(segs.find(g => g.text === '12')?.tag).toBe('fleetRun')
+  expect(segs.find(g => g.text === '16')?.tag).toBe('fleetWait')
+  expect(slotFleet({ stuck: 0, running: 0, waiting: 0 }, t)?.segs.map(g => g.text).join('')).toBe('艦隊 ⊘ 0  ● 0  ⋯ 0')
+  expect(slotFleet(null, t)).toBeNull()
+  expect(slotFleet(undefined, makeT('en'))).toBeNull()
+  expect(slotFleet({ stuck: 1, running: 0, waiting: 0 }, makeT('en'))?.segs.map(g => g.text).join('')).toBe('Fleet ⊘ 1  ● 0  ⋯ 0')
+  const facts = { verdict: verdictOf('decide', t), marker: null, live: 0, stalled: 0, review: null, qc: null, decisions: null, spend: null, loadSource: null, residue: null, nowMs: 0, fleet: { stuck: 2, running: 12, waiting: 16 } }
+  expect(bandSlots(facts, t).map(s => s.id).slice(0, 2)).toEqual(['verdict', 'fleet'])
+  expect(bandSlots({ ...facts, fleet: null }, t).some(s => s.id === 'fleet')).toBe(false)
+  expect(slotTab('fleet')).toBe('fleet')
+  expect(BAND_NARROW_STEPS.flat().includes('fleetStuck')).toBe(false)
+})
+
+test('band one line tier wide: verdict, fleet, spend, 7d, speed and the pet, in that order', () => {
+  const wide = bandOneLine(200)
+  expect(wide.applied).toBe(0)
+  expect(wide.width).toBe(displayWidth(wide.text))
+  expect(wide.text).toContain('▲ 要你決定 │ 艦隊 ⊘ 2  ● 12  ⋯ 16 │ $97 ▰▰▰▰▰▰▱▱▱▱ 60% │ 7d 7% │ ⓘ │ ϟ 44 tok/s █▅▇▂▅ · Ferris Lv.1')
+  const mid = bandOneLine(120)
+  expect(mid.applied).toBe(0)
+  expect(mid.text).toContain('▰▰▰▱▱')
+  expect(mid.text).not.toContain('60%')
+  expect(mid.text).toContain('Ferris Lv.1')
+})
+
+test('band one line tier pet: the pet goes first and the waiting count stays', () => {
+  const at = bandOneLine(89)
+  expect(at.applied).toBe(1)
+  expect(at.text).not.toContain('Ferris')
+  expect(at.text).toContain('⋯ 16')
+  expect(at.text).toContain('● 12')
+  expect(at.text).toContain('艦隊')
+  expect(bandOneLine(90).text).toContain('Ferris Lv.1')
+})
+
+test('band one line tier waiting: `⋯ N` goes and `● N` with the word 艦隊 stay', () => {
+  const at = bandOneLine(75)
+  expect(at.applied).toBe(2)
+  expect(at.text).not.toContain('⋯')
+  expect(at.text).toContain('● 12')
+  expect(at.text).toContain('艦隊')
+  expect(at.text).toContain('⊘ 2')
+  expect(bandOneLine(76).text).toContain('⋯ 16')
+})
+
+test('band one line tier running: `● N` and the word 艦隊 go together and the stuck count stays', () => {
+  const at = bandOneLine(69)
+  expect(at.applied).toBe(3)
+  expect(at.text).not.toContain('●')
+  expect(at.text).not.toContain('艦隊')
+  expect(at.text).toContain('⊘ 2')
+  expect(at.text).toContain('█▅▇▂▅')
+  expect(bandOneLine(70).text).toContain('艦隊')
+  expect(bandOneLine(70).text).toContain('● 12')
+})
+
+test('band one line tier trend: the speed spark goes and the ϟ label stays', () => {
+  const at = bandOneLine(58)
+  expect(at.applied).toBe(4)
+  expect(at.text).not.toContain('█▅▇▂▅')
+  expect(at.text).toContain('ϟ 44 tok/s')
+  expect(at.text).toContain('⊘ 2')
+  expect(bandOneLine(59).text).toContain('█▅▇▂▅')
+})
+
+test('band one line tier speed: the ϟ label goes entirely and 7d stays', () => {
+  const at = bandOneLine(52)
+  expect(at.applied).toBe(5)
+  expect(at.text).not.toContain('ϟ')
+  expect(at.text).not.toContain('tok/s')
+  expect(at.text).toContain('7d 7%')
+  expect(at.text).toContain('⊘ 2')
+  expect(bandOneLine(53).text).toContain('ϟ')
+})
+
+test('band one line tier quota: 7d goes and the spend bar stays', () => {
+  const at = bandOneLine(40)
+  expect(at.applied).toBe(6)
+  expect(at.text).not.toContain('7d')
+  expect(at.text).toContain('▰▰▰▱▱')
+  expect(at.text).toContain('⊘ 2')
+  expect(at.text).toContain('要你決定')
+  expect(bandOneLine(41).text).toContain('7d')
+})
+
+test('band one line tier narrow: the spend bar goes and the verdict and the stuck count stay, down to the narrowest tier', () => {
+  for (const cols of [32, 28, 20]) {
+    const at = bandOneLine(cols)
+    expect(at.applied, 'width ' + cols).toBe(7)
+    expect(at.text, 'width ' + cols).toContain('要你決定')
+    expect(at.text, 'width ' + cols).toContain('⊘ 2')
+    expect(at.text, 'width ' + cols).not.toContain('▰')
+    expect(at.text, 'width ' + cols).not.toContain('▱')
+    expect(at.text, 'width ' + cols).toContain('$97')
+  }
+  expect(bandOneLine(33).text).toContain('▰')
+})
+
+test('band one line control: a drop list that includes the stuck count loses ⊘ at the narrow tier (the production list does not)', () => {
+  const kept = bandOneLine(32)
+  expect(kept.text).toContain('⊘')
+  const dropped = bandOneLine(32, STUCK_ON_LAST)
+  expect(dropped.text).not.toContain('⊘')
+  expect(dropped.text).toContain('要你決定')
+  expect(dropped.text).toContain('$97')
 })
 
 test('P7 model: marker §2.9 fields are parsed, a wrong type reads as absent', () => {
@@ -6460,6 +6589,161 @@ for (const surface of SURFACES) {
     expect(d.text.split('ϟ').length - 1, 'three bolts, all ours: the label, the strip tab and the speed view\'s title').toBe(3)
   })
 
+  test('speed label: codeforge pet.json is drawn at the end of the line (`Ferris Lv.1`) (' + surface + ')', async ($, on) => {
+    const files = richWorld()
+    files[LIVE + '/codeforge/pet.json'] = j({ schema: 'codeforge.pet-view/1', pet: { name: 'Ferris', level: 1 } })
+    worldEn(on, files)
+    const d = await draw($, on, TWO, [], { bodyColumns: 240 })
+    expect(d.speedText).toMatch(/ · Ferris Lv\.1$/)
+  })
+
+  test('speed label: a null pet draws no pet tag (' + surface + ')', async ($, on) => {
+    const files = richWorld()
+    files[LIVE + '/codeforge/pet.json'] = j({ schema: 'codeforge.pet-view/1', pet: null })
+    worldEn(on, files)
+    const d = await draw($, on, TWO, [], { bodyColumns: 240 })
+    expect(d.speed).toBeDefined()
+    expect(d.speedText ?? '').not.toContain('Lv.')
+    expect(d.speedText).toMatch(/^│ ϟ /)
+  })
+
+  // five timed main-agent steps: the spark is 5 cells. `│ ϟ NNN tok/s █████ · Ferris Lv.1` is 33 cells, so the parts alone are 31 and FORGE_LABEL_MAX (30) drops the pet.
+  const FIVE_FAST: Plan[] = [
+    { before: 300, after: 200, tokens: 200 },
+    { before: 300, after: 200, tokens: 200 },
+    { before: 300, after: 200, tokens: 200 },
+    { before: 300, after: 200, tokens: 200 },
+    { before: 300, after: 200, tokens: 200 },
+  ]
+  // ~40 tokens over >= 700 ms stays two digits, so the same 5-cell spark plus the pet is 30 cells and still fits the console cap. Passing the pet would draw it.
+  const FIVE_SLOW: Plan[] = [
+    { before: 400, after: 300, tokens: 40 },
+    { before: 400, after: 300, tokens: 40 },
+    { before: 400, after: 300, tokens: 40 },
+    { before: 400, after: 300, tokens: 40 },
+    { before: 400, after: 300, tokens: 40 },
+  ]
+  const PET_FILE = j({ schema: 'codeforge.pet-view/1', pet: { name: 'Ferris', level: 1 } })
+
+  test('speed label: five timed steps keep the pet outside the console mode (' + surface + ')', async ($, on) => {
+    const files = richWorld()
+    files[LIVE + '/codeforge/pet.json'] = PET_FILE
+    world(on, files)
+    const d = await draw($, on, FIVE_FAST, [], { bodyColumns: 240 })
+    expect(d.speedText).toMatch(/ϟ \d{3,} tok\/s [▁▂▃▄▅▆▇█]{5} · Ferris Lv\.1$/)
+  })
+
+  test('speed label: the console mode draws no pet when pet.json and five timed steps exist (' + surface + ')', async ($, on) => {
+    const files = consoleFiles()
+    files[LIVE + '/codeforge/pet.json'] = PET_FILE
+    g33Ran(on)
+    const w = world(on, files)
+    await start($, surface)
+    await w.clock.advance(5_000) // the tick reads .claude/console.json; consoleOn is false until then
+    TURN_PLAN = FIVE_SLOW; TURN_AT = 0
+    await runPlan($, FIVE_SLOW.map(() => undefined))
+    const ui = await mount($, { bodyColumns: 240 })
+    const tree = (await ui.drawn()) as Node
+    const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
+    const speed = buttons.find(b => b.props?.key === 'speed')
+    const speedText = speed === undefined ? '' : walkTexts(speed).map(textOf).join('')
+    const text = cellsOf(tree).map(c => c.text).join('')
+    await ui.unmount()
+    expect(speedText).toMatch(/ϟ \d{2} tok\/s [▁▂▃▄▅▆▇█]{5}/)
+    expect(speedText).not.toContain('Ferris')
+    expect(speedText).not.toContain('Lv.')
+    expect(text).toContain('指揮')
+    expect(text).not.toContain('艦隊')
+  })
+
+  // the drawn band row's cells, summed with displayWidth. A row that wraps is wider than the columns the band was given.
+  const drawnRow = async ($: any, bodyColumns: number) => {
+    const ui = await mount($, { bodyColumns })
+    const tree = (await ui.drawn()) as Node
+    await ui.unmount()
+    const cells = cellsOf(tree)
+    const last = cells[cells.length - 1]
+    return { tree, text: cells.map(c => c.text).join(''), width: last === undefined ? 0 : last.start + last.width }
+  }
+
+  test('band row: a fetched fleet on a 79-column terminal keeps the › inside the row (' + surface + ')', async ($, on) => {
+    g33Ran(on)
+    const files = base()
+    const quiet = { runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 } }
+    files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope(quiet))
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope(quiet, null))
+    const w = world(on, files)
+    await start($, surface)
+    TURN_PLAN = FIVE_FAST; TURN_AT = 0
+    await runPlan($, FIVE_FAST.map(() => undefined))
+    await w.clock.advance(5_000)
+    const row = await drawnRow($, 79)
+    expect((row.tree.props as { flexDirection?: string } | undefined)?.flexDirection).toBeUndefined()
+    expect(row.width, row.text).toBeLessThanOrEqual(79)
+    // 79 columns drop the fleet word (the [fleetRun, fleetWord] step); the stuck count is the fetched fleet that stays on the line.
+    expect(row.text).toContain('⊘ 2')
+    expect(row.text).toContain('ϟ')
+    expect(row.text).toContain(ui.GLYPHS.structure.goto)
+  })
+
+  test('band row: richWorld with a fetched fleet stays on one line at 120 and the tab strip is in the row (' + surface + ')', async ($, on) => {
+    g33Ran(on)
+    const w = world(on, richWorld())
+    await start($, surface)
+    await w.clock.advance(5_000)
+    const row = await drawnRow($, 120)
+    const t = makeT('zh-TW')
+    expect((row.tree.props as { flexDirection?: string } | undefined)?.flexDirection).toBeUndefined()
+    expect(row.width, row.text).toBeLessThanOrEqual(120)
+    expect(row.text).toContain('疑似卡住')
+    expect(row.text).toContain('⊘ 2')
+    expect(row.text).toContain(' ' + t('tab.now') + ' ')
+    expect(row.text).toContain(' ' + t('tab.review') + ' ')
+  })
+
+  // the shared fitted width includes the ⓘ and the ›, so the drawn row is exactly `columns` at every width in this range (never columns+1)
+  const rowAt = async ($: any, bodyColumns: number) => {
+    const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: { ...F_PROPS, bodyColumns }, viewport: { columns: bodyColumns, rows: 50, isFullscreen: true } })
+    const tree = (await ui.drawn()) as Node
+    await ui.unmount()
+    const cells = cellsOf(tree)
+    const last = cells[cells.length - 1]
+    return { text: cells.map(c => c.text).join(''), width: last === undefined ? 0 : last.start + last.width }
+  }
+  const sweepWidths = async ($: any, name: string) => {
+    const bad: string[] = []
+    for (let columns = 40; columns <= 220; columns++) {
+      const row = await rowAt($, columns)
+      if (row.width !== columns) {
+        bad.push(name + '@' + columns + '=' + row.width)
+        if (bad.length >= 6) break
+      }
+    }
+    expect(bad, bad.join(' ')).toEqual([])
+  }
+
+  test('band row: idle fleet draws exactly columns cells from 40 to 220 (' + surface + ')', async ($, on) => {
+    g33Ran(on)
+    const files = base()
+    const quiet = { runs: [], counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 } }
+    files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope(quiet))
+    files[LIVE + '/runs/' + KEY + '.json'] = j(envelope(quiet, null))
+    const w = world(on, files)
+    await start($, surface)
+    TURN_PLAN = FIVE_FAST; TURN_AT = 0
+    await runPlan($, FIVE_FAST.map(() => undefined))
+    await w.clock.advance(5_000)
+    await sweepWidths($, 'idle')
+  })
+
+  test('band row: active fleet draws exactly columns cells from 40 to 220 (' + surface + ')', async ($, on) => {
+    g33Ran(on)
+    const w = world(on, richWorld())
+    await start($, surface)
+    await w.clock.advance(5_000)
+    await sweepWidths($, 'active')
+  })
+
   test('speed tab: the label does not time from the first visible chunk: hidden thinking counts from send (hook level, ' + surface + ')', async ($, on) => {
     worldEn(on, richWorld())
     const d = await draw($, on, [{ before: 400, after: 150, tokens: 100 }])
@@ -7644,26 +7928,27 @@ for (const surface of SURFACES) {
     for (let i = 1; i < at.length; i++) expect(at[i] - at[i - 1], 'gap ' + i).toBeGreaterThanOrEqual(30_000)
   })
 
-  test('O4 shell fleet fetch: once the shell is closed (no longer drawn) the Fleet CLI is not run again (' + surface + ')', async ($, on) => {
+  test('O4 shell fleet fetch: once the shell is closed the Fleet CLI keeps running, still at least 30 s apart (' + surface + ')', async ($, on) => {
     const at = fleetRuns(on)
     const w = shellWorld(on)
     await start($, surface)
     await drawShell($, 240, ['tab:decide'])
     for (let i = 0; i < 8; i++) { await tick(w); await drawShell($, 240) }
     expect(at.length).toBeGreaterThanOrEqual(1)
-    for (let i = 0; i < 4; i++) await tick(w) // 20 s: past the 15 s the shell counts as open
     const settled = at.length
-    for (let i = 0; i < 36; i++) await tick(w) // 180 s, nothing drawn
-    expect(at.length).toBe(settled)
+    for (let i = 0; i < 36; i++) await tick(w) // 180 s, nothing drawn: the band's own line still wants the counts
+    expect(at.length).toBeGreaterThan(settled)
+    for (let i = 1; i < at.length; i++) expect(at[i] - at[i - 1], 'gap ' + i).toBeGreaterThanOrEqual(30_000)
   })
 
-  test('O4 shell fleet fetch: the other tiers (200, 160, 120, 80) never run the Fleet CLI (' + surface + ')', async ($, on) => {
+  test('O4 shell fleet fetch: the other tiers (200, 160, 120, 80) run the Fleet CLI too, at least 30 s apart (' + surface + ')', async ($, on) => {
     const at = fleetRuns(on)
     const w = shellWorld(on)
     await start($, surface)
     await drawShell($, 160, ['tab:decide'])
     for (const cols of [200, 160, 120, 80]) for (let i = 0; i < 14; i++) { await tick(w); await drawShell($, cols) }
-    expect(at.length).toBe(0)
+    expect(at.length).toBeGreaterThanOrEqual(3)
+    for (let i = 1; i < at.length; i++) expect(at[i] - at[i - 1], 'gap ' + i).toBeGreaterThanOrEqual(30_000)
   })
 
   test('O4 shell v7: 待送 N 張 is a 160-and-wider tail: with room to spare it is there at 160 and 200 and not at 120 or 80 (' + surface + ')', async ($, on) => {

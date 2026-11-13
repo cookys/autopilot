@@ -1429,10 +1429,43 @@
       "audience": "internal",
       "class": "path_seam",
       "default": null,
-      "readers": ["scripts/noncq.js"],
+      "readers": ["scripts/noncq.js", "scripts/pace-select.js"],
       "doc": null,
-      "relates": ["AUTOPILOT_NONCQ_DIR"],
-      "note": "Pool map file for scripts/noncq.js drain, replacing scripts/lib/noncq-pools.json. Test seam: noncq.test.js (h) uses a fixture map with a null-model entry."
+      "relates": ["AUTOPILOT_NONCQ_DIR", "AUTOPILOT_PACE_FILE", "AUTOPILOT_PACE_ROLES"],
+      "note": "Pool map file for scripts/noncq.js drain and scripts/pace-select.js, replacing scripts/lib/noncq-pools.json. Test seam: noncq.test.js (h) uses a fixture map with a null-model entry."
+    },
+    {
+      "name": "AUTOPILOT_PACE_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/pace-select.js"],
+      "doc": "references/hetero-dispatch.md",
+      "relates": ["AUTOPILOT_NONCQ_POOLS", "AUTOPILOT_PACE_ROLES", "AUTOPILOT_QUALIFIED_FILE"],
+      "note": "Override path to capacity.pace/1 JSON read by scripts/pace-select.js (and via dispatch-hetero.sh --pace-role). Default: $HOME/projects/capacity/out/pace.v1.json."
+    },
+    {
+      "name": "AUTOPILOT_PACE_ROLES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/pace-select.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_PACE_FILE", "AUTOPILOT_NONCQ_POOLS", "AUTOPILOT_QUALIFIED_FILE"],
+      "note": "Role allowlist and scarce-pool map JSON override for scripts/pace-select.js, replacing scripts/lib/pace-roles.json in tests."
+    },
+    {
+      "name": "AUTOPILOT_QUALIFIED_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/engine-scorecard.js", "scripts/pace-select.js"],
+      "doc": "references/hetero-dispatch.md",
+      "relates": ["AUTOPILOT_PACE_FILE", "AUTOPILOT_PACE_ROLES", "AUTOPILOT_NONCQ_POOLS"],
+      "note": "Override path to autopilot.qualified/1 JSON written by engine-scorecard.js export-qualified and read by scripts/pace-select.js (falls back to scripts/lib/pace-roles.json when absent). Default: $HOME/.autopilot/qualified.v1.json."
     },
     {
       "name": "AUTOPILOT_RELAY_SEND_BUDGET_MS",
@@ -2619,6 +2652,32 @@
       ],
       "doc": null,
       "relates": []
+    },
+    {
+      "name": "AUTOPILOT_HETERO_FELL_BACK",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": ["AUTOPILOT_HETERO_FELL_BACK_JSON"],
+      "note": "Set to 1 by dispatch-hetero on the one cloud-seat re-exec after a failed --endpoint pre-probe. The child keeps the caller bwrap and does not retreat again."
+    },
+    {
+      "name": "AUTOPILOT_HETERO_FELL_BACK_JSON",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": null,
+      "relates": ["AUTOPILOT_HETERO_FELL_BACK"],
+      "note": "JSON object the cloud-seat re-exec writes as fell_back on the result and the manifest. Empty on the first attempt."
     },
     {
       "name": "AUTOPILOT_JSON_EMIT_SH",
@@ -6404,6 +6463,37 @@
       "type": "string"
     },
     {
+      "name": "quota_mirror_dirs",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "default": [],
+      "readers": [
+        "scripts/lib/quota-mirror-dirs.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_QUOTA_MIRROR_DIRS"
+      ],
+      "summary": "Extra fleet.quota mirror directories merged with this account's live quota directory. Each entry is a directory shaped like <live_dir>/quota.",
+      "type": "array"
+    },
+    {
+      "name": "AUTOPILOT_QUOTA_MIRROR_DIRS",
+      "kind": "env",
+      "audience": "user",
+      "group": "accounts",
+      "default": null,
+      "readers": [
+        "scripts/lib/quota-mirror-dirs.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "quota_mirror_dirs"
+      ],
+      "summary": "Colon-separated extra mirror directories. When set, even to empty, it replaces quota_mirror_dirs."
+    },
+    {
       "name": "AUTOPILOT_ACCOUNT_MODE",
       "kind": "env",
       "audience": "user",
@@ -6417,6 +6507,21 @@
         "accounts.mode"
       ],
       "summary": "Overrides accounts.mode for one shell (auto or off)."
+    },
+    {
+      "name": "AUTOPILOT_TOKEN_SEAT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/token-seat.js",
+        "scripts/lib/token-seat.sh",
+        "scripts/lib/account-env.js"
+      ],
+      "doc": "docs/guide/accounts.md",
+      "relates": [],
+      "note": "Exported as 1 by an external seat launcher together with CLAUDE_CODE_OAUTH_TOKEN. A claude child started while this is 1 and CLAUDE_CODE_OAUTH_TOKEN is empty exits non-zero instead of falling back to the host login. Unset means an ordinary seat (PM 01M7975S)."
     },
     {
       "name": "AUTOPILOT_DISPATCH_USAGE",

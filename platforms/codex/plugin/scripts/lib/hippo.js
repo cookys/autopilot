@@ -5,7 +5,18 @@
 // Library API (CommonJS, Node >= 20.10, built-ins only):
 //   detect(target?)                    -> {state, reason, problems[], repo_root, store_id, hippo_version, bin}
 //                                         state: files | hippo | hippo-problems | spool. Throws HippoError (exit 2) when the
-//                                         target is not in a git work tree or its root is this plugin's own install directory.
+//                                         target is not in a git work tree, or its root is this plugin's install directory
+//                                         and the plugin-dir guard below does not admit it.
+//
+// Plugin-dir guard. PLUGIN_ROOT is this file's install directory (the directory that contains scripts/
+// and hooks/). detect refuses a repo whose root is that directory, so an installed copy can never become
+// a record store. A marketplace cache copy is that directory when its resolved path contains the adjacent
+// segments plugins/cache (the shape <config>/plugins/cache/<marketplace>/<plugin>/<version>/, the same
+// shape the plugin-dir test builds by copying this module to <root>/scripts/lib). Such a path is refused
+// even when a .hippo directory is present. The one exception is the dev checkout, which is the same
+// directory but is not a cache path: it is admitted only when HEAD already contains .hippo/repo.toml and
+// that committed file's id is "autopilot" (this repo's own store). A plugin root with no such committed
+// file is still refused.
 //   run(repo, argv, {input}?)          -> parsed `hippo/1` document plus `exit`. Always `--json -C <repo>`, argv array, no shell.
 //                                         Non-JSON stdout -> exit 1 / error.code "internal"; binary missing -> exit 5 / "environment".
 //   spoolWrite(repo, {subcommand, plan, key?}) / spoolList(repo) / flush(repo, {drop?})
@@ -104,9 +115,33 @@ function run(repo, argv, opts = {}) {
   return doc;
 }
 
+const OWN_STORE_ID = 'autopilot';
+
+// A marketplace install lives at <config>/plugins/cache/<marketplace>/<plugin>/<version>/.
+// The dev symlink's real path does not contain these segments; a cache copy's does.
+function pluginCachePath(root) {
+  const parts = root.split(/[/\\]/);
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (parts[i] === 'plugins' && parts[i + 1] === 'cache') return true;
+  }
+  return false;
+}
+
+// The committed blob, not the worktree: an uncommitted repo.toml does not open the guard.
+function committedOwnStore(root) {
+  let text;
+  try { text = git(root, ['show', 'HEAD:.hippo/repo.toml']); } catch { return false; }
+  const m = /^id\s*=\s*"([^"]*)"/m.exec(text);
+  return Boolean(m && m[1] === OWN_STORE_ID);
+}
+
 function detect(target) {
   const root = repoRoot(target);
-  if (root === fs.realpathSync(PLUGIN_ROOT)) throw new HippoError(`refusing to use the plugin's own install directory as a record store: ${root}`, 2, 'plugin-dir');
+  // Admit only the dev checkout's own committed store. Dropping the second clause (unconditional
+  // plugin-dir refusal) makes that checkout exit 2 again.
+  if (root === fs.realpathSync(PLUGIN_ROOT) && (pluginCachePath(root) || !committedOwnStore(root))) {
+    throw new HippoError(`refusing to use the plugin's own install directory as a record store: ${root}`, 2, 'plugin-dir');
+  }
   const out = { state: 'files', reason: `no .hippo store in ${root}`, problems: [], repo_root: root, store_id: null, hippo_version: null, bin: bin() };
   const toml = path.join(root, '.hippo', 'repo.toml');
   if (!fs.existsSync(toml)) return out;

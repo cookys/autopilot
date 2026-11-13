@@ -1,0 +1,13 @@
+---
+id: 01M78954VPG9HQTAMG0TDT42W4
+kind: issue
+created: 2026-11-06T00:00:00.000Z
+---
+- **Since**: 2026-11-06
+- **Report**: 01M6HB7DK2BGZEZHT69R4DQX7C
+- **Reply**: none
+- **Problem**: 受影響套件挑選漏掉被改動的審查腳本自己的套件，也漏掉新的計畫路徑測試，有假綠風險。結果閘門只認受影響套件的紀錄，認不得全套紀錄。
+- **Impact**: 漏挑的套件若紅，合併時看不到。
+- **Trigger**: WIP 空出來即可；排在 bl-ap-streamjson 之前
+- **Source**: PM fleet 01M6HB7DK2BGZEZHT69R4DQX7C
+- **Pointer**: project/backlog/affected-suites-accuracy-2026-11-06.md

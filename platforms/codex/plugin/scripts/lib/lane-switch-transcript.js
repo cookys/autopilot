@@ -17,7 +17,7 @@
  *    .claude.json are never opened.
  *
  * cwd-key: every character outside [A-Za-z0-9] becomes "-".
- *   /home/cookys/projects/autopilot -> -home-cookys-projects-autopilot
+ *   /home/u/proj -> -home-u-proj
  *
  * opts: { from, to, cwd, sessionId, order, lane, home?, base? }
  *   from/to are profile names ('home' or a profile name), not directories.

@@ -1744,3 +1744,142 @@ test('selgap real tree: every tracked symlink (git mode 120000) is accepted by -
   }
   assert.deepStrictEqual(rejected, [], `tracked symlinks refused (${listed.length} listed: ${listed.join(', ')})`);
 });
+
+// BL-0434: a suite that prints `SKIP [` and exits 0 must not read as a green pass.
+// run.sh collect_skips keeps lines matching ^SKIP \[ (stdout and stderr, sort -u).
+// A suite whose every non-empty line is such a line asserted nothing: unverified, exit 1.
+// RED before the fix: the whole-run case exited 0 and the summary was `1 run, 0 failed`
+// with no skip count and no name. The mutant at the bottom deletes the detector and
+// that same fixture is green again.
+const VAC_SH = (body) => `#!/usr/bin/env bash\n${body}`;
+
+test('BL-0434 whole-run skip is unverified, named, and not a pass', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/vac.test.sh': VAC_SH("printf '%s\\n' 'SKIP [vac] VACUOUS RUN'\nexit 0\n"),
+  });
+  try {
+    const ran = runCli(r.dir, ['--run', '--files', 'hooks/tests/vac.test.sh']);
+    assert.match(ran.stdout, /rc=0 hooks\/tests\/vac\.test\.sh/, ran.stdout);
+    assert.strictEqual(ran.status, 1, `whole-run skip must not be green:\n${ran.stdout}`);
+    assert.match(ran.stdout, /summary: 1 run, 0 failed, 1 skipped: hooks\/tests\/vac\.test\.sh, 1 unverified: hooks\/tests\/vac\.test\.sh\n/);
+    assert.match(ran.stdout, /skipped: hooks\/tests\/vac\.test\.sh: SKIP \[vac\] VACUOUS RUN\n/);
+  } finally { r.cleanup(); }
+});
+
+test('BL-0434 skip lines are the run.sh set: unique, sorted, and stderr counts', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/vac.test.sh': VAC_SH("printf '%s\\n' 'SKIP [vac] B' 'SKIP [vac] A' 'SKIP [vac] A'\nprintf '%s\\n' 'SKIP [vac] B' >&2\nexit 0\n"),
+    'hooks/tests/err.test.sh': VAC_SH("printf '%s\\n' 'SKIP [err] VACUOUS RUN' >&2\nexit 0\n"),
+  });
+  try {
+    const both = runCli(r.dir, ['--run', '--files', 'hooks/tests/vac.test.sh']);
+    assert.strictEqual(both.status, 1, both.stdout + both.stderr);
+    assert.match(both.stdout, /skipped: hooks\/tests\/vac\.test\.sh: SKIP \[vac\] A\nskipped: hooks\/tests\/vac\.test\.sh: SKIP \[vac\] B\n/);
+    assert.doesNotMatch(both.stdout, /SKIP \[vac\] A\nskipped: hooks\/tests\/vac\.test\.sh: SKIP \[vac\] A/);
+    const err = runCli(r.dir, ['--run', '--files', 'hooks/tests/err.test.sh']);
+    assert.strictEqual(err.status, 1, err.stdout + err.stderr);
+    assert.match(err.stdout, /1 unverified: hooks\/tests\/err\.test\.sh/);
+    assert.match(err.stdout, /skipped: hooks\/tests\/err\.test\.sh: SKIP \[err\] VACUOUS RUN\n/);
+  } finally { r.cleanup(); }
+});
+
+test('BL-0434 a SKIP line beside other output is reported and the suite can still pass', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/part.test.sh': VAC_SH("printf '%s\\n' 'PASS: asserted' 'SKIP [part] one case'\nexit 0\n"),
+    'hooks/tests/bad.test.sh': VAC_SH("printf '%s\\n' 'SKIP [bad] still failed'\nexit 1\n"),
+  });
+  try {
+    const part = runCli(r.dir, ['--run', '--files', 'hooks/tests/part.test.sh']);
+    assert.strictEqual(part.status, 0, part.stdout + part.stderr);
+    assert.match(part.stdout, /summary: 1 run, 0 failed, 1 skipped: hooks\/tests\/part\.test\.sh\n/);
+    assert.match(part.stdout, /skipped: hooks\/tests\/part\.test\.sh: SKIP \[part\] one case\n/);
+    assert.doesNotMatch(part.stdout, /unverified/);
+    const bad = runCli(r.dir, ['--run', '--files', 'hooks/tests/bad.test.sh']);
+    assert.strictEqual(bad.status, 1, bad.stdout + bad.stderr);
+    assert.match(bad.stdout, /summary: 1 run, 1 failed\n/);
+    assert.doesNotMatch(bad.stdout, /unverified|skipped:/);
+  } finally { r.cleanup(); }
+});
+
+test('BL-0434 a pass and a whole-run skip: the skip is not counted as failed or as a pass', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/ok.test.sh': VAC_SH("printf '%s\\n' 'PASS: real'\nexit 0\n"),
+    'hooks/tests/vac.test.sh': VAC_SH("printf '%s\\n' 'SKIP [vac] VACUOUS RUN'\nexit 0\n"),
+  });
+  try {
+    const ran = runCli(r.dir, ['--run', '--files', 'hooks/tests/ok.test.sh', 'hooks/tests/vac.test.sh']);
+    assert.strictEqual(ran.status, 1, ran.stdout + ran.stderr);
+    assert.match(ran.stdout, /summary: 2 run, 0 failed, 1 skipped: hooks\/tests\/vac\.test\.sh, 1 unverified: hooks\/tests\/vac\.test\.sh\n/);
+  } finally { r.cleanup(); }
+});
+
+test('BL-0434 negative control: no ^SKIP [ line means no skip report and exit 0', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/plain.test.sh': VAC_SH("printf '%s\\n' 'PASS: real assertion'\nexit 0\n"),
+    'hooks/tests/word.test.sh': VAC_SH("printf '%s\\n' 'SKIP: no bracket' '  SKIP [indented] not at column 0'\nexit 0\n"),
+  });
+  try {
+    for (const rel of ['hooks/tests/plain.test.sh', 'hooks/tests/word.test.sh']) {
+      const ran = runCli(r.dir, ['--run', '--files', rel]);
+      assert.strictEqual(ran.status, 0, `${rel}\n${ran.stdout}${ran.stderr}`);
+      assert.match(ran.stdout, /summary: 1 run, 0 failed\n/);
+      assert.doesNotMatch(ran.stdout, /skipped:|unverified/);
+    }
+  } finally { r.cleanup(); }
+});
+
+test('BL-0434 --jobs reports a whole-run skip the same way, and --record keeps rc 0 plus unverified', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/skip-target.js': 'console.log(1);\n',
+    'hooks/tests/vac.test.sh': VAC_SH("echo scripts/skip-target.js >/dev/null\nprintf '%s\\n' 'SKIP [vac] VACUOUS RUN'\nexit 0\n"),
+  });
+  try {
+    const jobs = runCli(r.dir, ['--run', '--jobs', '2', '--files', 'hooks/tests/vac.test.sh']);
+    assert.strictEqual(jobs.status, 1, jobs.stdout + jobs.stderr);
+    assert.match(jobs.stdout, /1 unverified: hooks\/tests\/vac\.test\.sh/);
+    const head = r.change({ 'scripts/skip-target.js': 'console.log(2);\n' });
+    const rec = path.join(r.dir, 'qc-skip.json');
+    const recorded = runCli(r.dir, ['--base', r.base, '--head', head, '--run', '--record', rec, '--attribute']);
+    assert.strictEqual(recorded.status, 1, recorded.stdout + recorded.stderr);
+    assert.match(recorded.stdout, /attribution: new 0/);
+    const doc = JSON.parse(fs.readFileSync(rec, 'utf8'));
+    const row = doc.suites.find((s) => s.path === 'hooks/tests/vac.test.sh');
+    assert.ok(row, JSON.stringify(doc.suites));
+    assert.strictEqual(row.rc, 0);
+    assert.strictEqual(row.unverified, true);
+  } finally { r.cleanup(); }
+});
+
+test('BL-0434 negative control: a runner whose skip detector returns nothing counts the whole-run skip green', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'hooks/tests/vac.test.sh': VAC_SH("printf '%s\\n' 'SKIP [vac] VACUOUS RUN'\nexit 0\n"),
+  });
+  try {
+    const src = fs.readFileSync(path.join(__dirname, 'affected-suites.js'), 'utf8');
+    const anchor = 'function skipLinesOf(chunks) {\n';
+    assert.ok(src.includes(anchor), 'mutation anchor drifted');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-skip-mut-'));
+    const bin = path.join(dir, 'affected-suites.js');
+    const mutated = src.replace(anchor, 'function skipLinesOf(chunks) {\n  return [];\n').replace(
+      "require('./lib/repo-layout.js')",
+      `require(${JSON.stringify(path.join(__dirname, 'lib', 'repo-layout.js'))})`,
+    );
+    assert.notStrictEqual(mutated, src);
+    fs.writeFileSync(bin, mutated);
+    const env = { ...process.env };
+    delete env.NODE_TEST_CONTEXT;
+    delete env.NODE_TEST_WORKER_ID;
+    const p = spawnSync('node', [bin, '--root', r.dir, '--run', '--files', 'hooks/tests/vac.test.sh'], { encoding: 'utf8', env });
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.match(p.stdout, /summary: 1 run, 0 failed\n/);
+    assert.doesNotMatch(p.stdout, /unverified|skipped:/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  } finally { r.cleanup(); }
+});

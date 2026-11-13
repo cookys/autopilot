@@ -222,7 +222,7 @@ function validateBaseUrl(baseUrl) {
   if (parsed.protocol === 'http:' && isLoopbackHostname(parsed.hostname)) {
     return '';
   }
-  return 'base URL must use https:// unless it is an http:// loopback test endpoint';
+  return 'base URL must use https:// unless it is an http:// loopback test endpoint; a non-loopback http:// endpoint is the cc-shim rail (--runner cc-shim), not this anthropic-compatible transport';
 }
 
 function resolveEndpointUrl(baseUrl) {

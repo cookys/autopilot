@@ -72,8 +72,10 @@ function runAdvice(fx, { argv = [], nowMs = BASE_NOW, runCalls = [], runImpl } =
   const err = [];
   const run = (bin, args, opts) => {
     runCalls.push({ bin, args, opts });
-    const joined = [bin, ...(args || [])].join(' ');
-    assert.ok(!joined.includes('lane-switch'), `runner must never invoke lane-switch: ${joined}`);
+    // The executed program (bin, or a script passed to node) must never be lane-switch; the
+    // recommendation text itself carries the lane-switch command for the PM to run.
+    const exe = [bin, bin === 'node' || /\/node$/.test(bin) ? (args || [])[0] : ''].join(' ');
+    assert.ok(!exe.includes('lane-switch'), `runner must never invoke lane-switch: ${exe}`);
     if (typeof runImpl === 'function') return runImpl(bin, args, opts);
     return { status: 0, stdout: 'sent\n', stderr: '' };
   };

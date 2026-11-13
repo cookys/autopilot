@@ -28,6 +28,22 @@ const SCORECARD_CLI = path.join(__dirname, 'engine-scorecard.js');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
 const allEndpointsReady = () => true;
 
+// Inline-pace builders for the (priority a)-(priority f) tests.
+const priorityPace = (rows) => ({
+  schema: 'capacity.pace/1',
+  generated_at: '2026-11-13T04:00:00Z',
+  rows,
+});
+const paceRow = (pool, used, expected, extra = {}) => ({
+  pool,
+  class: 'other',
+  status: 'ok',
+  stale: false,
+  used_pct: used,
+  expected_pct: expected,
+  ...extra,
+});
+
 function fixturePath(name) {
   return path.join(FIXTURES_DIR, name);
 }
@@ -144,13 +160,16 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   const roles = loadRoles();
   assert.equal(typeof roles._why, 'string');
   assert.match(roles._why, /engine-scorecard current/);
-  assert.match(roles._why, /glm: reviewer provisional, implementer not qualified/);
+  assert.match(roles._why, /glm: reviewer provisional, implementer qualified 2026-11-13, scorecard event 34, 24\/24, integrity 0/);
   assert.match(roles._why, /agyclaude: reviewer and implementer pass 2026-11-13/);
   assert.match(roles._why, /minimax: failed both 2026-11-13/);
+  assert.match(roles._why, /hydrogen passed all four prereg bars \(develop d40e9ad43\)/);
 
   assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
-  assert.deepEqual(roles.implementer, ['agy', 'codex', 'grok', 'agyclaude']);
+  assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok']);
   assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
+  assert.deepEqual(roles.priority, { implementer: ['agy', 'glm', 'agyclaude'] });
+  assert.deepEqual(roles.role_models, { implementer: { agy: 'gemini-4-hydrogen-high' } });
 
   for (const r of ['reviewer', 'implementer', 'author']) {
     assert.equal(roles[r].includes('agyclaude'), true);
@@ -167,6 +186,12 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
 
   const badPools = cli(['--role', 'pools', '--pace', fixturePath('ahead-vs-behind.json')]);
   assert.equal(badPools.status, 2);
+
+  const badPriority = cli(['--role', 'priority', '--pace', fixturePath('ahead-vs-behind.json')]);
+  assert.equal(badPriority.status, 2);
+
+  const badRoleModels = cli(['--role', 'role_models', '--pace', fixturePath('ahead-vs-behind.json')]);
+  assert.equal(badRoleModels.status, 2);
 
   const missingRole = cli(['--pace', fixturePath('ahead-vs-behind.json')]);
   assert.equal(missingRole.status, 2);
@@ -193,14 +218,17 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
     used_pct: 26,
     expected_pct: 40,
     over_pace: false,
+    selected_by: 'slack',
+    reviewer_exclude: ['grok'],
     role: 'implementer',
     qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:00:00Z',
     candidates: [
       { engine: 'agy', pool: 'agy', slack_pts: -25 },
+      { engine: 'glm', pool: 'glm', slack_pts: -3 },
+      { engine: 'agyclaude', reason: 'unknown' },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli', slack_pts: 14 },
-      { engine: 'agyclaude', reason: 'unknown' },
     ],
   });
 
@@ -309,14 +337,16 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
   assert.equal(out.expected_pct, 30);
   assert.equal(out.over_pace, true);
 
-  // implementer excludes glm -> grok (-22) beats agy (-32) with over_pace: true.
+  // implementer: the priority walk fails (agy -32, glm -15, agyclaude unknown),
+  // so the slack fallback picks glm (-15), the least-behind eligible key.
   const impl = selectEngine({
     pace: readFixture('only-ahead.json'),
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
   });
-  assert.equal(impl.engine, 'grok');
-  assert.equal(impl.slack_pts, -22);
+  assert.equal(impl.engine, 'glm');
+  assert.equal(impl.selected_by, 'slack');
+  assert.equal(impl.slack_pts, -15);
   assert.equal(impl.over_pace, true);
 
   // Boundary: slack === -10 qualifies (over_pace: false); slack === -11 sets over_pace: true.
@@ -422,20 +452,23 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
   assert.deepEqual(out, {
     engine: 'agy',
     runner: 'agy',
-    model: 'gemini-4-carbon-high',
+    model: 'gemini-4-hydrogen-high',
     pool: 'agy(alias 2)',
     slack_pts: 28,
     used_pct: 12,
     expected_pct: 40,
     over_pace: false,
+    selected_by: 'priority',
+    reviewer_exclude: ['agy'],
     role: 'implementer',
     qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:20:00Z',
     candidates: [
       { engine: 'agy', pool: 'agy(alias 2)', slack_pts: 28 },
+      { engine: 'glm', reason: 'unknown' },
+      { engine: 'agyclaude', reason: 'unknown' },
       { engine: 'codex', reason: 'unknown' },
       { engine: 'grok', pool: 'grok-cli(alias 2)', slack_pts: 11 },
-      { engine: 'agyclaude', reason: 'unknown' },
     ],
   });
 });
@@ -467,14 +500,17 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
     used_pct: 75,
     expected_pct: 40,
     over_pace: true,
+    selected_by: 'slack',
+    reviewer_exclude: ['codex'],
     role: 'implementer',
     qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:25:00Z',
     candidates: [
       { engine: 'agy', reason: 'unknown' },
+      { engine: 'glm', reason: 'unknown' },
+      { engine: 'agyclaude', reason: 'unknown' },
       { engine: 'codex', pool: 'codex A', slack_pts: -35 },
       { engine: 'grok', reason: 'unknown' },
-      { engine: 'agyclaude', reason: 'unknown' },
     ],
   });
 
@@ -738,4 +774,96 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
   } finally {
     if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test('(priority a) agy slack +1 beats glm +30: priority order wins, hydrogen model, reviewer_exclude ["agy"]', () => {
+  const res = selectEngine({
+    pace: priorityPace([paceRow('agy', 39, 40), paceRow('glm', 10, 40)]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'agy');
+  assert.equal(res.runner, 'agy');
+  assert.equal(res.model, 'gemini-4-hydrogen-high');
+  assert.equal(res.selected_by, 'priority');
+  assert.deepEqual(res.reviewer_exclude, ['agy']);
+});
+
+test('(priority b) agy behind (-5) -> glm (+2) chosen, still selected_by priority', () => {
+  const res = selectEngine({
+    pace: priorityPace([paceRow('agy', 45, 40), paceRow('glm', 38, 40)]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'glm');
+  assert.equal(res.model, 'glm-5.3');
+  assert.equal(res.selected_by, 'priority');
+  assert.deepEqual(res.reviewer_exclude, ['glm']);
+});
+
+test('(priority c) agy -5, glm -3, agyclaude +4 -> agyclaude (third priority entry)', () => {
+  const res = selectEngine({
+    pace: priorityPace([
+      paceRow('agy', 45, 40),
+      paceRow('glm', 43, 40),
+      paceRow('agyclaude', 36, 40),
+    ]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'agyclaude');
+  assert.equal(res.model, 'claude-opus-5-5-medium');
+  assert.equal(res.selected_by, 'priority');
+  assert.deepEqual(res.reviewer_exclude, ['agyclaude']);
+});
+
+test('(priority d) all three behind (agy -5, glm -3, agyclaude -2), codex +20 -> slack fallback', () => {
+  const res = selectEngine({
+    pace: priorityPace([
+      paceRow('agy', 45, 40),
+      paceRow('glm', 43, 40),
+      paceRow('agyclaude', 42, 40),
+      { pool: 'codex A', class: 'scarce', status: 'ok', stale: false, used_pct: 20, expected_pct: 40 },
+    ]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'codex');
+  assert.equal(res.model, 'gpt-6.1-sol');
+  assert.equal(res.selected_by, 'slack');
+  assert.deepEqual(res.reviewer_exclude, ['codex']);
+});
+
+test('(priority e) reviewer role unchanged: largest slack, agy model stays gemini-4-carbon-high', () => {
+  const res = selectEngine({
+    pace: priorityPace([paceRow('agy', 10, 40), paceRow('glm', 39, 40)]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'reviewer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'agy');
+  assert.equal(res.model, 'gemini-4-carbon-high');
+  assert.equal(res.selected_by, 'slack');
+  assert.deepEqual(res.reviewer_exclude, ['agy']);
+});
+
+test('(priority f) agy reading stale -> skipped by the priority walk, glm chosen', () => {
+  const res = selectEngine({
+    pace: priorityPace([paceRow('agy', 4, 80, { stale: true }), paceRow('glm', 38, 40)]),
+    pools: loadPools(),
+    roles: loadRoles(),
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'glm');
+  assert.equal(res.selected_by, 'priority');
 });

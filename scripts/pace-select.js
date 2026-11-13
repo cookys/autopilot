@@ -24,9 +24,24 @@
  *   - Missing/null used_pct or expected_pct, or stale !== false, is unknown
  *     (never treated as 0) via scripts/lib/pace-reading.js.
  *   - Alias pools sharing an engine key merge by largest fresh slack.
+ *   - Roles with a `priority` list in pace-roles.json (`priority.<role>`)
+ *     walk that list in order and choose the first key that is eligible for
+ *     the role, passes the endpoint check, has a fresh reading and
+ *     slack >= 0 (selected_by: "priority"). A later priority entry is
+ *     reached only when every earlier one is ineligible, unready, unknown
+ *     or behind pace. When no priority entry qualifies — and for roles
+ *     without a priority list — the largest-slack rule below decides
+ *     (selected_by: "slack").
  *   - Among keys with slack >= -10, pick the largest slack (over_pace: false).
  *   - If none has slack >= -10 but at least one key has a fresh reading, pick
  *     the largest slack anyway with over_pace: true.
+ *   - The emitted `model` comes from pace-roles.json `role_models.<role>.<key>`
+ *     when present (implementer + agy -> gemini-4-hydrogen-high; reviewer and
+ *     author keep the pool's model), else the pool entry's model.
+ *   - `reviewer_exclude` lists the chosen key's family keys that a reviewer
+ *     must not share. agy and agyclaude are different families (google vs
+ *     anthropic), so choosing agy emits ["agy"] and never excludes agyclaude;
+ *     callers pass it to a follow-up `--role reviewer --exclude <joined>`.
  *   - If no candidate key has a known fresh reading, emit
  *     { engine: null, reason: "pace_unknown", ... } and exit 3.
  *
@@ -55,6 +70,10 @@ const EXIT_PACE_UNKNOWN = 3;
 const OVER_PACE_SLACK_FLOOR = -10;
 const QUALIFIED_SCHEMA = 'autopilot.qualified/1';
 const VALID_QUALIFIED_RESULTS = new Set(['pass', 'fail', 'provisional']);
+
+// agy and agyclaude share the "agy" runner but are different model families
+// (google vs anthropic): excluding one never excludes the other.
+const REVIEWER_FAMILY_EXCLUDE = { agy: ['agy'], glm: ['glm'], agyclaude: ['agyclaude'] };
 
 const POOLS_PATH = path.join(__dirname, 'lib', 'noncq-pools.json');
 const ROLES_PATH = path.join(__dirname, 'lib', 'pace-roles.json');
@@ -420,22 +439,73 @@ function selectEngine({
   const poolToPick = qualifying.length > 0 ? qualifying : known;
   const overPace = qualifying.length === 0;
 
-  let chosen = poolToPick[0];
-  for (let i = 1; i < poolToPick.length; i += 1) {
-    if (poolToPick[i].reading.slack > chosen.reading.slack) {
-      chosen = poolToPick[i];
+  // Priority walk (pace-roles.json `priority.<role>`): first key that is
+  // eligible, endpoint-ready, fresh and not behind pace wins; a priority pick
+  // always has slack >= 0 so overPace stays false. Otherwise the largest-slack
+  // rule decides, unchanged.
+  const priorityList = (
+    resolvedRoles.priority
+    && typeof resolvedRoles.priority === 'object'
+    && !Array.isArray(resolvedRoles.priority)
+    && Array.isArray(resolvedRoles.priority[role])
+  )
+    ? resolvedRoles.priority[role].filter((k) => typeof k === 'string' && k.trim() !== '')
+    : null;
+  let priorityPick = null;
+  if (priorityList) {
+    for (const key of priorityList) {
+      if (!allowedSet.has(key)) continue;
+      if (keyHadPool.has(key) && !keyHadReadyPool.has(key)) continue;
+      const hit = bestByKey.get(key);
+      if (!hit) continue;
+      if (hit.reading.slack < 0) continue;
+      priorityPick = hit;
+      break;
     }
   }
+
+  let chosen;
+  let selectedBy;
+  if (priorityPick) {
+    chosen = priorityPick;
+    selectedBy = 'priority';
+  } else {
+    selectedBy = 'slack';
+    chosen = poolToPick[0];
+    for (let i = 1; i < poolToPick.length; i += 1) {
+      if (poolToPick[i].reading.slack > chosen.reading.slack) {
+        chosen = poolToPick[i];
+      }
+    }
+  }
+
+  // role_models overrides the emitted model per role (implementer + agy ->
+  // gemini-4-hydrogen-high); the pool entry's model stays the default.
+  const roleModelMap = (
+    resolvedRoles.role_models
+    && typeof resolvedRoles.role_models === 'object'
+    && !Array.isArray(resolvedRoles.role_models)
+    && resolvedRoles.role_models[role]
+    && typeof resolvedRoles.role_models[role] === 'object'
+    && !Array.isArray(resolvedRoles.role_models[role])
+  )
+    ? resolvedRoles.role_models[role]
+    : {};
+  const modelOut = typeof roleModelMap[chosen.key] === 'string' && roleModelMap[chosen.key].trim() !== ''
+    ? roleModelMap[chosen.key].trim()
+    : (chosen.entry.model ?? null);
 
   const out = {
     engine: chosen.key,
     runner: chosen.entry.runner ?? null,
-    model: chosen.entry.model ?? null,
+    model: modelOut,
     pool: chosen.reading.pool,
     slack_pts: chosen.reading.slack,
     used_pct: chosen.reading.used_pct,
     expected_pct: chosen.reading.expected_pct,
     over_pace: overPace,
+    selected_by: selectedBy,
+    reviewer_exclude: REVIEWER_FAMILY_EXCLUDE[chosen.key] || [chosen.key],
     role,
     qualified_source: resolvedQualifiedSource,
     pace_generated_at: paceGeneratedAt,

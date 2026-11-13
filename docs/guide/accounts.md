@@ -210,6 +210,7 @@ Lanes are opened by hand in tmux, so keep a short manifest (one line per lane) t
 目前只有預演（P2a）：`node scripts/lane-switch.js --lane <lane> --profile <profile> --order <fleet 訊息 id> --dry-run` 會依序印出計畫的步驟 1 到 8 和回滾指令，並在 `~/.config/autopilot/lane-switch-journal.jsonl` 記一列，不執行任何事。不加 `--dry-run` 會拒絕（結束碼 3，「P2 execution not enabled in P2a」）。`--order` 必填：只有 PM 下令才換，工具不會自己換。
 
 - 帳號別名只由 `scripts/lib/account-alias.js` 算出，工具不會自己開 `.claude.json`，也不碰任何 `.credentials.json`。
+- 步驟 2（請 lane 執行 `autopilot:handoff`，等到交接檔比請求新、且該 lane 的 fleet `activity` 為 idle，預設最多 15 分鐘）在 `scripts/lib/lane-switch-handoff.js`。`lane-switch.js` 尚未呼叫它。
 - 車道紀錄放 `~/.config/autopilot/lanes/<lane>.json`（權限 0600，欄位同上面的 Lane manifest 表，加 pane 與 session id；不得含提示詞）。
 - 回滾：同一個指令，`--profile` 改成原本的 profile。
 - 計畫與步驟：`project/plans/2026-11-10-profile-switch.md`。

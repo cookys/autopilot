@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Wrapper for skill-creator run_loop.py that injects OAuth token as ANTHROPIC_API_KEY.
-# Reads from ~/.claude/.credentials.json (Claude Code OAuth login).
+# Reads from ~/.claude/.credentials.json (Claude Code OAuth login), unless the parent
+# already has CLAUDE_CODE_OAUTH_TOKEN: that value is inherited and the host file is not read
+# (same rule as the other claude spawn sites; token_seat_guard is the refusal).
 #
 # OAuth tokens only access Haiku via the API. Eval uses `claude -p` (any model),
 # but improve_description uses the SDK directly (Haiku only). We monkey-patch
@@ -27,12 +29,14 @@ _EA_LIB="$AUTOPILOT_DIR/scripts/lib/eval-account.sh"
 . "$_EA_LIB"
 eval_account_probe skill-opt || exit $?
 
-if [[ "${AUTOPILOT_TOKEN_SEAT:-}" == 1 ]]; then
-  if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
-    printf '%s\n' 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)' >&2
-    exit 78
-  fi
-elif [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
+# shellcheck source=lib/token-seat.sh
+. "$AUTOPILOT_DIR/scripts/lib/token-seat.sh"
+_ts_msg="$(token_seat_guard)" || { printf '%s\n' "$_ts_msg" >&2; exit 78; }
+
+# A parent CLAUDE_CODE_OAUTH_TOKEN is the child's auth whether or not AUTOPILOT_TOKEN_SEAT=1
+# (the other spawn sites pass that variable through and do not replace it). Do not read the
+# host credentials file in that case. No parent token and no account layer: the file path below.
+if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" && "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
 # Extract OAuth token
 if [[ ! -f "$CRED_FILE" ]]; then
   echo "ERROR: $CRED_FILE not found. Are you logged into Claude Code?" >&2
@@ -82,7 +86,7 @@ echo "Skill: $SKILL_PATH" >&2
 echo "Results: $RESULTS_DIR" >&2
 echo "" >&2
 
-if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 && "${AUTOPILOT_TOKEN_SEAT:-}" != 1 ]]; then
+if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" && "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
   export ANTHROPIC_API_KEY="$TOKEN"
 fi
 
@@ -153,15 +157,13 @@ _orig = imp.improve_description
 _cred_file = os.path.expanduser('~/.claude/.credentials.json')
 # Under claude-account.js exec (AUTOPILOT_ACCOUNT set) the token is the alias token in this process env; no credentials file is read
 # and ANTHROPIC_API_KEY is not exported (the claude children must authenticate with the OAuth token, not with an API-key variable).
-# A declared token seat uses the same env token and never opens the host credentials file.
-_seat = os.environ.get('AUTOPILOT_TOKEN_SEAT') == '1'
-_acct = bool(os.environ.get('AUTOPILOT_ACCOUNT')) or _seat
-
+# A parent CLAUDE_CODE_OAUTH_TOKEN (declared token seat or not) is the same rule the other spawn sites use: inherit it, never open the host file.
 def _patched(*args, **kwargs):
-    if _seat and not os.environ.get('CLAUDE_CODE_OAUTH_TOKEN'):
+    parent = os.environ.get('CLAUDE_CODE_OAUTH_TOKEN') or ''
+    if os.environ.get('AUTOPILOT_TOKEN_SEAT') == '1' and not parent:
         sys.stderr.write('token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)\n')
         sys.exit(78)
-    if _acct:
+    if os.environ.get('AUTOPILOT_ACCOUNT') or parent:
         token = os.environ['CLAUDE_CODE_OAUTH_TOKEN']
     else:
         # Re-read token every call (handles OAuth refresh mid-run)

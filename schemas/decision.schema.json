@@ -241,6 +241,24 @@
               "null"
             ]
           },
+          "dispatched_msg_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closed_via": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "done_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "backfilled": {
             "const": true
           },

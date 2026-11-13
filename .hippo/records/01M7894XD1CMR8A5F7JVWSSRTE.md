@@ -1,0 +1,13 @@
+---
+id: 01M7894XD1CMR8A5F7JVWSSRTE
+kind: issue
+created: 2026-11-07T00:00:00.000Z
+---
+- **Since**: 2026-11-07
+- **Report**: fleet 01M6SZVASD (2026-11-07)
+- **Reply**: none
+- **Problem**: 待你動手的數字是全域的，不是單張卡的，放在主視窗標題語意不對；改放最上面的選單列，前提是 80 欄寬放得下、不截字。
+- **Impact**: 數字位置會讓人誤以為只屬於目前這張卡。
+- **Trigger**: next change to the band top menu row
+- **Source**: codeforge fleet 01M6SZVASD (2026-11-07)
+- **Pointer**: project/backlog/docsz6-hardening-notes.md

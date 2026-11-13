@@ -1,0 +1,11 @@
+---
+id: 01M78950TSZYA0CEJ00YTNXCR3
+kind: issue
+created: 2026-10-28T00:00:00.000Z
+---
+- **Since**: 2026-10-28
+- **Problem**: 四席審查中只要有一席失敗（例如被閒置上限砍掉），整代審查就作廢，必須人工把同一席重派才能繼續；同席重派通常就成功。
+- **Impact**: 每次單席故障都多等一輪並要人介入，審查變慢。
+- **Trigger**: next review generation voided by a single seat fault, or the next edit to the review collector
+- **Source**: bltidy20 handoff list 2026-10-28; idle cap shipped ae247356e, paid-batch auth stop shipped 8183aaaf2
+- **Pointer**: project/backlog/review-seat-fault-no-auto-redispatch.md

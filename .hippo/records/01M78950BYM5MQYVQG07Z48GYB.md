@@ -1,0 +1,14 @@
+---
+id: 01M78950BYM5MQYVQG07Z48GYB
+kind: issue
+created: 2026-10-26T00:00:00.000Z
+---
+- **Since**: 2026-10-26
+- **Report**: 2026-10-26 fleet
+- **Reply**: 2026-10-26 fleet
+- **Problem**: 3.0.0-alpha.6 在 agy 1.4.7 安裝驗證失敗（3 個錯誤、4 個警告，載入的 agent 為 0）：三個 agent 檔的工具欄位格式不對，另有檔案不被載入或被截斷。
+- **Impact**: agy 上裝不起這個 plugin；agy 審查目前走 cleanroom，不受影響。
+- **Trigger**: 3.0.0 之後；someone needs the autopilot plugin itself installed on agy, or agy reviewers stop using cleanroom
+- **Source**: PEER-REPORTED <host> (peace--claude-2) 2026-10-26, agy 1.4.7, 3.0.0-alpha.6
+- **Pointer**: project/backlog/agy-147-plugin-install-validation.md
+- **Context**: Check first whether Claude Code and Codex read an array-form tools field; then edit the source files or convert at agy install time.

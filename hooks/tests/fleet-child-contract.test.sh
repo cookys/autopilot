@@ -126,7 +126,7 @@ check "probe-skill-frontmatter-portability" probe "$d"
 # run-skill-opt.sh: the external run_loop (not in this repo) starts bare `claude -p` children from PATH; the script's PATH wrapper must append --strict-mcp-config
 hopt="$TEST_TMP/hopt"; mkdir -p "$hopt/ap/scripts/lib" "$hopt/ap/skills/xs" "$hopt/ap/skill-creator-workspace/evals" "$hopt/home/.claude" "$hopt/bin" \
   "$hopt/home/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
-cp "$REPO_ROOT/scripts/run-skill-opt.sh" "$hopt/ap/scripts/"; cp "$REPO_ROOT/scripts/lib/repo-identity.sh" "$REPO_ROOT"/scripts/lib/auth-stop.* "$REPO_ROOT"/scripts/lib/claude-call-capture* "$hopt/ap/scripts/lib/"
+cp "$REPO_ROOT/scripts/run-skill-opt.sh" "$hopt/ap/scripts/"; cp "$REPO_ROOT/scripts/lib/repo-identity.sh" "$REPO_ROOT"/scripts/lib/auth-stop.* "$REPO_ROOT"/scripts/lib/claude-call-capture* "$REPO_ROOT"/scripts/lib/token-seat.* "$hopt/ap/scripts/lib/"
 # G37 W5: the eval runners fail closed without their account-layer helper (exit 2), so a minimal layout carries it and the
 # account CLI with its libs; the registry location points at an empty dir (no registry = the legacy path).
 . "$(dirname "$0")/lib/account-layer.sh"

@@ -23,7 +23,8 @@ mk_layout() {
   cp "$SCRIPTS/run-eval-batch.sh" "$SCRIPTS/bench-engine-capability.sh" "$SCRIPTS/qualification-sweep.sh" \
      "$SCRIPTS/run-grok-implementer-ab.sh" "$SCRIPTS/benchmark-hook-latency.js" "$d/scripts/"
   cp "$SCRIPTS/lib/auth-stop.js" "$SCRIPTS/lib/auth-stop.sh" "$SCRIPTS/lib/repo-identity.sh" \
-     "$SCRIPTS/lib/claude-call-capture.js" "$SCRIPTS/lib/claude-call-capture.sh" "$SCRIPTS/lib/claude-call-capture-exec.sh" "$d/scripts/lib/"
+     "$SCRIPTS/lib/claude-call-capture.js" "$SCRIPTS/lib/claude-call-capture.sh" "$SCRIPTS/lib/claude-call-capture-exec.sh" \
+     "$SCRIPTS/lib/token-seat.sh" "$SCRIPTS/lib/token-seat.js" "$d/scripts/lib/"
   cp_account_layer "$d/scripts"   # the eval runners fail closed (exit 2) without lib/eval-account.sh and the account CLI
   cp "$SCRIPTS/run-skill-opt.sh" "$d/scripts/"
   cp "$REPO_ROOT/evals/run-trigger-test.sh" "$d/evals/"

@@ -15,13 +15,13 @@ assert_file_exists "$PROFILE/metrics/costs.jsonl" "profile tracker writes ledger
 assert_file_exists "$PROFILE/metrics/.cursors/profile-session.json" "profile tracker writes cursor"
 assert_file_absent "$HOOK_HOME/.claude/metrics" "profile tracker leaves HOME metrics untouched"
 
-# Unset and empty both retain the home profile. The writer never supported a file override.
+# Unset and empty CLAUDE_CONFIG_DIR both retain the home profile (AUTOPILOT_COSTS_FILE unset; the writer's
+# file override is covered in cost-tracker-account.test.sh and by the override reader checks below).
 for mode in unset empty; do
   if [ "$mode" = empty ]; then export CLAUDE_CONFIG_DIR=''; else unset CLAUDE_CONFIG_DIR; fi
-  AUTOPILOT_COSTS_FILE="$TEST_TMP/unused.jsonl" run_hook cost-tracker.js "$(payload "$mode-session")"
+  run_hook cost-tracker.js "$(payload "$mode-session")"
   assert_file_exists "$HOOK_HOME/.claude/metrics/costs.jsonl" "$mode profile writes home ledger"
   assert_file_exists "$HOOK_HOME/.claude/metrics/.cursors/$mode-session.json" "$mode profile writes home cursor"
-  assert_file_absent "$TEST_TMP/unused.jsonl" "$mode tracker retains no file override"
 done
 
 # Distinct ledgers make fallback/merged reads observable, including in the watcher.

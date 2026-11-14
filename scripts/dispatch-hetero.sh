@@ -4865,13 +4865,13 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     reap_cnative_config_dir
   else
     _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
-    # S2 gateway join (2026-11-14): cc-shim talks to the model gateway, so its requests carry
-    # X-Fleet-Task when AUTOPILOT_UPSTREAM_TASK_ID is a ULID. lib/fleet-task-header.js owns the
-    # validation (never inline the regex: an unvalidated value in ANTHROPIC_CUSTOM_HEADERS could
+    # S2 gateway join (2026-11-14): cc-shim carries X-Fleet-Task only when --endpoint is in the
+    # fleet-gateway allowlist and AUTOPILOT_UPSTREAM_TASK_ID is a ULID. lib/fleet-task-header.js owns
+    # both checks (never inline them: an unvalidated value in ANTHROPIC_CUSTOM_HEADERS could
     # inject headers). An inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child: env -u drops
     # it first and the validated line is the only value set back. The claude-native branches above
     # keep scrubbing it and never set it (first-party API, not the gateway).
-    FLEET_TASK_HEADER="$(node "$SELF_DIR/lib/fleet-task-header.js" --rail dispatch-hetero)"
+    FLEET_TASK_HEADER="$(node "$SELF_DIR/lib/fleet-task-header.js" --rail dispatch-hetero ${ENDPOINT:+--endpoint "$ENDPOINT"})"
     # --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList: the CLI intermittently injects a
     # "task tools haven't been used recently" reminder into the conversation; on an Anthropic-compatible
     # endpoint with prefix caching it lands mid-prompt (~11.5K tokens) and breaks the cached prefix.
@@ -6391,7 +6391,7 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER PACE_ROLE ENGINE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \

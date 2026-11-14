@@ -107,6 +107,8 @@ assert_contains "$__RUN_STDOUT" "$OPEN_ABS" "reason has absolute open-decision.j
 assert_contains "$__RUN_STDOUT" "open" "reason names open"
 assert_contains "$__RUN_STDOUT" "--question" "reason names --question"
 assert_contains "$__RUN_STDOUT" "--option" "reason names --option"
+assert_contains "$__RUN_STDOUT" "--category <money|identity|presence|goal|public-release|unbackable-loss>" "reason names the required --category"
+assert_contains "$__RUN_STDOUT" "沒帶或不在其中 exit 7" "reason says --category is required (exit 7)"
 assert_contains "$__RUN_STDOUT" "close --id" "reason names close --id"
 assert_contains "$__RUN_STDOUT" "[待決回覆]" "reason names panel reply head"
 assert_not_contains "$__RUN_STDOUT" "node scripts/open-decision.js" "reason is not the relative-only command"

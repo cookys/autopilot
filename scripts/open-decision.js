@@ -4,14 +4,14 @@
 /**
  * open-decision.js — the "open owner questions" file of a watcher scope (mods P1W W2a-m; contract autopilot.decision/2).
  *
- *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text
+ *   node scripts/open-decision.js open  --category <c> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
  *                                       [--title <short card title, <= 20 characters>] [--kind <decide|go|remind|step|look>] [--attach <path-or-URL>]...
  *                                       [--operator-step <text>]...   (repeatable, or several steps in one value separated by newlines:
  *                                         what the operator must do himself after answering; stored as operator_steps)
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
- *   node scripts/open-decision.js open  --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
+ *   node scripts/open-decision.js open  --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (operator action step: no --option, --executor or --not-authorized needed)
  *   node scripts/open-decision.js open ... --category <money|identity|presence|goal|public-release|unbackable-loss>   (REQUIRED on every CLI open: the only six kinds of question that go to the operator; anything else -> exit 7 with a 拒絕開卡 message, nothing written)
  *   node scripts/open-decision.js stats [--since <ISO | Nh|Nd|Nw, default 7d>] [--cwd <dir>] [--json]   (cards opened in the window per category: {schema:"decision-stats/1", since, counts:{money,...,uncategorized}}; patrol's weekly line)

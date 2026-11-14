@@ -317,15 +317,34 @@ function evaluateBurnRate(windowReadings, resetsAtSec, nowMs) {
   };
 }
 
-function loadState(f, stateFile) {
+function loadState(f, stateFile, err) {
+  // Corrupt state (garbage JSON, empty file) must not crash the command: warn once on stderr
+  // and continue with fresh state; the next saveState overwrites the file. Any other read
+  // error (EACCES, EISDIR, ...) still throws.
+  const warn = (reason) => {
+    const say = typeof err === 'function' ? err : (s) => process.stderr.write(`${s}\n`);
+    say(`profile-switch-advice: ${stateFile}: unreadable state (${reason}), starting fresh`);
+  };
+  let raw;
   try {
-    const raw = f.readFileSync(stateFile, 'utf8');
-    const obj = JSON.parse(raw);
-    if (obj && typeof obj === 'object' && obj.lanes && typeof obj.lanes === 'object') {
-      return { version: 1, lanes: obj.lanes };
-    }
+    raw = f.readFileSync(stateFile, 'utf8');
   } catch (e) {
     if (!e || e.code !== 'ENOENT') throw e;
+    return { version: 1, lanes: {} };
+  }
+  if (raw.trim() === '') {
+    warn('empty file');
+    return { version: 1, lanes: {} };
+  }
+  let obj;
+  try {
+    obj = JSON.parse(raw);
+  } catch (_) {
+    warn('invalid JSON');
+    return { version: 1, lanes: {} };
+  }
+  if (obj && typeof obj === 'object' && obj.lanes && typeof obj.lanes === 'object') {
+    return { version: 1, lanes: obj.lanes };
   }
   return { version: 1, lanes: {} };
 }
@@ -506,7 +525,7 @@ function advise(opts, deps) {
   }
 
   const historyRows = readReadingsHistory(f, readingsFile);
-  const state = loadState(f, stateFile);
+  const state = loadState(f, stateFile, d.err);
   const advices = [];
   let stateDirty = false;
 

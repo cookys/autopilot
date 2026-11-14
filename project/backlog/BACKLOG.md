@@ -85,19 +85,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PM fleet 01M6RQYG00 (2026-11-06)
 - **Pointer**: project/backlog/fleet-lane-text-and-task-due.md
 
-### dispatch-hetero-account 的 subtest 可能還會跑出 fixture
-- **Id**: BL-0418
-- **Status**: open
-- **Since**: 2026-11-06
-- **Origin**: self
-- **Problem**: 這支套件有個 subtest 會在它的 cwd repo 裡提交；GIT_DIR 外洩那一類已修，但是否還有剩下的情況沒有記錄。
-- **Impact**: 漏掉的情況會改到外層 repo 的檔案。
-- **Trigger**: ready；next touch of dispatch-hetero-account.test.js
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: gitenv follow-up 2026-11-06
-- **Pointer**: project/backlog/flaky-under-load-suites.md
-
 ### seedclean g3 其餘加固：trap 還原、fork 後的空窗、review 路徑 timeout -k
 - **Id**: BL-0421
 - **Status**: open

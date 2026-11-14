@@ -6,7 +6,7 @@
  * After a lane switch, poll the ledger hooks/cost-tracker.js appends:
  *   path.join(metricsDirOf(), 'costs.jsonl')
  * which is <target profile>/metrics/costs.jsonl.
- * The writer does not consult AUTOPILOT_COSTS_FILE, so this reader does not either.
+ * This polls another profile's ledger, so it ignores AUTOPILOT_COSTS_FILE (which only redirects the current process's writer).
  * The target profile comes from --profile, or from the lane manifest when that
  * flag is omitted. home is ~/.claude; any other name is ~/.claude-profiles/<name>.
  * The caller's CLAUDE_CONFIG_DIR is not consulted.

@@ -45,4 +45,15 @@ CLAUDE_CONFIG_DIR="$CFG2" run_hook cost-tracker.js "$(payload ct-acct-1)"
 assert_eq "acct-$(sha8 "$(realpath "$CFG2")")" "$(last_account)" "missing .claude.json falls to the config dir hash"
 assert_not_contains "$(cat "$LEDGER")" "$FIX_EMAIL" "still no email after the fallback rows"
 
+# 4. AUTOPILOT_COSTS_FILE redirects the writer; without it the metrics dir ledger is used
+CFG3="$TEST_TMP/cfg3"; mkdir -p "$CFG3"
+SCRATCH="$TEST_TMP/scratch/x.jsonl"
+turn t5 >> "$TR"
+CLAUDE_CONFIG_DIR="$CFG3" AUTOPILOT_COSTS_FILE="$SCRATCH" run_hook cost-tracker.js "$(payload ct-env-1)"
+assert_eq 1 "$(grep -c ct-env-1 "$SCRATCH" 2>/dev/null || echo 0)" "env override: row appended to AUTOPILOT_COSTS_FILE"
+assert_eq "no" "$(test -e "$CFG3/metrics/costs.jsonl" && echo yes || echo no)" "env override: nothing under <config>/metrics/costs.jsonl"
+turn t6 >> "$TR"
+CLAUDE_CONFIG_DIR="$CFG3" run_hook cost-tracker.js "$(payload ct-env-2)"
+assert_eq 1 "$(grep -c ct-env-2 "$CFG3/metrics/costs.jsonl" 2>/dev/null || echo 0)" "no env: row appended to <config>/metrics/costs.jsonl"
+
 finalize_test

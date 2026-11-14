@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * cost-tracker — Stop (default-on since v2.35.15; opt-in before)
- * Logs per-session token usage + estimated cost to <CLAUDE_CONFIG_DIR or ~/.claude>/metrics/costs.jsonl.
+ * Logs per-session token usage + estimated cost to $AUTOPILOT_COSTS_FILE, else <CLAUDE_CONFIG_DIR or ~/.claude>/metrics/costs.jsonl.
  * Opt-out: set the env var AUTOPILOT_COST_TRACKER=false (settings.json `env` block works; there is no
  * `autopilot.costTracker` setting).
  *
@@ -26,7 +26,7 @@
 'use strict';
 
 const fs = require('fs');
-const { configPath, metricsDirOf } = require('../scripts/lib/config-path.js');
+const { configPath, metricsDirOf, costsFileOf } = require('../scripts/lib/config-path.js');
 const { claudeAccount } = require('../scripts/lib/account-alias.js');
 const { fromEnv: attributionFromEnv } = require('../scripts/lib/event-attribution.js');
 const path = require('path');
@@ -178,7 +178,8 @@ try {
     ...attr,
   })).join('\n') + '\n';
 
-  const costsFile = path.join(metricsDir, 'costs.jsonl');
+  const costsFile = costsFileOf();
+  fs.mkdirSync(path.dirname(costsFile), { recursive: true });
   fs.appendFileSync(costsFile, rows);
   // Cumulative cache-read report (v2.35.15, <host> digest #6): the money is in cache_read
   // on long-lived sessions, and nobody saw it accumulate. Sum THIS session's rows and

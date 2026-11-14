@@ -329,7 +329,7 @@ EOF
   artifact_type="$(printf '%s' "$parse_out" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(String(j.artifact_type))})')"
   rows_ok="$(printf '%s' "$parse_out" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.stdout.write(Array.isArray(j.rows)?"yes":"no")})')"
   # RED at 323e09d89af7949f5b5239eb52d64c85c2c54669: parse stdout is a bare array; schema_version=undefined artifact_type=undefined rows=undefined
-  assert_eq "2" "$schema_version" "r82: parse envelope schema_version is 2"
+  assert_eq "1" "$schema_version" "r82: parse envelope schema_version is 1"
   assert_eq "next_pick_parse_result" "$artifact_type" "r82: parse artifact_type is next_pick_parse_result"
   assert_eq "yes" "$rows_ok" "r82: parse envelope rows is an array"
 

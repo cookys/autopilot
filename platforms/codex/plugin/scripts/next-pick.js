@@ -35,9 +35,9 @@
  *     (`--today YYYY-MM-DD`, default the current UTC date; a malformed --today is a usage error, exit 2);
  *     null when Since is missing or malformed, 0 when it is in the future. pick-record stores the candidate
  *     list as a digest, so replay never depends on the reference day.
-     Output schema_version 2 (next_pick_parse_result); each row also carries `id` (the `- **Id**: BL-NNNN`
-     value, else null; permanent, survives title edits), `status` (first token of `- **Status**:`:
-     open|fired|shipped|dropped, else null) and `status_raw` (the full Status value, else null).
+ *     Output schema_version 1 (next_pick_parse_result, additive fields only); each row also carries `id` (the `- **Id**: BL-NNNN`
+ *     value, else null; permanent, survives title edits), `status` (first token of `- **Status**:`:
+ *     open|fired|shipped|dropped, else null) and `status_raw` (the full Status value, else null).
  *   pick --candidates <file> --preferences <file> [--readiness <file>]
  *        [--ledger <file>] [--decision-id <id>] [--round <n>]
  *     candidates: JSON array [{title, effort, tags[], class, age_days, source}]
@@ -238,7 +238,7 @@ function parseBacklog(opts) {
     });
   }
   process.stdout.write(`${JSON.stringify({
-    schema_version: 2,
+    schema_version: 1,
     artifact_type: 'next_pick_parse_result',
     rows,
   }, null, 1)}\n`);

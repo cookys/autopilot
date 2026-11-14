@@ -392,7 +392,7 @@ assert_contains "$OUT" '"stale": false' "a changed head resets the clock"
 TS_RC=0; node "$SCRIPT" top-stale --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" >/dev/null 2>&1 || TS_RC=$?
 assert_exit_code "$TS_RC" "2" "top-stale without --state is a usage error"
 
-# ── parse: row id / status / status_raw (schema 2) ──
+# ── parse: row id / status / status_raw (schema_version 1, additive) ──
 ID_BL="$TEST_TMP/id-backlog.md"
 cat > "$ID_BL" <<'MD'
 # fixture BACKLOG
@@ -424,7 +424,7 @@ cat > "$ID_BL" <<'MD'
 MD
 ID_OUT="$(node "$SCRIPT" parse --backlog "$ID_BL")"
 row_field() { node -e "const r=JSON.parse(require('fs').readFileSync(0,'utf8')).rows.find(x=>x.title===process.argv[1]);console.log(r[process.argv[2]])" "$1" "$2"; }
-assert_eq "$(printf '%s' "$ID_OUT" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).schema_version)")" "2" "parse schema_version is 2"
+assert_eq "$(printf '%s' "$ID_OUT" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).schema_version)")" "1" "parse schema_version stays 1 (additive fields)"
 assert_eq "$(printf '%s' "$ID_OUT" | row_field 'Ready row original title' id)" "BL-0042" "row id read from Id line"
 assert_eq "$(printf '%s' "$ID_OUT" | row_field 'Ready row renamed title' id)" "BL-0042" "same id survives a title change"
 assert_eq "$(printf '%s' "$ID_OUT" | row_field 'Ready row original title' status)" "open" "status open"

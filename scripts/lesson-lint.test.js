@@ -17,6 +17,10 @@ const NOW = '2026-11-15T00:00:00Z';
 const ULID = '01M7DMQ082CTRGZCTD2BGF5GNC';
 
 function mk() { return fs.mkdtempSync(path.join(os.tmpdir(), 'lesson-lint-')); }
+// Fence: every spawned stop-hook inherits these, so no run touches the durable default log.
+const XDG = mk();
+process.env.XDG_STATE_HOME = XDG;
+process.env.AUTOPILOT_RULE_CAPTURE_LOG = path.join(mk(), 'default-fence.jsonl');
 function memo(dir, file, { type = 'feedback', created, mechanism, nested = false } = {}) {
   const f = [];
   if (created) f.push(`created: ${created}`);
@@ -180,4 +184,9 @@ test('rule-capture log failure does not change the result', () => {
     input: JSON.stringify({ transcript_path: tp }), encoding: 'utf8', env: { ...process.env, AUTOPILOT_RULE_CAPTURE_LOG: tp + '/x/y' },
   });
   assert.equal(JSON.parse(r.stdout).decision, 'block'); assert.match(r.stderr, /log failed/);
+});
+
+test('rule-capture: the durable default log under XDG_STATE_HOME was never written', () => {
+  assert.equal(fs.existsSync(path.join(XDG, 'autopilot', 'rule-capture.jsonl')), false);
+  assert.equal(fs.existsSync(process.env.AUTOPILOT_RULE_CAPTURE_LOG), true); // cap() cases did log, into the fence
 });

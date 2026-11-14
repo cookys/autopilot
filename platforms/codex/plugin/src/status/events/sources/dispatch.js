@@ -46,10 +46,20 @@ function thresholdMs(window) {
 
 const isText = (v) => typeof v === 'string' && v.length > 0;
 
+// attribution (autopilot.events/1 additive fields): a manifest written before they existed simply omits them.
+const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const POOL = /^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.@-]+)?$/;
+const COMMIT = /^[0-9a-f]{7,64}$/;
+const LANE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+function attribution(m) {
+  const pick = (v, re) => (typeof v === 'string' && re.test(v) ? v : null);
+  return { fleet_task: pick(m.fleet_task, ULID), pool: pick(m.pool, POOL), commit: pick(m.commit, COMMIT), lane: pick(m.lane, LANE) };
+}
+
 function startedData(m) {
   const data = {
     run_id: m.run_id, role: m.role ?? null, runner: m.runner ?? null, model: m.model ?? null,
-    branch: m.branch ?? null, base_sha: m.base_sha ?? null,
+    branch: m.branch ?? null, base_sha: m.base_sha ?? null, ...attribution(m), commit: null, // a start event predates the head sha
   };
   if (isText(m.parent_run_id)) data.parent_run_id = m.parent_run_id;
   if (Number.isInteger(m.depth)) data.depth = m.depth;
@@ -130,7 +140,7 @@ function read(ctx, window) {
           if (duration === null && startedTs !== null) duration = Math.round((Date.parse(endedTs) - Date.parse(startedTs)) / 1000);
           events.push({
             id: `dispatch.ended:${m.run_id}`, kind: 'dispatch.ended', ts: endedTs, ...base,
-            data: { run_id: m.run_id, final_status: m.final_status, duration_s: duration, role: m.role ?? null, runner: m.runner ?? null, model: m.model ?? null },
+            data: { run_id: m.run_id, final_status: m.final_status, duration_s: duration, role: m.role ?? null, runner: m.runner ?? null, model: m.model ?? null, ...attribution(m) },
           });
         }
       }

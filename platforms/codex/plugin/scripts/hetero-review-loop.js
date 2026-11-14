@@ -155,6 +155,7 @@ function resolveMinReviewedSeats(flags, totalSeats) {
 
 const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
 const reviewPackets = require('./lib/review-packets');
+const { fromEnv: attributionFromEnv } = require('./lib/event-attribution');
 
 // Packet mode (collect/finalize): --packets <packets.json> --packet <id> makes this call one packet of a
 // packet set — its own phase `<set>-<id>`, reviewing only that packet's files of the full range. Returns
@@ -1543,6 +1544,7 @@ async function handleCollect(flags) {
     } : {}),
     ...(packetRecord ? { packet: packetRecord } : {}),
     collected_at: new Date().toISOString(),
+    fleet_task: attributionFromEnv(process.env).fleet_task,
   }, { recordPointer: true });
 
   publishRoundSummary({

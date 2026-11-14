@@ -2437,6 +2437,19 @@ EV_M3=$(pk_mutant evfinal hetero-review-loop.js "  targetChainEntry.finalized_at
 EV_ML3="$TEST_TMP/ev_ledger_m3"; ev_collect "$SCRIPT" "$EV_ML3" pevm3 >/dev/null; ev_finalize "$EV_M3/scripts/hetero-review-loop.js" "$EV_ML3" pevm3 >/dev/null
 assert_eq "$(ev_stamp "$EV_ML3" pevm3 finalized_at)" "missing" "events writer 3 (mutation): without the finalized_at writer the stamp is missing"
 
+# events writer 5 (D6): collect records fleet_task from the environment (ULID shape only), null otherwise
+ev_fleet_task() { # <ledger> <phase>: prints chain entry 0 fleet_task as JSON (undefined -> "absent")
+  node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[0]; process.stdout.write("fleet_task" in e ? JSON.stringify(e.fleet_task) : "absent")' "$1/review-$2/chain.json" 2>/dev/null
+}
+EV_ULID="01M7DR""BR19SD44054J""N5QFK0V2"
+EV_L5="$TEST_TMP/ev_ledger_ft"
+env -u AUTOPILOT_UPSTREAM_TASK_ID AUTOPILOT_FLEET_TASK="$EV_ULID" bash -c 'cd "$1" && shift && "$@"' _ "$PWD" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$EV_L5" --phase pft1 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" >/dev/null 2>&1
+assert_eq "$(ev_fleet_task "$EV_L5" pft1)" "\"$EV_ULID\"" "events writer 5: collect with AUTOPILOT_FLEET_TASK records fleet_task in the chain entry"
+env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$EV_L5" --phase pft2 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" >/dev/null 2>&1
+assert_eq "$(ev_fleet_task "$EV_L5" pft2)" "null" "events writer 5: collect without a Fleet task records fleet_task null"
+env AUTOPILOT_FLEET_TASK="not-a-ulid" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger "$EV_L5" --phase pft3 --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" >/dev/null 2>&1
+assert_eq "$(ev_fleet_task "$EV_L5" pft3)" "null" "events writer 5: a malformed AUTOPILOT_FLEET_TASK records null"
+
 # events writer 4: a relative --ledger is recorded as an absolute path
 EV_REL_OUT=$(cd "$TEST_TMP" && node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger --phase pevrel --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "gpt-m1/low@codex" 2>&1); EV_RC=$?
 assert_exit_code "$EV_RC" "0" "events writer: collect with a relative --ledger exits 0"

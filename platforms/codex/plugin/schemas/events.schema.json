@@ -72,6 +72,34 @@
             "null"
           ],
           "minimum": 0
+        },
+        "fleet_task": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "pool": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.@-]+)?$"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "lane": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
         }
       }
     },
@@ -159,6 +187,34 @@
         },
         "model": {
           "type": "string"
+        },
+        "fleet_task": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "pool": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.@-]+)?$"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "lane": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
         }
       }
     },
@@ -228,7 +284,8 @@
         "cache_read_tokens",
         "cache_write_tokens",
         "cost_usd",
-        "sidechain"
+        "sidechain",
+        "basis"
       ],
       "properties": {
         "session": {
@@ -268,6 +325,43 @@
             "string",
             "null"
           ]
+        },
+        "fleet_task": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "pool": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.@-]+)?$"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "lane": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "basis": {
+          "const": "self_reported"
         }
       }
     },
@@ -395,6 +489,13 @@
             "object",
             "null"
           ]
+        },
+        "fleet_task": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
         }
       }
     },
@@ -498,6 +599,13 @@
         "dispositions_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        },
+        "fleet_task": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
         }
       }
     },

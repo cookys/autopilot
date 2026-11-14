@@ -209,6 +209,8 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_REVIEW_SELF_DIR/lib/repo-identity.sh" ] && . "$_REVIEW_SELF_DIR/lib/repo-identity.sh" || true
+# Fail-open: a missing helper only leaves the manifest `lane` null. The review prompt is generated, so only $AUTOPILOT_LANE names the lane here.
+[ -r "$_REVIEW_SELF_DIR/lib/dispatch-lane.sh" ] && . "$_REVIEW_SELF_DIR/lib/dispatch-lane.sh" || true
 # shellcheck source=lib/token-seat.sh
 . "$_REVIEW_SELF_DIR/lib/token-seat.sh"
 # shellcheck source=lib/codeforge-collect.sh
@@ -1668,6 +1670,7 @@ unset AUTOPILOT_SESSION_ID
 [ -n "$LINEAGE_ROOT" ] && LINEAGE_ROOT="$(printf '%s' "$LINEAGE_ROOT" | tr -c 'A-Za-z0-9._-' '-')"
 LINEAGE_DEPTH=$((10#$LINEAGE_DEPTH))
 export AUTOPILOT_PARENT_RUN_ID="$REVIEW_RUN_ID"
+declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "" # child cost rows inherit lane + fleet task
 export AUTOPILOT_ROOT_RUN_ID="$LINEAGE_ROOT"
 export AUTOPILOT_DISPATCH_DEPTH="$(( LINEAGE_DEPTH + 1 ))"
 REVIEW_MANIFEST_ENDED=""
@@ -1714,12 +1717,13 @@ write_review_manifest() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   local _rk_ident="$REPO_IDENTITY_FIELDS"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
+  declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "" "$RUNNER" "${ENDPOINT:-}")"
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$( if [[ -n "$ALLOW_NARRATIVE" ]]; then json_escape "$ALLOW_NARRATIVE"; else printf null; fi )" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
-      "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \
+      "$(json_escape "$PROMPT_FILE")" "$(declare -F dispatch_lane_json >/dev/null 2>&1 && dispatch_lane_json || printf null)" "$(json_escape "$DIFF_FILE")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$_rk_ident" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" \

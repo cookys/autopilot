@@ -1,5 +1,5 @@
 {
-  "_why": "Follows engine-scorecard current (glm: reviewer provisional, implementer qualified 2026-11-13, scorecard event 34, 24/24, integrity 0; agyclaude: reviewer and implementer pass 2026-11-13, events 30/29; minimax: failed both 2026-11-13). Implementer priority agy -> glm -> agyclaude, with role_models giving the implementer agy key gemini-4-hydrogen-high (same agy pool and quota as carbon; reviewer and author keep carbon): hydrogen passed all four prereg bars (develop d40e9ad43). fallback.reviewer pins the automatic reviewer retreat order hydrogen -> glm -> agyclaude so endpoint-outage retreat matches picker order and never retreats to scarce codex pools (gpt-6.1-sol).",
+  "_why": "Follows engine-scorecard current (glm: reviewer provisional, implementer qualified 2026-11-13, scorecard event 34, 24/24, integrity 0; agyclaude: reviewer and implementer pass 2026-11-13, events 30/29; minimax: failed both 2026-11-13). Implementer priority agy -> glm -> agyclaude, with role_models giving the implementer agy key gemini-4-hydrogen-high (same agy pool and quota as carbon; reviewer and author keep carbon): hydrogen passed all four prereg bars (develop d40e9ad43). fallback.reviewer pins the automatic reviewer retreat order hydrogen -> glm -> agyclaude so endpoint-outage retreat matches picker order and never retreats to scarce codex pools (gpt-6.1-sol). Reviewer and author priority added 2026-11-15 (Taipei): agy weekly 7%, codex 94% until 2026-11-16 reset; revert after.",
   "reviewer": [
     "agy",
     "glm",
@@ -26,6 +26,20 @@
       "agy",
       "glm",
       "agyclaude"
+    ],
+    "reviewer": [
+      "agy",
+      "glm",
+      "agyclaude",
+      "grok",
+      "codex"
+    ],
+    "author": [
+      "agy",
+      "glm",
+      "agyclaude",
+      "grok",
+      "codex"
     ]
   },
   "fallback": {

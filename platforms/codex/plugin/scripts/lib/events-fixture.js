@@ -295,7 +295,7 @@ function goldenEvents(fx) {
     const r = JSON.parse(row);
     const d = {
       session: r.session, model: r.model, tier, input_tokens: r.input_tokens, output_tokens: r.output_tokens,
-      cache_read_tokens: r.cache_read_tokens, cache_write_tokens: r.cache_write_tokens, cost_usd: r.cost_usd, sidechain: r.sidechain === true,
+      cache_read_tokens: r.cache_read_tokens, cache_write_tokens: r.cache_write_tokens, cost_usd: r.cost_usd, sidechain: r.sidechain === true, basis: 'self_reported',
     };
     if (r.agent_id) d.agent_id = r.agent_id;
     return d;
@@ -311,7 +311,7 @@ function goldenEvents(fx) {
   const reviewData = (entry, phase, findings) => {
     const d = {
       phase, phase_base12: sha256hex(entry.base).slice(0, 12), generation: entry.generation, base: entry.base, head: entry.head,
-      seats: entry.seats, reviewed_seats: entry.reviewed_seats, total_seats: entry.total_seats,
+      seats: entry.seats, reviewed_seats: entry.reviewed_seats, total_seats: entry.total_seats, fleet_task: entry.fleet_task || null,
     };
     if (findings) { // findings.json absent: the event is kept, findings_total and findings_by_severity are left out
       const bySeverity = {};
@@ -327,7 +327,7 @@ function goldenEvents(fx) {
     out.push(ev('review.collected', idKey, entry.collected_at, 'review_ledger', {}, reviewData(entry, phase, findings)));
     if (entry.status === 'finalized') {
       out.push(ev('review.finalized', idKey, entry.finalized_at, 'review_ledger', {}, {
-        phase, phase_base12: base12, generation: entry.generation, verdict: 'SHIP-AS-IS', open_findings: 0,
+        phase, phase_base12: base12, generation: entry.generation, fleet_task: entry.fleet_task || null, verdict: 'SHIP-AS-IS', open_findings: 0,
         reviewed_seats: entry.reviewed_seats, total_seats: entry.total_seats, dispositions_sha256: entry.dispositions_sha256,
       }));
     }

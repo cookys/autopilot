@@ -447,6 +447,11 @@
       "file": "src/engine/profile-runtime.js",
       "status": "out_of_scope",
       "reason": "plan 4.1 B2: invokeClaude runs `claude -p --bare`, which requires ANTHROPIC_API_KEY (API billing) and refuses every routed provider, so it is not a subscription OAuth call"
+    },
+    {
+      "file": "scripts/lib/event-attribution.js",
+      "status": "out_of_scope",
+      "reason": "false positive: the hit is the CLAUDE_FAMILY runner-name list used to label the pool; the module requires only fs, path and ./account-alias and starts no process"
     }
   ],
   "reviewed_non_spawns": [

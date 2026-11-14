@@ -99,6 +99,7 @@ test('source-cost', () => {
   const res = cost.read(ctxOf(fx), {});
   assert.deepEqual(sorted(res.events), sorted(goldenOf(fx, 'cost.turn')));
   assert.equal(res.events.length, 5);
+  assert.ok(res.events.every((e) => e.data.basis === 'self_reported'), 'cost.turn is an estimate from a self-written transcript');
   assert.deepEqual(res.stats, { state: 'degraded', rows_read: 7, rows_skipped: 1, rows_filtered: 1, redactions: 0 });
   assert.deepEqual(res.warnings.map((w) => `${w.source}:${w.code}:${w.detail}:${w.count}`), ['cost:ts_invalid:costs.jsonl:1']);
   // the sum of cost_usd over events equals the file sum of the project rows (cost-digest style), byte-identical pair included

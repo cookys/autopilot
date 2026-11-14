@@ -176,11 +176,17 @@ function read(ctx = {}, window = {}) {
         if (floor !== null && parseInstantMs(ts) < floor) return;
         const data = {
           session: row.session, model: row.model, tier: tierOf(row.model), ...tokens, cost_usd: row.cost_usd, sidechain: row.sidechain === true,
+          basis: 'self_reported', // the Stop hook prices a transcript any process could write: an estimate, not a bill
         };
         if (typeof row.agent_id === 'string') data.agent_id = row.agent_id;
+        // attribution (additive under /1): rows written before the cost-tracker stamped them give null for every one
+        const pick = (v, re) => (typeof v === 'string' && re.test(v) ? v : null);
+        const FIELDS = { run_id: /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/, fleet_task: /^[0-9A-HJKMNP-TV-Z]{26}$/, pool: /^[A-Za-z0-9_.-]+(:[A-Za-z0-9_.@-]+)?$/, commit: /^[0-9a-f]{7,64}$/, lane: /^[a-z0-9][a-z0-9._-]{0,63}$/ };
+        for (const [k, re] of Object.entries(FIELDS)) if (k in row) data[k] = pick(row[k], re); // a row without the key stays without it
+        const runId = data.run_id || null;
         const event = {
           id: `cost.turn:${digest}#${n}`, kind: 'cost.turn', ts, ts_basis: 'source', source: 'costs',
-          project_key: project.project_key, root_run_id: null, run_id: null, data,
+          project_key: project.project_key, root_run_id: null, run_id: runId, data,
         };
         Object.defineProperty(event, '_src', { value: { source: SOURCE, file, head: info.head, offset: line.offset, end: line.end }, enumerable: false });
         events.push(event);

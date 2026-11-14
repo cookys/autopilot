@@ -201,7 +201,11 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
   assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok']);
   assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
-  assert.deepEqual(roles.priority, { implementer: ['agy', 'glm', 'agyclaude'] });
+  assert.deepEqual(roles.priority, {
+    implementer: ['agy', 'glm', 'agyclaude'],
+    reviewer: ['agy', 'glm', 'agyclaude', 'grok', 'codex'],
+    author: ['agy', 'glm', 'agyclaude', 'grok', 'codex'],
+  });
   assert.deepEqual(roles.role_models, { implementer: { agy: 'gemini-4-hydrogen-high' } });
 
   for (const r of ['reviewer', 'implementer', 'author']) {
@@ -827,6 +831,20 @@ test('(priority a) agy slack +1 beats glm +30: priority order wins, hydrogen mod
   assert.deepEqual(res.reviewer_exclude, ['agy']);
 });
 
+test('(priority reviewer) agy beats codex for reviewer and author even when codex has far more slack', () => {
+  for (const role of ['reviewer', 'author']) {
+    const res = selectEngine({
+      pace: priorityPace([paceRow('agy', 39, 40), paceRow('codex A', 10, 40)]),
+      pools: loadPools(),
+      roles: loadRoles(),
+      role,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(res.engine, 'agy', role);
+    assert.equal(res.selected_by, 'priority', role);
+  }
+});
+
 test('(priority b) agy behind (-5) -> glm (+2) chosen, still selected_by priority', () => {
   const res = selectEngine({
     pace: priorityPace([paceRow('agy', 45, 40), paceRow('glm', 38, 40)]),
@@ -878,7 +896,7 @@ test('(priority d) all three behind (agy -5, glm -3, agyclaude -2), codex +20 ->
   assert.deepEqual(res.reviewer_exclude, ['codex']);
 });
 
-test('(priority e) reviewer role unchanged: largest slack, agy model stays gemini-4-carbon-high', () => {
+test('(priority e) reviewer role: priority list (agy first), agy model stays gemini-4-carbon-high', () => {
   const res = selectEngine({
     pace: priorityPace([paceRow('agy', 10, 40), paceRow('glm', 39, 40)]),
     pools: loadPools(),
@@ -888,7 +906,7 @@ test('(priority e) reviewer role unchanged: largest slack, agy model stays gemin
   });
   assert.equal(res.engine, 'agy');
   assert.equal(res.model, 'gemini-4-carbon-high');
-  assert.equal(res.selected_by, 'slack');
+  assert.equal(res.selected_by, 'priority');
   assert.deepEqual(res.reviewer_exclude, ['agy']);
 });
 
@@ -1338,7 +1356,7 @@ test('(low 3b) low agy is skipped in priority walk when glm is fresh with slack 
   assert.equal(bothLow.demoted_last_resort, true);
   assert.deepEqual(bothLow.low_keys, ['agy', 'agyclaude']);
 
-  // Largest-slack role (reviewer): low agyclaude (+30) loses to non-low grok (+5).
+  // Reviewer (priority list): low agyclaude (+30) loses to non-low grok (+5).
   const reviewerRes = selectEngine({
     pace: priorityPace([
       paceRow('agyclaude', 10, 40, { status: 'WARN_agyclaude_low', left_pts: 2 }),
@@ -1350,7 +1368,7 @@ test('(low 3b) low agy is skipped in priority walk when glm is fresh with slack 
     checkEndpoint: allEndpointsReady,
   });
   assert.equal(reviewerRes.engine, 'grok');
-  assert.equal(reviewerRes.selected_by, 'slack');
+  assert.equal(reviewerRes.selected_by, 'priority');
   assert.deepEqual(reviewerRes.low_keys, ['agyclaude']);
   assert.equal(reviewerRes.demoted_last_resort, undefined);
 });

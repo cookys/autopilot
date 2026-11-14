@@ -28,6 +28,7 @@
 const fs = require('fs');
 const { configPath, metricsDirOf } = require('../scripts/lib/config-path.js');
 const { claudeAccount } = require('../scripts/lib/account-alias.js');
+const { fromEnv: attributionFromEnv } = require('../scripts/lib/event-attribution.js');
 const path = require('path');
 // default-on since v2.35.15 (was opt-in); opt out with AUTOPILOT_COST_TRACKER=false.
 
@@ -156,6 +157,8 @@ try {
   const cwd = input.cwd || process.cwd();
   // account: the hash alias scripts/lib/account-alias.js gives this session's runner (never the email or the uuid).
   const account = claudeAccount();
+  // run_id / fleet_task / pool / commit / lane: what the dispatch rails exported to this child (null at top level).
+  const attr = attributionFromEnv(process.env);
   const rows = [...deltas, ...subDeltas].map((d) => JSON.stringify({
     ts,
     session,
@@ -172,6 +175,7 @@ try {
     turns: d.turns,
     cost_usd: d.cost_usd,
     cwd,
+    ...attr,
   })).join('\n') + '\n';
 
   const costsFile = path.join(metricsDir, 'costs.jsonl');

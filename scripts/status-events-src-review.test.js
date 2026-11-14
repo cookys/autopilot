@@ -224,3 +224,28 @@ test('degrade-review-configured-wins: a gone ledger named by the pointer AND by 
   const pointerOnly = review.read(ctxOf(fx, { reviewLedgers: [] }), NO_WINDOW);
   assert.deepEqual(pointerOnly.warnings, [], 'negative control: pointer alone stays silent');
 });
+
+test('source-review-fleet-task: fleet_task of the chain entry rides on review.collected and review.finalized; absent -> null', () => {
+  const fx = fresh();
+  const ulid = ['01M7DR', 'BR19SD44054J', 'N5QFK0V2'].join('');
+  const ledger = fx.paths.reviewLedgers.b;
+  const chainFile = path.join(ledger, 'review-E1', 'chain.json');
+  const chain = JSON.parse(fs.readFileSync(chainFile, 'utf8'));
+  chain[0].fleet_task = ulid;
+  fs.writeFileSync(chainFile, JSON.stringify(chain));
+  const result = review.read(ctxOf(fx), NO_WINDOW);
+  const key = `${base12(fx.commits.c2)}:E1:g1`;
+  const collected = result.events.find((e) => e.id === `review.collected:${key}`);
+  const finalized = result.events.find((e) => e.id === `review.finalized:${key}`);
+  assert.equal(collected.data.fleet_task, ulid);
+  assert.equal(finalized.data.fleet_task, ulid);
+  assert.equal(finalized.data.generation, 1);
+  assert.equal(finalized.data.verdict, 'SHIP-AS-IS');
+  const others = result.events.filter((e) => e.id.indexOf(key) < 0);
+  assert.ok(others.length > 0);
+  for (const e of others) assert.equal(e.data.fleet_task, null, `${e.id}: an entry without fleet_task gives null`);
+  chain[0].fleet_task = 'not-a-ulid';
+  fs.writeFileSync(chainFile, JSON.stringify(chain));
+  const bad = review.read(ctxOf(fx), NO_WINDOW).events.find((e) => e.id === `review.finalized:${key}`);
+  assert.equal(bad.data.fleet_task, null);
+});

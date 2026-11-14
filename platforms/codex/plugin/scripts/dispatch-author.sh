@@ -139,6 +139,8 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" ] && . "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" || true
+# Fail-open: a missing helper only leaves the manifest `lane` null.
+[ -r "$_AUTHOR_SELF_DIR/lib/dispatch-lane.sh" ] && . "$_AUTHOR_SELF_DIR/lib/dispatch-lane.sh" || true
 # shellcheck source=lib/token-seat.sh
 . "$_AUTHOR_SELF_DIR/lib/token-seat.sh"
 # shellcheck source=lib/codeforge-collect.sh
@@ -1048,6 +1050,7 @@ RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
 AUTHOR_RUN_ID="${RUN_ID:-}"
 [ -n "$AUTHOR_RUN_ID" ] || AUTHOR_RUN_ID="author-$(date +%s)-$$"
 PROMPT_FILE_ORIG="${PROMPT_FILE_ORIG:-$PROMPT_FILE}"
+declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" # child cost rows inherit lane + fleet task
 # Lineage — same env names as dispatch-hetero.sh. parent/root JSON null and depth 0
 # when the corresponding env is unexported; with a parent, root falls back to parent.
 LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
@@ -1127,12 +1130,14 @@ write_author_manifest() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   local _rk_ident="$REPO_IDENTITY_FIELDS"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
+  declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" "$RUNNER" "${ENDPOINT:-}")"
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
       "$(json_escape "$AUTHOR_RUN_ID")" "$role_tok" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
       "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
       "$(json_escape "${PROMPT_FILE_ORIG:-$PROMPT_FILE}")" \
+      "$(declare -F dispatch_lane_json >/dev/null 2>&1 && dispatch_lane_json "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" || printf null)" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" \
       "$parent_json" "$root_json" "$depth_json" "$_rk_ident" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \

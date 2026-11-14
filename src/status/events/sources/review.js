@@ -231,6 +231,9 @@ function readFindings(file) {
   return { total: res.value.findings.length, bySeverity };
 }
 
+const FLEET_TASK_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const fleetTaskOf = (entry) => (typeof entry.fleet_task === 'string' && FLEET_TASK_RE.test(entry.fleet_task) ? entry.fleet_task : null);
+
 function receiptFor(ledgerDir, phase, generation) {
   // The receipt belongs to the last finalized generation of the phase; an earlier generation gets no verdict from it.
   const res = readJsonFile(path.join(ledgerDir, `receipt-${phase}.json`), {});
@@ -341,7 +344,7 @@ function buildEvents(candidate, projectKey, events, state) {
     } else {
       const data = {
         phase, phase_base12: phaseBase12, generation: entry.generation, base: entry.base, head: entry.head,
-        seats, reviewed_seats: reviewed, total_seats: total,
+        seats, reviewed_seats: reviewed, total_seats: total, fleet_task: fleetTaskOf(entry),
       };
       const findings = readFindings(candidate.findingsFile);
       if (findings) { data.findings_total = findings.total; data.findings_by_severity = findings.bySeverity; }
@@ -353,7 +356,7 @@ function buildEvents(candidate, projectKey, events, state) {
       if (!candidate.finalized.missing) state.warn('ts_invalid', `${path.basename(candidate.ledgerDir)}/review-${phase}`);
       state.stats.rows_skipped += 1;
     } else {
-      const data = { phase, phase_base12: phaseBase12, generation: entry.generation };
+      const data = { phase, phase_base12: phaseBase12, generation: entry.generation, fleet_task: fleetTaskOf(entry) };
       const receipt = receiptFor(candidate.ledgerDir, phase, entry.generation);
       if (receipt && receipt.verdict !== undefined) data.verdict = receipt.verdict;
       if (receipt && receipt.open_findings !== undefined) data.open_findings = receipt.open_findings;

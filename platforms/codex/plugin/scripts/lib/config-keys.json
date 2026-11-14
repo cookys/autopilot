@@ -1352,10 +1352,10 @@
       "audience": "internal",
       "class": "plumbing",
       "default": null,
-      "readers": ["scripts/request-decision.js"],
+      "readers": ["scripts/request-decision.js", "scripts/lib/dispatch-lane.sh", "scripts/lib/event-attribution.js"],
       "doc": null,
       "relates": ["AUTOPILOT_FLEET_BIN"],
-      "note": "Fleet task id for scripts/request-decision.js when --task is omitted. After a successful send it runs fleet task progress <id> blocked_human with the waiting_on_operator status."
+      "note": "Fleet task id (ULID). The dispatch rails set it for the child from the brief's Fleet-Task: line and record it as fleet_task in manifests and cost rows (lib/event-attribution.js). Also the id for scripts/request-decision.js when --task is omitted. After a successful send it runs fleet task progress <id> blocked_human with the waiting_on_operator status."
     },
     {
       "name": "AUTOPILOT_QUOTA_WATCH_TO",
@@ -6740,6 +6740,19 @@
         "fleet_gateway_endpoints"
       ],
       "summary": "Comma-separated named endpoints allowlisted as fleet gateways to receive the X-Fleet-Task header (case-insensitive). When set, even to empty, it replaces fleet_gateway_endpoints."
+    },
+    {
+      "name": "AUTOPILOT_LANE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/lib/dispatch-lane.sh"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Lane slug recorded as `lane` in the dispatch run manifest (^[a-z0-9][a-z0-9._-]{0,63}$, else null). When unset, dispatch-hetero.sh and dispatch-author.sh read the Lane: field from the first 8 lines of the brief."
     },
     {
       "name": "AUTOPILOT_FLEET_TASK_ENDPOINT",

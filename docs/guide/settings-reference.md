@@ -232,6 +232,7 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_ENDPOINTS_ENV` | Path of the endpoints env file (mode 600) that load-endpoints-env.sh and resolve-endpoint.sh read. | `~/.autopilot/endpoints.env` |  |
 | `AUTOPILOT_ENDPOINT_<NAME>_URL` | Per-endpoint settings loaded from the endpoints env file: AUTOPILOT_ENDPOINT_`<NAME>`_URL and AUTOPILOT_ENDPOINT_`<NAME>`_TOKEN. An HTTP seat appears in the topology only when its URL is set. | unset |  |
 | `fleet_gateway_endpoints` (config.json) | Named endpoints allowlisted as fleet gateways to receive the `X-Fleet-Task` header (case-insensitive); unnamed endpoints or endpoints outside the list send no header and emit no warning. | `[]` | `AUTOPILOT_FLEET_GATEWAY_ENDPOINTS`: comma-separated. When set, even to empty, it replaces this list. |
+| `AUTOPILOT_LANE` | Lane slug the dispatch rails (`dispatch-hetero.sh`, `dispatch-review.sh`, `dispatch-author.sh`) record as `lane` in the run manifest, so quota use can be attributed to a lane. Must match `^[a-z0-9][a-z0-9._-]{0,63}$`, otherwise `null`. When unset, `dispatch-hetero.sh` and `dispatch-author.sh` read the `Lane:` field from the first 8 lines of the brief (`Engine: x \| Role: y \| Lane: slug \| Size: S`, or one field per line); `dispatch-review.sh` has no brief and records `null`. | unset |  |
 | `AUTOPILOT_MINIMAX_BASE_URL` | Base URL for the provider-native MiniMax endpoint. | unset |  |
 
 ## Claude accounts (G37)

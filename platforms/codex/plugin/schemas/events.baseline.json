@@ -220,6 +220,26 @@
         "type": "integer",
         "nullable": true,
         "required": false
+      },
+      "fleet_task": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "pool": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "commit": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "lane": {
+        "type": "string",
+        "nullable": true,
+        "required": false
       }
     },
     "dispatch.ended": {
@@ -252,6 +272,26 @@
         "type": "string",
         "nullable": false,
         "required": true
+      },
+      "fleet_task": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "pool": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "commit": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "lane": {
+        "type": "string",
+        "nullable": true,
+        "required": false
       }
     },
     "cost.turn": {
@@ -304,6 +344,36 @@
         "type": "string",
         "nullable": true,
         "required": false
+      },
+      "fleet_task": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "pool": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "commit": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "lane": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "run_id": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "basis": {
+        "type": "string",
+        "nullable": false,
+        "required": true
       }
     },
     "review.collected": {
@@ -356,6 +426,11 @@
         "type": "object",
         "nullable": true,
         "required": false
+      },
+      "fleet_task": {
+        "type": "string",
+        "nullable": true,
+        "required": false
       }
     },
     "review.finalized": {
@@ -398,6 +473,11 @@
         "type": "string",
         "nullable": false,
         "required": true
+      },
+      "fleet_task": {
+        "type": "string",
+        "nullable": true,
+        "required": false
       }
     },
     "qc.verdict": {

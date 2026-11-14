@@ -110,7 +110,7 @@ test('only open and awaiting operator cards exempt their own sentence', (t) => {
 
 test('one card opened for a different hit still blocks', (t) => {
   const f = fixture(t), id = f.card();
-  const before = [{ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'node scripts/open-decision.js open --question "Different choice"' } }] } }];
+  const before = [{ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'node scripts/open-decision.js open --category goal --question "Different choice"' } }] } }];
   assert.equal(f.check(`Please confirm ${id}.\nPlease run the check.`, {}, before)?.decision, 'block');
 });
 

@@ -13,6 +13,8 @@
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
  *   node scripts/open-decision.js open  --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (operator action step: no --option, --executor or --not-authorized needed)
+ *   node scripts/open-decision.js open ... --category <money|identity|presence|goal|public-release|unbackable-loss>   (REQUIRED on every CLI open: the only six kinds of question that go to the operator; anything else -> exit 7 with a 拒絕開卡 message, nothing written)
+ *   node scripts/open-decision.js stats [--since <ISO | Nh|Nd|Nw, default 7d>] [--cwd <dir>] [--json]   (cards opened in the window per category: {schema:"decision-stats/1", since, counts:{money,...,uncategorized}}; patrol's weekly line)
  *   node scripts/open-decision.js open ... --executor <address> [--asker <address>]  (--executor is REQUIRED: who carries out the answer; the PM's own cards name the PM; --asker: who asked)
  *   node scripts/open-decision.js open ... [--due <ISO time | +N(m|h|d|w), e.g. +4h, +1d>] [--kind decide|go|remind]   (dated card / reminder: see "Dated cards" below)
  *   node scripts/open-decision.js due-sweep [--cwd <dir>]   (prints `DUE <id> <title>` once per card that became due since the last sweep; exit 0)
@@ -88,7 +90,8 @@
  * awaiting_operator (the step the operator must do), backfilled (true on a record made by backfill), operator_steps (string[], optional, set by `open --operator-step`),
  * last_answer + reask_at (optional; a decline answer stays status open, last_answer is that text, reask_at is when to ask again),
  * kind (decide | go | remind | step | look; absent = decision),
- * due_at (ISO UTC; absent = no date; see "Dated cards"). Field list: this comment and
+ * due_at (ISO UTC; absent = no date; see "Dated cards"),
+ * category (money | identity | presence | goal | public-release | unbackable-loss; set by the CLI `open --category`, required there; absent on older and hook-opened cards, which `stats` counts as uncategorized). Field list: this comment and
  * references/review-page.md (decisions); schemas/decision.schema.json validates them.
  * No new status value: operator_steps, last_answer and reask_at are optional. Readers (src/status/scope-key.js cardState) ignore them.
  * Panel answer delivery (PM 01M6ZXJYTQ, 2026-11-09; overrides the earlier PM ruling 01M6RV0Y02 "open-decision never sends"): when the hook verifies an operator answer
@@ -144,7 +147,7 @@
  *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
  * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure, or a non-PM team session refused by the role gate (nothing written) |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
- *       7 open refused: --kind is not decide|go|remind|step|look (nothing is written) |
+ *       7 open refused: --kind is not decide|go|remind|step|look, or --category is missing / not one of the six (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
  *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
  *       Library callers (openDecision) are unaffected: only the CLI `open` ensures and reports. AUTOPILOT_RUNS_WATCH_AUTOSTART=0 skips the ensure (the hook's own switch).
@@ -211,9 +214,9 @@ function notAuthorizedBoundaryId(raw) {
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
-    + '       open-decision.js open --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
-    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js close --id <id> --dispatched-msg <message_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (decision open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)>; a remind card takes no --option/--free-text; --operator-step <text>, repeatable or newline-separated)\n');
+  process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
+    + '       open-decision.js open --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
+    + '       open-decision.js stats [--since <ISO|7d>] [--json]\n       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js close --id <id> --dispatched-msg <message_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (decision open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)>; a remind card takes no --option/--free-text; --operator-step <text>, repeatable or newline-separated)\n');
   return 2;
 }
 
@@ -463,6 +466,7 @@ function showText(entries, { all = false, nowMs = Date.now() } = {}) {
     else if (e.due_at) out.push(`    due_at: ${e.due_at}`);
     if (e.kind === 'remind' && cardState(e) === 'open') out.push(`    reminder: answer with \`done --id ${e.id}\``);
     if (e.title) out.push(`    title: ${e.title}`);
+    if (e.category) out.push(`    category: ${e.category}`);
     if (e.status && e.status !== 'open') out.push(`    status: ${e.status}`);
     if (e.awaiting_operator) {
       const parts = String(e.awaiting_operator).split('\n').filter((s) => s.length > 0);
@@ -567,9 +571,12 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since'];
 const EXTRA_REPEAT = ['operator-step'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible'];
+// The only six kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
+const CATEGORIES = ['money', 'identity', 'presence', 'goal', 'public-release', 'unbackable-loss'];
+const CATEGORY_REFUSAL = '拒絕開卡：--category 必須是 money、identity（操作員本人的登入、憑證、金鑰、scope）、presence、goal、public-release、unbackable-loss 其中之一。這件 PM 自己決定；不確定就先找 hetero 評估。';
 function takeExtra(argv) {
   const rest = [];
   const extra = {};
@@ -665,6 +672,24 @@ function sessionForNotice() {
   return raw && /^[A-Za-z0-9_-]{1,64}$/.test(raw) ? raw : null;
 }
 
+// `stats --since`: ISO date/time, or N followed by h|d|w (back from now). -> ms or null.
+function parseSince(raw, nowMs) {
+  const m = /^(\d+)([hdw])$/.exec(String(raw).trim());
+  if (m) return nowMs - Number(m[1]) * { h: 3600000, d: 86400000, w: 604800000 }[m[2]];
+  const ms = Date.parse(String(raw));
+  return Number.isFinite(ms) ? ms : null;
+}
+// Per-category count of the cards opened at or after sinceMs (closed ones too; one record per card id). A card with no stored category
+// (opened before the category rule, or by a hook) counts as `uncategorized`. Patrol's weekly line reads this (`stats --since 7d --json`).
+function decisionStats(files, sinceMs) {
+  const counts = Object.fromEntries([...CATEGORIES, 'uncategorized'].map((c) => [c, 0]));
+  for (const w of pickCards(files.flatMap((file) => readFile(file, { all: true }).map((e) => ({ file, e }))))) {
+    if (!((Date.parse(w.e.opened_at) || 0) >= sinceMs)) continue;
+    counts[CATEGORIES.includes(w.e.category) ? w.e.category : 'uncategorized'] += 1;
+  }
+  return { schema: 'decision-stats/1', since: new Date(sinceMs).toISOString(), counts };
+}
+
 function main(argv) {
   const kd = takeDue(argv);
   if (kd.error) return usage(kd.error);
@@ -690,7 +715,7 @@ function main(argv) {
   if (args.attachments.length > 0 && cmd !== 'open') return usage('--attach is only an open argument');
   if (args.extra['look-target'] !== undefined && cmd !== 'open') return usage('--look-target is only an open argument');
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
-  if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver', 'due-sweep'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
+  if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver', 'due-sweep', 'stats'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);
   if (root && (!SAFE_ROOT.test(root) || root === '.' || root === '..')) return usage('--root-run-id must match [A-Za-z0-9._-]+');
@@ -701,7 +726,7 @@ function main(argv) {
   const stray = (names) => names.find((n) => ex[n] !== undefined);
   if (cmd === 'show' || cmd === 'list') {
     if (cmd === 'list' && args.id !== undefined) return usage('list takes no --id (use `show --id <id>`)');
-    const bad = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'operator-step', 'from', 'apply', 'dispatched', 'dispatched-msg', 'irreversible', 'from-request', 'note']);
+    const bad = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'operator-step', 'from', 'apply', 'dispatched', 'dispatched-msg', 'irreversible', 'from-request', 'note', 'category', 'since']);
     if (bad) return usage(`--${bad} is not a ${cmd} argument`);
     if (args.id !== undefined) { // show --id: ONE card, closed ones too
       if (!SAFE_ID.test(args.id)) return usage('show --id <id> needs a card id (see `list --all`)');
@@ -718,6 +743,16 @@ function main(argv) {
       .sort((a, b) => ((reaskDue(a, nowMs) ? -1 : dueRank(a, nowMs)) - (reaskDue(b, nowMs) ? -1 : dueRank(b, nowMs))) || (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0));
     if (entries.length === 0) { if (!args.json) process.stdout.write(all ? 'no decision\n' : 'no open decision\n'); return 1; }
     process.stdout.write(args.json ? `${JSON.stringify({ schema: SCHEMA, decisions: entries }, null, 2)}\n` : showText(entries, { all, nowMs }));
+    return 0;
+  }
+  if (cmd === 'stats') {
+    const badT = stray(['answer', 'executor', 'asker', 'awaiting-operator', 'from', 'apply', 'dispatched', 'dispatched-msg', 'all', 'title', 'irreversible', 'from-request', 'note', 'category']);
+    if (badT) return usage(`--${badT} is not a stats argument`);
+    if (args.id !== undefined) return usage('stats takes no --id');
+    const sinceMs = parseSince(ex.since === undefined ? '7d' : ex.since, Date.now());
+    if (sinceMs === null) return usage(`--since "${ex.since}" is neither an ISO date/time nor Nd|Nh|Nw (e.g. 7d)`);
+    const st = decisionStats(projectScopeFiles(args.cwd, { all: true }), sinceMs);
+    process.stdout.write(args.json ? `${JSON.stringify(st)}\n` : `cards opened since ${st.since}:\n${Object.entries(st.counts).map(([k, v]) => `  ${k}: ${v}`).join('\n')}\n`);
     return 0;
   }
   if (cmd === 'due-sweep') {
@@ -878,6 +913,7 @@ function main(argv) {
   // open
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
   if (args.kind !== undefined && !KINDS.includes(args.kind)) { process.stderr.write(`open-decision: refused: --kind must be one of ${KINDS.join(' | ')} (got "${args.kind}"); nothing written\n`); return 7; }
+  if (!CATEGORIES.includes(args.extra.category)) { process.stderr.write(`open-decision: ${CATEGORY_REFUSAL}（收到 ${args.extra.category === undefined ? '沒有 --category' : `"${args.extra.category}"`}；沒有寫入任何東西）\n`); return 7; }
   const remind = args.kind === 'remind';
   const isStepKind = args.kind === 'step' || args.kind === 'look';
   if (remind) {
@@ -931,7 +967,7 @@ function main(argv) {
   }
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
-    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
+    options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, category: ex.category, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,
     from_request: ex['from-request'], attachments: args.attachments, look_target: lookTarget,
     operator_steps: operatorSteps,
   });
@@ -993,7 +1029,7 @@ function roleGate({ not_authorized, origin, kind } = {}) {
 // lock + atomic-rename path as `open`; another entry is never touched. `origin` (e.g. "ask_user_question") marks which hook
 // opened it; the CLI never sets it. `options` = [{label, description}] (>= 2) or null.
 // Returns { status: 'ok'|'error', id, file, scope_key, message, code? }.
-function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps }) {
+function openDecision({ cwd, root, session, question, background, options, recommendation, why, blocks, not_authorized, source, origin, turn_tracked, kind, category, executor, asker, title, from_request, due_at, attachments, look_target, operator_steps }) {
   const routed = roleGate({ not_authorized, origin, kind });
   if (routed && routed.code === 4) return { status: 'error', code: 4, message: routed.message };
   const sf = scopeFile(cwd, root);
@@ -1016,6 +1052,7 @@ function openDecision({ cwd, root, session, question, background, options, recom
   }
   if (typeof title === 'string' && title !== '') entry.title = title; // additive: absent = the readers derive one (cardTitle in src/status/decision-input.js)
   if (KINDS.includes(kind)) entry.kind = kind; // additive: absent = unspecified
+  if (CATEGORIES.includes(category)) entry.category = category; // additive: set by the CLI `open` (required there); cards from before 2026-11-15 and hook-opened cards have none
   if (typeof due_at === 'string' && Number.isFinite(Date.parse(due_at))) entry.due_at = new Date(Date.parse(due_at)).toISOString(); // additive: absent = no date (dueState 'none')
   if (Array.isArray(attachments)) {
     const clean = attachments.map((a) => (typeof a === 'string' ? a.trim() : '')).filter((a) => a && !/[\x00-\x1f\x7f]/.test(a));

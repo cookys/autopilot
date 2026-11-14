@@ -14,7 +14,7 @@ OD="$REPO_ROOT/scripts/open-decision.js"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 mkrepo() { rm -rf "$1" 2>/dev/null; mkdir -p "$1"; $GIT -C "$1" init -q; $GIT -C "$1" commit -q --allow-empty -m base; }
 R="$TEST_TMP/repo"; mkrepo "$R"
-mk() { node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id rr --question "$1" --free-text --not-authorized irreversible; }
+mk() { node "$OD" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id rr --question "$1" --free-text --not-authorized irreversible; }
 OPEN="$(mk "Q-OPEN?")"; AWAIT="$(mk "Q-AWAIT?")"; CLOSED="$(mk "Q-CLOSED?")"; PEND="$(mk "Q-PEND?")"
 node "$OD" close --cwd "$R" --root-run-id rr --id "$PEND" --answer "p" --executor ns/cc/exec--claude >/dev/null
 node "$OD" close --cwd "$R" --root-run-id rr --id "$AWAIT" --answer "a" --awaiting-operator "run it" >/dev/null

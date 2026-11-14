@@ -97,7 +97,7 @@ printf '{"owner_question_guard":false}' > "$HOOK_HOME/.autopilot/config.json"
 run_hook owner-question-guard.js "$(payload zh)"
 assert_eq "" "$__RUN_STDOUT" "config false: silent"
 
-# RED at 792347b09: block reason was the relative command "node scripts/open-decision.js open ..."; stdout lacked the absolute script path, "--question", "--option", "close --id", and "[待決回覆]" (assert_not_contains of "node scripts/open-decision.js" failed on that relative text).
+# RED at 792347b09: block reason was the relative command "node scripts/open-decision.js open --category goal ..."; stdout lacked the absolute script path, "--question", "--option", "close --id", and "[待決回覆]" (assert_not_contains of "node scripts/open-decision.js" failed on that relative text).
 # Copy-pasteable instruction: absolute open-decision.js path, real flags, close form, panel reply head.
 rm -f "$HOOK_HOME/.autopilot/config.json"
 OPEN_ABS="$(node -e 'process.stdout.write(require("path").join(process.argv[1], "scripts", "open-decision.js"))' "$REPO_ROOT")"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Card short title, write side: `open-decision.js open --title <t>` stores an additive `title` (<= 20 code points, refused over, never cut), the open notice
+# Card short title, write side: `open-decision.js open --category goal --title <t>` stores an additive `title` (<= 20 code points, refused over, never cut), the open notice
 # to the PM carries it, the PM mirror keeps it, `show` prints it; without --title the card entry is byte-identical to before (no title field).
 # Negative control (sed_mutant, shown red before green): the 20-code-point check removed -> the 21-character case FAILs.
 . "$(dirname "$0")/lib.sh"
@@ -25,7 +25,7 @@ export PATH="$STUB:$PATH"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q --allow-empty -m base
 : > "$STUB/calls.log"
-od() { local script="$1"; shift; OUT="$(node "$script" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$TEST_TMP/err" < /dev/null)"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+od() { local script="$1"; shift; OUT="$(node "$script" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$TEST_TMP/err" < /dev/null)"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 store() { cat "$R"/.git/autopilot/decisions/*.json 2>/dev/null; }
 entry() { node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(v.decisions.find(d=>d.id===process.argv[2])))' "$(find "$R/.git/autopilot/decisions" -name '*.json' | head -1)" "$1"; }
 OD="$S/open-decision.js"

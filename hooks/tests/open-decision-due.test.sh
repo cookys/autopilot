@@ -51,7 +51,7 @@ UNIT="$(node -e '
 assert_eq "$UNIT" "none,none,due,not_due,due,not_due,due,none,0,1,2,1" "dueState/dueRank unit cases"
 
 # ---- 2. an ordinary card: no due line, no new fields ----
-N="$(OD open --question "ordinary question" --option a::one --option b::two "${OPEN_COMMON[@]}")"; rc=$?
+N="$(OD open --category goal --question "ordinary question" --option a::one --option b::two "${OPEN_COMMON[@]}")"; rc=$?
 assert_exit_code "$rc" 0 "open ordinary card"
 OUT="$(OD show)"
 assert_contains "$OUT" "open decisions: 1" "ordinary card counted"
@@ -61,20 +61,20 @@ NJ="$(OD show --id "$N" --json | node -e 'const d=JSON.parse(require("fs").readF
 assert_eq "$NJ" "false,false" "ordinary card stores neither due_at nor kind"
 
 # ---- 3. refused opens write nothing ----
-OD open --question "bad due" --kind remind --due tomorrow "${OPEN_COMMON[@]}" >/dev/null 2>&1; rc=$?
+OD open --category goal --question "bad due" --kind remind --due tomorrow "${OPEN_COMMON[@]}" >/dev/null 2>&1; rc=$?
 assert_exit_code "$rc" 2 "unparseable --due refused"
-OD open --question "remind with options" --kind remind --option a::one --option b::two "${OPEN_COMMON[@]}" >/dev/null 2>&1; rc=$?
+OD open --category goal --question "remind with options" --kind remind --option a::one --option b::two "${OPEN_COMMON[@]}" >/dev/null 2>&1; rc=$?
 assert_exit_code "$rc" 2 "remind card with --option refused"
-OD open --question "remind free text" --kind remind --free-text "${OPEN_COMMON[@]}" >/dev/null 2>&1; rc=$?
+OD open --category goal --question "remind free text" --kind remind --free-text "${OPEN_COMMON[@]}" >/dev/null 2>&1; rc=$?
 assert_exit_code "$rc" 2 "remind card with --free-text refused"
 OD show --due +1h >/dev/null 2>&1; rc=$?
 assert_exit_code "$rc" 2 "--due outside open refused"
 assert_contains "$(OD show)" "open decisions: 1" "refused opens wrote nothing"
 
 # ---- 4. remind cards: one past due, one in the future ----
-P="$(OD open --question "pay invoice" --kind remind --due 2020-01-01T00:00:00Z "${OPEN_COMMON[@]}")"; rc=$?
+P="$(OD open --category goal --question "pay invoice" --kind remind --due 2020-01-01T00:00:00Z "${OPEN_COMMON[@]}")"; rc=$?
 assert_exit_code "$rc" 0 "open past-due remind card (no options needed)"
-F="$(OD open --question "future reminder" --kind remind --due +1d "${OPEN_COMMON[@]}")"; rc=$?
+F="$(OD open --category goal --question "future reminder" --kind remind --due +1d "${OPEN_COMMON[@]}")"; rc=$?
 assert_exit_code "$rc" 0 "open future remind card"
 PJ="$(OD show --id "$P" --json | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8")).decisions[0]; process.stdout.write([d.kind, d.due_at, d.options].join(","))')"
 assert_eq "$PJ" "remind,2020-01-01T00:00:00.000Z," "remind card stores kind + due_at (ISO UTC), options null"

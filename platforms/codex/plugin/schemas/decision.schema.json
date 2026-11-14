@@ -137,6 +137,16 @@
               "permission_prompt"
             ]
           },
+          "category": {
+            "enum": [
+              "money",
+              "identity",
+              "presence",
+              "goal",
+              "public-release",
+              "unbackable-loss"
+            ]
+          },
           "kind": {
             "enum": [
               "decide",

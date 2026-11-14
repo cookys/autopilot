@@ -32,7 +32,7 @@ nsends() { if [ -f "$STUB/sends.jsonl" ]; then wc -l < "$STUB/sends.jsonl" | tr 
 dec() { node "$BIN" decision "$@" --cwd "$R" --json 2>"$TEST_TMP/derr" < /dev/null; }
 ans() { local id="$1"; shift; dec answer "$id" "$@" --source console --device web-1; }
 jf() { node -e 'let v=JSON.parse(require("fs").readFileSync(0,"utf8"));for(const k of process.argv[1].split("."))v=v==null?v:v[k];process.stdout.write(v===undefined?"<undef>":typeof v==="string"?v:JSON.stringify(v))' "$1"; }
-mkcard() { node "$OD" open --executor "$EXEC" --cwd "$R" --root-run-id root-t --question "$1" "${@:2}" --not-authorized irreversible 2>/dev/null | head -1; }
+mkcard() { node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id root-t --question "$1" "${@:2}" --not-authorized irreversible 2>/dev/null | head -1; }
 STORE="$(node -e 'const p=require("path");const{scopeFromCwd}=require(process.argv[1]);const{commonDirOf}=require(process.argv[2]);process.stdout.write(p.join(commonDirOf(scopeFromCwd(process.argv[3]).repo_identity),"autopilot","decisions"))' "$REPO_ROOT/src/status/project-key.js" "$REPO_ROOT/src/status/scope-key.js" "$R")"
 AUDIT="$STORE/answers-audit.jsonl"
 naudit() { if [ -f "$AUDIT" ]; then wc -l < "$AUDIT" | tr -d ' '; else echo 0; fi; }

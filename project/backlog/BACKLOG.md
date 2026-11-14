@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0455 -->
+<!-- next-id: BL-0456 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1724,3 +1724,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: autopilot lane 2026-11-13
 - **Pointer**: none
 - **Context**: Add a test that --exclude removes a key from the priority walk in scripts/pace-select.js.
+
+### manifest endpoint field is null in dispatch manifests
+- **Id**: BL-0455
+- **Status**: open
+- **Since**: 2026-11-14
+- **Origin**: self
+- **Problem**: dispatch manifest 在用 --endpoint 跑的派工裡把 endpoint 欄位記成 null。
+- **Impact**: capacity 無法把非 Claude 池的用量算到對應來源。
+- **Trigger**: next touch of dispatch manifest writing, or when capacity needs non-Claude pool attribution
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-15
+- **Pointer**: none

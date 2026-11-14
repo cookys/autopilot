@@ -341,3 +341,86 @@ test('h: a failed send mid-batch keeps the cooldown of lanes already sent and re
     fx.cleanup();
   }
 });
+
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+test('i: corrupt state file (garbage JSON or empty) warns once on stderr and continues with fresh state; other read errors still throw', () => {
+  // (a) garbage JSON: no throw, one stderr line naming the file, fresh lanes
+  //     (the 24 h cooldown from run 1 must NOT apply), next saveState overwrites the file
+  const fxA = makeFx(['home', 'work']);
+  try {
+    addLane(fxA, 'l1', 'home');
+    const resetSec = Math.floor((BASE_NOW + 12 * HOUR_MS) / 1000);
+    writeSnap(fxA, 'home', { writtenAtMs: BASE_NOW - 5 * 60 * 1000, pct: 0.90, resetsAtSec: resetSec });
+    writeSnap(fxA, 'work', { writtenAtMs: BASE_NOW - 5 * 60 * 1000, pct: 0.40, resetsAtSec: resetSec + 3600 });
+
+    const r1 = runAdvice(fxA);
+    assert.strictEqual(r1.code, 0);
+    assert.match(r1.out, /\[建議\]/);
+    assert.strictEqual(r1.err, '', 'healthy state file produces no stderr line');
+
+    fs.writeFileSync(fxA.stateFile, '{garbage not json', { mode: 0o600 });
+    const r2 = runAdvice(fxA);
+    assert.strictEqual(r2.code, 0, 'garbage state must not crash the run');
+    const warnLine = new RegExp(`^profile-switch-advice: ${escRe(fxA.stateFile)}: unreadable state \\(invalid JSON\\), starting fresh$`, 'm');
+    assert.match(r2.err, warnLine, `stderr line missing in: ${r2.err}`);
+    assert.strictEqual(r2.err.split('\n').filter((l) => l.includes('unreadable state')).length, 1, 'exactly one stderr line');
+    assert.match(r2.out, /\[建議\]/, 'fresh lanes: the first run\'s 24 h cooldown must not apply');
+    const rewritten = JSON.parse(fs.readFileSync(fxA.stateFile, 'utf8'));
+    assert.ok(rewritten.lanes && rewritten.lanes.l1, 'the next saveState overwrote the corrupt file');
+  } finally {
+    fxA.cleanup();
+  }
+
+  // (b) empty file: same contract, reason is the empty file
+  const fxB = makeFx(['home', 'work']);
+  try {
+    addLane(fxB, 'l1', 'home');
+    const resetSec = Math.floor((BASE_NOW + 12 * HOUR_MS) / 1000);
+    writeSnap(fxB, 'home', { writtenAtMs: BASE_NOW - 5 * 60 * 1000, pct: 0.90, resetsAtSec: resetSec });
+    writeSnap(fxB, 'work', { writtenAtMs: BASE_NOW - 5 * 60 * 1000, pct: 0.40, resetsAtSec: resetSec + 3600 });
+
+    fs.writeFileSync(fxB.stateFile, '', { mode: 0o600 });
+    const r = runAdvice(fxB);
+    assert.strictEqual(r.code, 0, 'empty state must not crash the run');
+    assert.match(r.err, new RegExp(`^profile-switch-advice: ${escRe(fxB.stateFile)}: unreadable state \\(empty file\\), starting fresh$`, 'm'));
+    assert.match(r.out, /\[建議\]/);
+  } finally {
+    fxB.cleanup();
+  }
+
+  // (c) a directory at the state path (EISDIR) is a real read error: still throws
+  const fxC = makeFx(['home', 'work']);
+  try {
+    addLane(fxC, 'l1', 'home');
+    const resetSec = Math.floor((BASE_NOW + 12 * HOUR_MS) / 1000);
+    writeSnap(fxC, 'home', { writtenAtMs: BASE_NOW - 5 * 60 * 1000, pct: 0.90, resetsAtSec: resetSec });
+    writeSnap(fxC, 'work', { writtenAtMs: BASE_NOW - 5 * 60 * 1000, pct: 0.40, resetsAtSec: resetSec + 3600 });
+
+    fs.mkdirSync(fxC.stateFile, { mode: 0o700 });
+    assert.throws(
+      () => runAdvice(fxC),
+      (e) => e && e.code === 'EISDIR',
+      'a directory at the state path must still throw',
+    );
+  } finally {
+    fxC.cleanup();
+  }
+
+  // (d) valid JSON without `lanes` keeps today's behaviour: fresh state, no warning
+  const fxD = makeFx(['home', 'work']);
+  try {
+    addLane(fxD, 'l1', 'home');
+    const resetSec = Math.floor((BASE_NOW + 12 * HOUR_MS) / 1000);
+    writeSnap(fxD, 'home', { writtenAtMs: BASE_NOW - 5 * 60 * 1000, pct: 0.90, resetsAtSec: resetSec });
+    writeSnap(fxD, 'work', { writtenAtMs: BASE_NOW - 5 * 60 * 1000, pct: 0.40, resetsAtSec: resetSec + 3600 });
+
+    fs.writeFileSync(fxD.stateFile, `${JSON.stringify({ version: 1, notes: 'no lanes here' })}\n`, { mode: 0o600 });
+    const r = runAdvice(fxD);
+    assert.strictEqual(r.code, 0);
+    assert.strictEqual(r.err, '', 'valid JSON without lanes stays silent');
+    assert.match(r.out, /\[建議\]/);
+  } finally {
+    fxD.cleanup();
+  }
+});

@@ -676,6 +676,52 @@
       "type": "number"
     },
     {
+      "name": "unmerged_ship",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/unmerged-ship-advisory.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_UNMERGED_SHIP"
+      ],
+      "summary": "false switches the unmerged-SHIP-AS-IS Stop advisory off; an object sets enabled and max_age_minutes.",
+      "type": "boolean|object"
+    },
+    {
+      "name": "unmerged_ship.enabled",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": true,
+      "readers": [
+        "hooks/unmerged-ship-advisory.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_UNMERGED_SHIP"
+      ],
+      "summary": "false switches the Stop advisory that flags reviewed (SHIP-AS-IS) branches left unmerged off.",
+      "type": "boolean"
+    },
+    {
+      "name": "unmerged_ship.max_age_minutes",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 60,
+      "readers": [
+        "hooks/unmerged-ship-advisory.js",
+        "scripts/check-unmerged-ship.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "summary": "Minutes after a SHIP-AS-IS verdict before a head that is not in the target branch is an alert.",
+      "type": "number"
+    },
+    {
       "name": "owner_question_guard",
       "kind": "config_key",
       "audience": "user",
@@ -4721,6 +4767,33 @@
         "dirty_tree_reminder"
       ],
       "summary": "Set to false, 0, off or no to disable the dirty-tree reminder."
+    },
+    {
+      "name": "AUTOPILOT_UNMERGED_SHIP",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/unmerged-ship-advisory.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "unmerged_ship"
+      ],
+      "summary": "Set to false, 0, off or no to disable the unmerged SHIP-AS-IS Stop advisory."
+    },
+    {
+      "name": "AUTOPILOT_FLEET_ADDRESS",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "scripts/check-unmerged-ship.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "summary": "Fleet address of this lane; check-unmerged-ship.js --notify uses it as the blocked_on owner when --merge-owner is not given."
     },
     {
       "name": "AUTOPILOT_OWNER_QUESTION_GUARD",

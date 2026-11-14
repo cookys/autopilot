@@ -1718,6 +1718,21 @@ write_review_manifest() {
   local _rk_ident="$REPO_IDENTITY_FIELDS"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
   declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "" "$RUNNER" "${ENDPOINT:-}")"
+  # What check-unmerged-ship.js reads: the verdict of THIS run (set only on a reviewed exit), the repo HEAD sha at dispatch time
+  # (this rail has no --head: with a --diff-file the diff was cut from the cwd checkout, so its HEAD is the reviewed head) and the
+  # cwd toplevel. All null when unknown; fleet_task is already in dispatch_attr_fields above.
+  if [ -z "${REVIEW_HEAD_SHA+x}" ]; then
+    REVIEW_HEAD_SHA=""; REVIEW_REPO_ROOT=""
+    if [ -n "${DIFF_FILE:-}" ]; then
+      REVIEW_HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+      REVIEW_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    fi
+  fi
+  local _vj="null" _hj="null" _rj="null"
+  [ -n "${REVIEW_VERDICT:-}" ] && _vj="\"$(json_escape "$REVIEW_VERDICT")\""
+  [[ "$REVIEW_HEAD_SHA" =~ ^[0-9a-f]{7,64}$ ]] && _hj="\"$REVIEW_HEAD_SHA\""
+  [ -n "$REVIEW_REPO_ROOT" ] && _rj="\"$(json_escape "$REVIEW_REPO_ROOT")\""
+  _rk_ident="$_rk_ident, \"verdict\": $_vj, \"head\": $_hj, \"repo_root\": $_rj"
   {
     printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$( if [[ -n "$ALLOW_NARRATIVE" ]]; then json_escape "$ALLOW_NARRATIVE"; else printf null; fi )" "$RUNNER" "$(json_escape "$MODEL")" \
@@ -2801,6 +2816,7 @@ _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verd
   "$(json_escape "$RAW_LOG")" "$REVIEW_USAGE_JSON" "$(json_escape "$FRAME_CLOSED_BY")" \
   "$([ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && printf ', "role_kit": %s' "$ROLE_KIT_JSON")" \
   "$(review_probe_suffix)")"
+REVIEW_VERDICT="$VERDICT"   # the exit trap rewrites the manifest with it
 printf '%s\n' "$_rv_json"
 review_log_fallback "reviewed"
 record_dispatch_usage "$_rv_json"

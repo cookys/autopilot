@@ -27,6 +27,12 @@ This reference indexes the three deterministic scripts supporting dev-flow's pla
 - **Cross-family rule**: the converged generation needs at least one reviewed seat whose model family differs from the implementer's. `hetero-review-loop.js collect` requires `--implementer-engine <id[,id]>` at generation 1 (a later generation reads it back from the chain; an engine whose family is unknown is refused); `finalize` re-derives the check and, with no cross-family reviewed seat, writes `capability_warnings` (`no_cross_family_seat`, listing seat and implementer families) into the generation record and returns FIX-THEN-SHIP instead of SHIP-AS-IS; the checker re-derives it from the ledger and exits non-zero. The only exception is `finalize --same-family-exception "<source>: <reason>"`, where `<source>` is a decision card id (`d-xxxxxxxx`) or a fleet message id (26-char ULID); without a valid source finalize refuses, and the checker accepts only the form finalize recorded. No environment variable and neither `--allow-seat-gap` nor `AUTOPILOT_MIN_REVIEWED_SEATS` skips it. A script written for one approved exception must not be reused for ordinary phases.
 - **Contract**: Canonical options and usage in `node scripts/check-phase-review-receipt.js --help`; indexed in `docs/scripts-inventory.md`.
 
+### scripts/check-unmerged-ship.js
+
+- **What**: Lists heads that got a SHIP-AS-IS verdict (hetero ledgers, or a single-seat `dispatch-review.sh` run manifest, which records `verdict`, `head`, `repo_root`, `fleet_task`) and are not in the target branch.
+- **When**: Fired by the default-on `unmerged-ship-advisory` Stop hook (once per 15 min per session); run by hand with `--json` to see every item.
+- **Contract**: Options, exit codes and the `markBlocked` fleet call in the script header; indexed in `docs/scripts-inventory.md`.
+
 ## Consult before design
 
 Canonical call site is the dev-flow `plan` node (the receipted consult step); this section documents the rail, it is not a second statement of the rule. For an L or XL task, before the design decision, write the design question and relevant artifacts to files and call `bash scripts/dispatch-consult.sh --question-file <path> --artifact <path>` to get one bounded outside opinion before committing to the design.

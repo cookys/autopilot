@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/check-unmerged-ship.js + hooks/unmerged-ship-advisory.js: a SHIP-AS-IS head that is not in origin/develop after
-# the max age is flagged once, marks its fleet task blocked (structured blocked_on), and the Stop hook fires it throttled.
+# the max age is flagged once, appends a blocked line to its fleet task, and the Stop hook fires it throttled.
 # Temp repos, temp ledgers, fake dispatch manifests and a PATH `fleet` shim only; the real fleet is never called.
 . "$(dirname "$0")/lib.sh"
 
@@ -12,7 +12,6 @@ export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR
 unset AUTOPILOT_FLEET_ADDRESS AUTOPILOT_UNMERGED_SHIP AUTOPILOT_EVENTS_REVIEW_LEDGERS
 NOW="2026-11-15T12:00:00Z"
 TASK="01JABCDEFGHJKMNPQRSTVWXYZ0"
-OWNER="ns/claude/merger--claude"
 
 # fleet shim: records one argv element per line
 SHIM="$TEST_TMP/shim"; mkdir -p "$SHIM"
@@ -20,6 +19,7 @@ FLEET_LOG="$TEST_TMP/fleet.argv"
 cat > "$SHIM/fleet" <<EOF
 #!/usr/bin/env bash
 { echo "CALL"; for a in "\$@"; do echo "\$a"; done; } >> "$FLEET_LOG"
+[ -f "$TEST_TMP/shim-fail" ] && { echo "boom" >&2; exit 3; }
 exit 0
 EOF
 chmod +x "$SHIM/fleet"
@@ -70,22 +70,35 @@ assert_eq "1" "$RC" "2h-old unmerged SHIP-AS-IS exits 1"
 assert_eq "unmerged:review:120" "$(jq_state "$OUT")" "item is unmerged, source review, 120 min"
 assert_contains "$OUT" '"schema":"autopilot.unmerged-ship/1"' "json schema tag"
 assert_contains "$OUT" "\"fleet_task\":\"$TASK\"" "item carries the fleet task"
-OUT="$(run_check --review-ledger "$TEST_TMP/led1" --notify --merge-owner "$OWNER")"; RC=$?
+OUT="$(run_check --review-ledger "$TEST_TMP/led1" --notify)"; RC=$?
 assert_eq "1" "$RC" "--notify still exits 1"
 assert_contains "$OUT" "unmerged-ship: ${H1:0:12} reviewed SHIP-AS-IS 120m ago" "--notify prints the alert line"
 assert_eq "1" "$(fleet_calls)" "fleet shim called once"
-assert_eq "$(printf 'CALL\ntask\nprogress\n%s\nblocked\n--blocked-on\n%s\nunmerged\n%s\nSHIP-AS-IS\n120m\nago,\nnot\nin\norigin/develop' "$TASK" "$OWNER" "${H1:0:12}")" "$(cat "$FLEET_LOG")" "exact argv: structured blocked_on, reason only in the note words"
-assert_not_contains "$(cat "$FLEET_LOG")" "blocked:unmerged" "no free text in blocked_on"
-OUT="$(run_check --review-ledger "$TEST_TMP/led1" --notify --merge-owner "$OWNER")"
+assert_eq "$(printf 'CALL\ntask\nupdate\n%s\nblocked:unmerged %s reviewed SHIP-AS-IS 120m ago, not in origin/develop' "$TASK" "${H1:0:12}")" "$(cat "$FLEET_LOG")" "exact argv: task update with one blocked:unmerged line"
+OUT="$(run_check --review-ledger "$TEST_TMP/led1" --notify)"
 assert_eq "" "$OUT" "second --notify prints nothing for the same head"
 assert_eq "1" "$(fleet_calls)" "second --notify does not call fleet again"
 
-# 1b. no merge owner -> one stderr line, task not marked
+# 1b. no owner env needed: update still called; a failing fleet leaves the head un-deduped and the next run retries
 H1B="$(mkbranch feat1b f1b.txt)"
 mkledger "$TEST_TMP/led1b" "$H1B" "2026-11-15T10:00:00Z" SHIP-AS-IS "$TASK"
 run_check --review-ledger "$TEST_TMP/led1b" --notify >/dev/null
-assert_eq "1" "$(fleet_calls)" "no owner: fleet not called"
-assert_contains "$(cat "$TEST_TMP/check.err")" "task not marked blocked" "no owner: one stderr line"
+assert_eq "2" "$(fleet_calls)" "no owner env: task update still called"
+H1C="$(mkbranch feat1c f1c.txt)"
+mkledger "$TEST_TMP/led1c" "$H1C" "2026-11-15T10:00:00Z" SHIP-AS-IS "$TASK"
+touch "$TEST_TMP/shim-fail"
+OUT="$(run_check --review-ledger "$TEST_TMP/led1c" --notify)"
+assert_eq "3" "$(fleet_calls)" "failing fleet: update attempted"
+assert_eq "" "$OUT" "failing fleet: no alert recorded as notified"
+assert_contains "$(cat "$TEST_TMP/check.err")" "fleet task update failed" "failing fleet: one stderr line"
+OUT="$(run_check --review-ledger "$TEST_TMP/led1c" --notify)"
+assert_eq "4" "$(fleet_calls)" "failing fleet: next run calls fleet again (not deduped)"
+rm -f "$TEST_TMP/shim-fail"
+OUT="$(run_check --review-ledger "$TEST_TMP/led1c" --notify)"
+assert_eq "5" "$(fleet_calls)" "fleet back: retry succeeds"
+assert_contains "$OUT" "unmerged-ship: ${H1C:0:12}" "fleet back: alert printed"
+OUT="$(run_check --review-ledger "$TEST_TMP/led1c" --notify)"
+assert_eq "5" "$(fleet_calls)" "after success: deduped"
 
 # 2. verdict 30 min old -> exit 0
 H2="$(mkbranch feat2 f2.txt)"

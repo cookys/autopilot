@@ -4784,18 +4784,6 @@
       "summary": "Set to false, 0, off or no to disable the unmerged SHIP-AS-IS Stop advisory."
     },
     {
-      "name": "AUTOPILOT_FLEET_ADDRESS",
-      "kind": "env",
-      "audience": "user",
-      "group": "hooks",
-      "default": null,
-      "readers": [
-        "scripts/check-unmerged-ship.js"
-      ],
-      "doc": "docs/guide/settings-reference.md",
-      "summary": "Fleet address of this lane; check-unmerged-ship.js --notify uses it as the blocked_on owner when --merge-owner is not given."
-    },
-    {
       "name": "AUTOPILOT_OWNER_QUESTION_GUARD",
       "kind": "env",
       "audience": "user",

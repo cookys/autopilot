@@ -6,7 +6,7 @@
 // Why: two reviewed branches sat unmerged for hours waiting for a batch; nothing noticed (e2e PM order 01M7E183).
 //
 // usage: check-unmerged-ship.js [--repo <dir>] [--target <ref>] [--max-age <minutes>] [--window-days <n>]
-//          [--review-ledger <dir>]... [--runs-dir <dir>] [--merge-owner <fleet address>] [--notify] [--json] [--now <iso>]
+//          [--review-ledger <dir>]... [--runs-dir <dir>] [--notify] [--json] [--now <iso>]
 //   --repo          repository to check (default cwd); any worktree of it works
 //   --target        branch a reviewed head must reach (default origin/develop)
 //   --max-age       minutes after the verdict before an unmerged head is an alert
@@ -14,9 +14,8 @@
 //   --window-days   verdicts newer than this are looked at (default 7)
 //   --review-ledger extra hetero-review-loop ledger root (repeatable; the roots `autopilot status events` finds are always read)
 //   --runs-dir      dispatch run manifests (default scripts/lib/runtime-paths.js runsDir)
-//   --merge-owner   fleet address of the lane that must merge (default env AUTOPILOT_FLEET_ADDRESS); used by --notify
 //   --notify        for each alert not yet notified for that head: print the alert line and, when the verdict carries a
-//                   fleet task, mark that task blocked (markBlocked below). Dedupe state lives in the live-state dir.
+//                   fleet task, append a `blocked:unmerged ...` progress line to that task (markBlocked below). Dedupe state lives in the live-state dir.
 //   --json          print schema autopilot.unmerged-ship/1 on stdout
 // exit: 0 nothing to alert, 1 at least one alert, 2 usage.
 //
@@ -30,8 +29,9 @@
 // OR the net patch of head against its merge-base equals a single commit's patch in the target (a squash re-land).
 // A head object missing from the repository is state `unknown`, never an alert.
 //
-// markBlocked needs the session running this to be the fleet task's ASSIGNEE (the requester gets `not_assignee`).
-// A fleet failure (older fleet that rejects `blocked`, not_assignee, binary missing) is one stderr line; it is never retried.
+// markBlocked uses `fleet task update <id> <line>` through scripts/lib/fleet-task.js (assignee only). A failure is one stderr
+// line and leaves the head un-deduped, so the next run retries. When fleet ships `task progress <id> blocked --blocked-on`,
+// switch to it (fleet D unit).
 // Node built-ins only.
 
 const fs = require('fs');
@@ -39,22 +39,21 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const fleetTask = require('./lib/fleet-task.js');
 
 const SCHEMA = 'autopilot.unmerged-ship/1';
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const DEFAULT_MAX_AGE_MIN = 60;
 const DEFAULT_WINDOW_DAYS = 7;
-// the whole fleet call in one place: a change of the fleet verb is a one-line edit here
-const FLEET_BLOCKED_ARGV = (task, blockedOn, noteWords) => ['task', 'progress', task, 'blocked', '--blocked-on', blockedOn, ...noteWords];
 
 function usage(msg) {
   if (msg) process.stderr.write(`check-unmerged-ship: ${msg}\n`);
-  process.stderr.write('usage: check-unmerged-ship.js [--repo dir] [--target ref] [--max-age minutes] [--window-days n] [--review-ledger dir]... [--runs-dir dir] [--merge-owner address] [--notify] [--json] [--now iso]\n');
+  process.stderr.write('usage: check-unmerged-ship.js [--repo dir] [--target ref] [--max-age minutes] [--window-days n] [--review-ledger dir]... [--runs-dir dir] [--notify] [--json] [--now iso]\n');
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const o = { repo: process.cwd(), target: 'origin/develop', maxAge: null, windowDays: DEFAULT_WINDOW_DAYS, ledgers: [], runsDir: null, owner: null, notify: false, json: false, now: null };
+  const o = { repo: process.cwd(), target: 'origin/develop', maxAge: null, windowDays: DEFAULT_WINDOW_DAYS, ledgers: [], runsDir: null, notify: false, json: false, now: null };
   const val = (i) => { if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) usage(`${argv[i]} needs a value`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -64,7 +63,6 @@ function parseArgs(argv) {
     else if (a === '--window-days') { o.windowDays = Number(val(i)); i += 1; if (!(o.windowDays > 0)) usage('--window-days must be positive'); }
     else if (a === '--review-ledger') { o.ledgers.push(path.resolve(val(i))); i += 1; }
     else if (a === '--runs-dir') { o.runsDir = path.resolve(val(i)); i += 1; }
-    else if (a === '--merge-owner') { o.owner = val(i); i += 1; }
     else if (a === '--now') { o.now = Date.parse(val(i)); i += 1; if (!Number.isFinite(o.now)) usage('--now must be an ISO instant'); }
     else if (a === '--notify') o.notify = true;
     else if (a === '--json') o.json = true;
@@ -161,16 +159,11 @@ function mergeState(repo, head, target) {
 
 // ---- notify ------------------------------------------------------------------------------------------------------------
 
-// The only fleet call. blockedOn is a structured value (fleet address); the reason travels in the note words only.
-function markBlocked({ task, blockedOn, note }) {
-  const argv = FLEET_BLOCKED_ARGV(task, blockedOn, note.split(/\s+/).filter(Boolean));
-  const r = spawnSync('fleet', argv, { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] });
-  if (r.error || r.status !== 0) {
-    const why = r.error ? r.error.message : String(r.stderr || '').trim().split('\n')[0] || `exit ${r.status}`;
-    process.stderr.write(`check-unmerged-ship: fleet task progress failed for ${task}: ${why}\n`);
-    return false;
-  }
-  return true;
+// The only fleet call. true when the task update went through.
+function markBlocked({ task, line }) {
+  const r = fleetTask.progress(task, line);
+  if (!r.ok) process.stderr.write(`check-unmerged-ship: fleet task update failed for ${task}: ${r.error}\n`);
+  return r.ok;
 }
 
 function notifiedFile(repo, head) {
@@ -181,14 +174,12 @@ function notifiedFile(repo, head) {
   return path.join(dir, `notified-${key}`);
 }
 
-// true when this call is the first to notify for (repo, head)
-function claimNotice(repo, head) {
-  try {
-    fs.writeFileSync(notifiedFile(repo, head), `${new Date().toISOString()}\n`, { flag: 'wx' });
-    return true;
-  } catch (e) {
-    return !(e && e.code === 'EEXIST');
-  }
+function isNotified(repo, head) {
+  return fs.existsSync(notifiedFile(repo, head));
+}
+
+function recordNotice(repo, head) {
+  fs.writeFileSync(notifiedFile(repo, head), `${new Date().toISOString()}\n`);
 }
 
 // ---- main --------------------------------------------------------------------------------------------------------------
@@ -223,16 +214,11 @@ function main() {
   const line = (i) => `unmerged-ship: ${i.head.slice(0, 12)} reviewed SHIP-AS-IS ${i.age_min}m ago, not in ${o.target} (${path.basename(repo)}${i.fleet_task ? `, task ${i.fleet_task}` : ''}) - merge it now, do not hold it for a batch`;
 
   if (o.notify) {
-    const owner = o.owner || process.env.AUTOPILOT_FLEET_ADDRESS || '';
     for (const i of alerts) {
-      if (!claimNotice(repo, i.head)) continue;
+      if (isNotified(repo, i.head)) continue;
+      if (i.fleet_task && !markBlocked({ task: i.fleet_task, line: `blocked:unmerged ${i.head.slice(0, 12)} reviewed SHIP-AS-IS ${i.age_min}m ago, not in ${o.target}` })) continue;
+      recordNotice(repo, i.head);
       (o.json ? process.stderr : process.stdout).write(`${line(i)}\n`);
-      if (!i.fleet_task) continue;
-      if (!owner) {
-        process.stderr.write('check-unmerged-ship: no --merge-owner / AUTOPILOT_FLEET_ADDRESS, task not marked blocked\n');
-        continue;
-      }
-      markBlocked({ task: i.fleet_task, blockedOn: owner, note: `unmerged ${i.head.slice(0, 12)} SHIP-AS-IS ${i.age_min}m ago, not in ${o.target}` });
     }
   } else if (!o.json) {
     for (const i of alerts) process.stdout.write(`${line(i)}\n`);

@@ -4,7 +4,7 @@
  *
  * Why: a branch with a SHIP-AS-IS review verdict sat unmerged for hours waiting for a batch and nothing noticed.
  * What: at turn end, runs `scripts/check-unmerged-ship.js --notify` for the cwd repo (alerts are SHIP-AS-IS heads older
- * than unmerged_ship.max_age_minutes that are not in origin/develop; the script also marks the fleet task blocked).
+ * than unmerged_ship.max_age_minutes that are not in origin/develop; the script also appends a blocked line to the fleet task).
  * At most once per 15 minutes per session (stamp in the RAM-backed live dir). The scan is cut off at 1.8 s: a slow or
  * failing scan is skipped, never a blocked turn.
  *

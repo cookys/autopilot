@@ -50,7 +50,15 @@ function main(argv) {
     // The reconcile reads the working tree: a partly staged writer run (store op committed, row left behind, or the reverse) would pass.
     const st = spawnSync('git', ['-C', root, 'status', '--porcelain', '-z', '--untracked-files=all', '--', ...BACKLOG_FILES, '.hippo'], { encoding: 'utf8' });
     if (st.status !== 0) die(2, `git status failed: ${(st.stderr || '').trim()}`);
-    const unstaged = st.stdout.split('\0').filter((e) => e.length > 3 && e[1] !== ' ').map((e) => e.slice(3));
+    // A rename/copy entry (column 0 R or C) is `XY dest\0orig\0`: the orig field is not a status line.
+    const unstaged = [];
+    const ents = st.stdout.split('\0');
+    for (let i = 0; i < ents.length; i++) {
+      const e = ents[i];
+      if (e.length <= 3) continue;
+      if (e[0] === 'R' || e[0] === 'C') i++;
+      if (e[1] !== ' ') unstaged.push(e.slice(3));
+    }
     if (unstaged.length) die(1, `${MESSAGE}\nunstaged changes in: ${unstaged.slice(0, 5).join(', ')}${unstaged.length > 5 ? ', ...' : ''}; stage BACKLOG.md and .hippo together (git add the backlog file and .hippo in the same commit)`);
   }
   const r = spawnSync(process.execPath, [GATE, '--hippo', '--reconcile', '--mode', 'block', '--target', root], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });

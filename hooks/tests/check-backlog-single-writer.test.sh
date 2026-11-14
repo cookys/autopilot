@@ -131,6 +131,16 @@ printf '### range hand row\n- **Id**: BL-0099\n- **Status**: open\n' >> "$R/$BL"
 OUT="$(node "$GUARD" --range "$base..HEAD" --target "$R" 2>&1 < /dev/null)"; RC=$?
 assert_eq "$RC" 1 "range with a hand edit is red"
 
+# --- rename: a fully staged rename is not "unstaged" (porcelain -z gives "R  dest\0orig\0"); renamed then edited is
+RN="$(mk renamed store)"
+git -C "$RN" mv "$BL" project/backlog/BACKLOG.md
+guard "$RN"
+assert_not_contains "$OUT" "unstaged changes" "a fully staged rename of BACKLOG.md is not reported as unstaged"
+printf 'late edit\n' >> "$RN/project/backlog/BACKLOG.md"
+guard "$RN"
+assert_eq "$RC" 1 "a renamed then edited BACKLOG.md is red"
+assert_contains "$OUT" "unstaged changes in: project/backlog/BACKLOG.md" "names the edited renamed file"
+
 # --- no store: never blocked
 N="$(mk nostore)"
 printf 'x\n' >> "$N/$BL"; git -C "$N" add "$BL"

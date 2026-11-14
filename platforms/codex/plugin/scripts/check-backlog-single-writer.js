@@ -1,21 +1,29 @@
 #!/usr/bin/env node
 'use strict';
-// scripts/check-backlog-single-writer.js - pre-commit guard: with a hippo store present, a commit that changes the backlog file
-// must also carry a store op (.hippo/ops/*), i.e. the change went through scripts/project-record.js and not a hand edit.
+// scripts/check-backlog-single-writer.js - pre-commit guard: with a hippo store present, BACKLOG.md and the store must agree.
 //
 //   node scripts/check-backlog-single-writer.js [--staged | --range <base>..<head>] [--target <dir>]
 //
-// Default is --staged (the pre-commit use). No .hippo/repo.toml in the repo root: nothing to guard, exit 0.
-// Exit: 0 ok | 1 direct edit of the backlog file | 2 usage / not a git repo.
+// The store is the source and BACKLOG.md a view written by `node scripts/project-record.js backlog new|reply|close|sync`. When the
+// change (staged diff, or the range) touches the backlog file or anything under .hippo/, this runs the reconcile
+// (`check-backlog-entries.js --hippo --reconcile`, the working tree) and fails if file and store disagree: a row with no record, an
+// open record with no row, a closed record whose row is still open, or a row field that differs from its record's. A hand edit of
+// BACKLOG.md and a store op without its row are both red; a project-record.js write (which changes both) is green.
+// Known drift that cannot be fixed yet is listed in project/backlog/store-drift.json ({"records": {"<ULID>": "reason"}}); a listed
+// record passes, and an entry that no longer drifts fails until removed (the list only shrinks).
+// Default is --staged (the pre-commit use). No .hippo/repo.toml in the repo root: nothing to guard, exit 0. hippo missing or broken
+// (reconcile exit 5): a loud warning and exit 0, the writers spool in that state.
+// Exit: 0 ok | 1 disagreement | 2 usage / not a git repo.
 // Why it exists: hippo M5 acceptance item 5 - 18 direct edits of BACKLOG.md left the store behind (two systems running).
-// Limit: this checks that a store op rides along, not that the op matches the edit; the store is not yet rendered back to the file.
 
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
 const BACKLOG_FILES = ['project/backlog/BACKLOG.md', 'docs/BACKLOG.md'];
-const MESSAGE = 'BACKLOG.md is written by scripts/project-record.js; run: node scripts/project-record.js backlog ...';
+const GATE = path.join(__dirname, 'check-backlog-entries.js');
+const DEBT_FILE = 'project/backlog/store-drift.json';
+const MESSAGE = 'BACKLOG.md is written by scripts/project-record.js and must agree with the store; run: node scripts/project-record.js backlog ...';
 
 function die(code, msg) { process.stderr.write(`${msg}\n`); process.exit(code); }
 
@@ -36,10 +44,26 @@ function main(argv) {
   const d = spawnSync('git', ['-C', root].concat(gitArgs), { encoding: 'utf8' });
   if (d.status !== 0) die(2, `git diff failed: ${(d.stderr || '').trim()}`);
   const files = d.stdout.split('\0').filter(Boolean);
-  const touched = files.filter((f) => BACKLOG_FILES.includes(f));
+  const touched = files.filter((f) => BACKLOG_FILES.includes(f) || f.startsWith('.hippo/'));
   if (!touched.length) return 0;
-  if (files.some((f) => f.startsWith('.hippo/ops/'))) return 0;
-  die(1, `${MESSAGE}\n(changed without a .hippo/ops/ entry in the same ${mode === 'staged' ? 'commit' : 'range'}: ${touched.join(', ')})`);
+  const r = spawnSync(process.execPath, [GATE, '--hippo', '--reconcile', '--mode', 'block', '--target', root], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (r.status === 5 || r.status === 2) {
+    process.stderr.write(`WARNING backlog single-writer: the store could not be read, agreement not checked (${(r.stderr || '').trim() || `reconcile exit ${r.status}`})\n`);
+    return 0;
+  }
+  let rep;
+  try { rep = JSON.parse(r.stdout); } catch { die(2, `reconcile gave no JSON (exit ${r.status}): ${(r.stderr || r.stdout || '').trim()}`); }
+  let debt = {};
+  try { debt = (JSON.parse(fs.readFileSync(path.join(root, DEBT_FILE), 'utf8')).records) || {}; } catch (e) { if (e.code !== 'ENOENT') die(2, `${DEBT_FILE}: ${e.message}`); }
+  const drift = (rep.reconcile && rep.reconcile.drift) || [];
+  const driftCodes = new Set(['backlog_unprojected', 'backlog_stale_row', 'backlog_store_mismatch']);
+  const problems = [];
+  for (const v of rep.violations || []) if (!driftCodes.has(v.code)) problems.push(`${v.code}: ${v.detail}`);
+  for (const d of drift) if (!Object.prototype.hasOwnProperty.call(debt, d.record)) problems.push(`${d.code}: ${d.detail}`);
+  const live = new Set(drift.map((d) => d.record));
+  for (const id of Object.keys(debt)) if (!live.has(id)) problems.push(`${DEBT_FILE}: ${id} no longer drifts; remove it from the list`);
+  if (!problems.length) return 0;
+  die(1, `${MESSAGE}\n${problems.join('\n')}\n(checked because the ${mode === 'staged' ? 'commit' : 'range'} touches: ${touched.slice(0, 5).join(', ')}${touched.length > 5 ? ', ...' : ''})`);
   return 1;
 }
 

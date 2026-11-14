@@ -9,8 +9,9 @@
 #      files + registry/reaper parity).
 #   1c. scripts/leak-guard.js --staged (personal data in added lines: paths, hosts, private IPs,
 #      credentials, .env files; per-file exemptions only, scripts/leak-guard-registry.json).
-#   1d. scripts/check-backlog-single-writer.js --staged (with a hippo store present, a BACKLOG.md
-#      change must carry a .hippo/ops entry, i.e. go through scripts/project-record.js).
+#   1d. scripts/check-backlog-single-writer.js --staged (with a hippo store present, a change to
+#      BACKLOG.md or .hippo/ must leave the two agreeing: the reconcile of check-backlog-entries.js; the writer is
+#      scripts/project-record.js, which writes both).
 #   2. scripts/sync-all.sh --check --changed — the manifest-driven sync/check rituals
 #      (version mirrors, agent-bodies, model-routing, codex + opencode payloads, README
 #      parity, hook inventory, canonical invariants, CLAUDE.md inventory). --changed

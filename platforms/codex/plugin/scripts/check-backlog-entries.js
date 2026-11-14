@@ -43,7 +43,12 @@
  *
  *   node scripts/check-backlog-entries.js --hippo --reconcile [--target <dir>] [--backlog <file>] [--adr-dir <dir>]
  *     every backlog row Id (BL-NNNN) and ADR file number (ADR-NNNN) needs a hippo record with that provenance value, else
- *     backlog_unimported (block). Exit 2 no store, 5 hippo unusable. The only `--hippo` rule so far.
+ *     backlog_unimported (block). Exit 2 no store, 5 hippo unusable. The only `--hippo` mode is --reconcile.
+ *     The file is a view of the store, so it also checks agreement the other way (the store is read from the working tree), each
+ *     a block finding naming the writer `node scripts/project-record.js backlog ...`: backlog_unprojected (an open issue record
+ *     has no row), backlog_stale_row (the record is closed but its row still says open) and backlog_store_mismatch (a row field
+ *     differs from its record's: Title, Since, Problem, Impact, Trigger, Source, Pointer, Context, Report, Reply, Origin, Effort,
+ *     Trigger-Type). report.reconcile.drift lists them one per record, for scripts/check-backlog-single-writer.js.
  *
  * Exit: 0 clean or warn · 1 block with new violations · 2 usage / unreadable / self-test fail
  */
@@ -1405,6 +1410,61 @@ function runSelfTest() {
   }
 }
 
+// Agreement between the rows of the file and the issue records of the store (the file is a view of the store).
+const AGREE_BULLETS = ['Since', 'Problem', 'Impact', 'Trigger', 'Source', 'Pointer', 'Context', 'Report', 'Reply'];
+function recordFields(rec) {
+  const out = { Title: rec.title };
+  for (const line of String(rec.body || '').split('\n')) {
+    const m = line.match(/^- \*\*([^*]+)\*\*:\s?(.*)$/);
+    if (m && out[m[1]] === undefined) out[m[1]] = m[2].trim();
+  }
+  const tag = (pre) => { const t = (rec.tags || []).find((x) => x.startsWith(pre)); return t ? t.slice(pre.length) : null; };
+  if (tag('origin:')) out.Origin = tag('origin:');
+  if (tag('effort:')) out.Effort = tag('effort:').toUpperCase() + ((rec.tags || []).includes('urgent') ? '!' : '');
+  if (tag('trigger:')) out['Trigger-Type'] = tag('trigger:').replace(/^date-/, 'date:');
+  return out;
+}
+
+// -> [{code, record (ULID), bl, detail}], one per record. `records` are list summaries; showRecord(id) returns the full record.
+function reconcileAgreement(entries, records, showRecord) {
+  const issues = records.filter((r) => r.kind === 'issue');
+  const byBl = new Map();
+  for (const r of issues) if (r.provenance && r.provenance.kind === 'autopilot-backlog') byBl.set(r.provenance.value, r);
+  const rows = new Map();
+  for (const ent of entries) {
+    const id = ent.id ? String(ent.id).trim().split(/\s+/)[0] : '';
+    if (BL_ID_RE.test(id)) rows.set(id, ent);
+  }
+  const drift = [];
+  for (const r of issues) {
+    if (r.status !== 'open') continue;
+    const bl = r.provenance && r.provenance.kind === 'autopilot-backlog' ? r.provenance.value : null;
+    if (!bl || !rows.has(bl)) drift.push({ code: 'backlog_unprojected', record: r.id, bl, detail: r.id });
+  }
+  for (const [bl, ent] of rows) {
+    const rec = byBl.get(bl);
+    if (!rec) continue; // backlog_unimported covers it
+    // Read the bullets from the row text: `fields` drops the opt-in fields (Problem, Impact, ...) when the project has not opted in.
+    const f = Object.assign({}, ent.fields || {});
+    for (const line of String(ent.text || '').split('\n')) {
+      const m = line.match(/^- \*\*([^*]+)\*\*:\s?(.*)$/);
+      if (m && !Object.prototype.hasOwnProperty.call(f, m[1])) f[m[1]] = m[2];
+    }
+    if (rec.status !== 'open') {
+      if (String(f.Status || '').trim() === 'open') drift.push({ code: 'backlog_stale_row', record: rec.id, bl, detail: bl });
+      continue;
+    }
+    const want = recordFields(showRecord(rec.id));
+    const diff = ['Title'].concat(AGREE_BULLETS, ['Origin', 'Effort', 'Trigger-Type']).filter((k) => {
+      const a = f[k] == null ? '' : String(k === 'Title' ? (f.Title || ent.title || '') : f[k]).trim();
+      const b = want[k] == null ? '' : String(want[k]).trim();
+      return a !== b;
+    });
+    if (diff.length) drift.push({ code: 'backlog_store_mismatch', record: rec.id, bl, detail: `${bl}: ${diff.join(',')}` });
+  }
+  return drift.sort((x, y) => (x.code + x.record).localeCompare(y.code + y.record));
+}
+
 // --hippo --reconcile (plan A3.4 step 1, the `--reconcile` sentence only): every backlog row Id and every ADR file number of the
 // frozen files needs a record whose provenance value equals it (`BL-NNNN`, `ADR-NNNN`; any status, closed included).
 // Exit 2: no store / usage; 5: store present but hippo unusable. Never passes silently.
@@ -1446,8 +1506,9 @@ function runReconcile(args) {
     process.stderr.write(`info: ${adrNote}\n`);
   }
   for (const a of adrIds) want.add(a);
-  const ex = hippo.run(root, ['export']);
-  if (!ex.ok) die(5, `hippo export failed: ${ex.error && ex.error.message}`);
+  // `list` reads the working tree (export reads HEAD only), so a pre-commit run sees the store ops about to be committed.
+  const ex = hippo.run(root, ['list', '--history', '--limit', '1000000']);
+  if (ex.exit !== 0) die(5, `hippo list failed: ${ex.error && ex.error.message}`);
   const have = new Set();
   for (const r of ex.data.records) if (r.provenance && r.provenance.value) have.add(r.provenance.value);
   const missing = [...want].filter((id) => !have.has(id)).sort();
@@ -1462,8 +1523,24 @@ function runReconcile(args) {
     annotated.push({ code: 'backlog_unimported', title: '', field: 'Id', level: 'block', allowed: false,
       detail: `${missing.join(', ')} ${missing.length === 1 ? 'has' : 'have'} no record; from the repo root run: ${fix}` });
   }
+  const showBody = (id) => {
+    const r = hippo.run(root, ['show', id]);
+    if (r.exit !== 0) die(5, `hippo show ${id} failed: ${r.error && r.error.message}`);
+    return r.data.record;
+  };
+  const drift = reconcileAgreement(collectEntries(text, cfg.style || 'heading', cfg), ex.data.records, showBody);
+  const WRITER = 'node scripts/project-record.js backlog';
+  const driftMsg = {
+    backlog_unprojected: (d) => ({ field: 'Id', detail: `open store record(s) with no BACKLOG.md row: ${d.join(', ')}; run: ${WRITER} sync <id> (or close the record: ${WRITER} close <id> done)` }),
+    backlog_stale_row: (d) => ({ field: 'Status', detail: `row(s) still open while the store record is closed: ${d.join(', ')}; a close goes through ${WRITER} close` }),
+    backlog_store_mismatch: (d) => ({ field: 'row', detail: `row field(s) differ from the store: ${d.join('; ')}; BACKLOG.md is written only by ${WRITER} new|reply|close|sync, so a hand edit must be redone through it` }),
+  };
+  for (const code of Object.keys(driftMsg)) {
+    const items = drift.filter((d) => d.code === code).map((d) => d.detail);
+    if (items.length) annotated.push(Object.assign({ code, title: '', level: 'block', allowed: false }, driftMsg[code](items)));
+  }
   const report = buildReport(cfg, backlogPath, cfg.style || 'heading', want.size, byteLen(text), annotated);
-  report.reconcile = { checked: want.size, missing, fix, adr_note: adrNote };
+  report.reconcile = { checked: want.size, missing, fix, adr_note: adrNote, drift };
   process.stdout.write(JSON.stringify(report) + '\n');
   process.exit(report.exit);
 }

@@ -8,6 +8,7 @@
 //                 --impact S [--type bug|feature|debt|question|chore] [--reporter R --report M --reply R] [--pointer P]
 //                 [--context C|--context-file F] [--relates ULID]...
 //   backlog reply <id> --reply "<date> <ptr>"            backlog close <id> done|cancelled|superseded [--commit SHA] [--by REF]
+//   backlog sync  <id>                                    (put an open store record's row into BACKLOG.md; no store write)
 //   decision new  --title T --rationale-file F|- [--ledger-row ID] [--area A] [--relates ULID]... [--decides ULID]...
 //   decision supersede <old> <same flags>                adr new --title T --body-file F|- [--status active|open] [--adr-dir D]
 //   adr supersede <old> <same flags>                     lesson new --title T --category build|debug|arch|env|api --body-file F|-
@@ -23,6 +24,11 @@
 //
 // Exit: 0 ok (incl. spooled) | 1 internal or file-mode refusal | 2 usage (unknown flag, bad target, plugin dir) | 3 rule refusal
 // (backlog-entry rules, validation, hippo rules incl. leak) | 4 not found | 5 store unavailable and not spoolable. Hippo's code is kept.
+// BACKLOG.md is a view of the store: after a successful hippo write, backlog new|close|reply|sync update the file in the same run
+// through the files-mode writers (record-files.js), so one invocation changes both. A new row takes the file's next BL-NNNN and the
+// record gets that provenance (autopilot-backlog), so `check-backlog-entries.js --hippo --reconcile` and a re-import agree. A write
+// that fails or spools leaves the file untouched. If the file step fails after the store write, the store keeps the record and
+// `backlog sync <id>` finishes the view.
 // Test hooks: PROJECT_RECORD_FAULT (lib/hippo.js), PROJECT_RECORD_NOW (ISO instant used as "now").
 
 const fs = require('fs');
@@ -65,6 +71,7 @@ const SUBS = {
   'backlog new': { f: BACKLOG_NEW, pos: [0, 0] },
   'backlog reply': { f: { reply: 'v' }, pos: [1, 3] },
   'backlog close': { f: { commit: 'v', by: 'v' }, pos: [2, 2] },
+  'backlog sync': { f: {}, pos: [1, 1] },
   'decision new': { f: DECISION, pos: [0, 0] },
   'decision supersede': { f: DECISION, pos: [1, 1] },
   'adr new': { f: ADR, pos: [0, 0] },
@@ -243,9 +250,9 @@ H['backlog new'] = {
     const inp = Object.assign({}, p.input);
     if (inp.pointer == null || String(inp.pointer).trim() === '') inp.pointer = 'none';
     if (String(inp.origin || '').trim() === 'peer' && (inp.reply == null || String(inp.reply).trim() === '')) inp.reply = 'none';
-    const proposed = Object.assign({ status: 'open', since: todayStr() }, inp, { id: 'BL-0000' }); // the id is not written in hippo mode
-    const v = rules.assertProposedValid(proposed, { cfg: rf.gateConfig(repo), repoRoot: repo, now: nowDate().getTime(), existingTitles: [] });
-    void state;
+    const proposed = Object.assign({ status: 'open', since: todayStr() }, inp, { id: 'BL-0000' }); // the real id is taken when the row is written
+    const view = state === 'files' ? null : rf.backlogView(repo);
+    const v = rules.assertProposedValid(proposed, { cfg: rf.gateConfig(repo), repoRoot: repo, now: nowDate().getTime(), existingTitles: view ? view.titles : [] });
     return v;
   },
   files(repo, p) {
@@ -503,6 +510,79 @@ H['handoff close'] = {
   plan: (repo, p, key) => ({ key, steps: [{ op: 'close', id: ulidArg(p.id, 'handoff close'), status: 'done' }] }),
 };
 
+// ---- BACKLOG.md as a view of the store ----------------------------------------------------------------------------------
+// Each `after` runs once the store write succeeded (never on a spool or a refusal) and puts the same change into the file with the
+// files-mode writer. It returns an info line (or null) and throws RecordError/RuleViolationError when the file step is refused.
+
+function provenanceBl(rec) {
+  const pv = rec.provenance;
+  return pv && pv.kind === 'autopilot-backlog' && rules.BL_ID_RE.test(pv.value) ? pv.value : null;
+}
+
+// What a row looks like when it is rebuilt from a store record (the tags carry Origin, Effort, Trigger-Type, Reporter).
+function inputFromRecord(rec) {
+  const b = bullets(rec.body);
+  const eff = tagValue(rec.tags, 'effort:');
+  const trig = tagValue(rec.tags, 'trigger:');
+  return {
+    title: rec.title, since: b.Since, origin: tagValue(rec.tags, 'origin:') || undefined, reporter: tagValue(rec.tags, 'reporter:') || undefined,
+    report: b.Report, reply: b.Reply, problem: b.Problem, impact: b.Impact, trigger: b.Trigger,
+    triggerType: trig ? trig.replace(/^date-/, 'date:') : undefined,
+    effort: eff ? eff.toUpperCase() + ((rec.tags || []).includes('urgent') ? '!' : '') : undefined,
+    source: b.Source, pointer: b.Pointer, context: b.Context,
+  };
+}
+
+// An open record gets one row: take the file's next BL-NNNN, record it as the provenance, write the row. Rerunnable.
+function ensureRow(repo, id, input) {
+  const view = rf.backlogView(repo);
+  if (!view) return null;
+  const rec = showRecord(repo, id);
+  if (rec.status !== 'open') return null; // a closed record has no row to add
+  const have = provenanceBl(rec);
+  if (have && rf.backlogHasRow(repo, have)) return `BACKLOG.md row ${have} already in place`;
+  const want = have || view.nextId;
+  if (want !== view.nextId) throw new rf.RecordError('view_conflict', `${id} is ${want} in the store but the file has no such row and its next id is ${view.nextId}; restore the row from git or close the record`);
+  if (!have) {
+    const r = hippo.run(repo, ['set', id, 'provenance', '--kind', 'autopilot-backlog', '--value', want, '--locator', `${view.rel}#${want}`]);
+    if (r.exit !== 0) throw new HippoRefusal(r);
+  }
+  const w = rf.backlogNew(repo, input || inputFromRecord(rec), { clock });
+  if (w.id !== want) throw new rf.RecordError('view_conflict', `row written as ${w.id}, store says ${want}`);
+  return `BACKLOG.md row ${want} written (${w.paths_written.join(', ')})`;
+}
+
+// The BL id of a record when its row is in the file, else null.
+function rowOf(repo, id) {
+  const bl = provenanceBl(showRecord(repo, id));
+  return bl && rf.backlogHasRow(repo, bl) ? bl : null;
+}
+
+H['backlog new'].after = (repo, p, res) => ensureRow(repo, res.ids.root, p.input);
+
+H['backlog reply'].after = (repo, p) => {
+  const bl = rowOf(repo, p.id);
+  if (!bl) return ensureRow(repo, p.id);
+  rf.backlogReply(repo, { id: bl, reply: p.reply }, { clock });
+  return `BACKLOG.md row ${bl} Reply updated`;
+};
+
+H['backlog close'].after = (repo, p) => {
+  const bl = rowOf(repo, p.id);
+  if (!bl) return null;
+  const r = rf.backlogClose(repo, { id: bl, how: p.how, by: p.by, commit: p.commit }, { clock });
+  return r.info_lines.concat([`BACKLOG.md row ${bl} ${p.how === 'cancelled' ? 'marked dropped' : 'removed'}`]).join('; ');
+};
+
+H['backlog sync'] = {
+  needsRead: true,
+  parse: (f, pos) => ({ id: pos[0] }),
+  validate(repo, p, state) { if (state !== 'files') ulidArg(p.id, 'backlog sync'); return null; },
+  files() { throw usage('backlog sync: this repo has no hippo store; BACKLOG.md is the store here'); },
+  plan: (repo, p, key) => ({ key, steps: [] }),
+  after: (repo, p) => ensureRow(repo, p.id) || 'nothing to write (the record is closed or the project has no backlog file)',
+};
+
 // ---- output ------------------------------------------------------------------------------------------------------------
 
 function out(s) { process.stdout.write(`${s}\n`); }
@@ -557,9 +637,22 @@ function hippoMode(g, cmd, handler, p, det) {
     emitJson(g, { ok: false, state, key, exit: res.exit, error: e, ids: res.ids, failed_step: res.failed_step });
     return res.exit;
   }
-  const info = plan.info || [];
-  for (const l of info) err(l);
+  const info = (plan.info || []).slice();
   const id = res.ids.root || null;
+  if (handler.after) {
+    try {
+      const line = handler.after(repo, p, res);
+      if (line) info.push(line);
+    } catch (e) {
+      if (!(e instanceof HippoRefusal || e instanceof rf.RecordError || e instanceof rules.RuleViolationError)) throw e;
+      const target = id || p.id;
+      err(`store written${id ? `: ${id}` : ''}; BACKLOG.md was not updated: ${e.message}`);
+      err(`repair once the cause is fixed: node scripts/project-record.js backlog sync ${target}`);
+      emitJson(g, { ok: false, state, key, id, view_error: e.message });
+      return e.exit || e.exitCode || 1;
+    }
+  }
+  for (const l of info) err(l);
   if (g.json) emitJson(g, { ok: true, state, key, id, ids: res.ids, created: res.created, skipped: res.skipped, warnings: res.warnings.concat((v ? v.warnings : []).map(fmtWarn)), info_lines: info });
   else if (id) out(`${cmd}: ${id} (display ${display(id)})${res.created.length ? '' : ' (already recorded)'}`);
   else out(`${cmd}: done (${res.created.length} change(s), ${res.skipped.length} already in place)`);

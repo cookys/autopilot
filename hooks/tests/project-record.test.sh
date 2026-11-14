@@ -504,5 +504,18 @@ for SRC in startup resume clear; do
 done
 assert_not_contains "$(ss_ctx "$R_RS_F" startup)" "spooled write(s) waiting" "session-start: another repo with no spool -> no line"
 
+# --- hippo mode also writes BACKLOG.md (the file is a view of the store): new, reply, close, sync in one invocation each
+R_VW="$(mk_fixture viewmode store)"
+pr --target "$R_VW" --json backlog new --title "View row" "${BL_FLAGS[@]}"; eq 0 "$RC" "view: backlog new -> exit 0"
+VW1="$(echo "$OUT" | jf 'd.id')"
+assert_contains "$(cat "$R_VW/docs/BACKLOG.md")" "### View row" "view: backlog new put the row in BACKLOG.md"
+pr --target "$R_VW" --json backlog new --title "Peer view row" --origin peer --reporter cuda --report "2026-11-09 fleet" --trigger "asked" --trigger-type peer --effort "S" --source "PEER-REPORTED cuda 2026-11-09" --problem "P." --impact "I."
+VW2="$(echo "$OUT" | jf 'd.id')"
+pr --target "$R_VW" backlog reply "$VW2" --reply "2026-11-09 fleet:m1"; eq 0 "$RC" "view: reply -> exit 0"
+assert_contains "$(cat "$R_VW/docs/BACKLOG.md")" "2026-11-09 fleet:m1" "view: reply landed in the row"
+pr --target "$R_VW" backlog close "$VW1" done; eq 0 "$RC" "view: close -> exit 0"
+assert_not_contains "$(cat "$R_VW/docs/BACKLOG.md")" "### View row" "view: close removed the row"
+pr --target "$R_VW" backlog sync "$VW1"; eq 0 "$RC" "view: sync of a closed record is a no-op"
+
 hs_exit_check
 finalize_test

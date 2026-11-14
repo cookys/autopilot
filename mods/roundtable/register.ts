@@ -119,7 +119,7 @@ function keepDraft(text: string): void {
 export async function submitSay($: EngineInterface, text: string): Promise<void> {
   const body = text.trim()
   if (state.room === null || body === '') {
-    state.draft = ''
+    // Nothing went out. The host clears the field on Enter; leave the draft and redraw the notice already on screen.
     void $.ui.invalidate('ui.render')
     return
   }

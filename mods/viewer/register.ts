@@ -12,8 +12,8 @@
 import type { EngineInterface, Register } from 'claude-code'
 
 import { errorOf, fileView, parseShowInput } from './model'
-import type { ShowInput, ShowRequest } from './model'
-import { aiState, cancelAi, runAi, sendToChat, toggleAi } from './assist'
+import type { AiLang, ShowInput, ShowRequest } from './model'
+import { aiState, askDraftOf, cancelAi, clearAcceptedAsk, keepAskDraft, runAi, sendToChat, setAskDraft, toggleAi } from './assist'
 import type { Source } from './assist'
 import { Viewer, newHScroll } from './pane'
 import { newScroll, scrollHook } from '../live/scroll'
@@ -26,6 +26,21 @@ import type { VT } from './strings'
 export async function startViewer($: EngineInterface): Promise<void> {
   await $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: TOOL_SCHEMA, isDeferred: false })
   await $.command.register({ name: 'show', description: 'Show a file or a git diff in a window (the text does not go to the model)', argumentHint: '<path[:line]> | diff <git diff arguments>' })
+}
+
+// Enter in the ask field. A blank submit is the host clearing the box: keep the typed question and redraw it. A non-empty
+// question is sent, and the field clears only after that send is accepted. A refused send puts the text back.
+async function submitAsk($: EngineInterface, q: string, src: Source, lang: AiLang, t: VT): Promise<void> {
+  if (q.trim() === '') {
+    if (askDraftOf().trim() === '') $.ui.toast(t('viewer.ai.emptyQuestion'))
+    void $.ui.invalidate('ui.render')
+    return
+  }
+  void $.ui.focus({ requestId: PANE_ID, key: 'ask' }).catch(() => undefined) // the keyboard leaves the field, so 1 to 4 press buttons again
+  const outcome = await runAi($, 'ask', q.trim(), src, lang, t)
+  if (outcome === 'accepted') clearAcceptedAsk(q)
+  else if (outcome === 'refused') keepAskDraft(q)
+  void $.ui.invalidate('ui.render')
 }
 
 // every hook of the mod except `session.start` (the composed module hands startViewer to the live mod's session.start)
@@ -69,10 +84,12 @@ export function registerViewer(on: Parameters<Register>[0]): void {
     const lang = c.locale === 'zh-TW' ? 'zh-TW' : 'en'
     const ai: AiView | undefined = src === null ? undefined : {
       state: aiState(),
+      draft: askDraftOf(),
+      onDraft: (v: string) => { setAskDraft(v) },
       summarize: () => { void runAi($, 'summary', null, src, lang, t) },
       cancel: () => cancelAi($),
       focusAsk: () => { void $.ui.focus({ requestId: PANE_ID, key: 'ask-input' }).catch(() => undefined) },
-      ask: (q: string) => { if (q.trim() === '') $.ui.toast(t('viewer.ai.emptyQuestion')); else { void runAi($, 'ask', q.trim(), src, lang, t); void $.ui.focus({ requestId: PANE_ID, key: 'ask' }).catch(() => undefined) } }, // the keyboard leaves the field, so 1 to 4 press buttons again
+      ask: (q: string) => submitAsk($, q, src, lang, t), // Enter sends; a blank or refused send keeps the field (the host clears it on submit)
       toChat: () => { void sendToChat($, t) },
       toggle: () => toggleAi($),
     }

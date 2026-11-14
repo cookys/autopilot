@@ -236,6 +236,38 @@ test('empty text and no room clear the draft and do not send', async ($, on) => 
   expect((await draftValue($)).value).toBe('')
 })
 
+test('no room: Enter keeps the typed draft, sends nothing, and the empty-room notice stays', async ($, on) => {
+  const w = world(on)
+  await $.session.start({ surface: 'terminal', cwd: '/work/repo' })
+  const win = await mount($)
+  expect(textOf((await win.drawn()) as Node)).toContain('No room yet')
+  await win.input({ key: 'say', text: '留著', kind: 'change' })
+  await win.input({ key: 'say', text: '留著', kind: 'submit' })
+  await win.unmount()
+  expect(w.runs.length).toBe(0)
+  const kept = await draftValue($)
+  expect(kept.value).toBe('留著')
+  expect(textOf(kept.tree)).toContain('No room yet')
+  const cleared = await mount($)
+  await cleared.input({ key: 'say', text: '還在', kind: 'change' })
+  await cleared.input({ key: 'say', text: '', kind: 'submit' }) // the host cleared the field before submit
+  await cleared.unmount()
+  expect(w.runs.length).toBe(0)
+  expect((await draftValue($)).value).toBe('還在')
+})
+
+test('a room with an empty Enter keeps the typed draft and does not send', async ($, on) => {
+  const w = world(on)
+  await $.session.start({ surface: 'terminal', cwd: '/work/repo' })
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const win = await mount($)
+  await win.input({ key: 'say', text: '先打', kind: 'change' })
+  await win.input({ key: 'say', text: '   ', kind: 'submit' })
+  await win.unmount()
+  expect(w.runs.length).toBe(0)
+  expect((await draftValue($)).value).toBe('先打')
+})
+
 // ---- chat-room layout: the control area (failure row + Say field) is fixed at the bottom; the log is bottom-anchored; scroll state is the first content row ----
 const longLog = (n: number) => Array.from({ length: n }, (_, i) => one({ seq: i + 1, from: i % 2 === 0 ? 'owner' : 'cuda', kind: 'say', text: '第 ' + (i + 1) + ' 則發言' })).join('\n') + '\n'
 const frameOf = (tree: Node) => {

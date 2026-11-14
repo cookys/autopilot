@@ -1125,9 +1125,10 @@ async function decideNote($: EngineInterface, key: string, value: string): Promi
 }
 
 // Enter in a note field (the Input's submit). The host clears its field on submit (roundtable/register.ts keepDraft), but a note is only SENT by the send Button, so Enter must
-// not lose what was typed: keep the text, then draw the pane again so the field is drawn with the kept text.
+// not lose what was typed: keep the text, then draw the pane again so the field is drawn with the kept text. A blank submit is that clear already done: writing it would
+// replace notes[id] with ''. Leave the stored note and only redraw.
 async function decideKeep($: EngineInterface, key: string, value: string): Promise<void> {
-  await decideNote($, key, value)
+  if (value.trim() !== '') await decideNote($, key, value)
   void $.ui.invalidate('ui.render')
 }
 

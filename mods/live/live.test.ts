@@ -6183,6 +6183,21 @@ for (const surface of SURFACES) {
     expect(f?.props?.value).toBe('叫 main')
   })
 
+  // The host clears the field and the submit event arrives as ''. Enter must not write that over the note change already stored.
+  test('DECIDE mounted: Enter with an empty submit keeps the typed note and sends nothing (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
+    await start($, surface)
+    const pane = await paneOn($, surface, 'decide')
+    await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
+    await pane.input({ key: 'note:d-0000free', text: '', kind: 'submit' })
+    await pane.unmount()
+    expect(submits.length, 'Enter never sends').toBe(0)
+    const p2 = await paneOn($, surface, 'decide')
+    const f = ((await p2.findAll({ type: 'Input' })) as Drawn[]).find(n => n.props?.key === 'note:d-0000free')
+    await p2.unmount()
+    expect(f?.props?.value).toBe('叫 main')
+  })
+
   test('DECIDE mounted: the send Button sends the note that Enter kept, once (' + surface + ')', async ($, on) => {
     const { w, submits } = decideWorld(on)
     await start($, surface)

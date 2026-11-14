@@ -16,7 +16,7 @@ autopilot decision answer <id> (--option <label> | --free-text <text>) [--note <
 
 ## Card shape (schema `autopilot.decision/1`)
 
-`list` -> `{schema, cards:[card]}` (open and awaiting_operator_action cards, oldest first, the two states the pane also shows as still needing the operator; `--all` adds pending_dispatch and closed). `show` -> `{schema, card}`.
+`list` -> `{schema, cards:[card]}` (open cards only, oldest first, the ones that can still be answered; `--all` adds awaiting_operator_action, pending_dispatch and closed, each item carrying its `state`). `show` -> `{schema, card}`.
 
 | field | meaning |
 |---|---|

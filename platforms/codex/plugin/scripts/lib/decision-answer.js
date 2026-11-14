@@ -16,7 +16,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const od = require('../open-decision.js');
-const { pickCards, cardState, isOpenEntry, isAwaitingEntry } = require('../../src/status/scope-key');
+const { pickCards, cardState, isOpenEntry } = require('../../src/status/scope-key');
 
 const SCHEMA = 'autopilot.decision/1';
 const MAX_FREE_TEXT = 4000;
@@ -49,7 +49,7 @@ function allCards(cwd) {
 }
 
 function listCards(cwd, { all = false } = {}) {
-  return allCards(cwd).map((w) => w.e).filter((e) => all || isOpenEntry(e) || isAwaitingEntry(e))
+  return allCards(cwd).map((w) => w.e).filter((e) => all || isOpenEntry(e))
     .sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0)).map(viewOf);
 }
 

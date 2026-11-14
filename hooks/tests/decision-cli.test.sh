@@ -110,13 +110,15 @@ setmode courier
 C3="$(mkcard "帶 courier" --option "是::y" --option "否::n")"
 OUT="$(ans "$C3" --option 是)"; assert_eq "$?" 0 "courier host: ok"; assert_eq "$(printf '%s' "$OUT" | jf answer_id)" ACLAIMSTUB0000000000000001 "courier host: the claim's answer id"
 assert_contains "$(cat "$STUB/claims.log")" "decision claim $C3 --option 是" "claim carried the option"
-# a card with operator_steps, answered with a non-decline option -> awaiting_operator_action (the operator still has a step), not closed; list keeps it
+# a card with operator_steps, answered with a non-decline option -> awaiting_operator_action (the operator still has a step), not closed; the default list omits it (answerCard would reject it as closed), --all and show report it
 setmode ok
 C4="$(mkcard "有手動步驟" --option "做::y" --option "不做::n" --operator-step "到機房按電源鍵")"
 OUT="$(ans "$C4" --option 做)"; assert_eq "$?" 0 "operator_steps answer -> 0"
 assert_eq "$(printf '%s' "$OUT" | jf state)" awaiting_operator_action "operator_steps: answer state is awaiting_operator_action, not closed"
 assert_eq "$(cardstate "$C4")" awaiting_operator_action "operator_steps: stored card awaiting_operator_action"
-assert_eq "$(dec list | jf cards.length)" 1 "list: awaiting_operator_action card still listed (C4)"
-assert_eq "$(dec list | jf cards.0.state)" awaiting_operator_action "list: its state"
+assert_eq "$(dec list | jf cards.length)" 0 "list: awaiting_operator_action card is not in the default (open-only) list (C4)"
+assert_eq "$(dec list --all | jf cards.length)" 4 "list --all: includes the awaiting card"
+assert_eq "$(dec list --all | jf cards.3.state)" awaiting_operator_action "list --all: its state"
+assert_eq "$(dec show "$C4" | jf card.state)" awaiting_operator_action "show: its state"
 
 finalize_test

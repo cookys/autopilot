@@ -13,8 +13,8 @@ Original wording: [`docs/dev/_archive/entry-docs/claude-md-detail.md`](docs/dev/
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 42 hooks (27 default-on,
-15 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
+Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 43 hooks (27 default-on,
+16 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
 
 ## Scripts (prefer over LLM judgment)
 

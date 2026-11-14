@@ -2,7 +2,7 @@
 
 Every hook knob (config.json keys and environment variables) is indexed in [docs/guide/settings-reference.md](../docs/guide/settings-reference.md).
 
-42 Claude Code hooks for runtime enforcement of development discipline: **27 default-on** (Tier A) + **15 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 15 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+43 Claude Code hooks for runtime enforcement of development discipline: **27 default-on** (Tier A) + **16 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 15 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -122,6 +122,7 @@ hooks/
   design-quality.js        # Tier B (opt-in)
   mcp-health.js            # Tier B (opt-in)
   per-turn-gate.js         # Tier B (opt-in) — Stop + SubagentStop: runs a configured verifier, or gate-verify.js for a worker-bound gate file, blocks up to N times per turn (BL-0055 phase 2, BL-0306 P2)
+  fleet-stop.js            # Tier B (opt-in) — Stop: pipes the payload to `fleet hook stop`, passthrough; exit 0 without fleet
   dispatch-model-guard.js  # Tier A (default-on since v2.35.15) — remind (deny→agent decides) on guarded expensive engine / omitted model
   version-drift-check.js   # Tier A (default-on, silent outside dev clone) — behind-upstream advisory (SessionStart)
   residue-auto-reap.js     # Tier A (default-on, silent outside a git repo) — detached 24 h-throttled `repo-residue-sweep.js reap --auto` (worktrees and tmp only; branches stay unless --delete-branches or residue.delete_branches) incl. the daily temp-root prune, `residue.tmp_prune` (SessionStart); logic in residue-auto-reap-lib.js
@@ -248,7 +249,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. The v2.7.1 bash version is retrievable from git history (`git log -- hooks/state-checkpoint.sh`), no in-tree copy.
 
-## Tier B — Opt-In (15 hooks)
+## Tier B — Opt-In (16 hooks)
 
 Wired in `hooks.json` but **default-OFF** — each self-gates via `_shared/opt-in.js` and no-ops until you opt in. **Enable** by adding the stem to `~/.autopilot/config.json`:
 
@@ -266,6 +267,7 @@ Per-hook env override also works: `AUTOPILOT_HOOK_BRANCH_PROTECTION=1` (stem upp
 |------|-------|---------|----------|
 | branch-protection | PreToolUse | Bash | Hard-blocks commit/force-push on `^(main\|master)$`; override `AUTOPILOT_PROTECTED_BRANCHES`. The advisory also reaches the model via `hookSpecificOutput.additionalContext` on the same event. |
 | exec-boundary | PreToolUse | Bash | Non-LLM deny gate at the execution boundary (four-layer K2): protected-ref force-push (defense-in-depth with branch-protection), recursive `rm` outside sanctioned roots, raw `DROP TABLE`/`TRUNCATE`, `sudo rm`. Allow-by-default; per-project config `.claude/execution-boundary-config.md` |
+| fleet-stop | Stop | — | **Opt-in (default-off).** Runs `fleet hook stop` with the Stop payload on stdin and passes its stdout, stderr and exit status through, so a turn that claims a fleet task done without `task_result` or blocked is sent back. Enable: `~/.autopilot/config.json` `{"hooks":{"fleet-stop":true}}` or `AUTOPILOT_HOOK_FLEET_STOP=1`; `scripts/dev-setup.sh` turns it on when `fleet` is on PATH and `dev-setup.sh --check` prints `fleet_stop_hook: on\|off\|fleet_missing` (FAIL when off on a fleet host). `fleet` missing or a wrapper error exits 0. |
 | commit-secret-scan | PreToolUse | Bash | Hard-blocks `git commit` when added staged hunk content contains secrets (`_shared/secret-patterns.js`); deletion-only cleanup passes, diff metadata is excluded, and diagnostics expose pattern names rather than secret values |
 | large-file-warner | PreToolUse | Read | >500KB warn, >2MB block. Bypasses if offset/limit set. The advisory also reaches the model via `hookSpecificOutput.additionalContext` on the same event. |
 | config-protection | PreToolUse | Write\|Edit | Blocks linter/formatter config edits |
@@ -397,5 +399,6 @@ gate pass. Knobs: `AUTOPILOT_LIVE_DIR` (override base, still probed), `AUTOPILOT
 | Stop | `dirty-protected-paths.js` | v2.36.11 default-on: dirty-protected-paths — turn-end reminder when uncommitted work under protected_paths passes min_files/min_lines; systemMessage only, never a Stop decision; AUTOPILOT_DIRTY_TREE_REMINDER=false to opt out. |
 | Stop | `owner-question-guard.js` | default-on: owner-question-guard — blocks unresolved asks, operator steps and promises on every Stop; each sentence needs a live card or dated fleet task. AUTOPILOT_OWNER_QUESTION_GUARD=off to opt out. |
 | Stop / SubagentStop | `per-turn-gate.js` | opt-in: per-turn-gate (BL-0055 phase 2) — runs a configured verifier at turn end and blocks up to `per_turn_gate.max_blocks` times per turn on its violations; off unless `hooks.per-turn-gate` is enabled and a verifier is configured. |
+| Stop | `fleet-stop.js` | opt-in: fleet-stop — runs `fleet hook stop` at turn end (task_result / blocked check); wired directly because the multiplexer does not forward a Stop decision. |
 | TaskCreated / TaskCompleted | `session-tasks.js` | mods P1W W1d default-on: session-tasks — folds the task-tool events into <live>/tasks/<sid>.json; AUTOPILOT_SESSION_TASKS=off to opt out. Exact tool-name matcher (never Task/Agent). Task tools need CLAUDE_CODE_ENABLE_TODO_TOOLS=1 for sonnet/opus. |
 | PermissionRequest / Notification | `awaiting-owner.js` | mods P1W W1e default-on: awaiting-owner — maintains <live>/attention/<sid>.json while Claude Code waits on the human (permission / question / idle); AUTOPILOT_AWAITING_OWNER=off to opt out. |

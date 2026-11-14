@@ -101,6 +101,43 @@ t('cli: transcript with tool_use input, tool_result cut to 200 chars + len, repo
   assert.deepStrictEqual(leaked(JSON.stringify(r) + res.stdout + res.stderr, P), []);
 });
 
+t('report privacy: seeded needles absent from the report bytes; every leaf is a number, boolean, schema or hex digest; keys are fixed names', () => {
+  const FIELDS = ['schema', 'in_lines', 'out_lines', 'counts', 'dropped'];
+  const checkReport = (bytes) => {
+    for (const n of needles(P)) assert.ok(!bytes.includes(n), 'needle in report bytes');
+    const walkLeaf = (v, where) => {
+      if (typeof v === 'number' || typeof v === 'boolean') return;
+      if (typeof v === 'string') { assert.ok(v === 'ar-redact/1' || /^[0-9a-f]{64}$/.test(v), `string leaf at ${where}`); return; }
+      assert.ok(v && typeof v === 'object' && !Array.isArray(v), `leaf type at ${where}`);
+      for (const [k, x] of Object.entries(v)) {
+        assert.ok(/^[a-z0-9_-]{1,40}$/.test(k), `key shape at ${where}`);
+        walkLeaf(x, `${where}.${k}`);
+      }
+    };
+    const r = JSON.parse(bytes);
+    assert.deepStrictEqual(Object.keys(r).sort(), [...FIELDS].sort());
+    walkLeaf(r, '$');
+  };
+  const f = jsonl('rp.jsonl', [
+    { type: 'assistant', message: { content: [{ type: 'text', text: LINES.slice(0, 5).join('\n') }, { type: 'tool_use', input: { command: LINES[7] } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'u1', content: `${LINES[5]}\n${LINES[6]}\n${LINES[8]}` }] } },
+  ]);
+  const rep = path.join(tmp, 'rp.report.json');
+  assert.strictEqual(ar.run({ in: f, out: path.join(tmp, 'rp.out.jsonl'), report: rep, err: quiet }), 0);
+  checkReport(fs.readFileSync(rep, 'utf8'));
+  // dropped session report (exit 4) obeys the same rules
+  const repD = path.join(tmp, 'rp.dropped.json');
+  assert.strictEqual(ar.run({ in: f, out: path.join(tmp, 'rp.d.out'), report: repD, rules: [], err: quiet }), 4);
+  checkReport(fs.readFileSync(repD, 'utf8'));
+  // negative control: a report carrying one matched sample must fail the same check
+  const bad = JSON.parse(fs.readFileSync(rep, 'utf8'));
+  bad.sample = P.ip;
+  assert.throws(() => checkReport(JSON.stringify(bad)));
+  const bad2 = JSON.parse(fs.readFileSync(rep, 'utf8'));
+  bad2.counts.note = 'masked 203 x';
+  assert.throws(() => checkReport(JSON.stringify(bad2)));
+});
+
 t('negative control: injected EMPTY rule set lets the planted values through (assertion goes red)', () => {
   const f = jsonl('neg.jsonl', [{ message: { content: [{ type: 'text', text: LINES.join('\n') }] } }]);
   const out = path.join(tmp, 'neg.out.jsonl');

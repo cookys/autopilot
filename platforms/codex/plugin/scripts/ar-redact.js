@@ -5,7 +5,9 @@
  * Usage: ar-redact.js --in <transcript.jsonl> --out <excerpt.jsonl> [--report <report.json>]
  * Exit: 0 written; 2 usage; 4 fail-closed (any exception, malformed line, or a hit left after the
  * re-scan): the out file is deleted and the session is dropped. Matched values are never printed.
- * Report: {schema:"ar-redact/1", in_lines, out_lines, counts:{class:n}, dropped:bool}.
+ * Exit 4 means the session must not be sent anywhere; the raw file never leaves the source host.
+ * Report: {schema:"ar-redact/1", in_lines, out_lines, counts:{class:n}, dropped:bool}: numbers, a boolean and
+ * fixed rule-class names only, never a path, session id or any fragment of a matched value.
  * Rules: scripts/lib/ar-redact-rules.js. Plan: AR layer 2, block 1. Node built-ins only.
  * Test seam: require() this file and call run({in, out, report, rules, rescanRules}); no env knob.
  */

@@ -4865,8 +4865,15 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     reap_cnative_config_dir
   else
     _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
+    # --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList: the CLI intermittently injects a
+    # "task tools haven't been used recently" reminder into the conversation; on an Anthropic-compatible
+    # endpoint with prefix caching it lands mid-prompt (~11.5K tokens) and breaks the cached prefix.
+    # Measured 2026-11-14 on qwen_local: prefix divergences 3 -> 0, cache_read 76.6% -> 95.5% with these
+    # four tools disallowed (runs hetero-1794626978 vs hetero-1794630645). A brief-driven hand does not
+    # use the Task tools, so the cc-shim hand is never given them. (claude-native branches: unchanged.)
     run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
-        --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
+        --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
+        ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
         _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" ${GATE_ARGV[@]+"${GATE_ARGV[@]}"}
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.

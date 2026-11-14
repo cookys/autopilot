@@ -27,12 +27,15 @@ SBX="$TEST_TMP/repo"; mkdir -p "$SBX"; $GIT -C "$SBX" init -q; $GIT -C "$SBX" co
 PROMPT="$TEST_TMP/prompt.txt"; echo "say ok" > "$PROMPT"
 
 BINDIR="$TEST_TMP/bin"; mkdir -p "$BINDIR"
-# stub claude: it leaves one edit in the worktree (the rail's wrapper-commit then commits
+export CCSHIM_STUB_ARGV_FILE="$TEST_TMP/claude-argv.txt"   # one argv entry per line; the stub overwrites it on its one call
+# stub claude: it records its argv (the assertion below reads what the rail actually put on the
+# claude command line), leaves one edit in the worktree (the rail's wrapper-commit then commits
 # it, so the run lands "committed"/exit 0 like a real cc-shim hand) and its stdout is the
 # harness envelope (claude --output-format json) — the case's envelope text, verbatim. The
 # prompt is read from stdin like the real CLI; the worker never sees its own stdout back.
 cat > "$BINDIR/claude" <<'EOS'
 #!/usr/bin/env bash
+printf '%s\n' "$@" > "${CCSHIM_STUB_ARGV_FILE:-/dev/null}"
 cat >/dev/null
 echo edited > ccshim-usage-edit.txt
 printf '%s' "${CCSHIM_STUB_ENVELOPE:-ok}"
@@ -102,6 +105,16 @@ const v = o.num_turns;
 process.stdout.write(v === undefined ? "<absent>" : (v === null ? "null" : String(v)));
 '
 }
+# argv_value <file> <flag>: the single argument that IMMEDIATELY follows <flag> in a
+# one-entry-per-line argv dump; prints nothing and returns 1 when the flag is absent.
+argv_value() {
+  local file="$1" flag="$2" prev="" a
+  while IFS= read -r a; do
+    if [ "$prev" = "$flag" ]; then printf '%s' "$a"; return 0; fi
+    prev="$a"
+  done < "$file"
+  return 1
+}
 
 EXP1='{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":0}'
 
@@ -109,6 +122,12 @@ EXP1='{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_
 EN1='{"type":"result","is_error":false,"result":"ok","usage":{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":0}}'
 run_case "$EN1"
 assert_eq "$RC" "0" "case1: cc-shim run exits 0 (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+# The cc-shim hand never gets the Task tools: the rail must pass --disallowedTools followed by
+# EXACTLY the four tool names — otherwise the CLI's "task tools haven't been used recently"
+# reminder lands mid-prompt and breaks the cached prefix on a prefix-caching endpoint.
+# Red on the unfixed rail (the flag is absent from the argv).
+AD1="$(argv_value "$CCSHIM_STUB_ARGV_FILE" --disallowedTools)"
+eq "TaskCreate,TaskUpdate,TaskGet,TaskList" "$AD1" "case1: the cc-shim claude argv passes --disallowedTools followed by exactly TaskCreate,TaskUpdate,TaskGet,TaskList (got: '$AD1')"
 U1="$(printf '%s' "$OUT" | result_json | usage_field 2>/dev/null)" || U1="<no-result-json>"
 eq "cc-shim" "$(printf '%s' "$OUT" | result_json | result_field runner 2>/dev/null)" "case1: the run is the cc-shim runner"
 eq "$EXP1" "$U1" "case1: result usage is exactly the envelope usage object (got: $U1)"

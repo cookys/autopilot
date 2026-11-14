@@ -274,7 +274,7 @@ function decide(input) {
   const autonomous = isAutonomous(input.session_id);
   const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
   const unboundNote = namedUnbound.map((u) =>
-    `回覆提到的卡片 ${u.id} 落在未綁定範圍（本 session 的 root 是 ${rs.root}，root 面板看不到未綁定卡片）：請先執行 node ${OPEN_DECISION_CMD} close --id ${u.id}，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} 重新開卡並更新回覆中的卡號。`
+    `回覆提到的卡片 ${u.id} 落在未綁定範圍（本 session 的 root 是 ${rs.root}，root 面板看不到未綁定卡片）：請先執行 node ${OPEN_DECISION_CMD} close --id ${u.id}，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} --category <money|identity|presence|goal|public-release|unbackable-loss> 重新開卡並更新回覆中的卡號。`
   ).join('\n');
   const lead = [
     ...(unboundNote ? [unboundNote] : []),

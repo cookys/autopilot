@@ -232,6 +232,7 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_ENDPOINTS_ENV` | Path of the endpoints env file (mode 600) that load-endpoints-env.sh and resolve-endpoint.sh read. | `~/.autopilot/endpoints.env` |  |
 | `AUTOPILOT_ENDPOINT_<NAME>_URL` | Per-endpoint settings loaded from the endpoints env file: AUTOPILOT_ENDPOINT_`<NAME>`_URL and AUTOPILOT_ENDPOINT_`<NAME>`_TOKEN. An HTTP seat appears in the topology only when its URL is set. | unset |  |
 | `fleet_gateway_endpoints` (config.json) | Named endpoints allowlisted as fleet gateways to receive the `X-Fleet-Task` header (case-insensitive); unnamed endpoints or endpoints outside the list send no header and emit no warning. | `[]` | `AUTOPILOT_FLEET_GATEWAY_ENDPOINTS`: comma-separated. When set, even to empty, it replaces this list. |
+| `AUTOPILOT_RULE_CAPTURE_LOG` | JSONL file where the `lesson-lint.js stop-hook` rule-capture appends one row per Stop whose last operator message matched a rule marker (outcome `block`, `no_rule` or `pass`; never the message text), so the false-block rate can be computed. | `$XDG_STATE_HOME/autopilot/rule-capture.jsonl` (else `~/.local/state/autopilot/rule-capture.jsonl`) | `AUTOPILOT_RULE_CAPTURE_LOG` |
 | `AUTOPILOT_MINIMAX_BASE_URL` | Base URL for the provider-native MiniMax endpoint. | unset |  |
 
 ## Claude accounts (G37)

@@ -6757,6 +6757,19 @@
         "AUTOPILOT_FLEET_GATEWAY_ENDPOINTS"
       ],
       "note": "Endpoint name forwarded from dispatch-review.sh and dispatch-author.sh to dispatch-anthropic-review.js so fleet-task-header.js checks it against the fleet-gateway allowlist."
+    },
+    {
+      "name": "AUTOPILOT_RULE_CAPTURE_LOG",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/lesson-lint.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "JSONL file where the lesson-lint stop-hook rule-capture appends one row per Stop whose last operator message matched a rule marker (outcome block, no_rule or pass; never the message text). Default: $XDG_STATE_HOME/autopilot/rule-capture.jsonl, else ~/.local/state/autopilot/rule-capture.jsonl."
     }
   ]
 }

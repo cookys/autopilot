@@ -107,3 +107,77 @@ test('stop-hook fails open on unreadable dir', () => {
 test('usage error exits 2', () => {
   assert.equal(spawnSync('node', [SCRIPT, 'check'], { encoding: 'utf8' }).status, 2);
 });
+
+// rule-capture rule (fake transcripts only)
+const U = (text, ts = '2026-11-15T00:00:01Z') => ({ type: 'user', timestamp: ts, message: { role: 'user', content: text } });
+const A = (...blocks) => ({ type: 'assistant', message: { role: 'assistant', content: blocks } });
+const T = (text) => ({ type: 'text', text });
+const TU = (name, input = {}) => ({ type: 'tool_use', name, input });
+const RULE = '花錢的在給我吧';
+function cap(lines, active = true) {
+  const d = mk(); const tp = path.join(d, 't.jsonl.txt');
+  fs.writeFileSync(tp, lines.map((l) => JSON.stringify(l)).join('\n'));
+  const r = spawnSync('node', [SCRIPT, 'stop-hook', '--dir', d], {
+    input: JSON.stringify({ transcript_path: tp, stop_hook_active: active }), encoding: 'utf8',
+  });
+  return r.stdout.trim() ? JSON.parse(r.stdout) : null;
+}
+
+test('rule-capture: marker and no capture blocks, prints marker only', () => {
+  const o = cap([U(RULE), A(T('好'))]);
+  assert.equal(o.decision, 'block'); assert.match(o.reason, /操作員這句像是規則/); assert.match(o.reason, /\[在給我\]$/);
+  assert.ok(!o.reason.includes(RULE));
+});
+test('rule-capture: CLAUDE.md edit passes', () => {
+  assert.equal(cap([U(RULE), A(TU('Edit', { file_path: '/x/repo/CLAUDE.md' }))]), null);
+});
+test('rule-capture: fleet dispatch passes', () => {
+  assert.equal(cap([U(RULE), A(TU('mcp__fleet__dispatch', {}))]), null);
+});
+test('rule-capture: [no-rule: reason] passes, empty reason blocks', () => {
+  assert.equal(cap([U(RULE), A(T('[no-rule: 只是問句]'))]), null);
+  assert.equal(cap([U(RULE), A(T('[no-rule: ]'))]).decision, 'block');
+});
+test('rule-capture: no marker passes', () => {
+  assert.equal(cap([U('現在幾點'), A(T('好'))]), null);
+});
+test('rule-capture: stop_hook_active is not a bypass', () => {
+  assert.equal(cap([U(RULE), A(T('好'))], true).decision, 'block');
+});
+test('rule-capture: marker in an earlier turn does not count', () => {
+  assert.equal(cap([U(RULE, '2026-11-15T00:00:01Z'), A(T('好')), U('現在幾點', '2026-11-15T00:00:09Z'), A(T('好'))]), null);
+});
+test('rule-capture: skills path, memory mechanism, ledger decision and tool_result-only user entries', () => {
+  assert.equal(cap([U(RULE), A(TU('Write', { file_path: '/x/skills/a/SKILL.md' }))]), null);
+  assert.equal(cap([U(RULE), A(TU('Write', { file_path: '/m/a.md', content: '---\nmechanism: scripts/a.js\n---' }))]), null);
+  assert.equal(cap([U(RULE), A(TU('Bash', { command: 'bash ledger.sh decision add' }))]), null);
+  const tr = { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'x' }] } };
+  assert.equal(cap([U(RULE), A(TU('Bash', { command: 'ls' })), tr, A(T('好'))]).decision, 'block');
+});
+
+function capLog(lines) {
+  const d = mk(); const tp = path.join(d, 't.jsonl.txt'); const log = path.join(d, 'sub', 'cap.jsonl');
+  fs.writeFileSync(tp, lines.map((l) => JSON.stringify(l)).join('\n'));
+  spawnSync('node', [SCRIPT, 'stop-hook', '--dir', d], {
+    input: JSON.stringify({ transcript_path: tp, session_id: 'sess1' }), encoding: 'utf8', env: { ...process.env, AUTOPILOT_RULE_CAPTURE_LOG: log },
+  });
+  return fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
+}
+test('rule-capture log: block, no_rule, pass, no marker', () => {
+  const b = capLog([U(RULE), A(T('好'))]);
+  assert.equal(b.length, 1); assert.equal(b[0].schema, 'rule-capture-log/1'); assert.equal(b[0].outcome, 'block');
+  assert.equal(b[0].marker, '在給我'); assert.equal(b[0].session_id, 'sess1'); assert.ok(!JSON.stringify(b[0]).includes(RULE));
+  const n = capLog([U(RULE), A(T('[no-rule: x]'))]);
+  assert.equal(n.length, 1); assert.equal(n[0].outcome, 'no_rule'); assert.equal(n[0].no_rule_reason, 'x');
+  const p = capLog([U(RULE), A(TU('Edit', { file_path: '/x/repo/CLAUDE.md' }))]);
+  assert.equal(p.length, 1); assert.equal(p[0].outcome, 'pass'); assert.equal(p[0].pass_by, 'claude_md');
+  assert.equal(capLog([U('現在幾點'), A(T('好'))]).length, 0);
+});
+test('rule-capture log failure does not change the result', () => {
+  const d = mk(); const tp = path.join(d, 't.jsonl.txt');
+  fs.writeFileSync(tp, [U(RULE), A(T('好'))].map((l) => JSON.stringify(l)).join('\n'));
+  const r = spawnSync('node', [SCRIPT, 'stop-hook', '--dir', d], {
+    input: JSON.stringify({ transcript_path: tp }), encoding: 'utf8', env: { ...process.env, AUTOPILOT_RULE_CAPTURE_LOG: tp + '/x/y' },
+  });
+  assert.equal(JSON.parse(r.stdout).decision, 'block'); assert.match(r.stderr, /log failed/);
+});

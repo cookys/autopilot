@@ -118,6 +118,10 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-detach.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-author-codex-transport.sh"
+# shellcheck source=lib/worker-containment.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/worker-containment.sh"
+# Mount isolation (01M7E4JC): detect once; the codex branch (the only author path that spawns a worker process) refuses on mode=refuse.
+worker_mount_isolation_detect
 # shellcheck source=lib/grok-effort.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/grok-effort.sh"
 # shellcheck source=lib/cursor-model.sh
@@ -1128,7 +1132,7 @@ write_author_manifest() {
   # repo_identity (mods P1a R1): explicit --repo-root wins, else the cwd's toplevel.
   if declare -F repo_identity_resolve_fields >/dev/null 2>&1; then repo_identity_resolve_fields "${AUTHOR_REPO_ROOT_EXPLICIT:-}" "" || true; fi
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
-  local _rk_ident="$REPO_IDENTITY_FIELDS"
+  local _rk_ident="$REPO_IDENTITY_FIELDS, \"mount_containment\": \"$(worker_mount_manifest_value)\""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
   declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" "$RUNNER" "${ENDPOINT:-}")"
   {
@@ -1326,6 +1330,10 @@ if [[ "$RUNNER" = "codex" ]]; then
   # classification, stdout authority + last-message witness, chrome-frame
   # session-id anchoring. Caller-supplied --output-last-message is already a
   # usage error (unknown arg → exit 2) before we reach here.
+  if [ "$WORKER_MOUNT_MODE" = "refuse" ]; then
+    worker_mount_isolation_require || true   # prints the stderr line
+    die_precondition "$WORKER_MOUNT_REFUSE_LINE"
+  fi
   if ! codex_transport_create_artifacts; then
     die_precondition "failed to create private codex transport artifacts"
   fi

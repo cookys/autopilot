@@ -1448,11 +1448,11 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
   author_kill_grace
   AUTHOR_TIMEOUT_START=$SECONDS
-  # S2 gateway join (2026-11-14): cc-shim talks to the model gateway, so its requests carry
-  # X-Fleet-Task when AUTOPILOT_UPSTREAM_TASK_ID is a ULID (lib/fleet-task-header.js validates; never
-  # inline the regex). An inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child: env -u drops it
-  # first and the validated line is the only value set back. claude-native keeps no such header.
-  _FT_HEADER="$(node "$_AUTHOR_SELF_DIR/lib/fleet-task-header.js" --rail dispatch-author)"
+  # S2 gateway join (2026-11-14): cc-shim carries X-Fleet-Task only when --endpoint is in the
+  # fleet-gateway allowlist and AUTOPILOT_UPSTREAM_TASK_ID is a ULID (lib/fleet-task-header.js owns
+  # both checks; never inline them). An inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child:
+  # env -u drops it first and the validated line is the only value set back. claude-native keeps no such header.
+  _FT_HEADER="$(node "$_AUTHOR_SELF_DIR/lib/fleet-task-header.js" --rail dispatch-author ${ENDPOINT:+--endpoint "$ENDPOINT"})"
   # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
   timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR -u ANTHROPIC_CUSTOM_HEADERS ${_FT_HEADER:+ANTHROPIC_CUSTOM_HEADERS="$_FT_HEADER"} HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
     bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
@@ -1563,7 +1563,7 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
     ANTHROPIC_ARGS+=(--token-env "$ANTHROPIC_TOKEN_ENV")
   fi
   set +e
-  node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
+  AUTOPILOT_FLEET_TASK_ENDPOINT="${ENDPOINT:-}" node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
   RUNNER_EXIT=$?
   set -e
 else

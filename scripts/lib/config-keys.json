@@ -6709,6 +6709,54 @@
       ],
       "summary": "Ordered substitute seats (engine/effort@runner, or engine@runner defaulting effort to high) tried once at runtime when a qc_panel seat on the codex runner fails due to codex quota or rate-limit exhaustion; never alters qc_panel composition.",
       "type": "array"
+    },
+    {
+      "name": "fleet_gateway_endpoints",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "dispatch",
+      "default": [],
+      "readers": [
+        "scripts/lib/fleet-task-header.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FLEET_GATEWAY_ENDPOINTS"
+      ],
+      "summary": "Named endpoints allowlisted as fleet gateways to receive the X-Fleet-Task header (case-insensitive). Empty means no endpoint is a gateway.",
+      "type": "array"
+    },
+    {
+      "name": "AUTOPILOT_FLEET_GATEWAY_ENDPOINTS",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/lib/fleet-task-header.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "fleet_gateway_endpoints"
+      ],
+      "summary": "Comma-separated named endpoints allowlisted as fleet gateways to receive the X-Fleet-Task header (case-insensitive). When set, even to empty, it replaces fleet_gateway_endpoints."
+    },
+    {
+      "name": "AUTOPILOT_FLEET_TASK_ENDPOINT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-anthropic-review.js",
+        "scripts/dispatch-author.sh",
+        "scripts/dispatch-review.sh"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_FLEET_GATEWAY_ENDPOINTS"
+      ],
+      "note": "Endpoint name forwarded from dispatch-review.sh and dispatch-author.sh to dispatch-anthropic-review.js so fleet-task-header.js checks it against the fleet-gateway allowlist."
     }
   ]
 }

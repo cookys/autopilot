@@ -433,8 +433,9 @@ async function runLocalDispatch(options) {
     leaseDir: options.leaseDir,
   });
   const requestId = crypto.randomBytes(24).toString('hex');
-  // S2: resolve once per dispatch; a set-but-invalid id sends nothing and says so on stderr.
-  const fleetTaskHeader = resolveFleetTask(process.env[FLEET_TASK_SOURCE_ENV]);
+  // S2: resolve once per dispatch against endpoint.id allowlist + ULID; a gateway endpoint with a
+  // set-but-invalid id sends nothing and says so on stderr.
+  const fleetTaskHeader = resolveFleetTask(process.env[FLEET_TASK_SOURCE_ENV], endpoint.id);
   if (!fleetTaskHeader.ok) process.stderr.write(`${fleetTaskWarnLine('dispatch-local-openai')}\n`);
   const request = chatRequest(endpoint, options.role, prompt, requestId);
   const requestHash = sha256(canonicalJson(request));

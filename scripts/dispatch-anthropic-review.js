@@ -53,8 +53,9 @@ try {
 const { MESSAGES_EFFORT_WIRE_VALUES } = require('./lib/effort-scale');
 const { refuseNonTextBlocks } = require('./lib/vision-guard');
 // S2 gateway join (2026-11-14): the gateway joins request speed to fleet tasks by the
-// X-Fleet-Task header; the ULID check lives only here (lib/fleet-task-header.js).
+// X-Fleet-Task header; the allowlist + ULID check lives only here (lib/fleet-task-header.js).
 const { HEADER_NAME: FLEET_TASK_HEADER_NAME, SOURCE_ENV: FLEET_TASK_SOURCE_ENV, resolveFleetTask, warnLine: fleetTaskWarnLine } = require('./lib/fleet-task-header');
+const FLEET_TASK_ENDPOINT_ENV = 'AUTOPILOT_FLEET_TASK_ENDPOINT';
 
 const RUNNER = 'anthropic-compatible';
 // Live-probed on 2026-07-01: appending /v1/messages gives
@@ -79,6 +80,7 @@ USAGE:
       [--timeout-ms <ms>]   # default 300000 (5m)
       [--base-url <url>]    # default ANTHROPIC_COMPATIBLE_BASE_URL,
                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
+      [--endpoint <name>]   # optional named endpoint for fleet gateway allowlist check
 
 AUTH (env only — never accepted as a CLI argument):
   MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN for other
@@ -101,6 +103,7 @@ function parseArgs(argv) {
     effort: '',
     baseUrl: '',
     tokenEnv: '',
+    endpoint: '',
     raw: false,
     help: false,
   };
@@ -128,6 +131,9 @@ function parseArgs(argv) {
         break;
       case '--base-url':
         out.baseUrl = argv[++i] || '';
+        break;
+      case '--endpoint':
+        out.endpoint = argv[++i] || '';
         break;
       case '--token-env': {
         // Require a non-empty value: a dangling `--token-env` (no arg) must NOT silently
@@ -480,7 +486,7 @@ function isTruncatedResponse(body) {
   return !!(body && typeof body === 'object' && body.stop_reason === 'max_tokens');
 }
 
-function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens, effort, rawLog }) {
+function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens, effort, endpointName, rawLog }) {
   const url = new URL(endpointUrl);
   const content = [{ type: 'text', text: prompt }];
   // Defence at the only HTTP body builder: a non-text block for an engine whose
@@ -498,9 +504,12 @@ function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens,
     ...(effort ? { output_config: { effort } } : {}),
   });
   const transport = url.protocol === 'https:' ? https : http;
-  // S2: X-Fleet-Task only when AUTOPILOT_UPSTREAM_TASK_ID is a ULID; a set-but-invalid value
-  // sends nothing and says so once on stderr (never a failed dispatch).
-  const fleetTask = resolveFleetTask(process.env[FLEET_TASK_SOURCE_ENV]);
+  // S2: X-Fleet-Task only when the named endpoint is allowlisted and AUTOPILOT_UPSTREAM_TASK_ID
+  // is a ULID; a gateway endpoint with a set-but-invalid id sends nothing and warns once on stderr.
+  const effectiveEndpoint = endpointName !== undefined
+    ? endpointName
+    : (process.env[FLEET_TASK_ENDPOINT_ENV] || '');
+  const fleetTask = resolveFleetTask(process.env[FLEET_TASK_SOURCE_ENV], effectiveEndpoint);
   if (!fleetTask.ok) process.stderr.write(`${fleetTaskWarnLine('dispatch-anthropic-review')}\n`);
 
   return new Promise((resolve, reject) => {
@@ -665,6 +674,7 @@ async function main() {
     failPrecondition(tokenError);
   }
   const endpointUrl = resolveEndpointUrl(baseUrl);
+  const endpointName = args.endpoint || process.env[FLEET_TASK_ENDPOINT_ENV] || '';
   const rawLog = createRawLogPath();
 
   let responseBody;
@@ -677,6 +687,7 @@ async function main() {
       timeoutMs: args.timeoutMs,
       maxTokens: args.maxTokens,
       effort: args.effort,
+      endpointName,
       rawLog,
     });
   } catch (err) {

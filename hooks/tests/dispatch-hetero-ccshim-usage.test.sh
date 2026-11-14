@@ -20,7 +20,16 @@ export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"; mkdir -p "$AUTOPILOT_DISPAT
 export ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \
   AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
-  CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID 2>/dev/null || true
+  CLAUDE_CODE_SESSION_ID AUTOPILOT_SESSION_ID AUTOPILOT_PARENT_SESSION_ID \
+  AUTOPILOT_FLEET_GATEWAY_ENDPOINTS 2>/dev/null || true
+# S2 round 2: named endpoints the X-Fleet-Task cases dispatch to (TESTEP/qwen_local are the
+# allowlisted gateways; glm is the cloud-looking non-gateway), plus the allowlist setting.
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
+export AUTOPILOT_ENDPOINT_QWEN_LOCAL_URL="http://127.0.0.1:9/v1"
+export AUTOPILOT_ENDPOINT_QWEN_LOCAL_TOKEN="t"
+export AUTOPILOT_ENDPOINT_GLM_URL="https://api.z.ai/api/anthropic"
+export AUTOPILOT_ENDPOINT_GLM_TOKEN="t"
 
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 SBX="$TEST_TMP/repo"; mkdir -p "$SBX"; $GIT -C "$SBX" init -q; $GIT -C "$SBX" commit -q --allow-empty -m base
@@ -45,15 +54,22 @@ printf '%s' "${CCSHIM_STUB_ENVELOPE:-ok}"
 EOS
 chmod +x "$BINDIR/claude"
 
-# run_case <envelope-text> -> sets OUT (the one-line result JSON printed to stdout) + RC
+# run_case <envelope-text> -> sets OUT (the one-line result JSON printed to stdout) + RC.
+# CCSHIM_EP (optional): pass --endpoint <name> (the named-endpoint X-Fleet-Task cases).
+# CCSHIM_ALLOWLIST (optional, default ''): AUTOPILOT_FLEET_GATEWAY_ENDPOINTS for the run —
+# set-but-empty wins over any host config.json, so the default is hermetically "no gateway".
 run_case() {
   local env_text="$1"
   local branch="feat/ccshim-usage-$RANDOM$RANDOM"
+  local -a ep_args=()
+  [ -n "${CCSHIM_EP:-}" ] && ep_args=(--endpoint "$CCSHIM_EP")
   RC=0
   OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
       CCSHIM_STUB_ENVELOPE="$env_text" PATH="$BINDIR:$PATH" \
+      AUTOPILOT_FLEET_GATEWAY_ENDPOINTS="${CCSHIM_ALLOWLIST-}" \
       "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
-      --prompt-file "$PROMPT" --context-window off --branch "$branch" 2>"$TEST_TMP/stderr")" || RC=$?
+      --prompt-file "$PROMPT" --context-window off --branch "$branch" \
+      ${ep_args[@]+"${ep_args[@]}"} 2>"$TEST_TMP/stderr")" || RC=$?
 }
 
 # result_json (stdin: the dispatch stdout) -> the one-line result JSON (the last parsable
@@ -167,16 +183,19 @@ eq "$EXP1" "$U4" "case4: result usage is still exactly the envelope usage object
 NT4="$(printf '%s' "$OUT" | result_json | num_turns_field 2>/dev/null)" || NT4="<no-result-json>"
 eq "18" "$NT4" "case4: result num_turns is the envelope integer (got: $NT4)"
 
-# S2 X-Fleet-Task gateway join (2026-11-14): cc-shim talks to the model gateway, so the claude
-# child's requests carry X-Fleet-Task when AUTOPILOT_UPSTREAM_TASK_ID is a ULID (validated by
+# S2 X-Fleet-Task gateway join (2026-11-14) + S2 round 2 allowlist: cc-shim requests carry
+# X-Fleet-Task only when the run's NAMED endpoint is allowlisted as a fleet gateway
+# (AUTOPILOT_FLEET_GATEWAY_ENDPOINTS) AND AUTOPILOT_UPSTREAM_TASK_ID is a ULID (both checks in
 # lib/fleet-task-header.js). Red on the unfixed rail: the rail never set ANTHROPIC_CUSTOM_HEADERS.
 ULID_OK="01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
-# case 5: a valid ULID -> the child's ANTHROPIC_CUSTOM_HEADERS is exactly the one X-Fleet-Task line.
-AUTOPILOT_UPSTREAM_TASK_ID="$ULID_OK" run_case "$EN1"
+# case 5: allowlisted endpoint + a valid ULID -> the child's ANTHROPIC_CUSTOM_HEADERS is exactly
+# the one X-Fleet-Task line.
+CCSHIM_EP=TESTEP CCSHIM_ALLOWLIST=TESTEP AUTOPILOT_UPSTREAM_TASK_ID="$ULID_OK" run_case "$EN1"
 assert_eq "$RC" "0" "case5: cc-shim run exits 0 with a valid upstream task id (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
 eq "X-Fleet-Task: $ULID_OK" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
-  "case5: valid ULID -> child env is exactly 'X-Fleet-Task: <V>' (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
+  "case5: valid ULID on allowlisted TESTEP -> child env is exactly 'X-Fleet-Task: <V>' (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
+unset CCSHIM_EP CCSHIM_ALLOWLIST
 
 # case 6: id unset + an inherited ANTHROPIC_CUSTOM_HEADERS -> the child must NOT see the inherited
 # value (the rail drops it and sets nothing). Red on the unfixed rail: 'Evil: 1' passed straight through.
@@ -188,15 +207,45 @@ eq "@UNSET@" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
   "case6: unset id -> no X-Fleet-Task and the inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
 unset ANTHROPIC_CUSTOM_HEADERS
 
-# case 7: id set but not a ULID (newline + a second header = injection attempt) -> no header reaches
-# the child and the rail names the refusal on stderr. Red on the unfixed rail: the raw value passed through.
-AUTOPILOT_UPSTREAM_TASK_ID=$'01ABC\nX-Evil: 1' run_case "$EN1"
+# case 7: allowlisted endpoint, id set but not a ULID (newline + a second header = injection
+# attempt) -> no header reaches the child and the rail names the refusal on stderr. Red on the
+# unfixed rail: the raw value passed through.
+CCSHIM_EP=TESTEP CCSHIM_ALLOWLIST=TESTEP AUTOPILOT_UPSTREAM_TASK_ID=$'01ABC\nX-Evil: 1' run_case "$EN1"
 assert_eq "$RC" "0" "case7: cc-shim run still exits 0 with a non-ULID upstream task id (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
 eq "@UNSET@" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
   "case7: non-ULID id -> no header reaches the child (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
 assert_contains "$(cat "$TEST_TMP/stderr")" \
   "dispatch-hetero: AUTOPILOT_UPSTREAM_TASK_ID is not a ULID; X-Fleet-Task not sent" \
   "case7: the rail says on stderr that X-Fleet-Task was not sent"
+unset AUTOPILOT_UPSTREAM_TASK_ID CCSHIM_EP CCSHIM_ALLOWLIST
+
+# case 8 (S2 round 2, the PM red test): a valid ULID on a cloud-looking endpoint NOT in the
+# allowlist (glm, https URL) -> NO header reaches the child and the rail stays silent (not
+# allowlisted is the normal case). Red at 2180f0238: the header was present.
+: > "$CCSHIM_STUB_ENV_FILE"; : > "$TEST_TMP/stderr"
+CCSHIM_EP=glm CCSHIM_ALLOWLIST=TESTEP AUTOPILOT_UPSTREAM_TASK_ID="$ULID_OK" run_case "$EN1"
+assert_eq "$RC" "0" "case8: cc-shim run exits 0 on a non-allowlisted endpoint (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+eq "@UNSET@" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
+  "case8: valid ULID on non-allowlisted glm -> no X-Fleet-Task reaches the child (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
+assert_not_contains "$(cat "$TEST_TMP/stderr")" "X-Fleet-Task not sent" \
+  "case8: no warning line on a non-gateway endpoint (not allowlisted is the normal case)"
+unset CCSHIM_EP CCSHIM_ALLOWLIST AUTOPILOT_UPSTREAM_TASK_ID
+
+# case 9 (S2 round 2): no endpoint name at all (raw ANTHROPIC_BASE_URL) + a valid ULID -> no
+# header. Red at 2180f0238: the header was present.
+: > "$CCSHIM_STUB_ENV_FILE"; : > "$TEST_TMP/stderr"
+AUTOPILOT_UPSTREAM_TASK_ID="$ULID_OK" run_case "$EN1"
+assert_eq "$RC" "0" "case9: cc-shim run exits 0 without a named endpoint (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+eq "@UNSET@" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
+  "case9: valid ULID with no endpoint name -> no X-Fleet-Task reaches the child (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
 unset AUTOPILOT_UPSTREAM_TASK_ID
+
+# case 10 (S2 round 2): allowlist matching is case-insensitive (QWEN_LOCAL vs qwen_local) ->
+# header present.
+CCSHIM_EP=qwen_local CCSHIM_ALLOWLIST=QWEN_LOCAL AUTOPILOT_UPSTREAM_TASK_ID="$ULID_OK" run_case "$EN1"
+assert_eq "$RC" "0" "case10: cc-shim run exits 0 on the case-insensitive allowlist match (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+eq "X-Fleet-Task: $ULID_OK" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
+  "case10: valid ULID, allowlist QWEN_LOCAL matches endpoint qwen_local -> child env is exactly 'X-Fleet-Task: <V>' (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
+unset CCSHIM_EP CCSHIM_ALLOWLIST AUTOPILOT_UPSTREAM_TASK_ID
 
 finalize_test

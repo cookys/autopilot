@@ -389,17 +389,36 @@ async function main() {
     'local request contains only minimal system and raw user text',
   );
 
-  // S2 X-Fleet-Task gateway join: the chat request carries the header only when
-  // AUTOPILOT_UPSTREAM_TASK_ID is a ULID (valid -> the exact id; unset/invalid -> absent),
-  // resolved by scripts/lib/fleet-task-header.js. Separate telemetry file: the row-count
-  // assertions below read the primary one.
+  // S2 X-Fleet-Task gateway join + S2 round 2 allowlist: the chat request carries the header
+  // only when the roster endpoint id is allowlisted as a fleet gateway
+  // (AUTOPILOT_FLEET_GATEWAY_ENDPOINTS) AND AUTOPILOT_UPSTREAM_TASK_ID is a ULID (valid ->
+  // the exact id; unset/invalid/not-allowlisted -> absent), resolved by
+  // scripts/lib/fleet-task-header.js. Separate telemetry file: the row-count assertions
+  // below read the primary one.
   const s2TelemetryPath = path.join(tempRoot, 'telemetry-s2.jsonl');
   const prevUpstreamTaskId = process.env.AUTOPILOT_UPSTREAM_TASK_ID;
+  const prevGatewayAllowlist = process.env.AUTOPILOT_FLEET_GATEWAY_ENDPOINTS;
   process.env.AUTOPILOT_UPSTREAM_TASK_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+  process.env.AUTOPILOT_FLEET_GATEWAY_ENDPOINTS = 'local-contract';
   reset('success');
   await runLocalDispatch(options({ telemetryPath: s2TelemetryPath }));
   equal(state.chatRequests[0].header_fleet_task, '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-    'a valid ULID puts X-Fleet-Task: <V> on the chat request');
+    'a valid ULID on an allowlisted endpoint puts X-Fleet-Task: <V> on the chat request');
+  process.env.AUTOPILOT_FLEET_GATEWAY_ENDPOINTS = 'some_other_ep';
+  reset('success');
+  await runLocalDispatch(options({ telemetryPath: s2TelemetryPath }));
+  equal(state.chatRequests[0].header_fleet_task, undefined,
+    'an allowlist naming a different endpoint sends no X-Fleet-Task');
+  process.env.AUTOPILOT_FLEET_GATEWAY_ENDPOINTS = '';
+  reset('success');
+  await runLocalDispatch(options({ telemetryPath: s2TelemetryPath }));
+  equal(state.chatRequests[0].header_fleet_task, undefined,
+    'a non-allowlisted endpoint (empty allowlist) sends no X-Fleet-Task');
+  process.env.AUTOPILOT_FLEET_GATEWAY_ENDPOINTS = 'LOCAL-CONTRACT';
+  reset('success');
+  await runLocalDispatch(options({ telemetryPath: s2TelemetryPath }));
+  equal(state.chatRequests[0].header_fleet_task, '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    'allowlist matching is case-insensitive (LOCAL-CONTRACT vs local-contract)');
   delete process.env.AUTOPILOT_UPSTREAM_TASK_ID;
   reset('success');
   await runLocalDispatch(options({ telemetryPath: s2TelemetryPath }));
@@ -412,6 +431,8 @@ async function main() {
     'a non-ULID AUTOPILOT_UPSTREAM_TASK_ID sends no X-Fleet-Task (no header injection)');
   if (prevUpstreamTaskId === undefined) delete process.env.AUTOPILOT_UPSTREAM_TASK_ID;
   else process.env.AUTOPILOT_UPSTREAM_TASK_ID = prevUpstreamTaskId;
+  if (prevGatewayAllowlist === undefined) delete process.env.AUTOPILOT_FLEET_GATEWAY_ENDPOINTS;
+  else process.env.AUTOPILOT_FLEET_GATEWAY_ENDPOINTS = prevGatewayAllowlist;
 
   const telemetry = fs.readFileSync(telemetryPath, 'utf8').trim().split('\n').map(JSON.parse);
   equal(telemetry.length, 1, 'success writes one metadata telemetry row');
@@ -634,7 +655,7 @@ async function main() {
     'dispatch CLI invalid arguments emit a stable reason',
   );
 
-  if (assertions !== 78) throw new Error(`dispatch-local-openai: expected exactly 78 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it; +3 S2 X-Fleet-Task cases 2026-11-14), got ${assertions}`);
+  if (assertions !== 81) throw new Error(`dispatch-local-openai: expected exactly 81 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it; +3 S2 X-Fleet-Task cases 2026-11-14, +3 S2 round 2 allowlist cases 2026-11-14), got ${assertions}`);
   process.stdout.write(`local OpenAI dispatch: ${assertions} assertions passed\n`);
 }
 

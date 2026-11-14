@@ -33,10 +33,12 @@ function btn(el: { Text: El; Button?: El }, key: string, label: string, press: (
 // what the three buttons do: register.ts binds them to the engine; the pane only draws and presses
 export type AiView = {
   state: AiState
+  draft: string
+  onDraft: (value: string) => void
   summarize: () => void
   cancel: () => void
   focusAsk: () => void
-  ask: (question: string) => void
+  ask: (question: string) => void | Promise<void>
   toChat: () => void
   toggle: () => void
 }
@@ -61,7 +63,7 @@ function aiButtons(el: { Box: El; Text: El; Button?: El; Input?: El }, ai: AiVie
 }
 function aiInput(el: { Input?: El }, ai: AiView, t: VT) {
   const { Input } = el
-  return Input === undefined ? null : <Input key="ask-input" label={t('viewer.ai.askLabel')} placeholder={t('viewer.ai.askPlaceholder')} submitLabel={t('viewer.ai.askGo')} onSubmit={(q: string) => ai.ask(q)} />
+  return Input === undefined ? null : <Input key="ask-input" label={t('viewer.ai.askLabel')} placeholder={t('viewer.ai.askPlaceholder')} submitLabel={t('viewer.ai.askGo')} value={ai.draft} onInput={(v: string) => ai.onDraft(v)} onSubmit={(q: string) => ai.ask(q)} />
 }
 // the status line: the running line is the `running` role, a failure the `broken` role, a cancel dim; nothing to say draws a blank (one cell: an empty Text takes no row)
 function aiStatus(el: { Text: El }, ai: AiView, t: VT) {

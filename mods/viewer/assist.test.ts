@@ -62,6 +62,18 @@ function world(on: On, files: Record<string, string>): World {
 
 type Node = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
 const textOf = (n: Node): string => (n.children || []).map(c => (typeof c === 'string' ? c : textOf(c as Node))).join('')
+function inputsOf(n: Node, out: Node[] = []): Node[] {
+  if (n.type === 'Input') out.push(n)
+  for (const c of n.children || []) if (typeof c !== 'string') inputsOf(c as Node, out)
+  return out
+}
+async function askField($: any): Promise<Node | undefined> {
+  const win = await mountWindow($)
+  const tree = (await win.drawn()) as Node
+  const input = inputsOf(tree).find(n => n.props?.key === 'ask-input')
+  await win.unmount()
+  return input
+}
 const PANE_PROPS = { title: 'x', isFocused: true, bodyColumns: 100, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 30 }, view: { agentId: undefined } }
 const mountWindow = ($: any) => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-viewer', props: PANE_PROPS, viewport: { columns: 150, rows: 40, isFullscreen: true } })
 const FILE = ['export const a = 1', '// ' + MARK, 'export const b = 2', ''].join('\n')
@@ -226,6 +238,47 @@ test('send into the conversation after an ask: the question and the answer both 
   expect(w.fills[0].text).toContain('[檢視問答] src.ts 第 1–3 行：')
   expect(w.fills[0].text).toContain('問： 有幾個常數？')
   expect(w.fills[0].text).toContain('答： 兩個。')
+})
+
+test('ask field: Enter after the host clears submits empty and keeps the typed question', async ($, on) => {
+  const w = world(on, { [CWD + '/src.ts']: FILE })
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await $.command.run({ command: 'show', args: 'src.ts' })
+  const win = await mountWindow($)
+  await win.input({ key: 'ask-input', text: '留著這句', kind: 'change' })
+  await win.input({ key: 'ask-input', text: '', kind: 'submit' })
+  await win.unmount()
+  expect(w.asks.length, 'an empty submit does not send').toBe(0)
+  expect((await askField($))?.props?.value).toBe('留著這句')
+})
+
+test('ask field: a non-empty submit that is accepted clears the question', async ($, on) => {
+  const w = world(on, { [CWD + '/src.ts']: FILE })
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await $.command.run({ command: 'show', args: 'src.ts' })
+  const win = await mountWindow($)
+  await win.input({ key: 'ask-input', text: '有幾個常數？', kind: 'change' })
+  await win.input({ key: 'ask-input', text: '有幾個常數？', kind: 'submit' })
+  await win.unmount()
+  for (let i = 0; i < 40 && w.asks.length === 0; i++) await new Promise(r => setTimeout(r, 25))
+  await new Promise(r => setTimeout(r, 50))
+  expect(w.asks.length).toBe(1)
+  expect((await askField($))?.props?.value).toBe('')
+})
+
+test('ask field: a refused send keeps the typed question', async ($, on) => {
+  const w = world(on, { [CWD + '/src.ts']: FILE })
+  w.reply = async () => { throw new Error('refused-by-model') }
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await $.command.run({ command: 'show', args: 'src.ts' })
+  const win = await mountWindow($)
+  await win.input({ key: 'ask-input', text: '再問一次', kind: 'change' })
+  await win.input({ key: 'ask-input', text: '再問一次', kind: 'submit' })
+  await win.unmount()
+  for (let i = 0; i < 40 && w.asks.length === 0; i++) await new Promise(r => setTimeout(r, 25))
+  await new Promise(r => setTimeout(r, 50))
+  expect(w.asks.length).toBe(1)
+  expect((await askField($))?.props?.value).toBe('再問一次')
 })
 
 test('the tool answer: the model reads one line, never the summary or the file (negative control: let the tool answer carry the summary and this goes red)', async ($, on) => {

@@ -24,16 +24,28 @@ export type AiState = { shown: AiResult | null; visible: boolean; running: Runni
 
 const fresh = (): AiState => ({ shown: null, visible: true, running: null, error: null, cancelled: false })
 let state: AiState = fresh()
+let askDraft = ''
 const saved = new Map<string, { text: string; usage: UsageLike }>()
 
 export const aiState = (): AiState => state
 export const savedCount = (): number => saved.size
 export const clearSaved = (): void => saved.clear()
+export const askDraftOf = (): string => askDraft
+export const setAskDraft = (value: string): void => { askDraft = value }
+// A refused send puts the submitted text back unless a newer draft arrived while the call ran.
+export function keepAskDraft(text: string): void {
+  if (askDraft === '' || askDraft === text) askDraft = text
+}
+// An accepted send drops only the text that was sent. A draft typed during the call stays.
+export function clearAcceptedAsk(submitted: string): void {
+  if (askDraft === submitted || askDraft === submitted.trim()) askDraft = ''
+}
 
 // a new window content: whatever was running is cancelled and the previous answer is dropped (the saved answers stay: the same content asked again is free)
 export function resetAssist(): void {
   if (state.running !== null) state.running.ctl.abort()
   state = fresh()
+  askDraft = ''
 }
 
 export type Source = { text: string; path: string | null; title: string; isDiff: boolean }
@@ -48,9 +60,12 @@ function redraw($: EngineInterface): void {
   void $.ui.invalidate('ui.render')
 }
 
+export type AiOutcome = 'accepted' | 'refused' | 'dropped'
+
 // Summary or question about the whole text of the window (cut at AI_MAX_CHARS, said on screen). A saved answer for the same content and question is shown without a call.
-export async function runAi($: EngineInterface, kind: AiKind, question: string | null, src: Source, lang: AiLang, t: VT): Promise<void> {
-  if (state.running !== null) { $.ui.toast(t('viewer.ai.busy')); return }
+// 'accepted' is an answer on screen (fresh or saved). 'refused' is busy, a thrown call, or no answer. 'dropped' means the window moved on.
+export async function runAi($: EngineInterface, kind: AiKind, question: string | null, src: Source, lang: AiLang, t: VT): Promise<AiOutcome> {
+  if (state.running !== null) { $.ui.toast(t('viewer.ai.busy')); return 'refused' }
   const cut = truncateForAi(src.text)
   const subject = src.isDiff ? src.title.replace(/[\r\n]+/g, ' ') : t('viewer.ai.lines', { path: src.path ?? src.title, n: cut.lines })
   const note = cut.cut ? t('viewer.ai.cut', { n: cut.lines, total: cut.total }) : null
@@ -62,12 +77,12 @@ export async function runAi($: EngineInterface, kind: AiKind, question: string |
   redraw($)
   const key = await cacheKeyOf(kind, question, lang, aiSrc)
   const hash = await sha256Hex(cut.text)
-  if (state !== mine) return
+  if (state !== mine) return 'dropped'
   const hit = saved.get(key)
   if (hit !== undefined) {
     state = { shown: { kind, text: hit.text, usage: hit.usage, subject, note, question, cached: true }, visible: true, running: null, error: null, cancelled: false }
     redraw($)
-    return
+    return 'accepted'
   }
   let r
   try {
@@ -76,23 +91,28 @@ export async function runAi($: EngineInterface, kind: AiKind, question: string |
       { signal: ctl.signal },
     )
   } catch (err) {
-    if (state !== mine) return // the window moved on while this call ran
-    if (ctl.signal.aborted) { state = { shown: mine.shown, visible: mine.visible, running: null, error: null, cancelled: true }; redraw($); return }
+    if (state !== mine) return 'dropped' // the window moved on while this call ran
+    if (ctl.signal.aborted) { state = { shown: mine.shown, visible: mine.visible, running: null, error: null, cancelled: true }; redraw($); return 'refused' }
     state = { shown: mine.shown, visible: mine.visible, running: null, cancelled: false, error: t('viewer.ai.failed', { why: t('viewer.ai.why.refused', { what: String(err instanceof Error ? err.message : err).slice(0, 160) }) }) }
     redraw($)
-    return
+    return 'refused'
   }
-  if (state !== mine) return
+  if (state !== mine) return 'dropped'
+  let outcome: AiOutcome
   if (r.isAnswered) {
     saved.set(key, { text: r.text, usage: r.usage })
     if (saved.size > AI_CACHE_ENTRIES) saved.delete(saved.keys().next().value as string)
     state = { shown: { kind, text: r.text, usage: r.usage, subject, note, question, cached: false }, visible: true, running: null, error: null, cancelled: false }
+    outcome = 'accepted'
   } else if (r.reason === 'aborted') {
     state = { shown: mine.shown, visible: mine.visible, running: null, error: null, cancelled: true }
+    outcome = 'refused'
   } else {
     state = { shown: mine.shown, visible: mine.visible, running: null, cancelled: false, error: t('viewer.ai.failed', { why: failureText(t, r) }) }
+    outcome = 'refused'
   }
   redraw($)
+  return outcome
 }
 
 export function cancelAi($: EngineInterface): void {

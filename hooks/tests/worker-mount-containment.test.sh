@@ -104,18 +104,56 @@ assert_file_exists "$MARK" "hetero worker ran under private_ns"
 eq "private_ns" "$(manifest_field mount_containment)" "hetero manifest records private_ns"
 assert_contains "$(cat "$TEST_TMP/unshare.argv" 2>/dev/null)" "--propagation private" "worker was launched through the unshare prefix"
 
-echo "== rail: author codex refuse =="
-ACODEX="$TEST_TMP/fake-codex"; MARK_A="$TEST_TMP/author.ran"
-printf '#!/usr/bin/env bash\necho ran > "%s"\nexit 0\n' "$MARK_A" > "$ACODEX"; chmod +x "$ACODEX"
+echo "== rail: author, every runner launch path (refuse blocks, private_ns wraps) =="
+AHOME="$TEST_TMP/ahome"; mkdir -p "$AHOME/.claude"; echo '{}' > "$AHOME/.claude/.credentials.json"
 echo "author brief" > "$TEST_TMP/aprompt.txt"
-RUNS_A="$TEST_TMP/runs-author"; mkdir -p "$RUNS_A"
-WORKER_MOUNT_FORCE_MODE=refuse AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS_A" DISPATCH_QUIET=1 DISPATCH_DETACH=0 \
-  bash "$REPO_ROOT/scripts/dispatch-author.sh" --runner codex --model gpt-5.5 --effort xhigh --prompt-file "$TEST_TMP/aprompt.txt" --bin "$ACODEX" \
-  >"$TEST_TMP/a.out" 2>"$TEST_TMP/a.err" < /dev/null; RC_A=$?
-[ "$RC_A" -ne 0 ] && eq ok ok "author refuse exits non-zero" || fail "author refuse exited 0"
-assert_file_absent "$MARK_A" "author codex worker never ran under refuse"
-eq "mount_containment_unavailable: forced by WORKER_MOUNT_FORCE_MODE $LINE_TAIL" "$(grep '^mount_containment_unavailable' "$TEST_TMP/a.err" | head -n1)" "author stderr line exact"
-assert_contains "$(cat "$RUNS_A"/*.manifest.json 2>/dev/null)" '"mount_containment": "refused"' "author manifest records refused"
+ASTUB="$TEST_TMP/author-stub"
+cat > "$ASTUB" <<'EOF2'
+#!/usr/bin/env bash
+[ -n "${MNT_MARK:-}" ] && echo ran >> "$MNT_MARK"
+cat >/dev/null 2>&1 || true
+echo "OK-WRITTEN"
+exit 0
+EOF2
+chmod +x "$ASTUB"
+mkdir -p "$TEST_TMP/abin"; ln -sf "$ASTUB" "$TEST_TMP/abin/kimi"
+author_run() { # <tag> <env words...> -- <runner args...>
+  local tag="$1"; shift
+  local -a envs=(); while [ "$1" != "--" ]; do envs+=("$1"); shift; done; shift
+  A_RUNS="$TEST_TMP/runs-a-$tag"; A_MARK="$TEST_TMP/mark-a-$tag"; mkdir -p "$A_RUNS"; rm -f "$A_MARK"
+  env HOME="$AHOME" AUTOPILOT_DISPATCH_RUNS_DIR="$A_RUNS" MNT_MARK="$A_MARK" DISPATCH_QUIET=1 DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 \
+    ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test-token-0123456789 "${envs[@]}" \
+    bash "$REPO_ROOT/scripts/dispatch-author.sh" "$@" --prompt-file "$TEST_TMP/aprompt.txt" --timeout 30s \
+    >"$TEST_TMP/a-$tag.out" 2>"$TEST_TMP/a-$tag.err" < /dev/null
+  A_RC=$?
+}
+for spec in "codex|--runner codex --model gpt-5.5 --effort xhigh" \
+            "grok|--runner grok --model grok-4.5 --effort high" \
+            "cursor|--runner cursor --model cursor-grok-4.6-low" \
+            "kimi|--runner kimi --model kimi-code/k3" \
+            "cc-shim|--runner cc-shim --model mini" \
+            "claude-native|--runner claude-native --model claude-fable-5-1" \
+            "agy|--runner agy --model gpt-test"; do
+  name="${spec%%|*}"; rargs="${spec#*|}"
+  # shellcheck disable=SC2086
+  author_run "ref-$name" WORKER_MOUNT_FORCE_MODE=refuse PATH="$TEST_TMP/abin:$PATH" AUTOPILOT_GROK_EFFORT_PROBE=0 -- $rargs --bin "$ASTUB"
+  [ "$A_RC" -ne 0 ] && eq ok ok "author $name refuse exits non-zero" || fail "author $name refuse exited 0"
+  assert_file_absent "$A_MARK" "author $name: runner never ran under refuse"
+  eq "mount_containment_unavailable: forced by WORKER_MOUNT_FORCE_MODE $LINE_TAIL" "$(grep '^mount_containment_unavailable' "$TEST_TMP/a-ref-$name.err" | head -n1)" "author $name stderr line exact"
+  # agy refuses before its model-alias probe (which runs the binary), i.e. before the manifest exists
+  [ "$name" = agy ] || assert_contains "$(cat "$A_RUNS"/*.manifest.json 2>/dev/null)" '"mount_containment": "refused"' "author $name manifest records refused"
+  # private_ns: pass-through unshare shim that logs argv; the runner launch must go through it.
+  mkshim unshare 'echo "$@" >> "'"$TEST_TMP"'/ua-'"$name"'.argv"; while [ "$1" != -- ]; do shift; done; shift; exec "$@"'
+  rm -f "$TEST_TMP/ua-$name.argv"
+  # shellcheck disable=SC2086
+  author_run "priv-$name" PATH="$SHIMS:$TEST_TMP/abin:$PATH" AUTOPILOT_GROK_EFFORT_PROBE=0 -- $rargs --bin "$ASTUB"
+  UA="$(grep -v -- ' -- true$' "$TEST_TMP/ua-$name.argv" 2>/dev/null | head -n1)"
+  case "$UA" in
+    "--user --map-current-user --mount --propagation private -- "*) eq ok ok "author $name launched through the unshare prefix" ;;
+    *) fail "author $name: no unshare-wrapped launch (got: '$UA'; rc=$A_RC; $(head -c 300 "$TEST_TMP/a-priv-$name.err") $(head -c 400 "$TEST_TMP/a-priv-$name.out"))" ;;
+  esac
+done
+rmshim unshare
 
 echo "== real namespace propagation (self-created sandbox only) =="
 if unshare --user --map-current-user --mount --propagation shared true >/dev/null 2>&1; then

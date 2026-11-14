@@ -960,6 +960,13 @@ if [ "$RUNNER" = "kimi" ]; then
 fi
 
 
+# Mount isolation (01M7E4JC): refuse BEFORE any runner process spawns. anthropic-compatible is exempt: it is an in-process
+# HTTPS client (scripts/dispatch-anthropic-review.js has no child_process), so no model-driven process exists to wrap.
+if [[ "$RUNNER" = "agy" && "$WORKER_MOUNT_MODE" = "refuse" ]]; then
+  worker_mount_isolation_require || true   # prints the stderr line
+  die_precondition "$WORKER_MOUNT_REFUSE_LINE"
+fi
+
 if [ "$RUNNER" = "agy" ]; then
   AGY_BIN="$(runner_bin_fallback "${BIN:-agy}")"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
@@ -1314,6 +1321,14 @@ if [ "${AUTOPILOT_DISPATCH_USAGE:-}" != "off" ]; then
     --provider-session-id "${CHILD_SESSION_ID:-}" || true
 fi
 
+# Mount isolation (01M7E4JC): refuse before any other runner process spawns (after the manifest exists, so it records
+# refused). anthropic-compatible is exempt: in-process HTTPS client (scripts/dispatch-anthropic-review.js has no
+# child_process), so no model-driven process exists to wrap. agy was refused earlier, before its alias probe.
+if [[ "$RUNNER" != "anthropic-compatible" && "$RUNNER" != "agy" && "$WORKER_MOUNT_MODE" = "refuse" ]]; then
+  worker_mount_isolation_require || true   # prints the stderr line
+  die_precondition "$WORKER_MOUNT_REFUSE_LINE"
+fi
+
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="$(runner_bin_fallback "${BIN:-codex}")"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
@@ -1330,10 +1345,6 @@ if [[ "$RUNNER" = "codex" ]]; then
   # classification, stdout authority + last-message witness, chrome-frame
   # session-id anchoring. Caller-supplied --output-last-message is already a
   # usage error (unknown arg → exit 2) before we reach here.
-  if [ "$WORKER_MOUNT_MODE" = "refuse" ]; then
-    worker_mount_isolation_require || true   # prints the stderr line
-    die_precondition "$WORKER_MOUNT_REFUSE_LINE"
-  fi
   if ! codex_transport_create_artifacts; then
     die_precondition "failed to create private codex transport artifacts"
   fi
@@ -1365,7 +1376,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
   grok_effort_note "$EFFORT" "dispatch-author" "$MODEL" "$GROK_BIN" "$GROK_EFFORT"
   AUTHOR_TIMEOUT_START=$SECONDS
   # grok reads --prompt-file, so stdin is /dev/null (avoids SIGTTOU on a tty).
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
     --reasoning-effort "$GROK_EFFORT" \
     --no-alt-screen --output-format plain --disable-web-search </dev/null > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
   RUNNER_EXIT=$?
@@ -1398,7 +1409,7 @@ elif [[ "$RUNNER" = "cursor" ]]; then
   set +e
   AUTHOR_TIMEOUT_START=$SECONDS
   # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
     --output-format text < "$4"' \
     _ "$CURSOR_CWD" "$BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2> "$CURSOR_ERR"
   RUNNER_EXIT=$?
@@ -1437,7 +1448,7 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   set +e
   AUTHOR_TIMEOUT_START=$SECONDS
   # kimi.js reads --prompt-file, so stdin is /dev/null (avoids SIGTTOU on a tty).
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
     ${KIMI_TIMEOUT_ARGS[@]+"${KIMI_TIMEOUT_ARGS[@]}"} ${KIMI_AGENT_ARGS[@]+"${KIMI_AGENT_ARGS[@]}"} </dev/null > "$RAW_LOG" 2>>"$RAW_LOG"
   RUNNER_EXIT=$?
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
@@ -1468,7 +1479,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   _FT_HEADER="$(node "$_AUTHOR_SELF_DIR/lib/fleet-task-header.js" --rail dispatch-author ${ENDPOINT:+--endpoint "$ENDPOINT"})"
   # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
   timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR -u ANTHROPIC_CUSTOM_HEADERS ${_FT_HEADER:+ANTHROPIC_CUSTOM_HEADERS="$_FT_HEADER"} HOME="$CCSHIM_CWD" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
-    bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
+    ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
     _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE" &
   # Backgrounded + forwarded so a TERM/INT/HUP aimed at this script reaches timeout and the claude child (BL-0420); see _acct_forward.
   _ACCT_CHILD=$!
@@ -1521,7 +1532,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     # Token never appears in bash or argv: claude-account.js reads it and sets it in the child env only.
     CNATIVE_WRAP_ERR="${RUNNER_ERR_FILE}.wrap"
     timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
-      node "$_CNATIVE_ACCT_JS" run --pin-default --purpose author --stdin "$PROMPT_FILE" --stdout "$RAW_LOG" --stderr "$RUNNER_ERR_FILE" --cwd "$CNATIVE_CWD" -- \
+      ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} node "$_CNATIVE_ACCT_JS" run --pin-default --purpose author --stdin "$PROMPT_FILE" --stdout "$RAW_LOG" --stderr "$RUNNER_ERR_FILE" --cwd "$CNATIVE_CWD" -- \
       "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "$ROLE_KIT_TOOLS" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} \
       2>"$CNATIVE_WRAP_ERR" &
     # Backgrounded so a TERM/INT/HUP aimed at this script reaches the claude child: bash defers a trap until a foreground
@@ -1537,7 +1548,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # --collect-err-fd 3 and the 3>&2 below stay together: fd 3 is this script's stderr,
   # saved before stdout/stderr go to the verdict capture. The child must not inherit it.
   node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec --collect-err-fd 3 -- \
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
     _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} 3>&2 > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
     RUNNER_EXIT=$?
   fi
@@ -1634,7 +1645,7 @@ else
   author_kill_grace
   set +e
   AGY_TIMEOUT_START=$SECONDS
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
   RUNNER_EXIT=$?
   author_remap_kill_exit "$AGY_TIMEOUT_START"
   set -e

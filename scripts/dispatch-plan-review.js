@@ -91,7 +91,6 @@ const RUNNERS = new Set([
   'cc-shim',
   'anthropic-compatible',
   'claude-native',
-  'qoderclicn',
   'kimi',
   'cursor',
   'opencode',

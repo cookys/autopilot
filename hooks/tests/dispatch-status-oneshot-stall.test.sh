@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A runner that prints nothing until it finishes (cc-shim = `claude -p`, qoderclicn, kimi, review-role plain logs) is not
+# A runner that prints nothing until it finishes (cc-shim = `claude -p`, kimi, review-role plain logs) is not
 # "stalled" just because its log is quiet: stall for it means alive past the dispatch's own timeout. Streaming runners keep the
 # quiet-log rule (--stall-secs).
 . "$(dirname "$0")/lib.sh"
@@ -22,7 +22,7 @@ age() { touch -d "$1 seconds ago" "$LIVELOG"; }
 age 360   # 6 minutes quiet
 mf shim cc-shim implementer plain 540;  assert_contains "$(st shim)" '"stall":false' "cc-shim 6 min quiet, timeout 9m: not stalled"
 mf shim2 cc-shim reviewer plain null;   assert_contains "$(st shim2)" '"stall":false' "cc-shim reviewer, no timeout recorded: default wall, not stalled"
-mf qd qoderclicn implementer plain 540; assert_contains "$(st qd)" '"stall":false' "qoderclicn 6 min quiet: not stalled"
+mf cn claude-native implementer plain 540; assert_contains "$(st cn)" '"stall":false' "claude-native 6 min quiet: not stalled"
 mf kimi kimi implementer plain 540;     assert_contains "$(st kimi)" '"stall":false' "kimi 6 min quiet: not stalled"
 mf cur cursor reviewer plain null;      assert_contains "$(st cur)" '"stall":false' "review-role plain log (cursor): not stalled"
 mf cod codex implementer codex-chrome 540; assert_contains "$(st cod)" '"stall":true' "streaming codex 6 min quiet: still stalled"

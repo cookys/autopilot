@@ -23,7 +23,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_AUTHOR = path.join(REPO_ROOT, 'scripts', 'dispatch-author.sh');
 const MAX_PRIVATE_RESPONSE_BYTES = 4096;
 // A provider that ANSWERED but not with `OK` is a compliance flake, not a transport
-// fault. Measured 2026-09-20 on qoderclicn/Qwen3.8-Max-Preview: 1 reply in ~6 is a
+// fault. Measured 2026-09-20 on Qwen3.8-Max-Preview: 1 reply in ~6 is a
 // refusal ("I can't comply with requests to … pretend to be an automated system
 // probe") or small talk ("I'm here and ready to help"), which dispatch-author reports
 // as `truncated/frame_missing`; the same tuple answers `OK` on the next call. Two

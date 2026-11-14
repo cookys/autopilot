@@ -115,7 +115,7 @@ chmod +x "$USTUB"
 AGYSTUB="$TEST_TMP/agystub"; cp "$USTUB" "$AGYSTUB"; make_agy_stdin_stub "$AGYSTUB"
 OCSTUB="$TEST_TMP/ocstub"; ln -sf "$USTUB" "$OCSTUB"
 PROBEBIN="$TEST_TMP/probebin"; mkdir -p "$PROBEBIN"
-for n in codex agy grok qoderclicn cursor-agent claude kimi opencode; do ln -sf "$USTUB" "$PROBEBIN/$n"; done
+for n in codex agy grok cursor-agent claude kimi opencode; do ln -sf "$USTUB" "$PROBEBIN/$n"; done
 
 # no_c <label> <dump>: the stub really ran (non-vacuous: a RUN invocation, not only a --version/--help preflight) and
 # none of the run invocations saw C. The rail's own preflights (`codex --version`, `--help`) run in the rail's environment
@@ -341,7 +341,7 @@ foreman_case "(f) foreman hand, C inherited (allowlist route)" "$FSD/inherited" 
 foreman_case "(f) foreman hand, --env-passthrough AUTOPILOT_CHILD_SESSION_ID" "$FSD/passthrough" --run-dir "$TEST_TMP/fr2" --env-passthrough AUTOPILOT_CHILD_SESSION_ID
 
 # probe-engine-capability.sh x every runner: every stub invocation (--version, the live branch, or none) sees no C
-for runner in cc-shim claude-native codex agy grok qoderclicn cursor kimi opencode; do
+for runner in cc-shim claude-native codex agy grok cursor kimi opencode; do
   for mode in live noop; do
     label="(f) probe $runner ($mode)"
     dump="$DUMPS/probe-$runner-$mode.env"; rm -f "$dump"

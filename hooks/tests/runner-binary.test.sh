@@ -26,7 +26,6 @@ assert_eq "$(node "$LIB" binary --runner codex)" "codex" "codex maps to codex"
 assert_eq "$(node "$LIB" binary --runner grok)" "grok" "grok maps to grok"
 assert_eq "$(node "$LIB" binary --runner agy)" "agy" "agy maps to agy"
 assert_eq "$(node "$LIB" binary --runner pi)" "pi" "pi maps to pi"
-assert_eq "$(node "$LIB" binary --runner qoderclicn)" "qoderclicn" "qoderclicn maps to qoderclicn"
 assert_eq "$(node "$LIB" binary --runner kimi)" "kimi" "kimi maps to kimi"
 assert_eq "$(node "$LIB" binary --runner opencode)" "opencode" "opencode maps to opencode (opencode run, v2.35.12)"
 

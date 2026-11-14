@@ -64,35 +64,6 @@ else
   echo "  (skip agy native JSON case: 'bwrap' not available)"
 fi
 
-# 5b. qoderclicn path: prompt via STDIN, scratch cwd, text output parsed.
-OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "qoderclicn reviewed exit 0"
-assert_contains "$OUT" '"runner": "qoderclicn"' "qoderclicn runner provenance"
-assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn verdict parsed"
-OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "qoderclicn empty clean exit is no_verdict"
-assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn empty clean output fails closed"
-OUT="$(STUB_MODE=ship_no_end "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_VERDICT" --max-tokens 5 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "qoderclicn capped partial wrapped block is no_verdict"
-assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn capped partial SHIP never passes"
-assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn partial SHIP is not accepted"
-
-# A well-formed, complete, correctly-framed SHIP-AS-IS block on stdout, then
-# the qoder process exits non-zero (rc=9) — engine answered correctly then
-# crashed on teardown. Pinning current production behaviour: fail-closed to
-# no_verdict, the well-formed block is NOT accepted despite being intact.
-OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_QODERCN_NONZERO" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "qoderclicn well-formed block + nonzero exit: exit 1 (fail-closed)"
-assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn well-formed block + nonzero exit → no_verdict"
-assert_contains "$OUT" "qoder exited non-zero (rc=9)" "qoderclicn well-formed block + nonzero exit names the exit code"
-assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn well-formed block + nonzero exit never authorizes shipping"
-# Model substituted by qoder (stderr notice) + intact SHIP block: rejected, reason names it.
-OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_QODERCN_SUBST" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "qoderclicn substituted model: exit 1 (fail-closed)"
-assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn substituted model → no_verdict"
-assert_contains "$OUT" "model substituted" "qoderclicn substituted model error names the cause"
-assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn substituted model never authorizes shipping"
-
 # 5b'. opencode path: prompt via STDIN, scratch cwd, --format json NDJSON parsed (the
 # dedicated Node scriptlet extracts the last {"type":"text"} event's .part.text before
 # the shared plain-text VERDICT parser runs — see scripts/dispatch-review.sh header).
@@ -122,7 +93,7 @@ assert_contains "$OUT" 'not executable' "opencode missing binary names the failu
 
 # opencode: a well-formed SHIP-AS-IS block lands on stdout (wrapped in NDJSON) and THEN
 # the process exits non-zero (rc=9) — engine answered correctly then crashed on
-# teardown. Same fail-closed contract as qoderclicn/kimi above: the well-formed block
+# teardown. Same fail-closed contract as kimi above: the well-formed block
 # is NOT accepted despite being intact.
 OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_NONZERO" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "opencode well-formed block + nonzero exit: exit 1 (fail-closed)"
@@ -160,7 +131,7 @@ assert_contains "$OUT" 'unsupported opencode version' "opencode unknown major na
 
 # opencode: scratch cwd is created (--dir), used, and reaped — never the repo (the
 # shared spawn-marker stub only proves it was invoked; the cwd's own removal is
-# structural in the branch, same as kimi/qoderclicn's "CWD=... ; CWD=\"\"" pattern above).
+# structural in the branch, same as kimi's "CWD=... ; CWD=\"\"" pattern above).
 unset OPENCODE_ARGV_FILE
 
 # 5c. Blind review: none-tier still requires no-tools containment (preservation).

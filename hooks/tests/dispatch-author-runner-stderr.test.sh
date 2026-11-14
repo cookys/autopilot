@@ -26,7 +26,7 @@ run_author() { # <runner> <model> <fake>
 
 raw_log_of() { printf '%s' "$1" | grep -o '"raw_log": "[^"]*"' | sed 's/.*: "//;s/"$//'; }
 
-for spec in "claude-native:claude-fable-5" "qoderclicn:qwen3.8-max"; do
+for spec in "claude-native:claude-fable-5" "grok:grok-4.5"; do
   runner="${spec%%:*}"; model="${spec#*:}"
 
   # 1. quota: HTTP 402 / balance exhausted on stderr, non-zero exit

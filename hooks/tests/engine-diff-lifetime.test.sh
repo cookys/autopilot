@@ -13,6 +13,10 @@
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
+export AUTOPILOT_ENDPOINT_GLM_URL="${AUTOPILOT_ENDPOINT_GLM_URL:-https://endpoint.example.invalid/anthropic}"
+export AUTOPILOT_ENDPOINT_GLM_TOKEN="${AUTOPILOT_ENDPOINT_GLM_TOKEN:-test-token-fixture}"
+export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-https://endpoint.example.invalid/anthropic}"
+export ANTHROPIC_AUTH_TOKEN="${ANTHROPIC_AUTH_TOKEN:-test-token-fixture}"
 
 STUB="$TEST_TMP/panel-stub"
 cat > "$STUB" <<'STUBEOF'
@@ -229,12 +233,12 @@ if (!PRINT) {
 // ---- Managed campaign with the REAL final panel (default dispatcher + default providers) ----
 const common = fs.realpathSync(path.resolve(repo, sh(repo, 'rev-parse', '--git-common-dir')));
 const seats = [
-  { role: 'qc', runner: 'qoderclicn', model: 'seat-a', effort: 'high', endpoint: null, family: 'fa' },
-  { role: 'qc', runner: 'qoderclicn', model: 'seat-b', effort: 'high', endpoint: null, family: 'fb' },
-  { role: 'qc', runner: 'qoderclicn', model: 'seat-c', effort: 'high', endpoint: null, family: 'fc' },
+  { role: 'qc', runner: 'cc-shim', model: 'seat-a', effort: 'high', endpoint: 'glm', family: 'fa' },
+  { role: 'qc', runner: 'cc-shim', model: 'seat-b', effort: 'high', endpoint: 'glm', family: 'fb' },
+  { role: 'qc', runner: 'cc-shim', model: 'seat-c', effort: 'high', endpoint: 'glm', family: 'fc' },
 ];
 const roster = {
-  reviewer_engine: seats[0].model, reviewer_effort: 'high', reviewer_runner: 'qoderclicn',
+  reviewer_engine: seats[0].model, reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_endpoint: 'glm',
   reviewer_qualified: true, implementer_engine: 'fixture-implementer', implementer_effort: 'high',
   implementer_runner: 'fixture', loop_max_rounds: 3, loop_convergence_verdict: 'SHIP-AS-IS',
   min_panel_size: 3, in_rail_review: 'single', qc_panel_seats_complete: true, qc_panel_seats: seats,

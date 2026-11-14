@@ -102,9 +102,6 @@ if command -v node >/dev/null 2>&1; then
     done
   done
 fi
-# The qoder rail already had its own --reasoning-effort; it must not have been disturbed.
-grep -q -- '--reasoning-effort "\$4"' "$script_dir/dispatch-review.sh" \
-  || fail "dispatch-review.sh: qoder --reasoning-effort wiring was disturbed"
 
 # ---- 4. live probe: read EACH MODEL's live enum and fail if the clamp would emit a rejected level
 # The previous probe only asked the CLI's DEFAULT model, so it stayed green while an explicit

@@ -13,7 +13,7 @@
 #
 # 🔴 PROCESS-LEVEL ORACLE: an exit-2-with-the-right-string assertion alone would pass
 # against an implementation that dispatched to a rail FIRST and failed after. This
-# suite shadows grok/codex/agy/qoderclicn/cursor-agent with recording stubs and asserts
+# suite shadows grok/codex/agy/cursor-agent with recording stubs and asserts
 # NONE of them are ever invoked across every guard-refusal case.
 . "$(dirname "$0")/lib.sh"
 
@@ -53,7 +53,7 @@ SENTINEL_DIR="$TEST_TMP/sentinels"
 mkdir -p "$SENTINEL_DIR"
 POISON_DIR="$TEST_TMP/poison-bin"
 mkdir -p "$POISON_DIR"
-for railbin in grok codex agy qoderclicn cursor-agent; do
+for railbin in grok codex agy cursor-agent; do
   cat > "$POISON_DIR/$railbin" <<STUB
 #!/usr/bin/env bash
 touch "$SENTINEL_DIR/$railbin.invoked"
@@ -92,7 +92,6 @@ no_cursor_rail_sentinels_tripped() {
   [ ! -e "$SENTINEL_DIR/cursor-agent.invoked" ] \
     && [ ! -e "$SENTINEL_DIR/grok.invoked" ] \
     && [ ! -e "$SENTINEL_DIR/agy.invoked" ] \
-    && [ ! -e "$SENTINEL_DIR/qoderclicn.invoked" ] \
     && [ ! -e "$SENTINEL_DIR/codex.invoked" ]
 }
 

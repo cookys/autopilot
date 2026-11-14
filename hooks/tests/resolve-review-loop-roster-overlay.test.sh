@@ -39,7 +39,9 @@ assert_eq "anthropic-compatible" "$(printf '%s' "$STUB_JSON" | jget reviewer_run
 assert_eq "default" "$(printf '%s' "$STUB_JSON" | jget reviewer_effort)" "roster loop reviewer effort is default"
 assert_eq "qwen_local" "$(printf '%s' "$STUB_JSON" | jget reviewer_endpoint)" "roster loop reviewer endpoint is qwen_local"
 assert_eq '["gemini-4-hydrogen-high","GLM-5.3","claude-opus-5-5-medium"]' "$(printf '%s' "$STUB_JSON" | jget reviewer_fallback_preference)" "reviewer fallback order follows the picker: hydrogen, then GLM, then agyclaude; never codex (PM 01M7AHAM)"
-assert_eq "Qwen3.8-Max" "$(printf '%s' "$STUB_JSON" | jget verification_author_engine)" "roster VA seat is Qwen3.8-Max"
+assert_eq "GLM-5.3" "$(printf '%s' "$STUB_JSON" | jget verification_author_engine)" "roster VA seat is GLM-5.3"
+assert_eq "cc-shim" "$(printf '%s' "$STUB_JSON" | jget verification_author_runner)" "roster VA runner is cc-shim"
+assert_eq "glm" "$(printf '%s' "$STUB_JSON" | jget verification_author_endpoint)" "roster VA endpoint is glm"
 assert_eq '["gpt-6-astra","gpt-6.1-sol","GLM-5.3","gemini-4-carbon-high"]' "$(printf '%s' "$STUB_JSON" | jget qc_panel)" "roster qc panel"
 assert_eq "[]" "$(printf '%s' "$STUB_JSON" | jget roster_overrides)" "no override declared -> roster_overrides is empty"
 assert_eq "$STUB" "$(printf '%s' "$STUB_JSON" | jget config_path)" "config_path still names the repo file"
@@ -63,20 +65,24 @@ assert_eq "$(printf '%s' "$ROSTER_JSON" | jget qc_panel)" "$(printf '%s' "$OVR_J
 assert_eq "7" "$(printf '%s' "$OVR_JSON" | jget loop_max_rounds)" "non-seat knob written in the repo file wins"
 assert_eq '[{"group":"implementer","until":"2099-01-01","reason":"trial of another implementer","expired":false}]' "$(printf '%s' "$OVR_JSON" | jget roster_overrides)" "roster_overrides lists the declared group"
 
-# 3d. dated VA override (PM 01M74FDC5Z codex window): GLM-5.3@cc-shim/glm before and after the until date (expiry only warns),
-# under a controlled clock (ROSTER_OVERLAY_TODAY) so the assertion does not depend on the real date.
+# 3d. autopilot's own config inherits the GLM-5.3@cc-shim/glm VA seat from the roster (no VA override).
 VA_CFG="$REPO_ROOT/.claude/review-loop-config.md"
-for _t in 2026-11-14 2026-11-16; do
-  VA_JSON="$(ROSTER_OVERLAY_TODAY="$_t" REVIEW_LOOP_CONFIG_OVERRIDE="$VA_CFG" bash "$SCRIPT" 2>"$TEST_TMP/va-$_t.err")"
-  assert_eq "GLM-5.3@cc-shim/glm" "$(printf '%s' "$VA_JSON" | jget verification_author_engine)@$(printf '%s' "$VA_JSON" | jget verification_author_runner)/$(printf '%s' "$VA_JSON" | jget verification_author_endpoint)" "autopilot's own config seats the VA on GLM-5.3@cc-shim/glm on $_t"
-done
-assert_contains "$(printf '%s' "$VA_JSON" | jget roster_overrides)" '"expired":true' "after 2026-11-15 the VA override reports expired:true"
-assert_contains "$(cat "$TEST_TMP/va-2026-11-16.err")" "override for verification_author expired on 2026-11-15" "after 2026-11-15 the VA override prints an expiry warning"
-assert_not_contains "$(cat "$TEST_TMP/va-2026-11-14.err")" "expired on" "before 2026-11-15 no expiry warning"
+VA_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$VA_CFG" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "autopilot's own config resolves"
+assert_eq "GLM-5.3@cc-shim/glm" "$(printf '%s' "$VA_JSON" | jget verification_author_engine)@$(printf '%s' "$VA_JSON" | jget verification_author_runner)/$(printf '%s' "$VA_JSON" | jget verification_author_endpoint)" "autopilot's own config inherits GLM-5.3@cc-shim/glm VA from roster"
 
-assert_contains "$(cat "$VA_CFG")" "replace it with gemini-4-argon-high@agy" "VA override reason: on 2026-11-16 replace with argon, not delete"
-assert_not_contains "$(cat "$VA_CFG")" "on 2026-11-21 delete this block" "VA override reason no longer orders deletion on the date"
-assert_not_contains "$(cat "$REPO_ROOT/CHANGELOG.md")" "must be deleted on 2026-11-21" "CHANGELOG no longer orders deletion on the date"
+# 3e. negative: retired qoderclicn runner on verification_author_runner is rejected.
+QOD_OVR="$TEST_TMP/qoder-va-override.md"
+cat > "$QOD_OVR" <<'EOF'
+- override: verification_author | until 2099-01-01 | retired qoderclicn test
+- verification_author_present: true
+- verification_author_engine: Qwen3.8-Max
+- verification_author_effort: high
+- verification_author_runner: qoderclicn
+EOF
+qod_out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$QOD_OVR" bash "$SCRIPT" 2>&1 >/dev/null)"; qod_rc=$?
+assert_eq "3" "$qod_rc" "retired qoderclicn verification_author_runner exits 3"
+assert_contains "$qod_out" "qoderclicn" "retired qoderclicn rejection names the runner"
 
 # 3b. an incomplete override group is refused.
 INC="$TEST_TMP/incomplete.md"

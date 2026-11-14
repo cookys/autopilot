@@ -2150,7 +2150,7 @@ SEATS_G='kimi-code-k3|kimi|consult
 gpt-5.6-sol|codex|consult
 claude-fable-5|claude-native|consult
 grok-4.6|grok|consult
-Qwen3.8-Max|qoderclicn|consult
+Qwen3.8-Max|cc-shim|consult
 GLM-5.3|cc-shim|consult
 gpt-5.6-sol|codex|discuss
 gemini-3.7-flash-high|agy|discuss

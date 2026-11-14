@@ -11,7 +11,6 @@ const VALID_IMPL_RUNNERS = new Set([
   'grok',
   'cc-shim',
   'pi',
-  'qoderclicn',
   'cursor',
   'opencode',
   'kimi',

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-hetero --runner opencode integration test (v2.35.12).
 #
-# The opencode rail is grok/qoderclicn-shaped: EDIT-ONLY directive prepended, prompt via
+# The opencode rail is grok-shaped: EDIT-ONLY directive prepended, prompt via
 # STDIN, `opencode run --dir <wt> --pure -m <model> --format json`, wrapper commits, verdict
 # from git artifacts. Only the binary is stubbed; the real dispatch-hetero.sh runs.
 . "$(dirname "$0")/lib.sh"
@@ -149,6 +149,6 @@ assert_contains "$OUT" 'opencode binary not found' "missing binary names the fix
 OUT="$(cd "$SBX" && "$SCRIPT" --runner auto --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-auto --prompt-file "$PROMPT" --agy-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
 assert_not_contains "$OUT" '"runner": "opencode"' "auto never routes a provider/model id to opencode"
 OUT="$(cd "$SBX" && "$SCRIPT" --runner bogus --model x --branch feat/oc-enum --prompt-file "$PROMPT" 2>&1)"
-assert_contains "$OUT" 'qoderclicn|cursor|opencode' "runner enum error names opencode"
+assert_contains "$OUT" 'pi|cursor|opencode' "runner enum error names opencode"
 
 finalize_test

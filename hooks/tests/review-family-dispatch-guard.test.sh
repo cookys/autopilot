@@ -353,7 +353,7 @@ cat > "$CFG_VA_OK" <<'EOF'
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_runner: codex
 - implementer_effort: high
-- implementer_ladder: GLM-5.3/high@codex, claude-sonnet-5/high@claude-native, grok-4.7/low@grok
+- implementer_ladder: gpt-5.6-sol/high@codex, claude-sonnet-5/high@claude-native, grok-4.7/low@grok
 EOF
 resolve_of va-ok "$CFG_VA_OK"
 assert_eq "$RESOLVE_RC" "0" "c2: ladder families that differ from the VA resolve"
@@ -427,7 +427,7 @@ cat > "$CFG_R0_OK" <<'EOF'
 - implementer_engine: grok-4.7
 - implementer_runner: grok
 - implementer_effort: low
-- implementer_ladder: grok-4.7/low@grok, GLM-5.3/high@codex
+- implementer_ladder: grok-4.7/low@grok, claude-sonnet-5/high@claude-native
 EOF
 resolve_of r0ok "$CFG_R0_OK"
 assert_eq "$RESOLVE_RC" "0" "c5: reviewer cloud rung of another family resolves"
@@ -436,7 +436,7 @@ assert_eq "$RESOLVE_RC" "0" "c5: reviewer cloud rung of another family resolves"
 # the reviewer cloud rung family: the ladder is shaped, never exit 3. Explicit ladders keep c1/c4.
 TOPO_AUTO="$TEST_TMP/topo-auto.json"
 cat > "$TOPO_AUTO" <<'EOF2'
-{"implementer_ladder":[{"engine":"gpt-6.1-sol","effort":"high","runner":"codex"},{"engine":"Qwen3.8-Max","effort":"high","runner":"qoderclicn"},{"engine":"grok-4.7","effort":"low","runner":"grok"}]}
+{"implementer_ladder":[{"engine":"gpt-6.1-sol","effort":"high","runner":"codex"},{"engine":"Qwen3.8-Max","effort":"high","runner":"cc-shim"},{"engine":"grok-4.7","effort":"low","runner":"grok"}]}
 EOF2
 CFG_AUTO="$TEST_TMP/auto-ladder.md"
 cat > "$CFG_AUTO" <<'EOF2'
@@ -457,7 +457,7 @@ cat > "$CFG_AUTO" <<'EOF2'
 - override: verification_author | until 2099-01-01 | alibaba VA advertised in the topology
 - verification_author_present: true
 - verification_author_engine: Qwen3.8-Max
-- verification_author_runner: qoderclicn
+- verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint:
 EOF2

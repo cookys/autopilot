@@ -47,7 +47,8 @@ function resolveConfiguredRunner(runner, model) {
   const family = familyOf(model);
   if (family === 'openai') return 'codex';
   if (family === 'xai') return 'grok';
-  if (family === 'alibaba') return 'qoderclicn';
+  // alibaba (Qwen/QwQ) has no default cloud CLI runner after qoderclicn retirement;
+  // fall through to 'agy' just like anthropic/deepseek/minimax/zhipu/moonshot.
   return 'agy';
 }
 
@@ -129,7 +130,7 @@ function reviewerFallbacks(resolved, primaryTuple, now, ttlSeconds) {
     const endpoint = candidate.endpoint === undefined ? null : candidate.endpoint;
     const complete = typeof model === 'string'
       && model.length > 0
-      && /^(?:codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor)$/.test(runner)
+      && /^(?:codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor)$/.test(runner)
       && /^(?:default|low|medium|high|xhigh|max)$/.test(effort)
       && (endpoint === null
         || (typeof endpoint === 'string' && /^[A-Za-z0-9_]+$/.test(endpoint)));

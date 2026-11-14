@@ -54,26 +54,6 @@ assert_contains "$OUT" '"status": "authored"' "codex status authored"
 assert_not_contains "$OUT" "You are a code reviewer" "codex prompt is not reviewer-wrapped"
 assert_not_contains "$OUT" "Diff under review" "codex prompt is not diff-wrapper"
 
-# qoder author path (grok-shaped read-only, stderr discarded so the non-git-cwd git fatal
-# never pollutes the authored text): status authored, runner reported qoderclicn.
-STUB_QODER="$TEST_TMP/runner-qoder"
-cat > "$STUB_QODER" <<'EOF'
-#!/usr/bin/env bash
-prompt=$(cat || true)
-begin=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$' | head -n1)
-end=$(printf '%s\n' "$prompt" | grep -E '^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$' | head -n1)
-if [ -n "$begin" ] && [ -n "$end" ]; then
-  printf '%s\n%s\n%s\n' "$begin" "OK-WRITTEN" "$end"
-else
-  echo "OK-WRITTEN"
-fi
-EOF
-chmod +x "$STUB_QODER"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --prompt-file "$PROMPT" --bin "$STUB_QODER" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "qoder authored exit 0"
-assert_contains "$OUT" '"status": "authored"' "qoder status authored"
-assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
-
 # Wrapped non-codex prompt is a dispatcher output-format contract, not an identity override.
 WRAP_DUMP="$TEST_TMP/wrapped-prompt.dump"
 STUB_WRAP="$TEST_TMP/runner-wrap-dump"

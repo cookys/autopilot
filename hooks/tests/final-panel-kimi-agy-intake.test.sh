@@ -20,7 +20,7 @@ tier_of_shell() { # file runner
 tier_of_js() {
   node -e 'process.stdout.write(require(process.argv[1]).reviewSeatTier(process.argv[2]))' "$JS_Q" "$1"
 }
-RUNNERS="codex agy grok cc-shim anthropic-compatible claude-native qoderclicn kimi cursor opencode"
+RUNNERS="codex agy grok cc-shim anthropic-compatible claude-native kimi cursor opencode"
 for R in $RUNNERS; do
   J="$(tier_of_js "$R")"; S="$(tier_of_shell "$DISPATCH" "$R")"; V="$(tier_of_shell "$RESOLVER" "$R")"
   assert_eq "$J" "$S" "$R: JS tier equals dispatch-review.sh tier"

@@ -415,7 +415,7 @@ configurable deny-list and cut 2 (verify-once, concurrent seats) remain open.
 Cut 1b-A of the blind-review redesign: `dispatch-review.sh` maps every runner to
 exactly one **seat tier** (`review_seat_tier`):
 
-- **packet** — `anthropic-compatible`, `cc-shim`, `claude-native`, `qoderclicn`
+- **packet** — `anthropic-compatible`, `cc-shim`, `claude-native`
   (prompt-only; same path as v2.36.61).
 - **cleanroom** — `codex`, `kimi`, `agy` (tool-capable; run only inside
   `scripts/lib/cleanroom-launch.sh` when `AUTOPILOT_BLIND_DISCOVERY=1`; kimi and

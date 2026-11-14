@@ -1061,7 +1061,7 @@ allow-by-omission (§17's uncounted copies, in tool-surface form); only a proven
 refusal — is containment. This is the same shape as the whole family: a documentation claim and a
 working capability produce the same observation until you plant the case the claim did not cover.
 
-**Related**: `docs/plans/evidence/2026-08-29-cursor-containment-probe/` (19 receipts), the grok/qoderclicn
+**Related**: `docs/plans/evidence/2026-08-29-cursor-containment-probe/` (19 receipts), the grok/historical CLI
 containment probes under `docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/`.
 
 ## 46. Re-grading old outputs is not re-measuring — a fixed prompt changes what the subject does

@@ -25,7 +25,7 @@ cat >"$MANIFEST" <<'JSON'
      "endpoint": "default", "role": "architecture", "family": "openai",
      "readiness_status": "ready", "qualification_status": "qualified", "required": true,
      "excluded_families": [], "fallbacks": []},
-    {"id": "skeptic", "runner": "qoderclicn", "model": "qwen-fixture", "effort": "high",
+    {"id": "skeptic", "runner": "cc-shim", "model": "qwen-fixture", "effort": "high",
      "endpoint": "default", "role": "skeptic", "family": "qwen",
      "readiness_status": "ready", "qualification_status": "qualified", "required": true,
      "excluded_families": [], "fallbacks": []}

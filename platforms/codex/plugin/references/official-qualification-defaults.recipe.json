@@ -121,11 +121,6 @@
       "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-pro-qualify"
     },
     {
-      "event_id": 148,
-      "role": "implementer",
-      "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/qoder-qualify"
-    },
-    {
       "event_id": 149,
       "role": "implementer",
       "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/grok46-qualify"
@@ -364,11 +359,6 @@
       "event_id": 286,
       "role": "reviewer",
       "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/rv6-gpt-5.6-sol-max"
-    },
-    {
-      "event_id": 287,
-      "role": "reviewer",
-      "evidence_bundle": "docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen/out/m-qwen-reviewer"
     },
     {
       "event_id": 288,

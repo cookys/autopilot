@@ -344,7 +344,7 @@ function modelFamilyOfEngine(engine) {
   const normalized = String(engine || '').toLowerCase();
   if (/(gpt|codex|o1|o3|o4)/.test(normalized)) return 'openai';
   if (/(claude|opus|sonnet|haiku)/.test(normalized)) return 'anthropic';
-  if (/(qwen|qwq|qoder)/.test(normalized)) return 'alibaba';
+  if (/(qwen|qwq)/.test(normalized)) return 'alibaba';
   if (/deepseek/.test(normalized)) return 'deepseek';
   if (/longcat/.test(normalized)) return 'meituan';
   if (/beam/.test(normalized)) return 'reflection';

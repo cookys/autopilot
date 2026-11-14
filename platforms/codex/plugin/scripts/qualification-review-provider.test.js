@@ -190,13 +190,6 @@ const promptFileFlag = process.argv.indexOf('--prompt-file');
 if (promptFileFlag !== -1) {
   try { promptFileContent = fs.readFileSync(process.argv[promptFileFlag + 1], 'utf8'); } catch { /* n/a */ }
 }
-// qoderclicn's containment clone rides --config-dir, not HOME — capture
-// whatever landed in it (if anything) for the same before-cleanup reason.
-let configDirEntries = null;
-const configDirFlag = process.argv.indexOf('--config-dir');
-if (configDirFlag !== -1) {
-  try { configDirEntries = fs.readdirSync(process.argv[configDirFlag + 1]).sort(); } catch { /* n/a */ }
-}
 // agy emulation (an invocation carrying --agent): capture the clone's exam agent
 // markdown, then write the log + transcript a real agy leaves in HOME so the
 // provider's post-run containment audit has something to read. STUB_AGY_MODE
@@ -231,7 +224,7 @@ if (agentFlag !== -1) {
 }
 fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({
   argv: process.argv.slice(2), env: process.env, stdin, settingsJson,
-  promptFileContent, configDirEntries, agentMd,
+  promptFileContent, agentMd,
 }));
 if (process.env.STUB_SPAWN_ORPHAN) {
   // A detached descendant in its OWN process group that INHERITS stdout: it
@@ -1375,76 +1368,6 @@ function roleOnlyRequest(role, content = 'x') {
     request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
   });
   check(!('GROK_HOME' in captured.env), 'non-grok kinds never get GROK_HOME set');
-}
-
-// ── 13. qoderclicn transport: --tools "" deny-ALL containment, --config-dir clone ─
-// Why: qoderclicn's OTHER deny mechanism (--disallowed-tools) is overridden by
-// --dangerously-skip-permissions in a live probe (real hostname leaked); --tools
-// "" alone held across FIVE live probes — including a security-review follow-up
-// with two tools NOVEL to the original probe set (`TodoWrite`, `Agent`/subagent-
-// spawn — see callCli()'s qoderclicn branch comment for the full evidence and the
-// structural argument for why "" is allowlist-empty-equals-deny-all, not
-// allow-by-omission: the model hallucinates a fake tool-call block instead of
-// getting a runtime "denied" refusal, meaning the tool was never registered at
-// all). So this kind must NEVER carry --dangerously-skip-permissions, and
-// containment is --tools "" + dont_ask only — an EMPTY allowlist, not a list of
-// denied names, so no future/unknown tool can be missed the way an enumerated
-// deny list could.
-{
-  const { captured } = runProvider({
-    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'qoderclicn', QRP_CLI_BIN: stubClaude },
-    request: reviewerRequest(),
-    stubOutput: REVIEWER_MODEL_OUTPUT,
-  });
-  check(captured !== null, 'qoderclicn stub captured the invocation');
-  equal(captured.argv[0], '-p', 'qoderclicn opens with -p');
-  check(captured.stdin.includes('CASE INPUT BELOW'), 'qoderclicn receives the prompt on stdin');
-  // BINDING: --tools must appear EXACTLY ONCE with an EMPTY value (the allowlist
-  // itself, not a per-name denial) — this is what makes containment total rather
-  // than enumerated. A regression to --disallowed-tools <name> (the mechanism
-  // proven defeatable by --dangerously-skip-permissions) would fail this.
-  const toolsIndexes = captured.argv
-    .map((token, index) => (token === '--tools' ? index : -1))
-    .filter((index) => index !== -1);
-  equal(toolsIndexes.length, 1, 'qoderclicn argv carries EXACTLY ONE --tools flag');
-  equal(captured.argv[toolsIndexes[0] + 1], '',
-    'qoderclicn disables ALL built-in tools via an EMPTY --tools allowlist (deny-all by construction)');
-  check(!captured.argv.includes('--disallowed-tools'),
-    'qoderclicn never uses --disallowed-tools (proven defeatable by --dangerously-skip-permissions)');
-  const pmIdx = captured.argv.indexOf('--permission-mode');
-  equal(captured.argv[pmIdx + 1], 'dont_ask', 'qoderclicn runs headless-safe dont_ask permission mode');
-  check(!captured.argv.includes('--dangerously-skip-permissions'),
-    'qoderclicn NEVER carries --dangerously-skip-permissions (verified to defeat --disallowed-tools)');
-  check(captured.argv.includes('--no-session-persistence'),
-    'qoderclicn disables session persistence for the exam run');
-}
-{
-  // (b) QRP_CLI_HOME clone rides --config-dir, never HOME (qoderclicn's own
-  // documented flag; verified live to redirect away from ~/.qoder-cn/.auth).
-  const template = path.join(tempRoot, 'qoder-clihome-template');
-  const authDir = path.join(template, '.auth');
-  fs.mkdirSync(authDir, { recursive: true });
-  fs.writeFileSync(path.join(authDir, 'user'), 'seed');
-  const { captured } = runProvider({
-    env: {
-      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'qoderclicn', QRP_CLI_BIN: stubClaude,
-      QRP_CLI_HOME: template,
-    },
-    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
-  });
-  const cfgIdx = captured.argv.indexOf('--config-dir');
-  check(cfgIdx !== -1, 'qoderclicn argv carries --config-dir');
-  check(captured.argv[cfgIdx + 1] !== template, '--config-dir never receives the template path itself');
-  check(Array.isArray(captured.configDirEntries) && captured.configDirEntries.includes('.auth'),
-    'the cloned --config-dir carries the seeded .auth directory');
-}
-{
-  // (c) negative: no other kind gains --config-dir.
-  const { captured } = runProvider({
-    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
-    request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
-  });
-  check(!captured.argv.includes('--config-dir'), 'non-qoderclicn kinds never get --config-dir');
 }
 
 // ── 14. cursor transport: unconditional refusal (no verified containment) ───────
@@ -2996,5 +2919,5 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 809) throw new Error(`qualification-review-provider: expected exactly 809 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 796) throw new Error(`qualification-review-provider: expected exactly 796 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

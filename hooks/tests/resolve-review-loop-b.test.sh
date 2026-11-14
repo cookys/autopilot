@@ -51,11 +51,11 @@ assert_eq "any" "$(json_get "$EXACT_QC_OUT" provider_readiness_fallback_family_c
 # with an empty roster — fail-closing every strict /l5 and /l6 run downstream.
 # Panel mirrors the real four-seat consumer config so the regression stays concrete.
 KIMI_QC_CFG="$TEST_TMP/exact-qc-kimi.md"
-printf -- '- qc_panel: claude-fable-5, kimi-code/k3, GLM-5.2, Qwen3.8-Max-Preview\n- qc_panel_runners: claude-native, kimi, anthropic-compatible, qoderclicn\n- qc_panel_efforts: high, high, high, max\n- qc_panel_endpoints: @none, @none, glm, @none\n' > "$KIMI_QC_CFG"
+printf -- '- qc_panel: claude-fable-5, kimi-code/k3, GLM-5.2, Qwen3.8-Max-Preview\n- qc_panel_runners: claude-native, kimi, anthropic-compatible, cc-shim\n- qc_panel_efforts: high, high, high, max\n- qc_panel_endpoints: @none, @none, glm, @none\n' > "$KIMI_QC_CFG"
 KIMI_QC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_QC_CFG" bash "$SCRIPT")"
 assert_eq "true" "$(json_get "$KIMI_QC_OUT" qc_panel_seats_complete)" \
   "a kimi-runner QC seat resolves complete"
-assert_eq '[{"role":"qc","runner":"claude-native","model":"claude-fable-5","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"kimi","model":"kimi-code/k3","effort":"high","endpoint":null,"family":"moonshot"},{"role":"qc","runner":"anthropic-compatible","model":"GLM-5.2","effort":"high","endpoint":"glm","family":"zhipu"},{"role":"qc","runner":"qoderclicn","model":"Qwen3.8-Max-Preview","effort":"max","endpoint":null,"family":"alibaba"}]' \
+assert_eq '[{"role":"qc","runner":"claude-native","model":"claude-fable-5","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"kimi","model":"kimi-code/k3","effort":"high","endpoint":null,"family":"moonshot"},{"role":"qc","runner":"anthropic-compatible","model":"GLM-5.2","effort":"high","endpoint":"glm","family":"zhipu"},{"role":"qc","runner":"cc-shim","model":"Qwen3.8-Max-Preview","effort":"max","endpoint":null,"family":"alibaba"}]' \
   "$(json_get "$KIMI_QC_OUT" qc_panel_seats)" \
   "kimi QC seat binds the kimi runner and the moonshot family"
 

@@ -806,7 +806,7 @@ const SEAT_TOKEN_RE = /^[A-Za-z0-9._@:-]+$/;
 // which made dispatch-hetero.sh's default seat's strike writer silently inert
 // (fail-soft wrapper swallowed the ERROR). Applied to the `engine` token ONLY:
 // `runner` and `role` are internal enumerations (agy/codex/grok/cc-shim/pi/
-// qoderclicn; implementer/reviewer/...), not vendor-controlled strings, so they
+// cursor/opencode/kimi; implementer/reviewer/...), not vendor-controlled strings, so they
 // keep the narrower SEAT_TOKEN_RE deliberately.
 const ENGINE_TOKEN_RE = /^(?![\s])[A-Za-z0-9 ._:()/-]{1,128}(?<![\s])$/u;
 

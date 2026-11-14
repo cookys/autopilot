@@ -56,5 +56,5 @@ implement-review` then re-dispatches that unit ONCE to the cloud rung (no `--end
 a row to `cloud-fallbacks.jsonl` in the capability store dir (`ts, run_id, from_runner,
 from_endpoint, error_class, to_rung, outcome`). The next dispatch tries the local endpoint again:
 no endpoint is blacklisted. Inside an admitted campaign there is no retreat (campaign 不退回雲端, PM 2026-11-08): the run escalates as under `ask` and the log row says `skipped_campaign`. If the cloud rung also dies unavailable the run stops and asks. The
-rung's runner must be a cloud runner (`codex|agy|grok|cursor|kimi|qoderclicn`); the default
+rung's runner must be a cloud runner (`codex|agy|grok|cursor|kimi`); the default
 stays `ask`.

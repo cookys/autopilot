@@ -47,7 +47,7 @@ assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "default reviewer engin
 assert_contains "$OUT" '"implementer_engine": "cursor-grok-4.6-low"' "default implementer (grok-4.6 via cursor; Board decision A seat moved 2026-09-12 on a paywall)"
 assert_contains "$OUT" '"verification_author_present": true' "default verification_author_present"
 assert_contains "$OUT" '"verification_author_engine": "Qwen3.8-Max-Preview"' "default verification_author_engine"
-assert_contains "$OUT" '"verification_author_runner": "qoderclicn"' "default verification_author_runner"
+assert_contains "$OUT" '"verification_author_runner": "cc-shim"' "default verification_author_runner"
 assert_contains "$OUT" '"verification_author_effort": "high"' "default verification_author_effort"
 assert_contains "$OUT" '"verification_author_endpoint": ""' "default verification_author_endpoint"
 assert_contains "$OUT" '"verification_author_family": "alibaba"' "default derived verification_author_family"
@@ -100,7 +100,7 @@ assert_eq "true" "$(F --field cross_family_required)" "--field cross_family_requ
 assert_eq "true" "$(F --field cross_family_satisfied)" "--field cross_family_satisfied"
 assert_eq "true" "$(F --field verification_author_present)" "--field verification_author_present"
 assert_eq "$(F --field verification_author_engine)" "Qwen3.8-Max-Preview" "--field verification_author_engine"
-assert_eq "$(F --field verification_author_runner)" "qoderclicn" "--field verification_author_runner"
+assert_eq "$(F --field verification_author_runner)" "cc-shim" "--field verification_author_runner"
 assert_eq "high" "$(F --field verification_author_effort)" "--field verification_author_effort"
 assert_eq "$(F --field verification_author_endpoint)" "" "--field verification_author_endpoint"
 assert_eq "$(F --field verification_author_family)" "alibaba" "--field verification_author_family"
@@ -128,12 +128,12 @@ assert_eq "5" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field loop_
 assert_eq "my-local-model" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field implementer_engine)" "valid override value is honored"
 assert_eq "override" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field source)" "override source reported"
 TEMPLATE_CFG="$REPO_ROOT/project-config-template/review-loop-config.md"
-# Re-pinned 2026-11-06: the template is the roster and carries the VA seat (Qwen3.8-Max on qoderclicn).
+# Re-pinned 2026-11-14: the template is the roster and carries the VA seat (GLM-5.3 on cc-shim, endpoint glm).
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_present)" "template roster verification_author_present is true"
-assert_eq "Qwen3.8-Max" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_engine)" "template roster verification_author_engine"
-assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_runner)" "template roster verification_author_runner"
+assert_eq "GLM-5.3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_engine)" "template roster verification_author_engine"
+assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_runner)" "template roster verification_author_runner"
 assert_eq "high" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_effort)" "template roster verification_author_effort"
-assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_endpoint)" "template override verification_author_endpoint is empty"
+assert_eq "glm" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_endpoint)" "template roster verification_author_endpoint"
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field qc_panel_seats_complete 2>/dev/null)" "shipped template qc_panel companion lists match the panel length (seats complete)"
 
 # 6a. Explicit runner values select a transport, so invalid/blank values fail
@@ -172,13 +172,6 @@ NCFG="$TEST_TMP/rl-new-runners.md"
 printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- reviewer_runner: grok\n- reviewer_engine: grok-build\n' > "$NCFG"
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field implementer_runner)" "cc-shim implementer_runner honored"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field reviewer_runner)" "grok reviewer_runner honored"
-QCFG="$TEST_TMP/rl-qoderclicn.md"
-# This fixture deliberately puts qoderclicn in BOTH seats to prove the enum accepts
-# it in each — which is now a dual-seat collision. Opt in: the subject is enum
-# acceptance, not decorrelation policy.
-printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n- allow_same_runner_dual_seat: on\n' > "$QCFG"
-assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field implementer_runner)" "qoderclicn implementer_runner honored"
-assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field reviewer_runner)" "qoderclicn reviewer_runner honored"
 OCCFG="$TEST_TMP/rl-opencode-impl.md"
 printf -- '- implementer_runner: opencode\n- implementer_engine: opencode-go/muse-spark-1.3-contributor\n' > "$OCCFG"
 assert_eq "opencode" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$OCCFG" bash "$SCRIPT" --field implementer_runner)" "opencode implementer_runner honored (v2.35.12 rail)"
@@ -334,7 +327,7 @@ XFCFG="$TEST_TMP/rl-xfamily.md"
 printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- qc_panel: grok-build\n- qc_panel_runners: grok\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$XFCFG"
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$XFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok (xai) panel member satisfies cross-family vs a minimax implementer"
 QXFCFG="$TEST_TMP/rl-qwen-xfamily.md"
-printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- qc_panel: grok-4.5\n- qc_panel_runners: grok\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$QXFCFG"
+printf -- '- implementer_runner: cc-shim\n- implementer_engine: Qwen3.8-Max-Preview\n- qc_panel: grok-4.5\n- qc_panel_runners: grok\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$QXFCFG"
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QXFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok panel member satisfies cross-family vs qwen/alibaba implementer"
 
 

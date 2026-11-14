@@ -22,7 +22,7 @@ OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --effort turbo 2>&
 for VALUE in 0 -1 1.5 01 abc 200001 999999999999999999999999999999; do
   SPAWN_MARKER_FILE="$TEST_TMP/invalid-max-spawn-$VALUE"; export SPAWN_MARKER_FILE
   rm -f "$SPAWN_MARKER_FILE"
-  OUT="$("$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens "$VALUE" 2>&1)"; EXIT=$?
+  OUT="$("$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens "$VALUE" 2>&1)"; EXIT=$?
   assert_eq "2" "$EXIT" "invalid --max-tokens '$VALUE' exits 2"
   assert_contains "$OUT" '"status": "precondition_failed"' "invalid --max-tokens '$VALUE' is a precondition"
   node -e 'JSON.parse(process.argv[1])' "$OUT"
@@ -31,7 +31,7 @@ for VALUE in 0 -1 1.5 01 abc 200001 999999999999999999999999999999; do
 done
 SPAWN_MARKER_FILE="$TEST_TMP/missing-max-spawn"; export SPAWN_MARKER_FILE
 rm -f "$SPAWN_MARKER_FILE"
-OUT="$("$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens 2>&1)"; EXIT=$?
+OUT="$("$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing --max-tokens value exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing --max-tokens value is a precondition"
 node -e 'JSON.parse(process.argv[1])' "$OUT"
@@ -65,15 +65,6 @@ assert_contains "$OUT" '"usage": null' "foreign D2 review receipt has no usage"
 assert_file_absent "$SPAWN_MARKER_FILE" "foreign D2 review receipt spawns no runner"
 
 # 2c. Supported rails receive their exact native argv; omission synthesizes no argument or result field.
-QODER_ARGV_FILE="$TEST_TMP/qoder-max.argv"; export QODER_ARGV_FILE
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" --max-tokens 200000 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "qoder accepts upper-bound --max-tokens"
-assert_contains "$(paste -sd ' ' "$QODER_ARGV_FILE")" '--max-output-tokens 200000' "qoder receives exact output-token argv"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "qoder omission preserves reviewed behavior"
-assert_not_contains "$(cat "$QODER_ARGV_FILE")" '--max-output-tokens' "qoder omission adds no output-token argv"
-assert_not_contains "$OUT" 'max_tokens' "qoder omission adds no result field"
-
 ANTHROPIC_ARGV_FILE="$TEST_TMP/anthropic-max.argv"; export ANTHROPIC_ARGV_FILE
 OUT="$(PATH="$FAKE_NODE_DIR:$PATH" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --context-window off --max-tokens 1 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "anthropic-compatible accepts lower-bound --max-tokens"
@@ -91,14 +82,6 @@ assert_eq "0" "$EXIT" "codex reviewed exit 0"
 assert_contains "$OUT" '"status": "reviewed"' "codex reviewed status"
 assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "codex verdict parsed"
 assert_contains "$OUT" 'does not reverse' "codex findings captured"
-
-# 3q. qoder path: STDOUT parsed (stderr split off), verdict → reviewed, runner reported. Real
-# qoder prints a benign 'fatal: not a git repository' to STDERR from the scratch cwd; the
-# split-stream capture keeps it out of the parse (see dispatch-review.sh qoderclicn branch).
-OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "qoder reviewed exit 0"
-assert_contains "$OUT" '"status": "reviewed"' "qoder reviewed status"
-assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
 
 # 4. FAIL-CLOSED: empty capture → no_verdict, exit 1 (NEVER a pass)
 OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?

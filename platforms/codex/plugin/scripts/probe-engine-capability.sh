@@ -35,7 +35,7 @@ Usage:
     [--store <path>] [--now <ISO>] [--role <role>]
 
 Options:
-  --runner <r>       Runner name: codex, agy, grok, qoderclicn, cursor, kimi, opencode, cc-shim,
+  --runner <r>       Runner name: codex, agy, grok, cursor, kimi, opencode, cc-shim,
                      claude-native, anthropic-compatible (the dispatch-review.sh roster).
   --model <m>        Specify model name.
   --effort <e>       Exact effort partition written into the capability row.
@@ -203,12 +203,6 @@ case "$RUNNER" in
       RUNNER_VERSION="$(grok --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
-  qoderclicn)
-    if command -v qoderclicn >/dev/null 2>&1; then
-      BINARY_FOUND=1
-      RUNNER_VERSION="$(qoderclicn --version 2>&1 | head -n 1 || echo "unknown")"
-    fi
-    ;;
   cursor)
     # The binary is cursor-agent, NOT cursor — a name-derived fallthrough would
     # probe the wrong command entirely.
@@ -323,12 +317,11 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
   # Exact tuple partitions authorize dispatch only when this runner actually
   # consumes the requested dimension.  Named endpoints are a verified
   # cc-shim/anthropic-compatible transport; exporting ANTHROPIC_* around
-  # Codex/Grok/Qoder does not observe their endpoint tuple.
+  # Codex/Grok does not observe their endpoint tuple.
   #
-  # Effort: only codex / grok / qoderclicn / opencode / kimi consume it — verified by
+  # Effort: only codex / grok / opencode / kimi consume it — verified by
   # reading the dispatcher, not by assumption (dispatch-review.sh: codex `-c
-  # model_reasoning_effort`, grok `--reasoning-effort`, qoderclicn
-  # `--reasoning-effort`, opencode `--variant` with max→xhigh,
+  # model_reasoning_effort`, grok `--reasoning-effort`, opencode `--variant` with max→xhigh,
   # kimi KIMI_MODEL_THINKING_EFFORT low|high|max; agy/cc-shim/anthropic-compatible/claude-native/cursor never receive it,
   # and dispatch-anthropic-review.js has no effort parameter at all).  An
   # effort-bearing tuple on a non-consuming runner is unobserved, so it must
@@ -338,8 +331,8 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
     *)                            _ENDPOINT_CONSUMER=0 ;;
   esac
   case "$RUNNER" in
-    codex|grok|qoderclicn|opencode|kimi) _EFFORT_CONSUMER=1 ;;
-    *)                              _EFFORT_CONSUMER=0 ;;
+    codex|grok|opencode|kimi) _EFFORT_CONSUMER=1 ;;
+    *)                        _EFFORT_CONSUMER=0 ;;
   esac
   if [ "$ENDPOINT_SET" -eq 1 ] && [ "$ENDPOINT" != "@none" ] \
       && [ "$_ENDPOINT_CONSUMER" -eq 0 ]; then
@@ -445,20 +438,6 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
           >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       else
         grok -p "Respond only with OK" --model "$MODEL" --cwd "$PROBE_CWD" --no-alt-screen --disable-web-search >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
-      fi
-      ;;
-    qoderclicn)
-      # scratch --cwd (never the repo), no session persistence, and tools disabled:
-      # a quota probe needs only a text reply and must not mutate files.
-      if [ -n "$EFFORT" ]; then
-        printf 'Respond only with OK' | qoderclicn -p --cwd "$PROBE_CWD" --model "$MODEL" \
-          --reasoning-effort "$EFFORT" \
-          --permission-mode dont_ask --tools "" --no-session-persistence --output-format text \
-          >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
-      else
-        printf 'Respond only with OK' | qoderclicn -p --cwd "$PROBE_CWD" --model "$MODEL" \
-          --permission-mode dont_ask --tools "" --no-session-persistence --output-format text \
-          >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi
       ;;
     cursor)

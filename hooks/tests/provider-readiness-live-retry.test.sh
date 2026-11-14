@@ -3,7 +3,7 @@
 # not with `OK` (a compliance flake: refusal or small talk → dispatch-author `truncated/frame_missing`,
 # or an authored reply that does not normalise to OK). Transport-class outcomes (auth, quota,
 # generic exit failure, timeout, precondition) never retry. Measured 2026-09-20 on
-# qoderclicn/Qwen3.8-Max-Preview: 1 reply in ~6 refused the probe, two Qwen seats per roster
+# cc-shim/Qwen3.8-Max-Preview: 1 reply in ~6 refused the probe, two Qwen seats per roster
 # → three consecutive strict campaigns blocked at provider_readiness.
 . "$(dirname "$0")/lib.sh"
 
@@ -50,7 +50,7 @@ const root = process.argv[2];
 const scriptPath = process.argv[3];
 const { LIVE_PROBE_REQUEST, classifyLiveProbeResult } = require(path.join(root, 'src', 'readiness', 'probe'));
 const { dispatchAuthorLiveProbe } = require(path.join(root, 'src', 'readiness', 'live-probe'));
-const tuple = { role: 'verification_author', runner: 'qoderclicn', model: 'Qwen3.8-Max-Preview', effort: 'high', endpoint: null };
+const tuple = { role: 'verification_author', runner: 'cc-shim', model: 'Qwen3.8-Max-Preview', effort: 'high', endpoint: null };
 const result = dispatchAuthorLiveProbe({ tuple, request: LIVE_PROBE_REQUEST }, { scriptPath });
 process.stdout.write(`classification=${classifyLiveProbeResult(tuple, result)}\n`);
 NODE

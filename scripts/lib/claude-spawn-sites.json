@@ -77,6 +77,11 @@
       "reason": "never starts claude itself: it refuses unless claude-account.js env-check says the alias is usable, then runs scripts/dispatch-author.sh claude-native, whose spawn goes through claude-account.js run; the --bin wrapper it generates is exec'd only by that rail (under --dry-run it is a stub that never starts a binary)"
     },
     {
+      "file": "evals/skill-onoff/step7-usage-ab/run-ab.py",
+      "status": "out_of_scope",
+      "reason": "false positive: the only hits are prose lines inside strings passed to lines.append (the generated README text mentions `claude -p`); the runner starts no claude process"
+    },
+    {
       "file": "scripts/lib/dispatch-usage.js",
       "status": "out_of_scope",
       "reason": "writes dispatch_usage/1 ledger rows and never spawns a process; its only claude shape is the CLAUDE_FAMILY runner-name list (line 38) used as the transcript dedupe key"
@@ -248,6 +253,11 @@
       "reason": "this gate: its own detection patterns contain the strings it looks for; it starts no claude"
     },
     {
+      "file": "scripts/lib/lane-switch-preflight.js",
+      "status": "out_of_scope",
+      "reason": "runs only `claude auth status --json` per profile (no model call, no token spend; reads loggedIn only) with CLAUDE_CONFIG_DIR set to ~/.claude-profiles/<profile>, or unset for the home profile so the child uses its own default login; the file never opens .claude.json, .credentials.json or settings.json"
+    },
+    {
       "file": "scripts/profile-health.js",
       "status": "out_of_scope",
       "reason": "runs only `claude auth status --json` per profile (no model call, no token spend); reads loggedIn and loginExpiresAt only"
@@ -407,6 +417,14 @@
       "group": "A5",
       "covered_by": [
         "scripts/account-rails-w4.test.js"
+      ]
+    },
+    {
+      "file": "scripts/quota-mirror-tick.js",
+      "status": "wired",
+      "group": "account-layer",
+      "covered_by": [
+        "scripts/quota-mirror-tick.test.js"
       ]
     },
     {

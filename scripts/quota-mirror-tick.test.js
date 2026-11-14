@@ -53,6 +53,7 @@ function runTick(codes) {
     env: {
       PATH: process.env.PATH,
       HOME: fx.root,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(fx.root, "accounts"),
       TMPDIR: fx.root,
       AUTOPILOT_LIVE_DIR: fx.live,
       QUOTA_MIRROR_BIN: fx.bin,
@@ -126,6 +127,7 @@ function runTickArgs(codes, args) {
     env: {
       PATH: process.env.PATH,
       HOME: fx.root,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(fx.root, "accounts"),
       TMPDIR: fx.root,
       AUTOPILOT_LIVE_DIR: fx.live,
       QUOTA_MIRROR_BIN: fx.bin,
@@ -164,6 +166,7 @@ test('--out-dir refuses a world-writable directory and runs nothing', () => {
     env: {
       PATH: process.env.PATH,
       HOME: fx.root,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(fx.root, "accounts"),
       TMPDIR: fx.root,
       AUTOPILOT_LIVE_DIR: fx.live,
       QUOTA_MIRROR_BIN: fx.bin,
@@ -184,6 +187,7 @@ test('--out-dir is passed to provider steps and is the smoke argument', () => {
     env: {
       PATH: process.env.PATH,
       HOME: fx.root,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(fx.root, "accounts"),
       TMPDIR: fx.root,
       AUTOPILOT_LIVE_DIR: path.join(fx.root, 'other-live'),
       QUOTA_MIRROR_BIN: fx.bin,

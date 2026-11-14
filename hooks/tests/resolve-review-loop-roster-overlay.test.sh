@@ -75,6 +75,7 @@ assert_eq "GLM-5.3@cc-shim/glm" "$(printf '%s' "$VA_JSON" | jget verification_au
 QOD_OVR="$TEST_TMP/qoder-va-override.md"
 cat > "$QOD_OVR" <<'EOF'
 - override: verification_author | until 2099-01-01 | retired qoderclicn test
+- verification_author_present: true
 - verification_author_engine: Qwen3.8-Max
 - verification_author_effort: high
 - verification_author_runner: qoderclicn

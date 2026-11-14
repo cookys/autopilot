@@ -61,15 +61,15 @@ for r in $ROSTER; do
 done
 
 # --- Effort consumers must agree with the dispatcher.
-# Only codex/grok/qoderclicn/opencode/kimi receive an effort in dispatch-review.sh
+# Only codex/grok/opencode/kimi receive an effort in dispatch-review.sh
 # (opencode via `--variant`, v2.36.13; kimi via KIMI_MODEL_THINKING_EFFORT, no flag). If the probe
 # authorized an effort tuple for any other runner it would stamp `available` on an
 # identity that dispatch never actually applies.
-EFFORT_LINE="$(grep -n 'codex|grok|qoderclicn|opencode|kimi) _EFFORT_CONSUMER=1' "$PROBE" | head -n 1)"
+EFFORT_LINE="$(grep -n 'codex|grok|opencode|kimi) _EFFORT_CONSUMER=1' "$PROBE" | head -n 1)"
 if [ -n "$EFFORT_LINE" ]; then
-  ok "probe restricts effort-tuple authorization to the five runners that consume it"
+  ok "probe restricts effort-tuple authorization to the four runners that consume it"
 else
-  bad "probe's effort-consumer set no longer matches dispatch-review.sh (codex/grok/qoderclicn/opencode/kimi) — re-read both files before changing this assertion"
+  bad "probe's effort-consumer set no longer matches dispatch-review.sh (codex/grok/opencode/kimi) — re-read both files before changing this assertion"
 fi
 
 # --- Endpoint consumers likewise.

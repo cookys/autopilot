@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-hetero --runner kimi integration test (v2.36.x, kimi-implementer-rail).
 #
-# The kimi rail is grok/qoderclicn/opencode-shaped (EDIT-ONLY directive prepended,
+# The kimi rail is grok/opencode-shaped (EDIT-ONLY directive prepended,
 # wrapper commits, verdict from git artifacts) EXCEPT for prompt transport: kimi 0.41.0
 # takes the prompt ONLY as one -p argv string (no --prompt-file, no STDIN — Stage-0 spike
 # 2026-09-11, docs/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md §0), so a pre-spend argv-byte

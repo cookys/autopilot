@@ -462,7 +462,7 @@ const VALID_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 // Endpoint wiring (v2.32.45): the only reviewer runners that consume a named
 // endpoint credential (dispatch-review.sh --endpoint <name> → resolve-endpoint.sh
 // → AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN} from ~/.autopilot/endpoints.env). Every
-// other runner (codex/agy/grok/qoderclicn/claude-native) authenticates natively and gets NO
+// other runner (codex/agy/grok/claude-native) authenticates natively and gets NO
 // --endpoint. The name must be env-var-compatible ([A-Za-z0-9_]+, matching the
 // resolve-endpoint.sh contract); anything else (a URL, empty string) is ignored.
 const ENDPOINT_CAPABLE_REVIEW_RUNNERS = new Set(['cc-shim', 'anthropic-compatible']);

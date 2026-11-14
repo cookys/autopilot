@@ -23,7 +23,7 @@ assert_eq "$RUN_EXIT" "0" "invalid QC runner stays non-fatal, per the shipped co
 assert_contains "$RUN_STDOUT" '"qc_panel_seats_complete": false' "invalid QC runner leaves the panel incomplete"
 assert_contains "$RUN_STDERR" "invalid qc_panel_runners[1]" "runner rejection names the rejected array entry"
 assert_contains "$RUN_STDERR" "nope" "runner rejection names the rejected value"
-assert_contains "$RUN_STDERR" "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode" "runner rejection names the complete accepted set"
+assert_contains "$RUN_STDERR" "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode" "runner rejection names the complete accepted set"
 assert_contains "$RUN_STDOUT" '"implementer_runner"' "runner rejection keeps stdout parseable JSON"
 
 EFFORT_CFG="$TEST_TMP/invalid-effort.md"

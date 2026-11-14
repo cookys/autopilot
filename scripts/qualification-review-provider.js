@@ -1375,7 +1375,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   let opencodeDir = null;
   let opencodeRoot = null;
   let opencodeAdaptor = 'v1';
-  // codex/claude/qoderclicn read the prompt on stdin; agy also reads it on stdin, as one
+  // codex/claude read the prompt on stdin; agy also reads it on stdin, as one
   // stream-json line via the shared lib/agy-stream-json.js (BL-0298); kimi takes it as an argv
   // value; grok takes it via --prompt-file (avoids ARG_MAX the same way codex's
   // sidecar avoids it for OUTPUT — see the promptViaFile branch below). Keep this a
@@ -1482,7 +1482,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     // enumerated names.
     //
     // `--deny "*"` is a VERIFIED catch-all, not a guess: `--tools ""` (the flag that
-    // DOES catch-all-deny agy/claude/qoderclicn) does **NOT** block tool execution for
+    // DOES catch-all-deny agy/claude) does **NOT** block tool execution for
     // grok — a live probe with `--tools ""` alone actually ran `hostname` and returned
     // the REAL host's hostname. `--deny "*"` was then probed against THREE tools, two
     // of them deliberately NOVEL (never named anywhere in this file, chosen to prove
@@ -1724,14 +1724,6 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       // found, falling back to default` and runs the fully-tooled default agent
       // with exit 0 — agyContainment.auditAgyRun() treats that log line as a breach.
       agyContainment.writeToollessAgent(path.join(settingsDir, 'agents'));
-    } else if (kind === 'qoderclicn') {
-      // qoderclicn exposes a real --config-dir flag (verified live: pointing it at
-      // an empty dir made the CLI report "Not logged in", i.e. it stopped reading
-      // the real ~/.qoder-cn/.auth) — cleaner than agy's HOME-wide redirect, no
-      // settings-merge dance needed since this kind's containment is pure argv
-      // (--tools ""; see the args-building branch above). The clone is still
-      // per-invocation (same concurrency-safety reasoning as agy's HOME clone).
-      args.push('--config-dir', cloneHome);
     }
   }
   let childEnv = cloneHome

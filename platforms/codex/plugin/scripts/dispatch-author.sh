@@ -49,7 +49,7 @@
 #   bad/bare-alias --model) are precondition_failed.
 #
 # USAGE:
-#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor --model <name> --prompt-file <file>
+#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|cursor --model <name> --prompt-file <file>
 #       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
@@ -83,7 +83,7 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   {
-#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor",
+#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|cursor",
 #     "model": "...",
 #     "status": "authored|empty_output|precondition_failed|runner_failed|truncated",
 #     "raw_log": "<path>",
@@ -899,7 +899,7 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor)"
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|cursor)"
 # --role-kit: refused on every runner but claude-native, validated now (before any spawn).
 . "$_AUTHOR_SELF_DIR/lib/role-kit.sh"   # defaults only: no kit leaves ROLE_KIT_TOOLS empty and ROLE_KIT_EXTRA unset-equivalent
 if [ -n "$ROLE_KIT_DIR" ]; then
@@ -911,7 +911,7 @@ if [ -n "$ROLE_KIT_DIR" ]; then
   fi
 fi
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;; esac
-case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, qoderclicn, or cursor (got: $RUNNER)" ;; esac
+case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, or cursor (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 if [[ "$RUNNER" = "cursor" ]]; then
   # No family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
@@ -1197,7 +1197,6 @@ GITCONFIG_DRIFT_KEYS=""
 GROK_CWD=""
 CCSHIM_CWD=""
 AGY_CWD=""
-QODER_CWD=""
 CNATIVE_CWD=""
 CNATIVE_ACCOUNT=0
 CNATIVE_CFG=""   # seeded credentials-only CLAUDE_CONFIG_DIR for claude-native (BL-0290)
@@ -1216,7 +1215,6 @@ cleanup() {
   declare -F codeforge_collect_claude_dir >/dev/null 2>&1 && [ -n "$CCSHIM_CWD" ] && codeforge_collect_claude_dir "$CCSHIM_CWD/.claude" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
-  [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD" || true
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
   [ -n "$CNATIVE_CFG" ] && rm -rf "$CNATIVE_CFG" || true
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD" || true
@@ -1361,32 +1359,13 @@ elif [[ "$RUNNER" = "grok" ]]; then
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   rm -rf "$GROK_CWD"; GROK_CWD=""
-elif [[ "$RUNNER" = "qoderclicn" ]]; then
-  QODER_BIN="${BIN:-qoderclicn}"
-  command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (Qoder CLI CN)"
-  # Read-only authoring, grok-shaped: scratch cwd (-w), --tools "" (no editor/tools — the
-  # authored content is produced as STDOUT text, not repo edits), prompt via STDIN. STDERR is
-  # captured to RUNNER_ERR_FILE (read only on failure) so qoder's benign non-git-cwd 'fatal: not a git repository' never
-  # lands in the captured authored text. Enforced timeout is the hang backstop.
-  QODER_CWD="$(mktemp -d -t dispatch-author-qodercwd-XXXXXX)"
-  author_kill_grace
-  set +e
-  AUTHOR_TIMEOUT_START=$SECONDS
-  # Prompt is fed with < "$5" inside the exec'd child. Do not redirect this timeout's stdin.
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
-    --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence < "$5"' \
-    _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
-  RUNNER_EXIT=$?
-  author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
-  set -e
-  rm -rf "$QODER_CWD"; QODER_CWD=""
 elif [[ "$RUNNER" = "cursor" ]]; then
   BIN="${BIN:-cursor-agent}"
   command -v "$BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $BIN (Cursor CLI — cursor-agent, not cursor)"
-  # EDIT-ONLY authoring, grok/qoder-shaped: scratch cwd, `--mode ask` (P9), prompt via STDIN
+  # EDIT-ONLY authoring, grok-shaped: scratch cwd, `--mode ask` (P9), prompt via STDIN
   # (P7); `--trust` is MANDATORY headlessly (P3) or the run aborts on workspace trust; the
   # agent never commits/pushes/opens a PR here — the wrapper commits and a separate review
-  # verifies (same contract as grok/qoderclicn). Enforced `timeout` is the hang backstop
+  # verifies (same contract as grok). Enforced `timeout` is the hang backstop
   # (cursor has no print-timeout flag). `--output-format text` (P13) is bound so the authored
   # text lands as clean prose on stdout with empty stderr. STDOUT and STDERR are captured to
   # SEPARATE temp files — STDOUT is the sole authored-text source ($RAW_LOG); STDERR is chrome
@@ -1421,9 +1400,9 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   # scratch cwd, the required-CLI-surface probe, argv shape, and the UTF-8 /
   # empty-output rejections, so none of that is duplicated here.
   #
-  # `timeout` wraps it the same way the grok/qoderclicn branches wrap theirs:
+  # `timeout` wraps it the same way the grok branch wraps its own:
   # the enforced deadline is the hang backstop and stays a shell concern.
-  # STDERR is appended to $RAW_LOG rather than discarded — unlike qoder there is
+  # STDERR is appended to $RAW_LOG rather than discarded — there is
   # no known benign chatter to filter, and a swallowed adapter error would
   # surface downstream as the unfalsifiable `empty_output`.
   #

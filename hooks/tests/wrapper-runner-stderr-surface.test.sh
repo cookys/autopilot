@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# BL-0229: when a qoderclicn runner rejects a model name, the wrapper must surface the runner's
+# BL-0229: when a runner rejects a model name, the wrapper must surface the runner's
 # (masked, bounded) stderr on ITS OWN stderr and in the result JSON failure field. Before: the
 # wrapper exited non-zero with an empty stderr, so a bad model tuple looked like a dead runner.
-# Covers dispatch-author.sh (the plan-review transport: runner_failed, exit 3) and the
-# dispatch-review.sh qoderclicn branch (no_verdict, exit 1). Stubs only; no real qodercli.
+# Covers dispatch-author.sh (grok transport: runner_failed, exit 3) and the
+# dispatch-review.sh codex branch (no_verdict, exit 1). Stubs only; no real runner binary.
 . "$(dirname "$0")/lib.sh"
 
 AUTHOR="$REPO_ROOT/scripts/dispatch-author.sh"
 REVIEW="$REPO_ROOT/scripts/dispatch-review.sh"
 PROMPT="$TEST_TMP/prompt.txt"; printf '%s\n' 'Return a small JSON object.' > "$PROMPT"
 DIFF="$TEST_TMP/d.diff"; printf '+def f(): return 1\n' > "$DIFF"
-MSG='model not found: qwen3.8-max-preview'
+MSG='model not found: bad-model-preview'
 
-STUB="$TEST_TMP/fake-qodercli"
+STUB="$TEST_TMP/fake-runner"
 cat > "$STUB" <<STUB
 #!/usr/bin/env bash
 cat >/dev/null 2>&1 || true
@@ -24,10 +24,11 @@ chmod +x "$STUB"
 
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/ecd"; mkdir -p "$ENGINE_CAPABILITY_DIR"
 export AUTOPILOT_STRIKE_WRITER=off
+export AUTOPILOT_GROK_EFFORT_PROBE=0
 
 # --- dispatch-author.sh ---------------------------------------------------------------
 ERR="$TEST_TMP/author.err"
-OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 "$AUTHOR" --runner qoderclicn --model qwen3.8-max-preview \
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 "$AUTHOR" --runner grok --model grok-4.5 \
   --prompt-file "$PROMPT" --bin "$STUB" --timeout 10s 2>"$ERR" < /dev/null)"; RC=$?
 assert_eq "3" "$RC" "author: exit code unchanged (3)"
 assert_contains "$OUT" '"status": "runner_failed"' "author: runner_failed"
@@ -36,9 +37,9 @@ assert_contains "$(cat "$ERR")" "$MSG" "author: wrapper stderr carries the runne
 assert_not_contains "$(cat "$ERR")" 'sk-abcdefghijklmnop' "author: wrapper stderr masks the key"
 assert_not_contains "$OUT" 'sk-abcdefghijklmnop' "author: JSON masks the key"
 
-# --- dispatch-review.sh (qoderclicn) ----------------------------------------------------
+# --- dispatch-review.sh (codex) -------------------------------------------------------
 ERR="$TEST_TMP/review.err"
-OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 "$REVIEW" --runner qoderclicn --model qwen3.8-max-preview \
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 "$REVIEW" --runner codex --model bad-model-preview \
   --diff-file "$DIFF" --bin "$STUB" 2>"$ERR" < /dev/null)"; RC=$?
 assert_eq "1" "$RC" "review: exit code unchanged (1)"
 assert_contains "$OUT" '"status": "no_verdict"' "review: no_verdict"
@@ -54,7 +55,7 @@ assert_not_contains "$OUT" 'sk-abcdefghijklmnop' "review: JSON masks the key"
 run_author_payload() { # $1 = case name, $2 = payload file
   local stub="$TEST_TMP/stub-$1" errf="$TEST_TMP/$1.err"
   printf '#!/usr/bin/env bash\ncat >/dev/null 2>&1 || true\ncat "%s" >&2\nexit 1\n' "$2" > "$stub"; chmod +x "$stub"
-  AOUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 "$AUTHOR" --runner qoderclicn --model bad \
+  AOUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=10 "$AUTHOR" --runner grok --model bad \
     --prompt-file "$PROMPT" --bin "$stub" --timeout 10s 2>"$errf" < /dev/null)"; ARC=$?
   AERR="$(cat "$errf")"
   printf '%s' "$AERR" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; AERR_UTF8=$?

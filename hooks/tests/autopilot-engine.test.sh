@@ -6098,7 +6098,7 @@ void first;
 void refused;
 console.log('cut2a_engine=true');
 
-// REAL batch path (no injected dispatcher): three qoderclicn seats through review-fanout.js and
+// REAL batch path (no injected dispatcher): three cc-shim seats through review-fanout.js and
 // dispatch-review.sh with a stub binary that sleeps 3/1/2 s (completion order 2,3,1) and touches
 // a marker; the engine clock jumps PAST the wall once any seat has run, so the finish phase sees
 // an exhausted wall. RED at 30b69a1a: every seat came back phase=campaign_wall_budget (the finish
@@ -6108,14 +6108,19 @@ const realStub = path.join(tmp, 'panel-2a-real-stub');
 const realMarker = path.join(tmp, 'panel-2a-real-marker');
 globalThis.__packetBuildCount = 0;
 const realSeats = [
-  { role: 'qc', runner: 'qoderclicn', model: 'slow-a', effort: 'high', endpoint: null, family: 'fa' },
-  { role: 'qc', runner: 'qoderclicn', model: 'fast-b', effort: 'high', endpoint: null, family: 'fb' },
-  { role: 'qc', runner: 'qoderclicn', model: 'mid-c', effort: 'high', endpoint: null, family: 'fc' },
+  { role: 'qc', runner: 'cc-shim', model: 'slow-a', effort: 'high', endpoint: null, family: 'fa' },
+  { role: 'qc', runner: 'cc-shim', model: 'fast-b', effort: 'high', endpoint: null, family: 'fb' },
+  { role: 'qc', runner: 'cc-shim', model: 'mid-c', effort: 'high', endpoint: null, family: 'fc' },
 ];
+const prevAnthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
+const prevAnthropicAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
+process.env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:9/anthropic';
+process.env.ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN || 'stub-token';
 const t0 = Date.parse('2026-09-18T00:00:05.000Z');
 const jumpingClock = () => (fs.existsSync(realMarker)
   ? new Date(t0 + 200 * 1000).toISOString()   // beyond the 120 s wall
   : new Date(t0).toISOString());
+try {
 runCase({
   ticket: 'panel-real-batch',
   reserve: 0,
@@ -6200,6 +6205,12 @@ try {
   });
 } finally {
   rp.buildReviewPacket = preSharedFailBuild;
+}
+} finally {
+  if (prevAnthropicBaseUrl === undefined) delete process.env.ANTHROPIC_BASE_URL;
+  else process.env.ANTHROPIC_BASE_URL = prevAnthropicBaseUrl;
+  if (prevAnthropicAuthToken === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+  else process.env.ANTHROPIC_AUTH_TOKEN = prevAnthropicAuthToken;
 }
 
 const fourSeats = [

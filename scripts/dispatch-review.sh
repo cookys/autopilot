@@ -2087,7 +2087,7 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   KIMI_INDIRECT=0
   if [ "$KIMI_PROMPT_BYTES" -gt "$KIMI_ARGV_LIMIT" ]; then
     if [ "$BLIND_RUNNER_CLEANROOM" -eq 1 ]; then
-      die_precondition "kimi prompt is ${KIMI_PROMPT_BYTES} bytes but the blind kimi seat is tool-less and takes the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — shrink the review (review_diff_scope / split the diff) or seat a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)"
+      die_precondition "kimi prompt is ${KIMI_PROMPT_BYTES} bytes but the blind kimi seat is tool-less and takes the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — shrink the review (review_diff_scope / split the diff) or seat a runner that reads a prompt file (codex, grok, cursor, opencode)"
     fi
     KIMI_INDIRECT=1
   fi

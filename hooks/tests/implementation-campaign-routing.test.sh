@@ -1091,12 +1091,12 @@ const roster = {
   qc_panel_seats: [
     { role: 'qc', runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
     { role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
-    { role: 'qc', runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
+    { role: 'qc', runner: 'cc-shim', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
   ],
   fallback_ladder: [
     { runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', family: 'openai' },
     { runner: 'claude-native', model: 'claude-opus', effort: 'high', family: 'anthropic' },
-    { runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', family: 'xai' },
+    { runner: 'cc-shim', model: 'grok-4.5', effort: 'high', family: 'xai' },
   ],
 };
 let implementationCalls = 0;
@@ -2153,12 +2153,12 @@ const roster = {
   qc_panel_seats: [
     { role: 'qc', runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
     { role: 'qc', runner: 'claude-native', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
-    { role: 'qc', runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
+    { role: 'qc', runner: 'cc-shim', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
   ],
   fallback_ladder: [
     { runner: 'cc-shim', model: 'gpt-5.5', effort: 'high', family: 'openai' },
     { runner: 'claude-native', model: 'claude-opus', effort: 'high', family: 'anthropic' },
-    { runner: 'qoderclicn', model: 'grok-4.5', effort: 'high', family: 'xai' },
+    { runner: 'cc-shim', model: 'grok-4.5', effort: 'high', family: 'xai' },
   ],
 };
 const seal = JSON.parse(fs.readFileSync(sealPath, 'utf8'));

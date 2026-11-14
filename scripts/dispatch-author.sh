@@ -1400,9 +1400,9 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   # scratch cwd, the required-CLI-surface probe, argv shape, and the UTF-8 /
   # empty-output rejections, so none of that is duplicated here.
   #
-  # `timeout` wraps it the same way the grok/qoderclicn branches wrap theirs:
+  # `timeout` wraps it the same way the grok branch wraps its own:
   # the enforced deadline is the hang backstop and stays a shell concern.
-  # STDERR is appended to $RAW_LOG rather than discarded — unlike qoder there is
+  # STDERR is appended to $RAW_LOG rather than discarded — there is
   # no known benign chatter to filter, and a swallowed adapter error would
   # surface downstream as the unfalsifiable `empty_output`.
   #

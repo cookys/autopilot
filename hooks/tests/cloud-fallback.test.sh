@@ -223,7 +223,7 @@ mkdir -p "$NOCFG/.claude"; printf -- '- on_engine_unavailable: ask\n' > "$NOCFG/
 mv "$NOCFG/.claude" "$TEST_TMP/nocfg-claude-trash"
 T="$(mk_tree mutR)"
 sed_mutant "$REPO_ROOT/scripts/resolve-review-loop.sh" "$T/scripts/resolve-review-loop.sh" \
-  's/^    codex|agy|grok|cursor|kimi|qoderclicn) ;;$/    codex|agy|grok|cursor|kimi|qoderclicn|cc-shim) ;;/'
+  's/^    codex|agy|grok|cursor|kimi) ;;$/    codex|agy|grok|cursor|kimi|cc-shim) ;;/'
 resolver_all "$T"
 case "$RES_SHIM" in *rc=3*) fail "mutant R (cc-shim allowed) must make the cc-shim rung pass" ;; esac
 

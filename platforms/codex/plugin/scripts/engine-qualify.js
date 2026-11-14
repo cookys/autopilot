@@ -3627,7 +3627,6 @@ function implRunnerBinFlag(runner) {
     case 'codex': return '--codex-bin';
     case 'agy': return '--agy-bin';
     case 'pi': return '--pi-bin';
-    case 'qoderclicn': return '--qoder-bin';
     case 'cursor': return '--cursor-bin';
     case 'opencode': return '--opencode-bin';
     case 'kimi': return '--kimi-bin';
@@ -4496,8 +4495,8 @@ function runImplCase(context) {
     });
     if (usageRecords) {
       // Rail-reported usage only (dispatch-hetero's `usage`, parsed from the harness
-      // event stream): codex reports a total with no in/out split, cc-shim/plain/kimi/
-      // qoder report null. Whatever the rail did not report stays null.
+      // event stream): codex reports a total with no in/out split, cc-shim/plain/kimi
+      // report null. Whatever the rail did not report stays null.
       usageRecords.push(qualUsage.caseRecord({
         role: 'implementer',
         trialId: ledgerRow.trial_id,

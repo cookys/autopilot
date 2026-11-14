@@ -436,7 +436,7 @@ assert_eq "$RESOLVE_RC" "0" "c5: reviewer cloud rung of another family resolves"
 # the reviewer cloud rung family: the ladder is shaped, never exit 3. Explicit ladders keep c1/c4.
 TOPO_AUTO="$TEST_TMP/topo-auto.json"
 cat > "$TOPO_AUTO" <<'EOF2'
-{"implementer_ladder":[{"engine":"gpt-6.1-sol","effort":"high","runner":"codex"},{"engine":"Qwen3.8-Max","effort":"high","runner":"qoderclicn"},{"engine":"grok-4.7","effort":"low","runner":"grok"}]}
+{"implementer_ladder":[{"engine":"gpt-6.1-sol","effort":"high","runner":"codex"},{"engine":"Qwen3.8-Max","effort":"high","runner":"cc-shim"},{"engine":"grok-4.7","effort":"low","runner":"grok"}]}
 EOF2
 CFG_AUTO="$TEST_TMP/auto-ladder.md"
 cat > "$CFG_AUTO" <<'EOF2'
@@ -457,7 +457,7 @@ cat > "$CFG_AUTO" <<'EOF2'
 - override: verification_author | until 2099-01-01 | alibaba VA advertised in the topology
 - verification_author_present: true
 - verification_author_engine: Qwen3.8-Max
-- verification_author_runner: qoderclicn
+- verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint:
 EOF2

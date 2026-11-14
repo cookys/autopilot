@@ -1820,7 +1820,6 @@ current_runner_name() {
     [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
     [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
     [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
-    [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
     [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
@@ -3456,7 +3455,6 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   [ "${IS_GROK:-0}" -eq 1 ] && local_runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && local_runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && local_runner="pi"
-  [ "${IS_QODER:-0}" -eq 1 ] && local_runner="qoderclicn"
   [ "${IS_CURSOR:-0}" -eq 1 ] && local_runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && local_runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && local_runner="kimi"
@@ -3593,7 +3591,7 @@ fi
 
 # --- scaffold-tier envelope (four-layer P1; references/scaffold-tiers.md is canonical) ---
 # Prepended to the SHARED prompt file BEFORE the per-runner branches, so every runner
-# (codex/grok/cc-shim/agy/pi/qoder) consumes the tier identically. Placed before the
+# (codex/grok/cc-shim/agy/pi) consumes the tier identically. Placed before the
 # context-window gate so the gate prices the envelope too. Disable per project with
 # `scaffold_tiers: off` in .claude/dispatch-config.md.
 if [ "$SCAFFOLD_TIER_ARG" != "off" ] \
@@ -4187,7 +4185,6 @@ abort_dispatch() {
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
-  [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
   [ -n "$CURSOR_PROMPT_FILE" ] && rm -f "$CURSOR_PROMPT_FILE"
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"

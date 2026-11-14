@@ -129,7 +129,6 @@
         "cc-shim",
         "anthropic-compatible",
         "claude-native",
-        "qoderclicn",
         "kimi",
         "cursor",
         "opencode"
@@ -164,7 +163,6 @@
         "cc-shim",
         "pi",
         "claude-native",
-        "qoderclicn",
         "cursor",
         "opencode",
         "kimi"
@@ -194,7 +192,6 @@
               "grok",
               "cc-shim",
               "pi",
-              "qoderclicn",
               "cursor",
               "opencode"
             ]
@@ -380,7 +377,6 @@
         "grok",
         "cc-shim",
         "anthropic-compatible",
-        "qoderclicn",
         "kimi",
         "cursor",
         "opencode"
@@ -489,7 +485,6 @@
               "cc-shim",
               "anthropic-compatible",
               "claude-native",
-              "qoderclicn",
               "kimi",
               "cursor",
               "opencode"
@@ -616,7 +611,6 @@
         "cc-shim",
         "anthropic-compatible",
         "claude-native",
-        "qoderclicn",
         "kimi",
         "cursor",
         "opencode"
@@ -651,7 +645,6 @@
         "cc-shim",
         "anthropic-compatible",
         "claude-native",
-        "qoderclicn",
         "kimi",
         "cursor",
         "opencode"
@@ -750,7 +743,6 @@
         "cc-shim",
         "anthropic-compatible",
         "claude-native",
-        "qoderclicn",
         "kimi",
         "cursor",
         "opencode"
@@ -787,7 +779,6 @@
         "cc-shim",
         "anthropic-compatible",
         "claude-native",
-        "qoderclicn",
         "kimi",
         "cursor",
         "opencode"
@@ -922,7 +913,7 @@
     },
     "reviewer_cloud_fallback_rung": {
       "type": ["object", "null"],
-      "description": "Explicit non-codex rung the reviewer seat retreats to when reviewer_on_engine_unavailable is cloud-fallback and an override is active; otherwise dispatch-review.sh walks pace-roles.json fallback.reviewer (hydrogen -> glm -> agyclaude), never codex. Same engine/effort@runner shape and cloud-runner allowlist (agy|grok|cursor|kimi|qoderclicn; codex never chosen automatically). Null when unset. Required when the reviewer policy is cloud-fallback. Its family must not be the reviewer seat's own family, except an agy reviewer whose engine is gemini-4-carbon-<tier> and whose rung is gemini-4-argon-<same tier> (filled in when the rung was empty). Always emitted (null when unset), unlike the conditional cloud_fallback_rung."
+      "description": "Explicit non-codex rung the reviewer seat retreats to when reviewer_on_engine_unavailable is cloud-fallback and an override is active; otherwise dispatch-review.sh walks pace-roles.json fallback.reviewer (hydrogen -> glm -> agyclaude), never codex. Same engine/effort@runner shape and cloud-runner allowlist (agy|grok|cursor|kimi; codex never chosen automatically). Null when unset. Required when the reviewer policy is cloud-fallback. Its family must not be the reviewer seat's own family, except an agy reviewer whose engine is gemini-4-carbon-<tier> and whose rung is gemini-4-argon-<same tier> (filled in when the rung was empty). Always emitted (null when unset), unlike the conditional cloud_fallback_rung."
     }
   },
   "required": [

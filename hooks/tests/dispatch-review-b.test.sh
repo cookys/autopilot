@@ -93,7 +93,7 @@ assert_contains "$OUT" 'not executable' "opencode missing binary names the failu
 
 # opencode: a well-formed SHIP-AS-IS block lands on stdout (wrapped in NDJSON) and THEN
 # the process exits non-zero (rc=9) — engine answered correctly then crashed on
-# teardown. Same fail-closed contract as qoderclicn/kimi above: the well-formed block
+# teardown. Same fail-closed contract as kimi above: the well-formed block
 # is NOT accepted despite being intact.
 OUT="$("$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --diff-file "$DIFF" --bin "$STUB_OPENCODE_NONZERO" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "opencode well-formed block + nonzero exit: exit 1 (fail-closed)"

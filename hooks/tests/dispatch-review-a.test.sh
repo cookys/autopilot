@@ -22,7 +22,7 @@ OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --effort turbo 2>&
 for VALUE in 0 -1 1.5 01 abc 200001 999999999999999999999999999999; do
   SPAWN_MARKER_FILE="$TEST_TMP/invalid-max-spawn-$VALUE"; export SPAWN_MARKER_FILE
   rm -f "$SPAWN_MARKER_FILE"
-  OUT="$("$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens "$VALUE" 2>&1)"; EXIT=$?
+  OUT="$("$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens "$VALUE" 2>&1)"; EXIT=$?
   assert_eq "2" "$EXIT" "invalid --max-tokens '$VALUE' exits 2"
   assert_contains "$OUT" '"status": "precondition_failed"' "invalid --max-tokens '$VALUE' is a precondition"
   node -e 'JSON.parse(process.argv[1])' "$OUT"
@@ -31,7 +31,7 @@ for VALUE in 0 -1 1.5 01 abc 200001 999999999999999999999999999999; do
 done
 SPAWN_MARKER_FILE="$TEST_TMP/missing-max-spawn"; export SPAWN_MARKER_FILE
 rm -f "$SPAWN_MARKER_FILE"
-OUT="$("$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens 2>&1)"; EXIT=$?
+OUT="$("$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing --max-tokens value exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing --max-tokens value is a precondition"
 node -e 'JSON.parse(process.argv[1])' "$OUT"

@@ -30,8 +30,8 @@
 # dispatch-hetero.sh carries a "Do NOT add unverified flags" warning for this class of bug).
 # Hence: clamp, don't pass through.
 #
-# Contrast with the qoder rail, which tolerates all 5 levels at the CLI layer and silently
-# degrades an unhonored one — no clamp needed there. grok is stricter, so the mapping is here.
+# Contrast with other rails that tolerate all 5 levels at the CLI layer;
+# grok is stricter, so the mapping is here.
 #
 # HONESTY REQUIREMENT
 # -------------------

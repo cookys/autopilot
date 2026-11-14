@@ -65,7 +65,7 @@ cat >"$MANIFEST" <<'JSON'
       "family": "openai", "readiness_status": "ready", "qualification_status": "qualified", "required": true, "excluded_families": [], "fallbacks": [] },
     { "id": "operations", "runner": "grok", "model": "grok-fixture", "effort": "high", "endpoint": "default", "role": "operations",
       "family": "xai", "readiness_status": "ready", "qualification_status": "qualified", "required": true, "excluded_families": [], "fallbacks": [] },
-    { "id": "skeptic", "runner": "qoderclicn", "model": "qwen-fixture", "effort": "high", "endpoint": "default", "role": "skeptic",
+    { "id": "skeptic", "runner": "cc-shim", "model": "qwen-fixture", "effort": "high", "endpoint": "default", "role": "skeptic",
       "family": "qwen", "readiness_status": "ready", "qualification_status": "qualified", "required": true, "excluded_families": [], "fallbacks": [] },
     { "id": "product", "runner": "agy", "model": "gemini-fixture", "effort": "high", "endpoint": "default", "role": "product",
       "family": "google", "readiness_status": "ready", "qualification_status": "qualified", "required": false, "excluded_families": [], "fallbacks": [] }

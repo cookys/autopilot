@@ -9,8 +9,8 @@ export AUTOPILOT_LIVE_DIR="$TEST_TMP/live"; mkdir -p "$AUTOPILOT_LIVE_DIR"
 export AUTOPILOT_CONFIG_FILE="$TEST_TMP/no-config.json"
 export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"; mkdir -p "$AUTOPILOT_DISPATCH_RUNS_DIR"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR"
-unset AUTOPILOT_FLEET_ADDRESS AUTOPILOT_UNMERGED_SHIP
-OWNER="ns/cx/merge-lane--claude"; export FLEET_ADDRESS="$OWNER" AUTOPILOT_EVENTS_REVIEW_LEDGERS
+unset AUTOPILOT_FLEET_ADDRESS AUTOPILOT_UNMERGED_SHIP AUTOPILOT_EVENTS_REVIEW_LEDGERS
+OWNER="ns/cx/merge-lane--claude"; export FLEET_ADDRESS="$OWNER@sess-0123"
 NOW="2026-11-15T12:00:00Z"
 TASK="01JABCDEFGHJKMNPQRSTVWXYZ0"
 
@@ -20,7 +20,10 @@ FLEET_LOG="$TEST_TMP/fleet.argv"
 cat > "$SHIM/fleet" <<EOF
 #!/usr/bin/env bash
 { echo "CALL"; for a in "\$@"; do echo "\$a"; done; } >> "$FLEET_LOG"
-[ "\$1" = whoami ] && exit 1
+if [ "\$1" = whoami ]; then
+  [ -f "$TEST_TMP/shim-whoami-cli" ] && { echo "courier socket mismatch" >&2; echo "address:   cookys/aimax395-team/fleet-cli   (this CLI's identity; replies land in fleet inbox)"; exit 0; }
+  exit 1
+fi
 [ -f "$TEST_TMP/shim-invalid" ] && { echo "blocked_on_invalid: bad target" >&2; exit 2; }
 [ -f "$TEST_TMP/shim-fail" ] && { echo "boom" >&2; exit 3; }
 exit 0
@@ -114,6 +117,16 @@ assert_eq "1" "$(grep -c 'blocked_on_invalid' "$TEST_TMP/check.err")" "blocked_o
 OUT="$(run_check --review-ledger "$TEST_TMP/led1d" --notify)"
 assert_eq "$((BEFORE + 2))" "$(fleet_calls)" "blocked_on_invalid: not deduped, next run calls fleet again"
 rm -f "$TEST_TMP/shim-invalid"
+
+# 1d. no FLEET_ADDRESS and whoami reports the CLI identity: no mark, one stderr line, not deduped
+H1E="$(mkbranch feat1e f1e.txt)"
+mkledger "$TEST_TMP/led1e" "$H1E" "2026-11-15T10:00:00Z" SHIP-AS-IS "$TASK"
+touch "$TEST_TMP/shim-whoami-cli"; BEFORE="$(grep -c '^progress$' "$FLEET_LOG")"
+OUT="$(env -u FLEET_ADDRESS bash -c '. /dev/null; node "$0" --repo "$1" --now "$2" --review-ledger "$3" --notify 2>"$4"' "$CHECK" "$WORK" "$NOW" "$TEST_TMP/led1e" "$TEST_TMP/check.err")"
+assert_eq "" "$OUT" "cli-identity whoami: no alert recorded"
+assert_eq "$BEFORE" "$(grep -c '^progress$' "$FLEET_LOG")" "cli-identity whoami: no task progress call"
+assert_contains "$(cat "$TEST_TMP/check.err")" "own fleet address unknown" "cli-identity whoami: one stderr line"
+rm -f "$TEST_TMP/shim-whoami-cli"
 
 # 2. verdict 30 min old -> exit 0
 H2="$(mkbranch feat2 f2.txt)"

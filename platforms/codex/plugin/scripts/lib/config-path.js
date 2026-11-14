@@ -27,7 +27,7 @@ function metricsDirOf(opts = {}) {
   return path.join(env.CLAUDE_CONFIG_DIR || path.join(opts.home || os.homedir(), '.claude'), 'metrics');
 }
 
-// Existing ledger readers accept a file override; the tracker uses metricsDirOf directly.
+// Ledger path: the writer (hooks/cost-tracker.js) and every reader share this override.
 function costsFileOf(opts = {}) {
   const env = opts.env || process.env;
   return env.AUTOPILOT_COSTS_FILE || path.join(metricsDirOf(opts), 'costs.jsonl');

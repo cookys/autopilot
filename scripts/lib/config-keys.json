@@ -2222,6 +2222,7 @@
       "class": "path_seam",
       "default": null,
       "readers": [
+        "hooks/cost-tracker.js",
         "scripts/lib/config-path.js"
       ],
       "doc": null,

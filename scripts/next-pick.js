@@ -35,6 +35,9 @@
  *     (`--today YYYY-MM-DD`, default the current UTC date; a malformed --today is a usage error, exit 2);
  *     null when Since is missing or malformed, 0 when it is in the future. pick-record stores the candidate
  *     list as a digest, so replay never depends on the reference day.
+     Output schema_version 2 (next_pick_parse_result); each row also carries `id` (the `- **Id**: BL-NNNN`
+     value, else null; permanent, survives title edits), `status` (first token of `- **Status**:`:
+     open|fired|shipped|dropped, else null) and `status_raw` (the full Status value, else null).
  *   pick --candidates <file> --preferences <file> [--readiness <file>]
  *        [--ledger <file>] [--decision-id <id>] [--round <n>]
  *     candidates: JSON array [{title, effort, tags[], class, age_days, source}]
@@ -216,7 +219,14 @@ function parseBacklog(opts) {
     const ageDays = sinceMs === null ? null : Math.max(0, Math.round((todayMs - sinceMs) / 86400000));
     const tags = [];
     if (/board/iu.test(effortText)) tags.push('board');
+    const idMatch = section.match(/^- \*\*Id\*\*:[ \t]*([^\n]*)/mu);
+    const idText = idMatch ? idMatch[1].trim() : '';
+    const statusMatch = section.match(/^- \*\*Status\*\*:[ \t]*([^\n]*)/mu);
+    const statusRaw = statusMatch && statusMatch[1].trim() ? statusMatch[1].trim() : null;
     rows.push({
+      id: /^BL-\d{4,}$/u.test(idText) ? idText : null,
+      status: statusRaw ? statusRaw.split(/\s+/u)[0] : null,
+      status_raw: statusRaw,
       title,
       effort: tokenMatch ? tokenMatch[1] : 'unknown',
       urgent: Boolean(tokenMatch && tokenMatch[2]),
@@ -228,7 +238,7 @@ function parseBacklog(opts) {
     });
   }
   process.stdout.write(`${JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     artifact_type: 'next_pick_parse_result',
     rows,
   }, null, 1)}\n`);

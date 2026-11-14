@@ -80,6 +80,23 @@ guard "$R"
 assert_eq "$RC" 0 "close through project-record is green"
 git -C "$R" commit -q -m closed || fail "commit close"
 
+# --- negative control: a writer run staged only in part (the worktree agrees, the commit would not)
+ID3="$(newrow "$R" "partial stage row")"
+git -C "$R" add -f .hippo
+guard "$R"
+assert_eq "$RC" 1 "staging only .hippo after a writer run is red"
+assert_contains "$OUT" "$BL" "names the unstaged BACKLOG.md"
+git -C "$R" reset -q; git -C "$R" add -f "$BL"
+guard "$R"
+assert_eq "$RC" 1 "staging only BACKLOG.md with .hippo dirty is red"
+assert_contains "$OUT" ".hippo" "names the unstaged .hippo"
+git -C "$R" add -A -f
+guard "$R"
+assert_eq "$RC" 0 "staging BACKLOG.md and .hippo together is green"
+git -C "$R" commit -q -m partial || fail "commit partial"
+pr "$R" backlog close "$ID3" done >/dev/null || fail "backlog close partial"
+git -C "$R" add -A -f; git -C "$R" commit -q -m partialclosed || fail "commit partial close"
+
 # --- negative control: a store op with no row (BACKLOG.md untouched)
 ORPHAN="$(orphan "$R" "orphan op")"
 git -C "$R" add -A -f

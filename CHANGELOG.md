@@ -471,6 +471,8 @@
 
 ### Settings changes
 
+- **New `fleet_gateway_endpoints`** (array of endpoint names; default `[]`). Named endpoints that are the fleet model gateway; only these receive `X-Fleet-Task`. Case-insensitive.
+- **New `AUTOPILOT_FLEET_GATEWAY_ENDPOINTS`** (comma-separated endpoint names; default unset). Overrides `fleet_gateway_endpoints`; empty means no endpoint gets the header.
 - **New `quota_mirror_dirs`** (array of strings; default `[]`). Extra fleet.quota mirror directories, each shaped like `<live_dir>/quota` (typically `<shared-dir>/quota`). Merged with the local live `quota/` directory: the newest `observed_at` per provider, account and window wins; a tie keeps the local row. A missing directory or an invalid row is skipped.
 - **New `AUTOPILOT_QUOTA_MIRROR_DIRS`** (colon-separated; default unset). When set, even to empty, it replaces `quota_mirror_dirs`.
 - **New `residue.delete_branches`** (boolean; default false). Env `AUTOPILOT_RESIDUE_DELETE_BRANCHES` (`0` or `1`; any other value is ignored). When true, `reap` and `close-session` delete branches after printing each `<branch> <tip>`. Default false: those branches stay and the automatic sweep lists them. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).

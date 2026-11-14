@@ -7,7 +7,7 @@
  * and sends it to the card's executor with open-decision.js deliverAnswer (parkAnswer + sendParked, the `[操作員答覆]` message). This module calls the
  * same deliverAnswer, with the same claim step (claimBeforeClose's rules), so there is no second implementation of recording, delivery or closing.
  *
- *   listCards(cwd, { all }) -> card views (open ones; all = every state)       viewOf(entry) -> the public card shape
+ *   listCards(cwd, { all }) -> card views (open + awaiting_operator_action; all = every state)       viewOf(entry) -> the public card shape
  *   answerCard({ cwd, id, option, freeText, note, source, device, sender }) -> { ok:true, ... } | { ok:false, code, exit, message }
  *
  * Nothing is written on a refusal. A failed delivery is rolled back: the card is restored to its stored state (open), no audit row, so a retry works.
@@ -16,7 +16,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const od = require('../open-decision.js');
-const { pickCards, cardState, isOpenEntry } = require('../../src/status/scope-key');
+const { pickCards, cardState, isOpenEntry, isAwaitingEntry } = require('../../src/status/scope-key');
 
 const SCHEMA = 'autopilot.decision/1';
 const MAX_FREE_TEXT = 4000;
@@ -49,7 +49,7 @@ function allCards(cwd) {
 }
 
 function listCards(cwd, { all = false } = {}) {
-  return allCards(cwd).map((w) => w.e).filter((e) => all || isOpenEntry(e))
+  return allCards(cwd).map((w) => w.e).filter((e) => all || isOpenEntry(e) || isAwaitingEntry(e))
     .sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0)).map(viewOf);
 }
 
@@ -107,14 +107,14 @@ function answerCard({ cwd, id, option, freeText, note, source, device, sender, n
     const v = { answer: { option: option !== undefined ? option : null, free_text: option !== undefined ? null : freeText }, answer_id: answerId, local_note: option !== undefined && note ? note : null };
     const r = od.deliverAnswer(hit.file, id, v, sender);
     if (r.status === 'in_flight') return fail('closed', `${id} is being delivered by another process`);
-    if (r.status === 'reask') { state = 'open'; } else if (r.status === 'sent' || r.status === 'already') { state = 'closed'; messageId = r.message_id || null; } else {
+    if (r.status === 'reask' || r.status === 'sent' || r.status === 'already') { if (r.status !== 'reask') messageId = r.message_id || null; state = cardState(findCardView(cwd, id).entry); } else {
       if (r.status !== 'absent') restore(hit.file, id, before);
       return r.status === 'absent' ? fail('not_found', `no such decision: ${id}`) : fail('delivery_failed', `delivery to ${before.executor} failed (${r.error || r.status}); the card stays open, nothing recorded`);
     }
   } else {
     const r = od.closeDecisionById(hit.file, id, undefined, option !== undefined ? option : freeText);
     if (r.status !== 'closed') return fail('delivery_failed', `could not close the card: ${r.message || r.status}`);
-    state = 'closed';
+    state = cardState(findCardView(cwd, id).entry);
   }
   const row = { at: now().toISOString(), card_id: id, ...(option !== undefined ? { option } : { free_text_len: [...freeText].length }), note_len: note === undefined ? 0 : [...note].length, source, device };
   fs.appendFileSync(path.join(path.dirname(hit.file), 'answers-audit.jsonl'), `${JSON.stringify(row)}\n`, { mode: 0o600 });

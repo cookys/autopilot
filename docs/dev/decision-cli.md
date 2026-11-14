@@ -16,7 +16,7 @@ autopilot decision answer <id> (--option <label> | --free-text <text>) [--note <
 
 ## Card shape (schema `autopilot.decision/1`)
 
-`list` -> `{schema, cards:[card]}` (open cards, oldest first; `--all` adds every other state). `show` -> `{schema, card}`.
+`list` -> `{schema, cards:[card]}` (open and awaiting_operator_action cards, oldest first, the two states the pane also shows as still needing the operator; `--all` adds pending_dispatch and closed). `show` -> `{schema, card}`.
 
 | field | meaning |
 |---|---|
@@ -45,7 +45,7 @@ Nothing is written on any refusal. A failed delivery (fleet send fails, courier 
 
 | exit | `code` | when |
 |---|---|---|
-| 0 | - | ok (`{schema, ok:true, card_id, state, answer_id, message_id, executor}`) |
+| 0 | - | ok (`{schema, ok:true, card_id, state, answer_id, message_id, executor}`; `state` is the card's stored state re-read after delivery: `awaiting_operator_action` for a card with operator steps, `open` after a decline, else `closed`) |
 | 2 | `usage` | bad argv, `--source` not console/pane, `--device` not `^[A-Za-z0-9._:@-]{1,128}$`, neither/both of `--option`/`--free-text` |
 | 4 | `not_found` | no such card |
 | 5 | `closed` | card not open (closed, awaiting, pending: a duplicate answer), or already claimed on the courier |

@@ -369,6 +369,27 @@ check_config_file() {
   status OK "config" "reference for every setting: docs/guide/settings-reference.md"
 }
 
+# Retired runners left in the host topology file (scripts/topology-prune.js; registry
+# scripts/lib/retired-runners.json). --check reports, the normal run prunes (backup first).
+check_topology_retired() {
+  if ! have_cmd node; then
+    status WARN "topology" "node not found; topology retired runners not checked"
+    return 0
+  fi
+  local out rc=0
+  out="$(node "$REPO_DIR/scripts/topology-prune.js" --check 2>&1)" || rc=$?
+  if [[ $rc -eq 0 ]]; then
+    status OK "topology" "$out"
+  else
+    status WARN "topology" "$out; fix: node $REPO_DIR/scripts/topology-prune.js --fix (or rerun dev-setup.sh without --check)"
+  fi
+}
+
+prune_topology_retired() {
+  have_cmd node || return 0
+  node "$REPO_DIR/scripts/topology-prune.js" --fix || echo "WARN: topology-prune --fix failed; run it by hand: node $REPO_DIR/scripts/topology-prune.js --fix" >&2
+}
+
 # Idempotent: skip when already directory-sourced at this repo.
 register_dev_marketplace() {
   if marketplace_is_dev_directory; then
@@ -1086,6 +1107,7 @@ main() {
       run_check_for "$HARNESS"
     fi
     check_config_file
+    check_topology_retired
     report_token_discipline
 
     echo ""
@@ -1095,6 +1117,8 @@ main() {
     fi
     exit 0
   fi
+
+  prune_topology_retired
 
   if [[ "$ALL" = "1" ]]; then
     for harness in claude codex opencode agy grok; do

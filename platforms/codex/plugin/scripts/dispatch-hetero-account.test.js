@@ -4,7 +4,9 @@ require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git canno
 // BL-0418: no child of this test may read or write outside the fixture tmp dir. Every spawn gets an
 // explicit fixture cwd and an env whose HOME / state dirs are in the fixture and that carries no
 // GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE (per-call table in the BL-0418 commit). The negative
-// control below snapshots the repo this test is run from and fails the file if anything touched it.
+// control below snapshots the outer repo's HEAD, refs (heads + tags) and stash list and fails the
+// file if this test moved any of them — the only things this file can cause and what BL-0418
+// guards (a fixture commit landing in the outer repo).
 // Only `claude` is faked (the Node shim from account-fixtures); the real rail and claude-account.js run.
 // Controls: registry present -> alias + token fingerprint at the shim, gate-rules --settings kept, push
 // block (HANDS_GIT_ENV) and git identity env reach the worker, no seeded dir; registry broken (N9) ->
@@ -13,7 +15,6 @@ require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git canno
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync, execFileSync } = require('child_process');
@@ -23,22 +24,24 @@ const SCRIPTS = __dirname;
 const REAL_RAIL = path.join(SCRIPTS, 'dispatch-hetero.sh');
 const fp = (t) => crypto.createHash('sha256').update(t).digest('hex').slice(0, 8);
 
-// BL-0418 negative control: this test must never touch the repo it is run from. Snapshot at module
-// load — before any fixture or child exists — and at file end assert the snapshot held: same HEAD,
-// same `git status --porcelain`, and no file (outside .git) with an mtime newer than the start
-// marker. The find leg catches writes git status cannot see (ignored files, a stray state file in
-// the cwd). Read-only by design: the control observes, never writes, in OUTER_ROOT. Red control:
-// write a canary into OUTER_ROOT between this snapshot and the control test at the end of the file
-// (or drop one of the fixture cwd/env fixes) and that test goes red before green.
+// BL-0418 negative control: this test must never move the outer repo's HEAD or create or move refs
+// or stashes there. Snapshot at module load — before any fixture or child exists — and at file end
+// assert the snapshot held: same HEAD, same `git for-each-ref` over refs/heads + refs/tags
+// (refname + objectname), same `git stash list`. That is the whole check on purpose: suites run in
+// parallel (affected-suites --jobs 4) from this same repo, so the old `git status --porcelain` leg
+// and the `find -newer` mtime leg (with their marker dir) are gone — other suites write
+// working-tree files while this file runs (the contract-pin test leaves
+// scripts/dispatch-contract.pre.js) and those legs went red on another suite's write, a false red
+// blaming this file.
+// Read-only by design: the control observes, never writes, in OUTER_ROOT. Red control: temporarily
+// alter the recorded HEAD string (e.g. append `x`) and run the file — the control goes red; restore.
 const OUTER_ROOT = process.cwd();
 const OUTER_START = (() => {
   try {
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: OUTER_ROOT, encoding: 'utf8' }).trim();
-    const status = execFileSync('git', ['status', '--porcelain'], { cwd: OUTER_ROOT, encoding: 'utf8' });
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bl0418-outer-'));
-    const marker = path.join(dir, 'start');
-    fs.writeFileSync(marker, '');
-    return { ok: true, head, status, marker, dir };
+    const refs = execFileSync('git', ['for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads', 'refs/tags'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+    const stash = execFileSync('git', ['stash', 'list'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+    return { ok: true, head, refs, stash };
   } catch (_) { return { ok: false }; } // cwd is not a git repo (scratch copy): nothing to protect
 })();
 
@@ -311,15 +314,14 @@ test('N9 mutation: account-state.sh default arm = legacy -> the unrecognised-out
 // by the time this starts, every fixture child (git, run-approval.js, the rail and its workers) has
 // finished. (A top-level `after()` hook is used by nothing here on purpose: it does not fire when
 // the file runs under plain `node script.js` — verified red — which is how this test is run.)
-test('BL-0418 control: the test left the repo it runs from untouched', () => {
+test('BL-0418 control: the test left the outer repo HEAD, refs and stashes unchanged', () => {
   if (!OUTER_START.ok) return;
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: OUTER_ROOT, encoding: 'utf8' }).trim();
-  const status = execFileSync('git', ['status', '--porcelain'], { cwd: OUTER_ROOT, encoding: 'utf8' });
-  const touched = execFileSync('find', [OUTER_ROOT, '-newer', OUTER_START.marker, '-type', 'f',
-    '-not', '-path', path.join(OUTER_ROOT, '.git', '*')], { encoding: 'utf8' });
-  fs.rmSync(OUTER_START.dir, { recursive: true, force: true });
+  const refs = execFileSync('git', ['for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads', 'refs/tags'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+  const stash = execFileSync('git', ['stash', 'list'], { cwd: OUTER_ROOT, encoding: 'utf8' });
   assert.equal(head, OUTER_START.head, 'BL-0418: test moved the outer repo HEAD');
-  assert.equal(status, OUTER_START.status,
-    'BL-0418: test changed the outer repo working tree (start ||| end):\n' + OUTER_START.status + '|||' + status);
-  assert.equal(touched, '', 'BL-0418: test touched outer-repo files (outside .git):\n' + touched);
+  assert.equal(refs, OUTER_START.refs,
+    'BL-0418: test created or moved outer-repo refs (start ||| end):\n' + OUTER_START.refs + '|||' + refs);
+  assert.equal(stash, OUTER_START.stash,
+    'BL-0418: test changed the outer repo stash list (start ||| end):\n' + OUTER_START.stash + '|||' + stash);
 });

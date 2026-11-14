@@ -28,14 +28,17 @@ PROMPT="$TEST_TMP/prompt.txt"; echo "say ok" > "$PROMPT"
 
 BINDIR="$TEST_TMP/bin"; mkdir -p "$BINDIR"
 export CCSHIM_STUB_ARGV_FILE="$TEST_TMP/claude-argv.txt"   # one argv entry per line; the stub overwrites it on its one call
+export CCSHIM_STUB_ENV_FILE="$TEST_TMP/claude-env.txt"     # @UNSET@ | the ANTHROPIC_CUSTOM_HEADERS the child actually saw
 # stub claude: it records its argv (the assertion below reads what the rail actually put on the
-# claude command line), leaves one edit in the worktree (the rail's wrapper-commit then commits
-# it, so the run lands "committed"/exit 0 like a real cc-shim hand) and its stdout is the
-# harness envelope (claude --output-format json) — the case's envelope text, verbatim. The
-# prompt is read from stdin like the real CLI; the worker never sees its own stdout back.
+# claude command line), dumps its ANTHROPIC_CUSTOM_HEADERS (X-Fleet-Task cases below), leaves one
+# edit in the worktree (the rail's wrapper-commit then commits it, so the run lands
+# "committed"/exit 0 like a real cc-shim hand) and its stdout is the harness envelope (claude
+# --output-format json) — the case's envelope text, verbatim. The prompt is read from stdin like
+# the real CLI; the worker never sees its own stdout back.
 cat > "$BINDIR/claude" <<'EOS'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "${CCSHIM_STUB_ARGV_FILE:-/dev/null}"
+printf '%s' "${ANTHROPIC_CUSTOM_HEADERS-@UNSET@}" > "${CCSHIM_STUB_ENV_FILE:-/dev/null}"
 cat >/dev/null
 echo edited > ccshim-usage-edit.txt
 printf '%s' "${CCSHIM_STUB_ENVELOPE:-ok}"
@@ -163,5 +166,37 @@ U4="$(printf '%s' "$OUT" | result_json | usage_field 2>/dev/null)" || U4="<no-re
 eq "$EXP1" "$U4" "case4: result usage is still exactly the envelope usage object (got: $U4)"
 NT4="$(printf '%s' "$OUT" | result_json | num_turns_field 2>/dev/null)" || NT4="<no-result-json>"
 eq "18" "$NT4" "case4: result num_turns is the envelope integer (got: $NT4)"
+
+# S2 X-Fleet-Task gateway join (2026-11-14): cc-shim talks to the model gateway, so the claude
+# child's requests carry X-Fleet-Task when AUTOPILOT_UPSTREAM_TASK_ID is a ULID (validated by
+# lib/fleet-task-header.js). Red on the unfixed rail: the rail never set ANTHROPIC_CUSTOM_HEADERS.
+ULID_OK="01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+# case 5: a valid ULID -> the child's ANTHROPIC_CUSTOM_HEADERS is exactly the one X-Fleet-Task line.
+AUTOPILOT_UPSTREAM_TASK_ID="$ULID_OK" run_case "$EN1"
+assert_eq "$RC" "0" "case5: cc-shim run exits 0 with a valid upstream task id (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+eq "X-Fleet-Task: $ULID_OK" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
+  "case5: valid ULID -> child env is exactly 'X-Fleet-Task: <V>' (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
+
+# case 6: id unset + an inherited ANTHROPIC_CUSTOM_HEADERS -> the child must NOT see the inherited
+# value (the rail drops it and sets nothing). Red on the unfixed rail: 'Evil: 1' passed straight through.
+unset AUTOPILOT_UPSTREAM_TASK_ID
+export ANTHROPIC_CUSTOM_HEADERS="Evil: 1"
+run_case "$EN1"
+assert_eq "$RC" "0" "case6: cc-shim run exits 0 without an upstream task id (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+eq "@UNSET@" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
+  "case6: unset id -> no X-Fleet-Task and the inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
+unset ANTHROPIC_CUSTOM_HEADERS
+
+# case 7: id set but not a ULID (newline + a second header = injection attempt) -> no header reaches
+# the child and the rail names the refusal on stderr. Red on the unfixed rail: the raw value passed through.
+AUTOPILOT_UPSTREAM_TASK_ID=$'01ABC\nX-Evil: 1' run_case "$EN1"
+assert_eq "$RC" "0" "case7: cc-shim run still exits 0 with a non-ULID upstream task id (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+eq "@UNSET@" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
+  "case7: non-ULID id -> no header reaches the child (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
+assert_contains "$(cat "$TEST_TMP/stderr")" \
+  "dispatch-hetero: AUTOPILOT_UPSTREAM_TASK_ID is not a ULID; X-Fleet-Task not sent" \
+  "case7: the rail says on stderr that X-Fleet-Task was not sent"
+unset AUTOPILOT_UPSTREAM_TASK_ID
 
 finalize_test

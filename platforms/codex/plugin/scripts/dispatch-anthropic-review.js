@@ -52,6 +52,9 @@ try {
 
 const { MESSAGES_EFFORT_WIRE_VALUES } = require('./lib/effort-scale');
 const { refuseNonTextBlocks } = require('./lib/vision-guard');
+// S2 gateway join (2026-11-14): the gateway joins request speed to fleet tasks by the
+// X-Fleet-Task header; the ULID check lives only here (lib/fleet-task-header.js).
+const { HEADER_NAME: FLEET_TASK_HEADER_NAME, SOURCE_ENV: FLEET_TASK_SOURCE_ENV, resolveFleetTask, warnLine: fleetTaskWarnLine } = require('./lib/fleet-task-header');
 
 const RUNNER = 'anthropic-compatible';
 // Live-probed on 2026-07-01: appending /v1/messages gives
@@ -495,6 +498,10 @@ function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens,
     ...(effort ? { output_config: { effort } } : {}),
   });
   const transport = url.protocol === 'https:' ? https : http;
+  // S2: X-Fleet-Task only when AUTOPILOT_UPSTREAM_TASK_ID is a ULID; a set-but-invalid value
+  // sends nothing and says so once on stderr (never a failed dispatch).
+  const fleetTask = resolveFleetTask(process.env[FLEET_TASK_SOURCE_ENV]);
+  if (!fleetTask.ok) process.stderr.write(`${fleetTaskWarnLine('dispatch-anthropic-review')}\n`);
 
   return new Promise((resolve, reject) => {
     const req = transport.request(
@@ -510,6 +517,7 @@ function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens,
           authorization: `Bearer ${token}`,
           'anthropic-version': '2023-06-01',
           connection: 'close',
+          ...(fleetTask.id ? { [FLEET_TASK_HEADER_NAME]: fleetTask.id } : {}),
         },
       },
       (res) => {

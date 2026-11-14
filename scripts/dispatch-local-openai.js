@@ -32,6 +32,14 @@ const {
   ensureDir,
   withWriteLock,
 } = require('./lib/jsonl-store');
+// S2 gateway join (2026-11-14): the model gateway joins request speed to fleet tasks by the
+// X-Fleet-Task header; the ULID check lives only in lib/fleet-task-header.js.
+const {
+  HEADER_NAME: FLEET_TASK_HEADER_NAME,
+  SOURCE_ENV: FLEET_TASK_SOURCE_ENV,
+  resolveFleetTask,
+  warnLine: fleetTaskWarnLine,
+} = require('./lib/fleet-task-header');
 
 const MAX_PROMPT_BYTES = 2 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -425,6 +433,9 @@ async function runLocalDispatch(options) {
     leaseDir: options.leaseDir,
   });
   const requestId = crypto.randomBytes(24).toString('hex');
+  // S2: resolve once per dispatch; a set-but-invalid id sends nothing and says so on stderr.
+  const fleetTaskHeader = resolveFleetTask(process.env[FLEET_TASK_SOURCE_ENV]);
+  if (!fleetTaskHeader.ok) process.stderr.write(`${fleetTaskWarnLine('dispatch-local-openai')}\n`);
   const request = chatRequest(endpoint, options.role, prompt, requestId);
   const requestHash = sha256(canonicalJson(request));
   let baseline;
@@ -448,7 +459,13 @@ async function runLocalDispatch(options) {
         token: credential.token,
         timeoutMs: endpoint.request_timeout_ms,
         maxBytes: MAX_RESPONSE_BYTES,
-        headers: { 'x-autopilot-request-id': requestId },
+        headers: {
+          'x-autopilot-request-id': requestId,
+          // S2 gateway join (2026-11-14): X-Fleet-Task only when AUTOPILOT_UPSTREAM_TASK_ID is a
+          // ULID (lib/fleet-task-header.js owns the check). Control calls (identity/capacity/cancel)
+          // stay untagged; only the model chat request joins the fleet task.
+          ...(fleetTaskHeader.id ? { [FLEET_TASK_HEADER_NAME]: fleetTaskHeader.id } : {}),
+        },
       });
     } catch (error) {
       try {

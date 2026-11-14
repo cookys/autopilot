@@ -149,6 +149,7 @@ const server = http.createServer(async (request, response) => {
       state.chatRequests.push({
         body,
         header_request_id: request.headers['x-autopilot-request-id'],
+        header_fleet_task: request.headers['x-fleet-task'],
       });
       state.capacity = {
         ...baselineCapacity,
@@ -388,6 +389,30 @@ async function main() {
     'local request contains only minimal system and raw user text',
   );
 
+  // S2 X-Fleet-Task gateway join: the chat request carries the header only when
+  // AUTOPILOT_UPSTREAM_TASK_ID is a ULID (valid -> the exact id; unset/invalid -> absent),
+  // resolved by scripts/lib/fleet-task-header.js. Separate telemetry file: the row-count
+  // assertions below read the primary one.
+  const s2TelemetryPath = path.join(tempRoot, 'telemetry-s2.jsonl');
+  const prevUpstreamTaskId = process.env.AUTOPILOT_UPSTREAM_TASK_ID;
+  process.env.AUTOPILOT_UPSTREAM_TASK_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+  reset('success');
+  await runLocalDispatch(options({ telemetryPath: s2TelemetryPath }));
+  equal(state.chatRequests[0].header_fleet_task, '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    'a valid ULID puts X-Fleet-Task: <V> on the chat request');
+  delete process.env.AUTOPILOT_UPSTREAM_TASK_ID;
+  reset('success');
+  await runLocalDispatch(options({ telemetryPath: s2TelemetryPath }));
+  equal(state.chatRequests[0].header_fleet_task, undefined,
+    'an unset AUTOPILOT_UPSTREAM_TASK_ID sends no X-Fleet-Task');
+  process.env.AUTOPILOT_UPSTREAM_TASK_ID = '01ABC\nX-Evil: 1';
+  reset('success');
+  await runLocalDispatch(options({ telemetryPath: s2TelemetryPath }));
+  equal(state.chatRequests[0].header_fleet_task, undefined,
+    'a non-ULID AUTOPILOT_UPSTREAM_TASK_ID sends no X-Fleet-Task (no header injection)');
+  if (prevUpstreamTaskId === undefined) delete process.env.AUTOPILOT_UPSTREAM_TASK_ID;
+  else process.env.AUTOPILOT_UPSTREAM_TASK_ID = prevUpstreamTaskId;
+
   const telemetry = fs.readFileSync(telemetryPath, 'utf8').trim().split('\n').map(JSON.parse);
   equal(telemetry.length, 1, 'success writes one metadata telemetry row');
   equal(telemetry[0].bodies_persisted, false, 'telemetry explicitly excludes bodies');
@@ -609,7 +634,7 @@ async function main() {
     'dispatch CLI invalid arguments emit a stable reason',
   );
 
-  if (assertions !== 75) throw new Error(`dispatch-local-openai: expected exactly 75 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it), got ${assertions}`);
+  if (assertions !== 78) throw new Error(`dispatch-local-openai: expected exactly 78 assertions (count pin moved here from hooks/tests/dispatch-local-openai.test.sh so the L1 run enforces it; +3 S2 X-Fleet-Task cases 2026-11-14), got ${assertions}`);
   process.stdout.write(`local OpenAI dispatch: ${assertions} assertions passed\n`);
 }
 

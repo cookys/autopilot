@@ -1,6 +1,10 @@
 'use strict';
 require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // G37 W3 (plan section 8) rail test: dispatch-hetero.sh --runner claude-native with an account registry.
+// BL-0418: no child of this test may read or write outside the fixture tmp dir. Every spawn gets an
+// explicit fixture cwd and an env whose HOME / state dirs are in the fixture and that carries no
+// GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE (per-call table in the BL-0418 commit). The negative
+// control below snapshots the repo this test is run from and fails the file if anything touched it.
 // Only `claude` is faked (the Node shim from account-fixtures); the real rail and claude-account.js run.
 // Controls: registry present -> alias + token fingerprint at the shim, gate-rules --settings kept, push
 // block (HANDS_GIT_ENV) and git identity env reach the worker, no seeded dir; registry broken (N9) ->
@@ -19,18 +23,51 @@ const SCRIPTS = __dirname;
 const REAL_RAIL = path.join(SCRIPTS, 'dispatch-hetero.sh');
 const fp = (t) => crypto.createHash('sha256').update(t).digest('hex').slice(0, 8);
 
-function git(cwd, args) {
-  execFileSync('git', ['-c', 'user.email=fixture', '-c', 'user.name=t', ...args], { cwd, stdio: 'ignore' });
+// BL-0418 negative control: this test must never touch the repo it is run from. Snapshot at module
+// load — before any fixture or child exists — and at file end assert the snapshot held: same HEAD,
+// same `git status --porcelain`, and no file (outside .git) with an mtime newer than the start
+// marker. The find leg catches writes git status cannot see (ignored files, a stray state file in
+// the cwd). Read-only by design: the control observes, never writes, in OUTER_ROOT. Red control:
+// write a canary into OUTER_ROOT between this snapshot and the control test at the end of the file
+// (or drop one of the fixture cwd/env fixes) and that test goes red before green.
+const OUTER_ROOT = process.cwd();
+const OUTER_START = (() => {
+  try {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: OUTER_ROOT, encoding: 'utf8' }).trim();
+    const status = execFileSync('git', ['status', '--porcelain'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bl0418-outer-'));
+    const marker = path.join(dir, 'start');
+    fs.writeFileSync(marker, '');
+    return { ok: true, head, status, marker, dir };
+  } catch (_) { return { ok: false }; } // cwd is not a git repo (scratch copy): nothing to protect
+})();
+
+function git(cwd, args, env) {
+  execFileSync('git', ['-c', 'user.email=fixture', '-c', 'user.name=t', ...args], { cwd, env, stdio: 'ignore' });
 }
 
 function world(opts) {
   const fx = makeFixture(opts);
   const repo = path.join(fx.root, 'repo');
+  // BL-0418: fixture-local identity file (same intent as scripts/lib/test-gitconfig) so fixture git
+  // never reads a config from the repo this test runs in or from the launcher's real home.
+  const gitConfig = path.join(fx.root, 'gitconfig');
+  fs.writeFileSync(gitConfig, '[user]\n\tname = t\n\temail = fixture\n[commit]\n\tgpgsign = false\n');
+  // Explicit child env (replacement, not inheritance): HOME, git refs and git's temp area all live
+  // in the fixture; GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE are absent by construction.
+  const gitEnv = {
+    PATH: process.env.PATH,
+    HOME: fx.realHome,
+    LANG: 'C',
+    TMPDIR: fx.tmpDir,
+    GIT_CONFIG_GLOBAL: gitConfig,
+    GIT_CONFIG_NOSYSTEM: '1',
+  };
   fs.mkdirSync(repo);
-  git(repo, ['init', '-q', '-b', 'develop']);
+  git(repo, ['init', '-q', '-b', 'develop'], gitEnv);
   fs.writeFileSync(path.join(repo, 'a.txt'), 'x\n');
-  git(repo, ['add', '-A']);
-  git(repo, ['commit', '-q', '-m', 'base']);
+  git(repo, ['add', '-A'], gitEnv);
+  git(repo, ['commit', '-q', '-m', 'base'], gitEnv);
   const prompt = path.join(fx.root, 'prompt.txt');
   fs.writeFileSync(prompt, 'do work\n');
   const rules = path.join(fx.root, 'rules.json');
@@ -64,7 +101,10 @@ function world(opts) {
     '',
   ].join('\n'), { mode: 0o755 });
   env.PATH = `${wrap}:${env.PATH}`;
-  spawnSync('node', [path.join(SCRIPTS, 'run-approval.js'), 'confirm-claude-native'], { env, stdio: 'ignore' });
+  // BL-0418: explicit fixture cwd — this child used to inherit the repo the test runs from. Its one
+  // write ($HOME/.autopilot/config.json, HOME = fixture home) already landed in the fixture, but the
+  // inherited cwd is exactly the leak class the outer-repo control guards.
+  spawnSync('node', [path.join(SCRIPTS, 'run-approval.js'), 'confirm-claude-native'], { cwd: repo, env, stdio: 'ignore' });
   return { fx, repo, prompt, rules, env, cap };
 }
 
@@ -265,4 +305,21 @@ test('N9 mutation: account-state.sh default arm = legacy -> the unrecognised-out
     const r = dispatch(w, rail);
     assert.equal(readLog(w.fx.shim.log).length, 1, 'unrecognised output was treated as legacy: the shim spawned: ' + r.out.slice(0, 500));
   } finally { w.fx.cleanup(); }
+});
+
+// BL-0418 negative control: registered LAST — top-level tests run serially in registration order, so
+// by the time this starts, every fixture child (git, run-approval.js, the rail and its workers) has
+// finished. (A top-level `after()` hook is used by nothing here on purpose: it does not fire when
+// the file runs under plain `node script.js` — verified red — which is how this test is run.)
+test('BL-0418 control: the test left the repo it runs from untouched', () => {
+  if (!OUTER_START.ok) return;
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: OUTER_ROOT, encoding: 'utf8' }).trim();
+  const status = execFileSync('git', ['status', '--porcelain'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+  const touched = execFileSync('find', [OUTER_ROOT, '-newer', OUTER_START.marker, '-type', 'f',
+    '-not', '-path', path.join(OUTER_ROOT, '.git', '*')], { encoding: 'utf8' });
+  fs.rmSync(OUTER_START.dir, { recursive: true, force: true });
+  assert.equal(head, OUTER_START.head, 'BL-0418: test moved the outer repo HEAD');
+  assert.equal(status, OUTER_START.status,
+    'BL-0418: test changed the outer repo working tree (start ||| end):\n' + OUTER_START.status + '|||' + status);
+  assert.equal(touched, '', 'BL-0418: test touched outer-repo files (outside .git):\n' + touched);
 });

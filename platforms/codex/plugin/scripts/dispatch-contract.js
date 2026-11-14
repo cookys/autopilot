@@ -438,7 +438,6 @@ function runnerConsumesEffort(runner) {
   switch (String(runner || '')) {
     case 'codex':
     case 'grok':
-    case 'qoderclicn':
     case 'opencode':
     case 'agy':
       return true;
@@ -449,7 +448,7 @@ function runnerConsumesEffort(runner) {
 
 // Build fail-closed exact capability `current` argv from the resolver tuple.
 // Always includes --endpoint. Include --effort only when the runner consumes it
-// (codex/grok/qoderclicn/opencode/agy); otherwise omit so admission hits the
+// (codex/grok/opencode/agy); otherwise omit so admission hits the
 // effort-less partition the probe actually stamps.
 function capabilityCurrentArgs(resolvedEngine, storeRole) {
   const args = [

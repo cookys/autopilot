@@ -499,7 +499,7 @@ for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
         *) continue ;;
       esac
       case "$r" in
-        agy|grok|cursor|kimi|qoderclicn|cc-shim) ;;
+        agy|grok|cursor|kimi|cc-shim) ;;
         *) continue ;;
       esac
       if family_guard_same "$e"; then

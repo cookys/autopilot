@@ -1290,7 +1290,7 @@ fi
 
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: ${RUNNER}/${MODEL} (effort=${EFFORT}, timeout=${TIMEOUT})" >&2
 
-# Runner stderr capture (BL-0136): grok / qoderclicn / cc-shim / claude-native write here
+# Runner stderr capture (BL-0136): grok / cc-shim / claude-native write here
 # instead of /dev/null; read only on failure, bounded + redacted, never salvaged as output.
 RUNNER_ERR_FILE="$(mktemp -t dispatch-author-runner-err-XXXXXX)"
 declare -F child_session_apply_env >/dev/null 2>&1 && child_session_apply_env "$_AUTHOR_SELF_DIR" 2>/dev/null || true   # 3b rule 3 for the in-process runner branches

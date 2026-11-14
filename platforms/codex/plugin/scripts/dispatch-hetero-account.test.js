@@ -1,6 +1,12 @@
 'use strict';
 require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // G37 W3 (plan section 8) rail test: dispatch-hetero.sh --runner claude-native with an account registry.
+// BL-0418: no child of this test may read or write outside the fixture tmp dir. Every spawn gets an
+// explicit fixture cwd and an env whose HOME / state dirs are in the fixture and that carries no
+// GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE (per-call table in the BL-0418 commit). The negative
+// control below snapshots the outer repo's HEAD, refs (heads + tags) and stash list and fails the
+// file if this test moved any of them — the only things this file can cause and what BL-0418
+// guards (a fixture commit landing in the outer repo).
 // Only `claude` is faked (the Node shim from account-fixtures); the real rail and claude-account.js run.
 // Controls: registry present -> alias + token fingerprint at the shim, gate-rules --settings kept, push
 // block (HANDS_GIT_ENV) and git identity env reach the worker, no seeded dir; registry broken (N9) ->
@@ -9,7 +15,6 @@ require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git canno
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync, execFileSync } = require('child_process');
@@ -19,18 +24,53 @@ const SCRIPTS = __dirname;
 const REAL_RAIL = path.join(SCRIPTS, 'dispatch-hetero.sh');
 const fp = (t) => crypto.createHash('sha256').update(t).digest('hex').slice(0, 8);
 
-function git(cwd, args) {
-  execFileSync('git', ['-c', 'user.email=fixture', '-c', 'user.name=t', ...args], { cwd, stdio: 'ignore' });
+// BL-0418 negative control: this test must never move the outer repo's HEAD or create or move refs
+// or stashes there. Snapshot at module load — before any fixture or child exists — and at file end
+// assert the snapshot held: same HEAD, same `git for-each-ref` over refs/heads + refs/tags
+// (refname + objectname), same `git stash list`. That is the whole check on purpose: suites run in
+// parallel (affected-suites --jobs 4) from this same repo, so the old `git status --porcelain` leg
+// and the `find -newer` mtime leg (with their marker dir) are gone — other suites write
+// working-tree files while this file runs (the contract-pin test leaves
+// scripts/dispatch-contract.pre.js) and those legs went red on another suite's write, a false red
+// blaming this file.
+// Read-only by design: the control observes, never writes, in OUTER_ROOT. Red control: temporarily
+// alter the recorded HEAD string (e.g. append `x`) and run the file — the control goes red; restore.
+const OUTER_ROOT = process.cwd();
+const OUTER_START = (() => {
+  try {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: OUTER_ROOT, encoding: 'utf8' }).trim();
+    const refs = execFileSync('git', ['for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads', 'refs/tags'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+    const stash = execFileSync('git', ['stash', 'list'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+    return { ok: true, head, refs, stash };
+  } catch (_) { return { ok: false }; } // cwd is not a git repo (scratch copy): nothing to protect
+})();
+
+function git(cwd, args, env) {
+  execFileSync('git', ['-c', 'user.email=fixture', '-c', 'user.name=t', ...args], { cwd, env, stdio: 'ignore' });
 }
 
 function world(opts) {
   const fx = makeFixture(opts);
   const repo = path.join(fx.root, 'repo');
+  // BL-0418: fixture-local identity file (same intent as scripts/lib/test-gitconfig) so fixture git
+  // never reads a config from the repo this test runs in or from the launcher's real home.
+  const gitConfig = path.join(fx.root, 'gitconfig');
+  fs.writeFileSync(gitConfig, '[user]\n\tname = t\n\temail = fixture\n[commit]\n\tgpgsign = false\n');
+  // Explicit child env (replacement, not inheritance): HOME, git refs and git's temp area all live
+  // in the fixture; GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE are absent by construction.
+  const gitEnv = {
+    PATH: process.env.PATH,
+    HOME: fx.realHome,
+    LANG: 'C',
+    TMPDIR: fx.tmpDir,
+    GIT_CONFIG_GLOBAL: gitConfig,
+    GIT_CONFIG_NOSYSTEM: '1',
+  };
   fs.mkdirSync(repo);
-  git(repo, ['init', '-q', '-b', 'develop']);
+  git(repo, ['init', '-q', '-b', 'develop'], gitEnv);
   fs.writeFileSync(path.join(repo, 'a.txt'), 'x\n');
-  git(repo, ['add', '-A']);
-  git(repo, ['commit', '-q', '-m', 'base']);
+  git(repo, ['add', '-A'], gitEnv);
+  git(repo, ['commit', '-q', '-m', 'base'], gitEnv);
   const prompt = path.join(fx.root, 'prompt.txt');
   fs.writeFileSync(prompt, 'do work\n');
   const rules = path.join(fx.root, 'rules.json');
@@ -64,7 +104,10 @@ function world(opts) {
     '',
   ].join('\n'), { mode: 0o755 });
   env.PATH = `${wrap}:${env.PATH}`;
-  spawnSync('node', [path.join(SCRIPTS, 'run-approval.js'), 'confirm-claude-native'], { env, stdio: 'ignore' });
+  // BL-0418: explicit fixture cwd — this child used to inherit the repo the test runs from. Its one
+  // write ($HOME/.autopilot/config.json, HOME = fixture home) already landed in the fixture, but the
+  // inherited cwd is exactly the leak class the outer-repo control guards.
+  spawnSync('node', [path.join(SCRIPTS, 'run-approval.js'), 'confirm-claude-native'], { cwd: repo, env, stdio: 'ignore' });
   return { fx, repo, prompt, rules, env, cap };
 }
 
@@ -265,4 +308,20 @@ test('N9 mutation: account-state.sh default arm = legacy -> the unrecognised-out
     const r = dispatch(w, rail);
     assert.equal(readLog(w.fx.shim.log).length, 1, 'unrecognised output was treated as legacy: the shim spawned: ' + r.out.slice(0, 500));
   } finally { w.fx.cleanup(); }
+});
+
+// BL-0418 negative control: registered LAST — top-level tests run serially in registration order, so
+// by the time this starts, every fixture child (git, run-approval.js, the rail and its workers) has
+// finished. (A top-level `after()` hook is used by nothing here on purpose: it does not fire when
+// the file runs under plain `node script.js` — verified red — which is how this test is run.)
+test('BL-0418 control: the test left the outer repo HEAD, refs and stashes unchanged', () => {
+  if (!OUTER_START.ok) return;
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: OUTER_ROOT, encoding: 'utf8' }).trim();
+  const refs = execFileSync('git', ['for-each-ref', '--format=%(refname) %(objectname)', 'refs/heads', 'refs/tags'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+  const stash = execFileSync('git', ['stash', 'list'], { cwd: OUTER_ROOT, encoding: 'utf8' });
+  assert.equal(head, OUTER_START.head, 'BL-0418: test moved the outer repo HEAD');
+  assert.equal(refs, OUTER_START.refs,
+    'BL-0418: test created or moved outer-repo refs (start ||| end):\n' + OUTER_START.refs + '|||' + refs);
+  assert.equal(stash, OUTER_START.stash,
+    'BL-0418: test changed the outer repo stash list (start ||| end):\n' + OUTER_START.stash + '|||' + stash);
 });

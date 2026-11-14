@@ -2,7 +2,7 @@
 // Optional source-context files for plan-review seats (cleanroom stays the default).
 // A seat judges a plan from text alone; --context-file lets the caller hand it a few repo
 // source files so claims about code can be checked. Files are allowlisted, size-capped, and
-// their path+sha256 list is sealed with the session, so generation 2 cannot swap them.
+// their path+sha256 list is sealed with the session: generation 2 must pass the same path set; edited content is resealed as a new version.
 // Blind-review rule (references/blind-dispatch.md): author conclusions and earlier-round
 // verdicts must never ride along, so evidence / review-output / disposition paths are refused.
 const crypto = require('crypto');

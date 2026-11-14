@@ -129,10 +129,62 @@ assert_contains "$OUT" "drifted" "different context message"
 OUT="$(run_ctx ok)"; RC=$?
 assert_exit_code "$RC" "3" "dropping context refused"
 assert_contains "$OUT" "drifted" "dropping context message"
-printf 'module.exports = 99;\n' >"$REPO/src/a.js"
-OUT="$(run_ctx ok --context-file src/a.js)"; RC=$?
-assert_exit_code "$RC" "3" "edited context content refused"
-assert_contains "$OUT" "drifted" "edited content message"
+
+# Resealing: a gen1 -> fold -> gen2 round. The PATH SET stays frozen; edited CONTENT is resealed as a
+# new version, recorded per generation (state context_versions, artifact context_sha256).
+sed 's/ctx-plan/ctx-reseal/' "$MANIFEST" >"$TEST_TMP/reseal.json"
+printf 'doc v1\n' >"$REPO/src/doc.md"
+printf 'other\n' >"$REPO/src/other.md"
+run_gen() { # ticket generation response-fixture [args...]
+  local ticket="$1" gen="$2" resp="$3"; shift 3
+  AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+  AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="{\"architect\":[\"$resp\"]}" \
+    node "$SCRIPT" --repo-root "$REPO" --plan-file "$REPO/plan.md" --rubric-file "$REPO/rubric.md" \
+      --ticket "$ticket" --session-id "s-$ticket-$gen" --generation "$gen" --manifest-file "$TEST_TMP/reseal.json" \
+      --state-dir "$STATE_DIR" --allow-unregistered "$@" 2>"$TEST_TMP/run-gen.err"
+}
+G1="$(run_gen reseal 1 "$FIXTURES/blocker.json" --context-file src/doc.md)"; RC=$?
+assert_exit_code "$RC" "0" "reseal gen1 runs: $G1"
+FP="$(printf '%s' "$G1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).findings[0].fingerprint))')"
+cat >"$TEST_TMP/reseal-disp.json" <<JSON
+{"schema_version":1,"logical_plan_id":"ctx-reseal","generation":1,
+ "findings":[{"fingerprint":"$FP","disposition":"accepted_blocker","rationale":"verified against frozen R1"}]}
+JSON
+RSDIR="$(dirname "$(grep -rl 'src/doc.md' "$STATE_DIR" --include=context.json | head -1)")"
+V1_SHA="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).context_sha256)' "$RSDIR/state.json")"
+printf 'doc v2 (findings folded in)\n' >"$REPO/src/doc.md"
+G2="$(run_gen reseal 2 "$FIXTURES/ready.json" --context-file src/doc.md --disposition-file "$TEST_TMP/reseal-disp.json")"; RC=$?
+assert_exit_code "$RC" "0" "edited context content is resealed, gen2 proceeds: $G2 $(cat "$TEST_TMP/run-gen.err")"
+assert_contains "$(cat "$TEST_TMP/run-gen.err")" "context resealed for generation 2: changed src/doc.md" "stderr names the changed file"
+VERS="$(node -e 'const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(s.context_versions.map(v=>v.generation+":"+v.context_sha256).join(",")+"|"+s.context_sha256+"|"+JSON.stringify(s.context_paths))' "$RSDIR/state.json")"
+G2_ART_SHA="$(printf '%s' "$G2" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).context_sha256))')"
+assert_eq "$(printf '%s' "$VERS" | cut -d'|' -f2)" "$G2_ART_SHA" "state current context sha equals the gen2 artifact's"
+assert_eq "$(printf '%s' "$VERS" | cut -d'|' -f1 | tr ',' '\n' | wc -l | tr -d ' ')" "2" "state has two context_versions"
+assert_contains "$VERS" "1:$V1_SHA," "gen1 version keeps the original sha"
+assert_contains "$VERS" '["src/doc.md"]' "state records the frozen path set"
+if [ "$V1_SHA" = "$G2_ART_SHA" ]; then fail "resealed context sha must differ from gen1's"; fi
+
+# Path set stays frozen: added or removed path at gen2 is exit 3 naming the path set.
+sed 's/ctx-plan/ctx-pathset/' "$MANIFEST" >"$TEST_TMP/pathset.json"
+USE_MANIFEST="$TEST_TMP/pathset.json" run_ctx pathset --context-file src/doc.md >/dev/null
+for variant in "--context-file src/doc.md --context-file src/other.md" ""; do
+  OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="{\"architect\":[\"$FIXTURES/ready.json\"]}" \
+    node "$SCRIPT" --repo-root "$REPO" --plan-file "$REPO/plan.md" --rubric-file "$REPO/rubric.md" \
+      --ticket pathset --session-id s-pathset-2 --generation 2 --manifest-file "$TEST_TMP/pathset.json" \
+      --state-dir "$STATE_DIR" --allow-unregistered $variant 2>&1)"; RC=$?
+  assert_exit_code "$RC" "3" "path set change refused ($variant)"
+  assert_contains "$OUT" "path set differs" "path-set message ($variant): $OUT"
+done
+
+# Old-shape state (written before context_paths): path set unknown, accepted once and recorded.
+sed 's/ctx-plan/ctx-oldshape/' "$MANIFEST" >"$TEST_TMP/oldshape.json"
+USE_MANIFEST="$TEST_TMP/oldshape.json" run_ctx oldshape --context-file src/other.md >/dev/null
+OSDIR="$(dirname "$(grep -rl 'src/other.md' "$STATE_DIR" --include=context.json | head -1)")"
+node -e 'const fs=require("fs");const p=process.argv[1];const s=JSON.parse(fs.readFileSync(p,"utf8"));delete s.context_paths;delete s.context_versions;s.terminal=false;s.terminal_verdict=null;delete s.terminal_reason;s.next_generation=1;fs.writeFileSync(p,JSON.stringify(s))' "$OSDIR/state.json"
+OUT="$(USE_MANIFEST="$TEST_TMP/oldshape.json" run_ctx oldshape --context-file src/other.md)"; RC=$?
+assert_exit_code "$RC" "0" "old-shape state accepts the current path set once: $OUT"
+assert_eq "$(node -e 'process.stdout.write(JSON.stringify(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).context_paths))' "$OSDIR/state.json")" '["src/other.md"]' "old-shape state now records the path set"
+assert_contains "$(cat "$OSDIR/state.json")" "context_versions" "old-shape state now records versions"
 
 # Prompt rendering: files appear in a delimited reference block; cleanroom has none.
 RENDER="$(node -e '

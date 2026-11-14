@@ -46,6 +46,7 @@
     },
     "rubric_sha256": { "$ref": "#/$defs/sha256" },
     "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "context_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
     "plan_sha256": { "$ref": "#/$defs/sha256" },
     "plan_path": { "type": ["string", "null"] },
     "plan_git_blob_sha": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$" },

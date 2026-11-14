@@ -6,6 +6,9 @@
 if (process.argv[2] === 'status' && process.argv[3] === 'events') {
   process.exit(require('../src/status/events/cli').main(process.argv.slice(4)));
 }
+if (process.argv[2] === 'decision') {
+  process.exit(require('../src/decision/cli').main(process.argv.slice(3)));
+}
 
 // BL-0336: a TMPDIR the user chose but that does not exist yet is made here before anything uses it (one stat when it
 // exists); one that cannot be used is said once instead of surfacing as ENOENT from deep inside a run.
@@ -49,6 +52,7 @@ function printHelp() {
   node bin/autopilot.js endpoints <init|list|which|set|doctor|test> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness|events] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
   node bin/autopilot.js status task --root-run-id <id> [--json]
+  node bin/autopilot.js decision list [--all] [--cwd <repo>] --json | show <id> --json | answer <id> (--option <label>|--free-text <text>) [--note <text>] --source console|pane --device <id> --json  (docs/dev/decision-cli.md)
   node bin/autopilot.js status events [--since <cursor|ISO-8601|0|->] [--limit N] [--kinds k1,k2] [--project <key>] [--review-ledger <dir>]... [--json]
   node bin/autopilot.js campaign <inspect|status|resume|terminalize> --campaign-id <id> [--ledger <file>]
   node bin/autopilot.js merge execute --request <file> [--json]

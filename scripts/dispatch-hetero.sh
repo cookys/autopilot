@@ -931,7 +931,7 @@ emit() { # status commit files ins del worktree error
   # `null`, never fails) — NOT worker self-report. Any parse/node failure ⇒ null.
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
-  local usage_json="null" ledger_usage_json=""
+  local usage_json="null" ledger_usage_json="" num_turns_json="null"
   if [ "${AGENT_EXIT:-1}" -eq 0 ] && [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] \
      && [ -r "$SELF_DIR/dispatch-status.js" ] && command -v node >/dev/null 2>&1; then
     # Format is DECLARED by runner (this script knows its own invocation flags: codex =
@@ -991,6 +991,28 @@ NODE
       '{'*'}') ;;   # single-line JSON object — accepted
       *) usage_json="null"; ledger_usage_json="" ;;
     esac
+    # num_turns for the two `claude -p --output-format json` runners (cc-shim,
+    # claude-native): the CLI's own count, read from the HARNESS-owned envelope
+    # $CCSHIM_ENVELOPE — same trust boundary as the cc-shim usage read above
+    # (captured by this script, unreachable from the worker). Missing file, bad
+    # JSON, a non-result document or a non-integer num_turns all keep it null.
+    # claude-native's usage stays on its plain-log channel above; only num_turns
+    # comes from the envelope here.
+    if [ "${IS_CCSHIM:-0}" -eq 1 ] || [ "${IS_CNATIVE:-0}" -eq 1 ]; then
+      num_turns_json="$(node - "${CCSHIM_ENVELOPE:-}" <<'NODE'
+const fs = require('fs');
+const p = process.argv[2];
+let doc;
+try { doc = JSON.parse(fs.readFileSync(p, 'utf8')); } catch { process.stdout.write('null'); process.exit(0); }
+if (!doc || typeof doc !== 'object' || Array.isArray(doc) || doc.type !== 'result') { process.stdout.write('null'); process.exit(0); }
+const t = doc.num_turns;
+process.stdout.write(Number.isInteger(t) && t >= 0 ? String(t) : 'null');
+NODE
+      )" || num_turns_json="null"
+      case "$num_turns_json" in
+        ''|*[!0-9]*) num_turns_json="null" ;;
+      esac
+    fi
   fi
   local wall_json="null"
   [ -n "${DISPATCH_STARTED_EPOCH:-}" ] && wall_json="$(( $(date +%s) - DISPATCH_STARTED_EPOCH ))"
@@ -1095,7 +1117,7 @@ NODE
   fell_back_fields="$(fell_back_json_suffix)"
   hetero_log_fallback "$1"
   local _emit_json
-  _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
+  _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -1103,7 +1125,7 @@ NODE
     "${OUTCOME_MUTATION_ATTEMPTS:-1}" "${OUTCOME_GATE_ATTEMPTS:-0}" \
     "${OUTCOME_RESOURCES_CREATED:-0}" "$zero_diff_receipt_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
-    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
+    "$run_id_json" "$usage_json" "$num_turns_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
     "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields")"
@@ -1891,7 +1913,7 @@ die_precondition() {
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
   hetero_log_fallback "precondition_failed"
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null%s }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null, "num_turns": null%s }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json" "$(fell_back_json_suffix)"
   exit 2
@@ -1938,7 +1960,7 @@ die_local_implementer_sandbox() {
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
   local msg="local implementer endpoint ${endpoint} requires --sandbox bwrap (missing flag); refusing before any model call"
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null, "boundary_code": "local_implementer_sandbox_required" }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null, "num_turns": null, "boundary_code": "local_implementer_sandbox_required" }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$msg")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
   exit 2
@@ -2151,7 +2173,7 @@ die_probe_unavailable() {
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   hetero_log_fallback "engine_unavailable"
-  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "probe": %s%s }\n' \
+  printf '{ "status": "engine_unavailable", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "engine unavailable (%s): endpoint pre-probe %s: %s; no worker started", "dispatcher_called": true, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": null, "retention_lease": null, "usage": null, "num_turns": null, "probe": %s%s }\n' \
     "$(current_runner_name)" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$([ "${CONTAINED:-0}" -eq 1 ] && echo true || echo false)" \
     "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$PROBE_CLASS" "$(_flat_json_escape "$ENDPOINT")" "$(_flat_json_escape "$PROBE_REASON")" \
@@ -2341,7 +2363,7 @@ die_resource_budget() {
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null, "num_turns": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
     "$count" "$limit" "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" \
@@ -4843,8 +4865,15 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     reap_cnative_config_dir
   else
     _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
+    # --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList: the CLI intermittently injects a
+    # "task tools haven't been used recently" reminder into the conversation; on an Anthropic-compatible
+    # endpoint with prefix caching it lands mid-prompt (~11.5K tokens) and breaks the cached prefix.
+    # Measured 2026-11-14 on qwen_local: prefix divergences 3 -> 0, cache_read 76.6% -> 95.5% with these
+    # four tools disallowed (runs hetero-1794626978 vs hetero-1794630645). A brief-driven hand does not
+    # use the Task tools, so the cc-shim hand is never given them. (claude-native branches: unchanged.)
     run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
-        --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
+        --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
+        ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
         _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" ${GATE_ARGV[@]+"${GATE_ARGV[@]}"}
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.

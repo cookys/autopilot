@@ -6569,11 +6569,12 @@
       "class": "plumbing",
       "default": null,
       "readers": [
-        "scripts/lib/dispatch-usage.js"
+        "scripts/lib/dispatch-usage.js",
+        "scripts/lib/fleet-task-header.js"
       ],
       "doc": null,
       "relates": [],
-      "note": "Fleet task id recorded as upstream.task_id in the dispatch usage ledger."
+      "note": "Fleet task id recorded as upstream.task_id in the dispatch usage ledger and sent as the X-Fleet-Task gateway header when it is a ULID (lib/fleet-task-header.js)."
     },
     {
       "name": "AUTOPILOT_UPSTREAM_MESSAGE_ID",

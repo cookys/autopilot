@@ -4865,16 +4865,25 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     reap_cnative_config_dir
   else
     _ts_msg="$(token_seat_guard)" || die_precondition "$_ts_msg"
+    # S2 gateway join (2026-11-14): cc-shim talks to the model gateway, so its requests carry
+    # X-Fleet-Task when AUTOPILOT_UPSTREAM_TASK_ID is a ULID. lib/fleet-task-header.js owns the
+    # validation (never inline the regex: an unvalidated value in ANTHROPIC_CUSTOM_HEADERS could
+    # inject headers). An inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child: env -u drops
+    # it first and the validated line is the only value set back. The claude-native branches above
+    # keep scrubbing it and never set it (first-party API, not the gateway).
+    FLEET_TASK_HEADER="$(node "$SELF_DIR/lib/fleet-task-header.js" --rail dispatch-hetero)"
     # --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList: the CLI intermittently injects a
     # "task tools haven't been used recently" reminder into the conversation; on an Anthropic-compatible
     # endpoint with prefix caching it lands mid-prompt (~11.5K tokens) and breaks the cached prefix.
     # Measured 2026-11-14 on qwen_local: prefix divergences 3 -> 0, cache_read 76.6% -> 95.5% with these
     # four tools disallowed (runs hetero-1794626978 vs hetero-1794630645). A brief-driven hand does not
     # use the Task tools, so the cc-shim hand is never given them. (claude-native branches: unchanged.)
-    run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
+    # "$8" (always passed, possibly empty) is the validated X-Fleet-Task line: with a gate settings
+    # file $7 holds it, so the settings slot is pinned with "${GATE_ARGV[0]-}" like the claude-native arm.
+    run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY -u ANTHROPIC_CUSTOM_HEADERS ${8:+ANTHROPIC_CUSTOM_HEADERS="$8"} claude -p ${4:+--session-id "$4"} --model "$2" \
         --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList \
         ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
-        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" ${GATE_ARGV[@]+"${GATE_ARGV[@]}"}
+        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "${GATE_ARGV[0]-}" "$FLEET_TASK_HEADER"
   fi
   # The worker is done (success, failure or timeout): the gate file and the settings file go now.
   if [ -n "${GATE_ARMED_SESSION:-}" ]; then

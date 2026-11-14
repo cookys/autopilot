@@ -42,6 +42,7 @@ printf '%s\n' "\$*" > "$ARGV_LOG"
 cat >/dev/null
 {
   echo "CFG=\$CLAUDE_CONFIG_DIR"
+  echo "CH=\${ANTHROPIC_CUSTOM_HEADERS-@UNSET@}"
   printf '%s' "\${CLAUDE_CODE_OAUTH_TOKEN-}" | sha256sum | awk '{print \$1}' > "$SHA_LOG"
   for v in $SCRUB_VARS; do [ -n "\${!v+x}" ] && echo "LEAK=\$v"; done
   echo "DIRMODE=\$(stat -c %a "\$CLAUDE_CONFIG_DIR")"
@@ -115,6 +116,9 @@ mv "$REAL_CLAUDE/.credentials.json.off" "$REAL_CLAUDE/.credentials.json"
 # The seat token is not scrubbed: the child records sha256(test-token-A).
 for v in $SCRUB_VARS; do export "$v=outer-$v"; done
 export CLAUDE_CODE_OAUTH_TOKEN=test-token-A
+# S2 X-Fleet-Task (2026-11-14): claude-native is first-party API, not the gateway — even a valid
+# upstream task id must NOT put X-Fleet-Task (or any inherited ANTHROPIC_CUSTOM_HEADERS) in the child.
+export AUTOPILOT_UPSTREAM_TASK_ID="01ARZ3NDEKTSV4RRFFQ69G5FAV"
 OUT="$(run --branch feat/cn-ok)"; RC=$?
 assert_eq "0" "$RC" "(b) confirmed claude-native exits 0"
 assert_contains "$OUT" '"status": "committed"' "(b) committed"
@@ -137,6 +141,7 @@ assert_eq "1" "$(printf '%s\n' "$SEEN" | grep -c '^ENTRY=')" "(c) exactly one en
 assert_not_contains "$SEEN" 'settings.json' "(c) no settings.json"
 assert_not_contains "$SEEN" 'projects' "(c) no projects/"
 assert_not_contains "$SEEN" 'LEAK=' "(f) no provider/auth selector variable reaches the child: $(printf '%s' "$SEEN" | grep '^LEAK=' | tr '\n' ' ')"
+assert_contains "$SEEN" 'CH=@UNSET@' "(g) claude-native never gets X-Fleet-Task even with a valid upstream task id (first-party API, not the gateway)"
 EXPECT_SHA="$(printf '%s' 'test-token-A' | sha256sum | awk '{print $1}')"
 assert_eq "$(cat "$SHA_LOG")" "$EXPECT_SHA" "(b) child sha256 matches the parent token (prefix ${EXPECT_SHA:0:8})"
 for v in $SCRUB_VARS; do unset "$v"; done

@@ -93,6 +93,15 @@ const v = o[process.argv[1]];
 process.stdout.write(v === null || v === undefined ? "<absent>" : String(v));
 ' "$1"
 }
+# num_turns_field (stdin: the result JSON) -> the value of .num_turns as a string:
+# <integer>, the literal null, or <absent> when the key is not in the result.
+num_turns_field() {
+  node -e '
+const o = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const v = o.num_turns;
+process.stdout.write(v === undefined ? "<absent>" : (v === null ? "null" : String(v)));
+'
+}
 
 EXP1='{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":0}'
 
@@ -115,11 +124,25 @@ run_case "$EN2"
 assert_eq "$RC" "0" "case2: cc-shim run exits 0"
 U2="$(printf '%s' "$OUT" | result_json | usage_field 2>/dev/null)" || U2="<no-result-json>"
 eq "<null>" "$U2" "case2: result without a usage object keeps usage null (got: $U2)"
+NT2="$(printf '%s' "$OUT" | result_json | num_turns_field 2>/dev/null)" || NT2="<no-result-json>"
+eq "null" "$NT2" "case2: envelope without a num_turns keeps num_turns null (got: $NT2)"
 
 # case 3: the envelope is not JSON at all -> usage stays null.
 run_case 'this is not json at all'
 assert_eq "$RC" "0" "case3: cc-shim run exits 0"
 U3="$(printf '%s' "$OUT" | result_json | usage_field 2>/dev/null)" || U3="<no-result-json>"
 eq "<null>" "$U3" "case3: non-JSON envelope keeps usage null (got: $U3)"
+NT3="$(printf '%s' "$OUT" | result_json | num_turns_field 2>/dev/null)" || NT3="<no-result-json>"
+eq "null" "$NT3" "case3: non-JSON envelope keeps num_turns null (got: $NT3)"
+
+# case 4: a result envelope WITH an integer num_turns -> the result JSON carries it
+# next to usage, verbatim; the usage object is untouched.
+EN4='{"type":"result","is_error":false,"result":"ok","num_turns":18,"usage":{"input_tokens":120,"output_tokens":45,"cache_read_input_tokens":7,"cache_creation_input_tokens":0}}'
+run_case "$EN4"
+assert_eq "$RC" "0" "case4: cc-shim run exits 0 (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
+U4="$(printf '%s' "$OUT" | result_json | usage_field 2>/dev/null)" || U4="<no-result-json>"
+eq "$EXP1" "$U4" "case4: result usage is still exactly the envelope usage object (got: $U4)"
+NT4="$(printf '%s' "$OUT" | result_json | num_turns_field 2>/dev/null)" || NT4="<no-result-json>"
+eq "18" "$NT4" "case4: result num_turns is the envelope integer (got: $NT4)"
 
 finalize_test

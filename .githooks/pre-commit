@@ -9,6 +9,8 @@
 #      files + registry/reaper parity).
 #   1c. scripts/leak-guard.js --staged (personal data in added lines: paths, hosts, private IPs,
 #      credentials, .env files; per-file exemptions only, scripts/leak-guard-registry.json).
+#   1d. scripts/check-backlog-single-writer.js --staged (with a hippo store present, a BACKLOG.md
+#      change must carry a .hippo/ops entry, i.e. go through scripts/project-record.js).
 #   2. scripts/sync-all.sh --check --changed — the manifest-driven sync/check rituals
 #      (version mirrors, agent-bodies, model-routing, codex + opencode payloads, README
 #      parity, hook inventory, canonical invariants, CLAUDE.md inventory). --changed
@@ -62,6 +64,15 @@ if ! LEAK_OUT="$(node scripts/leak-guard.js --staged 2>&1)"; then
   echo "pre-commit: leak-guard failed (personal data in added lines)" >&2
   echo "─────────────────────────────────────────────────────────────" >&2
   echo "$LEAK_OUT" >&2
+  exit 1
+fi
+
+# --- backlog single writer: BACKLOG.md is not hand-edited once a hippo store exists ---
+if ! SW_OUT="$(node scripts/check-backlog-single-writer.js --staged 2>&1)"; then
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "pre-commit: backlog single-writer gate failed" >&2
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "$SW_OUT" >&2
   exit 1
 fi
 

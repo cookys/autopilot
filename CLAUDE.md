@@ -75,7 +75,7 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 | Engine CLI / orchestration layer | `bin/autopilot.js`, `src/engine/`, `src/runners/` |
 | Cross-skill references | `references/{blind-dispatch,model-routing}.md` |
 | Project tracking | `docs/projects/` (active + `_archive/`) |
-| Backlog | `project/backlog/BACKLOG.md` |
+| Backlog | `project/backlog/BACKLOG.md`; written via `node scripts/project-record.js backlog ...` (hippo store; direct edits are refused by pre-commit) |
 | Plans | `docs/plans/` — registered in `project/projects/INDEX.md` (Version `active`; `check-plan-graduation.js`'s `plan_unregistered` gate) |
 | Architecture decisions | `docs/dev/adr/` (ADR-0001: verification over attestation — binding on governance work) |
 | Release notes | `CHANGELOG.md` |

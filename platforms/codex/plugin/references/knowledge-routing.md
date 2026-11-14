@@ -120,7 +120,7 @@ feeling — these are the four places it is mechanically findable in a session:
    question.
 3. **Every command that failed once and then worked.** The wrong invocation is the durable part —
    the next session will reach for the same wrong one.
-4. **Every problem you saw and chose not to fix.** That is a `docs/BACKLOG.md` row, and it is the
+4. **Every problem you saw and chose not to fix.** That is a backlog row (where a hippo store exists, write it with `node scripts/project-record.js backlog new ...`, not by hand), and it is the
    only sink whose absence is invisible: nothing later goes red because the row is missing.
 
 Two things that look durable and are not. **A plan, a survey, a project doc** is already a tracked

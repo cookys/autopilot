@@ -2391,11 +2391,11 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # the first-non-blank / vocabulary / prompt-echo guards.
   CCSHIM_CWD="$(mktemp -d -t dispatch-review-ccshimcwd-XXXXXX)"
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
-  # S2 gateway join (2026-11-14): cc-shim talks to the model gateway, so its requests carry
-  # X-Fleet-Task when AUTOPILOT_UPSTREAM_TASK_ID is a ULID (lib/fleet-task-header.js validates; never
-  # inline the regex). An inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child: env -u drops it
-  # first and the validated line is the only value set back. claude-native keeps no such header.
-  _FT_HEADER="$(node "$_REVIEW_SELF_DIR/lib/fleet-task-header.js" --rail dispatch-review)"
+  # S2 gateway join (2026-11-14): cc-shim carries X-Fleet-Task only when --endpoint is in the
+  # fleet-gateway allowlist and AUTOPILOT_UPSTREAM_TASK_ID is a ULID (lib/fleet-task-header.js owns
+  # both checks; never inline them). An inherited ANTHROPIC_CUSTOM_HEADERS never reaches the child:
+  # env -u drops it first and the validated line is the only value set back. claude-native keeps no such header.
+  _FT_HEADER="$(node "$_REVIEW_SELF_DIR/lib/fleet-task-header.js" --rail dispatch-review ${ENDPOINT:+--endpoint "$ENDPOINT"})"
   timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} -u ANTHROPIC_API_KEY -u CLAUDE_CONFIG_DIR -u ANTHROPIC_CUSTOM_HEADERS ${_FT_HEADER:+ANTHROPIC_CUSTOM_HEADERS="$_FT_HEADER"} HOME="$CCSHIM_CWD" \
       CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1 ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
@@ -2498,7 +2498,7 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   if [ -n "$CLAUDE_EFFORT_ARG" ]; then
     ANTHROPIC_ARGS+=(--effort "$CLAUDE_EFFORT_ARG")
   fi
-  node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
+  AUTOPILOT_FLEET_TASK_ENDPOINT="${ENDPOINT:-}" node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
   ANTHROPIC_RC=$?
   if [ "$ANTHROPIC_RC" -ne 0 ]; then
     printf '\n[dispatch-review: anthropic-compatible transport exited non-zero (rc=%s) — partial output NOT parsed]\n' \

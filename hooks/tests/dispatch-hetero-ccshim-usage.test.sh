@@ -240,12 +240,12 @@ eq "@UNSET@" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
   "case9: valid ULID with no endpoint name -> no X-Fleet-Task reaches the child (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
 unset AUTOPILOT_UPSTREAM_TASK_ID
 
-# case 10 (S2 round 2): allowlist matching is case-insensitive (QWEN_LOCAL vs qwen_local) ->
+# case 10 (S2 round 2): allowlist matching is case-insensitive (TESTEP allowlist vs testep endpoint) ->
 # header present.
-CCSHIM_EP=qwen_local CCSHIM_ALLOWLIST=QWEN_LOCAL AUTOPILOT_UPSTREAM_TASK_ID="$ULID_OK" run_case "$EN1"
+CCSHIM_EP=testep CCSHIM_ALLOWLIST=TESTEP AUTOPILOT_UPSTREAM_TASK_ID="$ULID_OK" run_case "$EN1"
 assert_eq "$RC" "0" "case10: cc-shim run exits 0 on the case-insensitive allowlist match (stderr: $(tail -c 300 "$TEST_TMP/stderr" 2>/dev/null))"
 eq "X-Fleet-Task: $ULID_OK" "$(cat "$CCSHIM_STUB_ENV_FILE")" \
-  "case10: valid ULID, allowlist QWEN_LOCAL matches endpoint qwen_local -> child env is exactly 'X-Fleet-Task: <V>' (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
+  "case10: valid ULID, allowlist TESTEP matches endpoint testep -> child env is exactly 'X-Fleet-Task: <V>' (got: '$(cat "$CCSHIM_STUB_ENV_FILE")')"
 unset CCSHIM_EP CCSHIM_ALLOWLIST AUTOPILOT_UPSTREAM_TASK_ID
 
 finalize_test

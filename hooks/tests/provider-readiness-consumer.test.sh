@@ -241,7 +241,7 @@ const primary = tuple('reviewer', 'grok', 'grok-4.5', 'high');
 const sameFamily = tuple('reviewer', 'grok', 'grok-4.5-fast', 'high');
 const unqualified = tuple('reviewer', 'kimi', 'kimi-code/k3', 'high');
 const eligible = tuple('reviewer', 'cc-shim', 'MiniMax-M3', 'high', 'minimax');
-const laterEligible = tuple('reviewer', 'qoderclicn', 'Qwen3.8-Max-Preview', 'max');
+const laterEligible = tuple('reviewer', 'cc-shim', 'Qwen3.8-Max-Preview', 'max');
 const blockedPrimary = {
   ...ready(primary),
   live: observation(primary, 'live', 'blocked', { reason: 'quota_exhausted' }),
@@ -330,7 +330,7 @@ const configuredRoster = buildSelectedRoster({
   fallback_ladder: [
     {
       engine: 'Qwen3.8-Max-Preview',
-      runner: 'qoderclicn',
+      runner: 'cc-shim',
       family: 'alibaba',
       effort: 'max',
       model: null,

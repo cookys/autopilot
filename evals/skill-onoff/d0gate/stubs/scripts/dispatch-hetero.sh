@@ -90,6 +90,7 @@ while [ $# -gt 0 ]; do
     --grok-bin) GROK_BIN="${2:-}"; BIN_FLAG_GROK=1; shift 2 ;;
     --pi-bin) PI_BIN="${2:-}"; BIN_FLAG_PI=1; shift 2 ;;
     --codex-bin) CODEX_BIN="${2:-}"; BIN_FLAG_CODEX=1; shift 2 ;;
+    --qoder-bin) QODER_BIN="${2:-}"; BIN_FLAG_QODER=1; shift 2 ;;
     --cursor-bin) CURSOR_BIN="${2:-}"; BIN_FLAG_CURSOR=1; shift 2 ;;
     --opencode-bin) OPENCODE_BIN="${2:-}"; BIN_FLAG_OPENCODE=1; shift 2 ;;
     --kimi-bin) KIMI_BIN="${2:-}"; BIN_FLAG_KIMI=1; shift 2 ;;
@@ -139,10 +140,10 @@ while [ $# -gt 0 ]; do
 done
 
 case "$RUNNER" in
-  auto|codex|agy|grok|pi|cursor|opencode|kimi) ;;
+  auto|codex|agy|grok|pi|qoderclicn|cursor|opencode|kimi) ;;
   cc-shim) IS_CCSHIM=1 ;;
   claude-native) IS_CNATIVE=1 ;;
-  *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native (got: $RUNNER)" ;;
+  *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi|claude-native (got: $RUNNER)" ;;
 esac
 CHILD_SESSION_ID="d0g-$$-$RANDOM"
   if [ -n "${GATE_RULES_FILE:-}" ]; then

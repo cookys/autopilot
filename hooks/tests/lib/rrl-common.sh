@@ -55,5 +55,9 @@ process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value));
 NODE
   unset JSON_VALUE
 }
-FROZEN_CFG="$REPO_ROOT/hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md"
+# The frozen fixture is byte-sealed (tools/migrate/no-rewrite.json) and still names the retired
+# qoderclicn runner on verification_author_runner; the resolver rejects that name. Work on a
+# copy with that one runner swapped to cc-shim, leaving the sealed file untouched.
+FROZEN_CFG="$TEST_TMP/review-loop-config.frozen-2026-09-13.md"
+sed 's/^- verification_author_runner: qoderclicn$/- verification_author_runner: cc-shim/' "$REPO_ROOT/hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md" > "$FROZEN_CFG"
 F() { REVIEW_LOOP_CONFIG_OVERRIDE="$FROZEN_CFG" bash "$SCRIPT" "$@"; }

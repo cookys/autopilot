@@ -45,7 +45,7 @@ assert_eq "1" "$RC" "review: exit code unchanged (1)"
 assert_contains "$OUT" '"status": "no_verdict"' "review: no_verdict"
 assert_contains "$OUT" '"exit_code": 1' "review: exit_code recorded"
 assert_contains "$OUT" "$MSG" "review: JSON stderr_tail carries the runner stderr"
-assert_contains "$(cat "$ERR")" "$MSG" "review: wrapper stderr carries the runner stderr"
+# (the wrapper-stderr echo of the runner stderr was the retired qoder branch only; codex surfaces it in the JSON stderr_tail above)
 assert_not_contains "$(cat "$ERR")" 'sk-abcdefghijklmnop' "review: wrapper stderr masks the key"
 assert_not_contains "$OUT" 'sk-abcdefghijklmnop' "review: JSON masks the key"
 

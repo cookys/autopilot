@@ -31,7 +31,7 @@ read_prompt_arg() {
     if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then
       next_index=$((i + 1))
       next_arg="${!next_index}"
-      # `-p` may be a BOOLEAN flag (prompt arrives on stdin — qoder/cc-shim/claude-native)
+      # `-p` may be a BOOLEAN flag (prompt arrives on stdin — cc-shim/claude-native)
       # or carry the prompt as its value (agy). If the following token is itself a flag or
       # absent, treat -p as boolean and fall through to the stdin read below.
       case "$next_arg" in

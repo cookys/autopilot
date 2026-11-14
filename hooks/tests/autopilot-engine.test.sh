@@ -2205,11 +2205,14 @@ execFileSync(process.execPath, [path.join(root, 'scripts', 'engine-capability-st
   '--engine', 'cursor-grok-4.6-low', '--runner', 'cursor', '--role', 'implementer', '--effort', 'low',
   '--endpoint', '@none', '--reason', 'kr4 fixture pin (isolated store)', '--operator', 'autopilot-engine.test',
   '--store', process.env.ENGINE_CAPABILITY_DIR], { stdio: ['ignore', 'ignore', 'pipe'] });
+// The sealed fixture still names the retired qoderclicn runner; resolve a copy with it swapped to cc-shim.
+const frozenRoster = path.join(path.dirname(process.argv[3]), 'review-loop-config.frozen-2026-09-13.md');
+require('fs').writeFileSync(frozenRoster, require('fs').readFileSync(path.join(root, 'hooks', 'tests', 'fixtures', 'review-loop-config.frozen-2026-09-13.md'), 'utf8').replace(/^- verification_author_runner: qoderclicn$/m, '- verification_author_runner: cc-shim'));
 const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
   cwd: root,
   // The frozen file plays the ROSTER (seats may only live in the roster or in an override block);
   // the repo layer is /dev/null, so the resolved seats are exactly the frozen file's.
-  env: { ...process.env, REVIEW_LOOP_ROSTER_TEMPLATE: path.join(root, 'hooks', 'tests', 'fixtures', 'review-loop-config.frozen-2026-09-13.md'), REVIEW_LOOP_CONFIG_OVERRIDE: '/dev/null' },
+  env: { ...process.env, REVIEW_LOOP_ROSTER_TEMPLATE: frozenRoster, REVIEW_LOOP_CONFIG_OVERRIDE: '/dev/null' },
 });
 if (resolvedResult.status !== 0 || !resolvedResult.result) {
   throw new Error(`fixture roster did not resolve: status=${resolvedResult.status} ${String(resolvedResult.stderr || '').slice(0, 300)}`);
@@ -5803,7 +5806,7 @@ function runCase({ ticket, reserve, reuse, clock, collect, verifyStatus, onRevie
   const caseSeats = seatsOverride || seats;
   const caseRoster = {
     ...(seatsOverride
-      ? { ...roster, reviewer_engine: 'inrail-x', reviewer_runner: seatsOverride[0].runner, qc_panel_seats: seatsOverride }
+      ? { ...roster, reviewer_engine: 'inrail-x', reviewer_runner: seatsOverride[0].runner, reviewer_endpoint: seatsOverride[0].endpoint, qc_panel_seats: seatsOverride }
       : roster),
     override_admitted_seats: caseSeats.map((_, index) => `qc_panel[${index}]`),
     review_fresh_context: 'on',
@@ -6108,13 +6111,15 @@ const realStub = path.join(tmp, 'panel-2a-real-stub');
 const realMarker = path.join(tmp, 'panel-2a-real-marker');
 globalThis.__packetBuildCount = 0;
 const realSeats = [
-  { role: 'qc', runner: 'cc-shim', model: 'slow-a', effort: 'high', endpoint: null, family: 'fa' },
-  { role: 'qc', runner: 'cc-shim', model: 'fast-b', effort: 'high', endpoint: null, family: 'fb' },
-  { role: 'qc', runner: 'cc-shim', model: 'mid-c', effort: 'high', endpoint: null, family: 'fc' },
+  { role: 'qc', runner: 'cc-shim', model: 'slow-a', effort: 'high', endpoint: 'glm', family: 'fa' },
+  { role: 'qc', runner: 'cc-shim', model: 'fast-b', effort: 'high', endpoint: 'glm', family: 'fb' },
+  { role: 'qc', runner: 'cc-shim', model: 'mid-c', effort: 'high', endpoint: 'glm', family: 'fc' },
 ];
 const prevAnthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
 const prevAnthropicAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
 process.env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL || 'http://127.0.0.1:9/anthropic';
+process.env.AUTOPILOT_ENDPOINT_GLM_URL = process.env.AUTOPILOT_ENDPOINT_GLM_URL || 'http://127.0.0.1:9/anthropic';
+process.env.AUTOPILOT_ENDPOINT_GLM_TOKEN = process.env.AUTOPILOT_ENDPOINT_GLM_TOKEN || 'stub-token';
 process.env.ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN || 'stub-token';
 const t0 = Date.parse('2026-09-18T00:00:05.000Z');
 const jumpingClock = () => (fs.existsSync(realMarker)

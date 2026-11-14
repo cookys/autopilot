@@ -29,7 +29,7 @@ export AUTOPILOT_ENDPOINTS_ENV="$TEST_TMP/no-such-endpoints.env"
 unset AUTOPILOT_ENDPOINT_GLM_URL AUTOPILOT_ENDPOINT_GLM_TOKEN ANTHROPIC_COMPATIBLE_BASE_URL ANTHROPIC_COMPATIBLE_AUTH_TOKEN
 export ENGINE_CAPABILITY_DIR="$TEST_TMP/cap"
 mkdir -p "$ENGINE_CAPABILITY_DIR"
-SEATS="m1/low@codex,m2/low@codex,m3/low@codex,qx/high@qoderclicn,oc/high@opencode"
+SEATS="m1/low@codex,m2/low@codex,m3/low@codex,qx/high@cc-shim,oc/high@opencode"
 
 record_quota() { # runner model effort status observed_at ttl reset_at
   printf '{"schema_version":1,"observed_at":"%s","runner":"%s","model":"%s","role":"reviewer","effort":"%s","endpoint":null,"runner_version":null,"capability":{"quota":{"status":"%s","reset_at":%s,"confidence":"high","evidence":"test","ttl_seconds":%s}}}' \
@@ -41,7 +41,7 @@ collect() { # phase seats
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # 1. two seats recorded exhausted: skipped with reason, the other 3 run, no gap
-record_quota qoderclicn qx high exhausted "$NOW" 86400 '"2026-11-21T00:00:00Z"'
+record_quota cc-shim qx high exhausted "$NOW" 86400 '"2026-11-21T00:00:00Z"'
 record_quota opencode oc high exhausted "$NOW" 86400 'null'
 export LOG_DISPATCH_ARGS="$TEST_TMP/d1.log"; : > "$LOG_DISPATCH_ARGS"
 OUT=$(collect p1); RC=$?
@@ -52,12 +52,12 @@ assert_contains "$CH" '"reset_at": "2026-11-21T00:00:00Z"' "exhausted seats: res
 assert_contains "$CH" '"total_seats": 3' "exhausted seats: the other 3 seats are the panel"
 assert_contains "$CH" '"reviewed_seats": 3' "exhausted seats: 3 of 3 reviewed"
 assert_contains "$OUT" "(quota_exhausted)" "exhausted seats: reason printed"
-assert_not_contains "$(cat "$LOG_DISPATCH_ARGS")" "SEAT:s3" "exhausted seats: qoderclicn seat never dispatched"
+assert_not_contains "$(cat "$LOG_DISPATCH_ARGS")" "SEAT:s3" "exhausted seats: cc-shim seat never dispatched"
 assert_not_contains "$(cat "$LOG_DISPATCH_ARGS")" "SEAT:s4" "exhausted seats: opencode seat never dispatched"
 
 # 2. every seat exhausted: fails clearly, nothing dispatched
 export LOG_DISPATCH_ARGS="$TEST_TMP/d2.log"; : > "$LOG_DISPATCH_ARGS"
-OUT=$(collect p2 "qx/high@qoderclicn,oc/high@opencode"); RC=$?
+OUT=$(collect p2 "qx/high@cc-shim,oc/high@opencode"); RC=$?
 assert_exit_code "$RC" "1" "all seats exhausted: collect fails"
 assert_contains "$OUT" "every seat was skipped" "all seats exhausted: clear message"
 assert_eq "$(cat "$LOG_DISPATCH_ARGS")" "" "all seats exhausted: nothing dispatched"

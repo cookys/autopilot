@@ -332,7 +332,7 @@ sprice() { sp price --model "$1" --runner "$2" | node -e "process.stdout.write(S
 assert_eq "$(sprice gemini-3.8-flash-low agy)" "4500000" "real sample: gemini-3.8-flash-low|agy priced"
 assert_eq "$(sprice gpt-6-luna codex)" "600000" "real sample: gpt-6-luna|codex priced"
 assert_eq "$(sprice grok-4.7 grok)" "8000000" "real sample: grok-4.7|grok priced"
-assert_eq "$(sprice Qwen3.8-Max qoderclicn)" "8000000" "real sample: Qwen3.8-Max|qoderclicn priced"
+assert_eq "$(sprice claude-fable-5-1 claude-native)" "60000000" "real sample: claude-fable-5-1|claude-native priced"
 assert_eq "$(sprice claude-sonnet-5-5 cc-shim)" "null" "real sample: claude-sonnet-5-5|cc-shim unknown"
 # The previous sample left these two unpriced. The live feed prices them (16000000 and 300000).
 assert_eq "$(sprice cursor-grok-4.6-high-fast cursor)" "16000000" "real sample: cursor-grok-4.6-high-fast|cursor priced"

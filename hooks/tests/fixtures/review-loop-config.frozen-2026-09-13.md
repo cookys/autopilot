@@ -46,7 +46,7 @@
      安全姿態），唯一的槓桿就是這個檔。 -->
 - verification_author_present: true
 - verification_author_engine: Qwen3.8-Max-Preview
-- verification_author_runner: cc-shim
+- verification_author_runner: qoderclicn
 - verification_author_effort: high
 <!-- 2026-08-14 使用者裁定：qc 的 codex 席 `gpt-5.5 @ xhigh` → `gpt-5.6-sol @ max`。
      模型出新版就該更新，這是維護不是繞道。實測 codex-cli 0.147.0 上

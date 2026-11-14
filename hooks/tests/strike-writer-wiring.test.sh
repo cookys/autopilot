@@ -296,7 +296,7 @@ run_scenario() {
   (
     SELF_DIR="$ROOT/scripts"
     MODEL="strike-engine-1"
-    IS_CODEX=0; IS_GROK=0; IS_CCSHIM=0; IS_PI=0; IS_QODER=0
+    IS_CODEX=0; IS_GROK=0; IS_CCSHIM=0; IS_PI=0
     OUTCOME_STATUS="$status"
     OUTCOME_DISPATCHER_CALLED="$dcalled"
     OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR="unit-test scenario"

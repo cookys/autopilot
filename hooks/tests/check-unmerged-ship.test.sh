@@ -9,7 +9,8 @@ export AUTOPILOT_LIVE_DIR="$TEST_TMP/live"; mkdir -p "$AUTOPILOT_LIVE_DIR"
 export AUTOPILOT_CONFIG_FILE="$TEST_TMP/no-config.json"
 export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"; mkdir -p "$AUTOPILOT_DISPATCH_RUNS_DIR"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; mkdir -p "$CLAUDE_CONFIG_DIR"
-unset AUTOPILOT_FLEET_ADDRESS AUTOPILOT_UNMERGED_SHIP AUTOPILOT_EVENTS_REVIEW_LEDGERS
+unset AUTOPILOT_FLEET_ADDRESS AUTOPILOT_UNMERGED_SHIP
+OWNER="ns/cx/merge-lane--claude"; export FLEET_ADDRESS="$OWNER" AUTOPILOT_EVENTS_REVIEW_LEDGERS
 NOW="2026-11-15T12:00:00Z"
 TASK="01JABCDEFGHJKMNPQRSTVWXYZ0"
 
@@ -19,6 +20,8 @@ FLEET_LOG="$TEST_TMP/fleet.argv"
 cat > "$SHIM/fleet" <<EOF
 #!/usr/bin/env bash
 { echo "CALL"; for a in "\$@"; do echo "\$a"; done; } >> "$FLEET_LOG"
+[ "\$1" = whoami ] && exit 1
+[ -f "$TEST_TMP/shim-invalid" ] && { echo "blocked_on_invalid: bad target" >&2; exit 2; }
 [ -f "$TEST_TMP/shim-fail" ] && { echo "boom" >&2; exit 3; }
 exit 0
 EOF
@@ -74,23 +77,23 @@ OUT="$(run_check --review-ledger "$TEST_TMP/led1" --notify)"; RC=$?
 assert_eq "1" "$RC" "--notify still exits 1"
 assert_contains "$OUT" "unmerged-ship: ${H1:0:12} reviewed SHIP-AS-IS 120m ago" "--notify prints the alert line"
 assert_eq "1" "$(fleet_calls)" "fleet shim called once"
-assert_eq "$(printf 'CALL\ntask\nupdate\n%s\nblocked:unmerged %s reviewed SHIP-AS-IS 120m ago, not in origin/develop' "$TASK" "${H1:0:12}")" "$(cat "$FLEET_LOG")" "exact argv: task update with one blocked:unmerged line"
+assert_eq "$(printf 'CALL\ntask\nprogress\n%s\nblocked\n--blocked-on\n%s\nunmerged feat1 %s' "$TASK" "$OWNER" "${H1:0:12}")" "$(cat "$FLEET_LOG")" "exact argv: task progress blocked --blocked-on owner, note unmerged <branch> <sha12>"
 OUT="$(run_check --review-ledger "$TEST_TMP/led1" --notify)"
 assert_eq "" "$OUT" "second --notify prints nothing for the same head"
 assert_eq "1" "$(fleet_calls)" "second --notify does not call fleet again"
 
-# 1b. no owner env needed: update still called; a failing fleet leaves the head un-deduped and the next run retries
+# 1b.  a failing fleet leaves the head un-deduped and the next run retries
 H1B="$(mkbranch feat1b f1b.txt)"
 mkledger "$TEST_TMP/led1b" "$H1B" "2026-11-15T10:00:00Z" SHIP-AS-IS "$TASK"
 run_check --review-ledger "$TEST_TMP/led1b" --notify >/dev/null
-assert_eq "2" "$(fleet_calls)" "no owner env: task update still called"
+assert_eq "2" "$(fleet_calls)" "task progress called for the second head"
 H1C="$(mkbranch feat1c f1c.txt)"
 mkledger "$TEST_TMP/led1c" "$H1C" "2026-11-15T10:00:00Z" SHIP-AS-IS "$TASK"
 touch "$TEST_TMP/shim-fail"
 OUT="$(run_check --review-ledger "$TEST_TMP/led1c" --notify)"
 assert_eq "3" "$(fleet_calls)" "failing fleet: update attempted"
 assert_eq "" "$OUT" "failing fleet: no alert recorded as notified"
-assert_contains "$(cat "$TEST_TMP/check.err")" "fleet task update failed" "failing fleet: one stderr line"
+assert_contains "$(cat "$TEST_TMP/check.err")" "fleet task progress failed" "failing fleet: one stderr line"
 OUT="$(run_check --review-ledger "$TEST_TMP/led1c" --notify)"
 assert_eq "4" "$(fleet_calls)" "failing fleet: next run calls fleet again (not deduped)"
 rm -f "$TEST_TMP/shim-fail"
@@ -99,6 +102,18 @@ assert_eq "5" "$(fleet_calls)" "fleet back: retry succeeds"
 assert_contains "$OUT" "unmerged-ship: ${H1C:0:12}" "fleet back: alert printed"
 OUT="$(run_check --review-ledger "$TEST_TMP/led1c" --notify)"
 assert_eq "5" "$(fleet_calls)" "after success: deduped"
+
+# 1c. fleet refuses the target (blocked_on_invalid): no dedupe, one stderr line, retried next run
+H1D="$(mkbranch feat1d f1d.txt)"
+mkledger "$TEST_TMP/led1d" "$H1D" "2026-11-15T10:00:00Z" SHIP-AS-IS "$TASK"
+touch "$TEST_TMP/shim-invalid"
+BEFORE="$(fleet_calls)"
+OUT="$(run_check --review-ledger "$TEST_TMP/led1d" --notify)"
+assert_eq "" "$OUT" "blocked_on_invalid: no alert recorded as notified"
+assert_eq "1" "$(grep -c 'blocked_on_invalid' "$TEST_TMP/check.err")" "blocked_on_invalid: exactly one stderr line"
+OUT="$(run_check --review-ledger "$TEST_TMP/led1d" --notify)"
+assert_eq "$((BEFORE + 2))" "$(fleet_calls)" "blocked_on_invalid: not deduped, next run calls fleet again"
+rm -f "$TEST_TMP/shim-invalid"
 
 # 2. verdict 30 min old -> exit 0
 H2="$(mkbranch feat2 f2.txt)"

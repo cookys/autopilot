@@ -15,7 +15,7 @@
 //   --review-ledger extra hetero-review-loop ledger root (repeatable; the roots `autopilot status events` finds are always read)
 //   --runs-dir      dispatch run manifests (default scripts/lib/runtime-paths.js runsDir)
 //   --notify        for each alert not yet notified for that head: print the alert line and, when the verdict carries a
-//                   fleet task, append a `blocked:unmerged ...` progress line to that task (markBlocked below). Dedupe state lives in the live-state dir.
+//                   fleet task, mark that task blocked (`fleet task progress ... blocked --blocked-on`) (markBlocked below). Dedupe state lives in the live-state dir.
 //   --json          print schema autopilot.unmerged-ship/1 on stdout
 // exit: 0 nothing to alert, 1 at least one alert, 2 usage.
 //
@@ -29,9 +29,9 @@
 // OR the net patch of head against its merge-base equals a single commit's patch in the target (a squash re-land).
 // A head object missing from the repository is state `unknown`, never an alert.
 //
-// markBlocked uses `fleet task update <id> <line>` through scripts/lib/fleet-task.js (assignee only). A failure is one stderr
-// line and leaves the head un-deduped, so the next run retries. When fleet ships `task progress <id> blocked --blocked-on`,
-// switch to it (fleet D unit).
+// markBlocked runs `fleet task progress <id> blocked --blocked-on <owner address> "unmerged <branch> <sha12>"` through
+// scripts/lib/fleet-task.js; the owner is this session's own address (FLEET_ADDRESS, else `fleet whoami`). A failure
+// (incl. blocked_on_invalid, or no owner address) is one stderr line and leaves the head un-deduped, so the next run retries.
 // Node built-ins only.
 
 const fs = require('fs');
@@ -132,6 +132,12 @@ function realOrSelf(p) { try { return fs.realpathSync(p); } catch (_e) { return 
 // ---- merged? -----------------------------------------------------------------------------------------------------------
 
 // -> 'merged' | 'unmerged' | 'unknown'
+function branchOf(repo, head) {
+  const r = git(repo, ['for-each-ref', '--points-at', head, '--format=%(refname:short)', 'refs/heads', 'refs/remotes']);
+  const first = r.ok ? r.out.split('\n').find(Boolean) : '';
+  return first || '(detached)';
+}
+
 function mergeState(repo, head, target) {
   if (!git(repo, ['cat-file', '-e', `${head}^{commit}`]).ok) return 'unknown';
   if (!git(repo, ['rev-parse', '--verify', '--quiet', `${target}^{commit}`]).ok) return 'unknown';
@@ -160,9 +166,11 @@ function mergeState(repo, head, target) {
 // ---- notify ------------------------------------------------------------------------------------------------------------
 
 // The only fleet call. true when the task update went through.
-function markBlocked({ task, line }) {
-  const r = fleetTask.progress(task, line);
-  if (!r.ok) process.stderr.write(`check-unmerged-ship: fleet task update failed for ${task}: ${r.error}\n`);
+function markBlocked({ task, note }) {
+  const owner = fleetTask.ownerAddress();
+  if (!owner) { process.stderr.write(`check-unmerged-ship: fleet task progress skipped for ${task}: own fleet address unknown\n`); return false; }
+  const r = fleetTask.blocked(task, owner, note);
+  if (!r.ok) process.stderr.write(`check-unmerged-ship: fleet task progress failed for ${task}: ${r.error}\n`);
   return r.ok;
 }
 
@@ -216,7 +224,7 @@ function main() {
   if (o.notify) {
     for (const i of alerts) {
       if (isNotified(repo, i.head)) continue;
-      if (i.fleet_task && !markBlocked({ task: i.fleet_task, line: `blocked:unmerged ${i.head.slice(0, 12)} reviewed SHIP-AS-IS ${i.age_min}m ago, not in ${o.target}` })) continue;
+      if (i.fleet_task && !markBlocked({ task: i.fleet_task, note: `unmerged ${branchOf(repo, i.head)} ${i.head.slice(0, 12)}` })) continue;
       recordNotice(repo, i.head);
       (o.json ? process.stderr : process.stdout).write(`${line(i)}\n`);
     }

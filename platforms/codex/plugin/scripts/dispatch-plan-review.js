@@ -143,8 +143,10 @@ Cross-family rule: READY needs at least one reviewed seat whose model family is 
   code can be checked (default for non-codex seats: plan + rubric text only; codex seats can already read the repo tree). Files must live inside
   --repo-root, use an allowlisted source extension, and stay within 12 files / 64 KB each /
   256 KB total. Evidence, review-output, disposition and plan/rubric paths are refused (blind
-  dispatch). The file list and hashes are sealed with the session: generation 2 must pass the
-  identical set or it is refused.
+  dispatch). The PATH SET is sealed with the session: generation 2 must pass the identical
+  set or it is refused (exit 3). A changed file CONTENT is resealed as a new version (state
+  context_versions, one stderr line naming the files); every generation artifact carries the
+  context_sha256 it was reviewed against.
 
 Legacy compatibility:
   replace --manifest-file with --runner/--model/--effort/--endpoint and optional
@@ -1781,6 +1783,7 @@ function policyArtifact(context, reason, details = {}) {
     policy_reason: reason,
     rubric_sha256: context.rubricSha,
     manifest_sha256: context.manifestSha,
+    context_sha256: context.contextSha,
     plan_sha256: context.planSha,
     ...context.provenance,
     growth_ratio: context.growthRatioValue || { numerator: 1, denominator: 1 },
@@ -1958,6 +1961,8 @@ function main() {
     throw error;
   }
   const contextSha = contextBundle ? contextBundle.sha256 : null;
+  const contextPaths = contextBundle ? contextBundle.files.map((file) => file.path) : [];
+  let contextResealed = false;
   const contextCopy = path.join(sessionDir, 'context.json');
   const contextSeal = path.join(sessionDir, 'context-seal.json');
   const clock = createClock(opts.now);
@@ -1978,6 +1983,7 @@ function main() {
     now,
     growthRatioValue: { numerator: 1, denominator: 1 },
     growthWarning,
+    contextSha,
   };
 
   let early = null;
@@ -2006,6 +2012,14 @@ function main() {
           rubric_sha256: rubricSha,
           manifest_sha256: manifestSha,
           context_sha256: contextSha,
+          context_paths: contextPaths,
+          context_versions: contextBundle
+            ? [{
+              generation: 1,
+              context_sha256: contextSha,
+              files: contextBundle.files.map((file) => ({ path: file.path, sha256: file.sha256 })),
+            }]
+            : [],
           baseline_plan_sha256: planSha,
           baseline_plan_bytes: planBytes.length,
           started_at: now.toISOString(),
@@ -2027,8 +2041,20 @@ function main() {
       } else {
         state = loadState(statePath);
       }
+      // The context PATH SET is frozen; the content of those files may change between generations
+      // (the author folds findings into a reviewed context file) and is then resealed as a new version.
+      let sealedPaths = state.context_paths;
+      if (!Array.isArray(sealedPaths)) {
+        // State written before context_paths existed: no context means an empty set; otherwise the
+        // set is unknown and the current one is accepted once and recorded.
+        if ((state.context_sha256 || null) === null) sealedPaths = [];
+        else sealedPaths = contextBundle ? contextPaths : ['<sealed, not re-presented>'];
+      }
+      if (JSON.stringify(sealedPaths) !== JSON.stringify(contextPaths)) {
+        throw new CliError('frozen context drifted: --context-file path set differs from the sealed session', 3);
+      }
       if ((state.context_sha256 || null) !== contextSha) {
-        throw new CliError('frozen context drifted: --context-file set differs from the sealed session', 3);
+        contextResealed = true;
       }
       if (state.repo_identity !== repoIdentity
           || state.session_key !== sessionKey
@@ -2044,7 +2070,7 @@ function main() {
           || sealSpec('check', manifestCopy, manifestSeal) !== manifestSha) {
         throw new CliError('frozen rubric/manifest drifted', 3);
       }
-      if (contextSha && sealSpec('check', contextCopy, contextSeal) !== contextSha) {
+      if (contextSha && !contextResealed && sealSpec('check', contextCopy, contextSeal) !== contextSha) {
         throw new CliError('frozen context drifted', 3);
       }
       commitLogicalBinding(binding);
@@ -2126,6 +2152,33 @@ function main() {
           `generation ${opts.generation} cannot acquire; next is ${state.next_generation}`,
           3,
         );
+      }
+      if (contextBundle && (contextResealed || !Array.isArray(state.context_paths))) {
+        const priorFiles = fs.existsSync(contextCopy)
+          ? JSON.parse(fs.readFileSync(contextCopy, 'utf8')).files.map((file) => ({ path: file.path, sha256: file.sha256 }))
+          : [];
+        if (!Array.isArray(state.context_versions)) {
+          state.context_versions = [{ generation: 1, context_sha256: state.context_sha256, files: priorFiles }];
+        }
+        state.context_paths = contextPaths;
+        if (contextResealed) {
+          const previousByPath = new Map(priorFiles.map((file) => [file.path, file.sha256]));
+          const changed = contextBundle.files
+            .filter((file) => previousByPath.get(file.path) !== file.sha256)
+            .map((file) => file.path);
+          fs.writeFileSync(contextCopy, contextBundle.manifestBytes, { mode: 0o600 });
+          if (sealSpec('seal', contextCopy, contextSeal) !== contextSha) {
+            throw new CliError('frozen context seal mismatch', 3);
+          }
+          state.context_sha256 = contextSha;
+          state.context_versions.push({
+            generation: opts.generation,
+            context_sha256: contextSha,
+            files: contextBundle.files.map((file) => ({ path: file.path, sha256: file.sha256 })),
+          });
+          process.stderr.write(`dispatch-plan-review: context resealed for generation ${opts.generation}: changed ${changed.join(', ')}\n`);
+        }
+        atomicWriteJson(statePath, state);
       }
       if (!early && clock.now() >= Date.parse(state.deadline_at)) {
         context.now = new Date(clock.now());
@@ -2445,6 +2498,7 @@ function main() {
         policy_reason: reason,
         rubric_sha256: rubricSha,
         manifest_sha256: manifestSha,
+        context_sha256: contextSha,
         plan_sha256: planSha,
         ...provenance,
         growth_ratio: context.growthRatioValue,

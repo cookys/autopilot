@@ -45,6 +45,11 @@ const { spawnSync } = require('child_process');
 // Verified per runner against how each is actually invoked elsewhere in the tree —
 // `scripts/dispatch-hetero.sh`'s *_BIN defaults, `scripts/dispatch-review.sh`'s runner
 // rails, and `scripts/probe-engine-capability.sh`'s presence branches.
+// RETIRING A RUNNER (2026-11-14, qoderclicn): in ONE push, remove the token from this map, from every
+// rail, resolver enum, schema enum, roster seat and doc, AND add it to scripts/lib/retired-runners.json
+// ({"retired": date, "merge": sha}). `scripts/topology-prune.js --lint` (run by validate.sh) fails while
+// a registry runner is still a key below. The registry is what lets resolve-review-loop.sh skip a stale
+// per-host topology rung with a "retired" warning (instead of exit 3) and lets dev-setup.sh prune it.
 const RUNNER_VERSION_BINARY = Object.freeze({
   codex: 'codex',                    // dispatch-hetero.sh CODEX_BIN="codex"
   agy: 'agy',                        // dispatch-hetero.sh AGY_BIN="agy"

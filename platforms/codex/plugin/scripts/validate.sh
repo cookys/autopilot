@@ -91,6 +91,18 @@ else
   failures+=("claude-spawn-sites")
 fi
 
+# Retirement lint: a runner in scripts/lib/retired-runners.json must be gone from the known-runner map,
+# so "retire a runner" and its registry entry ship in the same push.
+echo ""
+echo "Retired runners:"
+if node "$SCRIPT_DIR/topology-prune.js" --lint; then
+  echo "  PASS  retired runners"
+else
+  echo "  FAIL  retired runners"
+  failed=$((failed + 1))
+  failures+=("retired-runners")
+fi
+
 echo ""
 echo "Summary: $total skills found, $passed passed, $failed failed"
 

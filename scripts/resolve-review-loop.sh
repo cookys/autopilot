@@ -259,6 +259,25 @@ if [[ ! -r "$ROSTER_TEMPLATE" ]]; then
   exit 3
 fi
 CONFIG_ORIG="$CONFIG"
+# A host topology is a regenerable cache that lives outside the repo; a rung naming a runner
+# this checkout no longer knows (retired or unknown) is skipped with one warning instead of
+# exit 3 (2026-11-14: a retired runner's rung killed every dispatch-consult). Sets _topo_file to
+# a sanitized copy, once per run (no $( ) so the global and the cache survive). Unreadable or
+# unparseable input keeps the original path: the readers below already handle that.
+TOPO_EFFECTIVE=""
+TOPO_SANITIZED_FOR=""
+topology_sanitize() {
+  if [[ -n "$TOPO_SANITIZED_FOR" && "$TOPO_SANITIZED_FOR" == "$_topo_file" ]]; then _topo_file="$TOPO_EFFECTIVE"; return 0; fi
+  local src="$_topo_file"
+  [[ -f "$src" ]] || return 0
+  TOPO_EFFECTIVE="$(mktemp "${TMPDIR:-/tmp}/review-loop-topology.XXXXXX")" || return 0
+  trap 'rm -f -- "${ROSTER_EFFECTIVE:-}" "${TOPO_EFFECTIVE:-}"' EXIT
+  if node "$SCRIPT_DIR/lib/topology-runners.js" sanitize "$src" "$TOPO_EFFECTIVE"; then
+    TOPO_SANITIZED_FOR="$src"
+    _topo_file="$TOPO_EFFECTIVE"
+  fi
+}
+
 ROSTER_OVERRIDES_JSON="[]"
 if [[ -z "$CONFIG" || "$CONFIG" -ef "$ROSTER_TEMPLATE" ]]; then
   CONFIG="$ROSTER_TEMPLATE"
@@ -905,6 +924,7 @@ fi
 IMPL_LADDER_JSON="[]"
 if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   _topo_file="${AUTOPILOT_TOPOLOGY_FILE:-$HOME/.autopilot/topology.json}"
+  topology_sanitize
   # Exit protocol: 0 + JSON array on stdout = valid non-empty ladder; 2 = topology
   # file exists but implementer_ladder is empty/absent (keep implicit rung, warn);
   # 1 = no readable/parseable topology file at all (keep implicit rung, warn);
@@ -1130,8 +1150,18 @@ PLAN_REVIEW_SAME_FAMILY_AS_DEPTH0=0
 HETERO_REVIEW_RESOLVED_FROM=""
 CONSULT_RESOLVED_FROM=""
 
+review_set_fail_closed() { # <json> <set> <purpose>; exit 3 when skips emptied that review seat set
+  local rungs
+  rungs="$(node -e 'try { const e = JSON.parse(process.argv[1]).review_sets_emptied_by_skips || {}; const r = e[process.argv[2]]; if (Array.isArray(r) && r.length) process.stdout.write(r.join(", ")); } catch {}' "$1" "$2" 2>/dev/null)"
+  if [[ -n "$rungs" ]]; then
+    echo "resolve-review-loop: $3 fails closed: $2 has no valid seat left after skipping retired/unknown rungs ($rungs); a native same-family review is not a substitute. Regenerate the topology: node scripts/resolve-dispatch-topology.js, or run scripts/topology-prune.js --fix" >&2
+    exit 3
+  fi
+}
+
 if [[ "$PLAN_REVIEW" == "auto" || "$HETERO_REVIEW" == "auto" || "$CONSULT_DISPATCH" == "auto" ]]; then
   _topo_file="${AUTOPILOT_TOPOLOGY_FILE:-$HOME/.autopilot/topology.json}"
+  topology_sanitize
   _auto_out="$(node -e '
 const fs = require("fs");
 const file = process.argv[1];
@@ -1151,6 +1181,7 @@ const res = {
   plan_review_panel: Array.isArray(doc.plan_review_panel) ? doc.plan_review_panel : [],
   reviewer_ladder: Array.isArray(doc.reviewer_ladder) ? doc.reviewer_ladder : [],
   consult_ladder: Array.isArray(doc.consult_ladder) ? doc.consult_ladder : [],
+  review_sets_emptied_by_skips: (doc.review_sets_emptied_by_skips && typeof doc.review_sets_emptied_by_skips === "object") ? doc.review_sets_emptied_by_skips : {},
   missing_plan_review_panel: !Object.prototype.hasOwnProperty.call(doc, "plan_review_panel"),
   missing_reviewer_ladder: !Object.prototype.hasOwnProperty.call(doc, "reviewer_ladder"),
   missing_consult_ladder: !Object.prototype.hasOwnProperty.call(doc, "consult_ladder")
@@ -1246,6 +1277,7 @@ process.exit(1);
       fi
       PLAN_REVIEW_RESOLVED_FROM="topology"
     else
+      [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]] && review_set_fail_closed "$_topo_json" plan_review_panel "plan_review auto"
       PLAN_REV_ENGINE="opus"
       PLAN_REV_EFFORT="high"
       PLAN_REV_RUNNER="claude-native"
@@ -1288,6 +1320,7 @@ process.exit(1);
     if [[ "$_has_rev_ladder" -eq 1 ]]; then
       HETERO_REVIEW_RESOLVED_FROM="topology"
     else
+      [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]] && review_set_fail_closed "$_topo_json" reviewer_ladder "hetero_review auto"
       HETERO_REVIEW_RESOLVED_FROM="native-fallback"
       _hetero_missing_key=0
       if [[ "$_topo_ok" -eq 0 && -n "$_topo_json" ]]; then

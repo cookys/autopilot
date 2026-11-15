@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # hetero-review-loop.test.sh — contract test for scripts/hetero-review-loop.js
 . "$(dirname "$0")/lib.sh"
 

@@ -269,7 +269,8 @@ assert_contains "$OUT" "codex binary not found" "codex routing does not fall thr
 
 # 3c. retired qoderclicn / auto Qwen routing: --runner auto with a Qwen model is refused
 # (names --runner cc-shim --endpoint <name>); --runner qoderclicn is rejected as unknown.
-OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
+# The Chinese-model gate would refuse these Qwen dispatches first (no Size/Role/Scope), so the seam is set: the runner messages are what is under test.
+OUT="$(cd "$SBX" && PATH=/usr/bin:/bin AUTOPILOT_TEST_CN_GATE_OFF=1 \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
   --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
@@ -277,7 +278,7 @@ assert_eq "2" "$EXIT" "auto-detect refuses Qwen3.8-Max-Preview (qoderclicn retir
 assert_contains "$OUT" "--runner cc-shim --endpoint" "auto-detect Qwen refusal names cc-shim --endpoint"
 
 # 3d. negative: --runner qoderclicn is rejected as an unknown runner.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/qoder-retired --prompt-file "$PROMPT" --runner qoderclicn --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 "$SCRIPT" --branch feat/qoder-retired --prompt-file "$PROMPT" --runner qoderclicn --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "retired qoderclicn runner rejected (exit 2)"
 assert_contains "$OUT" '"status": "precondition_failed"' "retired qoderclicn runner -> precondition_failed"
 assert_contains "$OUT" "must be one of" "retired qoderclicn runner rejected as unknown runner"

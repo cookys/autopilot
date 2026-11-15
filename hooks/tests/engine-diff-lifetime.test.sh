@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # KR3 (docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.md): the engine's DEFAULT diffProvider and
 # repairPromptWriter dirs are deleted by their owner. Every other engine suite injects its own
 # diffProvider and would pass with the delete code removed, so this one uses the defaults.

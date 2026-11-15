@@ -335,3 +335,24 @@ test('existing TMPDIR: a link as the leaf, an unsafe ancestor and a leaf others 
   assert.strictEqual(modeOf(shared), 0o1777);
   assert.deepStrictEqual(o.calls.chmod, []);
 });
+
+// Native Windows: a drive-letter path must keep its root. path.win32 is injected as deps.path (the host platform cannot change);
+// the fake fs reports every layer missing, so the verdict is the list of layers that would be created.
+test('win32 drive-letter path keeps its root (never \\C:)', () => {
+  const missing = { lstatSync() { const e = new Error('ENOENT'); e.code = 'ENOENT'; throw e; } };
+  const deps = { fs: missing, path: path.win32, uid: 0, gid: 0, home: 'C:\\Users\\x' };
+  const env = { AUTOPILOT_DISPATCH_RUNS_DIR: 'C:\\Users\\x\\.autopilot\\runs' };
+  const v = rp.evaluateRunsDir(env, deps);
+  assert.strictEqual(v.decision, 'create');
+  assert.strictEqual(v.path, 'C:\\Users\\x\\.autopilot\\runs');
+  assert.deepStrictEqual(v.would_create, ['C:\\Users', 'C:\\Users\\x', 'C:\\Users\\x\\.autopilot', 'C:\\Users\\x\\.autopilot\\runs']);
+  for (const p of v.would_create) assert.ok(p.startsWith('C:\\') && !p.startsWith('\\C:'), p);
+  const t = rp.evaluatePrivateDir('C:\\Users\\x\\.claude\\plugins\\cache', deps);
+  assert.ok(t.would_create[0].startsWith('C:\\'), t.would_create[0]);
+});
+
+test('posix path verdict is unchanged by the root handling', () => {
+  const missing = { lstatSync() { const e = new Error('ENOENT'); e.code = 'ENOENT'; throw e; } };
+  const v = rp.evaluatePrivateDir('/nope/a/b', { fs: missing, uid: 0, gid: 0, home: '/h' });
+  assert.deepStrictEqual(v.would_create, ['/nope', '/nope/a', '/nope/a/b']);
+});

@@ -54,6 +54,7 @@ function defaults(deps) {
   const getgid = () => (typeof process.getgid === 'function' ? process.getgid() : 0);
   return {
     fs: d.fs || realFs,
+    path: d.path || path, // tests inject path.win32 to exercise drive-letter roots on any host
     uid: typeof d.uid === 'number' ? d.uid : getuid(),
     gid: typeof d.gid === 'number' ? d.gid : getgid(),
     home: d.home || os.homedir(),
@@ -123,12 +124,15 @@ function evaluatePrivateDir(target, deps, linkDepth = 0) {
   const ctx = defaults(deps);
   const f = ctx.fs;
   if (typeof target !== 'string' || target === '') return refuse(String(target), 'empty path');
-  const abs = path.resolve(target);
+  const P = ctx.path;
+  const abs = P.resolve(target);
   if (linkDepth > MAX_LINK_DEPTH) return refuse(abs, `too many symlinks while resolving ${abs}`);
-  const parts = abs.split(path.sep).filter(Boolean);
-  let cur = path.sep;
+  // Start from the real root ('/' or 'C:\\'): splitting on the separator and re-rooting at it turned 'C:\\x' into '\\C:'.
+  const root = P.parse(abs).root;
+  const parts = abs.slice(root.length).split(P.sep).filter(Boolean);
+  let cur = root;
   for (let i = 0; i < parts.length; i += 1) {
-    const next = path.join(cur, parts[i]);
+    const next = P.join(cur, parts[i]);
     const isLeaf = i === parts.length - 1;
     let st;
     try {
@@ -138,7 +142,7 @@ function evaluatePrivateDir(target, deps, linkDepth = 0) {
         // This layer and everything below it is missing; cur (the parent) was validated on the way down.
         const would = [];
         let p = cur;
-        for (let j = i; j < parts.length; j += 1) { p = path.join(p, parts[j]); would.push(p); }
+        for (let j = i; j < parts.length; j += 1) { p = P.join(p, parts[j]); would.push(p); }
         return { decision: 'create', path: abs, reason: null, would_create: would, would_tighten: false };
       }
       return refuse(abs, `cannot inspect ${next}: ${errText(error)}`);
@@ -160,7 +164,7 @@ function evaluatePrivateDir(target, deps, linkDepth = 0) {
         try { tst = f.statSync(real); } catch (error) { return refuse(abs, `cannot inspect the target ${real} of ${next}: ${errText(error)}`); }
         if (!tst.isDirectory() || tst.uid !== ctx.uid) return refuse(abs, `the target ${real} of the symbolic link ${next} is not a directory owned by this user (${ownerText(tst)})`);
       }
-      return evaluatePrivateDir(path.join(real, ...parts.slice(i + 1)), deps, linkDepth + 1);
+      return evaluatePrivateDir(P.join(real, ...parts.slice(i + 1)), deps, linkDepth + 1);
     }
     if (!st.isDirectory()) return refuse(abs, `${next} exists and is not a directory`);
     if (!isLeaf) {

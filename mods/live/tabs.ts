@@ -2,6 +2,7 @@
 // Every line is built by a ui.ts component; this file writes no theme key, no glyph literal and no hand-made line (ui-lint.test.js L1, L2, L4-L7).
 
 import { T_EN } from './i18n'
+import { ratioLevel } from './band-contract.ts'
 import type { T } from './i18n'
 import * as ui from './ui'
 import * as U from './ui'
@@ -772,7 +773,8 @@ function limitsSection(u: ui.Ctx, ctx: PaneCtx, s: SpendView | null, quota: read
     return [ui.header(u, t('usage.limits'), { id: SECTION.limits, open }), ...(open ? [ui.empty(t('nodata.prefix', { what: t(what) }), 'usage.brain')] : [])]
   }
   const worst = Math.max(...wins.map(w => (w.cap > 0 ? w.value / w.cap : 0)))
-  const chip = ui.levelChip(worst, t(worst >= 1 ? 'spend.over' : worst >= 0.8 ? 'spend.warn' : 'spend.ok'), 'usage.limit_max')
+  const level = ratioLevel(worst)
+  const chip = ui.levelChip(worst, t(level === 'over' ? 'spend.over' : level === 'warn' ? 'spend.warn' : 'spend.ok'), 'usage.limit_max')
   const head = ui.header(u, t('usage.limits'), { id: SECTION.limits, open }, { right: chip, fact: 'usage.limit_max' })
   if (!open) return [head]
   // every bar is as long as the longest tail allows, so the rows compare by length; a narrow pane shortens the bars, never wraps the row

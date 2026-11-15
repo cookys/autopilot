@@ -5,7 +5,7 @@
 // a placeholder mismatch or an id the code uses but en lacks; run-tests.sh runs the check first). This file stays pure: no `$`,
 // no fs. register.ts reads the config / env / Claude Code language once per tick and hands the answer to `resolveLocale`.
 
-import { EN, ZH_TW } from './locales'
+import { EN, ZH_TW } from './locales.ts'
 
 export type Locale = 'en' | 'zh-TW'
 export type Vars = Record<string, string | number>

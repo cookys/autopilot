@@ -1,7 +1,9 @@
 // mods/live/register.ts — the `live` mod (mods plan P1c; Claude Code only).
 //
 // Reads files the project watcher publishes and draws a band above the prompt, a pane in a wide fullscreen
-// terminal and a toast on an axis change. It writes no file and starts no program. The one thing it sends to the model is the owner's
+// terminal and a toast on an axis change. It starts no program. The one file it writes is
+// `<live_base>/autopilot/band-facts/<sanitised sid>.json` (numbers and the shared contract, for the statusline; mods/band-statusline-map.md).
+// The one thing it sends to the model is the owner's
 // answer from the 待決 tab: the send Button submits one prompt (`$.prompt.submit`, not as the user).
 //
 //   pointer  $HOME/.autopilot/live-pointer.json
@@ -70,7 +72,7 @@ import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
 import { reopenLook, showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, decideDialog, decideFillText, decideFixing, decideHeld, decideLine, decideOpen, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandFactsDocument, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   isStepCard, BAND_NARROW_STEPS, displayWidth, fittedBandWidth, layoutBand, layoutBandLine, shrinkToFitted, slotFleet, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeDurableDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions, readDurableDecisionFiles,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -78,6 +80,8 @@ import {
 import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveDecision, LiveSnapshot, LookTarget, Manifest, PaneLine, PaneTab, Seg, SlotId, QuotaWindow, Sources } from './model'
 
 const TICK_MS = 5000
+const FACTS_PRUNE_MS = 60_000
+const FACTS_TMP_STALE_MS = 5 * 60 * 1000
 const PANE_ID = 'autopilot-live'
 const MAX_PATH_FILES = 256
 const MAX_RECEIPT_FILES = 64
@@ -93,6 +97,7 @@ const STEPS = atom({ plugin: 'autopilot', key: 'steps' } as const, [] as Step[],
 const DECIDE_KEEP_MS = 24 * 3600 * 1000 // a sent question the session never closed is forgotten after a day
 let timer: { cancel: () => void } | undefined
 let liveBaseSeen: string | null = null // the live base the pointer named on the last tick (codeforge's pet.json sits under it)
+let factsPrunedAt = -Infinity // band-facts cleanup runs at most once a minute; session.start resets it
 let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read every refresh; null draws no pet
 let paneTab: PaneTab = 'now'
 // the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, kicked on every tick and when the Fleet tab is drawn. The TTL inside the feed keeps the runs 30 s apart.
@@ -554,6 +559,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const autopilotHome = typeof parsed.value.autopilot_home === 'string' && parsed.value.autopilot_home ? parsed.value.autopilot_home.replace(/\/+$/, '') : home + '/.autopilot'
 
   const sid = await $.session.id()
+  // A tick that got a pointer may still be non-ok below. Cleanup uses this tick's base, never a stale one from a later failed read.
+  if (sid) await pruneBandFacts($, liveBase, autopilotHome, sid, nowMs).catch(() => undefined)
   const scope = await resolveScope($, autopilotHome, liveBase, sid, nowMs)
   if (scope === null) {
     const wt = await orphanResidueCount($)
@@ -784,6 +791,82 @@ async function readAccountQuota($: EngineInterface, nowMs: number): Promise<void
   } catch (_e) { /* a failed read: keep the last account */ }
 }
 
+function bandFactsDir(liveBase: string): string {
+  return liveBase.replace(/\/+$/, '') + '/autopilot/band-facts'
+}
+
+// Numbers and the shared contract for the statusline. The plugin fs API has no rename, and a hooks
+// module cannot import node builtins, so this writes `<sid>.json.tmp` in the same directory and then the destination.
+// A tick that throws before the destination write leaves the previous file. A non-ok tick does not call this, so the
+// previous file stays; the statusline treats a file whose age is not inside 30 s as absent.
+async function publishBandFacts($: EngineInterface, liveBase: string, snap: LiveSnapshot, sessionId: string, nowMs: number): Promise<void> {
+  const d = snap.detail
+  const brain = d.spend?.brain ?? null
+  const cap = d.spend?.cap ?? null
+  const doc = bandFactsDocument({
+    written_at_ms: nowMs,
+    session_id: sessionId,
+    live: d.counts?.confirmed_live ?? 0,
+    marker: d.marker,
+    review: snap.review,
+    decisions: d.decisions?.count ?? 0,
+    spend: brain !== null && cap !== null ? { brain, cap } : null,
+  })
+  const dest = bandFactsDir(liveBase) + '/' + sanitizeSid(sessionId) + '.json'
+  const tmp = dest + '.tmp'
+  const text = JSON.stringify(doc)
+  await $.fs.write(tmp, text)
+  await $.fs.write(dest, text)
+}
+
+// Claude Code 2.1.322's plugin fs exposes read, write, list, exists, stat and ancestors.
+// `$.fs.delete`, `$.fs.unlink` and `$.fs.remove` are not functions, and a hooks module cannot import node builtins.
+// An empty file fails the reader's JSON parse and `v == 1` check, so the statusline treats it as absent. The name stays.
+async function retireBandFacts($: EngineInterface, path: string): Promise<void> {
+  await $.fs.write(path, '')
+}
+
+function factsEntryName(name: string): boolean {
+  return name.length > 0 && !name.includes('/') && !name.includes('\\') && !name.includes('..')
+}
+
+// At most once a minute: empty another session's `band-facts/<sid>.json` when that session is not alive by markerAlive,
+// and any `*.json.tmp` whose mtime is older than 5 minutes. Never the own session's `<sanitised sid>.json`.
+async function pruneBandFacts($: EngineInterface, liveBase: string, autopilotHome: string, sessionId: string, nowMs: number): Promise<void> {
+  if (nowMs - factsPrunedAt < FACTS_PRUNE_MS) return
+  factsPrunedAt = nowMs
+  const dir = bandFactsDir(liveBase)
+  const own = sanitizeSid(sessionId) + '.json'
+  let entries: Awaited<ReturnType<EngineInterface['fs']['list']>>
+  try {
+    entries = await $.fs.list(dir)
+  } catch (_e) {
+    return
+  }
+  for (const entry of entries) {
+    const name = entry.name
+    if (entry.kind !== 'file' || entry.isLink === true || !factsEntryName(name) || name === own) continue
+    const path = dir + '/' + name
+    try {
+      if (name.endsWith('.json.tmp')) {
+        const st = await $.fs.stat(path)
+        if (st.kind === 'file' && st.isLink !== true && nowMs - st.mtimeMs > FACTS_TMP_STALE_MS) await retireBandFacts($, path)
+        continue
+      }
+      if (!name.endsWith('.json')) continue
+      const stem = name.slice(0, -'.json'.length)
+      if (stem.length === 0) continue
+      const doc = await readObject($, path)
+      const named = doc !== null && typeof doc.session_id === 'string' ? doc.session_id : null
+      const sid = named !== null && sanitizeSid(named) === stem ? named : stem
+      if (sid === sessionId) continue
+      const marker = await readObject($, autopilotHome + '/session-mode/' + sid + '.json')
+      if (marker !== null && await markerAlive($, liveBase, sid, marker, nowMs)) continue
+      await retireBandFacts($, path)
+    } catch (_e) { /* one name failed: the next minute tries the directory again */ }
+  }
+}
+
 async function refresh($: EngineInterface): Promise<void> {
   try {
     const nowMs = await $.clock.now()
@@ -823,6 +906,7 @@ async function refresh($: EngineInterface): Promise<void> {
     }
     petText = petTag(liveBaseSeen === null ? null : await readText($, liveBaseSeen + '/codeforge/pet.json'))
     snapshot = { ...built.snap, recent, activity, account: { account, quota } }
+    if (built.snap.state === 'ok' && liveBaseSeen !== null && sidOk && sid) await publishBandFacts($, liveBaseSeen, built.snap, sid, nowMs).catch(() => undefined)
     await pruneDecide($, new Set(built.snap.pending.flatMap(d => (d.id === null ? [] : [d.id]))), built.snap.state === 'ok', nowMs).catch(() => undefined)
     $.ui.invalidate('ui.render')
     // toasts: only between two fresh snapshots of the same scope
@@ -1185,6 +1269,7 @@ export async function startLive($: EngineInterface): Promise<void> {
   holdTimer = undefined
   if (Object.keys((await read($, DECIDE)).hold ?? {}).length > 0) startHoldTimer($) // a send still inside its window when /clear came: the new session takes it over (an expired one goes out on the first tick)
   if (timer === undefined) timer = $.clock.every(TICK_MS, () => liveTick($))
+  factsPrunedAt = -Infinity
   await refresh($)
 }
 

@@ -226,8 +226,8 @@ assert_contains "$(json_get "$EMPTY_TOPO_OUT" capability_warnings)" \
   "capability_warnings contains the empty-ladder warning (distinct from the no-topology-file warning)"
 
 # (c3) implementer_ladder: auto + topology file has a rung whose runner fails the enum
-# check -> exit 3, same message shape as the comma-list path; a stale topology file
-# must not smuggle an invalid runner past the resolver.
+# check -> the rung is SKIPPED with a warning (2026-11-14: a retired runner's stale rung must not
+# kill the resolver); it never reaches the ladder, so it cannot be smuggled past the resolver.
 BOGUS_TOPO_FILE="$TEST_TMP/topo-bogus-fixture.json"
 cat > "$BOGUS_TOPO_FILE" <<'JSON'
 {
@@ -237,8 +237,8 @@ cat > "$BOGUS_TOPO_FILE" <<'JSON'
 }
 JSON
 BOGUS_TOPO_ERR="$(AUTOPILOT_TOPOLOGY_FILE="$BOGUS_TOPO_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$AUTO_CFG" bash "$SCRIPT" 2>&1 1>/dev/null)"; BOGUS_TOPO_RC=$?
-assert_exit_code "$BOGUS_TOPO_RC" 3 "implementer_ladder: auto with a bogus rung runner exits 3"
-assert_contains "$BOGUS_TOPO_ERR" "invalid implementer_ladder runner" "bogus auto rung runner error matches comma-list message shape"
+assert_exit_code "$BOGUS_TOPO_RC" 0 "implementer_ladder: auto with a bogus rung runner skips the rung (exit 0)"
+assert_contains "$BOGUS_TOPO_ERR" "skipped rung grok-4.6/low@bogus: runner bogus unknown" "bogus auto rung runner is named in the skip warning"
 
 # (c4) implementer_ladder: auto + topology file has a rung with an empty effort (what
 # resolve-dispatch-topology.js emitted for legacy no-effort seats before v2.36.16)

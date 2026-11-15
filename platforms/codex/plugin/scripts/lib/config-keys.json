@@ -1536,6 +1536,17 @@
       "note": "Pool map file for scripts/noncq.js drain and scripts/pace-select.js, replacing scripts/lib/noncq-pools.json. Test seam: noncq.test.js (h) uses a fixture map with a null-model entry."
     },
     {
+      "name": "AUTOPILOT_DS_SEAM_DAYS_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/pace-select.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_PACE_FILE", "AUTOPILOT_PACE_ROLES"],
+      "note": "Overrides the deepseek seat's available_dates_file (one YYYY-MM-DD Asia/Taipei date per line). Default path is that key (~/.config/autopilot/ds-seam-days.txt). Read at pick time; tests point this at a temp file."
+    },
+    {
       "name": "AUTOPILOT_PACE_FILE",
       "kind": "env",
       "audience": "internal",

@@ -1584,14 +1584,29 @@ const dsPace = (rows) => ({
 });
 const DS_IN_WINDOW = new Date('2026-11-15T02:00:00Z'); // 10:00 Taipei
 const DS_OUT_WINDOW = new Date('2026-11-15T05:00:00Z'); // 13:00 Taipei
+// Default seam file lists the in-window clock's Taipei date, so the existing
+// deepseek cases stay on "date listed" once available_dates_file is set.
+const dsSeamDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-seam-default-'));
+const dsSeamFile = path.join(dsSeamDir, 'days.txt');
+fs.writeFileSync(dsSeamFile, '# listed\n\n2026-11-15\n');
+const dsSeamEnv = { HOME: dsSeamDir, AUTOPILOT_DS_SEAM_DAYS_FILE: dsSeamFile };
 const dsSelect = (extra) => selectEngine({
   pace: dsPace(extra && extra.rows),
   role: 'reviewer',
   qualified: undefined,
   checkEndpoint: allEndpointsReady,
+  env: dsSeamEnv,
   ...extra,
   // only the deepseek seat is under test: take the other pools out of the walk unless the case wants them
 });
+const dsRolesDated = (fileOrNull) => {
+  const roles = loadRoles();
+  const deepseek = { ...roles.pools.deepseek };
+  if (fileOrNull === null) delete deepseek.available_dates_file;
+  else deepseek.available_dates_file = fileOrNull;
+  return { ...roles, pools: { ...roles.pools, deepseek } };
+};
+const DS_OTHERS = ['glm', 'codex', 'grok', 'agyclaude'];
 const dsCandidate = (res) => res.candidates.find((c) => c.engine === 'deepseek');
 
 test('(deepseek 1) deepseek is classified Chinese-family, seat pool is cn_gate', () => {
@@ -1603,6 +1618,9 @@ test('(deepseek 1) deepseek is classified Chinese-family, seat pool is cn_gate',
   assert.equal(pool.family, 'deepseek');
   assert.equal(isChineseFamily(pool.family), true);
   assert.deepEqual(pool.available_window, { tz: 'Asia/Taipei', start: '09:00', end: '12:45' });
+  assert.equal(pool.available_dates_file, '~/.config/autopilot/ds-seam-days.txt');
+  assert.match(pool.available_dates_why, /Delete this key when the recovery line ends/);
+  assert.match(loadRoles()._why, /available_dates_file/);
 });
 
 test('(deepseek 2) without --scope mechanical the seat is not a candidate at all', () => {
@@ -1654,8 +1672,213 @@ test('(deepseek 6) never the sole reviewer: with no non-Chinese key to pair, it 
   const only = { ...roles, priority: { ...roles.priority, reviewer: ['deepseek'] } };
   const paired = selectEngine({
     pace: dsPace(), pools: loadPools(), roles: only, role: 'reviewer', scope: 'mechanical', now: DS_IN_WINDOW,
-    checkEndpoint: allEndpointsReady, exclude: ['glm', 'codex', 'grok', 'agyclaude'],
+    checkEndpoint: allEndpointsReady, exclude: ['glm', 'codex', 'grok', 'agyclaude'], env: dsSeamEnv,
   });
   assert.equal(paired.engine, 'deepseek');
   assert.deepEqual(paired.cn_gate, { scope: 'mechanical', never_sole: true, pair_with: 'agy' });
+});
+
+test('(deepseek 7) listed seam day inside the window: deepseek stays selectable', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-seam-in-'));
+  try {
+    const file = path.join(dir, 'days.txt');
+    fs.writeFileSync(file, '# comment\n\n2026-11-16\n2026-11-17\n');
+    const res = dsSelect({
+      scope: 'mechanical',
+      now: new Date('2026-11-16T10:00:00+08:00'),
+      roles: dsRolesDated(file),
+      env: { HOME: dir },
+      exclude: DS_OTHERS,
+    });
+    assert.equal(res.engine, 'agy');
+    assert.deepEqual(dsCandidate(res), { engine: 'deepseek', pool: 'deepseek', slack_pts: 0 });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('(deepseek 8) inside the window but not a listed seam day: not_seam_day, next reviewer, exit 0', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-seam-out-'));
+  try {
+    const file = path.join(dir, 'days.txt');
+    fs.writeFileSync(file, '# comment\n\n2026-11-16\n2026-11-17\n');
+    const now = new Date('2026-11-18T10:00:00+08:00');
+    const res = dsSelect({
+      scope: 'mechanical',
+      now,
+      roles: dsRolesDated(file),
+      env: { HOME: dir },
+      exclude: DS_OTHERS,
+    });
+    assert.deepEqual(dsCandidate(res), { engine: 'deepseek', reason: 'not_seam_day' });
+    assert.equal(res.engine, 'agy');
+
+    const rolesPath = path.join(dir, 'pace-roles.json');
+    const pacePath = path.join(dir, 'pace.json');
+    fs.writeFileSync(rolesPath, JSON.stringify(dsRolesDated(file)));
+    fs.writeFileSync(pacePath, JSON.stringify(dsPace()));
+    const cliRes = cli([
+      '--role', 'reviewer', '--scope', 'mechanical', '--now', '2026-11-18T10:00:00+08:00', '--pace', pacePath,
+    ], {
+      AUTOPILOT_PACE_ROLES: rolesPath,
+      AUTOPILOT_DS_SEAM_DAYS_FILE: file,
+      AUTOPILOT_ENDPOINT_DEEPSEEK_URL: '',
+      AUTOPILOT_ENDPOINT_DEEPSEEK_TOKEN: '',
+      HOME: dir,
+    });
+    assert.equal(cliRes.status, 0, cliRes.stderr);
+    const body = JSON.parse(cliRes.stdout);
+    assert.equal(body.engine, 'agy');
+    assert.deepEqual(dsCandidate(body), { engine: 'deepseek', reason: 'not_seam_day' });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('(deepseek 9) absent available_dates_file keeps today behaviour even when the seam file would block', () => {
+  const missing = path.join(dsSeamDir, 'no-such-days.txt');
+  const res = dsSelect({
+    scope: 'mechanical',
+    now: DS_IN_WINDOW,
+    roles: dsRolesDated(null),
+    env: { HOME: dsSeamDir, AUTOPILOT_DS_SEAM_DAYS_FILE: missing },
+    exclude: DS_OTHERS,
+  });
+  assert.equal(res.engine, 'agy');
+  assert.deepEqual(dsCandidate(res), { engine: 'deepseek', pool: 'deepseek', slack_pts: 0 });
+});
+
+test('(deepseek 10) a non YYYY-MM-DD line fails closed with bad_available_dates; another reviewer is chosen', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-seam-bad-'));
+  try {
+    const file = path.join(dir, 'days.txt');
+    fs.writeFileSync(file, '2026-11-15\n2026-02-31\n');
+    const res = dsSelect({
+      scope: 'mechanical',
+      now: DS_IN_WINDOW,
+      roles: dsRolesDated(file),
+      env: { HOME: dir },
+      exclude: DS_OTHERS,
+    });
+    assert.deepEqual(dsCandidate(res), { engine: 'deepseek', reason: 'bad_available_dates' });
+    assert.equal(res.engine, 'agy');
+
+    const rolesPath = path.join(dir, 'pace-roles.json');
+    const pacePath = path.join(dir, 'pace.json');
+    fs.writeFileSync(rolesPath, JSON.stringify(dsRolesDated(file)));
+    fs.writeFileSync(pacePath, JSON.stringify(dsPace()));
+    const cliRes = cli([
+      '--role', 'reviewer', '--scope', 'mechanical', '--now', '2026-11-15T10:00:00+08:00', '--pace', pacePath,
+    ], {
+      AUTOPILOT_PACE_ROLES: rolesPath,
+      HOME: dir,
+      AUTOPILOT_ENDPOINT_DEEPSEEK_URL: '',
+      AUTOPILOT_ENDPOINT_DEEPSEEK_TOKEN: '',
+    });
+    assert.equal(cliRes.status, 0, cliRes.stderr);
+    const body = JSON.parse(cliRes.stdout);
+    assert.equal(body.engine, 'agy');
+    assert.deepEqual(dsCandidate(body), { engine: 'deepseek', reason: 'bad_available_dates' });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('(deepseek 11) missing seam-days file: seam_days_unreadable; another reviewer is chosen', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-seam-gone-'));
+  try {
+    const file = path.join(dir, 'missing.txt');
+    const res = dsSelect({
+      scope: 'mechanical',
+      now: DS_IN_WINDOW,
+      roles: dsRolesDated(file),
+      env: { HOME: dir },
+      exclude: DS_OTHERS,
+    });
+    assert.deepEqual(dsCandidate(res), { engine: 'deepseek', reason: 'seam_days_unreadable' });
+    assert.equal(res.engine, 'agy');
+
+    const rolesPath = path.join(dir, 'pace-roles.json');
+    const pacePath = path.join(dir, 'pace.json');
+    fs.writeFileSync(rolesPath, JSON.stringify(dsRolesDated(file)));
+    fs.writeFileSync(pacePath, JSON.stringify(dsPace()));
+    const cliRes = cli([
+      '--role', 'reviewer', '--scope', 'mechanical', '--now', '2026-11-15T10:00:00+08:00', '--pace', pacePath,
+    ], {
+      AUTOPILOT_PACE_ROLES: rolesPath,
+      HOME: dir,
+      AUTOPILOT_ENDPOINT_DEEPSEEK_URL: '',
+      AUTOPILOT_ENDPOINT_DEEPSEEK_TOKEN: '',
+    });
+    assert.equal(cliRes.status, 0, cliRes.stderr);
+    const body = JSON.parse(cliRes.stdout);
+    assert.equal(body.engine, 'agy');
+    assert.deepEqual(dsCandidate(body), { engine: 'deepseek', reason: 'seam_days_unreadable' });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('(deepseek 12) ~ expands to HOME and the file is read again at each pick', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-seam-home-'));
+  try {
+    const file = path.join(home, '.config', 'autopilot', 'ds-seam-days.txt');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, '2026-11-15\n');
+    const pick = () => dsSelect({
+      scope: 'mechanical',
+      now: DS_IN_WINDOW,
+      roles: dsRolesDated('~/.config/autopilot/ds-seam-days.txt'),
+      env: { HOME: home },
+      exclude: DS_OTHERS,
+    });
+    assert.deepEqual(dsCandidate(pick()), { engine: 'deepseek', pool: 'deepseek', slack_pts: 0 });
+    fs.writeFileSync(file, '2026-11-16\n');
+    assert.deepEqual(dsCandidate(pick()), { engine: 'deepseek', reason: 'not_seam_day' });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('(deepseek 13) AUTOPILOT_DS_SEAM_DAYS_FILE overrides available_dates_file', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-seam-over-'));
+  try {
+    const configured = path.join(dir, 'configured.txt');
+    const override = path.join(dir, 'override.txt');
+    fs.writeFileSync(configured, '2026-11-15\n');
+    fs.writeFileSync(override, '2026-11-16\n');
+    const res = dsSelect({
+      scope: 'mechanical',
+      now: DS_IN_WINDOW,
+      roles: dsRolesDated(configured),
+      env: { HOME: dir, AUTOPILOT_DS_SEAM_DAYS_FILE: override },
+      exclude: DS_OTHERS,
+    });
+    assert.deepEqual(dsCandidate(res), { engine: 'deepseek', reason: 'not_seam_day' });
+    assert.equal(res.engine, 'agy');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('(deepseek 14) outside the window stays outside_window even when the seam file is missing or the date is absent', () => {
+  const missing = dsSelect({
+    scope: 'mechanical',
+    now: DS_OUT_WINDOW,
+    roles: dsRolesDated(path.join(dsSeamDir, 'definitely-missing.txt')),
+    env: { HOME: dsSeamDir },
+    exclude: DS_OTHERS,
+  });
+  assert.deepEqual(dsCandidate(missing), { engine: 'deepseek', reason: 'outside_window' });
+
+  const otherDay = path.join(dsSeamDir, 'other-day.txt');
+  fs.writeFileSync(otherDay, '2026-11-16\n');
+  const unlisted = dsSelect({
+    scope: 'mechanical',
+    now: DS_OUT_WINDOW,
+    roles: dsRolesDated(otherDay),
+    env: { HOME: dsSeamDir },
+    exclude: DS_OTHERS,
+  });
+  assert.deepEqual(dsCandidate(unlisted), { engine: 'deepseek', reason: 'outside_window' });
 });

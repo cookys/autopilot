@@ -1,0 +1,45 @@
+{
+  "engine": "agy",
+  "runner": "agy",
+  "model": "gemini-4-carbon-high",
+  "pool": "agy",
+  "slack_pts": 10,
+  "used_pct": 10,
+  "expected_pct": 20,
+  "over_pace": false,
+  "selected_by": "priority",
+  "low_keys": [],
+  "reviewer_exclude": [
+    "agy"
+  ],
+  "role": "reviewer",
+  "qualified_source": "pace-roles.json",
+  "pace_generated_at": "2026-11-15T01:00:00Z",
+  "candidates": [
+    {
+      "engine": "agy",
+      "pool": "agy",
+      "slack_pts": 10
+    },
+    {
+      "engine": "glm",
+      "reason": "unknown"
+    },
+    {
+      "engine": "codex",
+      "reason": "unknown"
+    },
+    {
+      "engine": "grok",
+      "reason": "unknown"
+    },
+    {
+      "engine": "agyclaude",
+      "reason": "unknown"
+    },
+    {
+      "engine": "deepseek",
+      "reason": "not_seam_day"
+    }
+  ]
+}

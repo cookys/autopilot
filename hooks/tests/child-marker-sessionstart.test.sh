@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-tree step 3a (D2, BL-0142) -- the child end of the loop-back edge for author and review.
 # The four claude launches (author/review x claude-native/cc-shim) hand the child `--settings` carrying a
 # SessionStart hook; the hook is `session-mode.js ensure-child`, which writes a plain marker for the payload

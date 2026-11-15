@@ -12,6 +12,7 @@
 - implementer_effort: low
 - implementer_runner: agy
 - implementer_ladder: gemini-4-carbon-low/low@agy, grok-4.7/low@grok
+<!-- DISABLED until tested (operator, 2026-11-15; pace-roles.json _disabled lists kimi and minimax for the picker): to enable, append to the implementer_ladder line above: `, kimi-code/kimi-for-coding/high@kimi` (K2.8 Preview, standard rate), then `, MiniMax-M3.1-Flash/high@cc-shim` (needs endpoint minimax; XS/S only, no implementer-side low-risk key exists). Remove this note when enabled. -->
 
 - override: reviewer | until 2026-11-22 | PM 01M7DGV7, ends earlier when gpu-lead says GPU-host qwen is back (operator: GPU-host qwen down for verification, 2026-11-15 Taipei): every role routed to qwen_local goes to hydrogen, grok as fallback. Loop reviewer is gemini-4-hydrogen-high@agy; cloud-fallback rung grok-4.7/high@grok. The agy implementer (carbon) is the same family, so on_family_conflict: fallback retreats to the preference list, grok first. Restore the previous qwen_local block from the commit before this one when gpu-lead reports recovery.
 - reviewer_engine: gemini-4-hydrogen-high

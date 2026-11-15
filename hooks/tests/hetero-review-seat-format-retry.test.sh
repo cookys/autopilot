@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # hetero-review-seat-format-retry.test.sh — BL-0197: a seat whose answer breaks an output rule
 # is re-asked ONCE on its own; the round is not voided for it. Rules are unchanged: only the
 # re-ask is new. Covers (1) dispatch-review.sh marking format rejects, (2) the retry notice in

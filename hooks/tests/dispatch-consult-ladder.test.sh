@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-consult-ladder.test.sh — G1 R5 guard fix + --ladder-receipt
 # (plan docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md P2).
 # Hermetic like dispatch-consult-hermetic.test.sh: scratch topology via

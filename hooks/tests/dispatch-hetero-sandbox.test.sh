@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-hetero --sandbox bwrap: the worker may write only its worktree and its own scratch dir.
 #   green  : a worker that writes inside the worktree commits.
 #   red    : a worker that writes into the main checkout (the parent of its worktree's repo)

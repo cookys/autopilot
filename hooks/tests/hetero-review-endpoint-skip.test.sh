@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # hetero-review-endpoint-skip.test.sh — a seat whose named endpoint is not configured on this
 # account is skipped (reason endpoint_not_configured), not counted as a seat gap; a configured
 # endpoint whose run fails is still a gap; a configured working endpoint runs.

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # Live-pane plan 7.1 identity hand-off 3 -- every rail that starts a `claude` child (author: cc-shim and
 # claude-native; review: cc-shim and claude-native; hetero: cc-shim) mints the child's session id, passes it
 # as `--session-id`, records it as the manifest's child_session_id, and hands the child

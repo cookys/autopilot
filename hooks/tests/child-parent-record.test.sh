@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-tree step 3d (D10, BL-0176) -- a child's parent record needs the rail's own child id.
 # `ensurePlainMarker` records parent_session_id = P (AUTOPILOT_PARENT_SESSION_ID) only when the marker's own id equals
 # C (AUTOPILOT_CHILD_SESSION_ID), the uuid the launching rail minted for that child. P alone is an inherited

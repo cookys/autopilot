@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # codeforge usage collect after a throwaway claude config dir.
 # A recording fake `codeforge` is first on PATH. This file never invokes a real
 # codeforge or a real model. Unit cases restrict PATH to the fake plus /usr/bin:/bin.

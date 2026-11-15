@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # hetero-fallback-sandbox-agy.test.sh — real bwrap sandbox retreat from a busy cc-shim
 # local seat (qwen_local -> 503) to agy (gemini-4-hydrogen-high/high@agy).
 # Verifies:

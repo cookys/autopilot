@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # Shared suite for backlog bundle hooks-live-state-misc. Append-only per row.
 # RED at 95d4a7de9: chrome + complete block and chrome + truncated block FAIL precondition_failed (missing MINIMAX_API_KEY) when endpoints.env is absent under a temp HOME.
 set -u

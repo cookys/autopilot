@@ -13,7 +13,7 @@
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
  *   node scripts/open-decision.js open  --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (operator action step: no --option, --executor or --not-authorized needed)
- *   node scripts/open-decision.js open ... --category <money|identity|presence|goal|public-release|unbackable-loss>   (REQUIRED on every CLI open: the only six kinds of question that go to the operator; anything else -> exit 7 with a 拒絕開卡 message, nothing written)
+ *   node scripts/open-decision.js open ... --category <money|identity|presence|goal|public-release|unbackable-loss|authority>   (REQUIRED on every CLI open: the only seven kinds of question that go to the operator; anything else -> exit 7 with a 拒絕開卡 message, nothing written)
  *   node scripts/open-decision.js stats [--since <ISO | Nh|Nd|Nw, default 7d>] [--cwd <dir>] [--json]   (cards opened in the window per category: {schema:"decision-stats/1", since, counts:{money,...,uncategorized}}; patrol's weekly line)
  *   node scripts/open-decision.js open ... --executor <address> [--asker <address>]  (--executor is REQUIRED: who carries out the answer; the PM's own cards name the PM; --asker: who asked)
  *   node scripts/open-decision.js open ... [--due <ISO time | +N(m|h|d|w), e.g. +4h, +1d>] [--kind decide|go|remind]   (dated card / reminder: see "Dated cards" below)
@@ -91,7 +91,7 @@
  * last_answer + reask_at (optional; a decline answer stays status open, last_answer is that text, reask_at is when to ask again),
  * kind (decide | go | remind | step | look; absent = decision),
  * due_at (ISO UTC; absent = no date; see "Dated cards"),
- * category (money | identity | presence | goal | public-release | unbackable-loss; set by the CLI `open --category`, required there; absent on older and hook-opened cards, which `stats` counts as uncategorized). Field list: this comment and
+ * category (money | identity | presence | goal | public-release | unbackable-loss | authority; set by the CLI `open --category`, required there; absent on older and hook-opened cards, which `stats` counts as uncategorized). Field list: this comment and
  * references/review-page.md (decisions); schemas/decision.schema.json validates them.
  * No new status value: operator_steps, last_answer and reask_at are optional. Readers (src/status/scope-key.js cardState) ignore them.
  * Panel answer delivery (PM 01M6ZXJYTQ, 2026-11-09; overrides the earlier PM ruling 01M6RV0Y02 "open-decision never sends"): when the hook verifies an operator answer
@@ -147,7 +147,7 @@
  *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
  * Exit: 0 ok (show: at least one live card) | 1 show: none live (show --id: no such card) | 2 usage / close or --dispatched refused (card not in the needed state) / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure, or a non-PM team session refused by the role gate (nothing written) |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
- *       7 open refused: --kind is not decide|go|remind|step|look, or --category is missing / not one of the six (nothing is written) |
+ *       7 open refused: --kind is not decide|go|remind|step|look, or --category is missing / not one of the seven (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
  *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
  *       Library callers (openDecision) are unaffected: only the CLI `open` ensures and reports. AUTOPILOT_RUNS_WATCH_AUTOSTART=0 skips the ensure (the hook's own switch).
@@ -214,7 +214,8 @@ function notAuthorizedBoundaryId(raw) {
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
+  process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
+    + '       --category values: money（錢） identity（身分：操作員本人的登入、憑證、金鑰、scope） presence（到場） goal（改目標） public-release（對外） unbackable-loss（無備份的損失） authority（改授權）\n'
     + '       open-decision.js open --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js stats [--since <ISO|7d>] [--json]\n       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js close --id <id> --dispatched-msg <message_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (decision open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)>; a remind card takes no --option/--free-text; --operator-step <text>, repeatable or newline-separated)\n');
   return 2;
@@ -574,9 +575,9 @@ function takeFreeText(argv) {
 const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since'];
 const EXTRA_REPEAT = ['operator-step'];
 const EXTRA_SWITCH = ['all', 'apply', 'irreversible'];
-// The only six kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
-const CATEGORIES = ['money', 'identity', 'presence', 'goal', 'public-release', 'unbackable-loss'];
-const CATEGORY_REFUSAL = '拒絕開卡：--category 必須是 money、identity（操作員本人的登入、憑證、金鑰、scope）、presence、goal、public-release、unbackable-loss 其中之一。這件 PM 自己決定；不確定就先找 hetero 評估。';
+// The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
+const CATEGORIES = ['money', 'identity', 'presence', 'goal', 'public-release', 'unbackable-loss', 'authority'];
+const CATEGORY_REFUSAL = '拒絕開卡：--category 必須是 money（錢）、identity（身分：操作員本人的登入、憑證、金鑰、scope）、presence（到場）、goal（改目標）、public-release（對外）、unbackable-loss（無備份的損失）、authority（改授權：改 grant、authority table、DOA 或某條 lane 的權限）其中之一。這件 PM 自己決定；不確定就先找 hetero 評估。';
 function takeExtra(argv) {
   const rest = [];
   const extra = {};

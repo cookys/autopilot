@@ -80,7 +80,7 @@ function mk(extra = {}) {
   const { autostart, ...rest } = extra;
   const live = shm('hh-live-');
   const home = tmp('hh-home-');
-  const env = { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, ...rest };
+  const env = { ...process.env, HOME: home, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(home, 'runs'), ...rest };
   if (autostart) env.AUTOPILOT_RUNS_WATCH_AUTOSTART = ''; else env.AUTOPILOT_RUNS_WATCH_AUTOSTART = '0';
   return { live, home, env };
 }

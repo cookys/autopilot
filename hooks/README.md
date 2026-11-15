@@ -105,6 +105,7 @@ hooks/
   ask-decision.js          # Tier A (default-on, mods P1W HOOKQ) — PreToolUse AskUserQuestion adds an entry to the scope's decision/2 file; answer / SessionEnd close that entry
   askpm-log.js             # Tier B (opt-in, PM host only) — UserPromptSubmit hosted by advisory-relay; Stop via the opt-in multiplexer
   merge-task-status-lib.js # hosted in audit-log.js (lib, not a hook): a successful merge into the integration branch re-writes the task-status input
+  stuck-hand-lib.js        # hosted in audit-log.js (lib, not a hook): tells the dispatching session once when a running dispatched hand went quiet (scripts/stuck-hand-check.js; knob AUTOPILOT_STUCK_HAND_MINUTES)
   live-session-lib.js      # shared helpers for the two live-state writers (lib, not a hook)
   cost-tracker-lib.js      # pure usage/cost aggregation (lib, not a hook)
   audit-log.js             # Tier A

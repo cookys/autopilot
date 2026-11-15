@@ -13,7 +13,8 @@
  * after depth-0's AskUserQuestion; knob AUTOPILOT_ASK_DECISION) and merge-task-status-lib.js (a successful merge into the
  * integration branch re-writes the task-status input, detached; knob AUTOPILOT_MERGE_TASK_STATUS). Their opt-outs (AUTOPILOT_AWAITING_OWNER, AUTOPILOT_AGENT_ACTIVITY) are read inside
  * hooks/awaiting-owner.js handle() / hooks/live-session-lib.js, not here. Fifth hosted leg (BL-0327): runs-watch-autostart.js run(payload), the
- * PostToolUse watcher ensure (knob AUTOPILOT_RUNS_WATCH_AUTOSTART=0, read inside). Fail-open and independent of
+ * PostToolUse watcher ensure (knob AUTOPILOT_RUNS_WATCH_AUTOSTART=0, read inside). Sixth hosted leg: stuck-hand-lib.js handle(payload), which tells the
+ * dispatching session once that a running dispatched hand went quiet (knob AUTOPILOT_STUCK_HAND_MINUTES, 0/off disables, read inside). Fail-open and independent of
  * the audit logging below.
  */
 
@@ -43,6 +44,8 @@ function runHook(stdin) {
           require('./awaiting-owner.js').handle(p);
           // BL-0327: every tool call re-ensures the project watcher (zero-spawn fast path when alive; full path throttled inside). Own try, fail-open.
           try { require('./runs-watch-autostart.js').run(p); } catch (e) { process.stderr.write(`audit-log: runs-watch-autostart fail-open: ${e && e.message ? e.message : e}\n`); }
+          // Stuck-hand notice for the dispatching session (additionalContext; the chain merges it with the other members'). Own try, fail-open.
+          try { require('./stuck-hand-lib.js').handle(p); } catch (e) { process.stderr.write(`audit-log: stuck-hand fail-open: ${e && e.message ? e.message : e}\n`); }
           // HOOKQ (mods P1W): the answer to depth-0's AskUserQuestion closes its decision file; a successful merge into the
           // integration branch refreshes the task-status input. Own try each, lazy-required only for their tool.
           if (p.tool_name === 'AskUserQuestion') {

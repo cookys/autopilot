@@ -6908,6 +6908,66 @@
         "AUTOPILOT_FLEET_GATEWAY_ENDPOINTS"
       ],
       "note": "Endpoint name forwarded from dispatch-review.sh and dispatch-author.sh to dispatch-anthropic-review.js so fleet-task-header.js checks it against the fleet-gateway allowlist."
+    },
+    {
+      "name": "AUTOPILOT_STUCK_HAND_MINUTES",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "30",
+      "readers": [
+        "hooks/stuck-hand-lib.js",
+        "scripts/stuck-hand-check.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Minutes a still-running dispatched hand must show no log/worktree change, no new commit and no CPU growth before the dispatching session is told once (stuck-hand-lib hook (hosted by audit-log), scripts/stuck-hand-check.js). 0 or off disables the hook."
+    },
+    {
+      "name": "AUTOPILOT_STUCK_HAND_NOW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "hooks/stuck-hand-lib.js",
+        "scripts/stuck-hand-check.js"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_STUCK_HAND_MINUTES"
+      ],
+      "note": "Test-only fake clock (epoch ms) for the stuck-hand check and hook."
+    },
+    {
+      "name": "AUTOPILOT_STUCK_HAND_PROC_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/stuck-hand-check.js"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_STUCK_HAND_MINUTES"
+      ],
+      "note": "Test-only /proc root for the stuck-hand CPU reader."
+    },
+    {
+      "name": "AUTOPILOT_STUCK_HAND_STATE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/stuck-hand-check.js"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_STUCK_HAND_MINUTES"
+      ],
+      "note": "Test-only state file path for the stuck-hand observations (default: under the live runtime base)."
     }
   ]
 }

@@ -4426,6 +4426,19 @@
       "summary": "Set to off to skip the 2 s GET /models probe that dispatch-hetero and dispatch-consult make before using a local --endpoint."
     },
     {
+      "name": "AUTOPILOT_TIP_VERIFY_REQUIRE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to 1 to make dispatch-hetero refuse before the worker starts when no acceptance command is found. Unset, that dispatch proceeds and records tip_verify no_source."
+    },
+    {
       "name": "AUTOPILOT_CONSULT_TIMEOUT",
       "kind": "env",
       "audience": "user",

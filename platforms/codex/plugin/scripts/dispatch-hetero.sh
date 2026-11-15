@@ -159,6 +159,11 @@
 #                                               #   Refused together with --verify-cmd.
 #                                               #   Ignored under --strict-contract
 #                                               #   (that path does not emit tip_verify).
+#       [env AUTOPILOT_TIP_VERIFY_REQUIRE=1]   # when no source yields a command,
+#                                               #   refuse before the worker starts
+#                                               #   (the old die_precondition text).
+#                                               #   Unset, that case is
+#                                               #   "tip_verify": "no_source".
 #       [--keep-worktree]                      # keep worktree even on success
 #       [--sibling-ref-prefix refs/heads/x/]   # repeatable: a ref namespace the CALLER owns
 #                                              #   (e.g. refs/heads/hands/kr1/). Must start with
@@ -257,7 +262,12 @@
 #   2. the brief (--prompt-file) ## Acceptance section (source "brief");
 #   3. the consuming checkout's .claude/quality-gate-config.md section
 #      ## Test Command (source "repo_config");
-#   4. none → die_precondition before the worker starts, naming --verify-cmd,
+#   4. none → do not refuse. One stderr line is printed before the worker starts:
+#      dispatch-hetero: tip verify: no acceptance command found (brief ## Acceptance fenced block, or .claude/quality-gate-config.md ## Test Command); the tip is not re-verified
+#      TIP_VERIFY_SKIP is set and the result is tip_verify:"no_source" (no
+#      commands run). The dispatch is reported as it was before tip verification
+#      existed. AUTOPILOT_TIP_VERIFY_REQUIRE=1 restores the refusal:
+#      die_precondition before the worker starts, naming --verify-cmd,
 #      ## Acceptance, and ## Test Command. --no-verify-tip opts out and records
 #      tip_verify:"skipped_by_flag" (no commands run).
 #
@@ -307,7 +317,11 @@
 #     "commands": [ { "cmd", "rc", "duration_s", "tail" } ] }
 #   tail is the last 40 lines of stdout followed by stderr (one trailing empty
 #   line from a final newline is dropped). duration_s is integer seconds.
+#   When no source yields a command, "tip_verify" is the string "no_source"
+#   (not an object). AUTOPILOT_TIP_VERIFY_REQUIRE=1 refuses that case instead.
+#   --no-verify-tip sets the string "skipped_by_flag".
 # Any non-zero rc or timeout → dispatch status verify_failed, exit 3.
+# no_source is not verify_failed.
 
 set -uo pipefail
 
@@ -3681,7 +3695,14 @@ NODE
     TIP_VERIFY_CMDS_JSON="$cfg_line"
     return 0
   fi
-  die_precondition "no tip-verify command: pass --verify-cmd, or put acceptance commands in a fenced block under ## Acceptance, or set a fenced or whole-line command under ## Test Command in .claude/quality-gate-config.md, or pass --no-verify-tip"
+  # No source yielded a command. A fenced <word> placeholder already refused above.
+  if [ "${AUTOPILOT_TIP_VERIFY_REQUIRE:-}" = "1" ]; then
+    die_precondition "no tip-verify command: pass --verify-cmd, or put acceptance commands in a fenced block under ## Acceptance, or set a fenced or whole-line command under ## Test Command in .claude/quality-gate-config.md, or pass --no-verify-tip"
+  fi
+  printf '%s\n' 'dispatch-hetero: tip verify: no acceptance command found (brief ## Acceptance fenced block, or .claude/quality-gate-config.md ## Test Command); the tip is not re-verified' >&2
+  TIP_VERIFY_SKIP=1
+  TIP_VERIFY_RESULT_JSON='"no_source"'
+  return 0
 }
 
 # run_tip_verify — re-run the captured commands at the committed tip.
@@ -3692,7 +3713,10 @@ run_tip_verify() {
     return 0
   fi
   if [ "${TIP_VERIFY_SKIP:-0}" -eq 1 ] || [ "${NO_VERIFY_TIP:-0}" -eq 1 ]; then
-    TIP_VERIFY_RESULT_JSON='"skipped_by_flag"'
+    # no_source is recorded before the worker. Do not rewrite it as a flag skip.
+    if [ "${TIP_VERIFY_RESULT_JSON:-}" != '"no_source"' ]; then
+      TIP_VERIFY_RESULT_JSON='"skipped_by_flag"'
+    fi
     return 0
   fi
   local cmdfile="" tip_verify_out="" tip_verify_rc=0

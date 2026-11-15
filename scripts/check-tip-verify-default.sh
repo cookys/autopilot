@@ -47,8 +47,8 @@ if [ "${#specs[@]}" -eq 0 ]; then
   exit 1
 fi
 
+trap 'rm -f "${tmp:-}"' EXIT
 tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
 
 rc=0
 ok=()

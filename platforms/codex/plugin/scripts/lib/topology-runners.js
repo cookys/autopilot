@@ -21,6 +21,9 @@ const path = require('path');
 const RETIRED_FILE = path.join(__dirname, 'retired-runners.json');
 // Rung lists in a topology file. Each entry is {engine, effort, runner, ...}.
 const RUNG_LISTS = ['implementer_ladder', 'reviewer_ladder', 'consult_ladder', 'discuss_ladder', 'plan_review_panel'];
+// Review/QC seat sets: emptied by skips they must fail closed (never a native, same-family review).
+// The other lists keep skip + warn + native fallback.
+const REVIEW_SEAT_LISTS = ['reviewer_ladder', 'plan_review_panel'];
 // Tokens the resolver accepts that are not keys of the runner-binary map.
 const EXTRA_KNOWN = ['auto', 'codex-cli'];
 
@@ -83,11 +86,17 @@ function sanitizeCli(inFile, outFile) {
     const names = skipped.filter((s) => s.list === l).map((s) => s.spec).join(', ');
     process.stderr.write(`resolve-review-loop: ⚠ ${l} emptied by skipped rungs (${names}); regenerate the topology: node scripts/resolve-dispatch-topology.js, or run scripts/topology-prune.js --fix\n`);
   }
+  // Marker for the resolver: a review seat set that skips left empty (spec names of the skipped rungs).
+  const reviewEmptied = {};
+  for (const l of emptied.filter((x) => REVIEW_SEAT_LISTS.includes(x))) {
+    reviewEmptied[l] = skipped.filter((s) => s.list === l).map((s) => s.spec);
+  }
+  if (Object.keys(reviewEmptied).length) cleaned.review_sets_emptied_by_skips = reviewEmptied;
   fs.writeFileSync(outFile, JSON.stringify(cleaned), 'utf8');
   return 0;
 }
 
-module.exports = { RETIRED_FILE, RUNG_LISTS, retiredRunners, knownRunnerSet, topologyPath, specOf, findUnknownRungs, dropRungs };
+module.exports = { RETIRED_FILE, RUNG_LISTS, REVIEW_SEAT_LISTS, retiredRunners, knownRunnerSet, topologyPath, specOf, findUnknownRungs, dropRungs };
 
 if (require.main === module) {
   const [cmd, a, b] = process.argv.slice(2);

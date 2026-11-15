@@ -87,4 +87,29 @@ LINT="$(node "$PRUNE" --lint --runner-binary "$TEST_TMP/runner-binary-bad.js")";
 assert_exit_code "$RC" 1 "lint fails when a retired runner is back in the known list"
 assert_contains "$LINT" "qoderclicn still in the known-runner map" "lint names the runner"
 
+# 10. a review seat set emptied by skips fails closed; consult and valid-seat sets are unaffected
+RV_ONLY='{"schema_version":1,"runners_installed":{"codex":"/x"},"implementer_ladder":[],"reviewer_ladder":[{"engine":"Qwen3.8-Max","effort":"high","runner":"qoderclicn"}],"consult_ladder":[{"engine":"gpt-6.1-sol","effort":"low","runner":"codex","endpoint":""}],"discuss_ladder":[],"plan_review_panel":[]}'
+write_topo "$RV_ONLY"
+resolve "$TEST_TMP/o10" "$TEST_TMP/e10"
+assert_exit_code "$RC" 3 "reviewer_ladder only retired: resolver fails closed"
+assert_contains "$(cat "$TEST_TMP/e10")" "reviewer_ladder has no valid seat left" "reviewer_ladder only retired: message names the set"
+assert_contains "$(cat "$TEST_TMP/e10")" "Qwen3.8-Max/high@qoderclicn" "reviewer_ladder only retired: message names the skipped rung"
+assert_not_contains "$(cat "$TEST_TMP/o10")" "native-fallback" "reviewer_ladder only retired: no native seat emitted"
+# consult resolution on the same topology still succeeds (consult_dispatch=on skips the review auto path)
+printf 'hetero_review: off\nplan_review: off\nconsult_dispatch: auto\n' > "$TEST_TMP/consult.md"
+AUTOPILOT_TOPOLOGY_FILE="$TOPO" REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/consult.md" bash "$RRL" >"$TEST_TMP/o10c" 2>"$TEST_TMP/e10c" </dev/null; RC=$?
+assert_exit_code "$RC" 0 "same topology: consult resolution still exits 0"
+
+# 11. one retired + one valid reviewer rung: valid seat used
+write_topo '{"schema_version":1,"runners_installed":{"codex":"/x"},"implementer_ladder":[],"reviewer_ladder":[{"engine":"Qwen3.8-Max","effort":"high","runner":"qoderclicn"},{"engine":"gpt-6.1-sol","effort":"low","runner":"codex"}],"consult_ladder":[],"discuss_ladder":[],"plan_review_panel":[]}'
+resolve "$TEST_TMP/o11" "$TEST_TMP/e11"
+assert_exit_code "$RC" 0 "reviewer_ladder with a valid rung left: exits 0"
+assert_eq "topology" "$(jget "$TEST_TMP/o11" hetero_review_resolved_from)" "reviewer_ladder with a valid rung left: topology seat used"
+
+# 12. plan_review_panel only retired: fail closed
+write_topo '{"schema_version":1,"runners_installed":{"codex":"/x"},"implementer_ladder":[],"reviewer_ladder":[],"consult_ladder":[],"discuss_ladder":[],"plan_review_panel":[{"engine":"Qwen3.8-Max","effort":"high","runner":"qoderclicn"}]}'
+resolve "$TEST_TMP/o12" "$TEST_TMP/e12"
+assert_exit_code "$RC" 3 "plan_review_panel only retired: resolver fails closed"
+assert_contains "$(cat "$TEST_TMP/e12")" "plan_review_panel has no valid seat left" "plan_review_panel only retired: message names the set"
+
 finalize_test

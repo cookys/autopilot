@@ -115,7 +115,8 @@ the shipped defaults write them; no aliases.
   implementer and verification_author qualified; `kimi-code-k3` and `kimi-k2.8-preview` are the reviewer-
   qualified kimi ids, `kimi-code/k3.1-pro` has no reviewer row yet. `kimi` is now panel-eligible, so its
   consult row joins `plan_review_panel` as a non-chair seat today, and its reviewer row would join the
-  `reviewer_ladder` the same way.
+  `reviewer_ladder` the same way. Exam note (2026-11-15): the SWE implementer exam scored 16/19, under the
+  17/19 bar, so the kimi implementer seat stays disabled; a retake needs a newly pre-registered sitting (PM 01M7EAN4).
 * opencode: runner `opencode`, ids `opencode-go/<model>`, no endpoint. It stays OUT of `plan_review_panel`
   because `dispatch-author.sh` (the plan-review transport) has no opencode branch.
 * Runner binaries: `codex` and `agy` under `~/.local/bin`, `grok` under `~/.grok/bin` (and `~/.local/bin`) are

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Durable heterogeneous plan-review session controller: P1-P4 contract.
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: seam suites with Chinese-family fixture seats
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-plan-review.js"

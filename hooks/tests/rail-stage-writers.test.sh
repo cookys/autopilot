@@ -5,6 +5,7 @@
 # Each rail runs with its existing stub transport against a temp session marker and the test asserts the marker's
 # `stage`, `review_families` (completed seats only) and `unit`; a forced stage-advance exit 3 gives exactly one
 # diagnostic line and the rail still exits as it would have. Real ~/.autopilot is never touched.
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: seam suites with Chinese-family fixture seats
 . "$(dirname "$0")/lib.sh"
 
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \

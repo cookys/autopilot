@@ -58,7 +58,7 @@ echo ran > "$MARK_F"
 exit 0
 EOF
 chmod +x "$TEST_TMP/kimi"
-OUT_F="$(cd "$SBX" && WORKER_MOUNT_FORCE_MODE=refuse bash "$REPO_ROOT/scripts/dispatch-foreman.sh" --brief-file "$TEST_TMP/brief.md" --plan-file "$TEST_TMP/plan.md" \
+OUT_F="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 WORKER_MOUNT_FORCE_MODE=refuse bash "$REPO_ROOT/scripts/dispatch-foreman.sh" --brief-file "$TEST_TMP/brief.md" --plan-file "$TEST_TMP/plan.md" \
   --run-id mnt1 --run-dir "$TEST_TMP/runs/mnt1" --timeout 20 --kimi-bin "$TEST_TMP/kimi" 2>"$TEST_TMP/foreman.err" < /dev/null)"; RC_F=$?
 [ "$RC_F" -ne 0 ] && eq ok ok "foreman refuse exits non-zero" || fail "foreman refuse exited 0"
 assert_file_absent "$MARK_F" "foreman worker never ran under refuse"
@@ -121,7 +121,7 @@ author_run() { # <tag> <env words...> -- <runner args...>
   local tag="$1"; shift
   local -a envs=(); while [ "$1" != "--" ]; do envs+=("$1"); shift; done; shift
   A_RUNS="$TEST_TMP/runs-a-$tag"; A_MARK="$TEST_TMP/mark-a-$tag"; mkdir -p "$A_RUNS"; rm -f "$A_MARK"
-  env HOME="$AHOME" AUTOPILOT_DISPATCH_RUNS_DIR="$A_RUNS" MNT_MARK="$A_MARK" DISPATCH_QUIET=1 DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 \
+  env HOME="$AHOME" AUTOPILOT_DISPATCH_RUNS_DIR="$A_RUNS" MNT_MARK="$A_MARK" DISPATCH_QUIET=1 DISPATCH_DETACH=0 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_TEST_CN_GATE_OFF=1 \
     ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test-token-0123456789 "${envs[@]}" \
     bash "$REPO_ROOT/scripts/dispatch-author.sh" "$@" --prompt-file "$TEST_TMP/aprompt.txt" --timeout 30s \
     >"$TEST_TMP/a-$tag.out" 2>"$TEST_TMP/a-$tag.err" < /dev/null

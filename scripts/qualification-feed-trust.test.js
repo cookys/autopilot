@@ -46,7 +46,16 @@ const METRICS = path.join(REPO, 'scripts', `qualification-${'metrics'}.js`);
 const TRUST = path.join(REPO, 'scripts', 'qualification-feed-trust.js');
 const OPEN = path.join(REPO, 'scripts', 'open-decision.js');
 const metricsLib = require(`./lib/qualification-${'metrics'}.js`);
-const NOW_ISO = '2026-10-16T12:00:00Z';
+// qualification-feed-trust.js gates with Date.now() and a 30-day window. A committed
+// generated_at ages out of that window (red after 2026-11-15T09:00Z). Stamp from this run.
+const RUN_MS = Date.now();
+function isoUtc(ms) {
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+const NOW_ISO = isoUtc(RUN_MS);
+const FRESH_AT = isoUtc(RUN_MS - 3 * 60 * 60 * 1000);
+const RENEWED_AT = isoUtc(RUN_MS - 60 * 60 * 1000);
+const STALE_AT = isoUtc(RUN_MS - 31 * 24 * 60 * 60 * 1000);
 const HEX64 = 'ab'.repeat(32);
 
 function tmp(prefix) {
@@ -55,7 +64,7 @@ function tmp(prefix) {
 
 function baseDoc() {
   const doc = JSON.parse(fs.readFileSync(path.join(FIX, 'metrics-qualification-and-strikes.valid.json'), 'utf8'));
-  doc.generated_at = '2026-10-16T09:00:00Z';
+  doc.generated_at = FRESH_AT;
   return doc;
 }
 
@@ -304,7 +313,7 @@ test('confirm-twice', () => {
   assert.equal(lines.length, rowOf(doc).length);
 
   const renewed = baseDoc();
-  renewed.generated_at = '2026-10-16T11:00:00Z';
+  renewed.generated_at = RENEWED_AT;
   writeCacheBytes(cacheDir, Buffer.from(JSON.stringify(renewed)), renewed.generated_at);
   const beforeLines = confirmLines(cacheDir).length;
   const beforeBatches = batchLines(cacheDir).length;
@@ -480,7 +489,7 @@ test('confirmation-cannot-bypass-invariants', () => {
   assert.match(bad.stderr, /qualification-feed gate REJECTED/);
 
   const staleDoc = baseDoc();
-  staleDoc.generated_at = '2026-09-01T00:00:00Z';
+  staleDoc.generated_at = STALE_AT;
   const stale = homeWith(staleDoc);
   writeConfirmation(stale.cacheDir, match, 'd-stale');
   const old = seatStatus(childEnv(stale.home), 'grok-4.6', 'grok', 'reviewer', 'default');
@@ -734,4 +743,13 @@ test('corrupt-confirmations-stderr-once-per-process', () => {
   assert.equal(synced.status, 0, synced.stderr);
   const hits = synced.stderr.split('\n').filter((l) => /skipped 1 line/.test(l));
   assert.equal(hits.length, 1, synced.stderr);
+});
+
+test('stale-generated-at-exits-3', () => {
+  const doc = baseDoc();
+  doc.generated_at = STALE_AT;
+  const { home, cacheDir } = homeWith(doc);
+  const reported = runTrust(childEnv(home), ['status', '--feed-cache-dir', cacheDir]);
+  assert.equal(reported.status, 3);
+  assert.match(reported.stderr, /qualification-feed gate REJECTED freshness: stale/);
 });

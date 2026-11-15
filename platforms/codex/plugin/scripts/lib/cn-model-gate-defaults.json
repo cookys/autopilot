@@ -1,0 +1,13 @@
+{
+  "_why": "Starter lists for scripts/lib/cn-model-dispatch-gate.js (Fleet task 01M7E2A1, card d-1dfcf757). A repo extends every list (union, never replaces) in .claude/cn-model-gate.json. Globs: `*` stays inside one path segment, `**` crosses directories, a glob without `/` matches any single path segment.",
+  "sensitive_paths": [
+    "**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*.p12", "**/id_rsa*", "**/id_ed25519*", "**/.ssh/**",
+    "**/credentials*", "**/secrets/**", "**/secret*", "**/.netrc", "**/.npmrc", "**/.kimi-code/**", "**/.aws/**",
+    "**/payments/**", "**/payment*", "**/billing/**", "**/invoices/**", "**/ledger/**", "**/wallet*",
+    "**/pii/**", "**/customers/**", "**/customer-data/**", "**/customer_data/**",
+    "**/private/**", "**/home-data/**"
+  ],
+  "sensitive_repos": ["*payment*", "*billing*", "*customer*", "*-private", "home-*", "*secrets*"],
+  "core_dirs": [],
+  "novel_roles": ["plan", "design", "brainstorm", "architecture", "plan_review", "research"]
+}

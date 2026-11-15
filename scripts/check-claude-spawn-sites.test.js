@@ -219,6 +219,8 @@ test('mutation: an account-layer regex that matches everything lets the unwired 
 /** The fixture gets a copy of the checker (validate.sh runs it from its own dir); like the real tree, it registers itself. */
 function installChecker(root) {
   fs.copyFileSync(SCRIPT, path.join(root, 'scripts', 'check-claude-spawn-sites.js'));
+  // validate.sh also runs the retired-runner lint from its own dir; this fixture has no runner map, so a passing stub stands in.
+  fs.writeFileSync(path.join(root, 'scripts', 'topology-prune.js'), 'process.exit(0);\n');
   const f = path.join(root, 'scripts', 'lib', 'claude-spawn-sites.json');
   const doc = JSON.parse(fs.readFileSync(f, 'utf8'));
   doc.sites.push({ file: 'scripts/check-claude-spawn-sites.js', status: 'out_of_scope', reason: 'the gate itself: its patterns contain the strings it looks for' });

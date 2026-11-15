@@ -108,6 +108,7 @@ const SEATS = Object.freeze({
 // Family ids as scripts/lib/stage-write.js familyOfEngine() returns them, plus `claude` (what the PM writes for anthropic).
 // A seat's family is fixed by the seat, never by --seat-model.
 const KNOWN_FAMILIES = new Set(['anthropic', 'claude', 'openai', 'xai', 'moonshot', 'zhipu', 'minimax', 'google', 'alibaba', 'deepseek', 'meituan', 'reflection']);
+const transcriptGate = require('./lib/cn-model-dispatch-gate');
 const MIN_VALID = 2;
 const VERDICTS = new Set(['SHIP-AS-IS', 'FIX-THEN-SHIP']);
 
@@ -476,11 +477,15 @@ async function cmdRun(o) {
 
   const state = {};
   const todo = [];
+  const barredLines = [];
   for (const n of names) {
     const s = seatTable[n];
     const family = SEATS[n].family;
     const base = { runner: s.runner, engine: s.engine, model: s.model, effort: s.effort, family, qualified: isQualified(s, scorecardBin) };
     if (family === o['implementer-family']) { state[n] = { ...base, state: 'excluded_family' }; continue; }
+    // d-1dfcf757: a seat in a family barred from transcript content is not dispatched for a marked task.
+    const tfg = transcriptGate.check({ runner: s.runner, model: s.model, endpoint: s.endpoint, role: 'reviewer', files: [o['spec-file'], o.methodology], diffFiles: [o.pack], cwd: process.cwd() });
+    if (!tfg.allowed) { state[n] = { ...base, state: 'barred_family', reason: tfg.line }; barredLines.push(tfg.line); continue; }
     const reach = s.endpoint ? endpointReady(s.endpoint) : runnerFound(s);
     if (!reach) { state[n] = { ...base, state: 'unavailable', reason: s.endpoint ? `endpoint ${s.endpoint} not ready on this account` : `runner ${s.bin} not found on this account` }; continue; }
     state[n] = { ...base, state: 'dispatched' };
@@ -510,6 +515,7 @@ async function cmdRun(o) {
     }
   }
   writeJson(path.join(o.out, 'run.json'), { implementer_family: o['implementer-family'], questions: pk.questions, skipped_files: pk.skipped, seats: state });
+  if (barredLines.length && !todo.length) { process.stderr.write(`review-jury: ${barredLines[0]}; no allowed seat left\n`); return 2; }
   return mergeDirs([o.out], o.out);
 }
 

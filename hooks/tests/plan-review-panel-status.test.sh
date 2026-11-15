@@ -2,6 +2,7 @@
 # Panel-level progress view (v2.34.31): dispatch-plan-review writes a panel manifest at
 # every seat transition; dispatch-status --panels/--panel renders it. Red-green carrier:
 # the seam-driven run below leaves NO panel manifest on pre-change dispatch-plan-review.
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: seam suites with Chinese-family fixture seats
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-plan-review.js"

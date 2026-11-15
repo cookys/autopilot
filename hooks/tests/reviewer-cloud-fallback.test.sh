@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # Reviewer-seat cloud retreat (PM 01M726SXVB). ONLY the roster reviewer tuple, and only when
 # reviewer_on_engine_unavailable is cloud-fallback (empty follows the global on_engine_unavailable).
 # A 503 on GET /v1/models retreats ONCE to reviewer_cloud_fallback_rung; a later 200 with the

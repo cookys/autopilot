@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # on_engine_unavailable: cloud-fallback (PM ruling fleet 01M6WGGHWN + gpu-lead 429/503 addendum).
 #   1. dispatch-hetero classifies a local-endpoint death (--endpoint given) as endpoint_unreachable
 #      (refused / timeout / other 5xx) or endpoint_busy (429 / 503); cloud runners are unchanged.

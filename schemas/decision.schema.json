@@ -144,7 +144,8 @@
               "presence",
               "goal",
               "public-release",
-              "unbackable-loss"
+              "unbackable-loss",
+              "authority"
             ]
           },
           "kind": {

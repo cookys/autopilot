@@ -69,6 +69,7 @@ const { effortSeatTimeoutSeconds } = require('./lib/plan-review-timeout');
 const { createPanelManifest } = require('./lib/plan-review-panel');
 const { stageWrite } = require('./lib/stage-write');
 const familyGate = require('./lib/review-family-gate');
+const cnGate = require('./lib/cn-model-dispatch-gate');
 const { loadContextFiles, renderContextBlock } = require('./lib/plan-review-context');
 const LAYOUT = require('./lib/repo-layout.js'); // work-record locations (plans dir, projects index) come from the registry
 
@@ -1309,6 +1310,8 @@ function redactedTail(text, maxLines = 20, maxBytes = 2048) {
   return tail;
 }
 
+const cnRefusedSeats = [];
+
 function dispatchSeat(
   target,
   prompt,
@@ -1318,6 +1321,31 @@ function dispatchSeat(
   sequenceAttempt = attempt,
   repoRoot,
 ) {
+  // Chinese-model gate (01M7E2A1, d-1dfcf757): a plan is novel work, so a barred-family seat is refused
+  // before anything spawns (fail closed; the run then exits 2, see finish()).
+  const cn = cnGate.check({
+    runner: target.runner,
+    model: target.model,
+    endpoint: target.endpoint === 'default' ? undefined : target.endpoint,
+    role: 'plan_review',
+    env: { ...process.env, AUTOPILOT_TASK_ROLE: 'plan_review', AUTOPILOT_TASK_NOVEL: '1' },
+    cwd: repoRoot || process.cwd(),
+  });
+  if (!cn.allowed) {
+    cnRefusedSeats.push(target.id);
+    process.stderr.write(`dispatch-plan-review: seat ${target.id} (${target.runner}/${target.model}) skipped: ${cn.line}\n`);
+    const envelope = createRunnerTransportEnvelope({
+      runner: target.runner,
+      model: target.model,
+      operation: 'plan-review',
+      argv: ['cn-model-gate', target.id, String(attempt)],
+      cwd: process.cwd(),
+      child: { status: 2, signal: null, error: null, stdout: Buffer.alloc(0), stderr: `${cn.line}\n` },
+      outcomeHints: { preconditionFailed: true },
+      privateRawReference: null,
+    });
+    return { envelope, raw: Buffer.alloc(0), authorError: cn.line, failure: { error: cn.line, runner_stderr_tail: '' } };
+  }
   const seam = seamEntry(sequence, target.id, sequenceAttempt, legacyEnv);
   if (seam) {
     if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS !== '1') {
@@ -1809,7 +1837,7 @@ function artifactExitCode(artifact) {
 
 function finish(payload, code) {
   process.stdout.write(`${JSON.stringify(publicArtifact(payload), null, 2)}\n`);
-  process.exit(code);
+  process.exit(cnRefusedSeats.length > 0 ? 2 : code);
 }
 
 function createClock(nowOverride) {

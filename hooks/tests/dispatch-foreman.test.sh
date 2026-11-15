@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-foreman.test.sh — the non-Claude foreman rail (Shape B), every rail-owned
 # enforcement from docs/plans/_archive/2026/09/2026-09-13-foreman-rail-b-build.md pinned against a PATH-stubbed
 # `kimi` (no network, no live LLM). The stub is driven ONLY through KIMI_* variables, which

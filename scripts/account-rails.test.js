@@ -351,7 +351,7 @@ function orphanRun(tool, flags, kind, deaf, legacy, forkExtra) {
     // comparison uses a plain hanging claude double that records its start; `deaf` also ignores SIGTERM.
     // forkExtra (negative control only): the double also starts a detached second claude-named process that outlives it.
     const forkSrc = forkExtra ? "if (process.argv[2] !== 'grandchild') require('child_process').spawn(process.argv[0], [process.argv[1], 'grandchild'], { detached: true, stdio: 'ignore' }).unref();\n" : '';
-    if (deaf || legacy || forkExtra) fs.writeFileSync(path.join(fx.shim.binDir, 'claude'), `#!/usr/bin/env node\nrequire('fs').appendFileSync(${JSON.stringify(started)}, 'x');\n${forkSrc}${deaf ? "process.on('SIGTERM', () => {});" : ''}setInterval(() => {}, 1000);\n`, { mode: 0o755 });
+    if (deaf || legacy || forkExtra) fs.writeFileSync(path.join(fx.shim.binDir, 'claude'), `#!/usr/bin/env node\n${forkSrc}require('fs').appendFileSync(${JSON.stringify(started)}, 'x');\n${deaf ? "process.on('SIGTERM', () => {});" : ''}setInterval(() => {}, 1000);\n`, { mode: 0o755 });
     const pre = path.join(fx.root, 'pre.js');
     fs.writeFileSync(pre, PRELOAD_SRC);
     const env = Object.assign({}, fx.env, { NODE_OPTIONS: `--require ${pre}`, G37_TEST_REAL_HOME: fx.realHome, AUTOPILOT_SETTLE_MS: '0', DISPATCH_QUIET: '1' });
@@ -469,7 +469,7 @@ function termRun(arm, fork, deaf) {
     fs.writeFileSync(path.join(fx.shim.binDir, 'claude'), `#!/usr/bin/env node\nrequire('fs').appendFileSync(${JSON.stringify(started)}, 'x');\n${forkSrc}${deaf ? "process.on('SIGTERM', () => {});" : ''}setInterval(() => {}, 1000);\n`, { mode: 0o755 });
     const pre = path.join(fx.root, 'pre.js');
     fs.writeFileSync(pre, PRELOAD_SRC);
-    const env = Object.assign({}, fx.env, { NODE_OPTIONS: `--require ${pre}`, G37_TEST_REAL_HOME: fx.realHome, AUTOPILOT_SETTLE_MS: '0', DISPATCH_QUIET: '1' });
+    const env = Object.assign({}, fx.env, { AUTOPILOT_TEST_CN_GATE_OFF: '1', NODE_OPTIONS: `--require ${pre}`, G37_TEST_REAL_HOME: fx.realHome, AUTOPILOT_SETTLE_MS: '0', DISPATCH_QUIET: '1' });
     for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CHILD_SESSION_ID']) delete env[k];
     const marker = path.join(fx.shim.binDir, 'claude');
     let cmd; let cwd = REPO;
@@ -546,7 +546,7 @@ function exitRun(arm, mode) {
     const body = mode === 'ok' ? "process.stdout.write('hello\\n');" : mode === 'fail' ? 'process.exit(3);' : 'setInterval(() => {}, 1000);';
     fs.writeFileSync(path.join(fx.shim.binDir, 'claude'), `#!/usr/bin/env node\n${body}\n`, { mode: 0o755 });
     const marker = path.join(fx.shim.binDir, 'claude');
-    const env = Object.assign({}, fx.env, { AUTOPILOT_SETTLE_MS: '0', DISPATCH_QUIET: '1', AUTOPILOT_ENDPOINT_TT_URL: 'http://127.0.0.1:9/anthropic', AUTOPILOT_ENDPOINT_TT_TOKEN: 'FAKE-token-ccshim', ANTHROPIC_BASE_URL: 'http://127.0.0.1:9/anthropic', ANTHROPIC_AUTH_TOKEN: 'FAKE-token-ccshim' });
+    const env = Object.assign({}, fx.env, { AUTOPILOT_TEST_CN_GATE_OFF: '1', AUTOPILOT_SETTLE_MS: '0', DISPATCH_QUIET: '1', AUTOPILOT_ENDPOINT_TT_URL: 'http://127.0.0.1:9/anthropic', AUTOPILOT_ENDPOINT_TT_TOKEN: 'FAKE-token-ccshim', ANTHROPIC_BASE_URL: 'http://127.0.0.1:9/anthropic', ANTHROPIC_AUTH_TOKEN: 'FAKE-token-ccshim' });
     for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CHILD_SESSION_ID']) delete env[k];
     const tmo = mode === 'hang' ? '2s' : '60s';
     let cmd;

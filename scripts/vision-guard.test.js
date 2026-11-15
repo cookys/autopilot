@@ -105,7 +105,7 @@ function writeStore(dir, rows) {
 }
 
 function childEnv(extra) {
-  const env = { ...process.env, ...extra };
+  const env = { ...process.env, AUTOPILOT_TEST_CN_GATE_OFF: '1', ...extra };
   delete env.ENGINE_CAPABILITY_FILE;
   return env;
 }

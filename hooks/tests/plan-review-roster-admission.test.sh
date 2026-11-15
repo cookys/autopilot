@@ -9,6 +9,7 @@
 #   BL-0145 base: a required seat with fallbacks [] whose first attempt returns quota ends the
 #     panel as required_seat_transport_exhausted (no substitution is possible).
 # Negative controls are asserted below: removing the stop or the fill turns these red.
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: seam suites with Chinese-family fixture seats
 . "$(dirname "$0")/lib.sh"
 
 RESOLVER="$REPO_ROOT/scripts/resolve-review-loop.sh"
@@ -375,7 +376,7 @@ const [r] = process.argv.slice(1);
 process.stdout.write(JSON.stringify({ "auto-fb-architect-1": [{ file: r, classification: "success" }] }));' "$READY")"
 run_pr_nocodex() {  # run_pr_nocodex <ticket> <manifest> <topology> <config> [script]
   local ticket="$1" manifest="$2" topo="$3" cfg="$4" script="${5:-$PR}"
-  env -i HOME="$NOCODEX/home" PATH="$NOCODEX/bin:/usr/bin:/bin" \
+  env -i AUTOPILOT_TEST_CN_GATE_OFF=1 HOME="$NOCODEX/home" PATH="$NOCODEX/bin:/usr/bin:/bin" \
     AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 AUTOPILOT_TOPOLOGY_FILE="$topo" \
     REVIEW_LOOP_CONFIG_OVERRIDE="$cfg" AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$SEQ_NC" \
     AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$TEST_TMP/nocodex-cap" AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/nocodex-acc" \
@@ -437,7 +438,7 @@ assert_not_contains "$PR_OUT" "retry_substitution" "NC: and no substitution happ
 
 # NEGATIVE CONTROL 2: with no fallback pool at all (opt-out) the same missing codex also fails
 M9="$TEST_TMP/pr-m9.json"; mk_manifest "$M9" prr-nocodex-nofill
-env -i HOME="$NOCODEX/home" PATH="$NOCODEX/bin:/usr/bin:/bin" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+env -i AUTOPILOT_TEST_CN_GATE_OFF=1 HOME="$NOCODEX/home" PATH="$NOCODEX/bin:/usr/bin:/bin" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
   AUTOPILOT_TOPOLOGY_FILE="$TOPO_MIX" REVIEW_LOOP_CONFIG_OVERRIDE="$IMPL_GROK_CFG" AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$SEQ_NC" \
   AUTOPILOT_STRIKE_WRITER=off ENGINE_CAPABILITY_DIR="$TEST_TMP/nocodex-cap" AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/nocodex-acc" \
   node "$PR" --repo-root "$PR_REPO" --plan-file "$PR_REPO/plan.md" --rubric-file "$PR_REPO/rubric.md" \

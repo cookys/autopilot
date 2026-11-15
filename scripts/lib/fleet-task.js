@@ -1,14 +1,20 @@
 'use strict';
 
 /**
- * fleet-task.js — append one progress line to a fleet task.
+ * fleet-task.js — fleet task verbs: one progress line, or mark a task blocked on a target.
  *
- *   progress(taskId, text)  ->  { ok: true } | { ok: false, status, error }
+ *   progress(taskId, text)            ->  { ok: true } | { ok: false, status, error }   (`task update <id> <text>`, used by stage-advance)
+ *   blocked(taskId, blockedOn, note)  ->  { ok: true } | { ok: false, status, error }
+ *   ownerAddress()                    ->  'ns/courier/member' | null
  *
  * Binary: FLEET_BIN, or `fleet` on PATH when that is unset.
- * Verb, from a read-only `$FLEET_BIN task --help` (never a send): `task update <id> <progress...>`
- * ("assignee only; progress only"). `task progress <id> <blocked_human|running>` is a state report,
- * the same shape as the MCP `task_progress` tool, and cannot carry an arbitrary line.
+ * Verb: `fleet task progress <id> blocked --blocked-on <target> [note]`; target is a member address, a `d-xxxxxxxx`
+ * card id or a task id, anything else is refused by fleet with `blocked_on_invalid` (surfaced as the error).
+ * Owner address, in order: (1) env FLEET_ADDRESS (any `@session` suffix stripped: --blocked-on takes the bare seat);
+ * (2) when CLAUDE_CODE_SESSION_ID is set, `fleet whoami --session <id>` exit 0 -> first stdout line, which must be a
+ * `ns/courier/member` triple (stderr, e.g. a courier socket mismatch notice, is ignored; exit 2 `session_unknown` / 3 courier
+ * unreachable -> unavailable). Plain `fleet whoami` is not used: from a shell it only ever reports the CLI's own identity
+ * (member `fleet-cli`), never the session's seat. null when neither gives a triple (never guessed).
  * Tests point FLEET_BIN at a stub. This module never sends a message.
  * Node >= 20.10, built-ins only.
  */
@@ -19,14 +25,37 @@ function bin() {
   return process.env.FLEET_BIN || 'fleet';
 }
 
-function progress(taskId, text) {
-  const r = spawnSync(bin(), ['task', 'update', String(taskId), String(text)], { encoding: 'utf8' });
+function run(args) {
+  const r = spawnSync(bin(), args, { encoding: 'utf8', timeout: 15000 });
   if (r.error) return { ok: false, status: null, error: r.error.message };
   if (r.status !== 0) {
     const detail = (r.stderr || '').trim().split('\n')[0];
-    return { ok: false, status: r.status, error: detail || `exit ${r.status}` };
+    return { ok: false, status: r.status, error: detail || `exit ${r.status}`, stdout: r.stdout };
   }
-  return { ok: true };
+  return { ok: true, stdout: r.stdout };
 }
 
-module.exports = { progress, bin };
+function progress(taskId, text) {
+  return run(['task', 'update', String(taskId), String(text)]);
+}
+
+function blocked(taskId, blockedOn, note) {
+  const args = ['task', 'progress', String(taskId), 'blocked', '--blocked-on', String(blockedOn)];
+  if (note) args.push(String(note));
+  return run(args);
+}
+
+const ADDR_RE = /^[^/\s]+\/[^/\s]+\/[^/\s]+$/;
+
+function ownerAddress() {
+  const env = (process.env.FLEET_ADDRESS || '').trim().replace(/@.*$/, '');
+  if (ADDR_RE.test(env)) return env;
+  const sid = (process.env.CLAUDE_CODE_SESSION_ID || '').trim();
+  if (!sid) return null;
+  const r = run(['whoami', '--session', sid]);
+  if (!r.ok) return null;
+  const first = (r.stdout || '').split('\n')[0].trim();
+  return ADDR_RE.test(first) ? first : null;
+}
+
+module.exports = { progress, blocked, ownerAddress, bin };

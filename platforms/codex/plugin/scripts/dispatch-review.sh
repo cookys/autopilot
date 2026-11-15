@@ -585,6 +585,10 @@ validate_d2_agy_claims() {
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode)"
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint review-seat ;; esac
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
+# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
+_tfg_msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role reviewer --runner "$RUNNER" --model "$MODEL" ${DIFF_FILE:+--diff-file "$DIFF_FILE"} ${ENDPOINT:+--endpoint "$ENDPOINT"} ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} 2>&1 >/dev/null)" \
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
+unset _tfg_msg
 # --role-kit: refused on every runner but claude-native, validated now (before any spawn, and before the
 # detach supervisor below re-runs this argv inline).
 . "$_REVIEW_SELF_DIR/lib/role-kit.sh"   # defaults only: no kit leaves ROLE_KIT_TOOLS empty and ROLE_KIT_EXTRA unset-equivalent
@@ -1718,6 +1722,21 @@ write_review_manifest() {
   local _rk_ident="$REPO_IDENTITY_FIELDS"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
   declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "" "$RUNNER" "${ENDPOINT:-}")"
+  # What check-unmerged-ship.js reads: the verdict of THIS run (set only on a reviewed exit), the repo HEAD sha at dispatch time
+  # (this rail has no --head: with a --diff-file the diff was cut from the cwd checkout, so its HEAD is the reviewed head) and the
+  # cwd toplevel. All null when unknown; fleet_task is already in dispatch_attr_fields above.
+  if [ -z "${REVIEW_HEAD_SHA+x}" ]; then
+    REVIEW_HEAD_SHA=""; REVIEW_REPO_ROOT=""
+    if [ -n "${DIFF_FILE:-}" ]; then
+      REVIEW_HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+      REVIEW_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    fi
+  fi
+  local _vj="null" _hj="null" _rj="null"
+  [ -n "${REVIEW_VERDICT:-}" ] && _vj="\"$(json_escape "$REVIEW_VERDICT")\""
+  [[ "$REVIEW_HEAD_SHA" =~ ^[0-9a-f]{7,64}$ ]] && _hj="\"$REVIEW_HEAD_SHA\""
+  [ -n "$REVIEW_REPO_ROOT" ] && _rj="\"$(json_escape "$REVIEW_REPO_ROOT")\""
+  _rk_ident="$_rk_ident, \"verdict\": $_vj, \"head\": $_hj, \"repo_root\": $_rj"
   {
     printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$( if [[ -n "$ALLOW_NARRATIVE" ]]; then json_escape "$ALLOW_NARRATIVE"; else printf null; fi )" "$RUNNER" "$(json_escape "$MODEL")" \
@@ -2801,6 +2820,7 @@ _rv_json="$(printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verd
   "$(json_escape "$RAW_LOG")" "$REVIEW_USAGE_JSON" "$(json_escape "$FRAME_CLOSED_BY")" \
   "$([ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && printf ', "role_kit": %s' "$ROLE_KIT_JSON")" \
   "$(review_probe_suffix)")"
+REVIEW_VERDICT="$VERDICT"   # the exit trap rewrites the manifest with it
 printf '%s\n' "$_rv_json"
 review_log_fallback "reviewed"
 record_dispatch_usage "$_rv_json"

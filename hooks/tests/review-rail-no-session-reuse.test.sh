@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # Structural guard behind review_fresh_context=on (BL-0111, coordinator ruling C).
 #
 # The key's "on" promise is "a reviewer never continues an existing provider session". The review

@@ -59,6 +59,14 @@ Every roster change adds a block here: date, reason, who ruled.
 * An empty `reviewer_cloud_fallback_rung` on an agy `gemini-4-carbon-*` reviewer is filled with `gemini-4-argon-<same tier>/<tier>@agy`, and an empty `reviewer_on_engine_unavailable` becomes `cloud-fallback`. That same-tier pair is the one same-family exception. The qwen reviewer's rung stays `gpt-6.1-sol/high@codex`.
 * `scripts/dispatch-hetero.sh` default model is `gemini-4-carbon-low`. An agy implementer whose engine is `gemini-4-carbon-*` and whose `implementer_ladder` is empty gets that id as rung 0 and `gemini-4-argon-<same tier>` as rung 1 (the existing ladder climb). The roster implementer stays `gpt-6.1-sol`.
 
+**2026-11-15 (DeepSeek restricted reviewer seat).** `deepseek-v4.1-flash` (runner `anthropic-compatible`, endpoint `deepseek`, effort high) is a reviewer seat in the pace picker, ruled by the PM (fleet 01M7EETN). Evidence: scorecard event 35, 42/42, false_pass_critical 0, evidence `b678ae36`, emit-row `6d0bc54e`.
+
+* Declared as the `deepseek` pool in `scripts/lib/pace-roles.json` with `cn_gate: true` (Chinese-family restricted seat; family set in `scripts/lib/engine-spelling.js` `isChineseFamily`). It is in the `reviewer` list and deliberately not in `priority.reviewer`.
+* Scope: `scripts/pace-select.js --role reviewer --scope mechanical` only (XS/S mechanical changes, formatting, docs, dependency bumps). Without `--scope mechanical` the seat is not a candidate. Core code, payment or personal-data changes, designs and plans never pass `--scope mechanical`.
+* Window: 09:00 to 12:45 Asia/Taipei (`available_window`; outside it the candidate reads `outside_window`). Slots borrowed by the recovery line: pass `--exclude deepseek`.
+* Online: the pool's `probe_model` makes the picker run `scripts/lib/endpoint-probe.js` (GET `/v1/models`, 200 and the model listed); anything but `ok` reads `endpoint_not_ready` and the seat is skipped, never waited for.
+* Never sole: the seat is dropped (`no_non_cn_pair`) unless a non-Chinese-family key also has a fresh reading; a chosen seat reports `cn_gate.pair_with`, and that second reviewer must run. The existing `qwen_local`, `glm` and `kimi` seats keep their current rules until the Chinese-model dispatch gate (feat/kimi-seat, not on develop) merges and enforces them.
+
 **2026-11-10.** The qwen reviewer seat retreats to a cloud seat when `qwen_local` is down or busy, and returns when the endpoint answers again. Ruled by the PM (fleet 01M726SXVB).
 
 * Reason: <host> qwen planned downtime 16:05–18:40 +08. Only the reviewer seat. The global `on_engine_unavailable` stays `ask`, and every other seat is unchanged.
@@ -109,13 +117,16 @@ the shipped defaults write them; no aliases.
   `AUTOPILOT_ENDPOINT_MINIMAX_TOKEN`, or the provider-native pair `AUTOPILOT_MINIMAX_BASE_URL` (optional) and
   `MINIMAX_API_KEY` (`resolve-endpoint.sh` order). Shipped rows: implementer qualified; the reviewer rows for
   `MiniMax-M3.1-Flash-Preview` FAILED, and there is no reviewer row for `MiniMax-M3.1-Flash`, so it enters
-  `reviewer_ladder` only after a reviewer exam passes.
+  `reviewer_ladder` only after a reviewer exam passes. Exam note (2026-11-15): the SWE implementer exam scored
+  16/19 (sitting 4f2506468), under the 17/19 bar, so the MiniMax implementer seat stays disabled; a retake needs a
+  newly pre-registered sitting (PM 01M7EHRN).
 * kimi-code/k3.1-pro: runner `kimi`, no endpoint, no env var. The binary is `kimi` on PATH, else
   `~/.kimi-code/bin/kimi` (`scripts/lib/runner-fallback-bin.sh`). Shipped rows: consult, discuss, owner,
   implementer and verification_author qualified; `kimi-code-k3` and `kimi-k2.8-preview` are the reviewer-
   qualified kimi ids, `kimi-code/k3.1-pro` has no reviewer row yet. `kimi` is now panel-eligible, so its
   consult row joins `plan_review_panel` as a non-chair seat today, and its reviewer row would join the
-  `reviewer_ladder` the same way.
+  `reviewer_ladder` the same way. Exam note (2026-11-15): the SWE implementer exam scored 16/19, under the
+  17/19 bar, so the kimi implementer seat stays disabled; a retake needs a newly pre-registered sitting (PM 01M7EAN4).
 * opencode: runner `opencode`, ids `opencode-go/<model>`, no endpoint. It stays OUT of `plan_review_panel`
   because `dispatch-author.sh` (the plan-review transport) has no opencode branch.
 * Runner binaries: `codex` and `agy` under `~/.local/bin`, `grok` under `~/.grok/bin` (and `~/.local/bin`) are

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-runner-session-id-scrub.test.sh — a dispatch rail launches its runner as a CHILD session,
 # so the caller's explicit AUTOPILOT_SESSION_ID must never reach it: session-mode.js getSessionId()
 # prefers that variable, and a child that inherits it writes its marker (size/stage/root_run_id)

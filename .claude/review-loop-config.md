@@ -12,6 +12,7 @@
 - implementer_effort: low
 - implementer_runner: agy
 - implementer_ladder: gemini-4-carbon-low/low@agy, grok-4.7/low@grok
+<!-- DISABLED until tested (operator, 2026-11-15; pace-roles.json _disabled lists kimi and minimax for the picker): to enable, append to the implementer_ladder line above: `, kimi-code/kimi-for-coding/high@kimi` (K2.8 Preview, standard rate), then `, MiniMax-M3.1-Flash/high@cc-shim` (needs endpoint minimax; XS/S only, no implementer-side low-risk key exists). Remove this note when enabled. -->
 
 - override: reviewer | until 2026-11-15 | PM 01M747R1N0 codex quota: qwen_local stays the loop reviewer. Cloud fallback rung: claude-opus-5-5-medium@agy (agyclaude) (PM 01M79W9B replaces the grok-4.7 rung of PM 01M74FDC5Z; no grok reviews). PM asked for agy carbon, but the roster implementer is agy carbon (google) and the resolver refuses a same-family rung; a rung must be a cloud runner, so GLM (an endpoint runner) cannot be one. The family-conflict preference puts GLM-5.3 first. All other fields copy the roster.
 - reviewer_engine: Qwen3.8-27B-QUASAR-NVFP4

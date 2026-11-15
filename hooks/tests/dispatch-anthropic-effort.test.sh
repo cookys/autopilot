@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # BL-0354: an anthropic-compatible review seat is qualified with body output_config.effort; the daily
 # review must send the same field. dispatch-anthropic-review.js takes --effort, dispatch-review.sh
 # forwards the seat's explicit effort, and the cc-shim path keeps its own claude --effort argv.

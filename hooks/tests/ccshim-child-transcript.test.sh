@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-tree 3c (D3) -- author and review (cc-shim) keep the child's transcript before removing the scratch
 # HOME: <scratch>/.claude/projects/*/<child_session_id>.jsonl -> <runs>/<run_id>.child-transcript.jsonl, and
 # the manifest's child_transcript names it (null when nothing was written). Run status never depends on the copy.

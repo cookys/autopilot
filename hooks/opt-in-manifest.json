@@ -10,6 +10,7 @@
   "config-protection",
   "design-quality",
   "exec-boundary",
+  "fleet-stop",
   "large-file-warner",
   "mcp-health",
   "orchestrator-edit-gate",

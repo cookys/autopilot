@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-hetero --runner pi (RPC duplex) integration test.
 #
 # Outer bound: umbrella parallel runs must never hang indefinitely on the

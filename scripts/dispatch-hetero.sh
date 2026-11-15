@@ -498,6 +498,7 @@ DISPATCH_STARTED_EPOCH=""
 MANIFEST_FILE=""
 MANIFEST_CONTAINMENT="plain"
 MANIFEST_SCOPE_UNIT=""
+MANIFEST_MOUNT_CONTAINMENT=""   # private_ns|no_root|refused (01M7E4JC); set where the manifest is first written
 MANIFEST_PID_RECORDED=""
 MANIFEST_ENDED_AT=""
 MANIFEST_ENDED_EPOCH=""
@@ -2211,6 +2212,10 @@ process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
 ' "$resolved" 2>/dev/null)" || return 1
   IFS='|' read -r policy engine effort runner target_endpoint <<< "$parsed"
   [ "$policy" = "cloud-fallback" ] || return 1
+  # d-1dfcf757: a configured rung in a barred family is dropped for a marked task; the plan below then picks an allowed one.
+  if [ -n "$engine" ] && ! node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$runner" --model "$engine" ${target_endpoint:+--endpoint "$target_endpoint"} --prompt-file "${VISION_PROMPT_FILE:-$PROMPT_FILE}" >/dev/null 2>&1; then
+    engine=""; effort=""; runner=""; target_endpoint=""
+  fi
   case "$(printf '%s' "${runner:-}" | tr '[:upper:]' '[:lower:]')" in
     codex)
       engine=""
@@ -2229,10 +2234,11 @@ const plan = sf.implementerFallbackPlan({
   failedModel: process.argv[3],
   failedEndpoint: process.argv[4],
 });
-const rung = plan.chain[0];
+const gate = require(process.argv[6]);
+const rung = plan.chain.find((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, role: "implementer", files: [process.argv[5]] }).allowed);
 if (!rung) process.exit(1);
 process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || [])].join("|"));
-' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" 2>/dev/null)" || return 1
+' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" "${VISION_PROMPT_FILE:-$PROMPT_FILE}" "$SELF_DIR/lib/cn-model-dispatch-gate.js" 2>/dev/null)" || return 1
     IFS='|' read -r engine effort runner target_endpoint fb_demoted_json <<< "$pick_parsed"
   fi
   [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
@@ -2461,6 +2467,7 @@ write_manifest() {
   if [ "${NO_CAMPAIGN:-0}" -eq 1 ] && [ -n "${MISSION_ENFORCEMENT_MODE_SEEN:-}" ]; then
     campaign_scope_fields=", \"campaign_scope\": \"none_declared\", \"enforcement_mode\": \"$(_flat_json_escape "$MISSION_ENFORCEMENT_MODE_SEEN")\""
   fi
+  campaign_scope_fields="$campaign_scope_fields, \"mount_containment\": \"${MANIFEST_MOUNT_CONTAINMENT:-refused}\""
   {
     printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
@@ -2958,6 +2965,10 @@ if [ -n "$PACE_ROLE" ] && [ "$RUNNER_SUPPLIED" -eq 0 ]; then
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
+# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
+_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
+unset _tfg_msg
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
 # changes the exit code. A ../ counts only at a word start ( ../x, (../x, "../x), not a/../b.
 _DOTDOT_RE='(^|[][:space:]("'"'"'=,<])\.\./[^][:space:]()"'"'"'<>,;]+'
@@ -4201,6 +4212,9 @@ SCOPE_UNIT=""; WORKER_SID=""; WORKER_FALLBACK_PGID=""
 # shellcheck source=lib/worker-containment.sh
 source "$SELF_DIR/lib/worker-containment.sh"
 worker_containment_detect
+# Mount isolation (01M7E4JC): detect once here; run_worker puts WORKER_MOUNT_PREFIX in front of the
+# worker argv (scope/session outside, unshare inside). A refuse is enforced right after abort_dispatch.
+worker_mount_isolation_detect
 HAVE_SETSID=0; command -v setsid >/dev/null 2>&1 && grep -q -- --wait < <(setsid --help 2>&1) && HAVE_SETSID=1
 # reap_container is defined by worker-containment.sh (name kept for declare -f).
 
@@ -4247,6 +4261,13 @@ abort_dispatch() {
   exit 2
 }
 trap abort_dispatch INT TERM
+# Refuse BEFORE any worker spawns: no private mount namespace and a worker that could mount (01M7E4JC).
+if [ "$WORKER_MOUNT_MODE" = "refuse" ]; then
+  worker_mount_isolation_require || true   # prints the stderr line
+  MANIFEST_MOUNT_CONTAINMENT="refused"
+  write_manifest "$$" 2>/dev/null || true
+  abort_dispatch
+fi
 
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
@@ -4687,6 +4708,9 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
     if [ "${#SANDBOX_ARGV[@]}" -eq 0 ]; then echo "sandbox: no bwrap argv; worker not started" >"$LOG"; AGENT_EXIT=1; return 0; fi
     set -- "${SANDBOX_ARGV[@]}" "$@"
   fi
+  # Mount isolation (01M7E4JC): outermost wrapper of the worker argv, so every branch below
+  # (scope, setsid, plain) starts the worker inside the private mount namespace.
+  if [ "${#WORKER_MOUNT_PREFIX[@]}" -gt 0 ]; then set -- "${WORKER_MOUNT_PREFIX[@]}" "$@"; fi
   WORKER_TIMED_OUT=0
   WATCHDOG_PID=""
   WATCHDOG_TOKEN_FILE=""
@@ -5053,6 +5077,8 @@ elif [ "$IS_KIMI" -eq 1 ]; then
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
       _ "$WT" "$KIMI_BIN" "$KIMI_PROMPT_FILE" "$MODEL"
   rm -f "$KIMI_PROMPT_FILE"
+  # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
+  node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ]; then
   # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see
   # docs/plans/2026-08-26-cursor-cli-adaptor.md §0.1:
@@ -6410,7 +6436,7 @@ dispatch_detached_run() {
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_JOB_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
-      MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
+      MANIFEST_SCOPE_UNIT MANIFEST_MOUNT_CONTAINMENT WORKER_MOUNT_MODE WORKER_MOUNT_PREFIX MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
       TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
@@ -6498,6 +6524,7 @@ elif [ "$HAVE_SETSID" -eq 1 ]; then
 else
   MANIFEST_CONTAINMENT="plain"
 fi
+MANIFEST_MOUNT_CONTAINMENT="$(worker_mount_manifest_value)"
 write_manifest "$$"
 # --- strict pre-flight: every acceptance argv must at least be EXECUTABLE ---
 # run_strict_acceptance_checks() spawns these AFTER the runner has been paid for, and

@@ -746,6 +746,8 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 
 - **New `review_ledger_archive.rotate_after_months`** (positive integer; default 2). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS`. `rotate` compresses complete months strictly older than this. An invalid value keeps 2.
 - **New `review_ledger_archive.rotate_remove_source`** (boolean; default false). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE`. When true, `rotate` deletes the month directory after the tar listing matches.
+- **New `unmerged_ship`** (`false`, or an object with `enabled` and `max_age_minutes`; default on). Env `AUTOPILOT_UNMERGED_SHIP` (`false`, `0`, `off`, `no` disable it). `unmerged_ship.enabled` (boolean; default true) switches the Stop advisory for SHIP-AS-IS branches left unmerged. `unmerged_ship.max_age_minutes` (number; default 60) is the age after which such a head is an alert.
+- **New `AUTOPILOT_TASK_SIZE`**, **`AUTOPILOT_TASK_ROLE`**, **`AUTOPILOT_TASK_SCOPE`**, **`AUTOPILOT_TASK_NOVEL`**, **`AUTOPILOT_TASK_READS_TRANSCRIPT`** (default unset). Inputs to the Chinese-model dispatch gate; the `Size:`, `Role:`, `Scope:` and `Novel:` brief headers are the fallback.
 
 See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
 

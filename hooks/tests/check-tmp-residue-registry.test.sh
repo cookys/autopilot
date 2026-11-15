@@ -9,6 +9,10 @@
 #     unrelated clean change through (exit 0);
 #   - scripts/preflight-release.sh's gate step fails on the same clone and passes on the clean one.
 . "$(dirname "$0")/lib.sh"
+# This sandbox exports an empty GIT_ALLOW_PROTOCOL plus protocol.allow=never, which blocks
+# `git clone --local` (file transport). Drop that lockdown for the scratch clone only.
+unset GIT_ALLOW_PROTOCOL
+export GIT_CONFIG_COUNT=0
 
 GATE="$REPO_ROOT/scripts/check-tmp-residue-registry.js"
 

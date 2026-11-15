@@ -204,9 +204,9 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok', 'kimi']);
   assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude', 'kimi']);
   assert.deepEqual(roles.priority, {
-    implementer: ['agy', 'glm', 'agyclaude'],
-    reviewer: ['agy', 'glm', 'agyclaude', 'grok', 'codex'],
-    author: ['agy', 'glm', 'agyclaude', 'grok', 'codex'],
+    implementer: ['agy', 'grok', 'glm', 'agyclaude'],
+    reviewer: ['agy', 'grok', 'codex', 'glm', 'agyclaude'],
+    author: ['agy', 'grok', 'codex', 'glm', 'agyclaude'],
   });
   assert.deepEqual(roles.role_models, { implementer: { agy: 'gemini-4-hydrogen-high' } });
 
@@ -258,7 +258,7 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
     used_pct: 26,
     expected_pct: 40,
     over_pace: false,
-    selected_by: 'slack',
+    selected_by: 'priority',
     low_keys: [],
     reviewer_exclude: ['grok'],
     role: 'implementer',
@@ -295,11 +295,26 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
     { engine: 'codex', reason: 'unknown' },
   );
 
-  // Qualified agyclaude wins when its pool row is fresh and has the largest slack.
+  // Fresh agyclaude at slack +70 does not override grok: grok is earlier in
+  // implementer priority (agy -> grok -> glm -> agyclaude) and already on pace.
   const agyClaudeFresh = structuredClone(pace);
   agyClaudeFresh.rows.find((row) => row.pool === 'agyclaude(alias 2)').stale = false;
-  const agyClaudeWin = selectEngine({
+  const agyClaudeLater = selectEngine({
     pace: agyClaudeFresh,
+    pools,
+    roles,
+    role: 'implementer',
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(agyClaudeLater.engine, 'grok');
+  assert.equal(agyClaudeLater.selected_by, 'priority');
+  assert.equal(agyClaudeLater.slack_pts, 14);
+
+  // When grok is also behind, the last priority key (agyclaude) still wins.
+  const grokBehind = structuredClone(agyClaudeFresh);
+  grokBehind.rows.find((row) => row.pool === 'grok-cli').used_pct = 50;
+  const agyClaudeWin = selectEngine({
+    pace: grokBehind,
     pools,
     roles,
     role: 'implementer',
@@ -309,6 +324,7 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
   assert.equal(agyClaudeWin.runner, 'agy');
   assert.equal(agyClaudeWin.model, 'claude-opus-5-5-medium');
   assert.equal(agyClaudeWin.pool, 'agyclaude(alias 2)');
+  assert.equal(agyClaudeWin.selected_by, 'priority');
   assert.equal(agyClaudeWin.slack_pts, 70);
 });
 
@@ -378,7 +394,7 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
   assert.equal(out.expected_pct, 30);
   assert.equal(out.over_pace, true);
 
-  // implementer: the priority walk fails (agy -32, glm -15, agyclaude unknown),
+  // implementer: the priority walk fails (agy -32, grok -22, glm -15, agyclaude unknown),
   // so the slack fallback picks glm (-15), the least-behind eligible key.
   const impl = selectEngine({
     pace: readFixture('only-ahead.json'),
@@ -591,7 +607,8 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
   const pools = loadPools();
   const roles = loadRoles();
 
-  // Control: when endpoint is ready (injected, no shell spawn), glm (+30) beats grok (+14).
+  // Control: grok is second in reviewer priority and on pace (+14), so it wins
+  // before glm (+30). The glm endpoint is still probed during the pool scan.
   const checkedReady = [];
   const whenReady = selectEngine({
     pace,
@@ -604,8 +621,34 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     },
   });
   assert.deepEqual(checkedReady, ['glm']);
-  assert.equal(whenReady.engine, 'glm');
-  assert.equal(whenReady.slack_pts, 30);
+  assert.equal(whenReady.engine, 'grok');
+  assert.equal(whenReady.selected_by, 'priority');
+  assert.equal(whenReady.slack_pts, 14);
+
+  // When earlier priority keys are behind, a ready glm endpoint still wins.
+  const grokBehind = structuredClone(pace);
+  grokBehind.rows.find((row) => row.pool === 'grok-cli').used_pct = 51;
+  const glmWhenGrokBehind = selectEngine({
+    pace: grokBehind,
+    pools,
+    roles,
+    role: 'reviewer',
+    checkEndpoint: () => true,
+  });
+  assert.equal(glmWhenGrokBehind.engine, 'glm');
+  assert.equal(glmWhenGrokBehind.selected_by, 'priority');
+  assert.equal(glmWhenGrokBehind.slack_pts, 30);
+  const glmDown = selectEngine({
+    pace: grokBehind,
+    pools,
+    roles,
+    role: 'reviewer',
+    checkEndpoint: (ep) => ep !== 'glm',
+  });
+  assert.equal(glmDown.engine, 'grok');
+  assert.equal(glmDown.slack_pts, -11);
+  assert.equal(glmDown.selected_by, 'slack');
+  assert.equal(glmDown.over_pace, true);
 
   // When glm endpoint is not ready (injected, no shell spawn), glm is listed as
   // { engine: "glm", reason: "endpoint_not_ready" } and grok (+14) is chosen instead.
@@ -862,7 +905,7 @@ test('(priority b) agy behind (-5) -> glm (+2) chosen, still selected_by priorit
   assert.deepEqual(res.reviewer_exclude, ['glm']);
 });
 
-test('(priority c) agy -5, glm -3, agyclaude +4 -> agyclaude (third priority entry)', () => {
+test('(priority c) agy -5, glm -3, agyclaude +4, grok unknown -> agyclaude (last priority entry)', () => {
   const res = selectEngine({
     pace: priorityPace([
       paceRow('agy', 45, 40),
@@ -929,21 +972,28 @@ test('(priority f) agy reading stale -> skipped by the priority walk, glm chosen
 // Seat fallback order & implementer family inference (PM 01M7AHAM)
 // ---------------------------------------------------------------------------
 
-test('(seat-fallback a) reviewer retreat skips google/hydrogen and picks glm, never codex', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
+test('(seat-fallback a) reviewer retreat skips google/hydrogen and picks grok, never codex', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   const roles = loadRoles();
   assert.deepEqual(
     roles.fallback.reviewer.map((r) => r.key),
-    ['hydrogen', 'glm', 'agyclaude']
+    ['hydrogen', 'grok', 'glm', 'agyclaude']
   );
 
   const chain = reviewerFallbackChain({ implementerFamily: 'google' });
-  assert.deepEqual(chain.map((r) => r.key), ['glm', 'agyclaude']);
+  assert.deepEqual(chain.map((r) => r.key), ['grok', 'glm', 'agyclaude']);
   const first = selectReviewerFallback({ implementerFamily: 'google' });
-  assert.equal(first.key, 'glm');
-  assert.equal(first.runner, 'cc-shim');
-  assert.equal(first.endpoint, 'glm');
-  assert.equal(first.model, 'glm-5.3');
+  assert.equal(first.key, 'grok');
+  assert.equal(first.runner, 'grok');
+  assert.equal(first.model, 'grok-4.7');
+  assert.equal(first.effort, 'high');
+  assert.equal(first.family, 'xai');
+  assert.equal(first.endpoint, null);
   assert.equal(chain.some((r) => r.runner === 'codex' || isCodexRung(r)), false);
+
+  // xai / grok implementer skips the grok rung (same family) and keeps hydrogen first.
+  const xaiChain = reviewerFallbackChain({ implementerFamily: 'xai' });
+  assert.deepEqual(xaiChain.map((r) => r.key), ['hydrogen', 'glm', 'agyclaude']);
+  assert.equal(xaiChain.some((r) => r.key === 'grok'), false);
 }));
 
 test('(seat-fallback b) reviewer retreat for anthropic/agyclaude implementer picks hydrogen first', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
@@ -953,7 +1003,7 @@ test('(seat-fallback b) reviewer retreat for anthropic/agyclaude implementer pic
     assert.equal(first.runner, 'agy');
     assert.equal(first.model, 'gemini-4-hydrogen-high');
     const chain = reviewerFallbackChain({ implementerFamily: imp });
-    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'glm']);
+    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'grok', 'glm']);
     assert.equal(chain.some((r) => r.runner === 'codex'), false);
   }
 }));
@@ -976,7 +1026,7 @@ test('(seat-fallback c) unknown implementer family never assumes openai and keep
     assert.equal(inferred.source, 'none');
 
     const chain = reviewerFallbackChain({ implementerFamily: inferred.family });
-    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'glm', 'agyclaude']);
+    assert.deepEqual(chain.map((r) => r.key), ['hydrogen', 'grok', 'glm', 'agyclaude']);
     assert.equal(chain[0].model, 'gemini-4-hydrogen-high');
     assert.equal(chain.some((r) => r.key === 'glm'), true);
 
@@ -1016,18 +1066,22 @@ test('(seat-fallback c) unknown implementer family never assumes openai and keep
 
 test('(seat-fallback d) implementer default policy retreats along priority.implementer without codex', () => withEnv({ AUTOPILOT_PACE_FILE: MISSING_PACE }, () => {
   const chainAll = implementerFallbackChain({});
-  assert.deepEqual(chainAll.map((r) => r.key), ['agy', 'glm', 'agyclaude']);
+  assert.deepEqual(chainAll.map((r) => r.key), ['agy', 'grok', 'glm', 'agyclaude']);
   assert.equal(chainAll[0].model, 'gemini-4-hydrogen-high');
-  assert.equal(chainAll[1].endpoint, 'glm');
+  assert.equal(chainAll[1].key, 'grok');
+  assert.equal(chainAll[1].runner, 'grok');
+  assert.equal(chainAll[1].model, 'grok-4.7');
+  assert.equal(chainAll[2].endpoint, 'glm');
 
   const afterAgy = selectImplementerFallback({
     failedRunner: 'agy',
     failedModel: 'gemini-4-hydrogen-high',
   });
-  assert.equal(afterAgy.key, 'glm');
-  assert.equal(afterAgy.runner, 'cc-shim');
-  assert.equal(afterAgy.endpoint, 'glm');
-  assert.equal(afterAgy.model, 'glm-5.3');
+  assert.equal(afterAgy.key, 'grok');
+  assert.equal(afterAgy.runner, 'grok');
+  assert.equal(afterAgy.model, 'grok-4.7');
+  assert.equal(afterAgy.effort, 'high');
+  assert.equal(afterAgy.family, 'xai');
 
   const flagOf = (argv, flag) => {
     if (!Array.isArray(argv)) return '';
@@ -1095,7 +1149,7 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
     assert.equal(flagOf(callsQwen[1], '--model'), 'gemini-4-hydrogen-high');
     assert.notEqual(flagOf(callsQwen[1], '--runner'), 'codex');
 
-    // Case 2: agy seat unavailable with unset policy -> retreats to glm (cc-shim --endpoint glm).
+    // Case 2: agy seat unavailable with unset policy -> retreats to grok (grok-4.7).
     const callsAgy = [];
     const engineAgy = new AutopilotEngine({
       clock: () => 1782864000000,
@@ -1138,9 +1192,9 @@ test('(seat-fallback d) implementer default policy retreats along priority.imple
       },
     });
     assert.equal(callsAgy.length, 2);
-    assert.equal(flagOf(callsAgy[1], '--runner'), 'cc-shim');
-    assert.equal(flagOf(callsAgy[1], '--model'), 'glm-5.3');
-    assert.equal(flagOf(callsAgy[1], '--endpoint'), 'glm');
+    assert.equal(flagOf(callsAgy[1], '--runner'), 'grok');
+    assert.equal(flagOf(callsAgy[1], '--model'), 'grok-4.7');
+    assert.equal(flagOf(callsAgy[1], '--endpoint'), '');
 
     // Case 3: explicit roster.on_engine_unavailable = 'ask' still escalates without retreating.
     const callsAsk = [];
@@ -1379,7 +1433,7 @@ test('(low 3b) low agy is skipped in priority walk when glm is fresh with slack 
 test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs and records fallback.demoted only when order changed', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seat-fb-low-'));
   try {
-    // 1. google implementer + GLM unavailable + agyclaude low -> still returns agyclaude (last resort, order unchanged -> demoted []).
+    // 1. google implementer + GLM unavailable + agyclaude low -> grok (not low) stays ahead of agyclaude; order unchanged -> demoted [].
     const agyclaudeLowPace = path.join(tmpDir, 'pace-agyclaude-low.json');
     fs.writeFileSync(agyclaudeLowPace, JSON.stringify(priorityPace([
       {
@@ -1398,7 +1452,7 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
       excludeKeys: ['glm'],
       pacePath: agyclaudeLowPace,
     });
-    assert.deepEqual(planGoogleLastResort.chain.map((r) => r.key), ['agyclaude']);
+    assert.deepEqual(planGoogleLastResort.chain.map((r) => r.key), ['grok', 'agyclaude']);
     assert.deepEqual(planGoogleLastResort.demoted, []);
 
     const recNoReorder = buildFallbackRecord({
@@ -1410,7 +1464,7 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
     assert.equal(recNoReorder.reason, 'endpoint_busy');
     assert.equal(Object.prototype.hasOwnProperty.call(recNoReorder, 'demoted'), false);
 
-    // 2. hydrogen low + zhipu implementer -> agyclaude before hydrogen, demoted: ['hydrogen'].
+    // 2. hydrogen low + zhipu implementer -> grok and agyclaude before hydrogen, demoted: ['hydrogen'].
     const hydrogenLowPace = path.join(tmpDir, 'pace-hydrogen-low.json');
     fs.writeFileSync(hydrogenLowPace, JSON.stringify(priorityPace([
       paceRow('hydrogen', 92, 40, { status: 'WARN_hydrogen_low', left_pts: 2 }),
@@ -1420,10 +1474,10 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
       implementerFamily: 'zhipu',
       pacePath: hydrogenLowPace,
     });
-    assert.deepEqual(planZhipu.chain.map((r) => r.key), ['agyclaude', 'hydrogen']);
+    assert.deepEqual(planZhipu.chain.map((r) => r.key), ['grok', 'agyclaude', 'hydrogen']);
     assert.deepEqual(planZhipu.demoted, ['hydrogen']);
 
-    // Shared agy quota (WARN_agy_low) also demotes hydrogen behind agyclaude.
+    // Shared agy quota (WARN_agy_low) also demotes hydrogen behind grok and agyclaude.
     const agyLowPace = path.join(tmpDir, 'pace-agy-low.json');
     fs.writeFileSync(agyLowPace, JSON.stringify(priorityPace([
       paceRow('agy', 92, 40, { status: 'WARN_agy_low', left_pts: 2 }),
@@ -1434,7 +1488,7 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
       implementerFamily: 'zhipu',
       pacePath: agyLowPace,
     });
-    assert.deepEqual(planZhipuViaAgy.chain.map((r) => r.key), ['agyclaude', 'hydrogen']);
+    assert.deepEqual(planZhipuViaAgy.chain.map((r) => r.key), ['grok', 'agyclaude', 'hydrogen']);
     assert.deepEqual(planZhipuViaAgy.demoted, ['hydrogen']);
 
     const recDemoted = buildFallbackRecord({
@@ -1446,9 +1500,9 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
     assert.equal(recDemoted.reason, 'endpoint_busy');
     assert.deepEqual(recDemoted.demoted, ['hydrogen']);
 
-    // 3. Implementer walk with agy low moves agy behind glm and agyclaude.
+    // 3. Implementer walk with agy low moves agy behind grok, glm and agyclaude.
     const implPlan = implementerFallbackPlan({ pacePath: agyLowPace });
-    assert.deepEqual(implPlan.chain.map((r) => r.key), ['glm', 'agyclaude', 'agy']);
+    assert.deepEqual(implPlan.chain.map((r) => r.key), ['grok', 'glm', 'agyclaude', 'agy']);
     assert.deepEqual(implPlan.demoted, ['agy']);
 
     // 4. CLI supports --pace and AUTOPILOT_PACE_FILE.
@@ -1456,13 +1510,13 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
       SEAT_FALLBACK_CLI, 'reviewer', '--implementer-family', 'zhipu', '--pace', hydrogenLowPace, '--all',
     ], { encoding: 'utf8', env: { ...process.env } });
     assert.equal(cliFlag.status, 0, cliFlag.stderr);
-    assert.deepEqual(JSON.parse(cliFlag.stdout).map((r) => r.key), ['agyclaude', 'hydrogen']);
+    assert.deepEqual(JSON.parse(cliFlag.stdout).map((r) => r.key), ['grok', 'agyclaude', 'hydrogen']);
 
     const cliEnv = spawnSync(process.execPath, [
       SEAT_FALLBACK_CLI, 'implementer', '--all',
     ], { encoding: 'utf8', env: { ...process.env, AUTOPILOT_PACE_FILE: agyLowPace } });
     assert.equal(cliEnv.status, 0, cliEnv.stderr);
-    assert.deepEqual(JSON.parse(cliEnv.stdout).map((r) => r.key), ['glm', 'agyclaude', 'agy']);
+    assert.deepEqual(JSON.parse(cliEnv.stdout).map((r) => r.key), ['grok', 'glm', 'agyclaude', 'agy']);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -1477,15 +1531,15 @@ test('(seat-fallback g / 3d) missing or unreadable pace file leaves fallback ord
 
     for (const pacePath of [missing, badJson]) {
       const revZhipu = reviewerFallbackPlan({ implementerFamily: 'zhipu', pacePath });
-      assert.deepEqual(revZhipu.chain.map((r) => r.key), ['hydrogen', 'agyclaude']);
+      assert.deepEqual(revZhipu.chain.map((r) => r.key), ['hydrogen', 'grok', 'agyclaude']);
       assert.deepEqual(revZhipu.demoted, []);
 
       const revGoogle = reviewerFallbackPlan({ implementerFamily: 'google', pacePath });
-      assert.deepEqual(revGoogle.chain.map((r) => r.key), ['glm', 'agyclaude']);
+      assert.deepEqual(revGoogle.chain.map((r) => r.key), ['grok', 'glm', 'agyclaude']);
       assert.deepEqual(revGoogle.demoted, []);
 
       const imp = implementerFallbackPlan({ pacePath });
-      assert.deepEqual(imp.chain.map((r) => r.key), ['agy', 'glm', 'agyclaude']);
+      assert.deepEqual(imp.chain.map((r) => r.key), ['agy', 'grok', 'glm', 'agyclaude']);
       assert.deepEqual(imp.demoted, []);
     }
   } finally {

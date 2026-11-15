@@ -572,12 +572,12 @@ assert_eq "$ONCE_DFLT" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-
 ONCE_CODEX_RUNG="$(ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" codex-rung 2>"$TEST_TMP/once-codex-rung.err")" || fail "(fb-codex) once-default codex-rung threw: $(cat "$TEST_TMP/once-codex-rung.err")"
 assert_eq "$ONCE_CODEX_RUNG" "calls=2 policy=cloud-fallback runner2=agy model2=gemini-4-hydrogen-high exhausted=true" "(fb-codex) AutopilotEngine ignores explicit codex cloud_fallback_rung and retreats to picker agy"
 
-# --- (fb-low) AUTOPILOT_PACE_FILE marking agy low demotes agy behind glm in AutopilotEngine ---
+# --- (fb-low) AUTOPILOT_PACE_FILE marking agy low demotes agy behind grok in AutopilotEngine ---
 PACE_AGY_LOW="$TEST_TMP/pace-agy-low.json"
 cat > "$PACE_AGY_LOW" <<'EOF'
 {"schema":"capacity.pace/1","generated_at":"2026-11-13T04:00:00Z","rows":[{"pool":"agy","class":"other","status":"WARN_agy_low","stale":false,"used_pct":92,"expected_pct":40,"left_pts":2},{"pool":"glm","class":"other","status":"ok","stale":false,"used_pct":20,"expected_pct":40}]}
 EOF
 ONCE_AGY_LOW="$(AUTOPILOT_PACE_FILE="$PACE_AGY_LOW" ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-once-default" node "$TEST_TMP/once-default.js" "$REPO_ROOT" 2>"$TEST_TMP/once-agy-low.err")" || fail "(fb-low) once-default with agy low threw: $(cat "$TEST_TMP/once-agy-low.err")"
-assert_eq "$ONCE_AGY_LOW" "calls=2 policy=cloud-fallback runner2=cc-shim model2=glm-5.3 exhausted=true" "(fb-low) AutopilotEngine demotes low agy behind glm"
+assert_eq "$ONCE_AGY_LOW" "calls=2 policy=cloud-fallback runner2=grok model2=grok-4.7 exhausted=true" "(fb-low) AutopilotEngine demotes low agy behind grok"
 
 finalize_test

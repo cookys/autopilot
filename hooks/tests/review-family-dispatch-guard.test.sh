@@ -466,7 +466,7 @@ assert_eq "$RESOLVE_RC" "0" "c6: auto ladder with VA-family and reviewer-cloud-f
 AUTO_LADDER="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8").split("\n")[0]); process.stdout.write(j.implementer_ladder.map((r)=>r.engine).join(","));' "$TEST_TMP/resolve-auto.out")"
 assert_eq "$AUTO_LADDER" "grok-4.7,gpt-6.1-sol" "c6: VA family dropped, reviewer cloud family moved off rung 0"
 
-# --- (fb-a/b/c/e) default reviewer retreat follows picker order hydrogen -> glm -> agyclaude, never codex ---
+# --- (fb-a/b/c/e) default reviewer retreat follows picker order hydrogen -> grok -> glm -> agyclaude, never codex ---
 FB_CLEAN_REPO="$TEST_TMP/fb-clean-repo"
 mkdir -p "$FB_CLEAN_REPO"
 git -C "$FB_CLEAN_REPO" init -q -b feat/fb-clean
@@ -491,8 +491,9 @@ fb_review_run() { # $1 tag  $2 config  $3 extra args
   FB_CLAUDE="$TEST_TMP/fb-claude-$tag.log"
   FB_CODEX="$TEST_TMP/fb-codex-$tag.log"
   FB_AGY="$TEST_TMP/fb-agy-$tag.log"
+  FB_GROK="$TEST_TMP/fb-grok-$tag.log"
   FB_BWRAP="$TEST_TMP/fb-bwrap-$tag.log"
-  rm -f "$FB_CLAUDE" "$FB_CODEX" "$FB_AGY" "$FB_BWRAP"
+  rm -f "$FB_CLAUDE" "$FB_CODEX" "$FB_AGY" "$FB_GROK" "$FB_BWRAP"
   : > "$FB_BWRAP"
 
   cat > "$bindir/claude" <<EOF
@@ -518,7 +519,13 @@ printf '%s\n' "\$*" >> "$FB_AGY"
 printf 'agy-stub-ran\n' >&2
 exit 2
 EOF
-  chmod +x "$bindir/claude" "$bindir/codex" "$bindir/bwrap" "$bindir/agy"
+  cat > "$bindir/grok" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$FB_GROK"
+printf 'not a review\n'
+exit 0
+EOF
+  chmod +x "$bindir/claude" "$bindir/codex" "$bindir/bwrap" "$bindir/agy" "$bindir/grok"
   make_agy_stub_versioned "$bindir/agy"
 
   printf 'busy' > "$MODE_FILE"
@@ -543,16 +550,16 @@ EOF
   RUN_ERR="$(cat "$err")"
 }
 
-# (fb-a) qwen busy/unreachable + implementer family google -> skips hydrogen, picks glm, never codex.
+# (fb-a) qwen busy/unreachable + implementer family google -> skips hydrogen, picks grok, never codex.
 fb_review_run "fba" "$CFG_FB_DFLT" "--implementer-family google"
-assert_eq "$(jget "$RUN_OUT" runner)" "cc-shim" "fb-a: google implementer skips hydrogen and retreats to cc-shim"
-assert_eq "$(jget "$RUN_OUT" model)" "glm-5.3" "fb-a: glm model is glm-5.3"
-assert_eq "$(jget "$RUN_OUT" served_by)" "glm-5.3/high@cc-shim#glm" "fb-a: served_by names glm rung"
-assert_eq "$(jget "$RUN_OUT" fallback.to)" "glm-5.3/high@cc-shim#glm" "fb-a: fallback.to records glm rung"
+assert_eq "$(jget "$RUN_OUT" runner)" "grok" "fb-a: google implementer skips hydrogen and retreats to grok"
+assert_eq "$(jget "$RUN_OUT" model)" "grok-4.7" "fb-a: grok model is grok-4.7"
+assert_eq "$(jget "$RUN_OUT" served_by)" "grok-4.7/high@grok" "fb-a: served_by names grok rung"
+assert_eq "$(jget "$RUN_OUT" fallback.to)" "grok-4.7/high@grok" "fb-a: fallback.to records grok rung"
 assert_eq "$(jget "$RUN_OUT" fallback.demoted)" "null" "fb-a: no demoted field when order unchanged"
 assert_eq "$(jget "$RUN_OUT" implementer_family)" "google" "fb-a: receipt keeps implementer_family google"
-assert_contains "$(cat "$FB_CLAUDE")" "--model glm-5.3" "fb-a: claude shim invoked with glm-5.3"
-assert_contains "$(cat "$FB_CLAUDE")" "https://127.0.0.1:1/glm-stub" "fb-a: glm endpoint URL wired into cc-shim"
+assert_contains "$(cat "$FB_GROK")" "--model grok-4.7" "fb-a: grok stub invoked with grok-4.7"
+assert_eq "$(line_count "$FB_CLAUDE")" "0" "fb-a: glm/cc-shim is not the first retreat"
 assert_eq "$(line_count "$FB_AGY")" "0" "fb-a: hydrogen/agy is skipped for google implementer"
 assert_not_contains "$(cat "$FB_BWRAP")" "--model gemini-4-hydrogen-high" "fb-a: hydrogen/agy is not wrapped by bwrap for google implementer"
 assert_eq "$(line_count "$FB_CODEX")" "0" "fb-a: codex is never spawned"
@@ -589,18 +596,19 @@ cat > "$CFG_FB_CODEX_OV" <<'EOF'
 EOF
 fb_review_run "fbe" "$CFG_FB_CODEX_OV" "--implementer-family google"
 assert_neq "$(jget "$RUN_OUT" runner)" "codex" "fb-e: codex reviewer_cloud_fallback_rung never spawns codex"
-assert_eq "$(jget "$RUN_OUT" runner)" "cc-shim" "fb-e: falls back to next eligible picker rung (glm)"
+assert_eq "$(jget "$RUN_OUT" runner)" "grok" "fb-e: falls back to next eligible picker rung (grok)"
+assert_eq "$(jget "$RUN_OUT" model)" "grok-4.7" "fb-e: grok model is grok-4.7"
 assert_eq "$(line_count "$FB_CODEX")" "0" "fb-e: codex stub never called"
 
-# (fb-low) pace file marking hydrogen low demotes hydrogen behind agyclaude for zhipu implementer,
+# (fb-low) pace file marking hydrogen low demotes hydrogen behind grok and agyclaude for zhipu implementer,
 # keeping fallback.reason as endpoint_busy and recording fallback.demoted: ["hydrogen"].
 PACE_HYD_LOW="$TEST_TMP/pace-hydrogen-low.json"
 cat > "$PACE_HYD_LOW" <<'EOF'
 {"schema":"capacity.pace/1","generated_at":"2026-11-13T04:00:00Z","rows":[{"pool":"hydrogen","class":"other","status":"WARN_hydrogen_low","stale":false,"used_pct":92,"expected_pct":40,"left_pts":2},{"pool":"agyclaude","class":"other","status":"ok","stale":false,"used_pct":20,"expected_pct":40}]}
 EOF
 AUTOPILOT_PACE_FILE="$PACE_HYD_LOW" fb_review_run "fblow" "$CFG_FB_DFLT" "--implementer-family zhipu"
-assert_eq "$(jget "$RUN_OUT" runner)" "agy" "fb-low: zhipu implementer with hydrogen low retreats to agyclaude@agy"
-assert_eq "$(jget "$RUN_OUT" model)" "claude-opus-5-5-medium" "fb-low: model is claude-opus-5-5-medium"
+assert_eq "$(jget "$RUN_OUT" runner)" "grok" "fb-low: zhipu implementer with hydrogen low retreats to grok (not low)"
+assert_eq "$(jget "$RUN_OUT" model)" "grok-4.7" "fb-low: model is grok-4.7"
 assert_eq "$(jget "$RUN_OUT" fallback.reason)" "endpoint_busy" "fb-low: fallback.reason stays endpoint_busy"
 assert_eq "$(jget "$RUN_OUT" fallback.demoted)" '["hydrogen"]' "fb-low: fallback.demoted records [\"hydrogen\"]"
 assert_eq "$(line_count "$FB_CODEX")" "0" "fb-low: codex is never spawned"

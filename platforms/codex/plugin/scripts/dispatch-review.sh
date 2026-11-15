@@ -78,7 +78,7 @@
 #                               #   the endpoint when its effective policy is cloud-fallback
 #                               #   (reviewer_on_engine_unavailable, else global on_engine_unavailable,
 #                               #   which defaults to cloud-fallback) and retreats once along
-#                               #   pace-roles.json fallback.reviewer (hydrogen -> glm -> agyclaude,
+#                               #   pace-roles.json fallback.reviewer (hydrogen -> grok -> glm -> agyclaude,
 #                               #   skipping implementer_family when known, never codex).
 #                               #   AUTOPILOT_ENDPOINT_PREPROBE=off skips the probe. Other seats are unchanged.
 #                               #   An agy reviewer whose call matches that tuple (model + runner
@@ -392,7 +392,7 @@ let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
 # via lib/seat-fallback.js (chain.json / runsDir / dispatch-branches.jsonl), never
 # assuming openai. When nothing can be inferred it defaults to `unknown`, and with
 # `unknown` the family guard skips nothing (GLM remains eligible). A retreat walks
-# pace-roles.json fallback.reviewer (hydrogen -> glm -> agyclaude), never choosing codex.
+# pace-roles.json fallback.reviewer (hydrogen -> grok -> glm -> agyclaude), never choosing codex.
 family_guard_bind() {
   if [ -n "${IMPLEMENTER_FAMILY:-}" ]; then
     return 0
@@ -459,7 +459,7 @@ const hasOv = overrides.some(o => o && o.group === "reviewer") ? "1" : "0";
 const rung = j && j.reviewer_cloud_fallback_rung;
 const rungCustom = (rung && rung.runner && rung.runner !== "codex" && rung.engine !== "gemini-4-hydrogen-high") ? "1" : "0";
 const prefs = Array.isArray(j && j.reviewer_fallback_preference) ? j.reviewer_fallback_preference : [];
-const dfltNew = ["gemini-4-hydrogen-high", "GLM-5.3", "claude-opus-5-5-medium"];
+const dfltNew = ["gemini-4-hydrogen-high", "grok-4.7", "GLM-5.3", "claude-opus-5-5-medium"];
 const dfltOld = ["gpt-6.1-sol", "GLM-5.3"];
 const eq = (a, b) => a.length === b.length && a.every((v, i) => String(v) === b[i]);
 const prefsCustom = (prefs.length > 0 && !eq(prefs, dfltNew) && !eq(prefs, dfltOld) && prefs.some(x => String(x).includes("@"))) ? "1" : "0";
@@ -519,7 +519,7 @@ for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
     return 1
   fi
 
-  # Canonical pace-roles.json fallback.reviewer chain (hydrogen -> glm -> agyclaude; never codex).
+  # Canonical pace-roles.json fallback.reviewer chain (hydrogen -> grok -> glm -> agyclaude; never codex).
   local _chain_lines=""
   _chain_lines="$(node -e '
 const sf = require(process.argv[1]);

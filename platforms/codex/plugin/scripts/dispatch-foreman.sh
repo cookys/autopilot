@@ -229,6 +229,9 @@ if [ "$RESUME" -eq 1 ]; then
 else
   [ -n "$BRIEF_FILE" ] && [ -f "$BRIEF_FILE" ] || die_precondition "--brief-file <existing file> is required"
   [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ] || die_precondition "--plan-file <existing file> is required"
+  # Interim brief gate (01M7F2KZ): off under private_ns / sudo_private_ns.
+  worker_mount_brief_gate "$BRIEF_FILE" || die_precondition "$WORKER_MOUNT_REFUSE_LINE"
+  worker_mount_brief_gate "$PLAN_FILE" || die_precondition "$WORKER_MOUNT_REFUSE_LINE"
   [ -z "$RUN_ID" ] && RUN_ID="foreman-$(date +%s)-$$"
   case "$RUN_ID" in *[!A-Za-z0-9._-]*) die_precondition "--run-id must match [A-Za-z0-9._-]+" ;; esac
   [ -z "$RUN_DIR" ] && RUN_DIR="${TMPDIR:-/tmp}/autopilot-foreman-runs/$RUN_ID"

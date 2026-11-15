@@ -498,7 +498,7 @@ DISPATCH_STARTED_EPOCH=""
 MANIFEST_FILE=""
 MANIFEST_CONTAINMENT="plain"
 MANIFEST_SCOPE_UNIT=""
-MANIFEST_MOUNT_CONTAINMENT=""   # private_ns|no_root|refused (01M7E4JC); set where the manifest is first written
+MANIFEST_MOUNT_CONTAINMENT=""   # private_ns|sudo_private_ns|no_root|refused (01M7E4JC); set where the manifest is first written
 MANIFEST_PID_RECORDED=""
 MANIFEST_ENDED_AT=""
 MANIFEST_ENDED_EPOCH=""
@@ -4261,7 +4261,15 @@ abort_dispatch() {
   exit 2
 }
 trap abort_dispatch INT TERM
+# Interim brief gate (01M7F2KZ): off under private_ns / sudo_private_ns. A command-shaped
+# mount/umount/unshare in the prompt refuses before any worker spawns.
+if ! worker_mount_brief_gate "$PROMPT_FILE"; then
+  MANIFEST_MOUNT_CONTAINMENT="refused"
+  write_manifest "$$" 2>/dev/null || true
+  abort_dispatch
+fi
 # Refuse BEFORE any worker spawns: no private mount namespace and a worker that could mount (01M7E4JC).
+# sudo_private_ns is not refuse: run_worker puts its prefix in front of the worker argv.
 if [ "$WORKER_MOUNT_MODE" = "refuse" ]; then
   worker_mount_isolation_require || true   # prints the stderr line
   MANIFEST_MOUNT_CONTAINMENT="refused"

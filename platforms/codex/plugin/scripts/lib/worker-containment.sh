@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # worker-containment.sh — shared worker containment for dispatch-hetero.sh,
-# dispatch-foreman.sh and dispatch-author.sh (codex transport).
+# dispatch-foreman.sh, dispatch-author.sh.
 #
 # Two independent layers:
 #
@@ -23,28 +23,54 @@
 #    shared mount, so the unmount propagated to the host):
 #
 #    worker_mount_isolation_detect — sets WORKER_MOUNT_MODE, WORKER_MOUNT_REASON and
-#    the argv prefix array WORKER_MOUNT_PREFIX (empty unless private_ns):
-#      private_ns  the worker is started inside a NEW mount namespace with every
-#                  mount made private (`unshare --user --map-current-user --mount
-#                  --propagation private --`; plain `unshare -m ...` when euid is 0).
-#                  Its mounts/unmounts never propagate to the host. File ownership
-#                  and the filesystem view are otherwise unchanged
-#                  (--map-current-user maps the same uid). Probed once with `true`.
-#      no_root     private ns unavailable, but the worker cannot change the host
-#                  mount table: euid != 0 AND `sudo -n true` fails (never prompts)
-#                  AND CapEff has no CAP_SYS_ADMIN (bit 21 of /proc/self/status).
-#                  A same-user worker in this mode cannot mount at all, so there is
-#                  nothing to propagate. It does NOT isolate a worker that finds
-#                  some other privilege escalation path.
-#      refuse      neither. worker_mount_isolation_require prints
-#                  `mount_containment_unavailable: <reason> (01M7E4JC) — fix: ...`
-#                  to stderr and returns 1; every rail then exits non-zero BEFORE
-#                  spawning the worker. Manifests record
-#                  mount_containment: private_ns|no_root|refused.
+#    the argv prefix array WORKER_MOUNT_PREFIX (empty unless private_ns or
+#    sudo_private_ns). Detection order is fixed:
+#      private_ns → sudo_private_ns → no_root → refuse.
+#      private_ns       the worker is started inside a NEW mount namespace with every
+#                       mount made private (`unshare --user --map-current-user --mount
+#                       --propagation private --`; plain `unshare -m ...` when euid is 0).
+#                       Its mounts/unmounts never propagate to the host. File ownership
+#                       and the filesystem view are otherwise unchanged
+#                       (--map-current-user maps the same uid). Probed once with `true`.
+#      sudo_private_ns  unprivileged user namespaces are blocked, the dispatcher is not
+#                       root, `sudo -n true` succeeds, and
+#                       `sudo -n unshare --mount --propagation private -- true` succeeds.
+#                       Prefix (absolute `command -v` paths, so it survives `env -i`):
+#                         sudo -n --preserve-env unshare --mount --propagation private --
+#                           setpriv --reuid=<uid> --regid=<gid> --init-groups --
+#                       uid/gid are the dispatching account, numeric, taken at detect time.
+#                       The worker is that same user: the probe requires `id -u` and HOME
+#                       inside the prefix to equal the outside values, so runner logins
+#                       and the original env stay. No new account and no credential handling.
+#                       If `setpriv` is missing, or that identity probe fails, the drop is
+#                         sudo -n -E -u <user> --
+#                       still behind the same `sudo -n --preserve-env unshare --mount
+#                       --propagation private --`, so the mount namespace stays private.
+#                       If neither drop works, detection falls through to refuse with the
+#                       old passwordless-sudo reason. A failed unshare probe does the same.
+#      no_root          private ns unavailable, but the worker cannot change the host
+#                       mount table: euid != 0 AND `sudo -n true` fails (never prompts)
+#                       AND CapEff has no CAP_SYS_ADMIN (bit 21 of /proc/self/status).
+#                       A same-user worker in this mode cannot mount at all, so there is
+#                       nothing to propagate. It does NOT isolate a worker that finds
+#                       some other privilege escalation path.
+#      refuse           neither, including a root dispatcher with no private ns.
+#                       worker_mount_isolation_require prints
+#                       `mount_containment_unavailable: <reason> (01M7E4JC) — fix: ...`
+#                       to stderr and returns 1; every rail then exits non-zero BEFORE
+#                       spawning the worker. Manifests record
+#                       mount_containment: private_ns|sudo_private_ns|no_root|refused.
+#    Interim brief gate (worker_mount_brief_gate): when the mode is not private_ns or
+#    sudo_private_ns, a prompt/brief line that contains a command-shaped mount, umount
+#    or unshare is refused. The pattern is
+#    `(^|[^A-Za-z0-9_-])(u?mount|unshare)([[:space:]]|$)`, so "amount" and "mountpoint"
+#    do not match. stderr names the word and the 1-based line number. The gate is off
+#    under private_ns and sudo_private_ns.
 #    PM ruling A (layered): no_root is ACCEPTED. The single switch is the variable
 #    WORKER_MOUNT_NO_ROOT_OK just below (default 1; export 0 to turn no_root into
-#    refuse). Tests only: WORKER_MOUNT_FORCE_MODE=private_ns|no_root|refuse skips
-#    detection; WORKER_MOUNT_PROC_STATUS=<file> replaces /proc/self/status.
+#    refuse). Tests only: WORKER_MOUNT_FORCE_MODE=private_ns|sudo_private_ns|no_root|refuse
+#    skips detection (sudo_private_ns sets the mode and an empty prefix);
+#    WORKER_MOUNT_PROC_STATUS=<file> replaces /proc/self/status.
 #
 #    Composition with the scope/session wrapper: the scope (systemd-run) or session
 #    leader stays OUTSIDE and unshare runs INSIDE it, i.e.
@@ -53,8 +79,8 @@
 #    front of the worker argv; the prefix uses the absolute unshare path so it
 #    survives `env -i`.
 #
-#    Not covered: root or passwordless sudo on a host with no usable private ns is
-#    refused, never run unisolated.
+#    Not covered: a root dispatcher with no usable private ns is refused, never run
+#    unisolated. Passwordless sudo with a working unshare probe runs as sudo_private_ns.
 # Header comment is the contract.
 
 : "${WORKER_MOUNT_NO_ROOT_OK:=1}"   # PM ruling A: accept no_root. Flip here (or export 0) to refuse it.
@@ -86,6 +112,59 @@ _worker_mount_has_sys_admin() {
 
 WORKER_MOUNT_MODE=""; WORKER_MOUNT_REASON=""; WORKER_MOUNT_PREFIX=(); WORKER_MOUNT_REFUSE_LINE=""
 
+# _worker_mount_prefix_holds_identity <uid> <home> <prefix...>
+# 0 when the prefix runs a command whose id -u and HOME equal the dispatcher's.
+_worker_mount_prefix_holds_identity() {
+  local want_uid="$1" want_home="$2" out got_uid got_home rest
+  shift 2
+  # Trailing x keeps a trailing newline that command substitution would eat, including an empty HOME.
+  out="$("$@" bash -c 'printf "%s\n%s\n" "$(id -u)" "${HOME-}x"' 2>/dev/null)" || return 1
+  got_uid="${out%%$'\n'*}"
+  rest="${out#*$'\n'}"
+  got_home="${rest%x}"
+  [ -n "$got_uid" ] && [ "$got_uid" = "$want_uid" ] && [ "$got_home" = "$want_home" ]
+}
+
+# _worker_mount_try_sudo_private_ns — 0 and sets MODE/PREFIX when the sudo unshare
+# probe and one identity-preserving drop both work. Caller already knows euid != 0
+# and `sudo -n true` succeeded. A failure leaves mode unset so the caller refuses.
+_worker_mount_try_sudo_private_ns() {
+  local sudo_bin unshare_bin setpriv_bin uid gid user home
+  local -a prefix=()
+  uid="$(id -u 2>/dev/null || true)"
+  gid="$(id -g 2>/dev/null || true)"
+  user="$(id -un 2>/dev/null || true)"
+  home="${HOME-}"
+  case "$uid" in ''|*[!0-9]*) return 1 ;; esac
+  case "$gid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$uid" -eq 0 ] && return 1
+  sudo_bin="$(command -v sudo 2>/dev/null || true)"
+  unshare_bin="$(command -v unshare 2>/dev/null || true)"
+  [ -n "$sudo_bin" ] && [ -n "$unshare_bin" ] || return 1
+  if ! "$sudo_bin" -n "$unshare_bin" --mount --propagation private -- true >/dev/null 2>&1; then
+    return 1
+  fi
+  setpriv_bin="$(command -v setpriv 2>/dev/null || true)"
+  if [ -n "$setpriv_bin" ]; then
+    prefix=("$sudo_bin" -n --preserve-env "$unshare_bin" --mount --propagation private -- "$setpriv_bin" --reuid="$uid" --regid="$gid" --init-groups --)
+    if _worker_mount_prefix_holds_identity "$uid" "$home" "${prefix[@]}"; then
+      WORKER_MOUNT_MODE="sudo_private_ns"
+      WORKER_MOUNT_REASON=""
+      WORKER_MOUNT_PREFIX=("${prefix[@]}")
+      return 0
+    fi
+  fi
+  [ -n "$user" ] || return 1
+  prefix=("$sudo_bin" -n --preserve-env "$unshare_bin" --mount --propagation private -- "$sudo_bin" -n -E -u "$user" --)
+  if _worker_mount_prefix_holds_identity "$uid" "$home" "${prefix[@]}"; then
+    WORKER_MOUNT_MODE="sudo_private_ns"
+    WORKER_MOUNT_REASON=""
+    WORKER_MOUNT_PREFIX=("${prefix[@]}")
+    return 0
+  fi
+  return 1
+}
+
 worker_mount_isolation_detect() {
   WORKER_MOUNT_MODE=""; WORKER_MOUNT_REASON=""; WORKER_MOUNT_PREFIX=()
   local uid unshare_bin="" forced="${WORKER_MOUNT_FORCE_MODE:-}"
@@ -98,18 +177,23 @@ worker_mount_isolation_detect() {
     ns_prefix=("${unshare_bin:-unshare}" --user --map-current-user --mount --propagation private --)
   fi
   case "$forced" in
-    private_ns) WORKER_MOUNT_MODE="private_ns"; WORKER_MOUNT_PREFIX=("${ns_prefix[@]}"); return 0 ;;
-    no_root)    WORKER_MOUNT_MODE="no_root"; WORKER_MOUNT_REASON="forced"; return 0 ;;
-    refuse)     WORKER_MOUNT_MODE="refuse"; WORKER_MOUNT_REASON="forced by WORKER_MOUNT_FORCE_MODE"; return 0 ;;
+    private_ns)      WORKER_MOUNT_MODE="private_ns"; WORKER_MOUNT_PREFIX=("${ns_prefix[@]}"); return 0 ;;
+    sudo_private_ns) WORKER_MOUNT_MODE="sudo_private_ns"; WORKER_MOUNT_REASON="forced"; WORKER_MOUNT_PREFIX=(); return 0 ;;
+    no_root)         WORKER_MOUNT_MODE="no_root"; WORKER_MOUNT_REASON="forced"; return 0 ;;
+    refuse)          WORKER_MOUNT_MODE="refuse"; WORKER_MOUNT_REASON="forced by WORKER_MOUNT_FORCE_MODE"; return 0 ;;
   esac
   if [ -n "$unshare_bin" ] && "${ns_prefix[@]}" true >/dev/null 2>&1; then
     WORKER_MOUNT_MODE="private_ns"; WORKER_MOUNT_PREFIX=("${ns_prefix[@]}"); return 0
   fi
   local why="no private mount namespace (unshare unavailable or user namespaces blocked)"
+  # Root never takes sudo_private_ns: a root dispatcher with no private ns stays refuse.
   if [ "$uid" -eq 0 ]; then
     WORKER_MOUNT_MODE="refuse"; WORKER_MOUNT_REASON="$why and the dispatcher runs as root"; return 0
   fi
   if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    if _worker_mount_try_sudo_private_ns; then
+      return 0
+    fi
     WORKER_MOUNT_MODE="refuse"; WORKER_MOUNT_REASON="$why and passwordless sudo is available"; return 0
   fi
   if _worker_mount_has_sys_admin; then
@@ -137,9 +221,32 @@ worker_mount_isolation_require() {
 # worker_mount_manifest_value — the manifest token for the detected mode.
 worker_mount_manifest_value() {
   case "${WORKER_MOUNT_MODE:-}" in
-    private_ns|no_root) printf '%s' "$WORKER_MOUNT_MODE" ;;
+    private_ns|sudo_private_ns|no_root) printf '%s' "$WORKER_MOUNT_MODE" ;;
     *) printf 'refused' ;;
   esac
+}
+
+# worker_mount_brief_gate <file> — interim (01M7F2KZ). Returns 0 immediately when the
+# mode is private_ns or sudo_private_ns. Otherwise scans <file> for a command-shaped
+# mount, umount or unshare and, on a hit, prints one stderr line naming the word and
+# the 1-based line number, sets WORKER_MOUNT_REFUSE_LINE, and returns 1. A missing
+# file is not a hit (the caller's own existence check reports that).
+worker_mount_brief_gate() {
+  local file="${1:-}" line n=0 word
+  case "${WORKER_MOUNT_MODE:-}" in
+    private_ns|sudo_private_ns) return 0 ;;
+  esac
+  [ -n "$file" ] && [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    if [[ "$line" =~ (^|[^A-Za-z0-9_-])(u?mount|unshare)([[:space:]]|$) ]]; then
+      word="${BASH_REMATCH[2]}"
+      WORKER_MOUNT_REFUSE_LINE="mount_brief_refused: ${word} at line ${n} (01M7E4JC)"
+      printf '%s\n' "$WORKER_MOUNT_REFUSE_LINE" >&2
+      return 1
+    fi
+  done < "$file"
+  return 0
 }
 
 reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED

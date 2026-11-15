@@ -964,6 +964,11 @@ if [ "$RUNNER" = "kimi" ]; then
 fi
 
 
+# Interim brief gate (01M7F2KZ): off under private_ns / sudo_private_ns. Scans the caller
+# prompt before any runner process, including agy's alias probe. sudo_private_ns is not refuse.
+if ! worker_mount_brief_gate "$PROMPT_FILE"; then
+  die_precondition "$WORKER_MOUNT_REFUSE_LINE"
+fi
 # Mount isolation (01M7E4JC): refuse BEFORE any runner process spawns. anthropic-compatible is exempt: it is an in-process
 # HTTPS client (scripts/dispatch-anthropic-review.js has no child_process), so no model-driven process exists to wrap.
 if [[ "$RUNNER" = "agy" && "$WORKER_MOUNT_MODE" = "refuse" ]]; then

@@ -61,7 +61,7 @@ if (cardState({}) !== "open") process.exit(4);
 assert_eq "$?" 0 "cardState treats operator_steps, last_answer, reask_at as optional and adds no status"
 
 # (a) three steps, newline-separated, answer 兩個都換 -> awaiting, steps 1-3
-od open --executor "$EXEC" --question "換哪一把？" --free-text --not-authorized irreversible --operator-step $'換第一把\n換第二把\n登出再登入'
+od open --category goal --executor "$EXEC" --question "換哪一把？" --free-text --not-authorized irreversible --operator-step $'換第一把\n換第二把\n登出再登入'
 assert_eq "$RC" 0 "(a) open with three newline steps: exit 0"; A="$OUT"
 assert_eq "$(field "$A" operator_steps)" '["換第一把","換第二把","登出再登入"]' "(a) operator_steps stored"
 schema_ok; assert_eq "$?" 0 "(a) schema accepts operator_steps"
@@ -81,7 +81,7 @@ assert_not_contains "$OUT" "awaiting_operator:" "(a) multi-line steps are number
 schema_ok; assert_eq "$?" 0 "(a) schema accepts the awaiting card"
 
 # (b) four separate --operator-step flags
-od open --executor "$EXEC" --question "四步？" --free-text --not-authorized irreversible --operator-step 甲 --operator-step 乙 --operator-step 丙 --operator-step 丁
+od open --category goal --executor "$EXEC" --question "四步？" --free-text --not-authorized irreversible --operator-step 甲 --operator-step 乙 --operator-step 丙 --operator-step 丁
 assert_eq "$RC" 0 "(b) open four steps: exit 0"; B="$OUT"
 od close --id "$B" --answer "兩個都換"
 assert_eq "$RC" 0 "(b) close: exit 0"
@@ -94,7 +94,7 @@ assert_contains "$OUT" "step 4: 丁" "(b) step 4"
 assert_not_contains "$OUT" "step 5:" "(b) no fifth step"
 
 # (c) decline stays open, reask_at about now+4h, last_answer recorded, answer not set
-od open --executor "$EXEC" --question "現在能做嗎？" --free-text --not-authorized irreversible --operator-step 登入
+od open --category goal --executor "$EXEC" --question "現在能做嗎？" --free-text --not-authorized irreversible --operator-step 登入
 assert_eq "$RC" 0 "(c) open: exit 0"; C="$OUT"
 od close --id "$C" --answer "現在不方便"
 assert_eq "$RC" 0 "(c) decline: exit 0"
@@ -112,7 +112,7 @@ assert_contains "$OUT" "reask_at:" "(c) show prints reask_at"
 assert_not_contains "$OUT" "re-ask due" "(c) a future reask_at is not due"
 schema_ok; assert_eq "$?" 0 "(c) schema accepts last_answer and reask_at"
 # case-fold, and an explicit --awaiting-operator does not beat a decline
-od open --executor "$EXEC" --question "Later?" --free-text --not-authorized irreversible --operator-step 登入
+od open --category goal --executor "$EXEC" --question "Later?" --free-text --not-authorized irreversible --operator-step 登入
 assert_eq "$RC" 0 "Later open: exit 0"; CL="$OUT"
 od close --id "$CL" --answer "Later" --awaiting-operator "仍不該等" --reask-after 30m
 assert_eq "$RC" 0 "Later is a decline: exit 0"
@@ -121,7 +121,7 @@ assert_eq "$(field "$CL" last_answer)" "Later" "Later stored as last_answer"
 assert_eq "$(field "$CL" awaiting_operator)" "<undef>" "decline wins over --awaiting-operator"
 node -e 'const d=Date.parse(process.argv[1])-Date.now(); if(!(d>20*60e3 && d<40*60e3)) process.exit(1)' "$(field "$CL" reask_at)"
 assert_eq "$?" 0 "--reask-after 30m overrides the 4h default"
-od open --executor "$EXEC" --question "Not Now?" --free-text --not-authorized irreversible
+od open --category goal --executor "$EXEC" --question "Not Now?" --free-text --not-authorized irreversible
 assert_eq "$RC" 0 "Not Now open"; CN="$OUT"
 od close --id "$CN" --answer "Not Now"
 assert_eq "$RC" 0 "Not Now decline: exit 0"
@@ -129,7 +129,7 @@ assert_eq "$(field "$CN" status)" "open" "Not Now stays open"
 assert_eq "$(field "$CN" last_answer)" "Not Now" "Not Now case-folds onto not now"
 
 # (d) no operator_steps: the old close. executor -> pending_dispatch; no executor -> closed
-od open --executor "$EXEC" --question "普通題？" --free-text --not-authorized irreversible
+od open --category goal --executor "$EXEC" --question "普通題？" --free-text --not-authorized irreversible
 assert_eq "$RC" 0 "(d) open: exit 0"; D="$OUT"
 od close --id "$D" --answer "就這樣"
 assert_eq "$RC" 0 "(d) close: exit 0"
@@ -140,7 +140,7 @@ libcard "沒有執行者？"; DN="$OUT"
 od close --id "$DN" --answer "照舊關閉"
 assert_eq "$RC" 0 "(d) no executor: exit 0"
 assert_eq "$(field "$DN" status)" "closed" "(d) no executor and no steps closes as before"
-od open --executor "$EXEC" --question "later please?" --free-text --not-authorized irreversible
+od open --category goal --executor "$EXEC" --question "later please?" --free-text --not-authorized irreversible
 assert_eq "$RC" 0 "later please open"; DP="$OUT"
 od close --id "$DP" --answer "later please"
 assert_eq "$RC" 0 "later please: exit 0"
@@ -149,7 +149,7 @@ assert_eq "$(field "$DP" last_answer)" "<undef>" "later please is a normal answe
 assert_eq "$(field "$DP" reask_at)" "<undef>" "later please sets no reask_at"
 
 # (e) explicit --awaiting-operator still works, and wins over stored steps
-od open --executor "$EXEC" --question "顯式步驟？" --free-text --not-authorized irreversible
+od open --category goal --executor "$EXEC" --question "顯式步驟？" --free-text --not-authorized irreversible
 assert_eq "$RC" 0 "(e) open without steps: exit 0"; E="$OUT"
 od close --id "$E" --answer "去做" --awaiting-operator "跑 scripts/x.sh"
 assert_eq "$RC" 0 "(e) explicit awaiting: exit 0"
@@ -157,7 +157,7 @@ assert_eq "$(field "$E" status)" "awaiting_operator_action" "(e) status awaiting
 assert_eq "$(field "$E" awaiting_operator)" "跑 scripts/x.sh" "(e) the explicit step is stored"
 od show --id "$E"
 assert_contains "$OUT" "awaiting_operator: 跑 scripts/x.sh" "(e) show keeps the single-step line"
-od open --executor "$EXEC" --question "覆蓋步驟？" --free-text --not-authorized irreversible --operator-step 換第一把 --operator-step 換第二把
+od open --category goal --executor "$EXEC" --question "覆蓋步驟？" --free-text --not-authorized irreversible --operator-step 換第一把 --operator-step 換第二把
 assert_eq "$RC" 0 "(e) open with steps: exit 0"; EO="$OUT"
 od close --id "$EO" --answer "兩個都換" --awaiting-operator "只做這一步"
 assert_eq "$RC" 0 "(e) explicit overrides steps: exit 0"
@@ -168,7 +168,7 @@ assert_contains "$OUT" "awaiting_operator: 只做這一步" "(e) show prints the
 assert_not_contains "$OUT" "step 1:" "(e) joined steps are not listed"
 
 # withdrawal still closes, even with steps. --reask-after without an answer is refused.
-od open --executor "$EXEC" --question "撤回？" --free-text --not-authorized irreversible --operator-step 登入
+od open --category goal --executor "$EXEC" --question "撤回？" --free-text --not-authorized irreversible --operator-step 登入
 assert_eq "$RC" 0 "withdrawal open"; W="$OUT"
 od close --id "$W" --reask-after 1h
 assert_eq "$RC" 2 "--reask-after without an answer: exit 2"
@@ -181,9 +181,9 @@ assert_eq "$RC" 2 "bad --reask-after: exit 2"
 assert_eq "$(field "$C" status)" "open" "bad duration did not change the card"
 
 # re-ask due is listed first
-od open --executor "$EXEC" --question "先開的普通卡？" --free-text --not-authorized irreversible
+od open --category goal --executor "$EXEC" --question "先開的普通卡？" --free-text --not-authorized irreversible
 assert_eq "$RC" 0 "keeper open"; K="$OUT"
-od open --executor "$EXEC" --question "該再問了？" --free-text --not-authorized irreversible --operator-step 登入
+od open --category goal --executor "$EXEC" --question "該再問了？" --free-text --not-authorized irreversible --operator-step 登入
 assert_eq "$RC" 0 "due open"; DU="$OUT"
 od close --id "$DU" --answer "晚點" --reask-after 0m
 assert_eq "$RC" 0 "0m decline: exit 0"
@@ -194,18 +194,18 @@ assert_eq "$(first_id "$OUT")" "$DU" "a due card is shown first"
 assert_eq "$(printf '%s\n' "$OUT" | grep -c 're-ask due')" "1" "only the due card is marked"
 
 # warning: credential and presence are not boundaries (exit 2) but still warn; external warns and opens; steps suppress the warning
-od open --executor "$EXEC" --question "憑證？" --free-text --not-authorized "credential: log in"
+od open --category goal --executor "$EXEC" --question "憑證？" --free-text --not-authorized "credential: log in"
 assert_eq "$RC" 2 "credential is still an unknown boundary"
 assert_contains "$ERR" "pass --operator-step" "credential warns to pass --operator-step"
 assert_contains "$ERR" "not a known boundary" "credential is refused by the existing gate"
-od open --executor "$EXEC" --question "在場？" --free-text --not-authorized "presence: be there"
+od open --category goal --executor "$EXEC" --question "在場？" --free-text --not-authorized "presence: be there"
 assert_eq "$RC" 2 "presence is still an unknown boundary"
 assert_contains "$ERR" "pass --operator-step" "presence warns to pass --operator-step"
-od open --executor "$EXEC" --question "外部？" --free-text --not-authorized "external: outside"
+od open --category goal --executor "$EXEC" --question "外部？" --free-text --not-authorized "external: outside"
 assert_eq "$RC" 0 "external without steps still opens"
 assert_contains "$ERR" "pass --operator-step" "external warns when --operator-step is absent"
 EX="$OUT"
-od open --executor "$EXEC" --question "外部有步驟？" --free-text --not-authorized "external: outside" --operator-step 登入
+od open --category goal --executor "$EXEC" --question "外部有步驟？" --free-text --not-authorized "external: outside" --operator-step 登入
 assert_eq "$RC" 0 "external with a step opens"
 assert_not_contains "$ERR" "pass --operator-step" "a step suppresses the warning"
 
@@ -238,7 +238,7 @@ od show; assert_not_contains "$OUT" "$P3" "closed panel card leaves the live lis
 unset NO_DECISION
 : > "$STUBLOG"
 export STUB_OPTION="兩個都換"
-od open --executor "$EXEC" --question "派工三步？" --free-text --not-authorized irreversible --operator-step 登入 --operator-step 跑設定 --operator-step 人在現場
+od open --category goal --executor "$EXEC" --question "派工三步？" --free-text --not-authorized irreversible --operator-step 登入 --operator-step 跑設定 --operator-step 人在現場
 assert_eq "$RC" 0 "courier panel open"; P4="$OUT"
 AID="ABCDEFGHIJ0123456789ABCD"
 hook "$(printf '[待決回覆]\n%s\n' "$(pane_line "$P4" "派工三步？" "兩個都換" "$AID")")"
@@ -252,7 +252,7 @@ assert_contains "$OUT" "step 1: 登入" "courier panel step 1"
 assert_contains "$OUT" "step 3: 人在現場" "courier panel step 3"
 : > "$STUBLOG"
 export STUB_OPTION="現在不方便"
-od open --executor "$EXEC" --question "派工稍後？" --free-text --not-authorized irreversible --operator-step 登入
+od open --category goal --executor "$EXEC" --question "派工稍後？" --free-text --not-authorized irreversible --operator-step 登入
 assert_eq "$RC" 0 "courier decline open"; P5="$OUT"
 hook "$(printf '[待決回覆]\n%s\n' "$(pane_line "$P5" "派工稍後？" "現在不方便" "$AID")")"
 assert_eq "$HRC" 0 "courier decline: hook exit 0"
@@ -291,7 +291,7 @@ assert_eq "$(field "$DU" status)" "closed" "done closes answered due card"
 assert_eq "$(field "$DU" reask_at)" "<undef>" "closed entry still has no reask_at"
 
 # plain close (withdrawal) and pending_dispatch transitions on past-due declined cards
-od open --executor "$EXEC" --question "撤回到期卡？" --free-text --not-authorized irreversible
+od open --category goal --executor "$EXEC" --question "撤回到期卡？" --free-text --not-authorized irreversible
 assert_eq "$RC" 0 "withdraw-due open: exit 0"; DW="$OUT"
 od close --id "$DW" --answer "稍後" --reask-after 0m
 assert_eq "$RC" 0 "withdraw-due 0m decline: exit 0"
@@ -308,7 +308,7 @@ od show --all
 assert_not_contains "$OUT" "re-ask due" "show --all prints no re-ask due for closed card"
 assert_neq "$(first_id "$OUT")" "$DW" "closed card does not sort first in show --all"
 
-od open --executor "$EXEC" --question "待派工到期卡？" --free-text --not-authorized irreversible
+od open --category goal --executor "$EXEC" --question "待派工到期卡？" --free-text --not-authorized irreversible
 assert_eq "$RC" 0 "park-due open: exit 0"; DPK="$OUT"
 od close --id "$DPK" --answer "稍後" --reask-after 0m
 assert_eq "$RC" 0 "park-due 0m decline: exit 0"
@@ -351,7 +351,7 @@ unset NO_DECISION
 : > "$STUBLOG"
 export STUB_OPTION="兩個都換"
 AID2="BCDEFGHIJK0123456789BCDE"
-od open --executor "$EXEC" --question "派工到期三步？" --free-text --not-authorized irreversible --operator-step 登入
+od open --category goal --executor "$EXEC" --question "派工到期三步？" --free-text --not-authorized irreversible --operator-step 登入
 assert_eq "$RC" 0 "courier-await-due open: exit 0"; DP3="$OUT"
 od close --id "$DP3" --answer "晚點" --reask-after 0m
 assert_eq "$RC" 0 "courier-await-due 0m decline: exit 0"
@@ -363,7 +363,7 @@ od show --id "$DP3"
 assert_not_contains "$OUT" "re-ask due" "courier-await-due prints no re-ask due"
 
 AID3="CDEFGHIJKL0123456789CDEF"
-od open --executor "$EXEC" --question "派工到期普通？" --free-text --not-authorized irreversible
+od open --category goal --executor "$EXEC" --question "派工到期普通？" --free-text --not-authorized irreversible
 assert_eq "$RC" 0 "courier-close-due open: exit 0"; DP4="$OUT"
 od close --id "$DP4" --answer "晚點" --reask-after 0m
 assert_eq "$RC" 0 "courier-close-due 0m decline: exit 0"

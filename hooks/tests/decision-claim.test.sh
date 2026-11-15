@@ -69,7 +69,7 @@ export STUB_DIR="$STUB" AUTOPILOT_FLEET_BIN="$STUB/fleet"
 calls() { cat "$STUB/calls" 2>/dev/null; }
 reset() { rm -f "$STUB/calls" "$STUB/answers"; printf '%s' "${1:-ok}" > "$STUB/mode"; }
 Q="Should the panel claim before it sends?"
-open_card() { node "$OD" open --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "$Q" --option "Alpha::a" --option "Beta::b" --not-authorized irreversible 2>/dev/null | head -1; }
+open_card() { node "$OD" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "$Q" --option "Alpha::a" --option "Beta::b" --not-authorized irreversible 2>/dev/null | head -1; }
 is_open() { node "$OD" show --cwd "$R" 2>/dev/null | grep -q "$1"; }
 hook() { HOUT="$(node -e 'process.stdout.write(JSON.stringify({session_id:"vf",cwd:process.argv[1],prompt:process.argv[2]}))' "$R" "$1" | node "$HOOK" 2>"$TEST_TMP/herr")"; HRC=$?; }
 jf() { node -e 'const j=JSON.parse(process.argv[1]);const v=j[process.argv[2]];console.log(v===null?"null":v)' "$1" "$2"; }

@@ -75,7 +75,7 @@ test('open --attach is repeatable on decision cards, stored in attachments, and 
   const s = scratch('pm');
   try {
     const r = s.run([
-      'open', '--cwd', s.repo,
+      'open', '--category', 'goal', '--cwd', s.repo,
       '--executor', EXEC,
       '--not-authorized', 'external:owner must verify artifact',
       '--question', '核對這份計畫與 artifact 後決定要不要合併？',
@@ -130,7 +130,7 @@ test('open --kind step requires no options, executor, or not-authorized; allows 
     const s = scratch(role);
     try {
       const r = s.run([
-        'open', '--cwd', s.repo,
+        'open', '--category', 'goal', '--cwd', s.repo,
         '--kind', 'step',
         '--question', '請替換過期的 token 並套用補丁',
         '--background', '舊 token 已在 09:00 到期',
@@ -195,7 +195,7 @@ test('open --kind look stores look_target for persistent show items and round-tr
   try {
     const target = { kind: 'path', path: 'mods/viewer/show.ts', start: 10, end: 30 };
     const r = s.run([
-      'open', '--cwd', s.repo,
+      'open', '--category', 'goal', '--cwd', s.repo,
       '--kind', 'look',
       '--question', '給你看：show.ts（autopilot）',
       '--source', 'autopilot',
@@ -236,19 +236,19 @@ test('negative controls: step rejects --option, invalid --kind exits 7, empty or
   const s = scratch('pm');
   try {
     const withOpt = s.run([
-      'open', '--cwd', s.repo, '--kind', 'step', '--question', 'do x', '--option', 'A::a', '--option', 'B::b',
+      'open', '--category', 'goal', '--cwd', s.repo, '--kind', 'step', '--question', 'do x', '--option', 'A::a', '--option', 'B::b',
     ]);
     assert.equal(withOpt.status, 2);
     assert.deepEqual(s.files(), []);
 
     const badKind = s.run([
-      'open', '--cwd', s.repo, '--kind', 'bogus', '--question', 'do x', '--free-text', '--executor', EXEC, '--not-authorized', 'external',
+      'open', '--category', 'goal', '--cwd', s.repo, '--kind', 'bogus', '--question', 'do x', '--free-text', '--executor', EXEC, '--not-authorized', 'external',
     ]);
     assert.equal(badKind.status, 7);
     assert.deepEqual(s.files(), []);
 
     const emptyAttach = s.run([
-      'open', '--cwd', s.repo, '--kind', 'step', '--question', 'do x', '--attach', '   ',
+      'open', '--category', 'goal', '--cwd', s.repo, '--kind', 'step', '--question', 'do x', '--attach', '   ',
     ]);
     assert.equal(emptyAttach.status, 2);
     assert.deepEqual(s.files(), []);

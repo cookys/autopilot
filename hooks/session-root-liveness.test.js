@@ -54,7 +54,7 @@ function turn(t, sid, hoursAgo) {
 }
 
 function openCard(t, sid, extra = []) {
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'open-decision.js'), 'open', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'q?', ...extra], {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'open-decision.js'), 'open', '--category', 'goal', '--executor', 'ns/cc/exec--claude', '--not-authorized', 'irreversible', '--free-text', '--question', 'q?', ...extra], {
     cwd: t.repo, env: env(t, { AUTOPILOT_SESSION_ID: sid }), encoding: 'utf8',
   });
   const files = fs.existsSync(path.join(t.repo, '.git', 'autopilot', 'decisions')) ? fs.readdirSync(path.join(t.repo, '.git', 'autopilot', 'decisions')).filter((f) => f.endsWith('.json')) : [];
@@ -149,7 +149,7 @@ test('guard: block message carries the session root as a ready --root-run-id', (
   const out = guard(t, 's1', 'push 會等你批准。');
   assert.strictEqual(out.decision, 'block');
   // 2b4a98d7e made --executor required between --root-run-id and --question
-  assert.match(out.reason, / open --root-run-id root-abc --executor <執行者位址> --question /);
+  assert.match(out.reason, / open --root-run-id root-abc --category <[^>]+> --executor <執行者位址> --question /);
 });
 
 test('guard: no root => no --root-run-id demanded, message says the card will be unbound', () => {

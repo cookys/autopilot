@@ -300,7 +300,7 @@ expect_exit2 "both --dispatched and --dispatched-msg" node "$OD" close --id "$ID
 expect_exit2 "--dispatched-msg with --answer" node "$OD" close --id "$ID5" --dispatched-msg m-1 --answer yes --cwd "$R5"
 expect_exit2 "--dispatched-msg on show" node "$OD" show --dispatched-msg m-1 --cwd "$R5"
 expect_exit2 "--dispatched-msg on done" node "$OD" done --id "$ID5" --dispatched-msg m-1 --cwd "$R5"
-expect_exit2 "--dispatched-msg on open" node "$OD" open --question "Q?" --option A::a --option B::b --not-authorized external:x --executor ns/c/w --dispatched-msg m-1 --cwd "$R5"
+expect_exit2 "--dispatched-msg on open" node "$OD" open --category goal --question "Q?" --option A::a --option B::b --not-authorized external:x --executor ns/c/w --dispatched-msg m-1 --cwd "$R5"
 
 # State refusals for --dispatched-msg
 ID5_OPEN="d-8888bbbb"

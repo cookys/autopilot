@@ -22,7 +22,7 @@
   "sources": [
     {
       "path": "skills/ceo-agent/SKILL.md",
-      "sha256": "ebd3dcad26e57e227ad87f3054b2e7e88a8a688915d71994ca75cca83c380679",
+      "sha256": "ab51c621ca1a35e637292dc2832aed34a384ecd3824b40f7076088afb3c77d81",
       "segments": [
         {
           "id": "ceo.discovery-routing",

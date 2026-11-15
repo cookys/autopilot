@@ -50,13 +50,13 @@ write_marker "$MARK" 3600 "$IDENT"
 # open_at <process-cwd> [extra args...]: sets OUT RC ERR. No --cwd unless the caller passes it.
 open_at() {
   local dir="$1"; shift
-  OUT="$(cd "$dir" && AUTOPILOT_SESSION_ID="$SID" node "$OD" open --executor ns/cc/exec--claude --question "Where does the card go?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$ERRF")"
+  OUT="$(cd "$dir" && AUTOPILOT_SESSION_ID="$SID" node "$OD" open --category goal --executor ns/cc/exec--claude --question "Where does the card go?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$ERRF")"
   RC=$?
   ERR="$(cat "$ERRF")"
 }
 open_nosess() {
   local dir="$1"; shift
-  OUT="$(cd "$dir" && env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_THREAD_ID node "$OD" open --executor ns/cc/exec--claude --question "Where does the card go?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$ERRF")"
+  OUT="$(cd "$dir" && env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_THREAD_ID node "$OD" open --category goal --executor ns/cc/exec--claude --question "Where does the card go?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$ERRF")"
   RC=$?
   ERR="$(cat "$ERRF")"
 }

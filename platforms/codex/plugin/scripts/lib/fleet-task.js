@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * fleet-task.js — mark a fleet task blocked on a target.
+ * fleet-task.js — fleet task verbs: one progress line, or mark a task blocked on a target.
  *
+ *   progress(taskId, text)            ->  { ok: true } | { ok: false, status, error }   (`task update <id> <text>`, used by stage-advance)
  *   blocked(taskId, blockedOn, note)  ->  { ok: true } | { ok: false, status, error }
  *   ownerAddress()                    ->  'ns/courier/member' | null
  *
@@ -34,6 +35,10 @@ function run(args) {
   return { ok: true, stdout: r.stdout };
 }
 
+function progress(taskId, text) {
+  return run(['task', 'update', String(taskId), String(text)]);
+}
+
 function blocked(taskId, blockedOn, note) {
   const args = ['task', 'progress', String(taskId), 'blocked', '--blocked-on', String(blockedOn)];
   if (note) args.push(String(note));
@@ -53,4 +58,4 @@ function ownerAddress() {
   return ADDR_RE.test(first) ? first : null;
 }
 
-module.exports = { blocked, ownerAddress, bin };
+module.exports = { progress, blocked, ownerAddress, bin };

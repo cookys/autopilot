@@ -85,6 +85,10 @@ Usage:
       Run all setup paths. This can mutate user-level harness state.
 
 Options:
+  --enable-fleet-stop
+      Turn on the opt-in fleet Stop hook (config hooks.fleet-stop) when `fleet` is on PATH, then exit.
+      Claude setup does this too; --check prints `fleet_stop_hook: on|off|fleet_missing` and fails when off on a fleet host.
+
   --check       Read-only status checks.
   --install     Permit mutating setup for non-Claude harnesses.
   --uninstall   Remove the Codex dev-install hooks entry (only with --harness codex).
@@ -976,6 +980,50 @@ report_token_discipline() {
   done <<< "$out"
 }
 
+# fleet_stop_hook: on|off|fleet_missing. The opt-in Stop hook (hooks/fleet-stop.js) is read the way hooks/_shared/opt-in.js
+# reads it ({"hooks":{"fleet-stop":true}} in the config file, or AUTOPILOT_HOOK_FLEET_STOP). Fleet hosts need it on.
+fleet_stop_state() {
+  if ! have_cmd fleet; then echo fleet_missing; return 0; fi
+  if have_cmd node && node -e 'process.exit(require(process.argv[1]).isEnabled("fleet-stop") ? 0 : 1)' "$REPO_DIR/hooks/_shared/opt-in.js" 2>/dev/null; then
+    echo on
+  else
+    echo off
+  fi
+}
+
+check_fleet_stop_hook() {
+  local state
+  state="$(fleet_stop_state)"
+  case "$state" in
+    on) status OK "fleet" "fleet_stop_hook: on" ;;
+    fleet_missing) status OK "fleet" "fleet_stop_hook: fleet_missing" ;;
+    *) status FAIL "fleet" "fleet_stop_hook: off (fleet host: run scripts/dev-setup.sh --enable-fleet-stop)" ;;
+  esac
+}
+
+# Turns the knob on, only when `fleet` is on PATH. Keeps every other key in the config file; never touches a file it cannot parse.
+enable_fleet_stop_hook() {
+  if ! have_cmd fleet; then echo "fleet_stop_hook: fleet_missing"; return 0; fi
+  have_cmd node || { echo "WARN: node not found; fleet_stop_hook not enabled" >&2; return 0; }
+  local cfg="${AUTOPILOT_CONFIG_FILE:-$HOME/.autopilot/config.json}"
+  if ! node -e '
+    const fs = require("fs"), path = require("path");
+    const f = process.argv[1];
+    let c = {};
+    if (fs.existsSync(f)) c = JSON.parse(fs.readFileSync(f, "utf8"));
+    if (!c || typeof c !== "object" || Array.isArray(c)) process.exit(3);
+    if (!c.hooks || typeof c.hooks !== "object") c.hooks = {};
+    c.hooks["fleet-stop"] = true;
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f + ".tmp", JSON.stringify(c, null, 2) + "\n");
+    fs.renameSync(f + ".tmp", f);
+  ' "$cfg" 2>/dev/null; then
+    echo "WARN: $cfg could not be read as a JSON object; fleet_stop_hook not enabled" >&2
+    return 0
+  fi
+  echo "fleet_stop_hook: $(fleet_stop_state)"
+}
+
 run_check_for() {
   case "$1" in
     claude) check_claude ;;
@@ -1033,6 +1081,10 @@ parse_args() {
         HARNESS="$2"
         case "$HARNESS" in claude|codex|opencode|agy|grok) ;; *) die "--harness must be claude|codex|opencode|agy|grok" ;; esac
         shift 2
+        ;;
+      --enable-fleet-stop)
+        enable_fleet_stop_hook
+        exit 0
         ;;
       -h|--help)
         usage
@@ -1108,6 +1160,7 @@ main() {
     fi
     check_config_file
     check_topology_retired
+    check_fleet_stop_hook
     report_token_discipline
 
     echo ""
@@ -1126,6 +1179,9 @@ main() {
     done
   else
     run_setup_for "$HARNESS"
+  fi
+  if [[ "$ALL" = "1" || "$HARNESS" = "claude" ]]; then
+    enable_fleet_stop_hook
   fi
 }
 

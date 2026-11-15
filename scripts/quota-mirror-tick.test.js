@@ -1,9 +1,8 @@
 'use strict';
 
 // quota-mirror-tick.js — one failure must not stop the later steps, and the process
-// exits non-zero only when every producer failed. The smoke check still runs and
-// prints its own line; it does not count toward that exit. Children are stubs in
-// QUOTA_MIRROR_BIN. The child sentinel must never appear in the tick's own output.
+// exits non-zero only when every producer failed. There is no post-step check script.
+// Children are stubs in QUOTA_MIRROR_BIN. The child sentinel must never appear in the tick's own output.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -19,7 +18,6 @@ const IDS = [
   'sync-statusline',
   'sync-provider-minimax',
   'sync-provider-glm',
-  'smoke',
 ];
 
 function writeStub(dir, id, code, log) {
@@ -78,9 +76,7 @@ test('all steps ok: exit 0, every stub ran, child output is not relayed', () => 
     'sync-statusline',
     'sync-provider-minimax --provider minimax',
     'sync-provider-glm --provider glm',
-    `smoke ${live}`,
   ]);
-  assert.match(r.stdout, /quota-mirror-tick: smoke ok/);
   assert.match(r.stdout, /quota-mirror-tick: 4\/4 ok/);
   assert.ok(!r.stdout.includes(SENTINEL));
   assert.ok(!r.stderr.includes(SENTINEL));
@@ -95,7 +91,6 @@ test('one step fails: the others still run and the tick exits 0', () => {
   assert.strictEqual(r.status, 0, r.stderr);
   assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
   assert.match(r.stdout, /quota-mirror-tick: sync-statusline fail exit=1/);
-  assert.match(r.stdout, /quota-mirror-tick: smoke ok/);
   assert.match(r.stdout, /quota-mirror-tick: 3\/4 ok/);
 });
 
@@ -106,18 +101,13 @@ test('every step fails: exit non-zero after all of them ran', () => {
   assert.match(r.stdout, /quota-mirror-tick: 0\/4 ok/);
 });
 
-test('all four producers fail and smoke passes: exit non-zero, smoke line still printed', () => {
-  const codes = all(1);
-  codes.smoke = 0;
-  const { r, lines } = runTick(codes);
-  assert.notStrictEqual(r.status, 0);
+test('step list is the four producers and a missing check script is not spawned', () => {
+  const { r, lines } = runTick(all(0));
+  assert.strictEqual(r.status, 0, r.stderr);
   assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
-  assert.match(r.stdout, /quota-mirror-tick: usage-probe fail exit=1/);
-  assert.match(r.stdout, /quota-mirror-tick: sync-statusline fail exit=1/);
-  assert.match(r.stdout, /quota-mirror-tick: sync-provider-minimax fail exit=1/);
-  assert.match(r.stdout, /quota-mirror-tick: sync-provider-glm fail exit=1/);
-  assert.match(r.stdout, /quota-mirror-tick: smoke ok/);
-  assert.match(r.stdout, /quota-mirror-tick: 0\/4 ok/);
+  assert.ok(!r.stdout.includes('fail missing'), r.stdout);
+  assert.ok(!r.stdout.includes('fail exit=127'), r.stdout);
+  assert.ok(!r.stdout.includes('smoke'), r.stdout);
 });
 
 function runTickArgs(codes, args) {
@@ -179,10 +169,10 @@ test('--out-dir refuses a world-writable directory and runs nothing', () => {
   assert.deepStrictEqual(lines, []);
 });
 
-test('--out-dir is passed to provider steps and is the smoke argument', () => {
+test('--out-dir is passed to provider steps', () => {
   const fx = fixture(all(0));
   fs.chmodSync(fx.live, 0o750);
-  const r = spawnSync(process.execPath, [TICK, '--steps', 'smoke,sync-provider-minimax', '--out-dir', fx.live], {
+  const r = spawnSync(process.execPath, [TICK, '--steps', 'sync-provider-minimax', '--out-dir', fx.live], {
     encoding: 'utf8',
     env: {
       PATH: process.env.PATH,
@@ -198,7 +188,6 @@ test('--out-dir is passed to provider steps and is the smoke argument', () => {
   assert.strictEqual(r.status, 0, r.stderr);
   assert.deepStrictEqual(lines, [
     `sync-provider-minimax --provider minimax --out-dir ${fx.live}`,
-    `smoke ${fx.live}`,
   ]);
 });
 
@@ -376,6 +365,7 @@ test('one producer ok: exit 0', () => {
   assert.strictEqual(r.status, 0, r.stderr);
   assert.deepStrictEqual(lines.map((l) => l.split(' ')[0]), IDS);
   assert.match(r.stdout, /quota-mirror-tick: usage-probe ok/);
-  assert.match(r.stdout, /quota-mirror-tick: smoke fail exit=1/);
   assert.match(r.stdout, /quota-mirror-tick: 1\/4 ok/);
+  assert.ok(!r.stdout.includes('fail missing'), r.stdout);
+  assert.ok(!r.stdout.includes('smoke'), r.stdout);
 });

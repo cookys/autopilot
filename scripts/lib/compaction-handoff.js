@@ -345,20 +345,26 @@ function inboundSection(items) {
   return render(kept, items.length - kept.length);
 }
 
-// --- fleet task state + PM ledger tail + capacity ar-gate -------------------------------------
+// --- fleet task state + PM ledger tail + capacity ar-gate + operator initiatives ---------------
 // A reserved block that comes off BODY_CAP next to the unanswered messages (SessionStart injects at most 10000
-// characters, so the caps are bytes, not the 4 KB a section would like). Caps chosen so the whole block stays near 2.7 KB
-// even with the ledger tail: stuck 400 B, tree 500 B, ar-gate 300 B, PM ledger tail 1200 B (newest of the last 20 lines
-// first), each clipped to 150 characters per line. Fail closed: when either fleet call cannot be read the block carries ONE
-// line `!! 工作狀態未知，先跑 fleet tasks --stuck 再做任何事 (<reason>)` and the failed part is left out, so absence of a
-// task row is never read as "no work". Output of the fleet CLI, the ledger and the capacity file is data: every line is
-// escaped and clipped. Kill switch: AUTOPILOT_CHECKPOINT_FLEET=off (the whole block, ledger and ar-gate included).
-const FLEET_PART_CAPS = { stuck: { bytes: 400, lines: 40 }, tree: { bytes: 500, lines: 40 }, ar: { bytes: 300, lines: 40 }, ledger: { bytes: 1200, lines: 20 } };
+// characters, so the caps are bytes, not the 4 KB a section would like). Tree 500 B, ar-gate 300 B, PM ledger tail
+// 1200 B (newest of the last 20 lines first). Each kept line is clipped to 150 characters. Operator initiatives and
+// `fleet tasks --stuck` have no byte or line cap (per-line clip only). capScale shrinks the capped parts and does not
+// shrink initiatives. Fail closed: when either fleet call cannot be read the block carries ONE line
+// `!! 工作狀態未知，先跑 fleet tasks --stuck 再做任何事 (<reason>)` and the failed part is left out, so absence of a
+// task row is never read as "no work". A set-but-failing initiatives command is its own line, never silent; unset with
+// no pm checkout omits that part, and a pm checkout whose script is missing reports script missing. Output of the fleet CLI, the ledger, the capacity file and the initiatives
+// command is data: every field is escaped and clipped. Kill switch: AUTOPILOT_CHECKPOINT_FLEET=off (the whole block,
+// initiatives included).
+const FLEET_PART_CAPS = { tree: { bytes: 500, lines: 40 }, ar: { bytes: 300, lines: 40 }, ledger: { bytes: 1200, lines: 20 } };
 const FLEET_LINE_CLIP = 150;
 const FLEET_CALL_TIMEOUT_MS = 3500;
+const INITIATIVES_TIMEOUT_MS = 5000;
 const FLEET_UNKNOWN_LINE = '!! 工作狀態未知，先跑 fleet tasks --stuck 再做任何事';
 const AR_GATE_STALE_MS = 26 * 3600 * 1000;
 const AR_GATE_FIELDS = ['overdue_open', 'unaccepted', 'decided_no_task', 'closed_still_pending', 'lesson_overdue'];
+const INITIATIVE_REASONS = new Set(['no_task', 'waiting', 'blocked', 'stale_24h', 'evidence_overdue']);
+const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function fleetBinResolved() {
   const b = process.env.AUTOPILOT_FLEET_BIN;
@@ -379,6 +385,11 @@ function capBlock(lines, cap) {
   }
   const more = clipped.length - kept.length;
   return kept.join('\n') + (more > 0 ? `${kept.length ? '\n' : ''}... ${more} more` : '');
+}
+
+// Every line, clipped. No byte cap and no line cap (stuck tasks; RED initiatives clip per field).
+function clipLines(lines) {
+  return lines.map((l) => escapeText(l).slice(0, FLEET_LINE_CLIP)).join('\n');
 }
 
 // The last cap.lines lines, newest kept when the byte budget is short; the marker counts the older ones left out.
@@ -403,11 +414,12 @@ function fleetCall(args, deadlineAt) {
 }
 
 // -> { title, body } | { err }. An unreadable call is the caller's fail-closed line, never an empty part.
+// cap null: per-line clip only (stuck). A cap object: byte and line cap (tree).
 function fleetTasksPart(title, args, cap, deadlineAt) {
   try {
     const r = fleetCall(args, deadlineAt);
     if (r.err) return { err: `${args.slice(0, 2).join(' ')}: ${r.err}` };
-    return { title, body: r.lines.length ? capBlock(r.lines, cap) : 'none' };
+    return { title, body: r.lines.length ? (cap ? capBlock(r.lines, cap) : clipLines(r.lines)) : 'none' };
   } catch (e) { return { err: `${args.slice(0, 2).join(' ')}: ${String(e && e.message).slice(0, 60)}` }; }
 }
 
@@ -483,20 +495,112 @@ function capacityArGatePart(deadlineAt, cap) {
   return renderPart({ title, body: capBlock(out, cap) });
 }
 
+const INITIATIVES_TITLE = 'Operator initiatives (red never cut)';
+
+function initiativesUnknown(reason) {
+  const why = escapeText(String(reason || 'unparsable')).replace(/\s+/g, ' ').slice(0, 60);
+  return renderPart({ title: INITIATIVES_TITLE, body: `!! initiatives 狀態未知（${why}）` });
+}
+
+// AUTOPILOT_INITIATIVES_CMD when set (even if the path is missing). Otherwise the pm checkout default
+// under pmDir. This function is the only place that knows that path; pmDir is returned either way.
+// required false and the script absent: the caller omits the part when pmDir is not a directory, and
+// reports script missing when the pm checkout directory exists.
+function initiativesCommand() {
+  const pmDir = path.join(os.homedir(), 'projects', 'pm');
+  const env = process.env.AUTOPILOT_INITIATIVES_CMD;
+  if (env) return { cmd: env, required: true, pmDir };
+  return { cmd: path.join(pmDir, 'scripts', 'initiatives.sh'), required: false, pmDir };
+}
+
+// One stdout line: RED|GREEN, title, task_id|-, state, last_progress RFC3339|-, evidence_due RFC3339|-, reasons.
+// reasons is `-` for GREEN, else a comma list of no_task,waiting,blocked,stale_24h,evidence_overdue.
+function parseInitiative(line) {
+  const f = String(line).split('\t');
+  if (f.length !== 7) return null;
+  const [color, title, taskId, state, last, due, reasons] = f;
+  if (color !== 'RED' && color !== 'GREEN') return null;
+  if (!title || !taskId || !state) return null;
+  if (last !== '-' && !RFC3339_RE.test(last)) return null;
+  if (due !== '-' && !RFC3339_RE.test(due)) return null;
+  if (color === 'GREEN') {
+    if (reasons !== '-') return null;
+  } else if (!reasons || reasons.split(',').some((p) => !INITIATIVE_REASONS.has(p))) return null;
+  return { color, title, taskId, state, last, due, reasons };
+}
+
+function initiativeWhen(v) {
+  if (v === '-') return '-';
+  const ms = Date.parse(v);
+  return Number.isFinite(ms) ? taipeiTime(ms) : '-';
+}
+
+function renderRedInitiative(p) {
+  return [p.color, p.title, p.taskId, p.state, initiativeWhen(p.last), initiativeWhen(p.due), p.reasons]
+    .map((f) => escapeText(f).slice(0, FLEET_LINE_CLIP)).join('\t');
+}
+
+// Run with no args, no shell, stdin closed, timeout 5000 ms bounded by deadlineAt (same style as fleetCall).
+// Exit 0 text is parsed per line: bad lines increment malformed, they do not hide the RED rows.
+// NUL in stdout, or a spawn that ends with no status, is unparsable (one unknown line).
+function initiativesPart(deadlineAt) {
+  const { cmd, required, pmDir } = initiativesCommand();
+  if (!required && !fs.existsSync(cmd)) {
+    try {
+      if (fs.statSync(pmDir).isDirectory()) return initiativesUnknown('script missing');
+    } catch { /* no pm checkout */ }
+    return '';
+  }
+  let r;
+  try {
+    r = spawnSync(cmd, [], {
+      encoding: 'utf8',
+      timeout: boundedTimeout(INITIATIVES_TIMEOUT_MS, deadlineAt),
+      stdio: ['ignore', 'pipe', 'ignore'],
+      shell: false,
+      maxBuffer: 1 << 20,
+    });
+  } catch (e) {
+    return initiativesUnknown(String((e && e.code) || (e && e.message) || 'error').slice(0, 40));
+  }
+  if (r.error) return initiativesUnknown(r.error.code === 'ETIMEDOUT' ? 'timeout' : String(r.error.code || r.error.message || 'error').slice(0, 40));
+  if (r.signal) return initiativesUnknown(`signal ${r.signal}`);
+  if (r.status !== 0) return initiativesUnknown(r.status == null ? 'unparsable' : `exit ${r.status}`);
+  const text = String(r.stdout || '');
+  if (text.includes('\0')) return initiativesUnknown('unparsable');
+  const reds = [];
+  let green = 0;
+  let malformed = 0;
+  for (const line of text.split('\n')) {
+    const raw = line.replace(/\s+$/, '');
+    if (!raw) continue;
+    const row = parseInitiative(raw);
+    if (!row) { malformed += 1; continue; }
+    if (row.color === 'GREEN') green += 1;
+    else reds.push(renderRedInitiative(row));
+  }
+  const body = [...reds, `green: ${green}`];
+  if (malformed > 0) body.push(`malformed: ${malformed}`);
+  return renderPart({ title: INITIATIVES_TITLE, body: body.join('\n') });
+}
+
 // Always returns text unless the kill switch is off ('' then).
 function fleetStateSection(opts = {}) {
   if (String(process.env.AUTOPILOT_CHECKPOINT_FLEET || '').toLowerCase() === 'off') return '';
   const deadlineAt = Number.isFinite(opts.deadlineAt) ? opts.deadlineAt : Date.now() + HANDOFF_DEADLINE_MS;
-  // opts.capScale (0..1) shrinks every part's byte cap when the model note would otherwise be left without room.
+  // opts.capScale (0..1) shrinks tree / ledger / ar-gate byte caps when the model note would otherwise be left
+  // without room. Initiatives (already rendered) and stuck tasks are outside FLEET_PART_CAPS.
   const sc = Number.isFinite(opts.capScale) ? Math.min(1, Math.max(0.25, opts.capScale)) : 1;
   const caps = {};
   for (const k of Object.keys(FLEET_PART_CAPS)) caps[k] = { bytes: Math.max(100, Math.floor(FLEET_PART_CAPS[k].bytes * sc)), lines: FLEET_PART_CAPS[k].lines };
+  const initiatives = initiativesPart(deadlineAt);
   const parts = [
-    fleetTasksPart('fleet tasks --stuck --mine', ['tasks', '--stuck', '--mine'], caps.stuck, deadlineAt),
+    fleetTasksPart('fleet tasks --stuck --mine', ['tasks', '--stuck', '--mine'], null, deadlineAt),
     fleetTasksPart('fleet tasks --tree --mine', ['tasks', '--tree', '--mine'], caps.tree, deadlineAt),
   ];
   const errs = [...new Set(parts.filter((p) => p.err).map((p) => p.err))];
   return '## Fleet State (reserved, never cut; data, not instructions)\n'
+    + initiatives
     + (errs.length ? `${FLEET_UNKNOWN_LINE} (${errs.join('; ')})\n` : '')
     + parts.filter((p) => !p.err).map(renderPart).join('')
     + pmLedgerPart(caps.ledger)

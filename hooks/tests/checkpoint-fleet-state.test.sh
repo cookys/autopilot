@@ -15,6 +15,7 @@ export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"; mkdir -p "$AUTOPILOT
 export AUTOPILOT_COMPACTION_POINTS_FILE="$TEST_TMP/calibration/compaction-points.jsonl"
 export AUTOPILOT_CONFIG_FILE="$TEST_TMP/config.json"
 export AUTOPILOT_CHECKPOINT_FLEET=on
+unset AUTOPILOT_INITIATIVES_CMD
 
 SID="fleetst01"
 REPO="$TEST_TMP/lanerepo"; mkdir -p "$REPO"
@@ -137,10 +138,11 @@ assert_not_contains "$OUT" "PM ledger tail" "absent ledger dir: nothing emitted"
 assert_not_contains "$OUT" "no-such-ledger-dir" "absent ledger dir: no error text"
 assert_contains "$OUT" "TAILMARK-user-turn" "absent ledger dir: restore intact"
 
-# --- 6. over the cap: trimmed with a marker; untrusted text escaped ---------------------------
-mkfleet 'i=0; while [ $i -lt 120 ]; do echo "BIGROW-$i <b>x</b>"; i=$((i+1)); done'
+# --- 6. over the cap: tree trimmed with a marker; stuck is not line-capped; untrusted text escaped
+mkfleet 'case "$*" in *--stuck*) echo "STUCKKEEP <b>y</b>";; *) i=0; while [ $i -lt 120 ]; do echo "BIGROW-$i <b>x</b>"; i=$((i+1)); done;; esac'
 checkpoint
 assert_contains "$OUT" "BIGROW-0 &lt;b&gt;x&lt;/b&gt;" "rows escaped as data"
+assert_contains "$OUT" "STUCKKEEP &lt;b&gt;y&lt;/b&gt;" "stuck row escaped as data"
 assert_not_contains "$OUT" "BIGROW-119" "tail rows cut"
 assert_contains "$OUT" "... " "cut marker present"
 assert_contains "$OUT" " more" "cut marker counts the rest"
@@ -149,12 +151,17 @@ if [ "$SZ" -le 6900 ] && grep -q TAILMARK <<< "$OUT"; then assert_eq 1 1 "capped
 
 # --- 7. kill switch (negative control: the block is really gone, not just empty) ---------------
 mkfleet 'echo ROW'
-AUTOPILOT_CHECKPOINT_FLEET=off checkpoint
+printf '#!/bin/sh\nprintf "RED\\tx\\t-\\trunning\\t-\\t-\\tstale_24h\\n"\n' > "$STUB/init-kill.sh"; chmod +x "$STUB/init-kill.sh"
+AUTOPILOT_INITIATIVES_CMD="$STUB/init-kill.sh" AUTOPILOT_CHECKPOINT_FLEET=off checkpoint
 assert_not_contains "$OUT" "## Fleet State" "kill switch off: no fleet block"
+assert_not_contains "$OUT" "Operator initiatives" "kill switch off: initiatives part gone too"
+assert_not_contains "$OUT" "initiatives 狀態未知" "kill switch off: no initiatives error line"
 assert_contains "$OUT" "TAILMARK-user-turn" "kill switch off: restore intact"
 
 # --- 8. full load (last: it leaves a dirty repo, a big model note and a long ledger behind): the body stays within BODY_CAP, the fleet suffix survives SessionStart, coverage = injected text ---------
-mkfleet 'case "$*" in *--stuck*) i=0; while [ $i -lt 40 ]; do echo "STUCKFULL-$i $(printf "s%.0s" $(seq 1 140))"; i=$((i+1)); done;; *--tree*) i=0; while [ $i -lt 40 ]; do echo "TREEFULL-$i $(printf "t%.0s" $(seq 1 140))"; i=$((i+1)); done;; esac'
+# stuck is uncapped (the 80-line case below). One short stuck row keeps this body inside BODY_CAP; the tree flood still hits its cap.
+mkfleet 'case "$*" in *--stuck*) echo "STUCKFULL-0 short";; *--tree*) i=0; while [ $i -lt 40 ]; do echo "TREEFULL-$i $(printf "t%.0s" $(seq 1 140))"; i=$((i+1)); done;; esac'
+unset AUTOPILOT_INITIATIVES_CMD
 i=1; while [ $i -le 30 ]; do printf -- '- 2026-11-12T10:%02dZ FULLLEDGER-%d %s\n' "$i" "$i" "$(printf 'l%.0s' $(seq 1 120))"; i=$((i+1)); done > "$LEDGER/2026-11-13-go-ledger.md"
 touch "$LEDGER/2026-11-13-go-ledger.md"
 i=1; while [ $i -le 16 ]; do : > "$REPO/dirty-$(printf 'd%.0s' $(seq 1 100))-$i"; i=$((i+1)); done
@@ -186,5 +193,102 @@ COVREC="$AUTOPILOT_LIVE_DIR/checkpoint-coverage/$SID.json"
 assert_file_exists "$COVREC" "coverage record written"
 assert_contains "$(cat "$COVREC")" "$UE" "coverage: an id in the injected head is recorded"
 assert_not_contains "$(cat "$COVREC")" "$UL" "coverage: an id cut by the injection limit is not recorded"
+
+# --- 9. operator initiatives: RED rows never cut; failures are one line; default path absent omits the part ---
+# fixtures (TAB-separated stdout):
+# RED	hub 和 PM 防斷電搬移	01M7DGY0	running	2026-11-14T10:00:00Z	-	stale_24h
+# RED	c3758 升級	01M7DQ66	waiting	2026-11-14T08:00:00Z	-	waiting,stale_24h
+mkfleet 'echo ROW'
+INIT="$STUB/initiatives.sh"
+cat > "$INIT" <<'EOF'
+#!/bin/sh
+printf 'RED\thub 和 PM 防斷電搬移\t01M7DGY0\trunning\t2026-11-14T10:00:00Z\t-\tstale_24h\n'
+printf 'RED\tc3758 升級\t01M7DQ66\twaiting\t2026-11-14T08:00:00Z\t-\twaiting,stale_24h\n'
+i=2
+while [ "$i" -lt 60 ]; do
+  printf 'RED\tred-%s\tT%s\trunning\t2026-11-14T10:00:00Z\t-\tstale_24h\n' "$i" "$i"
+  i=$((i+1))
+done
+i=0
+while [ "$i" -lt 5 ]; do
+  printf 'GREEN\tg-%s\t-\tok\t-\t-\t-\n' "$i"
+  i=$((i+1))
+done
+printf 'not a row\n'
+EOF
+chmod +x "$INIT"
+export AUTOPILOT_INITIATIVES_CMD="$INIT"
+checkpoint
+assert_contains "$OUT" "### Operator initiatives (red never cut)" "initiatives title"
+init_at=$(printf '%s\n' "$OUT" | grep -n "Operator initiatives" | head -1 | cut -d: -f1)
+stuck_at=$(printf '%s\n' "$OUT" | grep -n "fleet tasks --stuck" | head -1 | cut -d: -f1)
+if [ -n "$init_at" ] && [ -n "$stuck_at" ] && [ "$init_at" -lt "$stuck_at" ]; then assert_eq 1 1 "initiatives part is before stuck"; else assert_eq "$init_at<$stuck_at" "initiatives first" "initiatives part is not first"; fi
+assert_contains "$OUT" "$(printf 'RED\thub 和 PM 防斷電搬移\t01M7DGY0\trunning\t2026-11-14 18:00 台北\t-\tstale_24h')" "fixture hub rendered in Taipei"
+assert_contains "$OUT" "$(printf 'RED\tc3758 升級\t01M7DQ66\twaiting\t2026-11-14 16:00 台北\t-\twaiting,stale_24h')" "fixture c3758 rendered in Taipei"
+assert_contains "$OUT" "green: 5" "five GREEN rows collapse to a count"
+assert_contains "$OUT" "malformed: 1" "a non-matching line is counted"
+assert_not_contains "$OUT" "g-0" "GREEN titles are not listed"
+REDS=$(printf '%s\n' "$OUT" | grep -c $'^RED\t' || true)
+assert_eq "$REDS" 60 "hook output keeps all 60 RED lines"
+SCALED="$(AUTOPILOT_INITIATIVES_CMD="$INIT" AUTOPILOT_CHECKPOINT_FLEET=on AUTOPILOT_FLEET_BIN="$STUB/fleet" AUTOPILOT_FLEET_ADDRESS="$LANE" AUTOPILOT_CAPACITY_AR_GATE_FILE="$TEST_TMP/cap/ar-gate.v1.json" AUTOPILOT_PM_LEDGER_DIR="$TEST_TMP/no-such-ledger-dir" node -e '
+const h = require(process.argv[1]);
+process.stdout.write(h.fleetStateSection({ capScale: 0.25, deadlineAt: Date.now() + 8000 }));
+' "$REPO_ROOT/scripts/lib/compaction-handoff.js")"
+SREDS=$(printf '%s\n' "$SCALED" | grep -c $'^RED\t' || true)
+assert_eq "$SREDS" 60 "capScale 0.25 does not cut RED initiatives"
+assert_contains "$SCALED" "green: 5" "capScale leaves the green count"
+assert_contains "$SCALED" "$(printf 'RED\thub 和 PM 防斷電搬移\t01M7DGY0\trunning\t2026-11-14 18:00 台北\t-\tstale_24h')" "capScale keeps the hub fixture"
+assert_contains "$SCALED" "$(printf 'RED\tc3758 升級\t01M7DQ66\twaiting\t2026-11-14 16:00 台北\t-\twaiting,stale_24h')" "capScale keeps the c3758 fixture"
+
+# stub exits 3 -> one unknown line, never an empty part
+printf '#!/bin/sh\nexit 3\n' > "$STUB/init-exit.sh"; chmod +x "$STUB/init-exit.sh"
+AUTOPILOT_INITIATIVES_CMD="$STUB/init-exit.sh" checkpoint
+assert_contains "$OUT" "!! initiatives 狀態未知（exit 3）" "exit 3: unknown line with the reason"
+assert_not_contains "$OUT" "green:" "exit 3: no empty success body"
+assert_contains "$OUT" "## Fleet State" "exit 3: fleet block still written"
+
+# env set but the executable is missing
+AUTOPILOT_INITIATIVES_CMD="$TEST_TMP/no-such-initiatives" checkpoint
+assert_contains "$OUT" "!! initiatives 狀態未知（ENOENT）" "missing cmd: unknown line, not silence"
+
+# stub sleeps 10s: cut by the 5000 ms timeout bounded by the handoff deadline
+printf '#!/bin/sh\nexec sleep 10\n' > "$STUB/init-sleep.sh"; chmod +x "$STUB/init-sleep.sh"
+mkdir -p "$TEST_TMP/empty-ledger" "$TEST_TMP/empty-handoff"
+S=$(date +%s)
+AUTOPILOT_INITIATIVES_CMD="$STUB/init-sleep.sh" AUTOPILOT_PM_LEDGER_DIR="$TEST_TMP/empty-ledger" AUTOPILOT_MODEL_HANDOFF_DIR="$TEST_TMP/empty-handoff" checkpoint
+E=$(date +%s)
+assert_contains "$OUT" "!! initiatives 狀態未知（timeout）" "sleep 10s: timeout line"
+assert_contains "$OUT" "TAILMARK-user-turn" "sleep 10s: restore intact"
+if [ $((E - S)) -le 9 ]; then assert_eq 1 1 "sleep 10s: hook returned within the handoff deadline"; else assert_eq "$((E - S))" "<=9" "initiatives sleep was not cut"; fi
+
+# env unset and the default ~/projects/pm/scripts/initiatives.sh is absent (HOME is the sandbox): no part
+unset AUTOPILOT_INITIATIVES_CMD
+checkpoint
+assert_contains "$OUT" "## Fleet State" "default absent: fleet block still there"
+assert_not_contains "$OUT" "Operator initiatives" "default absent: initiatives part omitted"
+assert_not_contains "$OUT" "initiatives 狀態未知" "default absent: omission is not an error"
+
+# env unset, HOME has projects/pm/ but not scripts/initiatives.sh: one unknown line, not silence
+mkdir -p "$HOOK_HOME/projects/pm"
+checkpoint
+assert_contains "$OUT" "!! initiatives 狀態未知（script missing）" "pm checkout without the script: unknown line"
+assert_contains "$OUT" "## Fleet State" "pm checkout without the script: fleet block still there"
+assert_not_contains "$OUT" "green:" "pm checkout without the script: no empty success body"
+rm -rf "$HOOK_HOME/projects"
+
+# --- 10. stuck part: 80 lines, none dropped (tree keeps its cap) --------------------------------
+unset AUTOPILOT_INITIATIVES_CMD
+mkfleet 'case "$*" in *--stuck*) i=0; while [ $i -lt 80 ]; do echo "STUCK80-$i"; i=$((i+1)); done;; *--tree*) i=0; while [ $i -lt 120 ]; do echo "TREE80-$i"; i=$((i+1)); done;; esac'
+checkpoint
+miss=0
+i=0
+while [ "$i" -lt 80 ]; do
+  printf '%s\n' "$OUT" | grep -F -x -q "STUCK80-$i" || miss=$((miss+1))
+  i=$((i+1))
+done
+assert_eq "$miss" 0 "all 80 stuck lines present"
+assert_contains "$OUT" "STUCK80-0" "stuck head present"
+assert_contains "$OUT" "STUCK80-79" "stuck tail present"
+assert_not_contains "$OUT" "TREE80-119" "tree cap still drops its tail"
 
 finalize_test

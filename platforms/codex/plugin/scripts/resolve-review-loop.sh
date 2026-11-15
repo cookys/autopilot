@@ -270,8 +270,8 @@ topology_sanitize() {
   if [[ -n "$TOPO_SANITIZED_FOR" && "$TOPO_SANITIZED_FOR" == "$_topo_file" ]]; then _topo_file="$TOPO_EFFECTIVE"; return 0; fi
   local src="$_topo_file"
   [[ -f "$src" ]] || return 0
-  TOPO_EFFECTIVE="$(mktemp "${TMPDIR:-/tmp}/review-loop-topology.XXXXXX")" || return 0
   trap 'rm -f -- "${ROSTER_EFFECTIVE:-}" "${TOPO_EFFECTIVE:-}"' EXIT
+  TOPO_EFFECTIVE="$(mktemp "${TMPDIR:-/tmp}/review-loop-topology.XXXXXX")" || return 0
   if node "$SCRIPT_DIR/lib/topology-runners.js" sanitize "$src" "$TOPO_EFFECTIVE"; then
     TOPO_SANITIZED_FOR="$src"
     _topo_file="$TOPO_EFFECTIVE"

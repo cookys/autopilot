@@ -72,6 +72,19 @@ function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
 // owner's picks and notes as the host holds them; `inputs` is whether the surface draws text fields.
 export type DecideActs = { state: DecideState; batch?: DecideBatch; now?: number; inputs: boolean; onPress: (id: string) => void; onNote: (key: string, value: string) => void; onKeep: (key: string, value: string) => void }
 
+// The host Input is uncontrolled. Enter clears its buffer and then ignores a new `value` while the element key stays, so the field shows the placeholder and the next
+// keystroke replaces the note. A new key remounts it and it takes the saved note. One count per field key: Enter in one card does not remount the others.
+const noteEpoch = new Map<string, number>()
+export function resetNoteInputs(): void {
+  noteEpoch.clear()
+}
+export function noteInputKey(fieldKey: string): string {
+  return fieldKey + ':' + String(noteEpoch.get(fieldKey) ?? 0)
+}
+function bumpNoteInput(fieldKey: string): void {
+  noteEpoch.set(fieldKey, (noteEpoch.get(fieldKey) ?? 0) + 1)
+}
+
 type El = (props: any) => any
 
 // The tab strip (ui.ts `strip`): Buttons when the surface has them (a click or Enter switches the tab), plain Text otherwise. The active tab is a bold name, and
@@ -140,7 +153,7 @@ function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, 
     return (
       <Box key={k + 'f' + i}>
         {l.segs === undefined ? null : l.segs.map((s, j) => <Text key={'g' + j} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)}
-        {Input === undefined || decide === null ? null : <Input key={f.key} placeholder={f.placeholder} value={f.value} onInput={(v: string) => decide.onNote(f.key, v)} onSubmit={(v: string) => decide.onKeep(f.key, v)} />}
+        {Input === undefined || decide === null ? null : <Input key={noteInputKey(f.key)} placeholder={f.placeholder} value={f.value} onInput={(v: string) => decide.onNote(f.key, v)} onSubmit={(v: string) => { bumpNoteInput(f.key); decide.onKeep(f.key, v) }} />}
       </Box>
     )
   }

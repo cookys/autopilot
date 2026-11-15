@@ -5991,6 +5991,77 @@ for (const surface of SURFACES) {
     await pane.unmount()
     return found
   }
+  // The plugin-test Input is not the host's. The real one is uncontrolled: Enter calls onSubmit with the whole buffer, does not call onInput(''), then clears the buffer. A later `value` is ignored while the element key stays; a new key remounts and takes `value`. This driver is that host. `shown` is the buffer, not the `value` prop.
+  const logicalNote = (key: string): string => {
+    const m = /^(note:.+):(\d+)$/.exec(key)
+    return m === null ? key : m[1]
+  }
+  const noteKeyOf = async (pane: any, logical: string): Promise<string> => {
+    const nodes = (await pane.findAll({ type: 'Input' })) as Drawn[]
+    const hit = nodes.find(n => logicalNote(String(n.props?.key ?? '')) === logical)
+    if (hit === undefined) throw new Error('no Input for ' + logical)
+    return String(hit.props?.key)
+  }
+  const noteInput = async (pane: any, logical: string, text: string, kind: 'change' | 'submit') => {
+    await pane.input({ key: await noteKeyOf(pane, logical), text, kind })
+  }
+  function hostOf() {
+    const buf = new Map<string, string>()
+    const live = new Map<string, string>()
+    const element = (logical: string): string => {
+      const key = live.get(logical)
+      if (key === undefined) throw new Error('no field ' + logical)
+      return key
+    }
+    return {
+      async see(pane: any) {
+        const nodes = (await pane.findAll({ type: 'Input' })) as Drawn[]
+        const seen = new Set<string>()
+        for (const n of nodes) {
+          const key = String(n.props?.key ?? '')
+          const logical = logicalNote(key)
+          seen.add(logical)
+          const value = typeof n.props?.value === 'string' ? n.props.value : ''
+          const prev = live.get(logical)
+          if (prev !== key) {
+            if (prev !== undefined) buf.delete(prev)
+            live.set(logical, key)
+            buf.set(key, value)
+          }
+        }
+        for (const logical of [...live.keys()]) {
+          if (seen.has(logical)) continue
+          const old = live.get(logical)
+          if (old !== undefined) buf.delete(old)
+          live.delete(logical)
+        }
+      },
+      shown(logical: string): string {
+        const key = live.get(logical)
+        return key === undefined ? '' : buf.get(key) ?? ''
+      },
+      element,
+      async type(pane: any, logical: string, text: string) {
+        for (const ch of text) {
+          const key = element(logical)
+          const next = (buf.get(key) ?? '') + ch
+          buf.set(key, next)
+          await pane.input({ key, text: next, kind: 'change' })
+        }
+      },
+      async enter(pane: any, logical: string) {
+        const key = element(logical)
+        const text = buf.get(key) ?? ''
+        await pane.input({ key, text, kind: 'submit' })
+        buf.set(key, '')
+      },
+      async value(pane: any, logical: string): Promise<string> {
+        const nodes = (await pane.findAll({ type: 'Input' })) as Drawn[]
+        const hit = nodes.find(n => logicalNote(String(n.props?.key ?? '')) === logical)
+        return typeof hit?.props?.value === 'string' ? hit.props.value : ''
+      },
+    }
+  }
 
   test('DECIDE mounted: each option is a Button, a text field sits under each question, the send Button is absent until something is chosen (' + surface + ')', async ($, on) => {
     decideWorld(on)
@@ -6005,7 +6076,7 @@ for (const surface of SURFACES) {
     const buttons = await keysOf($, 'Button')
     for (const k of ['opt:d-4290499d:0', 'opt:d-4290499d:1', 'opt:d-c24ecfd9:0', 'opt:d-c24ecfd9:1']) expect(buttons, k).toContain(k)
     expect(buttons, 'nothing is chosen: the send row is plain text').not.toContain('submit')
-    expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d', 'note:d-c24ecfd9', 'note:d-0000free'])
+    expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d:0', 'note:d-c24ecfd9:0', 'note:d-0000free:0'])
     expect(rows.filter(r => r === ' ').length, 'a blank line is DRAWN after each card (an empty Text takes no row, a one-cell Text does)').toBe(3)
     expect(rows.findIndex(r => r === ' '), 'the first blank closes the first card, after its note field').toBeGreaterThan(rows.findIndex(r => r.startsWith('  補充')))
   })
@@ -6023,7 +6094,7 @@ for (const surface of SURFACES) {
     const keys = await keysOf($, 'Button')
     expect(keys).toContain('submit')
     expect(keys, 'the other option is still pressable').toContain('opt:d-4290499d:0')
-    expect(await keysOf($, 'Input'), 'the note field stays').toContain('note:d-4290499d')
+    expect(await keysOf($, 'Input'), 'the note field stays').toContain('note:d-4290499d:0')
     await act($, 'opt:d-4290499d:0') // change the pick before sending
     rows = await decideRows($)
     expect(rows).toContain('  選項      [x] ★ OK')
@@ -6034,8 +6105,8 @@ for (const surface of SURFACES) {
     const { w, files, submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
-    await pane.input({ key: 'note:d-c24ecfd9', text: '要，但只寫一句', kind: 'change' })
-    await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
+    await noteInput(pane, 'note:d-c24ecfd9', '要，但只寫一句', 'change')
+    await noteInput(pane, 'note:d-0000free', '叫 main', 'change')
     await pane.press({ key: 'opt:d-4290499d:0' })
     await pane.press({ key: 'opt:d-c24ecfd9:1' })
     await pane.press({ key: 'submit' })
@@ -6145,7 +6216,7 @@ for (const surface of SURFACES) {
     for (const [n, stdout] of outs.entries()) {
       claim.stdout = stdout
       if (n < 2) await act($, 'opt:' + ['d-4290499d', 'd-c24ecfd9'][n] + ':0', 'submit')
-      else { const pane = await paneOn($, surface, 'decide'); await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' }); await pane.press({ key: 'submit' }); await pane.unmount() }
+      else { const pane = await paneOn($, surface, 'decide'); await noteInput(pane, 'note:d-0000free', '叫 main', 'change'); await pane.press({ key: 'submit' }); await pane.unmount() }
       await w.clock.advance(10_000)
     }
     expect(claim.ran.length).toBe(3)
@@ -6157,7 +6228,7 @@ for (const surface of SURFACES) {
     const { w, submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
-    await pane.input({ key: 'note:d-4290499d', text: '自己寫', kind: 'change' })
+    await noteInput(pane, 'note:d-4290499d', '自己寫', 'change')
     await pane.press({ key: 'submit' })
     await pane.unmount()
     await w.clock.advance(10_000)
@@ -6165,45 +6236,77 @@ for (const surface of SURFACES) {
     expect(submits[0].text).toBe('[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → 都不選｜補充：自己寫')
   })
 
-  // The host clears an Input's field when Enter submits it (roundtable/register.ts keepDraft). A note is only SENT by the send Button, so Enter in a note field must not lose
-  // the text: the mod keeps it and asks for a redraw, which draws the field with the kept text again.
+  // The real host clears its buffer on Enter and ignores a new `value` until the element key changes. A note is only SENT by the send Button.
   test('DECIDE mounted: Enter in a note field keeps the draft: it is still the field value, a redraw is asked, and nothing is sent (' + surface + ')', async ($, on) => {
     const { w, submits } = decideWorld(on)
     await start($, surface)
-    const pane = await paneOn($, surface, 'decide')
-    await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
+    const host = hostOf()
+    let pane = await paneOn($, surface, 'decide')
+    await host.see(pane)
+    await host.type(pane, 'note:d-0000free', '叫 main')
     const before = w.invalidates
-    await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'submit' }) // Enter
+    await host.enter(pane, 'note:d-0000free')
     await pane.unmount()
     expect(submits.length, 'Enter never sends').toBe(0)
     expect(w.invalidates - before, 'Enter asks for one redraw so the host\'s cleared field is drawn with the draft again').toBe(1)
-    const p2 = await paneOn($, surface, 'decide')
-    const f = ((await p2.findAll({ type: 'Input' })) as Drawn[]).find(n => n.props?.key === 'note:d-0000free')
-    await p2.unmount()
-    expect(f?.props?.value).toBe('叫 main')
+    pane = await paneOn($, surface, 'decide')
+    await host.see(pane)
+    expect(host.shown('note:d-0000free'), 'the field still shows the note after Enter').toBe('叫 main')
+    expect(await host.value(pane, 'note:d-0000free'), 'the stored note').toBe('叫 main')
+    await pane.unmount()
   })
 
-  // The host clears the field and the submit event arrives as ''. Enter must not write that over the note change already stored.
+  // A blank submit is not the host's clear (that one delivers the typed text). It must not replace the note already stored.
   test('DECIDE mounted: Enter with an empty submit keeps the typed note and sends nothing (' + surface + ')', async ($, on) => {
     const { submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
-    await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
-    await pane.input({ key: 'note:d-0000free', text: '', kind: 'submit' })
+    await noteInput(pane, 'note:d-0000free', '叫 main', 'change')
+    await noteInput(pane, 'note:d-0000free', '', 'submit')
     await pane.unmount()
     expect(submits.length, 'Enter never sends').toBe(0)
     const p2 = await paneOn($, surface, 'decide')
-    const f = ((await p2.findAll({ type: 'Input' })) as Drawn[]).find(n => n.props?.key === 'note:d-0000free')
+    const f = ((await p2.findAll({ type: 'Input' })) as Drawn[]).find(n => logicalNote(String(n.props?.key ?? '')) === 'note:d-0000free')
     await p2.unmount()
     expect(f?.props?.value).toBe('叫 main')
+  })
+
+  test('DECIDE mounted: Enter keeps a supplementary note, the next character continues it, and another card\'s field stays (' + surface + ')', async ($, on) => {
+    const { submits } = decideWorld(on)
+    await start($, surface)
+    const host = hostOf()
+    const A = 'note:d-4290499d'
+    const B = 'note:d-c24ecfd9'
+    let pane = await paneOn($, surface, 'decide')
+    await host.see(pane)
+    await host.type(pane, B, '別張')
+    const bKey = host.element(B)
+    await host.type(pane, A, 'abc 測試')
+    await host.enter(pane, A)
+    await pane.unmount()
+    pane = await paneOn($, surface, 'decide')
+    await host.see(pane)
+    expect(submits.length, 'Enter never sends').toBe(0)
+    expect(host.element(B), 'Enter on card A does not remount card B').toBe(bKey)
+    expect(host.shown(B), 'card B\'s field is unchanged').toBe('別張')
+    expect(host.shown(A), 'the field still shows the note').toBe('abc 測試')
+    expect(await host.value(pane, A), 'the stored note').toBe('abc 測試')
+    await host.type(pane, A, 'x')
+    expect(host.shown(A)).toBe('abc 測試x')
+    await pane.unmount()
+    pane = await paneOn($, surface, 'decide')
+    await host.see(pane)
+    expect(host.shown(A)).toBe('abc 測試x')
+    expect(await host.value(pane, A), 'the next character is part of the stored note').toBe('abc 測試x')
+    await pane.unmount()
   })
 
   test('DECIDE mounted: the send Button sends the note that Enter kept, once (' + surface + ')', async ($, on) => {
     const { w, submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
-    await pane.input({ key: 'note:d-4290499d', text: '先寫著', kind: 'change' })
-    await pane.input({ key: 'note:d-4290499d', text: '先寫著', kind: 'submit' }) // Enter by accident
+    await noteInput(pane, 'note:d-4290499d', '先寫著', 'change')
+    await noteInput(pane, 'note:d-4290499d', '先寫著', 'submit') // Enter by accident
     expect(submits.length).toBe(0)
     await pane.press({ key: 'opt:d-4290499d:0' })
     await pane.press({ key: 'submit' })
@@ -6226,7 +6329,7 @@ for (const surface of SURFACES) {
     const buttons = await keysOf($, 'Button')
     expect(buttons.filter(k => k.startsWith('opt:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])
     expect(buttons.filter(k => k.startsWith('opt:d-4290499d')).length).toBe(2)
-    expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d'])
+    expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d:0'])
   })
 
   test('DECIDE mounted: pressing a file path in a card opens the viewer window FIRST (before any stat or read: the engine counts an open as the owner\'s only in the press\'s own turn) and then shows the file from that line (' + surface + ')', async ($, on) => {

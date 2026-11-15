@@ -4,6 +4,8 @@ A backlog entry is an **index row**: what, for whom, when it fires, size, who sa
 
 Caps are UTF-8 **bytes**. The instrument is `scripts/check-backlog-entries.js`; a consumer config may only **lower** a cap.
 
+**Writer.** Where the repo has a hippo store (`.hippo/repo.toml`; autopilot does) a backlog row is written with `node scripts/project-record.js backlog new|reply|close ...`, never by editing `BACKLOG.md` alone. The store is the source and `BACKLOG.md` is its view: after the store write, `project-record.js backlog new|reply|close` updates the file in place in the same run (a failed or spooled write leaves the file alone), and `backlog sync <id>` projects a record that has no row. `scripts/check-backlog-single-writer.js` (pre-commit) runs the reconcile of `check-backlog-entries.js` and refuses a commit where the file and the store disagree (hand edit, op without its row, row of a closed record). Known drift is listed with a reason in `project/backlog/store-drift.json`; the list only shrinks.
+
 ## Fields
 
 | Field | Cap | Rule |

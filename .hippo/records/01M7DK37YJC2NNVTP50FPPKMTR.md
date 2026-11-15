@@ -1,0 +1,12 @@
+---
+id: 01M7DK37YJC2NNVTP50FPPKMTR
+kind: issue
+created: 2026-11-13T00:00:00.000Z
+---
+- **Since**: 2026-11-13
+- **Problem**: 審查派工的網址檢查只接受 https 或本機回環位址，無視端點設定已標明走私有明文傳輸，兩套規則不一致。
+- **Impact**: 走私有明文傳輸的審查端點每次都在呼叫模型前就失敗，那條路線完全不能用。
+- **Trigger**: ready
+- **Source**: autopilot lane 2026-11-13
+- **Pointer**: none
+- **Context**: validateBaseUrl takes https/loopback only and ignores AUTOPILOT_ENDPOINT_<X>_TRANSPORT=plaintext-private; anthropic-compatible + qwen_local fails rc=2 before any model call; cc-shim works.

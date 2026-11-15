@@ -1,0 +1,12 @@
+---
+id: 01M7DK3894Q4M49GSXJMY9GW0K
+kind: issue
+created: 2026-11-13T00:00:00.000Z
+---
+- **Since**: 2026-11-13
+- **Problem**: 查看目標的型別定義有兩份、清理邏輯也有兩份，散在不同檔案，改一處其他處不會跟著一致。
+- **Impact**: 三邊遲早行為不一致，同一張查看卡在不同入口被清成不同結果。
+- **Trigger**: ready
+- **Source**: autopilot lane（PM 01M7A0JM）
+- **Pointer**: none
+- **Context**: LookTarget type in mods/viewer/show.ts and mods/live/model.ts; cleaning in model.ts parseLookTarget and src/status/decision-input.js cleanLookTarget.

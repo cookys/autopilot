@@ -1,0 +1,12 @@
+---
+id: 01M7DK37AM888JBZPGPYXPDFYN
+kind: issue
+created: 2026-11-13T00:00:00.000Z
+---
+- **Since**: 2026-11-13
+- **Problem**: 審查派工回傳的結果裡，發現項目是一整段文字，不是一列一列的項目，讀的人必須自己拆開文字。
+- **Impact**: 每個下游都要自己解析同一段文字，格式一變就全部對不上。
+- **Trigger**: ready
+- **Source**: autopilot lane（PM 01M78BH1）
+- **Pointer**: none
+- **Context**: dispatch-review JSON: findings is a string, not an array.

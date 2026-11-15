@@ -1,0 +1,12 @@
+---
+id: 01M7DK37D5DX9TCRZ475JNGFEV
+kind: issue
+created: 2026-11-13T00:00:00.000Z
+---
+- **Since**: 2026-11-13
+- **Problem**: grok 提交失敗時，回報的失敗種類寫成認證失敗；agy 的空跑（工具遭禁用、未改任何檔案）也被標成同一種。這列要先抓到一次可重現，完成條件是留下那次重現。
+- **Impact**: 人會去查登入，真正讓提交失敗的原因被放掉。
+- **Trigger**: ready
+- **Source**: autopilot lane（PM 01M78BH1；hangar 01M78MZQ）
+- **Pointer**: none
+- **Context**: Seen label: auth_failed. agy -p no_op (run_command prohibited, Changed files: None) run hetero-1794510260-1465192-0a69 also labelled auth_failed (hangar 01M78MZQ); agy review rc=3 was upstream GOAWAY server_shutting_down, transient.

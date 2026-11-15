@@ -64,13 +64,18 @@ assert_eq "$(echo "$OUT" | jf 'd.reconcile.fix')" "hippo import --from adr-dir d
 rm "$R/docs/dev/adr/0003-third.md"
 
 # --- a mention is not an id: BL-0099 in a Problem line is not required
-sed -i 's/^- \*\*Problem\*\*: p$/- **Problem**: see BL-0099/' "$R/BACKLOG.md"
+# (a row and its record agree, as the single writer leaves them; only the Problem text names BL-0099)
+printf '### Row 0005\n- **Id**: BL-0005\n- **Status**: open\n- **Problem**: see BL-0099\n\n' >> "$R/BACKLOG.md"
+( cd "$R" && "$HIPPO_BIN" import --from autopilot-backlog BACKLOG.md --only BL-0005 >/dev/null ) || fail "import BL-0005"
+commit_all "$R" mention
 rec "$R"
 assert_eq "$RC" 0 "an id mentioned in text is not an item id"
 
 # --- a closed record still counts
 ID2="$(H "$R" list --kind issue --history | jf 'd.data.records.find(r=>r.provenance.value==="BL-0002").id')"
 H "$R" close "$ID2" done >/dev/null || fail "close BL-0002"
+# the writer drops a closed row from the file; the record stays in the store
+node -e 'const fs=require("fs");const f=process.argv[1];fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace(/### Row 0002\n(- .*\n)+\n/,""))' "$R/BACKLOG.md"
 commit_all "$R" close
 assert_eq "$(H "$R" list --kind issue --history | jf 'd.data.records.find(r=>r.provenance.value==="BL-0002").status')" done "BL-0002 record is closed"
 rec "$R"

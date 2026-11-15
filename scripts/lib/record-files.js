@@ -147,6 +147,35 @@ function runGate(repo, backlogAbs) {
   return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
 }
 
+// The backlog file as a view of the hippo store (project-record.js hippo mode): {abs, rel, nextId, titles[]}, or null when the
+// project has no heading-style backlog file with a next-id mark (nothing to project into).
+function backlogView(repo) {
+  let abs;
+  try {
+    const cfg = gateConfig(repo);
+    if ((cfg.style || 'heading') !== 'heading') return null;
+    abs = backlogFile(repo);
+  } catch (e) {
+    if (e instanceof RecordError) return null;
+    throw e;
+  }
+  const text = fs.readFileSync(abs, 'utf8');
+  const mark = text.match(rules.NEXT_ID_RE);
+  const mm = mark && mark[1].match(rules.BL_ID_RE);
+  if (!mm) return null;
+  const titles = gate.collectEntries(text, 'heading', gateConfig(repo)).map((e) => (e.fields && e.fields.Title) || e.title || '');
+  return { abs, rel: rel(repo, abs), nextId: `BL-${mm[1]}`, titles };
+}
+
+function backlogHasRow(repo, id) {
+  const view = backlogView(repo);
+  if (!view) return false;
+  try { locateRow(fs.readFileSync(view.abs, 'utf8'), id); return true; } catch (e) {
+    if (e instanceof RecordError) return false;
+    throw e;
+  }
+}
+
 function backlogNew(repo, input, opts) {
   const o = opts || {};
   const inp = Object.assign({}, input);
@@ -494,7 +523,7 @@ function handoffClose(repo, input, opts) {
 
 module.exports = {
   RecordError, RuleViolationError,
-  backlogNew, backlogReply, backlogClose,
+  backlogNew, backlogReply, backlogClose, backlogView, backlogHasRow,
   decisionNew, decisionSupersede,
   adrNew, adrSupersede,
   lessonNew,

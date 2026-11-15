@@ -1,0 +1,12 @@
+---
+id: 01M7DK386HVEKVPBN01R5BH3AQ
+kind: issue
+created: 2026-11-13T00:00:00.000Z
+---
+- **Since**: 2026-11-13
+- **Problem**: 面板查看按鍵在卡片沒有查看目標時，會把第一個附件當成本地路徑打開；附件若是網址就會開錯。目前走不到這條路，先加過濾。
+- **Impact**: 日後一旦走到，網址附件會被當本地檔案路徑開啟而失敗。
+- **Trigger**: ready
+- **Source**: autopilot lane（PM 01M7A0JM）
+- **Pointer**: none
+- **Context**: LOOK_PRESS falls back to showPath(attachments[0]) when a look card has no look_target; an https attachment would open as a path. Unreachable today; filter with isLocalAttachPath.

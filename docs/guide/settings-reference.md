@@ -479,6 +479,7 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_TASK_ROLE` | Task role read by the Chinese-model dispatch gate (`Role:` header fallback; rails supply an implied role). plan, design, brainstorm, architecture, plan_review and research are novel and blocked. | unset |  |
 | `AUTOPILOT_TASK_SCOPE` | Comma- or newline-separated paths the task reads or writes (`Scope:` header fallback; review rails add the diff paths). Sensitive or core paths, or a missing scope, block the barred families. | unset |  |
 | `AUTOPILOT_TASK_NOVEL` | Set to `1` (or `Novel: yes` header) to mark novel work; the barred families are then blocked. | unset |  |
+| `AUTOPILOT_RULE_CAPTURE_LOG` | JSONL file where the `lesson-lint.js stop-hook` rule-capture appends one row per Stop whose last operator message matched a rule marker (outcome `block`, `no_rule` or `pass`; never the message text), so the false-block rate can be computed. | `$XDG_STATE_HOME/autopilot/rule-capture.jsonl` (else `~/.local/state/autopilot/rule-capture.jsonl`) | `AUTOPILOT_RULE_CAPTURE_LOG` |
 | `AUTOPILOT_MINIMAX_BASE_URL` | Base URL for the provider-native MiniMax endpoint. | unset |  |
 
 ## Claude accounts (G37)

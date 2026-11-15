@@ -6968,6 +6968,19 @@
         "AUTOPILOT_STUCK_HAND_MINUTES"
       ],
       "note": "Test-only state file path for the stuck-hand observations (default: under the live runtime base)."
+    },
+    {
+      "name": "AUTOPILOT_RULE_CAPTURE_LOG",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/lesson-lint.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "JSONL file where the lesson-lint stop-hook rule-capture appends one row per Stop whose last operator message matched a rule marker (outcome block, no_rule or pass; never the message text). Default: $XDG_STATE_HOME/autopilot/rule-capture.jsonl, else ~/.local/state/autopilot/rule-capture.jsonl."
     }
   ]
 }

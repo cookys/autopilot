@@ -9,10 +9,10 @@
  *
  * Rules:
  *   - Reviewer retreat walks `fallback.reviewer` in pace-roles.json:
- *     hydrogen (agy, gemini-4-hydrogen-high) -> glm (cc-shim --endpoint glm, glm-5.3)
- *     -> agyclaude (agy, claude-opus-5-5-medium).
+ *     hydrogen (agy, gemini-4-hydrogen-high) -> grok (grok, grok-4.7)
+ *     -> glm (cc-shim --endpoint glm, glm-5.3) -> agyclaude (agy, claude-opus-5-5-medium).
  *   - Implementer retreat walks `priority.implementer` in pace-roles.json joined
- *     with noncq-pools.json + `role_models.implementer` (agy -> glm -> agyclaude).
+ *     with noncq-pools.json + `role_models.implementer` (agy -> grok -> glm -> agyclaude).
  *   - `codex` never appears as an automatic retreat target for either seat.
  *   - Family guard skips rungs matching known implementer families; when
  *     implementer family is `unknown`, the family guard skips nothing (and GLM

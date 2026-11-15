@@ -4,7 +4,7 @@
 # literal list in this test:
 #   openai  -> scripts/lib/pace-roles.json pools (the codex pool model). Until PM 01M7AHAM it was the
 #              roster's reviewer_fallback_preference, which no longer names an openai engine (the reviewer
-#              retreat is hydrogen -> GLM -> agyclaude, never codex); the codex pool is where the shipped
+#              retreat is hydrogen -> grok -> GLM -> agyclaude, never codex); the codex pool is where the shipped
 #              openai model now lives.
 #   xai     -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the grok entry)
 #   minimax -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the MiniMax-M3 review seat)

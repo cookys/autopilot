@@ -38,7 +38,7 @@ assert_eq "Qwen3.8-27B-QUASAR-NVFP4" "$(printf '%s' "$STUB_JSON" | jget reviewer
 assert_eq "anthropic-compatible" "$(printf '%s' "$STUB_JSON" | jget reviewer_runner)" "roster loop reviewer runner is anthropic-compatible"
 assert_eq "default" "$(printf '%s' "$STUB_JSON" | jget reviewer_effort)" "roster loop reviewer effort is default"
 assert_eq "qwen_local" "$(printf '%s' "$STUB_JSON" | jget reviewer_endpoint)" "roster loop reviewer endpoint is qwen_local"
-assert_eq '["gemini-4-hydrogen-high","GLM-5.3","claude-opus-5-5-medium"]' "$(printf '%s' "$STUB_JSON" | jget reviewer_fallback_preference)" "reviewer fallback order follows the picker: hydrogen, then GLM, then agyclaude; never codex (PM 01M7AHAM)"
+assert_eq '["gemini-4-hydrogen-high","grok-4.7","GLM-5.3","claude-opus-5-5-medium"]' "$(printf '%s' "$STUB_JSON" | jget reviewer_fallback_preference)" "reviewer fallback order follows the picker: hydrogen, then grok, then GLM, then agyclaude; never codex (PM 01M7AHAM)"
 assert_eq "GLM-5.3" "$(printf '%s' "$STUB_JSON" | jget verification_author_engine)" "roster VA seat is GLM-5.3"
 assert_eq "cc-shim" "$(printf '%s' "$STUB_JSON" | jget verification_author_runner)" "roster VA runner is cc-shim"
 assert_eq "glm" "$(printf '%s' "$STUB_JSON" | jget verification_author_endpoint)" "roster VA endpoint is glm"

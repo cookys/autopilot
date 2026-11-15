@@ -81,7 +81,7 @@ scripts/dispatch-hetero.sh --pace-role implementer --branch feat/x --prompt-file
   pace (spare capacity before reset); negative slack means it is ahead of pace. Alias pools sharing one engine
   key merge by their largest fresh slack.
 - **Role priority walk** (`implementer`): `priority.implementer` in
-  [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) (`agy` → `glm` → `agyclaude`) is walked
+  [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) (`agy` → `grok` → `glm` → `agyclaude`) is walked
   in order; the first key that is role-eligible, endpoint-ready, fresh and `slack >= 0` wins with
   `selected_by: "priority"` — a later entry is reached only when every earlier one is ineligible,
   unready, unknown or behind pace. Via `role_models`, the implementer `agy` key emits

@@ -75,6 +75,15 @@ bash -c 'exit 3'
 ## Notes
 done
 EOF
+PROMPT_ACC_PASS="$TEST_TMP/prompt-acc-pass.txt"
+cat > "$PROMPT_ACC_PASS" <<'EOF'
+edit the tree
+
+## Acceptance
+```bash
+true
+```
+EOF
 PROMPT_PROSE="$TEST_TMP/prompt-prose.txt"
 cat > "$PROMPT_PROSE" <<'EOF'
 edit the tree
@@ -112,6 +121,37 @@ process.stdin.on("end", () => {
 ' "$2"
 }
 
+# Finalized manifest compact tip_verify. jget prints "" for both null and a missing key.
+assert_manifest_tip() {
+  local expect_tip="$1" expect_src="$2" label="$3"
+  local id mf runs
+  id="$(jget "$J" run_id)"
+  [ -n "$id" ] || fail "$label manifest: result has no run_id"
+  if [ -n "${AUTOPILOT_DISPATCH_RUNS_DIR:-}" ]; then
+    runs="$AUTOPILOT_DISPATCH_RUNS_DIR"
+  else
+    runs="${TMPDIR:-/tmp}/autopilot-dispatch-runs"
+  fi
+  mf="$runs/${id}.manifest.json"
+  assert_file_exists "$mf" "$label manifest exists"
+  node -e '
+    const fs = require("fs");
+    const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const tip = process.argv[2] === "null" ? null : process.argv[2];
+    const src = process.argv[3] === "null" ? null : process.argv[3];
+    const text = fs.readFileSync(process.argv[1], "utf8");
+    function die(code, msg) { process.stderr.write(msg + "\n"); process.exit(code); }
+    if (!Object.prototype.hasOwnProperty.call(m, "tip_verify")) die(1, "missing tip_verify");
+    if (!Object.prototype.hasOwnProperty.call(m, "tip_verify_source")) die(2, "missing tip_verify_source");
+    if (m.tip_verify !== tip) die(3, "tip_verify " + JSON.stringify(m.tip_verify));
+    if (m.tip_verify_source !== src) die(4, "tip_verify_source " + JSON.stringify(m.tip_verify_source));
+    if (m.tip_verify !== null && typeof m.tip_verify !== "string") die(5, "tip_verify is not a string");
+    if (m.final_status === null || m.final_status === undefined) die(6, "manifest not finalized");
+    if (text.indexOf("\"tail\"") !== -1) die(7, "manifest copied a command tail");
+    if (text.indexOf("\"commands\"") !== -1) die(8, "manifest copied commands");
+  ' "$mf" "$expect_tip" "$expect_src" || fail "$label manifest tip_verify"
+}
+
 # run_case <branch> [extra args...] — prompt is $CASE_PROMPT (default plain).
 run_case() {
   local br="$1"; shift
@@ -136,6 +176,7 @@ run_case tv-none
 assert_eq "$EXIT" "0" "no source exits 0"
 assert_eq "$(jget "$J" status)" "committed" "no source status committed"
 assert_eq "$(jget "$J" tip_verify)" "no_source" "no source tip_verify no_source"
+assert_manifest_tip no_source null "no source"
 assert_eq "$(printf '%s\n' "$OUT" | grep -F -c "$NOSRC_LINE")" "1" "no source prints the stderr line once"
 assert_file_exists "$MARKER" "no source: runner stub ran"
 
@@ -207,6 +248,17 @@ assert_eq "$(jget "$J" tip_verify.source)" "brief" "hydrogen source brief"
 assert_eq "$(jget "$J" tip_verify.commands.0.cmd)" "bash -c 'exit 3'" "hydrogen command text"
 assert_eq "$(jget "$J" tip_verify.commands.0.rc)" "3" "hydrogen records rc 3"
 assert_eq "$(jget "$J" tip_verify.commands.1.cmd)" "" "non-command span is not a command"
+assert_manifest_tip fail brief "hydrogen"
+
+# --- brief Acceptance pass: committed, manifest tip_verify pass / source brief ---
+CASE_PROMPT="$PROMPT_ACC_PASS"
+run_case tv-brief-pass
+CASE_PROMPT="$PROMPT_PLAIN"
+assert_eq "$EXIT" "0" "brief pass exits 0"
+assert_eq "$(jget "$J" status)" "committed" "brief pass status committed"
+assert_eq "$(jget "$J" tip_verify.status)" "pass" "brief pass tip_verify.status pass"
+assert_eq "$(jget "$J" tip_verify.source)" "brief" "brief pass source brief"
+assert_manifest_tip pass brief "brief pass"
 
 # --- this repo's real ## Test Command shape: prose + numbered inline code is not a command ---
 rm -f "$MARKER"
@@ -278,6 +330,7 @@ run_case tv-skip --no-verify-tip
 assert_eq "$EXIT" "0" "skip exits 0"
 assert_eq "$(jget "$J" status)" "committed" "skip status committed"
 assert_eq "$(jget "$J" tip_verify)" "skipped_by_flag" "skip records skipped_by_flag"
+assert_manifest_tip skipped_by_flag null "skip"
 
 # --- timeout ---
 START="$(date +%s)"
@@ -286,6 +339,7 @@ ELAPSED=$(( $(date +%s) - START ))
 assert_neq "$EXIT" "0" "timeout exits non-zero"
 assert_eq "$(jget "$J" status)" "verify_failed" "timeout dispatch status verify_failed"
 assert_eq "$(jget "$J" tip_verify.status)" "timeout" "timeout tip_verify.status timeout"
+assert_manifest_tip timeout flag "timeout"
 [ "$ELAPSED" -lt 30 ] || fail "timeout case took ${ELAPSED}s (timeout did not fire)"
 [ "$ELAPSED" -lt 30 ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 

@@ -147,7 +147,7 @@ function buildFixture({ dir }) {
     lock_path: `${over.worktree}/.autopilot-worktree.lock`, log_path: path.join(root, 'logs', `${over.run_id}.log`),
     log_format: 'codex-chrome', pid: 4242, containment_planned: 'plain',
     prompt_file: path.join(root, 'prompts', `${over.run_id}.md`), scaffold_tier: 'off', ledger: paths.runLedger, stage: 'implement',
-    ended_at: null, ended_epoch: null, final_status: null, parent_run_id: null, root_run_id: 'fx-root-1', depth: 0,
+    ended_at: null, ended_epoch: null, final_status: null, tip_verify: null, tip_verify_source: null, parent_run_id: null, root_run_id: 'fx-root-1', depth: 0,
     timeout_seconds: 600, timeout_source: 'default', timeout_enforced: true,
     repo_identity: identity, repo_identity_source: 'git-common-dir', ...over,
   });

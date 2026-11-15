@@ -4,7 +4,7 @@
 // operator rule 2026-11-15, Fleet task 01M7E2A1). One gate, called before spawn by every rail that can
 // pick a runner/model.
 //
-// Barred families: Kimi (moonshot), GLM (zhipu), Qwen (alibaba), DeepSeek, MiniMax, qoder.
+// Barred families (cloud endpoints; fleet-local endpoints such as qwen_local are exempt, see Local exemption): Kimi (moonshot), GLM (zhipu), Qwen (alibaba), DeepSeek, MiniMax, qoder.
 // A dispatch to a barred family is blocked when ANY of these holds (reason class in brackets):
 //   [transcript]  the task reads agent transcript content (env AUTOPILOT_TASK_READS_TRANSCRIPT=1, or a
 //                 `Reads-Transcript: yes` header line in the first 8 lines of the brief/spec)
@@ -15,6 +15,10 @@
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
+// Local exemption (PM 01M7F6TK; d-1dfcf757 targets data leaving the fleet to Chinese vendors' clouds): a dispatch whose
+//   endpoint is a self-hosted, fleet-hosted open-weights endpoint (listed in scripts/lib/local-sandbox-endpoints.json, today
+//   qwen_local) is not barred for the family that endpoint serves. Cloud endpoints and any other barred
+//   model family (e.g. a kimi model on that endpoint) stay barred exactly as above.
 // Allowed only when none match: XS/S mechanical edit with tests, formatting, docs, open-source dependency bumps.
 //
 // Task facts (env wins over header; header = first 8 lines of the brief/spec, `Key: v` alone or as a `| Key: v` field):
@@ -113,9 +117,28 @@ function loadConfig(root) {
   return { sensitive_paths: u('sensitive_paths'), sensitive_repos: u('sensitive_repos'), core_dirs: u('core_dirs'), novel_roles: u('novel_roles').map((r) => r.toLowerCase()) };
 }
 
+// Self-hosted fleet endpoints: the one repo-documented list (also drives the local implementer sandbox).
+const LOCAL_ENDPOINTS_PATH = path.join(__dirname, 'local-sandbox-endpoints.json');
+function localEndpoints() {
+  const l = loadList(LOCAL_ENDPOINTS_PATH).local_sandbox_endpoints;
+  return Array.isArray(l) ? l.map(String) : [];
+}
+
+function rawFamily(p) { return /qoder/i.test(p) ? 'qoder' : familyOfEngine(p); }
+
 function familyOf(runner, model, endpoint) {
+  const ep = String(endpoint || '');
+  if (ep && localEndpoints().includes(ep)) {
+    // Local endpoint: its own name and the family it serves do not count; any OTHER barred family named by model/runner does.
+    const served = rawFamily(ep);
+    const fams = [model, runner].map((s) => String(s || '')).filter(Boolean).map(rawFamily);
+    const other = fams.find((f) => BARRED_FAMILIES.includes(f) && f !== served);
+    if (other) return other;
+    if (BARRED_FAMILIES.includes(served)) return 'local';
+    return fams.find((f) => f !== 'unknown') || served;
+  }
   const probes = [endpoint, model, runner].map((s) => String(s || '')).filter(Boolean);
-  const fams = probes.map((p) => (/qoder/i.test(p) ? 'qoder' : familyOfEngine(p)));
+  const fams = probes.map(rawFamily);
   return fams.find((f) => BARRED_FAMILIES.includes(f)) || fams.find((f) => f !== 'unknown') || 'unknown';
 }
 
@@ -199,6 +222,6 @@ function main(argv) {
   return 64;
 }
 
-module.exports = { BARRED_FAMILIES, CARD, TASK, familyOf, isMarked, check, filterLadder, refusalLine, globToRegex, matchesAny };
+module.exports = { BARRED_FAMILIES, localEndpoints, CARD, TASK, familyOf, isMarked, check, filterLadder, refusalLine, globToRegex, matchesAny };
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

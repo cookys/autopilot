@@ -160,6 +160,12 @@ run_foreman complete r2dol --verify-cmd 'echo $HOME'
 assert_eq "$RC" "0" "2e: --verify-cmd with a dollar still completes"
 assert_contains "$(cat "$RD/protocol.md")" '$HOME' "2e: protocol keeps \$HOME literal"
 assert_not_contains "$(cat "$RD/protocol.md")" "echo $HOME" "2e: protocol does not expand HOME before the hand runs"
+NL_CMD=$'true\ntrue'
+NL_QUOTED="$(printf '%q' "$NL_CMD")"
+run_foreman complete r2nl --verify-cmd "$NL_CMD"
+assert_eq "$RC" "0" "2f: --verify-cmd with a newline still completes"
+assert_contains "$(cat "$RD/protocol.md")" "--verify-cmd ${NL_QUOTED}" "2f: newline verify-cmd lands in protocol.md verbatim"
+assert_not_contains "$(cat "$RD/protocol.md")" "__VERIFY_FORWARD_SLOT__" "2f: newline verify-cmd still replaces the slot"
 OUT="$(cd "$SBX" && PATH="$STUBDIR:$PATH" bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" --verify-cmd true --no-verify-tip --run-dir "$RUNS/pcv" 2>/dev/null)"; RC=$?
 assert_eq "$RC" "2" "2d: --verify-cmd with --no-verify-tip is a precondition"
 assert_contains "$OUT" "mutually exclusive" "2d: names the mutual exclusion"

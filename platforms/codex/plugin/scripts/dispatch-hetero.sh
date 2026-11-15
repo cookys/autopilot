@@ -241,7 +241,8 @@
 #           expiry. repo-residue-sweep.js reap --auto reads these.
 #       2 = precondition failure (nothing was created)
 #       3 = verify_failed (a commit exists and the tree was clean and the agent
-#           exited 0, but a tip-verify command exited non-zero or timed out).
+#           exited 0, but a tip-verify command exited non-zero, timed out, or
+#           moved HEAD or refs/heads/<branch> off the committed sha).
 #           Distinct from 0. The commit stays on the branch for inspection and
 #           the worktree is kept. Not a success.
 #
@@ -289,10 +290,18 @@
 # /dev/null, environment without AUTOPILOT_SESSION_ID. --verify-timeout is a
 # positive integer (default 1800). GNU timeout exit 124, or a spawn error
 # ETIMEDOUT, is tip_verify status "timeout" (a command that itself exits 124
-# is also recorded as timeout). Any other non-zero rc is "fail". All commands
+# is also recorded as timeout). Any other non-zero rc is "fail". A spawn
+# error other than ETIMEDOUT or ENOENT is "fail" and is decided before the
+# exit status; that error's code is included in the command tail. stdout and
+# stderr are kept up to 64 MiB (maxBuffer). All commands
 # are recorded. If any command times out, tip_verify.status is "timeout"; else
 # if any rc is non-zero, "fail"; else "pass". A missing `timeout` binary is
-# fail with rc 127. Result JSON, when this path runs:
+# fail with rc 127. After each command, `git -C <worktree> rev-parse HEAD` and
+# `git -C <worktree> rev-parse --verify refs/heads/<branch>` must both still
+# equal the committed sha. If either differs, that command is "fail" (rc 1
+# when the command itself exited 0) and its tail names the command, the
+# expected sha, and both observed shas. Untracked or modified files left by
+# the command are not a failure. Result JSON, when this path runs:
 #   "tip_verify": { "status": "pass"|"fail"|"timeout", "commit": "<sha>",
 #     "source": "flag"|"brief"|"repo_config",
 #     "commands": [ { "cmd", "rc", "duration_s", "tail" } ] }
@@ -3695,7 +3704,7 @@ run_tip_verify() {
     printf '%s' "$TIP_VERIFY_CMDS_JSON" > "$cmdfile" || tip_verify_rc=1
   fi
   if [ "$tip_verify_rc" -eq 0 ]; then
-    tip_verify_out="$(node - "$WT" "$HEAD_SHA" "$TIP_VERIFY_SOURCE" "$VERIFY_TIMEOUT" "$cmdfile" <<'NODE'
+    tip_verify_out="$(node - "$WT" "$HEAD_SHA" "$TIP_VERIFY_SOURCE" "$VERIFY_TIMEOUT" "$cmdfile" "$BRANCH" <<'NODE'
 const fs = require("fs");
 const cp = require("child_process");
 // `node -` puts "-" in argv[1]; the real arguments start at argv[2].
@@ -3704,6 +3713,7 @@ const commit = process.argv[3];
 const source = process.argv[4];
 const timeoutSec = Number(process.argv[5]);
 const cmdFile = process.argv[6];
+const branch = process.argv[7];
 function emit(payload, code) {
   process.stdout.write(JSON.stringify(payload));
   process.exit(code);
@@ -3730,6 +3740,15 @@ function tailOf(out, err) {
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
   return lines.slice(-40).join("\n");
 }
+function gitSha(args) {
+  const r = cp.spawnSync("git", ["-C", worktree].concat(args), {
+    encoding: "utf8",
+    timeout: 30000,
+    maxBuffer: 1024 * 1024,
+  });
+  if (!r || r.error || r.status !== 0) return "";
+  return String(r.stdout || "").replace(/\s+$/, "");
+}
 const commands = [];
 let anyTimeout = false;
 let anyFail = false;
@@ -3742,6 +3761,7 @@ for (const cmd of cmds) {
       env,
       stdio: [devnull, "pipe", "pipe"],
       timeout: (timeoutSec + 15) * 1000,
+      maxBuffer: 64 * 1024 * 1024,
     });
   } catch (e) {
     commands.push({ cmd: String(cmd), rc: 1, duration_s: Math.round((Date.now() - started) / 1000), tail: String(e && e.message ? e.message : e) });
@@ -3749,7 +3769,7 @@ for (const cmd of cmds) {
     continue;
   }
   const duration_s = Math.round((Date.now() - started) / 1000);
-  const tail = tailOf(result.stdout, result.stderr);
+  let tail = tailOf(result.stdout, result.stderr);
   let rc;
   let timedOut = false;
   if (result.error && result.error.code === "ETIMEDOUT") {
@@ -3758,6 +3778,11 @@ for (const cmd of cmds) {
   } else if (result.error && result.error.code === "ENOENT") {
     rc = 127;
     anyFail = true;
+  } else if (result.error) {
+    rc = 1;
+    anyFail = true;
+    const errCode = String(result.error.code || "");
+    if (errCode) tail = tail ? tail + "\n" + errCode : errCode;
   } else if (typeof result.status === "number") {
     rc = result.status;
     if (rc === 124) timedOut = true;
@@ -3770,6 +3795,15 @@ for (const cmd of cmds) {
     anyFail = true;
   }
   if (timedOut) anyTimeout = true;
+  // TIP_MOVED_GATE: a verify command must not move the committed tip.
+  const headNow = gitSha(["rev-parse", "HEAD"]);
+  const branchNow = gitSha(["rev-parse", "--verify", "refs/heads/" + branch]);
+  if (headNow !== commit || branchNow !== commit) {
+    anyFail = true;
+    if (rc === 0) rc = 1;
+    const note = "tip moved: cmd=" + String(cmd) + " expected=" + commit + " head=" + headNow + " branch=" + branchNow;
+    tail = note + (tail ? "\n" + tail : "");
+  }
   commands.push({ cmd: String(cmd), rc, duration_s, tail });
 }
 if (typeof devnull === "number") { try { fs.closeSync(devnull); } catch (e) { /* fd already closed */ } }

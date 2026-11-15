@@ -410,7 +410,8 @@ EOF
     const s = fs.readFileSync(p, "utf8");
     if (s.split(token).length !== 2) { process.stderr.write("protocol verify slot missing\n"); process.exit(2); }
     const v = process.env.VERIFY_FORWARD || "";
-    fs.writeFileSync(p, s.replace(token, v ? " " + v : ""));
+    // String replacement interprets dollar-quote and $& in a printf %q command.
+    fs.writeFileSync(p, s.replace(token, () => (v ? " " + v : "")));
   ' "$RUN_DIR/protocol.md" || die_precondition "cannot write verify flags into protocol.md"
 fi
 

@@ -256,6 +256,40 @@ assert_eq "$(jget "$J" tip_verify.status)" "timeout" "timeout tip_verify.status 
 [ "$ELAPSED" -lt 30 ] || fail "timeout case took ${ELAPSED}s (timeout did not fire)"
 [ "$ELAPSED" -lt 30 ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 
+# --- untracked and modified files left by verify are not a failure (test caches) ---
+run_case tv-cache --verify-cmd 'echo more >> ok.txt; echo cache > tip-cache.tmp'
+assert_eq "$EXIT" "0" "cache file exits 0"
+assert_eq "$(jget "$J" status)" "committed" "untracked and modified files left by verify are not a failure"
+assert_eq "$(jget "$J" tip_verify.status)" "pass" "cache file tip_verify pass"
+
+# --- a verify command that commits moves the tip and must not be reported committed ---
+git -C "$SBX" config user.email t@t
+git -C "$SBX" config user.name t
+git -C "$SBX" config commit.gpgsign false
+MOVE_CMD='git commit --allow-empty -m x'
+run_case tv-move --verify-cmd "$MOVE_CMD"
+assert_eq "$EXIT" "3" "commit --allow-empty during verify exits 3"
+assert_eq "$(jget "$J" status)" "verify_failed" "commit --allow-empty during verify is verify_failed"
+assert_eq "$(jget "$J" tip_verify.status)" "fail" "moved tip is tip_verify fail"
+assert_eq "$(jget "$J" tip_verify.commands.0.rc)" "1" "moved tip records rc 1"
+assert_contains "$(jget "$J" tip_verify.commands.0.cmd)" "git commit --allow-empty -m x" "moved tip names the command"
+MOVE_OLD="$(jget "$J" tip_verify.commit)"
+MOVE_NEW="$(git -C "$SBX" rev-parse refs/heads/tv-move)"
+assert_neq "$MOVE_OLD" "$MOVE_NEW" "moved tip: branch ref left the committed sha"
+MOVE_TAIL="$(jget "$J" tip_verify.commands.0.tail)"
+assert_contains "$MOVE_TAIL" "expected=$MOVE_OLD" "moved tip tail names the expected sha"
+assert_contains "$MOVE_TAIL" "head=$MOVE_NEW" "moved tip tail names the new HEAD sha"
+assert_contains "$MOVE_TAIL" "branch=$MOVE_NEW" "moved tip tail names the new branch sha"
+assert_contains "$MOVE_TAIL" "git commit --allow-empty -m x" "moved tip tail names the command"
+assert_eq "$(jget "$J" commit)" "$MOVE_OLD" "reported commit stays the pre-verify sha"
+
+# --- ~3 MiB of stdout on a zero exit is a pass (default 1 MiB maxBuffer would ENOBUFS) ---
+run_case tv-big --verify-cmd 'node -e "process.stdout.write((\"x\".repeat(80)+String.fromCharCode(10)).repeat(40000))"'
+assert_eq "$EXIT" "0" "~3 MiB verify stdout exits 0"
+assert_eq "$(jget "$J" status)" "committed" "~3 MiB verify stdout is committed"
+assert_eq "$(jget "$J" tip_verify.status)" "pass" "~3 MiB verify stdout tip_verify pass"
+assert_eq "$(jget "$J" tip_verify.commands.0.rc)" "0" "~3 MiB verify stdout records rc 0"
+
 # --- negative control: ignore a failing rc → the false case goes wrongly green ---
 FARM="$TEST_TMP/farm-tip"
 rm -rf "$FARM"
@@ -293,5 +327,26 @@ fi
 assert_eq "$(jget "$J" status)" "committed" "negative control: ignoring rc reports committed"
 assert_eq "$EXIT" "0" "negative control: ignoring rc exits 0"
 assert_eq "$(jget "$J" tip_verify.status)" "fail" "negative control: command rc still recorded as fail"
+
+# --- negative control: remove the tip re-check → the empty commit is wrongly committed ---
+rm -f "$FARM/scripts/dispatch-hetero.sh"
+sed_mutant "$SCRIPT" "$FARM/scripts/dispatch-hetero.sh" \
+  's/if (headNow !== commit || branchNow !== commit)/if (false)/' \
+  || fail "negative control: sed did not remove the tip gate"
+chmod +x "$FARM/scripts/dispatch-hetero.sh"
+BROKEN="$FARM/scripts/dispatch-hetero.sh"
+grep -q 'if (false)' "$BROKEN" || fail "negative control: broken rail missing if (false)"
+grep -q 'if (headNow !== commit || branchNow !== commit)' "$SCRIPT" \
+  || fail "negative control: original tip gate was modified"
+SCRIPT="$BROKEN"
+run_case tv-neg-move --verify-cmd "$MOVE_CMD"
+SCRIPT="$SAVED_SCRIPT"
+if [ "$(jget "$J" status)" = "verify_failed" ]; then
+  fail "negative control: empty commit stayed verify_failed (tip gate assertion did not go red)"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+assert_eq "$(jget "$J" status)" "committed" "negative control: without the tip gate an empty commit is committed"
+assert_eq "$EXIT" "0" "negative control: without the tip gate an empty commit exits 0"
 
 finalize_test

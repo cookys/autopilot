@@ -42,6 +42,7 @@ const WHITELIST = {
   'hooks/audit-log.js': 1,
   'hooks/capture-payload.js': 1,
   'hooks/cost-fuse.js': 1,
+  'hooks/cost-tracker.js': 1,
   'hooks/dirty-protected-paths.js': 1,
   'hooks/failure-escalation.js': 1,
   'hooks/intent-capture.js': 2,
@@ -53,7 +54,9 @@ const WHITELIST = {
   'hooks/post-tool-chain-lib.js': 2,
   'hooks/residue-auto-reap-lib.js': 2,
   'hooks/runs-watch-autostart.js': 5,
+  'hooks/stuck-hand-lib.js': 1,
   'hooks/transcript-reader-lib.js': 3,
+  'hooks/unmerged-ship-advisory.js': 1,
 };
 
 // Members of `process` that never hand out the whole env. Every one has to stay that way.

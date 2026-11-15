@@ -36,13 +36,13 @@ mk please '請決定要不要刪。'
 expect_block please "please-decide without 你"
 mk look '請看 hooks/README.md 第三段，結果如下。'
 expect_pass look "請看 is not a wait"
-mk cardup "${LIVE_ID^^} 可以刪嗎？"
+mk cardup "${LIVE_ID^^}（合成待決） 可以刪嗎？"
 expect_pass cardup "uppercase live card id in the same sentence"
-mk card "$LIVE_ID 可以強制刪嗎？"
+mk card "$LIVE_ID（合成待決） 可以強制刪嗎？"
 expect_pass card "question with live card id in the same sentence"
-mk card_elsewhere "可以強制刪嗎？見待決 $LIVE_ID。"
+mk card_elsewhere "可以強制刪嗎？見待決 $LIVE_ID（合成待決）。"
 expect_block card_elsewhere "live card in another sentence exempts nothing"
-mk unknown_card 'd-4290499d 可以強制刪嗎？'
+mk unknown_card 'd-4290499d（合成待決） 可以強制刪嗎？'
 expect_block unknown_card "unknown card exempts nothing"
 
 mk active '可以強制刪嗎？你說可以我再刪。'
@@ -135,8 +135,12 @@ printf '%s\n' '{"role":"solo"}' > "$HOOK_HOME/.autopilot/team.json"
 mk solo_r '可以強制刪嗎？見請求 r-4290499d。'
 expect_block solo_r "solo with only an r- id still blocks"
 printf '%s\n' '{"role":"lane"}' > "$HOOK_HOME/.autopilot/team.json"
-mk lane_d '可以強制刪嗎？見待決 d-4290499d。'
-expect_pass lane_d "lane with a d- id"
+mk lane_d '可以強制刪嗎？見待決 d-4290499d（合成待決）。'
+expect_pass lane_d "lane with a d- id that names its subject"
+mk lane_bare 'd-4290499d 開著。'
+expect_block lane_bare "lane with a bare card id"
+assert_contains "$__RUN_STDOUT" "d-47602dd8（週一手機重連 Wi-Fi）" "bare reason shows the pass shape"
+assert_not_contains "$__RUN_STDOUT" "request-decision.js" "a bare id does not send the lane to request-decision"
 rm -f "$HOOK_HOME/.autopilot/team.json"
 
 finalize_test

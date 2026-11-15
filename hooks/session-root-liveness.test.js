@@ -163,17 +163,17 @@ test('guard: root-scoped unbound card blocks (including repeated Stop) with clos
   const t = fixture('l'); marker(t, 's1', { expiredHoursAgo: 30 });
   const c = openCard(t, 's1'); // unbound (no turn file)
   const id = c.stdout.trim();
-  assert.strictEqual(guard(t, 's1', `待決卡片 ${id}，等你回覆。`), null);
+  assert.strictEqual(guard(t, 's1', `待決卡片 ${id}（合成待決），等你回覆。`), null);
   marker(t, 's1'); // the session now has a live root (marker renewed) but the card is already unbound
-  const out = guard(t, 's1', `待決卡片 ${id}，等你回覆。`);
+  const out = guard(t, 's1', `待決卡片 ${id}（合成待決），等你回覆。`);
   assert.strictEqual(out.decision, 'block');
   assert.match(out.reason, new RegExp(`${id}.*未綁定`));
   assert.match(out.reason, /close --id d-[0-9a-f]{8}/);
   assert.match(out.reason, /--root-run-id root-abc/);
-  assert.strictEqual(guard(t, 's1', `待決卡片 ${id}，等你回覆。`, true).decision, 'block');
+  assert.strictEqual(guard(t, 's1', `待決卡片 ${id}（合成待決），等你回覆。`, true).decision, 'block');
   // a card that is bound in the same sentence passes silently
   const c2 = openCard(t, 's1', ['--root-run-id', 'root-abc']);
-  assert.strictEqual(guard(t, 's1', `待決卡片 ${c2.stdout.trim()}，等你回覆。`), null);
+  assert.strictEqual(guard(t, 's1', `待決卡片 ${c2.stdout.trim()}（合成待決），等你回覆。`), null);
 });
 
 test('ask-decision markerRoot (AskUserQuestion cards) uses the same judgement', () => {

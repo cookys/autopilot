@@ -156,6 +156,17 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/depth0-delegate-gate.js"
           }
         ]
+      },
+      {
+        "matcher": "mcp__fleet__send",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/fleet-send-work-order-guard.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
       }
     ],
     "PostToolUse": [

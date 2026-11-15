@@ -12,10 +12,14 @@
  * (open / awaiting_operator_action) or a fleet task with an explicit due date.
  * Repeated Stops are checked again. False positives may be named individually using
  * OWNER-GUARD-FALSE-POSITIVE [class,...] exact sentence :: reason (at most 8 per reply).
+ * A bare card id (d- + 8 hex) with no plain-language subject next to it is its own hit,
+ * class bare_card_id: （主題） or (主題) immediately after the id, or 「主題」 / a title： label
+ * immediately before it. Code spans, fences and the quote exclusions above hide an id.
  * Full syntax, quote exclusions and replay contract: references/owner-question-guard.md.
  *
  * Opt-out: AUTOPILOT_OWNER_QUESTION_GUARD=off (false/0/no) or `owner_question_guard: false`
- * in ~/.autopilot/config.json. Fail-open: any error -> one stderr line, exit 0.
+ * in ~/.autopilot/config.json. Bare-id check only: AUTOPILOT_BARE_CARD_ID_LINT=off
+ * (false/0/no). Fail-open: any error -> one stderr line, exit 0.
  */
 'use strict';
 
@@ -24,6 +28,13 @@ const path = require('path');
 const { configPath } = require('../scripts/lib/config-path.js');
 
 const OPEN_DECISION_JS = path.join(__dirname, '..', 'scripts', 'open-decision.js');
+
+// The whole-process.env scanner does not understand regex literals, and the
+// backtick in shellQuotePath below opens a template it never closes. A
+// process.env after that line is invisible, so this helper stays above it.
+function envBag() {
+  return process.env;
+}
 
 // Safe path characters stay bare so today's copy-paste text does not change.
 // Anything else is a single-quoted shell word, with ' written as '\'' .
@@ -99,10 +110,17 @@ const CONDITION_ON_OWNER = /(?:沒有|沒|未經|未獲|未得到|缺少)[你您
 const NEGATED = /(?:沒有|沒|無需|不需要|不用|不必|毋須|不會|不要)[^，。,；;、]{0,6}[你您]|\b(?:no|not|nothing|don'?t|doesn'?t|isn'?t)\b[^.,;]{0,24}\b(?:you|your)\b|\bno (?:approval|decision|confirmation)\b/i;
 const CLAUSE_SPLIT = /[，,；;：:、]|但是|但|不過|而是|\bbut\b|\bhowever\b/i;
 
+function offValue(v) {
+  return typeof v === 'string' && ['off', 'false', '0', 'no'].includes(v.trim().toLowerCase());
+}
+
 function optedOut(env, cfg) {
-  const v = env.AUTOPILOT_OWNER_QUESTION_GUARD;
-  if (typeof v === 'string' && ['off', 'false', '0', 'no'].includes(v.trim().toLowerCase())) return true;
+  if (offValue(env.AUTOPILOT_OWNER_QUESTION_GUARD)) return true;
   return cfg.owner_question_guard === false;
+}
+
+function bareCardLintOff() {
+  return offValue(envBag().AUTOPILOT_BARE_CARD_ID_LINT);
 }
 
 function loadCfg() {
@@ -187,19 +205,116 @@ function hasLiveCard(sentence, cwd, excludedIds = null) {
   }
 }
 
+const BARE_CARD_CLASS = 'bare_card_id';
+const ESCAPE_CLASSES = new Set([...Object.keys(HIT_PATTERNS), BARE_CARD_CLASS]);
+const TITLE_LABEL = /(?:標題|章節|題目|主題|title|heading|section)\s*[：:][ \t]*$/i;
+
 function parseEscape(line) {
-  const m = line.match(/^OWNER-GUARD-FALSE-POSITIVE \[([a-z,-]+)\] (.+) :: (\S.{0,239})$/);
+  const m = line.match(/^OWNER-GUARD-FALSE-POSITIVE \[([a-z_,-]+)\] (.+) :: (\S.{0,239})$/);
   if (!m) return null;
   const classes = m[1].split(',');
-  if (classes.some((c) => !Object.hasOwn(HIT_PATTERNS, c))) return null;
+  if (classes.some((c) => !ESCAPE_CLASSES.has(c))) return null;
   return { sentence: m[2], classes: [...new Set(classes)].sort().join(',') };
 }
 
-function unresolvedHits(text, cwd = process.cwd(), excludedIds = null) {
+function escapeRecords(text) {
   const lines = stripCode(text).split('\n').map((l) => l.trim()).filter((l) => l.startsWith(ESCAPE_PREFIX));
-  const escapes = lines.length > MAX_ESCAPES ? [] : lines.map(parseEscape).filter(Boolean);
+  if (lines.length > MAX_ESCAPES) return [];
+  return lines.map(parseEscape).filter(Boolean);
+}
+
+function unresolvedHits(text, cwd = process.cwd(), excludedIds = null) {
+  const escapes = escapeRecords(text);
   return findHits(text).filter(({ sentence, classes }) => !hasLiveCard(sentence, cwd, excludedIds) && !hasDueTask(sentence)
     && !escapes.some((e) => e.sentence === sentence && e.classes === [...classes].sort().join(',')));
+}
+
+function blankSpan(chars, start, end) {
+  for (let i = start; i < end; i += 1) {
+    if (chars[i] !== '\n') chars[i] = ' ';
+  }
+}
+
+// Length-preserving copy of stripCode's exclusions, plus every inline span (a span
+// whose whole content is a card id still counts for the question rule, not for this one).
+// Escape lines are blanked so the id on the marker is not itself a hit. Subjects are
+// judged on the original text, so a preceding 「主題」 stays visible to the check.
+function maskBareExclusions(text) {
+  const chars = text.split('');
+  for (const m of text.matchAll(/```[\s\S]*?(```|$)/g)) blankSpan(chars, m.index, m.index + m[0].length);
+  let working = chars.join('');
+  for (const m of working.matchAll(/`([^`\n]*)`/g)) blankSpan(chars, m.index, m.index + m[0].length);
+  working = chars.join('');
+  const lines = working.split('\n');
+  let offset = 0;
+  let inBlock = false;
+  for (const line of lines) {
+    let drop = false;
+    if (inBlock) {
+      drop = true;
+      if (line.includes('*/')) inBlock = false;
+    } else if (/^\s*\/\*/.test(line)) {
+      drop = true;
+      if (!line.includes('*/')) inBlock = true;
+    } else if (/^\s*(>|\/\/)/.test(line) || parseEscape(line.trim())) {
+      drop = true;
+    }
+    if (drop) blankSpan(chars, offset, offset + line.length);
+    offset += line.length + 1;
+  }
+  working = chars.join('');
+  for (const re of QUOTED) {
+    re.lastIndex = 0;
+    for (const m of working.matchAll(re)) blankSpan(chars, m.index, m.index + m[0].length);
+    re.lastIndex = 0;
+  }
+  return chars.join('');
+}
+
+function subjectTextOk(inner) {
+  return inner.replace(/\s/g, '').length >= 2;
+}
+
+function bareSubjectOk(text, index, idLength) {
+  const before = text.slice(0, index);
+  const after = text.slice(index + idLength);
+  const open = /^[ \t]*([（(])/.exec(after);
+  if (open) {
+    const close = open[1] === '（' ? '）' : ')';
+    const rest = after.slice(open[0].length);
+    const end = rest.indexOf(close);
+    if (end >= 0 && subjectTextOk(rest.slice(0, end))) return true;
+  }
+  const quoted = /「([^」]*)」[ \t]*$/.exec(before);
+  if (quoted && subjectTextOk(quoted[1])) return true;
+  return TITLE_LABEL.test(before);
+}
+
+// Escapes apply; the bare-id off switch does not. Unique ids, first bare occurrence order.
+function unresolvedBareIds(text) {
+  const escapes = escapeRecords(text);
+  const masked = maskBareExclusions(text);
+  const out = [];
+  const seen = new Set();
+  for (const m of masked.matchAll(/\bd-[0-9a-f]{8}\b/gi)) {
+    const id = m[0].toLowerCase();
+    if (seen.has(id)) continue;
+    if (bareSubjectOk(text, m.index, m[0].length)) continue;
+    if (escapes.some((e) => e.classes.split(',').includes(BARE_CARD_CLASS) && e.sentence.toLowerCase() === id)) {
+      seen.add(id);
+      continue;
+    }
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function bareCardReason(ids) {
+  return `這些卡片編號旁邊沒有白話主題，操作員看不出每張卡是什麼：${ids.join('、')}。`
+    + '編號後面緊接（主題）或 (主題)，主題至少兩個非空白字；或編號前面緊接「主題」，或「標題：」「章節：」「題目：」「主題：」這類標籤。'
+    + '合格例子：d-47602dd8（週一手機重連 Wi-Fi）。'
+    + '若為誤判，每個編號各加一行 OWNER-GUARD-FALSE-POSITIVE [bare_card_id] <編號> :: 理由。';
 }
 
 // Text of the last assistant entry that has text, after the last real user turn.
@@ -254,11 +369,15 @@ function decide(input) {
   const hits = unresolvedHits(text, input.cwd || process.cwd(), unboundIds);
   const mentioned = unboundIds ? new Set([...stripCode(text).matchAll(CARD_ID)].map(([id]) => id.toLowerCase())) : null;
   const namedUnbound = mentioned ? rs.unbound.filter((u) => mentioned.has(u.id.toLowerCase())) : [];
-  if (!hits.length && !namedUnbound.length) return null;
+  const bare = bareCardLintOff() ? [] : unresolvedBareIds(text);
+  if (!hits.length && !namedUnbound.length && !bare.length) return null;
   const role = teamRole();
   if (!namedUnbound.length && role !== 'solo' && role !== 'pm') {
-    // Non-PM lane sessions keep the pre-v2 rule: a request id or any d- card id in the reply silences the guard.
-    if (REQUEST_ID.test(text) || /\bd-[0-9a-f]{8}\b/i.test(text)) return null;
+    // Non-PM lane sessions keep the pre-v2 rule: a request id or any d- card id in the reply silences the question guard.
+    // A bare id still blocks, and only with the subject message: the lane is not told to open a card.
+    if (REQUEST_ID.test(text) || /\bd-[0-9a-f]{8}\b/i.test(text)) {
+      return bare.length ? { decision: 'block', reason: bareCardReason(bare) } : null;
+    }
     const first = hits[0].sentence;
     const quoted = first.length > 120 ? `${first.slice(0, 120)}…` : first;
     const req = shellQuotePath(path.join(__dirname, '..', 'scripts', 'request-decision.js'));
@@ -270,6 +389,7 @@ function decide(input) {
         + '若這句不是要 owner 回答（修辭、轉述別人的問題、列舉選項），請改寫句子避免誤判。',
     };
   }
+  if (!hits.length && !namedUnbound.length) return { decision: 'block', reason: bareCardReason(bare) };
   const shown = hits.map((h) => `[${h.classes.join(',')}] ${h.sentence}`).join('\n');
   const autonomous = isAutonomous(input.session_id);
   const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
@@ -277,6 +397,7 @@ function decide(input) {
     `回覆提到的卡片 ${u.id} 落在未綁定範圍（本 session 的 root 是 ${rs.root}，root 面板看不到未綁定卡片）：請先執行 node ${OPEN_DECISION_CMD} close --id ${u.id}，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} --category <money|identity|presence|goal|public-release|unbackable-loss|authority> 重新開卡並更新回覆中的卡號。`
   ).join('\n');
   const lead = [
+    ...(bare.length ? [bareCardReason(bare)] : []),
     ...(unboundNote ? [unboundNote] : []),
     ...(hits.length ? [`以下句子需要 owner 回答、操作或後續提醒，但同句沒有本地 live 卡片或有 due 的 fleet task：\n${shown}`] : []),
   ].join('\n');
@@ -300,7 +421,7 @@ function decide(input) {
 
 function main() {
   try {
-    if (optedOut(process.env, loadCfg())) return;
+    if (optedOut(envBag(), loadCfg())) return;
     const input = JSON.parse(fs.readFileSync(0, 'utf8'));
     const out = decide(input && typeof input === 'object' ? input : {});
     if (out) process.stdout.write(`${JSON.stringify(out)}\n`);
@@ -310,4 +431,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { findOwnerQuestion, findHits, unresolvedHits, lastAssistantText, decide, OWNER_WAIT_PATTERNS, HIT_PATTERNS };
+module.exports = { findOwnerQuestion, findHits, unresolvedHits, unresolvedBareIds, lastAssistantText, decide, OWNER_WAIT_PATTERNS, HIT_PATTERNS };

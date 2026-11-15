@@ -18,6 +18,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `dirty-protected-paths` | Stop<br>未驗證 | SessionEnd, Stop<br>未驗證 | — | — |
 | `dispatch-model-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `failure-escalation` | PostToolUse<br>未驗證 | — | — | — |
+| `fleet-send-work-order-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `fleet-stop` | Stop<br>未驗證 | — | — | — |
 | `foreman-guard` | PreToolUse<br>未驗證 | — | — | — |
 | `intent-capture` | PostToolUse<br>未驗證 | — | — | — |

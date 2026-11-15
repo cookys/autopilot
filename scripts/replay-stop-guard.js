@@ -27,8 +27,14 @@ function main(argv = process.argv.slice(2)) {
       const text = guard.lastAssistantText(fs.readFileSync(transcript_path, 'utf8'));
       if (!text) throw new Error(`${file}: no final assistant text`);
       const out = guard.decide({ transcript_path, cwd: process.cwd(), stop_hook_active: false });
-      const classes = [...new Set(guard.unresolvedHits(text).flatMap((h) => h.classes))].sort();
-      process.stdout.write(`${file}: ${out?.decision === 'block' ? `BLOCK ${classes.join(',')}` : 'PASS -'}\n`);
+      const bareIds = guard.unresolvedBareIds(text);
+      const classes = [...new Set([
+        ...guard.unresolvedHits(text).flatMap((h) => h.classes),
+        ...(bareIds.length ? ['bare_card_id'] : []),
+      ])].sort();
+      // unresolvedBareIds ignores the bare-id off switch, same as the question guard's opt-out living outside decide.
+      const block = out?.decision === 'block' || bareIds.length > 0;
+      process.stdout.write(`${file}: ${block ? `BLOCK ${classes.join(',')}` : 'PASS -'}\n`);
     }
     return 0;
   } catch (err) {

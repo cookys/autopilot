@@ -338,6 +338,12 @@
 #   --no-verify-tip sets the string "skipped_by_flag".
 # Any non-zero rc or timeout → dispatch status verify_failed, exit 3.
 # no_source is not verify_failed.
+# The same write_manifest that stamps final_status records compact
+# "tip_verify" (the object's status pass|fail|timeout, the string
+# no_source|skipped_by_flag, or null when this path never computed one)
+# and "tip_verify_source" (flag|brief|repo_config, else null). Source is
+# null for no_source, skipped_by_flag, and when tip verify was not computed.
+# Command tails stay in the result JSON.
 
 set -uo pipefail
 
@@ -2599,13 +2605,52 @@ write_manifest() {
     campaign_scope_fields=", \"campaign_scope\": \"none_declared\", \"enforcement_mode\": \"$(_flat_json_escape "$MISSION_ENFORCEMENT_MODE_SEEN")\""
   fi
   campaign_scope_fields="$campaign_scope_fields, \"mount_containment\": \"${MANIFEST_MOUNT_CONTAINMENT:-refused}\""
+  # Compact tip_verify for the manifest. The result JSON keeps the command
+  # tails; this write (including the finalize that stamps final_status) keeps
+  # only the status scalar and the source. Inline so detach's declare -f of
+  # write_manifest carries it. Stdin, not an env copy of the result: a tail
+  # can contain $(...) and must not be re-expanded.
+  local tip_verify_json="null" tip_verify_source_json="null"
+  if [ -n "${TIP_VERIFY_RESULT_JSON:-}" ]; then
+    local _tv_pair=""
+    _tv_pair="$(printf '%s' "${TIP_VERIFY_RESULT_JSON}" | TIP_SRC="${TIP_VERIFY_SOURCE:-}" node -e '
+      const src = process.env.TIP_SRC || "";
+      const statuses = new Set(["pass", "fail", "timeout"]);
+      const strings = new Set(["no_source", "skipped_by_flag"]);
+      const sources = new Set(["flag", "brief", "repo_config"]);
+      let raw = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (d) => { raw += d; });
+      process.stdin.on("end", () => {
+        let tip = null;
+        let source = null;
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+        if (typeof parsed === "string") {
+          if (strings.has(parsed)) tip = parsed;
+        } else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          if (statuses.has(parsed.status)) {
+            tip = parsed.status;
+            if (sources.has(src)) source = src;
+          }
+        }
+        process.stdout.write(JSON.stringify(tip) + "\n" + JSON.stringify(source) + "\n");
+      });
+    ' 2>/dev/null)" || _tv_pair=""
+    if [ -n "$_tv_pair" ]; then
+      tip_verify_json="$(printf '%s\n' "$_tv_pair" | sed -n '1p')"
+      tip_verify_source_json="$(printf '%s\n' "$_tv_pair" | sed -n '2p')"
+    fi
+    printf '%s\n' "$tip_verify_json" | grep -Eq '^(null|"pass"|"fail"|"timeout"|"no_source"|"skipped_by_flag")$' || tip_verify_json="null"
+    printf '%s\n' "$tip_verify_source_json" | grep -Eq '^(null|"flag"|"brief"|"repo_config")$' || tip_verify_source_json="null"
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "tip_verify": %s, "tip_verify_source": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${DISPATCH_LANE_JSON:-null}" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" \
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$tip_verify_json" "$tip_verify_source_json" "$parent_json" "$root_json" "$depth_json" \
       "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$role_kit_manifest_fields" "$campaign_scope_fields" "$REPO_IDENTITY_FIELDS$(declare -F dispatch_attr_fields >/dev/null 2>&1 && dispatch_attr_fields "${PROMPT_FILE:-}" "$runner" "${ENDPOINT:-}" "${MANIFEST_FINAL_STATUS:+${OUTCOME_COMMIT:-}}")" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"

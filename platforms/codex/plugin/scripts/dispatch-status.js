@@ -47,7 +47,12 @@
 //   { schema, run_id, role, runner, model, phase: "running"|"exited"|"unknown",
 //     alive: bool|null, liveness: {lock, pid, scope}, log: {path, exists, bytes,
 //     mtime_age_s}, last_event_age_s, events, tool_calls, last_action,
-//     files_touched, tokens, usage_source, stall, manifest }
+//     files_touched, tokens, usage_source, final_status, tip_verify, tip_verify_source,
+//     stall, manifest }
+//   tip_verify is pass|fail|timeout|no_source|skipped_by_flag or null.
+//   tip_verify_source is flag|brief|repo_config or null, and only when tip_verify
+//   is pass, fail, or timeout. A missing or unknown token is null.
+//   --list row keys are unchanged.
 //   Telemetry fields are null when the log format carries no such signal — the
 //   parser NEVER fabricates a value ("telemetry unavailable" is an honest answer).
 //   files_touched is git-artifact-derived (worktree status/diff), not log-derived.
@@ -76,6 +81,9 @@ const { spawnSync } = require('child_process');
 const runtimePaths = require('./lib/runtime-paths');
 
 const DEFAULT_STALL_SECS = 180;
+const TIP_VERIFY_VALUES = new Set(['pass', 'fail', 'timeout', 'no_source', 'skipped_by_flag']);
+const TIP_VERIFY_OBJECT = new Set(['pass', 'fail', 'timeout']);
+const TIP_VERIFY_SOURCES = new Set(['flag', 'brief', 'repo_config']);
 const FILES_TOUCHED_CAP = 50;
 // Runners whose CLI prints nothing until it finishes (`claude -p`, kimi `-p --output-format text`, anthropic-compatible / claude-native review calls): a quiet log is normal for them, so "quiet for stallSecs" proves nothing.
 // A review-role dispatch on any runner but codex also writes its plain log at the end (dispatch-review.sh declares log_format plain
@@ -636,6 +644,9 @@ function buildStatus(manifest, manifestPath, logOverride, stallSecs, formatOverr
     tokens: parsed.tokens,
     usage_source: parsed.usage_source,
     final_status: manifest ? manifest.final_status || null : null,
+    tip_verify: manifest && TIP_VERIFY_VALUES.has(manifest.tip_verify) ? manifest.tip_verify : null,
+    tip_verify_source: manifest && TIP_VERIFY_OBJECT.has(manifest.tip_verify) && TIP_VERIFY_SOURCES.has(manifest.tip_verify_source)
+      ? manifest.tip_verify_source : null,
     stall,
     stall_limit_s: stallLimit,
     manifest: manifestPath || null,

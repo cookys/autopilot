@@ -101,7 +101,7 @@ run_hetero() { # <runs> <cwd> [extra env...]
   local runs="$1" cwd="$2"; shift 2
   mkdir -p "$runs"
   ( cd "$cwd" && timeout 60 env -u REPO_ROOT -u CONSUMING_REPO_ROOT AUTOPILOT_DISPATCH_RUNS_DIR="$runs" "$@" \
-      "$HETERO" --runner grok --model grok-4.5 --effort high --grok-bin "$GROK_STUB" \
+      "$HETERO" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$GROK_STUB" \
       --branch "feat/ri-$RANDOM" --prompt-file "$PROMPT" >/dev/null 2>&1 ) || true
 }
 run_review() { # <runs> <cwd> [extra env...]

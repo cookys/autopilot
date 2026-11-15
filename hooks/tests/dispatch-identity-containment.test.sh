@@ -88,7 +88,7 @@ CLEAN_OUT="$TEST_TMP/clean_out.txt"
     AUTOPILOT_DISPATCH_MANIFEST=0 \
     AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/sess_empty_clean" \
     TMPDIR="$CLEAN_DIR" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip \
         --branch clean-dispatch-001 \
         --base main \
         --prompt-file "$PROMPT_CLEAN" \
@@ -130,7 +130,7 @@ DRIFT_OUT="$TEST_TMP/drift_out.txt"
     AUTOPILOT_DISPATCH_MANIFEST=0 \
     AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/sess_empty_drift" \
     TMPDIR="$DRIFT_DIR" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip \
         --branch drift-dispatch-001 \
         --base main \
         --prompt-file "$PROMPT_DRIFT" \

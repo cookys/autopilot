@@ -114,7 +114,7 @@ hetero_case() {
   fi
   (cd "$SBX" && env "$extra" SID_DUMP="$dump" DISPATCH_DETACH="$detach_flag" \
     PATH="${pfx:+$pfx:}$TEST_TMP/hetero-bin:$PATH" \
-    bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model mini --endpoint TESTEP \
+    bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP \
     --branch "feat/$id" --prompt-file "$PROMPT" "${coords[@]}" >"$TEST_TMP/hetero-$HN.out" 2>&1)
   check_scrubbed "$label" "$dump"
 }

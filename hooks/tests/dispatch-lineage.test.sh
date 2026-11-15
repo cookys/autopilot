@@ -79,7 +79,7 @@ json_field() { # file key  → prints value via node (numbers unquoted, strings 
 run_hetero() { # runid extra-env...  (DETACH off unless overridden)
   local runid="$1"; shift
   ( cd "$SBX" && env "$@" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" DISPATCH_DETACH=0 DISPATCH_QUIET=1 \
-      "$HETERO" --branch "feat/$runid" --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --run-id "$runid" >/dev/null 2>&1 )
+      "$HETERO" --no-verify-tip --branch "feat/$runid" --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --run-id "$runid" >/dev/null 2>&1 )
 }
 
 run_hetero root1
@@ -144,7 +144,7 @@ if command -v setsid >/dev/null 2>&1; then
   LEDGER="$TEST_TMP/detach-ledger.jsonl"
   DETACH_OUT="$(cd "$SBX" && env AUTOPILOT_PARENT_RUN_ID=foreman-D AUTOPILOT_ROOT_RUN_ID=root-D AUTOPILOT_DISPATCH_DEPTH=2 \
       AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" DISPATCH_QUIET=1 \
-      "$HETERO" --branch feat/detach1 --prompt-file "$PROMPT" --agy-bin "$STUB_OK" \
+      "$HETERO" --no-verify-tip --branch feat/detach1 --prompt-file "$PROMPT" --agy-bin "$STUB_OK" \
       --run-id detach1 --ledger "$LEDGER" --stage implement 2>&1)"; DETACH_RC=$?
   [ "$DETACH_RC" -eq 0 ] \
     || printf 'dispatch-lineage diagnostic (detach): %s\n' "$DETACH_OUT" >&2
@@ -161,7 +161,7 @@ fi
 # 6. AUTOPILOT_DISPATCH_MANIFEST=0 writes NO manifest
 # =========================================================================
 ( cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" DISPATCH_DETACH=0 DISPATCH_QUIET=1 AUTOPILOT_DISPATCH_MANIFEST=0 \
-    "$HETERO" --branch feat/nomani --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --run-id nomani1 >/dev/null 2>&1 )
+    "$HETERO" --no-verify-tip --branch feat/nomani --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --run-id nomani1 >/dev/null 2>&1 )
 assert_file_absent "$RUNS/nomani1.manifest.json" "AUTOPILOT_DISPATCH_MANIFEST=0 writes no manifest"
 
 # =========================================================================

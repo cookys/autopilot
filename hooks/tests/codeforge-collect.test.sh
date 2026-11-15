@@ -380,7 +380,7 @@ export DISPATCH_QUIET=1
 node "$REPO_ROOT/scripts/run-approval.js" confirm-claude-native >/dev/null
 
 e2e_one "13 hetero claude-native" \
-  env PATH="$HETERO_BIN:$PATH" bash -c 'cd "$1" && exec "$2" --runner claude-native --model claude-sonnet-4-6 --effort low --prompt-file "$3" --context-window off --branch feat/cf-cn' \
+  env PATH="$HETERO_BIN:$PATH" bash -c 'cd "$1" && exec "$2" --no-verify-tip --runner claude-native --model claude-sonnet-4-6 --effort low --prompt-file "$3" --context-window off --branch feat/cf-cn' \
   _ "$HETERO_REPO" "$HETERO" "$HETERO_PROMPT"
 
 if ! command -v bwrap >/dev/null 2>&1 || ! bwrap --ro-bind / / --dev /dev --proc /proc true >/dev/null 2>&1; then
@@ -390,7 +390,7 @@ else
   mkdir -p "$HETERO_WT"
   e2e_one "13 hetero cc-shim bwrap" \
     env PATH="$HETERO_BIN:$PATH" ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" \
-    bash -c 'cd "$1" && exec "$2" --runner cc-shim --model MiniMax-M3 --prompt-file "$3" --context-window off --branch feat/cf-sbx --sandbox bwrap --worktree-parent "$4"' \
+    bash -c 'cd "$1" && exec "$2" --no-verify-tip --runner cc-shim --model MiniMax-M3 --prompt-file "$3" --context-window off --branch feat/cf-sbx --sandbox bwrap --worktree-parent "$4"' \
     _ "$HETERO_REPO" "$HETERO" "$HETERO_PROMPT" "$HETERO_WT"
 fi
 

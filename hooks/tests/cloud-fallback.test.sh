@@ -58,7 +58,7 @@ hetero() {
   mkdir -p "$cap"
   (cd "$SBX" && env PATH="$bindir:$PATH" ENGINE_CAPABILITY_DIR="$cap" \
       ANTHROPIC_BASE_URL="http://127.0.0.1:9" ANTHROPIC_AUTH_TOKEN="FAKE-token-not-real" \
-      "$sdir/dispatch-hetero.sh" --runner cc-shim --model mini --branch "$branch" \
+      "$sdir/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model mini --branch "$branch" \
       --prompt-file "$PROMPT" --context-window off "$@" 2>&1 < /dev/null) | grep '^{' | tail -n 1
 }
 
@@ -500,7 +500,7 @@ const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 const base = execFileSync('git', ['-C', sbx, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const engine = new AutopilotEngine({ cwd: sbx });
 const out = engine.implementTask({
-  promptFile, branch: 'feat/cf-real', base, cwd: sbx, extraImplementationArgs: ['--endpoint', 'gpu1'],
+  promptFile, branch: 'feat/cf-real', base, cwd: sbx, extraImplementationArgs: ['--no-verify-tip', '--endpoint', 'gpu1'],
   implementationOptions: { cwd: sbx, env: {
     ...process.env, PATH: `${bindir}:${process.env.PATH}`, ENGINE_CAPABILITY_DIR: capDir,
     ANTHROPIC_BASE_URL: 'http://127.0.0.1:9', ANTHROPIC_AUTH_TOKEN: 'FAKE-token-not-real',

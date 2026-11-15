@@ -112,7 +112,7 @@ json_get() {
 }
 
 # 1) committed path: runner/duplex/manifest/log_format and usage parsing.
-OUT="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-ok --prompt-file "$PROMPT" --pi-bin "$STUB_OK" 2>&1)"
+OUT="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" "$SCRIPT" --no-verify-tip --runner pi --model MiniMax-M3 --branch feat/pi-ok --prompt-file "$PROMPT" --pi-bin "$STUB_OK" 2>&1)"
 RC=$?
 assert_eq "0" "$RC" "pi committed path exit"
 assert_contains "$OUT" '"status": "committed"' "pi committed status"
@@ -137,19 +137,19 @@ assert_contains "$SUMMARY" '"cache_read_tokens":50' "pi summary cache read token
 assert_contains "$SUMMARY" '"usage_source":"pi-rpc"' "pi summary usage source"
 
 # 2) no-op mock: exit 1 with status no_op.
-OUT_NOOP="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-noop --prompt-file "$PROMPT" --pi-bin "$STUB_NOOP" 2>&1)"
+OUT_NOOP="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" "$SCRIPT" --no-verify-tip --runner pi --model MiniMax-M3 --branch feat/pi-noop --prompt-file "$PROMPT" --pi-bin "$STUB_NOOP" 2>&1)"
 RC_NOOP=$?
 assert_eq "1" "$RC_NOOP" "pi no-op path exit"
 assert_contains "$OUT_NOOP" '"status": "no_op"' "pi status no_op"
 
 # 3) failure mock: no agent_end and non-zero => non-committed.
-OUT_FAIL="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-fail --prompt-file "$PROMPT" --pi-bin "$STUB_FAIL" 2>&1)"
+OUT_FAIL="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" "$SCRIPT" --no-verify-tip --runner pi --model MiniMax-M3 --branch feat/pi-fail --prompt-file "$PROMPT" --pi-bin "$STUB_FAIL" 2>&1)"
 RC_FAIL=$?
 assert_eq "1" "$RC_FAIL" "pi failure path exit"
 assert_not_contains "$OUT_FAIL" '"status": "committed"' "pi failure is not committed"
 
 # 4) stall probe path: one injected probe, still finalizes.
-OUT_STALL="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" PI_STALL_SLEEP=2 PI_RPC_STALL_PROBE_SECS=1 "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-stall --prompt-file "$PROMPT" --pi-bin "$STUB_STALL" 2>&1)"
+OUT_STALL="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" PI_STALL_SLEEP=2 PI_RPC_STALL_PROBE_SECS=1 "$SCRIPT" --no-verify-tip --runner pi --model MiniMax-M3 --branch feat/pi-stall --prompt-file "$PROMPT" --pi-bin "$STUB_STALL" 2>&1)"
 RC_STALL=$?
 assert_eq "0" "$RC_STALL" "pi stall path still commits"
 OUT_STALL_JSON="$(printf '%s\n' "$OUT_STALL" | grep '^{ "status"' | tail -1)"
@@ -158,12 +158,12 @@ assert_contains "$(cat "$STALL_LOG")" '"type":"supervisor_stall_probe"' "pi stal
 assert_contains "$OUT_STALL" '"status": "committed"' "pi stall path commits"
 
 # 5) preconditions
-OUT_MISSING_BIN="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-bad-bin --prompt-file "$PROMPT" --pi-bin "$TEST_TMP/non-existent-pi" 2>&1)"
+OUT_MISSING_BIN="$(cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" "$SCRIPT" --no-verify-tip --runner pi --model MiniMax-M3 --branch feat/pi-bad-bin --prompt-file "$PROMPT" --pi-bin "$TEST_TMP/non-existent-pi" 2>&1)"
 RC_MISSING_BIN=$?
 assert_eq "2" "$RC_MISSING_BIN" "pi precondition missing bin"
 assert_contains "$OUT_MISSING_BIN" 'pi binary not found' "pi precondition names missing pi binary"
 
-OUT_MISSING_MODELS="$(cd "$SBX" && PI_MODELS_JSON="$TEST_TMP/does-not-exist-models.json" "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-missing-models --prompt-file "$PROMPT" --pi-bin "$STUB_OK" 2>&1)"
+OUT_MISSING_MODELS="$(cd "$SBX" && PI_MODELS_JSON="$TEST_TMP/does-not-exist-models.json" "$SCRIPT" --no-verify-tip --runner pi --model MiniMax-M3 --branch feat/pi-missing-models --prompt-file "$PROMPT" --pi-bin "$STUB_OK" 2>&1)"
 RC_MISSING_MODELS=$?
 assert_eq "2" "$RC_MISSING_MODELS" "pi precondition missing models.json"
 assert_contains "$OUT_MISSING_MODELS" 'pi models.json not readable' "pi precondition names missing models.json"
@@ -494,7 +494,7 @@ E2E_OUT_FILE="$TEST_TMP/e2e-dispatch.out"
     PI_RPC_STALL_PROBE_SECS=999 \
     PI_RPC_DIRECTIVE_POLL_SECS=1 \
     timeout --signal=TERM --kill-after=15s 120 \
-    "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-e2e-directive --prompt-file "$PROMPT" \
+    "$SCRIPT" --no-verify-tip --runner pi --model MiniMax-M3 --branch feat/pi-e2e-directive --prompt-file "$PROMPT" \
     --pi-bin "$STUB_E2E" --ledger "$LGR_E2E" --run-id E2ERUN --stage implement > "$E2E_OUT_FILE" 2>&1 ) &
 E2E_DISPATCH_PID=$!
 # Always reap the dispatch process group on suite exit so a hung stub cannot

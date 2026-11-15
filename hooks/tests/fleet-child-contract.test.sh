@@ -78,7 +78,7 @@ run_rail review-native X_UNUSED=1 "$REVIEW" --runner claude-native --model haiku
 check "review claude-native" review-seat "$E_DUMP"
 run_rail review-ccshim X_UNUSED=1 "$REVIEW" --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file "$DIFF" --bin "$BINDIR/claude"
 check "review cc-shim" review-seat "$E_DUMP"
-run_rail hetero X_UNUSED=1 bash "$HETERO" --runner cc-shim --model MiniMax-M3 --effort high --branch feat/fcc-h --prompt-file "$PROMPT" --run-id fcc-h
+run_rail hetero X_UNUSED=1 bash "$HETERO" --no-verify-tip --runner cc-shim --model MiniMax-M3 --effort high --branch feat/fcc-h --prompt-file "$PROMPT" --run-id fcc-h
 check "hetero cc-shim" hand "$E_DUMP"
 # probe-engine-capability.sh: both claude branches (BL-0251: strict MCP + mint)
 for runner in cc-shim claude-native; do

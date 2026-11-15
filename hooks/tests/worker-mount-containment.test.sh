@@ -274,7 +274,7 @@ hetero_run() { # <tag> [env...] ; sets H_RC H_ERR RUNS MARK
   local tag="$1"; shift
   RUNS="$TEST_TMP/runs-$tag"; MARK="$TEST_TMP/mark-$tag"; mkdir -p "$RUNS"
   (cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" MNT_MARK="$MARK" "$@" \
-    bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner grok --model grok-4.5 --effort high --grok-bin "$HSTUB" \
+    bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$HSTUB" \
     --branch "feat/mnt-$tag" --prompt-file "$TEST_TMP/prompt.txt" --timeout 60s >"$TEST_TMP/h-$tag.out" 2>"$TEST_TMP/h-$tag.err" < /dev/null)
   H_RC=$?
 }

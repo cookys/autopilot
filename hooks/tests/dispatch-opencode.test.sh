@@ -58,7 +58,7 @@ __EOF3
 chmod +x "$STUB_FAIL"
 
 # 1) committed path
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-ok --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-ok --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
 RC=$?
 assert_eq "0" "$RC" "opencode committed path exit 0"
 assert_contains "$OUT" '"status": "committed"' "opencode committed status"
@@ -89,16 +89,16 @@ assert_contains "$(cat "$RUNS_DIR/$RUN_ID.manifest.json")" '"log_format": "plain
 
 # 1b) effort → --variant: pass-through for provider-known tiers, max clamped to xhigh
 for e in low medium high; do
-  OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort "$e" --branch "feat/oc-eff-$e" --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
+  OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort "$e" --branch "feat/oc-eff-$e" --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
   assert_contains "$(cat "$ARGV_LOG")" " --variant $e " "--effort $e is forwarded as --variant $e"
 done
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort max --branch feat/oc-eff-max --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort max --branch feat/oc-eff-max --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
 assert_contains "$(cat "$ARGV_LOG")" ' --variant xhigh ' "--effort max is clamped to --variant xhigh (provider has no max)"
 assert_not_contains "$(cat "$ARGV_LOG")" ' --variant max ' "max never reaches opencode (it would fall through to the provider default silently)"
 
 # 1b') --effort default: opencode-go models with no effort tier (beam-free, longcat-2.0) take no
 # --variant; the request then carries no reasoning_effort at all
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort default --branch feat/oc-eff-default --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort default --branch feat/oc-eff-default --prompt-file "$PROMPT" --opencode-bin "$STUB_OK" --context-window off 2>&1)"
 assert_contains "$OUT" '"status": "committed"' "opencode --effort default is accepted (not precondition_failed)"
 assert_not_contains "$(cat "$ARGV_LOG")" '--variant' "opencode --effort default sends no --variant"
 assert_contains "$(cat "$ARGV_LOG")" ' -m opencode-go/muse-spark-1.3-contributor ' "opencode --effort default still carries -m <model>"
@@ -116,26 +116,26 @@ echo opencode-v2-edited > oc_v2_out.txt
 printf '%s\n' '{"type":"step_start","timestamp":1}'
 __EOFV2
 chmod +x "$STUB_V2"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort max --branch feat/oc-v2 --prompt-file "$PROMPT" --opencode-bin "$STUB_V2" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort max --branch feat/oc-v2 --prompt-file "$PROMPT" --opencode-bin "$STUB_V2" --context-window off 2>&1)"
 assert_contains "$OUT" '"status": "committed"' "opencode v2 committed path"
 assert_eq "run --standalone -m opencode-go/muse-spark-1.3-contributor#xhigh --format json" "$(cat "$ARGV_LOG")" "opencode v2 argv: --standalone, model#variant (max->xhigh), no --dir/--pure/--variant"
 assert_contains "$(cat "$ARGV_LOG.cwd")" "feat-oc-v2" "opencode v2 runs with the worktree as cwd"
 assert_contains "$(cat "$STDIN_LOG")" 'HARNESS DIRECTIVE' "opencode v2 prompt still travels on stdin"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort default --branch feat/oc-v2-default --prompt-file "$PROMPT" --opencode-bin "$STUB_V2" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor --effort default --branch feat/oc-v2-default --prompt-file "$PROMPT" --opencode-bin "$STUB_V2" --context-window off 2>&1)"
 assert_eq "run --standalone -m opencode-go/muse-spark-1.3-contributor --format json" "$(cat "$ARGV_LOG")" "opencode v2 --effort default: bare model id, no #variant"
 STUB_V9="$TEST_TMP/opencode-v9"
 printf '#!/usr/bin/env bash\n[ "$1" = "--version" ] && { echo 9.0.1; exit 0; }\nexit 0\n' > "$STUB_V9"; chmod +x "$STUB_V9"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/x --branch feat/oc-v9 --prompt-file "$PROMPT" --opencode-bin "$STUB_V9" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/x --branch feat/oc-v9 --prompt-file "$PROMPT" --opencode-bin "$STUB_V9" --context-window off 2>&1)"
 assert_contains "$OUT" '"status": "precondition_failed"' "opencode unknown major fails closed before spend"
 assert_contains "$OUT" 'unsupported opencode version' "opencode unknown major names the version"
 
 # 2) no_op path
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-noop --prompt-file "$PROMPT" --opencode-bin "$STUB_NOOP" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-noop --prompt-file "$PROMPT" --opencode-bin "$STUB_NOOP" --context-window off 2>&1)"
 assert_contains "$OUT" '"status": "no_op"' "no edit → no_op"
 assert_contains "$OUT" '"runner": "opencode"' "no_op keeps runner provenance"
 
 # 3) failure path
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-fail --prompt-file "$PROMPT" --opencode-bin "$STUB_FAIL" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-fail --prompt-file "$PROMPT" --opencode-bin "$STUB_FAIL" --context-window off 2>&1)"
 RC=$?
 # same classification every rail gives a nonzero exit with no commit: question_suspected
 assert_contains "$OUT" '"status": "question_suspected"' "nonzero exit + no edit → question_suspected (worktree kept)"
@@ -143,12 +143,12 @@ assert_not_contains "$OUT" '"status": "committed"' "failure path is not committe
 [ "$RC" -ne 0 ] && assert_eq ok ok "failure path exits nonzero" || fail "failure path exited 0"
 
 # 4) preconditions: missing binary; auto never selects opencode; --model required
-OUT="$(cd "$SBX" && "$SCRIPT" --runner opencode --model opencode-go/x --branch feat/oc-nobin --prompt-file "$PROMPT" --opencode-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner opencode --model opencode-go/x --branch feat/oc-nobin --prompt-file "$PROMPT" --opencode-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing opencode binary fails closed"
 assert_contains "$OUT" 'opencode binary not found' "missing binary names the fix"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner auto --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-auto --prompt-file "$PROMPT" --agy-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner auto --model opencode-go/muse-spark-1.3-contributor --branch feat/oc-auto --prompt-file "$PROMPT" --agy-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
 assert_not_contains "$OUT" '"runner": "opencode"' "auto never routes a provider/model id to opencode"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner bogus --model x --branch feat/oc-enum --prompt-file "$PROMPT" 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner bogus --model x --branch feat/oc-enum --prompt-file "$PROMPT" 2>&1)"
 assert_contains "$OUT" 'pi|cursor|opencode' "runner enum error names opencode"
 
 finalize_test

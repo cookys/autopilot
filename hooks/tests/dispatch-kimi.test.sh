@@ -52,7 +52,7 @@ __EOF3
 chmod +x "$STUB_FAIL"
 
 # 1) committed path
-OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --branch feat/kimi-ok --prompt-file "$PROMPT" --kimi-bin "$STUB_OK" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/k3 --branch feat/kimi-ok --prompt-file "$PROMPT" --kimi-bin "$STUB_OK" --context-window off 2>&1)"
 RC=$?
 assert_eq "0" "$RC" "kimi committed path exit 0"
 assert_contains "$OUT" '"status": "committed"' "kimi committed status"
@@ -80,12 +80,12 @@ assert_contains "$(cat "$RUNS_DIR/$RUN_ID.manifest.json")" '"runner": "kimi"' "m
 assert_contains "$(cat "$RUNS_DIR/$RUN_ID.manifest.json")" '"log_format": "plain"' "manifest log_format plain (kimi stream-json has no usage today)"
 
 # 2) no_op path
-OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --branch feat/kimi-noop --prompt-file "$PROMPT" --kimi-bin "$STUB_NOOP" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/k3 --branch feat/kimi-noop --prompt-file "$PROMPT" --kimi-bin "$STUB_NOOP" --context-window off 2>&1)"
 assert_contains "$OUT" '"status": "no_op"' "no edit → no_op"
 assert_contains "$OUT" '"runner": "kimi"' "no_op keeps runner provenance"
 
 # 3) failure path
-OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --branch feat/kimi-fail --prompt-file "$PROMPT" --kimi-bin "$STUB_FAIL" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/k3 --branch feat/kimi-fail --prompt-file "$PROMPT" --kimi-bin "$STUB_FAIL" --context-window off 2>&1)"
 RC=$?
 # same classification every rail gives a nonzero exit with no commit: question_suspected
 assert_contains "$OUT" '"status": "question_suspected"' "nonzero exit + no edit → question_suspected (worktree kept)"
@@ -99,7 +99,7 @@ assert_not_contains "$OUT" '"status": "committed"' "failure path is not committe
 BIG_PROMPT="$TEST_TMP/kimi-big-prompt.txt"
 { for i in $(seq 1 3000); do printf 'line %05d %s\n' "$i" "$(printf 'x%.0s' $(seq 1 40))"; done; } > "$BIG_PROMPT"
 rm -f "$ARGV_LOG"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --branch feat/kimi-big --prompt-file "$BIG_PROMPT" --kimi-bin "$STUB_OK" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/k3 --branch feat/kimi-big --prompt-file "$BIG_PROMPT" --kimi-bin "$STUB_OK" --context-window off 2>&1)"
 RC=$?
 assert_eq "2" "$RC" "kimi: oversized prompt is a precondition failure (exit 2), never an rc=126 death"
 assert_contains "$OUT" '"status": "precondition_failed"' "kimi: oversized prompt reports precondition_failed"
@@ -123,19 +123,19 @@ __EOFE
 chmod +x "$STUB_ENV"
 for e in low high max; do
   rm -f "$ENV_LOG"
-  OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --effort "$e" --branch "feat/kimi-eff-$e" --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
+  OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/k3 --effort "$e" --branch "feat/kimi-eff-$e" --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
   assert_eq "SET:$e" "$(cat "$ENV_LOG" 2>/dev/null)" "kimi --effort $e reaches the CLI as KIMI_MODEL_THINKING_EFFORT=$e"
   assert_not_contains "$(cat "$ARGV_LOG")" "--effort" "kimi effort travels in the env, not argv"
 done
 rm -f "$ENV_LOG"
-OUT="$(cd "$SBX" && KIMI_MODEL_THINKING_EFFORT=max "$SCRIPT" --runner kimi --model kimi-code/k3 --effort default --branch feat/kimi-eff-default --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && KIMI_MODEL_THINKING_EFFORT=max "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/k3 --effort default --branch feat/kimi-eff-default --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
 assert_eq "UNSET" "$(cat "$ENV_LOG" 2>/dev/null)" "kimi --effort default sends no effort variable (an ambient one is scrubbed)"
 rm -f "$ENV_LOG"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --branch feat/kimi-eff-unset --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/k3 --branch feat/kimi-eff-unset --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
 assert_eq "UNSET" "$(cat "$ENV_LOG" 2>/dev/null)" "kimi without an explicit --effort sends no effort variable (the xhigh script default is not a seat decision)"
 for e in medium xhigh; do
   rm -f "$ENV_LOG"
-  OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/k3 --effort "$e" --branch "feat/kimi-eff-bad-$e" --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
+  OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/k3 --effort "$e" --branch "feat/kimi-eff-bad-$e" --prompt-file "$PROMPT" --kimi-bin "$STUB_ENV" --context-window off 2>&1)"
   RC=$?
   assert_eq "2" "$RC" "kimi --effort $e fails closed (kimi supports low|high|max only)"
   assert_contains "$OUT" '"status": "precondition_failed"' "kimi --effort $e reports precondition_failed"
@@ -144,12 +144,12 @@ for e in medium xhigh; do
 done
 
 # 5) preconditions: missing binary; auto never selects kimi; --model required; runner enum names kimi
-OUT="$(cd "$SBX" && "$SCRIPT" --runner kimi --model kimi-code/x --branch feat/kimi-nobin --prompt-file "$PROMPT" --kimi-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner kimi --model kimi-code/x --branch feat/kimi-nobin --prompt-file "$PROMPT" --kimi-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing kimi binary fails closed"
 assert_contains "$OUT" 'kimi binary not found' "missing binary names the fix"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner auto --model kimi-code/k3 --branch feat/kimi-auto --prompt-file "$PROMPT" --agy-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner auto --model kimi-code/k3 --branch feat/kimi-auto --prompt-file "$PROMPT" --agy-bin "$TEST_TMP/does-not-exist" --context-window off 2>&1)"
 assert_not_contains "$OUT" '"runner": "kimi"' "auto never routes a provider/alias id to kimi"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner bogus --model x --branch feat/kimi-enum --prompt-file "$PROMPT" 2>&1)"
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner bogus --model x --branch feat/kimi-enum --prompt-file "$PROMPT" 2>&1)"
 assert_contains "$OUT" 'opencode|kimi' "runner enum error names kimi"
 
 finalize_test

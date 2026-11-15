@@ -45,7 +45,7 @@ EMPTY_SHA="$(printf '%s' "" | sha256sum | awk '{print $1}')"
 
 node "$REPO_ROOT/scripts/run-approval.js" confirm-claude-native >/dev/null
 
-run() { (cd "$SBX" && "$SCRIPT" --runner claude-native --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off "$@" 2>&1); }
+run() { (cd "$SBX" && "$SCRIPT" --no-verify-tip --runner claude-native --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off "$@" 2>&1); }
 
 rm -f "$SHA_FILE" "$INVOKED"
 OUT="$(CLAUDE_CODE_OAUTH_TOKEN="$TOKEN_A" run --branch feat/tok-inherit)"; RC=$?

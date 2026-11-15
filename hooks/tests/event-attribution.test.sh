@@ -44,7 +44,7 @@ mf_get() { node -e '
   process.stdout.write(!(k in o) ? "<absent>" : o[k] === null ? "<null>" : String(o[k]));' "$1" "$2"; }
 run() { # <brief> <runsdir> [env...] -> prints the manifest path
   local pf="$1" runs="$2"; shift 2; mkdir -p "$runs"; rm -f "$ENVDUMP"
-  ( cd "$SBX" && timeout 90 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" AUTOPILOT_ACCOUNT=pool-test "$@" "$RAIL" --runner grok --model grok-4.5 --effort high \
+  ( cd "$SBX" && timeout 90 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" AUTOPILOT_ACCOUNT=pool-test "$@" "$RAIL" --no-verify-tip --runner grok --model grok-4.5 --effort high \
       --grok-bin "$STUB" --branch "feat/attr-$RANDOM" --prompt-file "$pf" >/dev/null 2>/dev/null ) || true
   find "$runs" -name '*.manifest.json' | head -1
 }

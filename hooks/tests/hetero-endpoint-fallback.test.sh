@@ -157,7 +157,7 @@ dispatch_case() {
       ENGINE_CAPABILITY_DIR="$CASE_CAP" \
       REVIEW_LOOP_CONFIG_OVERRIDE="$cfg" \
       AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
-      "$script" \
+      "$script" --no-verify-tip \
       --runner cc-shim --model mini --effort high \
       --branch "feat/fb-$tag" \
       --prompt-file "$PROMPT" --context-window off \

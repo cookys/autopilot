@@ -71,7 +71,7 @@ run_rail() {
   case "$kind" in
     review) OUT="$(KIT_INNER=review "$script" --runner "${KIT_RUNNER:-claude-native}" --model haiku --diff-file "$DIFF" --bin "$BIN/claude" --timeout 30s --context-window off "$@" 2>&1 < /dev/null)" ;;
     author) OUT="$(KIT_INNER=author "$script" --runner "${KIT_RUNNER:-claude-native}" --model haiku --prompt-file "$AUTHOR_PROMPT" --bin "$BIN/claude" --timeout 30s --context-window off "$@" 2>&1 < /dev/null)" ;;
-    hetero) OUT="$(cd "$SBX" && KIT_INNER=hetero "$script" --runner "${KIT_RUNNER:-claude-native}" --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off --branch "feat/kit-$RANDOM" "$@" 2>&1 < /dev/null)" ;;
+    hetero) OUT="$(cd "$SBX" && KIT_INNER=hetero "$script" --no-verify-tip --runner "${KIT_RUNNER:-claude-native}" --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off --branch "feat/kit-$RANDOM" "$@" 2>&1 < /dev/null)" ;;
   esac
   RC=$?
   NCALLS="$(grep -c call "$CALLS" 2>/dev/null || true)"; NCALLS="${NCALLS:-0}"
@@ -252,7 +252,7 @@ acct_run() { # <kind> [args...] ; shim logs one JSON line per spawn with the arg
     author) OUT="$(env "${envv[@]}" "$AUTHOR" --runner claude-native --model haiku --prompt-file "$AUTHOR_PROMPT" --bin "$FX_BIN/claude" --timeout 30s --context-window off "$@" 2>&1 < /dev/null)" ;;
     hetero)
       env HOME="$FX_HOME" node "$REPO_ROOT/scripts/run-approval.js" confirm-claude-native >/dev/null 2>&1
-      OUT="$(cd "$SBX" && env "${envv[@]}" "$HETERO" --runner claude-native --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off --branch "feat/acct-$RANDOM" "$@" 2>&1 < /dev/null)" ;;
+      OUT="$(cd "$SBX" && env "${envv[@]}" "$HETERO" --no-verify-tip --runner claude-native --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off --branch "feat/acct-$RANDOM" "$@" 2>&1 < /dev/null)" ;;
   esac
   RC=$?
 }

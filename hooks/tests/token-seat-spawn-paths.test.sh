@@ -115,7 +115,7 @@ mkdir -p "$SBX"
 git -C "$SBX" init -q -b develop
 git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 HETERO="$REPO_ROOT/scripts/dispatch-hetero.sh"
-run_cc() { (cd "$SBX" && ANTHROPIC_BASE_URL="$FAKE_URL" ANTHROPIC_AUTH_TOKEN="$FAKE_AUTH" "$HETERO" --runner cc-shim --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off --branch "$1" 2>&1); }
+run_cc() { (cd "$SBX" && ANTHROPIC_BASE_URL="$FAKE_URL" ANTHROPIC_AUTH_TOKEN="$FAKE_AUTH" "$HETERO" --no-verify-tip --runner cc-shim --model claude-sonnet-4-6 --effort low --prompt-file "$PROMPT" --context-window off --branch "$1" 2>&1); }
 reset_stub
 OUT="$(CLAUDE_CODE_OAUTH_TOKEN="$TOKEN_A" run_cc feat/cc-inherit)"; RC=$?
 assert_file_exists "$INVOKED" "(hetero cc-shim inherit) stub was invoked (rc=$RC)"

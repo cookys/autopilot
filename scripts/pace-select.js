@@ -71,7 +71,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { PACE_SCHEMA, freshReading } = require('./lib/pace-reading.js');
-const { sameEngine } = require('./lib/engine-spelling.js');
+const { sameEngine, isChineseFamily } = require('./lib/engine-spelling.js');
 
 const EXIT_OK = 0;
 const EXIT_USAGE = 2;
@@ -87,13 +87,16 @@ const REVIEWER_FAMILY_EXCLUDE = { agy: ['agy'], glm: ['glm'], agyclaude: ['agycl
 const POOLS_PATH = path.join(__dirname, 'lib', 'noncq-pools.json');
 const ROLES_PATH = path.join(__dirname, 'lib', 'pace-roles.json');
 const RESOLVE_ENDPOINT_SH = path.join(__dirname, 'resolve-endpoint.sh');
+const ENDPOINT_PROBE_JS = path.join(__dirname, 'lib', 'endpoint-probe.js');
 
 const USAGE_TEXT = [
-  'usage: pace-select.js --role <role> [--pace <pace.v1.json>] [--qualified <qualified.v1.json>] [--exclude k1,k2] [--json]',
+  'usage: pace-select.js --role <role> [--pace <pace.v1.json>] [--qualified <qualified.v1.json>] [--exclude k1,k2] [--scope mechanical] [--now <ISO>] [--json]',
   '  --role R        Role to select for (reviewer|implementer|author; required)',
   '  --pace F        capacity.pace/1 file (default: $AUTOPILOT_PACE_FILE, else $HOME/projects/capacity/out/pace.v1.json)',
   '  --qualified F   autopilot.qualified/1 file (default: $AUTOPILOT_QUALIFIED_FILE, else $HOME/.autopilot/qualified.v1.json; falls back to pace-roles.json when missing)',
   '  --exclude k1,k2 Comma-separated engine keys to exclude',
+  '  --scope S       Work scope; a cn_gate (Chinese-family restricted) seat is a candidate only with --scope mechanical',
+  '  --now ISO       Clock for availability windows (default: now)',
   '  --json          Emit JSON output (default)',
   '',
 ].join('\n');
@@ -209,7 +212,7 @@ function mergePools(pools, roles) {
   return { ...rolePools, ...pools };
 }
 
-function defaultCheckEndpoint(endpoint, env = process.env) {
+function defaultCheckEndpoint(endpoint, env = process.env, entry = null) {
   if (typeof endpoint !== 'string' || endpoint.trim() === '') return false;
   const res = spawnSync('bash', [RESOLVE_ENDPOINT_SH, endpoint.trim()], {
     encoding: 'utf8',
@@ -219,12 +222,50 @@ function defaultCheckEndpoint(endpoint, env = process.env) {
   if (res.error || res.status !== 0 || typeof res.stdout !== 'string') {
     return false;
   }
+  let ready;
   try {
     const parsed = JSON.parse(res.stdout);
-    return Boolean(parsed && parsed.ready === true);
+    ready = Boolean(parsed && parsed.ready === true);
   } catch (_err) {
     return false;
   }
+  if (!ready) return false;
+  // A pool entry with `probe_model` is also live-probed: GET <base>/models must answer 200 and list the model
+  // (scripts/lib/endpoint-probe.js, 2 s budget). Anything but decision "ok" is offline, so a restricted seat
+  // whose host is down is skipped, never waited for.
+  const probeModel = entry && typeof entry.probe_model === 'string' ? entry.probe_model.trim() : '';
+  if (probeModel === '') return true;
+  const probe = spawnSync('node', [ENDPOINT_PROBE_JS, '--endpoint', endpoint.trim(), '--model', probeModel], {
+    encoding: 'utf8',
+    env,
+    input: '',
+    timeout: 10000,
+  });
+  if (probe.error || probe.status !== 0 || typeof probe.stdout !== 'string') return false;
+  try {
+    return JSON.parse(probe.stdout.trim()).decision === 'ok';
+  } catch (_err) {
+    return false;
+  }
+}
+
+// `available_window` {tz, start:"HH:MM", end:"HH:MM"}: true when `now` falls in [start, end) on the wall clock
+// of `tz`. A missing or malformed window never restricts (the entry has none).
+function inAvailableWindow(windowSpec, now) {
+  if (!windowSpec || typeof windowSpec !== 'object') return true;
+  const hm = (v) => {
+    const m = /^(\d{1,2}):(\d{2})$/u.exec(String(v || '').trim());
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const start = hm(windowSpec.start);
+  const end = hm(windowSpec.end);
+  if (start === null || end === null) return true;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: windowSpec.tz || 'UTC', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (t) => Number(parts.find((p) => p.type === t).value);
+  const minutes = get('hour') * 60 + get('minute');
+  return minutes >= start && minutes < end;
 }
 
 function validRoleNames(roles) {
@@ -334,6 +375,8 @@ function selectEngine({
   checkEndpoint,
   qualified,
   qualifiedSource,
+  scope,
+  now,
 } = {}) {
   const resolvedPools = pools === undefined ? loadPools() : pools;
   const resolvedRoles = roles === undefined ? loadRoles() : roles;
@@ -408,9 +451,9 @@ function selectEngine({
 
   const endpointProbe = checkEndpoint || defaultCheckEndpoint;
   const endpointCache = new Map();
-  const isEndpointReady = (ep) => {
+  const isEndpointReady = (ep, entry) => {
     if (endpointCache.has(ep)) return endpointCache.get(ep);
-    const ready = Boolean(endpointProbe(ep));
+    const ready = Boolean(endpointProbe(ep, entry));
     endpointCache.set(ep, ready);
     return ready;
   };
@@ -419,13 +462,25 @@ function selectEngine({
   const readyPools = new Map();
   const keyHadPool = new Set();
   const keyHadReadyPool = new Set();
+  const blockedKeys = new Map();
   for (const [poolName, entry] of Object.entries(mergedPools)) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     if (typeof entry.key !== 'string' || !allowedSet.has(entry.key)) continue;
     if (useQualified && !poolEntryEligibleInQualified(entry, role, qualified.rows)) continue;
     keyHadPool.add(entry.key);
+    // cn_gate seat (Chinese-family, restricted): only for mechanical scope and inside its availability window.
+    // Checked before the endpoint probe, so a closed gate costs no network call.
+    if (entry.cn_gate === true) {
+      let blocked = null;
+      if (scope !== 'mechanical') blocked = 'cn_gate_scope';
+      else if (!inAvailableWindow(entry.available_window, now instanceof Date ? now : new Date())) blocked = 'outside_window';
+      if (blocked) {
+        blockedKeys.set(entry.key, blocked);
+        continue;
+      }
+    }
     const endpoint = typeof entry.endpoint === 'string' ? entry.endpoint.trim() : '';
-    if (endpoint !== '' && !isEndpointReady(endpoint)) {
+    if (endpoint !== '' && !isEndpointReady(endpoint, entry)) {
       continue;
     }
     keyHadReadyPool.add(entry.key);
@@ -454,6 +509,30 @@ function selectEngine({
     }
   }
 
+  // A schedule_only pool (flat local engine, no capacity pace row) reads as slack 0 whenever it is ready, so
+  // it ranks behind every pool that is ahead of pace.
+  for (const entry of readyPools.values()) {
+    if (entry.schedule_only === true && !bestByKey.has(entry.key)) {
+      bestByKey.set(entry.key, {
+        key: entry.key,
+        entry,
+        reading: { pool: entry.key, slack: 0, used_pct: null, expected_pct: null },
+        low: false,
+      });
+    }
+  }
+  // Never sole: a cn_gate seat is a candidate only while a non-Chinese-family key has a known reading to pair
+  // with it; the pairing key is reported as `pair_with`.
+  const pairable = [...bestByKey.values()].filter((h) => h.entry.cn_gate !== true && !isChineseFamily(h.entry.family));
+  if (pairable.length === 0) {
+    for (const [key, hit] of [...bestByKey.entries()]) {
+      if (hit.entry.cn_gate === true) {
+        bestByKey.delete(key);
+        blockedKeys.set(key, 'no_non_cn_pair');
+      }
+    }
+  }
+
   const paceGeneratedAt = typeof pace.generated_at === 'string'
     ? pace.generated_at
     : (typeof pace.pace_generated_at === 'string' ? pace.pace_generated_at : null);
@@ -462,6 +541,11 @@ function selectEngine({
   const known = [];
   const lowKeys = [];
   for (const key of allowedKeys) {
+    if (blockedKeys.get(key) === 'cn_gate_scope') continue; // not applicable without --scope mechanical: not listed
+    if (blockedKeys.has(key)) {
+      candidates.push({ engine: key, reason: blockedKeys.get(key) });
+      continue;
+    }
     if (keyHadPool.has(key) && !keyHadReadyPool.has(key)) {
       candidates.push({
         engine: key,
@@ -596,6 +680,10 @@ function selectEngine({
     pace_generated_at: paceGeneratedAt,
     candidates,
   };
+  if (chosen.entry.cn_gate === true) {
+    const pair = pairable.reduce((best, h) => (!best || h.reading.slack > best.reading.slack ? h : best), null);
+    out.cn_gate = { scope: 'mechanical', never_sole: true, pair_with: pair ? pair.key : null };
+  }
   if (chosen.low) {
     out.demoted_last_resort = true;
   }
@@ -612,6 +700,8 @@ function parseArgs(argv) {
     pace: null,
     qualified: null,
     exclude: [],
+    scope: null,
+    now: null,
     json: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -624,7 +714,7 @@ function parseArgs(argv) {
       out.json = true;
       continue;
     }
-    if (a === '--role' || a === '--pace' || a === '--qualified' || a === '--exclude') {
+    if (a === '--role' || a === '--pace' || a === '--qualified' || a === '--exclude' || a === '--scope' || a === '--now') {
       const val = argv[i + 1];
       if (val === undefined || val === '' || val.startsWith('--')) {
         throw usageError(`flag ${a} requires a value`);
@@ -633,6 +723,8 @@ function parseArgs(argv) {
       if (a === '--role') out.role = val;
       else if (a === '--pace') out.pace = val;
       else if (a === '--qualified') out.qualified = val;
+      else if (a === '--scope') out.scope = val;
+      else if (a === '--now') out.now = val;
       else out.exclude.push(val);
       continue;
     }
@@ -717,7 +809,15 @@ function main(argv = process.argv.slice(2), env = process.env) {
     qualifiedSource = qualifiedPath;
   }
 
-  const checkEndpoint = (ep) => defaultCheckEndpoint(ep, env);
+  let nowDate = null;
+  if (flags.now !== null) {
+    nowDate = new Date(flags.now);
+    if (Number.isNaN(nowDate.getTime())) {
+      process.stderr.write(`pace-select.js: --now is not an ISO time: ${flags.now}\n`);
+      return EXIT_USAGE;
+    }
+  }
+  const checkEndpoint = (ep, entry) => defaultCheckEndpoint(ep, env, entry);
   const paceRead = readPaceFile(flags.pace, env);
   if (!paceRead.ok) {
     if (paceRead.status === 'missing') {
@@ -731,6 +831,8 @@ function main(argv = process.argv.slice(2), env = process.env) {
         checkEndpoint,
         qualified,
         qualifiedSource,
+        scope: flags.scope,
+        now: nowDate,
       });
       process.stdout.write(`${JSON.stringify(unknownResult, null, 2)}\n`);
       return EXIT_PACE_UNKNOWN;
@@ -755,6 +857,8 @@ function main(argv = process.argv.slice(2), env = process.env) {
       checkEndpoint,
       qualified,
       qualifiedSource,
+      scope: flags.scope,
+      now: nowDate,
     });
   } catch (err) {
     process.stderr.write(`pace-select.js: ${err.message}\n`);
@@ -775,6 +879,7 @@ module.exports = {
   loadRoles,
   mergePools,
   defaultCheckEndpoint,
+  inAvailableWindow,
   defaultPacePath,
   resolvePacePath,
   readPaceFile,

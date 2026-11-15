@@ -51,6 +51,14 @@
  *     must not share. agy and agyclaude are different families (google vs
  *     anthropic), so choosing agy emits ["agy"] and never excludes agyclaude;
  *     callers pass it to a follow-up `--role reviewer --exclude <joined>`.
+ *   - A pool with `available_dates_file` is offered only when today's Asia/Taipei
+ *     date is a line of that file (one YYYY-MM-DD per line; blank lines and lines
+ *     starting with # are ignored) AND its `available_window` holds. `~` expands
+ *     to $HOME. AUTOPILOT_DS_SEAM_DAYS_FILE overrides the path. The file is read
+ *     at pick time, never cached. Missing or unreadable: seam_days_unreadable.
+ *     A non-blank non-comment line that is not YYYY-MM-DD: bad_available_dates.
+ *     Date not listed: not_seam_day. Outside the window stays outside_window.
+ *     Absent the key, the window rule is unchanged. A skipped seat is not chosen.
  *   - If no candidate key has a known fresh reading, emit
  *     { engine: null, reason: "pace_unknown", low_keys: [], ... } and exit 3.
  *
@@ -96,7 +104,7 @@ const USAGE_TEXT = [
   '  --qualified F   autopilot.qualified/1 file (default: $AUTOPILOT_QUALIFIED_FILE, else $HOME/.autopilot/qualified.v1.json; falls back to pace-roles.json when missing)',
   '  --exclude k1,k2 Comma-separated engine keys to exclude',
   '  --scope S       Work scope; a cn_gate (Chinese-family restricted) seat is a candidate only with --scope mechanical',
-  '  --now ISO       Clock for availability windows (default: now)',
+  '  --now ISO       Clock for availability windows and seam-day dates (default: now)',
   '  --json          Emit JSON output (default)',
   '',
 ].join('\n');
@@ -268,6 +276,68 @@ function inAvailableWindow(windowSpec, now) {
   return minutes >= start && minutes < end;
 }
 
+// Asia/Taipei calendar date for seam-day lists. The window's own tz is not reused:
+// the file's contract is one YYYY-MM-DD in Asia/Taipei per line.
+const SEAM_DAY_TZ = 'Asia/Taipei';
+const SEAM_DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function taipeiDate(now) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SEAM_DAY_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const get = (t) => parts.find((p) => p.type === t).value;
+  return `${get('year')}-${get('month').padStart(2, '0')}-${get('day').padStart(2, '0')}`;
+}
+
+function isCalendarDate(text) {
+  const m = SEAM_DAY_RE.exec(text);
+  if (!m) return false;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  return dt.getUTCFullYear() === year && dt.getUTCMonth() === month - 1 && dt.getUTCDate() === day;
+}
+
+// null when the seat has no date list, or today's Asia/Taipei date is listed.
+// Otherwise not_seam_day | seam_days_unreadable | bad_available_dates.
+// The key absent (or null) is not a restriction, and the env override is ignored then.
+// A present key that is empty or not a string fails closed (seam_days_unreadable).
+function seamDayBlock(entry, now, env = process.env) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+  if (!Object.prototype.hasOwnProperty.call(entry, 'available_dates_file') || entry.available_dates_file == null) {
+    return null;
+  }
+  const spec = entry.available_dates_file;
+  if (typeof spec !== 'string' || spec.trim() === '') return 'seam_days_unreadable';
+  const override = env && typeof env.AUTOPILOT_DS_SEAM_DAYS_FILE === 'string'
+    ? env.AUTOPILOT_DS_SEAM_DAYS_FILE.trim()
+    : '';
+  const raw = override !== '' ? override : spec.trim();
+  let filePath;
+  try {
+    filePath = path.resolve(expandHome(raw, env || process.env));
+  } catch (_err) {
+    return 'seam_days_unreadable';
+  }
+  let text;
+  try {
+    text = fs.readFileSync(filePath, 'utf8');
+  } catch (_err) {
+    return 'seam_days_unreadable';
+  }
+  const clock = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+  const today = taipeiDate(clock);
+  let listed = false;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === '' || trimmed.startsWith('#')) continue;
+    if (!isCalendarDate(trimmed)) return 'bad_available_dates';
+    if (trimmed === today) listed = true;
+  }
+  return listed ? null : 'not_seam_day';
+}
+
 function validRoleNames(roles) {
   return Object.keys(roles)
     .filter((k) => !k.startsWith('_') && Array.isArray(roles[k]))
@@ -377,7 +447,9 @@ function selectEngine({
   qualifiedSource,
   scope,
   now,
+  env,
 } = {}) {
+  const resolvedEnv = env && typeof env === 'object' ? env : process.env;
   const resolvedPools = pools === undefined ? loadPools() : pools;
   const resolvedRoles = roles === undefined ? loadRoles() : roles;
   if (!resolvedPools || typeof resolvedPools !== 'object' || Array.isArray(resolvedPools)) {
@@ -468,16 +540,22 @@ function selectEngine({
     if (typeof entry.key !== 'string' || !allowedSet.has(entry.key)) continue;
     if (useQualified && !poolEntryEligibleInQualified(entry, role, qualified.rows)) continue;
     keyHadPool.add(entry.key);
-    // cn_gate seat (Chinese-family, restricted): only for mechanical scope and inside its availability window.
+    // cn_gate seat (Chinese-family, restricted): only for mechanical scope, inside its
+    // availability window, and — when available_dates_file is set — on a listed seam day.
     // Checked before the endpoint probe, so a closed gate costs no network call.
-    if (entry.cn_gate === true) {
-      let blocked = null;
-      if (scope !== 'mechanical') blocked = 'cn_gate_scope';
-      else if (!inAvailableWindow(entry.available_window, now instanceof Date ? now : new Date())) blocked = 'outside_window';
-      if (blocked) {
-        blockedKeys.set(entry.key, blocked);
-        continue;
-      }
+    // Outside the window stays outside_window and does not read the date file.
+    // A present available_dates_file on any seat uses the same seamDayBlock helper.
+    const clock = now instanceof Date ? now : new Date();
+    let blocked = null;
+    if (entry.cn_gate === true && scope !== 'mechanical') blocked = 'cn_gate_scope';
+    else if (entry.cn_gate === true && !inAvailableWindow(entry.available_window, clock)) blocked = 'outside_window';
+    else {
+      const seamReason = seamDayBlock(entry, clock, resolvedEnv);
+      if (seamReason) blocked = seamReason;
+    }
+    if (blocked) {
+      blockedKeys.set(entry.key, blocked);
+      continue;
     }
     const endpoint = typeof entry.endpoint === 'string' ? entry.endpoint.trim() : '';
     if (endpoint !== '' && !isEndpointReady(endpoint, entry)) {
@@ -833,6 +911,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
         qualifiedSource,
         scope: flags.scope,
         now: nowDate,
+        env,
       });
       process.stdout.write(`${JSON.stringify(unknownResult, null, 2)}\n`);
       return EXIT_PACE_UNKNOWN;
@@ -859,6 +938,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
       qualifiedSource,
       scope: flags.scope,
       now: nowDate,
+      env,
     });
   } catch (err) {
     process.stderr.write(`pace-select.js: ${err.message}\n`);
@@ -880,6 +960,7 @@ module.exports = {
   mergePools,
   defaultCheckEndpoint,
   inAvailableWindow,
+  seamDayBlock,
   defaultPacePath,
   resolvePacePath,
   readPaceFile,

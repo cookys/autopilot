@@ -23,6 +23,7 @@ const SAFE = /(JSON\.stringify|emitAdditionalContext|additionalContextJson)/;
 // file:needle -> why a non-JSON write is intended. A needle must appear on the flagged line.
 const ALLOW = [
   ['state-checkpoint.js', 'Preserve the following workflow state', 'PreCompact: stdout is merged into the compaction summarizer instructions, not shown to the model (plan 2.1)'],
+  ['fleet-stop.js', 'process.stdout.write(r.stdout)', 'verbatim passthrough of `fleet hook stop` stdout, which is the Stop decision JSON (or nothing); this wrapper adds no text'],
   ['opt-in-multiplexer.js', 'exit2Child.stdout', 'exit-2 passthrough of a child that already wrote JSON (or nothing)'],
 ];
 

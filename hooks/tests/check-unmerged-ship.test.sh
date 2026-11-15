@@ -26,7 +26,7 @@ if [ "\$1" = whoami ] && [ "\$2" = --session ]; then
   echo "session_unknown: \$3" >&2; exit 2
 fi
 if [ "\$1" = whoami ]; then
-  [ -f "$TEST_TMP/shim-whoami-cli" ] && { echo "courier socket mismatch" >&2; echo "address:   cookys/aimax395-team/fleet-cli   (this CLI's identity; replies land in fleet inbox)"; exit 0; }
+  [ -f "$TEST_TMP/shim-whoami-cli" ] && { echo "courier socket mismatch" >&2; echo "address:   ns/host/fleet-cli   (this CLI's identity; replies land in fleet inbox)"; exit 0; }
   exit 1
 fi
 [ -f "$TEST_TMP/shim-invalid" ] && { echo "blocked_on_invalid: bad target" >&2; exit 2; }

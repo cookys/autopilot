@@ -171,7 +171,7 @@ function attempt(ctx, c, n) {
       const git = (...a) => cp.execFileSync('git', ['-C', repo, '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...a], { env: { ...process.env, ...GIT_ENV }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
       git('init', '-q', '-b', 'main'); git('add', '-A'); git('commit', '-q', '-m', 'base');
       const pf = path.join(tmp, 'prompt.txt'); fs.writeFileSync(pf, prompt);
-      railOut = cp.spawnSync('bash', [path.join(REPO, 'scripts/dispatch-hetero.sh'), '--runner', 'claude-native', '--model', model, '--prompt-file', pf, '--branch', `rk/${cellId}`, '--base', 'main', '--timeout', ctx.opts.timeout, '--keep-worktree', '--retain-owner', 'rkrun', '--retain-reason', 'pilot-check-workdir', '--retain-until', String(Math.floor(Date.now() / 1000) + 3600), ...kitArgs],
+      railOut = cp.spawnSync('bash', [path.join(REPO, 'scripts/dispatch-hetero.sh'), '--runner', 'claude-native', '--model', model, '--prompt-file', pf, '--branch', `rk/${cellId}`, '--base', 'main', '--timeout', ctx.opts.timeout, '--keep-worktree', '--retain-owner', 'rkrun', '--retain-reason', 'pilot-check-workdir', '--retain-until', String(Math.floor(Date.now() / 1000) + 3600), '--no-verify-tip', ...kitArgs],
         { cwd: repo, env, encoding: 'utf8', input: '', maxBuffer: 1 << 26 });
       r = lastJsonLine(railOut.stdout);
       if (r && ['committed', 'no_op', 'dirty'].includes(r.status) && r.agent_log) { answerText = fs.readFileSync(r.agent_log, 'utf8'); workdir = r.worktree; }

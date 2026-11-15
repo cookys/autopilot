@@ -261,23 +261,29 @@
 #      tip_verify:"skipped_by_flag" (no commands run).
 #
 # Acceptance extraction (deterministic; the original brief, before skill-pack):
+#   put acceptance commands in a fenced block under ## Acceptance.
 #   The section is the lines after a line matching ^## Acceptance[[:space:]]*$
 #   until the next line matching ^##[[:space:]] or EOF. A longer heading
 #   (## Acceptance criteria) does not open the section.
-#   A line whose trim starts with ``` opens or closes a fence (```bash counts).
-#   Inside a fence, each later line until the closing fence is a candidate;
-#   the fence lines themselves are not, and a fenced line is not also scanned
-#   for inline spans.
-#   Outside fences, every inline span matching `([^`\n]+)` is a candidate.
-#   A candidate is kept when, after trim, it is non-empty, does not start with
-#   #, and its first whitespace-separated token is executable-looking: it
-#   starts with ./ or ../ or /, OR it matches ^[A-Za-z][A-Za-z0-9_+-]*$
-#   (no dot, so tip_verify.status is not a command; true, false, sleep, bash,
-#   cargo, npm, node, make, pytest, go, env, timeout match).
-#   Kept text is the trimmed candidate, in document order.
+#   Only lines inside a fenced code block directly under that heading are
+#   commands. The opener is a trimmed line ``` or ```bash or ```sh; any other
+#   ``` line toggles a non-command fence. Inline code in prose is ignored.
+#   A fenced line containing a <word> placeholder (<[A-Za-z_][A-Za-z0-9_-]*>)
+#   fails extraction with a precondition error naming that line, before the
+#   worker starts. Other fenced lines are kept when, after trim, they are
+#   non-empty, do not start with #, and the first whitespace-separated token
+#   is executable-looking: it starts with ./ or ../ or /, OR it matches
+#   ^[A-Za-z][A-Za-z0-9_+-]*$ (no dot, so tip_verify.status is not a command;
+#   true, false, sleep, bash, cargo, npm, node, make, pytest, go, env,
+#   timeout match). Kept text is the trimmed line, in document order.
 #   ## Test Command: lines after ^## Test Command[[:space:]]*$ until the next
-#   ^##[[:space:]] or EOF. The first trimmed non-empty line that does not start
-#   with # is the whole command (no executable-looking filter).
+#   ^##[[:space:]] or EOF. A command counts only inside a fenced code block
+#   (a line whose trim starts with ``` opens or closes it; ```bash and ```sh
+#   count, other languages do not) or when the whole trimmed line is one
+#   inline span `...`. It must pass the same executable-looking check and
+#   contain no <word> placeholder (a <[A-Za-z_][A-Za-z0-9_-]*> token). Anything
+#   else is not a repo_config source. Prose and a numbered step with an inline
+#   span are not commands.
 #
 # Run: `timeout <secs> bash -c <cmd>` in the dispatch worktree, stdin from
 # /dev/null, environment without AUTOPILOT_SESSION_ID. --verify-timeout is a
@@ -3557,7 +3563,7 @@ resolve_tip_verify_commands() {
       || die_precondition "cannot encode --verify-cmd list"
     return 0
   fi
-  local extracted="" repo_root="" cfg_line=""
+  local extracted="" extract_rc=0 repo_root="" cfg_line=""
   if [ -n "${PROMPT_FILE:-}" ] && [ -r "$PROMPT_FILE" ]; then
     extracted="$(node - "$PROMPT_FILE" <<'NODE'
 const fs = require("fs");
@@ -3569,11 +3575,15 @@ function executableLooking(cmd) {
   if (token.startsWith("./") || token.startsWith("../") || token.startsWith("/")) return true;
   return /^[A-Za-z][A-Za-z0-9_+-]*$/.test(token);
 }
+function hasPlaceholder(s) {
+  return /<[A-Za-z_][A-Za-z0-9_-]*>/.test(s);
+}
 const lines = text.split(/\n/);
 let inSection = false;
-let inFence = false;
+let fence = null;
 const cmds = [];
-for (const line of lines) {
+for (let i = 0; i < lines.length; i++) {
+  const line = lines[i];
   if (!inSection) {
     if (/^## Acceptance\s*$/.test(line)) inSection = true;
     continue;
@@ -3581,22 +3591,29 @@ for (const line of lines) {
   if (/^## /.test(line)) break;
   const trimmed = line.trim();
   if (trimmed.startsWith("```")) {
-    inFence = !inFence;
+    if (fence !== null) fence = null;
+    else {
+      const lang = trimmed.slice(3).trim().split(/\s+/)[0] || "";
+      fence = (lang === "" || lang === "bash" || lang === "sh") ? "cmd" : "other";
+    }
     continue;
   }
-  if (inFence) {
-    if (executableLooking(line)) cmds.push(line.trim());
-    continue;
+  if (fence !== "cmd") continue;
+  if (hasPlaceholder(line)) {
+    process.stdout.write("line " + (i + 1) + ": " + line);
+    process.exit(3);
   }
-  const re = /`([^`\n]+)`/g;
-  let m;
-  while ((m = re.exec(line))) {
-    if (executableLooking(m[1])) cmds.push(m[1].trim());
-  }
+  if (executableLooking(line)) cmds.push(trimmed);
 }
 if (cmds.length) process.stdout.write(JSON.stringify(cmds));
 NODE
-)" || extracted=""
+)" || extract_rc=$?
+    if [ "$extract_rc" -eq 3 ]; then
+      die_precondition "acceptance fence has a <word> placeholder (${extracted}). put acceptance commands in a fenced block under ## Acceptance"
+    fi
+    if [ "$extract_rc" -ne 0 ]; then
+      extracted=""
+    fi
   fi
   if [ -n "$extracted" ] && [ "$extracted" != "[]" ]; then
     TIP_VERIFY_SOURCE="brief"
@@ -3608,29 +3625,54 @@ NODE
     cfg_line="$(node - "$repo_root/.claude/quality-gate-config.md" <<'NODE'
 const fs = require("fs");
 const text = fs.readFileSync(process.argv[2], "utf8");
+function executableLooking(cmd) {
+  const trimmed = String(cmd).trim();
+  if (!trimmed || trimmed.startsWith("#")) return false;
+  const token = trimmed.split(/\s+/)[0];
+  if (token.startsWith("./") || token.startsWith("../") || token.startsWith("/")) return true;
+  return /^[A-Za-z][A-Za-z0-9_+-]*$/.test(token);
+}
+function hasPlaceholder(s) {
+  return /<[A-Za-z_][A-Za-z0-9_-]*>/.test(s);
+}
 const lines = text.split(/\n/);
 let inSection = false;
+let fence = null;
+const cmds = [];
 for (const line of lines) {
   if (!inSection) {
     if (/^## Test Command\s*$/.test(line)) inSection = true;
     continue;
   }
   if (/^## /.test(line)) break;
-  const t = line.trim();
-  if (!t || t.startsWith("#")) continue;
-  process.stdout.write(t);
-  break;
+  const trimmed = line.trim();
+  if (trimmed.startsWith("```")) {
+    if (fence !== null) fence = null;
+    else {
+      const lang = trimmed.slice(3).trim().split(/\s+/)[0] || "";
+      fence = (lang === "" || lang === "bash" || lang === "sh") ? "cmd" : "other";
+    }
+    continue;
+  }
+  let candidate = null;
+  if (fence === "cmd") candidate = trimmed;
+  else if (fence === null) {
+    const m = trimmed.match(/^`([^`\n]+)`$/);
+    if (m) candidate = m[1].trim();
+  }
+  if (candidate === null || !candidate || hasPlaceholder(candidate)) continue;
+  if (executableLooking(candidate)) cmds.push(candidate);
 }
+if (cmds.length) process.stdout.write(JSON.stringify(cmds));
 NODE
 )" || cfg_line=""
   fi
-  if [ -n "$cfg_line" ]; then
+  if [ -n "$cfg_line" ] && [ "$cfg_line" != "[]" ]; then
     TIP_VERIFY_SOURCE="repo_config"
-    TIP_VERIFY_CMDS_JSON="$(node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "$cfg_line")" \
-      || die_precondition "cannot encode repo test command"
+    TIP_VERIFY_CMDS_JSON="$cfg_line"
     return 0
   fi
-  die_precondition "no tip-verify command: pass --verify-cmd, or put a command in the brief ## Acceptance section, or set ## Test Command in .claude/quality-gate-config.md, or pass --no-verify-tip"
+  die_precondition "no tip-verify command: pass --verify-cmd, or put acceptance commands in a fenced block under ## Acceptance, or set a fenced or whole-line command under ## Test Command in .claude/quality-gate-config.md, or pass --no-verify-tip"
 }
 
 # run_tip_verify — re-run the captured commands at the committed tip.

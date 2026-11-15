@@ -192,6 +192,7 @@ for c in "${cases[@]}"; do
     --runner "$RUNNER"
     --model "$MODEL"
     --skill-mode "$SKILL_MODE"
+    --no-verify-tip
   )
   if [ -n "$TEMP_STORE_DIR" ]; then
     dispatch_args+=(--store "$TEMP_STORE_DIR")

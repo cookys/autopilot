@@ -33,10 +33,15 @@ if [ "$n" -gt 120 ]; then
   : > "$violation_file"
 fi
 model=''
+verify_tip=0
 while [ "$#" -gt 0 ]; do
   if [ "$1" = '--model' ]; then model="$2"; shift 2; continue; fi
+  if [ "$1" = '--no-verify-tip' ]; then verify_tip=1; shift; continue; fi
   shift
 done
+if [ "$verify_tip" -ne 1 ]; then
+  printf 'missing --no-verify-tip\n' >> "${violation_file}.verify"
+fi
 runner='grok'
 provider="provider-$n"
 mode="${GROK_AB_TEST_MODE:-failure}"
@@ -139,6 +144,7 @@ assert_eq "indeterminate" "$(jq -r '.decision' "$REPORT_MAX" 2>/dev/null)" \
   "max-pairs report remains indeterminate"
 assert_eq "4" "$(jq -r '.provider_sessions' "$REPORT_MAX" 2>/dev/null)" \
   "max-pairs consumes exactly its reserved attempts"
+assert_file_absent "$VIOLATION.verify" "ab dispatch passes --no-verify-tip"
 set +e
 node "$REPO_ROOT/scripts/validate-grok-implementer-ab.js" --report "$REPORT_MAX" \
   --seed "$SEED_MAX" --tasks "$TASKS_MAX" >"$TEST_TMP/max.validate.out" 2>&1

@@ -65,11 +65,30 @@ cat > "$PROMPT_ACC" <<'EOF'
 edit the tree
 
 ## Acceptance
-`bash -c 'exit 3'`
 `tip_verify.status` is not a command.
+
+```bash
+bash -c 'exit 3'
+```
 
 ## Notes
 done
+EOF
+PROMPT_PROSE="$TEST_TMP/prompt-prose.txt"
+cat > "$PROMPT_PROSE" <<'EOF'
+edit the tree
+
+## Acceptance
+Run `false`, then `bash scripts/sync-all.sh` and `--check; echo $?`.
+EOF
+PROMPT_PH="$TEST_TMP/prompt-ph.txt"
+cat > "$PROMPT_PH" <<'EOF'
+edit the tree
+
+## Acceptance
+```bash
+bash <f> < /dev/null
+```
 EOF
 
 last_json() { printf '%s\n' "$1" | grep '^{' | tail -n 1; }
@@ -101,6 +120,9 @@ run_case() {
   J="$(last_json "$OUT")"
 }
 
+HELP="$("$SCRIPT" --help)"
+assert_contains "$HELP" "put acceptance commands in a fenced block under ## Acceptance" "help says to put acceptance commands in a fenced block under ## Acceptance"
+
 # --- no source: refuse before the implementation stub runs ---
 rm -f "$MARKER"
 run_case tv-none
@@ -111,6 +133,16 @@ assert_contains "$OUT" "## Acceptance" "no source names ## Acceptance"
 assert_contains "$OUT" "## Test Command" "no source names ## Test Command"
 assert_contains "$OUT" "--no-verify-tip" "no source names --no-verify-tip"
 assert_file_absent "$MARKER" "no source: runner stub never ran"
+
+# --- prose with inline code only: not a brief source ---
+rm -f "$MARKER"
+CASE_PROMPT="$PROMPT_PROSE"
+run_case tv-prose
+CASE_PROMPT="$PROMPT_PLAIN"
+assert_eq "$EXIT" "2" "prose inline acceptance exits 2"
+assert_eq "$(jget "$J" status)" "precondition_failed" "prose inline acceptance is not a brief source"
+assert_neq "$(jget "$J" tip_verify.source)" "brief" "prose inline is not source brief"
+assert_file_absent "$MARKER" "prose inline: runner stub never ran"
 
 # --- flag true: success, tip_verify pass, commit is the branch tip ---
 run_case tv-true --verify-cmd true
@@ -144,13 +176,38 @@ assert_eq "$(jget "$J" tip_verify.commands.0.cmd)" "bash -c 'exit 3'" "hydrogen 
 assert_eq "$(jget "$J" tip_verify.commands.0.rc)" "3" "hydrogen records rc 3"
 assert_eq "$(jget "$J" tip_verify.commands.1.cmd)" "" "non-command span is not a command"
 
+# --- this repo's real ## Test Command shape: prose + numbered inline code is not a command ---
+rm -f "$MARKER"
+mkdir -p "$SBX/.claude"
+cat > "$SBX/.claude/quality-gate-config.md" <<'EOF'
+## Test Command
+
+Test step: select first, then run (from the repository root).
+
+1. Run `node scripts/affected-suites.js --base <target-branch> --head HEAD --json`.
+2. `mode: "selective"`: run every path in `suites` (it already includes `always_run`) and every path in `extra_runners`, and nothing else is required. `mode: "full"`: run `bash hooks/tests/run.sh` (the whole suite) plus every `extra_runners` entry, because run.sh does not run those.
+3. An empty `suites` list is a pass only when every changed file is prose (selective, no `full_reasons`). An empty list from a non-prose change, or any `full` mode, is never a pass.
+4. Release preflight is always the whole suite (`bash hooks/tests/run.sh` plus `extra_runners`), whatever the selector says.
+
+`bash hooks/tests/run.sh` runs the L1 unit suite (`node --test hooks/*.test.js`) plus all L2 integration tests under `hooks/tests/*.test.sh`.
+EOF
+run_case tv-repo-prose
+assert_eq "$EXIT" "2" "real-shape repo prose exits 2"
+assert_eq "$(jget "$J" status)" "precondition_failed" "real-shape repo prose is precondition_failed"
+assert_neq "$(jget "$J" status)" "verify_failed" "real-shape repo prose is not verify_failed"
+assert_neq "$(jget "$J" tip_verify.source)" "repo_config" "real-shape repo prose is not repo_config"
+assert_file_absent "$MARKER" "real-shape repo prose: runner stub never ran"
+
 # --- repo config Test Command, no flag, no Acceptance ---
 mkdir -p "$SBX/.claude"
 cat > "$SBX/.claude/quality-gate-config.md" <<'EOF'
 # repo default
 ## Test Command
 # not this
+Test step: select first, then run (from the repository root).
+```bash
 true
+```
 
 ## Later
 false
@@ -160,6 +217,28 @@ assert_eq "$EXIT" "0" "repo_config exits 0"
 assert_eq "$(jget "$J" status)" "committed" "repo_config status committed"
 assert_eq "$(jget "$J" tip_verify.status)" "pass" "repo_config pass"
 assert_eq "$(jget "$J" tip_verify.source)" "repo_config" "repo_config source"
+
+# --- whole line that is one inline span is a repo_config command ---
+cat > "$SBX/.claude/quality-gate-config.md" <<'EOF'
+## Test Command
+
+`true`
+EOF
+run_case tv-repo-inline
+assert_eq "$EXIT" "0" "whole-line inline repo_config exits 0"
+assert_eq "$(jget "$J" tip_verify.source)" "repo_config" "whole-line inline source repo_config"
+assert_eq "$(jget "$J" tip_verify.status)" "pass" "whole-line inline repo_config pass"
+
+# --- fenced <f> is a precondition before the runner, even when repo_config would pass ---
+rm -f "$MARKER"
+CASE_PROMPT="$PROMPT_PH"
+run_case tv-ph
+CASE_PROMPT="$PROMPT_PLAIN"
+assert_eq "$EXIT" "2" "placeholder fence exits 2"
+assert_eq "$(jget "$J" status)" "precondition_failed" "placeholder fence is precondition_failed"
+assert_contains "$OUT" "<f>" "placeholder fence names the line"
+assert_contains "$OUT" "bash <f> < /dev/null" "placeholder fence quotes the line"
+assert_file_absent "$MARKER" "placeholder fence: runner stub never ran"
 
 # --- explicit skip ---
 run_case tv-skip --no-verify-tip

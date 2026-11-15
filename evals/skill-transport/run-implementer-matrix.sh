@@ -357,7 +357,7 @@ fs.writeFileSync(process.argv[1],p.join("\n"));' "$prompt"
   dispatch_err="$cell/dispatch.stderr"
   branch="bench/$cell_slug"
   dispatch_args=(--branch "$branch" --prompt-file "$prompt" --runner codex --model "$ENGINE" --effort "$EFFORT" \
-    --base "$base_sha" --timeout "$TIMEOUT" --codex-bin "$CODEX_BIN" --context-window block)
+    --base "$base_sha" --timeout "$TIMEOUT" --codex-bin "$CODEX_BIN" --context-window block --no-verify-tip)
   if [ "$arm" = "pack" ]; then dispatch_args+=(--skill-mode prompt --skill implementer-pack); else dispatch_args+=(--skill-mode off); fi
   set +e
   (cd "$repo" && DISPATCH_DETACH=0 AUTOPILOT_PARENT_RUN_ID="$ROOT_RUN_ID" AUTOPILOT_ROOT_RUN_ID="$ROOT_RUN_ID" \

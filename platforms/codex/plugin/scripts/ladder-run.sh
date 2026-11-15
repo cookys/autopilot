@@ -316,6 +316,9 @@ if [ -n "$IMPL_PROMPT" ]; then
   echo "-- impl: dispatching worktree-isolated implementer ($IMPL_RUNNER) --"
   HARGS=(--branch "$BRANCH" --prompt-file "$IMPL_PROMPT" --runner "$IMPL_RUNNER" --base "$BASE_SHA")
   [ -n "$IMPL_MODEL" ] && HARGS+=(--model "$IMPL_MODEL")
+  # The ladder's own acceptance is the later review and optional --gate-cmd, not the
+  # tip rail. The impl prompt is an owner task, not a fenced ## Acceptance command.
+  HARGS+=(--no-verify-tip)
   IMPL_JSON="$("$HETERO" "${HARGS[@]}")" || die "dispatch-hetero failed: $IMPL_JSON"
   [ "$(printf '%s' "$IMPL_JSON" | jq -r '.status')" = "committed" ] || die "implementer did not commit ($(printf '%s' "$IMPL_JSON" | jq -r '.status'))"
   IMPL_COMMIT=$(printf '%s' "$IMPL_JSON" | jq -r '.commit // empty')

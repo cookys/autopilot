@@ -292,7 +292,7 @@ plan_sweep() {
         echo "    --endpoint $endpoint --sandbox bwrap --worktree-parent <dir outside the probe repo> \\"
       fi
     fi
-    echo "    --timeout 240s --scaffold-tier off"
+    echo "    --timeout 240s --scaffold-tier off --no-verify-tip"
     echo "  # rc 0 + \"status\": \"committed\" -> probe receipt rc=0 appended to $bundle/probe-receipts.jsonl, proceed"
     echo "  # otherwise -> probe receipt rc=1 appended (instrument_charged:false), SKIP administration (uncharged)"
     if [ -n "$vbin" ]; then
@@ -428,7 +428,7 @@ EOF
   local out
   out=$(cd "$pd" && timeout 320 bash "$REPO_ROOT/scripts/dispatch-hetero.sh" \
     --branch probe-1 --prompt-file "$pd/.prompt.txt" --runner "$runner" --model "$model" \
-    --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off \
+    --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off --no-verify-tip \
     ${sbx_args[@]+"${sbx_args[@]}"} 2>"$pd/.dispatch.err" | tee "$pd/.dispatch.out" | tail -1)
   # BL-0294: a probe that died on authentication means every later seat dies the same way. Read every output of
   # the call (full stdout, stderr, and the runner's agent_log the result names) BEFORE the scratch dir is removed.

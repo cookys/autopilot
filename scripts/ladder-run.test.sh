@@ -40,6 +40,7 @@ cp "$LADDER" "$IMPL_BIN/ladder-run.sh"
 cat > "$IMPL_BIN/dispatch-hetero.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '%s\n' "$@" > "${TMPDIR}/hetero-argv"
 branch=""; base=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -92,6 +93,11 @@ if [ "$IMPL_RC" = "0" ] && grep -q 'DRY-RUN: would emit' <<<"$IMPL_OUT"; then
   ok "impl path uses returned commit when dispatch-hetero emits worktree:null"
 else
   bad "impl path failed with worktree:null returned commit (rc=$IMPL_RC): $IMPL_OUT"
+fi
+if grep -qx -- '--no-verify-tip' "$TMP/hetero-argv"; then
+  ok "impl path passes --no-verify-tip"
+else
+  bad "impl path did not pass --no-verify-tip: $(cat "$TMP/hetero-argv" 2>/dev/null)"
 fi
 set +e
 STALE_OUT="$(cd "$IMPL_SBX" && FAKE_IMPL_MODE=stale-tip "$IMPL_BIN/ladder-run.sh" run --task-class doc-sync --change-id impl-stale-tip \

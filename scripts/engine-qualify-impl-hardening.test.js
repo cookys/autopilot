@@ -339,7 +339,7 @@ function liveRail(mode) {
     DISPATCH,
     '--runner', 'grok', '--model', 'grok-4.5', '--effort', 'high', '--grok-bin', bin,
     '--branch', BRANCH, '--prompt-file', prompt, '--base', 'HEAD', '--timeout', '60',
-    '--scaffold-tier', 'off',
+    '--scaffold-tier', 'off', '--no-verify-tip',
   ], {
     cwd: repo,
     encoding: 'utf8',

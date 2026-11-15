@@ -22,6 +22,7 @@ FAILN=0
 ok() { PASS=$((PASS + 1)); }
 bad() { FAILN=$((FAILN + 1)); printf 'FAIL: %s\n' "$*" >&2; }
 assert_eq() { [ "$1" = "$2" ] && ok || bad "$3 (expected=$2 actual=$1)"; }
+grep -q -- '--no-verify-tip' "$RUNNER" && ok "matrix dispatch passes --no-verify-tip" || bad "matrix dispatch does not pass --no-verify-tip"
 sha() { sha256sum "$1" | awk '{print $1}'; }
 
 TASKS="$TMP/tasks"

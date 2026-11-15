@@ -12,6 +12,12 @@ const firstKey = () => rp.loadPlan().ordered[0];
 const scenarioFile = (d, sc) => { const f = path.join(d, 'sc.json'); fs.writeFileSync(f, JSON.stringify(sc)); return f; };
 const refusal = (f) => { try { f(); } catch (e) { return e.refusal ? e.message : `not a refusal: ${e.message}`; } return null; };
 
+test('hetero cells pass --no-verify-tip', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'run-pilot.js'), 'utf8');
+  const line = src.split('\n').find((l) => l.includes('dispatch-hetero.sh') && l.includes('spawnSync'));
+  assert.ok(line && line.includes("'--no-verify-tip'"), 'run-pilot hetero spawn passes --no-verify-tip');
+});
+
 test('parseArgs: account, out and model ids are required for a real run; --scenario only with --dry-run', () => {
   assert.match(refusal(() => rp.parseArgs(['--out', 'x'])), /--account/);
   assert.match(refusal(() => rp.parseArgs(['--account', 'a'])), /--out/);

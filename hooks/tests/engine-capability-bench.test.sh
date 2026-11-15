@@ -54,5 +54,7 @@ assert_contains "$OUT" "ERROR: --live-spend is required" "without live-spend men
 MAIN_PAYLOAD="$(sed -n '/const payload = {/,/last_bench_id/p' "$SCRIPT")"
 assert_contains "$MAIN_PAYLOAD" 'status: "unknown"' "bench authoritative quota status recorded as unknown"
 assert_not_contains "$MAIN_PAYLOAD" 'status: "available"' "bench does not hardcode quota available in the authoritative record"
+DISPATCH_ARGS="$(awk '/dispatch_args=\(/,/^  \)/' "$SCRIPT")"
+assert_contains "$DISPATCH_ARGS" "--no-verify-tip" "bench dispatch passes --no-verify-tip"
 
 finalize_test

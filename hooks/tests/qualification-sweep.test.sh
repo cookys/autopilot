@@ -74,6 +74,7 @@ PLAN_EXIT=$?
 assert_exit_code "$PLAN_EXIT" "0" "--plan exit code"
 
 assert_contains "$PLAN_OUT" "node scripts/engine-qualify.js implementer" "plan contains engine-qualify.js invocation"
+assert_contains "$PLAN_OUT" "--no-verify-tip" "plan probe passes --no-verify-tip"
 
 # seat-alpha resolved fields
 assert_contains "$PLAN_OUT" "seat-alpha" "plan names seat-alpha"

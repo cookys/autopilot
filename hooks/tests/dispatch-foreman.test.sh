@@ -146,16 +146,39 @@ assert_file_exists "$RD/protocol.md" "2: protocol written"
 assert_contains "$(cat "$RD/protocol.md")" "hands/r2/" "2: protocol names the hands namespace"
 assert_contains "$(cat "$RD/protocol.md")" "wait-dispatch-results.js" "2: protocol points at the wait primitive"
 assert_contains "$(cat "$RD/protocol.md")" '--out "$RUN_DIR/panel/' "foreman protocol requires qc-panel --out rooted at RUN_DIR/panel/"
+assert_not_contains "$(cat "$RD/protocol.md")" "--no-verify-tip" "2: no verify flag leaves tip resolution to the hand"
+assert_not_contains "$(cat "$RD/protocol.md")" "--verify-cmd" "2: no verify flag is not written into the hand line"
+assert_not_contains "$(cat "$RD/protocol.md")" "__VERIFY_FORWARD_SLOT__" "2: empty verify slot is removed"
+SD_R2="$SD"
+run_foreman complete r2tip --no-verify-tip
+assert_eq "$RC" "0" "2b: --no-verify-tip still completes"
+assert_contains "$(cat "$RD/protocol.md")" "--no-verify-tip" "2b: protocol forwards --no-verify-tip"
+run_foreman complete r2cmd --verify-cmd true
+assert_eq "$RC" "0" "2c: --verify-cmd still completes"
+assert_contains "$(cat "$RD/protocol.md")" "--verify-cmd true" "2c: protocol forwards --verify-cmd"
+run_foreman complete r2dol --verify-cmd 'echo $HOME'
+assert_eq "$RC" "0" "2e: --verify-cmd with a dollar still completes"
+assert_contains "$(cat "$RD/protocol.md")" '$HOME' "2e: protocol keeps \$HOME literal"
+assert_not_contains "$(cat "$RD/protocol.md")" "echo $HOME" "2e: protocol does not expand HOME before the hand runs"
+NL_CMD=$'true\ntrue'
+NL_QUOTED="$(printf '%q' "$NL_CMD")"
+run_foreman complete r2nl --verify-cmd "$NL_CMD"
+assert_eq "$RC" "0" "2f: --verify-cmd with a newline still completes"
+assert_contains "$(cat "$RD/protocol.md")" "--verify-cmd ${NL_QUOTED}" "2f: newline verify-cmd lands in protocol.md verbatim"
+assert_not_contains "$(cat "$RD/protocol.md")" "__VERIFY_FORWARD_SLOT__" "2f: newline verify-cmd still replaces the slot"
+OUT="$(cd "$SBX" && PATH="$STUBDIR:$PATH" bash "$SCRIPT" --brief-file "$BRIEF" --plan-file "$PLAN" --verify-cmd true --no-verify-tip --run-dir "$RUNS/pcv" 2>/dev/null)"; RC=$?
+assert_eq "$RC" "2" "2d: --verify-cmd with --no-verify-tip is a precondition"
+assert_contains "$OUT" "mutually exclusive" "2d: names the mutual exclusion"
 # argv: -m model, -p under 1 KB, stream-json
-ARGV="$(cat "$SD/argv.0")"
+ARGV="$(cat "$SD_R2/argv.0")"
 assert_contains "$ARGV" "kimi-code/k3" "2: model passed"
 assert_contains "$ARGV" "stream-json" "2: stream-json requested"
-PLEN="$(awk 'prev=="-p"{print length($0); exit} {prev=$0}' "$SD/argv.0")"
+PLEN="$(awk 'prev=="-p"{print length($0); exit} {prev=$0}' "$SD_R2/argv.0")"
 [ "${PLEN:-9999}" -lt 1024 ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "2: -p prompt stays under 1 KB (got $PLEN)"
 # cwd = worktree
-assert_eq "$(cat "$SD/cwd.0")" "$WT2" "2: kimi cwd is the foreman worktree"
+assert_eq "$(cat "$SD_R2/cwd.0")" "$WT2" "2: kimi cwd is the foreman worktree"
 # env allowlist
-ENV0="$(cat "$SD/env.0")"
+ENV0="$(cat "$SD_R2/env.0")"
 assert_not_contains "$ENV0" "SECRET_TOKEN" "2: secret NOT in foreman env"
 assert_contains "$ENV0" "KIMI_STUB_MODE=complete" "2: KIMI_* passes"
 assert_contains "$ENV0" "GIT_ALLOW_PROTOCOL=" "2: push block env present"
@@ -313,7 +336,7 @@ chmod +x "$AGY"; make_agy_stub_versioned "$AGY"
 echo "create ok.txt" > "$TEST_TMP/hand-prompt.txt"
 STUB_SCRIPT="$TEST_TMP/nested.sh"; cat > "$STUB_SCRIPT" <<EOF
 env | grep -E '^(GIT_ALLOW_PROTOCOL|GIT_CONFIG_COUNT)='
-DISPATCH_DETACH=0 bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch hands/r12/u1 --base "$BASE" --prompt-file "$TEST_TMP/hand-prompt.txt" --agy-bin "$AGY" --model gemini-3.7-flash-low
+DISPATCH_DETACH=0 bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --branch hands/r12/u1 --base "$BASE" --prompt-file "$TEST_TMP/hand-prompt.txt" --agy-bin "$AGY" --model gemini-3.7-flash-low
 echo "hetero rc=\$?"
 EOF
 run_foreman script r12 --timeout 300

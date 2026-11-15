@@ -29,7 +29,7 @@ chmod +x "$BIN_DIR/claude"
 export PATH="$BIN_DIR:$PATH"
 
 START="$(date +%s)"
-OUT="$(cd "$SBX" && timeout 60 "$SCRIPT" --runner claude-native --model claude-sonnet-4-6 --effort low \
+OUT="$(cd "$SBX" && timeout 60 "$SCRIPT" --no-verify-tip --runner claude-native --model claude-sonnet-4-6 --effort low \
   --prompt-file "$PROMPT" --context-window off --branch feat/cn-timeout --timeout 3s 2>&1)"
 ELAPSED=$(( $(date +%s) - START ))
 JSON="$(printf '%s\n' "$OUT" | grep '^{' | tail -n 1)"

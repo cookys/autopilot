@@ -116,7 +116,7 @@ run_case() {
   RC=0
   OUT="$(cd "${RUN_REPO:-$SBX}" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
       STUB_PARENT_TARGET="$tgt" PATH="$BINDIR:$PATH" \
-      "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+      "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
       --prompt-file "$PROMPT" --context-window off --branch "$branch" \
       ${sbx_args[@]+"${sbx_args[@]}"} "$@" 2>"$TEST_TMP/stderr")" || RC=$?
 }
@@ -159,7 +159,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
     --endpoint qwen_local \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-a-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a")" || RC=$?
@@ -181,7 +181,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner auto --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner auto --model MiniMax-M3 \
     --endpoint qwen_local \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-auto-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-auto")" || RC=$?
@@ -202,7 +202,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
     --endpoint=qwen_local \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-eq-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-eq")" || RC=$?
@@ -218,7 +218,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner auto --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner auto --model MiniMax-M3 \
     --endpoint glm --endpoint=qwen_local \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-eq-last-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-eq-last")" || RC=$?
@@ -233,7 +233,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
     --endpoint QWEN_LOCAL \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-case-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-case")" || RC=$?
@@ -253,7 +253,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner auto --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner auto --model MiniMax-M3 \
     --endpoint=Qwen_Local \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-case-eq-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-a-case-eq")" || RC=$?
@@ -273,7 +273,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
     --endpoint glm \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-c-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-c")" || RC=$?
@@ -310,7 +310,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
     --endpoint qwen_local --sandbox bwrap --worktree-parent "$WTPARENT" \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-b-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-b")" || RC=$?
@@ -326,7 +326,7 @@ rm -f "$SENTINEL"
 RC=0
 OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
     STUB_SENTINEL="$SENTINEL" PATH="$BINDIR:$PATH" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner auto --model MiniMax-M3 \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner auto --model MiniMax-M3 \
     --endpoint qwen_local --sandbox bwrap --worktree-parent "$WTPARENT" \
     --prompt-file "$PROMPT" --context-window off \
     --branch "feat/local-b-auto-$RANDOM$RANDOM" 2>"$TEST_TMP/stderr-b-auto")" || RC=$?
@@ -602,7 +602,7 @@ for d in "${_pdirs[@]}"; do
 done
 RC=0
 OUT="$(cd "$SBX" && PATH="$NOBW:$BINDIR" env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 --prompt-file "$PROMPT" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 --prompt-file "$PROMPT" \
     --context-window off --branch "feat/sbx-nobwrap" --sandbox bwrap --worktree-parent "$WTPARENT" 2>"$TEST_TMP/stderr")" || RC=$?
 eq '"precondition_failed"' "$(status_of)" "no-bwrap: fails closed with precondition_failed (rc=$RC, stderr: $(tail -c 200 "$TEST_TMP/stderr"))"
 case "$(printf '%s' "$OUT" | result_json | jfield error)" in
@@ -617,7 +617,7 @@ BADBW="$TEST_TMP/badbwrap-bin"; mkdir -p "$BADBW"
 printf '#!/bin/sh\necho "bwrap: No permissions to create new namespace" >&2\nexit 1\n' > "$BADBW/bwrap"; chmod +x "$BADBW/bwrap"
 RC=0
 OUT="$(cd "$SBX" && STUB_PARENT_TARGET="" PATH="$BADBW:$BINDIR:$PATH" env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 --prompt-file "$PROMPT" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 --prompt-file "$PROMPT" \
     --context-window off --branch "feat/sbx-badbwrap" --sandbox bwrap --worktree-parent "$WTPARENT" 2>"$TEST_TMP/stderr")" || RC=$?
 eq '"precondition_failed"' "$(status_of)" "bad-bwrap: a bwrap that cannot start fails closed (rc=$RC)"
 case "$(printf '%s' "$OUT" | result_json | jfield error)" in
@@ -628,7 +628,7 @@ esac
 # ---- other runners and bad values are refused, never ignored
 RC=0
 OUT="$(cd "$SBX" && PATH="$BINDIR:$PATH" env -u REPO_ROOT -u CONSUMING_REPO_ROOT \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner codex --model gpt-x --prompt-file "$PROMPT" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner codex --model gpt-x --prompt-file "$PROMPT" \
     --context-window off --branch "feat/sbx-codex" --sandbox bwrap 2>"$TEST_TMP/stderr")" || RC=$?
 eq '"precondition_failed"' "$(status_of)" "runner: --sandbox bwrap with a non-cc-shim runner is refused (rc=$RC)"
 

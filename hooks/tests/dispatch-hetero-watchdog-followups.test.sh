@@ -131,7 +131,7 @@ assert_r1_nojobcontrol_reports_unenforced() {
   local out json mf
   out="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_NO_SETSID=1 HETERO_TEST_NO_JOBCONTROL=1 HETERO_TEST_SLEEP=0 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-njc --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r1_nojobcontrol_reports_unenforced: missing JSON: $out"
@@ -153,7 +153,7 @@ assert_r1_nojobcontrol_detached_real_path() {
   (
     cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
       HETERO_TEST_NO_SETSID=1 HETERO_TEST_NO_JOBCONTROL=1 HETERO_TEST_SLEEP=0 \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-njc-d --prompt-file "$PROMPT" --timeout 3s \
       --ledger "$ledger" --run-id wdog-njc-d --stage implement
   ) >/dev/null 2>&1 &
@@ -178,7 +178,7 @@ assert_r1_nosetsid_with_jobcontrol_still_enforces() {
   start="$(date +%s)"
   out="$(cd "$SBX" && timeout 30 env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_NO_SETSID=1 HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-jc --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
   json="$(last_json "$out")"
@@ -206,7 +206,7 @@ assert_r9_no_job_notices_on_stderr() {
   local errf="$TEST_TMP/r9.err"
   (cd "$SBX" && timeout 30 env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_NO_SETSID=1 HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-r9 --prompt-file "$PROMPT" --timeout 3s >/dev/null) 2>"$errf" || true
   if grep -E '^[[:space:]]*\[[0-9]+\][+ ][[:space:]]*(Terminated|Killed|Done)' "$errf" >/dev/null; then
     fail "assert_r9_no_job_notices_on_stderr: bash job-status notice in stderr: $(cat "$errf")"
@@ -255,7 +255,7 @@ assert_r2_cgroup_kill_failure_falls_back_to_pgid() {
     cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
       HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
       HETERO_TEST_SYSTEMCTL_KILL_FAIL=1 \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-r2 --prompt-file "$PROMPT" --timeout 3s
   ) >"$outf" 2>&1 &
   dispid=$!
@@ -294,7 +294,7 @@ assert_r2_cgroup_kill_failure_detached_real_path() {
     cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
       HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
       HETERO_TEST_SYSTEMCTL_KILL_FAIL=1 \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-r2-d --prompt-file "$PROMPT" --timeout 3s \
       --ledger "$ledger" --run-id wdog-r2-d --stage implement
   ) >/dev/null 2>&1 &
@@ -372,7 +372,7 @@ exec "$real_sr" "\$@"
 WRAP
     chmod +x "$wrap/systemd-run"
     out="$(cd "$SBX" && env PATH="$wrap:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-stdin-cg --prompt-file "$PROMPT" --timeout 8s \
       < <(printf 'dispatcher-stdin-is-not-null\n') 2>&1)" || true
   else
@@ -380,7 +380,7 @@ WRAP
     hide_cgroup_dir "$hide"
     out="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
       HETERO_TEST_NO_SETSID=1 \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-stdin-plain --prompt-file "$PROMPT" --timeout 8s \
       < <(printf 'dispatcher-stdin-is-not-null\n') 2>&1)" || true
   fi
@@ -524,7 +524,7 @@ assert_r3_natural_exit_before_deadline_not_timed_out_real_path() {
   local out json
   out="$(cd "$SBX" && env PATH="$hide:$PATH" TMPDIR="$wdtmp" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_SLEEP=0 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-r3-nat --prompt-file "$PROMPT" --timeout 30s 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r3_natural_exit_before_deadline_not_timed_out_real_path: missing JSON: $out"
@@ -541,7 +541,7 @@ assert_r3_natural_exit_before_deadline_not_timed_out_real_path() {
   (
     cd "$SBX" && env PATH="$hide:$PATH" TMPDIR="$wdtmpd" AUTOPILOT_DISPATCH_RUNS_DIR="$runsd" \
       HETERO_TEST_SLEEP=0 \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stubd" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stubd" \
       --branch feat/wdog-r3-nat-d --prompt-file "$PROMPT" --timeout 30s \
       --ledger "$ledger" --run-id wdog-r3-nat --stage implement
   ) >/dev/null 2>&1 &
@@ -672,7 +672,7 @@ assert_r10_result_json_never_default_timeout_source() {
   local out json mf
   out="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_SLEEP=0 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-r10-none --prompt-file "$PROMPT" 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r10_result_json_never_default_timeout_source: missing no-timeout JSON: $out"
@@ -686,7 +686,7 @@ assert_r10_result_json_never_default_timeout_source() {
   install_sleep_stub "$stubt"
   out="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runst" \
     HETERO_TEST_SLEEP=0 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stubt" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stubt" \
     --branch feat/wdog-r10-to --prompt-file "$PROMPT" --timeout 8s 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r10_result_json_never_default_timeout_source: missing timeout JSON: $out"
@@ -738,7 +738,7 @@ assert_r8_detached_reaps_worker_session_descendants() {
   (
     cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
       HETERO_TEST_PIDFILE="$pidfile" \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-r8-d --prompt-file "$PROMPT" \
       --ledger "$ledger" --run-id wdog-r8-d --stage implement
   ) >/dev/null 2>&1 &
@@ -770,7 +770,7 @@ assert_r8_detached_reaps_worker_session_descendants() {
   local outi jsoni sleeperi
   outi="$(cd "$SBX" && env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runsi" \
     HETERO_TEST_PIDFILE="$pidfilei" \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stubi" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stubi" \
     --branch feat/wdog-r8-i --prompt-file "$PROMPT" 2>&1)" || true
   jsoni="$(last_json "$outi")"
   sleeperi="$(tr -d '[:space:]' < "$pidfilei" 2>/dev/null || true)"
@@ -1106,7 +1106,7 @@ assert_r11_test_knobs_inert_without_switch() {
   local out json
   out="$(cd "$SBX" && env -u AUTOPILOT_TEST_ALLOW_HETERO_SEAMS PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_NO_SETSID=1 HETERO_TEST_NO_JOBCONTROL=1 HETERO_TEST_SLEEP=0 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-r11sw --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || { fail "assert_r11 switch: missing JSON: $out"; return; }

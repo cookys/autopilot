@@ -86,11 +86,11 @@ status_line() {
 
 run_dispatch() {
   rm -f "$RAN"
-  (cd "$SBX" && "$SCRIPT" --prompt-file "$PROMPT" --agy-bin "$STUB" "$@")
+  (cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --agy-bin "$STUB" "$@")
 }
 
 # Usage documents the flag beside the campaign contract flags.
-HELP="$("$SCRIPT" --help 2>&1)"
+HELP="$("$SCRIPT" --no-verify-tip --help 2>&1)"
 assert_contains "$HELP" "--no-campaign" "--help documents --no-campaign"
 assert_contains "$HELP" "--campaign-contract" "--help still documents --campaign-contract"
 

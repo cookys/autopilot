@@ -33,6 +33,13 @@
 #                                 #   concurrent run writes its own rail I/O into; pruned from
 #                                 #   the fingerprint's stat walk only (same semantics as
 #                                 #   dispatch-hetero.sh's flag of the same name).
+#       [--verify-cmd <command>]  # repeatable. Written into the hand command in
+#                                 #   protocol.md so the hand's dispatch-hetero.sh
+#                                 #   receives it. Omit both this and --no-verify-tip
+#                                 #   to leave tip-verify source resolution to the hand.
+#       [--no-verify-tip]         # forwarded the same way. Mutually exclusive with
+#                                 #   --verify-cmd. Not accepted on --resume (the
+#                                 #   protocol was already written).
 #       [--keep]                  # retain the worktree on success too
 #       [--json]                  # (default) one JSON object on stdout
 #   dispatch-foreman.sh --resume --run-dir <dir> --answer-file <path> [same knobs]
@@ -113,6 +120,7 @@ source "$SELF_DIR/lib/worker-containment.sh"
 BRIEF_FILE=""; PLAN_FILE=""; MODEL="kimi-code/k3"; BASE_REF=""; RUN_ID=""; RUN_DIR=""
 LEDGER=""; TOOL_CAP=""; TIMEOUT_SECS=3600; HANDOFF_TIMEOUT=300; POLL=1
 KIMI_BIN="kimi"; KEEP=0; RESUME=0; ANSWER_FILE=""
+VERIFY_CMDS=(); NO_VERIFY_TIP=0
 ENV_PASSTHROUGH=()
 # --sibling-ref-prefix / --sibling-path-prefix (308 BACKLOG #46, gap 2): declared here, raw and
 # unvalidated, so the arg loop below can stay a plain case statement; validated once the shared
@@ -141,6 +149,8 @@ while [ $# -gt 0 ]; do
     --keep) KEEP=1; shift ;;
     --resume) RESUME=1; shift ;;
     --answer-file) ANSWER_FILE="${2:-}"; shift 2 ;;
+    --verify-cmd) VERIFY_CMDS+=("${2:-}"); shift 2 ;;
+    --no-verify-tip) NO_VERIFY_TIP=1; shift ;;
     --json) shift ;;
     -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) printf 'dispatch-foreman: unknown argument: %s\n' "$1" >&2; exit 2 ;;
@@ -175,6 +185,27 @@ emit() {
   exit "$rc"
 }
 die_precondition() { STATUS="precondition_failed"; ERROR="$1"; emit; }
+
+if [ "$NO_VERIFY_TIP" -eq 1 ] && [ "${#VERIFY_CMDS[@]}" -gt 0 ]; then
+  die_precondition "--no-verify-tip and --verify-cmd are mutually exclusive"
+fi
+if [ "$RESUME" -eq 1 ] && { [ "$NO_VERIFY_TIP" -eq 1 ] || [ "${#VERIFY_CMDS[@]}" -gt 0 ]; }; then
+  die_precondition "--verify-cmd and --no-verify-tip apply when protocol.md is written, not on --resume"
+fi
+for _vc in "${VERIFY_CMDS[@]+"${VERIFY_CMDS[@]}"}"; do
+  [ -n "$_vc" ] || die_precondition "--verify-cmd requires a command"
+done
+unset _vc
+VERIFY_FORWARD=""
+if [ "$NO_VERIFY_TIP" -eq 1 ]; then
+  VERIFY_FORWARD="--no-verify-tip"
+elif [ "${#VERIFY_CMDS[@]}" -gt 0 ]; then
+  for _vc in "${VERIFY_CMDS[@]}"; do
+    VERIFY_FORWARD+=" --verify-cmd $(printf '%q' "$_vc")"
+  done
+  VERIFY_FORWARD="${VERIFY_FORWARD# }"
+  unset _vc
+fi
 
 # ---------------------------------------------------------------- preconditions
 case "$TIMEOUT_SECS" in ''|*[!0-9]*) die_precondition "--timeout must be a non-negative integer" ;; esac
@@ -342,7 +373,7 @@ depth 0 (the dispatcher that started you), and it is reached from git, not from 
   push are blocked at git level; an attempt is recorded, not forgiven.
 - Inputs (read-only): \`$RUN_DIR/brief.md\`, \`$RUN_DIR/plan.md\`.
 - Hands: dispatch implementation through
-  \`$SELF_DIR/dispatch-hetero.sh --branch hands/$RUN_ID/<unit> --base $BASE_SHA --ledger $RUN_DIR/hands.ledger --run-id <unit> --stage implement ...\`
+  \`$SELF_DIR/dispatch-hetero.sh --branch hands/$RUN_ID/<unit> --base $BASE_SHA --ledger $RUN_DIR/hands.ledger --run-id <unit> --stage implement__VERIFY_FORWARD_SLOT__ ...\`
   (every hand branch MUST start with \`hands/$RUN_ID/\`; any other ref you create rejects the
   whole run; the three ledger flags together make the hand detach, so it survives you). Review
   through \`$SELF_DIR/dispatch-review.sh\`. Wait for detached hands with
@@ -370,6 +401,18 @@ depth 0 (the dispatcher that started you), and it is reached from git, not from 
   a hand or foreman is still running. That is depth 0's mistake, not yours — the round is
   discarded and your worktree is retained for inspection; report it in your next turn.
 EOF
+  # The heredoc is unquoted, so a $ in VERIFY_FORWARD would expand at write time.
+  # The slot is a fixed token; node writes the already-quoted flags as bytes.
+  VERIFY_FORWARD="$VERIFY_FORWARD" node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const token = "__VERIFY_FORWARD_SLOT__";
+    const s = fs.readFileSync(p, "utf8");
+    if (s.split(token).length !== 2) { process.stderr.write("protocol verify slot missing\n"); process.exit(2); }
+    const v = process.env.VERIFY_FORWARD || "";
+    // String replacement interprets dollar-quote and $& in a printf %q command.
+    fs.writeFileSync(p, s.replace(token, () => (v ? " " + v : "")));
+  ' "$RUN_DIR/protocol.md" || die_precondition "cannot write verify flags into protocol.md"
 fi
 
 WT_LOCK_FD=""

@@ -897,6 +897,8 @@ function runTrunc(mode, seed, truncate) {
   check(grokArgv.length > 0, 'unsandboxed run dispatched');
   check(grokArgv.every((a) => !a.includes('--sandbox') && !a.includes('--worktree-parent')),
     'non-cc-shim runner: the exam passes neither --sandbox nor --worktree-parent');
+  check(grokArgv.every((a) => a.includes('--no-verify-tip')),
+    'qualification exam passes --no-verify-tip');
   check(!('sandbox_blocked_writes' in grokRun.row.quality), 'unsandboxed row has no sandbox_blocked_writes key');
   equal(grokRun.evidence.identity.containment_fingerprint, digest('c'), 'unsandboxed identity carries the operator fingerprint');
 
@@ -913,6 +915,8 @@ function runTrunc(mode, seed, truncate) {
   }
   const sbxArgv = readArgv();
   equal(sbxArgv.length, grokArgv.length, 'sandboxed run dispatched the same number of cases');
+  check(sbxArgv.every((a) => a.includes('--no-verify-tip')),
+    'sandboxed exam passes --no-verify-tip');
   const parents = sbxArgv.map((a) => {
     const i = a.indexOf('--sandbox');
     equal(a[i + 1], 'bwrap', 'every implementer case passes --sandbox bwrap');

@@ -4389,6 +4389,9 @@ function runImplCase(context) {
       const worktreeParent = fs.mkdtempSync(path.join(workRoot, `impl-wt-${caseSpec.case_id}-`));
       argv.push('--sandbox', 'bwrap', '--worktree-parent', worktreeParent);
     }
+    // The exam grades git, not the consuming repo's ## Test Command. A prose
+    // Test Command must not run, and a missing fenced acceptance must not refuse the seat.
+    argv.push('--no-verify-tip');
     // Constructed allowlist env — NOT inherited-minus-N (G1-F3). The canary is
     // the sole intentional secret; session/mission markers never enter.
     const env = {

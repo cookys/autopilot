@@ -176,17 +176,17 @@ EOF
 chmod +x "$STUB_CODEX_UNCOMMITTED"
 
 # 1. --help exits 0 and mentions the worktree rail
-HELP_OUT="$("$SCRIPT" --help 2>&1)"; HELP_EXIT=$?
+HELP_OUT="$("$SCRIPT" --no-verify-tip --help 2>&1)"; HELP_EXIT=$?
 assert_eq "0" "$HELP_EXIT" "--help exit code"
 assert_contains "$HELP_OUT" "worktree" "--help mentions worktree"
 
 # 2. missing --branch → precondition_failed, exit 2
-OUT="$(cd "$SBX" && "$SCRIPT" --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing --branch exit code"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing --branch status"
 
 # 3. missing agy binary → precondition_failed, exit 2
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --agy-bin /nonexistent-agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" --agy-bin /nonexistent-agy 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing binary exit code"
 assert_contains "$OUT" "not found" "missing binary error text"
 
@@ -194,7 +194,7 @@ assert_contains "$OUT" "not found" "missing binary error text"
 # worktree, manifest, or runner effects.
 rm -f "$FOREIGN_D2_MARKER"
 OUT="$(cd "$SBX" && AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$FOREIGN_D2_RECEIPT" \
-  "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
+  "$SCRIPT" --no-verify-tip --runner agy --model "Gemini 3.5 Flash (High)" \
   --branch feat/foreign-d2 --prompt-file "$PROMPT" --agy-bin "$STUB_FOREIGN_D2" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "foreign D2 implementer receipt exits as precondition failure"
 assert_contains "$OUT" '"status": "precondition_failed"' "foreign D2 implementer receipt fails closed"
@@ -208,10 +208,10 @@ FOREIGN_D2_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' 
 git -C "$SBX" branch -D feat/foreign-d2 >/dev/null 2>&1 || true
 
 # 3a. bad --runner / --effort → precondition_failed, exit 2 (arg validation, no LLM)
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner bogus --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" --runner bogus --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "bad --runner exit code"
 assert_contains "$OUT" "runner must be one of" "bad --runner error text"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --effort turbo --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" --effort turbo --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "bad --effort exit code"
 assert_contains "$OUT" "effort must be one of" "bad --effort error text"
 
@@ -243,7 +243,7 @@ lineage_root_of() { # <dispatch stdout> → manifest root_run_id (or a marker st
 }
 
 OUT_ROOT_ONLY="$(cd "$SBX" && AUTOPILOT_ROOT_RUN_ID=lineage-probe-root \
-  "$SCRIPT" --branch t-lineage-root-only --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"
+  "$SCRIPT" --no-verify-tip --branch t-lineage-root-only --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"
 assert_contains "$OUT_ROOT_ONLY" '"status": "committed"' \
   "root-without-parent is supported and must not fail closed"
 assert_neq "$(lineage_root_of "$OUT_ROOT_ONLY")" "lineage-probe-root" \
@@ -251,7 +251,7 @@ assert_neq "$(lineage_root_of "$OUT_ROOT_ONLY")" "lineage-probe-root" \
 
 OUT_BOTH="$(cd "$SBX" && AUTOPILOT_PARENT_RUN_ID=lineage-probe-root \
   AUTOPILOT_ROOT_RUN_ID=lineage-probe-root \
-  "$SCRIPT" --branch t-lineage-both --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"
+  "$SCRIPT" --no-verify-tip --branch t-lineage-both --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"
 assert_contains "$OUT_BOTH" '"status": "committed"' "parent+root dispatches"
 assert_eq "$(lineage_root_of "$OUT_BOTH")" "lineage-probe-root" \
   "PARENT+ROOT sets the lineage root"
@@ -262,7 +262,7 @@ assert_eq "$(lineage_root_of "$OUT_BOTH")" "lineage-probe-root" \
 # the codex precondition must fire — proving routing did NOT fall through to agy.
 OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" \
   --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
 assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
@@ -272,13 +272,13 @@ assert_contains "$OUT" "codex binary not found" "codex routing does not fall thr
 # The Chinese-model gate would refuse these Qwen dispatches first (no Size/Role/Scope), so the seam is set: the runner messages are what is under test.
 OUT="$(cd "$SBX" && PATH=/usr/bin:/bin AUTOPILOT_TEST_CN_GATE_OFF=1 \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" \
   --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect refuses Qwen3.8-Max-Preview (qoderclicn retired)"
 assert_contains "$OUT" "--runner cc-shim --endpoint" "auto-detect Qwen refusal names cc-shim --endpoint"
 
 # 3d. negative: --runner qoderclicn is rejected as an unknown runner.
-OUT="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 "$SCRIPT" --branch feat/qoder-retired --prompt-file "$PROMPT" --runner qoderclicn --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 "$SCRIPT" --no-verify-tip --branch feat/qoder-retired --prompt-file "$PROMPT" --runner qoderclicn --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "retired qoderclicn runner rejected (exit 2)"
 assert_contains "$OUT" '"status": "precondition_failed"' "retired qoderclicn runner -> precondition_failed"
 assert_contains "$OUT" "must be one of" "retired qoderclicn runner rejected as unknown runner"
@@ -291,7 +291,7 @@ mkdir -p "$FIRST_SBX"
 git -C "$FIRST_SBX" init -q -b develop
 git -C "$FIRST_SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 [ -e "$FIRST_SBX/.claude" ] && fail "4: precondition — fresh sandbox starts without .claude/" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
-OUT="$(cd "$FIRST_SBX" && "$SCRIPT" --branch feat/first --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+OUT="$(cd "$FIRST_SBX" && "$SCRIPT" --no-verify-tip --branch feat/first --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "4: first placement in a sandbox without .claude/ exits 0"
 assert_contains "$OUT" '"status": "committed"' "4: first placement is committed, not main_checkout_mutated"
 assert_eq "" "$(git -C "$FIRST_SBX" status --porcelain)" "4: first placement leaves the sandbox porcelain clean"
@@ -299,7 +299,7 @@ DIRECT_AUTHORITY_BEFORE="$(
   git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
     | wc -l
 )"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "committed path exit code"
 assert_contains "$OUT" '"status": "committed"' "committed status"
 assert_contains "$OUT" '"files_changed": 1' "committed diff stat"
@@ -345,7 +345,7 @@ git -C "$SBX" worktree add -q -b hetero/managed-retained \
 OUT="$(cd "$SBX" && env AUTOPILOT_PARENT_RUN_ID=foreman-managed \
   AUTOPILOT_ROOT_RUN_ID=foreman-managed \
   AUTOPILOT_WORKTREE_ROOT_RUN_ID="$MANAGED_ROOT" AUTOPILOT_DISPATCH_DEPTH=1 \
-  "$SCRIPT" --branch hetero/managed-smoke --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch hetero/managed-smoke --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "managed committed path exit code"
 assert_contains "$OUT" '"worktree": null' \
@@ -393,7 +393,7 @@ OUT="$(cd "$SBX" && DISPATCH_DETACH=0 \
   AUTOPILOT_PARENT_RUN_ID=controller-parent \
   AUTOPILOT_ROOT_RUN_ID="$CONTROLLER_FILTER_ROOT" \
   AUTOPILOT_WORKTREE_ROOT_RUN_ID="$CONTROLLER_FILTER_ROOT" \
-  "$SCRIPT" --branch hetero/controller-filter --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch hetero/controller-filter --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "controller Work Order does not block child runner admission"
 assert_contains "$OUT" '"status": "committed"' \
@@ -413,7 +413,7 @@ printf '%s' '{"response":"partial-envelope-marker-7f3a"'
 EOF
 chmod +x "$STUB_BAD_ENVELOPE"
 make_agy_stub_versioned "$STUB_BAD_ENVELOPE"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --model "Gemini 3.5 Flash (High)" \
   --branch feat/bad-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_BAD_ENVELOPE" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "malformed agy envelope with a clean commit exits 0 (status from artifacts)"
 assert_contains "$OUT" '"status": "committed"' "malformed agy envelope no longer converts a landed commit into failure"
@@ -427,7 +427,7 @@ STUB_BAD_ENVELOPE_NOEDIT="$TEST_TMP/agy-bad-envelope-noedit"
 printf '#!/usr/bin/env bash\nprintf %%s "{\"response\":"\n' > "$STUB_BAD_ENVELOPE_NOEDIT"
 chmod +x "$STUB_BAD_ENVELOPE_NOEDIT"
 make_agy_stub_versioned "$STUB_BAD_ENVELOPE_NOEDIT"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --model "Gemini 3.5 Flash (High)" \
   --branch feat/bad-envelope-noedit --prompt-file "$PROMPT" --agy-bin "$STUB_BAD_ENVELOPE_NOEDIT" 2>&1)"
 assert_contains "$OUT" '"status": "no_op"' "malformed envelope + no edits → no_op (artifact truth), not failure"
 
@@ -442,7 +442,7 @@ exit 77
 EOF
 chmod +x "$STUB_NONZERO_ENVELOPE"
 make_agy_stub_versioned "$STUB_NONZERO_ENVELOPE"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --model "Gemini 3.5 Flash (High)" \
   --branch feat/nonzero-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_NONZERO_ENVELOPE" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "nonzero agy exit after valid-looking envelope fails closed"
 assert_contains "$OUT" '"status": "failure"' "nonzero agy exit is never committed success"
@@ -452,7 +452,7 @@ git -C "$SBX" worktree remove --force "$NONZERO_ENVELOPE_WT" >/dev/null 2>&1 || 
 
 # 4c. Explicit managed identity is exact input, never lossy-sanitized.
 OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID='bad/root' \
-  "$SCRIPT" --branch hetero/invalid-managed-root --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch hetero/invalid-managed-root --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "invalid explicit managed root fails before dispatch"
 assert_contains "$OUT" "AUTOPILOT_WORKTREE_ROOT_RUN_ID must match" \
@@ -482,7 +482,7 @@ DUP_WORKTREES_BEFORE="$(
     | awk '/^worktree / { count += 1 } END { print count + 0 }'
 )"
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$DUP_RUNS" \
-  "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$DUP_STUB" \
+  "$SCRIPT" --no-verify-tip --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$DUP_STUB" \
   --ledger "$DUP_LEDGER" --run-id duplicate-branch --stage implementation \
   2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "duplicate branch exit code"
@@ -516,7 +516,7 @@ echo leftover > unstaged.txt
 EOF
 chmod +x "$STUB_DIRTY"
 make_agy_stub_versioned "$STUB_DIRTY"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/dirty --prompt-file "$PROMPT" --agy-bin "$STUB_DIRTY" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/dirty --prompt-file "$PROMPT" --agy-bin "$STUB_DIRTY" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "dirty path exit code"
 assert_contains "$OUT" '"status": "dirty"' "dirty status"
 DIRTY_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
@@ -526,7 +526,7 @@ assert_eq "" "$(git -C "$SBX" status --porcelain)" "sandbox porcelain stays clea
 git -C "$SBX" worktree remove --force "$DIRTY_WT" >/dev/null 2>&1 || true
 
 # 5c. --keep-worktree is a bounded lease, never an ownerless boolean.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/bare-keep --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/bare-keep --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --keep-worktree 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "bare keep-worktree rejects before runner spend"
 assert_contains "$OUT" '"status": "precondition_failed"' \
@@ -537,7 +537,7 @@ assert_eq "0" "$(git -C "$SBX" branch --list feat/bare-keep | wc -l | tr -d ' ')
   "bare keep-worktree creates no branch"
 
 # A partial lease must still emit parseable JSON on the precondition path.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/partial-lease --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/partial-lease --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --keep-worktree --retain-owner test-campaign \
   --retain-reason integration-test 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "partial keep lease rejects before runner spend"
@@ -547,7 +547,7 @@ assert_eq "null" "$(node -e \
   "$PARTIAL_JSON")" "partial keep lease emits parseable null retention metadata"
 
 # 5d. a valid keep lease keeps the worktree and reports its path.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/keep --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/keep --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --keep-worktree --retain-owner test-campaign \
   --retain-reason integration-test --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "keep-worktree exit code"
@@ -594,7 +594,7 @@ EOF
 chmod +x "$STUB_GROK_REUSE"
 GROK_ROOT="campaign-v1-grok-reuse"
 OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
-  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
   --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
   --branch feat/grok-reuse --prompt-file "$PROMPT" --keep-worktree \
   --retain-owner "$GROK_ROOT" --retain-reason repair-lineage \
@@ -636,14 +636,14 @@ assert_contains "$OUT" '"worktree_reused": false' \
 # Another same-root leaf must count an unexpired retained lease as occupied and
 # must not reclaim the campaign checkout after its lifetime lock is released.
 OUT_LEASE_PROBE="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
-  "$SCRIPT" --branch feat/grok-lease-budget-probe --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/grok-lease-budget-probe --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "same-root admission with one retained lease stays within budget"
 assert_file_exists "$GROK_REUSE_WT/grok-lineage.txt" \
   "same-root budget reconciliation preserves the unexpired retained lease"
 
 OUT_REPAIR="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
-  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
   --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
   --branch feat/grok-reuse --base "$GROK_REUSE_COMMIT" --prompt-file "$PROMPT" \
   --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
@@ -672,7 +672,7 @@ repair:$GROK_REUSE_SESSION" "$(cat "$GROK_REUSE_CAPTURE")" \
 # the runner can mutate it.
 GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
 OUT_INSTANCE_MISMATCH="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
-  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
   --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
   --branch feat/grok-reuse --base "$(git -C "$GROK_REUSE_WT" rev-parse HEAD)" \
   --prompt-file "$PROMPT" --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
@@ -697,7 +697,7 @@ flock -x "$TEST_REUSE_LOCK_FD"
   exec {TEST_REUSE_LOCK_FD}>&-
   cd "$SBX"
   env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
-    GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+    GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
     --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
     --branch feat/grok-reuse --base "$LOCKED_BASE" --prompt-file "$PROMPT" \
     --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
@@ -725,7 +725,7 @@ assert_eq "$GROK_CAPTURE_LINES_BEFORE" \
 touch "$GROK_REUSE_WT/uncommitted-user-data.txt"
 GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
 OUT_DIRTY_REUSE="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
-  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" --no-verify-tip \
   --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
   --branch feat/grok-reuse --base "$(git -C "$GROK_REUSE_WT" rev-parse HEAD)" \
   --prompt-file "$PROMPT" --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
@@ -755,7 +755,7 @@ OUT="$( (
   cd "$SBX"
   CODEX_HOME="$CODEX_CONTROLLER_HOME" CONTROLLER_CODEX_HOME="$CODEX_CONTROLLER_HOME" \
     CODEX_ISOLATION_LOG="$CODEX_ISOLATION_LOG" CODEX_THREAD_ID=controller-thread \
-    PATH="$TEST_TMP:$PATH" "$SCRIPT" --branch feat/codex-no-commit --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
+    PATH="$TEST_TMP:$PATH" "$SCRIPT" --no-verify-tip --branch feat/codex-no-commit --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
 ) 2>&1 )"; EXIT=$?
 assert_eq "0" "$EXIT" "codex wrapper-commit exit code"
 assert_contains "$OUT" '"status": "committed"' "codex wrapper-commit status"
@@ -773,7 +773,7 @@ mkdir -p "$AUTHOR_ONLY_HOME"
 OUT="$( (
   cd "$SBX"
   env HOME="$AUTHOR_ONLY_HOME" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t PATH="$TEST_TMP:$PATH" \
-    "$SCRIPT" --branch feat/codex-author-only --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
+    "$SCRIPT" --no-verify-tip --branch feat/codex-author-only --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
 ) 2>&1 )"; EXIT=$?
 assert_eq "0" "$EXIT" "codex wrapper-commit with author-only env exit code"
 assert_contains "$OUT" '"status": "committed"' "codex author-only wrapper-commit status"
@@ -792,7 +792,7 @@ esac
 touch should_not_run.txt
 OLDEOF
 chmod +x "$STUB_CODEX_OLD"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/codex-old --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin "$STUB_CODEX_OLD" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/codex-old --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin "$STUB_CODEX_OLD" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "stale codex → precondition_failed exit 2 (not question_suspected)"
 assert_contains "$OUT" '"status": "precondition_failed"' "stale codex status precondition_failed"
 assert_contains "$OUT" 'does not support --dangerously-bypass-hook-trust' "stale codex error names the missing flag"
@@ -804,18 +804,18 @@ assert_file_absent "$SBX/should_not_run.txt" "stale codex never actually dispatc
 # worker's post-`cd $WT` exec would miss it.
 OUT="$( (
   cd "$SBX"
-  "$SCRIPT" --branch feat/codex-relbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin ../codex
+  "$SCRIPT" --no-verify-tip --branch feat/codex-relbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin ../codex
 ) 2>&1 )"; EXIT=$?
 assert_eq "0" "$EXIT" "relative --codex-bin absolutized → committed exit 0"
 assert_contains "$OUT" '"status": "committed"' "relative --codex-bin wrapper-commit status"
 
 # 5j. unresolvable path-form --codex-bin must fail closed (NOT silently become /<basename>) — R2
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/codex-badbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin nonexistent-dir/codex 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/codex-badbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin nonexistent-dir/codex 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unresolvable --codex-bin dir → precondition exit 2"
 assert_contains "$OUT" 'not resolvable' "unresolvable --codex-bin names the path"
 
 # 6 (case c). no_op path: stub exits 0 with no commit → exit 1, status no_op, worktree KEPT
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "no_op exit code"
 assert_contains "$OUT" '"status": "no_op"' "no_op status (exit 0, no commit)"
 KEPT_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
@@ -825,7 +825,7 @@ assert_retention_record "$KEPT_WT" no_op 72 "R1 no_op keep"
 git -C "$SBX" worktree remove --force "$KEPT_WT" >/dev/null 2>&1 || true
 
 # 7 (case d). question_suspected: stub exits non-zero (proxy for timeout/stall) with no commit
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/question --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/question --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "question_suspected exit code"
 assert_contains "$OUT" '"status": "question_suspected"' "question_suspected status (non-zero exit, no commit)"
 assert_contains "$OUT" "clarifying question" "question_suspected error hints at the cause"
@@ -835,7 +835,7 @@ assert_retention_record "$Q_WT" question_suspected 72 "R1 question_suspected kee
 git -C "$SBX" worktree remove --force "$Q_WT" >/dev/null 2>&1 || true
 
 # 8 (case b). failure: stub commits cleanly but exits non-zero → NOT scored success (KR1)
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/failcommit --prompt-file "$PROMPT" --agy-bin "$STUB_FAIL_COMMIT" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/failcommit --prompt-file "$PROMPT" --agy-bin "$STUB_FAIL_COMMIT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "failure (clean commit + non-zero exit) exit code"
 assert_contains "$OUT" '"status": "failure"' "failure status"
 assert_not_contains "$OUT" '"status": "committed"' "non-zero exit with clean commit is NEVER committed/success"
@@ -846,7 +846,7 @@ R1_SCAN="$(cd "$SBX" && "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" scan --r
 assert_not_contains "$R1_SCAN" 'invalid_schema_2_marker' "R1 scan: stamped marker is not classed malformed"
 assert_contains "$R1_SCAN" "$F_WT" "R1 scan: stamped leaf is still seen"
 # residue.lease_hours is honoured (env tier of the shared resolver)
-OUT="$(cd "$SBX" && AUTOPILOT_RESIDUE_LEASE_HOURS=5 "$SCRIPT" --branch feat/failcommit5 --prompt-file "$PROMPT" --agy-bin "$STUB_FAIL_COMMIT" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && AUTOPILOT_RESIDUE_LEASE_HOURS=5 "$SCRIPT" --no-verify-tip --branch feat/failcommit5 --prompt-file "$PROMPT" --agy-bin "$STUB_FAIL_COMMIT" 2>&1)"; EXIT=$?
 F5_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_retention_record "$F5_WT" failure 5 "R1 residue.lease_hours=5 honoured"
 git -C "$SBX" worktree remove --force "$F5_WT" >/dev/null 2>&1 || true
@@ -876,7 +876,7 @@ EOF
 sed -i "s#__ANCHOR_OUT__#$ANCHOR_OUT#g" "$STUB_ANCHOR"
 chmod +x "$STUB_ANCHOR"
 make_agy_stub_versioned "$STUB_ANCHOR"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/anchor --prompt-file "$PROMPT" --agy-bin "$STUB_ANCHOR" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/anchor --prompt-file "$PROMPT" --agy-bin "$STUB_ANCHOR" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "anchor stub committed → exit 0"
 assert_contains "$OUT" '"status": "committed"' "anchor flow committed"
 assert_file_exists "$ANCHOR_OUT" "anchor capture file written"
@@ -902,7 +902,7 @@ rm -rf "$CAP_TEST_DIR"
 # the agy quota stub is never exercised (the whole point of this case). A non-zero
 # agy exit with no commit + quota_exhausted log → engine_unavailable (exit 1);
 # passive_capture still records the quota event.
-OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --branch feat/quota-fail --prompt-file "$PROMPT" --agy-bin "$STUB_QUOTA_FAIL" --model "gpt-5.5" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --branch feat/quota-fail --prompt-file "$PROMPT" --agy-bin "$STUB_QUOTA_FAIL" --model "gpt-5.5" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "quota failure exit code remains 1"
 assert_contains "$OUT" '"status": "engine_unavailable"' "quota failure status is engine_unavailable"
 assert_contains "$OUT" "engine unavailable (quota_exhausted)" "quota failure error names the classification"
@@ -930,7 +930,7 @@ exit 1
 EOF
 chmod +x "$STUB_GROK_402"
 make_agy_stub_versioned "$STUB_GROK_402"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --branch feat/grok-402 --prompt-file "$PROMPT" --agy-bin "$STUB_GROK_402" --model "gpt-5.5" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner agy --branch feat/grok-402 --prompt-file "$PROMPT" --agy-bin "$STUB_GROK_402" --model "gpt-5.5" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "grok 402 fixture exit code is 1"
 assert_contains "$OUT" '"status": "engine_unavailable"' "grok 402 fixture status is engine_unavailable"
 assert_contains "$OUT" "engine unavailable (quota_exhausted)" "grok 402 error names quota_exhausted"
@@ -938,7 +938,7 @@ G402_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 git -C "$SBX" worktree remove --force "$G402_WT" >/dev/null 2>&1 || true
 
 # 11. Omission of --skill-mode defaults to off
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-default --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-default --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default skill mode exit code"
 assert_contains "$OUT" '"skill_mode_effective": "off"' "provenance shows off"
 assert_contains "$OUT" '"skills_injected": []' "provenance shows empty skills injected"
@@ -971,7 +971,7 @@ chmod +x "$STUB_CAPTURE_PROMPT"
 make_agy_stub_versioned "$STUB_CAPTURE_PROMPT"
 
 rm -f "$TEST_TMP/captured_prompt.txt"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-prompt --prompt-file "$PROMPT" --agy-bin "$STUB_CAPTURE_PROMPT" --skill-mode prompt --skill autopilot:dev-flow 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-prompt --prompt-file "$PROMPT" --agy-bin "$STUB_CAPTURE_PROMPT" --skill-mode prompt --skill autopilot:dev-flow 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "skill prompt mode exit code"
 assert_contains "$OUT" '"skill_mode_effective": "prompt"' "effective skill mode is prompt"
 assert_contains "$OUT" '"skills_injected": ["autopilot:dev-flow"]' "skills injected array matches"
@@ -1014,7 +1014,7 @@ mkdir -p "$CAMPAIGN_SESSION_MODE_DIR"
 # A legacy v1 campaign remains admissible outside strict Mission/L5/L6 policy.
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
-  "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-boundary --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
   --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
   --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
@@ -1028,7 +1028,7 @@ printf '%s\n' \
   > "$CAMPAIGN_SESSION_MODE_DIR/l6.json"
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-boundary --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
   --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
   --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
@@ -1039,7 +1039,7 @@ assert_file_exists "$TEST_TMP/captured_prompt.txt" \
 # 12b. A contract changed after intake is rejected before the runner or worktree exists.
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch feat/campaign-drift --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-drift --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
   --campaign-contract-sha256 "$(printf '0%.0s' {1..64})" \
   --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
@@ -1051,7 +1051,7 @@ assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo
 
 # 12c. Contract, digest, and intake seal are one inseparable managed boundary.
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch feat/campaign-unbound --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-unbound --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unbound campaign contract exit code"
 assert_contains "$OUT" "are required together" \
@@ -1060,7 +1060,7 @@ assert_contains "$OUT" "are required together" \
 # 12d. A self-hashed campaign JSON without the intake seal cannot bypass L6.
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch feat/campaign-missing-seal --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-missing-seal --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
   --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "campaign contract without seal exit code"
@@ -1079,7 +1079,7 @@ fs.writeFileSync(target, `${JSON.stringify(seal)}\n`);
 NODE
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch feat/campaign-forged-seal --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-forged-seal --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
   --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
   --campaign-seal "$FORGED_CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
@@ -1092,7 +1092,7 @@ assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo
 # 12f. The new campaign admission path does not weaken the prompt-only session gate.
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch feat/campaign-non-strict --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-non-strict --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-strict dispatch remains blocked under active L6"
 assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
@@ -1117,7 +1117,7 @@ mkdir -p "$MALFORMED_SESSION_MODE_DIR"
 printf '%s\n' 'not-json' > "$MALFORMED_SESSION_MODE_DIR/corrupt.json"
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MALFORMED_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch feat/campaign-malformed-marker --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-malformed-marker --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "malformed authoritative session marker fails closed"
 assert_contains "$OUT" "authoritative session-mode marker is invalid" \
@@ -1140,7 +1140,7 @@ node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv
 cp "$CAMPAIGN_SESSION_MODE_DIR/l6.json" "$MM_DIR/b-live.json"
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MM_DIR" \
-  "$SCRIPT" --branch feat/multi-marker-active --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/multi-marker-active --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "a live marker after an expired one still blocks"
 assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
@@ -1152,7 +1152,7 @@ MM_DIR="$(multi_marker_dir invalid-first)"
 printf '%s\n' 'not-json' > "$MM_DIR/a-corrupt.json"
 cp "$CAMPAIGN_SESSION_MODE_DIR/l6.json" "$MM_DIR/b-live.json"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MM_DIR" \
-  "$SCRIPT" --branch feat/multi-marker-invalid --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/multi-marker-invalid --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "corrupt first marker fails closed"
 assert_contains "$OUT" "authoritative session-mode marker is invalid" \
@@ -1164,7 +1164,7 @@ MM_DIR="$(multi_marker_dir dir-first)"
 mkdir -p "$MM_DIR/a-dir.json"
 cp "$CAMPAIGN_SESSION_MODE_DIR/l6.json" "$MM_DIR/b-live.json"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MM_DIR" \
-  "$SCRIPT" --branch feat/multi-marker-dir --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/multi-marker-dir --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-regular marker entry fails closed"
 assert_contains "$OUT" "authoritative session-mode marker is not a regular file" \
@@ -1175,7 +1175,7 @@ mkdir -p "$SBX/.claude" "$TEST_TMP/empty-session-mode"
 printf '%s\n' '{"mission_convergence":' > "$SBX/.claude/owner-kernel-governance.json"
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
-  "$SCRIPT" --branch feat/campaign-invalid-governance --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch feat/campaign-invalid-governance --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "invalid authoritative Mission governance fails closed"
 assert_contains "$OUT" "authoritative Mission governance is invalid" \
@@ -1185,7 +1185,7 @@ assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo
 rm -f "$SBX/.claude/owner-kernel-governance.json"
 
 # 13. --skill-mode prompt with non-existent skill fails with exit 2
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "nonexistent skill exit code"
 assert_contains "$OUT" '"status": "precondition_failed"' "nonexistent skill returns precondition_failed"
 
@@ -1193,7 +1193,7 @@ assert_contains "$OUT" '"status": "precondition_failed"' "nonexistent skill retu
 CAP_NATIVE_DIR="$TEST_TMP/cap-store-native"
 rm -rf "$CAP_NATIVE_DIR"
 export ENGINE_CAPABILITY_DIR="$CAP_NATIVE_DIR"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-native-fail --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-native-fail --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unsupported native skill exit code"
 assert_contains "$OUT" '"status": "precondition_failed"' "unsupported native skill returns precondition_failed"
 
@@ -1201,7 +1201,7 @@ assert_contains "$OUT" '"status": "precondition_failed"' "unsupported native ski
 NATIVE_EVENT_JSON='{"schema_version":1,"observed_at":"2026-07-02T00:00:00Z","runner":"agy","model":"gpt-5.5","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"evidence":"test"},"skill_transport":{"native":"supported","prompt_pack":"supported"}}}'
 echo "$NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
 
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-native-pass --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-native-pass --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "supported native skill exit code"
 assert_contains "$OUT" '"skill_mode_effective": "native"' "provenance shows native skill transport"
 
@@ -1210,7 +1210,7 @@ FRESH_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 FRESH_NATIVE_EVENT_JSON="{\"schema_version\":1,\"observed_at\":\"$FRESH_DATE\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"evidence\":\"test\"},\"skill_transport\":{\"native\":\"supported\",\"prompt_pack\":\"supported\"}}}"
 echo "$FRESH_NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
 
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-fresh --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-fresh --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "auto fresh exit code"
 assert_contains "$OUT" '"skill_mode_effective": "native"' "auto resolves to native when fresh"
 
@@ -1220,12 +1220,12 @@ STALE_NATIVE_EVENT_JSON="{\"schema_version\":1,\"observed_at\":\"$STALE_DATE\",\
 rm -rf "$CAP_NATIVE_DIR"
 echo "$STALE_NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
 
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-stale --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --skill autopilot:dev-flow 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-stale --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --skill autopilot:dev-flow 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "auto stale exit code"
 assert_contains "$OUT" '"skill_mode_effective": "prompt"' "auto falls back to prompt when native is stale"
 
 # 18. --skill-mode auto resolves to off when native is stale and no skills given
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-stale-noskill --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-stale-noskill --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "auto stale noskill exit code"
 assert_contains "$OUT" '"skill_mode_effective": "off"' "auto resolves to off when stale and no skills given"
 
@@ -1238,16 +1238,16 @@ F4_STALE="$(node -e 'const d=new Date();d.setDate(d.getDate()-2);console.log(d.t
 F4_FRESH="$(node -e 'console.log(new Date().toISOString())')"
 echo "{\"schema_version\":1,\"observed_at\":\"$F4_STALE\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"unknown\",\"confidence\":\"low\",\"ttl_seconds\":0,\"evidence\":\"t\"},\"skill_transport\":{\"native\":\"supported\",\"prompt_pack\":\"unknown\"}}}" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
 echo "{\"schema_version\":1,\"observed_at\":\"$F4_FRESH\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"evidence\":\"t\"}}}" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-f4 --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --skill autopilot:dev-flow 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-auto-f4 --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --skill autopilot:dev-flow 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "auto F4 exit code"
 assert_contains "$OUT" '"skill_mode_effective": "prompt"' "auto reads native_observed_at: a fresh quota-only event does not make a stale native signal look fresh"
 
 # 20. (P6 F3) reject skill names that are bare path segments (. / ..): '/' is blocked but the
 #     charset permits '.', so 'skills/..' would escape the skills/<name>/ boundary to repo root.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-dotdot --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill .. 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-dotdot --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill .. 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "reject '..' skill name exit code"
 assert_contains "$OUT" "invalid skill name" "'..' skill name rejected"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-dot --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill . 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/skill-dot --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill . 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "reject '.' skill name exit code"
 
 # 21. R1 detach gate falls back to inline when `setsid --help --wait` is unavailable.
@@ -1266,7 +1266,7 @@ chmod +x "$SETSIDLESS_BIN/setsid"
 LEDGER_NOSET="$TEST_TMP/no-setsid-ledger/ledger.jsonl"
 mkdir -p "$TEST_TMP/no-setsid-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_NOSET" >/dev/null
-OUT="$(cd "$SBX" && PATH="$SETSIDLESS_BIN:$PATH" "$SCRIPT" --branch feat/no-setsid --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && PATH="$SETSIDLESS_BIN:$PATH" "$SCRIPT" --no-verify-tip --branch feat/no-setsid --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --ledger "$LEDGER_NOSET" --run-id rn --stage implement 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (no setsid): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "missing setsid support falls back to inline dispatch"
@@ -1305,7 +1305,7 @@ LEDGER_GROK="$TEST_TMP/grok-detached-ledger/ledger.jsonl"
 mkdir -p "$TEST_TMP/grok-detached-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_GROK" >/dev/null
 OUT="$(cd "$SBX" && env GROK_EFFORT_CAPTURE="$GROK_EFFORT_CAPTURE" DISPATCH_QUIET=1 \
-  "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_EFFORT" \
+  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_EFFORT" \
   --branch feat/grok-detached-effort --prompt-file "$PROMPT" --ledger "$LEDGER_GROK" \
   --run-id grok-detached-effort --stage implement 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (detached Grok): %s\n' "$OUT" >&2
@@ -2133,7 +2133,7 @@ assert_contains "$REQ_MATRIX_OUT" '"engine_caller_zero_diff_forbidden":true' \
 # alias failed closed. It looked healthy only because the stub emitted id-only lines. The stub
 # now emits both columns (hooks/tests/lib.sh make_agy_stub_versioned), so this case fails if the
 # first-field extraction in lib/agy-model-alias.sh is reverted.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/alias-resolve --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/alias-resolve --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --model gemini-flash-high --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "gemini-flash alias dispatch exit code"
 assert_contains "$OUT" '"model": "gemini-3.7-flash-high"' \
@@ -2143,14 +2143,14 @@ assert_not_contains "$OUT" '"model": "gemini-flash-high"' \
 
 # The built-in default is the literal agy implementer id, so a --model-less agy
 # dispatch sends it unchanged (a non-alias is not rewritten by the flash resolver).
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/alias-default --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/alias-default --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default-model dispatch exit code"
 assert_contains "$OUT" '"model": "gemini-4-carbon-low"' \
   "the built-in default is gemini-4-carbon-low"
 
 # --- the default is agy-only: any other runner must be told, not guessed at ---
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/nomodel-grok --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/nomodel-grok --prompt-file "$PROMPT" \
   --runner grok 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-agy runner without --model exit code"
 assert_contains "$OUT" '"status": "precondition_failed"' "non-agy default refusal is a precondition"
@@ -2183,7 +2183,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "hands: with link"
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_SYMLINK"; make_agy_stub_versioned "$STUB_SYMLINK"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t22a --prompt-file "$PROMPT" --agy-bin "$STUB_SYMLINK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t22a --prompt-file "$PROMPT" --agy-bin "$STUB_SYMLINK" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "22a symlink-named-for-ignored-dir: exit 1"
 assert_contains "$OUT" '"status": "boundary_rejected"' "22a: status boundary_rejected"
 assert_contains "$OUT" '"boundary_code": "unsafe_commit_content"' "22a: boundary_code unsafe_commit_content"
@@ -2210,7 +2210,7 @@ EOF
 chmod +x "$STUB_PUSH"; make_agy_stub_versioned "$STUB_PUSH"
 git -C "$SBX" tag hands-tag >/dev/null 2>&1   # created BEFORE the round, so it is in the before-fingerprint
 git -C "$SBX" config protocol.file.allow always   # repo-level per-protocol ALLOW: beats a bare protocol.allow=never (review, 2026-09-13)
-OUT="$(cd "$SBX" && env PUSH_RC_FILE="$PUSH_RC_FILE" "$SCRIPT" --branch t22b --prompt-file "$PROMPT" --agy-bin "$STUB_PUSH" --keep-worktree --retain-owner t22b --retain-reason push-control --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env PUSH_RC_FILE="$PUSH_RC_FILE" "$SCRIPT" --no-verify-tip --branch t22b --prompt-file "$PROMPT" --agy-bin "$STUB_PUSH" --keep-worktree --retain-owner t22b --retain-reason push-control --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22b): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "22b push attempt: round still exit 0 (prevention, not rejection)"
 assert_contains "$OUT" '"status": "committed"' "22b: status committed"
@@ -2240,7 +2240,7 @@ git -C "$MAIN_SBX" update-ref refs/remotes/origin/planted "$(git rev-parse HEAD)
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_MAIN"; make_agy_stub_versioned "$STUB_MAIN"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22c --prompt-file "$PROMPT" --agy-bin "$STUB_MAIN" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22c --prompt-file "$PROMPT" --agy-bin "$STUB_MAIN" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "22c main checkout mutated: exit 1"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22c: boundary_code main_checkout_mutated"
 git -C "$SBX" update-ref -d refs/remotes/origin/planted 2>/dev/null || true
@@ -2259,7 +2259,7 @@ echo leftover > leftover.txt
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_SYMLINK_DIRTY"; make_agy_stub_versioned "$STUB_SYMLINK_DIRTY"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t22f --prompt-file "$PROMPT" --agy-bin "$STUB_SYMLINK_DIRTY" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t22f --prompt-file "$PROMPT" --agy-bin "$STUB_SYMLINK_DIRTY" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "unsafe_commit_content"' "22f dirty + unsafe: classified unsafe_commit_content, not dirty"
 assert_not_contains "$OUT" '"status": "dirty"' "22f: dirty does not mask unsafe content"
 
@@ -2276,7 +2276,7 @@ git -C "$MAIN_SBX" -c user.email=t@t -c user.name=t commit -q -m "hands: committ
 EOF
 chmod +x "$STUB_MAINCOMMIT"; make_agy_stub_versioned "$STUB_MAINCOMMIT"
 MAIN_BEFORE_22E="$(git -C "$SBX" rev-parse HEAD)"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22e --prompt-file "$PROMPT" --agy-bin "$STUB_MAINCOMMIT" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22e --prompt-file "$PROMPT" --agy-bin "$STUB_MAINCOMMIT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "22e main-only commit, worktree untouched: exit 1"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22e: boundary_code main_checkout_mutated even with no worktree commit"
 assert_not_contains "$OUT" '"status": "no_op"' "22e: NOT classified as a harmless no_op"
@@ -2288,7 +2288,7 @@ git -C "$SBX" reset -q --hard "$MAIN_BEFORE_22E"   # undo the escaped commit for
 #      every other hook (review, 2026-09-13).
 mkdir -p "$SBX/.git/hooks"; HOOK_MARK="$TEST_TMP/precommit-fired.txt"; rm -f "$HOOK_MARK"
 printf '#!/bin/sh\necho fired > "%s"\nexit 0\n' "$HOOK_MARK" > "$SBX/.git/hooks/pre-commit"; chmod +x "$SBX/.git/hooks/pre-commit"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t22g --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t22g --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "22g: cooperative self-committing stub still committed"
 assert_file_exists "$HOOK_MARK" "22g: the repo's own pre-commit hook fired for the worker's commit (no hook shadowing)"
 rm -f "$SBX/.git/hooks/pre-commit"
@@ -2305,7 +2305,7 @@ echo tampered >> "$MAIN_SBX/README-main.txt"
 EOF
 chmod +x "$STUB_MAINEDIT"; make_agy_stub_versioned "$STUB_MAINEDIT"
 echo base > "$SBX/README-main.txt"; git -C "$SBX" add README-main.txt; git -C "$SBX" -c user.email=t@t -c user.name=t commit -q -m "main file"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22h --prompt-file "$PROMPT" --agy-bin "$STUB_MAINEDIT" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22h --prompt-file "$PROMPT" --agy-bin "$STUB_MAINEDIT" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22h: uncommitted edit to a main-checkout file rejects"
 git -C "$SBX" checkout -q -- README-main.txt
 STUB_BRANCHMOVE="$TEST_TMP/agy-branchmove"
@@ -2318,7 +2318,7 @@ EOF
 chmod +x "$STUB_BRANCHMOVE"; make_agy_stub_versioned "$STUB_BRANCHMOVE"
 git -C "$SBX" branch other-branch >/dev/null 2>&1 || true
 OTHER_BEFORE_22I="$(git -C "$SBX" rev-parse refs/heads/other-branch)"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22i --prompt-file "$PROMPT" --agy-bin "$STUB_BRANCHMOVE" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22i --prompt-file "$PROMPT" --agy-bin "$STUB_BRANCHMOVE" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "22i: moving a NON-current branch is not a mutation — exit 0"
 assert_contains "$OUT" '"status": "committed"' "22i: …and the round is committed"
 assert_not_contains "$OUT" 'main_checkout_mutated' "22i: …no boundary_code"
@@ -2339,44 +2339,44 @@ git -C "$MAIN_SBX" update-ref "$SIBLING_REF" "$(git -C "$MAIN_SBX" rev-parse HEA
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF2
 chmod +x "$STUB_SIBLING"; make_agy_stub_versioned "$STUB_SIBLING"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 "$SCRIPT" --branch hands/kr1/c1a --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 "$SCRIPT" --no-verify-tip --branch hands/kr1/c1a --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22q control): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "22q control: a sibling heads ref appearing mid-round is not a mutation"
 assert_contains "$OUT" '"status": "committed"' "22q control: …and the round is committed"
 assert_not_contains "$OUT" 'main_checkout_mutated' "22q control: …no boundary_code"
 assert_eq "0" "$(git -C "$SBX" rev-parse --verify --quiet refs/heads/hands/kr1/c2 >/dev/null; echo $?)" "22q control fixture: the sibling branch was created"
 git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 "$SCRIPT" --branch hands/kr1/c1b --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 "$SCRIPT" --no-verify-tip --branch hands/kr1/c1b --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22q): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "22q: with --sibling-ref-prefix the declared namespace is exempt — round exit 0"
 assert_contains "$OUT" '"status": "committed"' "22q: …and the round is committed"
 git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
 # 22r. Other refs/heads/* are not a mutation even outside the declared prefix. A non-branch
 #      ref still is: the same stub planting a tag rejects with the flag present.
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/tags/outside-22r "$SCRIPT" --branch hands/kr1/c1c --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/tags/outside-22r "$SCRIPT" --no-verify-tip --branch hands/kr1/c1c --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "22r: a tag planted mid-round still rejects"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22r: …as main_checkout_mutated"
 git -C "$SBX" update-ref -d refs/tags/outside-22r 2>/dev/null || true
 # 22s. Argument validation: refs/heads/ alone and a non-namespace value are refused pre-spawn.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/ 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/ 2>&1)"; EXIT=$?
 assert_neq "0" "$EXIT" "22s: --sibling-ref-prefix refs/heads/ is refused"
 assert_contains "$OUT" 'would exempt every branch' "22s: …with the reason"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix hands/kr1 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix hands/kr1 2>&1)"; EXIT=$?
 assert_neq "0" "$EXIT" "22s: a bare branch name (no refs/heads/, no trailing /) is refused"
 assert_contains "$OUT" 'must look like refs/heads/<namespace>/' "22s: …with the shape named"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads// 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t22s --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads// 2>&1)"; EXIT=$?
 assert_neq "0" "$EXIT" "22s: an empty namespace segment (refs/heads//) is refused"
 assert_contains "$OUT" 'empty path segment' "22s: …with the reason"
 # 22z. Env-driven default (308 BACKLOG #46): AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX seeds the
 #      SAME exclusion as --sibling-ref-prefix, for a caller (dispatch-foreman.sh) that pre-sets
 #      it in a hand's environment instead of the hand's own argv. Positive case mirrors 22q;
 #      negative case mirrors 22s's validation, but via the env var and naming it in the error.
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/kr1/ "$SCRIPT" --branch hands/kr1/c1z --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/hands/kr1/ "$SCRIPT" --no-verify-tip --branch hands/kr1/c1z --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22z): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "22z: AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX env default exempts the same namespace as the CLI flag — round exit 0"
 assert_contains "$OUT" '"status": "committed"' "22z: …and the round is committed"
 git -C "$SBX" update-ref -d refs/heads/hands/kr1/c2 2>/dev/null || true
-OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/ "$SCRIPT" --branch t22z --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX=refs/heads/ "$SCRIPT" --no-verify-tip --branch t22z --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" 2>&1)"; EXIT=$?
 assert_neq "0" "$EXIT" "22z: an invalid AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX value is refused pre-spawn"
 assert_contains "$OUT" 'AUTOPILOT_DISPATCH_SIBLING_REF_PREFIX' "22z: …the error names the env var"
 assert_contains "$OUT" 'would exempt every branch' "22z: …with the same reason as the CLI flag's own refs/heads/ case"
@@ -2387,7 +2387,7 @@ assert_contains "$OUT" 'would exempt every branch' "22z: …with the same reason
 LEDGER_SIB="$TEST_TMP/sibling-detached-ledger/ledger.jsonl"
 mkdir -p "$TEST_TMP/sibling-detached-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_SIB" >/dev/null
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 DISPATCH_QUIET=1 "$SCRIPT" --branch hands/kr1/c1d --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ --ledger "$LEDGER_SIB" --run-id sib --stage implement 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" SIBLING_REF=refs/heads/hands/kr1/c2 DISPATCH_QUIET=1 "$SCRIPT" --no-verify-tip --branch hands/kr1/c1d --prompt-file "$PROMPT" --agy-bin "$STUB_SIBLING" --sibling-ref-prefix refs/heads/hands/kr1/ --ledger "$LEDGER_SIB" --run-id sib --stage implement 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22t): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "22t detached: the declared namespace survives the detach boundary — round exit 0"
 assert_contains "$OUT" '"status": "committed"' "22t detached: …and the round is committed"
@@ -2408,31 +2408,31 @@ mkdir -p "$MAIN_SBX/$RAIL_IO_DIR"; echo "hand stderr" > "$MAIN_SBX/$RAIL_IO_DIR/
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF2
 chmod +x "$STUB_RAILIO"; make_agy_stub_versioned "$STUB_RAILIO"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --branch t22u-a --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --no-verify-tip --branch t22u-a --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "22u control: rail I/O written under the checkout rejects WITHOUT the flag (the 308-8f shape)"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22u control: …as main_checkout_mutated"
 rm -rf "$SBX/rail-io"; mkdir -p "$SBX/rail-io"   # the declared directory exists BEFORE the round (its creation would touch the root mtime)
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --branch t22u-b --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --no-verify-tip --branch t22u-b --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22u): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "22u: with --sibling-path-prefix the declared directory is exempt — round exit 0"
 assert_contains "$OUT" '"status": "committed"' "22u: …and the round is committed"
 rm -rf "$SBX/rail-io"
 # 22v. The exemption is the declared directory and nothing else: the same stub writing OUTSIDE
 #      the prefix still rejects with the flag present (preservation of the fence).
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=elsewhere "$SCRIPT" --branch t22v --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=elsewhere "$SCRIPT" --no-verify-tip --branch t22v --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "22v: a write outside the declared directory still rejects"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22v: …as main_checkout_mutated"
 rm -rf "$SBX/elsewhere"
 # 22w. Argument validation: the whole checkout, .git, absolute and .. forms are refused pre-spawn.
 for bad in "/" "./" "/tmp/x/" ".git/" "../x/" "a//b/" "rail-io" "./.git/" "rail-io/./.git/"; do
-  OUT="$(cd "$SBX" && "$SCRIPT" --branch t22w --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix "$bad" 2>&1)"; EXIT=$?
+  OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t22w --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix "$bad" 2>&1)"; EXIT=$?
   assert_neq "0" "$EXIT" "22w: --sibling-path-prefix '$bad' is refused"
   assert_contains "$OUT" 'sibling-path-prefix' "22w: …naming the flag ('$bad')"
 done
 # 22w2. Documented contract: the declared directory must exist BEFORE the round. Creating it
 #       mid-round touches the root directory's mtime, which is NOT pruned — still rejects.
 rm -rf "$SBX/rail-io"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --branch t22w2 --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io "$SCRIPT" --no-verify-tip --branch t22w2 --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "22w2: a declared directory created only mid-round still rejects (root mtime)"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22w2: …as main_checkout_mutated"
 rm -rf "$SBX/rail-io"
@@ -2441,7 +2441,7 @@ LEDGER_RIO="$TEST_TMP/railio-detached-ledger/ledger.jsonl"
 mkdir -p "$TEST_TMP/railio-detached-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_RIO" >/dev/null
 mkdir -p "$SBX/rail-io"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io DISPATCH_QUIET=1 "$SCRIPT" --branch t22x --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ --ledger "$LEDGER_RIO" --run-id rio --stage implement 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" RAIL_IO_DIR=rail-io DISPATCH_QUIET=1 "$SCRIPT" --no-verify-tip --branch t22x --prompt-file "$PROMPT" --agy-bin "$STUB_RAILIO" --sibling-path-prefix rail-io/ --ledger "$LEDGER_RIO" --run-id rio --stage implement 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (22x): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "22x detached: the declared directory survives the detach boundary — round exit 0"
 assert_contains "$OUT" '"status": "committed"' "22x detached: …and the round is committed"
@@ -2461,7 +2461,7 @@ echo tampered > "$MAIN_SBX/.venv/bin/python"
 EOF
 chmod +x "$STUB_IGNORED"; make_agy_stub_versioned "$STUB_IGNORED"
 sleep 1  # mtime resolution guard: the overwrite must be measurably later than the fixture write
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22j --prompt-file "$PROMPT" --agy-bin "$STUB_IGNORED" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22j --prompt-file "$PROMPT" --agy-bin "$STUB_IGNORED" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22j: overwriting an IGNORED main-checkout file rejects"
 echo real > "$SBX/.venv/bin/python"
 echo already-dirty >> "$SBX/README-main.txt"   # main file dirty BEFORE the round
@@ -2473,7 +2473,7 @@ echo second-edit >> "$MAIN_SBX/README-main.txt"
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_REDIRTY"; make_agy_stub_versioned "$STUB_REDIRTY"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22k --prompt-file "$PROMPT" --agy-bin "$STUB_REDIRTY" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22k --prompt-file "$PROMPT" --agy-bin "$STUB_REDIRTY" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22k: a second edit to an ALREADY-dirty main file rejects (content, not status label)"
 git -C "$SBX" checkout -q -- README-main.txt
 
@@ -2488,7 +2488,7 @@ rmdir "$MAIN_SBX/.venv/empty" && ln -s /tmp/elsewhere "$MAIN_SBX/.venv/empty"
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_LINKMAIN"; make_agy_stub_versioned "$STUB_LINKMAIN"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22l --prompt-file "$PROMPT" --agy-bin "$STUB_LINKMAIN" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22l --prompt-file "$PROMPT" --agy-bin "$STUB_LINKMAIN" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22l: symlink over an empty ignored main directory rejects"
 rm -f "$SBX/.venv/empty"
 
@@ -2508,7 +2508,7 @@ timeout 20 git push --no-verify custom HEAD:refs/heads/x >/dev/null 2>&1; echo "
 EOF
 chmod +x "$STUB_CUSTOMPUSH"; make_agy_stub_versioned "$STUB_CUSTOMPUSH"
 CUSTOM_RC_FILE="$TEST_TMP/custom-rc.txt"
-OUT="$(cd "$SBX" && env PATH="$HELPER_DIR:$PATH" CUSTOM_RC_FILE="$CUSTOM_RC_FILE" "$SCRIPT" --branch t22m --prompt-file "$PROMPT" --agy-bin "$STUB_CUSTOMPUSH" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env PATH="$HELPER_DIR:$PATH" CUSTOM_RC_FILE="$CUSTOM_RC_FILE" "$SCRIPT" --no-verify-tip --branch t22m --prompt-file "$PROMPT" --agy-bin "$STUB_CUSTOMPUSH" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"status": "committed"' "22m: the round itself completed (the stub ran to the push)"
 assert_file_exists "$CUSTOM_RC_FILE" "22m: the stub reached the push and recorded its rc"
 assert_neq "0" "$(cat "$CUSTOM_RC_FILE")" "22m: push over a repo-allowed CUSTOM helper is refused"
@@ -2530,7 +2530,7 @@ git config --unset protocol.file.allow
 EOF
 chmod +x "$STUB_ALLOWLIST"; make_agy_stub_versioned "$STUB_ALLOWLIST"
 git -C "$SBX" tag hands-tag >/dev/null 2>&1 || true; rm -f "$PUSH_RC_FILE"
-OUT="$(cd "$SBX" && env GIT_ALLOW_PROTOCOL=file PUSH_RC_FILE="$PUSH_RC_FILE" "$SCRIPT" --branch t22n --prompt-file "$PROMPT" --agy-bin "$STUB_ALLOWLIST" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env GIT_ALLOW_PROTOCOL=file PUSH_RC_FILE="$PUSH_RC_FILE" "$SCRIPT" --no-verify-tip --branch t22n --prompt-file "$PROMPT" --agy-bin "$STUB_ALLOWLIST" 2>&1)"; EXIT=$?
 assert_file_exists "$PUSH_RC_FILE" "22n: the stub reached the push and recorded its rc"
 assert_neq "0" "$(cat "$PUSH_RC_FILE")" "22n: push refused despite inherited GIT_ALLOW_PROTOCOL=file AND a worker-added allow key"
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22n: the worker's git config edit in the shared .git is itself detected (config is fingerprinted)"
@@ -2547,7 +2547,7 @@ git -C "$MAIN_SBX" update-ref refs/remotes/origin/planted2 "$(git rev-parse HEAD
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_BOTH"; make_agy_stub_versioned "$STUB_BOTH"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22o --prompt-file "$PROMPT" --agy-bin "$STUB_BOTH" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22o --prompt-file "$PROMPT" --agy-bin "$STUB_BOTH" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22o: main-checkout code takes precedence"
 assert_contains "$OUT" 'ALSO boundary_rejected: unsafe commit content' "22o: …and the content verdict is carried too"
 git -C "$SBX" update-ref -d refs/remotes/origin/planted2 2>/dev/null || true
@@ -2562,7 +2562,7 @@ printf '#!/bin/sh\nexit 0\n' > "$MAIN_SBX/.git/hooks/post-checkout"; chmod +x "$
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_HOOK"; make_agy_stub_versioned "$STUB_HOOK"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22p --prompt-file "$PROMPT" --agy-bin "$STUB_HOOK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22p --prompt-file "$PROMPT" --agy-bin "$STUB_HOOK" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22p: a hook installed into the shared .git rejects"
 rm -f "$SBX/.git/hooks/post-checkout"
 
@@ -2575,7 +2575,7 @@ git -C "$MAIN_SBX" update-index --assume-unchanged README-main.txt
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_IDX"; make_agy_stub_versioned "$STUB_IDX"
-OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --branch t22q --prompt-file "$PROMPT" --agy-bin "$STUB_IDX" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env MAIN_SBX="$SBX" "$SCRIPT" --no-verify-tip --branch t22q --prompt-file "$PROMPT" --agy-bin "$STUB_IDX" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22q: an index-only flag change in main (assume-unchanged) rejects"
 git -C "$SBX" update-index --no-assume-unchanged README-main.txt
 
@@ -2589,12 +2589,12 @@ printf '#!/bin/sh\nexit 0\n' > "$REAL_HOOKS/post-merge"; chmod +x "$REAL_HOOKS/p
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_HOOK2"; make_agy_stub_versioned "$STUB_HOOK2"
-OUT="$(cd "$SBX" && env REAL_HOOKS="$REAL_HOOKS" "$SCRIPT" --branch t22r --prompt-file "$PROMPT" --agy-bin "$STUB_HOOK2" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && env REAL_HOOKS="$REAL_HOOKS" "$SCRIPT" --no-verify-tip --branch t22r --prompt-file "$PROMPT" --agy-bin "$STUB_HOOK2" 2>&1)"; EXIT=$?
 assert_contains "$OUT" '"boundary_code": "main_checkout_mutated"' "22r: a hook written through a SYMLINKED hooks dir rejects"
 rm -f "$SBX/.git/hooks"; mkdir -p "$SBX/.git/hooks"
 
 # 22d. Control: the plain cooperative stub is unaffected by the new gates.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch t22d --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch t22d --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "22d control: cooperative stub still exit 0 with gates in place"
 assert_contains "$OUT" '"status": "committed"' "22d control: committed"
 
@@ -2630,14 +2630,14 @@ chmod +x "$STUB_EFFORT_ARGV"
 make_agy_stub_versioned "$STUB_EFFORT_ARGV"
 
 # RED at base fe225ff5: gemini-flash-medium default effort reached the stub as --effort high
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-medium --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-medium --prompt-file "$PROMPT" \
   --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-medium --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero gemini-flash-medium default effort exit 0"
 assert_eq "medium" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
   "hetero alias gemini-flash-medium default effort reaches stub as --effort medium"
 
 # RED at base fe225ff5: gemini-flash-high --effort low reached stub as --effort high with no fold note
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-fold --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-fold --prompt-file "$PROMPT" \
   --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort low --runner agy 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero gemini-flash-high --effort low exit 0"
 assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
@@ -2647,13 +2647,13 @@ assert_contains "$OUT" "agy effort low (clamped low) folded to high: model id en
   "hetero fold note names requested, folded tier, and model-id reason"
 
 # (preservation, green at base)
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-high --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-high --prompt-file "$PROMPT" \
   --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --effort high --runner agy 2>&1)"; EXIT=$?
 assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
   "hetero gemini-flash-high --effort high stays --effort high"
 assert_eq "0" "$(count_fold_notes "$OUT")" "hetero zero fold notes when clamp matches suffix"
 
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-xhigh --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-xhigh --prompt-file "$PROMPT" \
   --agy-bin "$STUB_EFFORT_ARGV" --model gemini-flash-high --runner agy 2>&1)"; EXIT=$?
 assert_eq "high" "$(agy_effort_from_argv "$TEST_TMP/hetero-agy.argv")" \
   "hetero gemini-flash-high default xhigh reaches stub as --effort high"
@@ -2663,7 +2663,7 @@ assert_eq "0" "$(count_fold_notes "$OUT")" "hetero zero fold notes for default x
 export AGY_STUB_MODELS="$(printf '%s\n' \
   'gemini-3.7-flash	Gemini 3.7 Flash' \
   'gemini-3.7-flash-high	Gemini 3.7 Flash (High)')"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/effort-bare --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --branch feat/effort-bare --prompt-file "$PROMPT" \
   --agy-bin "$STUB_EFFORT_ARGV" --model gemini-3.7-flash --runner agy 2>&1)"; EXIT=$?
 unset AGY_STUB_MODELS
 assert_eq "0" "$EXIT" "hetero bare agy id exit 0"
@@ -2683,7 +2683,7 @@ printf '%s\n' "\$@" > "$HETERO_GROK_ARGV"
 printf 'grok argv\n' > grok-argv.txt
 EOF
 chmod +x "$STUB_GROK_ARGV"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
   --branch feat/grok-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero grok argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_GROK_ARGV")" "$(printf '%s\n' \
@@ -2703,7 +2703,7 @@ printf '%s\n' "\$@" > "$HETERO_CODEX_ARGV"
 printf 'codex argv\n' > codex-argv.txt
 EOF
 chmod +x "$STUB_CODEX_ARGV"
-OUT="$(cd "$SBX" && "$SCRIPT" --runner codex --model gpt-5.3-codex-spark --effort high \
+OUT="$(cd "$SBX" && "$SCRIPT" --no-verify-tip --runner codex --model gpt-5.3-codex-spark --effort high \
   --codex-bin "$STUB_CODEX_ARGV" --branch feat/codex-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero codex argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_CODEX_ARGV")" "$(printf '%s\n' \
@@ -2725,7 +2725,7 @@ ln -sf "$STUB_CC_ARGV" "$TEST_TMP/hetero-cc-bin/claude"
 export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1"
 export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
-  "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+  "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --branch feat/cc-argv --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero cc-shim argv capture exit 0"
 assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
   -p --session-id UUID --model mini --strict-mcp-config --dangerously-skip-permissions --disallowedTools TaskCreate,TaskUpdate,TaskGet,TaskList --output-format json)" \
@@ -2737,7 +2737,7 @@ assert_eq "$(normalize_argv < "$HETERO_CC_ARGV")" "$(printf '%s\n' \
 for _he_eff in low medium high xhigh max; do
   rm -f "$HETERO_CC_ARGV"
   OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
-    "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --effort "$_he_eff" --branch "feat/cc-eff-$_he_eff" --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+    "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --effort "$_he_eff" --branch "feat/cc-eff-$_he_eff" --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "hetero cc-shim --effort $_he_eff exit 0"
   assert_contains "$(tr '\n' ' ' < "$HETERO_CC_ARGV")" "--effort $_he_eff " "hetero cc-shim forwards --effort $_he_eff to claude"
 done
@@ -2750,7 +2750,7 @@ LEDGER_CC="$TEST_TMP/cc-detached-ledger/ledger.jsonl"
 mkdir -p "$TEST_TMP/cc-detached-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_CC" >/dev/null
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" DISPATCH_QUIET=1 \
-  "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --effort low --branch feat/cc-detached-effort \
+  "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --effort low --branch feat/cc-detached-effort \
   --prompt-file "$PROMPT" --ledger "$LEDGER_CC" --run-id cc-detached-effort --stage implement 2>&1)"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (detached cc-shim): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "detached hetero cc-shim --effort low exit 0"
@@ -2758,12 +2758,12 @@ assert_file_exists "$HETERO_CC_ARGV" "detached hetero cc-shim started claude"
 assert_contains "$(tr '\n' ' ' < "$HETERO_CC_ARGV" 2>/dev/null)" "--effort low " "detached hetero cc-shim forwards --effort low to claude"
 rm -f "$HETERO_CC_ARGV"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
-  "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --effort default --branch feat/cc-eff-default --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+  "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --effort default --branch feat/cc-eff-default --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero cc-shim --effort default exit 0"
 assert_not_contains "$(cat "$HETERO_CC_ARGV")" "--effort" "hetero cc-shim --effort default sends no --effort"
 rm -f "$HETERO_CC_ARGV"
 OUT="$(cd "$SBX" && env PATH="$TEST_TMP/hetero-cc-bin:$PATH" \
-  "$SCRIPT" --runner cc-shim --model mini --endpoint TESTEP --effort ultra --branch feat/cc-eff-bad --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
+  "$SCRIPT" --no-verify-tip --runner cc-shim --model mini --endpoint TESTEP --effort ultra --branch feat/cc-eff-bad --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero cc-shim invalid --effort ultra exits 2"
 assert_contains "$OUT" "precondition_failed" "hetero cc-shim invalid effort is a precondition failure"
 assert_file_absent "$HETERO_CC_ARGV" "hetero cc-shim invalid effort never launched claude"
@@ -2778,7 +2778,7 @@ OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/scarce-codex.json" \
   AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
   DISPATCH_QUIET=1 \
-  "$SCRIPT" --pace-role implementer --codex-bin "$STUB_CODEX_ARGV" \
+  "$SCRIPT" --no-verify-tip --pace-role implementer --codex-bin "$STUB_CODEX_ARGV" \
   --run-id pace-codex-pick --branch feat/pace-codex-pick --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-codex.err")"; EXIT=$?
 [ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (--pace-role codex): out=%s err=%s\n' "$OUT" "$(cat "$TEST_TMP/pace-codex.err" 2>/dev/null)" >&2
 assert_eq "0" "$EXIT" "hetero --pace-role implementer selects codex and exits 0"
@@ -2807,7 +2807,7 @@ assert_eq "ok" "$PACE_MF_CHECK" "manifest records full selector JSON as engine_c
 # (2) Without --pace-role, manifest has no engine_choice field.
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   DISPATCH_QUIET=1 \
-  "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
   --run-id pace-absent --branch feat/pace-absent --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-absent.err")"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero without --pace-role exits 0"
 PACE_ABSENT_CHECK="$(node -e '
@@ -2821,7 +2821,7 @@ assert_eq "absent" "$PACE_ABSENT_CHECK" "manifest omits engine_choice when --pac
 OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
   DISPATCH_QUIET=1 \
-  "$SCRIPT" --pace-role implementer --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
+  "$SCRIPT" --no-verify-tip --pace-role implementer --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_ARGV" \
   --run-id pace-explicit-runner --branch feat/pace-explicit-runner --prompt-file "$PROMPT" 2>"$TEST_TMP/pace-explicit.err")"; EXIT=$?
 assert_eq "0" "$EXIT" "hetero explicit --runner overrides --pace-role"
 PACE_EXPLICIT_CHECK="$(node -e '
@@ -2836,7 +2836,7 @@ OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
   AUTOPILOT_PACE_FILE="$REPO_ROOT/scripts/fixtures/pace-select/all-unknown.json" \
   AUTOPILOT_QUALIFIED_FILE="$TEST_TMP/missing-qualified.json" \
   DISPATCH_QUIET=1 \
-  "$SCRIPT" --pace-role implementer --agy-bin "$TEST_TMP/nonexistent-agy-bin" \
+  "$SCRIPT" --no-verify-tip --pace-role implementer --agy-bin "$TEST_TMP/nonexistent-agy-bin" \
   --run-id pace-unknown-fail --branch feat/pace-unknown-fail --prompt-file "$PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "hetero --pace-role with pace_unknown exits 2 (no silent default)"
 assert_contains "$OUT" '"status": "precondition_failed"' "hetero --pace-role pace_unknown emits precondition_failed"

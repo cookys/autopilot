@@ -253,6 +253,7 @@ function runArm(task, arm, attempt, taskBase) {
     '--effort', effort,
     '--base', 'HEAD',
     '--timeout', timeout,
+    '--no-verify-tip',
   ], {
     cwd: scratch,
     env,

@@ -130,7 +130,7 @@ assert_r1_grok_enforced_timeout_kills() {
   start="$(date +%s)"
   out="$(cd "$SBX" && timeout 30 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-grok --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
   assert_timeout_kill_result "$out" "$elapsed" "$pidfile" "assert_r1_grok_enforced_timeout_kills"
@@ -148,7 +148,7 @@ assert_r1_second_rail_enforced() {
   start="$(date +%s)"
   out="$(cd "$SBX" && timeout 30 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-    "$SCRIPT" --runner cursor --model grok46 --effort low --cursor-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner cursor --model grok46 --effort low --cursor-bin "$stub" \
     --branch feat/wdog-cursor --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
   assert_timeout_kill_result "$out" "$elapsed" "$pidfile" "assert_r1_second_rail_enforced"
@@ -161,7 +161,7 @@ assert_r1_default_not_enforced() {
   local out json mf
   out="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=5 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-default --prompt-file "$PROMPT" 2>&1)" || true
   json="$(last_json "$out")"
   [ -n "$json" ] || fail "assert_r1_default_not_enforced: missing JSON: $out"
@@ -182,7 +182,7 @@ assert_r1_no_stray_watchdog() {
   local owner="wdog-owner-$$-$RANDOM" p
   for i in 1 2 3 4 5; do
     (cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" HETERO_TEST_SLEEP=0 HETERO_TEST_WDOG_OWNER="$owner" \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch "feat/wdog-fast-$i" --prompt-file "$PROMPT" --timeout 60s >/dev/null 2>&1) || true
     for p in $(pgrep -f 'hetero-wall-watchdog' 2>/dev/null || true); do
       if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "HETERO_TEST_WDOG_OWNER=$owner"; then
@@ -200,7 +200,7 @@ assert_r1_term_ignoring_worker_killed() {
   start="$(date +%s)"
   out="$(cd "$SBX" && timeout 40 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 HETERO_TEST_IGNORE_TERM=1 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-trap --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
   [ "$elapsed" -lt 40 ] || fail "term-ignore: took ${elapsed}s"
@@ -233,7 +233,7 @@ EOF
   start="$(date +%s)"
   out="$(cd "$SBX" && timeout 30 env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-setsid --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
   assert_timeout_kill_result "$out" "$elapsed" "$pidfile" "assert_setsid_wait_path_enforced_timeout_kills"
@@ -259,7 +259,7 @@ EOF
   start="$(date +%s)"
   out="$(cd "$SBX" && timeout 30 env PATH="$hide:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_BUSYLOOP=1 HETERO_TEST_IGNORE_TERM=1 \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-setsid-trap --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
   [ "$elapsed" -lt 20 ] || fail "assert_setsid_wait_path_term_ignore_kills: took ${elapsed}s (want 3s + 10s grace + SIGKILL)"
@@ -295,7 +295,7 @@ assert_detached_path_enforced_timeout_kills() {
   (
     cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
       HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-detach --prompt-file "$PROMPT" --timeout 3s \
       --ledger "$ledger" --run-id wdog-detach --stage implement
   ) >/dev/null 2>&1 &
@@ -376,7 +376,7 @@ assert_reap_does_not_disarm_wall_timeout() {
   (
     cd "$SBX" && timeout --foreground 25 env TMPDIR="$priv" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
       HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-reap --prompt-file "$PROMPT" --timeout 4s
   ) >"$outf" 2>&1 &
   dpid=$!
@@ -503,7 +503,7 @@ assert_vanished_token_still_enforces_timeout() {
     cd "$SBX" && timeout --foreground 20 env HOME="$home" TMPDIR="$priv" \
       AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
       HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-      "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+      "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
       --branch feat/wdog-vanish --prompt-file "$PROMPT" --timeout 3s
   ) >"$outf" 2>&1 &
   dpid=$!
@@ -580,7 +580,7 @@ assert_clean_finish_leaves_no_watchdog_residue() {
   start="$(date +%s)"
   out="$(cd "$SBX" && env HOME="$home" TMPDIR="$priv" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=1 HETERO_TEST_TERM_LOG="$termlog" \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-clean --prompt-file "$PROMPT" --timeout 30s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
   [ "$elapsed" -lt 20 ] || fail "assert_clean_finish_leaves_no_watchdog_residue: took ${elapsed}s (runner sleeps 1s inside a 30s timeout)"
@@ -638,7 +638,7 @@ EOF
   out="$(cd "$SBX" && timeout --foreground 25 env HOME="$home" TMPDIR="$priv" PATH="$hide:$PATH" \
     AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_CHILD_PIDFILE="$childpidfile" \
-    "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
+    "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$stub" \
     --branch feat/wdog-case-c --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
   childpid="$(cat "$childpidfile" 2>/dev/null || true)"

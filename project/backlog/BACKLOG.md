@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0456 -->
+<!-- next-id: BL-0462 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -696,7 +696,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: pre-push suite runs 2026-10-26 to 10-27 (noexpiry, agyargv2, fbland, fbv3)
 - **Pointer**: project/backlog/base-red-suite-list.md
-- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here. The 2026-11-13 twelve are in the Pointer: eleven green alone, one host SKIP. BL-0428 is closed.
+- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here. The 2026-11-13 twelve are in the Pointer: eleven green alone, one host SKIP. BL-0428 is closed. 2026-11-16 vs base 761162e91: test-pipefail-grep-q still red.
 
 ### The library path openDecision() skips the --not-authorized and DOA checks
 - **Id**: BL-0320
@@ -1737,3 +1737,90 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: autopilot lane 2026-11-15
 - **Pointer**: none
+
+### band 工作階段編號的清理規則與 codeforge 不一致
+- **Id**: BL-0456
+- **Status**: open
+- **Since**: 2026-11-16
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 01M7GQEK
+- **Reply**: none
+- **Problem**: band 發布工作階段編號時，只替換點與兩種斜線；codeforge 則把英數、底線與連字號以外的每個字元都替換。同一編號會得到兩個不同結果。
+- **Impact**: 兩邊記不成同一個工作階段，跨專案對帳與共用測試會對不上。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16 (fleet 01M7GQEK)
+- **Pointer**: none
+- **Context**: mods/live/register.ts replaces only . / \ in band-facts. codeforge live::sanitize_session_id replaces chars outside [A-Za-z0-9_-]. Vectors: codeforge tests/fixtures/session-id-vectors.json. Report the codeforge sha after aligning.
+
+### develop 第二批套件在基準點就已經是紅的
+- **Id**: BL-0457
+- **Status**: open
+- **Since**: 2026-11-16
+- **Origin**: self
+- **Problem**: 2026-11-16 第二批全套對照主線基準，又有一批測試在基準點就失敗，不是這次改動新引入的。其中一支早已列在基準紅名單，其餘是新點名的。
+- **Impact**: 全套紅燈分不出新壞掉與本來就紅，驗收會把舊紅當成這次的退步。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: project/backlog/base-red-second-batch-2026-11-16.md
+- **Context**: 第二批名單與基準 761162e91 在旁檔。test-pipefail-grep-q 仍歸 BL-0313。runner-binary 另見 BL-0414（單獨跑綠）。
+
+### viewer 與 roundtable 測試收尾的 timeout 回傳 127
+- **Id**: BL-0458
+- **Status**: open
+- **Since**: 2026-11-16
+- **Origin**: self
+- **Problem**: viewer 與 roundtable 的測試結尾，timeout 回傳 127。通過數仍算過關，但 127 代表 timeout 指令找不到，或是包裝錯了。develop 主線上也一樣。
+- **Impact**: 收尾失敗被當成通過，指令壞掉時這次的結束碼抓不到。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+- **Context**: mods viewer and roundtable runners end with timeout rc=127 on develop too. Counts still pass. 127 means timeout is missing or wrapped wrong.
+
+### 單件選套件漏掉檢查設定段的那一支
+- **Id**: BL-0459
+- **Status**: open
+- **Since**: 2026-11-16
+- **Origin**: self
+- **Problem**: 只改變更紀錄裡的設定段、多了一個設定開關時，單件挑選沒有選到會檢查該段的套件。整包全跑才抓到。
+- **Impact**: 只跑挑到的套件會假綠，設定段的檢查壞了也能合併。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+- **Context**: scripts/affected-suites.js single select misses preflight-slash-probe-optin after a CHANGELOG Settings-section switch is added. Full suite caught it. Same family as BL-0391 and BL-0410.
+
+### 開卡範例缺必填分類，函式庫開的卡也沒分類
+- **Id**: BL-0460
+- **Status**: open
+- **Since**: 2026-11-16
+- **Origin**: self
+- **Problem**: 執行長技能的開卡範例少了必填的分類。從函式庫開卡的提問與權限阻擋也沒帶分類，統計會把它們算成未分類。改那個範例要重釘設定檔雜湊。
+- **Impact**: 照範例開卡會直接失敗；沒分類的卡在統計裡混在一起，看不出種類。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+- **Context**: skills/ceo-agent/SKILL.md near line 91: open-decision.js open lacks required --category; edit via profiles-hash-repin. ask-decision and permission-block have no category (uncategorized). BL-0320 is the separate DOA gap.
+
+### 選到一半以上套件時尖端驗證逾時而沒有判定
+- **Id**: BL-0461
+- **Status**: open
+- **Since**: 2026-11-16
+- **Origin**: self
+- **Problem**: 挑選幾乎涵蓋全部套件時，尖端驗證的 1800 秒上限跑不完，得到的是逾時而不是判定。挑選數達到一半時，應改跑全套，或把上限加長。
+- **Impact**: 驗證沒有判定就結束，過與不過都不知道。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+- **Context**: When the selector marks at least half the suites, tip verify hits its 1800s cap and returns timeout instead of a verdict. Run the full suite or raise the cap at that threshold. Related: BL-0407.

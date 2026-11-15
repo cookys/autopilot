@@ -24,4 +24,4 @@ Goal: either fix each, or record why it is red and since when, so a new red stan
 
 Added 2026-10-28 (bltidy20, from the handoff list):
 
-- `test-pipefail-grep-q` has been red for a long time. Re-run on 2026-10-28 at base 403c47f30: 7 passed, 1 failed; the one failure is the check "no printf-into-grep -q shape left in hooks/tests", which finds `hooks/tests/post-tool-chain-differential.test.sh:457` (a printf piped into grep -Eq). Fix is to rewrite that line, or to record why it is accepted and narrow the check.
+- `test-pipefail-grep-q` has been red for a long time. Re-run on 2026-10-28 at base 403c47f30: 7 passed, 1 failed; the one failure is the check "no printf-into-grep -q shape left in hooks/tests", which finds `hooks/tests/post-tool-chain-differential.test.sh:457` (a printf piped into grep -Eq). Fix is to rewrite that line, or to record why it is accepted and narrow the check. Reconfirmed 2026-11-16, second full-suite batch against base 761162e91: still red on that base. The other suites from that batch are a separate row.

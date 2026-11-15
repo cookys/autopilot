@@ -161,9 +161,14 @@
 #                                               #   (that path does not emit tip_verify).
 #       [env AUTOPILOT_TIP_VERIFY_REQUIRE=1]   # when no source yields a command,
 #                                               #   refuse before the worker starts
-#                                               #   (the old die_precondition text).
-#                                               #   Unset, that case is
-#                                               #   "tip_verify": "no_source".
+#                                               #   (the die_precondition text below).
+#                                               #   Unset: a non-empty grace list
+#                                               #   (scripts/lib/tip-verify-grace.json)
+#                                               #   is "tip_verify": "no_source";
+#                                               #   an empty list refuses the same way.
+#       [env AUTOPILOT_TIP_VERIFY_GRACE_FILE]  # test-only path of that grace list.
+#                                               #   Unset reads the file next to
+#                                               #   this script. Not a user knob.
 #       [--keep-worktree]                      # keep worktree even on success
 #       [--sibling-ref-prefix refs/heads/x/]   # repeatable: a ref namespace the CALLER owns
 #                                              #   (e.g. refs/heads/hands/kr1/). Must start with
@@ -261,15 +266,21 @@
 #   1. every --verify-cmd <shell command>, in flag order (source "flag");
 #   2. the brief (--prompt-file) ## Acceptance section (source "brief");
 #   3. the consuming checkout's .claude/quality-gate-config.md section
-#      ## Test Command (source "repo_config");
-#   4. none → do not refuse. One stderr line is printed before the worker starts:
-#      dispatch-hetero: tip verify: no acceptance command found (brief ## Acceptance fenced block, or .claude/quality-gate-config.md ## Test Command); the tip is not re-verified
-#      TIP_VERIFY_SKIP is set and the result is tip_verify:"no_source" (no
-#      commands run). The dispatch is reported as it was before tip verification
-#      existed. AUTOPILOT_TIP_VERIFY_REQUIRE=1 restores the refusal:
-#      die_precondition before the worker starts, naming --verify-cmd,
-#      ## Acceptance, and ## Test Command. --no-verify-tip opts out and records
-#      tip_verify:"skipped_by_flag" (no commands run).
+#      ## Test Command (source "repo_config"), via
+#      scripts/lib/tip-verify-repo-default.js;
+#   4. none. AUTOPILOT_TIP_VERIFY_REQUIRE=1 refuses before the worker starts
+#      (die_precondition, naming --verify-cmd, ## Acceptance, and ## Test Command).
+#      Otherwise, if scripts/lib/tip-verify-grace.json has a non-empty repos
+#      list, one stderr line is printed before the worker starts:
+#      dispatch-hetero: tip verify: <repo> has no default test command; add a fenced bash block under ## Test Command in .claude/quality-gate-config.md (or a fenced block under ## Acceptance in the brief); the tip is not re-verified
+#      <repo> is the basename of `git remote get-url origin` minus a trailing
+#      .git, else the toplevel directory basename. TIP_VERIFY_SKIP is set and
+#      the result is tip_verify:"no_source" (no commands run). An empty grace
+#      list refuses with the same die_precondition text.
+#      AUTOPILOT_TIP_VERIFY_GRACE_FILE is a test-only path override of the grace
+#      list (unset reads the file next to this script; not a user knob).
+#      --no-verify-tip opts out and records tip_verify:"skipped_by_flag"
+#      (no commands run).
 #
 # Acceptance extraction (deterministic; the original brief, before skill-pack):
 #   put acceptance commands in a fenced block under ## Acceptance.
@@ -288,13 +299,14 @@
 #   true, false, sleep, bash, cargo, npm, node, make, pytest, go, env,
 #   timeout match). Kept text is the trimmed line, in document order.
 #   ## Test Command: lines after ^## Test Command[[:space:]]*$ until the next
-#   ^##[[:space:]] or EOF. A command counts only inside a fenced code block
+#   ^##[[:space:]] or EOF. Read by scripts/lib/tip-verify-repo-default.js.
+#   A command counts only inside a fenced code block
 #   (a line whose trim starts with ``` opens or closes it; ```bash and ```sh
 #   count, other languages do not) or when the whole trimmed line is one
 #   inline span `...`. It must pass the same executable-looking check and
 #   contain no <word> placeholder (a <[A-Za-z_][A-Za-z0-9_-]*> token). Anything
 #   else is not a repo_config source. Prose and a numbered step with an inline
-#   span are not commands.
+#   span are not commands. A placeholder here is skipped, not a precondition.
 #
 # Run: `timeout <secs> bash -c <cmd>` in the dispatch worktree, stdin from
 # /dev/null, environment without AUTOPILOT_SESSION_ID. --verify-timeout is a
@@ -317,8 +329,9 @@
 #     "commands": [ { "cmd", "rc", "duration_s", "tail" } ] }
 #   tail is the last 40 lines of stdout followed by stderr (one trailing empty
 #   line from a final newline is dropped). duration_s is integer seconds.
-#   When no source yields a command, "tip_verify" is the string "no_source"
-#   (not an object). AUTOPILOT_TIP_VERIFY_REQUIRE=1 refuses that case instead.
+#   When no source yields a command and the grace list is non-empty,
+#   "tip_verify" is the string "no_source" (not an object). An empty grace
+#   list, and AUTOPILOT_TIP_VERIFY_REQUIRE=1, refuse that case instead (exit 2).
 #   --no-verify-tip sets the string "skipped_by_flag".
 # Any non-zero rc or timeout → dispatch status verify_failed, exit 3.
 # no_source is not verify_failed.
@@ -3568,6 +3581,42 @@ if [ -n "$CONTINUATION_CHECKPOINT" ] || [ -n "$CONTINUATION_DURABLE" ] \
     _cont_hb_json _cont_hb_st _cont_hb_rc _cont_wo_claimed _cont_root _cont_common
 fi
 
+# AUTOPILOT_TIP_VERIFY_GRACE_FILE is a test-only knob: path of the grace list.
+# Unset, the rail reads scripts/lib/tip-verify-grace.json next to this script.
+# Not a user setting. A missing or unreadable file counts as an empty list.
+tip_verify_grace_file() {
+  if [ -n "${AUTOPILOT_TIP_VERIFY_GRACE_FILE:-}" ]; then
+    printf '%s' "${AUTOPILOT_TIP_VERIFY_GRACE_FILE}"
+  else
+    printf '%s' "$SELF_DIR/lib/tip-verify-grace.json"
+  fi
+}
+
+tip_verify_grace_len() {
+  node -e 'const m=require(process.argv[1]); process.stdout.write(String(m.graceRepoCount(process.argv[2])))' \
+    "$SELF_DIR/lib/tip-verify-repo-default.js" "$(tip_verify_grace_file)" 2>/dev/null || printf '0'
+}
+
+tip_verify_repo_name() {
+  local url="" top=""
+  url="$(git remote get-url origin 2>/dev/null || true)"
+  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  node -e 'const m=require(process.argv[1]); process.stdout.write(m.repoName(process.argv[2] || "", process.argv[3] || ""))' \
+    "$SELF_DIR/lib/tip-verify-repo-default.js" "$url" "$top" 2>/dev/null || true
+}
+
+tip_verify_no_source() {
+  local repo_name=""
+  repo_name="$(tip_verify_repo_name)"
+  printf '%s\n' "dispatch-hetero: tip verify: ${repo_name} has no default test command; add a fenced bash block under ## Test Command in .claude/quality-gate-config.md (or a fenced block under ## Acceptance in the brief); the tip is not re-verified" >&2
+  TIP_VERIFY_SKIP=1
+  TIP_VERIFY_RESULT_JSON='"no_source"'
+}
+
+tip_verify_refuse() {
+  die_precondition "no tip-verify command: pass --verify-cmd, or put acceptance commands in a fenced block under ## Acceptance, or set a fenced or whole-line command under ## Test Command in .claude/quality-gate-config.md, or pass --no-verify-tip"
+}
+
 # resolve_tip_verify_commands — pick the command list before the worker starts.
 # Strict contract keeps its own acceptance path and emits no tip_verify field.
 # Defined above the call: bash runs this file top to bottom.
@@ -3645,50 +3694,7 @@ NODE
   fi
   repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   if [ -n "$repo_root" ] && [ -r "$repo_root/.claude/quality-gate-config.md" ]; then
-    cfg_line="$(node - "$repo_root/.claude/quality-gate-config.md" <<'NODE'
-const fs = require("fs");
-const text = fs.readFileSync(process.argv[2], "utf8");
-function executableLooking(cmd) {
-  const trimmed = String(cmd).trim();
-  if (!trimmed || trimmed.startsWith("#")) return false;
-  const token = trimmed.split(/\s+/)[0];
-  if (token.startsWith("./") || token.startsWith("../") || token.startsWith("/")) return true;
-  return /^[A-Za-z][A-Za-z0-9_+-]*$/.test(token);
-}
-function hasPlaceholder(s) {
-  return /<[A-Za-z_][A-Za-z0-9_-]*>/.test(s);
-}
-const lines = text.split(/\n/);
-let inSection = false;
-let fence = null;
-const cmds = [];
-for (const line of lines) {
-  if (!inSection) {
-    if (/^## Test Command\s*$/.test(line)) inSection = true;
-    continue;
-  }
-  if (/^## /.test(line)) break;
-  const trimmed = line.trim();
-  if (trimmed.startsWith("```")) {
-    if (fence !== null) fence = null;
-    else {
-      const lang = trimmed.slice(3).trim().split(/\s+/)[0] || "";
-      fence = (lang === "" || lang === "bash" || lang === "sh") ? "cmd" : "other";
-    }
-    continue;
-  }
-  let candidate = null;
-  if (fence === "cmd") candidate = trimmed;
-  else if (fence === null) {
-    const m = trimmed.match(/^`([^`\n]+)`$/);
-    if (m) candidate = m[1].trim();
-  }
-  if (candidate === null || !candidate || hasPlaceholder(candidate)) continue;
-  if (executableLooking(candidate)) cmds.push(candidate);
-}
-if (cmds.length) process.stdout.write(JSON.stringify(cmds));
-NODE
-)" || cfg_line=""
+    cfg_line="$(node "$SELF_DIR/lib/tip-verify-repo-default.js" "$repo_root/.claude/quality-gate-config.md")" || cfg_line=""
   fi
   if [ -n "$cfg_line" ] && [ "$cfg_line" != "[]" ]; then
     TIP_VERIFY_SOURCE="repo_config"
@@ -3697,12 +3703,13 @@ NODE
   fi
   # No source yielded a command. A fenced <word> placeholder already refused above.
   if [ "${AUTOPILOT_TIP_VERIFY_REQUIRE:-}" = "1" ]; then
-    die_precondition "no tip-verify command: pass --verify-cmd, or put acceptance commands in a fenced block under ## Acceptance, or set a fenced or whole-line command under ## Test Command in .claude/quality-gate-config.md, or pass --no-verify-tip"
+    tip_verify_refuse
   fi
-  printf '%s\n' 'dispatch-hetero: tip verify: no acceptance command found (brief ## Acceptance fenced block, or .claude/quality-gate-config.md ## Test Command); the tip is not re-verified' >&2
-  TIP_VERIFY_SKIP=1
-  TIP_VERIFY_RESULT_JSON='"no_source"'
-  return 0
+  if [ "$(tip_verify_grace_len)" -gt 0 ]; then
+    tip_verify_no_source
+    return 0
+  fi
+  tip_verify_refuse # empty-grace-refuse
 }
 
 # run_tip_verify — re-run the captured commands at the committed tip.

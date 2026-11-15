@@ -20,7 +20,7 @@ export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"
 EMPTY_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"
 mkdir -p "$EMPTY_SESSION_MODE_DIR"
 export AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR"
-unset AUTOPILOT_TIP_VERIFY_REQUIRE
+unset AUTOPILOT_TIP_VERIFY_REQUIRE AUTOPILOT_TIP_VERIFY_GRACE_FILE
 
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX"
@@ -124,8 +124,13 @@ run_case() {
 HELP="$("$SCRIPT" --help)"
 assert_contains "$HELP" "put acceptance commands in a fenced block under ## Acceptance" "help says to put acceptance commands in a fenced block under ## Acceptance"
 
-# --- no source: proceed, tip_verify no_source, one stderr line, stub runs ---
-NOSRC_LINE='dispatch-hetero: tip verify: no acceptance command found (brief ## Acceptance fenced block, or .claude/quality-gate-config.md ## Test Command); the tip is not re-verified'
+# --- no source, grace list non-empty: committed, tip_verify no_source, stderr names this sandbox ---
+SBX_NAME="$(node -e 'const m=require(process.argv[1]); process.stdout.write(m.repoName(process.argv[2] || "", process.argv[3] || ""))' \
+  "$REPO_ROOT/scripts/lib/tip-verify-repo-default.js" \
+  "$(git -C "$SBX" remote get-url origin 2>/dev/null || true)" \
+  "$(git -C "$SBX" rev-parse --show-toplevel)")"
+assert_eq "$SBX_NAME" "repo" "sandbox repo name is the toplevel basename"
+NOSRC_LINE="dispatch-hetero: tip verify: ${SBX_NAME} has no default test command; add a fenced bash block under ## Test Command in .claude/quality-gate-config.md (or a fenced block under ## Acceptance in the brief); the tip is not re-verified"
 rm -f "$MARKER"
 run_case tv-none
 assert_eq "$EXIT" "0" "no source exits 0"
@@ -145,6 +150,20 @@ assert_contains "$OUT" "## Test Command" "require=1 names ## Test Command"
 assert_contains "$OUT" "--no-verify-tip" "require=1 names --no-verify-tip"
 assert_eq "$(printf '%s\n' "$OUT" | grep -F -c "$NOSRC_LINE")" "0" "require=1 does not print the no_source line"
 assert_file_absent "$MARKER" "require=1: runner stub never ran"
+
+# --- empty grace list refuses with the same die_precondition text ---
+EMPTY_GRACE="$TEST_TMP/grace-empty.json"
+printf '%s\n' '{"repos":[]}' > "$EMPTY_GRACE"
+rm -f "$MARKER"
+AUTOPILOT_TIP_VERIFY_GRACE_FILE="$EMPTY_GRACE" run_case tv-grace-empty
+assert_eq "$EXIT" "2" "empty grace exits 2"
+assert_eq "$(jget "$J" status)" "precondition_failed" "empty grace is precondition_failed"
+assert_contains "$OUT" "--verify-cmd" "empty grace names --verify-cmd"
+assert_contains "$OUT" "## Acceptance" "empty grace names ## Acceptance"
+assert_contains "$OUT" "## Test Command" "empty grace names ## Test Command"
+assert_contains "$OUT" "--no-verify-tip" "empty grace names --no-verify-tip"
+assert_eq "$(printf '%s\n' "$OUT" | grep -F -c "$NOSRC_LINE")" "0" "empty grace does not print the no_source line"
+assert_file_absent "$MARKER" "empty grace: runner stub never ran"
 
 # --- prose with inline code only: not a brief source ---
 rm -f "$MARKER"
@@ -396,5 +415,34 @@ fi
 assert_eq "$(jget "$J" status)" "precondition_failed" "negative control: unconditional refuse is precondition_failed"
 assert_eq "$EXIT" "2" "negative control: unconditional refuse exits 2"
 assert_file_absent "$MARKER" "negative control: unconditional refuse never runs the stub"
+
+# --- negative control (paste): empty grace list takes no_source → the empty-grace case goes red ---
+rm -f "$FARM/scripts/dispatch-hetero.sh"
+rm -f "$SBX/.claude/quality-gate-config.md"
+sed_mutant "$SAVED_SCRIPT" "$FARM/scripts/dispatch-hetero.sh" \
+  's/tip_verify_refuse # empty-grace-refuse/tip_verify_no_source; return 0 # empty-grace-refuse/' \
+  || fail "negative control: sed did not make the empty list take no_source"
+chmod +x "$FARM/scripts/dispatch-hetero.sh"
+BROKEN="$FARM/scripts/dispatch-hetero.sh"
+grep -q 'tip_verify_no_source; return 0 # empty-grace-refuse' "$BROKEN" \
+  || fail "negative control: broken rail missing the no_source return"
+grep -q 'tip_verify_refuse # empty-grace-refuse' "$SAVED_SCRIPT" \
+  || fail "negative control: original empty-grace refuse was modified"
+SCRIPT="$BROKEN"
+rm -f "$MARKER"
+CASE_PROMPT="$PROMPT_PLAIN"
+AUTOPILOT_TIP_VERIFY_GRACE_FILE="$EMPTY_GRACE" run_case tv-neg-empty-grace
+SCRIPT="$SAVED_SCRIPT"
+if [ "$(jget "$J" status)" = "precondition_failed" ]; then
+  fail "negative control: empty grace stayed refused (assertion did not go red)"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+assert_eq "$(jget "$J" status)" "committed" "negative control: empty list taking no_source is committed"
+assert_eq "$(jget "$J" tip_verify)" "no_source" "negative control: empty list taking no_source records no_source"
+assert_eq "$EXIT" "0" "negative control: empty list taking no_source exits 0"
+assert_file_exists "$MARKER" "negative control: empty list taking no_source runs the stub"
+grep -q 'tip_verify_refuse # empty-grace-refuse' "$SAVED_SCRIPT" \
+  || fail "negative control: original empty-grace refuse was not restored"
 
 finalize_test

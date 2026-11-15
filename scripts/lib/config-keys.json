@@ -4436,7 +4436,18 @@
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "summary": "Set to 1 to make dispatch-hetero refuse before the worker starts when no acceptance command is found. Unset, that dispatch proceeds and records tip_verify no_source."
+      "summary": "Set to 1 to make dispatch-hetero refuse before the worker starts when no acceptance command is found. Unset, a non-empty scripts/lib/tip-verify-grace.json proceeds with tip_verify no_source; an empty, missing or unreadable list refuses the same way."
+    },
+    {
+      "name": "AUTOPILOT_TIP_VERIFY_GRACE_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/dispatch-hetero.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Test-only path of the tip-verify grace list. Unset, dispatch-hetero.sh reads scripts/lib/tip-verify-grace.json. Not a user setting."
     },
     {
       "name": "AUTOPILOT_CONSULT_TIMEOUT",

@@ -60,10 +60,18 @@ ln -s "$(command -v id)" "$MINBIN/id"
 ln -s "$(command -v head)" "$MINBIN/head"
 # `command -v true` is the shell builtin, so a symlink of that name loops. Use the binary.
 if [ -x /usr/bin/true ]; then ln -s /usr/bin/true "$MINBIN/true"; else ln -s /bin/true "$MINBIN/true"; fi
+ln -s "$(command -v env)" "$MINBIN/env"
+REAL_BASH="$(command -v bash)"
 mkshim id 'case "$1" in -u) echo 4242 ;; -g) echo 4343 ;; -un) echo worker ;; *) echo 4242 ;; esac'
+# Clobber the way standard sudoers does: secure_path, set_logname, always_set_home, SUDO_USER.
 mkshim sudo 'if [ "${SUDO_SHIM_FAIL_UNSHARE:-}" = 1 ]; then
   for a in "$@"; do b="${a##*/}"; [ "$b" = unshare ] && exit 1; done
 fi
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export USER=root
+export LOGNAME=root
+export HOME=/root
+export SUDO_USER=x
 while [ $# -gt 0 ]; do
   if [ "$1" = "--" ]; then shift; [ $# -eq 0 ] && exit 0; exec "$@"; fi
   shift
@@ -82,11 +90,43 @@ done
 exit 1'
 # PATH is shims + minbin only, so a real sudo/unshare/setpriv cannot answer.
 SUDO_PATH="$SHIMS:$MINBIN"
+ENV_BIN="$(PATH="$SUDO_PATH" command -v env)"
 detect_sudo() {
-  env "$@" PATH="$SUDO_PATH" HOME="${HOME-}" bash -c '. "$1"; worker_mount_isolation_detect; printf "%s|%s" "$WORKER_MOUNT_MODE" "$WORKER_MOUNT_REASON"' _ "$LIB"
+  env USER=worker LOGNAME=not-the-user PATH="$SUDO_PATH" HOME="${HOME-}" "$@" bash -c '. "$1"; worker_mount_isolation_detect; printf "%s|%s" "$WORKER_MOUNT_MODE" "$WORKER_MOUNT_REASON"' _ "$LIB"
 }
 prefix_sudo() {
-  env "$@" PATH="$SUDO_PATH" HOME="${HOME-}" bash -c '. "$1"; worker_mount_isolation_detect; printf "%s" "${WORKER_MOUNT_PREFIX[*]}"' _ "$LIB"
+  env USER=worker LOGNAME=not-the-user PATH="$SUDO_PATH" HOME="${HOME-}" "$@" bash -c '. "$1"; worker_mount_isolation_detect; printf "%s" "${WORKER_MOUNT_PREFIX[*]}"' _ "$LIB"
+}
+cat > "$TEST_TMP/check-inside.sh" << 'EOF'
+#!/bin/bash
+want_path="$1"; want_home="$2"; want_user="$3"
+[ "$PATH" = "$want_path" ] || { printf 'PATH=%s\n' "$PATH"; exit 5; }
+[ "$HOME" = "$want_home" ] || { printf 'HOME=%s\n' "$HOME"; exit 6; }
+[ "$USER" = "$want_user" ] || { printf 'USER=%s\n' "$USER"; exit 7; }
+[ "$LOGNAME" = "$want_user" ] || { printf 'LOGNAME=%s\n' "$LOGNAME"; exit 8; }
+if env | grep -q '^SUDO_'; then env | grep '^SUDO_'; exit 9; fi
+exit 0
+EOF
+cat > "$TEST_TMP/run-inside.sh" << 'EOF'
+#!/bin/bash
+lib="$1"; bashbin="$2"; check="$3"; want_path="$4"; want_home="$5"; want_user="$6"
+# shellcheck disable=SC1090
+. "$lib"
+worker_mount_isolation_detect
+[ "$WORKER_MOUNT_MODE" = sudo_private_ns ] || { printf 'mode=%s\n' "$WORKER_MOUNT_MODE"; exit 4; }
+exec "${WORKER_MOUNT_PREFIX[@]}" "$bashbin" "$check" "$want_path" "$want_home" "$want_user"
+EOF
+chmod +x "$TEST_TMP/check-inside.sh" "$TEST_TMP/run-inside.sh"
+run_inside() { # <lib> <path> <home> <user>
+  local lib="$1" want_path="$2" want_home="$3" want_user="$4" name
+  while IFS= read -r name; do
+    [ -n "$name" ] && unset "$name"
+  done < <(env | sed -n 's/^\(SUDO_[A-Za-z0-9_]*\)=.*/\1/p')
+  env -u SUDO_USER -u SUDO_UID -u SUDO_GID -u SUDO_COMMAND -u SUDO_HOME \
+    PATH="$want_path" HOME="$want_home" USER="$want_user" LOGNAME="not-the-user" \
+    WORKER_MOUNT_PROC_STATUS="$STATUS0" \
+    bash "$TEST_TMP/run-inside.sh" "$lib" "$REAL_BASH" "$TEST_TMP/check-inside.sh" \
+      "$want_path" "$want_home" "$want_user"
 }
 mkshim unshare 'exit 0'
 eq "private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "userns ok -> private_ns even if sudo would succeed"
@@ -96,9 +136,40 @@ while [ $# -gt 0 ]; do
   shift
 done
 exit 0'
-SETPRIV_PFX="$SHIMS/sudo -n --preserve-env $SHIMS/unshare --mount --propagation private -- $SHIMS/setpriv --reuid=4242 --regid=4343 --init-groups --"
+ENV_RESTORE="$ENV_BIN -u SUDO_USER -u SUDO_UID -u SUDO_GID -u SUDO_COMMAND -u SUDO_HOME PATH=$SUDO_PATH HOME=$HOME USER=worker LOGNAME=worker"
+SETPRIV_PFX="$SHIMS/sudo -n --preserve-env $SHIMS/unshare --mount --propagation private -- $SHIMS/setpriv --reuid=4242 --regid=4343 --init-groups -- $ENV_RESTORE"
 eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "userns blocked + sudo + unshare probe ok -> sudo_private_ns"
-eq "$SETPRIV_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0")" "sudo_private_ns prefix is sudo unshare setpriv"
+eq "$SETPRIV_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0")" "sudo_private_ns prefix is sudo unshare setpriv env"
+INSIDE_OUT="$(run_inside "$LIB" "$SUDO_PATH" "$HOME" worker 2>&1)"; INSIDE_RC=$?
+eq "0" "$INSIDE_RC" "setpriv form: inside PATH HOME USER LOGNAME are the dispatcher's and no SUDO_* (${INSIDE_OUT:-ok})"
+SPACED="$SUDO_PATH:/tmp/space dir"
+SP_OUT="$(run_inside "$LIB" "$SPACED" "$HOME" worker 2>&1)"; SP_RC=$?
+eq "0" "$SP_RC" "PATH with a space survives as one argv (${SP_OUT:-ok})"
+# Negative control: drop the env step. The sudo shim still clobbers, so the probe refuses.
+MUT_ENV="$TEST_TMP/worker-containment.no-env.sh"
+sed_mutant "$LIB" "$MUT_ENV" '/_worker_mount_append_dispatcher_env prefix "\$disp_path" "\$home" "\$disp_user" || return 1/d'
+NEG_ENV_OUT="$(run_inside "$MUT_ENV" "$SUDO_PATH" "$HOME" worker 2>&1)"; NEG_ENV_RC=$?
+eq "4" "$NEG_ENV_RC" "negative control red: without the env step the dispatcher env is not held (${NEG_ENV_OUT:-no-output})"
+REST_OUT="$(run_inside "$LIB" "$SUDO_PATH" "$HOME" worker 2>&1)"; REST_RC=$?
+eq "0" "$REST_RC" "restored env step holds the dispatcher env (${REST_OUT:-ok})"
+mkshim env 'while [ $# -gt 0 ]; do
+  case "$1" in
+    -u) shift 2 ;;
+    -*) shift ;;
+    *=*) shift ;;
+    *) exec "$@" ;;
+  esac
+done
+exit 1'
+eq "refuse" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "ineffective env step (PATH still clobbered) -> refuse"
+rmshim env
+eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "real env after the ineffective shim -> sudo_private_ns"
+# Newline sits in a later PATH component so `env` is still resolvable; the value itself is what must refuse.
+NL_PATH="$SUDO_PATH:/ok"$'\n'"x"
+NL_MODE="$(PATH="$NL_PATH" HOME="${HOME-}" USER=worker WORKER_MOUNT_PROC_STATUS="$STATUS0" "$REAL_BASH" -c '. "$1"; worker_mount_isolation_detect; printf "%s" "$WORKER_MOUNT_MODE"' _ "$LIB")"
+eq "refuse" "$NL_MODE" "PATH containing a newline is refused"
+NLH_MODE="$(env USER=worker PATH="$SUDO_PATH" HOME=$'/tmp/ho\nme' WORKER_MOUNT_PROC_STATUS="$STATUS0" bash -c '. "$1"; worker_mount_isolation_detect; printf "%s" "$WORKER_MOUNT_MODE"' _ "$LIB")"
+eq "refuse" "$NLH_MODE" "HOME containing a newline is refused"
 # Negative control: a copy that skips the sudo_private_ns attempt must go red on this same shim case.
 MUT="$TEST_TMP/worker-containment.skip-sudo.sh"
 sed_mutant "$LIB" "$MUT" 's/if _worker_mount_try_sudo_private_ns; then/if false; then/'
@@ -110,9 +181,11 @@ else
 fi
 eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "restored detection returns sudo_private_ns"
 rmshim setpriv
-FALLBACK_PFX="$SHIMS/sudo -n --preserve-env $SHIMS/unshare --mount --propagation private -- $SHIMS/sudo -n -E -u worker --"
+FALLBACK_PFX="$SHIMS/sudo -n --preserve-env $SHIMS/unshare --mount --propagation private -- $SHIMS/sudo -n -E -u worker -- $ENV_RESTORE"
 eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "setpriv missing -> sudo -u fallback still sudo_private_ns"
-eq "$FALLBACK_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0")" "setpriv missing prefix drops with sudo -n -E -u"
+eq "$FALLBACK_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0")" "setpriv missing prefix drops with sudo -n -E -u then env"
+FB_OUT="$(run_inside "$LIB" "$SUDO_PATH" "$HOME" worker 2>&1)"; FB_RC=$?
+eq "0" "$FB_RC" "sudo -u fallback: inside PATH HOME USER LOGNAME are the dispatcher's and no SUDO_* (${FB_OUT:-ok})"
 SUDO_SHIM_FAIL_UNSHARE=1
 eq "refuse" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SUDO_SHIM_FAIL_UNSHARE=1 | cut -d'|' -f1)" "unshare probe fails -> refuse"
 assert_contains "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SUDO_SHIM_FAIL_UNSHARE=1)" "passwordless sudo is available" "probe failure keeps the old refuse reason"
@@ -145,6 +218,26 @@ eq "1" "$(gate_rc no_root "$TEST_TMP/brief-umount.txt")" "umount command is refu
 eq "1" "$(gate_rc no_root "$TEST_TMP/brief-unshare.txt")" "unshare command is refused"
 eq "0" "$(gate_rc sudo_private_ns "$TEST_TMP/brief-mount.txt")" "same mount brief is allowed under sudo_private_ns"
 eq "0" "$(gate_rc private_ns "$TEST_TMP/brief-mount.txt")" "mount brief is allowed under private_ns"
+# Empty WORKER_MOUNT_MODE must detect. Shims decide the mode; FORCE_MODE stays unset.
+unset_gate() { # <lib> <file>
+  env -u WORKER_MOUNT_MODE -u WORKER_MOUNT_FORCE_MODE \
+    PATH="$SHIMS:$PATH" WORKER_MOUNT_PROC_STATUS="$STATUS0" \
+    bash -c 'unset WORKER_MOUNT_MODE WORKER_MOUNT_FORCE_MODE
+      . "$1"
+      worker_mount_brief_gate "$2" >/dev/null 2>"$3"
+      printf "%s|%s" "$?" "${WORKER_MOUNT_MODE-}"' _ "$1" "$2" "$TEST_TMP/gate-unset.err"
+}
+mkshim unshare 'exit 0'
+mkshim sudo 'exit 1'
+eq "0|private_ns" "$(unset_gate "$LIB" "$TEST_TMP/brief-mount.txt")" "unset mode + private_ns shim allows the mount brief"
+mkshim unshare 'exit 1'
+eq "1|no_root" "$(unset_gate "$LIB" "$TEST_TMP/brief-mount.txt")" "unset mode + no_root shim refuses the mount brief"
+eq "mount_brief_refused: mount at line 2 (01M7E4JC)" "$(cat "$TEST_TMP/gate-unset.err")" "unset no_root gate names the word and line"
+mkshim unshare 'exit 0'
+MUT_GATE="$TEST_TMP/worker-containment.no-detect.sh"
+sed_mutant "$LIB" "$MUT_GATE" '/^  \[ -n "\${WORKER_MOUNT_MODE:-}" \] || worker_mount_isolation_detect$/d'
+eq "1|" "$(unset_gate "$MUT_GATE" "$TEST_TMP/brief-mount.txt")" "negative control red: gate without detect refuses an unset mode"
+eq "0|private_ns" "$(unset_gate "$LIB" "$TEST_TMP/brief-mount.txt")" "restored gate detects private_ns and allows the brief"
 rmshim unshare; rmshim sudo; rmshim setpriv; rmshim id
 
 echo "== rail: foreman refuse never starts the worker =="
@@ -271,6 +364,26 @@ OUT_FG="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 WORKER_MOUNT_FORCE_MODE=no_r
 [ "$RC_FG" -ne 0 ] && eq ok ok "foreman no_root mount brief exits non-zero" || fail "foreman no_root mount brief exited 0"
 assert_file_absent "$TEST_TMP/foreman.ran" "foreman runner never ran under the brief gate"
 assert_contains "$(cat "$TEST_TMP/foreman-gate.err")" "mount_brief_refused: mount at line" "foreman stderr names the word and line"
+rm -f "$TEST_TMP/foreman.ran"
+OUT_FGOK="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 WORKER_MOUNT_FORCE_MODE=sudo_private_ns bash "$REPO_ROOT/scripts/dispatch-foreman.sh" --brief-file "$TEST_TMP/brief.md" --plan-file "$TEST_TMP/plan.md" \
+  --run-id mntgateok --run-dir "$TEST_TMP/runs/mntgateok" --timeout 20 --kimi-bin "$TEST_TMP/kimi" 2>"$TEST_TMP/foreman-gateok.err" < /dev/null)"; RC_FGOK=$?
+assert_file_exists "$TEST_TMP/foreman.ran" "foreman runner ran under sudo_private_ns with the same mount brief (rc=$RC_FGOK)"
+# --resume under no_root must gate the run-dir brief before any runner spawn.
+RES_DIR="$TEST_TMP/runs/mntresume"
+mkdir -p "$RES_DIR"
+RES_BASE="$(git -C "$SBX" rev-parse HEAD)"
+printf 'RUN_ID=%q\nBRANCH=%q\nBASE_SHA=%q\nWT=%q\nMODEL=%q\n' \
+  mntresume 'foreman/mntresume' "$RES_BASE" "$SBX" 'kimi-code/k3' > "$RES_DIR/run.env"
+printf 'mount --rbind /sys /x\n' > "$RES_DIR/brief.md"
+printf 'plan\n' > "$RES_DIR/plan.md"
+printf 'escalation\n' > "$RES_DIR/ESCALATION.md"
+printf 'answer\n' > "$TEST_TMP/answer-resume.md"
+rm -f "$TEST_TMP/foreman.ran"
+OUT_FR="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 WORKER_MOUNT_FORCE_MODE=no_root bash "$REPO_ROOT/scripts/dispatch-foreman.sh" --resume --run-dir "$RES_DIR" --answer-file "$TEST_TMP/answer-resume.md" \
+  --timeout 20 --kimi-bin "$TEST_TMP/kimi" 2>"$TEST_TMP/foreman-resume.err" < /dev/null)"; RC_FR=$?
+[ "$RC_FR" -ne 0 ] && eq ok ok "foreman --resume no_root mount brief exits non-zero" || fail "foreman --resume no_root mount brief exited 0"
+assert_file_absent "$TEST_TMP/foreman.ran" "foreman --resume runner never ran under the brief gate"
+assert_contains "$(cat "$TEST_TMP/foreman-resume.err")" "mount_brief_refused: mount at line" "foreman --resume stderr names the word and line"
 printf 'mount --rbind /sys /x\n' > "$TEST_TMP/aprompt.txt"
 # shellcheck disable=SC2086
 author_run "gate" WORKER_MOUNT_FORCE_MODE=no_root PATH="$TEST_TMP/abin:$PATH" AUTOPILOT_GROK_EFFORT_PROBE=0 -- --runner grok --model grok-4.5 --effort high --bin "$ASTUB"

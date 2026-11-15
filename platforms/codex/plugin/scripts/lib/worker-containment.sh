@@ -38,16 +38,26 @@
 #                       Prefix (absolute `command -v` paths, so it survives `env -i`):
 #                         sudo -n --preserve-env unshare --mount --propagation private --
 #                           setpriv --reuid=<uid> --regid=<gid> --init-groups --
+#                           <env> -u SUDO_USER -u SUDO_UID -u SUDO_GID -u SUDO_COMMAND
+#                             -u SUDO_HOME PATH=<dispatcher PATH> HOME=<dispatcher HOME>
+#                             USER=<dispatcher user> LOGNAME=<dispatcher user>
 #                       uid/gid are the dispatching account, numeric, taken at detect time.
-#                       The worker is that same user: the probe requires `id -u` and HOME
-#                       inside the prefix to equal the outside values, so runner logins
-#                       and the original env stay. No new account and no credential handling.
-#                       If `setpriv` is missing, or that identity probe fails, the drop is
-#                         sudo -n -E -u <user> --
-#                       still behind the same `sudo -n --preserve-env unshare --mount
-#                       --propagation private --`, so the mount namespace stays private.
-#                       If neither drop works, detection falls through to refuse with the
-#                       old passwordless-sudo reason. A failed unshare probe does the same.
+#                       Standard sudoers still replaces PATH (secure_path), USER/LOGNAME
+#                       (set_logname) and sometimes HOME (always_set_home), and adds SUDO_*.
+#                       `--preserve-env` does not stop that, and setpriv / `sudo -u` do not
+#                       put it back. The absolute `env` step, resolved at detect time, restores
+#                       the dispatcher PATH/HOME/USER/LOGNAME captured then and drops those
+#                       SUDO_* names. Callers expand WORKER_MOUNT_PREFIX as a bash array
+#                       ("${WORKER_MOUNT_PREFIX[@]}", and declare -p across detach), so each
+#                       assignment is one argv and a space in PATH or HOME stays intact. A
+#                       newline in PATH, HOME or the user cannot be represented that way and
+#                       is refused. The probe requires `id -u`, HOME, PATH and USER inside the
+#                       prefix to equal the outside values. No new account and no credential
+#                       handling. If `setpriv` is missing, or that identity probe fails, the
+#                       drop is `sudo -n -E -u <user> --` behind the same unshare, with the
+#                       same env step after it. If neither drop works, detection falls through
+#                       to refuse with the old passwordless-sudo reason. A failed unshare
+#                       probe does the same.
 #      no_root          private ns unavailable, but the worker cannot change the host
 #                       mount table: euid != 0 AND `sudo -n true` fails (never prompts)
 #                       AND CapEff has no CAP_SYS_ADMIN (bit 21 of /proc/self/status).
@@ -65,7 +75,9 @@
 #    or unshare is refused. The pattern is
 #    `(^|[^A-Za-z0-9_-])(u?mount|unshare)([[:space:]]|$)`, so "amount" and "mountpoint"
 #    do not match. stderr names the word and the 1-based line number. The gate is off
-#    under private_ns and sudo_private_ns.
+#    under private_ns and sudo_private_ns. An empty WORKER_MOUNT_MODE is not
+#    "unisolated": the gate detects first. dispatch-foreman.sh also gates the
+#    run-dir brief and plan on --resume.
 #    PM ruling A (layered): no_root is ACCEPTED. The single switch is the variable
 #    WORKER_MOUNT_NO_ROOT_OK just below (default 1; export 0 to turn no_root into
 #    refuse). Tests only: WORKER_MOUNT_FORCE_MODE=private_ns|sudo_private_ns|no_root|refuse
@@ -112,29 +124,61 @@ _worker_mount_has_sys_admin() {
 
 WORKER_MOUNT_MODE=""; WORKER_MOUNT_REASON=""; WORKER_MOUNT_PREFIX=(); WORKER_MOUNT_REFUSE_LINE=""
 
-# _worker_mount_prefix_holds_identity <uid> <home> <prefix...>
-# 0 when the prefix runs a command whose id -u and HOME equal the dispatcher's.
+# _worker_mount_prefix_holds_identity <uid> <home> <path> <user> <prefix...>
+# 0 when id -u, HOME, PATH and USER inside the prefix equal the dispatcher's.
+# Values must not contain a newline; the caller refuses those before probing.
 _worker_mount_prefix_holds_identity() {
-  local want_uid="$1" want_home="$2" out got_uid got_home rest
-  shift 2
-  # Trailing x keeps a trailing newline that command substitution would eat, including an empty HOME.
-  out="$("$@" bash -c 'printf "%s\n%s\n" "$(id -u)" "${HOME-}x"' 2>/dev/null)" || return 1
+  local want_uid="$1" want_home="$2" want_path="$3" want_user="$4"
+  local out got_uid got_home got_path got_user rest
+  shift 4
+  # Trailing x keeps an empty value and a final newline that command substitution would eat.
+  out="$("$@" bash -c 'printf "%s\n%s\n%s\n%s\n" "$(id -u)" "${HOME-}x" "${PATH-}x" "${USER-}x"' 2>/dev/null)" || return 1
   got_uid="${out%%$'\n'*}"
   rest="${out#*$'\n'}"
-  got_home="${rest%x}"
-  [ -n "$got_uid" ] && [ "$got_uid" = "$want_uid" ] && [ "$got_home" = "$want_home" ]
+  got_home="${rest%%$'\n'*}"
+  rest="${rest#*$'\n'}"
+  got_path="${rest%%$'\n'*}"
+  rest="${rest#*$'\n'}"
+  got_user="${rest%%$'\n'*}"
+  got_home="${got_home%x}"
+  got_path="${got_path%x}"
+  got_user="${got_user%x}"
+  [ -n "$got_uid" ] && [ "$got_uid" = "$want_uid" ] && [ "$got_home" = "$want_home" ] \
+    && [ "$got_path" = "$want_path" ] && [ "$got_user" = "$want_user" ]
+}
+
+# _worker_mount_append_dispatcher_env <array-name> <path> <home> <user>
+# Append the absolute env step that undoes sudo's secure_path / set_logname /
+# always_set_home and the SUDO_* names. 1 when `env` is missing, the user is
+# empty, or a value contains a newline (one argv cannot carry it through the
+# probe's line split, so the caller refuses).
+_worker_mount_append_dispatcher_env() {
+  local -n _p="$1"
+  local disp_path="$2" disp_home="$3" disp_user="$4" env_bin
+  case "$disp_path" in *$'\n'*) return 1 ;; esac
+  case "$disp_home" in *$'\n'*) return 1 ;; esac
+  case "$disp_user" in *$'\n'*) return 1 ;; esac
+  [ -n "$disp_user" ] || return 1
+  env_bin="$(command -v env 2>/dev/null || true)"
+  [ -n "$env_bin" ] || return 1
+  _p+=("$env_bin"
+    -u SUDO_USER -u SUDO_UID -u SUDO_GID -u SUDO_COMMAND -u SUDO_HOME
+    "PATH=$disp_path" "HOME=$disp_home" "USER=$disp_user" "LOGNAME=$disp_user")
 }
 
 # _worker_mount_try_sudo_private_ns — 0 and sets MODE/PREFIX when the sudo unshare
 # probe and one identity-preserving drop both work. Caller already knows euid != 0
 # and `sudo -n true` succeeded. A failure leaves mode unset so the caller refuses.
 _worker_mount_try_sudo_private_ns() {
-  local sudo_bin unshare_bin setpriv_bin uid gid user home
+  local sudo_bin unshare_bin setpriv_bin uid gid user home disp_path disp_user
   local -a prefix=()
   uid="$(id -u 2>/dev/null || true)"
   gid="$(id -g 2>/dev/null || true)"
   user="$(id -un 2>/dev/null || true)"
   home="${HOME-}"
+  disp_path="${PATH-}"
+  disp_user="${USER-}"
+  [ -n "$disp_user" ] || disp_user="$user"
   case "$uid" in ''|*[!0-9]*) return 1 ;; esac
   case "$gid" in ''|*[!0-9]*) return 1 ;; esac
   [ "$uid" -eq 0 ] && return 1
@@ -147,7 +191,8 @@ _worker_mount_try_sudo_private_ns() {
   setpriv_bin="$(command -v setpriv 2>/dev/null || true)"
   if [ -n "$setpriv_bin" ]; then
     prefix=("$sudo_bin" -n --preserve-env "$unshare_bin" --mount --propagation private -- "$setpriv_bin" --reuid="$uid" --regid="$gid" --init-groups --)
-    if _worker_mount_prefix_holds_identity "$uid" "$home" "${prefix[@]}"; then
+    _worker_mount_append_dispatcher_env prefix "$disp_path" "$home" "$disp_user" || return 1
+    if _worker_mount_prefix_holds_identity "$uid" "$home" "$disp_path" "$disp_user" "${prefix[@]}"; then
       WORKER_MOUNT_MODE="sudo_private_ns"
       WORKER_MOUNT_REASON=""
       WORKER_MOUNT_PREFIX=("${prefix[@]}")
@@ -156,7 +201,8 @@ _worker_mount_try_sudo_private_ns() {
   fi
   [ -n "$user" ] || return 1
   prefix=("$sudo_bin" -n --preserve-env "$unshare_bin" --mount --propagation private -- "$sudo_bin" -n -E -u "$user" --)
-  if _worker_mount_prefix_holds_identity "$uid" "$home" "${prefix[@]}"; then
+  _worker_mount_append_dispatcher_env prefix "$disp_path" "$home" "$disp_user" || return 1
+  if _worker_mount_prefix_holds_identity "$uid" "$home" "$disp_path" "$disp_user" "${prefix[@]}"; then
     WORKER_MOUNT_MODE="sudo_private_ns"
     WORKER_MOUNT_REASON=""
     WORKER_MOUNT_PREFIX=("${prefix[@]}")
@@ -230,9 +276,11 @@ worker_mount_manifest_value() {
 # mode is private_ns or sudo_private_ns. Otherwise scans <file> for a command-shaped
 # mount, umount or unshare and, on a hit, prints one stderr line naming the word and
 # the 1-based line number, sets WORKER_MOUNT_REFUSE_LINE, and returns 1. A missing
-# file is not a hit (the caller's own existence check reports that).
+# file is not a hit (the caller's own existence check reports that). An empty mode
+# has not been detected: detect before treating it as unisolated.
 worker_mount_brief_gate() {
   local file="${1:-}" line n=0 word
+  [ -n "${WORKER_MOUNT_MODE:-}" ] || worker_mount_isolation_detect
   case "${WORKER_MOUNT_MODE:-}" in
     private_ns|sudo_private_ns) return 0 ;;
   esac

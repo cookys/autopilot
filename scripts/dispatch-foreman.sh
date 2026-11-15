@@ -226,6 +226,10 @@ if [ "$RESUME" -eq 1 ]; then
   source "$RUN_DIR/run.env"   # RUN_ID BRANCH BASE_SHA WT MODEL (written by this rail)
   [ -d "$WT" ] || die_precondition "foreman worktree $WT is gone; kimi cannot resume a session from another cwd (probe p6) — start a new run"
   [ -f "$RUN_DIR/ESCALATION.md" ] || die_precondition "no ESCALATION.md under $RUN_DIR — nothing to answer"
+  # Interim brief gate (01M7F2KZ) on --resume too. The worker reads the copies
+  # already resolved into this run dir, not the (often empty) --brief-file/--plan-file.
+  worker_mount_brief_gate "$RUN_DIR/brief.md" || die_precondition "$WORKER_MOUNT_REFUSE_LINE"
+  worker_mount_brief_gate "$RUN_DIR/plan.md" || die_precondition "$WORKER_MOUNT_REFUSE_LINE"
 else
   [ -n "$BRIEF_FILE" ] && [ -f "$BRIEF_FILE" ] || die_precondition "--brief-file <existing file> is required"
   [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ] || die_precondition "--plan-file <existing file> is required"

@@ -746,6 +746,16 @@ function run() {
       limit: EXTRA_CONTEXT_LIMIT,
       keep: EXTRA_CONTEXT_KEEP,
     });
+    // Coverage measurement (scripts/checkpoint-coverage.js): the ids named by the text that was actually injected (the
+    // restored-state body after any cut to the limit), not the full file. Best-effort.
+    if (compactionRecovery) {
+      try {
+        const hs = context.indexOf(compactionRecovery.head);
+        const from = hs < 0 ? -1 : hs + compactionRecovery.head.length;
+        const to = from < 0 ? -1 : context.indexOf('</autopilot-restored-state>', from);
+        require('../scripts/lib/compaction-handoff.js').recordCoverage({ sessionId: payload.session_id, text: from < 0 ? '' : context.slice(from, to < 0 ? undefined : to) });
+      } catch { /* measurement only */ }
+    }
     const output = buildSessionStartOutput({
       context,
       claudePluginRoot: process.env.CLAUDE_PLUGIN_ROOT,

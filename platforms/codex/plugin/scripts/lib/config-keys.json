@@ -1387,10 +1387,54 @@
       "audience": "internal",
       "class": "path_seam",
       "default": null,
-      "readers": ["scripts/lib/fleet-decision.js", "scripts/noncq.js", "scripts/profile-health.js", "scripts/quota-provider-sync.js"],
+      "readers": ["scripts/lib/compaction-handoff.js", "scripts/lib/fleet-decision.js", "scripts/noncq.js", "scripts/profile-health.js", "scripts/quota-provider-sync.js"],
       "doc": null,
       "relates": [],
       "note": "Path of the fleet binary used by fleet-decision.js, profile-health.js, quota-provider-sync.js and noncq.js send/upload (default: fleet on PATH). Tests point it at a stub."
+    },
+    {
+      "name": "AUTOPILOT_CHECKPOINT_FLEET",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/lib/compaction-handoff.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_FLEET_BIN", "AUTOPILOT_CAPACITY_AR_GATE_FILE", "AUTOPILOT_PM_LEDGER_DIR"],
+      "note": "Set to off to drop the Fleet State block (fleet tasks --stuck / --tree, PM ledger tail, capacity ar-gate lines) from the post-compaction handoff. Default on."
+    },
+    {
+      "name": "AUTOPILOT_CAPACITY_AR_GATE_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/lib/compaction-handoff.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_CHECKPOINT_FLEET", "AUTOPILOT_FLEET_ADDRESS"],
+      "note": "Path of capacity's ar-gate file (default ~/projects/capacity/out/ar-gate.v1.json, schema capacity.ar-gate/1). Read by the post-compaction handoff: this lane's rows of the five difference fields; a file older than 26 h reads stale."
+    },
+    {
+      "name": "AUTOPILOT_FLEET_ADDRESS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/lib/compaction-handoff.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_CAPACITY_AR_GATE_FILE"],
+      "note": "This session's full fleet address (namespace/courier/member). The post-compaction handoff matches it against the lane of each ar-gate row; unset, it is derived from fleet whoami plus fleet tasks --mine --json."
+    },
+    {
+      "name": "AUTOPILOT_PM_LEDGER_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/lib/compaction-handoff.js", "scripts/checkpoint-coverage.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_CHECKPOINT_FLEET"],
+      "note": "Directory of the PM go ledger (default ~/projects/pm/log). The post-compaction handoff injects the last 20 lines of the newest *-go-ledger.md; absent directory means nothing is injected."
     },
     {
       "name": "AUTOPILOT_FLEET_TASK",

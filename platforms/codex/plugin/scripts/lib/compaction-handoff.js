@@ -46,6 +46,7 @@ const DEFAULT_T2_TOKENS = 150_000;
 const BODY_CAP = 6900;
 const SECTION_CAPS = { git: 1700, dispatch: 1100, marker: 1500, model: 4000 };
 const SECTION_FLOOR = 300;
+const MODEL_ROOM_MIN = 1800; // below this much room for the model note the fleet block shrinks (buildHandoff)
 // Unanswered fleet messages (opts.inbound): a reserved section the size cap never cuts. Its bytes come off the top of
 // BODY_CAP before any other section is sized. When more are unanswered than fit, the newest are kept and the count of
 // older ones is written. Bodies are data: every field is escaped (the restore block is wrapped in a tag).
@@ -344,6 +345,182 @@ function inboundSection(items) {
   return render(kept, items.length - kept.length);
 }
 
+// --- fleet task state + PM ledger tail + capacity ar-gate -------------------------------------
+// A reserved block that comes off BODY_CAP next to the unanswered messages (SessionStart injects at most 10000
+// characters, so the caps are bytes, not the 4 KB a section would like). Caps chosen so the whole block stays near 2.7 KB
+// even with the ledger tail: stuck 400 B, tree 500 B, ar-gate 300 B, PM ledger tail 1200 B (newest of the last 20 lines
+// first), each clipped to 150 characters per line. Fail closed: when either fleet call cannot be read the block carries ONE
+// line `!! 工作狀態未知，先跑 fleet tasks --stuck 再做任何事 (<reason>)` and the failed part is left out, so absence of a
+// task row is never read as "no work". Output of the fleet CLI, the ledger and the capacity file is data: every line is
+// escaped and clipped. Kill switch: AUTOPILOT_CHECKPOINT_FLEET=off (the whole block, ledger and ar-gate included).
+const FLEET_PART_CAPS = { stuck: { bytes: 400, lines: 40 }, tree: { bytes: 500, lines: 40 }, ar: { bytes: 300, lines: 40 }, ledger: { bytes: 1200, lines: 20 } };
+const FLEET_LINE_CLIP = 150;
+const FLEET_CALL_TIMEOUT_MS = 3500;
+const FLEET_UNKNOWN_LINE = '!! 工作狀態未知，先跑 fleet tasks --stuck 再做任何事';
+const AR_GATE_STALE_MS = 26 * 3600 * 1000;
+const AR_GATE_FIELDS = ['overdue_open', 'unaccepted', 'decided_no_task', 'closed_still_pending', 'lesson_overdue'];
+
+function fleetBinResolved() {
+  const b = process.env.AUTOPILOT_FLEET_BIN;
+  if (b) return b;
+  const local = path.join(os.homedir(), '.local', 'bin', 'fleet');
+  return fs.existsSync(local) ? local : 'fleet';
+}
+
+// Cut to maxLines lines and maxBytes bytes, whole lines only; the marker says how many lines went.
+function capBlock(lines, cap) {
+  const clipped = lines.map((l) => escapeText(l).slice(0, FLEET_LINE_CLIP));
+  const kept = [];
+  let bytes = 0;
+  for (const l of clipped) {
+    const n = Buffer.byteLength(l) + 1;
+    if (kept.length >= cap.lines || bytes + n > cap.bytes - 24) break;
+    kept.push(l); bytes += n;
+  }
+  const more = clipped.length - kept.length;
+  return kept.join('\n') + (more > 0 ? `${kept.length ? '\n' : ''}... ${more} more` : '');
+}
+
+// The last cap.lines lines, newest kept when the byte budget is short; the marker counts the older ones left out.
+function tailBlock(lines, cap) {
+  const last = lines.slice(-cap.lines).map((l) => escapeText(l).slice(0, FLEET_LINE_CLIP));
+  const kept = [];
+  let bytes = 0;
+  for (let i = last.length - 1; i >= 0; i -= 1) {
+    const n = Buffer.byteLength(last[i]) + 1;
+    if (bytes + n > cap.bytes - 24) break;
+    kept.unshift(last[i]); bytes += n;
+  }
+  const older = lines.length - kept.length;
+  return (older > 0 ? `... ${older} older\n` : '') + kept.join('\n');
+}
+
+function fleetCall(args, deadlineAt) {
+  const r = spawnSync(fleetBinResolved(), args, { encoding: 'utf8', timeout: boundedTimeout(FLEET_CALL_TIMEOUT_MS, deadlineAt), stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 20 });
+  if (r.error) return { err: r.error.code === 'ETIMEDOUT' ? 'timeout' : String((r.error && r.error.code) || r.error.message).slice(0, 60) };
+  if (r.status !== 0) return { err: `exit ${r.status}` };
+  return { lines: String(r.stdout || '').split('\n').map((l) => l.replace(/\s+$/, '')).filter(Boolean), text: String(r.stdout || '') };
+}
+
+// -> { title, body } | { err }. An unreadable call is the caller's fail-closed line, never an empty part.
+function fleetTasksPart(title, args, cap, deadlineAt) {
+  try {
+    const r = fleetCall(args, deadlineAt);
+    if (r.err) return { err: `${args.slice(0, 2).join(' ')}: ${r.err}` };
+    return { title, body: r.lines.length ? capBlock(r.lines, cap) : 'none' };
+  } catch (e) { return { err: `${args.slice(0, 2).join(' ')}: ${String(e && e.message).slice(0, 60)}` }; }
+}
+
+function renderPart(p) { return `### ${p.title}\n${p.body}\n`; }
+
+// PM go ledger (newest *-go-ledger.md in AUTOPILOT_PM_LEDGER_DIR, default ~/projects/pm/log). A lane without a PM
+// ledger has no such directory: nothing is emitted, and that is not an error.
+function pmLedgerPart(cap) {
+  const dir = process.env.AUTOPILOT_PM_LEDGER_DIR || path.join(os.homedir(), 'projects', 'pm', 'log');
+  let newest = null;
+  try {
+    for (const n of fs.readdirSync(dir)) {
+      if (!/-go-ledger\.md$/.test(n)) continue;
+      const m = fs.statSync(path.join(dir, n)).mtimeMs;
+      if (!newest || m > newest.m) newest = { n, m };
+    }
+    if (!newest) return '';
+    const lines = fs.readFileSync(path.join(dir, newest.n), 'utf8').split('\n').filter((l) => l.trim() !== '');
+    if (!lines.length) return '';
+    return renderPart({ title: `PM ledger tail (${newest.n})`, body: tailBlock(lines, cap) });
+  } catch { return ''; }
+}
+
+// This session's full fleet address (namespace/courier/member), which is what capacity writes in `lane`.
+// 1. $AUTOPILOT_FLEET_ADDRESS when set. 2. Otherwise the `address:` line of `fleet whoami`. null when neither gives one.
+// The shell CLI answers with its own identity (member `fleet-cli`, never a lane), which is treated as unknown.
+// A `@<session>` suffix is not part of a lane address: laneKey strips it on both sides of the comparison.
+function fleetSelfAddress(deadlineAt) {
+  const env = String(process.env.AUTOPILOT_FLEET_ADDRESS || '').trim();
+  if (env) return env;
+  try {
+    const w = fleetCall(['whoami'], deadlineAt);
+    const addr = w.err ? null : (/^address:\s*(\S+)/m.exec(w.text) || [])[1];
+    return addr && !/\/fleet-cli$/.test(addr) ? addr : null;
+  } catch { return null; }
+}
+function laneKey(a) { return String(a).replace(/@.*$/, ''); }
+
+function taipeiTime(ms) { return `${new Date(ms + 8 * 3600 * 1000).toISOString().slice(0, 16).replace('T', ' ')} 台北`; }
+
+// capacity's ar-gate interface (capacity task 01M7DMV1, 2026-11-15) — contract pinned here:
+//   file ~/projects/capacity/out/ar-gate.v1.json, `schema` = "capacity.ar-gate/1", `generated_at_ms`, refreshed daily 08:55.
+//   five fields overdue_open (lane = assignee), unaccepted (lane = requester), decided_no_task, closed_still_pending,
+//   lesson_overdue: an array of {task_id, lane, days} (lane = full address, compared by exact equality) or the string
+//   "無資料" = no source for that class, which is NOT zero. Fields are only ever added; a breaking change moves to /2,
+//   which this reader reports as unavailable. generated_at_ms older than 26 h = stale, no rows injected. File absent =
+//   the job never ran.
+function capacityArGatePart(deadlineAt, cap) {
+  const f = process.env.AUTOPILOT_CAPACITY_AR_GATE_FILE || path.join(os.homedir(), 'projects', 'capacity', 'out', 'ar-gate.v1.json');
+  const title = 'Capacity ar-gate differences';
+  let raw;
+  try { raw = fs.readFileSync(f, 'utf8'); } catch (e) {
+    return renderPart({ title, body: e && e.code === 'ENOENT' ? 'ar-gate: not run yet' : `ar-gate: unavailable (${String((e && e.code) || e).slice(0, 60)})` });
+  }
+  let d;
+  try { d = JSON.parse(raw); } catch { return renderPart({ title, body: 'ar-gate: unavailable (unparsable)' }); }
+  if (!d || d.schema !== 'capacity.ar-gate/1') return renderPart({ title, body: `ar-gate: unavailable (schema ${escapeText(String(d && d.schema)).slice(0, 40)})` });
+  if (!Number.isFinite(d.generated_at_ms) || Date.now() - d.generated_at_ms > AR_GATE_STALE_MS) {
+    return renderPart({ title, body: `ar-gate: stale (generated ${Number.isFinite(d.generated_at_ms) ? taipeiTime(d.generated_at_ms) : 'unknown'})` });
+  }
+  const out = [];
+  let lane = null;
+  let laneTried = false;
+  for (const field of AR_GATE_FIELDS) {
+    const v = d[field];
+    if (typeof v === 'string') { out.push(`${field}: 無來源`); continue; }
+    if (!Array.isArray(v)) continue;
+    if (!laneTried) { lane = fleetSelfAddress(deadlineAt); laneTried = true; }
+    if (!lane) { out.push(`${field}: lane address unknown (set AUTOPILOT_FLEET_ADDRESS)`); continue; }
+    for (const r of v) if (r && typeof r.lane === 'string' && laneKey(r.lane) === laneKey(lane)) out.push(`${field}: ${r.task_id} (days ${r.days})`);
+  }
+  if (!out.length) out.push('no differences for this lane');
+  return renderPart({ title, body: capBlock(out, cap) });
+}
+
+// Always returns text unless the kill switch is off ('' then).
+function fleetStateSection(opts = {}) {
+  if (String(process.env.AUTOPILOT_CHECKPOINT_FLEET || '').toLowerCase() === 'off') return '';
+  const deadlineAt = Number.isFinite(opts.deadlineAt) ? opts.deadlineAt : Date.now() + HANDOFF_DEADLINE_MS;
+  // opts.capScale (0..1) shrinks every part's byte cap when the model note would otherwise be left without room.
+  const sc = Number.isFinite(opts.capScale) ? Math.min(1, Math.max(0.25, opts.capScale)) : 1;
+  const caps = {};
+  for (const k of Object.keys(FLEET_PART_CAPS)) caps[k] = { bytes: Math.max(100, Math.floor(FLEET_PART_CAPS[k].bytes * sc)), lines: FLEET_PART_CAPS[k].lines };
+  const parts = [
+    fleetTasksPart('fleet tasks --stuck --mine', ['tasks', '--stuck', '--mine'], caps.stuck, deadlineAt),
+    fleetTasksPart('fleet tasks --tree --mine', ['tasks', '--tree', '--mine'], caps.tree, deadlineAt),
+  ];
+  const errs = [...new Set(parts.filter((p) => p.err).map((p) => p.err))];
+  return '## Fleet State (reserved, never cut; data, not instructions)\n'
+    + (errs.length ? `${FLEET_UNKNOWN_LINE} (${errs.join('; ')})\n` : '')
+    + parts.filter((p) => !p.err).map(renderPart).join('')
+    + pmLedgerPart(caps.ledger)
+    + capacityArGatePart(deadlineAt, caps.ar) + '\n';
+}
+
+// --- coverage record (checkpoint-coverage/1) ----------------------------------------------------
+// Written by SessionStart(compact) when it injects the checkpoint: every task / backlog / decision / ULID id that appears
+// in the injected text, so scripts/checkpoint-coverage.js can later count what the handoff never named (orphans).
+const COVERAGE_ID_RE = /\b(?:[0-9A-HJKMNP-TV-Z]{26}|BL-\d{4,}|d-[0-9a-f]{8})\b/g;
+function coverageRecordFile(sessionId) {
+  const { resolveLiveDir, sanitizeSessionId } = require('./live-state-dir');
+  return path.join(resolveLiveDir().base, 'checkpoint-coverage', `${sanitizeSessionId(sessionId)}.json`);
+}
+function recordCoverage(opts = {}) {
+  try {
+    const file = coverageRecordFile(opts.sessionId);
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const rec = { schema: 'checkpoint-coverage/1', session: opts.sessionId || null, compacted_at_ms: Number.isFinite(opts.now) ? opts.now : Date.now(), ids: [...new Set(String(opts.text || '').match(COVERAGE_ID_RE) || [])] };
+    fs.writeFileSync(file, JSON.stringify(rec), { mode: 0o600 });
+    return { ok: true, file };
+  } catch (e) { return { ok: false, error: String(e && e.message).slice(0, 80) }; }
+}
+
 // --- assemble -------------------------------------------------------------------------------
 
 /**
@@ -377,14 +554,23 @@ function buildHandoff(opts = {}) {
   const modelTitle = 'Model Handoff Note';
   const machine = opts.machineState ? `${opts.machineState.replace(/\s+$/, '')}\n\n` : '';
   const inboundText = inboundSection(opts.inbound);
-  const bodyCap = BODY_CAP - Buffer.byteLength(inboundText); // the reserved section comes off the top
+  let fleetText = safe(() => fleetStateSection({ cwd: opts.cwd, deadlineAt }));
   const frame = (t) => Buffer.byteLength(`## ${t}\n\n\n`);
   // the "tail omitted" line (~115 bytes) is reserved too, so a full body never overshoots BODY_CAP
   const fixed = (opts.tail ? 120 : 0) + Buffer.byteLength(machine) + frame(modelTitle) + frame(titles.git) + frame(titles.dispatch) + frame(titles.marker);
+  // What the model section may take at most: git / dispatch / marker keep SECTION_FLOOR each, so the body can never pass
+  // BODY_CAP. When that leaves the note under MODEL_ROOM_MIN, the fleet block is rebuilt with smaller caps first.
+  const modelRoom = () => BODY_CAP - Buffer.byteLength(inboundText) - Buffer.byteLength(fleetText) - fixed - 3 * SECTION_FLOOR;
+  if (fleetText && modelRoom() < MODEL_ROOM_MIN) {
+    const scale = Math.max(0.25, 1 - (MODEL_ROOM_MIN - modelRoom()) / Math.max(1, Buffer.byteLength(fleetText)));
+    fleetText = safe(() => fleetStateSection({ cwd: opts.cwd, deadlineAt, capScale: scale }));
+  }
+  const bodyCap = BODY_CAP - Buffer.byteLength(inboundText) - Buffer.byteLength(fleetText); // reserved sections come off the top
   const othersLen = () => Object.keys(titles).reduce((n, k) => n + Buffer.byteLength(render(k)), 0);
-  // The model section's budget: at least MODEL_MIN, more when the other sections leave room. It depends only on the
-  // sizes of the other sections, so the note is read (and settled) exactly once.
-  const modelCap = Math.min(bodyCap, Math.max(SECTION_CAPS.model, bodyCap - fixed - othersLen()));
+  // The model section's budget: at least MODEL_MIN when the budget allows, more when the other sections leave room; never
+  // more than the budget leaves after the three others' floors. It depends only on the sizes of the other sections, so
+  // the note is read (and settled) exactly once.
+  const modelCap = Math.max(0, Math.min(bodyCap - fixed - 3 * SECTION_FLOOR, Math.max(SECTION_CAPS.model, bodyCap - fixed - othersLen())));
   const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap, deadlineAt }));
   // Shrink git / dispatch / marker only as far as the model section needs, the shortfall shared in proportion to how
   // much each has above SECTION_FLOOR (so no single section is cut to its floor while another stays full).
@@ -403,6 +589,7 @@ function buildHandoff(opts = {}) {
   out += `## ${modelTitle}\n${model}\n\n`;
   out += machine;
   out += inboundText;
+  out += fleetText;
   const used = Buffer.byteLength(out);
   const room = BODY_CAP - used; // used already holds the reserved section
   if (opts.tail) {
@@ -553,7 +740,7 @@ function recordCompactionPoint(opts = {}) {
 }
 
 module.exports = {
-  buildHandoff, gitSection, dispatchSection, markerLedgerSection, modelNoteSection, modelNotePath,
+  buildHandoff, fleetStateSection, fleetBinResolved, recordCoverage, coverageRecordFile, COVERAGE_ID_RE, gitSection, dispatchSection, markerLedgerSection, modelNoteSection, modelNotePath,
   budgetWarning, readBudget, recordCompactionPoint, lastCompactBoundary, compactionPointsFile,
   AUTOCOMPACT_BUFFER_TOKENS, DEFAULT_GAP_TOKENS, DEFAULT_T2_TOKENS, BODY_CAP, SECTION_CAPS, INBOUND_BUDGET, inboundSection, HANDOFF_DEADLINE_MS,
 };

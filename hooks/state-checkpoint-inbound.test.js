@@ -32,7 +32,7 @@ function runHook(recs, { noteBytes = 0, cwd } = {}) {
   const sid = 'inboundsess1';
   const env = { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, 'claude'), AUTOPILOT_LIVE_DIR: path.join(home, 'live'),
     AUTOPILOT_MODEL_HANDOFF_DIR: path.join(home, 'handoff'), AUTOPILOT_DISPATCH_RUNS_DIR: path.join(home, 'runs'),
-    AUTOPILOT_SESSION_MODE_DIR: path.join(home, 'mode'), AUTOPILOT_CONFIG_FILE: path.join(home, 'config.json'), AUTOPILOT_PRECOMPACT_STDOUT: '0' };
+    AUTOPILOT_SESSION_MODE_DIR: path.join(home, 'mode'), AUTOPILOT_CONFIG_FILE: path.join(home, 'config.json'), AUTOPILOT_PRECOMPACT_STDOUT: '0', AUTOPILOT_CHECKPOINT_FLEET: 'off' };
   delete env.AUTOPILOT_SESSION_ID;
   fs.mkdirSync(env.AUTOPILOT_LIVE_DIR, { mode: 0o700 });
   fs.mkdirSync(env.AUTOPILOT_MODEL_HANDOFF_DIR, { recursive: true });

@@ -44,6 +44,9 @@ export AUTOPILOT_REVIEW_SERVER_AUTOSTART=0
 # open-decision.js sends a card notice to the program PM through the real `fleet` unless this is off; no suite may message the fleet by accident.
 # A suite that tests the notice re-exports it with a stub AUTOPILOT_FLEET_BIN.
 export AUTOPILOT_CARD_NOTIFY=off
+# The post-compaction handoff runs `fleet tasks` and reads capacity's AR file unless this is off; no suite may reach the real fleet by accident.
+# A suite that tests the Fleet State block re-exports it as on with a stub AUTOPILOT_FLEET_BIN.
+export AUTOPILOT_CHECKPOINT_FLEET=off
 
 # Fake-runner prompt + nonce-frame helpers (generic over AUTOPILOT-REVIEW /
 # AUTOPILOT-AUTHOR). Lifted from hooks/tests/dispatch-review-{a,b,c}.test.sh so consumer

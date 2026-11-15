@@ -91,7 +91,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/opt-in-multiplexer.js PreToolUse"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/opt-in-multiplexer.js PreToolUse",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       },
@@ -109,7 +111,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/foreman-guard.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/foreman-guard.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       },
@@ -135,7 +139,9 @@
           },
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-budget.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-budget.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       },

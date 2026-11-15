@@ -45,6 +45,7 @@ const WHITELIST = {
   'hooks/cost-tracker.js': 1,
   'hooks/dirty-protected-paths.js': 1,
   'hooks/failure-escalation.js': 1,
+  'hooks/fleet-send-work-order-guard.js': 1,
   'hooks/intent-capture.js': 2,
   'hooks/log-error.js': 1,
   'hooks/merge-task-status-lib.js': 1,

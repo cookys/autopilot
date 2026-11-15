@@ -43,7 +43,7 @@ test('replay CLI fails closed on card lookup in non-git cwd or corrupt store ins
   const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
   const r = spawnSync(process.execPath, [script, '--dir', dir], { cwd: dir, env: cleanEnv, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout, 'card.jsonl: BLOCK question\n');
+  assert.equal(r.stdout, 'card.jsonl: BLOCK bare_card_id,question\n');
 
   const origFindCard = cards.findCard;
   const origWrite = process.stdout.write;
@@ -55,5 +55,5 @@ test('replay CLI fails closed on card lookup in non-git cwd or corrupt store ins
   cards.findCard = () => { throw new Error('corrupt decision store'); };
   process.stdout.write = (chunk) => { captured += String(chunk); return true; };
   assert.equal(replay.main(['--dir', dir]), 0);
-  assert.equal(captured, 'card.jsonl: BLOCK question\n');
+  assert.equal(captured, 'card.jsonl: BLOCK bare_card_id,question\n');
 });

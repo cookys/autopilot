@@ -89,29 +89,29 @@ test('status and quoted lane text pass', () => {
 
 test('closed card must block', (t) => {
   const f = fixture(t);
-  assert.equal(f.check(`Please confirm ${f.card('closed')}.`)?.decision, 'block');
+  assert.equal(f.check(`Please confirm ${f.card('closed')}（合成待決）.`)?.decision, 'block');
 });
 
 test('only open and awaiting operator cards exempt their own sentence', (t) => {
   const f = fixture(t);
   const open = f.card(), awaiting = f.card('awaiting_operator_action', 'other-root');
-  assert.equal(f.check(`Please confirm ${open}.`), null);
-  assert.equal(f.check(`Please run the check ${awaiting}.`), null);
-  assert.equal(f.check(`Please confirm ${open.toUpperCase()}.`), null);
+  assert.equal(f.check(`Please confirm ${open}（合成待決）.`), null);
+  assert.equal(f.check(`Please run the check ${awaiting}（合成待決）.`), null);
+  assert.equal(f.check(`Please confirm ${open.toUpperCase()}（合成待決）.`), null);
   assert.equal(f.check(`Please confirm \`${open}\`.`), null);
-  assert.equal(f.check(`Please confirm ${f.card('pending_dispatch')}.`)?.decision, 'block');
-  assert.equal(f.check('Please confirm d-00000000.')?.decision, 'block');
+  assert.equal(f.check(`Please confirm ${f.card('pending_dispatch')}（合成待決）.`)?.decision, 'block');
+  assert.equal(f.check('Please confirm d-00000000（合成待決）.')?.decision, 'block');
   assert.equal(f.check('Please confirm d-12345678ffff.')?.decision, 'block');
-  assert.equal(f.check(`Please confirm. Card ${open}.`)?.decision, 'block');
-  assert.equal(f.check(`Please confirm ${open}. Please run the check.`)?.decision, 'block');
-  assert.equal(f.check(`Please confirm ${open}.\nI'll remind you.`)?.decision, 'block');
-  assert.equal(f.check(`已完成。\n待決卡：${open}、${awaiting}`), null);
+  assert.equal(f.check(`Please confirm. Card ${open}（合成待決）.`)?.decision, 'block');
+  assert.equal(f.check(`Please confirm ${open}（合成待決）. Please run the check.`)?.decision, 'block');
+  assert.equal(f.check(`Please confirm ${open}（合成待決）.\nI'll remind you.`)?.decision, 'block');
+  assert.equal(f.check(`已完成。\n待決卡：${open}（合成待決）、${awaiting}（合成待決）`), null);
 });
 
 test('one card opened for a different hit still blocks', (t) => {
   const f = fixture(t), id = f.card();
   const before = [{ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'node scripts/open-decision.js open --category goal --question "Different choice"' } }] } }];
-  assert.equal(f.check(`Please confirm ${id}.\nPlease run the check.`, {}, before)?.decision, 'block');
+  assert.equal(f.check(`Please confirm ${id}（合成待決）.\nPlease run the check.`, {}, before)?.decision, 'block');
 });
 
 test('fleet exemption requires a task and explicit due date in the same sentence', (t) => {
@@ -147,7 +147,7 @@ test('fleet exemption requires a task and explicit due date in the same sentence
 test('root-scoped session blocks unbound cards and points to close + reopen with --root-run-id', (t) => {
   const f = fixture(t);
   const unbound = f.card('open', null);
-  assert.equal(f.check(`待決卡片 ${unbound}，等你回覆。`), null);
+  assert.equal(f.check(`待決卡片 ${unbound}（合成待決），等你回覆。`), null);
 
   fs.writeFileSync(path.join(f.modes, 'synthetic.json'), JSON.stringify({
     session_id: 'synthetic',
@@ -158,13 +158,13 @@ test('root-scoped session blocks unbound cards and points to close + reopen with
     root_run_id: 'root-xyz',
   }));
 
-  const out = f.check(`待決卡片 ${unbound}，等你回覆。`);
+  const out = f.check(`待決卡片 ${unbound}（合成待決），等你回覆。`);
   assert.equal(out?.decision, 'block');
   assert.match(out.reason, new RegExp(`${unbound}.*未綁定`));
   assert.match(out.reason, new RegExp(`close --id ${unbound}`));
   assert.match(out.reason, /open --root-run-id root-xyz/);
 
-  const statusOut = f.check(`已開立待決卡片 ${unbound}。`);
+  const statusOut = f.check(`已開立待決卡片 ${unbound}（合成待決）。`);
   assert.equal(statusOut?.decision, 'block');
   assert.match(statusOut.reason, new RegExp(`close --id ${unbound}`));
   assert.match(statusOut.reason, /open --root-run-id root-xyz/);
@@ -172,7 +172,7 @@ test('root-scoped session blocks unbound cards and points to close + reopen with
   assert.equal(f.check('已完成更新，測試通過，沒有待決事項。'), null);
 
   const bound = f.card('open', 'root-xyz');
-  assert.equal(f.check(`待決卡片 ${bound}，等你回覆。`), null);
+  assert.equal(f.check(`待決卡片 ${bound}（合成待決），等你回覆。`), null);
 });
 
 test('hasLiveCard fails closed when cwd is not a git repo or card lookup throws', (t) => {
@@ -180,7 +180,7 @@ test('hasLiveCard fails closed when cwd is not a git repo or card lookup throws'
   const nonGit = fs.mkdtempSync(path.join(os.tmpdir(), 'owner-guard-nongit-'));
   t.after(() => fs.rmSync(nonGit, { recursive: true, force: true }));
   const tp = path.join(nonGit, 'turn.jsonl');
-  fs.writeFileSync(tp, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Please confirm d-00000000.' }] } }));
+  fs.writeFileSync(tp, JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Please confirm d-00000000（合成待決）.' }] } }));
   assert.equal(guard.decide({ cwd: nonGit, transcript_path: tp, session_id: 'synthetic' })?.decision, 'block');
 
   const cli = spawnSync(process.execPath, [path.join(__dirname, 'owner-question-guard.js')], {
@@ -195,7 +195,7 @@ test('hasLiveCard fails closed when cwd is not a git repo or card lookup throws'
   const origFindCard = cards.findCard;
   t.after(() => { cards.findCard = origFindCard; });
   cards.findCard = () => { throw new Error('corrupt decision store'); };
-  assert.equal(f.check('Please confirm d-00000000.')?.decision, 'block');
+  assert.equal(f.check('Please confirm d-00000000（合成待決）.')?.decision, 'block');
 });
 
 test('fixture strips ambient GIT_* so synthetic cards never land in an outer repo and restores env after', async (t) => {
@@ -225,7 +225,7 @@ test('fixture strips ambient GIT_* so synthetic cards never land in an outer rep
     assert.equal(f.env.GIT_DIR, undefined);
     assert.equal(f.env.GIT_WORK_TREE, undefined);
     const id = f.card();
-    assert.equal(f.check(`Please confirm ${id}.`), null);
+    assert.equal(f.check(`Please confirm ${id}（合成待決）.`), null);
     assert.equal(fs.existsSync(path.join(outerGitDir, 'autopilot')), false);
     assert.equal(fs.existsSync(path.join(f.cwd, '.git', 'autopilot', 'decisions')), true);
   });
@@ -263,6 +263,41 @@ test('malformed escape prefixes cannot hide instructions; multiline lane quotes 
   assert.equal(f.check('OWNER-GUARD-FALSE-POSITIVE Please run the check.')?.decision, 'block');
   assert.equal(f.check('OWNER-GUARD-FALSE-POSITIVE [wrong] Please run the check. :: excuse')?.decision, 'block');
   assert.equal(f.check('The lane wrote:\n"Please run the check.\nI will remind you."\nRecorded.'), null);
+});
+
+test('bare card ids need a plain-language subject', (t) => {
+  const f = fixture(t);
+  const bare = '卡片狀態：d-47602dd8 開著；d-25817f3a、d-eb29b32b 已答待步驟。d-1428cdd6 我決定 B 收掉。';
+  const out = f.check(bare);
+  assert.equal(out?.decision, 'block');
+  for (const id of ['d-47602dd8', 'd-25817f3a', 'd-eb29b32b', 'd-1428cdd6']) {
+    assert.match(out.reason, new RegExp(id));
+  }
+  assert.match(out.reason, /d-47602dd8（週一手機重連 Wi-Fi）/);
+  assert.equal(f.check('d-47602dd8（週一手機重連 Wi-Fi）開著'), null);
+  assert.equal(f.check('d-47602dd8 (週一手機重連 Wi-Fi) 開著'), null);
+  assert.equal(f.check('「週一手機重連」d-47602dd8 開著'), null);
+  assert.equal(f.check('標題：d-47602dd8 開著'), null);
+  assert.equal(f.check('見 `d-47602dd8`。'), null);
+  assert.equal(f.check('見\n```\nd-47602dd8\n```\n。'), null);
+  assert.equal(f.check('他寫「d-47602dd8 開著」。'), null);
+  assert.equal(f.check('d-47602dd8 開著。\nOWNER-GUARD-FALSE-POSITIVE [bare_card_id] d-47602dd8 :: 範例編號'), null);
+  const team = require('../scripts/lib/team.js');
+  const origResolve = team.resolve;
+  team.resolve = () => ({ role: 'lane', source: 'test', pm: null });
+  t.after(() => { team.resolve = origResolve; });
+  const laneBare = f.check('d-47602dd8 開著。');
+  assert.equal(laneBare?.decision, 'block');
+  assert.match(laneBare.reason, /d-47602dd8（週一手機重連 Wi-Fi）/);
+  assert.doesNotMatch(laneBare.reason, /request-decision\.js/);
+  assert.equal(f.check('可以強制刪嗎？見待決 d-4290499d（合成待決）。'), null);
+  const prev = process.env.AUTOPILOT_BARE_CARD_ID_LINT;
+  process.env.AUTOPILOT_BARE_CARD_ID_LINT = 'off';
+  t.after(() => {
+    if (prev === undefined) delete process.env.AUTOPILOT_BARE_CARD_ID_LINT;
+    else process.env.AUTOPILOT_BARE_CARD_ID_LINT = prev;
+  });
+  assert.equal(f.check(bare), null);
 });
 
 test('negative controls turn the closed-card and second-stop assertions red', (t) => {

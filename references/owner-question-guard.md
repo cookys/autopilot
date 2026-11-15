@@ -43,9 +43,23 @@ These are accepted **textual references**; the guard does not query fleet or
 verify that a task was created. Inline backticks around these references, card
 ids and `/login` preserve them; ordinary inline code and fenced blocks are ignored.
 
-Status-only reports and footers listing live cards pass. Markdown `>` quote lines,
-corner/curly quoted blocks (including multiline lane quotations), quoted inline
-text and source comments are ignored. Text outside a quote is still checked.
+Status-only reports and footers listing live cards pass when every card id carries
+a plain-language subject. A bare id (`d-` plus eight hex digits, case insensitive)
+is its own hit, class `bare_card_id`, even when a live card would exempt a question
+in that sentence. The subject sits immediately beside the id: optional spaces then
+`（…）` or `(…)` with at least two non-space characters inside, or the id immediately
+after `「…」` (same minimum) or a title label (`標題：`, `章節：`, `題目：`, `主題：`,
+`title:`, `heading:`, `section:`). Pass shape: `d-47602dd8（週一手機重連 Wi-Fi）`.
+Ids inside fenced blocks, any inline code span, Markdown `>` lines, `//` lines,
+block comments and quoted text are not bare hits. The false-positive line names
+the id itself: `OWNER-GUARD-FALSE-POSITIVE [bare_card_id] d-47602dd8 :: 理由`.
+`AUTOPILOT_BARE_CARD_ID_LINT=off` (`false`/`0`/`no`) disables only this check.
+A non-PM lane is still silenced by an annotated id or an `r-` id; a bare id blocks
+that lane with the subject message only.
+
+Markdown `>` quote lines, corner/curly quoted blocks (including multiline lane
+quotations), quoted inline text and source comments are ignored. Text outside a
+quote is still checked.
 
 ## Repeated Stops and false positives
 

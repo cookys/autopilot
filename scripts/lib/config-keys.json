@@ -4900,6 +4900,30 @@
       "summary": "Set to off, false, 0 or no to disable the owner-question guard."
     },
     {
+      "name": "AUTOPILOT_BARE_CARD_ID_LINT",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/owner-question-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "summary": "Set to off, false, 0 or no to disable only the bare card id check. A d- plus 8 hex id needs a plain-language subject next to it."
+    },
+    {
+      "name": "AUTOPILOT_SEND_WORK_ORDER_GUARD",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/fleet-send-work-order-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "summary": "Set to off, false, 0 or no to disable the PreToolUse guard that denies a fleet send used as a work order."
+    },
+    {
       "name": "AUTOPILOT_SUBAGENT_BUDGET_MODE",
       "kind": "env",
       "audience": "user",

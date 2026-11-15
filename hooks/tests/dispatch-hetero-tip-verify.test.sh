@@ -290,6 +290,15 @@ assert_eq "$(jget "$J" status)" "committed" "~3 MiB verify stdout is committed"
 assert_eq "$(jget "$J" tip_verify.status)" "pass" "~3 MiB verify stdout tip_verify pass"
 assert_eq "$(jget "$J" tip_verify.commands.0.rc)" "0" "~3 MiB verify stdout records rc 0"
 
+# --- this repo's real quality-gate-config.md: fenced default, source repo_config ---
+rm -f "$SBX/.claude/quality-gate-config.md"
+ln -s "$REPO_ROOT/.claude/quality-gate-config.md" "$SBX/.claude/quality-gate-config.md"
+CASE_PROMPT="$PROMPT_PLAIN"
+run_case tv-real-repo-config
+assert_eq "$(jget "$J" tip_verify.source)" "repo_config" "real quality-gate-config source repo_config"
+assert_eq "$(jget "$J" tip_verify.commands.0.cmd)" "node scripts/affected-suites.js --base develop --run" "real quality-gate-config command"
+assert_eq "$(jget "$J" tip_verify.commands.1.cmd)" "" "real quality-gate-config is one command"
+
 # --- negative control: ignore a failing rc → the false case goes wrongly green ---
 FARM="$TEST_TMP/farm-tip"
 rm -rf "$FARM"

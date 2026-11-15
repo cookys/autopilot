@@ -5,6 +5,10 @@
 
 ## Test Command
 
+```bash
+node scripts/affected-suites.js --base develop --run
+```
+
 Test step: select first, then run (from the repository root).
 
 1. Run `node scripts/affected-suites.js --base <target-branch> --head HEAD --json`.

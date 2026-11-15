@@ -117,7 +117,9 @@ the shipped defaults write them; no aliases.
   `AUTOPILOT_ENDPOINT_MINIMAX_TOKEN`, or the provider-native pair `AUTOPILOT_MINIMAX_BASE_URL` (optional) and
   `MINIMAX_API_KEY` (`resolve-endpoint.sh` order). Shipped rows: implementer qualified; the reviewer rows for
   `MiniMax-M3.1-Flash-Preview` FAILED, and there is no reviewer row for `MiniMax-M3.1-Flash`, so it enters
-  `reviewer_ladder` only after a reviewer exam passes.
+  `reviewer_ladder` only after a reviewer exam passes. Exam note (2026-11-15): the SWE implementer exam scored
+  16/19 (sitting 4f2506468), under the 17/19 bar, so the MiniMax implementer seat stays disabled; a retake needs a
+  newly pre-registered sitting (PM 01M7EHRN).
 * kimi-code/k3.1-pro: runner `kimi`, no endpoint, no env var. The binary is `kimi` on PATH, else
   `~/.kimi-code/bin/kimi` (`scripts/lib/runner-fallback-bin.sh`). Shipped rows: consult, discuss, owner,
   implementer and verification_author qualified; `kimi-code-k3` and `kimi-k2.8-preview` are the reviewer-

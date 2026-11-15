@@ -83,6 +83,7 @@ assert_exit_code "$RC" 0 "prune --check on the pruned file exits 0"
 node "$PRUNE" --lint >/dev/null; RC=$?
 assert_exit_code "$RC" 0 "lint passes on the repo"
 sed "s/^  codex: 'codex',/  codex: 'codex',\n  qoderclicn: 'qoderclicn',/" "$REPO_ROOT/scripts/lib/runner-binary.js" > "$TEST_TMP/runner-binary-bad.js"
+if cmp -s "$REPO_ROOT/scripts/lib/runner-binary.js" "$TEST_TMP/runner-binary-bad.js"; then echo "mutation did not apply: runner-binary.js anchor drifted" >&2; exit 1; fi
 LINT="$(node "$PRUNE" --lint --runner-binary "$TEST_TMP/runner-binary-bad.js")"; RC=$?
 assert_exit_code "$RC" 1 "lint fails when a retired runner is back in the known list"
 assert_contains "$LINT" "qoderclicn still in the known-runner map" "lint names the runner"

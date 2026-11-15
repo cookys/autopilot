@@ -17,6 +17,8 @@ cp "$REPO_ROOT/scripts/validate.sh" "$SANDBOX/scripts/validate.sh"
 # That gate is covered by its own suite; this sandbox tests link checks only, so it gets a pass-through stand-in. Without it
 # validate.sh dies on MODULE_NOT_FOUND and "clean fixtures pass" is red for a reason unrelated to links.
 printf '%s\n' "process.exit(0);" > "$SANDBOX/scripts/check-claude-spawn-sites.js"
+# Likewise the retired-runner lint (topology-prune.js --lint); this sandbox has no runner map.
+printf '%s\n' "process.exit(0);" > "$SANDBOX/scripts/topology-prune.js"
 
 # --- good skill: valid sibling link + a fenced-code placeholder (must be ignored) ---
 cat > "$SANDBOX/skills/good/SKILL.md" <<'EOF'

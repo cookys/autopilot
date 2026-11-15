@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const gate = require('./lib/cn-model-dispatch-gate');
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 
 const S = __dirname;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tfg-'));

@@ -451,7 +451,7 @@ codex_transport_run() {
   if [ "$CODEX_CONTAINMENT" = "cgroup" ]; then
     if [ -n "$trusted_cwd" ]; then
       systemd-run --user --scope --quiet --unit="$CODEX_CGROUP_UNIT" -- \
-        env -C "$trusted_cwd" setsid "$bin" exec --model "$model" \
+        env -C "$trusted_cwd" setsid ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$bin" exec --model "$model" \
         --sandbox read-only \
         --skip-git-repo-check \
         -c "model_reasoning_effort=\"$effort\"" \
@@ -459,7 +459,7 @@ codex_transport_run() {
         < "$prompt" > "$stdout_path" 2> "$stderr_path" &
     else
       systemd-run --user --scope --quiet --unit="$CODEX_CGROUP_UNIT" -- \
-        setsid "$bin" exec --model "$model" \
+        setsid ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$bin" exec --model "$model" \
         --sandbox read-only \
         --skip-git-repo-check \
         -c "model_reasoning_effort=\"$effort\"" \
@@ -468,14 +468,14 @@ codex_transport_run() {
     fi
   else
     if [ -n "$trusted_cwd" ]; then
-      env -C "$trusted_cwd" setsid "$bin" exec --model "$model" \
+      env -C "$trusted_cwd" setsid ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$bin" exec --model "$model" \
         --sandbox read-only \
         --skip-git-repo-check \
         -c "model_reasoning_effort=\"$effort\"" \
         --output-last-message "$sidecar_path" \
         < "$prompt" > "$stdout_path" 2> "$stderr_path" &
     else
-      setsid "$bin" exec --model "$model" \
+      setsid ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$bin" exec --model "$model" \
         --sandbox read-only \
         --skip-git-repo-check \
         -c "model_reasoning_effort=\"$effort\"" \

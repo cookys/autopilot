@@ -187,6 +187,8 @@ unset _tfg_msg
 command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
 command -v setsid >/dev/null 2>&1 || die_precondition "setsid is required for process-group containment"
 worker_containment_detect
+# Mount isolation (01M7E4JC): unshare goes inside the scope/session, in front of the kimi argv; refuse exits before any spawn.
+worker_mount_isolation_require || die_precondition "$WORKER_MOUNT_REFUSE_LINE"
 SCOPE_UNIT=""; WORKER_SID=""; FOREMAN_TURN_PID=""; FOREMAN_TURN_SCOPE=""
 command -v node >/dev/null 2>&1 || die_precondition "node is required (stream parsing, content gate)"
 [ -f "$SELF_DIR/check-hands-commit.js" ] || die_precondition "scripts/check-hands-commit.js missing beside this rail"
@@ -466,9 +468,9 @@ _foreman_launch_setsid() {
   if [ "${1:-}" = "--keep-stderr" ]; then keep_stderr=1; shift; fi
   FOREMAN_TURN_SCOPE=""; SCOPE_UNIT=""
   if [ "$keep_stderr" -eq 1 ]; then
-    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>>"$stream.stderr" &
+    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$KIMI_BIN" "$@" ) >"$stream" 2>>"$stream.stderr" &
   else
-    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+    ( cd "$WT" && exec setsid env -i "${FOREMAN_ENV[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
   fi
   FOREMAN_TURN_PID=$!
   WORKER_SID="$FOREMAN_TURN_PID"
@@ -504,7 +506,7 @@ run_turn() {
     FOREMAN_TURN_N=$(( ${FOREMAN_TURN_N:-0} + 1 ))
     candidate="foreman-${RUN_ID//[^A-Za-z0-9]/_}-${FOREMAN_TURN_N}-$$.scope"
     FOREMAN_TURN_SCOPE="$candidate"
-    ( cd "$WT" && exec setsid systemd-run --user --scope --quiet --unit="$candidate" -- env -i "${FOREMAN_ENV[@]}" "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
+    ( cd "$WT" && exec setsid systemd-run --user --scope --quiet --unit="$candidate" -- env -i "${FOREMAN_ENV[@]}" ${WORKER_MOUNT_PREFIX[@]+"${WORKER_MOUNT_PREFIX[@]}"} "$KIMI_BIN" "$@" ) >"$stream" 2>"$stream.stderr" &
     pid=$!
     FOREMAN_TURN_PID=$pid
     WORKER_SID=$pid

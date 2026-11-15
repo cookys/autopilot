@@ -204,3 +204,25 @@ test('dispatch-consult: gate and barred-rung guard are wired', () => {
 });
 
 test.after(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+test('local fleet endpoint (PM 01M7F6TK): qwen_local is not cloud dispatch; cloud Qwen and other families stay barred', () => {
+  const core = path.join(tmp, 'corerepo');
+  fs.mkdirSync(path.join(core, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(core, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_dirs: ['lib/engine/**'] }));
+  const env0 = { ...OK, AUTOPILOT_TASK_SCOPE: 'lib/engine/run.js', AUTOPILOT_TASK_SIZE: 'L', AUTOPILOT_TASK_READS_TRANSCRIPT: '1' };
+  const at = (x) => gate.check({ ...x, env: env0, cwd: core });
+  const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  assert.deepEqual(gate.localEndpoints(), ['qwen_local']);
+  assert.equal(at(LOCAL).allowed, true, 'local qwen on core dir / big size / transcript is allowed');
+  assert.equal(at({ runner: 'anthropic-compatible', endpoint: 'qwen_local' }).allowed, true);
+  assert.equal(at({ runner: 'cc-shim', model: 'Qwen3.8-Max' }).allowed, false, 'cloud Qwen, no endpoint');
+  assert.equal(at({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen' }).allowed, false, 'cloud qwen endpoint');
+  assert.equal(at({ runner: 'cc-shim', model: 'x', endpoint: 'glm' }).allowed, false);
+  assert.equal(at({ ...K, endpoint: 'kimi' }).allowed, false);
+  assert.equal(at({ runner: 'cc-shim', model: 'deepseek-v4', endpoint: 'deepseek' }).allowed, false);
+  assert.equal(at({ runner: 'anthropic-compatible', model: 'MiniMax-M3', endpoint: 'minimax' }).allowed, false);
+  assert.equal(at({ runner: 'qoderclicn', model: 'x' }).allowed, false);
+  const mixed = at({ runner: 'cc-shim', model: 'kimi-code/kimi-for-coding', endpoint: 'qwen_local' });
+  assert.equal(mixed.allowed, false, 'a cloud kimi model on the local endpoint is still barred');
+  assert.equal(mixed.family, 'moonshot');
+});

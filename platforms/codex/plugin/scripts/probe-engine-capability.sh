@@ -36,7 +36,7 @@ Usage:
 
 Options:
   --runner <r>       Runner name: codex, agy, grok, cursor, kimi, opencode, cc-shim,
-                     claude-native, anthropic-compatible (the dispatch-review.sh roster).
+                     claude-native, anthropic-compatible, qoderclicn (the dispatch-review.sh roster).
   --model <m>        Specify model name.
   --effort <e>       Exact effort partition written into the capability row.
   --endpoint <v>     Exact endpoint wallet name, or @none for explicit endpoint:null.
@@ -203,6 +203,14 @@ case "$RUNNER" in
       RUNNER_VERSION="$(grok --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
+  qoderclicn)
+    # command -v only. Do not call runner_bin_fallback: the explicit name stays
+    # qoderclicn, and a leftover host topology rung stays retired.
+    if command -v qoderclicn >/dev/null 2>&1; then
+      BINARY_FOUND=1
+      RUNNER_VERSION="$(qoderclicn --version 2>&1 | head -n 1 || echo "unknown")"
+    fi
+    ;;
   cursor)
     # The binary is cursor-agent, NOT cursor — a name-derived fallthrough would
     # probe the wrong command entirely.
@@ -319,10 +327,11 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
   # cc-shim/anthropic-compatible transport; exporting ANTHROPIC_* around
   # Codex/Grok does not observe their endpoint tuple.
   #
-  # Effort: only codex / grok / opencode / kimi consume it — verified by
+  # Effort: codex / grok / opencode / kimi / qoderclicn consume it — verified by
   # reading the dispatcher, not by assumption (dispatch-review.sh: codex `-c
   # model_reasoning_effort`, grok `--reasoning-effort`, opencode `--variant` with max→xhigh,
-  # kimi KIMI_MODEL_THINKING_EFFORT low|high|max; agy/cc-shim/anthropic-compatible/claude-native/cursor never receive it,
+  # kimi KIMI_MODEL_THINKING_EFFORT low|high|max, qoderclicn `--reasoning-effort`;
+  # agy/cc-shim/anthropic-compatible/claude-native/cursor never receive it,
   # and dispatch-anthropic-review.js has no effort parameter at all).  An
   # effort-bearing tuple on a non-consuming runner is unobserved, so it must
   # stay non-authorizing rather than be stamped available.
@@ -331,7 +340,7 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
     *)                            _ENDPOINT_CONSUMER=0 ;;
   esac
   case "$RUNNER" in
-    codex|grok|opencode|kimi) _EFFORT_CONSUMER=1 ;;
+    codex|grok|opencode|kimi|qoderclicn) _EFFORT_CONSUMER=1 ;;
     *)                        _EFFORT_CONSUMER=0 ;;
   esac
   if [ "$ENDPOINT_SET" -eq 1 ] && [ "$ENDPOINT" != "@none" ] \
@@ -439,6 +448,13 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       else
         grok -p "Respond only with OK" --model "$MODEL" --cwd "$PROBE_CWD" --no-alt-screen --disable-web-search >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi
+      ;;
+    qoderclicn)
+      # Explicit-only seat. Scratch cwd, empty tool allow-list. No
+      # --dangerously-skip-permissions: a live probe must not auto-approve tools.
+      ( cd "$PROBE_CWD" && printf 'Respond only with OK' | qoderclicn -p --model "$MODEL" -w "$PROBE_CWD" \
+          ${EFFORT:+--reasoning-effort "$EFFORT"} --tools "" --no-session-persistence ) \
+          >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       ;;
     cursor)
       # scratch --workspace (never the repo; cursor-agent has no --cwd). --trust

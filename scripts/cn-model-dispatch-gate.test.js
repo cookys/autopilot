@@ -203,6 +203,33 @@ test('dispatch-consult: gate and barred-rung guard are wired', () => {
   assert.match(src, /barred rung is not a fallback/);
 });
 
+test('dispatch-hetero: --runner qoderclicn on a core path is barred before the stub runs', () => {
+  const core = path.join(tmp, 'qoder-core');
+  fs.mkdirSync(path.join(core, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(core, '.claude', 'cn-model-gate.json'), JSON.stringify({ core_dirs: ['lib/engine/**'] }));
+  const g = (...a) => spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...a], { cwd: core, encoding: 'utf8' });
+  g('init', '-q', '-b', 'develop');
+  g('commit', '-q', '--allow-empty', '-m', 'i');
+  const stub = path.join(tmp, 'qoder-sentinel');
+  fs.writeFileSync(stub, '#!/bin/sh\necho SENTINEL\nexit 99\n', { mode: 0o755 });
+  const prompt = path.join(tmp, 'qoder-core.md');
+  fs.writeFileSync(prompt, 'Engine: qwen | Role: implementer | Lane: x | Size: S\nScope: lib/engine/run.js\nbody\n');
+  const e = env({
+    AUTOPILOT_TASK_SIZE: 'S',
+    AUTOPILOT_TASK_ROLE: 'implementer',
+    AUTOPILOT_TASK_SCOPE: 'lib/engine/run.js',
+  });
+  delete e.AUTOPILOT_TEST_CN_GATE_OFF;
+  const r = spawnSync('bash', [
+    path.join(S, 'dispatch-hetero.sh'), '--no-verify-tip', '--branch', 'b-qoder',
+    '--prompt-file', prompt, '--runner', 'qoderclicn', '--model', 'x', '--qoder-bin', stub,
+  ], { cwd: core, encoding: 'utf8', env: e, input: '', timeout: 60000 });
+  const text = `${r.stdout}${r.stderr}`;
+  assert.equal(r.status, 2);
+  assert.match(text, /cn_model_dispatch_barred qoder core-dir/);
+  assert.doesNotMatch(text, /SENTINEL/);
+});
+
 test.after(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
 test('local fleet endpoint (PM 01M7F6TK): qwen_local is not cloud dispatch; cloud Qwen and other families stay barred', () => {

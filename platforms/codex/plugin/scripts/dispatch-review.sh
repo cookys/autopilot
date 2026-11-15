@@ -30,13 +30,13 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # WALL-CLOCK CAP FOR EVERY RUNNER, not just agy (default 5m).
 #                               #   agy: passed as --print-timeout (bare number = seconds, via lib/agy-timeout.sh)
-#                               #   codex / grok / cursor: enforced via an external `timeout`
+#                               #   codex / grok / qoder / cursor: enforced via an external `timeout`
 #                               # Exceeding it is a NON-ZERO EXIT, which is fail-closed to
 #                               # status:no_verdict — the review is lost, not merely slow. A
 #                               # large diff at a high effort routinely needs more than 5m
@@ -47,14 +47,14 @@
 #                               # reported as status:no_verdict, error `seat_idle_timeout: ...`, so the
 #                               # caller swaps the seat instead of waiting for the wall cap. Ns / Nm / bare
 #                               # seconds; env AUTOPILOT_REVIEW_IDLE_TIMEOUT is the same knob (flag wins).
-#                               # Applies to codex(non-cleanroom) grok cursor kimi opencode cc-shim
+#                               # Applies to codex(non-cleanroom) grok qoder cursor kimi opencode cc-shim
 #                               # claude-native; see references/hetero-dispatch.md for safe values.
-#       [--max-tokens <n>]      # response-token cap (1..200000): anthropic-compatible only
+#       [--max-tokens <n>]      # response-token cap (1..200000): anthropic-compatible/qoderclicn only
 #       [--role-kit <dir>]      # claude-native only (any other runner is refused): <dir>/role.md becomes the
 #                               #   child's --system-prompt, <dir>/plugin its --plugin-dir (when present) and the
 #                               #   one-line <dir>/tools its --tools (`none` = no tools, today's posture). Validated
 #                               #   before any spawn; references/hetero-dispatch.md "Role kit". Off unless given.
-#       [--bin <path>]          # override the runner binary (test seam)
+#       [--bin <path>]          # override the runner binary; qoder: --qoder-bin / --qoder-config-dir
 #       [--implementer-family <family>]
 #                               # family of the engine that wrote this diff
 #                               #   (comma-separated when there are several).
@@ -152,7 +152,7 @@
 #   v1: `--pure` disables external plugins. v2 (opencode 2.x removed --dir/--pure/--variant):
 #   `--standalone`, `-m model#variant`, empty cwd, no --pure equivalent (see the lib header).
 #   The prompt is read from STDIN (no positional
-#   message ⇒ no ARG_MAX wall, same as cursor); `--format json` streams
+#   message ⇒ no ARG_MAX wall, same as qoderclicn/cursor); `--format json` streams
 #   newline-delimited JSON events — the final assistant text is the LAST
 #   `{"type":"text",...}` event's `.part.text` (probe-verified: one complete text event
 #   per assistant turn, not incremental deltas — extracted via a Node built-in
@@ -161,7 +161,7 @@
 #   dispatch-hetero.sh implementer rail — see there for the effort-tier probe).
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...",
 #     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "...",
 #     "usage": { ... }|null }
@@ -178,7 +178,7 @@
 # Seat tiers (the table lives only in review_seat_tier below):
 #   packet     anthropic-compatible cc-shim claude-native opencode (prompt-only)
 #   cleanroom  codex kimi agy (tool-capable; AUTOPILOT_BLIND_DISCOVERY=1 → scripts/lib/cleanroom-launch.sh)
-#   none       grok cursor (blind: existing no-tools message)
+#   none       grok cursor qoderclicn (explicit-only; not restored to the packet tier)
 # Blind cleanroom env:
 #   AUTOPILOT_CLEANROOM_LAUNCHER   replace the launcher script (test seam)
 #   AUTOPILOT_CLEANROOM_BWRAP      bwrap binary (must be AppArmor-allowed to create userns)
@@ -278,6 +278,8 @@ fi
 
 ROLE_KIT_DIR=""   # --role-kit (lib/role-kit.sh)
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; IDLE_TIMEOUT="${AUTOPILOT_REVIEW_IDLE_TIMEOUT:-}"; IDLE_MARKER=""; IDLE_WRAP=(); BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
+QODER_BIN_EXPLICIT=""   # --qoder-bin; wins over --bin for the qoderclicn seat
+QODER_CONFIG_DIR=""     # --qoder-config-dir; forwarded as --config-dir only when set
 REVIEW_USAGE_JSON="null"
 MAX_TOKENS=""; MAX_TOKENS_SUPPLIED=0; MAX_TOKENS_PARSE_ERROR=""
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
@@ -310,6 +312,8 @@ while [[ $# -gt 0 ]]; do
       ;;
     --role-kit)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--role-kit requires a non-empty directory path" >&2; exit 2; }; ROLE_KIT_DIR="$2"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
+    --qoder-bin) QODER_BIN_EXPLICIT="${2:-}"; shift 2 ;;
+    --qoder-config-dir) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--qoder-config-dir requires a non-empty directory" >&2; exit 2; }; QODER_CONFIG_DIR="$2"; shift 2 ;;
     --implementer-family) { [ $# -ge 2 ] && [ -n "${2:-}" ] && [[ "${2:-}" != --* ]]; } || { echo "--implementer-family requires a non-empty family" >&2; exit 2; }; IMPLEMENTER_FAMILY="$2"; shift 2 ;;
     --checklists) CHECKLISTS="${2:-}"; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
@@ -582,9 +586,9 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
 }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode)"
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint review-seat ;; esac
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
 # d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
 _tfg_msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role reviewer --runner "$RUNNER" --model "$MODEL" ${DIFF_FILE:+--diff-file "$DIFF_FILE"} ${ENDPOINT:+--endpoint "$ENDPOINT"} ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
@@ -734,7 +738,7 @@ if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
     && (( 10#$MAX_TOKENS <= 200000 )) \
     || die_precondition "--max-tokens must be a base-10 integer in 1..200000"
   case "$RUNNER" in
-    anthropic-compatible) ;;
+    anthropic-compatible|qoderclicn) ;;
     *) die_precondition "--max-tokens is unsupported for runner '$RUNNER': current rail has no verified enforceable output-token mapping" ;;
   esac
 fi
@@ -1527,6 +1531,9 @@ CODEX_OUT=""
 CODEX_ERR=""
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
 GROK_PARSE="" # grok glued-preamble normalized parse target (v2.36.4); trap-reaped like the other rails
+QODER_CWD=""  # set only on the qoderclicn path; same trap-reap rationale
+QODER_OUT=""  # qoder reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
+QODER_ERR=""  # qoder reviewer stderr capture (chrome); reaped on EXIT
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
 CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 CNATIVE_CFG="" # seeded credentials-only CLAUDE_CONFIG_DIR for claude-native (BL-0290); reaped by the EXIT trap
@@ -1587,6 +1594,9 @@ cleanup() {
   [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
   [ -n "$GROK_PARSE" ] && rm -f "$GROK_PARSE"
+  [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD"
+  [ -n "$QODER_OUT" ] && rm -f "$QODER_OUT"
+  [ -n "$QODER_ERR" ] && rm -f "$QODER_ERR"
   [ -n "$AGY_SALVAGE" ] && rm -f "$AGY_SALVAGE"
   [ -n "$SALVAGE_BLOCK" ] && rm -f "$SALVAGE_BLOCK"
   if [ -n "${CLEANROOM_PREFLIGHT_ERR:-}" ]; then
@@ -2031,6 +2041,55 @@ elif [[ "$RUNNER" = "grok" ]]; then
   fi
   PARSE_INPUT="$GROK_PARSE"
 
+elif [[ "$RUNNER" = "qoderclicn" ]]; then
+  QODER_BIN="${QODER_BIN_EXPLICIT:-${BIN:-qoderclicn}}"
+  command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (Qoder CLI CN)"
+  # READ-ONLY review of an UNTRUSTED diff, same posture as grok: scratch cwd (-w,
+  # NEVER the repo); --tools "" DISABLES all built-in tools (empty allow-list — the diff is
+  # in the prompt, so the reviewer only reads + answers, never runs/edits on the untrusted
+  # diff); --no-session-persistence; enforced `timeout` (qoder has no --print-timeout) as the
+  # ultimate hang backstop; FAIL-CLOSED before the shared parser on any non-zero exit.
+  # Prompt via STDIN (qoder -p reads stdin), NOT a positional argv arg.
+  # --config-dir only when --qoder-config-dir was given. Plain text, never -o json.
+  # SPLIT STREAMS (same rail as codex): parse STDOUT only, keep STDERR as chrome. qoder
+  # prints a benign `fatal: not a git repository` to STDERR at startup from the non-git
+  # scratch cwd; merging it (2>&1) would put it AHEAD of the wrapped block and the parser
+  # (which requires the response to START with the block) would reject a real verdict as
+  # no_verdict.
+  QODER_OUT="$(mktemp -t dispatch-review-qoder-out-XXXXXX)"
+  QODER_ERR="$(mktemp -t dispatch-review-qoder-err-XXXXXX)"
+  QODER_CWD="$(mktemp -d -t dispatch-review-qodercwd-XXXXXX)"
+  QODER_EXTRA=()
+  [ -n "${QODER_CONFIG_DIR:-}" ] && QODER_EXTRA+=(--config-dir "$QODER_CONFIG_DIR")
+  [ "$MAX_TOKENS_SUPPLIED" -eq 1 ] && QODER_EXTRA+=(--max-output-tokens "$MAX_TOKENS")
+  timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
+      --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence \
+      "${@:6}" < "$5"' \
+      _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" \
+      ${QODER_EXTRA[@]+"${QODER_EXTRA[@]}"} > "$QODER_OUT" 2> "$QODER_ERR"
+  QODER_RC=$?   # no set -e in this script (top is `set -uo pipefail`, see grok branch) — capturing $? is safe
+  wait_output_quiescent "$QODER_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  rm -rf "$QODER_CWD"; QODER_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  cat "$QODER_OUT" > "$RAW_LOG"
+  printf '\n--- qoder stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+  cat "$QODER_ERR" >> "$RAW_LOG"
+  if [ "$QODER_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: qoder exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$QODER_RC" "$([ "$QODER_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    SALVAGE_CAPTURE="$QODER_OUT"
+    NV_RC="$QODER_RC"; NV_STAGE="runner"; NV_STDERR_FILE="$QODER_ERR"
+    printf 'dispatch-review: qoder stderr (rc=%s): %s\n' "$QODER_RC" "$(nv_stderr_tail "$QODER_ERR")" >&2
+    emit_no_verdict "qoder exited non-zero (rc=$QODER_RC) — fail-closed, partial output not parsed"
+  fi
+  # MODEL SUBSTITUTION guard: qoder prints `Model "X" is not available right now; using
+  # "auto" instead` on stderr and still answers. The verdict then comes from a model the
+  # caller did not request, so it is rejected (fail-closed) with a named reason.
+  if grep -qE 'is not available right now; using .* instead' "$QODER_ERR" 2>/dev/null; then
+    QODER_SUBST_LINE="$(grep -E 'is not available right now; using .* instead' "$QODER_ERR" | head -n 1 | cut -c1-200)"
+    SALVAGE_CAPTURE="$QODER_OUT"
+    emit_no_verdict "model substituted: requested model unavailable, qoder answered with another model ($QODER_SUBST_LINE) — fail-closed, verdict not accepted"
+  fi
+  PARSE_INPUT="$QODER_OUT"
 elif [[ "$RUNNER" = "cursor" ]]; then
   BIN="${BIN:-cursor-agent}"
   command -v "$BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $BIN (Cursor CLI — cursor-agent, not cursor)"
@@ -2110,7 +2169,7 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   KIMI_INDIRECT=0
   if [ "$KIMI_PROMPT_BYTES" -gt "$KIMI_ARGV_LIMIT" ]; then
     if [ "$BLIND_RUNNER_CLEANROOM" -eq 1 ]; then
-      die_precondition "kimi prompt is ${KIMI_PROMPT_BYTES} bytes but the blind kimi seat is tool-less and takes the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — shrink the review (review_diff_scope / split the diff) or seat a runner that reads a prompt file (codex, grok, cursor, opencode)"
+      die_precondition "kimi prompt is ${KIMI_PROMPT_BYTES} bytes but the blind kimi seat is tool-less and takes the prompt only as one -p argv string (Linux MAX_ARG_STRLEN 131072; limit ${KIMI_ARGV_LIMIT}) — shrink the review (review_diff_scope / split the diff) or seat a runner that reads a prompt file (codex, grok, qoderclicn, cursor, opencode)"
     fi
     KIMI_INDIRECT=1
   fi

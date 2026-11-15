@@ -158,7 +158,18 @@ printf '#!/usr/bin/env bash\nexit 99\n' > "$PARITY_STUB"
 chmod +x "$PARITY_STUB"
 PARITY_FAKE_NODE="$TEST_TMP/blind-parity-fake-node"
 mkdir -p "$PARITY_FAKE_NODE"
-printf '#!/usr/bin/env bash\nexit 99\n' > "$PARITY_FAKE_NODE/node"
+# The cn-model gate and the other helpers also invoke `node`. Only the anthropic
+# transport (dispatch-anthropic-review.js) is the stub whose exit 99 is the signature.
+PARITY_REAL_NODE="$(command -v node)"
+cat > "$PARITY_FAKE_NODE/node" <<EOF
+#!/usr/bin/env bash
+for a in "\$@"; do
+  case "\$a" in
+    *dispatch-anthropic-review.js*) exit 99 ;;
+  esac
+done
+exec "$PARITY_REAL_NODE" "\$@"
+EOF
 chmod +x "$PARITY_FAKE_NODE/node"
 export AUTOPILOT_ENDPOINT_PARITYEP_URL="http://127.0.0.1:9/v1"
 export AUTOPILOT_ENDPOINT_PARITYEP_TOKEN="t"
@@ -177,7 +188,10 @@ for PARITY_RUNNER in $SCHEMA_RUNNERS; do
     cc-shim) PARITY_EXTRA=(--endpoint PARITYEP) ;;
     anthropic-compatible) PARITY_EXTRA=(--endpoint PARITYEP --context-window off); PARITY_PATH="$PARITY_FAKE_NODE:$PATH" ;;
   esac
+  # Size S + a non-core scope lets the cn-model gate allow a barred family (kimi, qoderclicn)
+  # so this loop still asserts the seat tier. The gate runs before review_seat_tier.
   PARITY_OUT="$(PATH="$PARITY_PATH" AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
+    AUTOPILOT_TASK_SIZE=S AUTOPILOT_TASK_ROLE=implementer AUTOPILOT_TASK_SCOPE=docs/guide/installation.md \
     "$SCRIPT" --runner "$PARITY_RUNNER" --model haiku --diff-file "$DIFF" --bin "$PARITY_STUB" "${PARITY_EXTRA[@]}" 2>&1)"; PARITY_EXIT=$?
   JS_TIER="$(node -e '
 const { reviewSeatTier } = require(process.argv[1]);

@@ -24,8 +24,9 @@
 #                                             # rung when this id is the implementer and
 #                                             # implementer_ladder is empty is gemini-4-argon-low
 #                                             # (resolve-review-loop.sh; this script does not retry).
-#       [--runner auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native|qoderclicn] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, else agy (*qwen*/*qwq* refused; use cc-shim + --endpoint).
+#                                              #   qoderclicn (EXPLICIT only, never auto): Qoder CLI CN.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
 #                                              #   cc-shim (EXPLICIT only): Claude Code CLI
@@ -125,6 +126,8 @@
 #       [--cursor-bin cursor-agent]            # alternate/pinned Cursor CLI (test seam)
 #       [--opencode-bin opencode]              # alternate/pinned OpenCode CLI (test seam)
 #       [--kimi-bin kimi]                      # alternate/pinned Kimi Code CLI (test seam)
+#       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
+#       [--qoder-config-dir <dir>]             # passed as --config-dir only when set
 #       [--cursor-fast]                        # cursor: opt into the `-fast` model-id lane
 #                                              #   (default non-fast). Runner-scoped: any other
 #                                              #   --runner is a die_precondition, same posture as
@@ -212,7 +215,7 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed" | "verify_failed",
-#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"cursor"|"opencode"|"kimi"|"claude-native", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"cursor"|"opencode"|"kimi"|"claude-native"|"qoderclicn", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -378,6 +381,9 @@ BIN_FLAG_CODEX=0
 BIN_FLAG_CURSOR=0
 BIN_FLAG_OPENCODE=0
 BIN_FLAG_KIMI=0
+BIN_FLAG_QODER=0
+QODER_BIN="qoderclicn"  # Qoder CLI CN; explicit --runner qoderclicn only. Test seam: --qoder-bin
+QODER_CONFIG_DIR=""     # --qoder-config-dir; empty means the invocation omits --config-dir
 MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
 OPENCODE_BIN="opencode"    # OpenCode CLI runner (`opencode run`); test seam via --opencode-bin
@@ -491,6 +497,7 @@ IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
 IS_PI=0
 IS_CNATIVE=0         # claude-native implementer (first-party Claude CLI, native auth) — owner-confirmation gated
+IS_QODER=0           # Qoder CLI CN. EXPLICIT only; auto never selects it
 CNATIVE_CONFIG_DIR=""  # seeded CLAUDE_CONFIG_DIR (only .credentials.json); removed on every exit path
 # G37 W3: account layer state for claude-native. Prints legacy (no registry, or mode off: the seeded
 # path below is unchanged) | active (registry present: the worker goes through claude-account.js run and
@@ -501,6 +508,7 @@ cnative_account_state() {
 }
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
+QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so the INT/TERM trap and detach declare -p can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
 OPENCODE_VER=""  # opencode --version line, read once at the pre-spend gate (declare -p carries it to the detached child)
@@ -1041,6 +1049,7 @@ emit() { # status commit files ins del worktree error
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   # --- observability fields (ADDITIVE; consumers tolerate unknown fields — implementer.js
@@ -1062,7 +1071,7 @@ emit() { # status commit files ins del worktree error
     if [ "${IS_CODEX:-0}" -eq 0 ] && [ "${IS_GROK:-0}" -eq 0 ] \
        && [ "${IS_CCSHIM:-0}" -eq 0 ] && [ "${IS_PI:-0}" -eq 0 ] \
        && [ "${IS_CURSOR:-0}" -eq 0 ] \
-       && [ "${IS_OPENCODE:-0}" -eq 0 ] && [ "${IS_KIMI:-0}" -eq 0 ] && [ "${IS_CNATIVE:-0}" -eq 0 ]; then
+       && [ "${IS_OPENCODE:-0}" -eq 0 ] && [ "${IS_KIMI:-0}" -eq 0 ] && [ "${IS_QODER:-0}" -eq 0 ] && [ "${IS_CNATIVE:-0}" -eq 0 ]; then
       usage_json="${AGY_USAGE_JSON:-null}"
     elif [ "${IS_CCSHIM:-0}" -eq 1 ]; then
       # cc-shim: $LOG is plain text with no token counts. $CCSHIM_ENVELOPE is the
@@ -1967,6 +1976,7 @@ current_runner_name() {
     [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
   fi
   printf '%s' "$runner"
@@ -2489,6 +2499,7 @@ die_resource_budget() {
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null, "num_turns": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
@@ -2521,6 +2532,7 @@ write_manifest() {
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
   # grok --output-format json / agy response-only plain log with a separate private
@@ -2649,6 +2661,8 @@ while [ $# -gt 0 ]; do
     --cursor-bin) CURSOR_BIN="${2:-}"; BIN_FLAG_CURSOR=1; shift 2 ;;
     --opencode-bin) OPENCODE_BIN="${2:-}"; BIN_FLAG_OPENCODE=1; shift 2 ;;
     --kimi-bin) KIMI_BIN="${2:-}"; BIN_FLAG_KIMI=1; shift 2 ;;
+    --qoder-bin) QODER_BIN="${2:-}"; BIN_FLAG_QODER=1; shift 2 ;;
+    --qoder-config-dir) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--qoder-config-dir requires a non-empty directory"; QODER_CONFIG_DIR="$2"; shift 2 ;;
     --cursor-fast) CURSOR_FAST=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
@@ -2748,7 +2762,8 @@ if [ "${AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE:-}" != "1" ] \
       || _bin_override_differs "$CODEX_BIN" codex "$BIN_FLAG_CODEX" \
       || _bin_override_differs "$CURSOR_BIN" cursor-agent "$BIN_FLAG_CURSOR" \
       || _bin_override_differs "$OPENCODE_BIN" opencode "$BIN_FLAG_OPENCODE" \
-      || _bin_override_differs "$KIMI_BIN" kimi "$BIN_FLAG_KIMI"; then
+      || _bin_override_differs "$KIMI_BIN" kimi "$BIN_FLAG_KIMI" \
+      || _bin_override_differs "$QODER_BIN" qoderclicn "$BIN_FLAG_QODER"; then
     CAPABILITY_WRITE_GUARD=1
     _CAPABILITY_WRITE_NOTE_DONE=1
     echo "dispatch-hetero: not writing the capability store (test double runner binary without an isolated store). Set ENGINE_CAPABILITY_DIR or pass --store to isolate, or set AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE=1 to write the real store." >&2
@@ -2851,6 +2866,7 @@ set_runner_flags() {
   IS_CURSOR=0
   IS_OPENCODE=0
   IS_KIMI=0
+  IS_QODER=0
   IS_CNATIVE=0
   # --gate-rules: the session id keys the gate file, so it must be minted fresh for this dispatch (never inherited).
   [ -z "${GATE_RULES_FILE:-}" ] || unset CHILD_SESSION_ID
@@ -2868,6 +2884,7 @@ set_runner_flags() {
     kimi)    IS_KIMI=1 ;;      # Kimi Code CLI (Moonshot). EXPLICIT only, never auto: model
                                # ids are provider/alias (kimi-code/k3) with no vendor family
                                # to match on — same rationale as opencode above.
+    qoderclicn) IS_QODER=1 ;;  # Qoder CLI CN. EXPLICIT only, never auto: *qwen*/*qwq* stay fail-closed.
     claude-native) IS_CNATIVE=1; declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;;   # EXPLICIT only; refused without the one-time owner confirmation (see precondition gate)
     auto)
       # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
@@ -2900,7 +2917,7 @@ set_runner_flags() {
         IS_GROK=1
       fi
       ;;
-    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native (got: $RUNNER)" ;;
+    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|cursor|opencode|kimi|claude-native|qoderclicn (got: $RUNNER)" ;;
   esac
   # --runner auto never selects cc-shim from the model name. A listed local
   # endpoint on this write rail is still that seat: re-resolve before the
@@ -2912,7 +2929,7 @@ set_runner_flags() {
     case "$_auto_listed_rc" in
       0)
         IS_CODEX=0; IS_GROK=0; IS_PI=0; IS_CURSOR=0
-        IS_OPENCODE=0; IS_KIMI=0; IS_CNATIVE=0
+        IS_OPENCODE=0; IS_KIMI=0; IS_QODER=0; IS_CNATIVE=0
         IS_CCSHIM=1
         RUNNER="cc-shim"
         declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand
@@ -2921,8 +2938,8 @@ set_runner_flags() {
       *) die_precondition "local implementer sandbox registry unreadable (scripts/lib/local-sandbox-endpoints.json); refusing auto endpoint '${ENDPOINT}'" ;;
     esac
   fi
-  # Fail closed if --runner auto did not re-resolve onto cc-shim and received a Qwen/QwQ model
-  # (qoderclicn is retired; do not silently fall through to agy).
+  # Fail closed if --runner auto did not re-resolve onto cc-shim and received a Qwen/QwQ model.
+  # qoderclicn is explicit-only; auto must not select it.
   if [ "$RUNNER" = "auto" ] && [[ "${model_lc:-}" == *qwen* || "${model_lc:-}" == *qwq* ]]; then
     die_precondition "auto-routing cannot route Qwen model id '$MODEL' (no Qwen cloud runner) — pass --runner cc-shim --endpoint <name> explicitly"
   fi
@@ -3210,7 +3227,7 @@ set_runner_flags
 # agy is the else-case rail (no IS_* flag). Refuse an unusable --timeout HERE, in the parent: the agy
 # block itself runs in the detached child, where a die would leave no result file behind.
 if [ "${RUNNER_RESOLVED:-0}" -eq 1 ] \
-  && [ "${IS_CODEX:-0}${IS_GROK:-0}${IS_CCSHIM:-0}${IS_PI:-0}${IS_CURSOR:-0}${IS_OPENCODE:-0}${IS_KIMI:-0}${IS_CNATIVE:-0}" = "00000000" ]; then
+  && [ "${IS_CODEX:-0}${IS_GROK:-0}${IS_CCSHIM:-0}${IS_PI:-0}${IS_CURSOR:-0}${IS_OPENCODE:-0}${IS_KIMI:-0}${IS_QODER:-0}${IS_CNATIVE:-0}" = "000000000" ]; then
   _AGY_TIMEOUT_CHECK="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$_AGY_TIMEOUT_CHECK"
 fi
 
@@ -3238,7 +3255,7 @@ if [ "$IS_CURSOR" -eq 1 ]; then
 fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
   AGY_BIN="$(runner_bin_fallback "$AGY_BIN")"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   validate_d2_agy_claims
@@ -3253,7 +3270,7 @@ if [ "${IS_CNATIVE:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 0 ]; then
 fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
   # `|| die` in the PARENT: agy_resolve_model_alias deliberately never dies inside `$( )`,
   # where die_precondition's JSON would be captured into MODEL instead of exiting.
   MODEL="$(agy_resolve_model_alias "$MODEL" "$AGY_BIN" "$EFFORT")" \
@@ -3386,6 +3403,9 @@ elif [ "$IS_OPENCODE" -eq 1 ]; then
   rm -f "$_oc_verr"
 elif [ "$IS_KIMI" -eq 1 ]; then
   command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
+elif [ "$IS_QODER" -eq 1 ]; then
+  # command -v only. runner_bin_fallback would resolve the host install; tests pass --qoder-bin.
+  command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (install Qoder CLI CN or pass --qoder-bin)"
 elif [ "$IS_CNATIVE" -eq 1 ]; then
   # claude-native implementer: first-party Claude on the owner's native auth. Gated by a ONE-TIME owner
   # confirmation recorded in ~/.autopilot/config.json (implementer_claude_native.confirmed_at). There is
@@ -3904,6 +3924,7 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   [ "${IS_CURSOR:-0}" -eq 1 ] && local_runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && local_runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && local_runner="kimi"
+  [ "${IS_QODER:-0}" -eq 1 ] && local_runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && local_runner="claude-native"
 
   if [[ "$SKILL_MODE" == "auto" ]]; then
@@ -4637,6 +4658,7 @@ abort_dispatch() {
   [ -n "$CURSOR_PROMPT_FILE" ] && rm -f "$CURSOR_PROMPT_FILE"
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
+  [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
   reap_cnative_config_dir || true
   reap_sandbox_config_dir || true
   [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
@@ -5434,6 +5456,27 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
         _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$GROK_EFFORT" "$PROVIDER_SESSION_ID"
   fi
   rm -f "$GROK_PROMPT_FILE"
+elif [ "$IS_QODER" -eq 1 ]; then
+  # Qoder CLI CN (qoderclicn 1.1.89). EDIT-ONLY + wrapper-commit, same rail as grok.
+  # Prompt on stdin. --config-dir only when --qoder-config-dir was given.
+  # Do not call runner_bin_fallback: an omitted --qoder-bin stays the bare name qoderclicn.
+  QODER_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Make ONLY the file edits the task requires, in the current working directory. Do NOT
+git commit, git push, or open a PR — the harness commits your edits and a separate review
+verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+===
+
+"
+  QODER_PROMPT_FILE="$(mktemp -t dispatch-hetero-qoder-prompt-XXXXXX)"
+  printf '%s' "${QODER_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$QODER_PROMPT_FILE"
+  QODER_CFG_ARGS=()
+  [ -n "${QODER_CONFIG_DIR:-}" ] && QODER_CFG_ARGS+=(--config-dir "$QODER_CONFIG_DIR")
+  run_worker bash -c 'cd "$1" && exec "$2" -p --model "$4" -w "$1" \
+      --reasoning-effort "$5" --dangerously-skip-permissions --no-session-persistence \
+      "${@:6}" < "$3"' \
+      _ "$WT" "$QODER_BIN" "$QODER_PROMPT_FILE" "$MODEL" "$EFFORT" \
+      ${QODER_CFG_ARGS[@]+"${QODER_CFG_ARGS[@]}"}
+  rm -f "$QODER_PROMPT_FILE"
 elif [ "$IS_OPENCODE" -eq 1 ]; then
   # opencode (OpenCode CLI, `opencode run` headless). Spike-verified 2026-09-03 (opencode
   # 1.18.25, docs/plans/2026-09-03-opencode-implementer-rail.md § Stage-0):
@@ -5778,7 +5821,7 @@ if ! wt_gitfile_check; then
 fi
 if [ "$(_wt_git rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(_wt_git status --porcelain --ignore-submodules=dirty)" ]; then
-  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"; [ "$IS_KIMI" -eq 1 ] && _runner_label="kimi"; [ "$IS_CNATIVE" -eq 1 ] && _runner_label="claude-native"
+  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"; [ "$IS_OPENCODE" -eq 1 ] && _runner_label="opencode"; [ "$IS_KIMI" -eq 1 ] && _runner_label="kimi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CNATIVE" -eq 1 ] && _runner_label="claude-native"
   _wt_git add -A
   if ! run_strict_staged_precheck; then
     # Staged manifest violation: leave the worktree staged for in-place repair;
@@ -6225,7 +6268,7 @@ run_strict_contract_postchecks() {
 }
 
 # _hetero_runner_token — the single derivation of "which runner is this dispatch using"
-# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_CURSOR/IS_OPENCODE/IS_KIMI flags, shared by
+# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_CURSOR/IS_OPENCODE/IS_KIMI/IS_QODER flags, shared by
 # passive_capture and seat_strike_capture (factored out rather than copy-pasted, per repo
 # convention).
 _hetero_runner_token() {
@@ -6237,6 +6280,7 @@ _hetero_runner_token() {
   [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   [ "${IS_OPENCODE:-0}" -eq 1 ] && runner="opencode"
   [ "${IS_KIMI:-0}" -eq 1 ] && runner="kimi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CNATIVE:-0}" -eq 1 ] && runner="claude-native"
   printf '%s' "$runner"
 }
@@ -6844,9 +6888,9 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE KIMI_EDIT_ONLY \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

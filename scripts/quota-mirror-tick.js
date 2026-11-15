@@ -11,15 +11,11 @@
 // --steps runs only the named step ids, still in this order. An unknown id exits 2 and runs nothing.
 // Exit 0 when at least one producer exited 0; exit 1 only when every producer failed;
 // exit 2 on usage. Producers are usage-probe, sync-statusline, sync-provider minimax
-// and sync-provider glm. The smoke check runs after them and prints its own line.
-// It does not count toward that exit: a live dir left valid by an earlier tick must
-// not hide a tick where every producer failed.
+// and sync-provider glm.
 // --out-dir is an already-existing shared directory (not a tmpfs live dir). Provider steps
-// write fleet.quota/1 rows under <dir>/quota and the smoke step runs against <dir>.
+// write fleet.quota/1 rows under <dir>/quota.
 // usage-probe and sync-statusline keep writing the live dir.
-// After the producers, runs scripts/g40-real-data/check.sh against the resolved live dir
-// (AUTOPILOT_LIVE_DIR, else the live-state-dir.js chain) and prints that verdict on its own line.
-// Then appends one idle line per Claude alias per transition into idle (BL-0372 task 4): the
+// After the producers, appends one idle line per Claude alias per transition into idle (BL-0372 task 4): the
 // merged mirror shows rolling_5h absent or its resets_at already in the past, and accounts-audit.jsonl
 // has no attempt for that alias in the last 5.5 h. The same label is not repeated unless activity
 // happened after that line (an audit attempt with ts after the line's observed_at, or rolling_5h
@@ -47,7 +43,6 @@ const STEP_TIMEOUT_MS = Object.freeze({
   'sync-provider-minimax': 25000,
   // HTTP 10s plus the glm first-used watch, which sends with a 30s timeout per recipient.
   'sync-provider-glm': 90000,
-  smoke: 60000,
 });
 
 const STEPS = Object.freeze([
@@ -55,7 +50,6 @@ const STEPS = Object.freeze([
   'sync-statusline',
   'sync-provider-minimax',
   'sync-provider-glm',
-  'smoke',
 ]);
 
 const IDLE_MS = 5.5 * 3600 * 1000;
@@ -63,10 +57,10 @@ const IDLE_MS = 5.5 * 3600 * 1000;
 function usage() {
   process.stdout.write(
     'usage: node scripts/quota-mirror-tick.js [--steps id,id] [--out-dir DIR]\n' +
-    'One pass: usage-probe --due, sync-statusline, sync-provider minimax, sync-provider glm,\n' +
-    'then scripts/g40-real-data/check.sh <live_dir>. Exit 1 only when every producer failed.\n' +
+    'One pass: usage-probe --due, sync-statusline, sync-provider minimax, sync-provider glm.\n' +
+    'Exit 1 only when every producer failed.\n' +
     '--steps runs only those step ids (an unknown id exits 2). --out-dir writes provider rows\n' +
-    'under <dir>/quota and points the smoke check at <dir>.\n'
+    'under <dir>/quota.\n'
   );
 }
 
@@ -94,7 +88,7 @@ function producer(id, outDir) {
   }
 }
 
-function stubArgs(id, liveDir, outDir) {
+function stubArgs(id, outDir) {
   switch (id) {
     case 'usage-probe':
       return ['--due'];
@@ -104,8 +98,6 @@ function stubArgs(id, liveDir, outDir) {
       return outDir ? ['--provider', 'minimax', '--out-dir', outDir] : ['--provider', 'minimax'];
     case 'sync-provider-glm':
       return outDir ? ['--provider', 'glm', '--out-dir', outDir] : ['--provider', 'glm'];
-    case 'smoke':
-      return [outDir || liveDir];
     default:
       return [];
   }
@@ -131,20 +123,7 @@ function spawnStep(file, args, timeoutMs) {
 function runStep(id, outDir) {
   const timeoutMs = STEP_TIMEOUT_MS[id];
   const bin = process.env.QUOTA_MIRROR_BIN;
-  if (id === 'smoke') {
-    let liveDir = outDir;
-    if (!liveDir) {
-      try {
-        liveDir = resolveLiveDir({ env: process.env, warn: () => {} }).base;
-      } catch (_) {
-        return { id, ok: false, detail: 'live_dir_refused' };
-      }
-    }
-    if (bin) return { id, ...classify(spawnStep(path.join(bin, id), stubArgs(id, liveDir, outDir), timeoutMs)) };
-    const check = path.join(__dirname, 'g40-real-data', 'check.sh');
-    return { id, ...classify(spawnStep('bash', [check, liveDir], timeoutMs)) };
-  }
-  if (bin) return { id, ...classify(spawnStep(path.join(bin, id), stubArgs(id, null, outDir), timeoutMs)) };
+  if (bin) return { id, ...classify(spawnStep(path.join(bin, id), stubArgs(id, outDir), timeoutMs)) };
   const cmd = producer(id, outDir);
   return { id, ...classify(spawnStep(cmd.file, cmd.args, timeoutMs)) };
 }
@@ -269,9 +248,6 @@ function run(opts) {
   let producers = 0;
   for (const result of results) {
     process.stdout.write(`${summary(result)}\n`);
-    // Smoke is a post-step check of the live dir. It is printed above and is not
-    // a producer, so it is neither a success nor a failure for the exit.
-    if (result.id === 'smoke') continue;
     producers += 1;
     if (result.ok) ok += 1;
   }

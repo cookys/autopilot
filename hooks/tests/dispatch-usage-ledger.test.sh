@@ -75,7 +75,7 @@ HARGV="$TEST_TMP/hetero-claude-argv.txt"
 run_hetero() {
   RC=0
   OUT="$(cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT CLAUDE_STUB_ARGV="$HARGV" PATH="$BINDIR:$PATH" \
-      "$@" "$REPO_ROOT/scripts/dispatch-hetero.sh" --runner cc-shim --model MiniMax-M3 \
+      "$@" "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model MiniMax-M3 \
       --prompt-file "$PROMPT" --context-window off --branch "feat/ledger-$RANDOM$RANDOM" 2>"$TEST_TMP/hetero.err")" || RC=$?
 }
 reset_rows

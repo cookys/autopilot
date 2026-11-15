@@ -185,7 +185,7 @@ hetero_run() {
   if [ "$runner" = codex ]; then rargs=(--runner codex --model gpt-5.5 --codex-bin "$BINDIR/codex"); else rargs=(--runner cc-shim --model MiniMax-M3 --effort high); fi
   ( cd "$SBX" && timeout 120 env -u REPO_ROOT -u CONSUMING_REPO_ROOT AUTOPILOT_DISPATCH_RUNS_DIR="$HRUNS" AUTOPILOT_SESSION_MODE_DIR="$MD" \
       STUB_BODY="$TEST_TMP/stub-body.sh" STUB_LOG="$log" STUB_SM="$SM" ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=t \
-      PATH="$BINDIR:$PATH" "$@" "$HETERO" "${rargs[@]}" --branch "feat/smwt-$HN" --prompt-file "$PROMPT" >"$log.out" 2>&1 ) || true
+      PATH="$BINDIR:$PATH" "$@" "$HETERO" --no-verify-tip "${rargs[@]}" --branch "feat/smwt-$HN" --prompt-file "$PROMPT" >"$log.out" 2>&1 ) || true
 }
 seen() { grep "^$2=" "$1" | head -1 | cut -d= -f2-; }   # seen <log> <VAR>
 

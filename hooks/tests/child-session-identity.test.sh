@@ -83,7 +83,7 @@ CMDS[author-native]="$AUTHOR --runner claude-native --model haiku --prompt-file 
 CMDS[author-ccshim]="$AUTHOR --runner cc-shim --model MiniMax-M3 --prompt-file $PROMPT --bin $BINDIR/claude"
 CMDS[review-native]="$REVIEW --runner claude-native --model haiku --diff-file $DIFF --bin $BINDIR/claude"
 CMDS[review-ccshim]="$REVIEW --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file $DIFF --bin $BINDIR/claude"
-CMDS[hetero-ccshim]="$HETERO --runner cc-shim --model MiniMax-M3 --effort high --branch feat/csid-BRX --prompt-file $PROMPT"
+CMDS[hetero-ccshim]="$HETERO --no-verify-tip --runner cc-shim --model MiniMax-M3 --effort high --branch feat/csid-BRX --prompt-file $PROMPT"
 
 for name in author-native author-ccshim review-native review-ccshim hetero-ccshim; do
   # shellcheck disable=SC2086
@@ -102,7 +102,7 @@ bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER" >/dev/null
 DRUNS="$TEST_TMP/runs-detached"; DLOG="$TEST_TMP/log-detached"; mkdir -p "$DRUNS"; : > "$DLOG"
 ( cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT AUTOPILOT_DISPATCH_RUNS_DIR="$DRUNS" STUB_LOG="$DLOG" DISPATCH_DETACH=1 \
     ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test PATH="$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$PARENT" \
-    "$HETERO" --runner cc-shim --model MiniMax-M3 --effort high --branch feat/csid-det --prompt-file "$PROMPT" \
+    "$HETERO" --no-verify-tip --runner cc-shim --model MiniMax-M3 --effort high --branch feat/csid-det --prompt-file "$PROMPT" \
     --ledger "$LEDGER" --run-id det-1 --stage implement >/dev/null 2>&1 ) || true
 check_case "hetero-ccshim detached" "$DRUNS" "$DLOG" "$PARENT"
 # Without a usable setsid the rail stays inline, so the checks above would pass without ever crossing the

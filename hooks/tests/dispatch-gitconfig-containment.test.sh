@@ -86,7 +86,7 @@ run_dispatch() {
     AUTOPILOT_DISPATCH_MANIFEST=0 \
     AUTOPILOT_SESSION_MODE_DIR="$sess" \
     TMPDIR="$tmp" \
-    "$REPO_ROOT/scripts/dispatch-hetero.sh" \
+    "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip \
       --branch "$branch" \
       --base main \
       --prompt-file "$prompt" \
@@ -253,7 +253,7 @@ RF_OUT="$TEST_TMP/restore_fail_out.txt"
   AUTOPILOT_DISPATCH_MANIFEST=0 \
   AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/sess_restore_fail" \
   TMPDIR="$RF_DIR" \
-  "$REPO_ROOT/scripts/dispatch-hetero.sh" \
+  "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip \
     --branch "gc-restore-fail" \
     --base main \
     --prompt-file "$TEST_TMP/prompt_restore_fail.txt" \
@@ -288,7 +288,7 @@ SNAP_MARKER="$TEST_TMP/fail-list-once"
   AUTOPILOT_DISPATCH_MANIFEST=0 \
   AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/sess_snap" \
   TMPDIR="$SNAP_DIR" \
-  "$REPO_ROOT/scripts/dispatch-hetero.sh" \
+  "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip \
     --branch "gc-snap-fail" \
     --base main \
     --prompt-file "$TEST_TMP/prompt_snap.txt" \

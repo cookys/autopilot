@@ -138,7 +138,7 @@ run_retreat_case() {
       ENGINE_CAPABILITY_DIR="$CASE_CAP" \
       REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_FB" \
       AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
-      "$script" \
+      "$script" --no-verify-tip \
       --runner cc-shim --model Qwen3.8-27B-QUASAR-NVFP4 --effort high \
       --branch "feat/sbx-agy-$tag" \
       --prompt-file "$PROMPT" --context-window off \

@@ -109,9 +109,9 @@ run_case anone env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt
 run_case rbig env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$BIGDIFF" --bin "$(mk_stub rbig AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error AGY_STUB_NEEDLE_FILE=$BIGDIFF)"
 run_case rerr env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub rerr AGY_STUB_RESULT=error AGY_STUB_ERROR_TEXT=zz-review-boom)"
 run_case rnone env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub rnone AGY_STUB_RESULT=none)"
-run_case hbig env -C "$TEST_TMP/sbx-hbig" "$HETERO" --branch t/hbig --prompt-file "$BIG" --agy-bin "$(mk_stub hbig AGY_STUB_CAPTURE=1 AGY_STUB_TAIL=$BIG_BYTES)" --model gemini-3.7-flash-high --runner agy
-run_case herr env -C "$TEST_TMP/sbx-herr" "$HETERO" --branch t/herr --prompt-file "$SMALL" --agy-bin "$(mk_stub herr AGY_STUB_RESULT=error AGY_STUB_ERROR_TEXT=zz-hetero-boom)" --model gemini-3.7-flash-high --runner agy
-run_case hnone env -C "$TEST_TMP/sbx-hnone" "$HETERO" --branch t/hnone --prompt-file "$SMALL" --agy-bin "$(mk_stub hnone AGY_STUB_RESULT=none)" --model gemini-3.7-flash-high --runner agy
+run_case hbig env -C "$TEST_TMP/sbx-hbig" "$HETERO" --no-verify-tip --branch t/hbig --prompt-file "$BIG" --agy-bin "$(mk_stub hbig AGY_STUB_CAPTURE=1 AGY_STUB_TAIL=$BIG_BYTES)" --model gemini-3.7-flash-high --runner agy
+run_case herr env -C "$TEST_TMP/sbx-herr" "$HETERO" --no-verify-tip --branch t/herr --prompt-file "$SMALL" --agy-bin "$(mk_stub herr AGY_STUB_RESULT=error AGY_STUB_ERROR_TEXT=zz-hetero-boom)" --model gemini-3.7-flash-high --runner agy
+run_case hnone env -C "$TEST_TMP/sbx-hnone" "$HETERO" --no-verify-tip --branch t/hnone --prompt-file "$SMALL" --agy-bin "$(mk_stub hnone AGY_STUB_RESULT=none)" --model gemini-3.7-flash-high --runner agy
 run_case loop env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$WRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \
   --repo-root "$LS" --ledger "$TEST_TMP/loop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$LOOP_BASE" \
   --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
@@ -129,7 +129,7 @@ OWRAP="$TEST_TMP/review-wrap-over.sh"
 printf '#!/usr/bin/env bash\nout="$(%q "$@" --bin %q)"; rc=$?\nprintf "%%s\\n" "$out" >> %q\nprintf "%%s\\n" "$out"\nexit $rc\n' "$REVIEW" "$(mk_stub oloop AGY_STUB_CAPTURE=1)" "$R/oloopseat.out" > "$OWRAP"; chmod +x "$OWRAP"
 run_case aover env "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$OVER" --bin "$(mk_stub aover AGY_STUB_CAPTURE=1)"
 run_case rover env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$OVERDIFF" --bin "$(mk_stub rover AGY_STUB_CAPTURE=1)"
-run_case hover env -C "$TEST_TMP/sbx-hover" "$HETERO" --branch t/hover --prompt-file "$OVER" --agy-bin "$(mk_stub hover AGY_STUB_CAPTURE=1)" --model gemini-3.7-flash-high --runner agy
+run_case hover env -C "$TEST_TMP/sbx-hover" "$HETERO" --no-verify-tip --branch t/hover --prompt-file "$OVER" --agy-bin "$(mk_stub hover AGY_STUB_CAPTURE=1)" --model gemini-3.7-flash-high --runner agy
 run_case oloop env -C "$OS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$OWRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \
   --repo-root "$OS" --ledger "$TEST_TMP/oloop-ledger" --phase p_agy --generation 1 --branch work --phase-base "$OLOOP_BASE" \
   --seats "gemini-3.7-flash-high/low@agy" --min-reviewed-seats 1
@@ -146,8 +146,8 @@ run_case acust env AUTOPILOT_AGY_INPUT_TOKEN_CEILING=100000 "$AUTHOR" --runner a
 run_case acustlow env AUTOPILOT_AGY_INPUT_TOKEN_CEILING=50000 "$AUTHOR" --runner agy --model gemini-3.7-flash-high --prompt-file "$SMALL" --bin "$(mk_stub acustlow AGY_STUB_INPUT_TOKENS=87366)"
 run_case remp env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub remp AGY_STUB_RESPONSE_EMPTY=1)"
 run_case rtrk env "$REVIEW" --runner agy --model gemini-3.7-flash-high --diff-file "$DIFFSMALL" --bin "$(mk_stub rtrk AGY_STUB_INPUT_TOKENS=97652)"
-run_case hemp env -C "$TEST_TMP/sbx-hemp" "$HETERO" --branch t/hemp --prompt-file "$SMALL" --agy-bin "$(mk_stub hemp AGY_STUB_RESPONSE_EMPTY=1)" --model gemini-3.7-flash-high --runner agy
-run_case htrk env -C "$TEST_TMP/sbx-htrk" "$HETERO" --branch t/htrk --prompt-file "$SMALL" --agy-bin "$(mk_stub htrk AGY_STUB_INPUT_TOKENS=97652)" --model gemini-3.7-flash-high --runner agy
+run_case hemp env -C "$TEST_TMP/sbx-hemp" "$HETERO" --no-verify-tip --branch t/hemp --prompt-file "$SMALL" --agy-bin "$(mk_stub hemp AGY_STUB_RESPONSE_EMPTY=1)" --model gemini-3.7-flash-high --runner agy
+run_case htrk env -C "$TEST_TMP/sbx-htrk" "$HETERO" --no-verify-tip --branch t/htrk --prompt-file "$SMALL" --agy-bin "$(mk_stub htrk AGY_STUB_INPUT_TOKENS=97652)" --model gemini-3.7-flash-high --runner agy
 RWRAP="$TEST_TMP/review-wrap-trk.sh"
 printf '#!/usr/bin/env bash\nout="$(%q "$@" --bin %q)"; rc=$?\nprintf "%%s\\n" "$out" >> %q\nprintf "%%s\\n" "$out"\nexit $rc\n' "$REVIEW" "$(mk_stub ltrk AGY_STUB_INPUT_TOKENS=97652)" "$R/ltrkseat.out" > "$RWRAP"; chmod +x "$RWRAP"
 run_case ltrk env -C "$LS" AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$RWRAP" node "$LOOP" collect --implementer-engine claude-sonnet-5 \

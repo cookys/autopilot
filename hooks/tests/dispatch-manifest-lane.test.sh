@@ -46,7 +46,7 @@ run_rail() { # <rail> <brief> <runsdir> [env assignments...] -> prints manifest 
   local rail="$1" pf="$2" runs="$3"; shift 3
   mkdir -p "$runs"
   case "$rail" in
-    hetero) ( cd "$SBX" && timeout 60 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" "$@" "$HETERO" --runner grok --model grok-4.5 --effort high \
+    hetero) ( cd "$SBX" && timeout 60 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" "$@" "$HETERO" --no-verify-tip --runner grok --model grok-4.5 --effort high \
               --grok-bin "$GROK_STUB" --branch "feat/lane-$RANDOM" --prompt-file "$pf" >/dev/null 2>&1 ) || true ;;
     author) ( cd "$SBX" && timeout 60 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" "$@" "$AUTHOR" --runner grok --model grok-4.5 \
               --prompt-file "$pf" --bin "$GROK_STUB" >/dev/null 2>&1 ) || true ;;

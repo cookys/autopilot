@@ -104,7 +104,7 @@ dispatch_leaf() {
       AUTOPILOT_ROOT_RUN_ID="$ROOT_RUN_ID" \
       AUTOPILOT_WORKTREE_ROOT_RUN_ID="$ROOT_RUN_ID" \
       AUTOPILOT_DISPATCH_DEPTH=1 \
-      "$DISPATCH" \
+      "$DISPATCH" --no-verify-tip \
         --branch "$branch" \
         --prompt-file "$PROMPT" \
         --runner agy \

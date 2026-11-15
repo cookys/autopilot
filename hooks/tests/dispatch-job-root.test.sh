@@ -61,7 +61,7 @@ chmod +x "$STUB_AUTH"
 
 eq() { assert_eq "$2" "$1" "$3"; }
 jf() { node -e 'const m=require(process.argv[1]);const v=m[process.argv[2]];process.stdout.write(v===null?"null":v===undefined?"undefined":String(v))' "$1" "$2"; }
-run_hetero() { local id="$1"; shift; ( cd "$SBX" && env "$@" "$HETERO" --branch "feat/$id" --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --run-id "$id" >/dev/null 2>&1 ); }
+run_hetero() { local id="$1"; shift; ( cd "$SBX" && env "$@" "$HETERO" --no-verify-tip --branch "feat/$id" --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --run-id "$id" >/dev/null 2>&1 ); }
 run_review() { local id="$1"; shift; ( env "$@" "$REVIEW" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_REV" --run-id "$id" >/dev/null 2>&1 ); }
 run_author() { local id="$1"; shift; ( env "$@" "$AUTHOR" --runner claude-native --model claude-fable-5-1 --prompt-file "$PROMPT" --bin "$STUB_AUTH" --run-id "$id" >/dev/null 2>&1 ); }
 

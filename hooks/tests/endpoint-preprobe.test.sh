@@ -94,7 +94,7 @@ hetero() {
   ln -sfn "$stub" "$bindir/claude"
   (cd "$SBX" && env PATH="$bindir:$PATH" ENGINE_CAPABILITY_DIR="$TEST_TMP/cap-$branch" \
       REVIEW_LOOP_CONFIG_OVERRIDE="$HETERO_ASK_CFG" \
-      "$sdir/dispatch-hetero.sh" --runner cc-shim --model mini --branch "$branch" \
+      "$sdir/dispatch-hetero.sh" --no-verify-tip --runner cc-shim --model mini --branch "$branch" \
       --prompt-file "$PROMPT" --context-window off --endpoint gpu1 2>"$TEST_TMP/err-${branch//\//_}" < /dev/null) | grep '^{' | tail -n 1
 }
 

@@ -99,16 +99,16 @@ run_case abad env "$AUTHOR" --runner agy --model $M --prompt-file "$SMALL" --tim
 run_case r900 env "$REVIEW" --runner agy --model $M --diff-file "$DIFFSMALL" --timeout 900 --bin "$(mk_stub r900 AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error)"
 run_case r9m  env "$REVIEW" --runner agy --model $M --diff-file "$DIFFSMALL" --timeout 9m --bin "$(mk_stub r9m AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error)"
 run_case rbad env "$REVIEW" --runner agy --model $M --diff-file "$DIFFSMALL" --timeout 9x --bin "$(mk_stub rbad AGY_STUB_CAPTURE=1 AGY_STUB_RESULT=error)"
-run_case h900 env -C "$TEST_TMP/sbx-h900" "$HETERO" --branch t/h900 --prompt-file "$SMALL" --timeout 900 --agy-bin "$(mk_stub h900 AGY_STUB_CAPTURE=1)" --model $M --runner agy
-run_case h9m  env -C "$TEST_TMP/sbx-h9m"  "$HETERO" --branch t/h9m  --prompt-file "$SMALL" --timeout 9m  --agy-bin "$(mk_stub h9m AGY_STUB_CAPTURE=1)" --model $M --runner agy
-run_case hbad env -C "$TEST_TMP/sbx-hbad" "$HETERO" --branch t/hbad --prompt-file "$SMALL" --timeout 9x  --agy-bin "$(mk_stub hbad AGY_STUB_CAPTURE=1)" --model $M --runner agy
+run_case h900 env -C "$TEST_TMP/sbx-h900" "$HETERO" --no-verify-tip --branch t/h900 --prompt-file "$SMALL" --timeout 900 --agy-bin "$(mk_stub h900 AGY_STUB_CAPTURE=1)" --model $M --runner agy
+run_case h9m  env -C "$TEST_TMP/sbx-h9m"  "$HETERO" --no-verify-tip --branch t/h9m  --prompt-file "$SMALL" --timeout 9m  --agy-bin "$(mk_stub h9m AGY_STUB_CAPTURE=1)" --model $M --runner agy
+run_case hbad env -C "$TEST_TMP/sbx-hbad" "$HETERO" --no-verify-tip --branch t/hbad --prompt-file "$SMALL" --timeout 9x  --agy-bin "$(mk_stub hbad AGY_STUB_CAPTURE=1)" --model $M --runner agy
 # detached child (ledger coords => dispatch-hetero re-execs into a setsid child with an allow-listed function set):
 # an invalid --timeout must fail closed with the clear precondition JSON, not "command not found".
 LEDGER_SH="$REPO_ROOT/scripts/run-ledger.sh"
 mk_sbx "$TEST_TMP/sbx-dbad"; mkdir -p "$TEST_TMP/dbad"
 bash "$LEDGER_SH" init --ledger "$TEST_TMP/dbad/ledger.jsonl" >/dev/null
-run_case dbad env -C "$TEST_TMP/sbx-dbad" DISPATCH_HEARTBEAT_SECS=1 "$HETERO" --branch t/dbad --prompt-file "$SMALL" --timeout 9x --agy-bin "$(mk_stub dbad AGY_STUB_CAPTURE=1)" --model $M --runner agy --ledger "$TEST_TMP/dbad/ledger.jsonl" --run-id rdb --stage implement
-run_case d900 env -C "$TEST_TMP/sbx-dbad" DISPATCH_HEARTBEAT_SECS=1 "$HETERO" --branch t/d900 --prompt-file "$SMALL" --timeout 900 --agy-bin "$(mk_stub d900 AGY_STUB_CAPTURE=1)" --model $M --runner agy --ledger "$TEST_TMP/dbad/ledger.jsonl" --run-id rd9 --stage implement
+run_case dbad env -C "$TEST_TMP/sbx-dbad" DISPATCH_HEARTBEAT_SECS=1 "$HETERO" --no-verify-tip --branch t/dbad --prompt-file "$SMALL" --timeout 9x --agy-bin "$(mk_stub dbad AGY_STUB_CAPTURE=1)" --model $M --runner agy --ledger "$TEST_TMP/dbad/ledger.jsonl" --run-id rdb --stage implement
+run_case d900 env -C "$TEST_TMP/sbx-dbad" DISPATCH_HEARTBEAT_SECS=1 "$HETERO" --no-verify-tip --branch t/d900 --prompt-file "$SMALL" --timeout 900 --agy-bin "$(mk_stub d900 AGY_STUB_CAPTURE=1)" --model $M --runner agy --ledger "$TEST_TMP/dbad/ledger.jsonl" --run-id rd9 --stage implement
 # explore runs agy straight (no bwrap), so a recording stub on a side channel is enough.
 EXREC="$TEST_TMP/explore-argv"
 EXSTUB="$TEST_TMP/explore-stub"

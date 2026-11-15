@@ -213,7 +213,7 @@ hetero_ccshim() {
   ( cd "$SBX" && timeout 120 env -u REPO_ROOT -u CONSUMING_REPO_ROOT "$extra" DISPATCH_DETACH="$flag" AUTOPILOT_DISPATCH_RUNS_DIR="$runs" AUTOPILOT_SESSION_MODE_DIR="$md" \
       STUB_DUMP="$dump" STUB_HOOK_PATH="$GITONLY" STUB_NODE="$NODE" STUB_HOOK="$HOOK" ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=t \
       PATH="${pfx:+$pfx:}$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$P" \
-      bash "$HETERO" --runner cc-shim --model MiniMax-M3 --effort high --branch "feat/$id" --prompt-file "$PROMPT" "${coords[@]}" >"$dump.out" 2>&1 ) || true
+      bash "$HETERO" --no-verify-tip --runner cc-shim --model MiniMax-M3 --effort high --branch "feat/$id" --prompt-file "$PROMPT" "${coords[@]}" >"$dump.out" 2>&1 ) || true
   check_pass "$label" "$runs" "$md" "$dump"
 }
 hetero_ccshim "(e) hetero cc-shim cgroup branch" "" 0
@@ -304,7 +304,7 @@ hetero_scrub() {
   HN2=$((HN2+1)); local id="cpr-hs$HN2" led="$TEST_TMP/ledger-hs-$HN2.jsonl"
   local -a coords=(--run-id "$id"); local flag=0
   if [ "$detached" = 1 ]; then bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$led" >/dev/null; coords=(--ledger "$led" --run-id "$id" --stage implement); flag=1; fi
-  scrub_case "$label" DISPATCH_DETACH="$flag" PATH="$BINDIR:$PATH" bash "$script" --runner "$runner" --model m "$binflag" "$stub" --branch "feat/$id" --prompt-file "$PROMPT" "${coords[@]}"
+  scrub_case "$label" DISPATCH_DETACH="$flag" PATH="$BINDIR:$PATH" bash "$script" --no-verify-tip --runner "$runner" --model m "$binflag" "$stub" --branch "feat/$id" --prompt-file "$PROMPT" "${coords[@]}"
 }
 hetero_scrub "(f) hetero codex" codex --codex-bin
 hetero_scrub "(f) hetero kimi" kimi --kimi-bin

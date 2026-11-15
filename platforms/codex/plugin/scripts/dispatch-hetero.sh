@@ -5062,6 +5062,8 @@ elif [ "$IS_KIMI" -eq 1 ]; then
   run_worker bash -c 'cd "$1" && exec "$2" -m "$4" -p "$(cat "$3")" --output-format text' \
       _ "$WT" "$KIMI_BIN" "$KIMI_PROMPT_FILE" "$MODEL"
   rm -f "$KIMI_PROMPT_FILE"
+  # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
+  node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ]; then
   # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see
   # docs/plans/2026-08-26-cursor-cli-adaptor.md §0.1:

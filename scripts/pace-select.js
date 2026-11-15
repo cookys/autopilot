@@ -371,6 +371,8 @@ function selectEngine({
   const mergedPools = mergePools(resolvedPools, resolvedRoles);
   const excluded = normalizeExclude(exclude);
   // pace-roles.json `_disabled`: keys kept in the tables but never offered by the picker (operator: test before enabling).
+  // kimi has no usage command: a dispatch-observed exhaustion (kimi-quota-observe.js) is unpickable until its reset.
+  if (require('./lib/kimi-quota-observe').exhaustedKimi({})) excluded.add('kimi');
   if (Array.isArray(resolvedRoles._disabled)) for (const k of resolvedRoles._disabled) if (typeof k === 'string') excluded.add(k);
   let allowedKeys;
   if (useQualified) {

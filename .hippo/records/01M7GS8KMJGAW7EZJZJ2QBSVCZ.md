@@ -1,0 +1,12 @@
+---
+id: 01M7GS8KMJGAW7EZJZJ2QBSVCZ
+kind: issue
+created: 2026-11-15T23:39:15.474Z
+---
+- **Since**: 2026-11-16
+- **Problem**: viewer 與 roundtable 的測試結尾，timeout 回傳 127。通過數仍算過關，但 127 代表 timeout 指令找不到，或是包裝錯了。develop 主線上也一樣。
+- **Impact**: 收尾失敗被當成通過，指令壞掉時這次的結束碼抓不到。
+- **Trigger**: ready
+- **Source**: autopilot lane 2026-11-16
+- **Pointer**: none
+- **Context**: mods viewer and roundtable runners end with timeout rc=127 on develop too. Counts still pass. 127 means timeout is missing or wrapped wrong.

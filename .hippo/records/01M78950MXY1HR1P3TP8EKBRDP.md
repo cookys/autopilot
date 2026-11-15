@@ -9,4 +9,4 @@ created: 2026-10-27T00:00:00.000Z
 - **Trigger**: next pre-push suite run, or a lane touches one of the listed suites
 - **Source**: pre-push suite runs 2026-10-26 to 10-27 (noexpiry, agyargv2, fbland, fbv3)
 - **Pointer**: project/backlog/base-red-suite-list.md
-- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here. The 2026-11-13 twelve are in the Pointer: eleven green alone, one host SKIP. BL-0428 is closed.
+- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here. The 2026-11-13 twelve are in the Pointer: eleven green alone, one host SKIP. BL-0428 is closed. 2026-11-16 vs base 761162e91: test-pipefail-grep-q still red.

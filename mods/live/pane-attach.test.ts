@@ -857,6 +857,6 @@ for (const surface of SURFACES) {
     expect(drawn.buttons).toContain('look:d-look-m1')
     expect(drawn.buttons).toContain('dismiss:d-look-m1')
     expect(drawn.links).toEqual([{ href: 'https://example.com/login', label: 'https://example.com/login' }])
-    expect(drawn.inputs).toEqual(['note:d-dec-m1'])
+    expect(drawn.inputs).toEqual(['note:d-dec-m1:0'])
   })
 }

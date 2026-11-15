@@ -64,7 +64,7 @@ import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, le
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
-import { Pane } from './pane'
+import { Pane, noteInputKey, resetNoteInputs } from './pane'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
@@ -1176,6 +1176,7 @@ export async function startLive($: EngineInterface): Promise<void> {
     // a host without commands: the band's own controls still open the pane
   }
   paneTab = 'now'
+  resetNoteInputs()
   barTab = null
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
@@ -1575,7 +1576,8 @@ async function decideFocusTo($: EngineInterface, plan: { focus: string | null; o
   decideFocus = plan.focus
   decideScroll.redraw?.()
   if (plan.focus === null) return
-  await $.ui.focus({ requestId: PANE_ID, key: plan.focus }).catch(() => undefined)
+  const hostKey = plan.focus.startsWith('note:') ? noteInputKey(plan.focus) : plan.focus
+  await $.ui.focus({ requestId: PANE_ID, key: hostKey }).catch(() => undefined)
 }
 // A draw's sync. A card the owner was on that another session or the CLI closed now stays greyed in place (batchSync): the focus goes where a local answer would send it.
 async function decideRepair($: EngineInterface, st: DecideState): Promise<void> {

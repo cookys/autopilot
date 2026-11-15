@@ -131,7 +131,8 @@
         "claude-native",
         "kimi",
         "cursor",
-        "opencode"
+        "opencode",
+        "qoderclicn"
       ],
       "x-shell-validated": true,
       "x-shell-var": "REV_RUNNER"
@@ -165,7 +166,8 @@
         "claude-native",
         "cursor",
         "opencode",
-        "kimi"
+        "kimi",
+        "qoderclicn"
       ],
       "x-shell-validated": true,
       "x-shell-var": "IMPL_RUNNER"
@@ -193,7 +195,8 @@
               "cc-shim",
               "pi",
               "cursor",
-              "opencode"
+              "opencode",
+              "qoderclicn"
             ]
           }
         }
@@ -487,7 +490,8 @@
               "claude-native",
               "kimi",
               "cursor",
-              "opencode"
+              "opencode",
+              "qoderclicn"
             ]
           },
           "model": {
@@ -613,7 +617,8 @@
         "claude-native",
         "kimi",
         "cursor",
-        "opencode"
+        "opencode",
+        "qoderclicn"
       ]
     },
     "plan_reviewer_endpoint": {
@@ -647,7 +652,8 @@
         "claude-native",
         "kimi",
         "cursor",
-        "opencode"
+        "opencode",
+        "qoderclicn"
       ]
     },
     "plan_deep_reviewer_endpoint": {
@@ -745,7 +751,8 @@
         "claude-native",
         "kimi",
         "cursor",
-        "opencode"
+        "opencode",
+        "qoderclicn"
       ],
       "description": "Runner for the consult seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
     },
@@ -781,7 +788,8 @@
         "claude-native",
         "kimi",
         "cursor",
-        "opencode"
+        "opencode",
+        "qoderclicn"
       ],
       "description": "Runner for the discuss seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
     },

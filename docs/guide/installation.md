@@ -423,6 +423,13 @@ one-off `AUTOPILOT_ENDPOINT_GLM_TOKEN=… <cmd>` still overrides the file for th
 > **OAuth runners need nothing here.** `codex` / `agy` / `grok` authenticate through their own CLI
 > login — leave them out of this file entirely.
 
+> **Qoder CLI CN (`qoderclicn`) is explicit-only, not a default seat.** `auto` does not map
+> `*qwen*` / `*qwq*` onto it. Install with `npm install -g @qodercn-ai/qoderclicn`, then sign in
+> with `/login` inside the CLI or set `QODERCN_PERSONAL_ACCESS_TOKEN`
+> ([Get started with Qoder CLI CN](https://help.aliyun.com/en/lingma/qoder-cli-cn-get-started-quickly)).
+> Pass `--runner qoderclicn` yourself. It is not added to the roster, the pace-role priority, or
+> the verification-author seat.
+
 ### Wire it declaratively (no hand-typed flags)
 
 Name the endpoint once in `.claude/review-loop-config.md` and `/l5` / `/l6` pass it through

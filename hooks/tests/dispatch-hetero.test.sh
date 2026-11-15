@@ -267,21 +267,22 @@ OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
 assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
 assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
 
-# 3c. retired qoderclicn / auto Qwen routing: --runner auto with a Qwen model is refused
-# (names --runner cc-shim --endpoint <name>); --runner qoderclicn is rejected as unknown.
+# 3c. auto Qwen routing: --runner auto with a Qwen model is refused
+# (names --runner cc-shim --endpoint <name>). auto never selects qoderclicn.
 # The Chinese-model gate would refuse these Qwen dispatches first (no Size/Role/Scope), so the seam is set: the runner messages are what is under test.
 OUT="$(cd "$SBX" && PATH=/usr/bin:/bin AUTOPILOT_TEST_CN_GATE_OFF=1 \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --no-verify-tip --branch t1 --prompt-file "$PROMPT" \
   --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "auto-detect refuses Qwen3.8-Max-Preview (qoderclicn retired)"
+assert_eq "2" "$EXIT" "auto-detect refuses Qwen3.8-Max-Preview (auto never selects qoderclicn)"
 assert_contains "$OUT" "--runner cc-shim --endpoint" "auto-detect Qwen refusal names cc-shim --endpoint"
 
-# 3d. negative: --runner qoderclicn is rejected as an unknown runner.
-OUT="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 "$SCRIPT" --no-verify-tip --branch feat/qoder-retired --prompt-file "$PROMPT" --runner qoderclicn --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "retired qoderclicn runner rejected (exit 2)"
-assert_contains "$OUT" '"status": "precondition_failed"' "retired qoderclicn runner -> precondition_failed"
-assert_contains "$OUT" "must be one of" "retired qoderclicn runner rejected as unknown runner"
+# 3d. negative: explicit --runner qoderclicn is known; a missing binary is precondition_failed.
+OUT="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 "$SCRIPT" --no-verify-tip --branch feat/qoder-missing --prompt-file "$PROMPT" --runner qoderclicn --qoder-bin "$TEST_TMP/no-such-qoderclicn" --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "missing qoderclicn binary exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "missing qoderclicn binary -> precondition_failed"
+assert_contains "$OUT" "qoder binary not found" "missing qoderclicn binary names the precondition"
+assert_not_contains "$OUT" "must be one of" "known qoderclicn runner is not rejected as unknown"
 
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
 # First run that places a worktree, in a fresh sandbox (earlier cases already placed some in $SBX):

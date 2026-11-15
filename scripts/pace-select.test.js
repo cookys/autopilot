@@ -21,7 +21,9 @@ const {
   defaultPacePath,
   defaultQualifiedPath,
   QUALIFIED_SCHEMA,
+  inAvailableWindow,
 } = require('./pace-select.js');
+const { isChineseFamily } = require('./lib/engine-spelling.js');
 
 const {
   normalizeFamily,
@@ -198,7 +200,7 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.match(roles._why, /minimax: failed both 2026-11-13/);
   assert.match(roles._why, /hydrogen passed all four prereg bars \(develop d40e9ad43\)/);
 
-  assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
+  assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude', 'deepseek']);
   assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok']);
   assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
   assert.deepEqual(roles.priority, {
@@ -216,6 +218,7 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.deepEqual(roles.pools, {
     'codex A': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
     'codex B': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
+    deepseek: roles.pools.deepseek, // the cn_gate seat: pinned field by field in the (deepseek 1) test
   });
 
   const badWhy = cli(['--role', '_why', '--pace', fixturePath('ahead-vs-behind.json')]);
@@ -1488,4 +1491,88 @@ test('(seat-fallback g / 3d) missing or unreadable pace file leaves fallback ord
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+// ---- DeepSeek restricted reviewer seat (PM 01M7EETN): cn_gate pool in pace-roles.json -------------------
+const dsPace = (rows) => ({
+  schema: 'capacity.pace/1',
+  generated_at: '2026-11-15T01:00:00Z',
+  rows: rows || [{ pool: 'agy', class: 'other', stale: false, used_pct: 10, expected_pct: 20 }],
+});
+const DS_IN_WINDOW = new Date('2026-11-15T02:00:00Z'); // 10:00 Taipei
+const DS_OUT_WINDOW = new Date('2026-11-15T05:00:00Z'); // 13:00 Taipei
+const dsSelect = (extra) => selectEngine({
+  pace: dsPace(extra && extra.rows),
+  role: 'reviewer',
+  qualified: undefined,
+  checkEndpoint: allEndpointsReady,
+  ...extra,
+  // only the deepseek seat is under test: take the other pools out of the walk unless the case wants them
+});
+const dsCandidate = (res) => res.candidates.find((c) => c.engine === 'deepseek');
+
+test('(deepseek 1) deepseek is classified Chinese-family, seat pool is cn_gate', () => {
+  assert.equal(isChineseFamily('deepseek'), true);
+  for (const f of ['zhipu', 'alibaba', 'moonshot', 'minimax', 'meituan']) assert.equal(isChineseFamily(f), true, f);
+  for (const f of ['google', 'openai', 'anthropic', 'xai', 'unknown', undefined]) assert.equal(isChineseFamily(f), false, String(f));
+  const pool = loadRoles().pools.deepseek;
+  assert.equal(pool.cn_gate, true);
+  assert.equal(pool.family, 'deepseek');
+  assert.equal(isChineseFamily(pool.family), true);
+  assert.deepEqual(pool.available_window, { tz: 'Asia/Taipei', start: '09:00', end: '12:45' });
+});
+
+test('(deepseek 2) without --scope mechanical the seat is not a candidate at all', () => {
+  const res = dsSelect({ now: DS_IN_WINDOW });
+  assert.equal(dsCandidate(res), undefined);
+  assert.notEqual(res.engine, 'deepseek');
+});
+
+test('(deepseek 3) mechanical scope inside the window with a non-Chinese pair: candidate, pair reported', () => {
+  const res = dsSelect({ scope: 'mechanical', now: DS_IN_WINDOW, exclude: ['glm', 'codex', 'grok', 'agyclaude'] });
+  // agy stays eligible (the pair); deepseek ranks behind it (slack 0 vs +10) and is listed as a candidate
+  assert.equal(res.engine, 'agy');
+  assert.deepEqual(dsCandidate(res), { engine: 'deepseek', pool: 'deepseek', slack_pts: 0 });
+});
+
+test('(deepseek 4) outside 09:00-12:45 Asia/Taipei the seat is skipped with reason outside_window', () => {
+  const res = dsSelect({ scope: 'mechanical', now: DS_OUT_WINDOW });
+  assert.deepEqual(dsCandidate(res), { engine: 'deepseek', reason: 'outside_window' });
+  assert.equal(inAvailableWindow({ tz: 'Asia/Taipei', start: '09:00', end: '12:45' }, new Date('2026-11-15T00:59:00Z')), false); // 08:59
+  assert.equal(inAvailableWindow({ tz: 'Asia/Taipei', start: '09:00', end: '12:45' }, new Date('2026-11-15T01:00:00Z')), true); // 09:00
+  assert.equal(inAvailableWindow({ tz: 'Asia/Taipei', start: '09:00', end: '12:45' }, new Date('2026-11-15T04:44:00Z')), true); // 12:44
+  assert.equal(inAvailableWindow({ tz: 'Asia/Taipei', start: '09:00', end: '12:45' }, new Date('2026-11-15T04:45:00Z')), false); // 12:45
+});
+
+test('(deepseek 5) offline (probe not ok) -> endpoint_not_ready, never waited for; the probe gets the pool entry', () => {
+  let probed = null;
+  const res = dsSelect({
+    scope: 'mechanical',
+    now: DS_IN_WINDOW,
+    checkEndpoint: (ep, entry) => { if (ep === 'deepseek') { probed = entry; return false; } return true; },
+  });
+  assert.deepEqual(dsCandidate(res), { engine: 'deepseek', reason: 'endpoint_not_ready' });
+  assert.equal(probed.probe_model, 'deepseek-v4.1-flash');
+  assert.notEqual(res.engine, 'deepseek');
+});
+
+test('(deepseek 6) never the sole reviewer: with no non-Chinese key to pair, it is dropped (no_non_cn_pair)', () => {
+  // only the deepseek seat and a Chinese-family seat (glm, zhipu pool has no family field -> keep it explicit) are left
+  const res = dsSelect({
+    scope: 'mechanical',
+    now: DS_IN_WINDOW,
+    exclude: ['agy', 'codex', 'grok', 'agyclaude'],
+    rows: [{ pool: 'glm', class: 'other', stale: false, used_pct: 10, expected_pct: 20 }],
+  });
+  assert.deepEqual(dsCandidate(res), { engine: 'deepseek', reason: 'no_non_cn_pair' });
+  assert.notEqual(res.engine, 'deepseek');
+  // with the pair present (agy) and deepseek the priority pick, it is chosen and reports its pair
+  const roles = loadRoles();
+  const only = { ...roles, priority: { ...roles.priority, reviewer: ['deepseek'] } };
+  const paired = selectEngine({
+    pace: dsPace(), pools: loadPools(), roles: only, role: 'reviewer', scope: 'mechanical', now: DS_IN_WINDOW,
+    checkEndpoint: allEndpointsReady, exclude: ['glm', 'codex', 'grok', 'agyclaude'],
+  });
+  assert.equal(paired.engine, 'deepseek');
+  assert.deepEqual(paired.cn_gate, { scope: 'mechanical', never_sole: true, pair_with: 'agy' });
 });

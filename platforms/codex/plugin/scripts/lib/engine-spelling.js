@@ -22,4 +22,13 @@ function canonicalEngine(engine) {
   return engineSpellings(engine)[0];
 }
 
-module.exports = { engineSpellings, sameEngine, canonicalEngine };
+// Model families of Chinese vendors (family ids as familyOfEngine / seat-fallback KNOWN_FAMILIES spell them).
+// A seat in one of these families that is flagged `cn_gate` in pace-roles.json may only take mechanical
+// XS/S work and is never the sole reviewer (PM ruling 2026-11-15, DeepSeek reviewer seat).
+const CHINESE_FAMILIES = new Set(['minimax', 'moonshot', 'zhipu', 'alibaba', 'deepseek', 'meituan']);
+
+function isChineseFamily(family) {
+  return typeof family === 'string' && CHINESE_FAMILIES.has(family.trim().toLowerCase());
+}
+
+module.exports = { engineSpellings, sameEngine, canonicalEngine, CHINESE_FAMILIES, isChineseFamily };

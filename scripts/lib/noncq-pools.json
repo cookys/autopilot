@@ -16,6 +16,7 @@
     "runner": "cc-shim",
     "endpoint": "glm",
     "model": "glm-5.3",
+    "family": "zhipu",
     "max_parallel": 2
   },
   "agy": {

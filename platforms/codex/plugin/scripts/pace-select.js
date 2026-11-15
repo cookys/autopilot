@@ -370,6 +370,8 @@ function selectEngine({
 
   const mergedPools = mergePools(resolvedPools, resolvedRoles);
   const excluded = normalizeExclude(exclude);
+  // pace-roles.json `_disabled`: keys kept in the tables but never offered by the picker (operator: test before enabling).
+  if (Array.isArray(resolvedRoles._disabled)) for (const k of resolvedRoles._disabled) if (typeof k === 'string') excluded.add(k);
   let allowedKeys;
   if (useQualified) {
     const eligibleKeys = new Set();

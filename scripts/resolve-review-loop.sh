@@ -914,7 +914,7 @@ if [[ "$IMPL_LADDER_RAW" == "auto" ]]; then
   # whole output anyway, this just names the rung and the fix).
   _auto_ladder="$(node -e '
 const fs = require("fs");
-const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","claude-native","cursor","opencode"]);
+const VALID_RUNNERS = new Set(["auto","codex","agy","grok","cc-shim","pi","claude-native","cursor","opencode","kimi"]);
 const VALID_EFFORTS = new Set(["default","low","medium","high","xhigh","max"]);
 const file = process.argv[1];
 let raw;
@@ -940,7 +940,7 @@ const rungs = doc.implementer_ladder.map((r) => ({
 for (const r of rungs) {
   if (!VALID_RUNNERS.has(r.runner)) {
     process.stdout.write(
-      "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode): " +
+      "invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode|kimi): " +
       r.engine + "/" + r.effort + "@" + r.runner
     );
     process.exit(3);
@@ -1014,9 +1014,9 @@ elif [[ -n "$IMPL_LADDER_RAW" ]]; then
         ;;
     esac
     case "$_lr" in
-      auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode) ;;
+      auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode|kimi) ;;
       *)
-        echo "resolve-review-loop: invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode): ${_item}" >&2
+        echo "resolve-review-loop: invalid implementer_ladder runner (must be auto|codex|agy|grok|cc-shim|pi|claude-native|cursor|opencode|kimi): ${_item}" >&2
         exit 3
         ;;
     esac

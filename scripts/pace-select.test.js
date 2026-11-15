@@ -199,8 +199,8 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.match(roles._why, /hydrogen passed all four prereg bars \(develop d40e9ad43\)/);
 
   assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
-  assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok']);
-  assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude']);
+  assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok', 'kimi']);
+  assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude', 'kimi']);
   assert.deepEqual(roles.priority, {
     implementer: ['agy', 'glm', 'agyclaude'],
     reviewer: ['agy', 'glm', 'agyclaude', 'grok', 'codex'],
@@ -1488,4 +1488,33 @@ test('(seat-fallback g / 3d) missing or unreadable pace file leaves fallback ord
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+// PM addendum 2: a kimi Highspeed variant burns 3x Coding Plan quota; no kimi id with "highspeed" may sit in a
+// reviewer/implementer list, the live roster or the pool table.
+test('no kimi highspeed model id in the live roster, implementer/reviewer lists or noncq pools', () => {
+  const fsx = require('fs');
+  const pathx = require('path');
+  const root = pathx.join(__dirname, '..');
+  const roster = fsx.readFileSync(pathx.join(root, '.claude', 'review-loop-config.md'), 'utf8');
+  const kimiLines = roster.split('\n').filter((l) => /kimi/i.test(l));
+  assert.ok(kimiLines.length >= 1, 'the live roster names kimi (as a disabled note)');
+  // PM addendum 3: no highspeed id, no K3.1 Pro, no bare 1M k3 (k3-256k is the only k3 spelling allowed).
+  for (const l of kimiLines) assert.doesNotMatch(l, /highspeed|k3\.1-pro|kimi-code[\/-]k3(?!-256k)/i, l);
+  const pools = fsx.readFileSync(pathx.join(root, 'scripts', 'lib', 'noncq-pools.json'), 'utf8');
+  for (const p of Object.values(JSON.parse(pools))) {
+    if (/kimi/i.test(JSON.stringify(p))) assert.doesNotMatch(JSON.stringify(p), /highspeed|k3\.1-pro/i);
+  }
+});
+
+test('pace-roles _disabled: a disabled key with a fresh pace row is never returned, enabling it makes it pickable', () => {
+  const pace = priorityPace([paceRow('kimi', 5, 60)]);
+  const pools = loadPools();
+  const roles = loadRoles();
+  assert.deepEqual(roles._disabled, ['kimi', 'minimax']);
+  const run = (r) => { try { return selectEngine({ pace, pools, roles: r, role: 'implementer', checkEndpoint: allEndpointsReady }); } catch (e) { return { error: e.code || e.message }; } };
+  const off = run(roles);
+  assert.notEqual(off.engine, 'kimi', JSON.stringify(off));
+  const on = run({ ...roles, _disabled: [] });
+  assert.equal(on.engine, 'kimi', JSON.stringify(on));
 });

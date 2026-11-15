@@ -1591,6 +1591,17 @@
       "note": "Override path to autopilot.qualified/1 JSON written by engine-scorecard.js export-qualified and read by scripts/pace-select.js (falls back to scripts/lib/pace-roles.json when absent). Default: $HOME/.autopilot/qualified.v1.json."
     },
     {
+      "name": "AUTOPILOT_RECALL_RECORDS_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["hooks/past-reference-recall.js"],
+      "doc": null,
+      "relates": ["AUTOPILOT_PAST_RECALL"],
+      "note": "Records directory the past-reference-recall hook scans (*.md/*.json/*.jsonl, newest 2000, 256 KiB each). Default: ~/projects/pm/.hippo/records. Absent directory is skipped. Tests point it at a temp dir."
+    },
+    {
       "name": "AUTOPILOT_RELAY_SEND_BUDGET_MS",
       "kind": "env",
       "audience": "internal",
@@ -5421,6 +5432,21 @@
         "orchestrator_edit_gate.mode"
       ],
       "summary": "Environment override of orchestrator_edit_gate.mode."
+    },
+    {
+      "name": "AUTOPILOT_PAST_RECALL",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/past-reference-recall.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_RECALL_RECORDS_DIR"
+      ],
+      "summary": "Set to \"off\" to stop the UserPromptSubmit hook that, when the prompt mentions the past, injects up to 5 keyword hits from prior records and this session's transcript."
     },
     {
       "name": "AUTOPILOT_PRECOMPACT_STDOUT",

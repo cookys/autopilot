@@ -81,6 +81,12 @@
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/advisory-relay.js",
             "timeout": 70
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/past-reference-recall.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       }

@@ -51,6 +51,7 @@ const WHITELIST = {
   'hooks/merge-task-status-lib.js': 1,
   'hooks/opt-in-multiplexer.js': 1,
   'hooks/owner-question-guard.js': 1,
+  'hooks/past-reference-recall.js': 1,
   'hooks/per-turn-gate.js': 2,
   'hooks/post-tool-chain-lib.js': 2,
   'hooks/residue-auto-reap-lib.js': 2,

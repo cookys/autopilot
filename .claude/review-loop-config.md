@@ -14,19 +14,19 @@
 - implementer_ladder: gemini-4-carbon-low/low@agy, grok-4.7/low@grok
 <!-- DISABLED until tested (operator, 2026-11-15; pace-roles.json _disabled lists kimi and minimax for the picker): to enable, append to the implementer_ladder line above: `, kimi-code/kimi-for-coding/high@kimi` (K2.8 Preview, standard rate), then `, MiniMax-M3.1-Flash/high@cc-shim` (needs endpoint minimax; XS/S only, no implementer-side low-risk key exists). Remove this note when enabled. -->
 
-- override: reviewer | until 2026-11-22 | PM 01M7DGV7, ends earlier when gpu-lead says GPU-host qwen is back (operator: GPU-host qwen down for verification, 2026-11-15 Taipei): every role routed to qwen_local goes to hydrogen, grok as fallback. Loop reviewer is gemini-4-hydrogen-high@agy; cloud-fallback rung grok-4.7/high@grok. The agy implementer (carbon) is the same family, so on_family_conflict: fallback retreats to the preference list, grok first. Restore the previous qwen_local block from the commit before this one when gpu-lead reports recovery.
-- reviewer_engine: gemini-4-hydrogen-high
-- reviewer_effort: high
-- reviewer_runner: agy
-- reviewer_endpoint:
+- override: reviewer | until 2026-11-15 | PM 01M747R1N0 codex quota: qwen_local stays the loop reviewer. Cloud fallback rung: claude-opus-5-5-medium@agy (agyclaude) (PM 01M79W9B replaces the grok-4.7 rung of PM 01M74FDC5Z; no grok reviews). PM asked for agy carbon, but the roster implementer is agy carbon (google) and the resolver refuses a same-family rung; a rung must be a cloud runner, so GLM (an endpoint runner) cannot be one. The family-conflict preference puts GLM-5.3 first. All other fields copy the roster.
+- reviewer_engine: Qwen3.8-27B-QUASAR-NVFP4
+- reviewer_effort: default
+- reviewer_runner: anthropic-compatible
+- reviewer_endpoint: qwen_local
 - reviewer_on_engine_unavailable: cloud-fallback
-- reviewer_cloud_fallback_rung: grok-4.7/high@grok
+- reviewer_cloud_fallback_rung: claude-opus-5-5-medium/medium@agy
 - reviewer_limitation:
 - reviewer_limitation_required: false
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
-- reviewer_fallback_preference: grok-4.7, GLM-5.3
-- reviewer_fallback_preference_low_risk: grok-4.7, GLM-5.3
+- reviewer_fallback_preference: GLM-5.3, gpt-6.1-sol
+- reviewer_fallback_preference_low_risk: GLM-5.3, gpt-6.1-sol
 
 - override: qc_panel | until 2026-11-30 | operator card d-b155785a 2026-11-09:same panel as cookys account (10-16 owner instruction)
 - qc_panel: gpt-5.6-sol, claude-fable-5-1, GLM-5.3, opencode-go/muse-spark-1.3-contributor

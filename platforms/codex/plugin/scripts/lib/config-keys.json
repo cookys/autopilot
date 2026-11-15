@@ -1569,6 +1569,28 @@
       "note": "Override path to capacity.pace/1 JSON read by scripts/pace-select.js (and via dispatch-hetero.sh --pace-role). Default: $HOME/projects/capacity/out/pace.v1.json."
     },
     {
+      "name": "AUTOPILOT_INVENTORY_PACE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/render-fleet-inventory.js"],
+      "doc": "docs/scripts-inventory.md",
+      "relates": ["AUTOPILOT_INVENTORY_SEATS", "AUTOPILOT_PACE_FILE"],
+      "note": "Override path to capacity.pace/1 JSON for scripts/render-fleet-inventory.js. --pace wins. Default: ~/projects/capacity/out/pace.v1.json."
+    },
+    {
+      "name": "AUTOPILOT_INVENTORY_SEATS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/render-fleet-inventory.js"],
+      "doc": "docs/scripts-inventory.md",
+      "relates": ["AUTOPILOT_INVENTORY_PACE"],
+      "note": "Override path to hangar seats-overlay TSV for scripts/render-fleet-inventory.js. --seats wins. Default: ~/.local/state/hangar-seats/seats-overlay.tsv."
+    },
+    {
       "name": "AUTOPILOT_PACE_ROLES",
       "kind": "env",
       "audience": "internal",

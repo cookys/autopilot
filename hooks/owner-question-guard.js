@@ -274,7 +274,7 @@ function decide(input) {
   const autonomous = isAutonomous(input.session_id);
   const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
   const unboundNote = namedUnbound.map((u) =>
-    `回覆提到的卡片 ${u.id} 落在未綁定範圍（本 session 的 root 是 ${rs.root}，root 面板看不到未綁定卡片）：請先執行 node ${OPEN_DECISION_CMD} close --id ${u.id}，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} --category <money|identity|presence|goal|public-release|unbackable-loss> 重新開卡並更新回覆中的卡號。`
+    `回覆提到的卡片 ${u.id} 落在未綁定範圍（本 session 的 root 是 ${rs.root}，root 面板看不到未綁定卡片）：請先執行 node ${OPEN_DECISION_CMD} close --id ${u.id}，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} --category <money|identity|presence|goal|public-release|unbackable-loss|authority> 重新開卡並更新回覆中的卡號。`
   ).join('\n');
   const lead = [
     ...(unboundNote ? [unboundNote] : []),
@@ -283,14 +283,14 @@ function decide(input) {
   return {
     decision: 'block',
     reason: `${lead}\n`
-      + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --category <money|identity|presence|goal|public-release|unbackable-loss> --executor <執行者位址> --question <問題> [--background <背景>] --option <標籤>::<說明> --option <標籤>::<說明> [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] --not-authorized <邊界>[:<為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
+      + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --executor <執行者位址> --question <問題> [--background <背景>] --option <標籤>::<說明> --option <標籤>::<說明> [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] --not-authorized <邊界>[:<為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
       + '--not-authorized 必填，邊界只能是 read_only、reversible、external、irreversible（resolve-doa 的行動類別）或 goal-change、scope-expansion、resources-2x、red-line（董事會批准項）；'
       + '本 session 的 DOA 內會自動放行的類別，open 會拒絕（exit 3）。'
       + (autonomous ? '本 session 是自主模式（l3–l6）：若這件事在 DOA 內請自行決定，不要開卡，直接改寫回覆、不要再問 owner。' : '')
       + (rs.root
         ? `本 session 的 root 是 ${rs.root}，帶 --root-run-id 可將卡片綁定此 root。`
         : '本 session 沒有可用的 root，卡片會放在本專案的未綁定範圍。')
-      + 'open 必填 --category（六類之一：money|identity|presence|goal|public-release|unbackable-loss，只有這六類問題會送到 operator，沒帶或不在其中 exit 7、卡片不會寫入）、--executor（執行答覆的位址，沒帶 exit 2）、非空的 --question 與至少兩個 --option（沒有或只有一個會被擋，exit 2；純打字回答的問題改帶 --free-text 且不能同時帶 --option）；其餘旗標（上列方括號者）可省略。'
+      + 'open 必填 --category（七類之一：money|identity|presence|goal|public-release|unbackable-loss|authority，只有這七類問題會送到 operator，沒帶或不在其中 exit 7、卡片不會寫入）、--executor（執行答覆的位址，沒帶 exit 2）、非空的 --question 與至少兩個 --option（沒有或只有一個會被擋，exit 2；純打字回答的問題改帶 --free-text 且不能同時帶 --option）；其餘旗標（上列方括號者）可省略。'
       + '每個命中句必須寫出自己的 live 卡片編號（d- 加 8 個 hex，狀態 open 或 awaiting_operator_action）；closed、pending_dispatch、未知卡號及其他句的卡號都不算。'
       + '或在同句寫 fleet task <args> --due YYYY-MM-DD（可帶 ISO 時間），或 task_id=<id> due=YYYY-MM-DD。'
       + `owner 從即時面板回答後，會送來第一行是 [待決回覆] 的訊息，卡片會自動關閉；手動關閉用 node ${OPEN_DECISION_CMD} close --id <id>。`

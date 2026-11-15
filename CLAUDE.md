@@ -9,7 +9,7 @@
 
 For Claude Code sessions working **on** the autopilot plugin itself. Skill-runtime conventions live in each skill's `SKILL.md`. Other agents (Codex, OpenCode, Antigravity): [`AGENTS.md`](AGENTS.md); portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
 
-Original wording of the rules shortened here: [`docs/dev/_archive/entry-docs/claude-md-detail.md`](docs/dev/_archive/entry-docs/claude-md-detail.md). Directory rules load when a session reads or edits a file there: `scripts/CLAUDE.md`, `skills/CLAUDE.md`, `references/CLAUDE.md`, `platforms/CLAUDE.md`, `mods/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below, in one line.
+Directory rules load when a session reads or edits a file there: `scripts/CLAUDE.md`, `skills/CLAUDE.md`, `references/CLAUDE.md`, `platforms/CLAUDE.md`, `mods/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below, in one line.
 
 ## What this repo is
 
@@ -55,16 +55,17 @@ If you see "Important" anywhere in a severity context, that's a leftover from th
 
 ## Versioning
 
-Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0 major"; during development a bump uses 3.0.0-alpha.N continuing from alpha.7 (never back to alpha.1). Whoever pushes to `origin` second yields a colliding number. Bump table and collision procedure: [`docs/dev/versioning.md`](docs/dev/versioning.md).
+Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0 major"; during development a bump uses 3.0.0-alpha.N continuing from alpha.7 (never back to alpha.1). Bump table and collision procedure: [`docs/dev/versioning.md`](docs/dev/versioning.md).
 
 ## Process rules
 
 - With `superpowers` installed, orchestrators consult `.claude/dispatch-config.md` (defaults: [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md)).
 - Mission graphs: node `verification_commands` stay fast and fixed, never `bash hooks/tests/run.sh`; the whole suite runs once, alone, on this host before a campaign merges into `develop`, and red means no merge. Sealed graphs keep their existing chain; editing one breaks its pinned digest.
 - The merge gate runs `check-phase-review-receipt.js` against the branch tip being merged, never the last reviewed head; any product-code delta after the reviewed head needs its own review, and at the generation cap only a PM ruling plus a post-head ledger passes ([`skills/dev-flow/references/hetero-loops.md`](skills/dev-flow/references/hetero-loops.md)).
-- No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow. The remaining checks.yml / website.yml are retired by G39.
+- No hosted CI: suites and the merge gate run locally; never add a hosted workflow.
 - Destructive or irreversible ops (force-push, history rewrite, mass delete, `reset --hard`, overwriting live config) need a snapshot, a stated blast radius and explicit operator confirmation; never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)).
 - A dispatch brief that relies on rules in a subdirectory must say "read <subdir>/AGENTS.md first".
+- Kimi, GLM, Qwen, DeepSeek, MiniMax, qoder: no transcript, sensitive, core or novel tasks (`scripts/lib/cn-model-dispatch-gate.js`, Fleet task 01M7E2A1).
 
 ## Where context lives
 

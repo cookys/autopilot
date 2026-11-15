@@ -130,6 +130,11 @@
       "path": "platforms/codex/plugin/scripts/lib/lane-switch-transcript.test.js",
       "category": "home_path",
       "reason": "synthetic cwd-key example (one-letter placeholder user, no real account) in the 2026-11-13 batch merges; the file itself now uses a neutral path"
+    },
+    {
+      "path": "hooks/tests/check-unmerged-ship.test.sh",
+      "category": "host",
+      "reason": "temporary: commits 7a320ebef/09d45efc6 of the unmerged-ship branch carry the fleet CLI address; the tip uses a placeholder (08d151480) and the host is already public in scripts/lib/leak-guard-hosts.json; removed in the next commit"
     }
   ]
 }

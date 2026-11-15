@@ -175,8 +175,8 @@ const CASES = [
 ];
 let n = 0;
 for (const [name, args] of CASES) {
-  // the real script requires --executor on `open`, a flag the frozen (digest-pinned) stub never had: give it to the real script only, right after `open`
-  const realArgs = args[0] === 'open' ? ['open', '--category', 'goal', '--executor', 'ns/cc/exec--claude', ...args.slice(1)] : args;
+  // the real script requires --category, --executor, and (decide cards) a question --title plus a choice --recommendation. The frozen stub never had them: give them to the real script only, before the case args, so a case's own --recommendation still wins.
+  const realArgs = args[0] === 'open' ? ['open', '--category', 'goal', '--executor', 'ns/cc/exec--claude', '--title', '要改嗎', '--recommendation', 'a', ...args.slice(1)] : args;
   const real = rc(realFile, realArgs, repo);
   const stub = rc(stubCopy, args, repo);
   n++;

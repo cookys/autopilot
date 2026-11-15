@@ -91,7 +91,7 @@ function libOpen(fields) {
 }
 
 function cli(home, repo, args) {
-  return spawnSync(process.execPath, [OD, 'open', '--category', 'goal', '--cwd', repo, '--executor', EXEC, '--question', QUESTION, '--option', '刪::刪掉', '--option', '留::留下', '--recommendation', '留', ...args], {
+  return spawnSync(process.execPath, [OD, 'open', '--category', 'goal', '--cwd', repo, '--executor', EXEC, '--title', '要改嗎', '--question', QUESTION, '--option', '刪::刪掉', '--option', '留::留下', '--recommendation', '留', ...args], {
     env: childEnv(home), encoding: 'utf8',
   });
 }

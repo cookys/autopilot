@@ -7,7 +7,7 @@
  *   node scripts/open-decision.js open  --category <c> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
- *                                       [--title <short card title, <= 20 characters>] [--kind <decide|go|remind|step|look>] [--attach <path-or-URL>]...
+ *                                       [--title <short card title, <= 20 characters>] [--kind <decide|go|remind|step|look>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]...
  *                                       [--operator-step <text>]...   (repeatable, or several steps in one value separated by newlines:
  *                                         what the operator must do himself after answering; stored as operator_steps)
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
@@ -80,8 +80,10 @@
  * check, in every session mode and for every boundary: production_denied (exit 10) refuses the card, and so does target_unlisted /
  * a failing resolver (fail closed) -> exit 6, nothing is written. A production target is refused, never escalated to the owner.
  * Without --target nothing changes. The caller reports --target itself; a wrong label is an accepted residual risk (see resolve-doa.sh).
- * --option may repeat; at least two are REQUIRED (none or one -> exit 2); a question the owner answers in typed text passes --free-text instead (options null; --free-text with --option -> exit 2). Everything except
- * --question is optional text for the owner; an empty value is stored as null. Writes take a lock and rename atomically.
+ * --option may repeat; at least two are REQUIRED (none or one -> exit 2); a question the owner answers in typed text passes --free-text instead (options null; --free-text with --option -> exit 2).
+ * CLI `open` of a decide card (kind absent or `decide`; `go`, `remind`, `step` and `look` are exempt) also requires: --question has exactly one `？` or `?`; --title is itself a question (contains `？` or `?`, or ends with `嗎`) and still within TITLE_MAX; --recommendation is present, does not end with `？` or `?`, and starts with one --option label (a --free-text card only checks that a recommendation, if given, does not end with `？` or `?`).
+ * --premise-source <file> and --premise-inferred are open-only. If that file contains `inferred` or `推算` (case-insensitive), or --premise-inferred is set, --question or --background must also contain `推算` or `inferred`. Library openDecision() does not apply these rules.
+ * Other fields are optional text for the owner; an empty value is stored as null. Writes take a lock and rename atomically.
  * Card trail (BL cardtrail). Stored fields a reader (patrol, the panel) may rely on: status ('open' | 'awaiting_operator_action' | 'pending_dispatch' | 'closed';
  * absent = open), answer (the answer text), closed_at (ISO UTC, set when status becomes closed), answered_at (set on awaiting_operator_action),
  * pending_dispatch_at (ISO UTC, set when status becomes pending_dispatch: patrol's "answered but not dispatched for 30 minutes" reads status + this),
@@ -214,8 +216,9 @@ function notAuthorizedBoundaryId(raw) {
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
+  process.stderr.write('usage: open-decision.js open --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--irreversible] [--from-request <r-id>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--kind <decide|go|remind|step|look>] [--due <ISO time | +N(m|h|d|w)>] [--premise-source <file>] [--premise-inferred] [--attach <path-or-URL>]... [--root-run-id <id>]\n'
     + '       --category values: money（錢） identity（身分：操作員本人的登入、憑證、金鑰、scope） presence（到場） goal（改目標） public-release（對外） unbackable-loss（無備份的損失） authority（改授權）\n'
+    + '       決定卡（沒有 --kind，或 --kind decide；go/remind/step/look 不在此限）：--question 恰好一個問號（？或?）；--title 本身要是問題（含？或?，或以嗎結尾，仍 <= 20）；--recommendation 必填、以某個 --option 標籤開頭、不可以？或?結尾（--free-text 只在有建議時拒絕問號結尾）。--premise-source <檔> 的內容若含 inferred 或推算（不分大小寫），或帶了 --premise-inferred，則 --question 或 --background 也必須含推算或 inferred。這兩支旗標只用於 open。\n'
     + '       open-decision.js open --category <c> --kind step --question <step text> [--background <why>] [--blocks <what stalls>] [--attach <path-or-URL>]... [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js stats [--since <ISO|7d>] [--json]\n       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js close --id <id> --answer <text> [--executor <address>] [--asker <address>] [--awaiting-operator <step>] [--reask-after <4h|30m|1d>]\n       open-decision.js close --id <id> --dispatched <task_id>\n       open-decision.js close --id <id> --dispatched-msg <message_id>\n       open-decision.js done --id <id> [--note <evidence>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--all] [--json]\n       open-decision.js show --id <id> [--json]\n       open-decision.js list [--all] [--json]\n       open-decision.js backfill --from <file.jsonl> [--apply]\n       open-decision.js due-sweep\n       (decision open REQUIRES --executor <address>; it also takes --asker <address> --title <short title, <= 20 characters> --due <ISO time | +N(m|h|d|w)>; a remind card takes no --option/--free-text; --operator-step <text>, repeatable or newline-separated)\n');
   return 2;
@@ -572,9 +575,9 @@ function takeFreeText(argv) {
 // BL cardtrail flags are lifted out like --kind/--target (parse()'s valued Set stays byte-identical to the frozen ask stub).
 // -> { rest, extra: { answer, executor, asker, 'awaiting-operator', 'reask-after', from, dispatched, 'dispatched-msg', title, note, 'operator-step', all, apply } } | { error }
 // operator-step is repeatable and may hold several steps separated by newlines. parse()'s valued Set stays untouched (frozen ask stub).
-const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since'];
+const EXTRA_VALUED = ['answer', 'executor', 'asker', 'awaiting-operator', 'reask-after', 'from', 'dispatched', 'dispatched-msg', 'title', 'from-request', 'note', 'look-target', 'category', 'since', 'premise-source'];
 const EXTRA_REPEAT = ['operator-step'];
-const EXTRA_SWITCH = ['all', 'apply', 'irreversible'];
+const EXTRA_SWITCH = ['all', 'apply', 'irreversible', 'premise-inferred'];
 // The only seven kinds of question that go to the operator (operator rule 2026-11-15); everything else the PM decides.
 const CATEGORIES = ['money', 'identity', 'presence', 'goal', 'public-release', 'unbackable-loss', 'authority'];
 const CATEGORY_REFUSAL = '拒絕開卡：--category 必須是 money（錢）、identity（身分：操作員本人的登入、憑證、金鑰、scope）、presence（到場）、goal（改目標）、public-release（對外）、unbackable-loss（無備份的損失）、authority（改授權：改 grant、authority table、DOA 或某條 lane 的權限）其中之一。這件 PM 自己決定；不確定就先找 hetero 評估。';
@@ -691,6 +694,52 @@ function decisionStats(files, sinceMs) {
   return { schema: 'decision-stats/1', since: new Date(sinceMs).toISOString(), counts };
 }
 
+// CLI decide-card shape only (kind absent or `decide`). `go` / `remind` / `step` / `look` skip it.
+// Library openDecision() does not call this.
+function countQuestionMarks(s) {
+  return (String(s).match(/[？?]/g) || []).length;
+}
+function titleIsQuestion(title) {
+  const t = String(title).trim();
+  return /[？?]/.test(t) || /嗎$/.test(t);
+}
+function recommendationShapeError(args, options) {
+  const rec = typeof args.recommendation === 'string' ? args.recommendation.trim() : '';
+  const endsQ = /[？?]$/.test(rec);
+  if (args['free-text']) {
+    if (rec && endsQ) return '建議必須是選擇，不能是問句：--recommendation 不可以以？或 ? 結尾';
+    return null;
+  }
+  if (!rec) return '決定卡的 --recommendation 必填，而且必須是選項之一（以某個 --option 標籤開頭），不能是問句';
+  if (endsQ) return '建議必須是選擇，不能是問句：--recommendation 不可以以？或 ? 結尾';
+  const labels = (options || []).map((o) => o.label);
+  if (!labels.some((l) => rec.startsWith(l))) return '建議必須以某個 --option 標籤開頭（--recommendation 要是選擇，不能是另一個問題）';
+  return null;
+}
+const PREMISE_MARK = /inferred|推算/i;
+function premiseShapeError(args, ex) {
+  let sourceHit = false;
+  if (ex['premise-source'] !== undefined) {
+    let text;
+    try { text = fs.readFileSync(ex['premise-source'], 'utf8'); }
+    catch (e) { return `前提檢查：讀不到 --premise-source ${ex['premise-source']}（${e.message}）`; }
+    sourceHit = PREMISE_MARK.test(text);
+  }
+  if (!sourceHit && !ex['premise-inferred']) return null;
+  const card = `${args.question || ''}\n${args.background || ''}`;
+  if (!PREMISE_MARK.test(card)) return '前提檢查：來源寫了 inferred 或推算（或你帶了 --premise-inferred），--question 或 --background 也必須寫明推算或 inferred，不能把推算值寫成實測';
+  return null;
+}
+function decideCardShapeError(args, ex, options) {
+  if (!(args.kind === undefined || args.kind === 'decide')) return null;
+  const n = countQuestionMarks(args.question);
+  if (n !== 1) return `一張卡只問一個問題：--question 必須恰好有一個問號（？或?），目前有 ${n} 個`;
+  if (ex.title === undefined || !titleIsQuestion(ex.title)) return '決定卡的 --title 必須是一個問題（含？或?，或以嗎結尾），而且不可省略';
+  const recErr = recommendationShapeError(args, options);
+  if (recErr) return recErr;
+  return premiseShapeError(args, ex);
+}
+
 function main(argv) {
   const kd = takeDue(argv);
   if (kd.error) return usage(kd.error);
@@ -715,6 +764,7 @@ function main(argv) {
   if (kd.due !== undefined && cmd !== 'open') return usage('--due is an `open` argument');
   if (args.attachments.length > 0 && cmd !== 'open') return usage('--attach is only an open argument');
   if (args.extra['look-target'] !== undefined && cmd !== 'open') return usage('--look-target is only an open argument');
+  if (cmd !== 'open' && (args.extra['premise-source'] !== undefined || args.extra['premise-inferred'])) return usage('--premise-source 與 --premise-inferred 只用於 open');
   if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
   if (!['open', 'close', 'done', 'show', 'list', 'backfill', 'redeliver', 'due-sweep', 'stats'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
@@ -966,6 +1016,8 @@ function main(argv) {
     routed = roleGate({ not_authorized: args['not-authorized'], kind: args.kind });
     if (routed && routed.code === 4) { process.stderr.write(`open-decision: ${routed.message}\n`); return 4; }
   }
+  const shapeErr = decideCardShapeError(args, ex, options);
+  if (shapeErr) return usage(shapeErr); // DECIDE_CARD_SHAPE
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source, kind: args.kind, category: ex.category, executor: ex.executor, asker: ex.asker, title: ex.title, due_at: dueAt,

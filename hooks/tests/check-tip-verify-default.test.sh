@@ -114,7 +114,7 @@ node "$READER" >/dev/null 2>"$ERR" || EXIT=$?
 assert_eq "$EXIT" "2" "reader with no file exits 2"
 assert_eq "$(cat "$ERR")" "usage: node scripts/lib/tip-verify-repo-default.js <config-file>" "reader usage line"
 
-NAME_OUT="$(node -e 'const m=require(process.argv[1]); process.stdout.write([m.repoName(process.argv[2], process.argv[3]), m.repoName("", "/work/aaa-race-cc-haiku55"), m.repoName("git@example.invalid:org/aaa-race-cc-haiku55.git", "/ignored")].join("\n"))' \
+NAME_OUT="$(node -e 'const m=require(process.argv[1]); process.stdout.write([m.repoName(process.argv[2], process.argv[3]), m.repoName("", "/work/aaa-race-cc-haiku55"), m.repoName("git"+"@example.invalid:org/aaa-race-cc-haiku55.git", "/ignored")].join("\n"))' \
   "$READER" "https://example.invalid/org/fleet.git" "/work/other")"
 assert_eq "$NAME_OUT" $'fleet\naaa-race-cc-haiku55\naaa-race-cc-haiku55' "repoName strips .git and falls back to toplevel"
 

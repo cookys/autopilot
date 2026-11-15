@@ -1,0 +1,5 @@
+{
+  "_why": "autopilot's own extension of the Chinese-model dispatch gate lists: the engine and the hooks are core code.",
+  "sensitive_paths": [],
+  "core_dirs": ["src/engine/**", "src/runners/**", "hooks/**", "bin/**"]
+}

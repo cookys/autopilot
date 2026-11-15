@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch_usage/1 ledger through the four model-calling rails (dispatch-hetero / -review / -author / -consult),
 # each driven with a fake runner. One finished dispatch = one row in <live_dir>/dispatch-usage-YYYYMM.jsonl;
 # the result JSON and the exit code are untouched; AUTOPILOT_DISPATCH_USAGE=off writes nothing; no token in the file.

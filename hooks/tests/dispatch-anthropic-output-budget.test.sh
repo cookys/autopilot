@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-anthropic-review.js: a max-effort reviewer seat gets a thinking-sized output budget, and a
 # thinking-only `stop_reason: max_tokens` response is the NAMED failure `output_budget_exhausted`
 # (still a failure — the parser is not relaxed; a thinking-only response never becomes a verdict).

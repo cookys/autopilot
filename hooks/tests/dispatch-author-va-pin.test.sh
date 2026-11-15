@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-author-va-pin -- a standing verification_author operator pin reaches the strict-contract check.
 # RED at 53ddc02f (unmodified scripts):
 #   FAIL V3 pinned seat admitted ... "contract checker failed: [engine: no qualified scorecard row ...]": expected '0', got '2'

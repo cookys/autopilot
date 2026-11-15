@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # BL-0251 -- a claude child a rail launches declares itself to fleet: child_session_mint (scripts/lib/repo-identity.sh)
 # exports FLEET_LIFETIME=ephemeral (always, an inherited durable is overridden), FLEET_PARENT (the launching CC session
 # id when no FLEET_PARENT is inherited) and FLEET_ROLE (review-seat for dispatch-review, hand for author/hetero).

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # hooks/tests/dispatch-author-result-provenance.test.sh
 # Unit 2c.i verification oracle: result envelope and authored paths test.
 . "$(dirname "$0")/lib.sh"

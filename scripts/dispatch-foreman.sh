@@ -180,6 +180,10 @@ die_precondition() { STATUS="precondition_failed"; ERROR="$1"; emit; }
 case "$TIMEOUT_SECS" in ''|*[!0-9]*) die_precondition "--timeout must be a non-negative integer" ;; esac
 case "$HANDOFF_TIMEOUT" in ''|*[!0-9]*) die_precondition "--handoff-timeout must be a non-negative integer" ;; esac
 case "$POLL" in ''|*[!0-9.]*) die_precondition "--poll must be a number" ;; esac
+# d-1dfcf757: this rail is always kimi, so a task marked as reading agent transcript content is refused here.
+_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner kimi --model "$MODEL" ${BRIEF_FILE:+--prompt-file "$BRIEF_FILE"} ${PLAN_FILE:+--prompt-file "$PLAN_FILE"} 2>&1 >/dev/null)" \
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred moonshot unknown (01M7E2A1, d-1dfcf757)}"
+unset _tfg_msg
 command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
 command -v setsid >/dev/null 2>&1 || die_precondition "setsid is required for process-group containment"
 worker_containment_detect

@@ -2211,6 +2211,10 @@ process.stdout.write([policy, re, rf, rr, ep].map(clean).join("|"));
 ' "$resolved" 2>/dev/null)" || return 1
   IFS='|' read -r policy engine effort runner target_endpoint <<< "$parsed"
   [ "$policy" = "cloud-fallback" ] || return 1
+  # d-1dfcf757: a configured rung in a barred family is dropped for a marked task; the plan below then picks an allowed one.
+  if [ -n "$engine" ] && ! node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$runner" --model "$engine" ${target_endpoint:+--endpoint "$target_endpoint"} --prompt-file "${VISION_PROMPT_FILE:-$PROMPT_FILE}" >/dev/null 2>&1; then
+    engine=""; effort=""; runner=""; target_endpoint=""
+  fi
   case "$(printf '%s' "${runner:-}" | tr '[:upper:]' '[:lower:]')" in
     codex)
       engine=""
@@ -2229,10 +2233,11 @@ const plan = sf.implementerFallbackPlan({
   failedModel: process.argv[3],
   failedEndpoint: process.argv[4],
 });
-const rung = plan.chain[0];
+const gate = require(process.argv[6]);
+const rung = plan.chain.find((r) => gate.check({ runner: r.runner, model: r.model, endpoint: r.endpoint, role: "implementer", files: [process.argv[5]] }).allowed);
 if (!rung) process.exit(1);
 process.stdout.write([rung.model, rung.effort, rung.runner, rung.endpoint || "", JSON.stringify(plan.demoted || [])].join("|"));
-' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" 2>/dev/null)" || return 1
+' "$SELF_DIR/lib/seat-fallback.js" "$cur_runner" "${MODEL:-}" "${ENDPOINT:-}" "${VISION_PROMPT_FILE:-$PROMPT_FILE}" "$SELF_DIR/lib/cn-model-dispatch-gate.js" 2>/dev/null)" || return 1
     IFS='|' read -r engine effort runner target_endpoint fb_demoted_json <<< "$pick_parsed"
   fi
   [ -n "$engine" ] && [ -n "$effort" ] && [ -n "$runner" ] || return 1
@@ -2958,6 +2963,10 @@ if [ -n "$PACE_ROLE" ] && [ "$RUNNER_SUPPLIED" -eq 0 ]; then
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.
 VISION_PROMPT_FILE="$PROMPT_FILE"
+# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
+_tfg_msg="$(node "$SELF_DIR/lib/cn-model-dispatch-gate.js" check --role implementer --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+  || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
+unset _tfg_msg
 # Warn-only: a brief that names a ../ path points outside the worktree. Never blocks, never
 # changes the exit code. A ../ counts only at a word start ( ../x, (../x, "../x), not a/../b.
 _DOTDOT_RE='(^|[][:space:]("'"'"'=,<])\.\./[^][:space:]()"'"'"'<>,;]+'

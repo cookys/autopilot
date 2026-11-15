@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # PRO P3 U1: hermetic native Kimi transport adapter.
 . "$(dirname "$0")/lib.sh"
 

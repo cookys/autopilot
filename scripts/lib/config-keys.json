@@ -1380,6 +1380,17 @@
       "note": "Path of the claude binary profile-health.js runs `auth status --json` with (default: claude on PATH). Tests point it at a stub."
     },
     {
+      "name": "AUTOPILOT_TEST_CN_GATE_OFF",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/lib/cn-model-dispatch-gate.js"],
+      "doc": null,
+      "relates": [],
+      "note": "1 disables the Chinese-model dispatch gate so suites that dispatch kimi/glm/minimax through a sentinel runner do not need Size/Role/Scope. Tests only."
+    },
+    {
       "name": "AUTOPILOT_NOW",
       "kind": "env",
       "audience": "internal",
@@ -6741,6 +6752,71 @@
         "fleet_gateway_endpoints"
       ],
       "summary": "Comma-separated named endpoints allowlisted as fleet gateways to receive the X-Fleet-Task header (case-insensitive). When set, even to empty, it replaces fleet_gateway_endpoints."
+    },
+    {
+      "name": "AUTOPILOT_TASK_READS_TRANSCRIPT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/lib/cn-model-dispatch-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to 1 on a task that reads agent transcript content: the Chinese-model dispatch gate then refuses Kimi, GLM, Qwen, DeepSeek, MiniMax and qoder runners/models (cn_model_dispatch_barred <family> transcript, 01M7E2A1, d-1dfcf757). A `Reads-Transcript: yes` line in the first 8 lines of the brief does the same."
+    },
+    {
+      "name": "AUTOPILOT_TASK_SIZE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/lib/cn-model-dispatch-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Task size XS|S|M|L|XL for the Chinese-model dispatch gate; a `Size:` header in the first 8 lines of the brief is the fallback. Missing or above S blocks Kimi, GLM, Qwen, DeepSeek, MiniMax and qoder (fail closed)."
+    },
+    {
+      "name": "AUTOPILOT_TASK_ROLE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/lib/cn-model-dispatch-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Task role for the Chinese-model dispatch gate (a `Role:` header is the fallback; rails supply their own implied role). plan, design, brainstorm, architecture, plan_review and research are novel work and block the barred families."
+    },
+    {
+      "name": "AUTOPILOT_TASK_SCOPE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/lib/cn-model-dispatch-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Comma- or newline-separated paths the task reads or writes, for the Chinese-model dispatch gate (a `Scope:` header is the fallback; review rails also take the paths in the diff). A sensitive or core path, or a missing scope, blocks the barred families."
+    },
+    {
+      "name": "AUTOPILOT_TASK_NOVEL",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/lib/cn-model-dispatch-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to 1 (or `Novel: yes` header) to mark a task as novel work: the Chinese-model dispatch gate then blocks Kimi, GLM, Qwen, DeepSeek, MiniMax and qoder."
     },
     {
       "name": "AUTOPILOT_LANE",

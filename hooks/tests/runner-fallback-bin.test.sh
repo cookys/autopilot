@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # runner-fallback-bin.test.sh — runner binaries that are installed but NOT on PATH still resolve.
 #
 # The team account keeps codex and agy in ~/.local/bin and grok in ~/.grok/bin (also ~/.local/bin);

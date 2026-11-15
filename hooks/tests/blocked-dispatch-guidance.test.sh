@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # BL-0017 (openclaw, owner-confirmed 2026-10-13): a brief that sets an l5/l6 marker and then runs a
 # non-strict dispatch burns foreman budget on the refusal. Three rules, each with a deliberately bad
 # case that must be caught and a clean case that must not be flagged:

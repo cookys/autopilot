@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # A plan-review seat whose runner fails must say why. Two real failures once came back as a bare
 # exit 3 with nothing else: codex refused the model ("gpt-5.5 not supported with ChatGPT account")
 # and a MiniMax seat had no MINIMAX_API_KEY. Everything here is a shim on PATH plus FAKE- tokens;

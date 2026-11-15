@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-tree step 3b (D7, plan section 6) -- ONE resolver for every session-marker writer, and every rail
 # hands its child runners its own write target as AUTOPILOT_PARENT_SESSION_ID (rule 3).
 #   resolveMarkerWriteTarget({payloadId, explicitId, env}) -> {id, source}; with P = AUTOPILOT_PARENT_SESSION_ID set,

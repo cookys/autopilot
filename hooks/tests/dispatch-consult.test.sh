@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-consult.test.sh — D8 acceptance surface (plan
 # docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md D8). Covers:
 # switch-off refusal (exit 2, zero transport spawns, real entry point),

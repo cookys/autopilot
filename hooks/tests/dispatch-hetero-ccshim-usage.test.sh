@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-hetero cc-shim usage: the result JSON's "usage" for runner cc-shim is the
 # HARNESS-WRITTEN envelope's (the claude CLI's `--output-format json` stdout, captured by
 # dispatch-hetero.sh into $CCSHIM_ENVELOPE) `usage` object — four non-negative-integer

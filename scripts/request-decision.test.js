@@ -193,10 +193,10 @@ test('PM open --from-request stores the id', () => {
     fs.mkdirSync(path.join(s.home, '.autopilot'), { recursive: true });
     fs.writeFileSync(path.join(s.home, '.autopilot', 'team.json'), '{"role":"pm"}\n');
     const env = envOf(s);
-    const bad = spawnSync(process.execPath, [OD, 'open', '--category', 'goal', '--cwd', s.repo, '--executor', 'ns/courier/member', '--question', '要刪嗎？', '--option', '刪::刪掉', '--option', '留::留下', '--not-authorized', 'read_only', '--from-request', 'nope'], { env, encoding: 'utf8' });
+    const bad = spawnSync(process.execPath, [OD, 'open', '--category', 'goal', '--cwd', s.repo, '--executor', 'ns/courier/member', '--title', '要改嗎', '--question', '要刪嗎？', '--option', '刪::刪掉', '--option', '留::留下', '--recommendation', '刪', '--not-authorized', 'read_only', '--from-request', 'nope'], { env, encoding: 'utf8' });
     assert.equal(bad.status, 2, bad.stderr);
     assert.equal(fs.existsSync(path.join(s.repo, '.git', 'autopilot', 'decisions')), false);
-    const ok = spawnSync(process.execPath, [OD, 'open', '--category', 'goal', '--cwd', s.repo, '--executor', 'ns/courier/member', '--question', '要刪嗎？', '--option', '刪::刪掉', '--option', '留::留下', '--not-authorized', 'read_only', '--from-request', 'r-abcdef01'], { env, encoding: 'utf8' });
+    const ok = spawnSync(process.execPath, [OD, 'open', '--category', 'goal', '--cwd', s.repo, '--executor', 'ns/courier/member', '--title', '要改嗎', '--question', '要刪嗎？', '--option', '刪::刪掉', '--option', '留::留下', '--recommendation', '刪', '--not-authorized', 'read_only', '--from-request', 'r-abcdef01'], { env, encoding: 'utf8' });
     assert.equal(ok.status, 0, ok.stderr);
     const dir = path.join(s.repo, '.git', 'autopilot', 'decisions');
     const file = fs.readdirSync(dir).find((n) => n.endsWith('.json'));

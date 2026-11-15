@@ -43,7 +43,7 @@ export AUTOPILOT_RENDER_TASK_STATUS_BIN="$SB/task-bin.sh"
 export AUTOPILOT_REVIEW_RETAIN_MS=999999999
 
 # ---- A. open-decision.js helper (decision/2) --------------------------------------------------------------
-odo() { local a=("$@"); [ "${1:-}" = open ] && a=(open --category goal --executor ns/cc/exec--claude "${@:2}"); (cd "$REPO" && wenv "$NODE" "$OD" "${a[@]}" 2> "$SB/od.err" < /dev/null); }
+odo() { local a=("$@"); [ "${1:-}" = open ] && a=(open --category goal --executor ns/cc/exec--claude --title '要改嗎' "${@:2}"); (cd "$REPO" && wenv "$NODE" "$OD" "${a[@]}" 2> "$SB/od.err" < /dev/null); }
 # jf <file> <js expr over v>: print an expression of the parsed JSON file
 jf() { node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(eval(process.argv[2])))' "$1" "$2"; }
 COMMON="$REPO/.git"
@@ -77,18 +77,18 @@ eq "closed,closed" "$(jf "$F1" 'v.decisions.map((d)=>d.status).join(",")')" "bot
 odo show --root-run-id R1 --json > /dev/null; eq 1 "$?" "show exits 1 after the last close"
 # six concurrent opens: ALL win, none is lost, the file is intact JSON
 rm -f "$SB"/c*.rc
-for i in 1 2 3 4 5 6; do ( odo open --not-authorized irreversible --free-text --question "P$i" --root-run-id RC > /dev/null; echo $? > "$SB/c$i.rc" ) & done; wait
+for i in 1 2 3 4 5 6; do ( odo open --not-authorized irreversible --free-text --question "P$i?" --root-run-id RC > /dev/null; echo $? > "$SB/c$i.rc" ) & done; wait
 eq '0 0 0 0 0 0' "$(cat "$SB"/c?.rc | sort | tr '\n' ' ' | sed 's/ $//')" "concurrent open x6: all six succeed"
 eq '6|6' "$(jf "$COMMON/autopilot/decisions/${KEY}--RC.json" 'v.decisions.length+"|"+new Set(v.decisions.map((d)=>d.id)).size')" "concurrent open leaves one intact file with six distinct entries (none lost)"
 rm -f "$COMMON/autopilot/decisions/${KEY}--RC.json"
 # concurrent close x12 + open x12 on one scope: every close lands, every open lands, nothing else is lost (the close path takes the same lock)
 FK="$COMMON/autopilot/decisions/${KEY}--RK.json"
 : > "$SB/keep.ids"; : > "$SB/gone.ids"
-for i in $(seq 1 12); do odo open --not-authorized irreversible --free-text --question "keep-$i" --root-run-id RK >> "$SB/keep.ids"; odo open --not-authorized irreversible --free-text --question "gone-$i" --root-run-id RK >> "$SB/gone.ids"; done
+for i in $(seq 1 12); do odo open --not-authorized irreversible --free-text --question "keep-$i?" --root-run-id RK >> "$SB/keep.ids"; odo open --not-authorized irreversible --free-text --question "gone-$i?" --root-run-id RK >> "$SB/gone.ids"; done
 eq 24 "$(jf "$FK" 'v.decisions.length')" "setup: 24 entries open on the scope"
 rm -f "$SB"/k*.rc "$SB"/n*.rc "$SB"/new.ids.*
 i=0; while read -r gid; do i=$((i+1)); ( odo close --id "$gid" --root-run-id RK > /dev/null; echo $? > "$SB/k$i.rc" ) & done < "$SB/gone.ids"
-for i in $(seq 1 12); do ( odo open --not-authorized irreversible --free-text --question "new-$i" --root-run-id RK > "$SB/new.ids.$i"; echo $? > "$SB/n$i.rc" ) & done; wait
+for i in $(seq 1 12); do ( odo open --not-authorized irreversible --free-text --question "new-$i?" --root-run-id RK > "$SB/new.ids.$i"; echo $? > "$SB/n$i.rc" ) & done; wait
 eq '0' "$(cat "$SB"/k*.rc "$SB"/n*.rc | sort -u | tr '\n' ' ' | sed 's/ $//')" "concurrent close x12 + open x12: every call exits 0"
 cat "$SB/keep.ids" "$SB"/new.ids.* | LC_ALL=C sort > "$SB/want.ids"
 jf "$FK" 'v.decisions.filter((d)=>d.status!=="closed").map((d)=>d.id).sort().join("\n")' > "$SB/have.ids"; echo >> "$SB/have.ids"

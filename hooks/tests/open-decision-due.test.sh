@@ -51,7 +51,7 @@ UNIT="$(node -e '
 assert_eq "$UNIT" "none,none,due,not_due,due,not_due,due,none,0,1,2,1" "dueState/dueRank unit cases"
 
 # ---- 2. an ordinary card: no due line, no new fields ----
-N="$(OD open --category goal --question "ordinary question" --option a::one --option b::two "${OPEN_COMMON[@]}")"; rc=$?
+N="$(OD open --category goal --title '要改嗎' --question "ordinary question?" --option a::one --option b::two --recommendation a "${OPEN_COMMON[@]}")"; rc=$?
 assert_exit_code "$rc" 0 "open ordinary card"
 OUT="$(OD show)"
 assert_contains "$OUT" "open decisions: 1" "ordinary card counted"
@@ -105,7 +105,7 @@ READ="$(node -e '
   const r = require(di).readDecision({ commonDir: common, key: s.project_key, identity: s.repo_identity, nowMs: Date.now(), liveBase: null });
   process.stdout.write(r.value.map((v) => `${v.question}:${v.due_state || "-"}:${"due_at" in v}`).join("|"));
 ' "$PK_JS" "$DI_JS" "$REPO")"
-assert_eq "$READ" "pay invoice:due:true|ordinary question:-:false|future reminder:not_due:true" "readDecision: due first, not_due last, ordinary view unchanged"
+assert_eq "$READ" "pay invoice:due:true|ordinary question?:-:false|future reminder:not_due:true" "readDecision: due first, not_due last, ordinary view unchanged"
 
 # ---- 6. due-sweep fires once ----
 S1="$(OD due-sweep)"; rc=$?

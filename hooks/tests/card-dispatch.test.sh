@@ -64,7 +64,21 @@ hook() { HOUT="$(node -e 'process.stdout.write(JSON.stringify({session_id:"cd",c
 card() { node "$OD" show --cwd "$R" --id "$1" --json; }
 cf() { card "$1" | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8")).decisions[0];const x=j[process.argv[1]];process.stdout.write(x===undefined?"<undef>":(typeof x==="string"?x:JSON.stringify(x)))' "$2"; }
 claim() { node -e 'const{claim}=require(process.argv[1]);const o=process.argv[3]==="o"?{option:process.argv[4]}:{freeText:process.argv[4]};process.stdout.write(claim(process.argv[2],o).answer_id)' "$FD" "$1" "$2" "$3"; }
-mkcard() { node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id root-t --question "$1" "${@:2}" --not-authorized irreversible 2>/dev/null | head -1; }
+mkcard() {
+  local q="$1"; shift
+  local args=("$@") free=0 hasrec=0 i lab="" rec=()
+  for i in "${!args[@]}"; do
+    [ "${args[$i]}" = "--free-text" ] && free=1
+    [ "${args[$i]}" = "--recommendation" ] && hasrec=1
+  done
+  if [ "$free" = 0 ] && [ "$hasrec" = 0 ]; then
+    for i in "${!args[@]}"; do
+      if [ "${args[$i]}" = "--option" ]; then lab="${args[$((i+1))]%%::*}"; break; fi
+    done
+    rec=(--recommendation "$lab")
+  fi
+  node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id root-t --title '要改嗎' --question "$q" "${args[@]}" "${rec[@]}" --not-authorized irreversible 2>/dev/null | head -1
+}
 sendfield() { node -e 'const l=require("fs").readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean);const o=JSON.parse(l[Number(process.argv[2])]);const x=o[process.argv[3]];process.stdout.write(x===null?"<null>":String(x))' "$STUB/sends.jsonl" "$1" "$2"; }
 
 # 0. open without --executor is refused, nothing written

@@ -30,7 +30,7 @@ EXEC="ns/cc/exec--claude"; ASK="ns/cc/asker--claude"
 od() { OUT="$(node "$OD" "$@" --cwd "$R" --root-run-id rt 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 # open refuses a card without --executor (PM 01M6ZXJYTQ), so opencard names one; a card with NO executor can only come from the library (hooks/ask-decision.js), libcard
 libcard() { OUT="$(node -e 'const r=require(process.argv[1]).openDecision({cwd:process.argv[2],root:"rt",session:null,question:process.argv[3],options:null,not_authorized:"irreversible"});process.stdout.write(r.id)' "$OD" "$R" "$1" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
-opencard() { OUT="$(node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id rt --question "$1" --free-text --not-authorized irreversible "${@:2}" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+opencard() { OUT="$(node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id rt --title '要改嗎' --question "$1" --free-text --not-authorized irreversible "${@:2}" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 field() { node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const e=v.decisions.find(d=>d.id===process.argv[2]);const x=e?e[process.argv[3]]:undefined;process.stdout.write(x===undefined?"<undef>":String(x))' "$(ls "$D"/*.json | head -1)" "$1" "$2"; }
 
 # 1. open stores executor + asker; close --answer --executor prints JSON, sends nothing, parks the card

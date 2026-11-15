@@ -25,16 +25,16 @@ export PATH="$STUB:$PATH"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q --allow-empty -m base
 : > "$STUB/calls.log"
-od() { local script="$1"; shift; OUT="$(node "$script" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible "$@" 2>"$TEST_TMP/err" < /dev/null)"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+od() { local script="$1"; shift; OUT="$(node "$script" open --category goal --executor ns/cc/exec--claude --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --recommendation A --not-authorized irreversible "$@" 2>"$TEST_TMP/err" < /dev/null)"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 store() { cat "$R"/.git/autopilot/decisions/*.json 2>/dev/null; }
 entry() { node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(JSON.stringify(v.decisions.find(d=>d.id===process.argv[2])))' "$(find "$R/.git/autopilot/decisions" -name '*.json' | head -1)" "$1"; }
 OD="$S/open-decision.js"
-T20="$(node -e 'process.stdout.write("字".repeat(20))')"; T21="$(node -e 'process.stdout.write("字".repeat(21))')"
+T20="$(node -e 'process.stdout.write("字".repeat(17)+"要改嗎")')"; T21="$(node -e 'process.stdout.write("字".repeat(18)+"要改嗎")')"
 
-# no --title: no title field, no title in the notice
-od "$OD"; assert_eq "$RC" 0 "no --title: exit 0"; OLD="$OUT"
-assert_eq "$(entry "$OLD" | grep -c '"title"')" 0 "no --title: the entry has no title field"
-assert_eq "$(grep -c '"title"' "$STUB/calls.log")" 0 "no --title: the open notice has no title"
+# a decide card now needs a question title; --kind go is exempt, so it still stores no title field and the notice has none
+od "$OD" --kind go; assert_eq "$RC" 0 "go card, no --title: exit 0"; OLD="$OUT"
+assert_eq "$(entry "$OLD" | grep -c '"title"')" 0 "go card, no --title: the entry has no title field"
+assert_eq "$(grep -c '"title"' "$STUB/calls.log")" 0 "go card, no --title: the open notice has no title"
 # 20 code points pass
 od "$OD" --title "$T20"; assert_eq "$RC" 0 "--title of 20 characters: exit 0"; ID20="$OUT"
 assert_eq "$(entry "$ID20" | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0,"utf8")).title)')" "$T20" "20 characters stored verbatim"
@@ -81,5 +81,5 @@ rm -rf "$MUT"; mkdir -p "$MUT"; ln -s "$REPO_ROOT/src" "$MUT/src"; mkdir -p "$MU
 for f in "$S"/*; do ln -s "$f" "$MUT/scripts/$(basename "$f")"; done
 rm "$MUT/scripts/open-decision.js"
 sed_mutant "$S/open-decision.js" "$MUT/scripts/open-decision.js" "s/ || require('.\/lib\/card-notice.js').CONTROL.test(ex.title)//"
-od "$MUT/scripts/open-decision.js" --title $'發版\n時機'; assert_eq "$RC" 0 "mutant (control check removed): the newline title is accepted, so the refusal check above would be red"
+od "$MUT/scripts/open-decision.js" --title $'要改嗎\n'; assert_eq "$RC" 0 "mutant (control check removed): the newline title is accepted, so the refusal check above would be red"
 finalize_test

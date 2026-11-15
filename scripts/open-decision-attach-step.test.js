@@ -78,9 +78,11 @@ test('open --attach is repeatable on decision cards, stored in attachments, and 
       'open', '--category', 'goal', '--cwd', s.repo,
       '--executor', EXEC,
       '--not-authorized', 'external:owner must verify artifact',
+      '--title', '要改嗎',
       '--question', '核對這份計畫與 artifact 後決定要不要合併？',
       '--option', '合併::照計畫合併',
       '--option', '退回::重寫',
+      '--recommendation', '合併',
       '--attach', 'docs/plans/review.md:42',
       '--attach', 'https://claude.ai/public/artifacts/00000000-1111-2222-3333-444444444444',
     ]);

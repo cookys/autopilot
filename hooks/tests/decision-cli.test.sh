@@ -32,7 +32,7 @@ nsends() { if [ -f "$STUB/sends.jsonl" ]; then wc -l < "$STUB/sends.jsonl" | tr 
 dec() { node "$BIN" decision "$@" --cwd "$R" --json 2>"$TEST_TMP/derr" < /dev/null; }
 ans() { local id="$1"; shift; dec answer "$id" "$@" --source console --device web-1; }
 jf() { node -e 'let v=JSON.parse(require("fs").readFileSync(0,"utf8"));for(const k of process.argv[1].split("."))v=v==null?v:v[k];process.stdout.write(v===undefined?"<undef>":typeof v==="string"?v:JSON.stringify(v))' "$1"; }
-mkcard() { node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id root-t --question "$1" "${@:2}" --not-authorized irreversible 2>/dev/null | head -1; }
+mkcard() { node "$OD" open --category goal --executor "$EXEC" --cwd "$R" --root-run-id root-t --title '要改嗎' --question "$1" "${@:2}" --not-authorized irreversible 2>/dev/null | head -1; }
 STORE="$(node -e 'const p=require("path");const{scopeFromCwd}=require(process.argv[1]);const{commonDirOf}=require(process.argv[2]);process.stdout.write(p.join(commonDirOf(scopeFromCwd(process.argv[3]).repo_identity),"autopilot","decisions"))' "$REPO_ROOT/src/status/project-key.js" "$REPO_ROOT/src/status/scope-key.js" "$R")"
 AUDIT="$STORE/answers-audit.jsonl"
 naudit() { if [ -f "$AUDIT" ]; then wc -l < "$AUDIT" | tr -d ' '; else echo 0; fi; }
@@ -40,7 +40,7 @@ cardstate() { node "$OD" show --cwd "$R" --id "$1" --json | jf decisions.0.statu
 
 setmode ok   # no `fleet decision`: local answer ids
 C1="$(mkcard "要不要發版？" --option "甲::走 A 路線" --option "乙::走 B" --recommendation 甲 --why 因為快 --background 背景)"
-C2="$(mkcard "請寫理由" --free-text)"
+C2="$(mkcard "請寫理由？" --free-text)"
 
 # list / show shape
 OUT="$(dec list)"; assert_eq "$?" 0 "list exit 0"
@@ -107,12 +107,12 @@ assert_eq "$(tail -1 "$AUDIT" | jf free_text_len)" 4000 "audit: free_text_len"; 
 
 # a courier host: the claim is made and its answer id is used
 setmode courier
-C3="$(mkcard "帶 courier" --option "是::y" --option "否::n")"
+C3="$(mkcard "帶 courier？" --option "是::y" --option "否::n" --recommendation 是)"
 OUT="$(ans "$C3" --option 是)"; assert_eq "$?" 0 "courier host: ok"; assert_eq "$(printf '%s' "$OUT" | jf answer_id)" ACLAIMSTUB0000000000000001 "courier host: the claim's answer id"
 assert_contains "$(cat "$STUB/claims.log")" "decision claim $C3 --option 是" "claim carried the option"
 # a card with operator_steps, answered with a non-decline option -> awaiting_operator_action (the operator still has a step), not closed; the default list omits it (answerCard would reject it as closed), --all and show report it
 setmode ok
-C4="$(mkcard "有手動步驟" --option "做::y" --option "不做::n" --operator-step "到機房按電源鍵")"
+C4="$(mkcard "有手動步驟？" --option "做::y" --option "不做::n" --recommendation 做 --operator-step "到機房按電源鍵")"
 OUT="$(ans "$C4" --option 做)"; assert_eq "$?" 0 "operator_steps answer -> 0"
 assert_eq "$(printf '%s' "$OUT" | jf state)" awaiting_operator_action "operator_steps: answer state is awaiting_operator_action, not closed"
 assert_eq "$(cardstate "$C4")" awaiting_operator_action "operator_steps: stored card awaiting_operator_action"

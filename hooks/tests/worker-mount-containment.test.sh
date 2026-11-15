@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Worker mount isolation (01M7E4JC): a dispatched worker must never be able to change the HOST mount
 # table (cuda lost /sys/fs/cgroup when a lane ran `mount --rbind /sys` then `umount -l`).
-# SAFETY: this suite never runs anything as root, never uses sudo, never mounts or unmounts in the
-# host namespace. The one real-namespace case builds its OWN user+mount namespace and is skipped
-# where unprivileged user namespaces are blocked.
+# SAFETY: shim cases never run real sudo/mount/umount/unshare. The real sudo_private_ns case runs
+# only when `sudo -n true` succeeds (otherwise it prints SKIP real-sudo-ns), touches only a scratch
+# dir under TEST_TMP, and umounts that dir from a trap. It never touches /sys or any host path.
 . "$(dirname "$0")/lib.sh"
 
 # eq <expected> <actual> <label>: lib.sh assert_eq takes (actual expected label)
@@ -46,6 +46,106 @@ PFX="$(env PATH="$SHIMS:$PATH" bash -c '. "$1"; worker_mount_isolation_detect; e
 assert_contains "$PFX" "--user --map-current-user --mount --propagation private --" "non-root prefix maps the current user"
 eq "no_root" "$(detect WORKER_MOUNT_FORCE_MODE=no_root | cut -d'|' -f1)" "force no_root"
 eq "refuse" "$(detect WORKER_MOUNT_FORCE_MODE=refuse | cut -d'|' -f1)" "force refuse"
+eq "sudo_private_ns" "$(detect WORKER_MOUNT_FORCE_MODE=sudo_private_ns | cut -d'|' -f1)" "force sudo_private_ns"
+
+echo "== detect: sudo_private_ns =="
+# Smart shims. id answers numeric uid/gid and a fixed name. sudo execs the argv after `--`
+# unless an argument's basename is unshare and SUDO_SHIM_FAIL_UNSHARE=1.
+# unshare fails the unprivileged --user form and otherwise execs the tail (unused by the sudo probe,
+# which stops at `-- true`). setpriv execs the tail after `--`.
+MINBIN="$TEST_TMP/minbin"; mkdir -p "$MINBIN"
+ln -s "$(command -v bash)" "$MINBIN/bash"
+ln -s "$(command -v sed)" "$MINBIN/sed"
+ln -s "$(command -v id)" "$MINBIN/id"
+ln -s "$(command -v head)" "$MINBIN/head"
+# `command -v true` is the shell builtin, so a symlink of that name loops. Use the binary.
+if [ -x /usr/bin/true ]; then ln -s /usr/bin/true "$MINBIN/true"; else ln -s /bin/true "$MINBIN/true"; fi
+mkshim id 'case "$1" in -u) echo 4242 ;; -g) echo 4343 ;; -un) echo worker ;; *) echo 4242 ;; esac'
+mkshim sudo 'if [ "${SUDO_SHIM_FAIL_UNSHARE:-}" = 1 ]; then
+  for a in "$@"; do b="${a##*/}"; [ "$b" = unshare ] && exit 1; done
+fi
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; [ $# -eq 0 ] && exit 0; exec "$@"; fi
+  shift
+done
+exit 0'
+mkshim unshare 'for a in "$@"; do [ "$a" = "--user" ] && exit 1; done
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; [ $# -eq 0 ] && exit 0; exec "$@"; fi
+  shift
+done
+exit 0'
+mkshim setpriv 'while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; [ $# -eq 0 ] && exit 0; exec "$@"; fi
+  shift
+done
+exit 1'
+# PATH is shims + minbin only, so a real sudo/unshare/setpriv cannot answer.
+SUDO_PATH="$SHIMS:$MINBIN"
+detect_sudo() {
+  env "$@" PATH="$SUDO_PATH" HOME="${HOME-}" bash -c '. "$1"; worker_mount_isolation_detect; printf "%s|%s" "$WORKER_MOUNT_MODE" "$WORKER_MOUNT_REASON"' _ "$LIB"
+}
+prefix_sudo() {
+  env "$@" PATH="$SUDO_PATH" HOME="${HOME-}" bash -c '. "$1"; worker_mount_isolation_detect; printf "%s" "${WORKER_MOUNT_PREFIX[*]}"' _ "$LIB"
+}
+mkshim unshare 'exit 0'
+eq "private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "userns ok -> private_ns even if sudo would succeed"
+mkshim unshare 'for a in "$@"; do [ "$a" = "--user" ] && exit 1; done
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; [ $# -eq 0 ] && exit 0; exec "$@"; fi
+  shift
+done
+exit 0'
+SETPRIV_PFX="$SHIMS/sudo -n --preserve-env $SHIMS/unshare --mount --propagation private -- $SHIMS/setpriv --reuid=4242 --regid=4343 --init-groups --"
+eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "userns blocked + sudo + unshare probe ok -> sudo_private_ns"
+eq "$SETPRIV_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0")" "sudo_private_ns prefix is sudo unshare setpriv"
+# Negative control: a copy that skips the sudo_private_ns attempt must go red on this same shim case.
+MUT="$TEST_TMP/worker-containment.skip-sudo.sh"
+sed_mutant "$LIB" "$MUT" 's/if _worker_mount_try_sudo_private_ns; then/if false; then/'
+NEG="$(env PATH="$SUDO_PATH" HOME="${HOME-}" WORKER_MOUNT_PROC_STATUS="$STATUS0" bash -c '. "$1"; worker_mount_isolation_detect; printf "%s" "$WORKER_MOUNT_MODE"' _ "$MUT")"
+if [ "$NEG" = "sudo_private_ns" ]; then
+  fail "negative control stayed green: skipping sudo_private_ns still returned sudo_private_ns"
+else
+  eq "refuse" "$NEG" "negative control red: detection that skips sudo_private_ns refuses the shim case"
+fi
+eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "restored detection returns sudo_private_ns"
+rmshim setpriv
+FALLBACK_PFX="$SHIMS/sudo -n --preserve-env $SHIMS/unshare --mount --propagation private -- $SHIMS/sudo -n -E -u worker --"
+eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "setpriv missing -> sudo -u fallback still sudo_private_ns"
+eq "$FALLBACK_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0")" "setpriv missing prefix drops with sudo -n -E -u"
+SUDO_SHIM_FAIL_UNSHARE=1
+eq "refuse" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SUDO_SHIM_FAIL_UNSHARE=1 | cut -d'|' -f1)" "unshare probe fails -> refuse"
+assert_contains "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SUDO_SHIM_FAIL_UNSHARE=1)" "passwordless sudo is available" "probe failure keeps the old refuse reason"
+unset SUDO_SHIM_FAIL_UNSHARE
+mkshim unshare 'exit 1'
+mkshim id 'echo 0'
+eq "refuse" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "root dispatcher -> refuse even when sudo would succeed"
+assert_contains "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0")" "dispatcher runs as root" "root refuse names root"
+rmshim id
+rmshim sudo
+eq "no_root" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "no sudo binary -> no_root"
+mkshim sudo 'exit 1'
+eq "no_root" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d'|' -f1)" "sudo -n true fails -> no_root"
+
+echo "== brief gate =="
+gate_rc() { # <mode> <file>
+  env WORKER_MOUNT_FORCE_MODE="$1" bash -c '. "$1"; worker_mount_isolation_detect; worker_mount_brief_gate "$2"' _ "$LIB" "$2" >/dev/null 2>"$TEST_TMP/gate.err"
+  echo $?
+}
+printf 'amount of mountpoints\n' > "$TEST_TMP/brief-amount.txt"
+printf 'note\nmount --rbind /sys /x\n' > "$TEST_TMP/brief-mount.txt"
+printf 'umount -l /mnt\n' > "$TEST_TMP/brief-umount.txt"
+printf 'unshare --mount\n' > "$TEST_TMP/brief-unshare.txt"
+eq "0" "$(gate_rc no_root "$TEST_TMP/brief-amount.txt")" "amount of mountpoints is allowed under no_root"
+eq "0" "$(gate_rc refuse "$TEST_TMP/brief-amount.txt")" "amount of mountpoints is allowed under refuse"
+eq "1" "$(gate_rc no_root "$TEST_TMP/brief-mount.txt")" "no_root + mount command is refused"
+eq "mount_brief_refused: mount at line 2 (01M7E4JC)" "$(cat "$TEST_TMP/gate.err")" "gate names the word and line"
+eq "1" "$(gate_rc refuse "$TEST_TMP/brief-mount.txt")" "refuse mode + mount command is refused"
+eq "1" "$(gate_rc no_root "$TEST_TMP/brief-umount.txt")" "umount command is refused"
+eq "1" "$(gate_rc no_root "$TEST_TMP/brief-unshare.txt")" "unshare command is refused"
+eq "0" "$(gate_rc sudo_private_ns "$TEST_TMP/brief-mount.txt")" "same mount brief is allowed under sudo_private_ns"
+eq "0" "$(gate_rc private_ns "$TEST_TMP/brief-mount.txt")" "mount brief is allowed under private_ns"
+rmshim unshare; rmshim sudo; rmshim setpriv; rmshim id
 
 echo "== rail: foreman refuse never starts the worker =="
 SBX="$TEST_TMP/repo"; mkdir -p "$SBX"
@@ -155,6 +255,33 @@ for spec in "codex|--runner codex --model gpt-5.5 --effort xhigh" \
 done
 rmshim unshare
 
+echo "== rail: brief gate refuses before the runner starts =="
+printf 'note\nmount --rbind /sys /x\n' > "$TEST_TMP/prompt.txt"
+hetero_run gate WORKER_MOUNT_FORCE_MODE=no_root
+[ "$H_RC" -ne 0 ] && eq ok ok "hetero no_root mount brief exits non-zero" || fail "hetero no_root mount brief exited 0"
+assert_file_absent "$MARK" "hetero runner never ran under the brief gate"
+assert_contains "$(cat "$TEST_TMP/h-gate.err")" "mount_brief_refused: mount at line" "hetero stderr names the word and line"
+printf 'note\nmount --rbind /sys /x\n' > "$TEST_TMP/prompt.txt"
+hetero_run gateok WORKER_MOUNT_FORCE_MODE=sudo_private_ns
+assert_file_exists "$MARK" "hetero runner ran under sudo_private_ns with the same mount brief"
+printf 'mount --rbind /sys /x\n' > "$TEST_TMP/brief.md"
+rm -f "$TEST_TMP/foreman.ran"
+OUT_FG="$(cd "$SBX" && AUTOPILOT_TEST_CN_GATE_OFF=1 WORKER_MOUNT_FORCE_MODE=no_root bash "$REPO_ROOT/scripts/dispatch-foreman.sh" --brief-file "$TEST_TMP/brief.md" --plan-file "$TEST_TMP/plan.md" \
+  --run-id mntgate --run-dir "$TEST_TMP/runs/mntgate" --timeout 20 --kimi-bin "$TEST_TMP/kimi" 2>"$TEST_TMP/foreman-gate.err" < /dev/null)"; RC_FG=$?
+[ "$RC_FG" -ne 0 ] && eq ok ok "foreman no_root mount brief exits non-zero" || fail "foreman no_root mount brief exited 0"
+assert_file_absent "$TEST_TMP/foreman.ran" "foreman runner never ran under the brief gate"
+assert_contains "$(cat "$TEST_TMP/foreman-gate.err")" "mount_brief_refused: mount at line" "foreman stderr names the word and line"
+printf 'mount --rbind /sys /x\n' > "$TEST_TMP/aprompt.txt"
+# shellcheck disable=SC2086
+author_run "gate" WORKER_MOUNT_FORCE_MODE=no_root PATH="$TEST_TMP/abin:$PATH" AUTOPILOT_GROK_EFFORT_PROBE=0 -- --runner grok --model grok-4.5 --effort high --bin "$ASTUB"
+[ "$A_RC" -ne 0 ] && eq ok ok "author no_root mount brief exits non-zero" || fail "author no_root mount brief exited 0"
+assert_file_absent "$A_MARK" "author runner never ran under the brief gate"
+assert_contains "$(cat "$TEST_TMP/a-gate.err")" "mount_brief_refused: mount at line" "author stderr names the word and line"
+printf 'mount --rbind /sys /x\n' > "$TEST_TMP/aprompt.txt"
+# shellcheck disable=SC2086
+author_run "gateok" WORKER_MOUNT_FORCE_MODE=sudo_private_ns PATH="$TEST_TMP/abin:$PATH" AUTOPILOT_GROK_EFFORT_PROBE=0 -- --runner grok --model grok-4.5 --effort high --bin "$ASTUB"
+assert_file_exists "$A_MARK" "author runner ran under sudo_private_ns with the same mount brief"
+
 echo "== real namespace propagation (self-created sandbox only) =="
 if unshare --user --map-current-user --mount --propagation shared true >/dev/null 2>&1; then
   SANDBOX_SCRIPT="$TEST_TMP/outer.sh"
@@ -177,6 +304,54 @@ EOF
   eq "0" "$PROP_RC" "private_ns worker's umount -l did not reach the outer sandbox ($PROP_OUT)"
 else
   echo "SKIP private_ns: userns unavailable"
+fi
+
+echo "== real sudo_private_ns (scratch dir only; SKIP without passwordless sudo) =="
+# host_mount_clean <mountpoint-q-status> <leak-test-status>
+# Both are exit codes: 0 means "yes" (mountpoint -q true, or the leak file exists).
+# A leak fails the assertion. The red control feeds a recorded mountpoint-true state and
+# must fail; it does not mount anything.
+host_mount_clean() {
+  local is_mp="$1" leak="$2"
+  if [ "$is_mp" -eq 0 ] || [ "$leak" -eq 0 ]; then
+    echo "host mount leak: mountpoint=$is_mp leak=$leak" >&2
+    return 1
+  fi
+  return 0
+}
+RED_RC=0
+host_mount_clean 0 1 || RED_RC=$?
+eq "1" "$RED_RC" "red control: recorded mountpoint=true is a leak"
+if sudo -n true >/dev/null 2>&1; then
+  SUDO_NS_D="$(mktemp -d "$TEST_TMP/sudo-ns.XXXXXX")"
+  cleanup_sudo_ns() {
+    if [ "$BASHPID" = "$__TEST_TOP_BASHPID" ] && [ -n "${SUDO_NS_D:-}" ]; then
+      sudo -n umount "$SUDO_NS_D" 2>/dev/null || true
+    fi
+    cleanup_test_tmp
+  }
+  trap cleanup_sudo_ns EXIT
+  sudo_ns_out="$(env -u WORKER_MOUNT_FORCE_MODE bash -c '. "$1"; worker_mount_isolation_detect; printf "%s\n" "$WORKER_MOUNT_MODE"; printf "%s\0" "${WORKER_MOUNT_PREFIX[@]}"' _ "$LIB" 2>"$TEST_TMP/sudo-ns-detect.err")"
+  SUDO_NS_MODE="${sudo_ns_out%%$'\n'*}"
+  if [ "$SUDO_NS_MODE" != "sudo_private_ns" ]; then
+    echo "SKIP real-sudo-ns"
+  else
+    # Rebuild the prefix from a second detect in this shell so the worker runs through it.
+    env -u WORKER_MOUNT_FORCE_MODE bash -c '
+      . "$1"
+      worker_mount_isolation_detect
+      [ "$WORKER_MOUNT_MODE" = "sudo_private_ns" ] || exit 91
+      "${WORKER_MOUNT_PREFIX[@]}" bash -c "sudo -n mount -t tmpfs none \"\$1\" && sudo -n touch \"\$1/leak\"" _ "$2"
+    ' _ "$LIB" "$SUDO_NS_D" >"$TEST_TMP/sudo-ns-run.out" 2>"$TEST_TMP/sudo-ns-run.err"
+    SUDO_NS_RUN=$?
+    eq "0" "$SUDO_NS_RUN" "worker mounted a tmpfs inside sudo_private_ns ($(head -c 200 "$TEST_TMP/sudo-ns-run.err"))"
+    if mountpoint -q "$SUDO_NS_D"; then MP_RC=0; else MP_RC=1; fi
+    if [ -e "$SUDO_NS_D/leak" ]; then LEAK_RC=0; else LEAK_RC=1; fi
+    host_mount_clean "$MP_RC" "$LEAK_RC" || fail "sudo_private_ns leaked the tmpfs onto the host"
+    sudo -n umount "$SUDO_NS_D" 2>/dev/null || true
+  fi
+else
+  echo "SKIP real-sudo-ns"
 fi
 
 finalize_test

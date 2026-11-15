@@ -30,7 +30,7 @@
 // A head object missing from the repository is state `unknown`, never an alert.
 //
 // markBlocked runs `fleet task progress <id> blocked --blocked-on <owner address> "unmerged <branch> <sha12>"` through
-// scripts/lib/fleet-task.js; the owner is this session's own address (FLEET_ADDRESS, else `fleet whoami`). A failure
+// scripts/lib/fleet-task.js; the owner is this session's own address (FLEET_ADDRESS, else `fleet whoami --session $CLAUDE_CODE_SESSION_ID`). A failure
 // (incl. blocked_on_invalid, or no owner address) is one stderr line and leaves the head un-deduped, so the next run retries.
 // Node built-ins only.
 

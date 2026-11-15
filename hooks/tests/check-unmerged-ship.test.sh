@@ -20,6 +20,11 @@ FLEET_LOG="$TEST_TMP/fleet.argv"
 cat > "$SHIM/fleet" <<EOF
 #!/usr/bin/env bash
 { echo "CALL"; for a in "\$@"; do echo "\$a"; done; } >> "$FLEET_LOG"
+if [ "\$1" = whoami ] && [ "\$2" = --session ]; then
+  [ -f "$TEST_TMP/shim-whoami-mismatch" ] && echo "fleet: courier socket mismatch (stale)" >&2
+  [ "\$3" = sess-known ] && { echo "ns/cx/session-seat--claude"; exit 0; }
+  echo "session_unknown: \$3" >&2; exit 2
+fi
 if [ "\$1" = whoami ]; then
   [ -f "$TEST_TMP/shim-whoami-cli" ] && { echo "courier socket mismatch" >&2; echo "address:   cookys/aimax395-team/fleet-cli   (this CLI's identity; replies land in fleet inbox)"; exit 0; }
   exit 1
@@ -127,6 +132,37 @@ assert_eq "" "$OUT" "cli-identity whoami: no alert recorded"
 assert_eq "$BEFORE" "$(grep -c '^progress$' "$FLEET_LOG")" "cli-identity whoami: no task progress call"
 assert_contains "$(cat "$TEST_TMP/check.err")" "own fleet address unknown" "cli-identity whoami: one stderr line"
 rm -f "$TEST_TMP/shim-whoami-cli"
+
+# 1e. no FLEET_ADDRESS, CLAUDE_CODE_SESSION_ID known to `fleet whoami --session`: mark uses that seat (argv exact)
+H1F="$(mkbranch feat1f f1f.txt)"
+mkledger "$TEST_TMP/led1f" "$H1F" "2026-11-15T10:00:00Z" SHIP-AS-IS "$TASK"
+: > "$FLEET_LOG"; touch "$TEST_TMP/shim-whoami-mismatch"
+OUT="$(env -u FLEET_ADDRESS CLAUDE_CODE_SESSION_ID=sess-known node "$CHECK" --repo "$WORK" --now "$NOW" --review-ledger "$TEST_TMP/led1f" --notify 2>"$TEST_TMP/check.err")"
+assert_contains "$OUT" "${H1F:0:12}" "session whoami: alert recorded"
+assert_eq "CALL
+whoami
+--session
+sess-known
+CALL
+task
+progress
+$TASK
+blocked
+--blocked-on
+ns/cx/session-seat--claude
+unmerged feat1f ${H1F:0:12}" "$(cat "$FLEET_LOG")" "session whoami (stderr mismatch line ignored): exact argv"
+rm -f "$TEST_TMP/shim-whoami-mismatch"
+
+# 1f. session id unknown to fleet (exit 2): no mark, not deduped
+H1G="$(mkbranch feat1g f1g.txt)"
+mkledger "$TEST_TMP/led1g" "$H1G" "2026-11-15T10:00:00Z" SHIP-AS-IS "$TASK"
+: > "$FLEET_LOG"
+OUT="$(env -u FLEET_ADDRESS CLAUDE_CODE_SESSION_ID=sess-nope node "$CHECK" --repo "$WORK" --now "$NOW" --review-ledger "$TEST_TMP/led1g" --notify 2>"$TEST_TMP/check.err")"
+assert_eq "" "$OUT" "session_unknown: no alert recorded"
+assert_eq "0" "$(grep -c '^progress$' "$FLEET_LOG")" "session_unknown: no task progress call"
+assert_contains "$(cat "$TEST_TMP/check.err")" "own fleet address unknown" "session_unknown: one stderr line"
+OUT="$(env -u FLEET_ADDRESS CLAUDE_CODE_SESSION_ID=sess-known node "$CHECK" --repo "$WORK" --now "$NOW" --review-ledger "$TEST_TMP/led1g" --notify 2>/dev/null)"
+assert_contains "$OUT" "${H1G:0:12}" "session_unknown: not deduped, later known session marks it"
 
 # 2. verdict 30 min old -> exit 0
 H2="$(mkbranch feat2 f2.txt)"

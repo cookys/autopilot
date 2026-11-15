@@ -9,8 +9,11 @@
  * Binary: FLEET_BIN, or `fleet` on PATH when that is unset.
  * Verb: `fleet task progress <id> blocked --blocked-on <target> [note]`; target is a member address, a `d-xxxxxxxx`
  * card id or a task id, anything else is refused by fleet with `blocked_on_invalid` (surfaced as the error).
- * Owner address: env FLEET_ADDRESS (any `@session` suffix stripped: --blocked-on takes the bare seat), else the `address:` line of `fleet whoami` unless it is the CLI's own identity (`this CLI's identity` / member `fleet-cli`); null when neither gives
- * a `ns/courier/member` triple (never guessed).
+ * Owner address, in order: (1) env FLEET_ADDRESS (any `@session` suffix stripped: --blocked-on takes the bare seat);
+ * (2) when CLAUDE_CODE_SESSION_ID is set, `fleet whoami --session <id>` exit 0 -> first stdout line, which must be a
+ * `ns/courier/member` triple (stderr, e.g. a courier socket mismatch notice, is ignored; exit 2 `session_unknown` / 3 courier
+ * unreachable -> unavailable). Plain `fleet whoami` is not used: from a shell it only ever reports the CLI's own identity
+ * (member `fleet-cli`), never the session's seat. null when neither gives a triple (never guessed).
  * Tests point FLEET_BIN at a stub. This module never sends a message.
  * Node >= 20.10, built-ins only.
  */
@@ -42,12 +45,12 @@ const ADDR_RE = /^[^/\s]+\/[^/\s]+\/[^/\s]+$/;
 function ownerAddress() {
   const env = (process.env.FLEET_ADDRESS || '').trim().replace(/@.*$/, '');
   if (ADDR_RE.test(env)) return env;
-  const r = run(['whoami']);
+  const sid = (process.env.CLAUDE_CODE_SESSION_ID || '').trim();
+  if (!sid) return null;
+  const r = run(['whoami', '--session', sid]);
   if (!r.ok) return null;
-  const line = /^address:.*$/m.exec(r.stdout || '');
-  if (!line || /this CLI's identity/.test(line[0])) return null;
-  const m = /^address:\s+(\S+)/.exec(line[0]);
-  return m && ADDR_RE.test(m[1]) && m[1].split('/')[2] !== 'fleet-cli' ? m[1] : null;
+  const first = (r.stdout || '').split('\n')[0].trim();
+  return ADDR_RE.test(first) ? first : null;
 }
 
 module.exports = { blocked, ownerAddress, bin };

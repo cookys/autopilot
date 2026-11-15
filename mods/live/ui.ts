@@ -10,6 +10,7 @@
 // (Node strips the types) and run the glyph and vocabulary lint against the very tables the pane draws from.
 
 import type { PaneLine, PaneTab, Seg, ThemeKey } from './model'
+import { ratioLevel } from './band-contract.ts'
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // display width (moved here from model.ts, which re-exports it)
@@ -484,8 +485,11 @@ export function stateLead(u: Ctx, s: Stated, o: { word?: boolean; wordW?: number
   if (o.word !== false) segs.push(sg(' '), sg(padCells(u.t('ui.state.' + s.id), o.wordW ?? 0), { ...tone(st.wordKey), role: 'state' }))
   return frag(segs)
 }
-// a meter level's theme key: < 80% default text (a healthy level says nothing), >= 80% attention, >= 100% broken (on the raw ratio)
-export const meterKey = (ratio: number): ThemeKey | undefined => (ratio >= 1 ? PALETTE.broken : ratio >= 0.8 ? PALETTE.attention : undefined)
+// a meter level's theme key, from the shared contract: below the warn percent default text, warn attention, error broken (on the raw ratio)
+export const meterKey = (ratio: number): ThemeKey | undefined => {
+  const level = ratioLevel(ratio)
+  return level === 'over' ? PALETTE.broken : level === 'warn' ? PALETTE.attention : undefined
+}
 export function meterValue(value: number, cap: number, o: { cells: number; fact?: FactId }): Frag {
   const ratio = cap > 0 ? value / cap : 0
   const on = Math.max(0, Math.min(o.cells, Math.round(Math.min(1, ratio) * o.cells)))

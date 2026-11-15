@@ -145,9 +145,8 @@ export function BarButton(el: { Text: El; Button?: El }, id: string, label: stri
   return Button === undefined ? text : <Button key={id} plain onPress={onPress}>{text}</Button>
 }
 
-const PROJECT_SLOTS: SlotId[] = ['position', 'unit', 'review', 'spend']
-
 // the open tab's content: rows (each one drawn row). `barParts` keeps the buttons row apart: the tab-row layout draws it as the last row, the O4 shell as its quick row.
+// Progress and spend left the collapsed slots, so the Now preview has no row. Dispatch shows the stalled chip. Review shows QC.
 export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): { rows: unknown[]; quick: unknown[] } {
   const { Box, Text } = el
   if (tab === 'usage') return { rows: [], quick: [<Box key="buttons">{BarButton(el, 'open:usage', t('bar.open'), () => o.onOpen('spend'))}</Box>] }
@@ -160,9 +159,9 @@ export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnaps
   }
   const open = <Box key="buttons">{BarButton(el, 'open:' + tab, t('bar.open'), () => o.onOpen(tab))}</Box>
   if (tab === 'decide') return { rows: [], quick: [open] }
-  if (tab === 'now') return { rows: lineOf(PROJECT_SLOTS), quick: [<Box key="buttons">{BarButton(el, 'open:now', t('bar.open'), () => o.onOpen('now'))}<Text>{'  '}</Text>{BarButton(el, 'open:dispatch', t('bar.dispatch'), () => o.onOpen('dispatch'))}</Box>] }
+  if (tab === 'now') return { rows: [], quick: [<Box key="buttons">{BarButton(el, 'open:now', t('bar.open'), () => o.onOpen('now'))}<Text>{'  '}</Text>{BarButton(el, 'open:dispatch', t('bar.dispatch'), () => o.onOpen('dispatch'))}</Box>] }
   if (tab === 'dispatch') return { rows: lineOf(['dispatch']), quick: [open] }
-  if (tab === 'review') return { rows: lineOf(['review', 'decisions']), quick: [open] }
+  if (tab === 'review') return { rows: lineOf(['review']), quick: [open] }
   return { rows: [], quick: [] }
 }
 export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {

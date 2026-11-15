@@ -9,12 +9,14 @@
 // TUI v2: every user-visible word is an id in locales/{en,zh-TW}.json, resolved through a `t` this file receives as a parameter
 // (never imported as state), so tests call the layout with a fixed `t`. Glyphs, numbers, ids, paths, shas and commands stay literal.
 
-import { T_EN } from './i18n'
+import { T_EN } from './i18n.ts'
 import type { T } from './i18n'
 import type { FleetView } from './fleet'
-import * as ui from './ui' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
-import * as U from './ui'
-import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, stateOf, ansiSpans, urlSpans } from './ui'
+import * as ui from './ui.ts' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
+import * as U from './ui.ts'
+import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, stateOf, ansiSpans, urlSpans } from './ui.ts'
+import { ratioLevel, floorPercent, BAND_CONTRACT } from './band-contract.ts'
+export { BAND_CONTRACT }
 const GS = GLYPHS.state
 const GT = GLYPHS.structure
 const GC = GLYPHS.chart
@@ -640,10 +642,10 @@ export function readQc(text: string | null, want: ScopeWant): QcView | null {
 }
 
 // the review-slot chip: `QC✓` (evidence present), `QC▲` (protected diff, no evidence: it awaits a person); nothing owed or unknown = no chip
-const QC_LABEL = 'QC'
-export function qcChip(q: QcView | null): string | null {
+export function qcChip(q: QcView | null, t: T = T_EN): string | null {
   if (q === null) return null
-  return q.state === 'ok' ? QC_LABEL + ui.CHIP_MARK + GS.done : q.state === 'owed' ? QC_LABEL + ui.CHIP_MARK + GS.need_you : null
+  const label = t('band.qc')
+  return q.state === 'ok' ? label + ui.CHIP_MARK + GS.done : q.state === 'owed' ? label + ui.CHIP_MARK + GS.need_you : null
 }
 
 // `git-common-dir:<abs path>` -> the path (only an absolute one); anything else -> null
@@ -726,16 +728,16 @@ export function loadSourceFor(v: LoadSourceView, sessionPid: number | string | n
 
 // The hygiene slot's load-source chip: `dev` / `dev ↓3` (behind upstream by 3), `dev ▲` (the marketplace is not this repo's directory),
 // `cache 2.36.36 ▲` (a stale cache copy is what loads), `src ? ▲` (unknown). warn = the chip carries ▲ (the renderer picks the warning colour).
-export function hygieneChip(v: LoadSourceView | null, sessionPid: number | string | null = null): { text: string; warn: boolean } | null {
+export function hygieneChip(v: LoadSourceView | null, sessionPid: number | string | null = null, t: T = T_EN): { text: string; warn: boolean } | null {
   if (v === null) return null
   const src = loadSourceFor(v, sessionPid)
   const marketplaceBad = v.flags.includes('marketplace_not_directory') || v.flags.includes('marketplace_not_this_repo')
-  if (src.startsWith('cache:')) return { text: 'cache ' + src.slice('cache:'.length) + ' ' + GS.need_you, warn: true }
+  if (src.startsWith('cache:')) return { text: t('band.src_cache') + ' ' + src.slice('cache:'.length) + ' ' + GS.need_you, warn: true }
   if (src === 'dev') {
     const behind = v.behind_upstream !== null && v.behind_upstream > 0 ? ui.CHIP_LEAD + GT.behind + ui.CHIP_MARK + v.behind_upstream : ''
-    return { text: 'dev' + behind + (marketplaceBad ? ' ' + GS.need_you : ''), warn: marketplaceBad }
+    return { text: t('band.src_dev') + behind + (marketplaceBad ? ' ' + GS.need_you : ''), warn: marketplaceBad }
   }
-  return { text: 'src ' + GS.unknown + ui.CHIP_MARK + GS.need_you, warn: true }
+  return { text: t('band.src_unknown') + ' ' + GS.unknown + ui.CHIP_MARK + GS.need_you, warn: true }
 }
 
 export type Sources = {
@@ -1560,14 +1562,15 @@ export function slotDispatch(live: number, stalled: number): Slot | null {
 }
 
 // `↺ R<n>` (↺ dim) + `  QC ▲` / `  QC ✓`: the round goes at < 120, the QC chip stays down to 80
-export function slotReview(r: ReviewView | null, q: QcView | null): Slot | null {
+export function slotReview(r: ReviewView | null, q: QcView | null, t: T = T_EN): Slot | null {
   const round = reviewRound(r)
-  const chip = qcChip(q)
+  const chip = qcChip(q, t)
   if (round === null && chip === null) return null
   const chips: Seg[][] = []
   if (round !== null) chips.push(ui.chipSegs([sp(GT.round, { dim: true, tag: 'round' })], [sp('R' + round, { tag: 'round' })]))
   // the label stays default text; only the mark carries the colour (the owner's attention is yellow once: the verdict word)
-  if (chip !== null) chips.push(ui.chipSegs([sp(QC_LABEL, { tag: 'qc' })], [sp(chip.slice(QC_LABEL.length + ui.CHIP_MARK.length), { color: chip === QC_LABEL + ui.CHIP_MARK + GS.done ? PALETTE.done : PALETTE.attention, tag: 'qc' })]))
+  const label = t('band.qc')
+  if (chip !== null) chips.push(ui.chipSegs([sp(label, { tag: 'qc' })], [sp(chip.slice(label.length + ui.CHIP_MARK.length), { color: chip === label + ui.CHIP_MARK + GS.done ? PALETTE.done : PALETTE.attention, tag: 'qc' })]))
   return { id: 'review', segs: ui.chipsJoin(chips) }
 }
 
@@ -1582,10 +1585,11 @@ export function slotDecisions(d: DecisionsView | null): Slot | null {
   return { id: 'decisions', segs: ui.chipsJoin(parts) }
 }
 
-// brain-tier spend vs the cap: warning from 80 % of the cap, error from 100 %
+// brain-tier spend vs the cap: warn and error percents come from the shared contract, judged on the raw ratio
 export function spendColor(brain: number, cap: number): ThemeKey | undefined {
   const ratio = brain / cap // the raw ratio, never a rounded percent: the band slot and the Spend tab judge the same number
-  return ratio >= 1 ? PALETTE.broken : ratio >= 0.8 ? PALETTE.attention : undefined
+  const level = ratioLevel(ratio)
+  return level === 'over' ? PALETTE.broken : level === 'warn' ? PALETTE.attention : undefined
 }
 
 // `▰▰▰▱▱`: filled = round(ratio * n) cells in the state colour, the rest inactive; one tag per width variant
@@ -1602,7 +1606,7 @@ export function slotSpend(s: { brain: number; cap: number } | null): Slot | null
   if (s === null) return null
   const color = spendColor(s.brain, s.cap)
   const c = color === undefined ? {} : { color }
-  const pct = Math.round((s.brain / s.cap) * 100)
+  const pct = floorPercent(s.brain / s.cap)
   return {
     id: 'spend',
     segs: [
@@ -1615,8 +1619,8 @@ export function slotSpend(s: { brain: number; cap: number } | null): Slot | null
 }
 
 // hygieneChip text (`dev ↓ 3`, the arrow chip dim) + `  ⚑ <n>` (n = residueTally(...).judgeCount = what a person must judge, the cleanable entries not counted, n > 0 only; the owner reminder, never dropped)
-export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | null): Slot | null {
-  const chip = hygieneChip(ls)
+export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | null, t: T = T_EN): Slot | null {
+  const chip = hygieneChip(ls, null, t)
   const wt = residue === null ? 0 : residueTally(residue).judgeCount // what the owner has to judge; the cleanable ones are not a reminder
   if (chip === null && wt === 0) return null
   const chips: Seg[][] = []
@@ -1650,12 +1654,51 @@ export type BandFacts = {
   fleet?: { stuck: number; running: number; waiting: number } | null
   nowMs: number
 }
-// Slots in priority order; an empty slot is left out. The fleet slot sits immediately after the verdict.
+// The collapsed row keeps action fields. Progress (live count, position, unit, review round, decisions), spend and the quota windows leave it.
 export function bandSlots(f: BandFacts, t: T = T_EN): Slot[] {
   return [
-    slotVerdict(f.verdict, f.reason ?? null), slotFleet(f.fleet, t), slotPosition(f.marker, f.nowMs, f.stage ?? null), slotUnit(f.marker, t), slotDispatch(f.live, f.stalled),
-    slotReview(f.review, f.qc), slotDecisions(f.decisions), slotSpend(f.spend), slotQuota(f.quota), slotHygiene(f.loadSource, f.residue),
+    slotVerdict(f.verdict, f.reason ?? null), slotFleet(f.fleet, t), slotDispatch(0, f.stalled), slotReview(null, f.qc, t), slotHygiene(f.loadSource, f.residue, t),
   ].filter((s): s is Slot => s !== null)
+}
+
+// Compact position token for the published file: `size[!]·level·stage`. No age, no unit label.
+export function positionToken(m: MarkerView | null): string | null {
+  if (m === null || m.stage === null) return null
+  const head = [m.size === null ? null : m.size + (m.urgent ? '!' : ''), m.level].filter((x): x is string => x !== null).join('·')
+  return head === '' ? m.stage : head + '·' + m.stage
+}
+
+export function bandFactsDocument(input: {
+  written_at_ms: number
+  session_id: string
+  live: number
+  marker: MarkerView | null
+  review: ReviewView | null
+  decisions: number
+  spend: { brain: number; cap: number } | null
+}): {
+  v: 1
+  written_at_ms: number
+  session_id: string
+  contract: typeof BAND_CONTRACT
+  progress: { live_dispatches: number; position: string | null; unit: string | null; review_round: number | null; decisions_open: number }
+  spend: { usd: number | null; cap_usd: number | null }
+} {
+  const unit = input.marker?.unit ?? null
+  return {
+    v: 1,
+    written_at_ms: input.written_at_ms,
+    session_id: input.session_id,
+    contract: { ...BAND_CONTRACT },
+    progress: {
+      live_dispatches: input.live,
+      position: positionToken(input.marker),
+      unit: unit === null ? null : unit.index + '/' + unit.total,
+      review_round: reviewRound(input.review),
+      decisions_open: input.decisions,
+    },
+    spend: input.spend === null ? { usd: null, cap_usd: null } : { usd: input.spend.brain, cap_usd: input.spend.cap },
+  }
 }
 
 export const BAND_SEP = ui.CHIP_MARK + GT.bandSep + ui.CHIP_MARK
@@ -1665,27 +1708,26 @@ export const BAND_ICON = GT.info
 export const BAND_INFO_LABEL = BAND_ICON + ' '
 export type BandLayout = { segs: Seg[]; text: string; width: number }
 
-// slots in one group read as one thing (single space between): the dispatch count with the review round and QC chip; every other slot is its own group; groups are separated by ` │ `
-const GROUP: Record<SlotId, number> = { verdict: 0, fleet: 1, position: 2, unit: 3, dispatch: 4, review: 4, decisions: 5, spend: 6, quota: 7, hygiene: 8 }
+// slots in one group read as one thing (CHIP_GAP between): stalled dispatch with the QC chip. Other collapsed slots are their own groups.
+// A slot the collapsed row no longer draws still gets a unique group, so a direct layoutBand of those slots does not join them.
+const GROUP: Partial<Record<SlotId, number>> = { verdict: 0, fleet: 1, dispatch: 2, review: 2, hygiene: 3 }
+const groupOf = (id: SlotId): number => GROUP[id] ?? 20 + id.charCodeAt(0)
 const REASON_MAX = 48
 const REASON_MIN = 8
 
-// The width table (cumulative per band; the line is ONE row, groups separated by ` │ `, items inside a group by a space):
-//   >= 160  everything: stage walk, 10-cell spend bar + %, the verdict's reason phrase, load-source chip, age, families, decisions, `5h N% 7d N%`
-//   120-159 verdict, `size·level·stage`, unit bar + k/N, `● ⊘ ↺R QC`, `$N` + 5-cell bar, `5h N% 7d N%`, `⚑N`
-//   80-119  verdict, unit bar, `●N QC▲`, `$` + 3-cell bar, the most used quota window, `⚑N`
-//   < 80    verdict, `●N ⊘N`, `⚑N`
-// Then, if the line still does not fit: the position's stage text is cut with `…`, then the unit bar, the ⊘ count and the ● count go, then the
-// verdict WORD is shortened (the glyph stays). Never the verdict glyph, the ⓘ or `⚑N` (the owner reminder survives narrowing).
+// The collapsed row (PM 2026-11-16): verdict, fleet, stalled ⊘, QC, hygiene (source chip and ⚑N). The reason phrase is for >= 160.
+// The source chip is not dropped. QC is not dropped. A caller that still passes position, unit, spend, quota or decisions gets the old width tags.
+// Then, if the line still does not fit: the position's stage text is cut with `…`, then a directly passed unit slot goes, then the
+// verdict WORD is shortened (the glyph stays). Never the verdict glyph, the ⓘ, the stalled count, QC or `⚑N`.
 export function layoutBand(slots: Slot[], columns: number): BandLayout {
   const drop = new Set<string>()
   if (columns >= 160) { drop.add('dot'); drop.add('bar5'); drop.add('bar3') }
   else {
-    for (const x of ['chip', 'reason', 'walk', 'pct', 'bar10', 'age', 'fam', 'decisions']) drop.add(x)
+    for (const x of ['reason', 'walk', 'pct', 'bar10', 'age', 'fam', 'decisions']) drop.add(x)
     if (columns >= 120) drop.add('bar3')
     else {
       for (const x of ['bar5', 'kn', 'round', 'amt', 'position', 'qx']) drop.add(x)
-      if (columns < 80) for (const x of ['unit', 'review', 'spend', 'quota']) drop.add(x)
+      if (columns < 80) for (const x of ['unit', 'spend', 'quota']) drop.add(x)
     }
   }
   const rs: { text: string | null } = { text: null }
@@ -1698,7 +1740,7 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   const join = (list: Slot[]): Seg[] => {
     const out: Seg[] = []
     list.forEach((s, i) => {
-      if (i > 0) out.push(GROUP[s.id] === GROUP[list[i - 1].id] ? ui.gapSeg(ui.CHIP_GAP) : sp(BAND_SEP, { color: PALETTE.structure }))
+      if (i > 0) out.push(groupOf(s.id) === groupOf(list[i - 1].id) ? ui.gapSeg(ui.CHIP_GAP) : sp(BAND_SEP, { color: PALETTE.structure }))
       out.push(...s.segs.map(g => ({ ...g, slot: s.id })))
     })
     out.push(sp(BAND_SEP, { color: PALETTE.structure }))
@@ -1710,11 +1752,9 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   if (widthOf(segs) > columns && kept.some(s => s.id === 'quota')) { kept = kept.filter(s => s.id !== 'quota'); segs = join(kept) }
   let over = widthOf(segs) - columns
   if (over > 0) segs = segs.map(g => (g.tag === 'stage' ? { ...g, text: truncateToWidth(g.text, Math.max(2, displayWidth(g.text) - over)) } : g))
-  // below the width table: still too long -> drop the unit bar, then the ⊘ stalled count, then the ● count (a slot left empty goes with its separator)
+  // below the width table: a directly passed unit slot goes. Stalled, QC and hygiene stay.
   const fallbacks: ((s: Slot) => Slot | null)[] = [
     s => (s.id === 'unit' ? null : s),
-    s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'stalled') } : s),
-    s => (s.id === 'dispatch' ? { ...s, segs: s.segs.filter(g => g.tag !== 'live') } : s),
   ]
   for (const f of fallbacks) {
     if (widthOf(segs) <= columns) break
@@ -1746,8 +1786,6 @@ export const BAND_NARROW_STEPS: readonly (readonly BandNarrowId[])[] = [
   ['fleetRun', 'fleetWord'],
   ['trend'],
   ['speed'],
-  ['quota'],
-  ['bar10', 'bar5', 'bar3', 'pct'],
 ]
 
 const SPEED_DROP: ReadonlySet<BandNarrowId> = new Set(['pet', 'trend', 'speed'])
@@ -1783,7 +1821,7 @@ export function fittedBandWidth(segWidth: number, speed: readonly ForgeSegment[]
 }
 
 // The row (register.ts) shortens the segs until `fittedBandWidth` fits the room. layoutBandLine does not: its last candidate is returned even when it
-// overflows, so a pure caller at width 20 still has the verdict, the stuck count and the spend.
+// overflows, so a pure caller at width 20 still has the verdict and the action fields that fit.
 export function shrinkToFitted(segs: readonly Seg[], speed: readonly ForgeSegment[] | null, more: boolean, room: number): Seg[] {
   const out = segs.map(s => ({ ...s }))
   while (fittedBandWidth(segTextWidth(out), speed, more) > room && out.length > 0) {
@@ -1798,13 +1836,10 @@ export function shrinkToFitted(segs: readonly Seg[], speed: readonly ForgeSegmen
 }
 
 // `columns` is the room for the indicator, the ⓘ, the speed label and, when `more` is set, the `›` cell (the caller already removed the tab strip and the one-cell gap).
-// The width table is shown at least 120 columns, so it cannot hide `$N`, the 5-cell bar or the quota window before the steps above take them; from 160 up it
-// sees the real width, so the 10-cell bar and the percent appear. A candidate whose verdict word was shortened is refused and the next step is tried.
+// The width table is shown at least 120 columns. A candidate whose verdict word was shortened is refused and the next step is tried.
 // The stuck count is not a step, so it is still on the line when every step has been applied.
-// An active session also carries position, unit, dispatch, review, decisions and hygiene. Those are outside the narrow steps, and the width table still lays
-// them out at 120 columns, so after every step the line can still be wider than `columns`. They are then dropped one at a time, lowest priority first, and the
-// steps run again (a dropped slot frees room, so the speed label can come back). Verdict, fleet and spend stay. The last candidate is returned even when it still overflows.
-const BAND_OPTIONAL: readonly SlotId[] = ['hygiene', 'decisions', 'review', 'dispatch', 'unit', 'position']
+// Verdict, fleet, stalled dispatch, QC and hygiene stay on the collapsed row. Nothing else is optional. The last candidate is returned even when it still overflows.
+const BAND_OPTIONAL: readonly SlotId[] = []
 export function layoutBandLine(slots: readonly Slot[], columns: number, speed: readonly ForgeSegment[] | null, steps: readonly (readonly BandNarrowId[])[] = BAND_NARROW_STEPS, more = false): BandLineLayout {
   const verdict = slots.find(s => s.id === 'verdict')?.segs[0]?.text ?? null
   const bandCols = columns >= 160 ? columns : Math.max(columns, 120)
@@ -1841,8 +1876,8 @@ export function plainBandText(reason: string, columns: number): string {
 export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', fleet: 'fleet', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'decide', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
-export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id]
+const SLOT_TAB: Partial<Record<SlotId, PaneTab>> = { verdict: 'now', fleet: 'fleet', dispatch: 'dispatch', review: 'review', hygiene: 'hygiene' }
+export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id] ?? (id === 'quota' || id === 'spend' ? 'spend' : id === 'decisions' ? 'decide' : 'now')
 export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.limits : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
@@ -2260,14 +2295,14 @@ export function readAccount(text: string | null): AccountView | null | undefined
 }
 
 // the shown percent is floored, so text and colour agree (79.9 shows 79% uncoloured) and 100% means the limit is reached
-const quotaPct = (pct: number): number => Math.floor(pct)
-// used share of a window: warning from 80 %, error from 100 % (the spend slot's thresholds)
+const quotaPct = (pct: number): number => floorPercent(pct / 100)
+// used share of a window: the spend slot's thresholds, from the shared contract
 const quotaColor = (pct: number): ThemeKey | undefined => spendColor(pct, 100)
-const QUOTA_SHORT: Record<string, string> = { five_hour: '5h', seven_day: '7d', spend_limit: 'cap' } // not `$`: the spend slot's `$60` sits beside it
+const QUOTA_ID: Record<string, string> = { five_hour: 'band.q_5h', seven_day: 'band.q_7d', spend_limit: 'band.q_cap' } // not `$`: the spend slot's `$60` sits beside it
 
 // `5h 42% 7d 18%`: the known windows only, each label dim and its percent coloured; below 120 columns only the most used window stays
-export function slotQuota(q: readonly QuotaWindow[] | null | undefined): Slot | null {
-  const known = (q ?? []).filter(w => QUOTA_SHORT[w.kind] !== undefined)
+export function slotQuota(q: readonly QuotaWindow[] | null | undefined, t: T = T_EN): Slot | null {
+  const known = (q ?? []).filter(w => QUOTA_ID[w.kind] !== undefined)
   if (known.length === 0) return null
   const top = known.reduce((m, w) => (w.pct > m.pct ? w : m), known[0])
   const segs: Seg[] = []
@@ -2275,7 +2310,7 @@ export function slotQuota(q: readonly QuotaWindow[] | null | undefined): Slot | 
     const tag = w === top ? undefined : 'qx'
     const c = quotaColor(w.pct)
     if (segs.length > 0) segs.push(sp(' ', { tag: 'qx' })) // a separator only matters while two windows show
-    segs.push(sp(QUOTA_SHORT[w.kind] + ' ', { dim: true, ...(tag === undefined ? {} : { tag }) }), sp(quotaPct(w.pct) + '%', { ...(c === undefined ? {} : { color: c }), ...(tag === undefined ? {} : { tag }) }))
+    segs.push(sp(t(QUOTA_ID[w.kind]) + ' ', { dim: true, ...(tag === undefined ? {} : { tag }) }), sp(quotaPct(w.pct) + '%', { ...(c === undefined ? {} : { color: c }), ...(tag === undefined ? {} : { tag }) }))
   }
   return { id: 'quota', segs }
 }

@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# Tip verification: the rail re-runs acceptance at the committed tip.
+# A worker that claims green on a failing command must not be reported done.
+. "$(dirname "$0")/lib.sh"
+
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
+unset GIT_CONFIG_COUNT GIT_ALLOW_PROTOCOL
+for _git_cfg_i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  unset "GIT_CONFIG_KEY_${_git_cfg_i}" "GIT_CONFIG_VALUE_${_git_cfg_i}"
+done
+unset _git_cfg_i
+
+SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
+export DISPATCH_QUIET=1
+export AUTOPILOT_GROK_EFFORT_PROBE=0
+mkdir -p "$TEST_TMP/engine-capability"
+export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"
+EMPTY_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"
+mkdir -p "$EMPTY_SESSION_MODE_DIR"
+export AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR"
+
+SBX="$TEST_TMP/repo"
+mkdir -p "$SBX"
+git -C "$SBX" init -q -b develop
+git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+
+AGY_FIXTURE_HELPER="$TEST_TMP/emit-agy-envelope"
+cat > "$AGY_FIXTURE_HELPER" <<'EOF'
+#!/usr/bin/env bash
+response="${1:-self-report: DONE}"
+RESPONSE="$response" node -e '
+  process.stdout.write(JSON.stringify({
+    conversation_id: "fixture",
+    duration_seconds: 1,
+    num_turns: 1,
+    response: process.env.RESPONSE,
+    status: "SUCCESS",
+    usage: { cache_read_tokens: 0, input_tokens: 1, output_tokens: 1, thinking_tokens: 0, total_tokens: 2 }
+  }));
+'
+EOF
+chmod +x "$AGY_FIXTURE_HELPER"
+export AGY_FIXTURE_HELPER
+
+MARKER="$TEST_TMP/stub-ran"
+STUB="$TEST_TMP/agy-commit"
+cat > "$STUB" <<EOF
+#!/usr/bin/env bash
+echo ran > "$MARKER"
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: tip"
+"\$AGY_FIXTURE_HELPER" "self-report: all green"
+exit 0
+EOF
+chmod +x "$STUB"
+make_agy_stub_versioned "$STUB"
+
+PROMPT_PLAIN="$TEST_TMP/prompt-plain.txt"
+printf 'edit the tree\n' > "$PROMPT_PLAIN"
+PROMPT_ACC="$TEST_TMP/prompt-acc.txt"
+cat > "$PROMPT_ACC" <<'EOF'
+edit the tree
+
+## Acceptance
+`bash -c 'exit 3'`
+`tip_verify.status` is not a command.
+
+## Notes
+done
+EOF
+
+last_json() { printf '%s\n' "$1" | grep '^{' | tail -n 1; }
+jget() {
+  printf '%s' "$1" | node -e '
+let s = "";
+process.stdin.on("data", (d) => { s += d; });
+process.stdin.on("end", () => {
+  let o;
+  try { o = JSON.parse(s); } catch (e) { process.stdout.write(""); return; }
+  let c = o;
+  for (const k of process.argv[1].split(".")) {
+    if (c === null || c === undefined) { c = ""; break; }
+    c = c[k];
+  }
+  if (c === undefined || c === null) process.stdout.write("");
+  else if (typeof c === "object") process.stdout.write(JSON.stringify(c));
+  else process.stdout.write(String(c));
+});
+' "$2"
+}
+
+# run_case <branch> [extra args...] — prompt is $CASE_PROMPT (default plain).
+run_case() {
+  local br="$1"; shift
+  local prompt="${CASE_PROMPT:-$PROMPT_PLAIN}"
+  EXIT=0
+  OUT="$(cd "$SBX" && "$SCRIPT" --branch "$br" --prompt-file "$prompt" --agy-bin "$STUB" "$@" 2>&1)" || EXIT=$?
+  J="$(last_json "$OUT")"
+}
+
+# --- no source: refuse before the implementation stub runs ---
+rm -f "$MARKER"
+run_case tv-none
+assert_eq "$EXIT" "2" "no source exits 2"
+assert_eq "$(jget "$J" status)" "precondition_failed" "no source is precondition_failed"
+assert_contains "$OUT" "--verify-cmd" "no source names --verify-cmd"
+assert_contains "$OUT" "## Acceptance" "no source names ## Acceptance"
+assert_contains "$OUT" "## Test Command" "no source names ## Test Command"
+assert_contains "$OUT" "--no-verify-tip" "no source names --no-verify-tip"
+assert_file_absent "$MARKER" "no source: runner stub never ran"
+
+# --- flag true: success, tip_verify pass, commit is the branch tip ---
+run_case tv-true --verify-cmd true
+assert_eq "$EXIT" "0" "true exits 0"
+assert_eq "$(jget "$J" status)" "committed" "true status committed (success)"
+assert_eq "$(jget "$J" tip_verify.status)" "pass" "true tip_verify.status pass"
+TIP="$(git -C "$SBX" rev-parse refs/heads/tv-true)"
+assert_eq "$(jget "$J" commit)" "$TIP" "true commit is the branch tip"
+assert_eq "$(jget "$J" tip_verify.commit)" "$TIP" "true tip_verify.commit is the branch tip"
+assert_eq "$(jget "$J" tip_verify.source)" "flag" "true source flag"
+assert_file_exists "$MARKER" "true: runner stub ran"
+
+# --- flag false: verify_failed, non-zero exit, rc 1 ---
+run_case tv-false --verify-cmd false
+assert_neq "$EXIT" "0" "false exits non-zero"
+assert_eq "$EXIT" "3" "false exits 3"
+assert_eq "$(jget "$J" status)" "verify_failed" "false status verify_failed"
+assert_eq "$(jget "$J" tip_verify.status)" "fail" "false tip_verify.status fail"
+assert_eq "$(jget "$J" tip_verify.commands.0.rc)" "1" "false records rc 1"
+FALSE_TIP="$(git -C "$SBX" rev-parse refs/heads/tv-false)"
+assert_eq "$(jget "$J" tip_verify.commit)" "$FALSE_TIP" "false commit stays on the branch"
+
+# --- hydrogen: worker commits and claims green; brief command exits 3 ---
+CASE_PROMPT="$PROMPT_ACC"
+run_case tv-hydrogen
+CASE_PROMPT="$PROMPT_PLAIN"
+assert_neq "$EXIT" "0" "hydrogen exits non-zero"
+assert_eq "$(jget "$J" status)" "verify_failed" "hydrogen status verify_failed"
+assert_eq "$(jget "$J" tip_verify.source)" "brief" "hydrogen source brief"
+assert_eq "$(jget "$J" tip_verify.commands.0.cmd)" "bash -c 'exit 3'" "hydrogen command text"
+assert_eq "$(jget "$J" tip_verify.commands.0.rc)" "3" "hydrogen records rc 3"
+assert_eq "$(jget "$J" tip_verify.commands.1.cmd)" "" "non-command span is not a command"
+
+# --- repo config Test Command, no flag, no Acceptance ---
+mkdir -p "$SBX/.claude"
+cat > "$SBX/.claude/quality-gate-config.md" <<'EOF'
+# repo default
+## Test Command
+# not this
+true
+
+## Later
+false
+EOF
+run_case tv-repo
+assert_eq "$EXIT" "0" "repo_config exits 0"
+assert_eq "$(jget "$J" status)" "committed" "repo_config status committed"
+assert_eq "$(jget "$J" tip_verify.status)" "pass" "repo_config pass"
+assert_eq "$(jget "$J" tip_verify.source)" "repo_config" "repo_config source"
+
+# --- explicit skip ---
+run_case tv-skip --no-verify-tip
+assert_eq "$EXIT" "0" "skip exits 0"
+assert_eq "$(jget "$J" status)" "committed" "skip status committed"
+assert_eq "$(jget "$J" tip_verify)" "skipped_by_flag" "skip records skipped_by_flag"
+
+# --- timeout ---
+START="$(date +%s)"
+run_case tv-timeout --verify-cmd 'sleep 5' --verify-timeout 1
+ELAPSED=$(( $(date +%s) - START ))
+assert_neq "$EXIT" "0" "timeout exits non-zero"
+assert_eq "$(jget "$J" status)" "verify_failed" "timeout dispatch status verify_failed"
+assert_eq "$(jget "$J" tip_verify.status)" "timeout" "timeout tip_verify.status timeout"
+[ "$ELAPSED" -lt 30 ] || fail "timeout case took ${ELAPSED}s (timeout did not fire)"
+[ "$ELAPSED" -lt 30 ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+
+# --- negative control: ignore a failing rc → the false case goes wrongly green ---
+FARM="$TEST_TMP/farm-tip"
+rm -rf "$FARM"
+mkdir -p "$FARM"
+for e in "$REPO_ROOT"/* "$REPO_ROOT"/.[!.]*; do
+  [ -e "$e" ] || continue
+  [ "$(basename "$e")" = .git ] && continue
+  ln -s "$e" "$FARM/$(basename "$e")"
+done
+real="$(readlink -f "$FARM/scripts")"
+rm "$FARM/scripts"
+mkdir "$FARM/scripts"
+for e in "$real"/* "$real"/.[!.]*; do
+  [ -e "$e" ] || continue
+  ln -s "$e" "$FARM/scripts/$(basename "$e")"
+done
+rm "$FARM/scripts/dispatch-hetero.sh"
+sed_mutant "$SCRIPT" "$FARM/scripts/dispatch-hetero.sh" \
+  's/if \[ "\$tip_verify_rc" -ne 0 \]; then/if false; then/' \
+  || fail "negative control: sed did not change the gate"
+chmod +x "$FARM/scripts/dispatch-hetero.sh"
+BROKEN="$FARM/scripts/dispatch-hetero.sh"
+grep -q 'if false; then' "$BROKEN" || fail "negative control: broken rail missing if false"
+grep -q 'if \[ "\$tip_verify_rc" -ne 0 \]; then' "$SCRIPT" \
+  || fail "negative control: original gate was modified"
+SAVED_SCRIPT="$SCRIPT"
+SCRIPT="$BROKEN"
+run_case tv-neg --verify-cmd false
+SCRIPT="$SAVED_SCRIPT"
+if [ "$(jget "$J" status)" = "verify_failed" ]; then
+  fail "negative control: false case stayed verify_failed (assertion did not go red)"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+assert_eq "$(jget "$J" status)" "committed" "negative control: ignoring rc reports committed"
+assert_eq "$EXIT" "0" "negative control: ignoring rc exits 0"
+assert_eq "$(jget "$J" tip_verify.status)" "fail" "negative control: command rc still recorded as fail"
+
+finalize_test

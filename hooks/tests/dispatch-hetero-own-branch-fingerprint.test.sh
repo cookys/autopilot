@@ -75,7 +75,7 @@ chmod +x "$STUB"; make_agy_stub_versioned "$STUB"
 run() {
   # (env DISPATCH_QUIET is inherited) # branch mutate [extra args]
   local br="$1" mu="$2"; shift 2
-  (cd "$SBX" && env MAIN_SBX="$SBX" MUTATE="$mu" OTHER_WT="$TEST_TMP/other-wt" "$SCRIPT" --base "${BASE_FULL:0:9}" --branch "$br" --prompt-file "$PROMPT" --agy-bin "$STUB" "$@" 2>&1)
+  (cd "$SBX" && env MAIN_SBX="$SBX" MUTATE="$mu" OTHER_WT="$TEST_TMP/other-wt" "$SCRIPT" --no-verify-tip --base "${BASE_FULL:0:9}" --branch "$br" --prompt-file "$PROMPT" --agy-bin "$STUB" "$@" 2>&1)
 }
 
 git -C "$SBX" branch pre-existing

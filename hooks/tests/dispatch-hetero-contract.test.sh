@@ -131,7 +131,7 @@ run_dispatch() {
         AUTOPILOT_SESSION_MODE_DIR="$SESSION_MODE_DIR" \
         RUN_MARKER_PATH="$RUN_MARKER_PATH" \
         TMPDIR="$CASE_TMP" \
-        "$REPO_ROOT/scripts/dispatch-hetero.sh" \
+        "$REPO_ROOT/scripts/dispatch-hetero.sh" --no-verify-tip \
             --branch "$branch_name" \
             --prompt-file "$TEST_TMP/prompt-$branch_name.txt" \
             --runner codex \

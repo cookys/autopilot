@@ -961,6 +961,7 @@ fs.mkdirSync(path.join(temp, 'off-tmp'), { recursive: true });
 resetRunner();
 const offNoMarker = spawnSync('bash', [
   path.join(root, 'scripts', 'dispatch-hetero.sh'),
+  '--no-verify-tip',
   '--branch', 'feat/off-compat',
   '--base', offBase,
   '--prompt-file', promptFile,

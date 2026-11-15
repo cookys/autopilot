@@ -102,7 +102,7 @@ run_guard_case() {
   local suffix="$1" model="$2"
   ( cd "$SBX" && PATH="$POISON_PATH" \
     AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-    "$SCRIPT" --branch "t-cursor-guard-$suffix" --prompt-file "$PROMPT" \
+    "$SCRIPT" --no-verify-tip --branch "t-cursor-guard-$suffix" --prompt-file "$PROMPT" \
     --runner auto --model "$model" 2>&1 )
 }
 
@@ -181,7 +181,7 @@ assert_not_contains "$OUT" '"runner": "agy"' \
 # BEFORE runner resolution — here, a missing --branch — must ALSO emit
 # runner: unresolved. Proves the fix is general, not cursor-special-cased.
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-low 2>&1)"; EXIT=$?
+  "$SCRIPT" --no-verify-tip --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-low 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing --branch → exit 2"
 assert_contains "$OUT" "--branch is required" "missing --branch precondition message"
 assert_contains "$OUT" '"runner": "unresolved"' \
@@ -223,7 +223,7 @@ else
 fi
 UNRESOLVABLE_CODEX_BIN="codex-definitely-not-installed-9f3c7a1b"
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch t-cursor-guard-non-over-capture --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch t-cursor-guard-non-over-capture --prompt-file "$PROMPT" \
   --runner auto --model gpt-5.2 --codex-bin "$UNRESOLVABLE_CODEX_BIN" 2>&1)"; EXIT=$?
 printf '%s\n' "$OUT" >> "$FULL_LOG"
 assert_eq "2" "$EXIT" "auto + gpt-5.2 → exit 2 (codex precondition, not the cursor guard)"
@@ -273,7 +273,7 @@ fi
 # 7. Negative: --cursor-fast with a non-cursor runner → die_precondition.
 # ---------------------------------------------------------------------------
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch t-cursor-fast-wrong-runner --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch t-cursor-fast-wrong-runner --prompt-file "$PROMPT" \
   --runner grok --model grok-4.5 --cursor-fast 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "--cursor-fast with --runner grok → exit 2"
 assert_contains "$OUT" "--cursor-fast applies only to --runner cursor" \
@@ -284,7 +284,7 @@ assert_contains "$OUT" "--cursor-fast applies only to --runner cursor" \
 # (the mapper is bypassed on that path, so the flag would otherwise no-op).
 # ---------------------------------------------------------------------------
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch t-cursor-fast-full-id --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch t-cursor-fast-full-id --prompt-file "$PROMPT" \
   --runner cursor --model cursor-grok-4.6-high --cursor-fast 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "--cursor-fast with a full-id --model → exit 2"
 assert_contains "$OUT" "--cursor-fast applies only when --model names a family alias" \
@@ -377,7 +377,7 @@ CURSOR_E2E_RECORD_A="$TEST_TMP/cursor-e2e-received-a.txt"
 : > "$CURSOR_E2E_RECORD_A"
 OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_A" \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch t-cursor-e2e-alias --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch t-cursor-e2e-alias --prompt-file "$PROMPT" \
   --runner cursor --model grok46 --effort low --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "cursor e2e (family alias, non-fast): exit 0"
 assert_contains "$OUT" '"status": "committed"' "cursor e2e (family alias, non-fast): status committed"
@@ -433,7 +433,7 @@ CURSOR_E2E_RECORD_B="$TEST_TMP/cursor-e2e-received-b.txt"
 : > "$CURSOR_E2E_RECORD_B"
 OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_B" \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch t-cursor-e2e-alias-fast --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch t-cursor-e2e-alias-fast --prompt-file "$PROMPT" \
   --runner cursor --model grok46 --effort low --cursor-fast --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "cursor e2e (family alias, --cursor-fast): exit 0"
 assert_contains "$OUT" '"status": "committed"' "cursor e2e (family alias, --cursor-fast): status committed"
@@ -447,7 +447,7 @@ CURSOR_E2E_RECORD_C="$TEST_TMP/cursor-e2e-received-c.txt"
 : > "$CURSOR_E2E_RECORD_C"
 OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_C" \
   AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --branch t-cursor-e2e-full-id --prompt-file "$PROMPT" \
+  "$SCRIPT" --no-verify-tip --branch t-cursor-e2e-full-id --prompt-file "$PROMPT" \
   --runner cursor --model cursor-grok-4.6-high --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "cursor e2e (full-id passthrough): exit 0"
 assert_contains "$OUT" '"status": "committed"' "cursor e2e (full-id passthrough): status committed"

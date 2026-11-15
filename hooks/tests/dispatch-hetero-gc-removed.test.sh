@@ -51,14 +51,14 @@ done
 # 3. dispatch-hetero.sh itself fails as a precondition when the project config carries a removed key.
 mkdir -p "$SCRATCH/.claude"
 printf -- '- stale_reaper_age_days: 14\n' > "$SCRATCH/.claude/worktree-teardown-config.md"
-set +e; out="$(cd "$SCRATCH" && bash "$HETERO" --branch t/x --prompt-file "$TEST_TMP/p.txt" 2>&1)"; rc=$?; set -e
+set +e; out="$(cd "$SCRATCH" && bash "$HETERO" --no-verify-tip --branch t/x --prompt-file "$TEST_TMP/p.txt" 2>&1)"; rc=$?; set -e
 assert_neq "$rc" 0 "dispatch with a stale teardown config fails"
 assert_contains "$out" "stale_reaper_age_days" "dispatch names the removed key"
 assert_contains "$out" "worktree-teardown config" "dispatch reports it as a teardown-config precondition"
 
 # 3b. Control: the same call with a clean config does NOT trip the teardown-config check.
 printf -- '- teardown_hook:\n- max_leaf_worktrees_per_root: 4\n' > "$SCRATCH/.claude/worktree-teardown-config.md"
-set +e; out="$(cd "$SCRATCH" && bash "$HETERO" --branch t/x --prompt-file "$TEST_TMP/p.txt" 2>&1)"; set -e
+set +e; out="$(cd "$SCRATCH" && bash "$HETERO" --no-verify-tip --branch t/x --prompt-file "$TEST_TMP/p.txt" 2>&1)"; set -e
 assert_not_contains "$out" "worktree-teardown config" "clean config passes the teardown-config check"
 
 # 4. Surviving seam: clean config resolves, JSON carries no removed fields.
@@ -78,7 +78,7 @@ rm -rf "$state_dir"
 victim="$TEST_TMP/state-dir-victim"; expected='0123456789abcdef'
 printf '%s' "$expected" > "$victim"
 ln -s "$victim" "$state_dir"
-set +e; bash "$HETERO" --help >/dev/null 2>&1; rc=$?; set -e
+set +e; bash "$HETERO" --no-verify-tip --help >/dev/null 2>&1; rc=$?; set -e
 assert_eq "$rc" 2 "symlink orphan state directory fails closed"
 assert_eq "$(cat "$victim")" "$expected" "state-directory validation never modifies symlink victim"
 

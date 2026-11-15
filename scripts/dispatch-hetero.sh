@@ -147,6 +147,18 @@
 #                                               #   frozen_four_tuple: the round's declared
 #                                               #   intent, gated pre-spawn by
 #                                               #   check-blueprint-conformance.js preflight
+#       [--verify-cmd <shell command>]         # repeatable. Re-run this command at the
+#                                               #   committed tip (bash -c). First source
+#                                               #   that yields a command wins; see
+#                                               #   "Tip verification" below.
+#       [--verify-timeout <seconds>]           # per-command tip-verify timeout (positive
+#                                               #   integer; default 1800). GNU timeout's
+#                                               #   exit 124 is recorded as timeout.
+#       [--no-verify-tip]                      # skip tip verification. Result JSON is
+#                                               #   "tip_verify": "skipped_by_flag".
+#                                               #   Refused together with --verify-cmd.
+#                                               #   Ignored under --strict-contract
+#                                               #   (that path does not emit tip_verify).
 #       [--keep-worktree]                      # keep worktree even on success
 #       [--sibling-ref-prefix refs/heads/x/]   # repeatable: a ref namespace the CALLER owns
 #                                              #   (e.g. refs/heads/hands/kr1/). Must start with
@@ -189,7 +201,7 @@
 # OUTPUT: one JSON object on stdout (agent stdout goes to a log file, never
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
-#               | "failure" | "precondition_failed",
+#               | "failure" | "precondition_failed" | "verify_failed",
 #     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"cursor"|"opencode"|"kimi"|"claude-native", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
@@ -228,6 +240,59 @@
 #           main_checkout_mutated and the detach-forced keep); an explicit --keep-worktree lease keeps its own
 #           expiry. repo-residue-sweep.js reap --auto reads these.
 #       2 = precondition failure (nothing was created)
+#       3 = verify_failed (a commit exists and the tree was clean and the agent
+#           exited 0, but a tip-verify command exited non-zero or timed out).
+#           Distinct from 0. The commit stays on the branch for inspection and
+#           the worktree is kept. Not a success.
+#
+# Tip verification (default on; --strict-contract does not use this path and
+# does not emit tip_verify):
+# After the rail commits the worker's edits, and only on the path that would
+# otherwise be status committed, each command is re-run at that commit. The
+# worker's own "green" is not evidence (ADR-0001).
+#
+# Command source, first that yields at least one command:
+#   1. every --verify-cmd <shell command>, in flag order (source "flag");
+#   2. the brief (--prompt-file) ## Acceptance section (source "brief");
+#   3. the consuming checkout's .claude/quality-gate-config.md section
+#      ## Test Command (source "repo_config");
+#   4. none → die_precondition before the worker starts, naming --verify-cmd,
+#      ## Acceptance, and ## Test Command. --no-verify-tip opts out and records
+#      tip_verify:"skipped_by_flag" (no commands run).
+#
+# Acceptance extraction (deterministic; the original brief, before skill-pack):
+#   The section is the lines after a line matching ^## Acceptance[[:space:]]*$
+#   until the next line matching ^##[[:space:]] or EOF. A longer heading
+#   (## Acceptance criteria) does not open the section.
+#   A line whose trim starts with ``` opens or closes a fence (```bash counts).
+#   Inside a fence, each later line until the closing fence is a candidate;
+#   the fence lines themselves are not, and a fenced line is not also scanned
+#   for inline spans.
+#   Outside fences, every inline span matching `([^`\n]+)` is a candidate.
+#   A candidate is kept when, after trim, it is non-empty, does not start with
+#   #, and its first whitespace-separated token is executable-looking: it
+#   starts with ./ or ../ or /, OR it matches ^[A-Za-z][A-Za-z0-9_+-]*$
+#   (no dot, so tip_verify.status is not a command; true, false, sleep, bash,
+#   cargo, npm, node, make, pytest, go, env, timeout match).
+#   Kept text is the trimmed candidate, in document order.
+#   ## Test Command: lines after ^## Test Command[[:space:]]*$ until the next
+#   ^##[[:space:]] or EOF. The first trimmed non-empty line that does not start
+#   with # is the whole command (no executable-looking filter).
+#
+# Run: `timeout <secs> bash -c <cmd>` in the dispatch worktree, stdin from
+# /dev/null, environment without AUTOPILOT_SESSION_ID. --verify-timeout is a
+# positive integer (default 1800). GNU timeout exit 124, or a spawn error
+# ETIMEDOUT, is tip_verify status "timeout" (a command that itself exits 124
+# is also recorded as timeout). Any other non-zero rc is "fail". All commands
+# are recorded. If any command times out, tip_verify.status is "timeout"; else
+# if any rc is non-zero, "fail"; else "pass". A missing `timeout` binary is
+# fail with rc 127. Result JSON, when this path runs:
+#   "tip_verify": { "status": "pass"|"fail"|"timeout", "commit": "<sha>",
+#     "source": "flag"|"brief"|"repo_config",
+#     "commands": [ { "cmd", "rc", "duration_s", "tail" } ] }
+#   tail is the last 40 lines of stdout followed by stderr (one trailing empty
+#   line from a final newline is dropped). duration_s is integer seconds.
+# Any non-zero rc or timeout → dispatch status verify_failed, exit 3.
 
 set -uo pipefail
 
@@ -460,6 +525,14 @@ STRICT_REQUIRED_CHANGE_PATHS=()
 STRICT_POSTCHECK_OK=0
 STRICT_POSTCHECK_STATUS=""
 STRICT_POSTCHECK_ERROR=""
+# Tip verification (default on). Arrays exist before detach's declare -p.
+NO_VERIFY_TIP=0
+VERIFY_TIMEOUT=1800
+VERIFY_CMDS=()
+TIP_VERIFY_SKIP=0
+TIP_VERIFY_SOURCE=""
+TIP_VERIFY_CMDS_JSON=""
+TIP_VERIFY_RESULT_JSON=""
 # ORPHAN_LOG must be set BEFORE the INT/TERM trap is armed (round-2 MiniMax §2f) so a
 # trap firing mid-run appends to a real path instead of an undefined one. Keep the
 # predictable log and lock inside a private per-user directory: shared /tmp names
@@ -1118,9 +1191,13 @@ NODE
   [ "${SANDBOX:-off}" = "bwrap" ] && sandbox_fields=", \"sandbox\": $(sandbox_json), \"sandbox_blocked_writes\": ${SANDBOX_BLOCKED:-0}, \"sandbox_blocked_samples\": ${SANDBOX_BLOCKED_SAMPLES:-[]}"
   local fell_back_fields=""
   fell_back_fields="$(fell_back_json_suffix)"
+  local tip_verify_fields=""
+  if [ -n "${TIP_VERIFY_RESULT_JSON:-}" ]; then
+    tip_verify_fields=", \"tip_verify\": ${TIP_VERIFY_RESULT_JSON}"
+  fi
   hetero_log_fallback "$1"
   local _emit_json
-  _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s }\n' \
+  _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -1131,7 +1208,7 @@ NODE
     "$run_id_json" "$usage_json" "$num_turns_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields")"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields" "$probe_fields" "$sandbox_fields$fell_back_fields" "$tip_verify_fields")"
   printf '%s\n' "$_emit_json"
   # dispatch_usage/1 ledger row (never affects the result or the exit code; see lib/dispatch-usage.js).
   printf '%s' "$_emit_json" | node "$SELF_DIR/lib/dispatch-usage.js" append --from-result - --role "${AUTOPILOT_DISPATCH_ROLE:-implementer}" \
@@ -2533,6 +2610,13 @@ while [ $# -gt 0 ]; do
     --cursor-fast) CURSOR_FAST=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
+    --verify-cmd)
+      [ $# -ge 2 ] && [ -n "${2:-}" ] || die_precondition "--verify-cmd requires a non-empty shell command"
+      VERIFY_CMDS+=("$2"); shift 2 ;;
+    --verify-timeout)
+      [ $# -ge 2 ] && [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die_precondition "--verify-timeout requires a positive integer number of seconds"
+      VERIFY_TIMEOUT="$2"; shift 2 ;;
+    --no-verify-tip) NO_VERIFY_TIP=1; shift ;;
     --conformance-intent) CONFORMANCE_INTENT_FILE="${2:-}"; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
     --sibling-ref-prefix)
@@ -2574,6 +2658,10 @@ while [ $# -gt 0 ]; do
     *) die_precondition "unknown argument: $1" ;;
   esac
 done
+
+if [ "$NO_VERIFY_TIP" -eq 1 ] && [ "${#VERIFY_CMDS[@]}" -gt 0 ]; then
+  die_precondition "--no-verify-tip cannot be combined with --verify-cmd"
+fi
 
 # Test double without an isolated store (2026-10-19). A --*-bin whose realpath is
 # not the PATH default, with neither ENGINE_CAPABILITY_DIR nor ENGINE_CAPABILITY_FILE
@@ -3451,10 +3539,223 @@ if [ -n "$CONTINUATION_CHECKPOINT" ] || [ -n "$CONTINUATION_DURABLE" ] \
     _cont_hb_json _cont_hb_st _cont_hb_rc _cont_wo_claimed _cont_root _cont_common
 fi
 
+# resolve_tip_verify_commands — pick the command list before the worker starts.
+# Strict contract keeps its own acceptance path and emits no tip_verify field.
+# Defined above the call: bash runs this file top to bottom.
+resolve_tip_verify_commands() {
+  if [ "${STRICT_CONTRACT:-0}" -eq 1 ]; then
+    return 0
+  fi
+  if [ "${NO_VERIFY_TIP:-0}" -eq 1 ]; then
+    TIP_VERIFY_SKIP=1
+    TIP_VERIFY_RESULT_JSON='"skipped_by_flag"'
+    return 0
+  fi
+  if [ "${#VERIFY_CMDS[@]}" -gt 0 ]; then
+    TIP_VERIFY_SOURCE="flag"
+    TIP_VERIFY_CMDS_JSON="$(node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "${VERIFY_CMDS[@]}")" \
+      || die_precondition "cannot encode --verify-cmd list"
+    return 0
+  fi
+  local extracted="" repo_root="" cfg_line=""
+  if [ -n "${PROMPT_FILE:-}" ] && [ -r "$PROMPT_FILE" ]; then
+    extracted="$(node - "$PROMPT_FILE" <<'NODE'
+const fs = require("fs");
+const text = fs.readFileSync(process.argv[2], "utf8");
+function executableLooking(cmd) {
+  const trimmed = String(cmd).trim();
+  if (!trimmed || trimmed.startsWith("#")) return false;
+  const token = trimmed.split(/\s+/)[0];
+  if (token.startsWith("./") || token.startsWith("../") || token.startsWith("/")) return true;
+  return /^[A-Za-z][A-Za-z0-9_+-]*$/.test(token);
+}
+const lines = text.split(/\n/);
+let inSection = false;
+let inFence = false;
+const cmds = [];
+for (const line of lines) {
+  if (!inSection) {
+    if (/^## Acceptance\s*$/.test(line)) inSection = true;
+    continue;
+  }
+  if (/^## /.test(line)) break;
+  const trimmed = line.trim();
+  if (trimmed.startsWith("```")) {
+    inFence = !inFence;
+    continue;
+  }
+  if (inFence) {
+    if (executableLooking(line)) cmds.push(line.trim());
+    continue;
+  }
+  const re = /`([^`\n]+)`/g;
+  let m;
+  while ((m = re.exec(line))) {
+    if (executableLooking(m[1])) cmds.push(m[1].trim());
+  }
+}
+if (cmds.length) process.stdout.write(JSON.stringify(cmds));
+NODE
+)" || extracted=""
+  fi
+  if [ -n "$extracted" ] && [ "$extracted" != "[]" ]; then
+    TIP_VERIFY_SOURCE="brief"
+    TIP_VERIFY_CMDS_JSON="$extracted"
+    return 0
+  fi
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$repo_root" ] && [ -r "$repo_root/.claude/quality-gate-config.md" ]; then
+    cfg_line="$(node - "$repo_root/.claude/quality-gate-config.md" <<'NODE'
+const fs = require("fs");
+const text = fs.readFileSync(process.argv[2], "utf8");
+const lines = text.split(/\n/);
+let inSection = false;
+for (const line of lines) {
+  if (!inSection) {
+    if (/^## Test Command\s*$/.test(line)) inSection = true;
+    continue;
+  }
+  if (/^## /.test(line)) break;
+  const t = line.trim();
+  if (!t || t.startsWith("#")) continue;
+  process.stdout.write(t);
+  break;
+}
+NODE
+)" || cfg_line=""
+  fi
+  if [ -n "$cfg_line" ]; then
+    TIP_VERIFY_SOURCE="repo_config"
+    TIP_VERIFY_CMDS_JSON="$(node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "$cfg_line")" \
+      || die_precondition "cannot encode repo test command"
+    return 0
+  fi
+  die_precondition "no tip-verify command: pass --verify-cmd, or put a command in the brief ## Acceptance section, or set ## Test Command in .claude/quality-gate-config.md, or pass --no-verify-tip"
+}
+
+# run_tip_verify — re-run the captured commands at the committed tip.
+# Returns 0 on pass or an explicit skip. Returns non-zero on fail or timeout.
+# The caller maps that to status verify_failed, exit 3. Does not reap.
+run_tip_verify() {
+  if [ "${STRICT_CONTRACT:-0}" -eq 1 ]; then
+    return 0
+  fi
+  if [ "${TIP_VERIFY_SKIP:-0}" -eq 1 ] || [ "${NO_VERIFY_TIP:-0}" -eq 1 ]; then
+    TIP_VERIFY_RESULT_JSON='"skipped_by_flag"'
+    return 0
+  fi
+  local cmdfile="" tip_verify_out="" tip_verify_rc=0
+  cmdfile="$(mktemp -t 'dispatch-hetero-tip-verify-XX''XX''XX')" || {
+    tip_verify_rc=1
+    cmdfile=""
+  }
+  if [ "$tip_verify_rc" -eq 0 ]; then
+    printf '%s' "$TIP_VERIFY_CMDS_JSON" > "$cmdfile" || tip_verify_rc=1
+  fi
+  if [ "$tip_verify_rc" -eq 0 ]; then
+    tip_verify_out="$(node - "$WT" "$HEAD_SHA" "$TIP_VERIFY_SOURCE" "$VERIFY_TIMEOUT" "$cmdfile" <<'NODE'
+const fs = require("fs");
+const cp = require("child_process");
+// `node -` puts "-" in argv[1]; the real arguments start at argv[2].
+const worktree = process.argv[2];
+const commit = process.argv[3];
+const source = process.argv[4];
+const timeoutSec = Number(process.argv[5]);
+const cmdFile = process.argv[6];
+function emit(payload, code) {
+  process.stdout.write(JSON.stringify(payload));
+  process.exit(code);
+}
+let cmds;
+try {
+  cmds = JSON.parse(fs.readFileSync(cmdFile, "utf8"));
+} catch (e) {
+  emit({ status: "fail", commit, source, commands: [{ cmd: "", rc: 1, duration_s: 0, tail: "cannot read verify commands" }] }, 1);
+}
+if (!Array.isArray(cmds) || cmds.length === 0) {
+  emit({ status: "fail", commit, source, commands: [{ cmd: "", rc: 1, duration_s: 0, tail: "no verify commands" }] }, 1);
+}
+const env = Object.assign({}, process.env);
+delete env.AUTOPILOT_SESSION_ID;
+let devnull = null;
+try { devnull = fs.openSync("/dev/null", "r"); } catch (e) { devnull = "ignore"; }
+function tailOf(out, err) {
+  const a = out ? out.toString("utf8") : "";
+  const b = err ? err.toString("utf8") : "";
+  let s = a;
+  if (b) s += (s && !s.endsWith("\n") ? "\n" : "") + b;
+  const lines = s.split("\n");
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
+  return lines.slice(-40).join("\n");
+}
+const commands = [];
+let anyTimeout = false;
+let anyFail = false;
+for (const cmd of cmds) {
+  const started = Date.now();
+  let result;
+  try {
+    result = cp.spawnSync("timeout", [String(timeoutSec), "bash", "-c", String(cmd)], {
+      cwd: worktree,
+      env,
+      stdio: [devnull, "pipe", "pipe"],
+      timeout: (timeoutSec + 15) * 1000,
+    });
+  } catch (e) {
+    commands.push({ cmd: String(cmd), rc: 1, duration_s: Math.round((Date.now() - started) / 1000), tail: String(e && e.message ? e.message : e) });
+    anyFail = true;
+    continue;
+  }
+  const duration_s = Math.round((Date.now() - started) / 1000);
+  const tail = tailOf(result.stdout, result.stderr);
+  let rc;
+  let timedOut = false;
+  if (result.error && result.error.code === "ETIMEDOUT") {
+    timedOut = true;
+    rc = 124;
+  } else if (result.error && result.error.code === "ENOENT") {
+    rc = 127;
+    anyFail = true;
+  } else if (typeof result.status === "number") {
+    rc = result.status;
+    if (rc === 124) timedOut = true;
+    else if (rc !== 0) anyFail = true;
+  } else if (result.signal) {
+    rc = 128;
+    anyFail = true;
+  } else {
+    rc = 1;
+    anyFail = true;
+  }
+  if (timedOut) anyTimeout = true;
+  commands.push({ cmd: String(cmd), rc, duration_s, tail });
+}
+if (typeof devnull === "number") { try { fs.closeSync(devnull); } catch (e) { /* fd already closed */ } }
+const status = anyTimeout ? "timeout" : (anyFail ? "fail" : "pass");
+const code = status === "pass" ? 0 : (status === "timeout" ? 2 : 1);
+emit({ status, commit, source, commands }, code);
+NODE
+)" || tip_verify_rc=$?
+  fi
+  [ -n "$cmdfile" ] && rm -f "$cmdfile"
+  TIP_VERIFY_RESULT_JSON="$(printf '%s' "$tip_verify_out" | tr -d '\n')"
+  if [ -z "$TIP_VERIFY_RESULT_JSON" ]; then
+    TIP_VERIFY_RESULT_JSON="$(node -e 'process.stdout.write(JSON.stringify({status:"fail",commit:process.argv[1],source:process.argv[2],commands:[{cmd:"",rc:1,duration_s:0,tail:"tip verify produced no result"}]}))' -- "${HEAD_SHA:-}" "${TIP_VERIFY_SOURCE:-}")" \
+      || TIP_VERIFY_RESULT_JSON='{"status":"fail","commit":"","source":"","commands":[]}'
+    tip_verify_rc=1
+  fi
+  # TIP_VERIFY_RC_GATE
+  if [ "$tip_verify_rc" -ne 0 ]; then
+    return 1
+  fi
+  return 0
+}
+
 if [ -z "$REUSE_WORKTREE" ] \
   && git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
   die_precondition "branch already exists: $BRANCH"
 fi
+resolve_tip_verify_commands
 # Claim the durable implementation tuple before branch/worktree/manifest
 # creation. This parent-owned lease is required whenever detach was requested,
 # even when this host cannot provide setsid --wait and execution later falls
@@ -6166,8 +6467,14 @@ classify_outcome() {
         OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
         OUTCOME_ERR="$STRICT_POSTCHECK_ERROR"
         OUTCOME_EXIT=1
+      elif [ "$STRICT_CONTRACT" -ne 1 ] && ! run_tip_verify; then
+        # Tip re-run failed or timed out. The commit stays; this is not done.
+        OUTCOME_STATUS="verify_failed"
+        OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
+        OUTCOME_ERR="tip verification failed at $HEAD_SHA; commit kept for inspection; worktree kept"
+        OUTCOME_EXIT=3
       else
-        # new commit + clean tree + agent exit 0 → the only success path
+        # new commit + clean tree + agent exit 0 + tip verify passed → the only success path
         if [ "$KEEP" = "0" ]; then
           # Full reap (project teardown_hook + remove). NEVER branch -D here — the
           # branch survives for review/merge. On remove failure: loud WARN +
@@ -6446,6 +6753,7 @@ dispatch_detached_run() {
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_MOUNT_CONTAINMENT WORKER_MOUNT_MODE WORKER_MOUNT_PREFIX MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
       TIMEOUT_SOURCE TIMEOUT_SUPPLIED WORKER_TIMED_OUT COMMIT_QUIET_SECS COMMIT_QUIET_ENDED REPO_IDENTITY_FIELDS _REPO_IDENTITY_FIELDS_KEY CHILD_SESSION_ID 2>/dev/null
+    declare -p NO_VERIFY_TIP VERIFY_TIMEOUT TIP_VERIFY_SKIP TIP_VERIFY_SOURCE TIP_VERIFY_CMDS_JSON TIP_VERIFY_RESULT_JSON VERIFY_CMDS 2>/dev/null || true
     # Hands boundary gates (item (E)): the pre-hands main-checkout fingerprint MUST cross the
     # detach boundary as the parent measured it, and the push-blocking env with it.
     declare -p MAIN_CHECKOUT MAIN_CHECKOUT_BEFORE MAIN_CHECKOUT_BEFORE_PARTS HANDS_GIT_ENV HANDS_BOUNDARY_ERROR HANDS_BOUNDARY_CODE 2>/dev/null || true
@@ -6474,7 +6782,7 @@ dispatch_detached_run() {
     # detached child dies with "command not found" before the claude worker starts.
     declare -f token_seat_guard 2>/dev/null || true
     declare -f agy_print_timeout agy_assert_disposable_home die_precondition fell_back_json_suffix hetero_log_fallback child_session_env_setup repo_identity_of _repo_identity_json_str repo_identity_resolve_fields manifest_session_id_json manifest_child_session_json child_session_mint json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_live_enum grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home _self_pgid _watchdog_sleeppid_cmdline_has_tag _cancel_worker_watchdog _setsid_wait_worker_sid _watchdog_worker_alive _watchdog_signal_worker _arm_worker_watchdog _worker_has_busy_descendant _supervise_commit_quiet _wait_worker_with_watchdog _verify_no_setsid_watchdog_or_disarm normalize_timeout_seconds run_worker run_agent compute_artifacts capture_structured_provider_error _prefer_structured_classified_error passive_capture \
-      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
+      _is_engine_unavailable _hetero_runner_token _capability_write_note _capability_write_suppress_now seat_strike_capture classify_outcome _emit_question_waiting_event heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks resolve_tip_verify_commands run_tip_verify _fp_unverifiable main_checkout_fingerprint main_checkout_parts_digest main_checkout_describe_delta main_checkout_wt_symlink_leaks check_main_checkout_boundary run_hands_content_gate \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

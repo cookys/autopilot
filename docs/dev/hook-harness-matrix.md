@@ -33,6 +33,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `residue-auto-reap` | SessionStart<br>未驗證 | — | — | — |
 | `run-approval-gate` | PostToolUse, PreToolUse<br>未驗證 | — | — | — |
 | `runs-watch-autostart` | SessionStart<br>未驗證 | — | — | — |
+| `scheduled-wakeup-guard` | PreToolUse, UserPromptSubmit<br>未驗證 | — | — | — |
 | `session-handoff` | SessionEnd<br>未驗證 | — | — | — |
 | `session-start` | SessionStart<br>未驗證 | — | — | — |
 | `session-tasks` | PostToolUse, TaskCompleted, TaskCreated<br>未驗證 | — | — | — |

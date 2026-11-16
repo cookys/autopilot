@@ -534,8 +534,9 @@ test('wiring: askpm-log is opt-in, not a per-prompt spawn', () => {
   assert.ok(commands('Stop').some((c) => c.includes('/hooks/opt-in-multiplexer.js Stop')), 'Stop multiplexer unwired');
   const ups = commands('UserPromptSubmit');
   assert.ok(ups.some((c) => c.includes('/hooks/advisory-relay.js')), 'advisory-relay stays on UserPromptSubmit');
-  assert.ok(ups.some((c) => c.includes('/hooks/past-reference-recall.js')), 'past-reference-recall is the second UserPromptSubmit process');
-  assert.equal(ups.length, 2, `UserPromptSubmit commands: ${ups.join(' | ')}`);
+  assert.ok(ups.some((c) => c.includes('/hooks/past-reference-recall.js')), 'past-reference-recall stays on UserPromptSubmit');
+  assert.ok(ups.some((c) => c.includes('/hooks/scheduled-wakeup-guard.js')), 'scheduled-wakeup-guard is a UserPromptSubmit process');
+  assert.equal(ups.length, 3, `UserPromptSubmit commands: ${ups.join(' | ')}`);
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'opt-in-manifest.json'), 'utf8'));
   assert.equal((manifest.opt_in || []).includes('askpm-log'), true, 'missing from opt-in manifest');
   const mux = fs.readFileSync(path.join(__dirname, 'opt-in-multiplexer.js'), 'utf8');

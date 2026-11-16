@@ -5799,6 +5799,19 @@
       "summary": "Seconds between runs watcher polls (positive integer)."
     },
     {
+      "name": "AUTOPILOT_SCHEDULED_WAKEUP_GUARD",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/scheduled-wakeup-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop the hook that marks a self-scheduled wakeup as not an authorisation, and that warns when a ScheduleWakeup prompt contains a go, an approval word, or a card id."
+    },
+    {
       "name": "AUTOPILOT_SESSION_TASKS",
       "kind": "env",
       "audience": "user",

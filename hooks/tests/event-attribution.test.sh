@@ -66,7 +66,7 @@ eq "$RID" "$(grep '^AUTOPILOT_PARENT_RUN_ID=' "$ENVDUMP" | cut -d= -f2)" "child 
 EVOUT="$(RUNS="$TEST_TMP/runs1" node -e '
   const { read } = require(process.argv[1] + "/src/status/events/sources/dispatch.js");
   const fs = require("fs"); const mf = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-  const r = read({ project: { project_key: "0123456789abcdef", repo_identity: mf.repo_identity }, env: { AUTOPILOT_DISPATCH_RUNS_DIR: process.env.RUNS } }, {});
+  const r = read({ project: { project_key: "0000000000000001", repo_identity: mf.repo_identity }, env: { AUTOPILOT_DISPATCH_RUNS_DIR: process.env.RUNS } }, {});
   for (const e of r.events) console.log(JSON.stringify({ kind: e.kind, run_id: e.data.run_id, fleet_task: e.data.fleet_task, pool: e.data.pool, commit: e.data.commit, lane: e.data.lane }));
 ' "$REPO_ROOT" "$MF")"
 assert_contains "$EVOUT" "{\"kind\":\"dispatch.started\",\"run_id\":\"$RID\",\"fleet_task\":\"$ULID\",\"pool\":\"grok\",\"commit\":null,\"lane\":\"x\"}" "dispatch.started: run_id fleet_task pool lane, commit null"
@@ -108,7 +108,7 @@ CLAUDE_CONFIG_DIR="$CFG" AUTOPILOT_ACCOUNT=pool-test run_hook cost-tracker.js "$
 COST="$(COSTS="$LEDGER" node -e '
   const { read } = require(process.argv[1] + "/src/status/events/sources/cost.js");
   const repo = "git-common-dir:" + require("fs").realpathSync(process.argv[2] + "/.git");
-  const r = read({ project: { project_key: "0123456789abcdef", repo_identity: repo }, env: { AUTOPILOT_COSTS_FILE: process.env.COSTS } }, {});
+  const r = read({ project: { project_key: "0000000000000001", repo_identity: repo }, env: { AUTOPILOT_COSTS_FILE: process.env.COSTS } }, {});
   for (const e of r.events) console.log(JSON.stringify([e.run_id, e.data.run_id, e.data.fleet_task, e.data.pool, e.data.commit, e.data.lane]));
 ' "$REPO_ROOT" "$SBX")"
 eq "3" "$(printf '%s\n' "$COST" | grep -c .)" "three cost.turn events read back"

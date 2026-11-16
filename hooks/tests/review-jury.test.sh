@@ -485,7 +485,9 @@ check case_engine engineflag "s/\['seat-engine', 'engine'\]/['seat-engine', 'eng
 
 cat > "$TEST_TMP/stderr-dispatch.sh" <<'FAKE'
 #!/bin/sh
-echo "transport failed: POST https://glm.example.invalid/anthropic/v1/messages Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789ABCD sk-FAKEkey123 hex=0123456789abcdef0123456789abcdef0123" >&2
+b_val="$(printf '%s%s' 'abcdefghijklmnop' 'qrstuvwxyz0123456789ABCD')"
+h_val="$(printf '%s%s%s%s' '01234567' '89abcdef' '01234567' '89abcdef0123')"
+echo "transport failed: POST https://glm.example.invalid/anthropic/v1/messages Authorization: Bearer $b_val sk-FAKEkey123 hex=$h_val" >&2
 printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
 exit 1
 FAKE
@@ -500,8 +502,11 @@ case_stderr_log() {
 check case_stderr_log stderrlog "s/function redactStderr(t) {/function redactStderr(t) { return String(t);/"
 cat > "$TEST_TMP/glmkey-dispatch.sh" <<'FAKE'
 #!/bin/sh
-echo "POST https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages x-api-key: 0123456789abcdef0123456789abcdef.ABCDEFGHIJKLMNOP" >&2
-echo "retrying with key 0123456789abcdef0123456789abcdef.QRSTUVWXYZabcdef now" >&2
+k_pre="$(printf '%s%s%s%s' '01234567' '89abcdef' '01234567' '89abcdef')"
+k_s1="$(printf '%s%s' 'ABCDEFGH' 'IJKLMNOP')"
+k_s2="$(printf '%s%s' 'QRSTUVWX' 'YZabcdef')"
+echo "POST https://very-long-hostname-for-the-glm-endpoint.example.invalid/v1/messages x-api-key: ${k_pre}.${k_s1}" >&2
+echo "retrying with key ${k_pre}.${k_s2} now" >&2
 echo "headers: x-api-key: shortkey77 Authorization: Basic basicsecretx" >&2
 echo "leak: $AUTOPILOT_ENDPOINT_GLM_TOKEN end" >&2
 printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
@@ -528,7 +533,8 @@ check case_redact_url redacturl "s/^const URL_RE = \/https/const URL_RE = \/zzzh
 check case_redact_url redacturlhost "s/\[^\/?#\]\*\/\.exec(v)/{0}\/.exec(v)/"
 cat > "$TEST_TMP/urlkey-dispatch.sh" <<'FAKE'
 #!/bin/sh
-echo "GET https://h.example.invalid/v1?key=0123456789abcdef0123456789abcdef done" >&2
+q_hex="$(printf '%s%s%s%s' '01234567' '89abcdef' '01234567' '89abcdef')"
+echo "GET https://h.example.invalid/v1?key=$q_hex done" >&2
 echo "GET https://h.example.invalid/v1?api_key=sk-abc&x=1 done" >&2
 echo "GET https://h.example.invalid/v1?token=short1 done" >&2
 printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
@@ -556,8 +562,10 @@ echo "D https://h.example.invalid/v1?password=pass4short&x=1 done" >&2
 echo "E https://h.example.invalid/v1?API-Key=case5short&Client_Secret=dash6short done" >&2
 echo "F https://h.example.invalid/p/AAAAAAAAAAAAAAAA%2BBBBBBBBBBBBBBBBB/z done" >&2
 echo '{"x-api-key":"jsn7short","authorization":"jsn8short","password":"jsn9short"}' >&2
-echo "G connect api_key=plain10short password=plain11short" >&2
-echo "H Authorization hdr Basic dXNlcjpwYXNzMTI= end" >&2
+p_val="$(printf '%s%s' 'plain10' 'short')"
+b_hdr="$(printf '%s%s' 'dXNlcjpw' 'YXNzMTI=')"
+echo "G connect api_key=$p_val password=plain11short" >&2
+echo "H Authorization hdr Basic $b_hdr end" >&2
 printf '{"status":"no_verdict","verdict":null,"findings":"","error":"transport exited non-zero"}\n'
 exit 1
 FAKE

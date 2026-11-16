@@ -33,6 +33,10 @@ This reference indexes the three deterministic scripts supporting dev-flow's pla
 - **When**: Fired by the default-on `unmerged-ship-advisory` Stop hook (once per 15 min per session); run by hand with `--json` to see every item.
 - **Contract**: Options, exit codes and the `markBlocked` fleet call in the script header; indexed in `docs/scripts-inventory.md`.
 
+### scripts/land-branch.js
+
+Depth-0 may land a reviewed branch with one command and read only its JSON line: `node scripts/land-branch.js --branch <ref> --review-json <file> --fleet-task <id> --body-file <file> [--push]`. It fetches, refuses anything but `SHIP-AS-IS`, merges `--no-ff`, runs affected suites and the landing checks, and with `--push` updates `develop` only when the base is still an ancestor. Exit 0 only for `landed` or `merged_not_pushed`. The log path is the JSON `log` field. Do not re-drive those steps by hand. Contract: script header; indexed in `docs/scripts-inventory.md`.
+
 ## Consult before design
 
 Canonical call site is the dev-flow `plan` node (the receipted consult step); this section documents the rail, it is not a second statement of the rule. For an L or XL task, before the design decision, write the design question and relevant artifacts to files and call `bash scripts/dispatch-consult.sh --question-file <path> --artifact <path>` to get one bounded outside opinion before committing to the design.

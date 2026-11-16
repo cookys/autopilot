@@ -617,7 +617,7 @@ chmod +x "$STUB_ANTHRO_MARKER_JS"
 
 rm -f "$ANTHRO_SPAWN_MARKER"
 ANTHRO_ERR_FILE="$TEST_TMP/anthro-nonloopback.stderr"
-OUT="$(AUTOPILOT_DISPATCH_RUNS_DIR="$ANTHRO_URL_RUNS" TEST_ANTHRO_SPAWN_MARKER="$ANTHRO_SPAWN_MARKER" AUTOPILOT_ENDPOINT_TESTLAN_URL="http://192.168.10.50:8080" AUTOPILOT_ENDPOINT_TESTLAN_TOKEN="t" AUTOPILOT_ENDPOINT_TESTLAN_TRANSPORT="plaintext-private" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model mini --prompt-file "$PROMPT" --bin "$STUB_ANTHRO_MARKER_JS" --endpoint TESTLAN --run-id anthro-nonloopback-http 2>"$ANTHRO_ERR_FILE")"
+OUT="$(AUTOPILOT_DISPATCH_RUNS_DIR="$ANTHRO_URL_RUNS" TEST_ANTHRO_SPAWN_MARKER="$ANTHRO_SPAWN_MARKER" AUTOPILOT_ENDPOINT_TESTLAN_URL="http://169.254.10.50:8080" AUTOPILOT_ENDPOINT_TESTLAN_TOKEN="t" AUTOPILOT_ENDPOINT_TESTLAN_TRANSPORT="plaintext-private" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model mini --prompt-file "$PROMPT" --bin "$STUB_ANTHRO_MARKER_JS" --endpoint TESTLAN --run-id anthro-nonloopback-http 2>"$ANTHRO_ERR_FILE")"
 EXIT=$?
 assert_eq "2" "$EXIT" "anthropic-compatible non-loopback http endpoint exits 2 before spawn"
 assert_contains "$(cat "$ANTHRO_ERR_FILE")" "base URL must use https:// unless it is an http:// loopback test endpoint; a non-loopback http:// endpoint is the cc-shim rail (--runner cc-shim), not this anthropic-compatible transport" "anthropic-compatible non-loopback http prints exact reason on stderr"

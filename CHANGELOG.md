@@ -513,6 +513,7 @@
 
 ### Settings changes
 
+- **New `AUTOPILOT_TASK_CLASS`** (env; no default). The task class of a dispatch to a local-sandbox endpoint (`qwen_local`): `format-convert`, `log-summary`, `simple-script` or `test-scaffold`. When unset, a `Task-Class:` header in the prompt file is read; neither present refuses the dispatch with `unknown-task-class`, any other value with `task-class`. Cloud endpoints ignore it.
 - **New `AUTOPILOT_SCHEDULED_WAKEUP_GUARD`** (env; default `on`; only `off` disables). Stops the hook that marks a self-scheduled wakeup as not an authorisation, and that warns when a `ScheduleWakeup` prompt contains a go, an approval word, or a card id. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
 - **New `AUTOPILOT_PAST_RECALL`** (env; default `on`; only `off` disables). Stops the UserPromptSubmit past-reference recall hook. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
 - **New `AUTOPILOT_BARE_CARD_ID_LINT`** (env; default on; `off` disables). Stops only the bare card id check in the owner-question Stop guard; the `owner_question_guard` opt-out still turns the whole guard off. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).

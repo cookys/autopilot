@@ -9,5 +9,7 @@
   ],
   "sensitive_repos": ["*payment*", "*billing*", "*customer*", "*-private", "home-*", "*secrets*"],
   "core_dirs": [],
-  "novel_roles": ["plan", "design", "brainstorm", "architecture", "plan_review", "research"]
+  "novel_roles": ["plan", "design", "brainstorm", "architecture", "plan_review", "research"],
+  "local_task_classes": ["format-convert", "log-summary", "simple-script", "test-scaffold"],
+  "local_deny_repos": ["aaa-race-*", "revival*", "pinball*", "twgameproject*", "308*", "*prod*", "*player*", "hangar", "mnemos", "*credential*", "*secret*"]
 }

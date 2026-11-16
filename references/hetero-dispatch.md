@@ -206,6 +206,8 @@ agy/kimi transport — see their own sections.
 
 Kimi, GLM, Qwen, DeepSeek, MiniMax and qoder are barred for: tasks that read agent transcript content (env `AUTOPILOT_TASK_READS_TRANSCRIPT=1` or a `Reads-Transcript: yes` line in the first 8 lines of the brief/spec); sensitive repos or scope paths (payments, PII, private-home data, keys, customer data; list in `scripts/lib/cn-model-gate-defaults.json`, extended by `.claude/cn-model-gate.json`); core code (size above S, or a scope under `core_dirs`); novel work (roles plan, design, brainstorm, architecture, plan_review, research, or `AUTOPILOT_TASK_NOVEL=1` / `Novel: yes`). Only XS/S mechanical edits, formatting, docs and open-source dependency bumps pass. Size, role and scope come from `AUTOPILOT_TASK_SIZE`, `AUTOPILOT_TASK_ROLE`, `AUTOPILOT_TASK_SCOPE` or the `Size:`/`Role:`/`Scope:` header (first 8 lines); a missing one fails closed. Every rail calls `scripts/lib/cn-model-dispatch-gate.js` before spawning and refuses with `cn_model_dispatch_barred <family> <reason-class> (01M7E2A1, d-1dfcf757)` (exit 2), skipping barred fallback rungs and seats.
 
+A dispatch to `qwen_local` must carry `Task-Class:` (or `AUTOPILOT_TASK_CLASS`, which wins) set to one of `format-convert`, `log-summary`, `simple-script`, `test-scaffold`. The cloud checks above still apply, and the repo directory name must not match `local_deny_repos` in that defaults file.
+
 ### Cross-family rule for plan review (and consult labelling)
 
 `dispatch-plan-review.js` applies the code-review family gate (`scripts/lib/review-family-gate.js`): READY needs at

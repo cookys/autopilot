@@ -299,4 +299,126 @@ assert_eq "$(jfield status)" "landed" "hippo landed"
 assert_eq "$(git -C "$BARE" show develop:.hippo/.cache/index.sqlite)" "base-db" "hippo cache restored from base"
 assert_eq "$(git -C "$BARE" show develop:b.txt)" "feature" "hippo keeps the other feature file"
 
+# --- both sides change the hippo cache with different binary bytes; nothing else conflicts ---
+# The cache conflict is restored from the base ref and the land continues.
+reset_env
+BARE="$TEST_TMP/hippo-both.git"
+WORK="$TEST_TMP/hippo-both"
+git init -q --bare "$BARE"
+git clone -q "$BARE" "$WORK" 2>/dev/null
+git -C "$WORK" checkout -q -b develop
+printf 'base\n' > "$WORK/a.txt"
+mkdir -p "$WORK/.hippo/.cache"
+printf 'anc\0v1' > "$WORK/.hippo/.cache/index.sqlite"
+git -C "$WORK" add a.txt .hippo
+git -C "$WORK" commit -qm base
+git -C "$WORK" push -q -u origin develop
+git -C "$WORK" checkout -q -b feat/land
+printf 'branch\0v2' > "$WORK/.hippo/.cache/index.sqlite"
+printf 'feature\n' > "$WORK/b.txt"
+git -C "$WORK" add -A
+git -C "$WORK" commit -qm feature
+git -C "$WORK" checkout -q develop
+printf 'base\0v3' > "$WORK/.hippo/.cache/index.sqlite"
+git -C "$WORK" add -A
+git -C "$WORK" commit -qm 'develop cache'
+git -C "$WORK" push -q origin develop
+BASE_BLOB="$(git -C "$WORK" rev-parse 'HEAD:.hippo/.cache/index.sqlite')"
+BRANCH_BLOB="$(git -C "$WORK" rev-parse 'feat/land:.hippo/.cache/index.sqlite')"
+assert_neq "$BRANCH_BLOB" "$BASE_BLOB" "hippo-both fixture blobs differ"
+REVIEW="$TEST_TMP/review-hippo-both.json"
+write_review "$REVIEW" SHIP-AS-IS
+LAND_SUITES_CMD="$OK_SUITES_JSON"
+LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+assert_one_json_line "hippo-both"
+assert_eq "$LAND_RC" "0" "hippo-both exits 0"
+assert_eq "$(jfield status)" "landed" "hippo-both landed"
+assert_eq "$(git -C "$BARE" rev-parse 'develop:.hippo/.cache/index.sqlite')" "$BASE_BLOB" "hippo-both cache equals the base ref"
+assert_eq "$(git -C "$BARE" show develop:b.txt)" "feature" "hippo-both keeps the feature file"
+
+# --- the same binary cache conflict plus a real text conflict lists only the text file ---
+reset_env
+BARE="$TEST_TMP/hippo-text.git"
+WORK="$TEST_TMP/hippo-text"
+git init -q --bare "$BARE"
+git clone -q "$BARE" "$WORK" 2>/dev/null
+git -C "$WORK" checkout -q -b develop
+printf 'base\n' > "$WORK/a.txt"
+mkdir -p "$WORK/.hippo/.cache"
+printf 'anc\0v1' > "$WORK/.hippo/.cache/index.sqlite"
+git -C "$WORK" add a.txt .hippo
+git -C "$WORK" commit -qm base
+git -C "$WORK" push -q -u origin develop
+git -C "$WORK" checkout -q -b feat/land
+printf 'branch-side\n' > "$WORK/a.txt"
+printf 'branch\0v2' > "$WORK/.hippo/.cache/index.sqlite"
+printf 'feature\n' > "$WORK/b.txt"
+git -C "$WORK" add -A
+git -C "$WORK" commit -qm feature
+git -C "$WORK" checkout -q develop
+printf 'develop-side\n' > "$WORK/a.txt"
+printf 'base\0v3' > "$WORK/.hippo/.cache/index.sqlite"
+git -C "$WORK" add -A
+git -C "$WORK" commit -qm 'develop both'
+git -C "$WORK" push -q origin develop
+REVIEW="$TEST_TMP/review-hippo-text.json"
+write_review "$REVIEW" SHIP-AS-IS
+LAND_SUITES_CMD="$OK_SUITES_JSON"
+LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+BEFORE="$(git -C "$BARE" rev-parse develop)"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+assert_one_json_line "hippo-text"
+assert_neq "$LAND_RC" "0" "hippo-text exits non-zero"
+assert_eq "$(jfield status)" "conflict" "hippo-text status"
+assert_eq "$(jfield conflicted)" '["a.txt"]' "hippo-text lists only a.txt"
+assert_eq "$(git -C "$WORK" status --porcelain)" "" "hippo-text work tree clean"
+MERGE_HEAD="$(git -C "$WORK" rev-parse -q --verify MERGE_HEAD 2>/dev/null || true)"
+assert_eq "$MERGE_HEAD" "" "hippo-text merge aborted"
+assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "hippo-text remote unchanged"
+assert_eq "$(cat "$WORK/a.txt")" "develop-side" "hippo-text restored the develop text"
+
+# --- verdict null or missing → review_not_ship, exit 1, nothing merged ---
+# Unparseable JSON and a non-object stay usage.
+reset_env
+make_repo nullverdict
+BEFORE="$(git -C "$BARE" rev-parse develop)"
+REVIEW="$TEST_TMP/review-null.json"
+printf '%s\n' '{"verdict":null}' > "$REVIEW"
+LAND_SUITES_CMD="$OK_SUITES_JSON"
+LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+assert_one_json_line "null-verdict"
+assert_eq "$LAND_RC" "1" "null-verdict exits 1"
+assert_eq "$(jfield status)" "review_not_ship" "null-verdict status"
+assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "null-verdict remote unchanged"
+assert_eq "$(git -C "$WORK" rev-parse HEAD)" "$BEFORE" "null-verdict local HEAD unchanged"
+assert_eq "$(git -C "$WORK" status --porcelain)" "" "null-verdict work tree clean"
+
+REVIEW="$TEST_TMP/review-empty.json"
+printf '%s\n' '{}' > "$REVIEW"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+assert_one_json_line "empty-verdict"
+assert_eq "$LAND_RC" "1" "empty-verdict exits 1"
+assert_eq "$(jfield status)" "review_not_ship" "empty-verdict status"
+assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "empty-verdict remote unchanged"
+assert_eq "$(git -C "$WORK" rev-parse HEAD)" "$BEFORE" "empty-verdict local HEAD unchanged"
+assert_eq "$(git -C "$WORK" status --porcelain)" "" "empty-verdict work tree clean"
+
+REVIEW="$TEST_TMP/review-bad.json"
+printf '%s\n' '{not json' > "$REVIEW"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+assert_one_json_line "bad-json"
+assert_eq "$LAND_RC" "2" "bad-json exits 2"
+assert_eq "$(jfield status)" "usage" "bad-json status"
+assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "bad-json remote unchanged"
+
+REVIEW="$TEST_TMP/review-array.json"
+printf '%s\n' '[]' > "$REVIEW"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+assert_one_json_line "non-object"
+assert_eq "$LAND_RC" "2" "non-object exits 2"
+assert_eq "$(jfield status)" "usage" "non-object status"
+assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "non-object remote unchanged"
+
 finalize_test

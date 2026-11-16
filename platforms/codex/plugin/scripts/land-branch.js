@@ -18,6 +18,14 @@
 // conflict adds conflicted (paths). push_failed adds stderr_tail. new_red lists the names.
 // checks maps each check that ran to its exit code.
 //
+// A parseable review object is accepted. A verdict other than SHIP-AS-IS, including
+// null or a missing verdict, is review_not_ship (exit 1). Unparseable JSON or a
+// non-object is usage (exit 2).
+// While a merge is in progress, .hippo/.cache/index.sqlite is restored from HEAD
+// before other conflicts are judged (checkout HEAD -- <path>, then add when that
+// path is unmerged). A failed restore aborts the merge. Remaining conflicted paths
+// are conflict; if none remain and the merge failed for another reason, merge_failed.
+//
 // --suites affected (default) runs `node scripts/affected-suites.js --base <base-ref> --run`.
 // Failing suites are `rc=<nonzero> <path>` lines (the affected-suites contract). --known-red
 // is one suite path per line; only names not listed count as new red. --suites none skips
@@ -131,7 +139,6 @@ function readReview(file) {
     throw new Error(`review json: ${error.message}`);
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('review json must be an object');
-  if (typeof parsed.verdict !== 'string') throw new Error('review json verdict must be a string');
   return parsed;
 }
 
@@ -256,12 +263,18 @@ function merging(git) {
 }
 
 function restoreHippo(git) {
+  const unmerged = conflictPaths(git).includes(HIPPO_CACHE);
   const listed = `${git(['diff', '--name-only', 'HEAD', '--', HIPPO_CACHE]).stdout}\n${git(['diff', '--name-only', '--cached', '--', HIPPO_CACHE]).stdout}`;
-  const touched = listed.split('\n').some((line) => line.trim() === HIPPO_CACHE);
+  const touched = unmerged || listed.split('\n').some((line) => line.trim() === HIPPO_CACHE);
   if (!touched) return null;
   if (git(['cat-file', '-e', `HEAD:${HIPPO_CACHE}`]).status === 0) {
     const restored = git(['checkout', 'HEAD', '--', HIPPO_CACHE]);
-    return restored.status === 0 ? null : tail(restored.stderr || restored.stdout);
+    if (restored.status !== 0) return tail(restored.stderr || restored.stdout);
+    if (unmerged) {
+      const added = git(['add', '--', HIPPO_CACHE]);
+      if (added.status !== 0) return tail(added.stderr || added.stdout);
+    }
+    return null;
   }
   const removed = git(['rm', '-f', '--cached', '--ignore-unmatch', '--', HIPPO_CACHE]);
   if (removed.status !== 0) return tail(removed.stderr || removed.stdout);
@@ -342,17 +355,29 @@ function main() {
   if (detached.status !== 0) finish({ status: 'checkout_failed', detail: tail(detached.stderr || detached.stdout) }, 1);
 
   const merged = git(['merge', '--no-ff', '--no-commit', opts.branch]);
+  const inMerge = merging(git);
+  let hippoOnlyConflict = false;
+  if (inMerge) {
+    const before = conflictPaths(git);
+    hippoOnlyConflict = before.length > 0 && before.every((name) => name === HIPPO_CACHE);
+    const hippoError = restoreHippo(git);
+    if (hippoError) {
+      git(['merge', '--abort']);
+      finish({ status: 'merge_failed', detail: `hippo cache restore: ${hippoError}` }, 1);
+    }
+  }
   if (merged.status !== 0) {
     const paths = conflictPaths(git);
-    const inMerge = merging(git);
-    if (inMerge) git(['merge', '--abort']);
-    if (paths.length > 0 || inMerge) finish({ status: 'conflict', conflicted: paths }, 1);
-    finish({ status: 'merge_failed', detail: tail(merged.stderr || merged.stdout) }, 1);
+    if (paths.length > 0) {
+      if (merging(git)) git(['merge', '--abort']);
+      finish({ status: 'conflict', conflicted: paths }, 1);
+    }
+    if (!hippoOnlyConflict) {
+      if (merging(git)) git(['merge', '--abort']);
+      finish({ status: 'merge_failed', detail: tail(merged.stderr || merged.stdout) }, 1);
+    }
   }
   if (!merging(git)) finish({ status: 'merge_failed', detail: tail(merged.stdout || merged.stderr) || 'merge did not start' }, 1);
-
-  const hippoError = restoreHippo(git);
-  if (hippoError) finish({ status: 'merge_failed', detail: `hippo cache restore: ${hippoError}` }, 1);
 
   const messagePath = path.join(log.dir, 'message.txt');
   fs.writeFileSync(messagePath, commitMessage(opts.branch, opts.body, opts.review.model, opts.fleetTask));

@@ -90,6 +90,12 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/past-reference-recall.js",
             "timeout": 5,
             "onFailure": "continue"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scheduled-wakeup-guard.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       }
@@ -160,6 +166,17 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/depth0-delegate-gate.js"
+          }
+        ]
+      },
+      {
+        "matcher": "ScheduleWakeup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scheduled-wakeup-guard.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       },

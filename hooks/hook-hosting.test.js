@@ -133,19 +133,24 @@ test('wiring: PostToolUse(Bash) spawns no awaiting-owner process; audit-log is t
   assert.strictEqual(cmds.length, 5, `5 default-on PostToolUse processes (was 7 before the chain, 8 with awaiting-owner): ${cmds.join(' | ')}`);
 });
 
-test('wiring: UserPromptSubmit spawns advisory-relay (timeout 70) and past-reference-recall (timeout 5, fail-open); autostart + awaiting-owner stay hosted', () => {
+test('wiring: UserPromptSubmit spawns advisory-relay (timeout 70), past-reference-recall and scheduled-wakeup-guard (timeout 5, fail-open); autostart + awaiting-owner stay hosted', () => {
   const ups = entries('UserPromptSubmit', null);
-  assert.deepStrictEqual(ups.map((c) => path.basename(c.split(' ')[1])), ['advisory-relay.js', 'past-reference-recall.js']);
+  assert.deepStrictEqual(ups.map((c) => path.basename(c.split(' ')[1])), ['advisory-relay.js', 'past-reference-recall.js', 'scheduled-wakeup-guard.js']);
   const g = HOOKS.UserPromptSubmit.find((x) => x.hooks.some((h) => h.command.includes('/hooks/advisory-relay.js')));
   const relay = g.hooks.find((h) => h.command.includes('/hooks/advisory-relay.js'));
   const recall = g.hooks.find((h) => h.command.includes('/hooks/past-reference-recall.js'));
+  const guard = g.hooks.find((h) => h.command.includes('/hooks/scheduled-wakeup-guard.js'));
   // 1859f6241 raised hooks.json timeout 10 -> 70 (probe + card verifies + margin)
   assert.strictEqual(relay.timeout, 70);
   assert.strictEqual(recall.timeout, 5);
   assert.strictEqual(recall.onFailure, 'continue');
+  assert.strictEqual(guard.timeout, 5);
+  assert.strictEqual(guard.onFailure, 'continue');
   assert.ok(!ups.some((c) => c.includes('/hooks/awaiting-owner.js')));
   assert.ok(!ups.some((c) => c.includes('/hooks/runs-watch-autostart.js')));
   assert.ok(HOOKS.SessionStart.some((x) => x.hooks.some((h) => h.command.includes('/hooks/runs-watch-autostart.js'))));
+  const pre = entries('PreToolUse', 'ScheduleWakeup').filter((c) => c.includes('/hooks/scheduled-wakeup-guard.js'));
+  assert.strictEqual(pre.length, 1);
 });
 
 // ---------- hosted PostToolUse: awaiting-owner behaviour identical ----------

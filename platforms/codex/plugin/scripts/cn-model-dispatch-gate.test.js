@@ -227,11 +227,15 @@ test('dispatch-review: marked kimi refused, marked grok passes the gate, unmarke
   assert.match(out(r), /cn_model_dispatch_barred moonshot review-role/, 'a review rail cannot be lowered by env AUTOPILOT_TASK_ROLE=implementer');
 });
 
-test('dispatch-anthropic-review: non-raw defaults to reviewer and checks --spec-file; --raw without --role keeps env/header', () => {
+test('dispatch-anthropic-review: non-raw forces reviewer (ignoring --role) and checks --spec-file; --raw honours --role', () => {
   const js = path.join(S, 'dispatch-anthropic-review.js');
   let r = run('node', [js, '--diff-file', diff, '--spec-file', small, '--model', 'MiniMax-M3'], OK);
   assert.equal(r.status, 2);
   assert.match(out(r), /cn_model_dispatch_barred minimax review-role/, 'direct non-raw call without --role defaults to reviewer under implementer env/spec');
+
+  r = run('node', [js, '--diff-file', diff, '--model', 'MiniMax-M3', '--role', 'implementer'], { ...OK, AUTOPILOT_TASK_SIZE: 'XS' });
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred minimax review-role/, 'non-raw call with --role implementer at size XS is still refused as review-role');
 
   r = run('node', [js, '--diff-file', diff, '--spec-file', marked, '--model', 'MiniMax-M3'], OK);
   assert.equal(r.status, 2);
@@ -240,6 +244,11 @@ test('dispatch-anthropic-review: non-raw defaults to reviewer and checks --spec-
   r = run('node', [js, '--raw', '--prompt-file', small, '--model', 'MiniMax-M3', '--base-url', 'http://127.0.0.1:1', '--token-env', 'TEST_UNSET_CN_GATE_TOKEN'], { ...OK, TEST_UNSET_CN_GATE_TOKEN: '' });
   assert.equal(r.status, 2);
   assert.doesNotMatch(out(r), BARRED, '--raw without --role leaves implementer XS/S authoring allowed by the gate');
+  assert.match(out(r), /missing auth token in env/);
+
+  r = run('node', [js, '--raw', '--role', 'implementer', '--prompt-file', plain, '--model', 'MiniMax-M3', '--base-url', 'http://127.0.0.1:1', '--token-env', 'TEST_UNSET_CN_GATE_TOKEN'], { AUTOPILOT_TASK_SIZE: 'XS', AUTOPILOT_TASK_SCOPE: 'docs/a.md', TEST_UNSET_CN_GATE_TOKEN: '' });
+  assert.equal(r.status, 2);
+  assert.doesNotMatch(out(r), BARRED, '--raw honours --role implementer for allowed XS authoring');
   assert.match(out(r), /missing auth token in env/);
 
   r = run('node', [js, '--raw', '--role', 'reviewer', '--prompt-file', small, '--model', 'MiniMax-M3'], OK);

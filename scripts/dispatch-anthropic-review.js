@@ -83,7 +83,7 @@ USAGE:
                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
       [--endpoint <name>]   # optional named endpoint for fleet gateway allowlist check
       [--spec-file <file>]  # optional task spec file checked by the Chinese-model gate
-      [--role <role>]       # rail-implied role for the Chinese-model gate (non-raw defaults to reviewer)
+      [--role <role>]       # rail-implied role for the Chinese-model gate (--raw only; non-raw is always reviewer)
 
 AUTH (env only — never accepted as a CLI argument):
   MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN for other
@@ -631,15 +631,15 @@ async function main() {
     failPrecondition('--model is required');
   }
 
-  // Before any credential file is read. Direct non-raw review calls default to role 'reviewer';
-  // --raw calls (e.g. dispatch-author.sh) use --role when passed, else env/header only so an
-  // allowed XS/S implementer authoring task is not forced into reviewer. A missing role still fails
-  // closed inside the gate.
+  // Before any credential file is read. Non-raw calls are always code reviews, so role is forced
+  // to 'reviewer' (--role is ignored). --raw calls (e.g. dispatch-author.sh) honour --role when
+  // passed, else env/header only so an allowed XS/S implementer authoring task is not forced into
+  // reviewer. A missing role still fails closed inside the gate.
   const cn = cnGate.check({
     runner: RUNNER,
     model,
     endpoint: args.endpoint || process.env[FLEET_TASK_ENDPOINT_ENV] || '',
-    role: args.role || (rawMode ? '' : 'reviewer'),
+    role: rawMode ? args.role : 'reviewer',
     files: [args.promptFile, args.specFile].filter(Boolean),
     diffFiles: args.diffFile ? [args.diffFile] : [],
   });

@@ -18,9 +18,11 @@ const fs = require('fs');
 const path = require('path');
 // Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
 const LAYOUT = require('./lib/repo-layout.js');
-const PLANS_DIR = LAYOUT.path('plans_dir');
+// Autopilot-only frozen consult transcripts in DEFAULT_EXCLUDES. This stays the registry
+// path for this plugin (LAYOUT.path at load), not the audited repo: those three files do
+// not exist in a consumer. Script-ref exemptions are resolved per AUDIT_ROOT inside
+// isScriptRefExemptDoc — AUDIT_ROOT is assigned in main(), after this module loads.
 const PLANS_EVIDENCE_DIR = LAYOUT.path('plans_evidence_dir');
-const PROJECTS_DIR = LAYOUT.path('projects_dir');
 const HOOK_TESTS_DIR = LAYOUT.path('hook_tests_dir');
 const CODEX_PLUGIN_DIR = LAYOUT.path('codex_plugin_dir');
 const EVALS_DIR = LAYOUT.path('evals_dir');
@@ -301,20 +303,25 @@ const SCRIPT_REF_RE = new RegExp(`(?<![\\w./-])(?:\\.\\/)?${SCRIPTS_DIR.replace(
 // prose mentions are intentionally NOT gated (unbounded false-positive risk).
 const BARE_SCRIPT_RE = /`([A-Za-z0-9_-]+\.(?:sh|bash|js|mjs|cjs|ts|py|ps1))`/g;
 
-// The script-ref existence check applies to ACTIVE autopilot operational docs only.
+// The script-ref existence check applies to ACTIVE operational docs of the audited repo only.
 // Exempt:
 //   - the plans dir, the plans evidence dir and the projects dir — period-accurate
 //     history/tracking (named scripts as they were at the time, e.g. tree.sh before
 //     the Node port). The evidence dir needs its own entry: it used to sit under the
 //     plans dir, and stopped being covered when the layout registry moved plans out.
+//     Resolved with pathFor(AUDIT_ROOT) at call time: main() assigns AUDIT_ROOT after
+//     load, and a consumer keeps these under docs/ while this plugin's registry does not.
 //   - CHANGELOG.md — immutable release history (same period-accuracy rationale)
 //   - project-config-template/ — templates describe a CONSUMING project's own
 //     scripts (e.g. `scripts/check-doc-drift.py`), not autopilot's
 function isScriptRefExemptDoc(relPath) {
   const p = relPath.replace(/\\/g, '/');
-  return p.startsWith(`${PLANS_DIR}/`)
-    || p.startsWith(`${PLANS_EVIDENCE_DIR}/`)
-    || p.startsWith(`${PROJECTS_DIR}/`)
+  const plansDir = LAYOUT.pathFor(AUDIT_ROOT, 'plans_dir');
+  const plansEvidenceDir = LAYOUT.pathFor(AUDIT_ROOT, 'plans_evidence_dir');
+  const projectsDir = LAYOUT.pathFor(AUDIT_ROOT, 'projects_dir');
+  return p.startsWith(`${plansDir}/`)
+    || p.startsWith(`${plansEvidenceDir}/`)
+    || p.startsWith(`${projectsDir}/`)
     || p.startsWith('project-config-template/')
     || p === 'CHANGELOG.md';
 }

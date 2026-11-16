@@ -10,6 +10,13 @@
       "reason": "affected-suites --jobs per-run TMPDIR base (and the private XDG_RUNTIME_DIR base); removed in runPool's finally and on TERM/INT"
     },
     {
+      "pattern": "land-branch-*",
+      "kind": "scratch",
+      "owner": "scripts/land-branch.js",
+      "retention_days": null,
+      "reason": "land-branch full command log directory; the JSON line carries the path; age-pruned with other scratch logs"
+    },
+    {
       "pattern": "hetero-*-log-*",
       "kind": "scratch",
       "owner": "scripts/dispatch-hetero.sh",

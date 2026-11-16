@@ -271,6 +271,41 @@ async function main() {
     }
     accountActive = layer.state === 'active';
   }
+  // Review seats: qc_panel is barred for a Chinese-model family at every size. Force the role
+  // in the env object so a parent implementer env cannot widen a glm/kimi/minimax judge.
+  // Judge B is checked on the requested model, before resolveAgyAlias (that calls `agy models`).
+  // Required here, not at load: the null-verdict path exits above, and the sandbox copy of this
+  // file does not carry the gate module.
+  const cnGate = require('./lib/cn-model-dispatch-gate');
+  const qcRoleEnv = { ...process.env, AUTOPILOT_TASK_ROLE: 'qc_panel' };
+  const qcSeats = [
+    {
+      runner: (path.basename(claudeBin) === 'codex' || judgeAModel.includes('gpt-5.5')) ? 'codex' : 'claude',
+      model: judgeAModel,
+    },
+    {
+      runner: (path.basename(agyBin) === 'codex' || judgeBModelRequested.includes('gpt-5.5')) ? 'codex' : 'agy',
+      model: judgeBModelRequested,
+    },
+    {
+      runner: (path.basename(claudeBin) === 'codex' || synthModel.includes('gpt-5.5')) ? 'codex' : 'claude',
+      model: synthModel,
+    },
+  ];
+  for (const seat of qcSeats) {
+    const cn = cnGate.check({
+      runner: seat.runner,
+      model: seat.model,
+      role: 'qc_panel',
+      env: qcRoleEnv,
+      diffFiles: diffFile ? [diffFile] : [],
+      cwd: process.cwd(),
+    });
+    if (!cn.allowed) {
+      console.error(cn.line);
+      process.exit(2);
+    }
+  }
   let acctSeq = 0;
   // Claude seat spawn. Legacy (no registry): exactly the old spawn. Active: the prompt (+ context file)
   // goes into a 0600 file and `claude-account.js run --stdin` feeds it; the token never reaches this process.

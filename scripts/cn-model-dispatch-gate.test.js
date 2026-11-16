@@ -12,6 +12,10 @@ require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git canno
 
 const S = __dirname;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tfg-'));
+const runsDir = path.join(tmp, 'runs');
+const sentinelRuns = path.join(tmp, 'autopilot-dispatch-runs');
+fs.mkdirSync(runsDir);
+fs.mkdirSync(sentinelRuns);
 const sent = path.join(tmp, 'sent');
 fs.mkdirSync(sent);
 for (const b of ['kimi', 'grok', 'agy', 'codex', 'claude', 'cursor', 'opencode']) {
@@ -34,8 +38,9 @@ fs.writeFileSync(diff, 'diff --git a/x b/x\n');
 
 function env(extra = {}) {
   const e = { ...process.env, PATH: `${sent}:/usr/bin:/bin:/usr/local/bin`, HOME: home, CLAUDE_CONFIG_DIR: path.join(tmp, 'cc'), ...extra };
-  for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'AUTOPILOT_TASK_READS_TRANSCRIPT', 'AUTOPILOT_TASK_CLASS']) delete e[k];
-  return { ...e, ...extra };
+  for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'AUTOPILOT_TASK_READS_TRANSCRIPT', 'AUTOPILOT_TASK_CLASS', 'AUTOPILOT_CN_GATE_NOW']) delete e[k];
+  // After extra: a spawned rail cannot inherit or override the real dispatch-runs ledger.
+  return { ...e, ...extra, TMPDIR: tmp, AUTOPILOT_DISPATCH_RUNS_DIR: runsDir };
 }
 const run = (cmd, args, extra) => spawnSync(cmd, args, { cwd: repo, encoding: 'utf8', env: env(extra), input: '', timeout: 120000 });
 const out = (r) => `${r.stdout}${r.stderr}`;
@@ -84,13 +89,74 @@ test('class 3 core: size above S, or a core dir from the repo config', () => {
   assert.equal(gate.check({ ...K, env: OK, cwd: core }).allowed, true, 'a non-core path in the same repo is allowed');
 });
 
-test('class 4 novel: plan/design/brainstorm/architecture/plan_review/research roles, or a novel marker', () => {
-  for (const r of ['plan', 'design', 'brainstorm', 'architecture', 'plan_review', 'research']) {
+test('class 4 novel: plan/design/brainstorm/architecture/research roles, or a novel marker', () => {
+  for (const r of ['plan', 'design', 'brainstorm', 'architecture', 'research']) {
     assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_ROLE: r }).cls, 'novel', r);
   }
   assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_NOVEL: '1' }).cls, 'novel');
   const nov = path.join(tmp, 'novel.md'); fs.writeFileSync(nov, 'Role: implementer | Size: S\nNovel: yes\nScope: a.md\n');
   assert.equal(cls(K, {}, { files: [nov] }).cls, 'novel');
+});
+
+test('review-role: barred cloud families refuse a review role at any size; grok and qwen_local do not', () => {
+  const rev = { AUTOPILOT_TASK_SIZE: 'XS', AUTOPILOT_TASK_ROLE: 'reviewer', AUTOPILOT_TASK_SCOPE: 'docs/a.md' };
+  let c = cls(K, rev);
+  assert.equal(c.allowed, false);
+  assert.equal(c.cls, 'review-role');
+  assert.equal(c.family, 'moonshot');
+  assert.equal(c.line, 'cn_model_dispatch_barred moonshot review-role (01M7E2A1, d-1dfcf757)');
+  c = cls({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'glm' }, { ...rev, AUTOPILOT_TASK_ROLE: 'qc' });
+  assert.equal(c.allowed, false);
+  assert.equal(c.cls, 'review-role');
+  assert.equal(c.family, 'zhipu');
+  assert.equal(c.line, 'cn_model_dispatch_barred zhipu review-role (01M7E2A1, d-1dfcf757)');
+  c = cls({ runner: 'anthropic-compatible', model: 'MiniMax-M3' }, { ...rev, AUTOPILOT_TASK_ROLE: 'plan_review' });
+  assert.equal(c.allowed, false);
+  assert.equal(c.cls, 'review-role');
+  assert.equal(c.family, 'minimax');
+  assert.equal(cls({ runner: 'grok', model: 'grok-4.7' }, rev).allowed, true);
+  assert.equal(cls(K, { ...OK, AUTOPILOT_TASK_SIZE: 'XS' }).allowed, true, 'implementer XS stays allowed');
+  const { AUTOPILOT_TASK_SIZE: _sz, ...noSize } = rev;
+  assert.equal(cls(K, noSize).cls, 'review-role', 'a review role is refused even when size is missing');
+  assert.equal(cls(K, { ...rev, AUTOPILOT_TASK_READS_TRANSCRIPT: '1' }).cls, 'transcript', 'transcript still wins');
+  assert.equal(cls(K, { ...rev, AUTOPILOT_TASK_SCOPE: 'app/.env' }).cls, 'sensitive', 'sensitive still wins');
+  const auto = path.join(tmp, 'autopilot-review-role');
+  fs.mkdirSync(auto);
+  const gi = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: auto, encoding: 'utf8' });
+  assert.equal(gi.status, 0, gi.stderr);
+  const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  const localOk = gate.check({ ...LOCAL, env: { ...rev, AUTOPILOT_TASK_CLASS: 'test-scaffold' }, cwd: auto, now: '2026-11-17T12:00:00+08:00' });
+  assert.equal(localOk.allowed, true, 'qwen_local reviewer with an allowed Task-Class is not review-role');
+  assert.notEqual(localOk.cls, 'review-role');
+  assert.equal(gate.check({ ...LOCAL, env: { ...rev, AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_CLASS: 'test-scaffold' }, cwd: auto, now: '2026-11-17T12:00:00+08:00' }).cls, 'core-size');
+  const ext = path.join(tmp, 'review-ext');
+  fs.mkdirSync(path.join(ext, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(ext, '.claude', 'cn-model-gate.json'), JSON.stringify({ review_roles: ['auditor'] }));
+  assert.equal(gate.check({ ...K, env: { ...OK, AUTOPILOT_TASK_ROLE: 'auditor' }, cwd: ext }).cls, 'review-role', 'repo config unions a review role');
+  const cleared = path.join(tmp, 'review-cleared');
+  fs.mkdirSync(path.join(cleared, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(cleared, '.claude', 'cn-model-gate.json'), JSON.stringify({ review_roles: [] }));
+  assert.equal(gate.check({ ...K, env: rev, cwd: cleared }).cls, 'review-role', 'an empty repo list cannot drop a starter review role');
+  const ladder = gate.filterLadder(['kimi-code/kimi-for-coding/high@kimi', 'grok-4.7/low@grok'], { env: rev, role: 'reviewer', cwd: repo });
+  assert.deepEqual(ladder.kept, ['grok-4.7/low@grok']);
+  assert.equal(ladder.barred.length, 1);
+  assert.match(ladder.barred[0].line, /cn_model_dispatch_barred moonshot review-role/);
+  const cli = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'filter-ladder', '--role', 'reviewer', '--', 'kimi-code/kimi-for-coding/high@kimi', 'grok-4.7/low@grok'], rev);
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.equal(cli.stdout.trim(), 'grok-4.7/low@grok');
+
+  assert.equal(gate.check({ ...K, role: 'reviewer', env: OK, cwd: repo }).cls, 'review-role', 'env AUTOPILOT_TASK_ROLE=implementer cannot lower rail role=reviewer');
+  assert.equal(gate.check({ ...K, role: 'reviewer', env: {}, files: [small], cwd: repo }).cls, 'review-role', 'header Role: implementer cannot lower rail role=reviewer');
+  assert.equal(gate.check({ ...K, role: 'plan', env: OK, files: [small], cwd: repo }).cls, 'novel', 'env/header Role: implementer cannot lower novel rail role');
+  const revHeader = path.join(tmp, 'rev-header.md');
+  fs.writeFileSync(revHeader, 'Role: reviewer | Size: S\nScope: docs/a.md\n');
+  assert.equal(gate.check({ ...K, role: 'implementer', env: OK, files: [revHeader], cwd: repo }).cls, 'review-role', 'header Role: reviewer cannot be lowered by env/rail implementer');
+  const ladderDowngrade = gate.filterLadder(['kimi-code/kimi-for-coding/high@kimi', 'grok-4.7/low@grok'], { env: OK, files: [small], role: 'reviewer', cwd: repo });
+  assert.deepEqual(ladderDowngrade.kept, ['grok-4.7/low@grok']);
+  assert.match(ladderDowngrade.barred[0].line, /cn_model_dispatch_barred moonshot review-role/);
+  const cliDowngrade = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'check', '--runner', 'kimi', '--model', 'kimi-code-k3', '--role', 'reviewer', '--prompt-file', small], OK);
+  assert.equal(cliDowngrade.status, 2);
+  assert.match(cliDowngrade.stderr, /cn_model_dispatch_barred moonshot review-role/);
 });
 
 test('allow: XS/S mechanical edit with a scope and role, from env or header; unbarred families always', () => {
@@ -145,16 +211,49 @@ test('dispatch-hetero: marked kimi refused (exit 2); marked cc-shim glm refused;
   assert.match(out(r), /cn_model_dispatch_barred moonshot core-size/);
 });
 
-test('dispatch-review: marked kimi refused, marked grok passes the gate, unmarked kimi passes the gate', () => {
+test('dispatch-review: marked kimi refused, marked grok passes the gate, unmarked kimi is review-role', () => {
   const a = (runner, model, spec) => [path.join(S, 'dispatch-review.sh'), '--runner', runner, '--model', model, '--diff-file', diff, '--spec-file', spec];
   let r = run('bash', a('kimi', 'kimi-code-k3', marked));
   assert.equal(r.status, 2); assert.match(out(r), BARRED); assert.doesNotMatch(out(r), /SENTINEL/);
   r = run('bash', a('grok', 'grok-4.7', marked));
   assert.doesNotMatch(out(r), BARRED);
   r = run('bash', a('kimi', 'kimi-code-k3', plain));
-  assert.match(out(r), /cn_model_dispatch_barred moonshot unknown-size/, 'fail closed without a size');
+  assert.match(out(r), /cn_model_dispatch_barred moonshot review-role/, 'a reviewer rail is refused even without a size');
   r = run('bash', a('kimi', 'kimi-code-k3', small));
-  assert.doesNotMatch(out(r), BARRED, 'XS/S, diff paths are the scope');
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred moonshot review-role/, 'a review rail cannot be lowered by header Role: implementer');
+  r = run('bash', a('kimi', 'kimi-code-k3', small), OK);
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred moonshot review-role/, 'a review rail cannot be lowered by env AUTOPILOT_TASK_ROLE=implementer');
+});
+
+test('dispatch-anthropic-review: non-raw forces reviewer (ignoring --role) and checks --spec-file; --raw honours --role', () => {
+  const js = path.join(S, 'dispatch-anthropic-review.js');
+  let r = run('node', [js, '--diff-file', diff, '--spec-file', small, '--model', 'MiniMax-M3'], OK);
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred minimax review-role/, 'direct non-raw call without --role defaults to reviewer under implementer env/spec');
+
+  r = run('node', [js, '--diff-file', diff, '--model', 'MiniMax-M3', '--role', 'implementer'], { ...OK, AUTOPILOT_TASK_SIZE: 'XS' });
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred minimax review-role/, 'non-raw call with --role implementer at size XS is still refused as review-role');
+
+  r = run('node', [js, '--diff-file', diff, '--spec-file', marked, '--model', 'MiniMax-M3'], OK);
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred minimax transcript/, 'direct non-raw call checks Reads-Transcript: yes in --spec-file');
+
+  r = run('node', [js, '--raw', '--prompt-file', small, '--model', 'MiniMax-M3', '--base-url', 'http://127.0.0.1:1', '--token-env', 'TEST_UNSET_CN_GATE_TOKEN'], { ...OK, TEST_UNSET_CN_GATE_TOKEN: '' });
+  assert.equal(r.status, 2);
+  assert.doesNotMatch(out(r), BARRED, '--raw without --role leaves implementer XS/S authoring allowed by the gate');
+  assert.match(out(r), /missing auth token in env/);
+
+  r = run('node', [js, '--raw', '--role', 'implementer', '--prompt-file', plain, '--model', 'MiniMax-M3', '--base-url', 'http://127.0.0.1:1', '--token-env', 'TEST_UNSET_CN_GATE_TOKEN'], { AUTOPILOT_TASK_SIZE: 'XS', AUTOPILOT_TASK_SCOPE: 'docs/a.md', TEST_UNSET_CN_GATE_TOKEN: '' });
+  assert.equal(r.status, 2);
+  assert.doesNotMatch(out(r), BARRED, '--raw honours --role implementer for allowed XS authoring');
+  assert.match(out(r), /missing auth token in env/);
+
+  r = run('node', [js, '--raw', '--role', 'reviewer', '--prompt-file', small, '--model', 'MiniMax-M3'], OK);
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred minimax review-role/, '--raw with --role reviewer cannot be lowered by env/header');
 });
 
 test('dispatch-author: marked kimi refused, marked grok passes the gate', () => {
@@ -184,7 +283,10 @@ test('review-jury: marked with --seats kimi,glm,minimax leaves no seat (exit 2);
   const runJson = JSON.parse(fs.readFileSync(path.join(tmp, 'j1', 'run.json'), 'utf8'));
   for (const n of ['kimi', 'glm', 'minimax']) assert.equal(runJson.seats[n].state, 'barred_family');
   r = run('node', j('kimi,glm,minimax', 'j2'), { AUTOPILOT_TASK_SIZE: 'S' });
-  assert.doesNotMatch(out(r), BARRED, 'XS/S with the pack diff as scope is not gated');
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred moonshot review-role/, 'a review seat is refused at size S');
+  const rj2 = JSON.parse(fs.readFileSync(path.join(tmp, 'j2', 'run.json'), 'utf8'));
+  for (const n of ['kimi', 'glm', 'minimax']) assert.equal(rj2.seats[n].state, 'barred_family');
   r = run('node', j('grok,kimi', 'j3'), { AUTOPILOT_TASK_READS_TRANSCRIPT: '1' });
   const rj = JSON.parse(fs.readFileSync(path.join(tmp, 'j3', 'run.json'), 'utf8'));
   assert.equal(rj.seats.kimi.state, 'barred_family');
@@ -230,7 +332,15 @@ test('dispatch-hetero: --runner qoderclicn on a core path is barred before the s
   assert.doesNotMatch(text, /SENTINEL/);
 });
 
-test.after(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+test.after(() => {
+  let leaked = [];
+  try {
+    leaked = fs.existsSync(sentinelRuns) ? fs.readdirSync(sentinelRuns) : ['missing'];
+    assert.deepEqual(leaked, [], `dispatch manifest leaked outside the test runs dir: ${leaked.join(',')}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
 
 test('(a) qwen_local with size, role and scope but no Task-Class is refused unknown-task-class', () => {
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
@@ -378,4 +488,99 @@ test('(h) filter-ladder drops a qwen_local rung when Task-Class is missing', () 
   assert.match(cli.stderr, /cn_model_dispatch_barred alibaba unknown-task-class \(01M7E2A1, d-1dfcf757\)/);
   const kept = gate.filterLadder([rung], { env: { ...OK, AUTOPILOT_TASK_CLASS: 'test-scaffold' }, cwd: repo });
   assert.deepEqual(kept.kept, [rung]);
+});
+
+// Shipped review_local_exceptions only (d-ede04b92, PM 01M7JPZQ). A repo file cannot open,
+// extend, or shrink one. Clock is check({ now }) (no env override).
+const EXC_BEFORE = '2026-11-17T12:00:00+08:00';
+const EXC_JUST_BEFORE = '2026-11-21T23:59:58.999+08:00';
+const EXC_UNTIL = '2026-11-21T23:59:59+08:00';
+const EXC_AFTER = '2026-11-22T00:00:00+08:00';
+const EXC_LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+const EXC_REV = { AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_ROLE: 'loop_reviewer', AUTOPILOT_TASK_SCOPE: 'docs/a.md', AUTOPILOT_TASK_CLASS: 'test-scaffold' };
+
+function excRepo(name) {
+  const dir = path.join(tmp, 'exc', name);
+  fs.mkdirSync(dir, { recursive: true });
+  const g = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(g.status, 0, g.stderr);
+  return dir;
+}
+
+test('review_local_exceptions: qwen_local review role is allowed only before the shipped until, and a repo cannot extend it', () => {
+  const normal = excRepo('autopilot');
+  const late = gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_AFTER });
+  assert.equal(late.allowed, false);
+  assert.equal(late.cls, 'review-role', 'after the shipped until the local served family is review-role');
+  assert.equal(late.family, 'alibaba');
+  assert.equal(late.line, 'cn_model_dispatch_barred alibaba review-role (01M7E2A1, d-1dfcf757)');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_UNTIL }).cls, 'review-role', 'now == until is not before until');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true, 'before expiry a normal repo is allowed');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: normal, now: EXC_JUST_BEFORE }).allowed, true, 'one millisecond before until is allowed');
+
+  const hangar = excRepo('hangar');
+  const denied = gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: hangar, now: EXC_BEFORE });
+  assert.equal(denied.cls, 'review-role', 'a denied repo is review-role, not the later local-deny-repo class');
+  const { AUTOPILOT_TASK_SIZE: _sz, ...noSize } = EXC_REV;
+  assert.equal(gate.check({ ...EXC_LOCAL, env: noSize, cwd: hangar, now: EXC_BEFORE }).cls, 'review-role', 'review-role wins even when size is missing');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_TASK_ROLE: 'implementer' }, cwd: hangar, now: EXC_BEFORE }).cls, 'local-deny-repo', 'a non-review role on a denied repo stays local-deny-repo');
+
+  const extended = excRepo('autopilot-extended');
+  fs.mkdirSync(path.join(extended, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(extended, '.claude', 'cn-model-gate.json'), JSON.stringify({
+    review_local_exceptions: [{ endpoint: 'qwen_local', until: '2099-01-01T00:00:00+08:00', ref: 'repo' }],
+  }));
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: extended, now: EXC_AFTER }).cls, 'review-role', 'a repo cannot extend the shipped until');
+
+  const shrunk = excRepo('autopilot-shrunk');
+  fs.mkdirSync(path.join(shrunk, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(shrunk, '.claude', 'cn-model-gate.json'), JSON.stringify({
+    review_local_exceptions: [{ endpoint: 'qwen_local', until: '2020-01-01T00:00:00+08:00', ref: 'repo' }],
+  }));
+  assert.equal(gate.check({ ...EXC_LOCAL, env: EXC_REV, cwd: shrunk, now: EXC_BEFORE }).allowed, true, 'a repo cannot shrink the shipped until');
+
+  const glmRepo = excRepo('autopilot-glm');
+  fs.mkdirSync(path.join(glmRepo, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(glmRepo, '.claude', 'cn-model-gate.json'), JSON.stringify({
+    review_local_exceptions: [{ endpoint: 'glm', until: '2099-01-01T00:00:00+08:00', ref: 'repo' }],
+  }));
+  const glm = gate.check({ runner: 'cc-shim', model: 'GLM-5.3', endpoint: 'glm', env: EXC_REV, cwd: glmRepo, now: EXC_BEFORE });
+  assert.equal(glm.allowed, false);
+  assert.equal(glm.cls, 'review-role', 'a cloud glm reviewer stays refused');
+  assert.equal(glm.family, 'zhipu');
+
+  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: 'not-a-date' }).cls, 'review-role', 'an invalid explicit now fails closed and ignores AUTOPILOT_CN_GATE_NOW');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'AUTOPILOT_CN_GATE_NOW is ignored when now is after expiry');
+  const realDateNow = Date.now;
+  try {
+    Date.now = () => Date.parse(EXC_AFTER);
+    assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal }).cls, 'review-role', 'AUTOPILOT_CN_GATE_NOW is ignored even when now is omitted and the real clock is after expiry');
+  } finally {
+    Date.now = realDateNow;
+  }
+
+  // Runner/model shorthands resolving to qwen_local without an explicit endpoint.
+  assert.equal(gate.check({ runner: 'qwen_local', model: 'Qwen3.8-27B-QUASAR-NVFP4', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true, 'runner=qwen_local shorthand resolves effective endpoint before expiry');
+  assert.equal(gate.check({ runner: 'qwen_local', model: 'Qwen3.8-27B-QUASAR-NVFP4', env: EXC_REV, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'runner=qwen_local shorthand expires after until');
+  assert.equal(gate.check({ runner: 'cc-shim', model: 'qwen_local', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true, 'model=qwen_local shorthand resolves effective endpoint before expiry');
+  assert.equal(gate.check({ runner: 'cc-shim', model: 'qwen_local', env: EXC_REV, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'model=qwen_local shorthand expires after until');
+  assert.equal(gate.check({ runner: 'qwen_local', model: 'kimi-k2', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).cls, 'review-role', 'other barred family with runner=qwen_local shorthand stays barred');
+
+  const rung = 'Qwen3.8-27B-QUASAR-NVFP4/medium@cc-shim#qwen_local';
+  const rungAlias = 'Qwen3.8-27B-QUASAR-NVFP4/medium@qwen_local';
+  assert.deepEqual(gate.filterLadder([rung, rungAlias], { env: EXC_REV, cwd: normal, now: EXC_BEFORE }).kept, [rung, rungAlias]);
+  const dropped = gate.filterLadder([rung, rungAlias], { env: EXC_REV, cwd: normal, now: EXC_AFTER });
+  assert.deepEqual(dropped.kept, []);
+  assert.match(dropped.barred[0].line, /cn_model_dispatch_barred alibaba review-role/);
+  assert.match(dropped.barred[1].line, /cn_model_dispatch_barred alibaba review-role/);
+
+  const gateMod = path.join(S, 'lib', 'cn-model-dispatch-gate.js');
+  const wrapScript = 'const g = require(process.argv[1]); const c = g.check({ runner: process.argv[2], model: process.argv[3], endpoint: process.argv[4], role: "loop_reviewer", cwd: process.argv[5], now: process.argv[6] }); if (!c.allowed) { process.stderr.write(c.line + "\\n"); process.exit(2); }';
+  const cliLate = run('node', ['-e', wrapScript, gateMod, 'cc-shim', 'Qwen3.8-27B-QUASAR-NVFP4', 'qwen_local', normal, EXC_AFTER], { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE });
+  assert.equal(cliLate.status, 2, cliLate.stderr);
+  assert.match(cliLate.stderr, /cn_model_dispatch_barred alibaba review-role \(01M7E2A1, d-1dfcf757\)/);
+  const cliOk = run('node', ['-e', wrapScript, gateMod, 'cc-shim', 'Qwen3.8-27B-QUASAR-NVFP4', 'qwen_local', normal, EXC_BEFORE], EXC_REV);
+  assert.equal(cliOk.status, 0, cliOk.stderr);
+  const cliAliasOk = run('node', ['-e', wrapScript, gateMod, 'qwen_local', 'Qwen3.8-27B-QUASAR-NVFP4', '', normal, EXC_BEFORE], EXC_REV);
+  assert.equal(cliAliasOk.status, 0, cliAliasOk.stderr);
 });

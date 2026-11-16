@@ -222,8 +222,10 @@ const SHIP = `cat >/dev/null\nprintf '%s\\n' '{"type":"text","part":{"text":"VER
 // pin is that the seat RAN (reached the binary) and was not refused or voided by containment
 const ranClean = (r, st) => !/precondition_failed|containment breach/.test(r.stdout) && fs.existsSync(`${st}.argv`);
 function review(bin, extraEnv, script = REVIEW) {
+  const runs = path.join(tmp, 'runs');
+  fs.mkdirSync(runs, { recursive: true });
   return spawnSync('bash', [script, '--runner', 'opencode', '--model', 'opencode-go/x', '--diff-file', diff, '--bin', bin],
-    { encoding: 'utf8', timeout: 90000, env: { ...process.env, TMPDIR: tmp, ...extraEnv } });
+    { encoding: 'utf8', timeout: 90000, env: { ...process.env, TMPDIR: tmp, ...extraEnv, AUTOPILOT_DISPATCH_RUNS_DIR: runs } });
 }
 {
   // v1: unchanged shape (--dir / --pure / --variant), same canonical env, scratch cwd empty

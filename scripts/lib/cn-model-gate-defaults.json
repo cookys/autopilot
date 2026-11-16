@@ -1,5 +1,5 @@
 {
-  "_why": "Starter lists for scripts/lib/cn-model-dispatch-gate.js (Fleet task 01M7E2A1, card d-1dfcf757). A repo extends every list (union, never replaces) in .claude/cn-model-gate.json. Globs: `*` stays inside one path segment, `**` crosses directories, a glob without `/` matches any single path segment.",
+  "_why": "Starter lists for scripts/lib/cn-model-dispatch-gate.js (Fleet task 01M7E2A1, card d-1dfcf757). A repo extends every list (union, never replaces) in .claude/cn-model-gate.json, including review_roles. review_local_exceptions is not one of those lists: only this shipped file counts, because the window is the operator's decision (d-ede04b92, PM 01M7JPZQ), not a repo's. A repo cannot add, extend, or shrink an entry. Globs: `*` stays inside one path segment, `**` crosses directories, a glob without `/` matches any single path segment.",
   "sensitive_paths": [
     "**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*.p12", "**/id_rsa*", "**/id_ed25519*", "**/.ssh/**",
     "**/credentials*", "**/secrets/**", "**/secret*", "**/.netrc", "**/.npmrc", "**/.kimi-code/**", "**/.aws/**",
@@ -10,6 +10,10 @@
   "sensitive_repos": ["*payment*", "*billing*", "*customer*", "*-private", "home-*", "*secrets*"],
   "core_dirs": [],
   "novel_roles": ["plan", "design", "brainstorm", "architecture", "plan_review", "research"],
+  "review_roles": ["reviewer", "review", "qc", "qc_panel", "plan_review", "loop_reviewer", "verifier"],
   "local_task_classes": ["format-convert", "log-summary", "simple-script", "test-scaffold"],
-  "local_deny_repos": ["aaa-race-*", "revival*", "pinball*", "twgameproject*", "308*", "*prod*", "*player*", "hangar", "mnemos", "*credential*", "*secret*"]
+  "local_deny_repos": ["aaa-race-*", "revival*", "pinball*", "twgameproject*", "308*", "*prod*", "*player*", "hangar", "mnemos", "*credential*", "*secret*"],
+  "review_local_exceptions": [
+    { "endpoint": "qwen_local", "until": "2026-11-21T23:59:59+08:00", "ref": "d-ede04b92 (PM 01M7JPZQ)" }
+  ]
 }

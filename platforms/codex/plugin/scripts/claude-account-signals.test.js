@@ -62,11 +62,14 @@ function world() {
   const pidFile = path.join(fx.root, 'pids');
   const fake = writeFakeClaude(fx.root, pidFile);
   const recorded = () => (fs.existsSync(pidFile) ? fs.readFileSync(pidFile, 'utf8').trim().split(' ').map(Number) : []);
-  const env = Object.assign({}, process.env, fx.env, { AUTOPILOT_SESSION_ID: '' });
+  const runsDir = path.join(fx.root, 'runs');
+  fs.mkdirSync(runsDir, { recursive: true });
+  const env = Object.assign({}, process.env, fx.env, { AUTOPILOT_SESSION_ID: '', AUTOPILOT_DISPATCH_RUNS_DIR: runsDir });
   delete env.AUTOPILOT_SESSION_ID;
   const procs = [];
   const launch = (cmd, args, extraEnv) => {
-    const p = spawn(cmd, args, { env: Object.assign({}, env, extraEnv || {}), stdio: ['ignore', 'ignore', 'ignore'] });
+    const childEnv = Object.assign({}, env, extraEnv || {}, { AUTOPILOT_DISPATCH_RUNS_DIR: runsDir });
+    const p = spawn(cmd, args, { env: childEnv, stdio: ['ignore', 'ignore', 'ignore'] });
     procs.push(p);
     return track(p, CHILD_WALL_MS);
   };

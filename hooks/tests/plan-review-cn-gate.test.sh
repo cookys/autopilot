@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Plan review goes through the Chinese-model dispatch gate with role plan_review (01M7E2A1, d-1dfcf757):
-# a plan is novel work, so a barred-family seat is skipped before anything spawns, stderr names it, exit 2.
+# plan_review is a review role, so a barred-family seat is skipped before anything spawns
+# (stderr names review-role), exit 2.
 # Negative control: the clean (non-Chinese) panel in the same harness is unchanged (exit 0).
 . "$(dirname "$0")/lib.sh"
 
@@ -30,7 +31,7 @@ run_plan() {
 
 run_plan cn-panel kimi kimi-code/kimi-for-coding; EXIT=$?
 assert_exit_code "$EXIT" "2" "panel with a Chinese-family seat exits 2"
-assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "cn_model_dispatch_barred moonshot novel" "stderr names family and the novel class"
+assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "cn_model_dispatch_barred moonshot review-role" "stderr names family and the review-role class"
 assert_contains "$(cat "$TEST_TMP/cn-panel.err")" "kimi/kimi-code/kimi-for-coding" "stderr names the seat's runner/model"
 assert_eq "$(cat "$RECORD")" "" "the barred seat's runner was never spawned"
 

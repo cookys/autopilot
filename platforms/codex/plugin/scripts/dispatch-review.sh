@@ -443,6 +443,17 @@ family_guard_same() {
   return 1
 }
 
+# Reviewer retreat must not land on a barred Chinese-model family (review-role, any size).
+# Exit 0 when the gate allows this rung. AUTOPILOT_TEST_CN_GATE_OFF=1 allows every family.
+cn_gate_reviewer_ok() {
+  local _runner="$1" _model="$2" _endpoint="${3:-}" _msg
+  _msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role reviewer --runner "$_runner" --model "$_model" ${_endpoint:+--endpoint "$_endpoint"} ${DIFF_FILE:+--diff-file "$DIFF_FILE"} ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} 2>&1 >/dev/null)" || {
+    echo "family-guard: skipping rung ${_model}@${_runner}${_endpoint:+#${_endpoint}} (${_msg:-cn_model_dispatch_barred})" >&2
+    return 1
+  }
+  return 0
+}
+
 # $1 engine  $2 effort  $3 runner  $4 resolved JSON
 # Sets _FG_ENGINE _FG_EFFORT _FG_RUNNER _FG_ENDPOINT _FG_DEMOTED_JSON. return 0 when a cross-family rung is chosen.
 family_guard_select() {
@@ -472,11 +483,13 @@ process.stdout.write([hasOv, rungCustom, prefsCustom].join("|"));
 
   if [[ "$has_override" == "1" && "$custom_rung" == "1" && "$run" != "codex" && -n "$eng" && -n "$eff" && -n "$run" ]]; then
     if ! family_guard_same "$eng"; then
-      _FG_ENGINE="$eng"
-      _FG_EFFORT="$eff"
-      _FG_RUNNER="$run"
-      _FG_ENDPOINT=""
-      return 0
+      if cn_gate_reviewer_ok "$run" "$eng" ""; then
+        _FG_ENGINE="$eng"
+        _FG_EFFORT="$eff"
+        _FG_RUNNER="$run"
+        _FG_ENDPOINT=""
+        return 0
+      fi
     else
       fam="$(_review_family_of "$eng")"
       echo "family-guard: skipping rung ${eng}/${eff}@${run} (family ${fam} equals implementer family ${IMPLEMENTER_FAMILY})" >&2
@@ -513,6 +526,7 @@ for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
         echo "family-guard: skipping rung ${e}/${f}@${r} (family ${fam} equals implementer family ${IMPLEMENTER_FAMILY})" >&2
         continue
       fi
+      cn_gate_reviewer_ok "$r" "$e" "$ep" || continue
       _FG_ENGINE="$e"
       _FG_EFFORT="$f"
       _FG_RUNNER="$r"
@@ -542,6 +556,7 @@ for (const r of plan.chain) {
   while IFS='|' read -r e f r ep dem; do
     [ -n "${e:-}" ] && [ -n "${r:-}" ] || continue
     [ "$r" = "codex" ] && continue
+    cn_gate_reviewer_ok "$r" "$e" "${ep:-}" || continue
     _FG_ENGINE="$e"
     _FG_EFFORT="${f:-high}"
     _FG_RUNNER="$r"
@@ -589,7 +604,7 @@ validate_d2_agy_claims() {
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint review-seat ;; esac
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, cursor, or opencode (got: $RUNNER)" ;; esac
-# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
+# d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (review-role at every size, plus transcript, sensitive, core, novel, unknown size/role/scope).
 _tfg_msg="$(node "$_REVIEW_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role reviewer --runner "$RUNNER" --model "$MODEL" ${DIFF_FILE:+--diff-file "$DIFF_FILE"} ${ENDPOINT:+--endpoint "$ENDPOINT"} ${SPEC_FILE:+--prompt-file "$SPEC_FILE"} 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
@@ -2564,6 +2579,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
 elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   ANTHROPIC_ARGS=(
     --raw
+    --role reviewer
     --prompt-file "$PROMPT_FILE"
     --model "$MODEL"
     --timeout-ms "$TIMEOUT_MS"

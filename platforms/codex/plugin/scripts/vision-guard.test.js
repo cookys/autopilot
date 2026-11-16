@@ -707,6 +707,20 @@ function runReview(script, dir, spec, stub) {
   fs.writeFileSync(diff, 'diff --git a/a b/a\n+hello\n');
   const cap = path.join(dir, 'empty-cap');
   fs.mkdirSync(cap, { recursive: true });
+  const env = childEnv({
+    DISPATCH_QUIET: '1',
+    DISPATCH_DETACH: '0',
+    AUTOPILOT_GROK_EFFORT_PROBE: '0',
+    AUTOPILOT_DISPATCH_USAGE: 'off',
+    AUTOPILOT_RUNNER_HOME_FALLBACK: 'off',
+    AUTOPILOT_EMPTY_GRACE_MS: '200',
+    AUTOPILOT_SETTLE_MS: '1000',
+    AUTOPILOT_STABLE_POLLS: '1',
+    ENGINE_CAPABILITY_DIR: cap,
+    TMPDIR: dir,
+  });
+  env.AUTOPILOT_DISPATCH_RUNS_DIR = path.join(dir, 'runs');
+  fs.mkdirSync(env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
   return cp.spawnSync('bash', [
     script,
     '--runner', 'grok',
@@ -720,18 +734,7 @@ function runReview(script, dir, spec, stub) {
     encoding: 'utf8',
     cwd: ROOT,
     timeout: 40000,
-    env: childEnv({
-      DISPATCH_QUIET: '1',
-      DISPATCH_DETACH: '0',
-      AUTOPILOT_GROK_EFFORT_PROBE: '0',
-      AUTOPILOT_DISPATCH_USAGE: 'off',
-      AUTOPILOT_RUNNER_HOME_FALLBACK: 'off',
-      AUTOPILOT_EMPTY_GRACE_MS: '200',
-      AUTOPILOT_SETTLE_MS: '1000',
-      AUTOPILOT_STABLE_POLLS: '1',
-      ENGINE_CAPABILITY_DIR: cap,
-      TMPDIR: dir,
-    }),
+    env,
   });
 }
 
@@ -793,6 +796,8 @@ function railEnv(dir, extra) {
     TMPDIR: dir,
     ...extra,
   });
+  env.AUTOPILOT_DISPATCH_RUNS_DIR = path.join(dir, 'runs');
+  fs.mkdirSync(env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
   for (const key of [
     'AUTOPILOT_PARENT_RUN_ID',
     'AUTOPILOT_ROOT_RUN_ID',

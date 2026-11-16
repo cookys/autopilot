@@ -917,7 +917,9 @@ if [ -n "$ROLE_KIT_DIR" ]; then
   fi
 fi
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;; esac
-case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, or cursor (got: $RUNNER)" ;; esac
+# Runner support is enforced after the manifest exists, so the refusal can record
+# final_status runner_unsupported. An early die here would be precondition_failed
+# and would leave no manifest.
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 if [[ "$RUNNER" = "cursor" ]]; then
   # No family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
@@ -1256,6 +1258,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# No spawn branch for this runner. Refuse before the child, with one stderr line, and let the
+# EXIT trap stamp the manifest. anthropic-compatible stays in the list: it is the in-process
+# verification-author transport (no worker process), not an unsupported name.
+case "$RUNNER" in
+  codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|cursor) ;;
+  *)
+    echo "dispatch-author: runner '$RUNNER' is not supported for authoring (supported: codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, cursor)" >&2
+    emit_result "runner_unsupported" "null" "runner '$RUNNER' is not supported for authoring" 2
+    ;;
+esac
+
 if [[ "$STRICT_CONTRACT" -eq 1 ]]; then
   CONTAINMENT_PRE_STATUS="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)"
   CONTAINMENT_PRE_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
@@ -1578,6 +1591,25 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
     ANTHROPIC_BASE_URL="$AUTOPILOT_MINIMAX_BASE_URL"
   else
     ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
+  fi
+  # Preflight the resolved base URL before spawning the runner so a non-loopback http://
+  # endpoint fails fast with precondition_failed (exit 2) and prints the reason to stderr
+  # instead of spawning the transport and failing exit 3 runner_failed in the raw log.
+  _anthropic_url_err="$(node -e '
+const baseUrl = String(process.argv[1] || "").replace(/\/+$/, "");
+let parsed;
+try { parsed = new URL(baseUrl); } catch (err) {
+  process.stdout.write("invalid base URL: " + err.message);
+  process.exit(0);
+}
+const h = parsed.hostname;
+const loopback = h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
+if (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback)) process.exit(0);
+process.stdout.write("base URL must use https:// unless it is an http:// loopback test endpoint; a non-loopback http:// endpoint is the cc-shim rail (--runner cc-shim), not this anthropic-compatible transport");
+' "$ANTHROPIC_BASE_URL")"
+  if [[ -n "$_anthropic_url_err" ]]; then
+    printf '%s\n' "$_anthropic_url_err" >&2
+    die_precondition "$_anthropic_url_err"
   fi
   # Authoring payloads are large single files; the JS's 4096 review default truncates them
   # and the truncated response fail-closes (verified live: GLM r6 oracle stopped at

@@ -335,6 +335,8 @@ function liveRail(mode) {
   fs.writeFileSync(prompt, 'edit src/a.js\n');
   const cap = path.join(tempRoot, `cap-${mode}`);
   fs.mkdirSync(cap, { recursive: true });
+  const railRuns = path.join(tempRoot, 'runs');
+  fs.mkdirSync(railRuns, { recursive: true });
   const run = spawnSync('bash', [
     DISPATCH,
     '--runner', 'grok', '--model', 'grok-4.5', '--effort', 'high', '--grok-bin', bin,
@@ -347,6 +349,7 @@ function liveRail(mode) {
       PATH: process.env.PATH,
       HOME: tempRoot,
       TMPDIR: tempRoot,
+      AUTOPILOT_DISPATCH_RUNS_DIR: railRuns,
       AUTOPILOT_ACCOUNTS_DIR: path.join(tempRoot, 'no-accounts'), // G37: never consult the real registry
       FAKE_GROK_MODE: mode,
       AUTOPILOT_GROK_EFFORT_PROBE: '0',

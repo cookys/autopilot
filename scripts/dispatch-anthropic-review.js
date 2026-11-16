@@ -39,6 +39,7 @@ const os = require('os');
 const path = require('path');
 const { URL } = require('url');
 const { loadEndpointsEnv } = require(path.join(__dirname, 'lib', 'load-endpoints-env'));
+const cnGate = require(path.join(__dirname, 'lib', 'cn-model-dispatch-gate'));
 
 let sharedRedact = (text) => String(text);
 try {
@@ -81,6 +82,8 @@ USAGE:
       [--base-url <url>]    # default ANTHROPIC_COMPATIBLE_BASE_URL,
                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
       [--endpoint <name>]   # optional named endpoint for fleet gateway allowlist check
+      [--spec-file <file>]  # optional task spec file checked by the Chinese-model gate
+      [--role <role>]       # rail-implied role for the Chinese-model gate (--raw only; non-raw is always reviewer)
 
 AUTH (env only — never accepted as a CLI argument):
   MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN for other
@@ -97,6 +100,7 @@ function parseArgs(argv) {
   const out = {
     model: '',
     diffFile: '',
+    specFile: '',
     promptFile: '',
     timeoutMs: DEFAULT_TIMEOUT_MS,
     maxTokens: DEFAULT_MAX_TOKENS,
@@ -104,6 +108,7 @@ function parseArgs(argv) {
     baseUrl: '',
     tokenEnv: '',
     endpoint: '',
+    role: '',
     raw: false,
     help: false,
   };
@@ -115,6 +120,9 @@ function parseArgs(argv) {
         break;
       case '--diff-file':
         out.diffFile = argv[++i] || '';
+        break;
+      case '--spec-file':
+        out.specFile = argv[++i] || '';
         break;
       case '--prompt-file':
         out.promptFile = argv[++i] || '';
@@ -134,6 +142,9 @@ function parseArgs(argv) {
         break;
       case '--endpoint':
         out.endpoint = argv[++i] || '';
+        break;
+      case '--role':
+        out.role = argv[++i] || '';
         break;
       case '--token-env': {
         // Require a non-empty value: a dangling `--token-env` (no arg) must NOT silently
@@ -599,12 +610,6 @@ async function main() {
     process.exit(0);
   }
 
-  // Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env before any
-  // token/base-url resolution. Best-effort: a rejected/absent file is a no-op and the normal
-  // "missing auth token" precondition fires. Usually dispatch-review.sh already loaded these
-  // via the shell twin, but direct invocation must honor the same one-credential-home contract.
-  loadEndpointsEnv();
-
   const rawMode = !!args.raw;
   const model = args.model;
   const failPrecondition = (error) => {
@@ -625,6 +630,26 @@ async function main() {
   if (!model) {
     failPrecondition('--model is required');
   }
+
+  // Before any credential file is read. Non-raw calls are always code reviews, so role is forced
+  // to 'reviewer' (--role is ignored). --raw calls (e.g. dispatch-author.sh) honour --role when
+  // passed, else env/header only so an allowed XS/S implementer authoring task is not forced into
+  // reviewer. A missing role still fails closed inside the gate.
+  const cn = cnGate.check({
+    runner: RUNNER,
+    model,
+    endpoint: args.endpoint || process.env[FLEET_TASK_ENDPOINT_ENV] || '',
+    role: rawMode ? args.role : 'reviewer',
+    files: [args.promptFile, args.specFile].filter(Boolean),
+    diffFiles: args.diffFile ? [args.diffFile] : [],
+  });
+  if (!cn.allowed) failPrecondition(cn.line);
+
+  // Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env before any
+  // token/base-url resolution. Best-effort: a rejected/absent file is a no-op and the normal
+  // "missing auth token" precondition fires. Usually dispatch-review.sh already loaded these
+  // via the shell twin, but direct invocation must honor the same one-credential-home contract.
+  loadEndpointsEnv();
 
   if (rawMode && !args.promptFile) {
     failPrecondition('--raw requires --prompt-file');

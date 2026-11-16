@@ -482,7 +482,7 @@ test('(h) filter-ladder drops a qwen_local rung when Task-Class is missing', () 
 });
 
 // Shipped review_local_exceptions only (d-ede04b92, PM 01M7JPZQ). A repo file cannot open,
-// extend, or shrink one. Clock is check({ now }); AUTOPILOT_CN_GATE_NOW is the test-only env.
+// extend, or shrink one. Clock is check({ now }) (no env override).
 const EXC_BEFORE = '2026-11-17T12:00:00+08:00';
 const EXC_JUST_BEFORE = '2026-11-21T23:59:58.999+08:00';
 const EXC_UNTIL = '2026-11-21T23:59:59+08:00';
@@ -540,19 +540,38 @@ test('review_local_exceptions: qwen_local review role is allowed only before the
   assert.equal(glm.cls, 'review-role', 'a cloud glm reviewer stays refused');
   assert.equal(glm.family, 'zhipu');
 
-  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: 'not-a-date' }).cls, 'review-role', 'an invalid explicit now fails closed and does not read the env');
-  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'an explicit now wins over the env');
-  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: 'nope' }, cwd: normal }).cls, 'review-role', 'an invalid env does not open the exception');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: 'not-a-date' }).cls, 'review-role', 'an invalid explicit now fails closed and ignores AUTOPILOT_CN_GATE_NOW');
+  assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'AUTOPILOT_CN_GATE_NOW is ignored when now is after expiry');
+  const realDateNow = Date.now;
+  try {
+    Date.now = () => Date.parse(EXC_AFTER);
+    assert.equal(gate.check({ ...EXC_LOCAL, env: { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE }, cwd: normal }).cls, 'review-role', 'AUTOPILOT_CN_GATE_NOW is ignored even when now is omitted and the real clock is after expiry');
+  } finally {
+    Date.now = realDateNow;
+  }
+
+  // Runner/model shorthands resolving to qwen_local without an explicit endpoint.
+  assert.equal(gate.check({ runner: 'qwen_local', model: 'Qwen3.8-27B-QUASAR-NVFP4', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true, 'runner=qwen_local shorthand resolves effective endpoint before expiry');
+  assert.equal(gate.check({ runner: 'qwen_local', model: 'Qwen3.8-27B-QUASAR-NVFP4', env: EXC_REV, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'runner=qwen_local shorthand expires after until');
+  assert.equal(gate.check({ runner: 'cc-shim', model: 'qwen_local', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).allowed, true, 'model=qwen_local shorthand resolves effective endpoint before expiry');
+  assert.equal(gate.check({ runner: 'cc-shim', model: 'qwen_local', env: EXC_REV, cwd: normal, now: EXC_AFTER }).cls, 'review-role', 'model=qwen_local shorthand expires after until');
+  assert.equal(gate.check({ runner: 'qwen_local', model: 'kimi-k2', env: EXC_REV, cwd: normal, now: EXC_BEFORE }).cls, 'review-role', 'other barred family with runner=qwen_local shorthand stays barred');
 
   const rung = 'Qwen3.8-27B-QUASAR-NVFP4/medium@cc-shim#qwen_local';
-  assert.deepEqual(gate.filterLadder([rung], { env: EXC_REV, cwd: normal, now: EXC_BEFORE }).kept, [rung]);
-  const dropped = gate.filterLadder([rung], { env: EXC_REV, cwd: normal, now: EXC_AFTER });
+  const rungAlias = 'Qwen3.8-27B-QUASAR-NVFP4/medium@qwen_local';
+  assert.deepEqual(gate.filterLadder([rung, rungAlias], { env: EXC_REV, cwd: normal, now: EXC_BEFORE }).kept, [rung, rungAlias]);
+  const dropped = gate.filterLadder([rung, rungAlias], { env: EXC_REV, cwd: normal, now: EXC_AFTER });
   assert.deepEqual(dropped.kept, []);
   assert.match(dropped.barred[0].line, /cn_model_dispatch_barred alibaba review-role/);
+  assert.match(dropped.barred[1].line, /cn_model_dispatch_barred alibaba review-role/);
 
-  const cliLate = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'check', '--runner', 'cc-shim', '--model', 'Qwen3.8-27B-QUASAR-NVFP4', '--endpoint', 'qwen_local', '--role', 'loop_reviewer', '--cwd', normal], { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_AFTER });
+  const gateMod = path.join(S, 'lib', 'cn-model-dispatch-gate.js');
+  const wrapScript = 'const g = require(process.argv[1]); const c = g.check({ runner: process.argv[2], model: process.argv[3], endpoint: process.argv[4], role: "loop_reviewer", cwd: process.argv[5], now: process.argv[6] }); if (!c.allowed) { process.stderr.write(c.line + "\\n"); process.exit(2); }';
+  const cliLate = run('node', ['-e', wrapScript, gateMod, 'cc-shim', 'Qwen3.8-27B-QUASAR-NVFP4', 'qwen_local', normal, EXC_AFTER], { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE });
   assert.equal(cliLate.status, 2, cliLate.stderr);
   assert.match(cliLate.stderr, /cn_model_dispatch_barred alibaba review-role \(01M7E2A1, d-1dfcf757\)/);
-  const cliOk = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'check', '--runner', 'cc-shim', '--model', 'Qwen3.8-27B-QUASAR-NVFP4', '--endpoint', 'qwen_local', '--role', 'loop_reviewer', '--cwd', normal], { ...EXC_REV, AUTOPILOT_CN_GATE_NOW: EXC_BEFORE });
+  const cliOk = run('node', ['-e', wrapScript, gateMod, 'cc-shim', 'Qwen3.8-27B-QUASAR-NVFP4', 'qwen_local', normal, EXC_BEFORE], EXC_REV);
   assert.equal(cliOk.status, 0, cliOk.stderr);
+  const cliAliasOk = run('node', ['-e', wrapScript, gateMod, 'qwen_local', 'Qwen3.8-27B-QUASAR-NVFP4', '', normal, EXC_BEFORE], EXC_REV);
+  assert.equal(cliAliasOk.status, 0, cliAliasOk.stderr);
 });

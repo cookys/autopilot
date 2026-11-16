@@ -1492,17 +1492,6 @@
       "note": "1 disables the Chinese-model dispatch gate so suites that dispatch kimi/glm/minimax through a sentinel runner do not need Size/Role/Scope. Tests only."
     },
     {
-      "name": "AUTOPILOT_CN_GATE_NOW",
-      "kind": "env",
-      "audience": "internal",
-      "class": "test_seam",
-      "default": null,
-      "readers": ["scripts/lib/cn-model-dispatch-gate.js"],
-      "doc": null,
-      "relates": [],
-      "note": "ISO time that replaces the clock in cn-model-dispatch-gate.js so review_local_exceptions expiry is deterministic. Test-only. An explicit check({ now }) wins; an unparsable value does not open the exception. Not an operator setting."
-    },
-    {
       "name": "AUTOPILOT_NOW",
       "kind": "env",
       "audience": "internal",

@@ -1592,6 +1592,25 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   else
     ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
   fi
+  # Preflight the resolved base URL before spawning the runner so a non-loopback http://
+  # endpoint fails fast with precondition_failed (exit 2) and prints the reason to stderr
+  # instead of spawning the transport and failing exit 3 runner_failed in the raw log.
+  _anthropic_url_err="$(node -e '
+const baseUrl = String(process.argv[1] || "").replace(/\/+$/, "");
+let parsed;
+try { parsed = new URL(baseUrl); } catch (err) {
+  process.stdout.write("invalid base URL: " + err.message);
+  process.exit(0);
+}
+const h = parsed.hostname;
+const loopback = h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
+if (parsed.protocol === "https:" || (parsed.protocol === "http:" && loopback)) process.exit(0);
+process.stdout.write("base URL must use https:// unless it is an http:// loopback test endpoint; a non-loopback http:// endpoint is the cc-shim rail (--runner cc-shim), not this anthropic-compatible transport");
+' "$ANTHROPIC_BASE_URL")"
+  if [[ -n "$_anthropic_url_err" ]]; then
+    printf '%s\n' "$_anthropic_url_err" >&2
+    die_precondition "$_anthropic_url_err"
+  fi
   # Authoring payloads are large single files; the JS's 4096 review default truncates them
   # and the truncated response fail-closes (verified live: GLM r6 oracle stopped at
   # max_tokens). Env override for calibration; validated as a positive integer.

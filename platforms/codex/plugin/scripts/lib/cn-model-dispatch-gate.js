@@ -50,13 +50,11 @@
 //   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
 //   sensitive_repos, core_dirs, novel_roles, review_roles, local_task_classes, local_deny_repos.
 //   review_local_exceptions is read only from the shipped defaults (not unioned). Clock: check(..., { now })
-//   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the env or
-//   the real clock. AUTOPILOT_CN_GATE_NOW (ISO string) is honoured only when now is omitted; it is a test
-//   seam, not an operator setting. An unparsable value does not open the exception. Unset uses Date.now().
+//   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the real
+//   clock. When now is omitted, Date.now() is used (no env override).
 // Family inference is stage-write.js familyOfEngine (qoder included). Transcript deny list is
 // scripts/lib/data-class-policy.json deny_families, which must cover BARRED_FAMILIES.
 // Test seam: AUTOPILOT_TEST_CN_GATE_OFF=1 disables the gate (suites that dispatch through a sentinel runner).
-// Test seam: AUTOPILOT_CN_GATE_NOW is an ISO clock for this gate only (see the config note above). Tests only.
 //
 // CLI (Node built-ins only):
 //   check --runner R [--model M] [--endpoint E] [--role R] [--prompt-file F]... [--diff-file F]... [--cwd D]
@@ -164,12 +162,10 @@ function instantMs(v) {
   return Number.isFinite(t) ? t : null;
 }
 
-// Explicit now wins. An invalid explicit now is null (fail closed): do not read the env or the real clock.
-// AUTOPILOT_CN_GATE_NOW is a test seam, used only when now was omitted. An invalid value does not open
-// the exception. Unset uses the real clock.
-function gateNow(opts, env) {
+// Explicit now wins. An invalid explicit now is null (fail closed): do not fall back to the real clock.
+// When now is omitted, use the real clock (no env override).
+function gateNow(opts) {
   if (Object.prototype.hasOwnProperty.call(opts, 'now')) return instantMs(opts.now);
-  if (env && Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_CN_GATE_NOW')) return instantMs(env.AUTOPILOT_CN_GATE_NOW);
   return Date.now();
 }
 
@@ -194,21 +190,39 @@ function localEndpoints() {
 
 function rawFamily(p) { return /qoder/i.test(p) ? 'qoder' : familyOfEngine(p); }
 
+// Effective endpoint: an explicit endpoint wins; otherwise a runner or model shorthand that names a listed
+// local-sandbox endpoint resolves to that canonical endpoint (matching filterLadder).
+function effectiveEndpointOf(runner, model, endpoint, locals = localEndpoints()) {
+  const ep = String(endpoint || '');
+  if (ep) {
+    const matched = locals.find((l) => l.toLowerCase() === ep.toLowerCase());
+    return matched || ep;
+  }
+  for (const cand of [runner, model]) {
+    const s = String(cand || '');
+    if (!s) continue;
+    const matched = locals.find((l) => l.toLowerCase() === s.toLowerCase());
+    if (matched) return matched;
+  }
+  return '';
+}
+
 // localServed: the endpoint is a local-sandbox endpoint and no OTHER barred family is named.
 // The family id is the one that endpoint serves (cloud qwen is alibaba), so the cloud checks apply as-is.
 function resolution(runner, model, endpoint) {
-  const ep = String(endpoint || '');
-  if (ep && localEndpoints().includes(ep)) {
+  const locals = localEndpoints();
+  const ep = effectiveEndpointOf(runner, model, endpoint, locals);
+  if (ep && locals.includes(ep)) {
     const served = rawFamily(ep);
     const fams = [model, runner].map((s) => String(s || '')).filter(Boolean).map(rawFamily);
     const other = fams.find((f) => BARRED_FAMILIES.includes(f) && f !== served);
-    if (other) return { family: other, localServed: false };
-    if (BARRED_FAMILIES.includes(served)) return { family: served, localServed: true };
-    return { family: fams.find((f) => f !== 'unknown') || served, localServed: false };
+    if (other) return { family: other, localServed: false, endpoint: ep };
+    if (BARRED_FAMILIES.includes(served)) return { family: served, localServed: true, endpoint: ep };
+    return { family: fams.find((f) => f !== 'unknown') || served, localServed: false, endpoint: ep };
   }
-  const probes = [endpoint, model, runner].map((s) => String(s || '')).filter(Boolean);
+  const probes = [ep, model, runner].map((s) => String(s || '')).filter(Boolean);
   const fams = probes.map(rawFamily);
-  return { family: fams.find((f) => BARRED_FAMILIES.includes(f)) || fams.find((f) => f !== 'unknown') || 'unknown', localServed: false };
+  return { family: fams.find((f) => BARRED_FAMILIES.includes(f)) || fams.find((f) => f !== 'unknown') || 'unknown', localServed: false, endpoint: ep };
 }
 
 function familyOf(runner, model, endpoint) { return resolution(runner, model, endpoint).family; }
@@ -235,7 +249,7 @@ function taskFacts({ files = [], diffFiles = [], role = '', env = process.env })
 // -> { allowed, family, cls?, line? }
 function check(opts = {}) {
   const { runner, model, endpoint, files = [], diffFiles = [], role = '', env = process.env, cwd = process.cwd() } = opts;
-  const { family, localServed } = resolution(runner, model, endpoint);
+  const { family, localServed, endpoint: effectiveEndpoint } = resolution(runner, model, endpoint);
   if (String(env.AUTOPILOT_TEST_CN_GATE_OFF || '') === '1' || !BARRED_FAMILIES.includes(family)) return { allowed: true, family };
   const root = repoRootOf(cwd);
   const cfg = loadConfig(root);
@@ -248,7 +262,7 @@ function check(opts = {}) {
   // only inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
   const reviewRolesToCheck = [f.role, f.railRole, f.headerRole].filter(Boolean);
   if (reviewRolesToCheck.some((r) => cfg.review_roles.includes(r))) {
-    const exempt = localServed && reviewLocalExempt(endpoint, gateNow(opts, env), root, cfg.local_deny_repos);
+    const exempt = localServed && reviewLocalExempt(effectiveEndpoint, gateNow(opts), root, cfg.local_deny_repos);
     if (!exempt) return block('review-role');
   }
   if (BIG_SIZES.includes(f.size)) return block('core-size');
@@ -287,10 +301,7 @@ function filterLadder(rungs, ctx = {}) {
   const locals = localEndpoints();
   for (const r of rungs) {
     const parts = rungParts(r);
-    let endpoint = parts.endpoint;
-    if (!endpoint && locals.includes(parts.runner)) endpoint = parts.runner;
-    else if (!endpoint && locals.includes(parts.model)) endpoint = parts.model;
-    else if (!endpoint) endpoint = ctx.endpoint || '';
+    const endpoint = effectiveEndpointOf(parts.runner, parts.model, parts.endpoint, locals) || ctx.endpoint || '';
     const c = check({ ...ctx, runner: parts.runner, model: parts.model, endpoint });
     if (c.allowed) kept.push(r); else barred.push({ rung: r, family: c.family, line: c.line });
   }

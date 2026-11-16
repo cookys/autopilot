@@ -590,6 +590,57 @@ assert_contains "$OUT" '"status": "precondition_failed"' "anthropic-compatible u
 assert_not_contains "$OUT" "--endpoint applies only to --runner cc-shim" "anthropic-compatible endpoint gate no longer cc-shim-only"
 assert_contains "$OUT" "--endpoint 'UNKNOWN_EP' not ready" "anthropic-compatible endpoint resolution reports not-ready"
 
+# Non-loopback http:// under --runner anthropic-compatible is refused BEFORE spawning:
+# stderr carries the transport reason, exit is 2, no child runs, manifest final_status is precondition_failed.
+ANTHRO_URL_RUNS="$TEST_TMP/anthro-url-runs"
+mkdir -p "$ANTHRO_URL_RUNS"
+ANTHRO_SPAWN_MARKER="$TEST_TMP/anthro-url-spawn-marker"
+STUB_ANTHRO_MARKER_JS="$TEST_TMP/runner-anthropic-marker.js"
+cat > "$STUB_ANTHRO_MARKER_JS" <<'EOF'
+#!/usr/bin/env node
+const fs = require('fs');
+if (process.env.TEST_ANTHRO_SPAWN_MARKER) {
+  fs.writeFileSync(process.env.TEST_ANTHRO_SPAWN_MARKER, 'SPAWNED\n');
+}
+let prompt = '';
+const idx = process.argv.indexOf('--prompt-file');
+if (idx >= 0 && process.argv[idx + 1]) {
+  try { prompt = fs.readFileSync(process.argv[idx + 1], 'utf8'); } catch (e) { prompt = ''; }
+}
+const begin = (prompt.match(/^<<<AUTOPILOT-AUTHOR-[0-9a-f]{32}>>>$/m) || [])[0];
+const end = (prompt.match(/^<<<AUTOPILOT-END-[0-9a-f]{32}>>>$/m) || [])[0];
+const body = "authoring body line 1\nauthoring body line 2";
+if (begin && end) process.stdout.write(begin + "\n" + body + "\n" + end + "\n");
+else process.stdout.write(body);
+EOF
+chmod +x "$STUB_ANTHRO_MARKER_JS"
+
+rm -f "$ANTHRO_SPAWN_MARKER"
+ANTHRO_ERR_FILE="$TEST_TMP/anthro-nonloopback.stderr"
+OUT="$(AUTOPILOT_DISPATCH_RUNS_DIR="$ANTHRO_URL_RUNS" TEST_ANTHRO_SPAWN_MARKER="$ANTHRO_SPAWN_MARKER" AUTOPILOT_ENDPOINT_TESTLAN_URL="http://192.168.10.50:8080" AUTOPILOT_ENDPOINT_TESTLAN_TOKEN="t" AUTOPILOT_ENDPOINT_TESTLAN_TRANSPORT="plaintext-private" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model mini --prompt-file "$PROMPT" --bin "$STUB_ANTHRO_MARKER_JS" --endpoint TESTLAN --run-id anthro-nonloopback-http 2>"$ANTHRO_ERR_FILE")"
+EXIT=$?
+assert_eq "2" "$EXIT" "anthropic-compatible non-loopback http endpoint exits 2 before spawn"
+assert_contains "$(cat "$ANTHRO_ERR_FILE")" "base URL must use https:// unless it is an http:// loopback test endpoint; a non-loopback http:// endpoint is the cc-shim rail (--runner cc-shim), not this anthropic-compatible transport" "anthropic-compatible non-loopback http prints exact reason on stderr"
+assert_contains "$OUT" '"status": "precondition_failed"' "anthropic-compatible non-loopback http emits precondition_failed"
+assert_file_absent "$ANTHRO_SPAWN_MARKER" "anthropic-compatible non-loopback http does not spawn child"
+ANTHRO_MANIFEST="$ANTHRO_URL_RUNS/anthro-nonloopback-http.manifest.json"
+assert_file_exists "$ANTHRO_MANIFEST" "anthropic-compatible non-loopback http writes manifest"
+assert_contains "$(cat "$ANTHRO_MANIFEST")" '"final_status": "precondition_failed"' "anthropic-compatible non-loopback http manifest final_status is precondition_failed"
+
+rm -f "$ANTHRO_SPAWN_MARKER"
+OUT="$(AUTOPILOT_DISPATCH_RUNS_DIR="$ANTHRO_URL_RUNS" TEST_ANTHRO_SPAWN_MARKER="$ANTHRO_SPAWN_MARKER" AUTOPILOT_ENDPOINT_TESTLOOP_URL="http://127.0.0.1:18080" AUTOPILOT_ENDPOINT_TESTLOOP_TOKEN="t" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model mini --prompt-file "$PROMPT" --bin "$STUB_ANTHRO_MARKER_JS" --endpoint TESTLOOP --run-id anthro-loopback-http 2>&1)"
+EXIT=$?
+assert_eq "0" "$EXIT" "anthropic-compatible loopback http endpoint reaches runner unchanged"
+assert_contains "$OUT" '"status": "authored"' "anthropic-compatible loopback http status is authored"
+assert_file_exists "$ANTHRO_SPAWN_MARKER" "anthropic-compatible loopback http spawns child"
+
+rm -f "$ANTHRO_SPAWN_MARKER"
+OUT="$(AUTOPILOT_DISPATCH_RUNS_DIR="$ANTHRO_URL_RUNS" TEST_ANTHRO_SPAWN_MARKER="$ANTHRO_SPAWN_MARKER" AUTOPILOT_ENDPOINT_TESTHTTPS_URL="https://api.example.test/anthropic" AUTOPILOT_ENDPOINT_TESTHTTPS_TOKEN="t" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model mini --prompt-file "$PROMPT" --bin "$STUB_ANTHRO_MARKER_JS" --endpoint TESTHTTPS --run-id anthro-https-ep 2>&1)"
+EXIT=$?
+assert_eq "0" "$EXIT" "anthropic-compatible https endpoint reaches runner unchanged"
+assert_contains "$OUT" '"status": "authored"' "anthropic-compatible https status is authored"
+assert_file_exists "$ANTHRO_SPAWN_MARKER" "anthropic-compatible https spawns child"
+
 # --- 9. late-flush and per-runner settle bound under cc-shim ---
 STUB_CC_LATE_FLUSH="$TEST_TMP/runner-cc-late-flush"
 cat > "$STUB_CC_LATE_FLUSH" <<'EOF'

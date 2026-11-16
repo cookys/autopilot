@@ -144,6 +144,19 @@ test('review-role: barred cloud families refuse a review role at any size; grok 
   const cli = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'filter-ladder', '--role', 'reviewer', '--', 'kimi-code/kimi-for-coding/high@kimi', 'grok-4.7/low@grok'], rev);
   assert.equal(cli.status, 0, cli.stderr);
   assert.equal(cli.stdout.trim(), 'grok-4.7/low@grok');
+
+  assert.equal(gate.check({ ...K, role: 'reviewer', env: OK, cwd: repo }).cls, 'review-role', 'env AUTOPILOT_TASK_ROLE=implementer cannot lower rail role=reviewer');
+  assert.equal(gate.check({ ...K, role: 'reviewer', env: {}, files: [small], cwd: repo }).cls, 'review-role', 'header Role: implementer cannot lower rail role=reviewer');
+  assert.equal(gate.check({ ...K, role: 'plan', env: OK, files: [small], cwd: repo }).cls, 'novel', 'env/header Role: implementer cannot lower novel rail role');
+  const revHeader = path.join(tmp, 'rev-header.md');
+  fs.writeFileSync(revHeader, 'Role: reviewer | Size: S\nScope: docs/a.md\n');
+  assert.equal(gate.check({ ...K, role: 'implementer', env: OK, files: [revHeader], cwd: repo }).cls, 'review-role', 'header Role: reviewer cannot be lowered by env/rail implementer');
+  const ladderDowngrade = gate.filterLadder(['kimi-code/kimi-for-coding/high@kimi', 'grok-4.7/low@grok'], { env: OK, files: [small], role: 'reviewer', cwd: repo });
+  assert.deepEqual(ladderDowngrade.kept, ['grok-4.7/low@grok']);
+  assert.match(ladderDowngrade.barred[0].line, /cn_model_dispatch_barred moonshot review-role/);
+  const cliDowngrade = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'check', '--runner', 'kimi', '--model', 'kimi-code-k3', '--role', 'reviewer', '--prompt-file', small], OK);
+  assert.equal(cliDowngrade.status, 2);
+  assert.match(cliDowngrade.stderr, /cn_model_dispatch_barred moonshot review-role/);
 });
 
 test('allow: XS/S mechanical edit with a scope and role, from env or header; unbarred families always', () => {
@@ -207,7 +220,31 @@ test('dispatch-review: marked kimi refused, marked grok passes the gate, unmarke
   r = run('bash', a('kimi', 'kimi-code-k3', plain));
   assert.match(out(r), /cn_model_dispatch_barred moonshot review-role/, 'a reviewer rail is refused even without a size');
   r = run('bash', a('kimi', 'kimi-code-k3', small));
-  assert.doesNotMatch(out(r), BARRED, 'header Role implementer still passes XS/S');
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred moonshot review-role/, 'a review rail cannot be lowered by header Role: implementer');
+  r = run('bash', a('kimi', 'kimi-code-k3', small), OK);
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred moonshot review-role/, 'a review rail cannot be lowered by env AUTOPILOT_TASK_ROLE=implementer');
+});
+
+test('dispatch-anthropic-review: non-raw defaults to reviewer and checks --spec-file; --raw without --role keeps env/header', () => {
+  const js = path.join(S, 'dispatch-anthropic-review.js');
+  let r = run('node', [js, '--diff-file', diff, '--spec-file', small, '--model', 'MiniMax-M3'], OK);
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred minimax review-role/, 'direct non-raw call without --role defaults to reviewer under implementer env/spec');
+
+  r = run('node', [js, '--diff-file', diff, '--spec-file', marked, '--model', 'MiniMax-M3'], OK);
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred minimax transcript/, 'direct non-raw call checks Reads-Transcript: yes in --spec-file');
+
+  r = run('node', [js, '--raw', '--prompt-file', small, '--model', 'MiniMax-M3', '--base-url', 'http://127.0.0.1:1', '--token-env', 'TEST_UNSET_CN_GATE_TOKEN'], { ...OK, TEST_UNSET_CN_GATE_TOKEN: '' });
+  assert.equal(r.status, 2);
+  assert.doesNotMatch(out(r), BARRED, '--raw without --role leaves implementer XS/S authoring allowed by the gate');
+  assert.match(out(r), /missing auth token in env/);
+
+  r = run('node', [js, '--raw', '--role', 'reviewer', '--prompt-file', small, '--model', 'MiniMax-M3'], OK);
+  assert.equal(r.status, 2);
+  assert.match(out(r), /cn_model_dispatch_barred minimax review-role/, '--raw with --role reviewer cannot be lowered by env/header');
 });
 
 test('dispatch-author: marked kimi refused, marked grok passes the gate', () => {

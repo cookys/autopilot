@@ -82,7 +82,8 @@ USAGE:
       [--base-url <url>]    # default ANTHROPIC_COMPATIBLE_BASE_URL,
                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
       [--endpoint <name>]   # optional named endpoint for fleet gateway allowlist check
-      [--role <role>]       # rail-implied role for the Chinese-model gate; omit to use env/header only
+      [--spec-file <file>]  # optional task spec file checked by the Chinese-model gate
+      [--role <role>]       # rail-implied role for the Chinese-model gate (non-raw defaults to reviewer)
 
 AUTH (env only — never accepted as a CLI argument):
   MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN for other
@@ -99,6 +100,7 @@ function parseArgs(argv) {
   const out = {
     model: '',
     diffFile: '',
+    specFile: '',
     promptFile: '',
     timeoutMs: DEFAULT_TIMEOUT_MS,
     maxTokens: DEFAULT_MAX_TOKENS,
@@ -118,6 +120,9 @@ function parseArgs(argv) {
         break;
       case '--diff-file':
         out.diffFile = argv[++i] || '';
+        break;
+      case '--spec-file':
+        out.specFile = argv[++i] || '';
         break;
       case '--prompt-file':
         out.promptFile = argv[++i] || '';
@@ -626,15 +631,16 @@ async function main() {
     failPrecondition('--model is required');
   }
 
-  // Before any credential file is read. --role when the caller is a review rail; otherwise
-  // env/header only. An author transport must not be forced into reviewer (that would re-refuse
-  // an allowed XS implementer). A missing role still fails closed inside the gate.
+  // Before any credential file is read. Direct non-raw review calls default to role 'reviewer';
+  // --raw calls (e.g. dispatch-author.sh) use --role when passed, else env/header only so an
+  // allowed XS/S implementer authoring task is not forced into reviewer. A missing role still fails
+  // closed inside the gate.
   const cn = cnGate.check({
     runner: RUNNER,
     model,
     endpoint: args.endpoint || process.env[FLEET_TASK_ENDPOINT_ENV] || '',
-    role: args.role || '',
-    files: args.promptFile ? [args.promptFile] : [],
+    role: args.role || (rawMode ? '' : 'reviewer'),
+    files: [args.promptFile, args.specFile].filter(Boolean),
     diffFiles: args.diffFile ? [args.diffFile] : [],
   });
   if (!cn.allowed) failPrecondition(cn.line);

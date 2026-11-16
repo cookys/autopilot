@@ -42,7 +42,7 @@
 //
 // Task facts (env wins over header; header = first 8 lines of the brief/spec, `Key: v` alone or as a `| Key: v` field):
 //   size   AUTOPILOT_TASK_SIZE  / `Size: XS|S|M|L|XL`
-//   role   AUTOPILOT_TASK_ROLE  / `Role: <role>`          (a rail may pass its own implied role as a default)
+//   role   AUTOPILOT_TASK_ROLE  / `Role: <role>`          (a rail may pass its own implied role; a review or novel rail role is a floor that env/header cannot lower)
 //   scope  AUTOPILOT_TASK_SCOPE / `Scope: a, b`  (comma/newline separated paths), plus the `diff --git` paths of any diff file
 //   novel  AUTOPILOT_TASK_NOVEL=1 / `Novel: yes`
 //   class  AUTOPILOT_TASK_CLASS / `Task-Class: <value>`   (local served family only; compared case-insensitively)
@@ -221,12 +221,15 @@ function isMarked(files = [], env = process.env) {
 
 function taskFacts({ files = [], diffFiles = [], role = '', env = process.env }) {
   const size = String(env.AUTOPILOT_TASK_SIZE || headerValue(files, 'Size') || '').trim().toUpperCase();
-  const roleV = String(env.AUTOPILOT_TASK_ROLE || headerValue(files, 'Role') || role || '').trim().toLowerCase();
+  const envRole = String(env.AUTOPILOT_TASK_ROLE || '').trim().toLowerCase();
+  const headerRole = String(headerValue(files, 'Role') || '').trim().toLowerCase();
+  const railRole = String(role || '').trim().toLowerCase();
+  const roleV = envRole || headerRole || railRole;
   const scopeRaw = String(env.AUTOPILOT_TASK_SCOPE || headerValue(files, 'Scope') || '');
   const scope = [...new Set([...scopeRaw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean), ...diffFiles.filter(Boolean).flatMap(diffPaths)])];
   const novel = String(env.AUTOPILOT_TASK_NOVEL || '') === '1' || /^yes$/i.test(headerValue(files, 'Novel'));
   const taskClass = String(env.AUTOPILOT_TASK_CLASS || headerValue(files, 'Task-Class') || '').trim().toLowerCase();
-  return { size, role: roleV, scope, novel, transcript: isMarked(files, env), taskClass };
+  return { size, role: roleV, railRole, headerRole, scope, novel, transcript: isMarked(files, env), taskClass };
 }
 
 // -> { allowed, family, cls?, line? }
@@ -240,15 +243,17 @@ function check(opts = {}) {
   const block = (cls) => ({ allowed: false, family, cls, line: refusalLine(family, cls) });
   if (f.transcript) return block('transcript');
   if (matchesAny(path.basename(root), cfg.sensitive_repos) || f.scope.some((p) => matchesAny(p, cfg.sensitive_paths))) return block('sensitive');
-  // Review roles are refused at every size. The local served family skips only this class, and only
-  // inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
-  if (cfg.review_roles.includes(f.role)) {
+  // Review roles are refused at every size. A review rail role (or brief Role:) is a floor that
+  // env/header Role: implementer cannot lower. The local served family skips only this class, and
+  // only inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
+  const reviewRolesToCheck = [f.role, f.railRole, f.headerRole].filter(Boolean);
+  if (reviewRolesToCheck.some((r) => cfg.review_roles.includes(r))) {
     const exempt = localServed && reviewLocalExempt(endpoint, gateNow(opts, env), root, cfg.local_deny_repos);
     if (!exempt) return block('review-role');
   }
   if (BIG_SIZES.includes(f.size)) return block('core-size');
   if (f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
-  if (f.novel || cfg.novel_roles.includes(f.role)) return block('novel');
+  if (f.novel || cfg.novel_roles.includes(f.role) || cfg.novel_roles.includes(f.railRole)) return block('novel');
   if (!SMALL_SIZES.includes(f.size)) return block('unknown-size');
   if (!f.role) return block('unknown-role');
   if (!f.scope.length) return block('unknown-scope');

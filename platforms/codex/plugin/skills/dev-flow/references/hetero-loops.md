@@ -35,7 +35,7 @@ This reference indexes the three deterministic scripts supporting dev-flow's pla
 
 ### scripts/land-branch.js
 
-Depth-0 may land a reviewed branch with one command and read only its JSON line: `node scripts/land-branch.js --branch <ref> --review-json <file> --fleet-task <id> --body-file <file> [--push]`. It fetches, refuses anything but `SHIP-AS-IS`, merges `--no-ff`, runs affected suites and the landing checks, and with `--push` updates `develop` only when the base is still an ancestor. Exit 0 only for `landed` or `merged_not_pushed`. The log path is the JSON `log` field. Do not re-drive those steps by hand. Contract: script header; indexed in `docs/scripts-inventory.md`.
+Depth-0 may land a reviewed branch with one command and read only its JSON line: `node scripts/land-branch.js --branch <ref> --review-json <file> --fleet-task <id> --body-file <file> --review-generation <n> [--push]`. `--review-generation` is required. n is the generation that passed; 1 = first-pass (the first review was SHIP-AS-IS). A missing or invalid n is usage, exit 2, before any git command. The merge commit's final paragraph is `QC-Verdict: SHIP-AS-IS (<model>)`, `Review-Generation: <n>`, `Fleet-Task: <id>`, `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. It fetches, refuses anything but `SHIP-AS-IS`, merges `--no-ff`, runs affected suites and the landing checks, and with `--push` updates `develop` only when the base is still an ancestor. Exit 0 only for `landed` or `merged_not_pushed`. The log path is the JSON `log` field. Do not re-drive those steps by hand. Contract: script header; indexed in `docs/scripts-inventory.md`.
 
 ## Consult before design
 

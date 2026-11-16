@@ -7,7 +7,19 @@
 //
 // Usage:
 //   node scripts/land-branch.js --branch <ref> --review-json <file> --fleet-task <id> --body-file <file>
-//     [--base-ref origin/develop] [--known-red <file>] [--suites affected|none] [--push] [--remote origin]
+//     --review-generation <n> [--base-ref origin/develop] [--known-red <file>] [--suites affected|none]
+//     [--push] [--remote origin]
+//
+// --review-generation <n> is required. n is the generation of the review that passed
+// (1 when the first review was SHIP-AS-IS). A positive integer only: no sign, no
+// decimal, no leading zero. Missing or invalid is status usage, exit 2, before any
+// git command.
+//
+// The merge commit ends with one paragraph, in this order:
+//   QC-Verdict: SHIP-AS-IS (<model>)
+//   Review-Generation: <n>
+//   Fleet-Task: <id>
+//   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 //
 // Exit: 0 only for status landed or merged_not_pushed. Usage errors exit 2. Every other
 // failure exits 1. Never force-pushes and never passes --no-verify.
@@ -45,7 +57,7 @@ const COAUTHOR = 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>';
 
 function usage(stream) {
   stream.write(
-    'Usage: node scripts/land-branch.js --branch <ref> --review-json <file> --fleet-task <id> --body-file <file>\n' +
+    'Usage: node scripts/land-branch.js --branch <ref> --review-json <file> --fleet-task <id> --body-file <file> --review-generation <n>\n' +
     '  [--base-ref origin/develop] [--known-red <file>] [--suites affected|none] [--push] [--remote origin]\n' +
     'Stdout is one JSON line: {"status","sha","new_red","checks","log"}.\n' +
     'Exit 0 only for landed or merged_not_pushed.\n',
@@ -65,6 +77,7 @@ function parseArgs(argv) {
     'review-json': 'reviewJson',
     'fleet-task': 'fleetTask',
     'body-file': 'bodyFile',
+    'review-generation': 'reviewGeneration',
     'base-ref': 'baseRef',
     'known-red': 'knownRed',
     suites: 'suites',
@@ -88,6 +101,8 @@ function parseArgs(argv) {
   if (!opts.reviewJson) throw new Error('--review-json is required');
   if (!opts.fleetTask) throw new Error('--fleet-task is required');
   if (!opts.bodyFile) throw new Error('--body-file is required');
+  if (opts.reviewGeneration === undefined) throw new Error('--review-generation is required');
+  if (!/^[1-9][0-9]*$/.test(opts.reviewGeneration)) throw new Error('--review-generation must be a positive integer');
   if (opts.suites !== 'affected' && opts.suites !== 'none') throw new Error('--suites must be affected or none');
   for (const [label, value] of [['--branch', opts.branch], ['--base-ref', opts.baseRef], ['--remote', opts.remote]]) {
     if (value.startsWith('-') || /\s/.test(value)) throw new Error(`${label} is not a single ref`);
@@ -171,13 +186,14 @@ function branchLabel(ref) {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
 }
 
-function commitMessage(branch, bodyText, model, fleetTask) {
+function commitMessage(branch, bodyText, model, fleetTask, reviewGeneration) {
   const norm = bodyText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const splitAt = norm.indexOf('\n');
   const first = (splitAt === -1 ? norm : norm.slice(0, splitAt)).replace(/[ \t]+$/g, '');
   const rest = (splitAt === -1 ? '' : norm.slice(splitAt + 1)).replace(/^\s+/, '').replace(/\s+$/, '');
   const trailers = [
     `QC-Verdict: SHIP-AS-IS (${model})`,
+    `Review-Generation: ${reviewGeneration}`,
     `Fleet-Task: ${fleetTask}`,
     COAUTHOR,
   ].join('\n');
@@ -323,6 +339,13 @@ function main() {
   let opts;
   try {
     opts = parseArgs(argv);
+  } catch (error) {
+    process.stdout.write(`${JSON.stringify({
+      status: 'usage', sha: null, new_red: [], checks: {}, log: log.logPath, detail: error.message,
+    })}\n`);
+    process.exit(2);
+  }
+  try {
     opts.review = readReview(opts.reviewJson);
     opts.body = readBody(opts.bodyFile);
     opts.known = readKnown(opts.knownRed);
@@ -380,7 +403,7 @@ function main() {
   if (!merging(git)) finish({ status: 'merge_failed', detail: tail(merged.stdout || merged.stderr) || 'merge did not start' }, 1);
 
   const messagePath = path.join(log.dir, 'message.txt');
-  fs.writeFileSync(messagePath, commitMessage(opts.branch, opts.body, opts.review.model, opts.fleetTask));
+  fs.writeFileSync(messagePath, commitMessage(opts.branch, opts.body, opts.review.model, opts.fleetTask, opts.reviewGeneration));
   const committed = git(['commit', '-F', messagePath, '--cleanup=verbatim']);
   if (committed.status !== 0) finish({ status: 'commit_failed', detail: tail(committed.stderr || committed.stdout) }, 1);
 

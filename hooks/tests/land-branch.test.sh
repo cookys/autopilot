@@ -97,17 +97,17 @@ assert_log() {
 }
 
 common_args() { # review file is $REVIEW
-  printf '%s\n' --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY"
+  printf '%s\n' --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1
 }
 
-# --- SHIP + green stubs + --push → landed, two parents, three trailers ---
+# --- SHIP + green stubs + --push → landed, two parents, four trailers ---
 reset_env
 make_repo ship
 REVIEW="$TEST_TMP/review-ship.json"
 write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 2 --push
 assert_one_json_line "ship"
 assert_eq "$LAND_RC" "0" "ship exits 0"
 assert_eq "$(jfield status)" "landed" "ship status landed"
@@ -123,7 +123,7 @@ assert_eq "$SUBJECT" "Merge feat/land: land the reviewed branch" "ship subject"
 BODY_MSG="$(git -C "$BARE" log -1 --format=%B develop)"
 assert_contains "$BODY_MSG" "Second paragraph stays in the message." "ship keeps the body"
 PARSED="$(printf '%s\n' "$BODY_MSG" | git interpret-trailers --parse)"
-assert_eq "$PARSED" "$(printf '%s\n' "QC-Verdict: SHIP-AS-IS (grok-4.7)" "Fleet-Task: $FLEET_ID" "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")" "ship three trailers parse"
+assert_eq "$PARSED" "$(printf '%s\n' "QC-Verdict: SHIP-AS-IS (grok-4.7)" "Review-Generation: 2" "Fleet-Task: $FLEET_ID" "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")" "ship four trailers parse"
 
 # --- NEEDS-WORK → review_not_ship, nothing merged ---
 reset_env
@@ -133,7 +133,7 @@ write_review "$REVIEW" NEEDS-WORK
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
 BEFORE="$(git -C "$BARE" rev-parse develop)"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "needs"
 assert_neq "$LAND_RC" "0" "needs exits non-zero"
 assert_eq "$(jfield status)" "review_not_ship" "needs status"
@@ -156,7 +156,7 @@ write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
 BEFORE="$(git -C "$BARE" rev-parse develop)"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "conflict"
 assert_neq "$LAND_RC" "0" "conflict exits non-zero"
 assert_eq "$(jfield status)" "conflict" "conflict status"
@@ -175,7 +175,7 @@ write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$FAIL_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
 BEFORE="$(git -C "$BARE" rev-parse develop)"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "new-red"
 assert_neq "$LAND_RC" "0" "new-red exits non-zero"
 assert_eq "$(jfield status)" "new_red" "new-red status"
@@ -191,7 +191,7 @@ KNOWN="$TEST_TMP/known-red.txt"
 printf '%s\n' 'x.test.sh' > "$KNOWN"
 LAND_SUITES_CMD="$FAIL_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --known-red "$KNOWN" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --known-red "$KNOWN" --push
 assert_one_json_line "known-red"
 assert_eq "$LAND_RC" "0" "known-red exits 0"
 assert_eq "$(jfield status)" "landed" "known-red still lands"
@@ -206,7 +206,7 @@ write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$FAIL_CHECKS_JSON"
 BEFORE="$(git -C "$BARE" rev-parse develop)"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "check"
 assert_neq "$LAND_RC" "0" "check exits non-zero"
 assert_eq "$(jfield status)" "check_failed" "check status"
@@ -230,7 +230,7 @@ REVIEW="$TEST_TMP/review-moved.json"
 write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$(checks_json "$ADVANCE")"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "moved"
 assert_neq "$LAND_RC" "0" "moved exits non-zero"
 assert_eq "$(jfield status)" "base_moved" "moved status"
@@ -246,7 +246,7 @@ write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
 BEFORE="$(git -C "$BARE" rev-parse develop)"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1
 assert_one_json_line "no-push"
 assert_eq "$LAND_RC" "0" "no-push exits 0"
 assert_eq "$(jfield status)" "merged_not_pushed" "no-push status"
@@ -262,7 +262,7 @@ write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
 BEFORE="$(git -C "$BARE" rev-parse develop)"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "dirty"
 assert_neq "$LAND_RC" "0" "dirty exits non-zero"
 assert_eq "$(jfield status)" "dirty_worktree" "dirty status"
@@ -292,7 +292,7 @@ REVIEW="$TEST_TMP/review-hippo.json"
 write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "hippo"
 assert_eq "$LAND_RC" "0" "hippo exits 0"
 assert_eq "$(jfield status)" "landed" "hippo landed"
@@ -330,7 +330,7 @@ REVIEW="$TEST_TMP/review-hippo-both.json"
 write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "hippo-both"
 assert_eq "$LAND_RC" "0" "hippo-both exits 0"
 assert_eq "$(jfield status)" "landed" "hippo-both landed"
@@ -367,7 +367,7 @@ write_review "$REVIEW" SHIP-AS-IS
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
 BEFORE="$(git -C "$BARE" rev-parse develop)"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "hippo-text"
 assert_neq "$LAND_RC" "0" "hippo-text exits non-zero"
 assert_eq "$(jfield status)" "conflict" "hippo-text status"
@@ -387,7 +387,7 @@ REVIEW="$TEST_TMP/review-null.json"
 printf '%s\n' '{"verdict":null}' > "$REVIEW"
 LAND_SUITES_CMD="$OK_SUITES_JSON"
 LAND_CHECK_CMDS="$OK_CHECKS_JSON"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "null-verdict"
 assert_eq "$LAND_RC" "1" "null-verdict exits 1"
 assert_eq "$(jfield status)" "review_not_ship" "null-verdict status"
@@ -397,7 +397,7 @@ assert_eq "$(git -C "$WORK" status --porcelain)" "" "null-verdict work tree clea
 
 REVIEW="$TEST_TMP/review-empty.json"
 printf '%s\n' '{}' > "$REVIEW"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "empty-verdict"
 assert_eq "$LAND_RC" "1" "empty-verdict exits 1"
 assert_eq "$(jfield status)" "review_not_ship" "empty-verdict status"
@@ -407,7 +407,7 @@ assert_eq "$(git -C "$WORK" status --porcelain)" "" "empty-verdict work tree cle
 
 REVIEW="$TEST_TMP/review-bad.json"
 printf '%s\n' '{not json' > "$REVIEW"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "bad-json"
 assert_eq "$LAND_RC" "2" "bad-json exits 2"
 assert_eq "$(jfield status)" "usage" "bad-json status"
@@ -415,10 +415,40 @@ assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "bad-json remote uncha
 
 REVIEW="$TEST_TMP/review-array.json"
 printf '%s\n' '[]' > "$REVIEW"
-run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation 1 --push
 assert_one_json_line "non-object"
 assert_eq "$LAND_RC" "2" "non-object exits 2"
 assert_eq "$(jfield status)" "usage" "non-object status"
 assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "non-object remote unchanged"
+
+# --- --review-generation is required and must be a positive integer, before any git command ---
+reset_env
+make_repo genuse
+REVIEW="$TEST_TMP/review-gen.json"
+write_review "$REVIEW" SHIP-AS-IS
+LAND_SUITES_CMD="$OK_SUITES_JSON"
+LAND_CHECK_CMDS="$OK_CHECKS_JSON"
+BEFORE="$(git -C "$BARE" rev-parse develop)"
+HEAD_BEFORE="$(git -C "$WORK" rev-parse HEAD)"
+run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --push
+assert_one_json_line "no-gen"
+assert_eq "$LAND_RC" "2" "no-gen exits 2"
+assert_eq "$(jfield status)" "usage" "no-gen status"
+assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "no-gen nothing merged"
+assert_eq "$(git -C "$WORK" rev-parse HEAD)" "$HEAD_BEFORE" "no-gen local HEAD unchanged"
+assert_eq "$(git -C "$WORK" status --porcelain)" "" "no-gen work tree clean"
+GEN_LOG="$(jfield log)"
+assert_file_exists "$GEN_LOG" "no-gen log exists"
+assert_not_contains "$(cat "$GEN_LOG")" "git " "no-gen runs no git command"
+for bad in 0 -1 abc; do
+  run_land "$WORK" --branch feat/land --review-json "$REVIEW" --fleet-task "$FLEET_ID" --body-file "$BODY" --review-generation "$bad" --push
+  assert_one_json_line "gen-$bad"
+  assert_eq "$LAND_RC" "2" "gen-$bad exits 2"
+  assert_eq "$(jfield status)" "usage" "gen-$bad status"
+  assert_eq "$(git -C "$BARE" rev-parse develop)" "$BEFORE" "gen-$bad nothing merged"
+  assert_eq "$(git -C "$WORK" rev-parse HEAD)" "$HEAD_BEFORE" "gen-$bad local HEAD unchanged"
+  GEN_LOG="$(jfield log)"
+  assert_not_contains "$(cat "$GEN_LOG")" "git " "gen-$bad runs no git command"
+done
 
 finalize_test

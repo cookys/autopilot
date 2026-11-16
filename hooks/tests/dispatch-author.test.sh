@@ -14,6 +14,30 @@ GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=main -c commit.g
 PROMPT="$TEST_TMP/prompt.txt"
 printf '%s' "Write a verification plan for the change and include exactly three bullet items." > "$PROMPT"
 
+# A runner with no author spawn branch is refused before any child, with the reason on stderr
+# and manifest final_status runner_unsupported (not runner_failed, not a silent exit 3).
+# anthropic-compatible stays supported: it is the in-process verification-author transport
+# (§8b and the contract suite). opencode is on the effort-default list and has no spawn branch.
+UNSUP_RUNS="$TEST_TMP/author-unsupported-runs"
+mkdir -p "$UNSUP_RUNS"
+UNSUP_MARKER="$TEST_TMP/unsupported-child-marker"
+rm -f "$UNSUP_MARKER"
+UNSUP_BIN="$TEST_TMP/runner-unsupported-sentinel"
+cat > "$UNSUP_BIN" <<EOF
+#!/bin/sh
+echo RAN > "$UNSUP_MARKER"
+exit 0
+EOF
+chmod +x "$UNSUP_BIN"
+OUT="$(AUTOPILOT_DISPATCH_RUNS_DIR="$UNSUP_RUNS" DISPATCH_QUIET=1 "$SCRIPT" --runner opencode --model mini --prompt-file "$PROMPT" --bin "$UNSUP_BIN" --run-id author-unsupported-opencode 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "unsupported runner exits 2"
+assert_contains "$OUT" "dispatch-author: runner 'opencode' is not supported for authoring (supported: codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, cursor)" "unsupported runner names the reason on stderr"
+assert_contains "$OUT" '"status": "runner_unsupported"' "unsupported runner status is runner_unsupported"
+assert_file_absent "$UNSUP_MARKER" "unsupported runner spawns no child"
+UNSUP_MANIFEST="$UNSUP_RUNS/author-unsupported-opencode.manifest.json"
+assert_file_exists "$UNSUP_MANIFEST" "unsupported runner writes a manifest"
+assert_contains "$(cat "$UNSUP_MANIFEST")" '"final_status": "runner_unsupported"' "manifest final_status is runner_unsupported"
+
 # --- 1. codex — raw prompt bytes preserved; no review-template leakage ---
 RECEIVED="$TEST_TMP/prompt.received.codex"
 STUB_COD="$TEST_TMP/runner-codex"

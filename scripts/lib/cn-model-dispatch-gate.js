@@ -10,6 +10,15 @@
 //                 `Reads-Transcript: yes` header line in the first 8 lines of the brief/spec)
 //   [sensitive]   the repo name or any path in the task's read/write scope matches the sensitive list
 //                 (money/payments, PII, private-home data, keys/credentials, customer data)
+//   [review-role] role is in review_roles (reviewer, review, qc, qc_panel, plan_review, loop_reviewer,
+//                 verifier), regardless of size, including a missing size. The local served family on a
+//                 local-sandbox endpoint is exempt from THIS class only when review_local_exceptions in
+//                 the shipped defaults names that endpoint, now < until, and the repo is not in
+//                 local_deny_repos (d-ede04b92, PM 01M7JPZQ; today qwen_local until 2026-11-21T23:59:59+08:00).
+//                 Past until, with no entry, or on a denied repo, the class is review-role. A repo
+//                 .claude/cn-model-gate.json cannot add, extend, or shrink an entry: the window is the
+//                 operator's decision, not a repo's. Every other check still applies. A cloud endpoint
+//                 of the same family, and any other barred family on that endpoint, stay barred.
 //   [core-size]   size is above XS/S (M, L, XL)
 //   [core-dir]    the scope touches a directory the config marks `core`
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
@@ -18,14 +27,18 @@
 // Local endpoint (interim, PM 01M7HQ92; operator rule 2026-11-15 applies to local qwen too, so being local
 //   is not an exemption; this stands until the AR data-class allowlist replaces it): when --endpoint is listed
 //   in scripts/lib/local-sandbox-endpoints.json (today qwen_local) and the family is the one that endpoint
-//   serves, every check above applies exactly as for a cloud endpoint of that family. Two further checks then
-//   apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
+//   serves, every check above applies exactly as for a cloud endpoint of that family, except [review-role]
+//   when a shipped review_local_exceptions entry names that endpoint, now < until, and the repo is outside
+//   local_deny_repos. Past that, [review-role] applies and is decided before the later local checks.
+//   Two further checks then apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
 //   Task-Class is missing; [task-class] it is not in local_task_classes (format-convert, log-summary,
 //   simple-script, test-scaffold). A different barred family on that endpoint (a kimi model on qwen_local)
 //   stays on the cloud checks only. Cloud endpoints are unchanged. filter-ladder applies the same rule to a
 //   rung that names the local endpoint (engine/effort@runner#endpoint, or a runner/model equal to that name).
-// Allowed only when none match: XS/S mechanical edit with tests, formatting, docs, open-source dependency bumps;
-//   a local served-family dispatch also needs an allowed Task-Class and a repo outside local_deny_repos.
+// Allowed only when none match: XS/S mechanical edit with tests, formatting, docs, open-source dependency bumps,
+//   and the role is not a review role (cloud). A local served-family review role passes this class only inside
+//   a shipped review_local_exceptions window, and that dispatch also needs an allowed Task-Class and a repo
+//   outside local_deny_repos.
 //
 // Task facts (env wins over header; header = first 8 lines of the brief/spec, `Key: v` alone or as a `| Key: v` field):
 //   size   AUTOPILOT_TASK_SIZE  / `Size: XS|S|M|L|XL`
@@ -35,10 +48,15 @@
 //   class  AUTOPILOT_TASK_CLASS / `Task-Class: <value>`   (local served family only; compared case-insensitively)
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
 //   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
-//   sensitive_repos, core_dirs, novel_roles, local_task_classes, local_deny_repos.
+//   sensitive_repos, core_dirs, novel_roles, review_roles, local_task_classes, local_deny_repos.
+//   review_local_exceptions is read only from the shipped defaults (not unioned). Clock: check(..., { now })
+//   with an ISO string. An explicit now that does not parse fails closed and is not replaced by the env or
+//   the real clock. AUTOPILOT_CN_GATE_NOW (ISO string) is honoured only when now is omitted; it is a test
+//   seam, not an operator setting. An unparsable value does not open the exception. Unset uses Date.now().
 // Family inference is stage-write.js familyOfEngine (qoder included). Transcript deny list is
 // scripts/lib/data-class-policy.json deny_families, which must cover BARRED_FAMILIES.
 // Test seam: AUTOPILOT_TEST_CN_GATE_OFF=1 disables the gate (suites that dispatch through a sentinel runner).
+// Test seam: AUTOPILOT_CN_GATE_NOW is an ISO clock for this gate only (see the config note above). Tests only.
 //
 // CLI (Node built-ins only):
 //   check --runner R [--model M] [--endpoint E] [--role R] [--prompt-file F]... [--diff-file F]... [--cwd D]
@@ -127,9 +145,44 @@ function loadConfig(root) {
   return {
     sensitive_paths: u('sensitive_paths'), sensitive_repos: u('sensitive_repos'), core_dirs: u('core_dirs'),
     novel_roles: u('novel_roles').map((r) => r.toLowerCase()),
+    review_roles: u('review_roles').map((r) => r.toLowerCase()),
     local_task_classes: u('local_task_classes').map((r) => r.toLowerCase()),
     local_deny_repos: u('local_deny_repos'),
   };
+}
+
+// Shipped defaults only. A repo file is not consulted: the window is the operator's decision
+// (d-ede04b92, PM 01M7JPZQ), not a repo's, so a repo cannot add, extend, or shrink an entry.
+function shippedReviewExceptions() {
+  const raw = loadList(DEFAULTS_PATH).review_local_exceptions;
+  return Array.isArray(raw) ? raw : [];
+}
+
+function instantMs(v) {
+  if (typeof v !== 'string' || v === '') return null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? t : null;
+}
+
+// Explicit now wins. An invalid explicit now is null (fail closed): do not read the env or the real clock.
+// AUTOPILOT_CN_GATE_NOW is a test seam, used only when now was omitted. An invalid value does not open
+// the exception. Unset uses the real clock.
+function gateNow(opts, env) {
+  if (Object.prototype.hasOwnProperty.call(opts, 'now')) return instantMs(opts.now);
+  if (env && Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_CN_GATE_NOW')) return instantMs(env.AUTOPILOT_CN_GATE_NOW);
+  return Date.now();
+}
+
+function reviewLocalExempt(endpoint, nowMs, root, denyGlobs) {
+  if (nowMs == null) return false;
+  if (matchesAny(path.basename(root), denyGlobs)) return false;
+  const ep = String(endpoint || '');
+  return shippedReviewExceptions().some((e) => {
+    if (!e || typeof e !== 'object') return false;
+    if (String(e.endpoint || '') !== ep) return false;
+    const until = Date.parse(String(e.until || ''));
+    return Number.isFinite(until) && nowMs < until;
+  });
 }
 
 // Self-hosted fleet endpoints: the one repo-documented list (also drives the local implementer sandbox).
@@ -177,7 +230,8 @@ function taskFacts({ files = [], diffFiles = [], role = '', env = process.env })
 }
 
 // -> { allowed, family, cls?, line? }
-function check({ runner, model, endpoint, files = [], diffFiles = [], role = '', env = process.env, cwd = process.cwd() } = {}) {
+function check(opts = {}) {
+  const { runner, model, endpoint, files = [], diffFiles = [], role = '', env = process.env, cwd = process.cwd() } = opts;
   const { family, localServed } = resolution(runner, model, endpoint);
   if (String(env.AUTOPILOT_TEST_CN_GATE_OFF || '') === '1' || !BARRED_FAMILIES.includes(family)) return { allowed: true, family };
   const root = repoRootOf(cwd);
@@ -186,6 +240,12 @@ function check({ runner, model, endpoint, files = [], diffFiles = [], role = '',
   const block = (cls) => ({ allowed: false, family, cls, line: refusalLine(family, cls) });
   if (f.transcript) return block('transcript');
   if (matchesAny(path.basename(root), cfg.sensitive_repos) || f.scope.some((p) => matchesAny(p, cfg.sensitive_paths))) return block('sensitive');
+  // Review roles are refused at every size. The local served family skips only this class, and only
+  // inside a shipped review_local_exceptions window on a repo outside local_deny_repos.
+  if (cfg.review_roles.includes(f.role)) {
+    const exempt = localServed && reviewLocalExempt(endpoint, gateNow(opts, env), root, cfg.local_deny_repos);
+    if (!exempt) return block('review-role');
+  }
   if (BIG_SIZES.includes(f.size)) return block('core-size');
   if (f.scope.some((p) => matchesAny(p, cfg.core_dirs))) return block('core-dir');
   if (f.novel || cfg.novel_roles.includes(f.role)) return block('novel');

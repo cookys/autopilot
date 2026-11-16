@@ -26,7 +26,7 @@ Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 46 h
 - A new script is dead code until wired into the reference doc, the SKILL.md table, `docs/scripts-inventory.md` and the name list in `scripts/CLAUDE.md`.
 - A script that parses JSON or could run under agy is Node built-ins only; bash only for pure git glue (table in `scripts/CLAUDE.md`).
 
-**Group index** (names are examples; the whole list is in `scripts/CLAUDE.md`):
+**Group index**:
 
 - **Dispatch rails**: `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-foreman.sh` `dispatch-consult.sh`
 - **Routing & config resolution**: `resolve-dispatch.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-execution-profile.js`
@@ -66,7 +66,7 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 - Destructive or irreversible ops (force-push, history rewrite, mass delete, `reset --hard`, overwriting live config) need a snapshot, a stated blast radius and explicit operator confirmation; never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)).
 - A SHIP-AS-IS reviewed branch merges to `develop` once suites are green, never batched; `check-unmerged-ship.js` flags it after 1 h.
 - A dispatch brief that relies on rules in a subdirectory must say "read <subdir>/AGENTS.md first".
-- Cloud Kimi/GLM/Qwen/DeepSeek/MiniMax/qoder: no transcript/sensitive/core/novel tasks (`scripts/lib/cn-model-dispatch-gate.js`).
+- Cloud Kimi/GLM/Qwen/DeepSeek/MiniMax/qoder: no transcript/sensitive/core/novel/review-role (`scripts/lib/cn-model-dispatch-gate.js`). qwen_local review skip is shipped-only until 2026-11-21.
 
 ## Where context lives
 

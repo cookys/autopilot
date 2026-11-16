@@ -917,7 +917,9 @@ if [ -n "$ROLE_KIT_DIR" ]; then
   fi
 fi
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;; esac
-case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, or cursor (got: $RUNNER)" ;; esac
+# Runner support is enforced after the manifest exists, so the refusal can record
+# final_status runner_unsupported. An early die here would be precondition_failed
+# and would leave no manifest.
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 if [[ "$RUNNER" = "cursor" ]]; then
   # No family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
@@ -1255,6 +1257,17 @@ cleanup() {
   author_manifest_finalize
 }
 trap cleanup EXIT
+
+# No spawn branch for this runner. Refuse before the child, with one stderr line, and let the
+# EXIT trap stamp the manifest. anthropic-compatible stays in the list: it is the in-process
+# verification-author transport (no worker process), not an unsupported name.
+case "$RUNNER" in
+  codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|cursor) ;;
+  *)
+    echo "dispatch-author: runner '$RUNNER' is not supported for authoring (supported: codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, cursor)" >&2
+    emit_result "runner_unsupported" "null" "runner '$RUNNER' is not supported for authoring" 2
+    ;;
+esac
 
 if [[ "$STRICT_CONTRACT" -eq 1 ]]; then
   CONTAINMENT_PRE_STATUS="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)"

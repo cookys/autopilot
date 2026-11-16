@@ -16,6 +16,7 @@
 # case-insensitive) live in dispatch-hetero-ccshim-usage.test.sh; the claude-native no-header
 # pin lives in dispatch-hetero-claude-native.test.sh.
 . "$(dirname "$0")/lib.sh"
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/runs"; mkdir -p "$AUTOPILOT_DISPATCH_RUNS_DIR"
 export TMPDIR="$TEST_TMP/tmp"; mkdir -p "$TMPDIR"
 export AUTOPILOT_SETTLE_MS=0 DISPATCH_QUIET=1

@@ -293,6 +293,21 @@ assert_exit_code "$__GATE_EXIT" 1 "same missing-script reference in an active do
 assert_contains "$__GATE_OUT" "docs/guide/g.md" "the active doc is the reported failure"
 assert_not_contains "$__GATE_OUT" "evidence/x/brief.md" "the evidence file is not reported"
 
+# A consuming repo is not this project, so its plans live under docs/plans even when this
+# plugin's live registry says project/plans. The suite-wide docs-layout registry would hide
+# that (path() and the consumer convention then agree), so this run uses the live registry.
+echo "Testing consumer-repo plan script-ref exemption..."
+CR="$TEST_TMP/consumer-layout-refs"
+mkdir -p "$CR/docs/plans" "$CR/docs/guide"
+printf '# Plan\nIt ran `scripts/missing.js` back then.\n' > "$CR/docs/plans/x.md"
+printf '# Guide\nRun `scripts/also-missing.js`.\n' > "$CR/docs/guide/g.md"
+__GATE_OUT="$(env -u REPO_LAYOUT_REGISTRY node "$GATE_JS" "$CR" --repo-root "$CR" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 1 "consumer: a missing script outside plans is drift"
+assert_contains "$__GATE_OUT" "docs/guide/g.md" "consumer: the non-plan doc is the reported failure"
+assert_contains "$__GATE_OUT" "scripts/also-missing.js" "consumer: the non-plan missing script is named"
+assert_not_contains "$__GATE_OUT" "docs/plans/x.md" "consumer: a docs/plans ref is history, not drift"
+assert_not_contains "$__GATE_OUT" "scripts/missing.js" "consumer: the plan doc's script ref is not reported"
+
 # 7b. Frozen rolekit kit/placebo copies keep dangling relative links: excluded by default, drift elsewhere.
 echo "Testing rolekit frozen-fixture exclusion..."
 RK="$TEST_TMP/rolekit-excl"

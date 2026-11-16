@@ -1,0 +1,9 @@
+{
+  "transcript": {
+    "mode": "allow",
+    "families": ["anthropic", "openai", "google", "xai"]
+  },
+  "deny_families": ["zhipu", "moonshot", "minimax", "alibaba", "deepseek", "meituan", "qoder"],
+  "deny_names": ["glm", "zhipu", "kimi", "moonshot", "minimax", "abab", "qwen", "deepseek", "longcat", "qoder"],
+  "seat_preference": ["haiku", "sonnet", "grok-4.7", "gemini-4-carbon-high", "gemini-4-hydrogen-high", "gpt-6-astra"]
+}

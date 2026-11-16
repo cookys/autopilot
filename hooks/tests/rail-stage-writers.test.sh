@@ -9,7 +9,7 @@ export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: seam suites with Chinese-f
 . "$(dirname "$0")/lib.sh"
 
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID AUTOPILOT_PARENT_RUN_ID \
-  AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
+  AUTOPILOT_PARENT_SESSION_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID AUTOPILOT_DISPATCH_DEPTH \
   CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID CODEX_THREAD_ID AUTOPILOT_STAGE_ADVANCE_BIN 2>/dev/null || true
 export AUTOPILOT_RUNS_WATCH_AUTOSTART=0 AUTOPILOT_REVIEW_SERVER_AUTOSTART=0
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/markers"
@@ -37,10 +37,11 @@ sed -n '/^family_of() {/,/^}/p' "$REPO_ROOT/scripts/resolve-review-loop.sh" >"$F
 PARITY=$(node -e '
 const { familyOfEngine } = require(process.argv[1]);
 const { spawnSync } = require("child_process");
-const models = ["gpt-5.5","codex-max","o3-mini","claude-opus-4","sonnet","haiku","Qwen3-Max","qwq","gemini-3-pro","flash","grok-4","composer-2","MiniMax-M2","abab7","glm-5","zhipu-x","kimi-k2","moonshot-v1","mystery","x","","MiniMax-M3.1-Flash","gemini-3.7-flash-high"];
+const models = ["gpt-5.5","codex-max","o3-mini","claude-opus-4","sonnet","haiku","Qwen3-Max","qwq","gemini-3-pro","flash","grok-4","composer-2","MiniMax-M2","abab7","glm-5","zhipu-x","kimi-k2","moonshot-v1","mystery","x","","MiniMax-M3.1-Flash","gemini-3.7-flash-high","qoder-x"];
 // RED before the vendor-first reorder (unfixed family_of and familyOfEngine, both google):
 // MiniMax-M3.1-Flash sh=google js=google (want minimax); gemini-3.7-flash-high sh=google js=google (want google).
-const want = { "MiniMax-M3.1-Flash": "minimax", "gemini-3.7-flash-high": "google" };
+// RED before qoder was named: qoder-x sh=unknown js=unknown (want qoder).
+const want = { "MiniMax-M3.1-Flash": "minimax", "gemini-3.7-flash-high": "google", "qoder-x": "qoder" };
 let bad = [];
 for (const m of models) {
   const sh = spawnSync("bash", ["-c", `. "$1"; family_of "$2"`, "_", process.argv[2], m], { encoding: "utf8" }).stdout.trim();

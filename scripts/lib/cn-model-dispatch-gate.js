@@ -28,7 +28,8 @@
 //   novel  AUTOPILOT_TASK_NOVEL=1 / `Novel: yes`
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
 //   (union of every list; fields sensitive_paths, sensitive_repos, core_dirs, novel_roles).
-// Family inference is NOT a second table: stage-write.js familyOfEngine; only `qoder` is named here.
+// Family inference is stage-write.js familyOfEngine (qoder included). Transcript deny list is
+// scripts/lib/data-class-policy.json deny_families, which must cover BARRED_FAMILIES.
 // Test seam: AUTOPILOT_TEST_CN_GATE_OFF=1 disables the gate (suites that dispatch through a sentinel runner).
 //
 // CLI (Node built-ins only):
@@ -43,7 +44,8 @@ const { familyOfEngine } = require('./stage-write');
 
 const CARD = 'd-1dfcf757';
 const TASK = '01M7E2A1';
-// Single source of the barred list. Ids are the ones familyOfEngine returns, plus `qoder`.
+// Cloud-dispatch barred families (local endpoints can be exempt). Transcript data-class deny is
+// data-class-policy.json, which loadPolicy() checks covers this list. Do not copy the ids elsewhere.
 const BARRED_FAMILIES = Object.freeze(['moonshot', 'zhipu', 'alibaba', 'deepseek', 'minimax', 'qoder']);
 const SMALL_SIZES = Object.freeze(['XS', 'S']);
 const BIG_SIZES = Object.freeze(['M', 'L', 'XL']);

@@ -7,6 +7,9 @@
 #   scripts/resolve-dispatch.sh --role planner
 #   scripts/resolve-dispatch.sh --role implementer --tree
 #   scripts/resolve-dispatch.sh --role manager --tree    # exit 3 — never dispatched
+#   scripts/resolve-dispatch.sh --role ar-analyst --data-class transcript
+#   scripts/resolve-dispatch.sh --role ar-analyst --data-class transcript --model glm-5.3
+#   scripts/resolve-dispatch.sh --role ar-analyst --data-class transcript --endpoint qwen_local
 #
 # Order of precedence:
 #   1. ${MODEL_ROUTING_CONFIG_OVERRIDE:-.claude/model-routing-config.md}
@@ -17,22 +20,65 @@
 # With --tree: JSON {model, mode, agent, table, source}.
 #   table = "tree" always when --tree is used.
 #
+# --data-class <name> works with any role. After the role resolves, the engine,
+# an optional --model probe, and --endpoint are checked against
+# scripts/lib/data-class-policy.json. A family outside the allowlist (or on the
+# deny list) exits 3 with one reason line on stderr. No flag overrides that file.
+# ar-analyst's default seat is haiku, first of haiku, sonnet, grok, carbon, hydrogen, astra.
+#
 # Exit codes:
 #   0  success (JSON on stdout)
 #   1  unknown role
 #   2  usage / missing required argument / invalid input
 #   3  manager role with --tree (manager is Fable-class and never dispatched
-#      as a delegate — Amendment 11; MANAGER_NOT_DISPATCHABLE on stderr)
+#      as a delegate — Amendment 11; MANAGER_NOT_DISPATCHABLE on stderr),
+#      or a data-class refusal
 
 set -euo pipefail
 
 ROLE=""
 TREE_MODE=0
+DATA_CLASS=""
+MODEL_PROBE=""
+ENDPOINT=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DATA_CLASS_JS="$SCRIPT_DIR/lib/data-class-policy.js"
+
+# Print the resolved JSON. When --data-class is set, refuse first (exit 3, reason on stderr).
+# The gate reads only the policy file. A non-zero node status is this script's status.
+finish_ok() {
+  local model="$1" json="$2" rc=0
+  if [[ -n "$DATA_CLASS" ]]; then
+    local -a args=(check --engine "$model" --data-class "$DATA_CLASS")
+    [[ -n "$MODEL_PROBE" ]] && args+=(--model "$MODEL_PROBE")
+    [[ -n "$ENDPOINT" ]] && args+=(--endpoint "$ENDPOINT")
+    node "$DATA_CLASS_JS" "${args[@]}" || rc=$?
+    [[ "$rc" -eq 0 ]] || exit "$rc"
+  fi
+  printf '%s\n' "$json"
+  exit 0
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --role) ROLE="$2"; shift 2 ;;
     --tree) TREE_MODE=1; shift ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --data-class)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "missing --data-class value" >&2; exit 2
+      fi
+      DATA_CLASS="$2"; shift 2 ;;
+    --model)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "missing --model value" >&2; exit 2
+      fi
+      MODEL_PROBE="$2"; shift 2 ;;
+    --endpoint)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "missing --endpoint value" >&2; exit 2
+      fi
+      ENDPOINT="$2"; shift 2 ;;
+    -h|--help) awk 'NR>1 && /^[^#]/{exit} NR>1{sub(/^# ?/,""); print}' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -84,8 +130,7 @@ if [[ "$TREE_MODE" -eq 1 ]]; then
       model="$(echo "$row" | awk -F'|' '{print $3}' | tr -d ' *')"
       mode="$(echo "$row"  | awk -F'|' '{print $4}' | tr -d ' *')"
       if valid_token "$model" && valid_token "$mode"; then
-        printf '{"model":"%s","mode":"%s","agent":"","table":"tree","source":"project"}\n' "$model" "$mode"
-        exit 0
+        finish_ok "$model" "$(printf '{"model":"%s","mode":"%s","agent":"","table":"tree","source":"project"}' "$model" "$mode")"
       fi
       echo "warning: ignoring override row for tree:${ROLE} (model/mode must match [A-Za-z0-9._-]+); using defaults" >&2
     fi
@@ -97,8 +142,8 @@ if [[ "$TREE_MODE" -eq 1 ]]; then
     echo "unknown tree role: $ROLE (known: ${!TREE_DEFAULTS[*]})" >&2
     exit 1
   fi
-  echo "${result%\}},\"table\":\"tree\",\"source\":\"default\"}"
-  exit 0
+  _tree_model="$(printf '%s' "$result" | sed -n 's/.*"model":"\([^"]*\)".*/\1/p')"
+  finish_ok "$_tree_model" "${result%\}},\"table\":\"tree\",\"source\":\"default\"}"
 fi
 
 # ── Legacy path ──────────────────────────────────────────────────────────────
@@ -115,6 +160,8 @@ DEFAULTS[hands]='{"model":"haiku","mode":"default","agent":""}'
 DEFAULTS[test-runner]='{"model":"haiku","mode":"default","agent":""}'
 DEFAULTS[researcher]='{"model":"sonnet","mode":"default","agent":""}'
 DEFAULTS[think-tank-role]='{"model":"sonnet","mode":"plan","agent":""}'
+# Transcript digest. First seat is haiku; order lives in data-class-policy.json seat_preference.
+DEFAULTS[ar-analyst]='{"model":"haiku","mode":"default","agent":""}'
 
 # Try project override (bare role rows only — tree: prefixed rows are ignored)
 CONFIG="${MODEL_ROUTING_CONFIG_OVERRIDE:-.claude/model-routing-config.md}"
@@ -129,8 +176,7 @@ if [[ -f "$CONFIG" ]]; then
     model="$(echo "$row" | awk -F'|' '{print $3}' | tr -d ' *')"
     mode="$(echo "$row"  | awk -F'|' '{print $4}' | tr -d ' *')"
     if valid_token "$model" && valid_token "$mode"; then
-      printf '{"model":"%s","mode":"%s","agent":"","source":"project"}\n' "$model" "$mode"
-      exit 0
+      finish_ok "$model" "$(printf '{"model":"%s","mode":"%s","agent":"","source":"project"}' "$model" "$mode")"
     fi
     echo "warning: ignoring override row for ${ROLE} (model/mode must match [A-Za-z0-9._-]+); using defaults" >&2
   fi
@@ -142,4 +188,5 @@ if [[ -z "$result" ]]; then
   echo "unknown role: $ROLE (known: ${!DEFAULTS[*]})" >&2
   exit 1
 fi
-echo "${result%\}},\"source\":\"default\"}"
+_legacy_model="$(printf '%s' "$result" | sed -n 's/.*"model":"\([^"]*\)".*/\1/p')"
+finish_ok "$_legacy_model" "${result%\}},\"source\":\"default\"}"

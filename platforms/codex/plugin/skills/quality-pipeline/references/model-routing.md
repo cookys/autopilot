@@ -32,6 +32,7 @@ Before dispatching an Agent, determine the role and look up model + mode:
 | **test-runner** | haiku | default | Execution-focused, speed priority |
 | **researcher** | sonnet | default | Web search + synthesis, needs tools |
 | **think-tank-role** | sonnet | plan | Analysis only, no implementation |
+| **ar-analyst** | haiku | default | AR transcript digest. First seat is haiku, then sonnet, then grok, carbon, hydrogen, astra. `--data-class transcript` stays on the allowlist in `scripts/lib/data-class-policy.json`. |
 
 ## Agent Dispatch Pattern
 

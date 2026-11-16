@@ -766,6 +766,7 @@ family_of() {
     *deepseek*)                              echo deepseek ;;
     *longcat*)                               echo meituan ;;
     *beam*)                                  echo reflection ;;
+    *qoder*)                                 echo qoder ;;
     *gemini*|*flash*|*bison*)                echo google ;;
     *)                                       echo unknown ;;
   esac

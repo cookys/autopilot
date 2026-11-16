@@ -34,7 +34,7 @@ fs.writeFileSync(diff, 'diff --git a/x b/x\n');
 
 function env(extra = {}) {
   const e = { ...process.env, PATH: `${sent}:/usr/bin:/bin:/usr/local/bin`, HOME: home, CLAUDE_CONFIG_DIR: path.join(tmp, 'cc'), ...extra };
-  for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'AUTOPILOT_TASK_READS_TRANSCRIPT']) delete e[k];
+  for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'AUTOPILOT_TASK_READS_TRANSCRIPT', 'AUTOPILOT_TASK_CLASS']) delete e[k];
   return { ...e, ...extra };
 }
 const run = (cmd, args, extra) => spawnSync(cmd, args, { cwd: repo, encoding: 'utf8', env: env(extra), input: '', timeout: 120000 });
@@ -232,6 +232,15 @@ test('dispatch-hetero: --runner qoderclicn on a core path is barred before the s
 
 test.after(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
+test('(a) qwen_local with size, role and scope but no Task-Class is refused unknown-task-class', () => {
+  const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  const c = cls(LOCAL, OK);
+  assert.equal(c.allowed, false);
+  assert.equal(c.cls, 'unknown-task-class');
+  assert.equal(c.family, 'alibaba');
+  assert.equal(c.line, 'cn_model_dispatch_barred alibaba unknown-task-class (01M7E2A1, d-1dfcf757)');
+});
+
 test('local fleet endpoint (PM 01M7F6TK): qwen_local is not cloud dispatch; cloud Qwen and other families stay barred', () => {
   const core = path.join(tmp, 'corerepo');
   fs.mkdirSync(path.join(core, '.claude'), { recursive: true });
@@ -240,8 +249,9 @@ test('local fleet endpoint (PM 01M7F6TK): qwen_local is not cloud dispatch; clou
   const at = (x) => gate.check({ ...x, env: env0, cwd: core });
   const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
   assert.deepEqual(gate.localEndpoints(), ['qwen_local']);
-  assert.equal(at(LOCAL).allowed, true, 'local qwen on core dir / big size / transcript is allowed');
-  assert.equal(at({ runner: 'anthropic-compatible', endpoint: 'qwen_local' }).allowed, true);
+  assert.equal(at(LOCAL).cls, 'transcript', 'local qwen is not exempt: transcript still bars');
+  assert.equal(at(LOCAL).family, 'alibaba');
+  assert.equal(at({ runner: 'anthropic-compatible', endpoint: 'qwen_local' }).cls, 'transcript');
   assert.equal(at({ runner: 'cc-shim', model: 'Qwen3.8-Max' }).allowed, false, 'cloud Qwen, no endpoint');
   assert.equal(at({ runner: 'cc-shim', model: 'Qwen3.8-Max', endpoint: 'qwen' }).allowed, false, 'cloud qwen endpoint');
   assert.equal(at({ runner: 'cc-shim', model: 'x', endpoint: 'glm' }).allowed, false);
@@ -252,4 +262,120 @@ test('local fleet endpoint (PM 01M7F6TK): qwen_local is not cloud dispatch; clou
   const mixed = at({ runner: 'cc-shim', model: 'kimi-code/kimi-for-coding', endpoint: 'qwen_local' });
   assert.equal(mixed.allowed, false, 'a cloud kimi model on the local endpoint is still barred');
   assert.equal(mixed.family, 'moonshot');
+  const cleanKimi = gate.check({ runner: 'cc-shim', model: 'kimi-code/kimi-for-coding', endpoint: 'qwen_local', env: OK, cwd: repo });
+  assert.equal(cleanKimi.allowed, true, 'a different barred family on qwen_local does not take the task-class rule');
+  assert.equal(cleanKimi.family, 'moonshot');
+});
+
+test('(b) each allowed Task-Class at XS and S on repo autopilot is allowed', () => {
+  const auto = path.join(tmp, 'autopilot');
+  fs.mkdirSync(auto, { recursive: true });
+  const g = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: auto, encoding: 'utf8' });
+  assert.equal(g.status, 0, g.stderr);
+  const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  for (const taskClass of ['format-convert', 'log-summary', 'simple-script', 'test-scaffold']) {
+    for (const size of ['XS', 'S']) {
+      const c = gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SIZE: size, AUTOPILOT_TASK_CLASS: taskClass }, cwd: auto });
+      assert.equal(c.allowed, true, `${taskClass} ${size}`);
+      assert.equal(c.family, 'alibaba');
+    }
+  }
+  const header = path.join(tmp, 'class-header.md');
+  fs.writeFileSync(header, 'Size: S | Role: implementer | Task-Class: simple-script\nScope: docs/a.md\n');
+  assert.equal(gate.check({ ...LOCAL, env: {}, files: [header], cwd: auto }).allowed, true, 'header Task-Class');
+});
+
+test('(c) Task-Class refactor is refused task-class', () => {
+  const auto = path.join(tmp, 'autopilot');
+  const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  const c = gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_CLASS: 'refactor' }, cwd: auto });
+  assert.equal(c.allowed, false);
+  assert.equal(c.cls, 'task-class');
+  assert.equal(c.line, 'cn_model_dispatch_barred alibaba task-class (01M7E2A1, d-1dfcf757)');
+});
+
+test('(d) AUTOPILOT_TASK_CLASS overrides a Task-Class header', () => {
+  const auto = path.join(tmp, 'autopilot');
+  const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  const brief = path.join(tmp, 'refactor-header.md');
+  fs.writeFileSync(brief, 'Task-Class: refactor\nSize: S\nRole: implementer\nScope: docs/a.md\n');
+  const c = gate.check({ ...LOCAL, env: { AUTOPILOT_TASK_CLASS: 'log-summary' }, files: [brief], cwd: auto });
+  assert.equal(c.allowed, true);
+  assert.equal(gate.check({ ...LOCAL, env: {}, files: [brief], cwd: auto }).cls, 'task-class', 'header alone is still refactor');
+});
+
+test('(e) local qwen still hits transcript, core-size, novel and sensitive', () => {
+  const auto = path.join(tmp, 'autopilot');
+  const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  assert.equal(gate.check({ ...LOCAL, env: OK, files: [marked], cwd: auto }).cls, 'transcript');
+  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SIZE: 'M' }, cwd: auto }).cls, 'core-size');
+  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_NOVEL: '1' }, cwd: auto }).cls, 'novel');
+  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_SCOPE: '.env' }, cwd: auto }).cls, 'sensitive');
+});
+
+test('(f) local_deny_repos bars revival and aaa-race, and a repo may only add names', () => {
+  const LOCAL = { runner: 'cc-shim', model: 'Qwen3.8-27B-QUASAR-NVFP4', endpoint: 'qwen_local' };
+  const allow = { ...OK, AUTOPILOT_TASK_CLASS: 'log-summary' };
+  for (const name of ['revival-world-city-war', 'aaa-race-3']) {
+    const dir = path.join(tmp, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const g = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: dir, encoding: 'utf8' });
+    assert.equal(g.status, 0, g.stderr);
+    const c = gate.check({ ...LOCAL, env: allow, cwd: dir });
+    assert.equal(c.cls, 'local-deny-repo', name);
+    assert.equal(c.line, 'cn_model_dispatch_barred alibaba local-deny-repo (01M7E2A1, d-1dfcf757)');
+  }
+  assert.equal(gate.check({ ...LOCAL, env: OK, cwd: path.join(tmp, 'revival-world-city-war') }).cls, 'local-deny-repo', 'deny wins over a missing class');
+  const extRepo = path.join(tmp, 'deny-ext', 'autopilot');
+  fs.mkdirSync(path.join(extRepo, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(extRepo, '.claude', 'cn-model-gate.json'), JSON.stringify({ local_deny_repos: ['autopilot'], local_task_classes: ['extra-class'] }));
+  const g = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: extRepo, encoding: 'utf8' });
+  assert.equal(g.status, 0, g.stderr);
+  assert.equal(gate.check({ ...LOCAL, env: allow, cwd: extRepo }).cls, 'local-deny-repo', 'repo config adds autopilot');
+  const classRepo = path.join(tmp, 'class-ext', 'autopilot');
+  fs.mkdirSync(path.join(classRepo, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(classRepo, '.claude', 'cn-model-gate.json'), JSON.stringify({ local_task_classes: ['extra-class'] }));
+  const g2 = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: classRepo, encoding: 'utf8' });
+  assert.equal(g2.status, 0, g2.stderr);
+  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_CLASS: 'extra-class' }, cwd: classRepo }).allowed, true, 'repo may add a class');
+  assert.equal(gate.check({ ...LOCAL, env: { ...OK, AUTOPILOT_TASK_CLASS: 'format-convert' }, cwd: classRepo }).allowed, true, 'a starter class cannot be removed');
+  const cleared = path.join(tmp, 'revival-cleared');
+  fs.mkdirSync(path.join(cleared, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(cleared, '.claude', 'cn-model-gate.json'), JSON.stringify({ local_deny_repos: [] }));
+  const g3 = spawnSync('git', ['init', '-q', '-b', 'develop'], { cwd: cleared, encoding: 'utf8' });
+  assert.equal(g3.status, 0, g3.stderr);
+  assert.equal(gate.check({ ...LOCAL, env: allow, cwd: cleared }).cls, 'local-deny-repo', 'an empty repo list cannot drop a starter deny');
+});
+
+test('(g) cloud qwen and glm results stay the pre-change outputs', () => {
+  assert.deepEqual(cls({ runner: 'cc-shim', model: 'Qwen3.8-Max' }, OK), { allowed: true, family: 'alibaba' });
+  assert.deepEqual(
+    cls({ runner: 'cc-shim', model: 'x', endpoint: 'glm' }, { ...OK, AUTOPILOT_TASK_READS_TRANSCRIPT: '1' }),
+    { allowed: false, family: 'zhipu', cls: 'transcript', line: 'cn_model_dispatch_barred zhipu transcript (01M7E2A1, d-1dfcf757)' },
+  );
+  assert.deepEqual(
+    cls({ runner: 'cc-shim', model: 'Qwen3.8-Max' }, { ...OK, AUTOPILOT_TASK_SIZE: 'M' }),
+    { allowed: false, family: 'alibaba', cls: 'core-size', line: 'cn_model_dispatch_barred alibaba core-size (01M7E2A1, d-1dfcf757)' },
+  );
+  assert.deepEqual(
+    cls({ runner: 'cc-shim', model: 'Qwen3.8-Max' }, { ...OK, AUTOPILOT_TASK_CLASS: 'refactor' }),
+    { allowed: true, family: 'alibaba' },
+    'a cloud dispatch ignores Task-Class',
+  );
+});
+
+test('(h) filter-ladder drops a qwen_local rung when Task-Class is missing', () => {
+  const rung = 'Qwen3.8-27B-QUASAR-NVFP4/medium@cc-shim#qwen_local';
+  const r = gate.filterLadder([rung, 'grok-4.7/low@grok'], { env: OK, cwd: repo });
+  assert.deepEqual(r.kept, ['grok-4.7/low@grok']);
+  assert.equal(r.barred.length, 1);
+  assert.equal(r.barred[0].line, 'cn_model_dispatch_barred alibaba unknown-task-class (01M7E2A1, d-1dfcf757)');
+  const named = gate.filterLadder(['Qwen3.8-27B/medium@qwen_local'], { env: OK, cwd: repo });
+  assert.deepEqual(named.kept, []);
+  assert.match(named.barred[0].line, /unknown-task-class/);
+  const cli = run('node', [path.join(S, 'lib', 'cn-model-dispatch-gate.js'), 'filter-ladder', '--', rung], OK);
+  assert.equal(cli.status, 2);
+  assert.match(cli.stderr, /cn_model_dispatch_barred alibaba unknown-task-class \(01M7E2A1, d-1dfcf757\)/);
+  const kept = gate.filterLadder([rung], { env: { ...OK, AUTOPILOT_TASK_CLASS: 'test-scaffold' }, cwd: repo });
+  assert.deepEqual(kept.kept, [rung]);
 });

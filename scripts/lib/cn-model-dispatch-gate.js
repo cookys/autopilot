@@ -4,7 +4,7 @@
 // operator rule 2026-11-15, Fleet task 01M7E2A1). One gate, called before spawn by every rail that can
 // pick a runner/model.
 //
-// Barred families (cloud endpoints; fleet-local endpoints such as qwen_local are exempt, see Local exemption): Kimi (moonshot), GLM (zhipu), Qwen (alibaba), DeepSeek, MiniMax, qoder.
+// Barred families: Kimi (moonshot), GLM (zhipu), Qwen (alibaba), DeepSeek, MiniMax, qoder.
 // A dispatch to a barred family is blocked when ANY of these holds (reason class in brackets):
 //   [transcript]  the task reads agent transcript content (env AUTOPILOT_TASK_READS_TRANSCRIPT=1, or a
 //                 `Reads-Transcript: yes` header line in the first 8 lines of the brief/spec)
@@ -15,19 +15,27 @@
 //   [novel]       role is plan, design, brainstorm, architecture, plan_review or research, or the task is
 //                 marked novel (env AUTOPILOT_TASK_NOVEL=1, or `Novel: yes` header)
 //   [unknown-size|unknown-role|unknown-scope]  FAIL CLOSED: size, role or scope is missing
-// Local exemption (PM 01M7F6TK; d-1dfcf757 targets data leaving the fleet to Chinese vendors' clouds): a dispatch whose
-//   endpoint is a self-hosted, fleet-hosted open-weights endpoint (listed in scripts/lib/local-sandbox-endpoints.json, today
-//   qwen_local) is not barred for the family that endpoint serves. Cloud endpoints and any other barred
-//   model family (e.g. a kimi model on that endpoint) stay barred exactly as above.
-// Allowed only when none match: XS/S mechanical edit with tests, formatting, docs, open-source dependency bumps.
+// Local endpoint (interim, PM 01M7HQ92; operator rule 2026-11-15 applies to local qwen too, so being local
+//   is not an exemption; this stands until the AR data-class allowlist replaces it): when --endpoint is listed
+//   in scripts/lib/local-sandbox-endpoints.json (today qwen_local) and the family is the one that endpoint
+//   serves, every check above applies exactly as for a cloud endpoint of that family. Two further checks then
+//   apply, and only then: [local-deny-repo] the repo directory name matches local_deny_repos; [unknown-task-class]
+//   Task-Class is missing; [task-class] it is not in local_task_classes (format-convert, log-summary,
+//   simple-script, test-scaffold). A different barred family on that endpoint (a kimi model on qwen_local)
+//   stays on the cloud checks only. Cloud endpoints are unchanged. filter-ladder applies the same rule to a
+//   rung that names the local endpoint (engine/effort@runner#endpoint, or a runner/model equal to that name).
+// Allowed only when none match: XS/S mechanical edit with tests, formatting, docs, open-source dependency bumps;
+//   a local served-family dispatch also needs an allowed Task-Class and a repo outside local_deny_repos.
 //
 // Task facts (env wins over header; header = first 8 lines of the brief/spec, `Key: v` alone or as a `| Key: v` field):
 //   size   AUTOPILOT_TASK_SIZE  / `Size: XS|S|M|L|XL`
 //   role   AUTOPILOT_TASK_ROLE  / `Role: <role>`          (a rail may pass its own implied role as a default)
 //   scope  AUTOPILOT_TASK_SCOPE / `Scope: a, b`  (comma/newline separated paths), plus the `diff --git` paths of any diff file
 //   novel  AUTOPILOT_TASK_NOVEL=1 / `Novel: yes`
+//   class  AUTOPILOT_TASK_CLASS / `Task-Class: <value>`   (local served family only; compared case-insensitively)
 // Config: scripts/lib/cn-model-gate-defaults.json (starter lists) extended by <repo>/.claude/cn-model-gate.json
-//   (union of every list; fields sensitive_paths, sensitive_repos, core_dirs, novel_roles).
+//   (union of every list; a repo can add entries and cannot remove a starter). Fields: sensitive_paths,
+//   sensitive_repos, core_dirs, novel_roles, local_task_classes, local_deny_repos.
 // Family inference is NOT a second table: stage-write.js familyOfEngine; only `qoder` is named here.
 // Test seam: AUTOPILOT_TEST_CN_GATE_OFF=1 disables the gate (suites that dispatch through a sentinel runner).
 //
@@ -114,7 +122,12 @@ function loadConfig(root) {
   const base = loadList(DEFAULTS_PATH);
   const ext = loadList(path.join(root, '.claude', 'cn-model-gate.json'));
   const u = (k) => [...new Set([...(base[k] || []), ...(ext[k] || [])].map(String))];
-  return { sensitive_paths: u('sensitive_paths'), sensitive_repos: u('sensitive_repos'), core_dirs: u('core_dirs'), novel_roles: u('novel_roles').map((r) => r.toLowerCase()) };
+  return {
+    sensitive_paths: u('sensitive_paths'), sensitive_repos: u('sensitive_repos'), core_dirs: u('core_dirs'),
+    novel_roles: u('novel_roles').map((r) => r.toLowerCase()),
+    local_task_classes: u('local_task_classes').map((r) => r.toLowerCase()),
+    local_deny_repos: u('local_deny_repos'),
+  };
 }
 
 // Self-hosted fleet endpoints: the one repo-documented list (also drives the local implementer sandbox).
@@ -126,21 +139,24 @@ function localEndpoints() {
 
 function rawFamily(p) { return /qoder/i.test(p) ? 'qoder' : familyOfEngine(p); }
 
-function familyOf(runner, model, endpoint) {
+// localServed: the endpoint is a local-sandbox endpoint and no OTHER barred family is named.
+// The family id is the one that endpoint serves (cloud qwen is alibaba), so the cloud checks apply as-is.
+function resolution(runner, model, endpoint) {
   const ep = String(endpoint || '');
   if (ep && localEndpoints().includes(ep)) {
-    // Local endpoint: its own name and the family it serves do not count; any OTHER barred family named by model/runner does.
     const served = rawFamily(ep);
     const fams = [model, runner].map((s) => String(s || '')).filter(Boolean).map(rawFamily);
     const other = fams.find((f) => BARRED_FAMILIES.includes(f) && f !== served);
-    if (other) return other;
-    if (BARRED_FAMILIES.includes(served)) return 'local';
-    return fams.find((f) => f !== 'unknown') || served;
+    if (other) return { family: other, localServed: false };
+    if (BARRED_FAMILIES.includes(served)) return { family: served, localServed: true };
+    return { family: fams.find((f) => f !== 'unknown') || served, localServed: false };
   }
   const probes = [endpoint, model, runner].map((s) => String(s || '')).filter(Boolean);
   const fams = probes.map(rawFamily);
-  return fams.find((f) => BARRED_FAMILIES.includes(f)) || fams.find((f) => f !== 'unknown') || 'unknown';
+  return { family: fams.find((f) => BARRED_FAMILIES.includes(f)) || fams.find((f) => f !== 'unknown') || 'unknown', localServed: false };
 }
+
+function familyOf(runner, model, endpoint) { return resolution(runner, model, endpoint).family; }
 
 // Kept for callers/tests that only ask about the transcript marker.
 function isMarked(files = [], env = process.env) {
@@ -154,12 +170,13 @@ function taskFacts({ files = [], diffFiles = [], role = '', env = process.env })
   const scopeRaw = String(env.AUTOPILOT_TASK_SCOPE || headerValue(files, 'Scope') || '');
   const scope = [...new Set([...scopeRaw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean), ...diffFiles.filter(Boolean).flatMap(diffPaths)])];
   const novel = String(env.AUTOPILOT_TASK_NOVEL || '') === '1' || /^yes$/i.test(headerValue(files, 'Novel'));
-  return { size, role: roleV, scope, novel, transcript: isMarked(files, env) };
+  const taskClass = String(env.AUTOPILOT_TASK_CLASS || headerValue(files, 'Task-Class') || '').trim().toLowerCase();
+  return { size, role: roleV, scope, novel, transcript: isMarked(files, env), taskClass };
 }
 
 // -> { allowed, family, cls?, line? }
 function check({ runner, model, endpoint, files = [], diffFiles = [], role = '', env = process.env, cwd = process.cwd() } = {}) {
-  const family = familyOf(runner, model, endpoint);
+  const { family, localServed } = resolution(runner, model, endpoint);
   if (String(env.AUTOPILOT_TEST_CN_GATE_OFF || '') === '1' || !BARRED_FAMILIES.includes(family)) return { allowed: true, family };
   const root = repoRootOf(cwd);
   const cfg = loadConfig(root);
@@ -173,20 +190,41 @@ function check({ runner, model, endpoint, files = [], diffFiles = [], role = '',
   if (!SMALL_SIZES.includes(f.size)) return block('unknown-size');
   if (!f.role) return block('unknown-role');
   if (!f.scope.length) return block('unknown-scope');
+  if (localServed) {
+    if (matchesAny(path.basename(root), cfg.local_deny_repos)) return block('local-deny-repo');
+    if (!f.taskClass) return block('unknown-task-class');
+    if (!cfg.local_task_classes.includes(f.taskClass)) return block('task-class');
+  }
   return { allowed: true, family };
 }
 
-// rungs are "engine/effort@runner"; the endpoint is not expressible in a rung, so engine and runner decide.
+// rungs are "engine/effort@runner" or "engine/effort@runner#endpoint". A #endpoint, or a runner or model
+// equal to a local-sandbox endpoint name, is that endpoint for the local served-family rule.
 function rungParts(rung) {
-  const m = /^(.*?)(?:\/[a-z]+)?@([^@]+)$/.exec(String(rung));
-  return m ? { model: m[1], runner: m[2] } : { model: String(rung), runner: '' };
+  const raw = String(rung);
+  const m = /^(.*?)(?:\/[a-z]+)?@([^@]+)$/.exec(raw);
+  if (!m) {
+    const hash = raw.indexOf('#');
+    if (hash === -1) return { model: raw, runner: '', endpoint: '' };
+    return { model: raw.slice(0, hash), runner: '', endpoint: raw.slice(hash + 1) };
+  }
+  let runner = m[2];
+  let endpoint = '';
+  const hash = runner.indexOf('#');
+  if (hash !== -1) { endpoint = runner.slice(hash + 1); runner = runner.slice(0, hash); }
+  return { model: m[1], runner, endpoint };
 }
 
 function filterLadder(rungs, ctx = {}) {
   const kept = []; const barred = [];
+  const locals = localEndpoints();
   for (const r of rungs) {
-    const { model, runner } = rungParts(r);
-    const c = check({ ...ctx, runner, model });
+    const parts = rungParts(r);
+    let endpoint = parts.endpoint;
+    if (!endpoint && locals.includes(parts.runner)) endpoint = parts.runner;
+    else if (!endpoint && locals.includes(parts.model)) endpoint = parts.model;
+    else if (!endpoint) endpoint = ctx.endpoint || '';
+    const c = check({ ...ctx, runner: parts.runner, model: parts.model, endpoint });
     if (c.allowed) kept.push(r); else barred.push({ rung: r, family: c.family, line: c.line });
   }
   return { kept, barred };

@@ -7055,6 +7055,19 @@
       "summary": "Set to 1 (or `Novel: yes` header) to mark a task as novel work: the Chinese-model dispatch gate then blocks Kimi, GLM, Qwen, DeepSeek, MiniMax and qoder."
     },
     {
+      "name": "AUTOPILOT_TASK_CLASS",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "",
+      "readers": [
+        "scripts/lib/cn-model-dispatch-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Task class for a local-sandbox endpoint (today qwen_local) serving its own family. Allowed: format-convert, log-summary, simple-script, test-scaffold. A Task-Class: header in the first 8 brief lines is the fallback. Missing refuses unknown-task-class; any other value refuses task-class. Cloud endpoints ignore it."
+    },
+    {
       "name": "AUTOPILOT_LANE",
       "kind": "env",
       "audience": "user",

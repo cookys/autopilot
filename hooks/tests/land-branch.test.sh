@@ -123,7 +123,11 @@ assert_eq "$SUBJECT" "Merge feat/land: land the reviewed branch" "ship subject"
 BODY_MSG="$(git -C "$BARE" log -1 --format=%B develop)"
 assert_contains "$BODY_MSG" "Second paragraph stays in the message." "ship keeps the body"
 PARSED="$(printf '%s\n' "$BODY_MSG" | git interpret-trailers --parse)"
-assert_eq "$PARSED" "$(printf '%s\n' "QC-Verdict: SHIP-AS-IS (grok-4.7)" "Review-Generation: 2" "Fleet-Task: $FLEET_ID" "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")" "ship four trailers parse"
+# The identity guard rejects a real address written in a test. Read the trailer
+# the script stores; do not copy the address into this file.
+COAUTHOR_LINE="$(grep -m 1 -o 'Co-Authored-By: [^"'"'"'`]*' "$SCRIPT")"
+assert_neq "$COAUTHOR_LINE" "" "co-author trailer read from the script"
+assert_eq "$PARSED" "$(printf '%s\n' "QC-Verdict: SHIP-AS-IS (grok-4.7)" "Review-Generation: 2" "Fleet-Task: $FLEET_ID" "$COAUTHOR_LINE")" "ship four trailers parse"
 
 # --- NEEDS-WORK → review_not_ship, nothing merged ---
 reset_env

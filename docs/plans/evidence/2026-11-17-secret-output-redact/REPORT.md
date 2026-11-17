@@ -18,7 +18,7 @@ Add a default-on PostToolUse Bash hook that replaces secret values in stdout/std
 
 ## 3–4. Incremental red → green
 
-Each implementation family was verified before advancing. Logs and matching `.exit` files preserve the run results; absolute checkout prefixes in logs are normalized to `<worktree>`.
+Each implementation family was verified before advancing. Logs and matching `.exit` files preserve the run results; absolute checkout prefixes in logs are normalized to `<worktree>` and renderer-only trailing whitespace is stripped. Implementation commit: `5ca2ab31a`. A separate staged whitespace check found the captured-log padding (exit 2); the evidence cleanup recheck passed (exit 0).
 
 | Criterion | Red artifact / exit | Green artifact / exit |
 |---|---|---|

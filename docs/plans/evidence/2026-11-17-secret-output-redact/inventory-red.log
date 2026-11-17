@@ -20,5 +20,5 @@ Hook inventory (derived from hooks.json + opt-in-manifest.json):
   total          : 47
   default-on (31) : advisory-relay, ask-decision, audit-log, awaiting-owner, context-budget, cost-fuse, cost-tracker, depth0-delegate-gate, dirty-protected-paths, dispatch-model-guard, failure-escalation, fleet-send-work-order-guard, foreman-guard, intent-capture, log-error, owner-question-guard, past-reference-recall, reload-watch, residue-auto-reap, run-approval-gate, runs-watch-autostart, scheduled-wakeup-guard, secret-output-redact, session-handoff, session-start, session-tasks, state-checkpoint, subagent-budget, suggest-compact, unmerged-ship-advisory, version-drift-check
   opt-in     (16) : accumulator, askpm-log, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, design-quality, exec-boundary, fleet-stop, large-file-warner, mcp-health, orchestrator-edit-gate, per-turn-gate, session-summary, test-runner
-  disabled   (0) : 
+  disabled   (0) :
   mods: 1   (top-level modules in hooks.json; separate from the hook tiers)

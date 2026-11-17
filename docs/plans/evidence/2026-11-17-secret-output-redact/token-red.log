@@ -14,7 +14,7 @@ test at hooks/secret-output-redact.test.js:78:1
 ✖ service token: shared patterns redact every occurrence (28.03075ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -28,7 +28,7 @@ test at hooks/secret-output-redact.test.js:78:1
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:80:3)
       at Test.runInAsyncScope (node:async_hooks:227:14)

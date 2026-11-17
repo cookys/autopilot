@@ -21,7 +21,7 @@ test at hooks/secret-output-redact.test.js:75:3
 ✖ env Environment=AUTH_SALT=synthetic-salt-value-0001 (31.033152ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -35,7 +35,7 @@ test at hooks/secret-output-redact.test.js:75:3
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -54,7 +54,7 @@ test at hooks/secret-output-redact.test.js:75:3
 ✖ env Environment="API_TOKEN=synthetic token" "DB_PASSWORD=synthetic password" "MODE=debug" (29.864051ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -68,7 +68,7 @@ test at hooks/secret-output-redact.test.js:75:3
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -89,7 +89,7 @@ test at hooks/secret-output-redact.test.js:75:3
 ✖ env Environment='SECRET=synthetic secret' API_KEY=synthetic-key-0001 (34.546466ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -103,7 +103,7 @@ test at hooks/secret-output-redact.test.js:75:3
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -124,7 +124,7 @@ test at hooks/secret-output-redact.test.js:75:3
 ✖ env export API_KEY=synthetic-key-0001 (30.6975ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -138,7 +138,7 @@ test at hooks/secret-output-redact.test.js:75:3
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -159,7 +159,7 @@ test at hooks/secret-output-redact.test.js:75:3
 ✖ env   export DB_PASS='synthetic password'  # keep comment (34.831221ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -173,7 +173,7 @@ test at hooks/secret-output-redact.test.js:75:3
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -194,7 +194,7 @@ test at hooks/secret-output-redact.test.js:75:3
 ✖ env auth_salt=synthetic-salt-value-0001 (33.545451ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -208,7 +208,7 @@ test at hooks/secret-output-redact.test.js:75:3
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -229,7 +229,7 @@ test at hooks/secret-output-redact.test.js:75:3
 ✖ env SECRET=synthetic value with spaces (35.080351ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -243,7 +243,7 @@ test at hooks/secret-output-redact.test.js:75:3
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -264,7 +264,7 @@ test at hooks/secret-output-redact.test.js:75:3
 ✖ env Environment="SECRET=synthetic\"quote" "TOKEN=synthetic-token-0001" (32.448076ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
   + actual - expected
-  
+
   + null
   - {
   -   hookSpecificOutput: {
@@ -278,7 +278,7 @@ test at hooks/secret-output-redact.test.js:75:3
   -     }
   -   }
   - }
-  
+
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
       at Test.runInAsyncScope (node:async_hooks:227:14)

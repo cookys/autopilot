@@ -40,7 +40,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -53,12 +53,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -79,7 +79,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -92,12 +92,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -120,7 +120,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -133,12 +133,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -161,7 +161,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -174,12 +174,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -202,7 +202,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -215,12 +215,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -243,7 +243,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -256,12 +256,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -284,7 +284,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -297,12 +297,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -325,7 +325,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -338,12 +338,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -366,7 +366,7 @@ test at hooks/secret-output-redact.test.js:59:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -379,12 +379,12 @@ test at hooks/secret-output-redact.test.js:59:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:59:30)
@@ -407,7 +407,7 @@ test at hooks/secret-output-redact.test.js:75:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -420,12 +420,12 @@ test at hooks/secret-output-redact.test.js:75:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
@@ -448,7 +448,7 @@ test at hooks/secret-output-redact.test.js:75:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -461,12 +461,12 @@ test at hooks/secret-output-redact.test.js:75:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
@@ -489,7 +489,7 @@ test at hooks/secret-output-redact.test.js:75:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -502,12 +502,12 @@ test at hooks/secret-output-redact.test.js:75:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
@@ -530,7 +530,7 @@ test at hooks/secret-output-redact.test.js:75:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -543,12 +543,12 @@ test at hooks/secret-output-redact.test.js:75:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
@@ -571,7 +571,7 @@ test at hooks/secret-output-redact.test.js:75:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -584,12 +584,12 @@ test at hooks/secret-output-redact.test.js:75:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
@@ -612,7 +612,7 @@ test at hooks/secret-output-redact.test.js:75:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -625,12 +625,12 @@ test at hooks/secret-output-redact.test.js:75:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
@@ -653,7 +653,7 @@ test at hooks/secret-output-redact.test.js:75:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -666,12 +666,12 @@ test at hooks/secret-output-redact.test.js:75:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
@@ -694,7 +694,7 @@ test at hooks/secret-output-redact.test.js:75:3
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -707,12 +707,12 @@ test at hooks/secret-output-redact.test.js:75:3
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
@@ -735,7 +735,7 @@ test at hooks/secret-output-redact.test.js:78:1
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -748,12 +748,12 @@ test at hooks/secret-output-redact.test.js:78:1
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:20)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:80:3)
@@ -776,7 +776,7 @@ test at hooks/secret-output-redact.test.js:83:1
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -789,12 +789,12 @@ test at hooks/secret-output-redact.test.js:83:1
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:84:16)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -816,7 +816,7 @@ test at hooks/secret-output-redact.test.js:86:1
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -829,12 +829,12 @@ test at hooks/secret-output-redact.test.js:86:1
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:88:20)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -856,7 +856,7 @@ test at hooks/secret-output-redact.test.js:92:1
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -869,12 +869,12 @@ test at hooks/secret-output-redact.test.js:92:1
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:94:16)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -896,7 +896,7 @@ test at hooks/secret-output-redact.test.js:97:1
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -909,12 +909,12 @@ test at hooks/secret-output-redact.test.js:97:1
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:103:19)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -936,7 +936,7 @@ test at hooks/secret-output-redact.test.js:105:1
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -949,12 +949,12 @@ test at hooks/secret-output-redact.test.js:105:1
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:107:18)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -976,7 +976,7 @@ test at hooks/secret-output-redact.test.js:110:1
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -989,12 +989,12 @@ test at hooks/secret-output-redact.test.js:110:1
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:111:16)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -1016,7 +1016,7 @@ test at hooks/secret-output-redact.test.js:114:1
   AssertionError [ERR_ASSERTION]: node:internal/modules/cjs/loader:1568
     throw err;
     ^
-  
+
   Error: Cannot find module '<worktree>/hooks/secret-output-redact.js'
       at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
       at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
@@ -1029,12 +1029,12 @@ test at hooks/secret-output-redact.test.js:114:1
     code: 'MODULE_NOT_FOUND',
     requireStack: []
   }
-  
+
   Node.js v24.22.1
-  
-  
+
+
   1 !== 0
-  
+
       at run (<worktree>/hooks/secret-output-redact.test.js:28:10)
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:117:18)
       at Test.runInAsyncScope (node:async_hooks:227:14)
@@ -1054,9 +1054,9 @@ test at hooks/secret-output-redact.test.js:114:1
 test at hooks/secret-output-redact.test.js:121:1
 ✖ wiring: default-on Bash hook is registered exactly once and retained in profiles (1.177146ms)
   AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-  
+
   0 !== 1
-  
+
       at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:126:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)

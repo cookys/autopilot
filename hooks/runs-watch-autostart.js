@@ -234,13 +234,20 @@ function cacheFile(base, cwd) {
 // own code fingerprint cannot see the update): autostart replaces it.
 let ownIdMemo = null;
 function ownIdentity(root) {
-  if (ownIdMemo) return ownIdMemo;
-  let real = root;
-  try { real = fs.realpathSync(root); } catch (_error) { /* as given */ }
-  let version = null;
-  try { const v = JSON.parse(fs.readFileSync(path.join(real, '.claude-plugin', 'plugin.json'), 'utf8')).version; version = typeof v === 'string' && v ? v : null; } catch (_error) { /* unknown */ }
-  ownIdMemo = { root: real, version };
-  return ownIdMemo;
+  if (!ownIdMemo) {
+    let real = root;
+    try { real = fs.realpathSync(root); } catch (_error) { /* as given */ }
+    let version = null;
+    try { const v = JSON.parse(fs.readFileSync(path.join(real, '.claude-plugin', 'plugin.json'), 'utf8')).version; version = typeof v === 'string' && v ? v : null; } catch (_error) { /* unknown */ }
+    ownIdMemo = { root: real, version };
+  }
+  return { ...ownIdMemo, codeVersion: require('../src/status/watcher-identity').readCodeVersion(ownIdMemo.root) };
+}
+
+// A legacy record is replaced once when HEAD is known. An explicitly unknown version on either side keeps the old behaviour.
+function codeVersionStale(record, current) {
+  return current !== null && (!Object.hasOwn(record, 'plugin_code_version') ||
+    (typeof record.plugin_code_version === 'string' && record.plugin_code_version !== '' && record.plugin_code_version !== current));
 }
 
 // The plugin root a watcher process runs from, read off its argv: `<root>/bin/autopilot.js status runs --watch ...`.
@@ -252,7 +259,7 @@ function argvRootOf(argv) {
 
 // One look at the project's watcher: the envelope writer pid, its /proc/<pid>/cmdline (must be `status runs --watch --project <key>`).
 //   null                       no live watcher of this project
-//   { state:'current', pid }   its recorded root + version are ours (a legacy record without them: its argv root is ours)
+//   { state:'current', pid }   its recorded root + version are ours, with no known code mismatch (unknown HEAD: legacy argv-root fallback)
 //   { state:'stale', pid, argvRoot, recordedRoot }
 function lockPathIn(base, key) { return path.join(base, 'runs', `${key}.lock`); }
 
@@ -272,6 +279,7 @@ function inspectWatcher(base, key, root) {
     // page, so no owner card ever shows. Never accepted as 'current': it is replaced like an old install's (reapStale, then a start with
     // the render argv).
     if (id.state === 'no_render') return { state: 'stale', pid, argvRoot, recordedRoot, reason: 'no_render' };
+    if (codeVersionStale(w, own.codeVersion)) return { state: 'stale', pid, argvRoot, recordedRoot, reason: 'code_version' };
     if (recordedRoot !== null) {
       if (recordedRoot === own.root && (w.plugin_version || null) === own.version) return { state: 'current', pid };
     } else if (argvRoot === null || argvRoot === own.root) return { state: 'current', pid }; // legacy writer block: only the argv root can be compared (none named = cannot tell)
@@ -370,10 +378,10 @@ function fillEnsureStamp(base, sid, cwd, key, pid, root) {
     const file = ensureStampFile(base, sid);
     const prev = readEnsureStamp(base, sid);
     const d = prev && prev.data;
-    if (d && d.cwd === cwd && d.project_key === key && d.pid === pid && d.plugin_root === own.root && d.plugin_version === own.version) return;
+    if (d && d.cwd === cwd && d.project_key === key && d.pid === pid && d.plugin_root === own.root && d.plugin_version === own.version && d.plugin_code_version === own.codeVersion) return;
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     const tmp = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify({ cwd, project_key: key, pid, plugin_root: own.root, plugin_version: own.version }), { mode: 0o600 });
+    fs.writeFileSync(tmp, JSON.stringify({ cwd, project_key: key, pid, plugin_root: own.root, plugin_version: own.version, plugin_code_version: own.codeVersion }), { mode: 0o600 });
     if (prev) fs.utimesSync(tmp, new Date(prev.mtimeMs), new Date(prev.mtimeMs));
     fs.renameSync(tmp, file);
   } catch (_error) { /* optimisation only */ }
@@ -401,7 +409,7 @@ function run(payload) {
       // A complete stamp names the watcher pid and the plugin identity it was confirmed against: one /proc read, no envelope parse (it can be
       // large). A stamp from another plugin root / version (an upgrade landed) is not trusted: the full path runs WATCHVER's replacement.
       const own = ownIdentity(root);
-      if (st.data.plugin_root === own.root && st.data.plugin_version === own.version && pidIsWatcher(st.data.pid, st.data.project_key)) return;
+      if (st.data.plugin_root === own.root && st.data.plugin_version === own.version && !codeVersionStale(st.data, own.codeVersion) && pidIsWatcher(st.data.pid, st.data.project_key)) return;
     }
     if (st && Date.now() - st.mtimeMs < ENSURE_THROTTLE_S * 1000) return;
   }

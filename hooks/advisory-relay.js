@@ -244,8 +244,43 @@ try {
     process.stderr.write(`advisory-relay: live-state hosting fail-open: ${e && e.message ? e.message : e}\n`);
   }
   try {
-    if (payload && typeof payload === 'object' && require('./_shared/opt-in').isEnabled('askpm-log')) {
-      require('./askpm-log').handle(payload, { AUTOPILOT_STATE_DIR: process.env.AUTOPILOT_STATE_DIR, XDG_STATE_HOME: process.env.XDG_STATE_HOME, HOME: process.env.HOME });
+    if (payload && typeof payload === 'object') {
+      const optIn = require('./_shared/opt-in');
+      const askpmEnv = {
+        AUTOPILOT_STATE_DIR: process.env.AUTOPILOT_STATE_DIR,
+        XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+        HOME: process.env.HOME,
+      };
+      const askpmLogOn = optIn.isEnabled('askpm-log');
+      const askpmRemindOn = optIn.isEnabled('askpm-remind');
+      let askRes = null;
+      if (askpmLogOn) {
+        askRes = require('./askpm-log').handle(payload, askpmEnv);
+      }
+      if (askpmRemindOn && !payload.agent_id) {
+        const cwd = typeof payload.cwd === 'string' && payload.cwd !== '' ? payload.cwd : process.cwd();
+        if (require('./_shared/pm-console').isPmConsole(cwd)) {
+          if (!askpmLogOn) {
+            process.stderr.write('askpm-remind: askpm-log is off (no rows to read)\n');
+          } else {
+            if (askRes && askRes.kind === 'ask' && askRes.ask_id) {
+              ctxLines.push(`ask_id ${askRes.ask_id}`);
+            }
+            const { stateDir } = require('./askpm-log');
+            const dir = stateDir(askpmEnv);
+            const dayFile = path.join(dir, 'remind-day');
+            const todayUtc8 = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+            let prevDay = '';
+            try { prevDay = fs.readFileSync(dayFile, 'utf8').trim(); } catch { prevDay = ''; }
+            if (prevDay !== todayUtc8) {
+              fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+              fs.writeFileSync(dayFile, `${todayUtc8}\n`, { mode: 0o600 });
+              const overdueText = require('../scripts/pm-ask.js').overdueOutput(askpmEnv, 24);
+              if (overdueText) ctxLines.push(overdueText);
+            }
+          }
+        }
+      }
     }
   } catch (e) {
     process.stderr.write(`advisory-relay: askpm-log hosting fail-open: ${e && e.message ? e.message : e}\n`);

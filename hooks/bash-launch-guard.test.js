@@ -1932,3 +1932,10 @@ for (const cmd of ['cat <.env', 'kubectl get -o yaml secret db']) {
 for (const cmd of ['cat README.md > .env', 'kubectl get secret json']) {
   test(`secret-print output path/name allowed: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
 }
+
+for (const cmd of ['env -- FOO=1', 'env FOO=1 > /tmp/output', 'env -S FOO=1']) {
+  test(`secret-print env without command: ${cmd}`, () => assert.strictEqual(run(cmd).deny, true));
+}
+for (const cmd of ["docker inspect -f '{{.Config.Image}}' web", "docker inspect -f '{{.Config.WorkingDir}}' web"]) {
+  test(`secret-print safe Config scalar: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
+}

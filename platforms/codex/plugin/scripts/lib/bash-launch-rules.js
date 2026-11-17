@@ -1591,14 +1591,18 @@ function secretWords(head, args, depth) {
   if (depth > MAX_EXPAND_DEPTH || !head) return false;
   const name = path.posix.basename(head);
   if (name === 'env') {
+    args = args.filter((a, i) => !REDIR_RE.test(a) && !(i > 0 && REDIR_RE.test(args[i - 1]) && REDIR_RE.exec(args[i - 1])[1] === ''));
     let i = 0;
+    let options = true;
     for (; i < args.length; i += 1) {
       const a = args[i];
-      if (a === '--') { i += 1; break; }
-      if (['--help', '--version'].includes(a)) return false;
-      if (['-u', '--unset', '-C', '--chdir'].includes(a)) { i += 1; continue; }
-      if (a === '-S' || a === '--split-string') return secretText(args.slice(i + 1).join(' '), depth + 1);
-      if (a.startsWith('-') || /^[A-Za-z_]\w*=/.test(a)) continue;
+      if (options && a === '--') { options = false; continue; }
+      if (options && ['--help', '--version'].includes(a)) return false;
+      if (options && ['-u', '--unset', '-C', '--chdir'].includes(a)) { i += 1; continue; }
+      if (options && (a === '-S' || a === '--split-string')) {
+        return secretWords('env', [...tokens(args[i + 1] || '').map((t) => dequote(t.raw)), ...args.slice(i + 2)], depth + 1);
+      }
+      if ((options && a.startsWith('-')) || /^[A-Za-z_]\w*=/.test(a)) continue;
       break;
     }
     return i >= args.length || secretInvocation(args.slice(i), depth + 1);
@@ -1669,8 +1673,8 @@ function secretWords(head, args, depth) {
         else if (a.startsWith('--format=')) formats.push(a.slice(9));
         else if (a.startsWith('-f')) formats.push(a.slice(2).replace(/^=/, ''));
       }
-      // Any .Config access can expose Env (including index/with/range); .State remains useful.
-      return !formats.length || formats.some((f) => /\.Config\b|\bindex\s+\.\s+["']Config["']|\{\{\s*(?:json\s+)?\.\s*\}\}/.test(f));
+      // Env and the whole Config/root expose values; scalar fields such as Config.Image stay useful.
+      return !formats.length || formats.some((f) => /\.Config\s*(?:\.Env\b|[|})]|$)|\bindex\s+\.Config\s+["']Env["']|\bindex\s+\.\s+["']Config["']|\{\{\s*(?:json\s+)?\.\s*\}\}/.test(f));
     }
     if (sub === 'exec') {
       while (i < args.length && args[i].startsWith('-')) {

@@ -139,6 +139,51 @@
       "tail": [
         "OK: 503 registered (255 user, 248 internal); 399 env tokens and 55 config properties scanned; 0 finding(s)"
       ]
+    },
+    {
+      "command": "node --test --test-name-pattern=\"secret-print (env without|safe Config)\" hooks/bash-launch-guard.test.js (before option/format repair)",
+      "rc": 1,
+      "log": ".claude/secret-print-evidence/guard-env-format-red.log",
+      "tail": [
+        "ℹ tests 5",
+        "ℹ suites 0",
+        "ℹ pass 0",
+        "ℹ fail 5",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 287.893515"
+      ]
+    },
+    {
+      "command": "node --test --test-name-pattern=\"secret-print env without\" hooks/bash-launch-guard.test.js",
+      "rc": 0,
+      "log": ".claude/secret-print-evidence/guard-env-green.log",
+      "tail": [
+        "ℹ tests 3",
+        "ℹ suites 0",
+        "ℹ pass 3",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 198.368202"
+      ]
+    },
+    {
+      "command": "node --test --test-name-pattern=secret-print hooks/bash-launch-guard.test.js (final rule cases)",
+      "rc": 0,
+      "log": ".claude/secret-print-evidence/guard-green.log",
+      "tail": [
+        "ℹ tests 97",
+        "ℹ suites 0",
+        "ℹ pass 97",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 3234.496603"
+      ]
     }
   ]
 }

@@ -1,0 +1,200 @@
+// mods/live/pages/quota.ts — page 4 額度 (plan r2 §4.1, g2 folds A1 / A3 / A7 / A10 / A11): one row per quota pool, in danger order, with the verdict of fold A7.
+// Pure: a PageCtx in, rows out; frameRows draws the header, the strip and the padding. Every number is the feed's (console quota.pools, capacity's pace): the pane never
+// recomputes a rate or a projection, a field the feed lacks stays null and is drawn as a dash, never as 0.
+//   pace missing (sources.quota_forecast is not ok): rate, projection and verdict columns read "✗ 無來源：capacity pace 未接", except limit_hit (a fact) and a stale pool (a fact)
+//   stale (> 10 min or flagged): the row is red with the full reason, the numbers stay and carry a ✗ (A1, A10); 80x24 writes the reason in a row under the table, untruncated
+//   Enter (A3) expands the focused pool's seats from `fleet seats --quota --json`; the page draws them from `quota.seats` when the feed carries them
+import type { Page, PageCtx, Row } from './frame'
+import type { Seg } from '../model'
+import { GLYPHS, PALETTE, displayWidth } from '../ui'
+import type { QuotaPool, Verdict } from './quota-pick'
+import { rankPools, ROLE_WARNING } from './quota-pick'
+
+export type QuotaSeat = { seat: string; pool: string; seven_day_pct: number | null; five_hour_pct: number | null; stale: boolean | null; age_min: number | null }
+export type QuotaView = { focus: number; expanded: boolean } // the pane's own state (j/k, Enter); the page contract has no place for it yet, so render() uses the default
+
+// ---- reading the feed (trust boundary: console.ts does not carry `quota` yet, so the page reads it tolerantly and drops what is wrong-typed) ----
+type Obj = Record<string, unknown>
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
+const bool = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null)
+function toPool(v: unknown): QuotaPool | null {
+  if (!isObj(v)) return null
+  const pool = str(v.pool)
+  if (pool === null) return null
+  const list = Array.isArray(v.stranded_seat_list) ? v.stranded_seat_list.filter((x): x is string => typeof x === 'string') : null
+  const sw = v.switched
+  return {
+    pool, seven_day_pct: num(v.seven_day_pct), five_hour_pct: num(v.five_hour_pct), resets_at_ms: num(v.resets_at_ms), burn_pct_per_h: num(v.burn_pct_per_h),
+    burn_window_h: num(v.burn_window_h), projected_pct_at_reset: num(v.projected_pct_at_reset), projected_exhaustion_at_ms: num(v.projected_exhaustion_at_ms), verdict: str(v.verdict),
+    limit_hit: bool(v.limit_hit), stale: bool(v.stale), stale_age_min: num(v.stale_age_min), stale_note: str(v.stale_note), observed_at_ms: num(v.observed_at_ms),
+    stranded_seats: num(v.stranded_seats), stranded_seat_list: list, switched: typeof sw === 'string' || typeof sw === 'boolean' ? sw : null, seats: num(v.seats),
+    projection_source: str(v.projection_source), switch_suggestion: str(v.switch_suggestion),
+  }
+}
+function toSeat(v: unknown): QuotaSeat | null {
+  if (!isObj(v)) return null
+  const seat = str(v.seat), pool = str(v.pool)
+  return seat === null || pool === null ? null : { seat, pool, seven_day_pct: num(v.seven_day_pct), five_hour_pct: num(v.five_hour_pct), stale: bool(v.stale), age_min: num(v.age_min) }
+}
+// null = the console has no quota object or no pools array (no source); [] = the feed says there is no pool
+export function readQuota(consoleSnap: unknown): { pools: QuotaPool[] | null; seats: QuotaSeat[] } {
+  const q = isObj(consoleSnap) && isObj(consoleSnap.quota) ? consoleSnap.quota : null
+  if (q === null || !Array.isArray(q.pools)) return { pools: null, seats: [] }
+  return { pools: q.pools.map(toPool).filter((p): p is QuotaPool => p !== null), seats: Array.isArray(q.seats) ? q.seats.map(toSeat).filter((s): s is QuotaSeat => s !== null) : [] }
+}
+
+// ---- drawing helpers ----
+// the section 5 red marker, the same segment frame.ts's staleBadge / brokenRow build. frame.ts imports ./index (PAGES) and index imports this file, so a value import
+// of frame.ts here would put quotaPage in its temporal dead zone whenever this file is the first one loaded; the two one-line builders are repeated instead of imported.
+const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken })
+const brokenRow = (text: string): Row => [staleBadge(text)]
+const DASH = GLYPHS.structure.empty
+const bad = GLYPHS.state.failed
+const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, w - displayWidth(text)))
+const roleColor = (r: Verdict['role']): Seg['color'] => (r === 'broken' ? PALETTE.broken : r === ROLE_WARNING ? PALETTE.attention : PALETTE.done)
+const roleGlyph = (r: Verdict['role']): string => (r === 'broken' ? GLYPHS.state.failed : r === ROLE_WARNING ? GLYPHS.state.need_you : GLYPHS.state.done)
+const roleWord = (t: PageCtx['t'], r: Verdict['role']): string => (r === 'broken' ? t('page.quota.role_broken') : r === ROLE_WARNING ? t('page.quota.role_warning') : t('page.quota.role_success'))
+const pct = (n: number | null, mark: boolean): string => (n === null ? DASH : Math.round(n) + '%') + (mark ? bad : '')
+const rate = (n: number | null, unit: boolean, mark: boolean): string => (n === null ? DASH : (n >= 0 ? '+' : '') + n.toFixed(1) + (unit ? '/h' : '')) + (mark ? bad : '')
+
+function tpe(ms: number): { mo: string; d: string; dow: number; hh: string; mm: string } {
+  const d = new Date(ms + 8 * 3600000)
+  const z = (n: number): string => String(n).padStart(2, '0')
+  return { mo: z(d.getUTCMonth() + 1), d: z(d.getUTCDate()), dow: d.getUTCDay(), hh: z(d.getUTCHours()), mm: z(d.getUTCMinutes()) }
+}
+type Tier = 'wide' | 'mid' | 'narrow'
+const tierOf = (cols: number): Tier => (cols >= 140 ? 'wide' : cols >= 100 ? 'mid' : 'narrow')
+
+function ageText(ctx: PageCtx, ms: number | null): string | null {
+  if (ms === null) return null
+  const s = Math.max(0, Math.floor((ctx.nowMs - ms) / 1000))
+  return s < 60 ? ctx.t('page.quota.age_s', { n: s }) : s < 3600 ? ctx.t('page.quota.age_m', { n: Math.floor(s / 60) }) : ctx.t('page.quota.age_h', { n: Math.floor(s / 3600) })
+}
+// "── title ─────── right"
+function rule(title: string, right: string | null, cols: number): Row {
+  const left = GLYPHS.structure.rule.repeat(2) + ' ' + title + ' '
+  const r = right === null ? '' : ' ' + right
+  const fill = Math.max(2, cols - displayWidth(left) - displayWidth(r))
+  return [{ text: left, color: PALETTE.structure }, { text: GLYPHS.structure.rule.repeat(fill), color: PALETTE.structure }, ...(right === null ? [] : [{ text: r, dim: true }])]
+}
+
+type Cols = { pool: number; d7: number; h5: number; reset: number; burn: number; proj: number; exh: number; seats: number }
+const COLS: Record<Tier, Cols> = {
+  wide: { pool: 20, d7: 8, h5: 9, reset: 18, burn: 10, proj: 8, exh: 14, seats: 7 },
+  mid: { pool: 14, d7: 7, h5: 9, reset: 14, burn: 9, proj: 8, exh: 0, seats: 0 },
+  narrow: { pool: 10, d7: 6, h5: 5, reset: 7, burn: 8, proj: 6, exh: 0, seats: 0 },
+}
+
+function resetText(ms: number | null, tier: Tier, dows: string[]): string {
+  if (ms === null) return DASH
+  const x = tpe(ms)
+  const dow = dows[x.dow] ?? ''
+  return tier === 'wide' ? `${x.mo}-${x.d} ${dow} ${x.hh}:${x.mm}` : tier === 'mid' ? `${dow} ${x.hh}:${x.mm}` : `${dow}${x.hh}`
+}
+
+export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded: false }): { body: Row[]; actions: Row[] } {
+  const { t } = ctx
+  const cols = ctx.size.cols
+  if (ctx.console === null) return { body: [brokenRow(bad + ' ' + t('page.quota.no_console'))], actions: [] }
+  const q = readQuota(ctx.console)
+  if (q.pools === null || q.pools.length === 0) return { body: [brokenRow(bad + ' ' + t('page.quota.no_pools'))], actions: [] }
+  const tier = tierOf(cols)
+  const c = COLS[tier]
+  const dows = t('page.quota.dow').split(' ')
+  const paceOk = ctx.console.sources.quota_forecast?.state === 'ok'
+  // no forecast source: every projection is dropped before the verdict is judged, so a leftover number cannot paint a green
+  const pools = paceOk ? q.pools : q.pools.map(p => ({ ...p, projected_pct_at_reset: null, projected_exhaustion_at_ms: null, burn_pct_per_h: null }))
+  const ranked = rankPools(pools, ctx.nowMs, t)
+  const byName = new Map(pools.map(p => [p.pool, p]))
+  const focus = Math.max(0, Math.min(view.focus, ranked.length - 1))
+  const win = pools.map(p => p.burn_window_h).find((h): h is number => h !== null)
+  const h = win === undefined ? '-' : String(win)
+  const body: Row[] = []
+
+  // title row, with the age of the quota source on the right
+  const age = ageText(ctx, ctx.console.sources.quota_now?.at_ms ?? null)
+  const right = age === null ? null : t('page.quota.data_age', { age })
+  const title = paceOk ? t(tier === 'wide' ? 'page.quota.title_pace' : 'page.quota.title_pace_s', { h }) : t('page.quota.title_nopace') + ' · ' + bad + ' ' + t('page.quota.v_nopace')
+  body.push(rule(title, right, cols))
+  if (!paceOk && tier !== 'narrow') body.push([{ text: '(' + t('page.quota.title_nopace_note') + ')', dim: true }])
+
+  // column header
+  const head: string[] = ['    ' + padR(t('page.quota.col_pool'), c.pool)]
+  const short = tier === 'narrow'
+  head.push(padR(t(short ? 'page.quota.col_7d_s' : 'page.quota.col_7d'), c.d7), padR(t(short ? 'page.quota.col_5h_s' : 'page.quota.col_5h'), c.h5), padR(t(short ? 'page.quota.col_reset_s' : 'page.quota.col_reset'), c.reset))
+  if (paceOk) {
+    head.push(padR(t('page.quota.col_burn', { h }), c.burn), padR(t('page.quota.col_proj'), c.proj))
+    if (tier === 'wide') head.push(padR(t('page.quota.col_exh'), c.exh), padR(t('page.quota.col_seats'), c.seats))
+    head.push(t('page.quota.col_verdict'))
+  } else head.push(t('page.quota.col_rate_proj_verdict'))
+  body.push([{ text: head.join(''), dim: true }])
+
+  // one row per pool
+  const under: Row[] = [] // narrow: the stale reasons, written whole under the table (A10)
+  ranked.forEach((v, i) => {
+    const p = byName.get(v.pool) as QuotaPool
+    const isStale = v.kind === 'stale' // the pool as a whole is old: its numbers carry the mark
+    const seg = (text: string, color?: Seg['color']): Seg => (color === undefined ? { text } : { text, color })
+    const stalled = v.kind === 'stale' || v.kind === 'stale_seat'
+    const mark = (x: string): Seg => seg(x, isStale ? PALETTE.broken : undefined)
+    const row: Seg[] = [
+      seg(i === focus ? GLYPHS.structure.folded + ' ' : '  '),
+      seg(roleGlyph(v.role) + ' ', roleColor(v.role)),
+      seg(padR(v.pool, c.pool)),
+      mark(padR(pct(p.seven_day_pct, isStale), c.d7)),
+      mark(padR(pct(p.five_hour_pct, isStale), c.h5)),
+      seg(padR(resetText(p.resets_at_ms, tier, dows), c.reset)),
+    ]
+    // a pace-less pool says so in one merged column; a fact (limit_hit, stale) still says what it says
+    const fact = p.limit_hit === true || stalled
+    if (paceOk) {
+      row.push(mark(padR(rate(p.burn_pct_per_h, tier !== 'narrow', isStale), c.burn)))
+      row.push(mark(padR(p.projected_pct_at_reset === null ? DASH : (p.projected_pct_at_reset > 100 ? '>100' : Math.round(p.projected_pct_at_reset)) + '%' + (isStale ? bad : ''), c.proj)))
+      if (tier === 'wide') {
+        const ex = p.limit_hit === true ? t('page.quota.used_up') : p.projected_exhaustion_at_ms === null ? DASH : (() => { const x = tpe(p.projected_exhaustion_at_ms); return `${x.mo}-${x.d} ${x.hh}:${x.mm}` })()
+        row.push(seg(padR(ex, c.exh)), seg(padR(p.seats === null ? DASH : t('page.quota.seats_n', { n: p.seats }), c.seats)))
+      }
+    }
+    const word = roleWord(t, v.role)
+    let text: string
+    if (!paceOk && !fact) text = bad + ' ' + t('page.quota.v_nopace')
+    else if (tier === 'narrow' && stalled) { text = word + ' ' + bad + ' ' + t('page.quota.f_see_below'); under.push([staleBadge(bad + ' ' + v.pool + ' ' + v.text)]) }
+    else text = (tier === 'narrow' ? word + ' ' : stalled ? bad + ' ' : '') + v.text
+    row.push(seg(text, roleColor(v.role)))
+    body.push(row)
+  })
+  body.push(...under)
+
+  // the focused pool's detail
+  const fv = ranked[focus]
+  const fp = byName.get(fv.pool) as QuotaPool
+  body.push([{ text: '' }])
+  body.push(rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: fv.pool }), null, cols))
+  const kv = (label: string, text: string, color?: Seg['color']): Row => [{ text: padR(label, 6), dim: true }, color === undefined ? { text } : { text, color }]
+  const names = q.seats.filter(s => s.pool === fp.pool).map(s => s.seat)
+  const count = fp.seats === null ? t('page.quota.f_seats_unknown') : t('page.quota.f_seats_n', { n: fp.seats })
+  body.push(kv(t('page.quota.f_seats'), (names.length === 0 ? '' : names.slice(0, 2).join(' · ') + (names.length > 2 || (fp.seats ?? 0) > 2 ? ' · … ' : ' ')) + count))
+  if (view.expanded) {
+    const mine = q.seats.filter(s => s.pool === fp.pool)
+    if (mine.length === 0) body.push(kv('', t('page.quota.seat_none')))
+    for (const s of mine) {
+      const sage = s.age_min === null ? DASH : t('page.quota.age_m', { n: s.age_min })
+      const row = t('page.quota.seat_row', { seat: s.seat, a: pct(s.seven_day_pct, s.stale === true), b: pct(s.five_hour_pct, s.stale === true), age: sage })
+      body.push(kv('', row, s.stale === true ? PALETTE.broken : undefined))
+    }
+  }
+  if (tier !== 'narrow') {
+    const none = fp.stranded_seats === null && fp.switched === null
+    body.push(kv(t('page.quota.f_switch'), none ? t('page.quota.f_switch_null') : t('page.quota.f_switch_data', { n: fp.stranded_seats === null ? DASH : fp.stranded_seats, pool: typeof fp.switched === 'string' ? fp.switched : DASH })))
+  }
+  const fact = fp.limit_hit === true ? t('page.quota.f_limit_hit') + '，' : ''
+  body.push(kv(t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role)))
+  if (tier === 'wide') body.push(kv(t('page.quota.f_order'), t(paceOk ? 'page.quota.f_order_pace' : 'page.quota.f_order_nopace'), undefined))
+
+  const actions: Row[] = fp.switch_suggestion === null ? [] : [[{ text: t('page.quota.action_f'), color: PALETTE.action, press: 'fill:quota:' + fp.pool }]]
+  return { body, actions }
+}
+
+export const quotaPage: Page = { id: 'quota', key: '4', title: '額度', framed: true, render: ctx => renderQuota(ctx) }

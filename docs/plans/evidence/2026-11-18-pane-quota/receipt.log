@@ -1,0 +1,22 @@
+# S4 quota page negative controls (2026-11-18)
+## control 1 (quota.test.ts goldens): the A7 waste verdict text broken on purpose in quota-pick.ts (v_waste -> v_use); expected red
+(fail) quota: 160x40 pace (the mockup): one row per pool in danger order, verdict text per A7, no arrows [4.29ms]
+(fail) quota: 120x30 pace (the mockup) [0.54ms]
+(fail) quota: 80x24 pace: one row per pool, all six columns abbreviated, the stale reasons whole under the table (A10), the full verdict in the focus detail [0.45ms]
+(fail) quota: Enter (A3) expands the focused pool's seats from the seats feed; a stale seat carries the mark [0.47ms]
+ 10 pass
+ 4 fail
+## reverted: green
+ 14 pass
+ 0 fail
+## control 2 (quota-pick.test.js): yellow sorted by waste ascending on purpose; expected red
+✖ A7 order: limit_hit -> earliest finite exhaustion -> stale oldest first; then yellow by waste desc; then green (1.789237ms)
+✖ negative control: a broken order (waste ascending) is caught by the same assertion (0.257565ms)
+ℹ pass 6
+ℹ fail 2
+✖ failing tests:
+✖ A7 order: limit_hit -> earliest finite exhaustion -> stale oldest first; then yellow by waste desc; then green (1.789237ms)
+✖ negative control: a broken order (waste ascending) is caught by the same assertion (0.257565ms)
+## reverted: green
+ℹ pass 8
+ℹ fail 0

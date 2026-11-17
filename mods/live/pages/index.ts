@@ -4,6 +4,7 @@
 // A shell has no `framed` flag and pane.tsx still draws its tab the old way; the hand's page sets `framed: true` and is then drawn through frameRows.
 import type { Page } from './frame'
 import { quotaPage } from './quota'
+import { nowPage } from './now'
 
 const shell = (id: Page['id'], key: string, title: string): Page => ({ id, key, title, render: () => ({ body: [], actions: [] }) })
 
@@ -12,7 +13,7 @@ const shell = (id: Page['id'], key: string, title: string): Page => ({ id, key, 
 const pet = (): Page => ({ id: 'pet', key: '9', title: '寵物', framed: true, render: ctx => ({ body: [[{ text: ctx.t('frame.pet_todo'), dim: true }]], actions: [] }) })
 
 export const PAGES: Page[] = [
-  shell('now', '1', '現況'),
+  nowPage,
   shell('decide', '2', '待決'),
   shell('fleet', '3', '艦隊'),
   quotaPage,

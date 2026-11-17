@@ -15,14 +15,14 @@ test.after(() => {
   fs.rmdirSync(evidence);
 });
 
-function run(response, { mode, cfg = {}, tool = 'Bash', event = 'PostToolUse' } = {}) {
+function run(response, { mode, cfg = {}, tool = 'Bash', event = 'PostToolUse', timeout = 5000 } = {}) {
   fs.writeFileSync(config, JSON.stringify(cfg));
   const env = { ...process.env, AUTOPILOT_CONFIG_FILE: config };
   delete env.AUTOPILOT_BASH_GUARD_SECRET_MODE;
   if (mode !== undefined) env.AUTOPILOT_BASH_GUARD_SECRET_MODE = mode;
   const child = spawnSync(process.execPath, [path.join(__dirname, 'secret-output-redact.js')], {
     input: JSON.stringify({ hook_event_name: event, tool_name: tool, tool_response: response }),
-    encoding: 'utf8', env, maxBuffer: 16 * 1024 * 1024, timeout: 5000,
+    encoding: 'utf8', env, maxBuffer: 16 * 1024 * 1024, timeout,
   });
   assert.equal(child.status, 0, child.stderr);
   assert.equal(child.stderr, '');
@@ -73,6 +73,54 @@ const assignments = [
 ];
 for (const [input, expected] of assignments) {
   test(`env ${input}`, () => expectRedacted(input, expected));
+}
+
+const spacedAssignments = [
+  ['DB_PASSWORD = "synthetic"', 'DB_PASSWORD = "[REDACTED]"'],
+  ['api_key = synthetic', 'api_key = [REDACTED]'],
+  ['export DB_PASS=synthetic', 'export DB_PASS=[REDACTED]'],
+  ['DB_PASS= "synthetic" # comment', 'DB_PASS= "[REDACTED]" # comment'],
+  ['api_key = synthetic  # comment', 'api_key = [REDACTED]  # comment'],
+  ['DB_PASS = synthetic#inline\t # comment', 'DB_PASS = [REDACTED]\t # comment'],
+  ['Environment="API_TOKEN = synthetic"', 'Environment="API_TOKEN = [REDACTED]"'],
+  ['Environment="API_TOKEN = synthetic # secret tail" # comment',
+    'Environment="API_TOKEN = [REDACTED]" # comment'],
+  [" \texport DB_PASS\t =\t 'synthetic'  # comment", " \texport DB_PASS\t =\t '[REDACTED]'  # comment"],
+  ['Environment="API_TOKEN\t=\tsynthetic" "MODE=ok"', 'Environment="API_TOKEN\t=\t[REDACTED]" "MODE=ok"'],
+  ['MODE = synthetic\r\nDB_PASS = "synthetic" # comment\r\nnext',
+    'MODE = synthetic\r\nDB_PASS = "[REDACTED]" # comment\r\nnext'],
+];
+for (const [input, expected] of spacedAssignments) {
+  test(`spaced assignment ${input}`, () => expectRedacted(input, expected));
+}
+
+const properties = [
+  ['"password": "synthetic"', '"password": "[REDACTED]"'],
+  ['{"api_key":"x","name":"ok"}', '{"api_key":"[REDACTED]","name":"ok"}'],
+  ['{"SaLt":"synthetic","PASS":"synthetic","SECRET":"synthetic","TOKEN":"synthetic","KEY":"synthetic"}',
+    '{"SaLt":"[REDACTED]","PASS":"[REDACTED]","SECRET":"[REDACTED]","TOKEN":"[REDACTED]","KEY":"[REDACTED]"}'],
+  ["'db_pass'\t:\t'synthetic' # comment", "'db_pass'\t:\t'[REDACTED]' # comment"],
+  ['api_key: "synthetic" # comment', 'api_key: "[REDACTED]" # comment'],
+  [String.raw`{"password":"synthetic\"quote\\tail","name":"ok"}`, '{"password":"[REDACTED]","name":"ok"}'],
+  ['"password": "synthetic"\r\n"name": "ok"', '"password": "[REDACTED]"\r\n"name": "ok"'],
+];
+for (const [input, expected] of properties) {
+  test(`secret property ${input}`, () => expectRedacted(input, expected));
+}
+test('negative properties: benign keys, quoted content and line boundaries stay intact', () => {
+  const input = String.raw`{"name":"ok","message":"\"password\": \"synthetic\""}` +
+    '\n"password":\n"synthetic"\n"password": "unterminated\nnext line\n';
+  assert.equal(run(response(input)), null);
+});
+
+for (const fragment of ['a=', '"k":', String.raw`\"`]) {
+  test(`linear time: 1 MiB of ${fragment} finishes under 1 s`, () => {
+    const input = fragment.repeat(Math.ceil(1024 * 1024 / fragment.length)).slice(0, 1024 * 1024);
+    const start = performance.now();
+    assert.equal(run(response(input), { timeout: 1000 }), null);
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 1000, `redaction took ${elapsed.toFixed(1)} ms`);
+  });
 }
 
 test('service token: shared patterns redact every occurrence', () => {

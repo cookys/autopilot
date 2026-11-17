@@ -44,17 +44,20 @@ function quotedEnd(text, start) {
   return text.length;
 }
 
-function redactAssignment(text) {
-  const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(text);
-  if (!match || !secretName.test(match[1])) return text;
-  const prefix = match[1] + '=';
-  const value = match[2];
+function redactAssignment(text, preserveComment = true) {
+  const match = /^(([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*)(.*)$/.exec(text);
+  if (!match || !secretName.test(match[2])) return text;
+  const prefix = match[1];
+  const value = match[3];
   if (value[0] === '"' || value[0] === "'") {
     const end = quotedEnd(value, 0);
     const close = end > 1 && value[end - 1] === value[0] ? value[0] : '';
     return prefix + value[0] + '[REDACTED]' + close + value.slice(end);
   }
-  return prefix + '[REDACTED]';
+  const comment = preserveComment && /[ \t]#/.exec(value);
+  let end = comment ? comment.index : value.length;
+  while (end > 0 && (value[end - 1] === ' ' || value[end - 1] === '\t')) end--;
+  return prefix + '[REDACTED]' + (comment ? value.slice(end) : '');
 }
 
 function redactEnvironment(text) {
@@ -75,12 +78,28 @@ function redactEnvironment(text) {
     const quote = token[0];
     if ((quote === '"' || quote === "'") && quotedEnd(token, 0) === token.length) {
       const close = token.length > 1 && token.at(-1) === quote ? quote : '';
-      parts.push(quote + redactAssignment(token.slice(1, close ? -1 : undefined)) + close);
+      parts.push(quote + redactAssignment(token.slice(1, close ? -1 : undefined), false) + close);
     } else parts.push(redactAssignment(token));
     start = i;
   }
   parts.push(text.slice(start));
   return parts.join('');
+}
+
+function redactProperties(text) {
+  let name = '';
+  let end = 0;
+  // Consume each quoted or bare token once, including incomplete strings. The
+  // disjoint escape/body alternatives cannot cross a line or retry nested keys.
+  const tokens = /"(?:\\[^\r\n]|[^"\\\r\n])*("?)|'(?:\\[^\r\n]|[^'\\\r\n])*('?)|[A-Za-z_][A-Za-z0-9_]*/g;
+  return text.replace(tokens, (token, doubleClose, singleClose, offset) => {
+    const closed = doubleClose === '"' || singleClose === "'";
+    const isValue = /^[ \t]*:[ \t]*$/.test(text.slice(end, offset));
+    const redact = isValue && closed && secretName.test(name);
+    end = offset + token.length;
+    name = isValue ? '' : closed ? token.slice(1, -1) : token;
+    return redact ? token[0] + '[REDACTED]' + token.at(-1) : token;
+  });
 }
 
 function redactOutput(text) {
@@ -92,9 +111,10 @@ function redactOutput(text) {
   result = result.replace(/^[^\r\n]+/gm, (line) => {
     const env = /^([ \t]*Environment[ \t]*=)(.*)$/.exec(line);
     if (env) return env[1] + redactEnvironment(env[2]);
-    const plain = /^([ \t]*(?:export[ \t]+)?)([A-Za-z_][A-Za-z0-9_]*=.*)$/.exec(line);
+    const plain = /^([ \t]*(?:export[ \t]+)?)([A-Za-z_][A-Za-z0-9_]*[ \t]*=.*)$/.exec(line);
     return plain ? plain[1] + redactAssignment(plain[2]) : line;
   });
+  result = redactProperties(result);
   for (const { pattern } of patterns) {
     result = result.replace(new RegExp(pattern.source, 'g'), '[REDACTED]');
   }

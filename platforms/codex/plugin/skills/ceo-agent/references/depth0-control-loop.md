@@ -454,7 +454,7 @@ reinvention; the fix is architectural, not mnemonic). Every round:
 
 ```
 ① rehydrate: node scripts/build-rehydration-bundle.js build --contract <c> \
-     --ledger <ledger> --manifest-dir /tmp/autopilot-dispatch-runs [--red-lines <f>]
+     --ledger <ledger> --manifest-dir "$(node scripts/lib/runtime-paths.js runs-dir --ensure)" [--red-lines <f>]
    (five frozen sections, 80KB cap, over-cap = BUILD ERROR — never truncated)
 ② execute the round (dispatch under the conformance preflight, §-2/§3)
 ③ persist: every decision → ledger (§6); progress → run-ledger; findings → BACKLOG
@@ -485,7 +485,7 @@ node scripts/check-stall-fuse.js check --bursts <campaign>/bursts.jsonl \
   --strike-identity-file <seat-identity.json> --strike-store <capability-store>
 node scripts/check-blueprint-conformance.js audit \
   --contract <contract> --intent <intent> --repo <repo> \
-  --manifest-dir /tmp/autopilot-dispatch-runs --ledger <ledger> \
+  --manifest-dir "$(node scripts/lib/runtime-paths.js runs-dir --ensure)" --ledger <ledger> \
   --strike-identity-file <seat-identity.json> --strike-store <capability-store>
 ```
 

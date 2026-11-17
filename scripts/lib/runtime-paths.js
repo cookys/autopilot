@@ -4,8 +4,9 @@
 // scripts/lib/runtime-paths.js -- the ONE place that knows where autopilot's runtime directories live and
 // how to make them exist safely (BL-0336). Node >= 20.10, built-ins only.
 //
-//   runsDir(env)            where dispatch run manifests live: $AUTOPILOT_DISPATCH_RUNS_DIR, else
-//                           $TMPDIR/<name>, else /tmp/<name>. Pure string work; no filesystem access.
+//   runsDir(env)            where dispatch run manifests live: $AUTOPILOT_DISPATCH_RUNS_DIR, else a private
+//                           $TMPDIR/<name>, else $XDG_RUNTIME_DIR/autopilot/<name>, else /tmp/autopilot-<uid>/<name>
+//                           (never the shared /tmp root: another account may own it). Pure string work; no filesystem access.
 //   evaluateRunsDir(env)    PURE verdict for that directory (never mkdir, never chmod): { decision, path,
 //   evaluateTmpdir(env)     reason, would_create, would_tighten }. decision is 'ok' | 'create' | 'tighten' | 'refuse'.
 //   evaluatePrivateDir(p)   the same verdict for any private directory (live dir, ~/.autopilot/**).
@@ -82,9 +83,24 @@ function groupIsPrivate(ctx) {
   return others.length === 0;
 }
 
-function runsDir(env = process.env) {
+// Per-user base for runtime dirs: $XDG_RUNTIME_DIR/autopilot when set and writable, else /tmp/autopilot-<uid>.
+// Never the shared /tmp root itself: the first account to create a fixed /tmp name owns it and locks the others out.
+function userRuntimeBase(env = process.env, deps) {
+  const ctx = defaults(deps);
+  const xdg = env.XDG_RUNTIME_DIR;
+  if (xdg && ctx.path.isAbsolute(xdg)) {
+    try { ctx.fs.accessSync(xdg, realFs.constants.W_OK); return ctx.path.join(xdg, 'autopilot'); } catch (_e) { /* fall through */ }
+  }
+  return ctx.path.join('/tmp', `autopilot-${ctx.uid}`);
+}
+
+// $AUTOPILOT_DISPATCH_RUNS_DIR; else a TMPDIR the user set to something private (not the shared /tmp root);
+// else the per-user runtime base. No side effects (one access probe on XDG_RUNTIME_DIR).
+function runsDir(env = process.env, deps) {
   if (env.AUTOPILOT_DISPATCH_RUNS_DIR) return env.AUTOPILOT_DISPATCH_RUNS_DIR;
-  return path.join(env.TMPDIR || '/tmp', RUNS_DIR_NAME);
+  const t = env.TMPDIR;
+  if (t && t.replace(/\/+$/, '') !== '/tmp') return path.join(t, RUNS_DIR_NAME);
+  return path.join(userRuntimeBase(env, deps), RUNS_DIR_NAME);
 }
 
 function tmpdirOf(env = process.env) {
@@ -221,11 +237,11 @@ function ensurePrivateDir(target, deps) {
 }
 
 function evaluateRunsDir(env = process.env, deps) {
-  return evaluatePrivateDir(runsDir(env), deps);
+  return evaluatePrivateDir(runsDir(env, deps), deps);
 }
 
 function ensureRunsDir(env = process.env, deps) {
-  return ensurePrivateDir(runsDir(env), deps);
+  return ensurePrivateDir(runsDir(env, deps), deps);
 }
 
 // TMPDIR: unset -> /tmp, which is a shared system root and is only checked. Set and present -> checked, never
@@ -275,7 +291,7 @@ function ensureTmpdir(env = process.env, deps) {
 }
 
 module.exports = {
-  RUNS_DIR_NAME, runsDir, tmpdirOf, evaluatePrivateDir, ensurePrivateDir, evaluateRunsDir, ensureRunsDir, evaluateTmpdir, ensureTmpdir,
+  RUNS_DIR_NAME, runsDir, userRuntimeBase, tmpdirOf, evaluatePrivateDir, ensurePrivateDir, evaluateRunsDir, ensureRunsDir, evaluateTmpdir, ensureTmpdir,
 };
 
 if (require.main === module) {

@@ -1,0 +1,17 @@
+== RED (new tests, old runtime-paths.js) ==
+✖ runsDir precedence: AUTOPILOT_DISPATCH_RUNS_DIR, then a private TMPDIR, then the per-user base (1.058412ms)
+✖ per-user runs dir: a writable XDG_RUNTIME_DIR wins (0.348446ms)
+✖ per-user runs dir: XDG unset (or unwritable) gives /tmp/autopilot-<uid>, TMPDIR=/tmp is not honoured (0.115037ms)
+✖ per-user runs dir: /tmp/autopilot-<uid> already owned by another uid is refused, naming path and owner (0.54156ms)
+ℹ tests 26
+ℹ pass 22
+ℹ fail 4
+✖ failing tests:
+✖ runsDir precedence: AUTOPILOT_DISPATCH_RUNS_DIR, then a private TMPDIR, then the per-user base (1.058412ms)
+✖ per-user runs dir: a writable XDG_RUNTIME_DIR wins (0.348446ms)
+✖ per-user runs dir: XDG unset (or unwritable) gives /tmp/autopilot-<uid>, TMPDIR=/tmp is not honoured (0.115037ms)
+✖ per-user runs dir: /tmp/autopilot-<uid> already owned by another uid is refused, naming path and owner (0.54156ms)
+== GREEN (with fix) ==
+ℹ tests 26
+ℹ pass 26
+ℹ fail 0

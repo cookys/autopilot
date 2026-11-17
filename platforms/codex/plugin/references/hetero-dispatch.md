@@ -709,7 +709,7 @@ Signal-handler orphan paths use the private state root `${AUTOPILOT_ORPHAN_STATE
 
 A dispatch is no longer fire-and-forget (Stage 1, BACKLOG "Dispatch observability"). At START,
 `dispatch-hetero.sh` and `dispatch-review.sh` write a **run manifest** to
-`${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}/<run-id>.manifest.json`
+`$(node scripts/lib/runtime-paths.js runs-dir)/<run-id>.manifest.json`
 (run_id, live log path, worktree, lock path, predicted containment, pid) and announce
 `run_id=… manifest=…` on stderr — BEFORE blocking on the worker. The worker's event stream was
 always streamed live to the log file; the manifest is what makes it findable mid-flight.

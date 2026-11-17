@@ -1401,7 +1401,7 @@
       "readers": ["scripts/lib/compaction-handoff.js"],
       "doc": null,
       "relates": ["AUTOPILOT_FLEET_BIN", "AUTOPILOT_CAPACITY_AR_GATE_FILE", "AUTOPILOT_PM_LEDGER_DIR", "AUTOPILOT_INITIATIVES_CMD"],
-      "note": "Set to off to drop the Fleet State block (operator initiatives, fleet tasks --stuck / --tree, PM ledger tail, capacity ar-gate lines) from the post-compaction handoff. Default on."
+      "note": "Set to off to drop the Fleet State block (operator initiatives, open fleet tasks from tasks --mine --json in a 3500-char reserved part with full list written under the live dir, fleet tasks --stuck, capped --tree fallback only when the open-tasks part did not render, PM ledger tail, capacity ar-gate lines) from the post-compaction handoff. Default on."
     },
     {
       "name": "AUTOPILOT_CAPACITY_AR_GATE_FILE",

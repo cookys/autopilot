@@ -291,4 +291,150 @@ assert_contains "$OUT" "STUCK80-0" "stuck head present"
 assert_contains "$OUT" "STUCK80-79" "stuck tail present"
 assert_not_contains "$OUT" "TREE80-119" "tree cap still drops its tail"
 
+# --- 11. open fleet tasks (reserved, never cut): 55 open + finished, 01M7DQ66 oldest last, full-list file, <=10000 ---
+cat > "$STUB/init-short.sh" <<'EOF'
+#!/bin/sh
+printf 'RED\tinit-1\t01M7DGY0000000000000000000\trunning\t2026-11-14T10:00:00Z\t-\tstale_24h\n'
+EOF
+chmod +x "$STUB/init-short.sh"
+export AUTOPILOT_INITIATIVES_CMD="$STUB/init-short.sh"
+
+cat > "$STUB/fleet-open55" <<'EOF'
+#!/usr/bin/env node
+'use strict';
+const args = process.argv.slice(2).join(' ');
+if (args === 'whoami') {
+  process.stdout.write('address: ns/crt/lanerepo--claude\n');
+} else if (args.includes('--stuck')) {
+  process.stdout.write('STUCK55-0 active stuck row\n');
+} else if (args.includes('--tree')) {
+  process.stdout.write('TREEDROP-0 should be omitted when open tasks renders\n');
+} else if (args.includes('--mine') && args.includes('--json')) {
+  const rows = [];
+  for (let i = 0; i < 54; i++) {
+    rows.push({
+      task_id: `01M7AAA00000000000000000${String(i).padStart(2, '0')}`,
+      state: i % 3 === 0 ? 'running' : (i % 3 === 1 ? 'waiting' : 'open'),
+      title: `Open task ${i} ` + 'L'.repeat(120),
+    });
+  }
+  rows.push({ task_id: '01M7DQ66000000000000000000', state: 'waiting', title: 'c3758 oldest open plan ' + 'Z'.repeat(90) });
+  rows.push({ task_id: '01M7D0NE000000000000000001', state: 'done', title: 'finished done' });
+  rows.push({ task_id: '01M7FA99000000000000000002', state: 'failed', title: 'finished failed' });
+  rows.push({ task_id: '01M7DEC9000000000000000003', state: 'declined', title: 'finished declined' });
+  rows.push({ task_id: '01M7CANC000000000000000004', state: 'cancelled', title: 'finished cancelled' });
+  rows.push({ task_id: '01M7C90S000000000000000005', state: 'closed', title: 'finished closed' });
+  process.stdout.write(JSON.stringify(rows));
+}
+EOF
+chmod +x "$STUB/fleet-open55"
+export AUTOPILOT_FLEET_BIN="$STUB/fleet-open55"
+
+checkpoint
+assert_exit_code "$__RUN_EXIT" 0 "55 open tasks: checkpoint exits 0"
+assert_contains "$OUT" "### Open fleet tasks (reserved, never cut)" "55 open tasks: reserved part header present"
+assert_not_contains "$OUT" "### fleet tasks --tree --mine" "55 open tasks: redundant --tree part dropped"
+assert_not_contains "$OUT" "TREEDROP-0" "55 open tasks: tree content absent"
+init_at=$(printf '%s\n' "$OUT" | grep -n "### Operator initiatives" | head -1 | cut -d: -f1)
+open_at=$(printf '%s\n' "$OUT" | grep -n "### Open fleet tasks" | head -1 | cut -d: -f1)
+stuck_at=$(printf '%s\n' "$OUT" | grep -n "### fleet tasks --stuck" | head -1 | cut -d: -f1)
+if [ -n "$init_at" ] && [ -n "$open_at" ] && [ -n "$stuck_at" ] && [ "$init_at" -lt "$open_at" ] && [ "$open_at" -lt "$stuck_at" ]; then
+  assert_eq 1 1 "55 open tasks: placed right after initiatives and before stuck"
+else
+  assert_eq "$init_at<$open_at<$stuck_at" "init<open<stuck" "55 open tasks: section order"
+fi
+open_sec=$(printf '%s\n' "$OUT" | awk '/^### Open fleet tasks/{f=1;next} /^### /{f=0} f')
+assert_not_contains "$open_sec" "... " "55 open tasks: no '... more' truncation in open tasks"
+
+FULL_LIST_PATH=$(printf '%s\n' "$open_sec" | sed -n 's/^full list (55): //p' | head -1)
+assert_file_exists "$FULL_LIST_PATH" "55 open tasks: full-list file exists under live dir"
+FULL_LIST_BODY="$(cat "$FULL_LIST_PATH")"
+miss_full=0
+i=0
+while [ "$i" -lt 54 ]; do
+  tid=$(printf '01M7AAA00000000000000000%02d' "$i")
+  printf '%s\n' "$FULL_LIST_BODY" | grep -F -q "$tid" || miss_full=$((miss_full+1))
+  i=$((i+1))
+done
+assert_eq "$miss_full" 0 "55 open tasks: full-list file contains all 54 numbered ids"
+assert_contains "$FULL_LIST_BODY" "01M7DQ66000000000000000000" "55 open tasks: full-list file contains oldest open task"
+assert_contains "$FULL_LIST_BODY" "$(printf 'L%.0s' $(seq 1 120))" "55 open tasks: full-list file keeps full 120-char titles"
+assert_contains "$FULL_LIST_BODY" "c3758 oldest open plan $(printf 'Z%.0s' $(seq 1 90))" "55 open tasks: full-list file keeps full oldest title"
+
+# SessionStart injection (compact) with extra optional pressure (budgetWarning) so fitBodyToRoom is exercised
+printf '{"context_budget":{"t2":150000,"gap":50000}}\n' > "$AUTOPILOT_CONFIG_FILE"
+CLAUDE_CODE_AUTO_COMPACT_WINDOW=100000 run_hook session-start.js "{\"source\":\"compact\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
+assert_exit_code "$__RUN_EXIT" 0 "55 open tasks: session-start exits 0"
+CTX="$(node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write((j.hookSpecificOutput&&j.hookSpecificOutput.additionalContext)||"")' <<< "$__RUN_STDOUT")"
+if [ "${#CTX}" -le 10000 ]; then assert_eq 1 1 "55 open tasks: SessionStart injection ${#CTX} chars <= 10000"; else assert_eq "${#CTX}" "<=10000" "55 open tasks: injection over limit"; fi
+assert_contains "$CTX" "</autopilot-restored-state>" "55 open tasks: closing wrapper tag intact"
+miss_ctx=0
+i=0
+while [ "$i" -lt 54 ]; do
+  tid=$(printf '01M7AAA00000000000000000%02d' "$i")
+  printf '%s\n' "$CTX" | grep -F -q "$tid" || miss_ctx=$((miss_ctx+1))
+  i=$((i+1))
+done
+assert_eq "$miss_ctx" 0 "55 open tasks: injected context contains all 54 numbered ids"
+assert_contains "$CTX" "01M7DQ66000000000000000000" "55 open tasks: oldest open task (last in output) survives in injected context"
+assert_not_contains "$CTX" "01M7D0NE000000000000000001" "55 open tasks: done task excluded"
+assert_not_contains "$CTX" "01M7FA99000000000000000002" "55 open tasks: failed task excluded"
+assert_not_contains "$CTX" "01M7DEC9000000000000000003" "55 open tasks: declined task excluded"
+assert_not_contains "$CTX" "01M7CANC000000000000000004" "55 open tasks: cancelled task excluded"
+assert_not_contains "$CTX" "01M7C90S000000000000000005" "55 open tasks: closed task excluded"
+
+# --- 12. 100 open tasks: titles dropped, <id> <state> kept for every task; 3 short tasks keep full titles ---
+unset AUTOPILOT_INITIATIVES_CMD
+cat > "$STUB/fleet-open100" <<'EOF'
+#!/usr/bin/env node
+'use strict';
+const args = process.argv.slice(2).join(' ');
+if (args.includes('--stuck')) {
+  process.stdout.write('none\n');
+} else if (args.includes('--mine') && args.includes('--json')) {
+  const rows = [];
+  for (let i = 0; i < 100; i++) {
+    rows.push({
+      task_id: `01M7BBB0000000000000000${String(i).padStart(3, '0')}`,
+      state: 'open',
+      title: `Task ${i} ` + 'T'.repeat(80),
+    });
+  }
+  process.stdout.write(JSON.stringify(rows));
+}
+EOF
+chmod +x "$STUB/fleet-open100"
+export AUTOPILOT_FLEET_BIN="$STUB/fleet-open100"
+checkpoint
+run_hook session-start.js "{\"source\":\"compact\",\"session_id\":\"$SID\",\"cwd\":\"$REPO\"}"
+CTX100="$(node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write((j.hookSpecificOutput&&j.hookSpecificOutput.additionalContext)||"")' <<< "$__RUN_STDOUT")"
+if [ "${#CTX100}" -le 10000 ]; then assert_eq 1 1 "100 open tasks: injection ${#CTX100} <= 10000"; else assert_eq "${#CTX100}" "<=10000" "100 open tasks: injection over limit"; fi
+miss100=0
+i=0
+while [ "$i" -lt 100 ]; do
+  tid=$(printf '01M7BBB0000000000000000%03d' "$i")
+  printf '%s\n' "$CTX100" | grep -F -q "$tid open" || miss100=$((miss100+1))
+  i=$((i+1))
+done
+assert_eq "$miss100" 0 "100 open tasks: all 100 <id> <state> lines present, none dropped"
+
+cat > "$STUB/fleet-open3" <<'EOF'
+#!/usr/bin/env node
+'use strict';
+const args = process.argv.slice(2).join(' ');
+if (args.includes('--stuck')) {
+  process.stdout.write('none\n');
+} else if (args.includes('--mine') && args.includes('--json')) {
+  process.stdout.write(JSON.stringify([
+    { task_id: '01M7CCC0000000000000000001', state: 'running', title: 'Exact short title alpha' },
+    { task_id: '01M7CCC0000000000000000002', state: 'waiting', title: 'Exact short title beta' },
+  ]));
+}
+EOF
+chmod +x "$STUB/fleet-open3"
+export AUTOPILOT_FLEET_BIN="$STUB/fleet-open3"
+checkpoint
+assert_contains "$OUT" "01M7CCC0000000000000000001 running Exact short title alpha" "short tasks: full title emitted unclipped (1)"
+assert_contains "$OUT" "01M7CCC0000000000000000002 waiting Exact short title beta" "short tasks: full title emitted unclipped (2)"
+
 finalize_test

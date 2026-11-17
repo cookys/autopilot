@@ -154,11 +154,65 @@ function isRecoveryParts(value) {
     && typeof value.tail === 'string';
 }
 
+function splitBodyChunks(body) {
+  const starts = [];
+  const re = /^## [^\n]*/gm;
+  let m;
+  while ((m = re.exec(body)) !== null) starts.push(m.index);
+  if (!starts.length) return [{ text: body, reserved: false }];
+  const chunks = [];
+  if (starts[0] > 0) chunks.push({ text: body.slice(0, starts[0]), reserved: false });
+  for (let i = 0; i < starts.length; i += 1) {
+    const end = i + 1 < starts.length ? starts[i + 1] : body.length;
+    const text = body.slice(starts[i], end);
+    const nl = text.indexOf('\n');
+    const header = nl < 0 ? text : text.slice(0, nl);
+    chunks.push({ text, reserved: /\(reserved, never cut\b/.test(header) });
+  }
+  return chunks;
+}
+
 function fitBodyToRoom(body, room) {
-  if (room < 0) room = 0;
+  if (room <= 0) return '';
   if (body.length <= room) return body;
   const marker = RECOVERY_CUT_LINE;
-  if (room >= marker.length) return body.slice(0, room - marker.length) + marker;
+  if (!/^## [^\n]*\(reserved, never cut\b/m.test(body)) {
+    if (room >= marker.length) return body.slice(0, room - marker.length) + marker;
+    return marker.slice(0, room);
+  }
+  const chunks = splitBodyChunks(body);
+  const reservedLen = chunks.filter((c) => c.reserved).reduce((n, c) => n + c.text.length, 0);
+  if (reservedLen <= room) {
+    const optBudget = room - reservedLen;
+    const useMarker = optBudget >= marker.length ? marker : '';
+    let availOpt = optBudget - useMarker.length;
+    let markerPlaced = !useMarker;
+    const out = [];
+    for (const c of chunks) {
+      if (c.reserved) {
+        out.push(c.text);
+        continue;
+      }
+      if (availOpt >= c.text.length) {
+        out.push(c.text);
+        availOpt -= c.text.length;
+      } else if (!markerPlaced) {
+        const nl = availOpt > 0 ? '\n' : '';
+        const sliceLen = Math.max(0, availOpt - nl.length);
+        out.push(c.text.slice(0, sliceLen) + useMarker + nl);
+        availOpt = 0;
+        markerPlaced = true;
+      }
+    }
+    const res = out.join('');
+    return res.length <= room ? res : res.slice(0, room);
+  }
+  let onlyReserved = chunks.filter((c) => c.reserved).map((c) => c.text).join('');
+  if (onlyReserved.length > room) {
+    onlyReserved = onlyReserved.replace(/^### (?![^\n]*(?:reserved, never cut|red never cut))[^\n]*\n(?:(?!^### |^## )[\s\S])*/gm, '');
+  }
+  if (onlyReserved.length <= room) return onlyReserved;
+  if (room >= marker.length) return onlyReserved.slice(0, room - marker.length) + marker;
   return marker.slice(0, room);
 }
 

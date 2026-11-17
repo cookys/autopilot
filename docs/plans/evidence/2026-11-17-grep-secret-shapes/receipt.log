@@ -1,0 +1,91 @@
+Fleet-Task: 01M7KW98HVPK9B9Y73DTDFP251
+Baseline commit: 79c1f0d11486da19ceb5dd883fd0ca6bf0fde31f
+1. Acceptance: mask complete grep/YAML secret values; block secret-name searches except count/file/quiet output or immediate sanitizer pipes; preserve benign controls; generate and verify mirrors.
+2. Located originals: hooks/_shared/secret-patterns.js: const secretName = /SALT|PASSWORD|PASS|SECRET|TOKEN|KEY/i;
+   scripts/lib/bash-launch-rules.js: const SECRET_GREP = new Set(['grep', 'rg', 'ugrep']);
+   scripts/lib/bash-launch-rules.js: return !safeOutput && files.some(secretPath);
+
+3. Output redaction: new regressions before product edits, then minimal list/prefix parsing fix.
+RED node --test hooks/secret-output-redact.test.js hooks/bash-launch-guard.test.js: exit=1 (9 assertion failures).
+GREEN node --test hooks/secret-output-redact.test.js: exit=0 (75 passed).
+RED→GREEN grep/YAML grep -n YAML list assignment
+RED→GREEN grep/YAML grep -Hn YAML list assignment
+RED→GREEN grep/YAML rg YAML list assignment
+RED→GREEN grep/YAML YAML list mapping
+RED→GREEN grep/YAML grep -Hn YAML list mapping
+RED→GREEN grep/YAML quoted YAML list assignment
+RED→GREEN grep/YAML single-quoted YAML list assignment
+RED→GREEN grep/YAML credential YAML list mapping
+RED→GREEN grep/YAML passwd YAML list mapping
+GREEN→GREEN grep/YAML exact incident and negative controls retain existing behavior
+The exact single-token incident already masked at baseline; whitespace tails, colon mappings and quoted list assignments were RED. KEY_COUNT already masked and remains masked.
+
+4. Pattern guard: new regressions before guard edits, then pattern parsing and immediate-pipe exception.
+RED node --test --test-name-pattern="secret-print.*(grep pattern|README)" hooks/bash-launch-guard.test.js: exit=1 (24 assertion failures).
+GREEN node --test --test-name-pattern=secret-print hooks/bash-launch-guard.test.js: exit=0 (217 passed).
+RED→GREEN secret-print denies: grep -n 'secret' README.md
+GREEN→GREEN secret-print grep pattern denies: grep -n PASSWORD .env
+RED→GREEN secret-print grep pattern denies: grep -n PASSWORD config.yml
+RED→GREEN secret-print grep pattern denies: rg -i 'api_key|secret' config/
+RED→GREEN secret-print grep pattern denies: grep -E 'TOKEN' a.yml
+RED→GREEN secret-print grep pattern denies: git grep -n DB_PASSWORD
+RED→GREEN secret-print grep pattern denies: egrep -n passwd config.yml
+RED→GREEN secret-print grep pattern denies: grep -P PRIVATE_KEY config.yml
+RED→GREEN secret-print grep pattern denies: grep -e MODE -e DB_PASSWORD config.yml
+RED→GREEN secret-print grep pattern denies: grep -nEe DB_PASSWORD config.yml
+RED→GREEN secret-print grep pattern denies: grep -ePASSWORD config.yml
+RED→GREEN secret-print grep pattern denies: rg --regexp=api_key config/
+RED→GREEN secret-print grep pattern denies: git -C src grep -n DB_PASSWORD
+RED→GREEN secret-print grep pattern denies: grep -- DB_PASSWORD config.yml
+RED→GREEN secret-print grep pattern denies: grep -e '-q|TOKEN' config.yml
+RED→GREEN secret-print grep pattern denies: rg -e '-c|SECRET' config.yml
+RED→GREEN secret-print grep pattern denies: grep -n KEY config.yml
+RED→GREEN secret-print grep pattern denies: grep -n KEY_ID config.yml
+RED→GREEN secret-print grep pattern denies: rg encryption_key config/
+RED→GREEN secret-print grep pattern denies: grep -n PASSWORD config.yml; mask-secrets
+RED→GREEN secret-print grep pattern denies: grep -n PASSWORD config.yml || mask-secrets
+RED→GREEN secret-print grep pattern denies: grep -n PASSWORD config.yml | tee /dev/stderr | mask-secrets
+RED→GREEN secret-print grep pattern denies: echo mask-secrets; grep -n PASSWORD config.yml
+GREEN→GREEN secret-print grep pattern allows: grep -c PASSWORD .env
+GREEN→GREEN secret-print grep pattern allows: grep -l SECRET -r config
+GREEN→GREEN secret-print grep pattern allows: rg -q TOKEN x
+GREEN→GREEN secret-print grep pattern allows: egrep -L SECRET config.yml
+GREEN→GREEN secret-print grep pattern allows: git grep -l DB_PASSWORD
+GREEN→GREEN secret-print grep pattern allows: grep --count PASSWORD .env
+GREEN→GREEN secret-print grep pattern allows: grep --files-with-matches SECRET config.yml
+GREEN→GREEN secret-print grep pattern allows: grep --files-without-match TOKEN config.yml
+GREEN→GREEN secret-print grep pattern allows: rg --quiet TOKEN x
+GREEN→GREEN secret-print grep pattern allows: grep --silent PASSWORD .env
+GREEN→GREEN secret-print grep pattern allows: grep -ne PASSWORD -c .env
+RED→GREEN secret-print grep pattern allows: grep -n PASSWORD .env | mask-secrets
+RED→GREEN secret-print grep pattern allows: grep -n PASSWORD .env | safe-inspect
+GREEN→GREEN secret-print grep pattern allows: rg TOKEN config/ | node scripts/safe-inspect.js
+GREEN→GREEN secret-print grep pattern allows: git grep DB_PASSWORD | ./mask-secrets
+GREEN→GREEN secret-print grep pattern allows: grep -n image: docker-compose.yml
+GREEN→GREEN secret-print grep pattern allows: grep -rn keyboard src
+GREEN→GREEN secret-print grep pattern allows: grep -n MonkeyPatch x
+GREEN→GREEN secret-print grep pattern allows: grep -e mode --include='*secret*' src
+GREEN→GREEN secret-print grep pattern allows: git log --grep=SECRET
+GREEN→GREEN secret-print grep pattern allows: grep -nE 'percona|my.cnf|custom.cnf|MYSQL_ROOT|image:' docker-compose.yml
+GREEN→GREEN controls are recorded honestly; they were already supported, not new failures.
+MYSQL_ROOT alone contains no specified secret-name word: the incident pattern remains allowed; output redaction is its protective layer.
+
+5. Final verification (in order):
+node --test hooks/secret-output-redact.test.js hooks/bash-launch-guard.test.js: exit=0; tests=989 pass=979 fail=0 skipped=10 cancelled=0 todo=0. Baseline also skipped 10.
+bash scripts/sync-all.sh: exit=0; ok=true failures=[]; five generators ran.
+bash scripts/sync-all.sh --check: exit=0; ok=true failures=[] skipped=[]; all 16 rituals ran.
+
+Changed files (one line each):
+hooks/_shared/secret-patterns.js — parse grep-prefixed YAML lists, mask complete assignment/mapping values and credential names.
+hooks/secret-output-redact.test.js — add synthetic YAML/grep regressions and preserve incident/benign controls.
+scripts/lib/bash-launch-rules.js — inspect grep/egrep/rg/git-grep patterns, preserve safe-output flags and permit immediate sanitizer pipes.
+hooks/bash-launch-guard.test.js — exercise blocked patterns, permitted flags/pipes and benign-word controls through the real hook.
+platforms/codex/plugin/hooks/_shared/secret-patterns.js — generated redactor mirror via sync-all.
+platforms/codex/plugin/scripts/lib/bash-launch-rules.js — generated guard mirror via sync-all.
+docs/plans/evidence/2026-11-17-grep-secret-shapes/receipt.log — record actual per-test transitions, command exits and scope.
+
+Not done / out of scope: no deployment, push, merge, version change, live configuration change or credential access. No network used. All test values synthetic; HOME/TMPDIR isolated inside this worktree. Caller-owned independent cross-family review is pending.
+hooks/secret-output-redact.js stays unchanged: its existing handle() already calls the shared redactOutput implementation.
+
+Commit attempt 1: exit=1; lab gitleaks flagged ten fixture lines containing the explicitly synthetic S3cr3t-synthetic-001 value. The hook requires a Lab-Hook-Override trailer explaining this false positive; no product changes follow the green verification.
+git diff --cached --check: exit=0.

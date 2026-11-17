@@ -30,7 +30,7 @@ const kvPatterns = [
   { find: /Authorization:\s*Bearer\s+[^ '"]*/gi, replace: 'Authorization: Bearer <REDACTED>' },
 ];
 
-const secretName = /SALT|PASSWORD|PASS|SECRET|TOKEN|KEY/i;
+const secretName = /SALT|PASSWORD|PASS|SECRET|TOKEN|KEY|CREDENTIAL/i;
 // Quote alternatives are disjoint; escapes consume two characters. Never cross a line.
 const phpDefine = /\bdefine[ \t]*\([ \t]*(?:'([^'\r\n]*)'|"([^"\r\n]*)")[ \t]*,[ \t]*('(?:\\[^\r\n]|[^'\\\r\n])*'|"(?:\\[^\r\n]|[^"\\\r\n])*")/gi;
 
@@ -45,7 +45,7 @@ function quotedEnd(text, start) {
 }
 
 function redactAssignment(text, preserveComment = true) {
-  const match = /^(([A-Za-z_][A-Za-z0-9_]*)[ \t]*=[ \t]*)(.*)$/.exec(text);
+  const match = /^(([A-Za-z_][A-Za-z0-9_]*)[ \t]*[=:][ \t]*)(.*)$/.exec(text);
   if (!match || !secretName.test(match[2])) return text;
   const prefix = match[1];
   const value = match[3];
@@ -111,6 +111,19 @@ function redactOutput(text) {
   result = result.replace(/^[^\r\n]+/gm, (line) => {
     const env = /^([ \t]*Environment[ \t]*=)(.*)$/.exec(line);
     if (env) return env[1] + redactEnvironment(env[2]);
+    // grep -n / -Hn and rg prefixes precede YAML list entries. Keep the
+    // prefix/outer quotes, but redact the whole value (including spaces).
+    const list = /^((?:(?:[^:\r\n]+:)*\d+:)?[ \t]*-[ \t]+)(.*)$/.exec(line);
+    if (list) {
+      const body = list[2];
+      if (body[0] === '"' || body[0] === "'") {
+        const end = quotedEnd(body, 0);
+        const close = end > 1 && body[end - 1] === body[0] ? body[0] : '';
+        return list[1] + body[0] + redactAssignment(body.slice(1, close ? end - 1 : end), false)
+          + close + body.slice(end);
+      }
+      return list[1] + redactAssignment(body);
+    }
     const plain = /^([ \t]*(?:export[ \t]+)?)([A-Za-z_][A-Za-z0-9_]*[ \t]*=.*)$/.exec(line);
     return plain ? plain[1] + redactAssignment(plain[2]) : line;
   });

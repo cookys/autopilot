@@ -12,7 +12,6 @@
 #
 # and runs `claude plugin test <tmp>`. Nothing is written into the repo. Run solo (not in parallel with other long suites).
 #
-# Test-only JSX compiler prerequisite: npm ci --offline --prefix mods/live
 # usage: bash mods/live/run-tests.sh [extra args for `claude plugin test`]      exit code = the test run's
 set -euo pipefail
 
@@ -26,7 +25,6 @@ node --test "$here/gen-locales.test.js"
 # the glyph tables, vocabulary and the all-mod design lints (L3, I5 (a), I20, L1b-L9 over every mods/* source): imports the real ui.ts, so the tables it lints are the ones the pane draws
 node --test "$here/ui-lint.test.js"
 node --test "$here/band-split.test.js"
-node --test "$here/bottom-anchor.test.js"
 # the O4 shell planner (tiers, geometry, the forge-stats panel reader, the right-hand columns): pure, imports the real shell.ts
 node --test "$here/shell.test.js"
 # the operator-console snapshot (the fleet.console/1 trust-boundary parser, the console.json mode reader, fictional fixtures): pure, imports the real console.ts

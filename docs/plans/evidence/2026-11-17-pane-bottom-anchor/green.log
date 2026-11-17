@@ -1,61 +1,40 @@
-✔ renderer controls: top alignment and a trailing spacer are distinguishable from bottom alignment (1.824704ms)
-✔ pane now 160x40: footer last, short content leaves blanks above (23.562444ms)
-✔ pane decide 160x40: footer last, short content leaves blanks above (14.511356ms)
-✔ pane dispatch 160x40: footer last, short content leaves blanks above (9.739513ms)
-✔ pane review 160x40: footer last, short content leaves blanks above (10.018238ms)
-✔ pane spend 160x40: footer last, short content leaves blanks above (10.735018ms)
-✔ pane hygiene 160x40: footer last, short content leaves blanks above (10.223334ms)
-✔ pane fleet 160x40: footer last, short content leaves blanks above (10.209809ms)
-✔ pane legend 160x40: footer last, short content leaves blanks above (10.070015ms)
-✔ console command 160x40: footer last (13.424911ms)
-✔ console team 160x40: footer last (8.461538ms)
-✔ console quota 160x40: footer last (10.646591ms)
-✔ console hosts 160x40: footer last (13.448145ms)
-✔ console self 160x40: footer last (10.449ms)
-✔ pane waiting 160x40: short-content fallback is bottom anchored (1.151738ms)
-✔ scroll 160x40: bottom default, up reveals older rows, End returns to hot rows (35.444311ms)
-✔ band speed 160x40: real speed content grows above band (2.220951ms)
-✔ pane now 80x24: footer last, short content leaves blanks above (4.516061ms)
-✔ pane decide 80x24: footer last, short content leaves blanks above (4.193864ms)
-✔ pane dispatch 80x24: footer last, short content leaves blanks above (4.347173ms)
-✔ pane review 80x24: footer last, short content leaves blanks above (5.251245ms)
-✔ pane spend 80x24: footer last, short content leaves blanks above (5.93957ms)
-✔ pane hygiene 80x24: footer last, short content leaves blanks above (5.738873ms)
-✔ pane fleet 80x24: footer last, short content leaves blanks above (4.513416ms)
-✔ pane legend 80x24: footer last, short content leaves blanks above (6.201423ms)
-✔ console command 80x24: footer last (7.146723ms)
-✔ console team 80x24: footer last (5.674191ms)
-✔ console quota 80x24: footer last (5.537053ms)
-✔ console hosts 80x24: footer last (4.997878ms)
-✔ console self 80x24: footer last (4.37224ms)
-✔ pane waiting 80x24: short-content fallback is bottom anchored (0.853066ms)
-✔ scroll 80x24: bottom default, up reveals older rows, End returns to hot rows (23.58666ms)
-✔ band speed 80x24: real speed content grows above band (0.668979ms)
-✔ shell: short main content is padded above, quick controls precede final menu (3.525466ms)
-✔ shell overflow: default opens at bottom, scrolling up survives redraw (0.821998ms)
-✔ page order: summary, hint and data age are cold; the held card and submit stay last (19.647504ms)
-✔ summary: every figure comes from counts (running 2, waiting 1, stalled 3, hosts 2/3, gpu 5/7, quota worst, hints 2) (1.598669ms)
-✔ exceptions: only to_console === true rows (quota + exceptions); a card item never; the T7 own-card exception is drawn (2.133476ms)
-✔ negative control: flipping one exception to_console to false removes it from the page (red before green) (2.411309ms)
-✔ queue: the held card is a full card (options), the others are plain rows; the waiting_step card has the report Button that fills, never submits (1.337858ms)
-✔ queue count is counts.decisions, not a count of rows (1.582548ms)
-✔ a card of another host (the mirror) is not in the queue: no card items are drawn from items, only cards[] (0.856913ms)
-✔ data age: fresh sources say their age, expired says 過期, no_source says 無來源; the line fits every width (6.156289ms)
-✔ stale fixture: hosts empty but expired draws 過期 where the figures were (3.570932ms)
-✔ empty fixture: the queue and the exceptions say there is nothing, not a blank section (0.479122ms)
-✔ cards missing says 無來源 in the queue; an empty cards array says there is no open question (1.489093ms)
-✔ folding: a folded exceptions section hides its rows and keeps its header (0.784697ms)
-✔ no raw member address, IP or login name is drawn anywhere on the page, both locales and all widths (9.065215ms)
-✔ the module copy of console-full.json (for the plugin-test drawing test) equals the official JSON (1.194458ms)
-(node:78055) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/mods/live/tabs.ts is not specified and it doesn't parse as CommonJS.
-Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
-To eliminate this warning, add "type": "module" to <worktree>/mods/live/package.json.
-(Use `node --trace-warnings ...` to show where the warning was created)
-ℹ tests 49
-ℹ suites 0
-ℹ pass 49
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 1320.571894
+Source: cf9f25bee product sources + final bottom-anchor.test.ts
+Harness: guarded claude plugin test; no npm dependency
+Exit: 0
+Pass: 35; fail: 0; total: 35
+
+(pass) renderer controls: top alignment and a trailing spacer are distinguishable from bottom alignment
+(pass) pane now 160x40: footer last, short content leaves blanks above
+(pass) pane decide 160x40: footer last, short content leaves blanks above
+(pass) pane dispatch 160x40: footer last, short content leaves blanks above
+(pass) pane review 160x40: footer last, short content leaves blanks above
+(pass) pane spend 160x40: footer last, short content leaves blanks above
+(pass) pane hygiene 160x40: footer last, short content leaves blanks above
+(pass) pane fleet 160x40: footer last, short content leaves blanks above
+(pass) pane legend 160x40: footer last, short content leaves blanks above
+(pass) console command 160x40: footer last
+(pass) console team 160x40: footer last
+(pass) console quota 160x40: footer last
+(pass) console hosts 160x40: footer last
+(pass) console self 160x40: footer last
+(pass) pane waiting 160x40: short-content fallback is bottom anchored
+(pass) scroll 160x40: bottom default, up reveals older rows, End returns to hot rows
+(pass) band speed 160x40: real speed content grows above band
+(pass) pane now 80x24: footer last, short content leaves blanks above
+(pass) pane decide 80x24: footer last, short content leaves blanks above
+(pass) pane dispatch 80x24: footer last, short content leaves blanks above
+(pass) pane review 80x24: footer last, short content leaves blanks above
+(pass) pane spend 80x24: footer last, short content leaves blanks above
+(pass) pane hygiene 80x24: footer last, short content leaves blanks above
+(pass) pane fleet 80x24: footer last, short content leaves blanks above
+(pass) pane legend 80x24: footer last, short content leaves blanks above
+(pass) console command 80x24: footer last
+(pass) console team 80x24: footer last
+(pass) console quota 80x24: footer last
+(pass) console hosts 80x24: footer last
+(pass) console self 80x24: footer last
+(pass) pane waiting 80x24: short-content fallback is bottom anchored
+(pass) scroll 80x24: bottom default, up reveals older rows, End returns to hot rows
+(pass) band speed 80x24: real speed content grows above band
+(pass) shell: short main content is padded above, quick controls precede final menu
+(pass) shell overflow: default opens at bottom, scrolling up survives redraw

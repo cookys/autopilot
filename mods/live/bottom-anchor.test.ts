@@ -1,46 +1,42 @@
-'use strict'
-// Render the REAL TSX views, not a parallel implementation of their row order.
-// Install the test-only compiler with: npm ci --offline --prefix mods/live
-// The small terminal below implements the Box/Text flex subset these views use;
-// geometry controls prove that top alignment and bottom padding fail the golden.
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
-const ts = require('typescript')
+// Bottom-anchor goldens run through the same TSX compiler as live.test.ts.
+// The small terminal implements the Box/Text flex subset used by the real views.
+import { test, expect } from 'claude-code/testing'
+import { Pane } from './pane'
+import * as B from './band'
+import * as M from './model'
+import * as S from './scrollmath'
+import * as U from './ui'
+import { makeT } from './i18n'
+import { parseConsole } from './console'
+import { shellPlan, parsePanel } from './shell'
+import { speedView } from './speedview'
+import full from './fixtures/console/console-full.fixture'
 
-for (const ext of ['.ts', '.tsx']) require.extensions[ext] = (mod, file) => {
-  const result = ts.transpileModule(fs.readFileSync(file, 'utf8'), { fileName: file, compilerOptions: {
-    target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS,
-    jsx: ts.JsxEmit.React, jsxFactory: '__jsx',
-  } })
-  mod._compile(result.outputText, file)
+const assert = {
+  ok(value: unknown, message?: string) { expect(Boolean(value), message).toBe(true) },
+  equal(actual: unknown, expected: unknown, message?: string) { expect(actual, message).toBe(expected) },
+  deepEqual(actual: unknown, expected: unknown) { expect(actual).toEqual(expected) },
+  fail(message: string): never { throw new Error(message) },
 }
 const children = xs => xs.flat(Infinity).filter(x => x !== null && x !== undefined && x !== false)
-global.__jsx = (tag, props, ...xs) => tag({ ...props, children: children(xs) })
-const el = Object.fromEntries(['Box', 'Text', 'Link', 'Button', 'Input'].map(type => [type, props => ({ type, props, children: props.children ?? [] })]))
-// Red/green replay can point at immutable base product sources while keeping
-// this same test artifact and fixtures. Normal runs always use this directory.
-const source = process.env.AUTOPILOT_ANCHOR_SOURCE ?? __dirname
-const load = name => require(path.join(source, name))
-const { Pane } = load('pane.tsx')
-const B = load('band.tsx')
-const M = load('model.ts')
-const S = load('scrollmath.ts')
-const U = load('ui.ts')
-const { makeT } = load('i18n.ts')
-const { parseConsole } = load('console.ts')
-const { shellPlan, parsePanel } = load('shell.ts')
-const { speedView } = load('speedview.ts')
+const el = Object.fromEntries(['Box', 'Text', 'Link', 'Button', 'Input'].map(type => [type, props => ({ type, props, children: children([props.children]) })]))
+// The host compiler returns JSX nodes; evaluate their functional element types
+// just as consoleframe.test.ts does, then hand plain nodes to the terminal.
+function norm(n) {
+  if (n === null || n === undefined || n === false || typeof n !== 'object') return n
+  if (typeof n.type === 'function') return norm(n.type(n.props))
+  return { ...n, children: children([n.children ?? n.props?.children]).map(norm) }
+}
 const t = makeT('zh-TW')
-const textOf = n => typeof n === 'string' ? n : n.type === 'Input' ? n.props.placeholder : n.type === 'Link' ? n.props.label : n.children.map(textOf).join('')
+const textOf = n0 => { const n = norm(n0); return typeof n === 'string' ? n : n.type === 'Input' ? n.props.placeholder : n.type === 'Link' ? n.props.label : n.children.map(textOf).join('') }
 const cut = (s, w) => S.sliceCells(s, 0, w)
 const pad = (s, w) => cut(s, w) + ' '.repeat(Math.max(0, w - U.displayWidth(cut(s, w))))
 const blank = w => ' '.repeat(w)
 
 // Intrinsic height first, then distribute the available column height to flexGrow
 // children. Row Boxes share a height; fixed-width cells and flexGrow share width.
-function render(n, width, givenHeight) {
+function render(n0, width, givenHeight?) {
+  const n = norm(n0)
   if (n === null || n === undefined) return []
   if (typeof n === 'string') return [cut(n, width)]
   const p = n.props
@@ -77,12 +73,12 @@ function render(n, width, givenHeight) {
   }
   return rows.map(r => cut(r, width))
 }
-const walk = n => n && typeof n !== 'string' ? [n, ...n.children.flatMap(walk)] : []
+const walk = n0 => { const n = norm(n0); return n && typeof n !== 'string' ? [n, ...n.children.flatMap(walk)] : [] }
 const lastInk = rows => rows.findLastIndex(r => r.trim() !== '')
 const HELD = { id: 'd-fixture', title: 'Anchor fixture', question: 'Choose the next step', background: null, options: [{ label: 'A', description: 'First option' }, { label: 'B', description: 'Last option' }], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 1 }
 const snap = () => ({ state: 'ok', text: 'fixture', header: 'fixture', band: { kind: 'decide', verdict: '要你決定', reason: null, project: 'fixture', elapsed: '1m', phase: '', slots: [] }, pending: [{ ...HELD, background: 'Fixture context', recommendation: 'A', why: 'Fixture reason' }], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: 1794200000000, spend: { session: '$1', host_all: '$2', host_all_n: 2, brain: null, cap: null, mode: 'fixture' } } })
 const acts = { state: { ...M.NO_DECIDE, picks: { 'd-fixture': 0 } }, inputs: false, onPress() {}, onNote() {}, onKeep() {} }
-const consoleSnap = () => parseConsole(fs.readFileSync(path.join(__dirname, 'fixtures/console/c0/console-full.json'), 'utf8'))
+const consoleSnap = () => parseConsole(JSON.stringify(full))
 function pane(tab, cols, rows, { live = snap(), win = S.newScroll(), con = false } = {}) {
   const console = con ? { nav: { snap: consoleSnap(), tab }, onTab() {}, onNext() {}, live, decide: acts, scroll: { offset: 0, bodyRows: rows }, win } : null
   return { tree: Pane(el, live, con ? 'now' : tab, () => {}, t, cols, () => {}, new Set(), () => {}, new Set(), { offset: 0, bodyRows: rows }, acts, win, null, console), win }
@@ -103,10 +99,14 @@ function footer(tree, out) {
 }
 
 test('renderer controls: top alignment and a trailing spacer are distinguishable from bottom alignment', () => {
-  const text = el.Text({ children: ['fixture'] })
+  const text = el.Box({ children: [el.Text({ key: 'next', children: ['fixture'] })] })
   const tree = justifyContent => el.Box({ flexDirection: 'column', justifyContent, children: [text] })
   assert.deepEqual(render(tree('flex-end'), 8, 3).map(x => x.trim()), ['', '', 'fixture'])
   assert.deepEqual(render(tree(undefined), 8, 3).map(x => x.trim()), ['fixture', '', ''])
+  footer(tree('flex-end'), render(tree('flex-end'), 8, 3))
+  expect(() => footer(tree(undefined), render(tree(undefined), 8, 3))).toThrow()
+  const trailing = el.Box({ flexDirection: 'column', justifyContent: 'flex-end', children: [text, el.Text({ children: [' '] })] })
+  expect(() => footer(trailing, render(trailing, 8, 3))).toThrow()
 })
 for (const [cols, rows] of [[160, 40], [80, 24]]) {
   for (const tab of M.PANE_TABS) test(`pane ${tab} ${cols}x${rows}: footer last, short content leaves blanks above`, () => {

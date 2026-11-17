@@ -303,7 +303,7 @@ async function mountAbove($: any, spec: any) {
 
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 120, scroll: { offset: 0, bodyRows: 5 }, view: { agentId: undefined } }
 // Semantic snapshot cases need the whole page; viewport geometry is pinned by
-// SCROLL below and bottom-anchor.test.js at the actual 160x40 / 80x24 sizes.
+// SCROLL below and bottom-anchor.test.ts at the actual 160x40 / 80x24 sizes.
 const PANE_PROPS = { title: 'Dispatch', isFocused: false, bodyColumns: 120, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 300 }, view: { agentId: undefined } }
 
 async function start($: any, surface: string) {
@@ -6610,7 +6610,7 @@ for (const surface of SURFACES) {
   }
   const rowsOf = (tree: Node): Node[] => {
     const rows = tree.type === 'Box' && tree.props?.flexDirection === 'column' ? (tree.children || []) as Node[] : [tree]
-    // Semantic readers retain band/rule/content slots; bottom-anchor.test.js
+    // Semantic readers retain band/rule/content slots; bottom-anchor.test.ts
     // and the raw shell assertions pin the actual bottom navigation.
     return rows.length > 1 ? [rows[rows.length - 1], ...rows.slice(0, -1)] : rows
   }

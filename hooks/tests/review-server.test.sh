@@ -152,7 +152,11 @@ rm -f "$LIVE/runs/$KEY.json"
 
 start_watcher 1; wait_writer
 eq yes "$([ -n "$W_PID" ] && echo yes || echo no)" "watcher (autostart 1) published an envelope"
-for _ in $(seq 1 50); do [ -s "$LIVE/review/server.json" ] && break; sleep 0.1; done
+# The wrapper publishes server.json before Python binds the socket.
+for _ in $(seq 1 50); do
+  [ -s "$LIVE/review/server.json" ] && [ -n "$(listen_addr "$PORT")" ] && break
+  sleep 0.1
+done
 SPID="$(info_field pid)"
 eq yes "$(alive "${SPID:-0}")" "AUTOSTART=1 -> watcher ensured a live review server"
 eq 200 "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$PORT/")" "watcher-started server answers 200"

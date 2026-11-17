@@ -136,8 +136,8 @@ done
 
 # ---- negative control 2: the watcher refuses the runs directory -> a failed launch result, reported by the next hook run -----
 mkplugin "$SB/mut-refuse" scripts/lib/runtime-paths.js "function ensureRunsDir(env = process.env, deps) {
-  return ensurePrivateDir(runsDir(env), deps);" "function ensureRunsDir(env = process.env, deps) {
-  return { ok: false, path: runsDir(env), reason: 'mutation: this directory is refused' };"
+  return ensurePrivateDir(runsDir(env, deps), deps);" "function ensureRunsDir(env = process.env, deps) {
+  return { ok: false, path: runsDir(env, deps), reason: 'mutation: this directory is refused' };"
 for shape in exists missing; do
   new_case "refuse-$shape"
   if [ "$shape" = exists ]; then BTMP="$CD/tmp"; mkdir -p "$BTMP"; else BTMP="$CD/not/yet/tmp"; fi

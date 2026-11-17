@@ -1,0 +1,150 @@
+RED (before source change)
+command: node --test --test-name-pattern='^rail on the explicit list: dispatch-panel\.js$' hooks/bash-launch-guard.test.js
+✖ rail on the explicit list: dispatch-panel.js (28.862078ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 93.634621
+
+✖ failing tests:
+
+test at hooks/bash-launch-guard.test.js:850:3
+✖ rail on the explicit list: dispatch-panel.js (28.862078ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> ($HOME/.tmp/claude-1001/-home-<user>-projects-autopilot/612c3c35-57c5-4a58-a8e8-280a25ceae3c/scratchpad/rclone/.claude/worktrees/hetero-fix-rail-dispatch-panel-4vhYF1/hooks/bash-launch-guard.test.js:851:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit_code=1
+
+GREEN (after source change)
+command: node --test --test-name-pattern='^rail on the explicit list: dispatch-panel\.js$' hooks/bash-launch-guard.test.js
+✔ rail on the explicit list: dispatch-panel.js (62.060318ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 193.247837
+exit_code=0
+
+command: node --test hooks/bash-launch-guard.test.js
+✔ secret-print systemd modes and depths: cat x.service.d/a.conf (383.924823ms)
+ℹ tests 871
+ℹ suites 0
+ℹ pass 861
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 10
+ℹ todo 0
+ℹ duration_ms 69838.269832
+exit_code=0
+
+command: bash scripts/sync-all.sh
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --write
+{"mode":"generate","changed":false,"ran":["sync-agent-bodies","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","hook-harness-matrix"],"skipped":["sync-version (no generate cmd)","check-canonical-invariants (no generate cmd)","check-readme-parity (no generate cmd)","check-hook-inventory (no generate cmd)","check-config-docs (no generate cmd)","check-quota-adapters (no generate cmd)","check-claude-md-inventory (no generate cmd)","check-js-syntax (no generate cmd)","check-backlog-entries (no generate cmd)","check-contract-schema (no generate cmd)","check-profile-catalog (no generate cmd)"],"unknown_only":[],"failures":[],"ok":true}
+exit_code=0
+
+command: bash scripts/sync-all.sh --check
+── sync-version: node scripts/sync-version.js --check
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh --check
+── check-canonical-invariants: bash scripts/check-canonical-invariants.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh --check
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh --check
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh --check
+── check-readme-parity: node scripts/check-readme-parity.js
+── check-hook-inventory: node scripts/check-hook-inventory.js --check
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --check
+── check-config-docs: node scripts/check-config-docs.js
+── check-quota-adapters: node scripts/check-quota-adapters.js
+── check-claude-md-inventory: node scripts/check-claude-md-inventory.js
+── check-js-syntax: node scripts/check-js-syntax.js
+── check-backlog-entries: node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md
+── check-contract-schema: node scripts/check-contract-schema.js
+── check-profile-catalog: node scripts/build-profile-payload.js catalog --check --repo .
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","hook-harness-matrix","check-config-docs","check-quota-adapters","check-claude-md-inventory","check-js-syntax","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}
+exit_code=0
+
+FINAL PASS
+command: node --test --test-name-pattern=... hooks/bash-launch-guard.test.js
+✔ rail on the explicit list: dispatch-panel.js (50.664687ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 159.250763
+exit_code=0
+
+Changed files and reasons:
+scripts/lib/bash-launch-rules.js — append panel to the explicit launching-rail list.
+platforms/codex/plugin/scripts/lib/bash-launch-rules.js — generated Codex mirror of the same rail list.
+docs/plans/evidence/2026-11-17-rail-dispatch-panel/receipt.log — record red/green outputs and verification exit codes.
+Out of scope: no observer/test edits, version bump, merge, push, network access, credential access, or real ~/.claude access. Independent cross-family review is caller-owned and pending.
+
+command: node --test hooks/bash-launch-guard.test.js
+✔ secret-print systemd modes and depths: cat x.service.d/a.conf (361.862094ms)
+ℹ tests 871
+ℹ suites 0
+ℹ pass 861
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 10
+ℹ todo 0
+ℹ duration_ms 66820.180531
+exit_code=0
+
+FINAL command: bash scripts/sync-all.sh
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --write
+{"mode":"generate","changed":false,"ran":["sync-agent-bodies","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","hook-harness-matrix"],"skipped":["sync-version (no generate cmd)","check-canonical-invariants (no generate cmd)","check-readme-parity (no generate cmd)","check-hook-inventory (no generate cmd)","check-config-docs (no generate cmd)","check-quota-adapters (no generate cmd)","check-claude-md-inventory (no generate cmd)","check-js-syntax (no generate cmd)","check-backlog-entries (no generate cmd)","check-contract-schema (no generate cmd)","check-profile-catalog (no generate cmd)"],"unknown_only":[],"failures":[],"ok":true}
+exit_code=0
+
+FINAL command: bash scripts/sync-all.sh --check
+── sync-version: node scripts/sync-version.js --check
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh --check
+── check-canonical-invariants: bash scripts/check-canonical-invariants.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh --check
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh --check
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh --check
+── check-readme-parity: node scripts/check-readme-parity.js
+── check-hook-inventory: node scripts/check-hook-inventory.js --check
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --check
+── check-config-docs: node scripts/check-config-docs.js
+── check-quota-adapters: node scripts/check-quota-adapters.js
+── check-claude-md-inventory: node scripts/check-claude-md-inventory.js
+── check-js-syntax: node scripts/check-js-syntax.js
+── check-backlog-entries: node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md
+── check-contract-schema: node scripts/check-contract-schema.js
+── check-profile-catalog: node scripts/build-profile-payload.js catalog --check --repo .
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","hook-harness-matrix","check-config-docs","check-quota-adapters","check-claude-md-inventory","check-js-syntax","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}
+exit_code=0
+
+Evidence note: captured stack path redacted with scripts/redact-personal.js; assertions and exit codes unchanged. Initial bash .githooks/pre-commit exit_code=1 (home_path in captured stack); corrected by evidence redaction.
+Final bash .githooks/pre-commit exit_code=0

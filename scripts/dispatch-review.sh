@@ -4,6 +4,9 @@
 # engine and parses a VERDICT, so a disjoint-family qc panel can include a vendor
 # (e.g. Gemini-via-agy) that is unreliable as an implementer but fine as a reviewer.
 # For AUTHORING tasks, use sibling dispatch-author.sh (unwrapped raw-prompt dispatch).
+# With no named runner/model, pace-select chooses a qualified cross-family seat by
+# quota. Named seats stay pinned and warn above the ceiling. pace_unknown retains
+# the existing required-seat preconditions (or configured retreat chain).
 #
 # Why a script: the agy/Gemini read path has two non-obvious rails that MUST NOT be
 # skipped — (1) the diff goes in the PROMPT as text (agy -p ignores cwd; asking it to
@@ -321,7 +324,7 @@ while [[ $# -gt 0 ]]; do
     --run-id)    RUN_ID="${2:-}"; shift 2 ;;
     --stage)     STAGE="${2:-}"; shift 2 ;;
     --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
-    -h|--help)   sed -n '2,63p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   awk 'NR>1 { if ($0 !~ /^#/) exit; print }' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -339,21 +342,24 @@ PROBE_JSON=""
 SERVED_BY=""
 FALLBACK_JSON=""
 FALLBACK_LOG_ROW=""
+PACE_CHOICE_JSON=""
 # A retreated child is a fresh process and the four assignments above clear the
 # parent's values. Restore from env the parent set for this one re-run only.
 if [ "${AUTOPILOT_AGY_REVIEW_RETREATED:-}" = "1" ]; then
   SERVED_BY="${AUTOPILOT_AGY_RETREAT_SERVED_BY:-}"
   FALLBACK_LOG_ROW="${AUTOPILOT_AGY_RETREAT_LOG_ROW:-}"
   if [ -n "$FALLBACK_LOG_ROW" ]; then
-    IFS=$'\t' read -r _retreat_fb _retreat_fam <<< "$(node -e '
+    IFS=$'\t' read -r _retreat_fb _retreat_fam _retreat_pace <<< "$(node -e '
 try {
   const j = JSON.parse(process.argv[1]);
   const fb = j && j.fallback ? JSON.stringify(j.fallback) : "";
   const fam = j && j.implementer_family ? String(j.implementer_family) : "";
-  process.stdout.write(fb + "\t" + fam);
+  const pace = j && j.pace_choice ? JSON.stringify(j.pace_choice) : "";
+  process.stdout.write(fb + "\t" + fam + "\t" + pace);
 } catch {}
 ' "$FALLBACK_LOG_ROW" 2>/dev/null)" || true
     FALLBACK_JSON="${_retreat_fb:-}"
+    PACE_CHOICE_JSON="${_retreat_pace:-}"
     if [ -z "${IMPLEMENTER_FAMILY:-}" ] && [ -n "${_retreat_fam:-}" ]; then
       IMPLEMENTER_FAMILY="$_retreat_fam"
     fi
@@ -464,6 +470,7 @@ family_guard_select() {
   _FG_RUNNER=""
   _FG_ENDPOINT=""
   _FG_DEMOTED_JSON="[]"
+  _FG_PACE_CHOICE_JSON=""
   family_guard_bind "$resolved"
 
   # Detect explicit non-template reviewer overrides (preserves custom test/repo pins without ever picking codex).
@@ -537,7 +544,21 @@ for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
     return 1
   fi
 
-  # Canonical pace-roles.json fallback.reviewer chain (hydrogen -> grok -> glm -> agyclaude; never codex).
+  # An unpinned retreat uses quota among cross-family seats first. Missing pace
+  # retains the existing fallback chain; explicit roster overrides above stay pinned.
+  local _pace_args=(--dispatch --role reviewer) _pace_pick=""
+  [ -z "${IMPLEMENTER_FAMILY:-}" ] || _pace_args+=(--exclude-family "$IMPLEMENTER_FAMILY")
+  [ -z "${MODEL:-}" ] || _pace_args+=(--exclude-model "$MODEL")
+  [ -z "${SPEC_FILE:-}" ] || _pace_args+=(--prompt-file "$SPEC_FILE")
+  [ -z "${DIFF_FILE:-}" ] || _pace_args+=(--diff-file "$DIFF_FILE")
+  _pace_pick="$(node "$_REVIEW_SELF_DIR/pace-select.js" "${_pace_args[@]}")" || return 1
+  if [ -n "$_pace_pick" ]; then
+    { IFS= read -r _FG_RUNNER; IFS= read -r _FG_ENGINE; IFS= read -r _FG_ENDPOINT; IFS= read -r _ps_full; IFS= read -r _FG_PACE_CHOICE_JSON; } <<< "$_pace_pick"
+    _FG_EFFORT=high
+    return 0
+  fi
+
+  # Legacy fallback.reviewer chain when pace is unknown.
   local _chain_lines=""
   _chain_lines="$(node -e '
 const sf = require(process.argv[1]);
@@ -600,6 +621,24 @@ validate_d2_agy_claims() {
   [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
     || die_precondition "D2 capability claim validation failed"
 }
+
+# Default quota choice; nonempty runner/model/endpoint (including strict roster tuples) are caller pins.
+_ps_args=(--dispatch --role reviewer)
+[ -z "${RUNNER:-}" ] || _ps_args+=(--named-runner "$RUNNER")
+[ -z "${MODEL:-}" ] || _ps_args+=(--named-model "$MODEL")
+[ -z "${ENDPOINT:-}" ] || _ps_args+=(--named-endpoint "$ENDPOINT")
+[ -z "${SPEC_FILE:-}" ] || _ps_args+=(--prompt-file "$SPEC_FILE")
+[ -z "${DIFF_FILE:-}" ] || _ps_args+=(--diff-file "$DIFF_FILE")
+if [ -z "${RUNNER:-}${MODEL:-}${ENDPOINT:-}" ]; then
+  family_guard_bind
+  [ -z "${IMPLEMENTER_FAMILY:-}" ] || _ps_args+=(--exclude-family "$IMPLEMENTER_FAMILY")
+fi
+_ps_parsed="$(node "$_REVIEW_SELF_DIR/pace-select.js" "${_ps_args[@]}")" || die_precondition "pace selection refused"
+if [ -n "$_ps_parsed" ]; then
+  _ps_ep=""
+  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r _ps_full; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
+fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint review-seat ;; esac
@@ -1003,6 +1042,7 @@ process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] 
                 fi
                 RUNNER="$_FG_RUNNER"
                 MODEL="$_FG_ENGINE"
+                PACE_CHOICE_JSON="$_FG_PACE_CHOICE_JSON"
                 EFFORT="$_FG_EFFORT"
                 EFFORT_EXPLICIT=1
                 ENDPOINT="${_FG_ENDPOINT:-}"
@@ -1432,8 +1472,8 @@ process.stdout.write(JSON.stringify(sf.buildFallbackRecord({
 })));
 ' "$_REVIEW_SELF_DIR/lib/seat-fallback.js" "$_from_seat" "$served" "${classification:-unavailable}" "${_FG_DEMOTED_JSON:-[]}")"
   FALLBACK_LOG_ROW="$(node -e '
-process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: null, error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: null, fallback: JSON.parse(process.argv[5]), implementer_family: process.argv[6] || "unknown" }));
-' "${RUN_ID:-}" "$RUNNER" "$classification" "$served" "$_fb_json" "${IMPLEMENTER_FAMILY:-unknown}")"
+process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] : null, from_runner: process.argv[2], from_endpoint: null, error_class: process.argv[3], to_rung: process.argv[4], branch: null, served_by: process.argv[4], probe: null, fallback: JSON.parse(process.argv[5]), implementer_family: process.argv[6] || "unknown", ...(process.argv[7] ? { pace_choice: JSON.parse(process.argv[7]) } : {}) }));
+' "${RUN_ID:-}" "$RUNNER" "$classification" "$served" "$_fb_json" "${IMPLEMENTER_FAMILY:-unknown}" "${_FG_PACE_CHOICE_JSON:-}")"
   echo "dispatch-review: retreating once to cloud rung ${served} (reviewer_on_engine_unavailable: ${_rv_pol})" >&2
   echo "dispatch-review: agy retreat kept first-attempt raw log ${RAW_LOG}" >&2
   local -a _agy_retreat_args=()
@@ -1461,6 +1501,8 @@ process.stdout.write(JSON.stringify({ run_id: process.argv[1] ? process.argv[1] 
       *) _agy_retreat_args+=("$_a"); _i=$((_i + 1)) ;;
     esac
   done
+  # Automatic initial selection has no runner/model flags in ORIG_ARGS to replace.
+  _agy_retreat_args+=(--runner "$_FG_RUNNER" --model "$_FG_ENGINE")
   [ "$_saw_effort" -eq 1 ] || _agy_retreat_args+=(--effort "$_FG_EFFORT")
   if [ -n "${_FG_ENDPOINT:-}" ] && [ "$_saw_endpoint" -eq 0 ]; then
     _agy_retreat_args+=(--endpoint "$_FG_ENDPOINT")
@@ -1746,6 +1788,7 @@ write_review_manifest() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   local _rk_ident="$REPO_IDENTITY_FIELDS"
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
+  [ -n "${PACE_CHOICE_JSON:-}" ] && _rk_ident="$_rk_ident, \"pace_choice\": $PACE_CHOICE_JSON"
   declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "" "$RUNNER" "${ENDPOINT:-}")"
   # What check-unmerged-ship.js reads: the verdict of THIS run (set only on a reviewed exit), the repo HEAD sha at dispatch time
   # (this rail has no --head: with a --diff-file the diff was cut from the cwd checkout, so its HEAD is the reviewed head) and the

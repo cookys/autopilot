@@ -1,0 +1,39 @@
+{
+  "schema": "capacity.pace/1",
+  "generated_at": "2026-11-17T00:00:00Z",
+  "rows": [
+    {
+      "pool": "grok-cli",
+      "class": "other",
+      "used_pct": 93,
+      "expected_pct": 60,
+      "stale": false,
+      "hours_to_reset": 12,
+      "reset_at": "2026-11-17T12:00:00.000Z",
+      "seen_at": "2026-11-16T23:00:00Z",
+      "status": "ok"
+    },
+    {
+      "pool": "codex A",
+      "class": "scarce",
+      "used_pct": 13,
+      "expected_pct": 60,
+      "stale": false,
+      "hours_to_reset": 24,
+      "reset_at": "2026-11-18T00:00:00.000Z",
+      "seen_at": "2026-11-16T23:00:00Z",
+      "status": "ok"
+    },
+    {
+      "pool": "agy",
+      "class": "other",
+      "used_pct": 43,
+      "expected_pct": 60,
+      "stale": false,
+      "hours_to_reset": 48,
+      "reset_at": "2026-11-19T00:00:00.000Z",
+      "seen_at": "2026-11-16T23:00:00Z",
+      "status": "ok"
+    }
+  ]
+}

@@ -4,6 +4,9 @@
 # prompt file and forwards it as raw prompt bytes to a writer-capable runner for
 # AUTHORING tasks (test plans, verification docs, spec/risk writeups), with no
 # local template wrapper.
+# With no named runner/model, pace-select chooses by eligible remaining quota.
+# Named seats stay pinned; a fresh over-ceiling reading emits a warning only.
+# pace_unknown retains the existing required-seat preconditions.
 #
 # Why separate from dispatch-review.sh:
 # - dispatch-review feeds a REVIEW template + embedded DIFF BLOCK for verifier
@@ -202,7 +205,7 @@ while [[ $# -gt 0 ]]; do
     --polarity-verify-cmd) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-verify-cmd requires a non-empty value" >&2; exit 2; }; POLARITY_VERIFY_CMD="$2"; shift 2 ;;
     --polarity-assertion-artifact) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-assertion-artifact requires a non-empty value" >&2; exit 2; }; POLARITY_ASSERTION_ARTIFACTS+=("$2"); shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
-    -h|--help)     sed -n '2,58p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)     awk 'NR>1 { if ($0 !~ /^#/) exit; print }' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -905,6 +908,20 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
+# Default quota choice; nonempty runner/model/endpoint (including strict roster tuples) are caller pins.
+PACE_CHOICE_JSON=""
+_ps_args=(--dispatch --role author)
+[ -z "${RUNNER:-}" ] || _ps_args+=(--named-runner "$RUNNER")
+[ -z "${MODEL:-}" ] || _ps_args+=(--named-model "$MODEL")
+[ -z "${ENDPOINT:-}" ] || _ps_args+=(--named-endpoint "$ENDPOINT")
+[ -z "${PROMPT_FILE:-}" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")
+_ps_parsed="$(node "$_AUTHOR_SELF_DIR/pace-select.js" "${_ps_args[@]}")" || die_precondition "pace selection refused"
+if [ -n "$_ps_parsed" ]; then
+  _ps_ep=""
+  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r _ps_full; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
+fi
+
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|cursor)"
 # --role-kit: refused on every runner but claude-native, validated now (before any spawn).
 . "$_AUTHOR_SELF_DIR/lib/role-kit.sh"   # defaults only: no kit leaves ROLE_KIT_TOOLS empty and ROLE_KIT_EXTRA unset-equivalent
@@ -930,7 +947,7 @@ if [[ "$RUNNER" = "cursor" ]]; then
 fi
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 # d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
-_tfg_msg="$(node "$_AUTHOR_SELF_DIR/lib/cn-model-dispatch-gate.js" check --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
+_tfg_msg="$(node "$_AUTHOR_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role author --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
 unset _tfg_msg
 case "$EFFORT" in default|low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be default|low|medium|high|xhigh|max" ;; esac
@@ -1152,6 +1169,7 @@ write_author_manifest() {
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
   local _rk_ident="$REPO_IDENTITY_FIELDS, \"mount_containment\": \"$(worker_mount_manifest_value)\""
   [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
+  [ -n "${PACE_CHOICE_JSON:-}" ] && _rk_ident="$_rk_ident, \"pace_choice\": $PACE_CHOICE_JSON"
   declare -F dispatch_attr_fields >/dev/null 2>&1 && _rk_ident="$_rk_ident$(dispatch_attr_fields "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" "$RUNNER" "${ENDPOINT:-}")"
   {
     printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "lane": %s, "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \

@@ -34,7 +34,10 @@ test.after(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: 
 
 function cleanEnv(extra) {
   const env = { ...process.env };
-  for (const k of Object.keys(env)) if (k.startsWith('GIT_')) delete env[k];
+  // Keep test-git-env's isolation from the operator's global/system config and hooks.
+  for (const k of Object.keys(env)) {
+    if (k.startsWith('GIT_') && k !== 'GIT_CONFIG_GLOBAL' && k !== 'GIT_CONFIG_NOSYSTEM') delete env[k];
+  }
   delete env.AUTOPILOT_SESSION_ID;
   delete env.CLAUDE_CODE_SESSION_ID;
   delete env.AUTOPILOT_GATE_FILE;

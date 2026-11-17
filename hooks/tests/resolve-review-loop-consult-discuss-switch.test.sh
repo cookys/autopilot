@@ -286,6 +286,7 @@ hooks/tests/contract-parity.test.sh|direct validateReviewLoopConfig caller on li
 hooks/tests/fixtures/pre-consult-discuss-resolve-review-loop.sh|frozen pre-D6 resolver copy (printf literal)
 hooks/tests/fixtures/pre-d7-resolve-review-loop.sh|frozen pre-D7 resolver copy (printf literal)
 hooks/tests/hetero-review-loop.test.sh|matches the JSON-literal extractor, roster built via live resolver
+hooks/tests/pace-default-dispatch.test.sh|reviewer-retreat fixture only; partial resolver output is not a complete roster or validateReviewLoopConfig input
 hooks/tests/resolve-review-loop-a.test.sh|resolver shard, quoted "reviewer_engine" literals
 hooks/tests/resolve-review-loop-b.test.sh|resolver shard, quoted "reviewer_engine" literals and EXPECTED_KEYS
 hooks/tests/review-loop-runner.test.sh|payload JS literal, widened and asserted above'

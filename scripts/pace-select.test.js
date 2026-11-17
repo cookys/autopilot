@@ -45,6 +45,9 @@ const SCORECARD_CLI = path.join(__dirname, 'engine-scorecard.js');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
 const MISSING_PACE = path.join(FIXTURES_DIR, '__missing_pace__.json');
 const allEndpointsReady = () => true;
+// Small public-doc work admits CN seats; the dedicated gate test passes its own M facts.
+const testTask = { AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_SCOPE: 'docs/example.md', AUTOPILOT_TASK_ROLE: 'reviewer' };
+Object.assign(process.env, testTask);
 
 function withEnv(vars, fn) {
   const prev = {};
@@ -67,7 +70,7 @@ function withEnv(vars, fn) {
 const priorityPace = (rows) => ({
   schema: 'capacity.pace/1',
   generated_at: '2026-11-13T04:00:00Z',
-  rows,
+  rows: rows.map(row => ({ hours_to_reset: 24, ...row })),
 });
 const paceRow = (pool, used, expected, extra = {}) => ({
   pool,
@@ -75,6 +78,7 @@ const paceRow = (pool, used, expected, extra = {}) => ({
   status: 'ok',
   stale: false,
   used_pct: used,
+  hours_to_reset: 24,
   expected_pct: expected,
   ...extra,
 });
@@ -237,7 +241,7 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.equal(missingRole.status, 2);
 });
 
-test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never candidates', () => {
+test('(a) reset-weighted quota outranks linear pace; claude rows are never candidates', () => {
   const pace = readFixture('ahead-vs-behind.json');
   const pools = loadPools();
   const roles = loadRoles();
@@ -250,17 +254,19 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
     checkEndpoint: allEndpointsReady,
   });
   assert.deepEqual(res, {
-    engine: 'grok',
-    runner: 'grok',
-    model: 'grok-4.7',
-    pool: 'grok-cli',
-    slack_pts: 14,
-    used_pct: 26,
+    engine: 'glm',
+    runner: 'cc-shim',
+    model: 'glm-5.3',
+    endpoint: 'glm',
+    pool: 'glm',
+    slack_pts: -3,
+    used_pct: 43,
     expected_pct: 40,
+    reset_at: null, score: 57 / 14.4, status: 'fresh', runner_up: 'grok', reason: 'quota_score',
     over_pace: false,
-    selected_by: 'priority',
+    selected_by: 'quota_score',
     low_keys: [],
-    reviewer_exclude: ['grok'],
+    reviewer_exclude: ['glm'],
     role: 'implementer',
     qualified_source: 'pace-roles.json',
     pace_generated_at: '2026-11-13T02:00:00Z',
@@ -289,14 +295,13 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
   });
-  assert.equal(withClaude.engine, 'grok');
+  assert.equal(withClaude.engine, 'glm');
   assert.deepEqual(
     withClaude.candidates.find((c) => c.engine === 'codex'),
     { engine: 'codex', reason: 'unknown' },
   );
 
-  // Fresh agyclaude at slack +70 does not override grok: grok is earlier in
-  // implementer priority (agy -> grok -> glm -> agyclaude) and already on pace.
+  // A fresh agyclaude reading wins with 90 points left and only 7.2 hours to reset.
   const agyClaudeFresh = structuredClone(pace);
   agyClaudeFresh.rows.find((row) => row.pool === 'agyclaude(alias 2)').stale = false;
   const agyClaudeLater = selectEngine({
@@ -306,11 +311,11 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
   });
-  assert.equal(agyClaudeLater.engine, 'grok');
-  assert.equal(agyClaudeLater.selected_by, 'priority');
-  assert.equal(agyClaudeLater.slack_pts, 14);
+  assert.equal(agyClaudeLater.engine, 'agyclaude');
+  assert.equal(agyClaudeLater.selected_by, 'quota_score');
+  assert.equal(agyClaudeLater.slack_pts, 70);
 
-  // When grok is also behind, the last priority key (agyclaude) still wins.
+  // Increasing grok usage does not change the winner.
   const grokBehind = structuredClone(agyClaudeFresh);
   grokBehind.rows.find((row) => row.pool === 'grok-cli').used_pct = 50;
   const agyClaudeWin = selectEngine({
@@ -324,7 +329,7 @@ test('(a) a key 25 pts ahead loses to a key 14 pts behind; claude rows are never
   assert.equal(agyClaudeWin.runner, 'agy');
   assert.equal(agyClaudeWin.model, 'claude-opus-5-5-medium');
   assert.equal(agyClaudeWin.pool, 'agyclaude(alias 2)');
-  assert.equal(agyClaudeWin.selected_by, 'priority');
+  assert.equal(agyClaudeWin.selected_by, 'quota_score');
   assert.equal(agyClaudeWin.slack_pts, 70);
 });
 
@@ -354,7 +359,7 @@ test('(b) stale row and null expected_pct/used_pct rows are reported as unknown 
   // Negative controls: coalescing null expected_pct -> 0 makes glm win (0 > -6);
   // ignoring stale on agy makes agy win (76 > -6).
   const nullAsZeroPace = structuredClone(pace);
-  nullAsZeroPace.rows.find((row) => row.pool === 'glm').expected_pct = 0;
+  Object.assign(nullAsZeroPace.rows.find((row) => row.pool === 'glm'), { expected_pct: 0, hours_to_reset: 1 });
   assert.equal(
     selectEngine({
       pace: nullAsZeroPace,
@@ -402,7 +407,7 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
     checkEndpoint: allEndpointsReady,
   });
   assert.equal(impl.engine, 'glm');
-  assert.equal(impl.selected_by, 'slack');
+  assert.equal(impl.selected_by, 'quota_score');
   assert.equal(impl.slack_pts, -15);
   assert.equal(impl.over_pace, true);
 
@@ -411,7 +416,7 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
     pace: {
       schema: 'capacity.pace/1',
       generated_at: '2026-11-13T02:12:00Z',
-      rows: [{ pool: 'agy', class: 'other', status: 'WARN_ahead', stale: false, used_pct: 50, expected_pct: 40 }],
+      rows: [{ pool: 'agy', class: 'other', status: 'WARN_ahead', stale: false, hours_to_reset: 24, used_pct: 50, expected_pct: 40 }],
     },
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
@@ -424,7 +429,7 @@ test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: 
     pace: {
       schema: 'capacity.pace/1',
       generated_at: '2026-11-13T02:12:00Z',
-      rows: [{ pool: 'agy', class: 'other', status: 'WARN_ahead', stale: false, used_pct: 51, expected_pct: 40 }],
+      rows: [{ pool: 'agy', class: 'other', status: 'WARN_ahead', stale: false, hours_to_reset: 24, used_pct: 51, expected_pct: 40 }],
     },
     role: 'implementer',
     checkEndpoint: allEndpointsReady,
@@ -460,7 +465,7 @@ test('(d) all unknown -> exit 3 with engine: null and reason: pace_unknown', () 
     AUTOPILOT_PACE_FILE: fixturePath('ahead-vs-behind.json'),
   });
   assert.equal(viaEnv.status, 0, viaEnv.stderr);
-  assert.equal(JSON.parse(viaEnv.stdout).engine, 'grok');
+  assert.equal(JSON.parse(viaEnv.stdout).engine, 'glm');
 
   let emptyHome;
   try {
@@ -480,7 +485,7 @@ test('(e) --exclude removes keys from consideration', () => {
 
   const base = cli(['--role', 'reviewer', '--pace', file, '--json']);
   assert.equal(base.status, 0, base.stderr);
-  assert.equal(JSON.parse(base.stdout).engine, 'grok');
+  assert.equal(JSON.parse(base.stdout).engine, 'glm');
 
   const noGrok = cli(['--role', 'reviewer', '--pace', file, '--exclude', 'grok', '--json']);
   assert.equal(noGrok.status, 0, noGrok.stderr);
@@ -514,8 +519,9 @@ test('(f) alias rows of one key: the larger fresh slack is used', () => {
     slack_pts: 28,
     used_pct: 12,
     expected_pct: 40,
+    reset_at: null, score: 88 / 72, status: 'fresh', runner_up: 'grok', reason: 'quota_score',
     over_pace: false,
-    selected_by: 'priority',
+    selected_by: 'quota_score',
     low_keys: [],
     reviewer_exclude: ['agy'],
     role: 'implementer',
@@ -557,8 +563,9 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
     slack_pts: -35,
     used_pct: 75,
     expected_pct: 40,
+    reset_at: null, score: 25 / 96, status: 'fresh', runner_up: null, reason: 'quota_score',
     over_pace: true,
-    selected_by: 'slack',
+    selected_by: 'quota_score',
     low_keys: [],
     reviewer_exclude: ['codex'],
     role: 'implementer',
@@ -583,7 +590,7 @@ test('(g) scarce codex row 35 pts ahead is a known reading with slack -35, not u
         pool: 'codex B',
         class: 'scarce',
         status: 'ok',
-        stale: false,
+        stale: false, hours_to_reset: 24,
         used_pct: 48,
         expected_pct: 40,
       },
@@ -621,9 +628,9 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     },
   });
   assert.deepEqual(checkedReady, ['glm']);
-  assert.equal(whenReady.engine, 'grok');
-  assert.equal(whenReady.selected_by, 'priority');
-  assert.equal(whenReady.slack_pts, 14);
+  assert.equal(whenReady.engine, 'glm');
+  assert.equal(whenReady.selected_by, 'quota_score');
+  assert.equal(whenReady.slack_pts, 30);
 
   // When earlier priority keys are behind, a ready glm endpoint still wins.
   const grokBehind = structuredClone(pace);
@@ -636,7 +643,7 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     checkEndpoint: () => true,
   });
   assert.equal(glmWhenGrokBehind.engine, 'glm');
-  assert.equal(glmWhenGrokBehind.selected_by, 'priority');
+  assert.equal(glmWhenGrokBehind.selected_by, 'quota_score');
   assert.equal(glmWhenGrokBehind.slack_pts, 30);
   const glmDown = selectEngine({
     pace: grokBehind,
@@ -645,9 +652,9 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     role: 'reviewer',
     checkEndpoint: (ep) => ep !== 'glm',
   });
-  assert.equal(glmDown.engine, 'grok');
-  assert.equal(glmDown.slack_pts, -11);
-  assert.equal(glmDown.selected_by, 'slack');
+  assert.equal(glmDown.engine, 'agy');
+  assert.equal(glmDown.slack_pts, -15);
+  assert.equal(glmDown.selected_by, 'quota_score');
   assert.equal(glmDown.over_pace, true);
 
   // When glm endpoint is not ready (injected, no shell spawn), glm is listed as
@@ -766,7 +773,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
     const viaMissingFlag = cli(['--role', 'reviewer', '--pace', paceFile, '--qualified', missingPath, '--json']);
     assert.equal(viaMissingFlag.status, 0, viaMissingFlag.stderr);
     const missingFlagOut = JSON.parse(viaMissingFlag.stdout);
-    assert.equal(missingFlagOut.engine, 'grok');
+    assert.equal(missingFlagOut.engine, 'glm');
     assert.equal(missingFlagOut.qualified_source, 'pace-roles.json');
 
     assert.equal(
@@ -779,7 +786,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
     });
     assert.equal(viaMissingDefault.status, 0, viaMissingDefault.stderr);
     const missingDefaultOut = JSON.parse(viaMissingDefault.stdout);
-    assert.equal(missingDefaultOut.engine, 'grok');
+    assert.equal(missingDefaultOut.engine, 'glm');
     assert.equal(missingDefaultOut.qualified_source, 'pace-roles.json');
 
     // 4. End-to-end round-trip: engine-scorecard.js export-qualified -> pace-select.js --role author
@@ -862,110 +869,20 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
   }
 });
 
-test('(priority a) agy slack +1 beats glm +30: priority order wins, hydrogen model, reviewer_exclude ["agy"]', () => {
-  const res = selectEngine({
-    pace: priorityPace([paceRow('agy', 39, 40), paceRow('glm', 10, 40)]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'implementer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(res.engine, 'agy');
-  assert.equal(res.runner, 'agy');
-  assert.equal(res.model, 'gemini-4-hydrogen-high');
-  assert.equal(res.selected_by, 'priority');
-  assert.deepEqual(res.reviewer_exclude, ['agy']);
-});
-
-test('(priority reviewer) agy beats codex for reviewer and author even when codex has far more slack', () => {
-  for (const role of ['reviewer', 'author']) {
-    const res = selectEngine({
-      pace: priorityPace([paceRow('agy', 39, 40), paceRow('codex A', 10, 40)]),
-      pools: loadPools(),
-      roles: loadRoles(),
-      role,
-      checkEndpoint: allEndpointsReady,
-    });
-    assert.equal(res.engine, 'agy', role);
-    assert.equal(res.selected_by, 'priority', role);
-  }
-});
-
-test('(priority b) agy behind (-5) -> glm (+2) chosen, still selected_by priority', () => {
-  const res = selectEngine({
-    pace: priorityPace([paceRow('agy', 45, 40), paceRow('glm', 38, 40)]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'implementer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(res.engine, 'glm');
-  assert.equal(res.model, 'glm-5.3');
-  assert.equal(res.selected_by, 'priority');
-  assert.deepEqual(res.reviewer_exclude, ['glm']);
-});
-
-test('(priority c) agy -5, glm -3, agyclaude +4, grok unknown -> agyclaude (last priority entry)', () => {
-  const res = selectEngine({
-    pace: priorityPace([
-      paceRow('agy', 45, 40),
-      paceRow('glm', 43, 40),
-      paceRow('agyclaude', 36, 40),
-    ]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'implementer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(res.engine, 'agyclaude');
-  assert.equal(res.model, 'claude-opus-5-5-medium');
-  assert.equal(res.selected_by, 'priority');
-  assert.deepEqual(res.reviewer_exclude, ['agyclaude']);
-});
-
-test('(priority d) all three behind (agy -5, glm -3, agyclaude -2), codex +20 -> slack fallback', () => {
-  const res = selectEngine({
-    pace: priorityPace([
-      paceRow('agy', 45, 40),
-      paceRow('glm', 43, 40),
-      paceRow('agyclaude', 42, 40),
-      { pool: 'codex A', class: 'scarce', status: 'ok', stale: false, used_pct: 20, expected_pct: 40 },
-    ]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'implementer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(res.engine, 'codex');
-  assert.equal(res.model, 'gpt-6.1-sol');
-  assert.equal(res.selected_by, 'slack');
-  assert.deepEqual(res.reviewer_exclude, ['codex']);
-});
-
-test('(priority e) reviewer role: priority list (agy first), agy model stays gemini-4-carbon-high', () => {
-  const res = selectEngine({
-    pace: priorityPace([paceRow('agy', 10, 40), paceRow('glm', 39, 40)]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'reviewer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(res.engine, 'agy');
-  assert.equal(res.model, 'gemini-4-carbon-high');
-  assert.equal(res.selected_by, 'priority');
-  assert.deepEqual(res.reviewer_exclude, ['agy']);
-});
-
-test('(priority f) agy reading stale -> skipped by the priority walk, glm chosen', () => {
-  const res = selectEngine({
-    pace: priorityPace([paceRow('agy', 4, 80, { stale: true }), paceRow('glm', 38, 40)]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'implementer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(res.engine, 'glm');
-  assert.equal(res.selected_by, 'priority');
+test('quota tie-breaks: score, slack, then configured priority; role model and family exclusions stay intact', () => {
+  const pace = priorityPace([paceRow('agy', 40, 50), paceRow('codex A', 40, 60)]);
+  const run = (role = 'implementer') => selectEngine({ pace, role, checkEndpoint: allEndpointsReady });
+  assert.equal(run().engine, 'codex'); // equal score, codex has larger slack
+  pace.rows[0].expected_pct = 60;
+  assert.equal(run().engine, 'agy'); // exact tie uses priority
+  assert.equal(run().model, 'gemini-4-hydrogen-high');
+  assert.deepEqual(run().reviewer_exclude, ['agy']);
+  assert.equal(run('reviewer').model, 'gemini-4-carbon-high');
+  assert.equal(run('author').model, 'gemini-4-carbon-high');
+  pace.rows[1].used_pct = 13;
+  assert.equal(run('reviewer').engine, 'codex'); // priority never beats quota
+  pace.rows[1].stale = true;
+  assert.equal(run().engine, 'agy'); // incomplete stale row stays unknown
 });
 
 // ---------------------------------------------------------------------------
@@ -1299,7 +1216,7 @@ test('(seat-fallback e) codex never appears as a retreat target in reviewer or i
 // Low-quota warning demotion (PM 01M7AVE2 item 3)
 // ---------------------------------------------------------------------------
 
-test('(low 3a) low agyclaude loses to codex in slack fallback, but wins with demoted_last_resort when codex/grok absent', () => {
+test('(low 3a) quota score ranks codex then agyclaude; low_keys is diagnostic', () => {
   const withCodex = priorityPace([
     paceRow('agy', 45, 40),
     {
@@ -1307,12 +1224,12 @@ test('(low 3a) low agyclaude loses to codex in slack fallback, but wins with dem
       id: 'agyclaude-2',
       class: 'other',
       status: 'WARN_agyclaude_low',
-      stale: false,
+      stale: false, hours_to_reset: 24,
       used_pct: 36,
       expected_pct: 40,
       left_pts: 4,
     },
-    { pool: 'codex A', class: 'scarce', status: 'ok', stale: false, used_pct: 20, expected_pct: 40 },
+    { pool: 'codex A', class: 'scarce', status: 'ok', stale: false, hours_to_reset: 24, used_pct: 20, expected_pct: 40 },
   ]);
 
   const resWithCodex = selectEngine({
@@ -1323,7 +1240,7 @@ test('(low 3a) low agyclaude loses to codex in slack fallback, but wins with dem
     checkEndpoint: allEndpointsReady,
   });
   assert.equal(resWithCodex.engine, 'codex');
-  assert.equal(resWithCodex.selected_by, 'slack');
+  assert.equal(resWithCodex.selected_by, 'quota_score');
   assert.equal(resWithCodex.over_pace, false);
   assert.deepEqual(resWithCodex.low_keys, ['agyclaude']);
   assert.equal(resWithCodex.demoted_last_resort, undefined);
@@ -1336,7 +1253,7 @@ test('(low 3a) low agyclaude loses to codex in slack fallback, but wins with dem
       id: 'agyclaude-2',
       class: 'other',
       status: 'WARN_agyclaude_low',
-      stale: false,
+      stale: false, hours_to_reset: 24,
       used_pct: 36,
       expected_pct: 40,
       left_pts: 4,
@@ -1351,10 +1268,10 @@ test('(low 3a) low agyclaude loses to codex in slack fallback, but wins with dem
     checkEndpoint: allEndpointsReady,
   });
   assert.equal(resLastResort.engine, 'agyclaude');
-  assert.equal(resLastResort.demoted_last_resort, true);
+  assert.equal(resLastResort.demoted_last_resort, undefined);
   assert.deepEqual(resLastResort.low_keys, ['agyclaude']);
 
-  // CLI path using a temp fixture pace file also respects low demotion and emits low_keys / demoted_last_resort.
+  // The CLI uses quota score and preserves low_keys diagnostics.
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-low-3a-'));
   try {
     const f1 = path.join(tmpDir, 'pace-codex.json');
@@ -1366,7 +1283,7 @@ test('(low 3a) low agyclaude loses to codex in slack fallback, but wins with dem
     assert.equal(r1.status, 0, r1.stderr);
     const out1 = JSON.parse(r1.stdout);
     assert.equal(out1.engine, 'codex');
-    assert.equal(out1.selected_by, 'slack');
+    assert.equal(out1.selected_by, 'quota_score');
     assert.deepEqual(out1.low_keys, ['agyclaude']);
     assert.equal(out1.demoted_last_resort, undefined);
 
@@ -1374,60 +1291,20 @@ test('(low 3a) low agyclaude loses to codex in slack fallback, but wins with dem
     assert.equal(r2.status, 0, r2.stderr);
     const out2 = JSON.parse(r2.stdout);
     assert.equal(out2.engine, 'agyclaude');
-    assert.equal(out2.demoted_last_resort, true);
+    assert.equal(out2.demoted_last_resort, undefined);
     assert.deepEqual(out2.low_keys, ['agyclaude']);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
-test('(low 3b) low agy is skipped in priority walk when glm is fresh with slack >= 0', () => {
-  const res = selectEngine({
-    pace: priorityPace([
-      paceRow('agy', 10, 40, { status: 'WARN_agy_low', left_pts: 2 }),
-      paceRow('glm', 38, 40),
-    ]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'implementer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(res.engine, 'glm');
-  assert.equal(res.selected_by, 'priority');
+test('quota score supersedes legacy WARN low demotion; low_keys remains diagnostic', () => {
+  const res = selectEngine({ pace: priorityPace([
+    paceRow('agy', 10, 40, { status: 'WARN_agy_low' }), paceRow('glm', 38, 40),
+  ]), role: 'implementer', checkEndpoint: allEndpointsReady });
+  assert.equal(res.engine, 'agy');
+  assert.equal(res.selected_by, 'quota_score');
   assert.deepEqual(res.low_keys, ['agy']);
-  assert.equal(res.demoted_last_resort, undefined);
-
-  // When both priority keys are low and no non-low key qualifies, relative priority order holds (agy before agyclaude).
-  const bothLow = selectEngine({
-    pace: priorityPace([
-      paceRow('agy', 38, 40, { status: 'WARN_agy_low', left_pts: 2 }),
-      paceRow('agyclaude', 20, 40, { status: 'WARN_agyclaude_low', left_pts: 3 }),
-    ]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'implementer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(bothLow.engine, 'agy');
-  assert.equal(bothLow.selected_by, 'priority');
-  assert.equal(bothLow.demoted_last_resort, true);
-  assert.deepEqual(bothLow.low_keys, ['agy', 'agyclaude']);
-
-  // Reviewer (priority list): low agyclaude (+30) loses to non-low grok (+5).
-  const reviewerRes = selectEngine({
-    pace: priorityPace([
-      paceRow('agyclaude', 10, 40, { status: 'WARN_agyclaude_low', left_pts: 2 }),
-      paceRow('grok-cli', 35, 40),
-    ]),
-    pools: loadPools(),
-    roles: loadRoles(),
-    role: 'reviewer',
-    checkEndpoint: allEndpointsReady,
-  });
-  assert.equal(reviewerRes.engine, 'grok');
-  assert.equal(reviewerRes.selected_by, 'priority');
-  assert.deepEqual(reviewerRes.low_keys, ['agyclaude']);
-  assert.equal(reviewerRes.demoted_last_resort, undefined);
 });
 
 test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs and records fallback.demoted only when order changed', () => {
@@ -1441,7 +1318,7 @@ test('(seat-fallback f / 3c) pace demotion moves low rungs behind non-low rungs 
         id: 'agyclaude-2',
         class: 'other',
         status: 'WARN_agyclaude_low',
-        stale: false,
+        stale: false, hours_to_reset: 24,
         used_pct: 90,
         expected_pct: 40,
         left_pts: 3,
@@ -1580,7 +1457,7 @@ test('pace-roles _disabled: a disabled key with a fresh pace row is never return
 const dsPace = (rows) => ({
   schema: 'capacity.pace/1',
   generated_at: '2026-11-15T01:00:00Z',
-  rows: rows || [{ pool: 'agy', class: 'other', stale: false, used_pct: 10, expected_pct: 20 }],
+  rows: rows || [{ pool: 'agy', class: 'other', stale: false, hours_to_reset: 24, used_pct: 10, expected_pct: 20 }],
 });
 const DS_IN_WINDOW = new Date('2026-11-15T02:00:00Z'); // 10:00 Taipei
 const DS_OUT_WINDOW = new Date('2026-11-15T05:00:00Z'); // 13:00 Taipei
@@ -1589,7 +1466,7 @@ const DS_OUT_WINDOW = new Date('2026-11-15T05:00:00Z'); // 13:00 Taipei
 const dsSeamDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-seam-default-'));
 const dsSeamFile = path.join(dsSeamDir, 'days.txt');
 fs.writeFileSync(dsSeamFile, '# listed\n\n2026-11-15\n');
-const dsSeamEnv = { HOME: dsSeamDir, AUTOPILOT_DS_SEAM_DAYS_FILE: dsSeamFile };
+const dsSeamEnv = { ...testTask, HOME: dsSeamDir, AUTOPILOT_DS_SEAM_DAYS_FILE: dsSeamFile };
 const dsSelect = (extra) => selectEngine({
   pace: dsPace(extra && extra.rows),
   role: 'reviewer',
@@ -1597,6 +1474,7 @@ const dsSelect = (extra) => selectEngine({
   checkEndpoint: allEndpointsReady,
   env: dsSeamEnv,
   ...extra,
+  env: { ...testTask, ...(extra?.env || dsSeamEnv) },
   // only the deepseek seat is under test: take the other pools out of the walk unless the case wants them
 });
 const dsRolesDated = (fileOrNull) => {
@@ -1663,7 +1541,7 @@ test('(deepseek 6) never the sole reviewer: with no non-Chinese key to pair, it 
     scope: 'mechanical',
     now: DS_IN_WINDOW,
     exclude: ['agy', 'codex', 'grok', 'agyclaude'],
-    rows: [{ pool: 'glm', class: 'other', stale: false, used_pct: 10, expected_pct: 20 }],
+    rows: [{ pool: 'glm', class: 'other', stale: false, hours_to_reset: 24, used_pct: 10, expected_pct: 20 }],
   });
   assert.deepEqual(dsCandidate(res), { engine: 'deepseek', reason: 'no_non_cn_pair' });
   assert.notEqual(res.engine, 'deepseek');
@@ -1671,7 +1549,7 @@ test('(deepseek 6) never the sole reviewer: with no non-Chinese key to pair, it 
   const roles = loadRoles();
   const only = { ...roles, priority: { ...roles.priority, reviewer: ['deepseek'] } };
   const paired = selectEngine({
-    pace: dsPace(), pools: loadPools(), roles: only, role: 'reviewer', scope: 'mechanical', now: DS_IN_WINDOW,
+    pace: dsPace([...dsPace().rows, { pool: 'deepseek', class: 'other', stale: false, used_pct: 0, expected_pct: 0, hours_to_reset: 1 }]), pools: loadPools(), roles: only, role: 'reviewer', scope: 'mechanical', now: DS_IN_WINDOW,
     checkEndpoint: allEndpointsReady, exclude: ['glm', 'codex', 'grok', 'agyclaude'], env: dsSeamEnv,
   });
   assert.equal(paired.engine, 'deepseek');
@@ -1881,4 +1759,156 @@ test('(deepseek 14) outside the window stays outside_window even when the seam f
     exclude: DS_OTHERS,
   });
   assert.deepEqual(dsCandidate(unlisted), { engine: 'deepseek', reason: 'outside_window' });
+});
+
+// PM 01M7K384: quota score replaces the habitual priority walk.
+test('quota ranking: reviewer picks codex at 13 over agy at 43 and grok at 93', () => {
+  const result = selectEngine({ pace: readFixture('quota-default.json'), role: 'reviewer', checkEndpoint: allEndpointsReady });
+  assert.equal(result.engine, 'codex');
+});
+test('quota ranking: equal remaining quota prefers the sooner reset', () => {
+  const pace = readFixture('quota-default.json');
+  pace.rows = pace.rows.filter(r => r.pool !== 'grok-cli');
+  pace.rows.forEach(r => { r.used_pct = 40; });
+  const result = selectEngine({ pace, role: 'reviewer', checkEndpoint: allEndpointsReady });
+  assert.equal(result.engine, 'codex');
+});
+
+test('quota ceiling: 85 inclusive, configurable, and reported before ranking', () => {
+  const pace = readFixture('quota-default.json');
+  const run = (roles = loadRoles()) => selectEngine({ pace, roles, role: 'reviewer', checkEndpoint: allEndpointsReady });
+  assert.equal(run().candidates.find(c => c.engine === 'grok').reason, 'over_ceiling');
+  pace.rows = [pace.rows[0]];
+  pace.rows[0].used_pct = 85;
+  assert.equal(run().engine, null);
+  pace.rows[0].expected_pct = null;
+  assert.equal(run().candidates.find(c => c.engine === 'grok').reason, 'over_ceiling');
+  pace.rows[0].expected_pct = 60;
+  assert.equal(run({ ...loadRoles(), PACE_CEILING_PCT: 90 }).engine, 'grok');
+});
+
+test('quota stale: recent codex loses to every fresh row but beats over-ceiling grok', () => {
+  const pace = readFixture('quota-default.json');
+  const now = new Date('2026-11-17T00:00:00Z');
+  const codex = pace.rows.find(r => r.pool === 'codex A');
+  codex.stale = true;
+  pace.rows[0].used_pct = 70;
+  pace.rows[0].hours_to_reset = 100;
+  const run = () => selectEngine({ pace, now, role: 'reviewer', checkEndpoint: allEndpointsReady });
+  assert.equal(run().engine, 'agy');
+  pace.rows = pace.rows.filter(r => r.pool !== 'agy');
+  pace.rows[0].used_pct = 93;
+  assert.equal(run().engine, 'codex');
+  assert.equal(run().status, 'stale_recent');
+  for (const patch of [{ seen_at: '2026-11-15T23:59:59Z' }, { seen_at: null }, { reset_at: '2026-11-16T00:00:00Z' }, { used_pct: null }, { seen_at: '2026-11-17T00:00:01Z' }]) {
+    const saved = { ...codex };
+    Object.assign(codex, patch);
+    assert.equal(run().engine, null, JSON.stringify(patch));
+    Object.assign(codex, saved);
+  }
+  codex.expected_pct = null; // score needs usage and reset; slack is only a tie-breaker
+  assert.equal(run().engine, 'codex');
+  codex.seen_at = '2026-11-16T00:00:00Z'; // inclusive 24-hour boundary
+  assert.equal(run().engine, 'codex');
+});
+
+test('quota gates: CN review gate, qualification and disabled keys precede ranking', () => {
+  const pace = readFixture('quota-default.json');
+  pace.rows.push({ ...pace.rows[0], pool: 'glm', used_pct: 0, hours_to_reset: 1 });
+  const run = (extra = {}) => selectEngine({ pace, role: 'reviewer', env: { AUTOPILOT_TASK_SIZE: 'M', AUTOPILOT_TASK_SCOPE: 'scripts/pace-select.js' },
+    checkEndpoint: () => { throw Error('barred endpoint must not be probed'); }, ...extra });
+  assert.equal(run().engine, 'codex');
+  assert.equal(run().candidates.find(c => c.engine === 'glm').reason, 'cn_model_dispatch_barred');
+  assert.equal(run({ roles: { ...loadRoles(), _disabled: ['codex'] } }).engine, 'agy');
+  const qualified = { schema: QUALIFIED_SCHEMA, rows: [
+    { runner: 'codex', engine: 'gpt-6.1-sol', role: 'reviewer', result: 'fail' },
+    { runner: 'agy', engine: 'gemini-4-carbon-high', role: 'reviewer', result: 'pass' },
+  ] };
+  assert.equal(run({ qualified }).engine, 'agy');
+});
+
+test('quota caller pin: broken qualification data cannot veto a named runner', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-named-'));
+  try {
+    const qualified = path.join(dir, 'qualified.json');
+    fs.writeFileSync(qualified, '{broken');
+    const r = cli(['--role', 'reviewer', '--dispatch', '--pace', fixturePath('quota-default.json'),
+      '--qualified', qualified, '--named-runner', 'grok', '--named-model', 'grok-4.7']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '');
+    assert.match(r.stderr, /named by caller, dispatching anyway/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('quota review: every comma-separated implementer family is excluded before ranking', () => {
+  const pace = readFixture('quota-default.json');
+  pace.rows[0].used_pct = 70;
+  const result = selectEngine({ pace, role: 'reviewer', excludeFamily: 'openai, google', checkEndpoint: allEndpointsReady });
+  assert.equal(result.engine, 'grok');
+  for (const engine of ['codex', 'agy']) assert.equal(result.candidates.find(c => c.engine === engine).reason, 'same_family');
+});
+
+test('cc-shim named pool matching: --named-endpoint isolates pools and runner-only fallback requires single key', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-ccshim-'));
+  try {
+    const pace = readFixture('quota-default.json');
+    pace.rows.push(
+      { pool: 'glm', class: 'other', used_pct: 90, expected_pct: 60, stale: false, hours_to_reset: 12, reset_at: '2026-11-17T12:00:00.000Z', seen_at: '2026-11-16T23:00:00Z', status: 'ok' },
+      { pool: 'minimax', class: 'other', used_pct: 0, expected_pct: 60, stale: false, hours_to_reset: 12, reset_at: '2026-11-17T12:00:00.000Z', seen_at: '2026-11-16T23:00:00Z', status: 'ok' },
+    );
+    const pacePath = path.join(dir, 'pace.json');
+    fs.writeFileSync(pacePath, JSON.stringify(pace));
+
+    // Direction 1: cc-shim + glm endpoint while glm >=85% and minimax 0% must still warn about glm.
+    for (const extra of [
+      ['--named-runner', 'cc-shim', '--named-endpoint', 'glm'],
+      ['--named-endpoint', 'glm'],
+      ['--named-runner', 'cc-shim', '--named-model', 'glm-5.3', '--named-endpoint', 'glm'],
+    ]) {
+      const r = cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, ...extra]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '');
+      assert.match(r.stderr, /pace: glm is at 90% of its 7-day window.*named by caller, dispatching anyway — codex has 87% left/);
+    }
+
+    // Direction 2: naming minimax while glm >=85% must not warn about glm.
+    for (const extra of [
+      ['--named-runner', 'cc-shim', '--named-model', 'MiniMax-M3.1-Flash'],
+      ['--named-runner', 'cc-shim', '--named-endpoint', 'minimax'],
+      ['--named-runner', 'cc-shim', '--named-model', 'MiniMax-M3.1-Flash', '--named-endpoint', 'minimax'],
+      ['--named-runner', 'cc-shim', '--named-endpoint', 'qwen_local'],
+      ['--named-runner', 'cc-shim'],
+    ]) {
+      const r = cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, ...extra]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '');
+      assert.equal(r.stderr, '', `expected no warning for ${extra.join(' ')}`);
+    }
+
+    // Single-key runner fallback still works for grok and codex, not multi-key agy.
+    const grokDiffModel = cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, '--named-runner', 'grok', '--named-model', 'grok-4.6']);
+    assert.equal(grokDiffModel.status, 0, grokDiffModel.stderr);
+    assert.match(grokDiffModel.stderr, /pace: grok is at 93% of its 7-day window/);
+
+    const multiPace = structuredClone(pace);
+    multiPace.rows.find(r => r.pool === 'codex A').used_pct = 90;
+    multiPace.rows.find(r => r.pool === 'agy').used_pct = 90;
+    multiPace.rows.push({ pool: 'agyclaude', class: 'other', used_pct: 0, expected_pct: 60, stale: false, hours_to_reset: 12, reset_at: '2026-11-17T12:00:00.000Z', seen_at: '2026-11-16T23:00:00Z', status: 'ok' });
+    const multiPacePath = path.join(dir, 'pace-multi.json');
+    fs.writeFileSync(multiPacePath, JSON.stringify(multiPace));
+
+    const codexOnly = cli(['--role', 'implementer', '--dispatch', '--pace', multiPacePath, '--named-runner', 'codex']);
+    assert.equal(codexOnly.status, 0, codexOnly.stderr);
+    assert.match(codexOnly.stderr, /pace: codex is at 90% of its 7-day window/);
+
+    const agyOnly = cli(['--role', 'implementer', '--dispatch', '--pace', multiPacePath, '--named-runner', 'agy']);
+    assert.equal(agyOnly.status, 0, agyOnly.stderr);
+    assert.equal(agyOnly.stderr, '');
+
+    // parseArgs rejects empty/missing --named-endpoint.
+    assert.equal(cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, '--named-endpoint', '']).status, 2);
+    assert.equal(cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, '--named-endpoint']).status, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -572,6 +572,70 @@ test('cross-runner model mismatch and unknown models on known runners are barred
   }
 });
 
+test('non-ID string arrays in fleet host metadata do not become identifiers', () => {
+  const { extractDirectoryIdentifiers } = require('./dispatch-panel');
+  const directory = {
+    hosts: [{
+      info: {
+        declared: { hostname: 'box-01', runners: ['claude', 'codex'], roles: ['worker'] },
+        observed: { runners: ['claude', 'codex'], roles: ['worker'], details: [{ hostname: 'box-02' }] },
+      },
+    }],
+  };
+  assert.deepEqual(extractDirectoryIdentifiers(directory).sort(), ['box-01', 'box-02']);
+
+  for (const allowed of [
+    ['box-01'],
+    { hostname: ['box-01'] },
+    { hosts: ['box-01'] },
+  ]) {
+    assert.deepEqual(extractDirectoryIdentifiers(allowed), ['box-01']);
+  }
+  for (const nested of [
+    { details: ['worker', { hostname: 'box-01' }] },
+    [['worker'], { hostname: 'box-01' }],
+    { hostname: [['worker'], { hostname: 'box-01' }] },
+    { hosts: [['worker'], { hostname: 'box-01' }] },
+  ]) {
+    assert.deepEqual(extractDirectoryIdentifiers(nested), ['box-01']);
+  }
+
+  const sb = makeSandbox();
+  try {
+    fs.writeFileSync(sb.fleetBin, `#!/usr/bin/env node
+if (process.argv[2] === 'directory') {
+  process.stdout.write(${JSON.stringify(JSON.stringify(directory))} + '\\n');
+  process.exit(0);
+}
+process.exit(1);
+`, { mode: 0o755 });
+    const cleanPrompt = writePrompt(sb, 'clean.txt', 'Compare claude and codex runners for the worker role.\n');
+    const clean = runPanel(sb, [
+      '--prompt-file', cleanPrompt,
+      '--seat', 'grok:grok-4.7',
+      '--out-dir', path.join(sb.dir, 'out-clean'),
+      '--author-cmd', sb.authorStub,
+    ]);
+    assert.equal(clean.status, 0, clean.stderr);
+    assert.equal(readCalls(sb.logDir).length, 1);
+
+    const leakedPrompt = writePrompt(sb, 'leaked.txt', 'Check box-01 status.\n');
+    const outLeak = path.join(sb.dir, 'out-leak');
+    const leaked = runPanel(sb, [
+      '--prompt-file', leakedPrompt,
+      '--seat', 'grok:grok-4.7',
+      '--out-dir', outLeak,
+      '--author-cmd', sb.authorStub,
+    ]);
+    assert.equal(leaked.status, 4, leaked.stderr);
+    assert.match(leaked.stderr, /fleet_directory_identifier/);
+    assert.equal(fs.existsSync(path.join(outLeak, 'prompt.txt')), false);
+    assert.equal(readCalls(sb.logDir).length, 1, 'hostname refusal must not spawn a seat');
+  } finally {
+    sb.cleanup();
+  }
+});
+
 test('real fleet directory --json shape extracts identifiers recursively, splits @, excludes structural keys, handles empty & --json fallback', () => {
   const { extractDirectoryIdentifiers } = require('./dispatch-panel');
 

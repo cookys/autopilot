@@ -331,13 +331,12 @@ function extractDirectoryIdentifiers(doc) {
       }
     }
   };
-  const visit = (node) => {
-    if (typeof node === 'string') {
-      add(node);
-      return;
-    }
+  const visit = (node, allowStringItems = false) => {
     if (Array.isArray(node)) {
-      for (const item of node) visit(item);
+      for (const item of node) {
+        if (allowStringItems && typeof item === 'string') add(item);
+        else visit(item);
+      }
       return;
     }
     if (!node || typeof node !== 'object') return;
@@ -346,7 +345,7 @@ function extractDirectoryIdentifiers(doc) {
       if (DIRECTORY_SKIP_KEYS.has(lower)) continue;
       if (DIRECTORY_ID_KEYS.has(lower)) {
         if (typeof v === 'string') add(v);
-        else if (v && typeof v === 'object') visit(v);
+        else if (v && typeof v === 'object') visit(v, true);
         continue;
       }
       if (DIRECTORY_CONTAINER_KEYS.has(lower) && v && typeof v === 'object' && !Array.isArray(v)) {
@@ -358,10 +357,10 @@ function extractDirectoryIdentifiers(doc) {
         }
         continue;
       }
-      if (v && typeof v === 'object') visit(v);
+      if (v && typeof v === 'object') visit(v, DIRECTORY_CONTAINER_KEYS.has(lower));
     }
   };
-  visit(doc);
+  visit(doc, true);
   return [...names];
 }
 

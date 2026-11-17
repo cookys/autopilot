@@ -430,6 +430,64 @@ test('lane: fetch outage preserves prior resolved M, outage with nothing resolve
   }
 });
 
+test('lane: init update refuses Size S after attaching a resolved Size L work order', () => {
+  const sb = makeSandbox();
+  try {
+    const sid = sb.newSession();
+    sb.setTaskFixture('T1', 'Size: L\nPlan: plan-first');
+    const attached = sb.sm(sid, ['set', '--fleet-task', 'T1', '--repo-root', sb.repo]);
+    assert.equal(attached.status, 0, attached.stderr);
+    const before = sb.assertSchemaValid(sid);
+    assert.equal(before.fleet_task_id, 'T1');
+    assert.equal(before.wo_state, 'resolved');
+    assert.equal(before.wo_size, 'L');
+    assert.equal(before.size, 'L');
+
+    const lowered = sb.sm(sid, ['set', '--size', 'S', '--repo-root', sb.repo]);
+    assert.equal(lowered.status, 2, 'same-task init must refuse a size below the resolved work order');
+    assert.deepEqual(sb.readMarker(sid), before, 'refusing a size decrease must leave the marker untouched');
+    const bypass = sb.sa(sid, ['--to', 'implement', '--repo-root', sb.repo]);
+    assert.notEqual(bypass.status, 0, 'the Size L graph must still block a direct jump to implement');
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test('lane: same-task init refresh preserves implement stage and plan-first receipt', () => {
+  const sb = makeSandbox();
+  try {
+    const sid = sb.newSession();
+    sb.setTaskFixture('T_REFRESH', 'Size: M\nPlan: plan-first');
+    const attached = sb.sm(sid, ['set', '--fleet-task', 'T_REFRESH', '--repo-root', sb.repo]);
+    assert.equal(attached.status, 0, attached.stderr);
+    const planned = sb.sa(sid, ['--to', 'plan', '--repo-root', sb.repo]);
+    assert.equal(planned.status, 0, planned.stderr);
+
+    const planRel = 'docs/plans/refresh.md';
+    fs.mkdirSync(path.join(sb.repo, 'docs', 'plans'), { recursive: true });
+    fs.writeFileSync(path.join(sb.repo, planRel), '# Refresh Plan\n');
+    git(sb.repo, ['add', planRel]);
+    git(sb.repo, ['commit', '-q', '-m', 'add refresh plan']);
+    const implemented = sb.sa(sid, ['--to', 'implement', '--plan', planRel, '--repo-root', sb.repo]);
+    assert.equal(implemented.status, 0, implemented.stderr);
+    const before = sb.assertSchemaValid(sid);
+    assert.equal(before.stage, 'implement');
+    assert.equal(before.plan_receipt.path, planRel);
+
+    const refreshed = sb.sm(sid, ['set', '--refresh', '--repo-root', sb.repo]);
+    assert.equal(refreshed.status, 0, refreshed.stderr);
+    const after = sb.assertSchemaValid(sid);
+    assert.equal(after.fleet_task_id, 'T_REFRESH');
+    assert.equal(after.size, 'M');
+    assert.equal(after.wo_state, 'resolved');
+    assert.equal(after.stage, before.stage);
+    assert.equal(after.stage_set_at, before.stage_set_at);
+    assert.deepEqual(after.plan_receipt, before.plan_receipt);
+  } finally {
+    sb.cleanup();
+  }
+});
+
 test('lane: size floor refuses downward --size, raises size + resets stage to plan, and new task id replaces wo_*', () => {
   const sb = makeSandbox();
   try {

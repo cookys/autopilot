@@ -272,6 +272,16 @@
       "file": "scripts/lib/bash-launch-rules.js",
       "match": "os.tmpdir()",
       "reason": "Path policy: resolves the Claude Code session scratchpad root (CLAUDE_CODE_TMPDIR || TMPDIR || os.tmpdir()) to guard recursive rm; allocates nothing."
+    },
+    {
+      "file": "scripts/lib/plan-review-normalize.js",
+      "match": "os.tmpdir()",
+      "reason": "Redaction policy: reads OS temp root prefix to replace absolute temp paths with <tmp> in persisted plan-review artifacts; allocates nothing."
+    },
+    {
+      "file": "scripts/lib/plan-review-normalize.js",
+      "match": "process.env.TMPDIR",
+      "reason": "Redaction policy: reads TMPDIR prefix to replace absolute temp paths with <tmp> in persisted plan-review artifacts; allocates nothing."
     }
   ]
 }

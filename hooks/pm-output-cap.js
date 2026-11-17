@@ -37,8 +37,18 @@ function absPath(v) {
   return typeof v === 'string' && path.isAbsolute(v) ? v : '';
 }
 
+function envFromProcess() {
+  return {
+    AUTOPILOT_STATE_DIR: process.env.AUTOPILOT_STATE_DIR,
+    XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+    HOME: process.env.HOME,
+    XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+    AUTOPILOT_CONFIG_FILE: process.env.AUTOPILOT_CONFIG_FILE,
+  };
+}
+
 function stateDir(env) {
-  const e = env || process.env;
+  const e = env || envFromProcess();
   const over = absPath(e.AUTOPILOT_STATE_DIR);
   if (over) return over;
   const xdg = absPath(e.XDG_STATE_HOME);
@@ -48,7 +58,7 @@ function stateDir(env) {
 }
 
 function resolveOutputDir(env) {
-  const e = env || process.env;
+  const e = env || envFromProcess();
   const xdgRuntime = absPath(e.XDG_RUNTIME_DIR);
   if (xdgRuntime) {
     return path.join(xdgRuntime, 'autopilot', 'pm-output');
@@ -265,7 +275,7 @@ function handlePreToolUse(input, env) {
   };
 }
 
-function handle(input, env = process.env) {
+function handle(input, env = envFromProcess()) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
   const cwd = typeof input.cwd === 'string' && input.cwd !== '' ? input.cwd : process.cwd();
   if (!isPmConsole(cwd)) return null;
@@ -288,7 +298,7 @@ function main() {
     if (!isEnabled('pm-output-cap')) return;
     const raw = readStdin();
     const input = JSON.parse(raw);
-    const out = handle(input, process.env);
+    const out = handle(input, envFromProcess());
     if (out) process.stdout.write(`${JSON.stringify(out)}\n`);
   } catch (err) {
     process.stderr.write(`pm-output-cap: fail-open: ${err && err.message}\n`);

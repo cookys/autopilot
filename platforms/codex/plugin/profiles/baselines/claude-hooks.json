@@ -191,17 +191,6 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/secret-output-redact.js",
-            "timeout": 5,
-            "onFailure": "continue"
-          }
-        ]
-      },
-      {
         "matcher": ".*",
         "hooks": [
           {
@@ -223,6 +212,17 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/secret-output-redact.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       },

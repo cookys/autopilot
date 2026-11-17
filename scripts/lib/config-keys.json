@@ -587,7 +587,8 @@
       "audience": "user",
       "group": "hooks",
       "readers": [
-        "hooks/depth0-delegate-gate.js"
+        "hooks/depth0-delegate-gate.js",
+        "hooks/secret-output-redact.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "default": "block",
@@ -4462,7 +4463,8 @@
       "audience": "user",
       "group": "hooks",
       "readers": [
-        "hooks/depth0-delegate-gate.js"
+        "hooks/depth0-delegate-gate.js",
+        "hooks/secret-output-redact.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "default": null,

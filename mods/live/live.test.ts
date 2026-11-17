@@ -6480,7 +6480,10 @@ for (const surface of SURFACES) {
     const content = kids.find(k => k.props?.key === 'content') as Node
     const rows = ((content.children || []) as Node[]).find(k => k.props?.key === 'rows') as Node
     expect(textOf(rows), 'the send row is not among the scrolling rows').not.toContain('送出')
-    expect(((tree.children || []) as Node[]).length, 'no spare row below the final navigation').toBe(1)
+    const frame = (tree.children || []) as Node[]
+    expect(frame.length, 'the spare row lets the host raise ui.scroll below the visible navigation').toBe(2)
+    expect(frame[1].type).toBe('Text')
+    expect(textOf(frame[1])).toBe(' ')
   })
   test('SCROLL decide: more cards than room draws the scrollbar with the thumb at the bottom; few cards draw none (' + surface + ')', async ($, on) => {
     decideWorld(on, MANY)

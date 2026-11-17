@@ -58,7 +58,8 @@ const SNAP = parseConsole(JSON.stringify(full))
 
 function draw(cols: number, rows: number, win = newScroll(), tab: 'command' | 'team' = 'command') {
   const con = { nav: { snap: SNAP, tab }, onTab: () => {}, onNext: () => {}, live: LIVE, now: NOW, scroll: { offset: 0, bodyRows: rows }, win, decide: null }
-  return screen(Pane(EL, null, 'now', () => {}, t, cols, () => {}, new Set(), () => {}, new Set(), { offset: 0, bodyRows: rows }, null, win, null, con as never))
+  // The host viewport stays at 0; the spare scroll-trigger row is below it.
+  return screen(Pane(EL, null, 'now', () => {}, t, cols, () => {}, new Set(), () => {}, new Set(), { offset: 0, bodyRows: rows }, null, win, null, con as never)).slice(0, rows)
 }
 const rowOf = (lines: string[], needle: string): number => lines.findIndex(l => l.includes(needle))
 

@@ -47,7 +47,7 @@ function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
       return scrollFrame(el, {
         rows: scroll.bodyRows, cols, head: [], headRows: 0, total: view.body.length, window: (off, room) => view.body.slice(off, off + room).map((l, i) => line(l, off + i)),
         bar: [...view.bar.map((l, i) => line(l, i, 'bar')), strip], barRows: view.bar.length + stripRows, model: win,
-        bottom: { above: n => t('shell.more_up', { n }), newer: '', controlsLast: true },
+        bottom: { above: n => t('shell.more_up', { n }), newer: '' },
       })
     }
     return (
@@ -62,14 +62,17 @@ function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   const content = [
     ...(tab === 'command' && con.nav.snap === null ? [<Text {...dimProps()} wrap="truncate">{t('console.no_source')}</Text>] : []),
     ...(page === null ? [] : page.lines.map((l, i) => <Text key={'p' + i} {...(page.kind === 'summary' ? {} : dimProps())} wrap="truncate">{l}</Text>)),
-    ...(tab !== 'self' ? [] : own === null ? [<Text {...dimProps()}>{t('pane.waiting')}</Text>] : own.parts.flatMap((p, n) => [...(p.title === null ? [] : [<Text {...dimProps()} wrap="truncate">{p.title}</Text>]), ...p.lines.map((l, i) => own.draw(l, i, 's' + n))])),
+    ...(tab !== 'self' ? [] : own === null ? [<Text {...dimProps()}>{t('pane.waiting')}</Text>] : own.parts.flatMap((p, n) => {
+      while (p.lines[p.lines.length - 1]?.kind === 'blank') p.lines.pop()
+      return [...(p.title === null ? [] : [<Text {...dimProps()} wrap="truncate">{p.title}</Text>]), ...p.lines.map((l, i) => own.draw(l, i, 's' + n))]
+    })),
   ]
   if (con.scroll !== null && con.scroll !== undefined && win !== null) {
     keyed(win, 'console:' + tab)
     return scrollFrame(el, {
       rows: con.scroll.bodyRows, cols, head: [], headRows: 0, total: content.length, window: (off, room) => content.slice(off, off + room),
       bar: [strip], barRows: stripRows, model: win,
-      bottom: { above: n => t('shell.more_up', { n }), newer: '', controlsLast: true },
+      bottom: { above: n => t('shell.more_up', { n }), newer: '' },
     })
   }
   return <Box flexDirection="column" height={con.scroll?.bodyRows} justifyContent="flex-end">{content}{strip}</Box>
@@ -215,7 +218,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
       rows: scroll.bodyRows, cols, head: [], headRows: 0,
       total: cards.length + (link ? 1 : 0), window: (off, room) => [...cards.map((l, i) => line(l, i < plainHead.length ? i : i - plainHead.length, i < plainHead.length ? 'h' : '')), ...(link ? [<Link href={snap.link as string} label={t('dispatch.link')} />] : [])].slice(off, off + room),
       bar: [...barLines.map((l, i) => line(l, i, 'bar')), strip], barRows: barLines.length + stripH.rows, model: win,
-      bottom: { above: n => t('shell.more_up', { n }), newer: '', controlsLast: true },
+      bottom: { above: n => t('shell.more_up', { n }), newer: '' },
     })
   }
   const head = withOverflowHint(plainHead, ctx, scroll, treeRowCount(stripH.rows, plainHead, body, link ? 1 : 0), stripH.exact).map((l, i) => line(l, i, 'h'))

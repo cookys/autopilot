@@ -79,8 +79,8 @@ const HELD = { id: 'd-fixture', title: 'Anchor fixture', question: 'Choose the n
 const snap = () => ({ state: 'ok', text: 'fixture', header: 'fixture', band: { kind: 'decide', verdict: '要你決定', reason: null, project: 'fixture', elapsed: '1m', phase: '', slots: [] }, pending: [{ ...HELD, background: 'Fixture context', recommendation: 'A', why: 'Fixture reason' }], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: 1794200000000, spend: { session: '$1', host_all: '$2', host_all_n: 2, brain: null, cap: null, mode: 'fixture' } } })
 const acts = { state: { ...M.NO_DECIDE, picks: { 'd-fixture': 0 } }, inputs: false, onPress() {}, onNote() {}, onKeep() {} }
 const consoleSnap = () => parseConsole(JSON.stringify(full))
-function pane(tab, cols, rows, { live = snap(), win = S.newScroll(), con = false } = {}) {
-  const console = con ? { nav: { snap: consoleSnap(), tab }, onTab() {}, onNext() {}, live, decide: acts, scroll: { offset: 0, bodyRows: rows }, win } : null
+function pane(tab, cols, rows, { live = snap(), win = S.newScroll(), con = false, conSnap = consoleSnap() } = {}) {
+  const console = con ? { nav: { snap: conSnap, tab }, onTab() {}, onNext() {}, live, decide: acts, scroll: { offset: 0, bodyRows: rows }, win } : null
   return { tree: Pane(el, live, con ? 'now' : tab, () => {}, t, cols, () => {}, new Set(), () => {}, new Set(), { offset: 0, bodyRows: rows }, acts, win, null, console), win }
 }
 function screen(tree, cols, rows) {
@@ -97,6 +97,17 @@ function footer(tree, out) {
   assert.ok(out[lastInk(out)].includes(label), 'last visible row must be the tab labels: ' + JSON.stringify(out[lastInk(out)]))
   assert.equal(lastInk(out), out.length - 1, 'no blank row below the controls')
 }
+function bottomAligned(tree, out, cols, win) {
+  footer(tree, out)
+  if (win.max === 0) assert.equal(out[0].trim(), '', 'short content must leave top blank rows')
+  const nodes = walk(tree)
+  const fixed = nodes.find(n => n.props?.key === 'fixed')
+  const chrome = fixed === undefined ? [nodes.find(n => n.props?.key === 'tabs')] : fixed.children.slice(fixed.children.findIndex(n => n.props?.key === 'rule'))
+  const chromeRows = chrome.flatMap(n => render(n, cols)).length
+  const above = out[out.length - chromeRows - 1]
+  // A scrollbar thumb must not make an otherwise blank content row pass.
+  assert.ok(cut(above, cols - (win.max > 0 ? 1 : 0)).trim() !== '', 'content directly above bottom rule/chrome must be non-blank')
+}
 
 test('renderer controls: top alignment and a trailing spacer are distinguishable from bottom alignment', () => {
   const text = el.Box({ children: [el.Text({ key: 'next', children: ['fixture'] })] })
@@ -112,11 +123,10 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
   for (const tab of M.PANE_TABS) test(`pane ${tab} ${cols}x${rows}: footer last, short content leaves blanks above`, () => {
     const { tree, win } = pane(tab, cols, rows)
     const out = screen(tree, cols, rows)
-    footer(tree, out)
-    if (win.max === 0) assert.ok(out[0].trim() === '', 'short fixture must leave top blank rows')
+    bottomAligned(tree, out, cols, win)
     const short = pane(tab, cols, rows, { live: null })
     const shortRows = screen(short.tree, cols, rows)
-    footer(short.tree, shortRows)
+    bottomAligned(short.tree, shortRows, cols, short.win)
     assert.equal(shortRows[0].trim(), '', 'short-content case leaves blank rows above on every tab')
     if (tab === 'decide') {
       const opt = out.findIndex(r => r.includes('Last option'))
@@ -126,10 +136,12 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
       assert.ok(out.slice(send + 1).every(r => /現況|[─━]/.test(r)), 'only navigation may follow submit')
     }
   })
-  for (const tab of ['command', 'team', 'quota', 'hosts', 'self']) test(`console ${tab} ${cols}x${rows}: footer last`, () => {
-    const { tree } = pane(tab, cols, rows, { con: true })
+  for (const tab of ['command', 'team', 'quota', 'hosts', 'self']) test(`console ${tab} ${cols}x${rows}: footer last, short content leaves blanks above`, () => {
+    const { tree, win } = pane(tab, cols, rows, { con: true })
     const out = screen(tree, cols, rows)
-    footer(tree, out)
+    bottomAligned(tree, out, cols, win)
+    const short = pane(tab, cols, rows, { con: true, live: null, conSnap: null })
+    bottomAligned(short.tree, screen(short.tree, cols, rows), cols, short.win)
     if (tab === 'command') {
       const option = out.findIndex(r => r.includes('Last option'))
       const submit = out.findIndex(r => r.includes('送出'))
@@ -151,7 +163,9 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
     assert.ok(win.max > 0)
     assert.equal(win.offset, win.max, 'overflow opens at bottom')
     assert.ok(screen(drawn.tree, cols, rows).some(r => r.includes('Older fixture 29')))
-    const ev = { by: -rows, bodyRows: rows, contentRows: rows + 1, offset: 0 }
+    const contentRows = render(drawn.tree, cols).length
+    assert.equal(contentRows, rows + 1, 'real rendered tree needs the spare row to trigger host ui.scroll')
+    const ev = { by: -rows, bodyRows: rows, contentRows, offset: 0 }
     S.scrollHook(win, ev, () => assert.fail('framed keys must stay in the mod'), () => {})
     const off = win.offset
     drawn = pane('decide', cols, rows, { live, win })

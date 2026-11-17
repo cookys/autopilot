@@ -1,6 +1,6 @@
 # Plan — PM seat token split: scripted PM chores (fleet task 01M7KZZ1ZT3V1KTKNR3E4MFK4B)
 
-Status: draft for plan review · logical_plan_id: `pm-token-split-2026-11-17` · Size: L (seven phases)
+Status: draft for plan review · logical_plan_id: `pm-token-split-2026-11-17-b` · Size: L (seven phases)
 
 ## 0. Context / thesis
 
@@ -174,3 +174,4 @@ Acceptance: tests with a stub `claude`: batch over 30k → split into ≥ 2 call
 ## Review log
 
 - R0: author depth-0 (autopilot lane), 2026-11-17. Manifest `docs/plans/2026-11-17-pm-token-split.manifest.json`, rubric `docs/plans/2026-11-17-pm-token-split.rubric.md`; seats astra (chair, openai) + grok (boundary red-team, xai).
+- Generation 1 (logical id `pm-token-split-2026-11-17`, 2026-11-17): no semantic verdict. Required seat grok_redteam failed both attempts with HTTP 402 (Grok Build usage balance exhausted), so the round stopped with `required_seat_transport_exhausted`; no finding was produced or adjudicated. Re-opened as `pm-token-split-2026-11-17-b` with the red-team seat moved to agy gemini-4-carbon-high (google); budget restarts because no semantic generation was consumed.

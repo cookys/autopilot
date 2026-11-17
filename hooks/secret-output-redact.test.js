@@ -107,21 +107,52 @@ const properties = [
 for (const [input, expected] of properties) {
   test(`secret property ${input}`, () => expectRedacted(input, expected));
 }
+const statelessProperties = [
+  ['client-secret-id: "synthetic"', 'client-secret-id: "[REDACTED]"'],
+  ['secret-1: "synthetic"', 'secret-1: "[REDACTED]"'],
+  ['api.key: "synthetic"', 'api.key: "[REDACTED]"'],
+  [String.raw`password: 'secret\'`, "password: '[REDACTED]'"],
+  ["password: 'it''s_secret'", "password: '[REDACTED]'"],
+  ['Can\'t parse {"password": "synthetic"}', 'Can\'t parse {"password": "[REDACTED]"}'],
+  ['INFO: "password": "synthetic"', 'INFO: "password": "[REDACTED]"'],
+  ['config.yaml:api_key: "synthetic"', 'config.yaml:api_key: "[REDACTED]"'],
+  ['config.secret: "name": "ok"', 'config.secret: "name": "ok"'],
+  ['{"api_key":"x","name":"ok"}', '{"api_key":"[REDACTED]","name":"ok"}'],
+  ['{"name":"password","value":"ok"}', '{"name":"password","value":"ok"}'],
+  ['password: string', 'password: string'],
+];
+for (const [input, expected] of statelessProperties) {
+  test(`stateless property ${input}`, () => {
+    if (input === expected) assert.equal(run(response(input, input)), null);
+    else expectRedacted(input, expected);
+  });
+}
 test('negative properties: benign keys, quoted content and line boundaries stay intact', () => {
   const input = String.raw`{"name":"ok","message":"\"password\": \"synthetic\""}` +
     '\n"password":\n"synthetic"\n"password": "unterminated\nnext line\n';
   assert.equal(run(response(input)), null);
 });
 
-for (const fragment of ['a=', '"k":', String.raw`\"`]) {
+for (const fragment of ['a=', '"k":', String.raw`\"`, "'", '"password": "\n', '"password": "']) {
   test(`linear time: 1 MiB of ${fragment} finishes under 1 s`, () => {
     const input = fragment.repeat(Math.ceil(1024 * 1024 / fragment.length)).slice(0, 1024 * 1024);
     const start = performance.now();
-    assert.equal(run(response(input), { timeout: 1000 }), null);
+    const result = run(response(input), { timeout: 1000 });
+    // Repetition on one line closes alternating values; line-separated values
+    // remain unterminated. Both must finish within the same bound.
+    if (fragment === '"password": "') assert.ok(result.hookSpecificOutput.updatedToolOutput.stdout.includes('[REDACTED]'));
+    else assert.equal(result, null);
     const elapsed = performance.now() - start;
     assert.ok(elapsed < 1000, `redaction took ${elapsed.toFixed(1)} ms`);
   });
 }
+test('linear time: 1 MiB unterminated property value finishes under 1 s', () => {
+  const input = '"password": "' + 'x'.repeat(1024 * 1024);
+  const start = performance.now();
+  assert.equal(run(response(input), { timeout: 1000 }), null);
+  const elapsed = performance.now() - start;
+  assert.ok(elapsed < 1000, `redaction took ${elapsed.toFixed(1)} ms`);
+});
 
 test('service token: shared patterns redact every occurrence', () => {
   const token = 'ghp_' + 'A'.repeat(36);

@@ -87,18 +87,18 @@ function redactEnvironment(text) {
 }
 
 function redactProperties(text) {
-  let name = '';
-  let end = 0;
-  // Consume each quoted or bare token once, including incomplete strings. The
-  // disjoint escape/body alternatives cannot cross a line or retry nested keys.
-  const tokens = /"(?:\\[^\r\n]|[^"\\\r\n])*("?)|'(?:\\[^\r\n]|[^'\\\r\n])*('?)|[A-Za-z_][A-Za-z0-9_]*/g;
-  return text.replace(tokens, (token, doubleClose, singleClose, offset) => {
-    const closed = doubleClose === '"' || singleClose === "'";
-    const isValue = /^[ \t]*:[ \t]*$/.test(text.slice(end, offset));
-    const redact = isValue && closed && secretName.test(name);
-    end = offset + token.length;
-    name = isValue ? '' : closed ? token.slice(1, -1) : token;
-    return redact ? token[0] + '[REDACTED]' + token.at(-1) : token;
+  // Disjoint quote bodies: backslash escapes in double quotes, YAML '' in single
+  // quotes. A quoted key after a log/path prefix must not be consumed as a value.
+  const quoted = String.raw`(?:"(?:\\[^\r\n]|[^"\\\r\n])*"|'(?:''|[^'\r\n])*')(?![ \t]*:)`;
+  // The left boundary prevents suffix retries within names and escaped quotes.
+  // Consume benign properties too, so a secret word in their value is not a key.
+  const properties = new RegExp(
+    String.raw`(?<![A-Za-z0-9_."'\\-])(["']?)([A-Za-z0-9_][A-Za-z0-9_.-]*)\1[ \t]*(?::[ \t]*(${quoted})|=[ \t]*(${quoted}|[^\s"',;{}\[\]]+))`, 'g');
+  return text.replace(properties, (match, keyQuote, name, colonValue, equalsValue) => {
+    if (!secretName.test(name)) return match;
+    const value = colonValue ?? equalsValue;
+    const quote = value[0] === '"' || value[0] === "'" ? value[0] : '';
+    return match.slice(0, -value.length) + quote + '[REDACTED]' + quote;
   });
 }
 

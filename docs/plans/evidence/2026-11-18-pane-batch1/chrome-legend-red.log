@@ -1,0 +1,18 @@
+
+mods/live/chrome.test.ts:
+(pass) R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label [13.57ms]
+(pass) R7: pressing 1 on 現況 keeps the pane open on 現況 [0.44ms]
+(pass) R7 mounted: current-page digit Button does not call ui.close or change the 現況 header [292.34ms]
+(pass) R9: collapsed band shows snapshot pending and fault counts, [+], no digit keys, exactly two rows [15.12ms]
+(pass) R12: action role uses the accessible light-theme link token with contrast >= 4.5:1 [0.43ms]
+(pass) R13: dock uses all 40 available rows with strip last; inline stays capped at 24 [0.95ms]
+(pass) R13 mounted: host dock bodyRows reaches the last row at 160x40 and 120x30; inline 80x24 stays capped [202.66ms]
+(fail) R12 legend: action help follows the link role instead of promising purple [0.34ms]
+  AssertionError: expect(received).not.toContain()
+
+  Expected: not containing "purple"
+  Received: "pressable: a button or option you can press (purple); dim means nothing to press yet"
+
+ 7 pass
+ 1 fail
+Ran 8 tests across 1 file. [0.88s]

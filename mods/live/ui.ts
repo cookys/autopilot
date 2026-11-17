@@ -83,9 +83,10 @@ export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '�
 //   attention  (warning)    = the owner must look or act        here      (claude)     = you are here
 //   broken     (error)      = failed, stalled or over the cap   done      (success)    = finished
 //   running    (suggestion) = running now                       idle      (inactive)   = nothing to do
-//   structure  (subtle)     = rules, fold marks, separators     action    (merged)     = you can press this (a pressable `[ ... ]` button or option, never a state)
+//   structure  (subtle)     = rules, fold marks, separators     action    (remember)     = you can press this (a pressable `[ ... ]` button or option, never a state)
 export type PaletteRole = 'attention' | 'here' | 'broken' | 'done' | 'running' | 'idle' | 'structure' | 'action'
-export const PALETTE: Record<PaletteRole, ThemeKey> = { attention: 'warning', here: 'claude', broken: 'error', done: 'success', running: 'suggestion', idle: 'inactive', structure: 'subtle', action: 'merged' }
+// The action role uses the host link token: light RGB(0,0,255) / ANSI 21 (8.59:1 on white), with its native dark-theme counterpart.
+export const PALETTE: Record<PaletteRole, ThemeKey> = { attention: 'warning', here: 'claude', broken: 'error', done: 'success', running: 'suggestion', idle: 'inactive', structure: 'subtle', action: 'remember' }
 // the one bold whitelist: a section title, the verdict line, the active tab name, a tab name that needs the owner, a decision card's question, a picked decision option and the send button. Nothing else is bold.
 export const BOLD_USES = ['header title', 'verdict line', 'active tab name', 'needing tab name', 'question title', 'picked option', 'send button'] as const
 // which whitelist entry a bold segment belongs to, or null (a violation); invariant I4 reads this so the test never keeps its own copy of the list
@@ -1171,6 +1172,8 @@ export type Strip<Id extends string = PaneTab> = {
 }
 // Q1 (owner 2026-10-13, revised 2026-10-16): no background; the active tab name is bold default text (attention bold when it needs the owner) and the `here` colour
 // is only the run of `━` in the baseline; a strip that wraps falls back to bold alone. The `›` next-page button is an action, not a place: dim.
+// Band tab badges keep their glyph and number formatting in the shared UI layer.
+export const tabCountLabel = (label: string, count: number, broken = false): string => label + (count > 0 ? '(' + (broken ? GLYPHS.state.failed : '') + count + ')' : '')
 export function strip<Id extends string = PaneTab>(u: Ctx, active: Id | null, tabs: readonly StripTab<Id>[], hasNext: boolean): Strip<Id> {
   const next = hasNext ? sg(GLYPHS.structure.goto, { dim: true, role: 'glyph' }) : null
   const built = tabs.map(tb => {

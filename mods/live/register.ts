@@ -69,7 +69,6 @@ import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane, noteInputKey, resetNoteInputs } from './pane'
-import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV } from './pages/decide'
 import type { DecideNav } from './pages/decide'
@@ -1277,18 +1276,9 @@ const SLOT_PAGE_OF: Partial<Record<SlotId, BandPageId>> = {
 }
 const pageOfTab = (t: PaneTab): PageId => (t === 'spend' ? 'quota' : t === 'legend' ? 'help' : t)
 
-// A press on a pane page Button (its digit hotkey or a click; plan r2 §3.2): the digit of the page showing closes the pane, another digit shows that page.
+// A page digit selects that page; pressing the current page again leaves the pane and its state alone.
 async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
-  const entry = PAGES.find(p => p.id === id)
-  const act = entry === undefined ? null : routeKey(entry.key, { page: panePage, paneFocus: true, focusedButton: true, textMode: false })
-  if (act === null ? id === panePage : act.kind === 'close') {
-    try {
-      await $.ui.close({ id: PANE_ID })
-    } catch (_e) {
-      // already closed
-    }
-    return
-  }
+  if (id === panePage) return
   panePage = id
   paneTab = PAGE_TAB_OF[id] ?? paneTab
   decideLocal = { ...decideLocal, textMode: false, textBuf: '' } // a tab press ends a note being typed: the mode must not outlive the page
@@ -1352,7 +1342,7 @@ async function fillPrompt($: EngineInterface, text: string): Promise<void> {
 // A press inside a framed page: `fleet:fold`, `fleet:see:<line_id>` (open the list so the line is on screen; nothing is sent), `fill:quota:<pool>` (the pool's switch suggestion into the prompt) and any other `fill:<text>`.
 async function framePress($: EngineInterface, id: string): Promise<void> {
   try {
-    if (id === 'fleet:fold') pageView.fleet = { ...(pageView.fleet ?? { focus: 0, expanded: false }), expanded: !(pageView.fleet?.expanded ?? false) }
+    if (id === 'fleet:fold') { await frameKey($, { kind: 'fold' }); return } // use the same focus clamp as the fold key, including when a tall dock auto-unfolded the body
     else if (id === 'quota:open') pageView.quota = { ...(pageView.quota ?? { focus: 0, expanded: false }), expanded: !(pageView.quota?.expanded ?? false) }
     else if (id.startsWith('fleet:see:')) {
       const at = consoleSnap?.lines == null ? -1 : fleetRowsOf(consoleSnap.lines).findIndex(r => r.line.line_id === id.slice('fleet:see:'.length))
@@ -1761,7 +1751,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => { const legacy = (e.props as { legacyTabs?: boolean }).legacyTabs === true; return consoleOn && legacy ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($), null, legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: await $.clock.now(), rows: frameHeight(e.props.scroll?.bodyRows ?? 24), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') } })) })
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => { const legacy = (e.props as { legacyTabs?: boolean }).legacyTabs === true; return consoleOn && legacy ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($), null, legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: await $.clock.now(), rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') } })) })
 
   // All live and console tabs share the bottom window; scroll keys move its
   // offset. A host without a frame still receives the event through next(e).

@@ -72,12 +72,12 @@ test('keys: decide text mode (`n`) — 1–8 and a–e are text, not page switch
   expect(routeKey('Enter', st({ page: 'decide', textMode: true }))).toEqual({ kind: 'text_save' })
 })
 
-test('keys: decide (not text mode) — 1–8 only switch page (own key closes), a–e pick option 0–4', () => {
+test('keys: decide (not text mode) — 1–8 only switch page (own key stays), a–e pick option 0–4', () => {
   const bad: string[] = []
   DIGITS.forEach((d, i) => {
     const target = PAGES[i]?.id
     const a = routeKey(d, st({ page: 'decide' }))
-    const want = target === undefined ? null : target === 'decide' ? { kind: 'close' } : { kind: 'page', to: target }
+    const want = target === undefined ? null : target === 'decide' ? { kind: 'none' } : { kind: 'page', to: target }
     if (want !== null && show(a) !== show(want)) bad.push(`${d}=${show(a)} want ${show(want)}`)
     if (a.kind === 'pick') bad.push(`${d} picks`)
   })
@@ -95,7 +95,7 @@ test('keys: one meaning per key — digits, 9, 0, ? switch page identically on e
     for (const [k, to] of [...DIGITS.map((d, i) => [d, PAGES[i]?.id as string | undefined] as const), ...Object.entries(special)]) {
       if (to === undefined) continue
       const a = routeKey(k, st({ page }))
-      const want = to === page ? { kind: 'close' } : { kind: 'page', to }
+      const want = to === page ? { kind: 'none' } : { kind: 'page', to }
       if (show(a) !== show(want)) bad.push(`${page}:${k}=${show(a)}`)
     }
     // a–e and n/u/[/] mean something only on decide; elsewhere they are not page switches or picks

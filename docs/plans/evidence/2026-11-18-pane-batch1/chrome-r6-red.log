@@ -1,0 +1,11 @@
+
+mods/live/chrome.test.ts:
+(fail) R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label [5.01ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "i"]
+  Received: ["1", "2", "3", "4", "5", "6", "7", "8", "i"]
+
+ 0 pass
+ 1 fail
+Ran 1 test across 1 file. [0.31s]

@@ -77,22 +77,23 @@ function drawSegs(el: { Text: El; Button?: El }, segs: Seg[], onSlot: (id: SlotI
 }
 
 // the band's own cells (the line and the ⓘ), and the width they take
-function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null): { nodes: unknown[]; width: number } {
+function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL): { nodes: unknown[]; width: number } {
   const { Text, Button } = el
+  const extra = displayWidth(infoLabel) - displayWidth(BAND_INFO_LABEL)
   // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
   const icon = Button === undefined
-    ? <Text>{BAND_INFO_LABEL}</Text>
-    : <Button key="info" plain autoFocus onPress={onInfo}>{BAND_INFO_LABEL}</Button>
+    ? <Text>{infoLabel}</Text>
+    : <Button key="info" plain autoFocus onPress={onInfo}>{infoLabel}</Button>
   // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + ⓘ), never preset.width on its own.
   const segW = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
-  if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: fittedBandWidth(segW(preset.segs), null, false) }
+  if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: fittedBandWidth(segW(preset.segs), null, false) + extra }
   if (snap === null || snap.band === null) {
     const reason = snap === null ? t('band.waiting') : snap.text
-    const line = plainBandText(reason, columns) + BAND_SEP
-    return { nodes: [<Text key="w" {...dimProps()} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) }
+    const line = plainBandText(reason, columns - extra) + BAND_SEP
+    return { nodes: [<Text key="w" {...dimProps()} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
   }
-  const line = layoutBand(snap.band.slots, columns)
-  return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: fittedBandWidth(segW(line.segs), null, false) }
+  const line = layoutBand(snap.band.slots, columns - extra)
+  return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: fittedBandWidth(segW(line.segs), null, false) + extra }
 }
 
 export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T = T_EN, onSlot: (id: SlotId) => void = () => {}) {
@@ -125,8 +126,8 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab
   const more = moreTo !== null
   const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
-  const strip = con === null ? row1Strip : pageBarStrip(snap, t, Math.max(0, columns - moreW), active, speedGlyph)
-  const left = bandCells(el, snap, Math.max(1, columns - row1Strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot, preset)
+  const strip = con === null ? row1Strip : pageBarStrip(snap, t, Math.max(0, columns - moreW), active, speedGlyph, con.snap)
+  const left = bandCells(el, snap, Math.max(1, columns - row1Strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? '[+] ' : BAND_INFO_LABEL)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
   void segW
@@ -145,7 +146,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
     )
   })
   // r2 §3.1: the band is two rows, always. Row 1 is the summary (cells, ⓘ, speed); row 2 is the tab strip, right-aligned to the bottom edge.
-  const stripRow = <Box><Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>
+  const stripRow = <Box height={1} width={columns} overflow="hidden"><Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>
   // `stripRow` alone is the menu row of the O4 shell: the shell is already 12 rows (SHELL_ROWS), so it takes the tab strip and leaves the summary row to the band's own draw
   // the quota segment sits at the right end of row 1 when two cells of room are left; it never takes a row and never pushes the speed label
   const qw = quota === null ? 0 : displayWidth(quota.text)

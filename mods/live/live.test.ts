@@ -2620,7 +2620,7 @@ for (const surface of SURFACES) {
 
 // ==================== stage-graph P7: the one-line band (contract ②) and the eight-tab panel ====================
 // RED before the change (the two-line band): every "P7 band" / "P7 panel" case below fails (no slot, no ⓘ, no Legend / Graph / Spend / Hygiene tabs).
-const THEME = ['claude', 'warning', 'error', 'success', 'suggestion', 'inactive', 'subtle', 'merged']
+const THEME = ['claude', 'warning', 'error', 'success', 'suggestion', 'inactive', 'subtle', 'merged', 'remember']
 
 // the rich world: a marker with the §2.9 fields, review + qc, decisions with a ladder rung, brain spend 120.4 / 150, load source + residue, a stage walk
 function richWorld(): Tree {

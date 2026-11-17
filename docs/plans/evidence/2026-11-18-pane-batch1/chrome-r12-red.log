@@ -1,0 +1,15 @@
+
+mods/live/chrome.test.ts:
+(pass) R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label [8.75ms]
+(pass) R7: pressing 1 on 現況 keeps the pane open on 現況 [0.26ms]
+(pass) R7 mounted: current-page digit Button does not call ui.close or change the 現況 header [230.12ms]
+(pass) R9: collapsed band shows snapshot pending and fault counts, [+], no digit keys, exactly two rows [16.44ms]
+(fail) R12: action role uses the accessible light-theme link token with contrast >= 4.5:1 [0.42ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: "remember"
+  Received: "merged"
+
+ 4 pass
+ 1 fail
+Ran 5 tests across 1 file. [0.53s]

@@ -124,7 +124,7 @@ const scanMods = (rule, except = [], root = MODS_ROOT) => modSources(root).filte
 // code only: block comments and `// ...` line comments are dropped (a glyph in a comment is documentation, not drawing)
 const code = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, '')).split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n')
 const hits = (src, re) => code(src).split('\n').flatMap((l, i) => (re.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : []))
-const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle|merged'
+const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle|merged|remember'
 const STATE_IDS_RE = 'need_you|failed|stalled|findings|running|done|pending|waiting|stopped|skipped|unknown|stale'
 
 const L1 = src => [

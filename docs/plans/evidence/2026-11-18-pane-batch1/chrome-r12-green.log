@@ -1,0 +1,36 @@
+
+mods/live/chrome.test.ts:
+(pass) R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label [11.86ms]
+(pass) R7: pressing 1 on 現況 keeps the pane open on 現況 [0.34ms]
+(pass) R7 mounted: current-page digit Button does not call ui.close or change the 現況 header [254.83ms]
+(pass) R9: collapsed band shows snapshot pending and fault counts, [+], no digit keys, exactly two rows [14.60ms]
+(pass) R12: action role uses the accessible light-theme link token with contrast >= 4.5:1 [0.41ms]
+
+mods/live/ui.test.ts:
+(pass) I5 (a): the real glyph tables have no emoji hazard; new glyphs carry a well-formed verified entry; I20: one glyph, one meaning [3.94ms]
+(pass) I5 (c): the checker flags the emoji hazards; digits, # and * stay legal; a detail line may carry a pictograph [0.40ms]
+(pass) every line a builder makes is branded, free of emoji hazards, and within the emphasis rule, at 76 and 120 columns [6.65ms]
+(pass) branding: a hand-made line or fragment is not made; only the builders brand [0.21ms]
+(pass) grid: the four columns, and the key column width [0.42ms]
+(pass) stateOf: the verdict, run and gate mappings; an unknown token is `unknown`, never a thrown error [0.20ms]
+(pass) classify: run precedence is failed > done > weird > stall > fresh running > stopped [0.26ms]
+(pass) worst: follows SEVERITY; empty is skipped; unknown never hides a finding [0.26ms]
+(pass) FRESH_MS: exactly at the threshold is fresh, one ms over is stale (T-1, T, T+1) [0.46ms]
+(pass) idTail: the cut tail never starts with a separator, and fits the width (the cut fell on a `-` here) [0.21ms]
+(pass) classify run: an undefined or missing rc is no exit code; only a number counts [0.18ms]
+(pass) stateBadge: only need_you, running and stalled have a badge form; the runtime refusal stays [0.56ms]
+(pass) plan-review BLOCK and REJECT are both a failure, STOP and CONDITIONAL are findings (§8 Q5); a code seat maps the same way [0.26ms]
+(pass) classify round: a round holding an unknown seat is unknown, not stopped; running, failed and findings still beat it; no seats stays stopped [0.28ms]
+(pass) I13 pairwise precedence: round, background, loadSource, run and gate conflict fixtures [0.49ms]
+(pass) item: a body of 98 cells is cut so the line and its toggle mark fit 40 columns (one item is one line); the meta goes first, the bare-glyph form keeps one space [0.59ms]
+(pass) kv: a value wider than the pane wraps at the key column through wrapLines; no piece is wider than the pane, every continuation hangs at 12 [0.93ms]
+(pass) header: a title and a chip too wide for the pane are cut so the line is cols - 1 wide with a rule of at least 3 cells [0.25ms]
+(pass) palette: every state colour is a PALETTE role; need_you draws only its mark yellow, findings is default text, nothing in STATES is bold [0.58ms]
+(pass) palette: a meter is plain below 80 %, attention from 80 %, broken from 100 %; its bar and percent are not bold [0.23ms]
+(pass) palette: a need_you count on a section title is a plain number; any other state keeps its mark [0.21ms]
+(pass) palette: the tab strip draws the active name default bold, a needing name attention+bold (active or not), the rest dim, the here colour only on the ━ run, and the next-page button dim [0.54ms]
+(pass) palette: I4 accepts a bold tab name only when it is the active one (here) or one that needs the owner; a planted bold inactive name is a violation [0.20ms]
+
+ 28 pass
+ 0 fail
+Ran 28 tests across 2 files. [0.62s]

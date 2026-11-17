@@ -19,7 +19,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   if (key === 'Escape') return { kind: 'close' }
   if (key === 'Enter') return st.focusedButton ? { kind: 'button' } : { kind: 'none' } // submit is s only, never Enter
   const target = /^[1-8]$/.test(key) ? PAGES[Number(key) - 1]?.id : SPECIAL[key]
-  if (target !== undefined) return target === st.page ? { kind: 'close' } : { kind: 'page', to: target }
+  if (target !== undefined) return target === st.page ? { kind: 'none' } : { kind: 'page', to: target }
   if (/^[1-9]$/.test(key)) return { kind: 'none' } // a digit with no page yet
   if (key === 'j' || key === 'ArrowDown') return { kind: 'move', by: 1 }
   if (key === 'k' || key === 'ArrowUp') return { kind: 'move', by: -1 }

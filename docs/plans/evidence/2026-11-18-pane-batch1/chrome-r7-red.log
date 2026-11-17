@@ -1,0 +1,35 @@
+
+mods/live/chrome.test.ts:
+(pass) R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label [18.19ms]
+(fail) R7: pressing 1 on 現況 keeps the pane open on 現況 [0.68ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: true
+  Received: false
+(fail) R7 mounted: current-page digit Button does not call ui.close or change the 現況 header [292.47ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: []
+  Received: ["autopilot-live"]
+
+mods/live/pages/keys.test.ts:
+(pass) keys: Enter on a focused Button is that Button only, on every page (never a second submit/primary) [2.56ms]
+(pass) keys: decide, Enter with nothing focused = none (submit is s only); decide, s = submit [0.74ms]
+(pass) keys: Esc with focus in the prompt box is passed to Claude Code on every page and in text mode [0.23ms]
+(pass) keys: with focus in the prompt box no pane/band hotkey fires — every key is passed to Claude Code (g2 folds A5) [0.25ms]
+(pass) keys: Esc with the pane focused closes it; in text mode it only leaves text mode [0.20ms]
+(pass) keys: decide text mode (`n`) — 1–8 and a–e are text, not page switches or picks [0.30ms]
+(fail) keys: decide (not text mode) — 1–8 only switch page (own key stays), a–e pick option 0–4 [0.33ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: ""
+  Received: "2={\"kind\":\"close\"} want {\"kind\":\"none\"}"
+(fail) keys: one meaning per key — digits, 9, 0, ? switch page identically on every page [0.48ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: ""
+  Received: "now:1={\"kind\":\"close\"} decide:2={\"kind\":\"close\"} fleet:3={\"kind\":\"close\"} quota:4={\"kind\":\"close\"} dispatch:5={\"kind\":\"close\"} review:6={\"kind\":\"close\"} spend:7={\"kind\":\"close\"} hygiene:8={\"kind\":\"close\"} pet:9={\"kind\":\"close\"} forge:0={\"kind\":\"close\"} help:i={\"kind\":\"close\"}"
+
+ 7 pass
+ 4 fail
+Ran 11 tests across 2 files. [0.57s]

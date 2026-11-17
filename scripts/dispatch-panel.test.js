@@ -495,10 +495,16 @@ test('symlinked --out-dir is refused (with or without trailing slash)', () => {
 });
 
 test('path traversal ../x in a model name stays inside --out-dir and failed seat records rc', () => {
+  const { safeOutPath } = require('./dispatch-panel');
   const sb = makeSandbox();
   try {
     const promptFile = writePrompt(sb, 'clean.txt', 'Clean prompt.\n');
     const outDir = path.join(sb.dir, 'nested', 'out-trav');
+    const travOut = safeOutPath(outDir, 0, 'grok-4.7/../x');
+    assert.equal(path.dirname(travOut), outDir);
+    assert.equal(path.relative(outDir, travOut).startsWith('..'), false);
+    assert.equal(path.isAbsolute(path.relative(outDir, travOut)), false);
+
     const res = runPanel(
       sb,
       [
@@ -515,15 +521,52 @@ test('path traversal ../x in a model name stays inside --out-dir and failed seat
     assert.equal(res.status, 0, res.stderr);
     const panel = JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'), 'utf8'));
     assert.equal(panel.complete, true);
-    assert.equal(panel.seats[0].status, 'ok');
-    assert.equal(panel.seats[0].rc, 0);
-    assert.equal(path.dirname(panel.seats[0].out_path), outDir);
+    assert.equal(panel.seats[0].status, 'barred');
+    assert.equal(panel.seats[0].rc, null);
+    assert.equal(panel.seats[0].out_path, null);
+    assert.equal(panel.seats[0].bytes, 0);
     assert.equal(fs.existsSync(path.join(sb.dir, 'nested', 'x')), false);
     assert.equal(fs.existsSync(path.join(sb.dir, 'nested', 'x.out')), false);
     assert.equal(panel.seats[1].status, 'failed');
     assert.equal(panel.seats[1].rc, 3);
     assert.equal(panel.seats[1].out_path, null);
     assert.equal(panel.seats[1].bytes, 0);
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test('cross-runner model mismatch and unknown models on known runners are barred; valid runner models pass', () => {
+  const sb = makeSandbox();
+  try {
+    const promptFile = writePrompt(sb, 'clean.txt', 'Compare model routing.\n');
+    const outDir = path.join(sb.dir, 'out-runner-models');
+    const res = runPanel(sb, [
+      '--prompt-file', promptFile,
+      '--seat', 'grok:gpt-6.1-sol',
+      '--seat', 'codex:unknown-codex-model',
+      '--seat', 'agy:unknown-agy-model',
+      '--seat', 'claude-native:unknown-claude-model',
+      '--seat', 'claude-native:opus',
+      '--seat', 'agy:hydrogen',
+      '--out-dir', outDir,
+      '--author-cmd', sb.authorStub,
+    ]);
+    assert.equal(res.status, 0, res.stderr);
+    const panel = JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'), 'utf8'));
+    assert.equal(panel.complete, true);
+    assert.equal(panel.seats.length, 6);
+    assert.equal(panel.seats[0].status, 'barred');
+    assert.equal(panel.seats[1].status, 'barred');
+    assert.equal(panel.seats[2].status, 'barred');
+    assert.equal(panel.seats[3].status, 'barred');
+    assert.equal(panel.seats[4].status, 'ok');
+    assert.equal(panel.seats[5].status, 'ok');
+
+    const calls = readCalls(sb.logDir);
+    assert.equal(calls.length, 2);
+    const pairs = calls.map((c) => `${c.runner}:${c.model}`).sort();
+    assert.deepEqual(pairs, ['agy:gemini-4-hydrogen-high', 'claude-native:opus']);
   } finally {
     sb.cleanup();
   }

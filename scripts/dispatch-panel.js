@@ -16,7 +16,7 @@
  *      the `fleet directory` identifier list; any hit, scanner error, or missing rule
  *      file -> exit 4, print rule ids only, write nothing, run zero seats.
  *   4. Only then: refuse a symlinked D, create or chmod D to 0700, write D/prompt.txt (0600).
- *   5. Per seat: resolve aliases, check `cn-model-dispatch-gate.js` + known runner/family;
+ *   5. Per seat: resolve aliases, check `cn-model-dispatch-gate.js` + known runner/model/family;
  *      barred or unknown seats become {status:'barred'} in panel.json and are never spawned.
  *   6. Spawn `dispatch-author.sh` concurrently for allowed seats, each in a fresh empty 0700
  *      temp cwd with §2.5 scrubbed env (ANTHROPIC_BASE_URL, ANTHROPIC_MODEL,
@@ -44,6 +44,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+
+const { CLAUDE_CLI_ALIASES: SEAT_CLAUDE_ALIASES, isClaudeNativeModel } = require('./lib/seat-model-id');
+const NONCQ_POOLS = require('./lib/noncq-pools.json');
+const PACE_ROLES = require('./lib/pace-roles.json');
 
 const SELF_DIR = __dirname;
 const DEFAULT_TIMEOUT = '15m';
@@ -76,8 +80,115 @@ const MODEL_ALIASES = Object.freeze({
   astra: 'gpt-6-astra',
   fable: 'opus',
 });
-const CLAUDE_CLI_ALIASES = new Set(['opus', 'sonnet', 'haiku', 'fable', 'opusplan', 'default', 'best']);
+const CLAUDE_CLI_ALIASES = new Set(SEAT_CLAUDE_ALIASES);
 const ALLOWED_FAMILIES = new Set(['anthropic', 'openai', 'google', 'xai']);
+
+// No single repo-wide JSON registry lists every non-CN (runner, model) pair:
+// scripts/lib/noncq-pools.json + scripts/lib/pace-roles.json cover pace-managed pools,
+// scripts/lib/seat-model-id.js owns claude-native, and the entries below cover the remaining
+// runner models from project-config-template/review-loop-config.md, check-context-window.js,
+// data-class-policy.json, and lib/cursor-model.sh.
+const SUPPLEMENTAL_MODELS_BY_RUNNER = Object.freeze({
+  codex: [
+    'gpt-6-astra',
+    'gpt-6.1-sol',
+    'gpt-6-sol',
+    'gpt-6-luna',
+    'gpt-5.6-sol',
+    'gpt-5.6-luna',
+    'gpt-5.6-terra',
+    'gpt-5.5',
+    'gpt-5.4-mini',
+    'gpt-5.3-codex-spark',
+  ],
+  agy: [
+    'gemini-4-carbon-high',
+    'gemini-4-carbon-medium',
+    'gemini-4-carbon-low',
+    'gemini-4-hydrogen-high',
+    'gemini-4-hydrogen-medium',
+    'gemini-4-hydrogen-low',
+    'gemini-4-argon-high',
+    'gemini-4-argon-medium',
+    'gemini-4-argon-low',
+    'claude-opus-5-5-medium',
+    'claude-opus-5-5-high',
+    'claude-opus-5-5-low',
+    'claude-opus-5-5',
+    'claude-sonnet-5-5',
+    'claude-haiku-5-5',
+  ],
+  grok: [
+    'grok-4.7',
+    'grok-4.6',
+    'grok-4.5',
+    'grok-build',
+    'grok-composer-2.5-fast',
+  ],
+  cursor: [
+    'cursor-grok-4.6-low',
+    'cursor-grok-4.6-medium',
+    'cursor-grok-4.6-high',
+    'cursor-grok-4.6-xhigh',
+    'cursor-grok-4.6-low-fast',
+    'cursor-grok-4.6-medium-fast',
+    'cursor-grok-4.6-high-fast',
+    'cursor-grok-4.6-xhigh-fast',
+    'gpt-5.3-codex',
+    'gpt-5.3-codex-low',
+    'gpt-5.3-codex-high',
+    'gpt-5.3-codex-xhigh',
+    'gpt-5.3-codex-fast',
+    'gpt-5.3-codex-low-fast',
+    'gpt-5.3-codex-high-fast',
+    'gpt-5.3-codex-xhigh-fast',
+  ],
+});
+
+function buildKnownModelsByRunner() {
+  const byRunner = new Map();
+  const add = (runner, model) => {
+    if (typeof runner !== 'string' || typeof model !== 'string') return;
+    const r = runner.trim();
+    const m = model.trim().toLowerCase();
+    if (!r || !m) return;
+    if (!byRunner.has(r)) byRunner.set(r, new Set());
+    byRunner.get(r).add(m);
+  };
+
+  for (const entry of Object.values(NONCQ_POOLS || {})) {
+    if (entry && typeof entry === 'object') add(entry.runner, entry.model);
+  }
+  for (const entry of Object.values((PACE_ROLES && PACE_ROLES.pools) || {})) {
+    if (entry && typeof entry === 'object') add(entry.runner, entry.model);
+  }
+  for (const entry of ((PACE_ROLES && PACE_ROLES.fallback && PACE_ROLES.fallback.reviewer) || [])) {
+    if (entry && typeof entry === 'object') add(entry.runner, entry.model);
+  }
+  const roleModels = (PACE_ROLES && PACE_ROLES.role_models) || {};
+  for (const map of Object.values(roleModels)) {
+    if (!map || typeof map !== 'object') continue;
+    for (const [key, model] of Object.entries(map)) {
+      const pool = Object.values(NONCQ_POOLS || {}).find((p) => p && p.key === key);
+      if (pool) add(pool.runner, model);
+    }
+  }
+  for (const [runner, models] of Object.entries(SUPPLEMENTAL_MODELS_BY_RUNNER)) {
+    for (const model of models) add(runner, model);
+  }
+  return byRunner;
+}
+
+const KNOWN_MODELS_BY_RUNNER = buildKnownModelsByRunner();
+
+function isKnownModelForRunner(runner, model) {
+  if (typeof runner !== 'string' || typeof model !== 'string') return false;
+  const norm = model.trim().toLowerCase();
+  if (!norm) return false;
+  if (runner === 'claude-native') return isClaudeNativeModel(norm);
+  const models = KNOWN_MODELS_BY_RUNNER.get(runner);
+  return Boolean(models && models.has(norm));
+}
 
 function usageText() {
   return 'usage: dispatch-panel.js --prompt-file F --seat <runner>:<model>[:<effort>] ... --out-dir D [--timeout 15m] [--author-cmd <path>]\n';
@@ -415,6 +526,9 @@ function resolveSeat(parsedSeat, promptPath) {
   if (!ALLOWED_FAMILIES.has(family)) {
     return { allowed: false, runner, model, endpoint, effort: parsedSeat.effort, reason: 'unknown_or_barred_family' };
   }
+  if (!isKnownModelForRunner(runner, model)) {
+    return { allowed: false, runner, model, endpoint, effort: parsedSeat.effort, reason: 'unknown_model' };
+  }
   return { allowed: true, runner, model, endpoint, effort: parsedSeat.effort, family };
 }
 
@@ -692,6 +806,15 @@ async function main() {
   await runPanel(opts, outDir, promptPath);
 }
 
-main().catch((err) => {
-  fail(4, err && err.message ? err.message : String(err));
-});
+if (require.main === module) {
+  main().catch((err) => {
+    fail(4, err && err.message ? err.message : String(err));
+  });
+}
+
+module.exports = {
+  resolveSeat,
+  sanitizeOutName,
+  safeOutPath,
+  isKnownModelForRunner,
+};

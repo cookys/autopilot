@@ -556,3 +556,71 @@ test('wiring: askpm-log is opt-in, not a per-prompt spawn', () => {
   assert.equal(off.stdout, '');
   assert.equal(off.lines.length, 0, 'opt-in off still recorded');
 });
+
+test('child git repo under PM workspace writes passive ask without ask_id or session_id', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'askpm-child-'));
+  const pmDir = path.join(root, 'pm');
+  const childDir = path.join(pmDir, 'child-repo');
+  const state = path.join(root, 'state');
+  try {
+    fs.mkdirSync(path.join(pmDir, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(pmDir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    fs.mkdirSync(path.join(pmDir, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(pmDir, '.claude', 'console.json'), CONSOLE_OK);
+    fs.mkdirSync(path.join(childDir, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(childDir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+    fs.mkdirSync(state, { recursive: true });
+
+    const childRes = spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({
+        hook_event_name: 'UserPromptSubmit',
+        session_id: 's-child',
+        prompt: 'prompt inside child repo',
+        cwd: childDir,
+      }),
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH,
+        HOME: root,
+        TMPDIR: root,
+        AUTOPILOT_STATE_DIR: state,
+        AUTOPILOT_HOOK_ASKPM_LOG: '1',
+      },
+    });
+    assert.equal(childRes.status, 0, childRes.stderr);
+    assert.equal(childRes.stdout, '');
+
+    const pmRes = spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({
+        hook_event_name: 'UserPromptSubmit',
+        session_id: 's-pm',
+        prompt: 'prompt inside pm repo',
+        cwd: pmDir,
+      }),
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH,
+        HOME: root,
+        TMPDIR: root,
+        AUTOPILOT_STATE_DIR: state,
+        AUTOPILOT_HOOK_ASKPM_LOG: '1',
+      },
+    });
+    assert.equal(pmRes.status, 0, pmRes.stderr);
+    assert.equal(pmRes.stdout, '');
+
+    const rows = readRows(state);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0].kind, 'ask');
+    assert.equal(rows[0].text, 'prompt inside child repo');
+    assert.equal(rows[0].ask_id, undefined);
+    assert.equal(rows[0].session_id, undefined);
+
+    assert.equal(rows[1].kind, 'ask');
+    assert.equal(rows[1].text, 'prompt inside pm repo');
+    assert.equal(rows[1].session_id, 's-pm');
+    assert.match(rows[1].ask_id, /^a-[0-9a-f]{8}$/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

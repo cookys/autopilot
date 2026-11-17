@@ -6672,44 +6672,43 @@ for (const surface of SURFACES) {
     expect(rowsOf(await drawE1($)).length).toBe(1)
   })
 
-  test('E1 現況: the Now preview has no project line; progress and spend left the band; the buttons open the pane (' + surface + ')', async ($, on) => {
+  test('E1 現況: the Now preview has no project line; progress and spend left the band; no buttons row sits under the open tab; the ⓘ opens the pane (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const rows = rowsOf(await drawE1($, ['tab:now']))
-    expect(rows.length, 'bar, rule, buttons').toBe(3)
-    const buttons = walkTexts(rows[2]).map(textOf).join('')
-    expect(buttons).not.toMatch(/3\/5|R3|\$/)
-    expect(buttons).toContain('[ 開面板 ]')
-    expect(buttons).toContain('[ 看派工 ]')
+    expect(rows.length, 'bar and rule: the Now preview has no row and no buttons row').toBe(2)
+    expect(rows.map(r => walkTexts(r).map(textOf).join('')).join('\n')).not.toMatch(/\[ 開面板 \]|\[ 看派工 \]/)
     const open = await mountE1($)
-    await open.press({ key: 'open:dispatch' })
+    const keys = ((await open.findAll({ type: 'Button' })) as Drawn[]).map(x => x.props?.key)
+    expect(keys).not.toContain('open:now')
+    expect(keys).not.toContain('open:dispatch')
+    await open.press({ key: 'info' })
     await open.unmount()
     expect(w.opens.length).toBe(1)
-    expect(await shownTabOf($, surface)).toBe('dispatch')
   })
 
   for (const id of ['dispatch', 'review'] as const) {
-    test('E1 ' + id + ': one summary line from the band\'s own slots and an open-the-pane button (' + surface + ')', async ($, on) => {
+    test('E1 ' + id + ': one summary line from the band\'s own slots and no buttons row (' + surface + ')', async ($, on) => {
       const w = world(on, richWorld())
       await start($, surface)
       const rows = rowsOf(await drawE1($, ['tab:' + id]))
-      expect(rows.length, 'bar, rule, summary, button').toBe(4)
+      expect(rows.length, 'bar, rule, summary').toBe(3)
       expect(walkTexts(rows[2]).map(textOf).join('').length).toBeGreaterThan(0)
-      expect(walkTexts(rows[3]).map(textOf).join('')).toContain('[ 開面板 ]')
+      expect(rows.map(r => walkTexts(r).map(textOf).join('')).join('\n')).not.toContain('[ 開面板 ]')
       const open = await mountE1($) // drawE1 above pressed the tab: it stays open
-      await open.press({ key: 'open:' + id })
+      expect(((await open.findAll({ type: 'Button' })) as Drawn[]).map(x => x.props?.key)).not.toContain('open:' + id)
+      await open.press({ key: 'info' })
       await open.unmount()
       expect(w.opens.length).toBe(1)
-      expect(await shownTabOf($, surface)).toBe(id)
     })
   }
 
   test('E1 rows: when the content and its rule do not fit in maxRows the row alone stays (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    // Now preview is bar + rule + buttons (3). Two rows cannot hold the rule and the buttons.
-    expect(rowsOf(await drawE1($, ['tab:now'], { maxRows: 2 })).length).toBe(1)
-    expect(rowsOf(await drawE1($, ['tab:now'], { maxRows: 3 })).length).toBe(3)
+    // The dispatch preview is bar + rule + summary (3). Two rows cannot hold the rule and the summary.
+    expect(rowsOf(await drawE1($, ['tab:dispatch'], { maxRows: 2 })).length).toBe(1)
+    expect(rowsOf(await drawE1($, ['tab:dispatch'], { maxRows: 3 })).length).toBe(3)
   })
 
   test('E1: the collapsed row has no decisions slot; the 待決 tab opens on the band (' + surface + ')', async ($, on) => {
@@ -8074,15 +8073,15 @@ for (const surface of SURFACES) {
     expect(main).toContain('用量格式不認得')
     expect(main).not.toContain('tk60')
   })
-  test('usagetab: where the shell is not drawn (maxRows under 12) the open tab offers one button that opens the pane (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+  test('usagetab: where the shell is not drawn (maxRows under 12) the open tab draws no open-pane button; the ⓘ still opens the pane (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
     const w = shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(3) })
     await start($, surface)
     await drawShell($, 160, ['tab:usage'])
     const small = await drawShell($, 160, [], 6)
     expect(small.rows.some(r => r.includes('╭'))).toBe(false)
-    expect(small.buttons).toContain('open:usage')
+    expect(small.buttons).not.toContain('open:usage')
     const before = w.opens.length
-    await drawShell($, 160, ['open:usage'], 6)
+    await drawShell($, 160, ['info'], 6)
     expect(w.opens.length).toBeGreaterThan(before)
   })
 
@@ -8328,7 +8327,7 @@ for (const surface of SURFACES) {
     expect(back.rows[1], 'the batch was closed with the tab: the closed card is gone').toContain('共 2 張')
   })
 
-  test('side pane plan B: the pane is never opened on its own, at 160 or 240 columns, fullscreen with a project; the ⓘ, a slot, the quick row and /live-pane open it (' + surface + ')', async ($, on) => {
+  test('side pane plan B: the pane is never opened on its own, at 160 or 240 columns, fullscreen with a project; the ⓘ, a slot and /live-pane open it (' + surface + ')', async ($, on) => {
     const w = shellWorld(on)
     await start($, surface)
     for (const cols of [160, 240]) {
@@ -8341,17 +8340,14 @@ for (const surface of SURFACES) {
     await $.command.run({ command: 'live-pane', args: '' })
     expect(w.opens.length).toBe(1)
     expect(w.opens[0]).toEqual({ id: 'autopilot-live', title: 'Autopilot', focus: true, closeOnEscape: true })
-    // the quick row of the shell opens it on the tab
-    const q = await mountShell($, 160)
-    await q.press({ key: 'tab:dispatch' }) // the 待決 card view's quick row has its own four keys (ux-v7); the other tabs keep the open button
-    await q.unmount()
+    // the shell has no open-pane button any more: the ⓘ opens it
     const again = await mountShell($, 160)
-    await again.press({ key: 'open:dispatch' })
+    await again.press({ key: 'info' })
     await again.unmount()
     expect(w.opens.length).toBe(2)
   })
 
-  // design.md section 9: only the 待決 card view has its own quick row (0/7/8/9); every other tab, and 待決 with no card, keeps the open-panel button.
+  // design.md section 9: only the 待決 card view has its own quick row (0/7/8/9); every other tab, and 待決 with no card, has a blank quick row (no open-panel button).
   const CARD_KEYS = ['send', 'prev', 'next', 'next-menu']
   // ---- bandlayout: the 待決 card view follows guideline §13 (menu row and quick row on the bottom two rows, the content grows upward, one scroll position per tab), shows every word of the card, and has
   // no right-hand column ----
@@ -8632,11 +8628,11 @@ for (const surface of SURFACES) {
     const first = await drawShell($, 100, ['prev'], 12)
     expect(mainCells(first.raw, 100), 'a card read again starts at its top').toEqual(mainCells(top.raw, 100))
   })
-  test('O4 shell quick row: the dispatch tab keeps the open-panel button and none of the four card keys (' + surface + ')', async ($, on) => {
+  test('O4 shell quick row: the dispatch tab has no open-panel button and none of the four card keys (' + surface + ')', async ($, on) => {
     shellWorld(on)
     await start($, surface)
     const d = await drawShell($, 160, ['tab:dispatch'])
-    expect(d.buttons).toContain('open:dispatch')
+    expect(d.buttons).not.toContain('open:dispatch')
     for (const k of CARD_KEYS) expect(d.buttons, k).not.toContain(k)
   })
 
@@ -8652,11 +8648,47 @@ for (const surface of SURFACES) {
     expect(d.buttons).not.toContain('open:decide')
   })
 
-  test('O4 shell quick row: control: the 待決 tab with no card falls back to the open-panel button (' + surface + ')', async ($, on) => {
+  test('O4 shell quick row: control: the 待決 tab with no card has a blank quick row, no open-panel button (' + surface + ')', async ($, on) => {
     shellWorld(on, { [W_MODEL]: j(model({ needs_decision: false, decisions: [] })) })
     await start($, surface)
     const d = await drawShell($, 160, ['tab:decide'])
-    expect(d.buttons).toContain('open:decide')
+    expect(d.buttons).not.toContain('open:decide')
     for (const k of CARD_KEYS) expect(d.buttons, k).not.toContain(k)
+  })
+
+  // The band's height must not jump: with a band tab open the drawn band has the same number of rows whichever tab is open (the 12-row shell at the two common widths; 160 and 80 columns are
+  // the widths of a 160x40 and an 80x24 terminal), and no open-pane buttons row (`[ 開面板 ]` / `[ 看派工 ]`) sits in it. The closed band is one row; that is reported, not padded.
+  test('band height golden: every open band tab draws the same number of rows at 160 and 80 columns, no tab draws an open-pane buttons row; the closed band is one row (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { [W_MODEL]: j(model({ needs_decision: false, decisions: [] })), '/fake/forge-panel.json': usageRowsOf(3) })
+    const heights: Record<string, number> = {}
+    for (const cols of [160, 80]) {
+      await start($, surface)
+      const closed = await drawShell($, cols, [], 12)
+      heights['closed@' + cols] = closed.tree.type === 'Box' && closed.tree.props?.flexDirection === 'column' ? closed.rows.length : 1 // a row of cells is one row
+      for (const tab of ['now', 'decide', 'dispatch', 'review', 'usage']) {
+        await start($, surface) // a new session: no tab open
+        const probe = await drawShell($, cols, [], 12)
+        const key = probe.buttons.includes('tab:' + tab) ? 'tab:' + tab : 'more' // at 80 columns the 用量 tab has no room: the dim › reaches it
+        const d = await drawShell($, cols, [key], 12)
+        expect(d.rows.some(r => r.startsWith('╭')), tab + '@' + cols + ' is the shell').toBe(true)
+        heights[tab + '@' + cols] = d.rows.length
+        expect(d.raw.join('\n'), tab + '@' + cols + ' has no open-pane button row').not.toMatch(/\[ 開面板 \]|\[ 看派工 \]/)
+        expect(d.buttons, tab + '@' + cols).not.toContain('open:' + tab)
+      }
+    }
+    // the tab-row layout (a host that gives fewer than 12 rows): measured and reported, not asserted equal: dispatch and review carry a summary row of their own
+    for (const tab of ['now', 'decide', 'dispatch', 'review', 'usage']) {
+      await start($, surface)
+      const probe = await drawShell($, 160, [], 11)
+      const d = await drawShell($, 160, [probe.buttons.includes('tab:' + tab) ? 'tab:' + tab : 'more'], 11)
+      heights['tabrow-' + tab + '@160'] = d.tree.type === 'Box' && d.tree.props?.flexDirection === 'column' ? d.rows.length : 1
+    }
+    if (surface === 'terminal') console.log('BAND-HEIGHTS ' + JSON.stringify(heights))
+    expect(heights['closed@160'], 'closed band, 160').toBe(1)
+    expect(heights['closed@80'], 'closed band, 80').toBe(1)
+    for (const cols of [160, 80]) {
+      const open = ['now', 'decide', 'dispatch', 'review', 'usage'].map(t => heights[t + '@' + cols])
+      expect(new Set(open).size, 'open-tab heights at ' + cols + ': ' + open.join(',')).toBe(1)
+    }
   })
 }

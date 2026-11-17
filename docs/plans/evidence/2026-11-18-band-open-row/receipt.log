@@ -1,0 +1,25 @@
+band open-pane row removal (fix/band-open-row), suite: AUTOPILOT_MODS_REAL_CLAUDE=<real claude> bash mods/live/run-tests.sh
+base  faa6b4cb6 : 1084 pass / 15 fail (1099 tests)   failing names: 15, all pre-existing (G33a x3, C1 U7 x2, speed tab x10)
+after (this fix) : 1086 pass / 15 fail (1101 tests)   failing names identical to base (diff empty); +2 new tests = band height golden (terminal, desktop), both green
+negative control: base band.tsx/register.ts/locales + the new golden test -> band height golden RED on terminal and desktop ("now@160 has no open-pane button row"); 1070 pass / 31 fail in that tree (the other 14 reds are the updated old-layout tests)
+heights (rows, golden BAND-HEIGHTS line), shell frame, maxRows 12:
+  closed@160=1 now=12 decide=12 dispatch=12 review=12 usage=12
+  closed@80 =1 now=12 decide=12 dispatch=12 review=12 usage=12
+heights, tab-row layout (maxRows 11, 160 cols), after: now=2 decide=3 dispatch=3 review=2 usage=2 (bar + rule + the tab's own content rows; no buttons row)
+console mode: its band tabs open the console pane (consoleOpen), no band body is drawn; not measured
+base failing names:
+(fail) C1 U7: console mode: an alive forge-stats with summary_row is never asked for the second row (next(e) 0 calls) and the band row carries the console tab names (terminal)
+(fail) C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal)
+(fail) G33a: a stale, foreign, unreadable or oversized heartbeat does not stop the fetch, and the band stays one row (terminal)
+(fail) G33a: the feed runs with no summary_row heartbeat, and before any run the band has no fleet counts; the reader is never asked (terminal)
+(fail) G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal)
+(fail) speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (desktop)
+(fail) speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (terminal)
+(fail) speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (desktop)
+(fail) speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (terminal)
+(fail) speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (desktop)
+(fail) speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (terminal)
+(fail) speed tab: pressing it again closes it, and the speed view is gone (desktop)
+(fail) speed tab: pressing it again closes it, and the speed view is gone (terminal)
+(fail) speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (desktop)
+(fail) speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (terminal)

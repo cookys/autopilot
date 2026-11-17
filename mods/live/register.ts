@@ -939,7 +939,7 @@ async function refresh($: EngineInterface): Promise<void> {
       previous = { scope, counts: built.counts, acceptance: built.acceptance }
     }
     // The side pane is never opened here (side-pane plan B, owner ruling 2026-11-06): it took 37-40% of the width and left the band 83 columns at 160 and 145 at 240. The person opens it:
-    // the ⓘ, a slot, the shell's quick row, or the /live-pane command.
+    // the ⓘ, a slot, or the /live-pane command.
   } catch (_e) {
     // a bad tick must never take the session down; the next tick tries again
   }
@@ -1295,7 +1295,7 @@ export async function startLive($: EngineInterface): Promise<void> {
 
 // every hook of the live mod except `session.start`
 export function registerLive(on: Parameters<Register>[0]): void {
-  // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ, slots and quick row are the ways to open it
+  // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ and slots are the ways to open it
   on('command.run', { command: 'live-pane' }, async ($) => {
     await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
     return {}
@@ -1477,7 +1477,6 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const at = active === null ? -1 : hidden.indexOf(active)
     const moreTo: BarTabId | null = hidden.length === 0 ? null : at < 0 ? hidden[0] : (hidden[at + 1] ?? active)
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con, bandPreset)
-    const open = (tab: PaneTab) => { void openOn(tab) }
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
     if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
@@ -1596,16 +1595,16 @@ export function registerLive(on: Parameters<Register>[0]): void {
           })
         } else {
           const parts = active === 'usage'
-            ? { rows: usageDraw(el, usageRows(panel, mainCols, MAIN_CONTENT_ROWS, t)), quick: barParts(el, snapshot, 'usage', mainCols, t, { onSlot: slot, onOpen: open }).quick }
+            ? usageDraw(el, usageRows(panel, mainCols, MAIN_CONTENT_ROWS, t))
             : active === 'decide'
-            ? { rows: decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, MAIN_CONTENT_ROWS), quick: barParts(el, snapshot, 'decide', mainCols, t, { onSlot: slot, onOpen: open }).quick }
-            : barParts(el, snapshot, active, mainCols, t, { onSlot: slot, onOpen: open })
+            ? decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, MAIN_CONTENT_ROWS)
+            : barParts(el, snapshot, active, mainCols, t, { onSlot: slot }).rows
           const unit = snapshot.band === null ? [] : snapshot.band.slots.filter(sl => sl.id === 'unit')
-          main = parts.rows.slice(0, MAIN_CONTENT_ROWS)
+          main = parts.slice(0, MAIN_CONTENT_ROWS)
           left = leftItems(strip.tabs.map(b => ({ id: b.id, label: b.label.text.trim() })), active, plan.geo.left)
           onLeft = (id: string) => { if (id !== active) onTab(id as BarTabId) }
           progress = progressRow(el, unit.length === 0 ? [] : layoutBand(unit, mainCols - 1).segs.slice(0, -1), slot)
-          quick = parts.quick
+          quick = [] // the shell's quick row stays (the card keys use it); outside a card it is blank, so the frame keeps its height
         }
         return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: bar.node }))
       }
@@ -1632,11 +1631,11 @@ export function registerLive(on: Parameters<Register>[0]): void {
       // the pane's own 待決 lines, compact; a press is the pane's decidePress, and the draw is asked again once it has written the state
       content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, rows - 2)
     } else if (active !== null) {
-      content = barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: open })
+      content = barContent(el, snapshot, active, columns, t, { onSlot: slot })
     }
-    if (active !== 'forge' && rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
+    if (active !== 'forge' && rows < 2 + content.length) return bar.node // the rule and the rows do not fit: the first row alone stays
     // The fleet counts are on the band's own line (slotFleet). Nothing is handed to the mod below for a second row.
-    if (content.length === 0) return bar.node
+    if ((content.length === 0 && (active === null || active === 'forge')) || rows < 2) return bar.node // an open tab with no row of its own still draws its rule: the ━ shows which tab is open
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 

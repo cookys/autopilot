@@ -517,6 +517,8 @@
 
 ### Settings changes
 
+- **New `depth0_delegate_gate.secret_print`** (config.json; `block`, `warn` or `off`; default `block`). Blocks Bash commands that would print secret values, including systemd unit/drop-in dumps. Use [safe-inspect](docs/guide/safe-inspect.md) for masked inspection.
+- **New `AUTOPILOT_BASH_GUARD_SECRET_MODE`** (env; `block`, `warn` or `off`; default `block`). Overrides `depth0_delegate_gate.secret_print`; env wins, and invalid values fall back to `block`.
 - **New `AUTOPILOT_TASK_CLASS`** (env; no default). The task class of a dispatch to a local-sandbox endpoint (`qwen_local`): `format-convert`, `log-summary`, `simple-script` or `test-scaffold`. When unset, a `Task-Class:` header in the prompt file is read; neither present refuses the dispatch with `unknown-task-class`, any other value with `task-class`. Cloud endpoints ignore it.
 - **New `AUTOPILOT_CN_GATE_NOW`** (env; ISO-8601 string; default unset, which is the real clock). Test-only clock for `scripts/lib/cn-model-dispatch-gate.js` so a `review_local_exceptions` window is deterministic. An explicit `check({ now })` wins. An unparsable value does not open the exception. Not an operator setting.
 - **New `PACE_CEILING_PCT`** (`scripts/lib/pace-roles.json`, default `85`; override through the existing `$AUTOPILOT_PACE_ROLES` config path): maximum percent used for automatic engine choice; at/above the ceiling is excluded, while a named runner/model dispatches with a warning. `priority.<role>` now only breaks score/slack ties.

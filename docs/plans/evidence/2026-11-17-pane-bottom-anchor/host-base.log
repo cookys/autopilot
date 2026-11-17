@@ -1,0 +1,803 @@
+console mode next(e) asks for the second row: 0 | band row: ⊘ 疑似卡住 │ ⊘ 1 │ 指揮 團隊 額度 主機 本席 FLEET ▲0 ✗0 ⊘2 ●1 ⋯1 top [REG a2] DOA class (unacc
+non-console mode next(e) asks for the second row: 0
+speed view widths: 30:no tab | 40:no tab | 60:no tab | 81:no tab | 82:no tab | 100:view 82 | 120:view 82
+speed view widths: 30:no tab | 40:no tab | 60:no tab | 81:no tab | 82:no tab | 100:view 82 | 120:view 82
+
+mods/live/live.test.ts:
+(pass) P7 band: the ⓘ is a plain Button with autoFocus and no hotkey; pressing it opens the pane on the Now tab (terminal) [595.45ms]
+(pass) P7 panel: the tab strip is seven Buttons in contract order, the active one bold, with badges (terminal) [384.47ms]
+(pass) P7 band: the ⓘ is a plain Button with autoFocus and no hotkey; pressing it opens the pane on the Now tab (desktop) [349.12ms]
+(pass) P7 panel: the tab strip is seven Buttons in contract order, the active one bold, with badges (desktop) [341.23ms]
+(fail) G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal) [321.49ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: false
+  Received: true
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git
+    test's fs.read hook was skipped: test: ENOENT /work/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.read hook was skipped: test: ENOENT /work/.git
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(fail) G33a: the feed runs with no summary_row heartbeat, and before any run the band has no fleet counts; the reader is never asked (terminal) [336.81ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: false
+  Received: true
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git
+    test's fs.read hook was skipped: test: ENOENT /work/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.read hook was skipped: test: ENOENT /work/.git
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(fail) G33a: a stale, foreign, unreadable or oversized heartbeat does not stop the fetch, and the band stays one row (terminal) [414.34ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: false
+  Received: true
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git
+    test's fs.read hook was skipped: test: ENOENT /work/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.read hook was skipped: test: ENOENT /work/.git
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git
+    test's fs.read hook was skipped: test: ENOENT /work/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.read hook was skipped: test: ENOENT /work/.git
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git
+    test's fs.read hook was skipped: test: ENOENT /work/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.read hook was skipped: test: ENOENT /work/.git
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(fail) C1 U7: console mode: an alive forge-stats with summary_row is never asked for the second row (next(e) 0 calls) and the band row carries the console tab names (terminal) [289.64ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: false
+  Received: true
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(fail) C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal) [282.27ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: false
+  Received: true
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/sub/.git
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /work/repo/.git
+    test's fs.read hook was skipped: test: ENOENT /work/.git/HEAD
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.read hook was skipped: test: ENOENT /work/.git
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.decisions.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/load-source.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.qc.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.residue.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/stage/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718.review.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) G33a review g1: the heartbeat file is not the gate: a link, a non-file, an oversized body or a stat error still lets the tick fetch once, and no second row is handed over (terminal) [348.36ms]
+(pass) TUI v2 panel: at pane widths 60, 76 and 90 no tab clips value text with … and no line is wider than the pane, in en (terminal) [892.92ms]
+(pass) TUI v2 panel: at pane widths 60, 76 and 90 no tab clips value text with … and no line is wider than the pane, in zh-TW (terminal) [777.61ms]
+(pass) TUI v2 panel: at pane widths 60, 76 and 90 no tab clips value text with … and no line is wider than the pane, in en (desktop) [823.33ms]
+(pass) TUI v2 panel: at pane widths 60, 76 and 90 no tab clips value text with … and no line is wider than the pane, in zh-TW (desktop) [743.66ms]
+(pass) DECIDE mounted: each option is a Button, a text field sits under each question, the send Button is absent until something is chosen (terminal) [305.51ms]
+(pass) DECIDE mounted: a question whose model.json entry has origin ask_user_question is left to its own dialog: no pick Button, no field, not counted (terminal) [312.77ms]
+(pass) DECIDE mounted: each option is a Button, a text field sits under each question, the send Button is absent until something is chosen (desktop) [337.73ms]
+(pass) DECIDE mounted: a question whose model.json entry has origin ask_user_question is left to its own dialog: no pick Button, no field, not counted (desktop) [314.19ms]
+(pass) speed tab: while nothing is timed there is no label and no tab, and the mod below is not asked for a one-row label (terminal) [270.08ms]
+(fail) speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (terminal) [1063.23ms]
+  AssertionError: the label comes right after the ⓘ
+
+  expect(received).toEqual()
+
+  Expected: ["info", "speed"]
+  Received: []
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) speed tab: only ONE speed stands on the band: the old keyed label the mod below would answer is never asked for and never drawn (terminal) [1114.64ms]
+(pass) band row: idle fleet draws exactly columns cells from 40 to 220 (terminal) [3796.35ms]
+(pass) speed tab: the label does not time from the first visible chunk: hidden thinking counts from send (hook level, terminal) [855.18ms]
+(pass) speed tab: thinking that streams as text is timed from its first chunk, not from send (hook level, terminal) [838.22ms]
+(fail) speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (terminal) [1108.88ms]
+  TypeError: undefined is not an object (evaluating 'mark.start')
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) speed tab: the speed view is drawn in English too, and the subagent request is marked (terminal) [1094.05ms]
+(pass) speed tab: pressing the label on the left opens the same tab as the strip tab (terminal) [1039.07ms]
+(pass) speed tab: the ask for the full view carries the requestId as received (forge-stats draws its Raster under it) (terminal) [1087.76ms]
+(fail) speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (terminal) [1096.89ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: [17]
+  Received: [19]
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(fail) speed tab: pressing it again closes it, and the speed view is gone (terminal) [1052.16ms]
+  AssertionError: expect(received).not.toContain()
+
+  Expected: not containing "FERRIS"
+  Received: "⊘ Stalled| │ |⊘| |1|  |QC| |✓| │ |dev |↓| |3|  |⚑| |2| │ |ⓘ |│ |ϟ |150| tok/s| |█▅|                | Now | | Decide | | Dispatch | | Review | | Usage | | ϟ | |FERRIS-0|FERRIS-1|FERRIS-2|FERRIS-3|FERRIS-4|FERRIS-5|FERRIS-6|FERRIS-7|FERRIS-8|FERRIS-9|FERRIS-10|FERRIS-11"
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) speed tab: the mod below answering nothing (the engine) leaves the speed view alone, ours (terminal) [1063.41ms]
+(pass) speed tab: room for the speed view needs 8 rows under the rule, the mod below 12 more beside it: 9 rows leaves the row alone, 10 draws ours, 14 the mod below too (terminal) [2769.78ms]
+(fail) speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (terminal) [1903.09ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: []
+  Received: [
+    {
+      maxRows: null,
+      bodyColumns: 120,
+      requestId: "rq-band-1",
+      hasSurvey: false,
+      hasScroll: true,
+      bodyRows: 5
+    },
+    {
+      maxRows: undefined,
+      bodyColumns: 120,
+      requestId: "rq-band-1",
+      hasSurvey: false,
+      hasScroll: true,
+      bodyRows: 5
+    }
+  ]
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) speed tab: a measurement that throws (a null entry in serverToolUses) leaves the turn alone: its result still comes back, and nothing is recorded (terminal) [699.05ms]
+(pass) speed tab: at 30 to 120 columns the open speed view exists exactly where the tab does, never draws wider than the band, and the recent table is left out whole, not cut, when its 46 cells do not fit (terminal) [1183.57ms]
+(pass) speed tab: the label colours on the drawn band: ϟ and the trend running, the number default, the unit dim (terminal) [1070.82ms]
+(pass) speed tab: while nothing is timed there is no label and no tab, and the mod below is not asked for a one-row label (desktop) [261.70ms]
+(fail) speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (desktop) [1071.58ms]
+  AssertionError: the label comes right after the ⓘ
+
+  expect(received).toEqual()
+
+  Expected: ["info", "speed"]
+  Received: []
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) speed tab: only ONE speed stands on the band: the old keyed label the mod below would answer is never asked for and never drawn (desktop) [1179.73ms]
+(pass) band row: idle fleet draws exactly columns cells from 40 to 220 (desktop) [3883.51ms]
+(pass) speed tab: the label does not time from the first visible chunk: hidden thinking counts from send (hook level, desktop) [866.53ms]
+(pass) speed tab: thinking that streams as text is timed from its first chunk, not from send (hook level, desktop) [841.29ms]
+(fail) speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (desktop) [1081.93ms]
+  TypeError: undefined is not an object (evaluating 'mark.start')
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) speed tab: the speed view is drawn in English too, and the subagent request is marked (desktop) [1071.34ms]
+(pass) speed tab: pressing the label on the left opens the same tab as the strip tab (desktop) [1083.65ms]
+(pass) speed tab: the ask for the full view carries the requestId as received (forge-stats draws its Raster under it) (desktop) [1096.93ms]
+(fail) speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (desktop) [1089.55ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: [17]
+  Received: [19]
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(fail) speed tab: pressing it again closes it, and the speed view is gone (desktop) [1087.16ms]
+  AssertionError: expect(received).not.toContain()
+
+  Expected: not containing "FERRIS"
+  Received: "⊘ Stalled| │ |⊘| |1|  |QC| |✓| │ |dev |↓| |3|  |⚑| |2| │ |ⓘ |│ |ϟ |150| tok/s| |█▅|                | Now | | Decide | | Dispatch | | Review | | Usage | | ϟ | |FERRIS-0|FERRIS-1|FERRIS-2|FERRIS-3|FERRIS-4|FERRIS-5|FERRIS-6|FERRIS-7|FERRIS-8|FERRIS-9|FERRIS-10|FERRIS-11"
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) speed tab: the mod below answering nothing (the engine) leaves the speed view alone, ours (desktop) [1079.94ms]
+(pass) speed tab: room for the speed view needs 8 rows under the rule, the mod below 12 more beside it: 9 rows leaves the row alone, 10 draws ours, 14 the mod below too (desktop) [2765.35ms]
+(fail) speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (desktop) [1908.17ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: []
+  Received: [
+    {
+      maxRows: null,
+      bodyColumns: 120,
+      requestId: "rq-band-1",
+      hasSurvey: false,
+      hasScroll: true,
+      bodyRows: 5
+    },
+    {
+      maxRows: undefined,
+      bodyColumns: 120,
+      requestId: "rq-band-1",
+      hasSurvey: false,
+      hasScroll: true,
+      bodyRows: 5
+    }
+  ]
+
+  the engine reported:
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/advisories/sid-aaaa.jsonl
+    test's fs.list hook was skipped: test: ENOENT /dev/shm/live-1/autopilot/band-facts
+    test's fs.list hook was skipped: test: ENOENT /home/t/.autopilot/review/a1b2c3d4e5f60718
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/review/server.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/sources/a1b2c3d4e5f60718--root-1.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/tasks/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/attention/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/turn-effective/sid-aaaa.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/a1b2c3d4e5f60718--root-1.foreman.json
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/work-orders/root-1
+    test's fs.list hook was skipped: test: ENOENT /work/repo/.git/autopilot/decisions
+    test's fs.read hook was skipped: test: ENOENT /home/t/.autopilot/config.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/runs/spend-history.json
+    test's fs.read hook was skipped: test: ENOENT /dev/shm/live-1/codeforge/pet.json
+(pass) speed tab: a measurement that throws (a null entry in serverToolUses) leaves the turn alone: its result still comes back, and nothing is recorded (desktop) [586.88ms]
+(pass) speed tab: at 30 to 120 columns the open speed view exists exactly where the tab does, never draws wider than the band, and the recent table is left out whole, not cut, when its 46 cells do not fit (desktop) [1073.94ms]
+(pass) speed tab: the label colours on the drawn band: ϟ and the trend running, the number default, the unit dim (desktop) [1044.24ms]
+(pass) O4 shell: panel data older than a minute is marked on the first row of the first right column, with no extra row (terminal) [248.38ms]
+(pass) usagetab: data older than a minute puts its age in front of the first row, with no row of its own (terminal) [252.83ms]
+(pass) bandsent: a sent card of five options (inline state line, no row under the options) still offers 改答案, within the width; at 80, 100 and 160 columns (terminal) [348.40ms]
+(pass) O4 shell: panel data older than a minute is marked on the first row of the first right column, with no extra row (desktop) [234.36ms]
+(pass) usagetab: data older than a minute puts its age in front of the first row, with no row of its own (desktop) [206.26ms]
+(pass) bandsent: a sent card of five options (inline state line, no row under the options) still offers 改答案, within the width; at 80, 100 and 160 columns (desktop) [337.38ms]
+
+ 45 pass
+ 15 fail
+Ran 60 tests across 1 file. [56.59s]

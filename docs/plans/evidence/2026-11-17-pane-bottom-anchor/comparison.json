@@ -1,0 +1,11 @@
+{
+  "base": "b28dbc5e6",
+  "base_failures": 15,
+  "current_failures": 15,
+  "added_failures": [],
+  "removed_failures": [],
+  "full_current_pass": 1049,
+  "full_current_failures": 15,
+  "full_added_failures": [],
+  "full_removed_failures": []
+}

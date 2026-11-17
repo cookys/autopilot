@@ -32,7 +32,9 @@ export type FrameOptions = {
   // `newer` (the words; the arrow is GLYPHS.structure.behind, added here) the line shown just above the control area when rows were APPENDED while scrolled up (`items`: a count of appended items that only grows, e.g. the message count; the line shows only when it grows while the view is scrolled up, so a change of width, which re-wraps rows, never says it. Omitted = a snapshot that is re-read whole, never says so). The control area is
   // `bar` and its height never depends on any of this.
   // `inline`: an inline pane's frame fits its content, so the content grows upward from the control area up to `rows` and there is no blank; a dock pane has the fixed height `rows`.
-  bottom?: { above: (n: number) => string; newer: string; items?: number; inline?: boolean }
+  // `controlsLast`: a live pane ends at its navigation, with no trailing spare.
+  // The viewer retains its original spare-row contract by default.
+  bottom?: { above: (n: number) => string; newer: string; items?: number; inline?: boolean; controlsLast?: boolean }
 }
 
 function bottomFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions & { bottom: NonNullable<FrameOptions['bottom']> }) {
@@ -84,7 +86,7 @@ function bottomFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions & {
         <Text key="rule" color={PALETTE.structure}>{GLYPHS.structure.rule.repeat(Math.max(1, o.cols))}</Text>
         {o.bar}
       </Box>
-      <Text key="spare"> </Text>
+      {o.bottom.controlsLast === true ? null : <Text key="spare"> </Text>}
     </Box>
   )
 }

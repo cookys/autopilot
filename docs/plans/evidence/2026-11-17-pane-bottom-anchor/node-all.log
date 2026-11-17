@@ -1,0 +1,203 @@
+✔ renderer controls: top alignment and a trailing spacer are distinguishable from bottom alignment (1.845484ms)
+✔ pane now 160x40: footer last, short content leaves blanks above (20.13409ms)
+✔ pane decide 160x40: footer last, short content leaves blanks above (21.802801ms)
+✔ pane dispatch 160x40: footer last, short content leaves blanks above (10.218184ms)
+✔ pane review 160x40: footer last, short content leaves blanks above (9.444529ms)
+✔ pane spend 160x40: footer last, short content leaves blanks above (10.340726ms)
+✔ pane hygiene 160x40: footer last, short content leaves blanks above (12.599337ms)
+✔ pane fleet 160x40: footer last, short content leaves blanks above (10.676186ms)
+✔ pane legend 160x40: footer last, short content leaves blanks above (10.830888ms)
+✔ console command 160x40: footer last (12.899192ms)
+✔ console team 160x40: footer last (8.269015ms)
+✔ console quota 160x40: footer last (8.113453ms)
+✔ console hosts 160x40: footer last (7.203479ms)
+✔ console self 160x40: footer last (8.184627ms)
+✔ pane waiting 160x40: short-content fallback is bottom anchored (0.957623ms)
+✔ scroll 160x40: bottom default, up reveals older rows, End returns to hot rows (26.872765ms)
+✔ band speed 160x40: real speed content grows above band (1.594602ms)
+✔ pane now 80x24: footer last, short content leaves blanks above (4.507365ms)
+✔ pane decide 80x24: footer last, short content leaves blanks above (3.465063ms)
+✔ pane dispatch 80x24: footer last, short content leaves blanks above (2.828093ms)
+✔ pane review 80x24: footer last, short content leaves blanks above (2.788048ms)
+✔ pane spend 80x24: footer last, short content leaves blanks above (3.115444ms)
+✔ pane hygiene 80x24: footer last, short content leaves blanks above (2.877887ms)
+✔ pane fleet 80x24: footer last, short content leaves blanks above (2.916029ms)
+✔ pane legend 80x24: footer last, short content leaves blanks above (4.241314ms)
+✔ console command 80x24: footer last (6.176577ms)
+✔ console team 80x24: footer last (4.711539ms)
+✔ console quota 80x24: footer last (3.745812ms)
+✔ console hosts 80x24: footer last (3.071782ms)
+✔ console self 80x24: footer last (2.678923ms)
+✔ pane waiting 80x24: short-content fallback is bottom anchored (0.402768ms)
+✔ scroll 80x24: bottom default, up reveals older rows, End returns to hot rows (13.166665ms)
+✔ band speed 80x24: real speed content grows above band (0.493399ms)
+✔ shell: short main content is padded above, quick controls precede final menu (2.498774ms)
+✔ shell overflow: default opens at bottom, scrolling up survives redraw (0.599409ms)
+✔ page order: summary, hint and data age are cold; the held card and submit stay last (20.210063ms)
+✔ summary: every figure comes from counts (running 2, waiting 1, stalled 3, hosts 2/3, gpu 5/7, quota worst, hints 2) (1.611794ms)
+✔ exceptions: only to_console === true rows (quota + exceptions); a card item never; the T7 own-card exception is drawn (2.146681ms)
+✔ negative control: flipping one exception to_console to false removes it from the page (red before green) (2.272137ms)
+✔ queue: the held card is a full card (options), the others are plain rows; the waiting_step card has the report Button that fills, never submits (1.234804ms)
+✔ queue count is counts.decisions, not a count of rows (1.522967ms)
+✔ a card of another host (the mirror) is not in the queue: no card items are drawn from items, only cards[] (0.896868ms)
+✔ data age: fresh sources say their age, expired says 過期, no_source says 無來源; the line fits every width (7.020976ms)
+✔ stale fixture: hosts empty but expired draws 過期 where the figures were (3.314889ms)
+✔ empty fixture: the queue and the exceptions say there is nothing, not a blank section (0.564553ms)
+✔ cards missing says 無來源 in the queue; an empty cards array says there is no open question (2.351737ms)
+✔ folding: a folded exceptions section hides its rows and keeps its header (1.089962ms)
+✔ no raw member address, IP or login name is drawn anywhere on the page, both locales and all widths (11.394749ms)
+✔ the module copy of console-full.json (for the plugin-test drawing test) equals the official JSON (1.017184ms)
+(node:2228100) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/mods/live/tabs.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to <worktree>/mods/live/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2228105) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/mods/live/console.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to <worktree>/mods/live/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+node:internal/modules/package_json_reader:331
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'claude-code' imported from <worktree>/mods/live/console.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)
+    at packageResolve (node:internal/modules/esm/resolve:784:25)
+    at moduleResolve (node:internal/modules/esm/resolve:873:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.22.1
+✖ mods/live/console.test.ts (77.875563ms)
+(node:2228131) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/mods/live/consoleframe.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to <worktree>/mods/live/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+node:internal/modules/package_json_reader:331
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'claude-code' imported from <worktree>/mods/live/consoleframe.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)
+    at packageResolve (node:internal/modules/esm/resolve:784:25)
+    at moduleResolve (node:internal/modules/esm/resolve:873:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.22.1
+✖ mods/live/consoleframe.test.ts (82.159096ms)
+(node:2228143) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/mods/live/decide.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to <worktree>/mods/live/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+node:internal/modules/package_json_reader:331
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'claude-code' imported from <worktree>/mods/live/decide.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)
+    at packageResolve (node:internal/modules/esm/resolve:784:25)
+    at moduleResolve (node:internal/modules/esm/resolve:873:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.22.1
+✖ mods/live/decide.test.ts (106.373497ms)
+(node:2228151) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/mods/live/live.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to <worktree>/mods/live/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+node:internal/modules/package_json_reader:331
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'claude-code' imported from <worktree>/mods/live/live.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)
+    at packageResolve (node:internal/modules/esm/resolve:784:25)
+    at moduleResolve (node:internal/modules/esm/resolve:873:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.22.1
+✖ mods/live/live.test.ts (284.75447ms)
+(node:2228166) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<worktree>/mods/live/pane-attach.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to <worktree>/mods/live/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+node:internal/modules/package_json_reader:331
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'claude-code' imported from <worktree>/mods/live/pane-attach.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)
+    at packageResolve (node:internal/modules/esm/resolve:784:25)
+    at moduleResolve (node:internal/modules/esm/resolve:873:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.22.1
+✖ mods/live/pane-attach.test.ts (101.728724ms)
+ℹ tests 54
+ℹ suites 0
+ℹ pass 49
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1145.32978
+
+✖ failing tests:
+
+test at mods/live/console.test.ts:1:1
+✖ mods/live/console.test.ts (77.875563ms)
+  'test failed'
+
+test at mods/live/consoleframe.test.ts:1:1
+✖ mods/live/consoleframe.test.ts (82.159096ms)
+  'test failed'
+
+test at mods/live/decide.test.ts:1:1
+✖ mods/live/decide.test.ts (106.373497ms)
+  'test failed'
+
+test at mods/live/live.test.ts:1:1
+✖ mods/live/live.test.ts (284.75447ms)
+  'test failed'
+
+test at mods/live/pane-attach.test.ts:1:1
+✖ mods/live/pane-attach.test.ts (101.728724ms)
+  'test failed'

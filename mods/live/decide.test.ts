@@ -34,7 +34,7 @@ const ctxOf = (t: ReturnType<typeof makeT>, cols: number, decide?: DecideView) =
 const texts = (ls: PaneLine[]): string[] => ls.map(l => l.text.trimEnd())
 const pressIds = (ls: PaneLine[]): string[] => ls.flatMap(l => [...new Set((l.segs ?? []).flatMap(s => (s.press === undefined ? [] : [s.press])))])
 
-test('DECIDE card: a section header with the count, then per question the title, 背景 → 卡住 → 選項 → 建議 → 補充 in the key/value grammar (key at column 2, value at column 12), a blank between cards, the send row last', () => {
+test('DECIDE card: context and notes precede options, then submit in the key/value grammar (key at column 2, value at column 12), a blank between cards', () => {
   const zh = makeT('zh-TW')
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view()))
   const t = texts(ls)
@@ -49,7 +49,7 @@ test('DECIDE card: a section header with the count, then per question the title,
   const advice = at('  建議      ')
   const note = ls.findIndex(l => l.field !== undefined && l.field.key === 'note:d-4290499d')
   expect(bg).toBe(2)
-  expect([bg < blocks, blocks < row, row < advice, advice < note], 'the order is 背景, 卡住, 選項, 建議, 補充').toEqual([true, true, true, true])
+  expect([bg < blocks, blocks < advice, advice < note, note < row], 'the order is 背景, 卡住, 建議, 補充, 選項').toEqual([true, true, true, true])
   expect(t[row + 1]).toBe('            照現況') // every option shows its description under it, not only the picked one
   expect(t[row + 2]).toBe('            [ ] 完整顯示')
   expect(t[row + 3]).toBe('            全列出來')
@@ -352,12 +352,12 @@ test('DECIDE copy: the note placeholder and the submit label say a written answe
 })
 
 // ---- review round 1 ----
-test('DECIDE rows: 背景 → 卡住 → 選項 → 建議 → 補充, a row with nothing to say is not drawn, the source is never drawn, 建議 is `<option>：<reason>` with no star (negative controls)', () => {
+test('DECIDE rows: 背景 → 卡住 → 建議 → 補充 → 選項, a row with nothing to say is not drawn, the source is never drawn, 建議 is `<option>：<reason>` with no star (negative controls)', () => {
   const zh = makeT('zh-TW')
   const full = (over: Partial<LiveDecision>) => decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], ...over })]), ctxOf(zh, 76, view()))
   const one = (over: Partial<LiveDecision>) => texts(full(over))
   const all = one({ background: '為什麼問', recommendation: '甲', why: '少一屏', blocks: '下一個派工', source: 'lane-x', not_authorized: '深度零不能決定' })
-  const keys = ['  背景      為什麼問', '  卡住      下一個派工', '  選項      [ ] ★ 甲', '            [ ] 乙', '  建議      甲', '            少一屏', '  補充']
+  const keys = ['  背景      為什麼問', '  卡住      下一個派工', '  建議      甲', '            少一屏', '  補充', '  選項      [ ] ★ 甲', '            [ ] 乙']
   expect(keys.map(k => all.indexOf(k)), 'every row is there').not.toContain(-1)
   expect(keys.map(k => all.indexOf(k)), 'in this order').toEqual(keys.map(k => all.indexOf(k)).slice().sort((a, b) => a - b))
   expect(all.join('\n'), 'the source is data for the assistant, not the owner').not.toMatch(/lane-x|來源/)
@@ -546,7 +546,7 @@ function cardText(ls: PaneLine[]): { bg: string; label: string; desc: string } {
   const t = texts(ls)
   const bgAt = t.findIndex(x => x.startsWith('  背景'))
   const optAt = t.findIndex(x => x.startsWith('  選項'))
-  const bg = t.slice(bgAt, optAt).map(val12).join('')
+  const bg = t.slice(bgAt, optAt).filter((_, i) => ls[bgAt + i].field === undefined).map(val12).join('')
   let label = ''
   let desc = ''
   for (let i = optAt; i < ls.length && ls[i].kind !== 'blank' && !ls[i].bar; i++) {

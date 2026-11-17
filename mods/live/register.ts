@@ -68,7 +68,7 @@ import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane, noteInputKey, resetNoteInputs } from './pane'
 import { FILL_PRESS } from './commandtab'
-import { type ScrollModel, fixedWindow, newScroll, scrollHook } from './scroll'
+import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
 import { reopenLook, showPath } from '../viewer/show'
 import {
@@ -222,6 +222,7 @@ const consoleNav = (): ConsoleNav => ({ snap: consoleSnap, tab: consoleTab })
 // the console pane (pane.tsx consolePane): the same navigation state as the band. The 指揮 page answers cards through the same decide wiring as the 待決 tab (decideState, decideBatch,
 // decidePress); a `fill:` press (a waiting_step card's report button) only puts the report line in the prompt box with `$.prompt.fill`, it never submits.
 const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0] & { props: { bodyColumns: number | null; scroll?: ScrollView | null } }) => {
+  hostScrollHome($, e.props.scroll ?? undefined)
   decideCols = paneWidth(e.props.bodyColumns)
   decideInputs = inputsFor(e.surface)
   await decideRepair($, await read($, DECIDE))
@@ -1552,7 +1553,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const room = split ? avail : Math.max(MAIN_CONTENT_ROWS, whole.rows.length)
           if (room + 2 !== plan.bodyRows) { const again = shellPlan({ ...planInp, bodyRows: room + 2 }); if (again !== null) plan = again }
           const model = bandModel('decide')
-          if (model.key !== curKey) { model.key = curKey; model.offset = 0 }
+          keyed(model, curKey)
           const page = (by: number) => { model.offset = Math.max(0, Math.min(model.max, model.offset + by * Math.max(1, model.room))); redraw() }
           // the hint names only the options whose Button is in the tree: all of them when drawn whole or in the strip, else those in the window (a Button off the tree has no hotkey)
           let seen = whole.keyed.map(x => x.k)
@@ -1628,8 +1629,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => consoleOn ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($))))
 
-  // The 待決 tab draws its own scrolling window (scroll.tsx), so the person's scroll keys there move the mod's offset and never reach the engine; every other tab keeps the engine's own
-  // scrolling (`next(e)`).
+  // All live and console tabs share the bottom window; scroll keys move its
+  // offset. A host without a frame still receives the event through next(e).
   on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, ($, e, next) => {
     return scrollHook(decideScroll, e, next, () => { void $.ui.invalidate('ui.render') })
   })
@@ -1683,10 +1684,10 @@ async function decideAnswered($: EngineInterface, id: string): Promise<void> {
   await decideFocusTo($, plan)
 }
 
-// The 待決 tab is exactly the pane's height, so the engine's own window must stand at 0 there; one left scrolled by another tab (the engine keeps one offset per pane) would hide the
-// strip. Best effort: a pane that holds no keys refuses, and the next draw asks again.
-function hostScrollHome($: EngineInterface, scroll: { offset: number } | undefined, tab: PaneTab): void {
-  if (tab === 'decide' && scroll !== undefined && scroll.offset > 0) void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
+// The mod cuts every tab's window itself. Keep the engine's outer window at 0
+// so a stale host offset cannot hide the fixed footer.
+function hostScrollHome($: EngineInterface, scroll: { offset: number } | undefined, _tab?: PaneTab): void {
+  if (scroll !== undefined && scroll.offset > 0) void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
 }
 
 export const register: Register = on => {

@@ -62,15 +62,19 @@ function draw(cols: number, rows: number, win = newScroll(), tab: 'command' | 't
 }
 const rowOf = (lines: string[], needle: string): number => lines.findIndex(l => l.includes(needle))
 
-test('指揮 drawn at 120 / 80 / 20 columns: order summary, exceptions, queue, data age; printed for the mockup diff', () => {
+test('指揮 drawn at 120 / 80 / 20 columns: summary and data age precede exceptions and queue; tabs last', () => {
   for (const [cols, rows] of [[120, 40], [80, 30], [20, 24]] as const) {
     const lines = draw(cols, rows)
     console.log('SNAPSHOT-BEGIN ' + cols + ' columns x ' + rows + ' rows\n' + lines.map(l => '|' + l).join('\n') + '\nSNAPSHOT-END')
-    const at = (s: string) => rowOf(lines, s)
+    // The narrow default starts at the hot bottom; inspect the full page as
+    // well to pin cold-section order even when those rows are off screen.
+    const complete = draw(cols, 100)
+    const at = (s: string) => rowOf(complete, s)
     expect(at('產線'), cols + ': summary after the strip').toBeGreaterThan(0)
     expect(at('例外'), cols + ': exceptions after summary').toBeGreaterThan(at('產線'))
     expect(at('待決'), cols + ': queue after exceptions').toBeGreaterThan(at('例外'))
-    expect(at('資料'), cols + ': data age under everything').toBeGreaterThan(at('待決'))
+    expect(at('資料'), cols + ': data age above the hot queue').toBeLessThan(at('待決'))
+    expect(lines[lines.length - 1], cols + ': tabs last').toContain('指揮')
   }
 })
 
@@ -78,16 +82,16 @@ test('the action area keeps its screen row while the window scrolls', () => {
   for (const [cols, rows] of [[120, 14], [80, 14], [20, 14]] as const) {
     const win = newScroll()
     const first = draw(cols, rows, win)
-    const barAt = rowOf(first, '資料')
-    const ruleAt = barAt - 2
+    const barAt = rowOf(first, '送出')
+    const tabsAt = first.length - 1
     expect(win.max, cols + ': the content overflows so there is something to scroll').toBeGreaterThan(0)
     const seen = new Set<string>([first[3]])
     for (const off of [1, 3, win.max]) {
       win.offset = off
       const moved = draw(cols, rows, win)
-      expect(rowOf(moved, '資料'), cols + ' offset ' + off + ': the data-age row').toBe(barAt)
-      expect(rowOf(moved, '按按鈕作答') < 0 ? barAt - 1 : rowOf(moved, '按按鈕作答'), cols + ' offset ' + off + ': the hint row').toBe(barAt - 1)
-      expect(moved[ruleAt], cols + ' offset ' + off + ': the rule above the action area').toBe(first[ruleAt])
+      expect(rowOf(moved, '送出'), cols + ' offset ' + off + ': submit stays fixed').toBe(barAt)
+      expect(moved[tabsAt], cols + ' offset ' + off + ': navigation stays fixed').toBe(first[tabsAt])
+      expect(moved[tabsAt - 1], cols + ' offset ' + off + ': the rule above navigation').toBe(first[tabsAt - 1])
       expect(moved.length, cols + ' offset ' + off + ': the frame height').toBe(first.length)
       seen.add(moved[3])
     }

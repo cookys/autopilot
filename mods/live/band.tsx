@@ -10,7 +10,7 @@ import { PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
 import { actionSeg, cardParas, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg, PALETTE, wrapPlain } from './ui'
-import { fixedWindow, thumbOf } from './scrollmath'
+import { fixedWindow, followsTail, thumbOf } from './scrollmath'
 import type { ScrollModel } from './scrollmath'
 import type { ForgeSegment } from './ui'
 import { barRule, barStrip, decideBandPlan } from './tabs'
@@ -24,17 +24,17 @@ type El = (props: any) => any
 // the band is this many rows tall (one Box of one line); the mods drawn below it are given the rows that remain
 export const BAND_ROWS = 1
 
-// the band over what a mod below it drew: autopilot on top, the other under it
+// The band is the final row next to the prompt; open content grows above it.
 export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
   const { Box } = el
-  return <Box flexDirection="column">{band}{below}</Box>
+  return <Box flexDirection="column" justifyContent="flex-end">{below}{band}</Box>
 }
 
-// bandlayout: the rows drawn as they are, top to bottom, no band over them (the shell's own order puts the menu row second from the bottom). The tree is never taller than the band: a host that gets more
+// bandlayout: rows drawn top to bottom, ending in quick controls and the menu row. The tree is never taller than the band: a host that gets more
 // than maxRows rows opens a window of its own and hides the last row (the quick row) behind a "n more" line, so there is no spare row here.
 export function stackRows(el: { Box: El }, rows: unknown[]) {
   const { Box } = el
-  return <Box flexDirection="column">{rows}</Box>
+  return <Box flexDirection="column" justifyContent="flex-end">{rows}</Box>
 }
 
 // the scroll hint row of a window that holds more than it shows (guideline §13.3): `↑ 還有 N 行 · ↓ 還有 M 行`, each half a `[ … ]` Button (BarButton's look) that moves the window a page (a click, or Tab and Enter, reach what
@@ -230,7 +230,7 @@ export type ShellDraw = {
   main: unknown[] // the main window's content rows, at most plan.bodyRows - 2; the divider and the progress row below them are drawn here
   progress: unknown // the progress row's content (one Box), inside the main window
   quick: unknown[]
-  bar: unknown // the menu row (BandBar): bandlayout puts it on the second row from the bottom, the quick row last (guideline §13: the operation area is the last two rows)
+  bar: unknown // the menu row (BandBar), always last, directly below the quick controls
 }
 export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unknown[] {
   const { Box, Text, Button } = el
@@ -252,7 +252,8 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
       : Button === undefined
         ? <Box key="l">{segsOf(item.segs, 'l')}</Box>
         : <Button key={item.key} plain onPress={() => d.onLeft(item.id)}>{segsOf(item.segs, 'l')}</Button>
-    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > content ? d.progress : d.main[r] ?? blank('m')
+    const mainAt = r - Math.max(0, content - d.main.length)
+    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > content ? d.progress : d.main[mainAt] ?? blank('m')
     const cells = [
       vert(0, false),
       <Box key="lc" width={plan.geo.left} flexShrink={0}>{leftCell}</Box>,
@@ -266,8 +267,8 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
     rows.push(<Box key={'row' + r}>{cells}</Box>)
   }
   rows.push(<Box key="bottom">{segsOf(plan.bottom, 'b')}</Box>)
-  rows.push(<Box key="menu">{d.bar}</Box>)
   rows.push(<Box key="quick"><Text>{' '}</Text>{d.quick}</Box>)
+  rows.push(<Box key="menu">{d.bar}</Box>)
   return rows
 }
 
@@ -371,6 +372,7 @@ export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top
   const fixed = 1 + o.strip.length // the rule and the strip
   const fits = o.top.length <= o.room - fixed
   const winRows = Math.max(1, fits ? o.room - fixed : o.room - fixed - 1) // an overflowing window gives one more row to the page Buttons
+  if (followsTail(o.model)) o.model.offset = Math.max(0, o.top.length - winRows)
   const win = fixedWindow(o.top.length, winRows, o.model)
   const th = thumbOf(o.top.length, winRows, win.offset)
   const shown = o.top.slice(win.offset, win.offset + win.rows)
@@ -379,10 +381,10 @@ export function cardSplit(el: { Box: El; Text: El; Button?: El }, t: T, o: { top
     const bar = th === null ? <Text key="sb">{' '}</Text> : <Text key="sb" color={on ? PALETTE.here : PALETTE.structure}>{on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track}</Text>
     return <Box key={'sw' + i}><Box key="c" width={o.cells - 1} flexShrink={0} overflow="hidden">{r}</Box>{bar}</Box>
   })
-  while (rows.length < winRows) rows.push(<Text key={'sp' + rows.length}>{' '}</Text>)
+  while (rows.length < winRows) rows.unshift(<Text key={'sp' + rows.length}>{' '}</Text>)
   rows.push(<Text key="rule" color={PALETTE.structure}>{GLYPHS.structure.rule.repeat(Math.max(1, o.cells - 1))}</Text>)
-  rows.push(...o.strip)
   if (win.hint) rows.push(scrollHint(el, t, win.above, win.below, () => o.onPage(-1), () => o.onPage(1)))
+  rows.push(...o.strip)
   return { rows, from: win.offset, to: win.offset + win.rows } // [from, to): the rows of `top` the window shows
 }
 

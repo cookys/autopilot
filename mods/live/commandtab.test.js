@@ -25,14 +25,17 @@ const rows = (v, which) => v[which].map(l => (l.segs === undefined ? l.text : l.
 const view = (con, { cols = 120, locale = 'zh-TW', live = LIVE, folded } = {}) => V.commandView(con, live, { t: I.makeT(locale), cols, ...(folded === undefined ? {} : { folded }) }, NOW)
 const width = s => [...s].reduce((w, ch) => w + (/[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1), 0)
 
-test('page order: summary, exceptions, queue, then the fixed bottom (hint, data age); the order never changes', () => {
+test('page order: summary, hint and data age are cold; the held card and submit stay last', () => {
   const v = view(FULL())
   const body = rows(v, 'body')
   const at = needle => body.findIndex(r => r.includes(needle))
   assert.ok(at('產線') === 0, 'the summary line comes first: ' + body[0])
   assert.ok(at('例外') > 0 && at('待決') > at('例外'), 'exceptions before the queue')
   const bar = rows(v, 'bar')
-  assert.ok(bar[bar.length - 1].startsWith('資料'), 'the data-age line is the last bar row: ' + bar[bar.length - 1])
+  assert.ok(at('資料') > 0 && at('資料') < at('待決'), 'data age stays above the hot card')
+  assert.ok(at('按按鈕作答') > 0 && at('按按鈕作答') < at('待決'), 'keyboard hint stays above the hot card')
+  assert.ok(bar.length > 0 && bar[bar.length - 1].includes('送出'), 'submit is the final control row')
+  assert.ok(body[body.length - 1].includes('再看 diff'), 'other feed cards and blank rows never separate the held card options from submit')
 })
 
 test('summary: every figure comes from counts (running 2, waiting 1, stalled 3, hosts 2/3, gpu 5/7, quota worst, hints 2)', () => {
@@ -84,12 +87,13 @@ test('a card of another host (the mirror) is not in the queue: no card items are
 
 test('data age: fresh sources say their age, expired says 過期, no_source says 無來源; the line fits every width', () => {
   const con = FULL()
-  const full = rows(view(con), 'bar').pop()
+  const age = () => rows(view(con), 'body').find(r => r.startsWith('資料 '))
+  const full = age()
   assert.ok(full.startsWith('資料 ') && full.includes('卡 ') && full.includes('額度 '), full)
   con.sources.cards = { at_ms: NOW - 20 * 60000, state: 'expired' }
-  assert.ok(rows(view(con), 'bar').pop().includes('卡 過期'))
+  assert.ok(age().includes('卡 過期'))
   con.sources.cards = { at_ms: NOW - 90000, state: 'stale' }
-  assert.ok(rows(view(con), 'bar').pop().includes('卡 1 分前'))
+  assert.ok(age().includes('卡 1 分前'))
   // the rows this page makes (the held card's own rows are decideCards', the 待決 tab's, drawn truncated by the pane)
   for (const cols of [120, 80, 20]) for (const l of [...rows(view(FULL(), { cols, live: null }), 'body'), ...rows(view(FULL(), { cols, live: null }), 'bar')]) assert.ok(width(l) <= cols - 1, cols + ': ' + l)
 })

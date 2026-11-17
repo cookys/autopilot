@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Offline-capable compiler for real TSX pane goldens; no production dependencies",
+  "devDependencies": {
+    "typescript": "5.7.3"
+  }
+}

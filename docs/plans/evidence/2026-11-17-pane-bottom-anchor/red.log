@@ -1,0 +1,710 @@
+✔ renderer controls: top alignment and a trailing spacer are distinguishable from bottom alignment (2.090676ms)
+✖ pane now 160x40: footer last, short content leaves blanks above (14.526067ms)
+✖ pane decide 160x40: footer last, short content leaves blanks above (14.172591ms)
+✖ pane dispatch 160x40: footer last, short content leaves blanks above (2.805892ms)
+✖ pane review 160x40: footer last, short content leaves blanks above (2.359462ms)
+✖ pane spend 160x40: footer last, short content leaves blanks above (2.210872ms)
+✖ pane hygiene 160x40: footer last, short content leaves blanks above (1.87007ms)
+✖ pane fleet 160x40: footer last, short content leaves blanks above (1.616794ms)
+✖ pane legend 160x40: footer last, short content leaves blanks above (2.244706ms)
+✖ console command 160x40: footer last (18.037437ms)
+✖ console team 160x40: footer last (2.141201ms)
+✖ console quota 160x40: footer last (1.930905ms)
+✖ console hosts 160x40: footer last (1.451563ms)
+✖ console self 160x40: footer last (2.726353ms)
+✖ pane waiting 160x40: short-content fallback is bottom anchored (0.932576ms)
+✖ scroll 160x40: bottom default, up reveals older rows, End returns to hot rows (2.6881ms)
+✖ band speed 160x40: real speed content grows above band (1.723635ms)
+✖ pane now 80x24: footer last, short content leaves blanks above (1.001515ms)
+✖ pane decide 80x24: footer last, short content leaves blanks above (2.625804ms)
+✖ pane dispatch 80x24: footer last, short content leaves blanks above (0.733792ms)
+✖ pane review 80x24: footer last, short content leaves blanks above (0.677165ms)
+✖ pane spend 80x24: footer last, short content leaves blanks above (0.781391ms)
+✖ pane hygiene 80x24: footer last, short content leaves blanks above (0.673438ms)
+✖ pane fleet 80x24: footer last, short content leaves blanks above (0.628744ms)
+✖ pane legend 80x24: footer last, short content leaves blanks above (1.52972ms)
+✖ console command 80x24: footer last (4.317217ms)
+✖ console team 80x24: footer last (1.308153ms)
+✖ console quota 80x24: footer last (1.084371ms)
+✖ console hosts 80x24: footer last (0.91382ms)
+✖ console self 80x24: footer last (1.567591ms)
+✖ pane waiting 80x24: short-content fallback is bottom anchored (0.473392ms)
+✖ scroll 80x24: bottom default, up reveals older rows, End returns to hot rows (1.305327ms)
+✖ band speed 80x24: real speed content grows above band (0.421905ms)
+✖ shell: short main content is padded above, quick controls precede final menu (2.763002ms)
+✖ shell overflow: default opens at bottom, scrolling up survives redraw (0.669711ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 1
+ℹ fail 34
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1018.403377
+
+✖ failing tests:
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane now 160x40: footer last, short content leaves blanks above (14.526067ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有背景工作在跑"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane decide 160x40: footer last, short content leaves blanks above (14.172591ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "  [ 送出（已答 1/1） ]  答案會貼進這個對話送出"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane dispatch 160x40: footer last, short content leaves blanks above (2.805892ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "  這是執行狀態，不是進度"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane review 160x40: footer last, short content leaves blanks above (2.359462ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有決策資料"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane spend 160x40: footer last, short content leaves blanks above (2.210872ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有帳號資料"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane hygiene 160x40: footer last, short content leaves blanks above (1.87007ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有資料 · 沒有載入來源資料"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane fleet 160x40: footer last, short content leaves blanks above (1.616794ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "其他主機的卡— 還沒有鏡像檔：到 PM 主機跑 scripts/fleet-card-mirror.js sync"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane legend 160x40: footer last, short content leaves blanks above (2.244706ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "  鍵盤：Ctrl+x Tab，再對 ⓘ 按 Enter；每按一次 Enter 切到下一個分頁"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console command 160x40: footer last (18.037437ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "資料 12:53 · 卡 20 秒前 · 額度 20 秒前 · 額度預測 無來源 · 槽位 無來源 · 指標 無來源"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console team 160x40: footer last (2.141201ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "團隊：進行中 2　等待 1　卡住 3"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console quota 160x40: footer last (1.930905ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "額度：風險 2 項　最差的池 pool-b"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console hosts 160x40: footer last (1.451563ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "主機：在線 2/3　GPU 忙 5/7"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console self 160x40: footer last (2.726353ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有決策資料"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:140:3
+✖ pane waiting 160x40: short-content fallback is bottom anchored (0.932576ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "等待第一份快照"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:143:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:146:3
+✖ scroll 160x40: bottom default, up reveals older rows, End returns to hot rows (2.6881ms)
+  AssertionError [ERR_ASSERTION]: overflow opens at bottom
+
+  0 !== 177
+
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:152:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 177,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:165:3
+✖ band speed 160x40: real speed content grows above band (1.723635ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + '│ ⓘ                                                                                                                          現況   待決   派工   審查   用量'
+  - '— 還沒有請求                        — 還沒有請求'
+
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:170:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '│ ⓘ                                                                                                                          現況   待決   派工   審查   用量',
+    expected: '— 還沒有請求                        — 還沒有請求',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane now 80x24: footer last, short content leaves blanks above (1.001515ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有背景工作在跑"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane decide 80x24: footer last, short content leaves blanks above (2.625804ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "  [ 送出（已答 1/1） ]  答案會貼進這個對話送出"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane dispatch 80x24: footer last, short content leaves blanks above (0.733792ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "  這是執行狀態，不是進度"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane review 80x24: footer last, short content leaves blanks above (0.677165ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有決策資料"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane spend 80x24: footer last, short content leaves blanks above (0.781391ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有帳號資料"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane hygiene 80x24: footer last, short content leaves blanks above (0.673438ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "— 沒有資料 · 沒有載入來源資料"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane fleet 80x24: footer last, short content leaves blanks above (0.628744ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "其他主機的卡— 還沒有鏡像檔：到 PM 主機跑 scripts/fleet-card-mirror.js sync"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:112:34
+✖ pane legend 80x24: footer last, short content leaves blanks above (1.52972ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "└ $         細節行 / 可執行的指令"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:115:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console command 80x24: footer last (4.317217ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "資料 12:53 · 卡 20 秒前 · 額度 20 秒前 · 額度預測 無來源 · 槽位 無來源"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console team 80x24: footer last (1.308153ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "團隊：進行中 2　等待 1　卡住 3"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console quota 80x24: footer last (1.084371ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "額度：風險 2 項　最差的池 pool-b"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console hosts 80x24: footer last (0.91382ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "主機：在線 2/3　GPU 忙 5/7"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:129:68
+✖ console self 80x24: footer last (1.567591ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "審查 ›      — 沒有審查資料"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:140:3
+✖ pane waiting 80x24: short-content fallback is bottom anchored (0.473392ms)
+  AssertionError [ERR_ASSERTION]: last visible row must be the tab labels: "等待第一份快照"
+      at footer (<worktree>/mods/live/bottom-anchor.test.js:101:10)
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:143:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:146:3
+✖ scroll 80x24: bottom default, up reveals older rows, End returns to hot rows (1.305327ms)
+  AssertionError [ERR_ASSERTION]: overflow opens at bottom
+
+  0 !== 194
+
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:152:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 194,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:165:3
+✖ band speed 80x24: real speed content grows above band (0.421905ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + '│ ⓘ                                          現況   待決   派工   審查   用量'
+  - '— 還沒有請求'
+
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:170:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '│ ⓘ                                          現況   待決   派工   審查   用量',
+    expected: '— 還沒有請求',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:174:1
+✖ shell: short main content is padded above, quick controls precede final menu (2.763002ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'fixture submit'
+  - 'fixture band'
+             ^
+
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:180:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'fixture submit',
+    expected: 'fixture band',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at mods/live/bottom-anchor.test.js:185:1
+✖ shell overflow: default opens at bottom, scrolling up survives redraw (0.669711ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 21
+
+      at TestContext.<anonymous> (<worktree>/mods/live/bottom-anchor.test.js:191:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 21,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

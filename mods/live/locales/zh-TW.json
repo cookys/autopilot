@@ -494,5 +494,16 @@
   "frame.more": "{arrow} 還有 {n} 列（PgDn）",
   "frame.src_no_source": "{name} 無來源",
   "frame.src_expired": "{name} 資料已過期，{min} 分鐘前",
-  "frame.src_stale": "{name} 資料過期，{min} 分鐘前"
+  "frame.src_stale": "{name} 資料過期，{min} 分鐘前",
+  "page.quota.v_limit_nosw": "已用完，換池資料無來源",
+  "page.quota.v_limit_stranded": "已用完，{n} 席停擺",
+  "page.quota.v_limit_switched": "已用完，席位已切到 {pool}",
+  "page.quota.v_exhaust_stranded": "約 {h} 時後用完，{n} 席沒池可切",
+  "page.quota.v_exhaust_ok": "約 {h} 時後用完，席位可切池",
+  "page.quota.v_exhaust_nosw": "約 {h} 時後用完，換池資料無來源",
+  "page.quota.v_use": "會用到 {p}%",
+  "page.quota.v_waste": "約剩 {y}% 會浪費",
+  "page.quota.v_stale": "{min} 分未更新（>10 分{why}）",
+  "page.quota.v_nopace": "無來源：capacity pace 未接",
+  "page.quota.v_top7": "7 天 {p}% 最高，沒有 pace"
 }

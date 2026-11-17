@@ -80,6 +80,7 @@
 // One JSON object on stdout when there is one, diagnostics on stderr.
 // Node >= 20.10, built-ins only.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -95,11 +96,15 @@ const SYNTHESIS_NAME = 'explore-synthesis.md';
 const REPO_ROOT = path.resolve(__dirname, '..');
 const STAGE_GRAPH = path.join(__dirname, 'stage-graph.js');
 const CHECK_INPUTS_LANDED = path.join(__dirname, 'check-inputs-landed.js');
+const CHECK_PHASE_REVIEW_RECEIPT = path.join(__dirname, 'check-phase-review-receipt.js');
 const GRAPH_JSON = path.join(REPO_ROOT, 'references', 'stage-graph.json');
 const LABEL_MAX = 64;
 const UNIT_RE = /^(phase|deliverable):(\d+)\/(\d+)(?::(.*))?$/su;
 const FAMILY_RE = /^[A-Za-z0-9._-]+$/u;
-const VALUED = new Set(['--to', '--resume-from', '--unit', '--review-families', '--session-id', '--repo-root', '--synthesis', '--coarse']);
+const VALUED = new Set([
+  '--to', '--resume-from', '--unit', '--review-families', '--session-id', '--repo-root',
+  '--synthesis', '--coarse', '--plan', '--plan-artifact', '--dispositions', '--rubric-file',
+]);
 const COARSE_STAGES = Object.freeze(['explore', 'plan', 'build', 'review', 'merged', 'shipped', 'used']);
 // Stated default: plan; implement+verify -> build; code-review+qc-gate -> review; finish -> merged.
 // Added default so every graph node has a coarse name: pre-plan nodes -> explore; plan-review stays plan.
@@ -128,14 +133,16 @@ function parseArgs(argv) {
     if (argv[i + 1] === undefined) throw new Usage(`${a} needs a value`);
     o[a.slice(2)] = argv[++i];
   }
-  if (o.coarse !== undefined && (o.to || o.unit || o['review-families'] || o.synthesis || o['resume-from'] !== undefined)) {
-    throw new Usage('--coarse is mutually exclusive with --to, --unit, --review-families, --synthesis and --resume-from');
+  if (o.coarse !== undefined && (o.to || o.unit || o['review-families'] || o.synthesis || o['resume-from'] !== undefined || o.plan)) {
+    throw new Usage('--coarse is mutually exclusive with --to, --unit, --review-families, --synthesis, --plan and --resume-from');
   }
   if (o['resume-from'] !== undefined) {
     if (o.to) throw new Usage('--resume-from takes no --to (the stage comes from the old marker)');
     if (o.unit || o['review-families']) throw new Usage('--resume-from takes no --unit / --review-families');
     if (o.synthesis) throw new Usage('--resume-from takes no --synthesis');
+    if (o.plan) throw new Usage('--resume-from takes no --plan');
   } else if (!o.to && o.coarse === undefined) throw new Usage('--to <node> is required');
+  if (o.plan && o.to !== 'implement') throw new Usage('--plan is only supported with --to implement');
   return o;
 }
 
@@ -580,6 +587,280 @@ function checkPlanInputsLanded(repoRoot, marker, sid) {
   };
 }
 
+function buildHeadPlanReceipt(repoRoot, planArg) {
+  const absPlan = path.isAbsolute(planArg) ? path.resolve(planArg) : path.resolve(repoRoot, planArg);
+  const rel = path.relative(repoRoot, absPlan).split(path.sep).join('/');
+  if (!rel || rel === '.' || rel.startsWith('..') || path.isAbsolute(rel)) {
+    return { error: `plan file "${planArg}" must be inside repository ${repoRoot}` };
+  }
+  let st;
+  try {
+    st = fs.statSync(absPlan);
+  } catch (err) {
+    return { error: `cannot stat plan file "${rel}": ${err.message}` };
+  }
+  if (!st.isFile()) return { error: `plan file "${rel}" is not a regular file` };
+
+  const statusRes = spawnSync('git', ['-C', repoRoot, 'status', '--porcelain', '--untracked-files=all', '--', rel], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (statusRes.status !== 0) {
+    return { error: `git status failed for "${rel}": ${(statusRes.stderr || '').trim()}` };
+  }
+  if ((statusRes.stdout || '').trim() !== '') {
+    return { error: `plan file "${rel}" is uncommitted or dirty; commit it before recording the frozen plan receipt` };
+  }
+
+  const receipt = sessionMode.derivePlanReceiptFromGit(repoRoot, 'HEAD', rel);
+  if (!receipt) {
+    return { error: `plan file "${rel}" does not resolve in HEAD` };
+  }
+  const blobRes = spawnSync('git', ['-C', repoRoot, 'cat-file', 'blob', receipt.blob_sha], {
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (blobRes.status !== 0 || !Buffer.isBuffer(blobRes.stdout) || !fs.readFileSync(absPlan).equals(blobRes.stdout)) {
+    return { error: `plan file "${rel}" on disk does not match HEAD` };
+  }
+  return { receipt };
+}
+
+function readJsonSafe(file) {
+  try {
+    const val = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return val && typeof val === 'object' && !Array.isArray(val) ? val : null;
+  } catch {
+    return null;
+  }
+}
+
+function listJsonFilesInDir(dir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const ent of entries) {
+    if (ent.isFile() && ent.name.endsWith('.json')) {
+      out.push(path.join(dir, ent.name));
+    }
+  }
+  return out.sort();
+}
+
+function collectPlanReviewDirs(repoRoot, receipt) {
+  const dirs = [];
+  const add = (d) => { if (d && !dirs.includes(d)) dirs.push(d); };
+  if (receipt && receipt.path) {
+    add(path.dirname(path.join(repoRoot, receipt.path)));
+  }
+  try { add(path.join(repoRoot, pathFor(repoRoot, 'plans_evidence_dir'))); } catch { /* optional */ }
+  try { add(path.join(repoRoot, pathFor(repoRoot, 'plans_dir'))); } catch { /* optional */ }
+  add(path.join(repoRoot, 'docs', 'plans'));
+  add(path.join(repoRoot, '.autopilot', 'plan-review'));
+  return dirs;
+}
+
+function runPhaseReviewReceiptCheck(repoRoot, artifactPath, dispositionsPath, receipt, opts) {
+  const args = [
+    CHECK_PHASE_REVIEW_RECEIPT,
+    '--plan-artifact', artifactPath,
+    '--dispositions', dispositionsPath,
+    '--repo-root', repoRoot,
+  ];
+  if (opts['rubric-file']) {
+    args.push('--rubric-file', path.resolve(opts['rubric-file']));
+  }
+  if (receipt && receipt.path) {
+    const diskPlan = path.join(repoRoot, receipt.path);
+    if (fs.existsSync(diskPlan)) args.push('--plan-file', diskPlan);
+  }
+  const res = spawnSync(process.execPath, args, { cwd: repoRoot, encoding: 'utf8' });
+  if (res.status === 0) return { ok: true };
+  return { ok: false, detail: (res.stderr || res.stdout || `exit ${res.status}`).trim() };
+}
+
+function verifyLargePlanReview(repoRoot, marker, receipt, opts) {
+  if (opts['plan-artifact'] && opts.dispositions) {
+    const artPath = path.resolve(opts['plan-artifact']);
+    const dispPath = path.resolve(opts.dispositions);
+    const art = readJsonSafe(artPath);
+    if (!art || art.artifact_type !== 'plan_review_artifact') {
+      return { ok: false, detail: `invalid plan-artifact ${artPath}` };
+    }
+    if (art.plan_sha256 !== receipt.plan_sha256) {
+      return { ok: false, detail: `plan-artifact plan_sha256 (${art.plan_sha256}) does not match frozen plan receipt (${receipt.plan_sha256})` };
+    }
+    return runPhaseReviewReceiptCheck(repoRoot, artPath, dispPath, receipt, opts);
+  }
+
+  const repoDirs = collectPlanReviewDirs(repoRoot, receipt);
+  const stateRoot = process.env.AUTOPILOT_PLAN_REVIEW_STATE_DIR || path.join(os.homedir(), '.autopilot', 'plan-review');
+  const artifacts = [];
+  const dispositions = [];
+
+  if (opts['plan-artifact']) {
+    const artPath = path.resolve(opts['plan-artifact']);
+    const art = readJsonSafe(artPath);
+    if (!art || art.artifact_type !== 'plan_review_artifact') {
+      return { ok: false, detail: `invalid plan-artifact ${artPath}` };
+    }
+    if (art.plan_sha256 !== receipt.plan_sha256) {
+      return { ok: false, detail: `plan-artifact plan_sha256 (${art.plan_sha256}) does not match frozen plan receipt (${receipt.plan_sha256})` };
+    }
+    artifacts.push({ path: artPath, dir: path.dirname(artPath), data: art });
+  } else {
+    const scanDirs = [...repoDirs];
+    try {
+      for (const ent of fs.readdirSync(stateRoot, { withFileTypes: true })) {
+        if (!ent.isDirectory() || ent.name === 'logical') continue;
+        const sub = path.join(stateRoot, ent.name);
+        const st = readJsonSafe(path.join(sub, 'state.json'));
+        if (st && st.repo_identity && marker.repo_identity && st.repo_identity !== marker.repo_identity) continue;
+        scanDirs.push(sub);
+      }
+    } catch { /* optional state dir */ }
+    scanDirs.push(stateRoot);
+
+    for (const dir of scanDirs) {
+      for (const file of listJsonFilesInDir(dir)) {
+        const j = readJsonSafe(file);
+        if (!j) continue;
+        if (j.artifact_type === 'plan_review_artifact' && j.plan_sha256 === receipt.plan_sha256) {
+          artifacts.push({ path: file, dir, data: j });
+        } else if (typeof j.logical_plan_id === 'string' && Number.isInteger(j.generation) && Array.isArray(j.findings)) {
+          dispositions.push({ path: file, dir, data: j });
+        }
+      }
+    }
+  }
+
+  if (opts.dispositions) {
+    const dispPath = path.resolve(opts.dispositions);
+    const j = readJsonSafe(dispPath);
+    if (j && typeof j.logical_plan_id === 'string' && Number.isInteger(j.generation) && Array.isArray(j.findings)) {
+      dispositions.length = 0;
+      dispositions.push({ path: dispPath, dir: path.dirname(dispPath), data: j });
+    } else {
+      return { ok: false, detail: `invalid dispositions ${dispPath}` };
+    }
+  } else {
+    for (const dir of repoDirs) {
+      for (const file of listJsonFilesInDir(dir)) {
+        if (dispositions.some((d) => d.path === file)) continue;
+        const j = readJsonSafe(file);
+        if (j && j.artifact_type !== 'plan_review_artifact'
+            && typeof j.logical_plan_id === 'string'
+            && Number.isInteger(j.generation)
+            && Array.isArray(j.findings)) {
+          dispositions.push({ path: file, dir, data: j });
+        }
+      }
+    }
+    if (opts['plan-artifact']) {
+      for (const file of listJsonFilesInDir(path.dirname(path.resolve(opts['plan-artifact'])))) {
+        if (dispositions.some((d) => d.path === file)) continue;
+        const j = readJsonSafe(file);
+        if (j && j.artifact_type !== 'plan_review_artifact'
+            && typeof j.logical_plan_id === 'string'
+            && Number.isInteger(j.generation)
+            && Array.isArray(j.findings)) {
+          dispositions.push({ path: file, dir: path.dirname(file), data: j });
+        }
+      }
+    }
+  }
+
+  artifacts.sort((a, b) => (b.data.generation || 0) - (a.data.generation || 0));
+  let lastError = null;
+  for (const art of artifacts) {
+    const matchingDisps = dispositions
+      .filter((d) => d.data.logical_plan_id === art.data.logical_plan_id && d.data.generation === art.data.generation)
+      .sort((a, b) => (a.dir === art.dir ? 0 : 1) - (b.dir === art.dir ? 0 : 1));
+    for (const disp of matchingDisps) {
+      const check = runPhaseReviewReceiptCheck(repoRoot, art.path, disp.path, receipt, opts);
+      if (check.ok) return { ok: true };
+      lastError = check.detail;
+    }
+  }
+
+  return {
+    ok: false,
+    detail: lastError || `no passing check-phase-review-receipt.js --plan-artifact found for plan_sha256 ${receipt.plan_sha256}`,
+  };
+}
+
+function checkWorkOrderImplementGate(marker, opts, repoRoot, from, to) {
+  if (to !== 'implement' || typeof marker.fleet_task_id !== 'string' || marker.fleet_task_id.length === 0) {
+    return { ok: true, patch: {} };
+  }
+  const refuse = (errCode, reason) => ({
+    ok: false,
+    result: {
+      code: 5,
+      err: `stage-advance: ${reason}`,
+      out: { allowed: false, code: errCode, from, to, reason },
+    },
+  });
+
+  if (marker.wo_state !== 'resolved') {
+    return refuse(
+      'WORK_ORDER_UNRESOLVED',
+      `work order for fleet task ${marker.fleet_task_id} is ${marker.wo_state || 'unresolved'}; run \`node scripts/session-mode.js set --fleet-task ${marker.fleet_task_id} --refresh\``,
+    );
+  }
+
+  if (!['M', 'L', 'XL'].includes(marker.wo_size)) {
+    return { ok: true, patch: {} };
+  }
+
+  let receipt = marker.plan_receipt || null;
+  const patch = {};
+  if (opts.plan) {
+    if (marker.wo_plan && typeof marker.wo_plan === 'object') {
+      return refuse(
+        'PLAN_PINNED',
+        `work order pins Plan: ${marker.wo_plan.path}@${marker.wo_plan.sha}; cannot override with --plan`,
+      );
+    }
+    if (marker.wo_plan !== 'plan-first') {
+      return refuse(
+        'PLAN_MARKER_MISSING',
+        `work order of size ${marker.wo_size} has no Plan marker; cannot record --plan`,
+      );
+    }
+    const built = buildHeadPlanReceipt(repoRoot, opts.plan);
+    if (built.error) return refuse('PLAN_RECEIPT_INVALID', built.error);
+    receipt = built.receipt;
+    patch.plan_receipt = receipt;
+  }
+
+  if (!receipt) {
+    return refuse(
+      'PLAN_RECEIPT_REQUIRED',
+      `work order of size ${marker.wo_size} requires a frozen plan receipt (pass --plan <path> for plan-first orders)`,
+    );
+  }
+  if (!sessionMode.isReceiptBlobValid(repoRoot, receipt)) {
+    return refuse(
+      'PLAN_BLOB_MISSING',
+      `plan receipt blob ${receipt.blob_sha} does not resolve or hash mismatch in git`,
+    );
+  }
+
+  if (marker.wo_size === 'L' || marker.wo_size === 'XL') {
+    const rev = verifyLargePlanReview(repoRoot, marker, receipt, opts);
+    if (!rev.ok) {
+      return refuse('PLAN_REVIEW_REQUIRED', `L/XL work order requires passing plan-review receipt: ${rev.detail}`);
+    }
+  }
+
+  return { ok: true, patch };
+}
+
 // Pure decision over one marker snapshot. -> { code, err?, out } | { patch, out }
 function decide(marker, opts, repoRootArg, sid) {
   const to = opts.to;
@@ -661,7 +942,11 @@ function decide(marker, opts, repoRootArg, sid) {
     }
   }
 
-  const patch = {};
+  // P0 work-order plan-first gate: fires only when a fleet_task_id is attached and entering `implement`.
+  const woGate = checkWorkOrderImplementGate(marker, opts, repoRoot, from, to);
+  if (!woGate.ok) return woGate.result;
+
+  const patch = { ...woGate.patch };
   if (to !== from) { patch.stage = to; patch.stage_set_at = new Date().toISOString(); }
   if (unitArg) patch.unit = unitArg;
   if (opts.families) patch.review_families = opts.families;
@@ -671,11 +956,17 @@ function decide(marker, opts, repoRootArg, sid) {
 
 // Snapshot of everything decide() reads, to detect a marker change between decision and locked write.
 function fingerprint(m) {
-  return JSON.stringify([m.stage, m.unit, m.size, m.urgent, m.bug, m.high_risk, m.base_ref, m.level]);
+  return JSON.stringify([
+    m.stage, m.unit, m.size, m.urgent, m.bug, m.high_risk, m.base_ref, m.level,
+    m.fleet_task_id, m.wo_state, m.wo_size, m.wo_plan, m.plan_receipt,
+  ]);
 }
 
 const RESUME_HINT = 'fall back to the re-walk in skills/dev-flow/references/context-continuation.md (session-mode.js set, then stage-advance --to from the entry node)';
-const RESUME_COPY = ['size', 'bug', 'urgent', 'stage', 'unit', 'base_ref', 'high_risk', 'review_families', 'fleet_task_id', 'coarse_stage'];
+const RESUME_COPY = [
+  'size', 'bug', 'urgent', 'stage', 'unit', 'base_ref', 'high_risk', 'review_families',
+  'fleet_task_id', 'coarse_stage', 'wo_task', 'wo_size', 'wo_plan', 'wo_state', 'wo_fetched_at', 'plan_receipt',
+];
 
 // -> { code, err } | { patch }. Pure over the two marker snapshots.
 function decideResume(marker, old, oldId, currentId = sessionMode.getSessionId()) {
@@ -787,7 +1078,19 @@ function run(argv) {
         const next = { ...current, ...d.patch };
         sessionMode.writeMarkerFile(file, next);
         written = next;
-        result = { code: 0, out: { ...d.out, marker_path: file, stage: next.stage, stage_set_at: next.stage_set_at, unit: next.unit, review_families: next.review_families, high_risk: next.high_risk } };
+        result = {
+          code: 0,
+          out: {
+            ...d.out,
+            marker_path: file,
+            stage: next.stage,
+            stage_set_at: next.stage_set_at,
+            unit: next.unit,
+            review_families: next.review_families,
+            high_risk: next.high_risk,
+            ...(next.plan_receipt ? { plan_receipt: next.plan_receipt } : {}),
+          },
+        };
       });
     } catch (e) {
       return { code: 1, err: `stage-advance: marker not written: ${e.message}`, out: null };

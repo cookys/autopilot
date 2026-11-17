@@ -89,15 +89,18 @@
 
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const { canonicalDigest } = require('../src/engine/campaign-verification');
 const { admitMissionRouting } = require('./mission-routing-admission');
 const { scopeFromCwd } = require('../src/status/project-key');
 const { writeLivePointer } = require('../src/status/live-pointer');
 const { withWriteLock } = require('./lib/jsonl-store');
+const workOrderPlan = require('./lib/work-order-plan');
+const fleetTask = require('./lib/fleet-task');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const DEFAULT_TTL_HOURS = 24;
@@ -594,7 +597,7 @@ function gitToplevel() {
 }
 
 // Valueless flags (stage-graph P2a): `--urgent` / `--bug` take no value, so they must not swallow the next token.
-const BOOLEAN_FLAGS = new Set(['--urgent', '--bug', '--new-task']);
+const BOOLEAN_FLAGS = new Set(['--urgent', '--bug', '--new-task', '--refresh']);
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -851,8 +854,10 @@ function cmdSetPlain(args) {
 
 // ---- stage-graph P2a: size / urgent / bug / base_ref init fields (plan §2.9) --------------------------------
 const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
-const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task', 'fleet-task'];
+const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task', 'fleet-task', 'refresh'];
 const FLEET_TASK_ID_MAX = 64;
+const AT_OR_PAST_IMPLEMENT = new Set(['implement', 'verify', 'code-review', 'qc-gate', 'finish']);
+const GIT_OID_RE = /^[0-9a-f]{40,64}$/u;
 
 // non-empty, no whitespace, at most 64 characters. null when the value is legal.
 function fleetTaskIdError(raw) {
@@ -866,6 +871,189 @@ function fleetTaskIdError(raw) {
 
 function assignFleetTaskId(marker, args) {
   if (Object.prototype.hasOwnProperty.call(args, 'fleet-task')) marker.fleet_task_id = args['fleet-task'];
+}
+
+function derivePlanReceiptFromGit(repoRoot, commitRef, planPath) {
+  const normPath = String(planPath || '').replace(/^\.\//, '').replace(/\\/g, '/');
+  if (!normPath || normPath.startsWith('/') || normPath.split('/').includes('..')) return null;
+  const cRes = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--verify', '--quiet', '--end-of-options', `${commitRef}^{commit}`], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (cRes.status !== 0) return null;
+  const commit = (cRes.stdout || '').trim();
+  if (!GIT_OID_RE.test(commit)) return null;
+  const bRes = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--verify', '--quiet', '--end-of-options', `${commit}:${normPath}`], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (bRes.status !== 0) return null;
+  const blobSha = (bRes.stdout || '').trim();
+  if (!GIT_OID_RE.test(blobSha)) return null;
+  const tRes = spawnSync('git', ['-C', repoRoot, 'cat-file', '-t', blobSha], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (tRes.status !== 0 || (tRes.stdout || '').trim() !== 'blob') return null;
+  const catRes = spawnSync('git', ['-C', repoRoot, 'cat-file', 'blob', blobSha], {
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (catRes.status !== 0 || !Buffer.isBuffer(catRes.stdout)) return null;
+  const planSha256 = crypto.createHash('sha256').update(catRes.stdout).digest('hex');
+  return {
+    path: normPath,
+    commit,
+    blob_sha: blobSha,
+    plan_sha256: planSha256,
+    recorded_at: new Date().toISOString(),
+  };
+}
+
+function isReceiptBlobValid(repoRoot, receipt) {
+  if (!receipt || typeof receipt !== 'object') return false;
+  if (typeof receipt.blob_sha !== 'string' || !GIT_OID_RE.test(receipt.blob_sha)) return false;
+  if (typeof receipt.plan_sha256 !== 'string' || !SHA256.test(receipt.plan_sha256)) return false;
+  const tRes = spawnSync('git', ['-C', repoRoot, 'cat-file', '-t', receipt.blob_sha], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (tRes.status !== 0 || (tRes.stdout || '').trim() !== 'blob') return false;
+  const catRes = spawnSync('git', ['-C', repoRoot, 'cat-file', 'blob', receipt.blob_sha], {
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (catRes.status !== 0 || !Buffer.isBuffer(catRes.stdout)) return false;
+  return crypto.createHash('sha256').update(catRes.stdout).digest('hex') === receipt.plan_sha256;
+}
+
+function fetchAndResolveWorkOrder(taskId, repoRoot) {
+  const r = spawnSync(fleetTask.bin(), ['task', 'show', String(taskId), '--json'], {
+    encoding: 'utf8',
+    timeout: 10000,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (r.error) {
+    return { ok: false, reason: r.error.message || 'fleet spawn failed' };
+  }
+  if (r.status !== 0) {
+    const detail = (r.stderr || '').trim().split('\n')[0];
+    return { ok: false, reason: detail || `exit ${r.status}` };
+  }
+  let data;
+  try {
+    data = JSON.parse(r.stdout || '');
+  } catch (err) {
+    return { ok: false, reason: `unparseable JSON (${err.message})` };
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.title !== 'string') {
+    return { ok: false, reason: 'missing title field in fleet task JSON' };
+  }
+  const parsed = workOrderPlan.parse(data.title);
+  if (parsed.size === 'conflict') {
+    return {
+      ok: true,
+      wo_size: null,
+      wo_plan: null,
+      wo_state: 'unresolved',
+      plan_receipt: null,
+      stderr: `session-mode: fleet task ${taskId}: conflicting Size lines in work order; stored wo_state: unresolved\n`,
+    };
+  }
+  if (parsed.plan && typeof parsed.plan === 'object') {
+    const receipt = derivePlanReceiptFromGit(repoRoot, parsed.plan.sha, parsed.plan.path);
+    if (!receipt) {
+      return {
+        ok: true,
+        wo_size: parsed.size,
+        wo_plan: parsed.plan,
+        wo_state: 'unresolved',
+        plan_receipt: null,
+        stderr: `session-mode: fleet task ${taskId}: Plan ${parsed.plan.path}@${parsed.plan.sha} did not resolve in git; stored wo_state: unresolved\n`,
+      };
+    }
+    return {
+      ok: true,
+      wo_size: parsed.size,
+      wo_plan: parsed.plan,
+      wo_state: 'resolved',
+      plan_receipt: receipt,
+      stderr: null,
+    };
+  }
+  return {
+    ok: true,
+    wo_size: parsed.size,
+    wo_plan: parsed.plan,
+    wo_state: 'resolved',
+    plan_receipt: null,
+    stderr: null,
+  };
+}
+
+function applyWorkOrderToMarker(marker, taskId, fetchRes, prior, repoRoot) {
+  const nowIso = new Date().toISOString();
+  const sameTask = Boolean(prior && prior.wo_task === taskId);
+  marker.fleet_task_id = taskId;
+
+  if (!fetchRes.ok) {
+    if (sameTask && prior.wo_state === 'resolved') {
+      marker.wo_task = prior.wo_task;
+      marker.wo_size = prior.wo_size;
+      marker.wo_plan = prior.wo_plan;
+      marker.wo_state = 'resolved';
+      marker.wo_fetched_at = prior.wo_fetched_at;
+      if (prior.plan_receipt) marker.plan_receipt = prior.plan_receipt;
+      else delete marker.plan_receipt;
+      return `session-mode: fleet task ${taskId} fetch failed (${fetchRes.reason}); keeping previously resolved work order\n`;
+    }
+    marker.wo_task = taskId;
+    marker.wo_size = null;
+    marker.wo_plan = null;
+    marker.wo_state = 'unresolved';
+    marker.wo_fetched_at = nowIso;
+    delete marker.plan_receipt;
+    return `session-mode: fleet task ${taskId} fetch failed (${fetchRes.reason}); stored wo_state: unresolved\n`;
+  }
+
+  marker.wo_task = taskId;
+  marker.wo_size = fetchRes.wo_size;
+  marker.wo_plan = fetchRes.wo_plan;
+  marker.wo_state = fetchRes.wo_state;
+  marker.wo_fetched_at = nowIso;
+
+  if (fetchRes.plan_receipt) {
+    marker.plan_receipt = fetchRes.plan_receipt;
+  } else if (fetchRes.wo_state === 'resolved' && sameTask && fetchRes.wo_plan === 'plan-first' && prior.wo_plan === 'plan-first' && prior.plan_receipt) {
+    marker.plan_receipt = prior.plan_receipt;
+  } else {
+    delete marker.plan_receipt;
+  }
+
+  if (marker.wo_state === 'resolved' && SIZES.includes(marker.wo_size)) {
+    const woIdx = SIZES.indexOf(marker.wo_size);
+    const curIdx = SIZES.includes(marker.size) ? SIZES.indexOf(marker.size) : -1;
+    if (woIdx > curIdx) {
+      marker.size = marker.wo_size;
+    }
+    if (workOrderPlan.isMPlus(marker.wo_size) && typeof marker.stage === 'string' && AT_OR_PAST_IMPLEMENT.has(marker.stage)) {
+      if (!isReceiptBlobValid(repoRoot, marker.plan_receipt)) {
+        const oldStage = marker.stage;
+        marker.stage = 'plan';
+        marker.stage_set_at = nowIso;
+        return `session-mode: fleet task ${taskId} requires a valid plan receipt for ${marker.wo_size}; stage reset from ${oldStage} to plan\n`;
+      }
+    }
+  }
+  return fetchRes.stderr || null;
+}
+
+function sizeFloorError(requestedSize, woTask, woSize) {
+  if (!requestedSize || !SIZES.includes(woSize)) return null;
+  if (SIZES.indexOf(requestedSize) < SIZES.indexOf(woSize)) {
+    return `refusing --size ${requestedSize}: resolved work order (${woTask}) requires at least ${woSize}`;
+  }
+  return null;
 }
 const BASE_REF_SHA = /^[0-9a-f]{7,64}$/u;
 // Default-branch pairs, same order as scripts/resolve-review-loop.sh probe_diff_bytes (develop, then main), then
@@ -994,17 +1182,27 @@ function cmdSetInit(args) {
   if (parsed.error) { process.stderr.write(`session-mode: ${parsed.error}\n`); return 2; }
   const { init } = parsed;
   const newTask = args['new-task'] === true;
+  const hasFleetTaskArg = Object.prototype.hasOwnProperty.call(args, 'fleet-task');
+  const existingSnapshot = readSessionRecord(target.id);
+  const effectiveTaskId = hasFleetTaskArg
+    ? args['fleet-task']
+    : (args.refresh === true ? (existingSnapshot && existingSnapshot.fleet_task_id) : null);
+  if (args.refresh === true && !effectiveTaskId) {
+    process.stderr.write('session-mode: --refresh requires --fleet-task <id> or an existing fleet_task_id on the marker\n');
+    return 2;
+  }
   const ttlHours = args['ttl-hours'] !== undefined ? Number(args['ttl-hours']) : DEFAULT_TTL_HOURS;
   if (!Number.isFinite(ttlHours) || ttlHours < 0) {
     process.stderr.write(`session-mode: invalid --ttl-hours "${args['ttl-hours']}"\n`);
     return 2;
   }
   const repoRoot = path.resolve(args['repo-root'] || gitToplevel());
+  const fetchRes = effectiveTaskId ? fetchAndResolveWorkOrder(effectiveTaskId, repoRoot) : null;
   const timeoutMs = Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) > 0
     ? Number(process.env.AUTOPILOT_SESSION_MODE_LOCK_TIMEOUT_MS) : PHASE_LOCK_TIMEOUT_MS;
   const file = target.file;
   fs.mkdirSync(markerDir(), { recursive: true });
-  let result = null; // { marker, created } | { refusal }
+  let result = null; // { marker, created, woStderr } | { refusal }
   try {
     withWriteLock({ storeDir: markerDir(), lockFile: `${file}.lock`, name: 'session-mode marker', timeoutMs }, () => {
       const current = readSessionRecord(target.id);
@@ -1013,6 +1211,14 @@ function cmdSetInit(args) {
         if (asked !== undefined && asked !== current.level) {
           result = { refusal: `refusing --new-task with --level ${asked === null ? 'none' : asked}: the live marker is level ${current.level}; --new-task keeps the level` };
           return;
+        }
+        if (!effectiveTaskId && current.wo_state === 'resolved') {
+          const floorErr = sizeFloorError(init.size, current.wo_task, current.wo_size);
+          if (floorErr) { result = { refusal: floorErr }; return; }
+        }
+        if (effectiveTaskId && fetchRes && fetchRes.ok && fetchRes.wo_state === 'resolved') {
+          const floorErr = sizeFloorError(init.size, effectiveTaskId, fetchRes.wo_size);
+          if (floorErr) { result = { refusal: floorErr }; return; }
         }
         const seqPrev = Number.isInteger(current.task_seq) && current.task_seq >= 1 ? current.task_seq
           : (current.size !== undefined || current.stage !== undefined ? 1 : 0);
@@ -1023,11 +1229,16 @@ function cmdSetInit(args) {
         for (const k of NEW_TASK_CLEARED) delete next[k];
         followRepoRoot(next, repoRoot);
         applyInitFields(next, init, next.repo_root || repoRoot, null);
-        assignFleetTaskId(next, args);
+        let woStderr = null;
+        if (effectiveTaskId) {
+          woStderr = applyWorkOrderToMarker(next, effectiveTaskId, fetchRes, current, next.repo_root || repoRoot);
+        } else {
+          assignFleetTaskId(next, args);
+        }
         next.task_seq = seqPrev + 1;
         next.task_started_at = new Date().toISOString();
         writeMarkerFile(file, next);
-        result = { marker: next, created: false };
+        result = { marker: next, created: false, woStderr };
         return;
       }
       if (current) {
@@ -1035,17 +1246,34 @@ function cmdSetInit(args) {
           result = { refusal: `refusing --size ${init.size}: the marker is already ${current.size} and size only moves up (XS<S<M<L<XL)` };
           return;
         }
+        if (!effectiveTaskId && current.wo_state === 'resolved') {
+          const floorErr = sizeFloorError(init.size, current.wo_task, current.wo_size);
+          if (floorErr) { result = { refusal: floorErr }; return; }
+        }
+        if (effectiveTaskId && fetchRes && fetchRes.ok && fetchRes.wo_state === 'resolved') {
+          const floorErr = sizeFloorError(init.size, effectiveTaskId, fetchRes.wo_size);
+          if (floorErr) { result = { refusal: floorErr }; return; }
+        }
         const next = { ...current };
         followRepoRoot(next, repoRoot);
         applyInitFields(next, init, next.repo_root || repoRoot, current);
-        assignFleetTaskId(next, args);
+        let woStderr = null;
+        if (effectiveTaskId) {
+          woStderr = applyWorkOrderToMarker(next, effectiveTaskId, fetchRes, current, next.repo_root || repoRoot);
+        } else {
+          assignFleetTaskId(next, args);
+        }
         writeMarkerFile(file, next);
-        result = { marker: next, created: false };
+        result = { marker: next, created: false, woStderr };
         return;
       }
       if (newTask && args.level !== undefined && args.level !== "none") {
         result = { refusal: `refusing --new-task with --level ${args.level}: no live marker to keep the level of (run set --level ${args.level} first)` };
         return;
+      }
+      if (effectiveTaskId && fetchRes && fetchRes.ok && fetchRes.wo_state === 'resolved') {
+        const floorErr = sizeFloorError(init.size, effectiveTaskId, fetchRes.wo_size);
+        if (floorErr) { result = { refusal: floorErr }; return; }
       }
       let scope = { repo_identity: null, project_key: null };
       try { scope = scopeFromCwd(repoRoot); } catch (_error) { /* fail-open: fields stay null */ }
@@ -1056,10 +1284,15 @@ function cmdSetInit(args) {
         sessionId: target.id, repoRoot, scope, now, ttlHours,
         rootRunId: resolveJobRoot({ explicit: explicitRoot, now }),
       }), init, repoRoot, null);
-      assignFleetTaskId(marker, args);
+      let woStderr = null;
+      if (effectiveTaskId) {
+        woStderr = applyWorkOrderToMarker(marker, effectiveTaskId, fetchRes, null, repoRoot);
+      } else {
+        assignFleetTaskId(marker, args);
+      }
       if (newTask) { marker.task_seq = 1; marker.task_started_at = new Date(now).toISOString(); }
       writeMarkerFile(file, marker);
-      result = { marker, created: true };
+      result = { marker, created: true, woStderr };
     });
   } catch (error) {
     process.stderr.write(`session-mode: marker not written: ${error.message}\n`);
@@ -1067,6 +1300,7 @@ function cmdSetInit(args) {
   }
   if (!result) { process.stderr.write('session-mode: marker not written\n'); return 1; }
   if (result.refusal) { process.stderr.write(`session-mode: ${result.refusal}\n`); return 2; }
+  if (result.woStderr) process.stderr.write(result.woStderr);
   if (newTask) {
     const advisory = newTaskAdvisory(repoRoot);
     if (advisory) process.stderr.write(`session-mode: ${advisory}\n`);
@@ -1112,6 +1346,20 @@ function cmdSet(args) {
     return 2;
   }
   const repoRoot = path.resolve(args['repo-root'] || gitToplevel());
+  const prior = readSessionRecord(target.id);
+  const hasFleetTaskArg = Object.prototype.hasOwnProperty.call(args, 'fleet-task');
+  const effectiveTaskId = hasFleetTaskArg
+    ? args['fleet-task']
+    : (args.refresh === true ? (prior && prior.fleet_task_id) : null);
+  if (args.refresh === true && !effectiveTaskId) {
+    process.stderr.write('session-mode: --refresh requires --fleet-task <id> or an existing fleet_task_id on the marker\n');
+    return 2;
+  }
+  const fetchRes = effectiveTaskId ? fetchAndResolveWorkOrder(effectiveTaskId, repoRoot) : null;
+  if (effectiveTaskId && fetchRes && fetchRes.ok && fetchRes.wo_state === 'resolved') {
+    const floorErr = sizeFloorError(initParsed.init.size, effectiveTaskId, fetchRes.wo_size);
+    if (floorErr) { process.stderr.write(`session-mode: ${floorErr}\n`); return 2; }
+  }
   let missionRouting;
   try {
     missionRouting = admitMissionRouting({
@@ -1200,13 +1448,19 @@ function cmdSet(args) {
     }
   }
   if (hasInitFlags(args)) applyInitFields(marker, initParsed.init, repoRoot, null);
-  assignFleetTaskId(marker, args);
+  let woStderr = null;
+  if (effectiveTaskId) {
+    woStderr = applyWorkOrderToMarker(marker, effectiveTaskId, fetchRes, prior, repoRoot);
+  } else {
+    assignFleetTaskId(marker, args);
+  }
   fs.mkdirSync(markerDir(), { recursive: true });
   const tmp = `${target.file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
   fs.renameSync(tmp, target.file); // atomic on same fs
   try { writeLivePointer(); } catch (_error) { /* fail-open: pointer is advisory for the mod */ }
   startProjectWatcher(marker, repoRoot);
+  if (woStderr) process.stderr.write(woStderr);
   process.stdout.write(`${JSON.stringify({ ok: true, marker_path: target.file, ...marker }, null, 2)}\n`);
   if (marker.level === 'l5' || marker.level === 'l6') {
     process.stderr.write(`session-mode: ${marker.level} marker set — non-strict dispatch (dispatch-author/consult/plan-review seats) is refused while it is live. ${MASK_LINE}\n`);
@@ -1517,8 +1771,8 @@ function main() {
         'Usage: session-mode.js set [--level none] [--root-run-id <id>] (plain session) | ' +
         'set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
         '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] [--root-run-id <id>] | ' +
-        'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] (create-or-merge; size only moves up) | ' +
-        'set --new-task [--size XS|S|M|L|XL] [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] (restart the stage walk for a second task) | ' +
+        'set --size XS|S|M|L|XL [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] [--refresh] (create-or-merge; size only moves up) | ' +
+        'set --new-task [--size XS|S|M|L|XL] [--urgent] [--bug] [--base-ref <sha>] [--fleet-task <id>] [--refresh] (restart the stage walk for a second task) | ' +
         'clear | retire --session <id> --integration-receipt <file> [--integration-ref <ref>] | bind-campaign-root --root <id> (--repo-identity <id> | --repo-root <dir>) | ensure-child (SessionStart payload on stdin) | write-target [--rail] | status | root\n',
       );
       return 2;
@@ -1553,4 +1807,6 @@ module.exports = {
   writeMarkerFile,
   defaultBaseRef,
   PHASE_LOCK_TIMEOUT_MS,
+  derivePlanReceiptFromGit,
+  isReceiptBlobValid,
 };

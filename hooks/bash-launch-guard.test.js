@@ -37,6 +37,7 @@ function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = 
   delete baseEnv.AUTOPILOT_BASH_GUARD_RMVAR_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SHARED_RM_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_SECRET_MODE;
   delete baseEnv.AUTOPILOT_CONFIG_FILE;
   delete baseEnv.CLAUDE_CODE_TMPDIR;
   const r = spawnSync('node', [HOOK], {
@@ -1844,3 +1845,97 @@ test('rules 6 & 7 fail open (no throw) on deeply nested quote/substitution input
     assert.doesNotThrow(() => detectRmSharedDir(`echo rm ${unit.repeat(25000)}`, { sessionId: 'blg' }));
   }
 });
+
+// Rule 8: never print secrets into a Bash transcript. Commands are hook input only; never executed.
+const secretDenial = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行 (secret-print)';
+const secretDenied = [
+  'docker inspect web', 'docker container inspect web',
+  "docker inspect --format '{{.Config.Env}}' web",
+  "docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' web",
+  "docker inspect --format='{{json .Config}}' web",
+  "docker inspect -f '{{json .}}' web",
+  "docker inspect -f '{{ .Config }}' web",
+  'docker --context prod inspect web',
+  'docker exec web env', 'docker exec -it web printenv PASSWORD',
+  'docker exec --user root web /usr/bin/env',
+  "docker exec web sh -c 'printenv'",
+  'docker compose config', 'docker compose -f compose.yml config --services',
+  'docker-compose config', 'docker-compose --project-name app config',
+  'env', 'env FOO=1', 'env -i FOO=1', 'env -u FOO', 'printenv', 'printenv NAME',
+  'set', 'export -p', 'export -np',
+  'sudo -u nobody timeout 5 env', 'timeout 5 sudo cat .env',
+  'env FOO=1 cat app.env', 'true && cat .env.local; echo done',
+  'cat .env | wc -l', "bash -c 'cat .env'", "sudo bash -c 'cat .env'",
+  'echo $(cat .env)', 'cat < .env',
+  "sed -n '1,8p' config_main.php", "awk '{print}' dbdef.h",
+  'less tls.pem', 'more tls.key', 'head id_ed25519', 'tail auth.json',
+  'bat credentials.local', 'grep PASSWORD app-secret.yml',
+  'rg PASSWORD access.token', 'ugrep PASSWORD .netrc', 'cat .pgpass', 'cat my.cnf',
+  "cat '/tmp/service secret.txt'", 'cat config/*.env',
+  'kubectl get secret db -o yaml', 'kubectl get secrets -ojson',
+  "kubectl -n prod get secret db --output=jsonpath='{.data}'",
+  "kubectl get secrets -o go-template='{{.data}}'", 'kubectl describe secret db',
+  'kubectl describe secrets', 'kubectl --context prod describe secret db',
+];
+for (const cmd of secretDenied) {
+  test(`secret-print denies: ${cmd}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.status, 0, 'same exit status as existing guard denials');
+    assert.strictEqual(r.deny, true);
+    assert.strictEqual(r.reason, secretDenial, 'one line, without echoing command contents');
+  });
+}
+for (const cmd of [
+  'grep -c PASSWORD .env', 'grep -l DB_PASS -r config/', 'rg -rl PASSWORD .env',
+  'ugrep -ic PASSWORD .env', 'grep -L PASSWORD .env', 'rg -q PASSWORD .env',
+  'grep --files-with-matches PASSWORD .env', 'rg --count PASSWORD .env',
+  'env FOO=1 node x.js', 'env -i FOO=1 node x.js', 'set -e', 'export FOO=1',
+  "docker inspect -f '{{.State.Status}}' web", "docker inspect --format='{{json .State}}' web",
+  'docker exec web env FOO=1 node x.js',
+  'cat README.md', 'cat id_rsa.pub', 'cat /tmp/id_ed25519.pub',
+  'echo "cat .env"', "cat <<'EOF'\ncat .env\nEOF", '# cat .env\necho ok',
+  'kubectl get secrets', 'kubectl get pods -o yaml', 'docker compose ps',
+  "grep -n 'secret' README.md",
+]) {
+  test(`secret-print allows: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
+}
+test('secret-print mode config, env precedence, defaults and every-depth enforcement', () => {
+  for (const mode of ['block', 'garbage']) {
+    assert.strictEqual(run('printenv NAME', { env: { AUTOPILOT_BASH_GUARD_SECRET_MODE: mode } }).deny, true);
+  }
+  const warning = run('cat .env', { env: { AUTOPILOT_BASH_GUARD_SECRET_MODE: 'warn' } });
+  assert.strictEqual(warning.deny, false);
+  assert.match(warning.ctx, /secret-print/);
+  assert.strictEqual(run('cat .env', { env: { AUTOPILOT_BASH_GUARD_SECRET_MODE: 'off' } }).ctx, '');
+  assert.strictEqual(run('cat .env', { extra: { agent_id: 'child' } }).deny, true);
+  const cfgFile = path.join(mk('blg-secret-config-'), 'config.json');
+  fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { secret_print: 'off' } }));
+  assert.strictEqual(run('cat .env', { env: { AUTOPILOT_CONFIG_FILE: cfgFile } }).deny, false);
+  assert.strictEqual(run('cat .env', { env: {
+    AUTOPILOT_CONFIG_FILE: cfgFile, AUTOPILOT_BASH_GUARD_SECRET_MODE: 'block',
+  } }).deny, true);
+  fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { secret_print: 'warn' } }));
+  assert.match(run('cat .env', { env: { AUTOPILOT_CONFIG_FILE: cfgFile } }).ctx, /secret-print/);
+});
+
+for (const cmd of [
+  'env FOO=1 sudo -u nobody cat .env', 'docker exec web timeout 5 env',
+  'kubectl get -n prod secrets -o yaml', 'kubectl get --namespace=prod secret db -o json',
+  "grep -e '-q' .env", "rg -e '-c' .env", "grep -- '-q' .env",
+]) {
+  test(`secret-print prefix/option regression: ${cmd}`, () => assert.strictEqual(run(cmd).deny, true));
+}
+
+for (const cmd of ['cat <.env', 'kubectl get -o yaml secret db']) {
+  test(`secret-print redirection/output placement: ${cmd}`, () => assert.strictEqual(run(cmd).deny, true));
+}
+for (const cmd of ['cat README.md > .env', 'kubectl get secret json']) {
+  test(`secret-print output path/name allowed: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
+}
+
+for (const cmd of ['env -- FOO=1', 'env FOO=1 > /tmp/output', 'env -S FOO=1']) {
+  test(`secret-print env without command: ${cmd}`, () => assert.strictEqual(run(cmd).deny, true));
+}
+for (const cmd of ["docker inspect -f '{{.Config.Image}}' web", "docker inspect -f '{{.Config.WorkingDir}}' web"]) {
+  test(`secret-print safe Config scalar: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
+}

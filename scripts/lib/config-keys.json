@@ -582,6 +582,27 @@
       ]
     },
     {
+      "name": "depth0_delegate_gate.secret_print",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "default": "block",
+      "relates": [
+        "AUTOPILOT_BASH_GUARD_SECRET_MODE"
+      ],
+      "summary": "Secret-print Bash rule: block (default), warn or off. Use safe-inspect for masked values.",
+      "type": "enum",
+      "allowed": [
+        "block",
+        "warn",
+        "off"
+      ]
+    },
+    {
       "name": "depth0_delegate_gate.threshold",
       "kind": "config_key",
       "audience": "user",
@@ -4434,6 +4455,21 @@
         "depth0_delegate_gate.shared_rm"
       ],
       "summary": "Environment override of depth0_delegate_gate.shared_rm; values are off, warn, deny (default warn); a garbage value maps to warn."
+    },
+    {
+      "name": "AUTOPILOT_BASH_GUARD_SECRET_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "readers": [
+        "hooks/depth0-delegate-gate.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "default": null,
+      "relates": [
+        "depth0_delegate_gate.secret_print"
+      ],
+      "summary": "Override depth0_delegate_gate.secret_print: block, warn or off; invalid values map to block."
     },
     {
       "name": "AUTOPILOT_CAPTURE_PAYLOAD",

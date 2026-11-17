@@ -71,9 +71,12 @@
  *            scratchpad and is a group/world-writable directory (mode & 0o022) or owned by another uid. Knob:
  *            depth0_delegate_gate.shared_rm or env AUTOPILOT_BASH_GUARD_SHARED_RM_MODE = off|warn|deny (default warn;
  *            garbage ⇒ warn). Rule 2d's deny wins when both apply.
+ *   2f. BLOCK secret-print: Docker/env/config-file/Kubernetes value dumps. Knob: depth0_delegate_gate.secret_print
+ *            or AUTOPILOT_BASH_GUARD_SECRET_MODE = block|warn|off (default block; invalid env ⇒ block).
+ *            Use node scripts/safe-inspect.js for masked inspection; docs/guide/safe-inspect.md.
  *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`
  *            or an unquoted glob that matches nothing — zsh aborts the whole line.
- * Gate mode `off` silences all seven rules (1, 2, 2b, 2c, 2d, 2e, 3). Rules 1, 2, 2b, 2c and 2d deny in `warn` and `block` modes alike.
+ * Gate mode `off` silences all rules. Per-rule blocks apply in both gate `warn` and `block` modes.
  *
  * MODES: ~/.autopilot/config.json {"depth0_delegate_gate": {"mode": "off"|"warn"|"block",
  * "threshold": 8, "guarded_models": ["fable","opus"], "wait_advice_every": 5}} or
@@ -94,6 +97,7 @@ const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wa
 const {
   detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion,
   detectBareLs, detectRecursiveRmVar, detectSubagentRmOutsideScratch, detectRmSharedDir,
+  detectSecretPrint,
 } = require('../scripts/lib/bash-launch-rules.js');
 
 const DEFAULT_THRESHOLD = 8;
@@ -118,6 +122,7 @@ function loadConfig() {
     rmVarMode: 'deny',
     subagentRmMode: 'deny',
     sharedRmMode: 'warn',
+    secretMode: 'block',
     threshold: DEFAULT_THRESHOLD,
     guardedModels: DEFAULT_GUARDED,
     waitAdviceEvery: DEFAULT_WAIT_ADVICE_EVERY,
@@ -134,6 +139,7 @@ function loadConfig() {
         if (['off', 'warn', 'deny'].includes(g.rm_var_target)) cfg.rmVarMode = g.rm_var_target;
         if (['off', 'warn', 'deny'].includes(g.subagent_rm)) cfg.subagentRmMode = g.subagent_rm;
         if (['off', 'warn', 'deny'].includes(g.shared_rm)) cfg.sharedRmMode = g.shared_rm;
+        if (['block', 'warn', 'off'].includes(g.secret_print)) cfg.secretMode = g.secret_print;
         if (Number.isInteger(g.threshold) && g.threshold > 0) cfg.threshold = g.threshold;
         if (Number.isInteger(g.wait_advice_every) && g.wait_advice_every > 0) cfg.waitAdviceEvery = g.wait_advice_every;
         if (Array.isArray(g.guarded_models) && g.guarded_models.every((m) => typeof m === 'string')) {
@@ -159,6 +165,8 @@ function loadConfig() {
   const envSh = process.env.AUTOPILOT_BASH_GUARD_SHARED_RM_MODE;
   if (envSh !== undefined && envSh !== '') cfg.sharedRmMode = ['off', 'warn', 'deny'].includes(envSh) ? envSh : 'warn';
   const envEvery = process.env.AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY;
+  const envSecret = process.env.AUTOPILOT_BASH_GUARD_SECRET_MODE;
+  if (envSecret !== undefined && envSecret !== '') cfg.secretMode = ['block', 'warn', 'off'].includes(envSecret) ? envSecret : 'block';
   if (envEvery !== undefined && /^\d+$/.test(envEvery.trim()) && Number(envEvery) > 0) cfg.waitAdviceEvery = Number(envEvery);
   return cfg;
 }
@@ -256,6 +264,13 @@ function classify(tool, input) {
     const launchWarns = [];
     if (payload.tool_name === 'Bash' && payload.tool_input && typeof payload.tool_input.command === 'string') {
       const cmd = payload.tool_input.command;
+      const secret = cfg.secretMode === 'off' ? null : detectSecretPrint(cmd);
+      const secretReason = secret && `${secret.why} (${secret.rule})`;
+      if (secret && cfg.secretMode === 'block') {
+        emitDeny(secretReason);
+        process.exit(0);
+      }
+      if (secret) launchWarns.push(secretReason);
       const detach = detectDetachNoWake(cmd);
       if (detach) {
         emitDeny(`bash-launch-guard (${detach.rule}): ${detach.why}. ${detach.advice}`);

@@ -1138,8 +1138,12 @@ function newTaskAdvisory(repoRoot) {
   return `worktree ${dir} is on branch ${branch}, which shares no word with it — open a fresh worktree for a new task (references/worktree-placement.md)`;
 }
 
-// Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init fields.
-const NEW_TASK_CLEARED = Object.freeze(['stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'coarse_stage', 'size', 'urgent', 'bug', 'base_ref']);
+// Fields `set --new-task` drops from a live marker: the stage-advance position plus the task-scoped init and work-order fields.
+const NEW_TASK_CLEARED = Object.freeze([
+  'stage', 'stage_set_at', 'unit', 'review_families', 'high_risk', 'coarse_stage',
+  'size', 'urgent', 'bug', 'base_ref',
+  'fleet_task_id', 'wo_task', 'wo_size', 'wo_plan', 'wo_state', 'wo_fetched_at', 'plan_receipt',
+]);
 
 function hasInitFlags(args) {
   return INIT_FLAGS.some((k) => Object.prototype.hasOwnProperty.call(args, k));
@@ -1198,7 +1202,7 @@ function cmdSetInit(args) {
   const existingSnapshot = readSessionRecord(target.id);
   const effectiveTaskId = hasFleetTaskArg
     ? args['fleet-task']
-    : (args.refresh === true ? (existingSnapshot && existingSnapshot.fleet_task_id) : null);
+    : (args.refresh === true && !newTask ? (existingSnapshot && existingSnapshot.fleet_task_id) : null);
   if (args.refresh === true && !effectiveTaskId) {
     process.stderr.write('session-mode: --refresh requires --fleet-task <id> or an existing fleet_task_id on the marker\n');
     return 2;
@@ -1224,10 +1228,6 @@ function cmdSetInit(args) {
           result = { refusal: `refusing --new-task with --level ${asked === null ? 'none' : asked}: the live marker is level ${current.level}; --new-task keeps the level` };
           return;
         }
-        if (!effectiveTaskId && current.wo_state === 'resolved') {
-          const floorErr = sizeFloorError(init.size, current.wo_task, current.wo_size);
-          if (floorErr) { result = { refusal: floorErr }; return; }
-        }
         if (effectiveTaskId && fetchRes && fetchRes.ok && fetchRes.wo_state === 'resolved') {
           const floorErr = sizeFloorError(init.size, effectiveTaskId, fetchRes.wo_size);
           if (floorErr) { result = { refusal: floorErr }; return; }
@@ -1243,7 +1243,7 @@ function cmdSetInit(args) {
         applyInitFields(next, init, next.repo_root || repoRoot, null);
         let woStderr = null;
         if (effectiveTaskId) {
-          woStderr = applyWorkOrderToMarker(next, effectiveTaskId, fetchRes, current, next.repo_root || repoRoot);
+          woStderr = applyWorkOrderToMarker(next, effectiveTaskId, fetchRes, null, next.repo_root || repoRoot);
         } else {
           assignFleetTaskId(next, args);
         }
@@ -1372,6 +1372,11 @@ function cmdSet(args) {
     const floorErr = sizeFloorError(initParsed.init.size, effectiveTaskId, fetchRes.wo_size);
     if (floorErr) { process.stderr.write(`session-mode: ${floorErr}\n`); return 2; }
   }
+  const hasPriorFleetTask = !effectiveTaskId && prior && typeof prior.fleet_task_id === 'string' && prior.fleet_task_id.length > 0;
+  if (hasPriorFleetTask && prior.wo_state === 'resolved') {
+    const floorErr = sizeFloorError(initParsed.init.size, prior.wo_task || prior.fleet_task_id, prior.wo_size);
+    if (floorErr) { process.stderr.write(`session-mode: ${floorErr}\n`); return 2; }
+  }
   let missionRouting;
   try {
     missionRouting = admitMissionRouting({
@@ -1463,6 +1468,19 @@ function cmdSet(args) {
   let woStderr = null;
   if (effectiveTaskId) {
     woStderr = applyWorkOrderToMarker(marker, effectiveTaskId, fetchRes, prior, repoRoot);
+  } else if (hasPriorFleetTask) {
+    marker.fleet_task_id = prior.fleet_task_id;
+    for (const key of ['wo_task', 'wo_size', 'wo_plan', 'wo_state', 'wo_fetched_at']) {
+      if (prior[key] !== undefined) marker[key] = prior[key];
+    }
+    if (prior.plan_receipt && typeof prior.plan_receipt === 'object') {
+      marker.plan_receipt = prior.plan_receipt;
+    }
+    if (SIZES.includes(marker.wo_size)) {
+      const woIdx = SIZES.indexOf(marker.wo_size);
+      const curIdx = SIZES.includes(marker.size) ? SIZES.indexOf(marker.size) : -1;
+      if (woIdx > curIdx) marker.size = marker.wo_size;
+    }
   } else {
     assignFleetTaskId(marker, args);
   }

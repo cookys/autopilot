@@ -49,7 +49,7 @@ function makeSandbox() {
   fs.writeFileSync(path.join(home, '.autopilot', 'config.json'), '{}\n');
 
   git(repo, ['init', '-q', '-b', 'develop']);
-  git(repo, ['config', 'user.email', 't@example.invalid']);
+  git(repo, ['config', 'user.email', 't@t']);
   git(repo, ['config', 'user.name', 'Test User']);
   fs.writeFileSync(path.join(repo, 'README.md'), '# Test\n');
   git(repo, ['add', 'README.md']);
@@ -522,31 +522,43 @@ test('lane: set --level preserves fleet_task_id, wo_*, plan_receipt and enforces
     git(sb.repo, ['commit', '-q', '-m', 'add lvl keep plan']);
     const headSha = git(sb.repo, ['rev-parse', 'HEAD']);
 
-    const sid = sb.newSession();
-    sb.setTaskFixture('T_LVL_KEEP', `Size: M\nPlan: ${planRel}@${headSha}`);
-    const rAttach = sb.sm(sid, ['set', '--fleet-task', 'T_LVL_KEEP', '--repo-root', sb.repo]);
-    assert.equal(rAttach.status, 0, rAttach.stderr);
+    for (const size of ['M', 'L']) {
+      const sid = sb.newSession();
+      const taskId = `T_LVL_KEEP_${size}`;
+      sb.setTaskFixture(taskId, `Size: ${size}\nPlan: ${planRel}@${headSha}`);
+      const rAttach = sb.sm(sid, ['set', '--fleet-task', taskId, '--repo-root', sb.repo]);
+      assert.equal(rAttach.status, 0, rAttach.stderr);
+      const before = sb.assertSchemaValid(sid);
 
-    const rFloor = sb.sm(sid, ['set', '--level', 'l4', '--size', 'S', '--repo-root', sb.repo]);
-    assert.equal(rFloor.status, 2, 'set --level with --size below wo_size must be refused');
+      // M starts at plan; L starts at intent and requires plan-review before implement.
+      const nodes = size === 'M' ? ['plan', 'implement'] : ['intent', 'proposal', 'plan'];
+      const rEntry = sb.sa(sid, ['--to', nodes[0], '--repo-root', sb.repo]);
+      assert.equal(rEntry.status, 0, `--to ${nodes[0]} should pass before set --level: ${rEntry.stdout} ${rEntry.stderr}`);
 
-    const rLevel = sb.sm(sid, ['set', '--level', 'l4', '--repo-root', sb.repo]);
-    assert.equal(rLevel.status, 0, rLevel.stderr);
-    const m = sb.assertSchemaValid(sid);
-    assert.equal(m.level, 'l4');
-    assert.equal(m.fleet_task_id, 'T_LVL_KEEP');
-    assert.equal(m.wo_task, 'T_LVL_KEEP');
-    assert.equal(m.wo_size, 'M');
-    assert.equal(m.wo_state, 'resolved');
-    assert.equal(m.size, 'M');
-    assert.ok(m.wo_fetched_at);
-    assert.ok(m.plan_receipt && m.plan_receipt.plan_sha256);
+      const rFloor = sb.sm(sid, ['set', '--level', 'l4', '--size', 'S', '--repo-root', sb.repo]);
+      assert.equal(rFloor.status, 2, 'set --level with --size below wo_size must be refused');
 
-    for (const node of ['intent', 'proposal', 'plan', 'implement']) {
-      const rAdv = sb.sa(sid, ['--to', node, '--repo-root', sb.repo]);
-      assert.equal(rAdv.status, 0, `--to ${node} should pass after set --level: ${rAdv.stderr}`);
+      const rLevel = sb.sm(sid, ['set', '--level', 'l4', '--repo-root', sb.repo]);
+      assert.equal(rLevel.status, 0, rLevel.stderr);
+      const m = sb.assertSchemaValid(sid);
+      assert.equal(m.level, 'l4');
+      assert.equal(m.fleet_task_id, taskId);
+      assert.equal(m.wo_task, taskId);
+      assert.equal(m.wo_size, size);
+      assert.equal(m.wo_state, 'resolved');
+      assert.equal(m.size, size);
+      assert.ok(m.wo_fetched_at);
+      assert.ok(m.plan_receipt && m.plan_receipt.plan_sha256);
+      for (const key of Object.keys(before).filter((k) => k === 'fleet_task_id' || k.startsWith('wo_') || k === 'plan_receipt')) {
+        assert.deepEqual(m[key], before[key], `${key} must survive set --level unchanged`);
+      }
+
+      for (const node of nodes) {
+        const rAdv = sb.sa(sid, ['--to', node, '--repo-root', sb.repo]);
+        assert.equal(rAdv.status, 0, `--to ${node} should pass after set --level: ${rAdv.stdout} ${rAdv.stderr}`);
+      }
+      assert.equal(sb.assertSchemaValid(sid).stage, nodes.at(-1));
     }
-    assert.equal(sb.assertSchemaValid(sid).stage, 'implement');
   } finally {
     sb.cleanup();
   }

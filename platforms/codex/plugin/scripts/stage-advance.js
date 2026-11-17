@@ -654,13 +654,25 @@ function listJsonFilesInDir(dir) {
 function collectPlanReviewDirs(repoRoot, receipt) {
   const dirs = [];
   const add = (d) => { if (d && !dirs.includes(d)) dirs.push(d); };
+  const addWithSubdirs = (d) => {
+    if (!d) return;
+    add(d);
+    try {
+      const entries = fs.readdirSync(d, { withFileTypes: true })
+        .filter((ent) => ent.isDirectory())
+        .map((ent) => ent.name)
+        .sort();
+      for (const name of entries) add(path.join(d, name));
+    } catch { /* directory may not exist */ }
+  };
   if (receipt && receipt.path) {
     add(path.dirname(path.join(repoRoot, receipt.path)));
   }
-  try { add(path.join(repoRoot, pathFor(repoRoot, 'plans_evidence_dir'))); } catch { /* optional */ }
+  try { addWithSubdirs(path.join(repoRoot, pathFor(repoRoot, 'plans_evidence_dir'))); } catch { /* optional */ }
   try { add(path.join(repoRoot, pathFor(repoRoot, 'plans_dir'))); } catch { /* optional */ }
   add(path.join(repoRoot, 'docs', 'plans'));
-  add(path.join(repoRoot, '.autopilot', 'plan-review'));
+  addWithSubdirs(path.join(repoRoot, 'docs', 'plans', 'evidence'));
+  addWithSubdirs(path.join(repoRoot, '.autopilot', 'plan-review'));
   return dirs;
 }
 
@@ -731,7 +743,12 @@ function verifyLargePlanReview(repoRoot, marker, receipt, opts) {
         if (!j) continue;
         if (j.artifact_type === 'plan_review_artifact' && j.plan_sha256 === receipt.plan_sha256) {
           artifacts.push({ path: file, dir, data: j });
-        } else if (typeof j.logical_plan_id === 'string' && Number.isInteger(j.generation) && Array.isArray(j.findings)) {
+        } else if (
+          j.artifact_type !== 'plan_review_artifact'
+          && typeof j.logical_plan_id === 'string'
+          && Number.isInteger(j.generation)
+          && Array.isArray(j.findings)
+        ) {
           dispositions.push({ path: file, dir, data: j });
         }
       }

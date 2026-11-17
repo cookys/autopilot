@@ -623,7 +623,7 @@ test('real fleet directory --json shape extracts identifiers recursively, splits
   }
   assert.deepEqual(extractDirectoryIdentifiers({ members: [], hosts: [] }), []);
 
-  // End-to-end: clean prompt with structural words passes; identifier prompt exits 2; empty dir exits 4
+  // End-to-end: clean prompt with structural words passes; identifier prompt and empty dir exit 4
   const sb = makeSandbox();
   try {
     fs.writeFileSync(
@@ -671,7 +671,10 @@ process.exit(1);
       '--out-dir', outLeak,
       '--author-cmd', sb.authorStub,
     ]);
-    assert.equal(rLeak.status, 2);
+    assert.equal(rLeak.status, 4, rLeak.stderr);
+    assert.match(rLeak.stderr, /fleet_directory_identifier/);
+    assert.equal(fs.existsSync(path.join(outLeak, 'prompt.txt')), false);
+    assert.equal(readCalls(sb.logDir).length, 1, 'only the clean prompt may spawn a seat');
 
     const outEmpty = path.join(sb.dir, 'out-empty-dir');
     const rEmpty = runPanel(
@@ -685,6 +688,8 @@ process.exit(1);
       { DP_TEST_DIR_MODE: 'empty' },
     );
     assert.equal(rEmpty.status, 4);
+    assert.equal(fs.existsSync(path.join(outEmpty, 'prompt.txt')), false);
+    assert.equal(readCalls(sb.logDir).length, 1, 'empty directory must not spawn a seat');
   } finally {
     sb.cleanup();
   }

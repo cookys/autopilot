@@ -363,14 +363,16 @@ test('child repo under PM workspace is untouched by askpm-remind and advisory-re
     assert.equal(logPrompt.status, 0, logPrompt.stderr);
     assert.equal(logPrompt.stdout, '');
     const askRows = s.readRows().filter((r) => r.kind === 'ask');
-    assert.equal(askRows.length, 1);
-    assert.equal(askRows[0].text, 'child log prompt');
-    assert.equal(askRows[0].ask_id, undefined);
-    assert.equal(askRows[0].session_id, undefined);
+    // Relay also invokes passive logging; both prompts retain the original gate.
+    assert.deepEqual(askRows.map((r) => r.text), ['child prompt', 'child log prompt']);
+    for (const row of askRows) {
+      assert.equal(row.ask_id, undefined);
+      assert.equal(row.session_id, undefined);
+    }
 
     // Stop in child repo: askpm-remind never blocks, and askpm-log still writes reply because PM console gate is false
     const tp = s.writeTranscript('child.jsonl', [
-      entry('user', 'child prompt'),
+      entry('user', 'child log prompt'),
       entry('assistant', [{ type: 'text', text: 'child reply' }]),
     ]);
     const remind = s.runRemind({ hook_event_name: 'Stop', transcript_path: tp, cwd: child });

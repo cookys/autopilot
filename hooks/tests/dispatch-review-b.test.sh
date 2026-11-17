@@ -181,6 +181,7 @@ SCHEMA_RUNNERS="$(node -e '
 const schema = require(process.argv[1]);
 process.stdout.write(schema.properties.reviewer_runner.enum.filter((r) => r !== "auto").join(" "));
 ' "$REPO_ROOT/schemas/review-loop-contract.schema.json")"
+PARITY_UNBARRED_COUNT=0
 for PARITY_RUNNER in $SCHEMA_RUNNERS; do
   PARITY_EXTRA=()
   PARITY_PATH="$PATH"
@@ -188,8 +189,10 @@ for PARITY_RUNNER in $SCHEMA_RUNNERS; do
     cc-shim) PARITY_EXTRA=(--endpoint PARITYEP) ;;
     anthropic-compatible) PARITY_EXTRA=(--endpoint PARITYEP --context-window off); PARITY_PATH="$PARITY_FAKE_NODE:$PATH" ;;
   esac
-  # Size S + a non-core scope lets the cn-model gate allow a barred family (kimi, qoderclicn)
-  # so this loop still asserts the seat tier. The gate runs before review_seat_tier.
+  # Review-role is a floor in cn-model-dispatch-gate.js that AUTOPILOT_TASK_ROLE=implementer
+  # cannot lower (PM 01M7JPSR / 01M7K8QX), so CN-family runners (kimi, qoderclicn) stop at the
+  # cn-model gate before review_seat_tier or the --bin stub. Tier-parity and capability-flag
+  # assertions still run for every runner; dispatch-output assertions branch on the cn-model gate.
   PARITY_OUT="$(PATH="$PARITY_PATH" AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
     AUTOPILOT_TASK_SIZE=S AUTOPILOT_TASK_ROLE=implementer AUTOPILOT_TASK_SCOPE=docs/guide/installation.md \
     "$SCRIPT" --runner "$PARITY_RUNNER" --model haiku --diff-file "$DIFF" --bin "$PARITY_STUB" "${PARITY_EXTRA[@]}" 2>&1)"; PARITY_EXIT=$?
@@ -210,23 +213,44 @@ process.stdout.write(String(isBlindDiscoveryCapableRunner(process.argv[2])));
     *" $PARITY_RUNNER "*) PARITY_LIST_CAPABLE=true ;;
     *) PARITY_LIST_CAPABLE=false ;;
   esac
-  if [ "$JS_TIER" = "packet" ]; then
-    assert_eq "true" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: packet alias is capable"
-    assert_eq "true" "$PARITY_LIST_CAPABLE" "$PARITY_RUNNER: packet is in REVIEW_SEAT_TIERS.packet"
-    assert_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: packet-tier runner reached the stub binary (rc=99 signature)"
-    assert_not_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: packet runner is not gated"
-  elif [ "$JS_TIER" = "cleanroom" ]; then
-    assert_eq "true" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: cleanroom alias is capable (tier !== none)"
-    assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: cleanroom never reaches the --bin stub without a packet"
-    assert_contains "$PARITY_OUT" "cleanroom seat requires a review packet" "$PARITY_RUNNER: cleanroom names the packet gate"
-  else
-    assert_eq "false" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: none-tier is not capable"
-    assert_eq "false" "$PARITY_LIST_CAPABLE" "$PARITY_RUNNER: none-tier is not in the packet list"
-    assert_eq "2" "$PARITY_EXIT" "$PARITY_RUNNER: incompatible runner is a precondition failure (exit 2)"
-    assert_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: incompatible runner hits the no-tools gate"
-    assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: incompatible runner never reaches the stub"
-  fi
+  case "$JS_TIER" in
+    packet)
+      assert_eq "true" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: packet alias is capable"
+      assert_eq "true" "$PARITY_LIST_CAPABLE" "$PARITY_RUNNER: packet is in REVIEW_SEAT_TIERS.packet"
+      ;;
+    cleanroom)
+      assert_eq "true" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: cleanroom alias is capable (tier !== none)"
+      ;;
+    *)
+      assert_eq "false" "$PARITY_NODE_CAPABLE" "$PARITY_RUNNER: none-tier is not capable"
+      assert_eq "false" "$PARITY_LIST_CAPABLE" "$PARITY_RUNNER: none-tier is not in the packet list"
+      ;;
+  esac
+  case "$PARITY_OUT" in
+    *cn_model_dispatch_barred*)
+      assert_eq "2" "$PARITY_EXIT" "$PARITY_RUNNER: cn-barred review seat is a precondition failure (exit 2)"
+      assert_contains "$PARITY_OUT" "cn_model_dispatch_barred" "$PARITY_RUNNER: cn-barred review seat names the cn-model gate"
+      assert_contains "$PARITY_OUT" "review-role" "$PARITY_RUNNER: cn-barred review seat names review-role"
+      assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: cn-barred review seat never reaches the stub"
+      ;;
+    *)
+      PARITY_UNBARRED_COUNT=$((PARITY_UNBARRED_COUNT + 1))
+      if [ "$JS_TIER" = "packet" ]; then
+        assert_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: packet-tier runner reached the stub binary (rc=99 signature)"
+        assert_not_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: packet runner is not gated"
+      elif [ "$JS_TIER" = "cleanroom" ]; then
+        assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: cleanroom never reaches the --bin stub without a packet"
+        assert_contains "$PARITY_OUT" "cleanroom seat requires a review packet" "$PARITY_RUNNER: cleanroom names the packet gate"
+      else
+        assert_eq "2" "$PARITY_EXIT" "$PARITY_RUNNER: incompatible runner is a precondition failure (exit 2)"
+        assert_contains "$PARITY_OUT" "enforceable no-tools runner profile" "$PARITY_RUNNER: incompatible runner hits the no-tools gate"
+        assert_not_contains "$PARITY_OUT" "rc=99" "$PARITY_RUNNER: incompatible runner never reaches the stub"
+      fi
+      ;;
+  esac
 done
+assert_eq "true" "$([ "$PARITY_UNBARRED_COUNT" -gt 0 ] && echo true || echo false)" \
+  "parity loop: at least one non-CN runner exercised packet/cleanroom/no-tools output assertions (got $PARITY_UNBARRED_COUNT)"
 
 # BL-0204: blind opencode is admitted ONLY while the deny-all is genuinely applied. A fault-injecting
 # `node` shim rewrites the lib's `plan` output (env.nul) to an allow-all config; the pre-spawn assert must refuse

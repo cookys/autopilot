@@ -13,8 +13,6 @@
   "band.q_5h": "5h",
   "band.q_7d": "7d",
   "band.q_cap": "cap",
-  "bar.open": "Open panel",
-  "bar.dispatch": "Dispatch",
   "speed.title": "Speed",
   "speed.none": "no requests yet",
   "speed.avg": "average",

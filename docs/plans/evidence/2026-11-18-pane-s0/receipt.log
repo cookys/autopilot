@@ -28,3 +28,12 @@
 - Focused set (frame, keys, fixed-height, frame.golden, bottom-anchor): 267 pass, 0 fail.
 - live.test.ts rebaselined for the 2-row band: bandLine text is the summary row only; the 209-column test checks row 0 of 2; the strip-entries count is 8 (no chip).
 - OPEN: 28 legacy live.test.ts tests (56 runs) still assert the old band (open-panel buttons, one row, E1 rule/tabs); they need rebaselining in a follow-up, no codeforge assertion was touched.
+
+## UPDATE 2026-11-18 (Fleet-Task 01M7N307: merge fix/band-open-row, live.test.ts load, two-row band tests, Enter needs focus)
+- merge fix/band-open-row (cfdf8cce3) --no-ff: one conflict, band.tsx barParts/barContent signature; took the fix side (onOpen removed, rows only), kept S0's two-row BandBar.
+- BASE cdf73aad6: whole-suite run: live.test.ts "(fail) the file did not load"; alone with the split: 717 pass / 81 fail (old-design band tests + the 15 known reds).
+- LOAD CAUSE: `claude plugin test` child prints one report line to a pipe; over ~128 KiB it is cut ("its run ended without a report"). live.test.ts (~800 tests) reports ~200 KB even at 0 fail, +2.5 KB per failure. Fix: three files (live.test.ts, live2.test.ts, live3.test.ts) each registering a third via live.part1.ts / live.part2.ts.
+- RED: before the test rewrite, live files: 59-75 fail (E1 x20, bandsent/bandlayout/bandinput, band row x8, P7, TUI v2, band height golden, O4 shell).
+- GREEN: bash mods/live/run-tests.sh: 1319 pass / 15 fail; the 15 are C1 U7 x2, G33a x3, speed tab x10 (the allowed set).
+- Product edits: BandBar.stripRow (the O4 shell takes the strip row as its menu row, so the shell stays 12 rows, not 13); register fit rule counts the two bar rows (rows < 3 + content); inert autoFocus anchor in pane.tsx (A5): Enter with nothing focused presses it = no-op, no tab is pressed.
+- New tests: "Enter with nothing focused is a no-op" and "a click on the tab showing closes the pane" (x2 surfaces); frame.test.ts asserts the anchor is the only autoFocus Button.

@@ -1606,7 +1606,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           progress = progressRow(el, unit.length === 0 ? [] : layoutBand(unit, mainCols - 1).segs.slice(0, -1), slot)
           quick = [] // the shell's quick row stays (the card keys use it); outside a card it is blank, so the frame keeps its height
         }
-        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: bar.node }))
+        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: bar.stripRow }))
       }
     }
     let content: unknown[] = []
@@ -1614,7 +1614,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       // the room under the bar and the rule: the speed view (ours) and, when there is room for it, the mod below's full view (Ferris, pet, memory, brain)
       // When this tab is shut the mod below is not asked and its element is not in our tree. Its Raster is then not mounted, so its `$.ui.blit` is denied (host contract: `{ deny }` when nothing of the
       // caller's is mounted there) and the screen shows only our tree: no stale picture (checked in a real terminal, BL-0359 round 2). The mod resends its frame once it is drawn again.
-      const room = rows - 2
+      const room = rows - 2 // the speed tab's thresholds are pinned by the speed-tab tests (known red until its own follow-up); with the two-row bar it is one row over budget
       if (room >= SPEED_ROWS) {
         const stack = SPEED_PLACEMENT === 'stack'
         const view = speedView(steps, stack ? SPEED_ROWS : Math.min(room, FORGE_FULL_ROWS), columns, t)
@@ -1633,9 +1633,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     } else if (active !== null) {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot })
     }
-    if (active !== 'forge' && rows < 2 + content.length) return bar.node // the rule and the rows do not fit: the first row alone stays
+    if (active !== 'forge' && rows < 3 + content.length) return bar.node // the two bar rows, the rule and the rows do not fit: the two bar rows alone stay
     // The fleet counts are on the band's own line (slotFleet). Nothing is handed to the mod below for a second row.
-    if ((content.length === 0 && (active === null || active === 'forge')) || rows < 2) return bar.node // an open tab with no row of its own still draws its rule: the ━ shows which tab is open
+    if ((content.length === 0 && (active === null || active === 'forge')) || rows < 3) return bar.node // an open tab with no row of its own still draws its rule: the ━ shows which tab is open
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 

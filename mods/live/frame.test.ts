@@ -1,7 +1,7 @@
 // mods/live/frame.test.ts — S0 of the pane tab merge (plan r2 §3.1, §3.2, §5): the fixed-height frame, the page registry and the pane's key table.
 // Pure: frameRows and paneKey are called directly; the strip is also drawn through the real Pane with fake elements.
 import { test, expect } from 'claude-code/testing'
-import { Pane } from './pane'
+import { FOCUS_ANCHOR_KEY, Pane } from './pane'
 import { makeT } from './i18n'
 import { actionRows, brokenRow, frameRows, mostSevere } from './pages/frame'
 import type { Page, PageCtx, Row } from './pages/frame'
@@ -122,7 +122,9 @@ test('pane strip: no `›` next chip anywhere, every digit tab is a Button with 
   expect(Object.fromEntries(old.filter(n => n.kind === 'Button' && n.props.hotkey !== undefined).map(n => [n.props.key, n.props.hotkey]))).toEqual({ now: '1', decide: '2', fleet: '3', spend: '4', dispatch: '5', review: '6', hygiene: '8' })
   const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
   const framed = walk(Pane(EL as never, live, 'decide', () => {}, t, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: null, nowMs: NOW, rows: 30 }))
-  const btn = framed.filter(n => n.kind === 'Button')
+  const anchor = framed.filter(n => n.kind === 'Button' && n.props.autoFocus === true)
+  expect(anchor.map(n => n.props.key), 'the one autoFocus Button is the inert anchor (g2 fold A5), not a tab').toEqual([FOCUS_ANCHOR_KEY])
+  const btn = framed.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY)
   expect(btn.map(n => n.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'])
   expect(btn.some(n => flat(n).includes('›'))).toBe(false)
   expect(framed.find(n => n.kind === 'Box' && n.props.height === 30)).toBeDefined()

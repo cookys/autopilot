@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # mods/live/run-tests.sh — run the live mod's suites (gen-locales.js --check, live.test.ts, load-source.test.ts) with `claude plugin test`.
 #
+# live.test.ts is split in three files (live.test.ts, live2.test.ts, live3.test.ts; live.part1.ts / live.part2.ts only set which third a file registers): `claude plugin test` runs each file in a child
+# that prints ONE report line to a pipe, and a line over about 128 KiB is cut, which reads as "the file did not load". One file of ~800 tests is about 200 KB; a third each is well under.
+#
 # `claude plugin test <folder>` runs a plugin's *.test.ts files against the real engine, and a plugin loads its hooks module from the
 # `modules` key of hooks/hooks.json. The suite is written for a plugin named `autopilot` ($.state refs are owner-checked) whose
 # modules entry is ../mods/live/register.ts. This script builds that throwaway wrapper in a temp dir:

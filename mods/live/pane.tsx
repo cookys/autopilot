@@ -110,6 +110,14 @@ function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (
 // the digit of each tab (plan r2 §3.2): the four pages of the registry first (the quota page is still the Spend tab until S4 adds its own), then the tabs not moved yet
 export const PAGE_DIGIT: Record<string, string> = { now: '1', decide: '2', fleet: '3', spend: '4', dispatch: '5', review: '6', hygiene: '8' }
 export const DIGIT_TAB: Record<string, PaneTab> = { '1': 'now', '2': 'decide', '3': 'fleet', '4': 'spend', '5': 'dispatch', '6': 'review', '7': 'spend', '8': 'hygiene' }
+// The FOCUS ANCHOR (plan r2 §3.2, fold A5): the one autoFocus Button carries the pane's autoFocus, so the host's ring starts on a Button that does nothing (drawn last: 'first drawn' only ranks among autoFocus Buttons, so it still wins) and `Enter` with nothing focused is a no-op.
+// Without it the ring starts on the first tab Button, whose Enter pressed the tab already showing and closed the pane. It is zero cells wide and draws nothing; a tab is chosen by its digit or a click.
+export const FOCUS_ANCHOR_KEY = 'focus'
+function focusAnchor(el: { Text: El; Button?: El }) {
+  const { Text, Button } = el
+  return Button === undefined ? null : <Button key={FOCUS_ANCHOR_KEY} plain autoFocus onPress={() => {}}><Text>{''}</Text></Button>
+}
+
 // the drawing half of the strip, shared with the operator-console pane (same Buttons, same baseline)
 function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, strip: Strip<Id>, onTab: (t: Id) => void, digits: Record<string, string> = {}) {
   const { Box, Text, Button } = el
@@ -124,6 +132,7 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
             <Text> </Text>
           </Box>
         ))}
+        {focusAnchor(el)}
       </Box>
     </Box>
   )
@@ -148,7 +157,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       })}
     </Box>
   )
-  return <Box flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
+  return <Box flexDirection="column" height={frame.rows}>{rows.map(drawRow)}{focusAnchor(el)}</Box>
 }
 
 // how one PaneLine is drawn (shared by the tabs and the console's 指揮 page): plain segments, a press row of Buttons, a text field, a toggle Button, a goto Button

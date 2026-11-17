@@ -130,7 +130,9 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
     )
   })
   // r2 §3.1: the band is two rows, always. Row 1 is the summary (cells, ⓘ, speed); row 2 is the tab strip, right-aligned to the bottom edge.
-  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}</Box><Box><Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box></Box>, strip, tabsAt: gap }
+  const stripRow = <Box><Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>
+  // `stripRow` alone is the menu row of the O4 shell: the shell is already 12 rows (SHELL_ROWS), so it takes the tab strip and leaves the summary row to the band's own draw
+  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}</Box>{stripRow}</Box>, stripRow, strip, tabsAt: gap }
 }
 
 // the rule under the bar

@@ -145,28 +145,23 @@ export function BarButton(el: { Text: El; Button?: El }, id: string, label: stri
   return Button === undefined ? text : <Button key={id} plain onPress={onPress}>{text}</Button>
 }
 
-// the open tab's content: rows (each one drawn row). `barParts` keeps the buttons row apart: the tab-row layout draws it as the last row, the O4 shell as its quick row.
+// the open tab's content: rows (each one drawn row). No buttons row sits under it: the band's height must not change with the open tab (the pane is reached from the ⓘ, a slot, the tab strip and /live-pane).
 // Progress and spend left the collapsed slots, so the Now preview has no row. Dispatch shows the stalled chip. Review shows QC.
-export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): { rows: unknown[]; quick: unknown[] } {
-  const { Box, Text } = el
-  if (tab === 'usage') return { rows: [], quick: [<Box key="buttons">{BarButton(el, 'open:usage', t('bar.open'), () => o.onOpen('spend'))}</Box>] }
-  if (snap === null || snap.band === null) return { rows: [], quick: [] }
+export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, _t: T, o: { onSlot: (id: SlotId) => void }): { rows: unknown[] } {
+  const { Box } = el
+  if (tab === 'usage' || snap === null || snap.band === null) return { rows: [] }
   const band = snap.band
   const sel = (ids: SlotId[]) => band.slots.filter(s => ids.includes(s.id))
   const lineOf = (ids: SlotId[]): unknown[] => {
     const slots = sel(ids)
     return slots.length === 0 ? [] : [<Box key="line">{drawSegs(el, layoutBand(slots, columns).segs.slice(0, -1), o.onSlot)}</Box>]
   }
-  const open = <Box key="buttons">{BarButton(el, 'open:' + tab, t('bar.open'), () => o.onOpen(tab))}</Box>
-  if (tab === 'decide') return { rows: [], quick: [open] }
-  if (tab === 'now') return { rows: [], quick: [<Box key="buttons">{BarButton(el, 'open:now', t('bar.open'), () => o.onOpen('now'))}<Text>{'  '}</Text>{BarButton(el, 'open:dispatch', t('bar.dispatch'), () => o.onOpen('dispatch'))}</Box>] }
-  if (tab === 'dispatch') return { rows: lineOf(['dispatch']), quick: [open] }
-  if (tab === 'review') return { rows: lineOf(['review']), quick: [open] }
-  return { rows: [], quick: [] }
+  if (tab === 'dispatch') return { rows: lineOf(['dispatch']) }
+  if (tab === 'review') return { rows: lineOf(['review']) }
+  return { rows: [] }
 }
-export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {
-  const p = barParts(el, snap, tab, columns, t, o)
-  return [...p.rows, ...p.quick]
+export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void }): unknown[] {
+  return barParts(el, snap, tab, columns, t, o).rows
 }
 
 // the 待決 tab's compact form: the first open question's title and its options, then the send row the pane's own builder made (the same lines, the same press ids: a press is

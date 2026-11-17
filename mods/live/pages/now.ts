@@ -8,15 +8,12 @@ import type { LiveSnapshot, Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import { ROLE_WARNING, worstPool } from './quota-pick'
-import type { QuotaPool } from './quota-pick'
-import type { Page, PageCtx, Row } from './frame'
+import type { Page, PageCtx } from './frame'
+import { brokenRow, staleBadge } from './rows'
+import type { Row } from './rows'
 
 type T = PageCtx['t']
 
-// The same red marker as frame.ts's staleBadge/brokenRow (§5: broken role, no background, no inverse). frame.ts is not imported at runtime on purpose: frame -> index -> now -> frame is a
-// cycle, and a test that loads index or now first fails with "Cannot access 'nowPage' before initialization". now.test.ts pins these two equal to frame.ts's.
-export const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken })
-export const brokenRow = (text: string): Row => [staleBadge(text)]
 
 // ---- the own-seat quota feed (fold A3: every seat may call `fleet seats --quota --json`; 60 s cache) ----
 export const SEATS_ARGV = ['fleet', 'seats', '--quota', '--json'] as const
@@ -115,25 +112,11 @@ function rightAlign(left: Seg[], right: string, cols: number): Row {
 const labelled = (label: string, wide: boolean, ...rest: Seg[]): Row => (wide ? [dim('  ' + label + ' '.repeat(Math.max(1, 7 - displayWidth(label)))), ...rest] : rest)
 
 // ---- the fleet overview + exceptions ----
-// The quota overview line names the pool the band and the quota page name: `worstPool` of pages/quota-pick.ts (S4), the first of the same order. The pools are the console's
-// `quota.pools[]` (fleet 01M7N4EK; a missing field is null, never 0); parseConsole does not carry `quota` yet, so until it does this reads the raw field when present and
-// otherwise draws the §5 "no source" row. After S4's quota.ts merges, `poolsOf` should be replaced by its `readQuota`.
-function poolsOf(con: ConsoleSnapshot): QuotaPool[] | null {
-  const q = (con as unknown as { quota?: unknown }).quota
-  if (!isObj(q) || !Array.isArray(q.pools)) return null
-  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
-  const bool = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null)
-  return q.pools.filter(isObj).filter(p => typeof p.pool === 'string').map(p => ({
-    pool: p.pool as string, seven_day_pct: num(p.seven_day_pct), five_hour_pct: num(p.five_hour_pct), resets_at_ms: num(p.resets_at_ms), burn_pct_per_h: num(p.burn_pct_per_h), burn_window_h: num(p.burn_window_h),
-    projected_pct_at_reset: num(p.projected_pct_at_reset), projected_exhaustion_at_ms: num(p.projected_exhaustion_at_ms), verdict: str(p.verdict), limit_hit: bool(p.limit_hit), stale: bool(p.stale),
-    stale_age_min: num(p.stale_age_min), stale_note: str(p.stale_note), observed_at_ms: num(p.observed_at_ms), stranded_seats: num(p.stranded_seats),
-    stranded_seat_list: Array.isArray(p.stranded_seat_list) ? p.stranded_seat_list.filter((x): x is string => typeof x === 'string') : null,
-    switched: typeof p.switched === 'string' || typeof p.switched === 'boolean' ? p.switched : null, seats: num(p.seats), projection_source: str(p.projection_source), switch_suggestion: str(p.switch_suggestion),
-  }))
-}
+// The quota overview line names the pool the band and the quota page name: `worstPool` of pages/quota-pick.ts, the first of the same order. The pools are the parsed console's
+// `quota.pools` (null = no source: the §5 row).
 function quotaWorstSeg(ctx: PageCtx, wide: boolean): Seg[] {
   const { t } = ctx
-  const pools = ctx.console === null ? null : poolsOf(ctx.console)
+  const pools = ctx.console === null ? null : ctx.console.quota.pools
   if (pools === null) return [staleBadge(GLYPHS.state.failed + ' ' + t('page.now.quota_no_source'))]
   const w = worstPool(pools, ctx.nowMs)
   if (w === null) return [dim(t('page.now.quota_empty'))]
@@ -169,21 +152,20 @@ function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] 
   return [[...main, wide ? plain(' ｜ ') : plain(' · '), ...qSegs]]
 }
 
-// the items the exceptions block draws: exceptions and quota items the feed sends to the console, plus `seat_blocked:<seat>` items (a seat whose pool is used up). parseConsole keeps no
-// `facts`, so a seat_blocked item's `facts.stale` / `facts.source` are read from the raw field when present.
-const isSeatBlocked = (i: ConsoleItem): boolean => (i.kind as string) === 'seat_blocked'
-const factsOf = (i: ConsoleItem): Record<string, unknown> => { const f = (i as unknown as { facts?: unknown }).facts; return isObj(f) ? f : {} }
+// the items the exceptions block draws: exceptions and quota items the feed sends to the console, plus `seat_blocked:<seat>` items (a seat whose pool is used up);
+// a seat_blocked item's `facts.stale` / `facts.source` come from the parsed facts.
+const isSeatBlocked = (i: ConsoleItem): boolean => i.kind === 'seat_blocked'
 function exceptionRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
   const { t, nowMs, size } = ctx
   const items = con.items.filter((i: ConsoleItem) => ((i.kind === 'exception' || i.kind === 'quota') && i.to_console === true) || (isSeatBlocked(i) && i.to_console !== false))
   return items.map((it, i) => {
     const g = glyph(it.state)
-    const f = factsOf(it)
+    const f = it.facts
     const stale = isSeatBlocked(it) && f.stale === true
     const body = wide ? it.text : it.title
     const lead: Seg[] = [dim((i === 0 ? GLYPHS.structure.folded : ' ') + (wide ? ' ' : '')), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }]
     // §5: stale data is red with its reason; the number (the text) stays
-    const left: Seg[] = stale ? [...lead, staleBadge(' ' + body + ' ' + GLYPHS.state.failed + ' ' + t('page.now.seat_blocked_stale', { source: str(f.source) ?? '?' }))] : [...lead, plain(' ' + body)]
+    const left: Seg[] = stale ? [...lead, staleBadge(' ' + body + ' ' + GLYPHS.state.failed + ' ' + t('page.now.seat_blocked_stale', { source: String(f.source ?? '?') }))] : [...lead, plain(' ' + body)]
     return wide ? rightAlign(left, ageOf(t, nowMs - it.since_ms), size.cols - 1) : left
   })
 }

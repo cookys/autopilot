@@ -14,6 +14,8 @@ import { fixedWindow, followsTail, thumbOf } from './scrollmath'
 import type { ScrollModel } from './scrollmath'
 import type { ForgeSegment } from './ui'
 import { barRule, barStrip, decideBandPlan } from './tabs'
+import { ROLE_WARNING, worstPool } from './pages/quota-pick'
+import type { QuotaPool } from './console'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
@@ -103,7 +105,15 @@ export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot 
 export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; onTab: (id: BarTabId | ConsoleTab) => void }
 
 // the row, and the column its tabs start in (the rule under it is built from that)
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null): { node: unknown; strip: BarStrip; tabsAt: number } {
+// r2 §3.1: the right end of the summary row names the most dangerous pool, the same one the 現況 page names (worstPool, folds A7). null = nothing to show (no pools).
+export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T): Seg | null {
+  const w = worstPool(pools, nowMs)
+  if (w === null) return null
+  const color = w.role === 'broken' ? PALETTE.broken : w.role === ROLE_WARNING ? PALETTE.attention : PALETTE.done
+  return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }
+}
+
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null): { node: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
   const fb = forge === null ? null : forgeBar(forge)
@@ -132,7 +142,11 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // r2 §3.1: the band is two rows, always. Row 1 is the summary (cells, ⓘ, speed); row 2 is the tab strip, right-aligned to the bottom edge.
   const stripRow = <Box><Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>
   // `stripRow` alone is the menu row of the O4 shell: the shell is already 12 rows (SHELL_ROWS), so it takes the tab strip and leaves the summary row to the band's own draw
-  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}</Box>{stripRow}</Box>, stripRow, strip, tabsAt: gap }
+  // the quota segment sits at the right end of row 1 when two cells of room are left; it never takes a row and never pushes the speed label
+  const qw = quota === null ? 0 : displayWidth(quota.text)
+  const qpad = quota === null ? 0 : columns - left.width - forgeW - qw
+  const qnode = quota === null || qpad < 2 ? [] : [<Text key="[REDACTED]">{' '.repeat(qpad)}</Text>, <Text key="[REDACTED]" {...drawSeg(quota)} wrap="truncate">{quota.text}</Text>]
+  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}</Box>{stripRow}</Box>, stripRow, strip, tabsAt: gap }
 }
 
 // the rule under the bar

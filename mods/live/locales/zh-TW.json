@@ -700,5 +700,7 @@
   "page.decide.sent_free": "已送出：{text}",
   "page.decide.sent_opt": "已送出：[{k}] {label}",
   "page.decide.stale_live": "本席待決資料不是最新：{why}",
-  "page.decide.step": "步驟"
+  "page.decide.step": "步驟",
+  "page.quota.f_blocked": "用完",
+  "page.quota.blocked_stale": "資料過期：{source} 沒在跑"
 }

@@ -704,7 +704,9 @@ export const EN: Record<string, string> = {
   "page.decide.sent_free": "Sent: {text}",
   "page.decide.sent_opt": "Sent: [{k}] {label}",
   "page.decide.stale_live": "this seat's decision data is not current: {why}",
-  "page.decide.step": "Step"
+  "page.decide.step": "Step",
+  "page.quota.f_blocked": "blocked",
+  "page.quota.blocked_stale": "data stale: {source} is not running"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -1409,5 +1411,7 @@ export const ZH_TW: Record<string, string> = {
   "page.decide.sent_free": "已送出：{text}",
   "page.decide.sent_opt": "已送出：[{k}] {label}",
   "page.decide.stale_live": "本席待決資料不是最新：{why}",
-  "page.decide.step": "步驟"
+  "page.decide.step": "步驟",
+  "page.quota.f_blocked": "用完",
+  "page.quota.blocked_stale": "資料過期：{source} 沒在跑"
 }

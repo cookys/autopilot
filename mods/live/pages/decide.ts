@@ -10,7 +10,9 @@ import { DECIDE_UNDO_MS, NO_DECIDE, decideDialog, decideFillText, decideLine, de
 import type { DecideState, LiveDecision, Seg } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import type { KeyAction } from './keys'
-import type { Page, PageCtx, Row } from './frame'
+import type { Page, PageCtx } from './frame'
+import { brokenRow } from './rows'
+import type { Row } from './rows'
 
 // ---- view state and the key reducer ----
 // DecideState (model.ts) carries picks, notes, sent and hold (the 10 s undo window, by card id); the rest is this page's own: which card shows in full, whether the others are folded, the note mode and its buffer, the focused option beyond a)–e)
@@ -218,9 +220,6 @@ function otherRow(id: string, title: string, who: string, age: string, ctx: Page
   return [seg(id + ' ' + title + (age === '' ? '' : ' · ' + age))]
 }
 
-// frame.ts's brokenRow, written out here: importing it would make decide.ts wait on frame.ts, which waits on index.ts, which needs decidePage (a cycle that
-// leaves decidePage unread when the module graph is entered at decide or at register)
-const brokenRow = (text: string): Row => [{ text, color: PALETTE.broken }]
 const noSource = (ctx: PageCtx, id: string): Row => brokenRow(GLYPHS.state.failed + ' ' + ctx.t(id))
 
 function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {

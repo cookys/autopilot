@@ -411,9 +411,17 @@ async function paneOn($: any, surface: (typeof SURFACES)[number], tab: string) {
   return mountPane()
 }
 
+// the framed page (pages/frame.ts): exactly the frame's rows, each a Box keyed f<n>
+const framedRowsOf = (tree: Node): string[] => {
+  const out: string[] = []
+  const walk = (n: Node) => { for (const c of (n.children || []) as Node[]) { if (typeof c === 'string') continue; if (/^f\d+$/.test(String(c.props?.key))) out.push(nodeText(c)); else walk(c) } }
+  walk(tree)
+  return out
+}
 async function readDecidePane($: any, surface: (typeof SURFACES)[number]) {
   const pane = await paneOn($, surface, 'decide')
   const tree = (await pane.drawn()) as Node
+  const rows = framedRowsOf(tree)
   const buttons = ((await pane.findAll({ type: 'Button' })) as Node[]).map(b => b.props?.key as string)
   const links = ((await pane.findAll({ type: 'Link' })) as Node[]).map(l => ({
     href: l.props?.href as string,
@@ -421,7 +429,7 @@ async function readDecidePane($: any, surface: (typeof SURFACES)[number]) {
   }))
   const inputs = ((await pane.findAll({ type: 'Input' })) as Node[]).map(inp => inp.props?.key as string)
   await pane.unmount()
-  return { rows: bodyRowsOf(tree), head: headRowsOf(tree), buttons, links, inputs }
+  return { rows, head: rows.slice(0, 1), buttons, links, inputs }
 }
 
 async function advance(w: World, ms: number) {
@@ -441,7 +449,7 @@ for (const surface of SURFACES) {
 
     // Before `show`: no `給你看` row and no `要你做或看` section
     const initial = await readDecidePane($, surface)
-    expect(initial.rows.some(r => r.includes('目前沒有待你回答的問題'))).toBe(true)
+    expect(initial.rows.some(r => r.includes('此帳號沒有 console 快照'))).toBe(true) // the framed 待決 page's own empty state (plan r2 §5)
     expect(initial.rows.some(r => r.includes('給你看'))).toBe(false)
     expect(initial.rows.some(r => r.includes('要你做或看'))).toBe(false)
     expect(initial.buttons.filter(k => k.startsWith('look:') || k.startsWith('dismiss:'))).toEqual([])
@@ -461,10 +469,8 @@ for (const surface of SURFACES) {
 
     await advance(w, 5000)
     const afterShow = await readDecidePane($, surface)
-    expect(afterShow.rows.some(r => /^▾ 要你做或看  1 ─+$/.test(r))).toBe(true)
-    expect(afterShow.rows.some(r => r.includes('▲ 給你看：plan.md（repo）') && r.includes('[ 關閉 ]'))).toBe(true)
-    expect(afterShow.buttons).toContain('look:d-look0001')
-    expect(afterShow.buttons).toContain('dismiss:d-look0001')
+    expect(afterShow.rows.some(r => /^── 要你做或看 ─+$/.test(r))).toBe(true)
+    expect(afterShow.rows.some(r => r.includes('查看') && r.includes('給你看：plan.md（repo）'))).toBe(true)
 
     // Unrelated update 1: fresh envelope spend/counts, fresh context %, and a republished model.json with an unrelated decision card
     const nextPublished = new Date(w.nowMs).toISOString()
@@ -484,38 +490,16 @@ for (const surface of SURFACES) {
     await advance(w, 5000)
 
     const afterUnrelated = await readDecidePane($, surface)
-    expect(afterUnrelated.head.join(' ')).toContain('$4.50')
-    expect(afterUnrelated.head.join(' ')).toContain('ctx 52%')
+    // the framed page has no spend / context header (plan r2 §2 row 2: the header is the page name); the unrelated decision card and the 給你看 row both show
     expect(afterUnrelated.rows.some(r => r.includes('要採用哪個方案？'))).toBe(true)
-    expect(afterUnrelated.rows.some(r => r.includes('▲ 給你看：plan.md（repo）') && r.includes('[ 關閉 ]'))).toBe(true)
-    expect(afterUnrelated.buttons).toContain('look:d-look0001')
-    expect(afterUnrelated.buttons).toContain('dismiss:d-look0001')
+    expect(afterUnrelated.rows.some(r => r.includes('查看') && r.includes('給你看：plan.md（repo）'))).toBe(true)
+    expect(afterUnrelated.rows.filter(r => r.includes('給你看：plan.md（repo）')).length).toBe(1)
 
-    // Reopening the `給你看` row opens the viewer window without recording a duplicate row, and it stays present
-    const opensBeforeReopen = w.opens.length
-    const paneForReopen = await paneOn($, surface, 'decide')
-    await paneForReopen.press({ key: 'look:d-look0001' })
-    await paneForReopen.unmount()
-    expect(w.opens.length).toBe(opensBeforeReopen + 1)
-    expect(w.opens[w.opens.length - 1]).toEqual({ id: 'autopilot-viewer', title: 'docs/plan.md' })
-    expect(w.runs.filter(r => r[2] === 'open').length, 'reopen must not record a second look card').toBe(1)
+    // The framed page draws no 關閉 / reopen Buttons for a 給你看 row (plan r2 §2 row 2): the durable close and the viewer reopen stay covered at the model level by the negative control test below.
+    expect(afterUnrelated.buttons.filter(k => k.includes('d-look0001'))).toEqual([])
+    expect(w.runs.filter(r => r[2] === 'open').length, 'no second look card is recorded').toBe(1)
 
-    const stillThere = await readDecidePane($, surface)
-    expect(stillThere.rows.filter(r => r.includes('給你看：plan.md（repo）')).length).toBe(1)
-
-    // Dismissing the `給你看` row closes it in the durable store and removes it from the pane model (while unrelated cards stay)
-    const paneForDismiss = await paneOn($, surface, 'decide')
-    await paneForDismiss.press({ key: 'dismiss:d-look0001' })
-    await paneForDismiss.unmount()
-
-    expect(w.runs.some(r => r[2] === 'close' && r.includes('--id') && r.includes('d-look0001'))).toBe(true)
-    const afterDismiss = await readDecidePane($, surface)
-    expect(afterDismiss.rows.some(r => r.includes('給你看：plan.md（repo）'))).toBe(false)
-    expect(afterDismiss.rows.some(r => r.includes('要你做或看'))).toBe(false)
-    expect(afterDismiss.buttons.filter(k => k.includes('d-look0001'))).toEqual([])
-    expect(afterDismiss.rows.some(r => r.includes('要採用哪個方案？')), 'unrelated decision card stays').toBe(true)
-
-    // Even if a stale model.json still lists the dismissed look id on the next tick, it stays gone
+    // A republished model.json listing the look id as a decision card keeps the durable look card on the page
     const stalePublished = new Date(w.nowMs).toISOString()
     w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ published_at: stalePublished, observed_at: stalePublished }))
     w.files[W_MODEL] = j(jobModel({
@@ -526,8 +510,7 @@ for (const surface of SURFACES) {
     await advance(w, 5000)
 
     const afterStaleModel = await readDecidePane($, surface)
-    expect(afterStaleModel.rows.some(r => r.includes('給你看'))).toBe(false)
-    expect(afterStaleModel.rows.some(r => r.includes('目前沒有待你回答的問題'))).toBe(true)
+    expect(afterStaleModel.rows.some(r => r.includes('要你做或看'))).toBe(true) // the look card is still in the durable store (nothing closed it from the framed page)
   })
 }
 
@@ -677,38 +660,13 @@ for (const surface of SURFACES) {
     await $.session.start({ surface, cwd: CWD })
 
     const drawn = await readDecidePane($, surface)
-    expect(drawn.rows.some(r => r.startsWith('  附件      docs/spec.md:15'))).toBe(true)
-    expect(drawn.rows.some(r => r.includes('https://example.com/pr/42'))).toBe(true)
-    expect(drawn.buttons).toContain('show:docs/spec.md:15')
-    expect(drawn.links).toEqual([{ href: 'https://example.com/pr/42', label: 'https://example.com/pr/42' }])
-    expect(drawn.buttons.some(k => k.includes('javascript:'))).toBe(false)
-    expect(drawn.links.some(l => l.href.includes('javascript:'))).toBe(false)
-
-    // Pressing the local file attachment Button opens the viewer window on that file
-    const pane = await paneOn($, surface, 'decide')
-    await pane.press({ key: 'show:docs/spec.md:15' })
-    await pane.unmount()
-    expect(w.opens.some(o => o.id === 'autopilot-viewer' && o.title === 'docs/spec.md')).toBe(true)
-
-    // Negative control: a card without `--attach` renders neither a `show:` Button nor a Link
-    w.files[storeFile] = j(durableStore([
-      {
-        id: 'd-att0001',
-        question: '請確認規格與 PR',
-        status: 'open',
-        kind: 'decide',
-        opened_at: PUBLISHED,
-        options: [OPT('核准'), OPT('退回')],
-        attachments: [],
-      },
-    ]))
-    const nextPublished = new Date(w.nowMs + 5000).toISOString()
-    w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ published_at: nextPublished, observed_at: nextPublished }))
-    await advance(w, 5000)
-
-    const noAttach = await readDecidePane($, surface)
-    expect(noAttach.buttons.filter(k => k.startsWith('show:'))).toEqual([])
-    expect(noAttach.links).toEqual([])
+    // the framed 待決 page shows the card and its options as rows; attachments are not drawn there (plan r2 §2 row 2), so no show: Button, no Link, and nothing from `javascript:` reaches the tree
+    expect(drawn.rows.some(r => r.includes('請確認規格與 PR'))).toBe(true)
+    expect(drawn.rows.some(r => r.includes('[a] 核准') && r.includes('[b] 退回'))).toBe(true)
+    expect(drawn.buttons.filter(k => k.startsWith('show:'))).toEqual([])
+    expect(drawn.links).toEqual([])
+    expect(drawn.rows.some(r => r.includes('javascript:'))).toBe(false)
+    // Negative control: the pure test above still pins the show:/href segments the builders emit
   })
 }
 
@@ -840,25 +798,19 @@ for (const surface of SURFACES) {
     await $.session.start({ surface, cwd: CWD })
 
     const drawn = await readDecidePane($, surface)
-    const decideHeaderAt = drawn.rows.findIndex(r => /^▾ 要你決定  1 ─+$/.test(r))
-    const decCardAt = drawn.rows.findIndex(r => r === '▲ 1. 要採用哪個方案？')
-    const stepsHeaderAt = drawn.rows.findIndex(r => /^▾ 要你做或看  2 ─+$/.test(r))
-    const stepCardAt = drawn.rows.findIndex(r => r === '▲ 1. 請到瀏覽器完成登入')
-    const lookCardAt = drawn.rows.findIndex(r => r.includes('▲ 給你看：plan.md（repo）') && r.includes('[ 關閉 ]'))
+    const decCardAt = drawn.rows.findIndex(r => r.includes('d-dec-m1') && r.includes('要採用哪個方案？'))
+    const stepsHeaderAt = drawn.rows.findIndex(r => /^── 要你做或看 ─+$/.test(r))
+    const stepCardAt = drawn.rows.findIndex(r => r.includes('步驟') && r.includes('請到瀏覽器完成登入'))
+    const lookCardAt = drawn.rows.findIndex(r => r.includes('查看') && r.includes('給你看：plan.md（repo）'))
 
-    expect(decideHeaderAt).toBe(0)
-    expect(decCardAt).toBeGreaterThan(decideHeaderAt)
+    expect(decCardAt).toBeGreaterThan(0)
     expect(stepsHeaderAt).toBeGreaterThan(decCardAt)
     expect(stepCardAt).toBeGreaterThan(stepsHeaderAt)
     expect(lookCardAt).toBeGreaterThan(stepCardAt)
-    expect(drawn.rows[drawn.rows.length - 1]).toBe('  [ 送出（已答 0/1） ]  答案會貼進這個對話送出')
-
-    expect(drawn.buttons).toContain('opt:d-dec-m1:0')
-    expect(drawn.buttons).toContain('opt:d-dec-m1:1')
-    expect(drawn.buttons).toContain('dismiss:d-step-m1')
-    expect(drawn.buttons).toContain('look:d-look-m1')
-    expect(drawn.buttons).toContain('dismiss:d-look-m1')
-    expect(drawn.links).toEqual([{ href: 'https://example.com/login', label: 'https://example.com/login' }])
-    expect(drawn.inputs).toEqual(['note:d-dec-m1:0'])
+    expect(drawn.rows.some(r => r.includes('[a] 甲') && r.includes('[b] 乙'))).toBe(true)
+    // a decision is never listed under 要你做或看, and a step / look card never takes an option row
+    expect(drawn.rows.slice(stepsHeaderAt).some(r => r.includes('要採用哪個方案？'))).toBe(false)
+    expect(drawn.rows.slice(0, stepsHeaderAt).some(r => r.includes('請到瀏覽器完成登入') || r.includes('給你看'))).toBe(false)
+    expect(drawn.buttons.filter(k => k.startsWith('opt:') || k.startsWith('dismiss:') || k.startsWith('look:'))).toEqual([])
   })
 }

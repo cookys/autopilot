@@ -126,7 +126,8 @@ test('pane strip: no `›` next chip anywhere, every digit tab is a Button with 
   const anchor = framed.filter(n => n.kind === 'Button' && n.props.autoFocus === true)
   expect(anchor.map(n => n.props.key), 'the one autoFocus Button is the inert anchor (g2 fold A5), not a tab').toEqual([FOCUS_ANCHOR_KEY])
   const btn = framed.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY)
-  expect(btn.map(n => n.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'])
+  // pane.tsx also draws the page's own hidden hotkey Buttons (j k z a-e n u p l f s): letters; the digits belong to the strip alone
+  expect(btn.map(n => n.props.hotkey).filter(h => /^[0-9]$/.test(h))).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'])
   expect(btn.some(n => flat(n).includes('›'))).toBe(false)
   expect(framed.find(n => n.kind === 'Box' && n.props.height === 30)).toBeDefined()
 })

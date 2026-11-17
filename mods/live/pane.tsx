@@ -19,6 +19,10 @@ import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
 import { frameRows } from './pages/frame'
+import { fleetView as fleetPageView } from './pages/fleet'
+import { renderQuota } from './pages/quota'
+import type { DecideNav } from './pages/decide'
+import type { KeyAction } from './pages/keys'
 import type { ConsoleSnapshot } from './console'
 import type { Page, Row } from './pages/frame'
 import type { ScrollModel } from './scroll'
@@ -139,25 +143,50 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 }
 
 // A page of the registry (pages/index.ts) drawn through frameRows: exactly `rows` rows, the strip entries are Buttons with the digit as hotkey.
-export type FramePane = { pages: readonly Page[]; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number }
+export type PageView = { focus: number; expanded: boolean }
+// view: focus index + expanded flag per page id (fleet, quota); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons)
+export type FramePane = { pages: readonly Page[]; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void }
+const COMMON_KEYS: Record<string, KeyAction> = { j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here
+const DECIDE_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 }, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, n: { kind: 'note' }, u: { kind: 'undo' }, p: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
 // quota (4) and spend (7) both show the Spend tab until S4 gives the quota page its own tab; pet / forge / help have no old tab and no Button yet (a PaneTab for them comes with their pages)
 const PAGE_TAB: Record<string, PaneTab> = { now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend', dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene' }
 export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => (frame === null ? undefined : frame.pages.find(p => p.framed === true && PAGE_TAB[p.id] === tab))
 function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, cols: number) {
   const { Box, Text, Button } = el
-  const rows: Row[] = frameRows(page, { live: snap, console: frame.console, size: { cols, rows: frame.rows }, t, nowMs: frame.nowMs }, { pages: frame.pages, ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
-  const drawRow = (r: Row, i: number) => (
-    <Box key={'f' + i}>
-      {r.map((sg, j) => {
-        const m = sg.press === undefined ? null : /^tab:(\d):(\w+)$/.exec(sg.press)
-        const text = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{sg.text === '' ? ' ' : sg.text}</Text>
-        const to = m === null ? undefined : PAGE_TAB[m[2]]
-        if (m === null || to === undefined || Button === undefined) return text
-        return <Button key={'t' + m[2]} plain hotkey={m[1]} onPress={() => onTab(to)}>{text}</Button>
-      })}
-    </Box>
-  )
-  return <Box flexDirection="column" height={frame.rows}>{rows.map(drawRow)}{focusAnchor(el)}</Box>
+  const ctx = { live: snap, console: frame.console, size: { cols, rows: frame.rows }, t, nowMs: frame.nowMs, ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
+  const view = frame.view?.[page.id] ?? { focus: 0, expanded: false }
+  // the pages that take a view are drawn through their view functions; the registry's render() keeps the default view
+  const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page
+  const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
+  const press = (id: string) => { frame.onPress?.(id) }
+  const noteAt = page.id === 'decide' && frame.decide?.textMode === true && el.Input !== undefined ? rows.length - 2 : -1
+  const drawRow = (r: Row, i: number) => {
+    if (i === noteAt && el.Input !== undefined) {
+      const Input = el.Input
+      return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} /></Box>
+    }
+    return (
+      <Box key={'f' + i}>
+        {r.map((sg, j) => {
+          const m = sg.press === undefined ? null : /^tab:(\d):(\w+)$/.exec(sg.press)
+          const text = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{sg.text === '' ? ' ' : sg.text}</Text>
+          if (sg.press !== undefined && m === null && Button !== undefined) return <Button key={'p' + j} plain onPress={() => press(sg.press as string)}>{text}</Button>
+          const to = m === null ? undefined : PAGE_TAB[m[2]]
+          if (m === null || to === undefined || Button === undefined) return text
+          // the strip (last row) owns the digit hotkey and the key t<id>; a page's own `[2]` action is a click target only
+          return i === rows.length - 1 ? <Button key={to} plain hotkey={m[1]} onPress={() => onTab(to)}>{text}</Button> : <Button key={'a' + i + m[2]} plain onPress={() => onTab(to)}>{text}</Button>
+        })}
+      </Box>
+    )
+  }
+  // page-local keys: zero-width hotkey Buttons (never while a note is typed: the Input owns the keys then). On fleet and quota, f presses the page's own fill action.
+  const keys: Record<string, KeyAction> = page.id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : COMMON_KEYS
+  const fillPress = rows.flat().find(sg => sg.press?.startsWith('fill:'))?.press
+  const hot = Button === undefined || frame.decide?.textMode === true ? [] : [
+    ...Object.entries(keys).filter(([k]) => page.id === 'decide' || k !== 'f').map(([k, act]) => <Button key={'k:' + k} plain hotkey={k} onPress={() => frame.onKey?.(act)}><Text>{''}</Text></Button>),
+    ...(page.id !== 'decide' && fillPress !== undefined ? [<Button key="k:f" plain hotkey="f" onPress={() => press(fillPress)}><Text>{''}</Text></Button>] : []),
+  ]
+  return <Box flexDirection="column" height={frame.rows}>{rows.map(drawRow)}{hot}{focusAnchor(el)}</Box>
 }
 
 // how one PaneLine is drawn (shared by the tabs and the console's 指揮 page): plain segments, a press row of Buttons, a text field, a toggle Button, a goto Button

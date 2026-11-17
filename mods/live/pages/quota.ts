@@ -4,52 +4,20 @@
 //   pace missing (sources.quota_forecast is not ok): rate, projection and verdict columns read "✗ 無來源：capacity pace 未接", except limit_hit (a fact) and a stale pool (a fact)
 //   stale (> 10 min or flagged): the row is red with the full reason, the numbers stay and carry a ✗ (A1, A10); 80x24 writes the reason in a row under the table, untruncated
 //   Enter (A3) expands the focused pool's seats from `fleet seats --quota --json`; the page draws them from `quota.seats` when the feed carries them
-import type { Page, PageCtx, Row } from './frame'
+import type { Page, PageCtx } from './frame'
+import { brokenRow, staleBadge } from './rows'
+import type { Row } from './rows'
+import type { QuotaSeat } from '../console'
 import type { Seg } from '../model'
 import { GLYPHS, PALETTE, displayWidth } from '../ui'
 import type { QuotaPool, Verdict } from './quota-pick'
 import { rankPools, ROLE_WARNING } from './quota-pick'
 
-export type QuotaSeat = { seat: string; pool: string; seven_day_pct: number | null; five_hour_pct: number | null; stale: boolean | null; age_min: number | null }
 export type QuotaView = { focus: number; expanded: boolean } // the pane's own state (j/k, Enter); the page contract has no place for it yet, so render() uses the default
 
-// ---- reading the feed (trust boundary: console.ts does not carry `quota` yet, so the page reads it tolerantly and drops what is wrong-typed) ----
-type Obj = Record<string, unknown>
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
-const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
-const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
-const bool = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null)
-function toPool(v: unknown): QuotaPool | null {
-  if (!isObj(v)) return null
-  const pool = str(v.pool)
-  if (pool === null) return null
-  const list = Array.isArray(v.stranded_seat_list) ? v.stranded_seat_list.filter((x): x is string => typeof x === 'string') : null
-  const sw = v.switched
-  return {
-    pool, seven_day_pct: num(v.seven_day_pct), five_hour_pct: num(v.five_hour_pct), resets_at_ms: num(v.resets_at_ms), burn_pct_per_h: num(v.burn_pct_per_h),
-    burn_window_h: num(v.burn_window_h), projected_pct_at_reset: num(v.projected_pct_at_reset), projected_exhaustion_at_ms: num(v.projected_exhaustion_at_ms), verdict: str(v.verdict),
-    limit_hit: bool(v.limit_hit), stale: bool(v.stale), stale_age_min: num(v.stale_age_min), stale_note: str(v.stale_note), observed_at_ms: num(v.observed_at_ms),
-    stranded_seats: num(v.stranded_seats), stranded_seat_list: list, switched: typeof sw === 'string' || typeof sw === 'boolean' ? sw : null, seats: num(v.seats),
-    projection_source: str(v.projection_source), switch_suggestion: str(v.switch_suggestion),
-  }
-}
-function toSeat(v: unknown): QuotaSeat | null {
-  if (!isObj(v)) return null
-  const seat = str(v.seat), pool = str(v.pool)
-  return seat === null || pool === null ? null : { seat, pool, seven_day_pct: num(v.seven_day_pct), five_hour_pct: num(v.five_hour_pct), stale: bool(v.stale), age_min: num(v.age_min) }
-}
-// null = the console has no quota object or no pools array (no source); [] = the feed says there is no pool
-export function readQuota(consoleSnap: unknown): { pools: QuotaPool[] | null; seats: QuotaSeat[] } {
-  const q = isObj(consoleSnap) && isObj(consoleSnap.quota) ? consoleSnap.quota : null
-  if (q === null || !Array.isArray(q.pools)) return { pools: null, seats: [] }
-  return { pools: q.pools.map(toPool).filter((p): p is QuotaPool => p !== null), seats: Array.isArray(q.seats) ? q.seats.map(toSeat).filter((s): s is QuotaSeat => s !== null) : [] }
-}
+export type { QuotaSeat }
 
 // ---- drawing helpers ----
-// the section 5 red marker, the same segment frame.ts's staleBadge / brokenRow build. frame.ts imports ./index (PAGES) and index imports this file, so a value import
-// of frame.ts here would put quotaPage in its temporal dead zone whenever this file is the first one loaded; the two one-line builders are repeated instead of imported.
-const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken })
-const brokenRow = (text: string): Row => [staleBadge(text)]
 const DASH = GLYPHS.structure.empty
 const bad = GLYPHS.state.failed
 const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, w - displayWidth(text)))
@@ -98,14 +66,18 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const { t } = ctx
   const cols = ctx.size.cols
   if (ctx.console === null) return { body: [brokenRow(bad + ' ' + t('page.quota.no_console'))], actions: [] }
-  const q = readQuota(ctx.console)
+  const q = ctx.console.quota // pools null = the console has no quota.pools (no source)
   if (q.pools === null || q.pools.length === 0) return { body: [brokenRow(bad + ' ' + t('page.quota.no_pools'))], actions: [] }
   const tier = tierOf(cols)
   const c = COLS[tier]
   const dows = t('page.quota.dow').split(' ')
   const paceOk = ctx.console.sources.quota_forecast?.state === 'ok'
   // no forecast source: every projection is dropped before the verdict is judged, so a leftover number cannot paint a green
-  const pools = paceOk ? q.pools : q.pools.map(p => ({ ...p, projected_pct_at_reset: null, projected_exhaustion_at_ms: null, burn_pct_per_h: null }))
+  // seat_blocked items (a seat whose pool is used up) are that pool's limit_hit fact; stale=true adds the reason to the focused detail
+  const blocked = ctx.console.items.filter(i => i.kind === 'seat_blocked' && typeof i.facts.pool === 'string')
+  const blockedBy = (pool: string) => blocked.filter(i => i.facts.pool === pool)
+  const paced = paceOk ? q.pools : q.pools.map(p => ({ ...p, projected_pct_at_reset: null, projected_exhaustion_at_ms: null, burn_pct_per_h: null }))
+  const pools = paced.map(p => (blockedBy(p.pool).length === 0 ? p : { ...p, limit_hit: true }))
   const ranked = rankPools(pools, ctx.nowMs, t)
   const byName = new Map(pools.map(p => [p.pool, p]))
   const focus = Math.max(0, Math.min(view.focus, ranked.length - 1))
@@ -188,6 +160,10 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   if (tier !== 'narrow') {
     const none = fp.stranded_seats === null && fp.switched === null
     body.push(kv(t('page.quota.f_switch'), none ? t('page.quota.f_switch_null') : t('page.quota.f_switch_data', { n: fp.stranded_seats === null ? DASH : fp.stranded_seats, pool: typeof fp.switched === 'string' ? fp.switched : DASH })))
+  }
+  for (const it of blockedBy(fp.pool)) {
+    const stale = it.facts.stale === true
+    body.push(kv(t('page.quota.f_blocked'), (stale ? bad + ' ' : '') + it.text + (stale ? ' ' + bad + ' ' + t('page.quota.blocked_stale', { source: String(it.facts.source ?? '?') }) : ''), stale ? PALETTE.broken : undefined))
   }
   const fact = fp.limit_hit === true ? t('page.quota.f_limit_hit') + '，' : ''
   body.push(kv(t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role)))

@@ -12,29 +12,9 @@ const GOOD = `${'succ'}ess` as const
 export type PoolRole = 'broken' | typeof WARN | typeof GOOD
 export const ROLE_WARNING: PoolRole = WARN
 export const ROLE_SUCCESS: PoolRole = GOOD
-// one element of console `quota.pools[]` (fleet 01M7N4EK); a field the feed lacks is null, never 0
-export type QuotaPool = {
-  pool: string
-  seven_day_pct: number | null
-  five_hour_pct: number | null
-  resets_at_ms: number | null
-  burn_pct_per_h: number | null
-  burn_window_h: number | null
-  projected_pct_at_reset: number | null
-  projected_exhaustion_at_ms: number | null
-  verdict: string | null
-  limit_hit: boolean | null
-  stale: boolean | null // the whole pool is stale (every seat)
-  stale_age_min: number | null // age of the oldest stale reading, minutes
-  stale_note: string | null // the feed's reason, e.g. "席 twgame-2 過期 14 分，舊值 55% 較高" (A1) or "statusline 沒在跑"
-  observed_at_ms: number | null
-  stranded_seats: number | null // null = no source for the switch data (before capacity r5)
-  stranded_seat_list: string[] | null
-  switched: string | boolean | null // the pool the seats switched to; true = switched, name unknown
-  seats: number | null
-  projection_source: string | null
-  switch_suggestion: string | null // capacity's switch advice, when it gives one
-}
+// one element of console `quota.pools[]` (fleet 01M7N4EK): parsed by console.ts's parseConsole, a field the feed lacks is null, never 0
+import type { QuotaPool } from '../console.ts'
+export type { QuotaPool }
 
 export const STALE_MIN = 10 // minutes; only the quota page uses this threshold (§4.1)
 const MIN = 60000

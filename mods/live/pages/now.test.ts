@@ -1,9 +1,9 @@
 // pages/now.test.ts — S3, page 1 現況 (r2 mockups 現況 at 160x40, 120x30, 80x24 and the 80x24 state variants). Golden = the page's content rows (header, blank filler, actions and strip
 // stripped; the frame bottom-anchors the body where the mockup draws it top-anchored, so the blank rows between content and actions are not compared).
-// Import order matters: frame first (frame -> index -> now is a cycle that only resolves in that order).
 import { test, expect } from 'claude-code/testing'
 import { frameRows, actionRows, staleBadge as frameBadge, brokenRow as frameBroken } from './frame'
-import { nowPage, seatQuota, parseSeatQuota, staleBadge, brokenRow } from './now'
+import { nowPage, seatQuota, parseSeatQuota } from './now'
+import { staleBadge, brokenRow } from './rows'
 import { makeT } from '../i18n'
 import type { ConsoleSnapshot } from '../console'
 
@@ -23,7 +23,7 @@ const con = (over: Partial<ConsoleSnapshot> = {}): ConsoleSnapshot => ({
   ],
   cards: [{ id: 'd-aaaaaaaa', question: 'q', status: 'open', opened_at_ms: NOW - 40 * MIN, executor_display: null }],
   lines: [],
-  quota: { pools: [{ pool: 'personal', limit_hit: true, stranded_seats: null, seven_day_pct: 100, five_hour_pct: 100, stale: false, observed_at_ms: NOW - 40_000 }] },
+  quota: { pools: [{ pool: 'personal', limit_hit: true, stranded_seats: null, seven_day_pct: 100, five_hour_pct: 100, stale: false, observed_at_ms: NOW - 40_000 }], seats: [] },
   ...over,
 } as ConsoleSnapshot)
 
@@ -118,7 +118,7 @@ test('now: frameRows is exactly H rows at every size and every state, actions ne
   const states: [string, ConsoleSnapshot | null, unknown][] = [
     ['console', con(), live()], ['no console', null, live()], ['no live', con(), null], ['neither', null, null], ['blocked', withItems([blocked(false)]), live()], ['blocked stale', withItems([blocked(true)]), live()],
     ['many exceptions', withItems(Array.from({ length: 30 }, (_, i) => ({ ...con().items[0], id: 'x' + i }))), live()],
-    ['no pools', con({ quota: undefined } as never), live()], ['empty pools', con({ quota: { pools: [] } } as never), live()],
+    ['no pools', con({ quota: { pools: null, seats: [] } } as never), live()], ['empty pools', con({ quota: { pools: [], seats: [] } } as never), live()],
   ]
   const bad: string[] = []
   for (const [cols, rows] of [[160, 40], [120, 30], [80, 24]] as const)
@@ -207,5 +207,5 @@ test('now: the quota line is worstPool\'s pool; a pace-less console with no pool
   await feed()
   const two = con({ quota: { pools: [{ pool: 'team', limit_hit: false, seven_day_pct: 50, stale: false, observed_at_ms: NOW }, { pool: 'personal', limit_hit: true, stranded_seats: null, seven_day_pct: 100, stale: false, observed_at_ms: NOW }] } } as never)
   expect(content(160, 40, two)[1]).toContain('personal')
-  expect(content(160, 40, con({ quota: undefined } as never))[1]).toContain('無來源：console 沒有 quota.pools')
+  expect(content(160, 40, con({ quota: { pools: null, seats: [] } } as never))[1]).toContain('無來源：console 沒有 quota.pools')
 })

@@ -3,7 +3,8 @@
 // with the full reason, and the key presses (Enter looks, Space folds, f fills the prompt and never sends).
 import { test, expect } from 'claude-code/testing'
 import { frameRows, staleBadge as frameBadge, brokenRow as frameBroken, actionRows } from './frame'
-import { fleetPage, fleetView, staleBadge, brokenRow, FOLD_AT } from './fleet'
+import { fleetPage, fleetView, FOLD_AT } from './fleet'
+import { staleBadge, brokenRow } from './rows'
 import { makeT } from '../i18n'
 import { PALETTE } from '../ui'
 
@@ -285,7 +286,7 @@ test('fleet: Enter looks (never expands), Space folds, f fills the prompt line a
   expect(moved?.press).toBe('fleet:see:pinball')
 })
 
-test('fleet: the local badge helpers equal frame.ts (a value import would be a cycle through pages/index.ts)', () => {
+test('fleet: the badge helpers are the shared leaf rows.ts ones that frame.ts re-exports', () => {
   expect(staleBadge('x')).toEqual(frameBadge('x'))
   expect(brokenRow('x')).toEqual(frameBroken('x'))
 })

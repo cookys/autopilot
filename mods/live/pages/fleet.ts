@@ -6,12 +6,10 @@ import { FILL_PRESS } from '../commandtab'
 import type { Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE, STATES, type StateId } from '../ui'
-import type { Page, PageCtx, Row } from './frame'
+import type { Page, PageCtx } from './frame'
+import { brokenRow, staleBadge } from './rows'
+import type { Row } from './rows'
 
-// the same two helpers as frame.ts (§5: broken role, red text, no background); frame.ts imports index.ts which imports this file, so a value import back into frame.ts would be a cycle
-// that throws when this file is loaded first (fleetPage in its temporal dead zone). The pin test in fleet.test.ts compares both against frame.ts's.
-export const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken })
-export const brokenRow = (text: string): Row => [staleBadge(text)]
 
 const RULE2 = GLYPHS.structure.rule.repeat(2)
 export const FOLD_AT = 6 // rows shown before the fold

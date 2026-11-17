@@ -55,7 +55,7 @@ import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 
-import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, speedContent, stackBand, stackRows, usageDraw } from './band'
+import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
@@ -69,6 +69,10 @@ import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { DIGIT_TAB, PAGE_DIGIT, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
+import type { KeyAction } from './pages/keys'
+import { decideReduce, NO_NAV } from './pages/decide'
+import type { DecideNav } from './pages/decide'
+import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
 import { PAGES } from './pages/index'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
@@ -144,6 +148,7 @@ export function liveTick($: EngineInterface): Promise<void> {
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   await consoleTick($).catch(() => undefined) // the console mode and its snapshot (below); the tick is the only place either is read
+  if (consoleOn) void seatQuota.refresh(argv => $.process.run([...argv], { timeoutMs: SEATS_TIMEOUT_MS }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => undefined) // the 現況 page's seat quota row: 60 s cache inside the feed, never awaited by a render
   kickFleet($, nowMs) // the band's own fleet segment reads the summary this publishes; the feed's TTL spaces the runs
   await shellTick($, nowMs).catch(() => undefined)
 }
@@ -1271,6 +1276,54 @@ async function paneTabPress($: EngineInterface, t: PaneTab): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
+// ---- the framed pages' own state (pages/*.ts are pure): focus + fold per page id, and the 待決 page's nav (cursor, fold, note text) beside the DECIDE atom ----
+let pageView: Record<string, { focus: number; expanded: boolean }> = {}
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+const framePageId = (): string => (paneTab === 'spend' ? 'quota' : paneTab)
+// A key of the framed page (a hidden hotkey Button, pane.tsx). 待決 goes through decideReduce; fleet and quota keep a focus row and a fold.
+async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
+  try {
+    const id = framePageId()
+    const nowMs = await $.clock.now()
+    if (id === 'decide') {
+      const st = await read($, DECIDE)
+      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs }
+      const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt }
+      if (r.nav.picks !== st.picks || r.nav.notes !== st.notes) await update($, DECIDE, s => ({ ...s, picks: r.nav.picks, notes: r.nav.notes }))
+      if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
+      else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
+      else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
+    } else {
+      const v = pageView[id] ?? { focus: 0, expanded: false }
+      if (k.kind === 'move') pageView[id] = { ...v, focus: Math.max(0, v.focus + k.by) }
+      else if (k.kind === 'fold') pageView[id] = { ...v, expanded: !v.expanded }
+    }
+  } catch (_e) {
+    // a key never takes the session down
+  }
+  void $.ui.invalidate('ui.render')
+}
+async function fillPrompt($: EngineInterface, text: string): Promise<void> {
+  const out = await $.prompt.fill({ text, mode: 'replace' })
+  if (!out.isFilled) $.ui.toast(tr('console.command.fill_refused'))
+}
+// A press inside a framed page: `fleet:fold`, `fleet:see:<line_id>` (open the list so the line is on screen; nothing is sent), `fill:quota:<pool>` (the pool's switch suggestion into the prompt) and any other `fill:<text>`.
+async function framePress($: EngineInterface, id: string): Promise<void> {
+  try {
+    if (id === 'fleet:fold') pageView.fleet = { ...(pageView.fleet ?? { focus: 0, expanded: false }), expanded: !(pageView.fleet?.expanded ?? false) }
+    else if (id.startsWith('fleet:see:')) pageView.fleet = { ...(pageView.fleet ?? { focus: 0, expanded: false }), expanded: true }
+    else if (id.startsWith('fill:quota:')) {
+      const pool = id.slice('fill:quota:'.length)
+      const sug = consoleSnap?.quota.pools?.find(p => p.pool === pool)?.switch_suggestion ?? null
+      if (sug !== null) await fillPrompt($, sug)
+    } else if (id.startsWith(FILL_PRESS)) await fillPrompt($, id.slice(FILL_PRESS.length))
+  } catch (_e) {
+    // a press never takes the session down
+  }
+  void $.ui.invalidate('ui.render')
+}
+
 // the live mod's session start. A function of its own because Claude Code refuses a second matcher-less `session.start` hook in one plugin: the composed module
 // (mods/register.ts) registers the one hook and calls this and the viewer's start; the live mod's own tests use `register` below, which hooks it alone.
 export async function startLive($: EngineInterface): Promise<void> {
@@ -1280,6 +1333,8 @@ export async function startLive($: EngineInterface): Promise<void> {
     // a host without commands: the band's own controls still open the pane
   }
   paneTab = 'now'
+  pageView = {}
+  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
   resetNoteInputs()
   barTab = null
   folded.clear() // a new Claude Code session opens every section
@@ -1476,7 +1531,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const hidden: BarTabId[] = [...(usageOn ? [] : ['usage' as const]), ...(forgeMore ? ['forge' as const] : [])]
     const at = active === null ? -1 : hidden.indexOf(active)
     const moreTo: BarTabId | null = hidden.length === 0 ? null : at < 0 ? hidden[0] : (hidden[at + 1] ?? active)
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con, bandPreset)
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(consoleSnap.quota.pools, nowMs, t) : null)
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
     if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
@@ -1645,7 +1700,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => consoleOn ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($), null, { pages: PAGES, console: null, nowMs: await $.clock.now(), rows: e.props.scroll?.bodyRows ?? 24 })))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => consoleOn ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($), null, (e.props as { legacyTabs?: boolean }).legacyTabs === true ? null : { pages: PAGES, console: consoleSnap, nowMs: await $.clock.now(), rows: e.props.scroll?.bodyRows ?? 24, view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') } })))
 
   // All live and console tabs share the bottom window; scroll keys move its
   // offset. A host without a frame still receives the event through next(e).

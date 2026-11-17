@@ -2,7 +2,6 @@
 // Golden = the mockup's body and action rows (the frame's own header and strip rows are frame.golden.test.ts's). The mockups were drawn by hand, so the comparison
 // is tolerant in exactly three ways (see `norm`): a run of blanks or of rule dashes inside a row counts as one, and a blank between a number and its unit (40 分 / 40分) is
 // ignored. Everything else (every word, glyph, label, row order, row count) must be equal. DEVIATIONS lists the places where the mockup contradicts itself and what the page draws instead.
-// Import order matters: index.ts first (index -> decide -> frame -> index is a cycle; entering at decide or frame first reads decidePage before it exists).
 import { test, expect } from 'claude-code/testing'
 import { PAGES } from './index'
 import { frameRows, actionRows } from './frame'

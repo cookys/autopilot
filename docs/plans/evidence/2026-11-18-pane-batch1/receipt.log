@@ -1,0 +1,10 @@
+== RED (parseConsole drops item facts: line 59 facts: {}) 2026-11-17T18:38:32Z
+== integration.golden.test.ts
+(fail) integration: parseConsole keeps quota.pools, quota.seats and the seat_blocked item facts [4.91ms]
+  AssertionError: expect(received).toBe()
+ 5 pass
+ 1 fail
+== GREEN (facts kept) 2026-11-17T18:38:33Z
+== integration.golden.test.ts
+ 6 pass
+ 0 fail

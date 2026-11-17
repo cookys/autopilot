@@ -700,5 +700,7 @@
   "page.decide.sent_free": "Sent: {text}",
   "page.decide.sent_opt": "Sent: [{k}] {label}",
   "page.decide.stale_live": "this seat's decision data is not current: {why}",
-  "page.decide.step": "Step"
+  "page.decide.step": "Step",
+  "page.quota.f_blocked": "blocked",
+  "page.quota.blocked_stale": "data stale: {source} is not running"
 }

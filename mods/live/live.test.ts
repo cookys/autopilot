@@ -313,7 +313,8 @@ async function mountAbove($: any, spec: any) {
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 120, scroll: { offset: 0, bodyRows: 5 }, view: { agentId: undefined } }
 // Semantic snapshot cases need the whole page; viewport geometry is pinned by
 // SCROLL below and bottom-anchor.test.ts at the actual 160x40 / 80x24 sizes.
-const PANE_PROPS = { title: 'Dispatch', isFocused: false, bodyColumns: 120, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 300 }, view: { agentId: undefined } }
+// legacyTabs: the old now / decide / fleet / spend tabs these suites test stay drawn the old way until batch 3 deletes them (register.ts hands the Pane no framed pages); pane-attach.test.ts and pages/*.test.ts cover the framed pages
+const PANE_PROPS = { title: 'Dispatch', isFocused: false, bodyColumns: 120, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 300 }, view: { agentId: undefined }, legacyTabs: true }
 
 async function start($: any, surface: string) {
   await $.session.start({ surface, cwd: CWD })

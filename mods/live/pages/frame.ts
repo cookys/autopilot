@@ -12,8 +12,10 @@ import type { LiveSnapshot, Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import { PAGES } from './index'
+import { brokenRow, staleBadge } from './rows'
+import type { Row } from './rows'
 
-export type Row = Seg[]
+export type { Row } from './rows'
 export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number }
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'forge' | 'help'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
@@ -24,9 +26,7 @@ export type FrameOpts = { scroll?: number; pages?: readonly Page[]; extra?: read
 
 export const actionRows = (rows: number): number => (rows >= 32 ? 6 : 4)
 
-// §5: stale, expired and no_source all use the broken role (red text colour, no background, no inverse); the number stays, the reason is written beside it
-export const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken })
-export const brokenRow = (text: string): Row => [staleBadge(text)]
+export { staleBadge, brokenRow }
 
 const SEVERITY: Record<string, number> = { no_source: 3, expired: 2, stale: 1 }
 // the most severe broken source of the console snapshot as one marker, null when every source is ok (the header shows it; the band's summary row takes the same one)

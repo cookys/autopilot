@@ -1,0 +1,11 @@
+{
+  "base": "b28dbc5e6",
+  "base_scope": "full host suite",
+  "base_pass": 1049,
+  "base_failures": 15,
+  "head_scope": "full host suite",
+  "head_pass": 1084,
+  "head_failures": 15,
+  "added_failures": [],
+  "removed_failures": []
+}

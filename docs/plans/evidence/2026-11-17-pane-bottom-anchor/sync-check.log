@@ -1,0 +1,2 @@
+Command: bash scripts/sync-all.sh --check; exit 0
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","hook-harness-matrix","check-config-docs","check-quota-adapters","check-claude-md-inventory","check-js-syntax","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}

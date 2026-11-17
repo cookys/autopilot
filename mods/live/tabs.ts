@@ -358,8 +358,8 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 }
 // ================= Decide (待決) =================
 // The owner's open questions under one section header (`▾ 待你回答  3 ───`), one card each. A card is the question (bold, wraps, never repeated), then rows in the pane's key/value
-// grammar (key at column 2, value at column 12): 背景 (why it is asked) → 卡住 (what stalls) → 選項 (Buttons; the recommended one starred, the picked one bold) → 建議 (the
-// recommendation and its reason, no star) → 補充 (the note field). A row with nothing to say is not drawn. A blank line separates cards. Under the cards one Button sends every
+// grammar (key at column 2, value at column 12): 背景 (why it is asked) → 卡住 (what stalls) → 建議 (the recommendation and its reason, no star) → 補充 (the note field) → 選項
+// (Buttons; the recommended one starred, the picked one bold). A row with nothing to say is not drawn. A blank line separates cards. Under the cards one Button sends every
 // answered question as a single prompt (register.ts) and says where the answers go. A phone has no text field, so a question without options says to answer in the conversation.
 function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
@@ -402,9 +402,6 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     const pick = decidePick(d, dv)
     const rec = recommendedIndex(d)
     const dialog = decideDialog(d)
-    if (d.options.length > 0) {
-      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(locked || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F, descriptions: d.options.map(o => o.description) })) // every option shows its description under it
-    }
     if (d.recommendation !== null) { // the recommended option's own label when it matches one, else the recommendation as written; the reason goes on the row below it
       const what = rec === null ? d.recommendation : d.options[rec].label
       out.push(...ui.cardRow(u, t('decide.k_advice'), what, { fact: F })) // the option name on the first row, the reason on its own rows below
@@ -419,6 +416,9 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
       if (id !== null && dv.inputs && !dialog) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))
       else if (dialog) out.push(...ui.detail(u, t('decide.in_dialog'), { fact: F }))
       else if (d.options.length === 0 || id === null) out.push(...ui.detail(u, t('decide.in_chat'), { fact: F }))
+    }
+    if (d.options.length > 0) {
+      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(locked || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F, descriptions: d.options.map(o => o.description) })) // keep options adjacent to the submit strip; every description stays visible
     }
     out.push(ui.blank()) // the one body blank (design plan 4, the 待決 exception): cards are told apart by a drawn empty row
   })

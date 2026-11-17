@@ -1,0 +1,40 @@
+Source: cf9f25bee product sources + final bottom-anchor.test.ts
+Harness: guarded claude plugin test; no npm dependency
+Exit: 0
+Pass: 35; fail: 0; total: 35
+
+(pass) renderer controls: top alignment and a trailing spacer are distinguishable from bottom alignment
+(pass) pane now 160x40: footer last, short content leaves blanks above
+(pass) pane decide 160x40: footer last, short content leaves blanks above
+(pass) pane dispatch 160x40: footer last, short content leaves blanks above
+(pass) pane review 160x40: footer last, short content leaves blanks above
+(pass) pane spend 160x40: footer last, short content leaves blanks above
+(pass) pane hygiene 160x40: footer last, short content leaves blanks above
+(pass) pane fleet 160x40: footer last, short content leaves blanks above
+(pass) pane legend 160x40: footer last, short content leaves blanks above
+(pass) console command 160x40: footer last
+(pass) console team 160x40: footer last
+(pass) console quota 160x40: footer last
+(pass) console hosts 160x40: footer last
+(pass) console self 160x40: footer last
+(pass) pane waiting 160x40: short-content fallback is bottom anchored
+(pass) scroll 160x40: bottom default, up reveals older rows, End returns to hot rows
+(pass) band speed 160x40: real speed content grows above band
+(pass) pane now 80x24: footer last, short content leaves blanks above
+(pass) pane decide 80x24: footer last, short content leaves blanks above
+(pass) pane dispatch 80x24: footer last, short content leaves blanks above
+(pass) pane review 80x24: footer last, short content leaves blanks above
+(pass) pane spend 80x24: footer last, short content leaves blanks above
+(pass) pane hygiene 80x24: footer last, short content leaves blanks above
+(pass) pane fleet 80x24: footer last, short content leaves blanks above
+(pass) pane legend 80x24: footer last, short content leaves blanks above
+(pass) console command 80x24: footer last
+(pass) console team 80x24: footer last
+(pass) console quota 80x24: footer last
+(pass) console hosts 80x24: footer last
+(pass) console self 80x24: footer last
+(pass) pane waiting 80x24: short-content fallback is bottom anchored
+(pass) scroll 80x24: bottom default, up reveals older rows, End returns to hot rows
+(pass) band speed 80x24: real speed content grows above band
+(pass) shell: short main content is padded above, quick controls precede final menu
+(pass) shell overflow: default opens at bottom, scrolling up survives redraw

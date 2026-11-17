@@ -17,7 +17,7 @@ import { consoleStrip } from './consoletabs'
 import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
-import { keyedGrow, scrollFrame } from './scroll'
+import { keyed, scrollFrame } from './scroll'
 import type { ScrollModel } from './scroll'
 
 export type { PaneTab } from './model'
@@ -26,7 +26,7 @@ export type { PaneTab } from './model'
 // Beyond the navigation: the live snapshot (the cards the host holds), the clock, the answering wiring, the scroll model of the 指揮 page, and its folded sections.
 export type ConsolePane = { nav: ConsoleNav; onTab: (t: ConsoleTab) => void; onNext: () => void; live?: LiveSnapshot | null; now?: number; decide?: DecideActs | null; scroll?: ScrollView | null; win?: ScrollModel | null; folded?: ReadonlySet<string>; onToggle?: (id: string) => void; inline?: boolean }
 
-// The console pane (C1 U4, U6): the five-tab strip with its badges, then the page. The command page's own content is U5; 團隊 · 額度 · 主機 are a skeleton (consolepages.ts: a name line and a summary line, or
+// The console pane (C1 U4, U6): the page grows above the five-tab strip and its badges. The command page's own content is U5; 團隊 · 額度 · 主機 are a skeleton (consolepages.ts: a name line and a summary line, or
 // "no source", never an empty table); 本席 folds this session's own 現況, 派工 and 審查 (the non-console pane's builders, tabs.ts) under one header. `own` is what 本席 draws: null = this session has no snapshot yet.
 type SelfDraw = (l: PaneLine, i: number, k: string) => unknown
 function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, con: ConsolePane, t: T, cols: number, own: { parts: { title: string | null; lines: PaneLine[] }[]; draw: SelfDraw } | null) {
@@ -43,29 +43,39 @@ function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
     const line = lineView(el, decide, con.onToggle ?? (() => {}), () => {})
     const scroll = con.scroll ?? null
     if (scroll !== null && win !== null) {
-      keyedGrow(win, view.body.map((_, i) => String(i)))
+      keyed(win, 'console:' + tab)
       return scrollFrame(el, {
-        rows: scroll.bodyRows, cols, head: [strip], headRows: stripRows, total: view.body.length, window: (off, room) => view.body.slice(off, off + room).map((l, i) => line(l, off + i)),
-        bar: view.bar.map((l, i) => line(l, i, 'bar')), barRows: view.bar.length, model: win,
+        rows: scroll.bodyRows, cols, head: [], headRows: 0, total: view.body.length, window: (off, room) => view.body.slice(off, off + room).map((l, i) => line(l, off + i)),
+        bar: [...view.bar.map((l, i) => line(l, i, 'bar')), strip], barRows: view.bar.length + stripRows, model: win,
+        bottom: { above: n => t('shell.more_up', { n }), newer: '' },
       })
     }
     return (
-      <Box flexDirection="column">
-        {strip}
+      <Box flexDirection="column" height={con.scroll?.bodyRows} justifyContent="flex-end">
         {view.body.map((l, i) => line(l, i))}
         {view.bar.map((l, i) => line(l, i, 'bar'))}
+        {strip}
       </Box>
     )
   }
   const page = tab === 'team' || tab === 'quota' || tab === 'hosts' ? consolePage(con.nav.snap, tab, t) : null
-  return (
-    <Box flexDirection="column">
-      {strip}
-      {tab === 'command' && con.nav.snap === null ? <Text {...dimProps()} wrap="truncate">{t('console.no_source')}</Text> : null}
-      {page === null ? null : page.lines.map((l, i) => <Text key={'p' + i} {...(page.kind === 'summary' ? {} : dimProps())} wrap="truncate">{l}</Text>)}
-      {tab === 'self' ? (own === null ? <Text {...dimProps()}>{t('pane.waiting')}</Text> : own.parts.map((p, n) => <Box key={'s' + n} flexDirection="column">{p.title === null ? null : <Text {...dimProps()} wrap="truncate">{p.title}</Text>}{p.lines.map((l, i) => own.draw(l, i, 's' + n))}</Box>)) : null}
-    </Box>
-  )
+  const content = [
+    ...(tab === 'command' && con.nav.snap === null ? [<Text {...dimProps()} wrap="truncate">{t('console.no_source')}</Text>] : []),
+    ...(page === null ? [] : page.lines.map((l, i) => <Text key={'p' + i} {...(page.kind === 'summary' ? {} : dimProps())} wrap="truncate">{l}</Text>)),
+    ...(tab !== 'self' ? [] : own === null ? [<Text {...dimProps()}>{t('pane.waiting')}</Text>] : own.parts.flatMap((p, n) => {
+      while (p.lines[p.lines.length - 1]?.kind === 'blank') p.lines.pop()
+      return [...(p.title === null ? [] : [<Text {...dimProps()} wrap="truncate">{p.title}</Text>]), ...p.lines.map((l, i) => own.draw(l, i, 's' + n))]
+    })),
+  ]
+  if (con.scroll !== null && con.scroll !== undefined && win !== null) {
+    keyed(win, 'console:' + tab)
+    return scrollFrame(el, {
+      rows: con.scroll.bodyRows, cols, head: [], headRows: 0, total: content.length, window: (off, room) => content.slice(off, off + room),
+      bar: [strip], barRows: stripRows, model: win,
+      bottom: { above: n => t('shell.more_up', { n }), newer: '' },
+    })
+  }
+  return <Box flexDirection="column" height={con.scroll?.bodyRows} justifyContent="flex-end">{content}{strip}</Box>
 }
 
 // What the 待決 tab's controls call: a press on an option or the send Button (by its `press` id), and an edit of a note field (by the field's key). `state` is the
@@ -102,7 +112,8 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
   const { Box, Text, Button } = el
   const draw = (s: Seg, k: string | number) => <Text key={k} {...drawSeg(s)} wrap="truncate">{s.text}</Text>
   return (
-    <Box flexDirection="column">
+    <Box key="tabs" flexDirection="column">
+      <Box>{strip.rule.map((s, i) => draw(s, 'rule' + i))}</Box>
       <Box flexWrap="wrap">
         {Button === undefined || strip.next === null ? null : <Box key="next"><Button key="next" plain autoFocus onPress={onNext}>{strip.next.text}</Button><Text> </Text></Box>}
         {strip.tabs.map(x => (
@@ -112,7 +123,6 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
           </Box>
         ))}
       </Box>
-      <Box>{strip.rule.map((s, i) => draw(s, 'rule' + i))}</Box>
     </Box>
   )
 }
@@ -184,37 +194,40 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   const strip = tabStrip(el, tab, onTab, onNext, snap, t, cols)
   if (snap === null) {
     return (
-      <Box flexDirection="column">
-        {strip}
+      <Box flexDirection="column" height={scroll?.bodyRows} justifyContent="flex-end">
         <Text {...dimProps()}>{t('pane.waiting')}</Text>
+        {strip}
       </Box>
     )
   }
   // the global header (design plan §2.2): drawn here, once, on every tab; no tab builder emits it (I9)
-  // (pane.overflow: this site's own scroll state, so the one thing allowed to differ between tabs: the last metrics line may end with the overflow hint)
+  // The frame keeps its upward overflow hint apart from these shared facts.
   const body: PaneLine[] = tab === 'legend' ? legendLines(ctx) : tab === 'now' ? nowLines(snap, ctx) : tab === 'decide' ? decideTabLines(snap, ctx) : tab === 'review' ? reviewTabLines(snap, ctx) : tab === 'spend' ? spendTabLines(snap, ctx) : tab === 'hygiene' ? hygieneTabLines(snap, ctx) : tab === 'fleet' ? fleetTabLines(snap, ctx) : dispatchLines(snap, ctx)
   const link = tab === 'dispatch' && snap.link !== null
   const stripH = stripOf(snap, ctx, tab, Button !== undefined)
   const plainHead = headerLines(snap, ctx)
-  // the 待決 tab is a scrolling window of its own (design plan §12.10): the strip and the header stay, the cards scroll, the send row sits in the fixed action strip under a rule
+  // Every tab shares a bottom window: cold header/body rows scroll above the
+  // fixed submit controls and navigation. No padding separates L2 from L3.
   if (win !== null) win.framed = false // set again by the frame; a plain tree leaves ui.scroll to the engine
-  if (tab === 'decide' && scroll !== null && win !== null && snap.band !== null) {
-    const cards = body.filter(l => l.bar !== true)
+  if (scroll !== null && win !== null) {
+    const cards = [...plainHead, ...body.filter(l => l.bar !== true)]
+    while (cards[cards.length - 1]?.kind === 'blank') cards.pop()
     const barLines = body.filter(l => l.bar === true)
-    keyedGrow(win, decide !== null && decide.batch !== undefined ? [...decide.batch.order, ...snap.pending.filter(d => d.kind === 'step' || d.kind === 'look').map(d => d.id ?? d.question)] : snap.pending.map(d => d.id ?? d.question))
+    keyed(win, tab)
     return scrollFrame(el, {
-      rows: scroll.bodyRows, cols, head: [strip, ...plainHead.map((l, i) => line(l, i, 'h'))], headRows: stripH.rows + plainHead.length,
-      total: cards.length, window: (off, room) => cards.slice(off, off + room).map((l, i) => line(l, off + i)),
-      bar: barLines.map((l, i) => line(l, i, 'bar')), barRows: barLines.length, model: win,
+      rows: scroll.bodyRows, cols, head: [], headRows: 0,
+      total: cards.length + (link ? 1 : 0), window: (off, room) => [...cards.map((l, i) => line(l, i < plainHead.length ? i : i - plainHead.length, i < plainHead.length ? 'h' : '')), ...(link ? [<Link href={snap.link as string} label={t('dispatch.link')} />] : [])].slice(off, off + room),
+      bar: [...barLines.map((l, i) => line(l, i, 'bar')), strip], barRows: barLines.length + stripH.rows, model: win,
+      bottom: { above: n => t('shell.more_up', { n }), newer: '' },
     })
   }
   const head = withOverflowHint(plainHead, ctx, scroll, treeRowCount(stripH.rows, plainHead, body, link ? 1 : 0), stripH.exact).map((l, i) => line(l, i, 'h'))
   return (
-    <Box flexDirection="column">
-      {strip}
+    <Box flexDirection="column" height={scroll?.bodyRows} justifyContent="flex-end">
       {head}
       {body.map((l, i) => line(l, i))}
       {link ? <Link href={snap.link as string} label={t('dispatch.link')} /> : null}
+      {strip}
     </Box>
   )
 }

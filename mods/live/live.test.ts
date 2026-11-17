@@ -302,7 +302,9 @@ async function mountAbove($: any, spec: any) {
 }
 
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 120, scroll: { offset: 0, bodyRows: 5 }, view: { agentId: undefined } }
-const PANE_PROPS = { title: 'Dispatch', isFocused: false, bodyColumns: 120, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 30 }, view: { agentId: undefined } }
+// Semantic snapshot cases need the whole page; viewport geometry is pinned by
+// SCROLL below and bottom-anchor.test.ts at the actual 160x40 / 80x24 sizes.
+const PANE_PROPS = { title: 'Dispatch', isFocused: false, bodyColumns: 120, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 300 }, view: { agentId: undefined } }
 
 async function start($: any, surface: string) {
   await $.session.start({ surface, cwd: CWD })
@@ -323,7 +325,7 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
   const pane = await paneOn($, surface, 'now')
   const tree = (await pane.drawn()) as Node
   await pane.unmount()
-  const kids = (tree.children || []) as Node[] // [0] = the tab strip, then the Now tab's lines
+  const kids = (flat(tree).children || []) as Node[] // semantic order: strip, header, body; raw geometry is tested separately
   const head = kids[1]
   // P5: a snapshot that is not ok also draws its state text as a Box of segments, so the Now branch is taken only when kids[1] reads as the verdict header
   const heroOf = (n: Node): string => walkTexts(n).map(textOf).join('').replace(/ {3,}(工作階段|session) .*$/, '')
@@ -384,7 +386,7 @@ async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string
   const tree = (await pane.drawn()) as Node
   const link = await pane.find({ type: 'Link' })
   await pane.unmount()
-  return { texts: rowsOf(tree), head: headOf(tree), href: link?.props.href as string | undefined, tree: flat(tree) }
+  return { texts: rowsOf(tree), head: headOf(tree), href: link?.props.href as string | undefined, tree: flat(tree), raw: tree }
 }
 
 // the lines of a pane: every child of the pane's column Box after the tab strip (child 0), one string per line. P4: pane.tsx draws the global header (verdict
@@ -395,13 +397,19 @@ async function paneParts($: any, surface: (typeof SURFACES)[number], tab: string
 // the spare row are chrome, not rows), so every row assertion below reads the same list as before. A tree that is not framed passes through.
 const flat = (tree: Node): Node => {
   const fixed = ((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed')
-  if (fixed === undefined) return tree // not framed
+  if (fixed === undefined) {
+    const kids = (tree.children || []) as Node[]
+    const tabs = kids.find(k => k.props?.key === 'tabs')
+    return tabs === undefined ? tree : { ...tree, children: [tabs, ...kids.filter(k => k !== tabs)] }
+  }
   const kids = (fixed.children || []) as Node[]
   const content = kids.find(k => k.props?.key === 'content') as Node
   const rows = ((content.children || []) as Node[]).find(k => k.props?.key === 'rows') as Node
   const at = kids.indexOf(content)
-  const rest = kids.slice(at + 1).filter((k, i) => !(i === 0 && /^─+$/.test(textOf(k)))) // the rule is the first child under the content window
-  return { ...tree, children: [...kids.slice(0, at), ...((rows.children || []) as Node[]), ...rest] }
+  const tabs = kids.find(k => k.props?.key === 'tabs')
+  const rest = kids.slice(at + 1).filter(k => k !== tabs && !/^─+$/.test(textOf(k)))
+  const contentRows = ((rows.children || []) as Node[]).filter(k => k.props?.key !== 'pad' && !/^上面還有 \d+ 行$/.test(textOf(k)))
+  return { ...tree, children: [...(tabs === undefined ? [] : [tabs]), ...kids.slice(0, at), ...contentRows, ...rest] }
 }
 const allRows = (tree: Node): string[] => ((flat(tree).children || []) as Node[]).slice(1).map(k => textOf(k))
 const headEnd = (rows: string[]): number => rows.findIndex(r => r.trim() === '') + 1 // the blank is drawn as a one-cell Text (an empty Text takes no row)
@@ -409,7 +417,7 @@ const rowsOf = (tree: Node): string[] => { const r = allRows(tree); return r.sli
 const headOf = (tree: Node): string[] => { const r = allRows(tree); return r.slice(0, headEnd(r)) }
 // the tab strip: one entry per tab, `[label, badge]` as drawn
 const fullText = (n: Node): string => (n.type === 'Button' && typeof n.props?.label === 'string' ? (n.props.label as string) : (n.children || []).map(c => (typeof c === 'string' ? c : fullText(c as Node))).join(''))
-const stripOf = (tree: Node): string => fullText(((flat(tree).children || []) as Node[])[0]).replace(/\s*[─━]+$/, '') // without the baseline rule
+const stripOf = (tree: Node): string => fullText(((((flat(tree).children || []) as Node[])[0].children || []) as Node[])[1]) // without the baseline rule
 
 // the drawn Text of one tab's name in the strip (its colour and weight say whether the tab needs the owner)
 const tabName = (tree: Node, id: string): Drawn => walkAll(tree as never).find(n => n.type === 'Button' && n.props?.key === id && n.props?.key !== 'next') ? (walkAll(walkAll(tree as never).find(n => n.type === 'Button' && n.props?.key === id) as Drawn).find(n => n.type === 'Text') as Drawn) : ({} as Drawn)
@@ -2679,13 +2687,14 @@ const joined = (texts: string[]) => texts.join('')
 // (the `next` chip, then the tabs), each followed by a one-cell gap; the baseline is the first Text made only of `─` / `━`, its leading `─` run as
 // wide as everything left of the active label.
 async function activeKeyOf(p: any): Promise<string | undefined> {
-  const texts = (await p.findAll({ type: 'Text' })) as Drawn[]
+  const strip = ((flat(await p.drawn()).children || []) as Node[])[0]
+  const texts = walkAll(strip).filter(n => n.type === 'Text')
   const rule = texts.map(n => textOf(n as Node)).filter(x => x !== '' && /^[─━]+$/u.test(x))
   const at = rule.findIndex(x => x.startsWith('━'))
   if (at < 0) return undefined
   const markAt = rule.slice(0, at).reduce((w, x) => w + displayWidth(x), 0)
   let x = 0
-  for (const b of (await p.findAll({ type: 'Button' })) as Drawn[]) {
+  for (const b of walkAll(strip).filter(n => n.type === 'Button')) {
     if (b.props?.key !== 'next' && x === markAt) return b.props?.key as string
     x += displayWidth(fullText(b as Node)) + 1 // fullText: the `next` chip may carry its glyph as a label prop
     if (x > markAt) return undefined
@@ -2785,7 +2794,7 @@ for (const surface of SURFACES) {
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
     expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(9) // the section headings are Buttons too
     expect(tabButtons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['next'])
-    expect(tabButtons[0].props?.key).toBe('next')
+    expect(tabButtons.find(b => b.props?.autoFocus === true)?.props?.key).toBe('next')
     await pane.unmount()
     expect(texts[0]).toContain('⊘ 疑似卡住') // the Now tab: its hero row, then the dim header
     expect(texts[0]).toContain('工作階段 $') // and the spend / ctx metrics on its right (P4: one global header)
@@ -3127,7 +3136,7 @@ for (const surface of SURFACES) {
     for (const id of ['dispatch', 'decide', 'spend']) { expect(nameNode(id).props?.color, id).toBeUndefined(); expect(nameNode(id).props?.bold, id).not.toBe(true) }
     expect(strip).not.toMatch(/殘留 \d/) // variant A: colour only, no number
     // the active tab (Now) is bold default text with a `claude` `━` run in the rule under it; the inactive ones are dim; nothing carries a background (§8 Q1, 2026-10-16)
-    const stripNodes = walkAll(((tree.children || [])[0]) as Drawn)
+    const stripNodes = walkAll(((flat(tree as Node).children || [])[0]) as Drawn)
     expect(stripNodes.filter(n => n.props?.backgroundColor !== undefined).length).toBe(0)
     const boldNodes = stripNodes.filter(n => n.type === 'Text' && n.props?.bold === true)
     expect(boldNodes.some(n => textOf(n as Node).includes('現況') && n.props?.color === undefined)).toBe(true)
@@ -4168,7 +4177,7 @@ for (const surface of SURFACES) {
           if (id === 'fleet') await paneParts($, surface, id, width) // the first Fleet draw starts the fetch; the second draws its rows
           const parts = await paneParts($, surface, id, width)
           // the strip is Buttons in a wrapping Box: lay its entries out row by row the way a wrapping Box does (an entry that does not fit starts the next row) and hold every ROW to the width
-          const entries = (((((parts.tree.children || []) as Node[])[0].children || []) as Node[])[0].children || []) as Node[]
+          const entries = (((((parts.tree.children || []) as Node[])[0].children || []) as Node[])[1].children || []) as Node[]
           const rowsW: number[] = [0]
           for (const e of entries) { const w = displayWidth(fullText(e)); if (rowsW[rowsW.length - 1] > 0 && rowsW[rowsW.length - 1] + w > width) rowsW.push(0); rowsW[rowsW.length - 1] += w }
           expect(entries.length, width + ' ' + id + ': the strip entries (› chip + 8 tabs)').toBe(9)
@@ -5749,7 +5758,7 @@ for (const surface of SURFACES) {
     // scroll state (how many rows lie below THIS tab's tree), not a fact of the session; everything else in the header must be byte-identical.
     const OVERFLOW = /下方還有 (\d+) 行/
     const rawHeads: string[][] = []
-    for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) rawHeads.push((await paneParts($, surface, tab, PANE_PROPS.bodyColumns, { offset: 0, bodyRows: 8 })).head)
+    for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) rawHeads.push((await paneParts($, surface, tab)).head)
     const heads = rawHeads.map(h => h.map(l => l.replace(OVERFLOW, (_m, d: string) => " ".repeat(12 + d.length)).trimEnd())) // the hint is 12 + digits cells wide
     expect(heads[0].length, 'the header has a verdict line and the blank under it').toBeGreaterThanOrEqual(2)
     expect(heads[0][0]).toContain('⊘ 疑似卡住  repo')
@@ -5757,8 +5766,8 @@ for (const surface of SURFACES) {
     expect(heads[0][heads[0].length - 1]).toBe('')
     heads.forEach((h, i) => expect(h, 'tab ' + i).toEqual(heads[0]))
     // the hint is the ONLY difference: every raw header carries exactly one, and the raw headers differ from one another (different tree heights)
-    rawHeads.forEach((h, i) => expect(h.filter(l => OVERFLOW.test(l)).length, 'tab ' + i + ' has one hint').toBe(1))
-    expect(new Set(rawHeads.map(h => h.join('\n'))).size, 'the hints differ per tab, so the exclusion is exercised').toBeGreaterThan(1)
+    rawHeads.forEach((h, i) => expect(h.filter(l => OVERFLOW.test(l)).length, 'tab ' + i + ': upward hints live outside the header').toBe(0))
+    expect(new Set(rawHeads.map(h => h.join('\n'))).size, 'headers stay identical across tabs').toBe(1)
     // negative control: the comparison sees one byte of difference
     expect(JSON.stringify(heads[0].map((l, i) => (i === 0 ? l + ' ' : l)))).not.toBe(JSON.stringify(heads[1]))
   })
@@ -5997,43 +6006,40 @@ for (const surface of SURFACES) {
   })
 }
 
-// ---- the overflow hint (coordinator ruling 2026-10-14): `下方還有 N 行` on the header's last metrics line while the window is at the top over a taller tree ----
+// ---- Bottom-window hints: cold rows above, independent of header metrics ----
 for (const surface of SURFACES) {
-  test('P4 hint: N equals the rows the tree really has beyond bodyRows, on every tab; none when the tree fits, none once scrolled (' + surface + ')', async ($, on) => {
+  test('P4 hint: the upward count equals the hidden cold rows on every tab; exact fit has no hint (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    const HINT = /下方還有 (\d+) 行/
     for (const tab of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
-      // the tree's real height: the tab strip (one row of tabs + its rule at 120 columns) plus every other child of the pane's column Box, one row each
       const tree = (await paneParts($, surface, tab)).tree
-      const total = 2 + ((tree.children || []) as Node[]).slice(1).filter(k => textOf(k) !== '' || k.type === 'Link').length // drawn rows, not elements: an empty Text takes no row, a Link does
-      const hintOf = async (scroll: { offset: number; bodyRows: number }): Promise<number | null> => {
-        const line = (await paneParts($, surface, tab, PANE_PROPS.bodyColumns, scroll)).head.find(l => HINT.test(l))
-        const m = line === undefined ? null : HINT.exec(line)
-        return m === null ? null : Number(m[1])
+      const total = ((tree.children || []) as Node[]).length - 1
+      const hintOf = async (rows: number): Promise<number | null> => {
+        const raw = (await paneParts($, surface, tab, 120, { offset: 0, bodyRows: rows })).raw
+        const hint = walkTexts(raw).map(textOf).find(l => /^上面還有 \d+ 行$/.test(l))
+        return hint === undefined ? null : Number(/(\d+)/.exec(hint)?.[1])
       }
-      expect(await hintOf({ offset: 0, bodyRows: total }), tab + ': a tree exactly the window high has no hint').toBeNull()
-      expect(await hintOf({ offset: 0, bodyRows: total - 1 }), tab + ': one row taller than the window says 1').toBe(1)
-      expect(await hintOf({ offset: 0, bodyRows: 5 }), tab + ': N = tree rows - bodyRows').toBe(total - 5)
-      expect(await hintOf({ offset: 3, bodyRows: 5 }), tab + ': the header has scrolled away, so no hint').toBeNull()
+      expect(await hintOf(total + 3), tab + ': content, rule and two navigation rows fit exactly').toBeNull()
+      expect(await hintOf(total + 2), tab + ': overflow reserves its own hint row').toBe(2)
+      expect(await hintOf(5), tab + ': content minus one visible row').toBe(total - 1)
+      const small = await paneParts($, surface, tab, 120, { offset: 0, bodyRows: 5 })
+      expect(textOf(((small.raw.children || []) as Node[])[0])).not.toContain('下方還有')
     }
   })
-
-  test('P4 hint: the hint ends the last metrics line and is dropped, not squeezed, when it does not fit (' + surface + ')', async ($, on) => {
+  test('P4 hint: a separate top row leaves every header metric whole at 120, 76 and 28 columns (' + surface + ')', async ($, on) => {
     world(on, richWorld())
     await start($, surface)
-    const wide = (await paneParts($, surface, 'now', 120, { offset: 0, bodyRows: 5 })).head
-    // wide (the one-line header, already as wide as the pane): the hint sits in the blanks before the metrics, which do not move
-    expect(wide.some(l => /^⊘ 疑似卡住  repo · 已進行 10m +下方還有 \d+ 行 +工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37%$/.test(l)), wide.join('\n')).toBe(true)
-    const plain = (await paneParts($, surface, 'now', 120, { offset: 0, bodyRows: 999 })).head
-    expect(wide[0].replace(/下方還有 (\d+) 行/, (_m, d: string) => ' '.repeat(12 + d.length)), 'only the hint differs from the header without it').toBe(plain[0])
-    // 76 columns (two header lines): the hint ends the metrics line
-    const mid = (await paneParts($, surface, 'now', 76, { offset: 0, bodyRows: 5 })).head
-    expect(mid.some(l => /^工作階段 \$0\.42 · 本機今日 \$3\.10 · ctx 37% +下方還有 \d+ 行$/.test(l)), mid.join('\n')).toBe(true)
-    // 28 columns (the hint is now 2 cells narrower than with its arrow; 28 leaves gap 0, as tight as 30 did, so loosening `gap >= 2` is caught): the metrics line is already wrapped over rows; whichever row is last has no room for the hint, so it is gone and the figures stay whole
-    const narrow = (await paneParts($, surface, 'now', 28, { offset: 0, bodyRows: 5 })).head
-    expect(narrow.some(l => l.includes('下方還有')), narrow.join('\n')).toBe(false)
-    expect(narrow.join('\n')).toContain('$3.10')
+    for (const cols of [120, 76, 28]) {
+      const full = (await paneParts($, surface, 'now', cols, { offset: 0, bodyRows: 999 })).head
+      expect(full.join('\n')).toContain('$3.10')
+      expect(full.join('\n')).toContain('37%')
+      expect(full.some(l => l.includes('上面還有') || l.includes('下方還有'))).toBe(false)
+      const small = (await paneParts($, surface, 'now', cols, { offset: 0, bodyRows: 8 })).raw
+      const hint = walkTexts(small).find(n => /^上面還有 \d+ 行$/.test(textOf(n)))
+      expect(hint, 'the hint has its own top row at ' + cols).toBeDefined()
+      expect(textOf(hint as Node)).toMatch(/^上面還有 \d+ 行$/)
+      expect(displayWidth(textOf(hint as Node))).toBeLessThanOrEqual(cols)
+    }
   })
 }
 
@@ -6164,7 +6170,7 @@ for (const surface of SURFACES) {
     for (const k of ['opt:d-4290499d:0', 'opt:d-4290499d:1', 'opt:d-c24ecfd9:0', 'opt:d-c24ecfd9:1']) expect(buttons, k).toContain(k)
     expect(buttons, 'nothing is chosen: the send row is plain text').not.toContain('submit')
     expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d:0', 'note:d-c24ecfd9:0', 'note:d-0000free:0'])
-    expect(rows.filter(r => r === ' ').length, 'a blank line is DRAWN after each card (an empty Text takes no row, a one-cell Text does)').toBe(3)
+    expect(rows.filter(r => r === ' ').length, 'blank lines separate cards; none separates the final card from submit').toBe(2)
     expect(rows.findIndex(r => r === ' '), 'the first blank closes the first card, after its note field').toBeGreaterThan(rows.findIndex(r => r.startsWith('  補充')))
   })
 
@@ -6409,9 +6415,9 @@ for (const surface of SURFACES) {
     const rows = await decideRows($)
     const at = rows.findIndex(t => t.startsWith('▲ 2. U6'))
     expect(at).toBeGreaterThan(0)
-    expect(rows[at + 1]).toBe('  選項      [ ] 要') // still shown, as plain text
-    expect(rows[at + 2]).toBe('            [ ] 不要')
-    expect(rows[at + 3]).toBe('  請在對話框回答。')
+    expect(rows[at + 1]).toBe('  請在對話框回答。')
+    expect(rows[at + 2]).toBe('  選項      [ ] 要') // still shown, as plain text
+    expect(rows[at + 3]).toBe('            [ ] 不要')
     expect(rows[rows.length - 1]).toBe('  [ 送出（已答 0/1） ]  答案會貼進這個對話送出') // only the first question counts
     const buttons = await keysOf($, 'Button')
     expect(buttons.filter(k => k.startsWith('opt:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])
@@ -6461,36 +6467,40 @@ for (const surface of SURFACES) {
     return tree
   }
   const fixedOf = (tree: Node): Node[] => (((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed')?.children || []) as Node[]
-  test('SCROLL decide: the tree is the pane height plus a spare row; the send row is the LAST child of the fixed box, under a rule, outside the scrolling rows (' + surface + ')', async ($, on) => {
+  test('SCROLL decide: submit stays under its rule, outside scrolling rows, followed only by bottom navigation (' + surface + ')', async ($, on) => {
     decideWorld(on, MANY)
     await start($, surface)
     const tree = await framed($, 20)
     const kids = fixedOf(tree)
     expect(kids.length, 'a frame was drawn').toBeGreaterThan(0)
     const last = kids[kids.length - 1]
-    expect(textOf(last)).toContain('送出')
-    expect(textOf(kids[kids.length - 2]), 'the rule is just above the strip').toMatch(/^─+$/)
+    expect(textOf(last)).toContain('現況')
+    expect(textOf(kids[kids.length - 2])).toContain('送出')
+    expect(textOf(kids[kids.length - 3]), 'the rule is just above submit').toMatch(/^─+$/)
     const content = kids.find(k => k.props?.key === 'content') as Node
     const rows = ((content.children || []) as Node[]).find(k => k.props?.key === 'rows') as Node
     expect(textOf(rows), 'the send row is not among the scrolling rows').not.toContain('送出')
-    expect(((tree.children || []) as Node[]).length, 'a spare row under the frame, so the tree is taller than the window and the engine raises ui.scroll').toBe(2)
+    const frame = (tree.children || []) as Node[]
+    expect(frame.length, 'the spare row lets the host raise ui.scroll below the visible navigation').toBe(2)
+    expect(frame[1].type).toBe('Text')
+    expect(textOf(frame[1])).toBe(' ')
   })
-  test('SCROLL decide: more cards than room draws the scrollbar with the thumb at the top; few cards draw none (' + surface + ')', async ($, on) => {
+  test('SCROLL decide: more cards than room draws the scrollbar with the thumb at the bottom; few cards draw none (' + surface + ')', async ($, on) => {
     decideWorld(on, MANY)
     await start($, surface)
     const bar = (tree: Node): Node | undefined => (((fixedOf(tree).find(k => k.props?.key === 'content') as Node).children || []) as Node[]).find(k => k.props?.key === 'scrollbar')
     const small = bar(await framed($, 20))
     expect(small, 'scrollbar present').toBeDefined()
     const cells = ((small as Node).children || []) as Node[]
-    expect(textOf(cells[0]), 'thumb at the top').toBe('█')
-    expect(textOf(cells[cells.length - 1]), 'track at the bottom').toBe('│')
+    expect(textOf(cells[0]), 'track at the top').toBe('│')
+    expect(textOf(cells[cells.length - 1]), 'thumb at the bottom').toBe('█')
     // each of the five jump cells (jumpCells) is a plain Button around the coloured Text, every other cell the Text alone (a click on it jumps the window); the look is the Text's
     const glyphOf = (c: Node): Node => (c.type === 'Button' ? (c.children as Node[])[0] : c)
     const pressable = cells.map((c, i) => (c.type === 'Button' ? i : -1)).filter(i => i >= 0)
-    expect(pressable, 'only the five jump cells are pressable (top, quarter, middle, three quarters, bottom); the rest stay plain text').toEqual([0, 3, 7, 10, 13])
+    expect(pressable, 'only the five jump cells are pressable (top, quarter, middle, three quarters, bottom); the rest stay plain text').toEqual([0, 4, 8, 11, 15])
     expect(cells.filter((_, i) => !pressable.includes(i)).every(c => c.type === 'Text'), 'the other cells are not Buttons').toBe(true)
-    expect(glyphOf(cells[0]).props?.color, 'thumb is the here colour').toBe('claude')
-    expect(glyphOf(cells[cells.length - 1]).props?.color, 'track is the structure colour').toBe('subtle')
+    expect(glyphOf(cells[cells.length - 1]).props?.color, 'thumb is the here colour').toBe('claude')
+    expect(glyphOf(cells[0]).props?.color, 'track is the structure colour').toBe('subtle')
     expect(bar(await framed($, 90)), 'everything fits: no scrollbar').toBeUndefined()
   })
   test('SCROLL decide: a click on a jump cell moves the thumb to that share of the track (bottom, top, middle, three quarters); the cells between are not Buttons (' + surface + ')', async ($, on) => {
@@ -6514,19 +6524,19 @@ for (const surface of SURFACES) {
     }
     const glyphs = (cells: Node[]) => cells.map(c => textOf(c)).join('')
     const before = await clickThenRead(null)
-    expect(glyphs(before)).toBe('████││││││││││')
-    expect(glyphs(await clickThenRead('sbj13')), 'the thumb now ends at the bottom cell').toBe('││││││││││████')
-    expect(glyphs(await clickThenRead('sbj0')), 'back at the top').toBe('████││││││││││')
-    expect(glyphs(await clickThenRead('sbj7')), 'the middle cell of 14: the thumb has moved to the middle of its travel').toBe('│││││████│││││')
-    expect(glyphs(await clickThenRead('sbj10')), 'the three-quarter cell').toBe('││││││││████││')
+    expect(glyphs(before)).toBe('│││││││││││█████')
+    expect(glyphs(await clickThenRead('sbj15')), 'the thumb ends at the bottom cell').toBe('│││││││││││█████')
+    expect(glyphs(await clickThenRead('sbj0')), 'back at the top').toBe('█████│││││││││││')
+    expect(glyphs(await clickThenRead('sbj8')), 'middle of the 16-cell track').toBe('││││││█████│││││')
+    expect(glyphs(await clickThenRead('sbj11')), 'the three-quarter cell').toBe('││││││││█████│││')
   })
-  test('SCROLL decide: another tab is never framed (it keeps the engine scroll) (' + surface + ')', async ($, on) => {
+  test('SCROLL decide: other tabs use the same bottom frame (' + surface + ')', async ($, on) => {
     decideWorld(on, MANY)
     await start($, surface)
     const pane = await paneOn($, surface, 'dispatch')
     const tree = (await pane.drawn()) as Node
     await pane.unmount()
-    expect(((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed')).toBeUndefined()
+    expect(((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed')).toBeDefined()
   })
   test('DECIDE mounted: a phone draws no text field; a question without options says to answer in the conversation, the option Buttons still work (' + surface + ')', async ($, on) => {
     decideWorld(on)
@@ -6601,7 +6611,12 @@ for (const surface of SURFACES) {
     await ui.unmount()
     return tree
   }
-  const rowsOf = (tree: Node): Node[] => (tree.type === 'Box' && (tree.props as { flexDirection?: string } | undefined)?.flexDirection === 'column' ? ((tree.children || []) as Node[]) : [tree])
+  const rowsOf = (tree: Node): Node[] => {
+    const rows = tree.type === 'Box' && tree.props?.flexDirection === 'column' ? (tree.children || []) as Node[] : [tree]
+    // Semantic readers retain band/rule/content slots; bottom-anchor.test.ts
+    // and the raw shell assertions pin the actual bottom navigation.
+    return rows.length > 1 ? [rows[rows.length - 1], ...rows.slice(0, -1)] : rows
+  }
 
   for (const locale of ['zh-TW', 'en'] as const) {
     const make = (on: On) => (locale === 'en' ? worldEn(on, richWorld()) : world(on, richWorld()))
@@ -7279,7 +7294,8 @@ for (const surface of SURFACES) {
     const keys = ((await ui.findAll({ type: 'Button' })) as Node[]).map(b => b.props?.key as string)
     const inputs = ((await ui.findAll({ type: 'Input' })) as Node[]).length
     await ui.unmount()
-    return { rows: ((tree.children || []) as Node[]), keys, inputs }
+    const raw = (tree.children || []) as Node[]
+    return { rows: raw.length > 1 ? [raw[raw.length - 1], ...raw.slice(0, -1)] : raw, keys, inputs }
   }
   const textD = (n: Node): string => cellsOf(n).map(c => c.text).join('')
 
@@ -7623,7 +7639,7 @@ for (const surface of SURFACES) {
     // bandlayout: the shell stands as `top frame, body rows, bottom frame, menu row, quick row` (the menu row and the quick row are the bottom two rows). `rows` keeps the older order (menu row first)
     // so a test that counts rows from the top reads what it always read; `raw` is the drawn order.
     const shell = core.length >= 4 && core[0].startsWith('\u256d')
-    const rows = shell ? [core[core.length - 2], ...core.slice(0, core.length - 2), core[core.length - 1]] : core
+    const rows = shell ? [core[core.length - 1], ...core.slice(0, core.length - 2), core[core.length - 2]] : core
     return { tree, rows, raw, spare, buttons, hot }
   }
   // the width of the last window of the top frame row (the text after the last ┬, less the closing corner)
@@ -8035,8 +8051,9 @@ for (const surface of SURFACES) {
     await drawShell($, 160, ['tab:usage'])
     const d = await drawShell($, 160)
     expect(d.rows.length).toBe(12)
-    expect(usageMain(d)[0]).toContain('資料 3 分鐘前')
-    expect(usageMain(d)[0]).toContain('tk60 row 1')
+    const first = usageMain(d).find(r => r.includes('tk60 row 1')) ?? ''
+    expect(first).toContain('資料 3 分鐘前')
+    expect(first).toContain('tk60 row 1')
     expect(usageMain(d).filter(r => r.includes('tk60 row')).length).toBe(3)
   })
   test('usagetab: no forge-stats panel (state.get resolves with no value, the same as a forge-stats that has written nothing) is one dim line 沒有用量資料; an unknown schema says the format is not recognised (' + surface + ')', async ($, on) => {
@@ -8235,6 +8252,8 @@ for (const surface of SURFACES) {
     w.files[W_MODEL] = j(model({ needs_decision: true, decisions: [DQ5] }))
     await start($, surface)
     await drawShell($, 160, ['tab:decide'])
+    let first = await drawShell($, 160)
+    for (let i = 0; i < 30 && !first.buttons.includes('opt:d-5optcard:0') && first.buttons.includes('scroll:up'); i++) first = await drawShell($, 160, ['scroll:up'])
     await drawShell($, 160, ['opt:d-5optcard:0'])
     await drawShell($, 160, ['send'])
     await w.clock.advance(10_000)
@@ -8416,14 +8435,14 @@ for (const surface of SURFACES) {
     for (const cols of [80, 100, 120, 160]) {
       const d = await drawShell($, cols, [], 12)
       expect(d.raw.length, 'rows at ' + cols).toBeLessThanOrEqual(12)
-      expect(d.raw[d.raw.length - 1], 'the quick row is last at ' + cols).toContain('送出')
-      expect(d.raw[d.raw.length - 2], 'the menu row above it at ' + cols).toContain('現況')
+      expect(d.raw[d.raw.length - 2], 'quick controls precede navigation at ' + cols).toContain('送出')
+      expect(d.raw[d.raw.length - 1], 'navigation is last at ' + cols).toContain('現況')
       for (const r of d.raw) expect(displayWidth(r), 'row width at ' + cols).toBeLessThanOrEqual(cols)
       const strip = stripOf(mainCells(d.raw, cols))
       expect(strip.length, 'a fixed strip under a rule at ' + cols).toBeGreaterThan(1)
       expect(squash(strip), 'the option names are on the first screen at ' + cols).toContain('★')
       expect(strip.some(r => r.includes('甲案')) && strip.some(r => r.includes('乙案')), 'both options at ' + cols).toBe(true)
-      for (const k of ['opt:d-lay00001:0', 'opt:d-lay00001:1', 'fill', 'scroll:down']) expect(d.buttons, k + ' at ' + cols).toContain(k)
+      for (const k of ['opt:d-lay00001:0', 'opt:d-lay00001:1', 'fill', 'scroll:up']) expect(d.buttons, k + ' at ' + cols).toContain(k)
       expect(d.raw.join('\n').includes('█'), 'the scrollbar thumb at ' + cols).toBe(true)
       if (surface === 'terminal' && cols === 100) console.log('RENDER-BEGIN layout2-long-100\n' + d.raw.join('\n') + '\nRENDER-END')
     }
@@ -8446,7 +8465,7 @@ for (const surface of SURFACES) {
     layWorld(on, [LAYCARD, DQ2])
     await start($, surface)
     await drawShell($, 100, ['tab:decide'], 12)
-    await drawShell($, 100, ['scroll:down'], 12)
+    await drawShell($, 100, ['scroll:up'], 12)
     const d = await drawShell($, 100, [], 12)
     const walk = (n: Node | string, out: Node[]): Node[] => { if (typeof n !== 'string') { out.push(n); for (const c of n.children || []) walk(c as Node | string, out) } return out }
     const all = walk(d.tree, [])
@@ -8467,6 +8486,7 @@ for (const surface of SURFACES) {
     layWorld(on, [LAYCARD, DQ2])
     await start($, surface)
     await drawShell($, 100, ['tab:decide'], 12)
+    await drawShell($, 100, ['scroll:up', 'scroll:up'], 12)
     const top = await drawShell($, 100, [], 12)
     const stripTop = stripOf(mainCells(top.raw, 100))
     let d = top
@@ -8487,6 +8507,7 @@ for (const surface of SURFACES) {
     const full = await drawShell($, 100, [], 60)
     expect(hintOf(full.raw), 'every option drawn: 1-6').toMatch(/1-6|1–6/)
     let d = await drawShell($, 100, [], 12)
+    for (let i = 0; i < 60 && d.buttons.includes('scroll:up'); i++) d = await drawShell($, 100, ['scroll:up'], 12)
     const shown = new Set<string>()
     for (let i = 0; i < 40; i++) {
       const ks = d.buttons.filter(b => b.startsWith('opt:d-lay00006:')).map(b => Number(b.split(':')[2])).sort()
@@ -8506,6 +8527,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     await drawShell($, 160, ['tab:decide'], 12)
     let d = await drawShell($, 100, [], 12)
+    for (let i = 0; i < 60 && d.buttons.includes('scroll:up'); i++) d = await drawShell($, 100, ['scroll:up'], 12)
     const seen: string[] = []
     let widest = 0
     // the main window's inner width: the bottom frame's stretch between the junction and the corner
@@ -8565,9 +8587,9 @@ for (const surface of SURFACES) {
     const tall = await drawShell($, 100, [], 40)
     const bottom = (d: { raw: string[]; buttons: string[] }): string[] => {
       const n = d.raw.length
-      expect(d.raw[n - 1], 'the quick row is last').toContain('送出')
-      expect(d.raw[n - 2], 'the menu row holds the tabs').toContain('現況')
-      expect(d.raw[n - 2], 'the open tab is in it').toContain('待決')
+      expect(d.raw[n - 2], 'quick controls precede navigation').toContain('送出')
+      expect(d.raw[n - 1], 'navigation is last').toContain('現況')
+      expect(d.raw[n - 1], 'the open tab is in it').toContain('待決')
       expect(d.raw[n - 3].startsWith('╰'), 'the bottom frame is just above the menu row').toBe(true)
       return d.raw.slice(n - 2, n)
     }
@@ -8582,12 +8604,12 @@ for (const surface of SURFACES) {
     await start($, surface)
     await drawShell($, 100, ['tab:decide'], 12)
     const top = await drawShell($, 100, [], 12)
-    expect(top.buttons, 'a window over the card at the top has a down half only').toContain('scroll:down')
-    expect(top.buttons.includes('scroll:up')).toBe(false)
+    expect(top.buttons, 'a window opens at the bottom with an up half only').toContain('scroll:up')
+    expect(top.buttons.includes('scroll:down')).toBe(false)
     expect(top.raw.length, 'the frame is maxRows high, no spare row').toBe(12)
     expect(top.raw.join('\n').includes('還有'), 'the hint says how many rows are out of sight').toBe(true)
     expect(squash(mainCells(top.raw, 100))).not.toContain(LONG_BG)
-    const scrolled = await drawShell($, 100, ['scroll:down', 'scroll:down'], 12)
+    const scrolled = await drawShell($, 100, ['scroll:up', 'scroll:up'], 12)
     expect(scrolled.buttons).toContain('scroll:up')
     const sc = mainCells(scrolled.raw, 100)
     expect(sc, 'the window moved').not.toEqual(mainCells(top.raw, 100))

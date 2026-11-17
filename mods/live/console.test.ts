@@ -98,7 +98,7 @@ test('KR8: the 指揮 queue shows counts.decisions cards, in the fixture order, 
     const from = lines.findIndex(l => l.includes('待決'))
     expect(Number(/待決\s+(\d+)/.exec(lines[from])?.[1]), cols + ': the queue header count').toBe(RAW.counts.decisions)
     const rows: string[] = []
-    for (const l of lines.slice(from + 1)) { if (l.trim() === '') break; if (!l.trim().startsWith('[')) rows.push(l) }
+    for (const l of lines.slice(from + 1)) { if (l.trim() === '' || /^[─━]+$/.test(l)) break; if (!l.trim().startsWith('[')) rows.push(l) }
     expect(rows.length, cols + ': one row per card').toBe(RAW.counts.decisions)
     expected.forEach((it: any, k: number) => {
       const shown = rows[k].replace(/^\S+\s+/, '').split(' · ')[0].replace(/…$/, '')

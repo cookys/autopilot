@@ -1,0 +1,63 @@
+Review repair of dc70945fe; comparison base b28dbc5e6; Fleet task 01M7MCEGZ52PNEHQR4F1THBEA5.
+
+1. Restatement / acceptance: restore the host scroll trigger without moving the last visible navigation row; check top padding and content/chrome adjacency across all 8 PANE_TABS and all 5 console tabs at 160x40 and 80x24; trim trailing blank self-part lines; demonstrate red controls, add no failing test names relative to base, and pass both sync commands.
+
+2. Located / exact original lines (the commit diff preserves the complete edits):
+- mods/live/pane.tsx:50,72,218: `bottom: { above: n => t('shell.more_up', { n }), newer: '', controlsLast: true },`
+- mods/live/scroll.tsx:89: `{o.bottom.controlsLast === true ? null : <Text key="spare"> </Text>}`
+- mods/live/bottom-anchor.test.ts:154: `const ev = { by: -rows, bodyRows: rows, contentRows: rows + 1, offset: 0 }`
+- mods/live/bottom-anchor.test.ts:132: `footer(tree, out)` (console-only geometry assertion).
+- mods/live/live.test.ts:6483: `expect(((tree.children || []) as Node[]).length, 'no spare row below the final navigation').toBe(1)`
+- mods/live/pane.tsx:65: `...(tab !== 'self' ? [] : own === null ? [<Text {...dimProps()}>{t('pane.waiting')}</Text>] : own.parts.flatMap((p, n) => [...(p.title === null ? [] : [<Text {...dimProps()} wrap="truncate">{p.title}</Text>]), ...p.lines.map((l, i) => own.draw(l, i, 's' + n))])),`
+
+3. Scroll criterion: first changed only the golden to measure render(drawn.tree, cols).length and feed that measured height to scrollHook. With controlsLast:true intact, focused host wrapper exit 1, 33 pass / 2 fail; measured 40 vs required 41 and 24 vs required 25. Full named runner at this red point: exit 1, Node 162/0, host 1082/17 (base failures plus exactly these two scroll tests). Removed controlsLast from all three callers and removed the unused internal option; spare Text is unconditional. Updated the host assertion to require the blank spare Text. Focused green: exit 0, 35 pass / 0 fail.
+Red scroll names, both green in the final run:
+- scroll 160x40: bottom default, up reveals older rows, End returns to hot rows
+- scroll 80x24: bottom default, up reveals older rows, End returns to hot rows
+
+4. Alignment criterion: shared bottomAligned asserts blank out[0] for short non-overflow views and non-blank content immediately before the fixed rule/chrome, excluding scrollbar ink. Applied to every pane/console tab, including absent-source short views. Initial expanded-fixture probe: exit 1, 34/1; console command 80x24 with a full console source and live:null filled the window exactly. Changed that auxiliary short fixture to conSnap:null to guarantee slack; exit 0, 35/0. Trimmed trailing kind===blank lines from each self part before drawing; exit 0, 35/0.
+Top-align negative control: temporarily set the team console frame to `bottom: undefined` (other tabs retain bottom mode). Footer still passes, new top-blank assertion fails: exit 1, 33/2. Restored bottom mode: exit 0, 35/0. Red names, both green in final run:
+- console team 160x40: footer last, short content leaves blanks above
+- console team 80x24: footer last, short content leaves blanks above
+Adjacency negative control in the isolated golden copy: appended `<Text> </Text>` after self content. New content/chrome assertion fails: exit 1, 33/2. Restored the exact production source; final focused run exit 0, 35/0. Red names, both green in final run:
+- console self 160x40: footer last, short content leaves blanks above
+- console self 80x24: footer last, short content leaves blanks above
+
+Console viewport correction after the first full pass: exit 1, host 1083/16; the only added name was `指揮 drawn at 120 / 80 / 20 columns: summary and data age precede exceptions and queue; tabs last`. consoleframe.test.ts draw() returned the whole tree, so its last row was now the spare. Original line 61: `return screen(Pane(EL, null, 'now', () => {}, t, cols, () => {}, new Set(), () => {}, new Set(), { offset: 0, bodyRows: rows }, null, win, null, con as never))`. Focused reproduction (bottom-anchor + consoleframe): exit 1, 37/1. Slice the screen to the visible rows; focused exit 0, 38/0. Product source unchanged in this correction.
+
+5. Final pass (all commands re-run against the final product/test source):
+- `bash mods/live/run-tests.sh < /dev/null`: exit 1; Node 8 files, 162 pass / 0 fail (each node --test exit 0); host 1084 pass / 15 fail / 1099 total, including bottom-anchor 35/0. Real Claude plugin runner available; no Node-only fallback.
+- Same runner from `git archive b28dbc5e6 mods scripts src`: exit 1; Node 162/0; host 1049/15/1064. First archive attempt omitted src and exited 1 before host tests (ui-lint dependency src/status/git-env missing); corrected archive run above completed.
+- Mechanical sorted failing-name comparison: exit 0; added 0, removed 0. The 15 identical names are listed once below.
+- `bash scripts/sync-all.sh`: exit 0, all generators clean.
+- `bash scripts/sync-all.sh --check`: exit 0, all 16 checks clean.
+- `git diff --check`: exit 0.
+
+All plugin runs used AUTOPILOT_MODS_REAL_CLAUDE set to the local executable and TMPDIR inside this worktree. The existing real-claude-env guard used fresh empty HOME/config/XDG directories with authentication removed. Focused wrappers mirror run-tests.sh but retain bottom-anchor.test.ts (35 cases), adding consoleframe.test.ts for the final viewport correction (38 cases); base sources are immutable git archive output. No npm dependency was added. Only names, counts and exits are retained here; raw scratch logs are removed.
+
+Identical base/final failing names:
+- C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal)
+- C1 U7: console mode: an alive forge-stats with summary_row is never asked for the second row (next(e) 0 calls) and the band row carries the console tab names (terminal)
+- G33a: a stale, foreign, unreadable or oversized heartbeat does not stop the fetch, and the band stays one row (terminal)
+- G33a: the feed runs with no summary_row heartbeat, and before any run the band has no fleet counts; the reader is never asked (terminal)
+- G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal)
+- speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (desktop)
+- speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (terminal)
+- speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (desktop)
+- speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (terminal)
+- speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (desktop)
+- speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (terminal)
+- speed tab: pressing it again closes it, and the speed view is gone (desktop)
+- speed tab: pressing it again closes it, and the speed view is gone (terminal)
+- speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (desktop)
+- speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (terminal)
+
+Every changed file and why (relative to dc70945fe):
+- mods/live/scroll.tsx — always render the spare trigger row and remove the unused internal controlsLast option.
+- mods/live/pane.tsx — retain the spare row on all pane/console frames and trim trailing blank self-part lines.
+- mods/live/bottom-anchor.test.ts — measure actual tree height and check bottom padding/adjacency on every tab at both sizes, with short console fixtures.
+- mods/live/consoleframe.test.ts — clip the rendered tree to the host viewport so navigation/action assertions exclude the spare trigger row.
+- mods/live/live.test.ts — require the host frame’s restored blank spare Text while keeping navigation last inside the visible frame.
+- docs/plans/evidence/2026-11-17-pane-bottom-anchor/review-fix.log — record the ordered repair, red/green names and counts, command exits, failure comparison and scope.
+
+Not done / out of scope: fixing the 15 pre-existing fleet/speed failures, physical operator-terminal interaction, merge/push/deployment, version changes, new dependencies, or the caller’s independent cross-family review (pending with the caller; no review verdict claimed).

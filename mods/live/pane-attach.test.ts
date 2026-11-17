@@ -392,8 +392,10 @@ const flatPane = (tree: Node): Node => {
   const content = kids.find(k => k.props?.key === 'content') as Node
   const rows = ((content.children || []) as Node[]).find(k => k.props?.key === 'rows') as Node
   const at = kids.indexOf(content)
-  const rest = kids.slice(at + 1).filter((k, i) => !(i === 0 && /^─+$/.test(nodeText(k))))
-  return { ...tree, children: [...kids.slice(0, at), ...((rows.children || []) as Node[]), ...rest] }
+  const tabs = kids.find(k => k.props?.key === 'tabs')
+  const rest = kids.slice(at + 1).filter(k => k !== tabs && !/^─+$/.test(nodeText(k)))
+  const contentRows = ((rows.children || []) as Node[]).filter(k => k.props?.key !== 'pad' && !/^上面還有 \d+ 行$/.test(nodeText(k)))
+  return { ...tree, children: [...(tabs === undefined ? [] : [tabs]), ...kids.slice(0, at), ...contentRows, ...rest] }
 }
 
 const allPaneRows = (tree: Node): string[] => ((flatPane(tree).children || []) as Node[]).slice(1).map(nodeText)

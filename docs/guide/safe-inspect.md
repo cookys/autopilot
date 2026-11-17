@@ -1,6 +1,6 @@
 # Inspect settings without printing values
 
-The existing `depth0-delegate-gate` PreToolUse Bash guard checks every depth, including subagents. Its default-on `secret-print` rule denies Docker inspect dumps and Env/Config formats, Docker exec env/printenv, Compose config, bare env/printenv/set/export dumps, reads of sensitive filenames, and Kubernetes secret YAML/JSON/template output or describe. No additional hook is registered.
+The existing `depth0-delegate-gate` PreToolUse Bash guard checks every depth, including subagents. Its default-on `secret-print` rule denies Docker inspect dumps and Env/Config formats, Docker exec env/printenv, Compose config, bare env/printenv/set/export dumps, reads of sensitive filenames, Kubernetes secret YAML/JSON/template output or describe, and systemd unit/drop-in dumps. This includes `systemctl cat`, unfiltered `systemctl show`, `show` property lists containing `Environment` or `EnvironmentFiles`, and file-printing reads of `*.service.d/*` or `*/systemd/*/*.conf`. Ordinary status/restart commands, `show` restricted to safe properties, `cat x.service` outside a drop-in directory, and grep count/filename/quiet modes pass. No additional hook is registered.
 
 The denial is one line, without the original command or its arguments:
 

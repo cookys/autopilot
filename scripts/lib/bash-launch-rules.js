@@ -1585,7 +1585,9 @@ const SECRET_MESSAGE = '這個指令會印出秘密。要檢查設定，請用 s
 function secretPath(word) {
   const base = path.posix.basename(word);
   return /^(?:\.env(?:\..*)?|.*\.env|config_main\.php|dbdef\.h|.*\.(?:pem|key|token)|auth\.json|credentials.*|.*secret.*|\.netrc|\.pgpass|my\.cnf)$/i.test(base)
-    || (/^id_/.test(base) && !/\.pub$/.test(base));
+    || (/^id_/.test(base) && !/\.pub$/.test(base))
+    || /(?:^|\/)[^/]+\.service\.d\/[^/]+$/.test(word)
+    || /(?:^|\/)systemd\/[^/]+\/[^/]+\.conf$/.test(word);
 }
 function secretWords(head, args, depth) {
   if (depth > MAX_EXPAND_DEPTH || !head) return false;
@@ -1647,6 +1649,29 @@ function secretWords(head, args, depth) {
       files.push(a);
     }
     return !safeOutput && files.some(secretPath);
+  }
+  if (name === 'systemctl') {
+    // Options may precede the verb. Their values are not verbs (e.g. --host cat status).
+    const valueFlags = new Set(['-H', '--host', '-M', '--machine', '--root', '--image',
+      '-t', '--type', '--state', '-n', '--lines', '-o', '--output',
+      '--job-mode', '--kill-whom', '-s', '--signal', '--preset-mode']);
+    let verb;
+    const properties = [];
+    for (let i = 0; i < args.length; i += 1) {
+      const a = args[i];
+      const redirect = REDIR_RE.exec(a);
+      if (redirect) { if (!redirect[1]) i += 1; continue; }
+      // -P is --value --property; property selection is legal on either side of the verb/unit.
+      const property = ['-p', '-P', '--property'].includes(a) ? args[++i] || ''
+        : a.startsWith('--property=') ? a.slice(11)
+          : /^-[pP]./.test(a) ? a.slice(2).replace(/^=/, '') : null;
+      if (property !== null) { properties.push(...property.split(',').filter(Boolean)); continue; }
+      if (valueFlags.has(a)) { i += 1; continue; }
+      if (a.startsWith('-')) continue;
+      if (!verb) verb = a;
+    }
+    return verb === 'cat' || (verb === 'show'
+      && (!properties.length || properties.some((p) => p === 'Environment' || p === 'EnvironmentFiles')));
   }
   if (name === 'docker' || name === 'docker-compose') {
     let i = 0;

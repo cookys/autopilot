@@ -1,0 +1,714 @@
+{
+  "base": "d18c42dd022b255b24438dad5082d40faf78de58",
+  "branch": "fix/secret-systemd",
+  "safety": "Fake command text only; hook input is never executed. No network, real credential, token, env file or systemd unit was inspected.",
+  "root_cause": "The shared secret-print matcher had no systemctl verb/property or systemd drop-in path detection.",
+  "verification_sequence": "Existing baseline green; per-criterion new blocking assertions red before the corresponding matcher change; each criterion green before the next change.",
+  "counts": {
+    "new_block_cases": 48,
+    "new_allow_cases": 26,
+    "new_mode_and_depth_cases": 3
+  },
+  "groups": [
+    {
+      "criterion": "cat",
+      "cases": [
+        {
+          "name": "secret-print systemd cat denies: systemctl cat x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: systemctl cat x y",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: systemctl --user cat x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: systemctl cat --user x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: systemctl --no-pager cat --user x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: sudo systemctl cat x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: SYSTEMD_PAGER= systemctl --user cat x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: bash -c 'systemctl --user cat x'",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: true; systemctl cat x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: true && systemctl cat x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: systemctl cat x | cat",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: true | systemctl --user cat x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat denies: systemctl --host fake-host cat x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: systemctl --user status x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: systemctl is-active x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: systemctl --user restart x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: systemctl --user daemon-reload",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: systemctl list-units",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: systemctl --user edit x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: systemctl --host cat status x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: echo \"systemctl cat x\"",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd cat allows: cat <<'EOF'\\\\nsystemctl cat x\\\\nEOF",
+          "red": "pass",
+          "green": "pass"
+        }
+      ]
+    },
+    {
+      "criterion": "show",
+      "cases": [
+        {
+          "name": "secret-print systemd show denies: systemctl show -p Environment x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show -pEnvironment x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show --property=Environment x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show --property Environment x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show -p Environment,ActiveState x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show -p ActiveState,EnvironmentFiles x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl --user show x --property=EnvironmentFiles",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl --property Environment show x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl --user show x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show -p ActiveState -p Environment x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show -P Environment x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show -PEnvironmentFiles x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: systemctl show --property= x",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show denies: sudo bash -c 'systemctl --user show x --property Environment'",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show allows: systemctl show -p ActiveState x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show allows: systemctl show -p MainPID,SubState x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show allows: systemctl --user show x --property=ActiveState",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show allows: systemctl --property ActiveState --user show x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show allows: systemctl show -pActiveState x",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show allows: systemctl show x -p MainPID -p SubState",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show allows: systemctl --user show x --property ActiveState",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd show allows: systemctl show --property=MainPID,SubState x",
+          "red": "pass",
+          "green": "pass"
+        }
+      ]
+    },
+    {
+      "criterion": "files",
+      "cases": [
+        {
+          "name": "secret-print systemd files denies: cat x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: cat x.service.d/override",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: cat ~/.config/systemd/user/*.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: cat /etc/systemd/system/*.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: cat *.service.d/*",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: cat */systemd/*/*.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: less x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: more x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: head x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: tail x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: bat x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: xargs cat x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: grep Environment x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: grep -n TOKEN ~/.config/systemd/user/x.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: sed -n '1,8p' x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: awk '{print}' x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: rg TOKEN x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: ugrep TOKEN x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: cat < x.service.d/a.conf",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files denies: cat 'fake path/x.service.d/a.conf'",
+          "red": "fail",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: cat x.service",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: grep -c Environment x.service.d/a.conf",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: grep -l TOKEN -r ~/.config/systemd",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: grep -q Environment x.service.d/a.conf",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: ls x.service.d/",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: cat x.service.docs/a.conf",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: cat docs/a.conf",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: cat README.md > x.service.d/a.conf",
+          "red": "pass",
+          "green": "pass"
+        },
+        {
+          "name": "secret-print systemd files allows: grep --count TOKEN x.service.d/a.conf",
+          "red": "pass",
+          "green": "pass"
+        }
+      ]
+    }
+  ],
+  "mode_cases": [
+    {
+      "name": "secret-print systemd modes and depths: systemctl --user cat x",
+      "status": "pass"
+    },
+    {
+      "name": "secret-print systemd modes and depths: systemctl show -p Environment x",
+      "status": "pass"
+    },
+    {
+      "name": "secret-print systemd modes and depths: cat x.service.d/a.conf",
+      "status": "pass"
+    }
+  ],
+  "runs": [
+    {
+      "label": "baseline",
+      "command": "node --test --test-reporter=tap --test-name-pattern=secret-print hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/baseline.log"
+    },
+    {
+      "label": "cat-red",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd cat\" hooks/bash-launch-guard.test.js",
+      "exit_code": 1,
+      "log": ".context/secret-systemd-evidence/cat-red.log"
+    },
+    {
+      "label": "cat-green",
+      "command": "node --test --test-reporter=tap --test-name-pattern=secret-print hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/cat-green.log"
+    },
+    {
+      "label": "show-red",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd show\" hooks/bash-launch-guard.test.js",
+      "exit_code": 1,
+      "log": ".context/secret-systemd-evidence/show-red.log"
+    },
+    {
+      "label": "show-green",
+      "command": "node --test --test-reporter=tap --test-name-pattern=secret-print hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/show-green.log"
+    },
+    {
+      "label": "files-red",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd files\" hooks/bash-launch-guard.test.js",
+      "exit_code": 1,
+      "log": ".context/secret-systemd-evidence/files-red.log"
+    },
+    {
+      "label": "files-green",
+      "command": "node --test --test-reporter=tap --test-name-pattern=secret-print hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/files-green.log"
+    },
+    {
+      "label": "modes-green",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd modes\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/modes-green.log"
+    },
+    {
+      "label": "docs-green",
+      "command": "node scripts/check-config-docs.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/docs-green.log"
+    },
+    {
+      "label": "sync-generate",
+      "command": "bash scripts/sync-all.sh",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/sync-generate.log"
+    },
+    {
+      "label": "full-suites",
+      "command": "node --test --test-reporter=tap hooks/bash-launch-guard.test.js hooks/depth0-delegate-gate.test.js scripts/safe-inspect.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/full-suites.log"
+    },
+    {
+      "label": "sync-check",
+      "command": "bash scripts/sync-all.sh --check",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/sync-check.log"
+    },
+    {
+      "label": "final-cat",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd cat\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-cat.log"
+    },
+    {
+      "label": "final-show",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd show\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-show.log"
+    },
+    {
+      "label": "final-files",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd files\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-files.log"
+    },
+    {
+      "label": "final-modes",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd modes\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-modes.log"
+    },
+    {
+      "label": "final-secret-print",
+      "command": "node --test --test-reporter=tap --test-name-pattern=secret-print hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-secret-print.log"
+    },
+    {
+      "label": "final-full-suites",
+      "command": "node --test --test-reporter=tap hooks/bash-launch-guard.test.js hooks/depth0-delegate-gate.test.js scripts/safe-inspect.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-full-suites.log"
+    },
+    {
+      "label": "final-docs",
+      "command": "node scripts/check-config-docs.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-docs.log"
+    },
+    {
+      "label": "final-completeness",
+      "command": "bash scripts/completeness-scan.sh --files scripts/lib/bash-launch-rules.js hooks/depth0-delegate-gate.js hooks/bash-launch-guard.test.js platforms/codex/plugin/scripts/lib/bash-launch-rules.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-completeness.log"
+    },
+    {
+      "label": "final-sync-generate",
+      "command": "bash scripts/sync-all.sh",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-sync-generate.log"
+    },
+    {
+      "label": "final-sync-check",
+      "command": "bash scripts/sync-all.sh --check",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-sync-check.log"
+    },
+    {
+      "label": "final-diff-check",
+      "command": "git -C \"$PWD\" diff --check",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-diff-check.log"
+    }
+  ],
+  "full_suite_summary": [
+    "# tests 921",
+    "# suites 0",
+    "# pass 911",
+    "# fail 0",
+    "# cancelled 0",
+    "# skipped 10",
+    "# todo 0"
+  ],
+  "selection": {
+    "command": "node scripts/affected-suites.js --files hooks/depth0-delegate-gate.js hooks/bash-launch-guard.test.js scripts/lib/bash-launch-rules.js docs/guide/safe-inspect.md docs/guide/settings-reference.md --json",
+    "exit_code": 0,
+    "stats": {
+      "changed": 5,
+      "selected": 568,
+      "total_suites": 927,
+      "graph_files": 1681
+    },
+    "mode": "selective",
+    "premerge_handoff": "Selection is 568/927 suites (at least half). Repo policy reserves the full merged-tree run for the depth-0 controller; not run by this implementation worker."
+  },
+  "changed_files": [
+    {
+      "path": "scripts/lib/bash-launch-rules.js",
+      "why": "Detect systemctl cat, unsafe/unfiltered show, and systemd drop-in/config reads through the existing rule."
+    },
+    {
+      "path": "hooks/bash-launch-guard.test.js",
+      "why": "Add 48 blocked, 26 allowed, and 3 mode/depth cases without changing existing cases."
+    },
+    {
+      "path": "hooks/depth0-delegate-gate.js",
+      "why": "Name systemd unit/drop-in dumps in the section 2f header."
+    },
+    {
+      "path": "docs/guide/safe-inspect.md",
+      "why": "Document systemd block patterns and safe inspection commands."
+    },
+    {
+      "path": "docs/guide/settings-reference.md",
+      "why": "Name systemd unit/drop-in dumps in both secret_print rows."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "why": "Add systemd unit/drop-in dumps to the existing unreleased guard summary."
+    },
+    {
+      "path": "platforms/codex/plugin/scripts/lib/bash-launch-rules.js",
+      "why": "Generated matcher mirror from bash scripts/sync-all.sh."
+    },
+    {
+      "path": "docs/plans/evidence/2026-11-17-secret-systemd/red-green.json",
+      "why": "Record per-case red/green results, command exits, and review handoff."
+    }
+  ],
+  "out_of_scope": [
+    "No merge, push, deployment, version bump, live canary or live systemd/credential inspection.",
+    "No changes to systemctl edit or existing secret_print modes and deny message.",
+    "Independent cross-family review and the full merged-tree suite remain caller-controlled gates."
+  ],
+  "session_marker": "Local marker initialization refused the inherited parent session ID (exit 3); no caller marker modified.",
+  "final_pass": [
+    {
+      "label": "final-cat",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd cat\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-cat.log"
+    },
+    {
+      "label": "final-show",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd show\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-show.log"
+    },
+    {
+      "label": "final-files",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd files\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-files.log"
+    },
+    {
+      "label": "final-modes",
+      "command": "node --test --test-reporter=tap \"--test-name-pattern=secret-print systemd modes\" hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-modes.log"
+    },
+    {
+      "label": "final-secret-print",
+      "command": "node --test --test-reporter=tap --test-name-pattern=secret-print hooks/bash-launch-guard.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-secret-print.log"
+    },
+    {
+      "label": "final-full-suites",
+      "command": "node --test --test-reporter=tap hooks/bash-launch-guard.test.js hooks/depth0-delegate-gate.test.js scripts/safe-inspect.test.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-full-suites.log"
+    },
+    {
+      "label": "final-docs",
+      "command": "node scripts/check-config-docs.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-docs.log"
+    },
+    {
+      "label": "final-completeness",
+      "command": "bash scripts/completeness-scan.sh --files scripts/lib/bash-launch-rules.js hooks/depth0-delegate-gate.js hooks/bash-launch-guard.test.js platforms/codex/plugin/scripts/lib/bash-launch-rules.js",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-completeness.log"
+    },
+    {
+      "label": "final-sync-generate",
+      "command": "bash scripts/sync-all.sh",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-sync-generate.log"
+    },
+    {
+      "label": "final-sync-check",
+      "command": "bash scripts/sync-all.sh --check",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-sync-check.log"
+    },
+    {
+      "label": "final-diff-check",
+      "command": "git -C \"$PWD\" diff --check",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/final-diff-check.log"
+    }
+  ],
+  "existing_skips": [
+    "ok 376 - @slow real hook under zsh: `ls <huge dir>/*` and `/*.zza` stay under 100 ms per call (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 378 - @slow crafted quadratic input (`[a` x 25000): still fast (< 100 ms) (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 383 - @slow deep glob is bounded (worst case stays fast) (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 384 - @slow five deep globs cost < 200 ms in total (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 402 - @slow segments() stays linear-ish: `} & ` x 4000 and a 64 KB input are each < 100 ms through the real hook (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 595 - @slow rule4 stays fast on 25000 x [a (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 597 - @slow rule4 stays fast on 25000 x a=( (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 599 - @slow rule4 stays fast on 25000 x \"(( (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 601 - @slow rule4 stays fast on 25000 x (( (set BLG_SLOW_TIMING=1) # SKIP",
+    "ok 603 - @slow rule4 stays fast on 25000 x <( (set BLG_SLOW_TIMING=1) # SKIP"
+  ],
+  "integrity": "hooks/bash-launch-guard.test.js has additions only: 106 added lines, zero deleted; existing tests and skips unchanged.",
+  "additional_checks": [
+    {
+      "command": "node scripts/secret-scan-diff.js --staged",
+      "exit_code": 0,
+      "result": {
+        "findings": []
+      }
+    },
+    {
+      "command": "node scripts/leak-guard.js --staged",
+      "exit_code": 0
+    },
+    {
+      "command": "bash .githooks/pre-commit",
+      "exit_code": 0,
+      "log": ".context/secret-systemd-evidence/pre-commit.log"
+    }
+  ],
+  "review_status": "Implementation handoff for caller-controlled independent cross-family review; no review verdict claimed."
+}

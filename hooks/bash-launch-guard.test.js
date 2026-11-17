@@ -1939,3 +1939,109 @@ for (const cmd of ['env -- FOO=1', 'env FOO=1 > /tmp/output', 'env -S FOO=1']) {
 for (const cmd of ["docker inspect -f '{{.Config.Image}}' web", "docker inspect -f '{{.Config.WorkingDir}}' web"]) {
   test(`secret-print safe Config scalar: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
 }
+
+// Systemd fixtures are command text only: never invoke systemctl or open a unit/drop-in.
+for (const cmd of [
+  'systemctl cat x', 'systemctl cat x y', 'systemctl --user cat x',
+  'systemctl cat --user x', 'systemctl --no-pager cat --user x',
+  'sudo systemctl cat x', 'SYSTEMD_PAGER= systemctl --user cat x',
+  "bash -c 'systemctl --user cat x'", 'true; systemctl cat x',
+  'true && systemctl cat x', 'systemctl cat x | cat',
+  'true | systemctl --user cat x', 'systemctl --host fake-host cat x',
+]) {
+  test(`secret-print systemd cat denies: ${cmd}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(r.deny, true);
+    assert.strictEqual(r.reason, secretDenial);
+  });
+}
+for (const cmd of [
+  'systemctl --user status x', 'systemctl is-active x',
+  'systemctl --user restart x', 'systemctl --user daemon-reload',
+  'systemctl list-units', 'systemctl --user edit x',
+  'systemctl --host cat status x', 'echo "systemctl cat x"',
+  "cat <<'EOF'\nsystemctl cat x\nEOF",
+]) {
+  test(`secret-print systemd cat allows: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
+}
+
+for (const cmd of [
+  'systemctl show -p Environment x', 'systemctl show -pEnvironment x',
+  'systemctl show --property=Environment x', 'systemctl show --property Environment x',
+  'systemctl show -p Environment,ActiveState x',
+  'systemctl show -p ActiveState,EnvironmentFiles x',
+  'systemctl --user show x --property=EnvironmentFiles',
+  'systemctl --property Environment show x', 'systemctl show x',
+  'systemctl --user show x', 'systemctl show -p ActiveState -p Environment x',
+  'systemctl show -P Environment x', 'systemctl show -PEnvironmentFiles x',
+  'systemctl show --property= x',
+  "sudo bash -c 'systemctl --user show x --property Environment'",
+]) {
+  test(`secret-print systemd show denies: ${cmd}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(r.deny, true);
+    assert.strictEqual(r.reason, secretDenial);
+  });
+}
+for (const cmd of [
+  'systemctl show -p ActiveState x', 'systemctl show -p MainPID,SubState x',
+  'systemctl --user show x --property=ActiveState',
+  'systemctl --property ActiveState --user show x',
+  'systemctl show -pActiveState x', 'systemctl show x -p MainPID -p SubState',
+  'systemctl --user show x --property ActiveState',
+  'systemctl show --property=MainPID,SubState x',
+]) {
+  test(`secret-print systemd show allows: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
+}
+
+for (const cmd of [
+  'cat x.service.d/a.conf', 'cat x.service.d/override',
+  'cat ~/.config/systemd/user/*.conf', 'cat /etc/systemd/system/*.conf',
+  'cat *.service.d/*', 'cat */systemd/*/*.conf',
+  'less x.service.d/a.conf', 'more x.service.d/a.conf',
+  'head x.service.d/a.conf', 'tail x.service.d/a.conf', 'bat x.service.d/a.conf',
+  'xargs cat x.service.d/a.conf', 'grep Environment x.service.d/a.conf',
+  'grep -n TOKEN ~/.config/systemd/user/x.conf',
+  "sed -n '1,8p' x.service.d/a.conf", "awk '{print}' x.service.d/a.conf",
+  'rg TOKEN x.service.d/a.conf', 'ugrep TOKEN x.service.d/a.conf',
+  'cat < x.service.d/a.conf', "cat 'fake path/x.service.d/a.conf'",
+]) {
+  test(`secret-print systemd files denies: ${cmd}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(r.deny, true);
+    assert.strictEqual(r.reason, secretDenial);
+  });
+}
+for (const cmd of [
+  'cat x.service', 'grep -c Environment x.service.d/a.conf',
+  'grep -l TOKEN -r ~/.config/systemd', 'grep -q Environment x.service.d/a.conf',
+  'ls x.service.d/', 'cat x.service.docs/a.conf', 'cat docs/a.conf',
+  'cat README.md > x.service.d/a.conf', 'grep --count TOKEN x.service.d/a.conf',
+]) {
+  test(`secret-print systemd files allows: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
+}
+
+for (const cmd of ['systemctl --user cat x', 'systemctl show -p Environment x', 'cat x.service.d/a.conf']) {
+  test(`secret-print systemd modes and depths: ${cmd}`, () => {
+    const warning = run(cmd, { env: { AUTOPILOT_BASH_GUARD_SECRET_MODE: 'warn' } });
+    assert.strictEqual(warning.deny, false);
+    assert.strictEqual(warning.ctx, secretDenial);
+    const off = run(cmd, { env: { AUTOPILOT_BASH_GUARD_SECRET_MODE: 'off' } });
+    assert.strictEqual(off.deny, false);
+    assert.strictEqual(off.ctx, '');
+    assert.strictEqual(run(cmd, { env: { AUTOPILOT_BASH_GUARD_SECRET_MODE: 'invalid' } }).deny, true);
+    assert.strictEqual(run(cmd, { extra: { agent_id: 'fake-child' } }).deny, true);
+    assert.strictEqual(run(cmd, { env: { AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE: 'off' } }).deny, false);
+    const cfgFile = path.join(mk('blg-systemd-config-'), 'config.json');
+    fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { secret_print: 'off' } }));
+    assert.strictEqual(run(cmd, { env: { AUTOPILOT_CONFIG_FILE: cfgFile } }).deny, false);
+    assert.strictEqual(run(cmd, { env: {
+      AUTOPILOT_CONFIG_FILE: cfgFile, AUTOPILOT_BASH_GUARD_SECRET_MODE: 'block',
+    } }).deny, true);
+    fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { secret_print: 'warn' } }));
+    assert.strictEqual(run(cmd, { env: { AUTOPILOT_CONFIG_FILE: cfgFile } }).ctx, secretDenial);
+  });
+}

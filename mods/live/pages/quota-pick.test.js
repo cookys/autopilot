@@ -22,13 +22,13 @@ test('worstPool: no pools -> null (null and empty are no source, never a pool)',
 test('A7 table: each of the five rows gives its role and text', () => {
   const t = makeT('zh-TW')
   const v = (o, pace = true) => classify(pool('x', o), NOW, pace, t)
-  assert.deepEqual([v({ limit_hit: true }).role, v({ limit_hit: true }).text], ['broken', '已用完，換池資料無來源'])
+  assert.deepEqual([v({ limit_hit: true }).role, v({ limit_hit: true }).text], ['warning', '判定未知：缺換池資料（capacity）']) // PM 01M7NJAS: no switch data is unknown, not red
   assert.deepEqual([v({ limit_hit: true, stranded_seats: 3 }).role, v({ limit_hit: true, stranded_seats: 3 }).text], ['broken', '已用完，3 席停擺'])
   assert.deepEqual([v({ limit_hit: true, stranded_seats: 0, switched: 'lab' }).role, v({ limit_hit: true, stranded_seats: 0, switched: 'lab' }).text], ['success', '已用完，席位已切到 lab'])
   const ex = { projected_pct_at_reset: 120, projected_exhaustion_at_ms: NOW + 17 * H }
   assert.deepEqual([v({ ...ex, stranded_seats: 2 }).role, v({ ...ex, stranded_seats: 2 }).text], ['broken', '約 17 時後用完，2 席沒池可切'])
   assert.deepEqual([v({ ...ex, stranded_seats: 0 }).role, v({ ...ex, stranded_seats: 0 }).text], ['success', '約 17 時後用完，席位可切池'])
-  assert.deepEqual([v(ex).role, v(ex).text], ['broken', '約 17 時後用完，換池資料無來源'])
+  assert.deepEqual([v(ex).role, v(ex).text], ['warning', '約 17 時後用完；判定未知：缺換池資料（capacity）'])
   assert.deepEqual([v({ projected_pct_at_reset: 98 }).role, v({ projected_pct_at_reset: 98 }).text], ['success', '會用到 98%'])
   assert.deepEqual([v({ projected_pct_at_reset: 100 }).role, v({ projected_pct_at_reset: 95 }).role], ['success', 'success'])
   assert.deepEqual([v({ projected_pct_at_reset: 94 }).role, v({ projected_pct_at_reset: 43 }).text], ['warning', '約剩 57% 會浪費'])
@@ -46,8 +46,10 @@ test('A7 order: limit_hit -> earliest finite exhaustion -> stale oldest first; t
     pool('team', { projected_pct_at_reset: 120, projected_exhaustion_at_ms: NOW + 17 * H }),
     pool('personal', { limit_hit: true }),
   ]
-  assert.equal(order(pools), 'personal,team,late,trinity,twgame,grok,lab,green')
-  assert.deepEqual(worstPool(pools, NOW), { pool: 'personal', role: 'broken', text: '已用完，換池資料無來源' })
+  // red (stale, oldest first) -> unknown (no switch data: earliest exhaustion first, none last) -> yellow by waste -> green
+  assert.equal(order(pools), 'trinity,twgame,team,late,personal,grok,lab,green')
+  assert.deepEqual(worstPool(pools, NOW), { pool: 'trinity', role: 'broken', text: '180 分未更新（>10 分）' })
+  assert.equal(worstPool(pools.filter(p => p.pool !== 'trinity' && p.pool !== 'twgame'), NOW).pool, 'team', 'with no red the unknown one comes first')
 })
 
 test('A7: an infinite or missing exhaustion time sorts after every finite one', () => {
@@ -72,8 +74,8 @@ test('no pace anywhere (§4.1 fallback): limit hit -> stale > 10 min (oldest fir
     pool('old2', { seven_day_pct: 5, stale: true, stale_age_min: 30 }),
     pool('personal', { seven_day_pct: 100, limit_hit: true }),
   ]
-  assert.equal(order(pools), 'personal,trinity,old2,codex,team')
-  assert.deepEqual(worstPool(pools.slice(0, 2), NOW), { pool: 'codex', role: 'broken', text: '7 天 80% 最高，沒有 pace' })
+  assert.equal(order(pools), 'trinity,old2,codex,team,personal') // personal is unknown (no switch data): after every red
+  assert.deepEqual(worstPool(pools.slice(0, 2), NOW), { pool: 'codex', role: 'broken', text: '7 天 80% 最高，沒有預測' })
 })
 
 test('null stays null: a pool with every number null is not read as 0% (no pace, nothing flagged, rank last)', () => {

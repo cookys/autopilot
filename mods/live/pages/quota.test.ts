@@ -19,108 +19,112 @@ const body = (cols: number, rows: number, c: unknown, view?: { focus: number; ex
 
 const GOLDEN = {
   wide: [
-    "── 額度池（預測 = fleet 算，pane 不重算；近 6 時 = burn_window_h 6） ────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "    池                  7 天    5 小時   重置（台北）      近 6 時   預測    用完時間      席數   判定",
-    "▸ ✗ personal            100%    100%     11-19 週四 08:00  +1.1/h    100%    已用完        5 席   已用完，換池資料無來源",
-    "  ✗ team                68%     17%      11-21 週六 12:00  +1.9/h    >100%   11-18 18:00   3 席   約 17 時後用完，換池資料無來源",
-    "  ✗ trinity             31%✗    0%✗      11-20 週五 06:00  +0.3/h✗   47%✗    —             1 席   ✗ 180 分未更新（>10 分；statusline 沒在跑）",
-    "  ✗ twgame              49%     0%       11-19 週四 09:00  +1.4/h    94%     —             2 席   ✗ 席 twgame-2 過期 14 分，舊值 55% 較高",
-    "  ▲ grok                10%     0%       11-24 週二 00:00  +0.0/h    10%     —             1 席   約剩 90% 會浪費",
-    "  ▲ lab                 22%     4%       11-22 週日 10:00  +0.2/h    43%     —             2 席   約剩 57% 會浪費",
-    "  ✓ codex               80%     12%      11-19 週四 21:00  +0.4/h    98%     —             2 席   會用到 98%",
+    "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
+    "    池                     7 天    5 小時  重置（台北）        近 6 時     預測  用完時間      席數   判定",
+    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00     +0.3/h✗     47%✗ —             1 席   ✗ 180 分未更新（>10 分；statusline 沒在跑）",
+    "  ✗ twgame                  49%        0%  11-19 週四 09:00     +1.4/h      94%  —             2 席   ✗ 席 twgame-2 過期 14 分，舊值 55% 較高",
+    "  ▲ team                    68%       17%  11-21 週六 12:00     +1.9/h    >100%  11-18 18:00   3 席   約 17 時後用完；判定未知：缺換池資料（capacity）",
+    "  ▲ personal               100%      100%  11-19 週四 08:00     +1.1/h     100%  已用完        5 席   判定未知：缺換池資料（capacity）",
+    "  ▲ grok                    10%        0%  11-24 週二 00:00     +0.0/h      10%  —             1 席   約剩 90% 會浪費",
+    "  ▲ lab                     22%        4%  11-22 週日 10:00     +0.2/h      43%  —             2 席   約剩 57% 會浪費",
+    "  ✓ codex                   80%       12%  11-19 週四 21:00     +0.4/h      98%  —             2 席   會用到 98%",
     "",
-    "── 焦點池 personal（[o] 展開各席） ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
-    "席    capacity--claude · hangar--claude · … 共 5 席",
-    "換池  stranded_seats、switched 都是 null（capacity r5 之前沒有來源）",
-    "判定  紅：limit_hit 為真，已用完，換池資料無來源",
+    "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "  [o] 展開各席",
+    "席    共 1 席",
+    "換池  沒有換池資料（capacity 尚未提供）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
     "排序  紅：已用完 > 最早用完 > 過期（最舊在前）；黃：浪費比例多的在前；最後才是綠",
   ],
   mid: [
-    "── 額度池 · 預測 fleet 算 · 近 6 時 = burn_window_h 6 ───────────────────────────────────────────────────── 資料 40 秒前",
-    "    池            7 天   5 小時   重置（台北）  近 6 時  預測    判定",
-    "▸ ✗ personal      100%   100%     週四 08:00    +1.1/h   100%    已用完，換池資料無來源",
-    "  ✗ team          68%    17%      週六 12:00    +1.9/h   >100%   約 17 時後用完，換池資料無來源",
-    "  ✗ trinity       31%✗   0%✗      週五 06:00    +0.3/h✗  47%✗    ✗ 180 分未更新（>10 分；statusline 沒在跑）",
-    "  ✗ twgame        49%    0%       週四 09:00    +1.4/h   94%     ✗ 席 twgame-2 過期 14 分，舊值 55% 較高",
-    "  ▲ grok          10%    0%       週二 00:00    +0.0/h   10%     約剩 90% 會浪費",
-    "  ▲ lab           22%    4%       週日 10:00    +0.2/h   43%     約剩 57% 會浪費",
-    "  ✓ codex         80%    12%      週四 21:00    +0.4/h   98%     會用到 98%",
+    "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────────────────────────────────────────────── 資料 40 秒前",
+    "    池              7 天    5 小時  重置（台北）   近 6 時     預測  判定",
+    "▸ ✗ trinity          31%✗       0%✗ 週五 06:00      +0.3/h✗     47%✗ ✗ 180 分未更新（>10 分；statusline 沒在跑）",
+    "  ✗ twgame           49%        0%  週四 09:00      +1.4/h      94%  ✗ 席 twgame-2 過期 14 分，舊值 55% 較高",
+    "  ▲ team             68%       17%  週六 12:00      +1.9/h    >100%  約 17 時後用完；判定未知：缺換池資料（capacity）",
+    "  ▲ personal        100%      100%  週四 08:00      +1.1/h     100%  判定未知：缺換池資料（capacity）",
+    "  ▲ grok             10%        0%  週二 00:00      +0.0/h      10%  約剩 90% 會浪費",
+    "  ▲ lab              22%        4%  週日 10:00      +0.2/h      43%  約剩 57% 會浪費",
+    "  ✓ codex            80%       12%  週四 21:00      +0.4/h      98%  會用到 98%",
     "",
-    "── 焦點池 personal（[o] 展開各席） ─────────────────────────────────────────────────────────────────────────────────────",
-    "席    capacity--claude · hangar--claude · … 共 5 席",
-    "換池  stranded_seats、switched 都是 null（capacity r5 之前沒有來源）",
-    "判定  紅：limit_hit 為真，已用完，換池資料無來源",
+    "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "  [o] 展開各席",
+    "席    共 1 席",
+    "換池  沒有換池資料（capacity 尚未提供）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
   ],
   narrow: [
-    "── 額度池 · 預測 fleet 算 · 近 6 時 = burn_window_h 6 ───────────── 資料 40 秒前",
-    "    池        7d    5h   重置   近 6 時 預測  判定",
-    "▸ ✗ personal  100%  100% 週四08 +1.1    100%  紅 已用完，換池資料無來源",
-    "  ✗ team      68%   17%  週六12 +1.9    >100% 紅 約 17 時後用完，換池資料無來源",
-    "  ✗ trinity   31%✗  0%✗  週五06 +0.3✗   47%✗  紅 ✗ 見下",
-    "  ✗ twgame    49%   0%   週四09 +1.4    94%   紅 ✗ 見下",
-    "  ▲ grok      10%   0%   週二00 +0.0    10%   黃 約剩 90% 會浪費",
-    "  ▲ lab       22%   4%   週日10 +0.2    43%   黃 約剩 57% 會浪費",
-    "  ✓ codex     80%   12%  週四21 +0.4    98%   綠 會用到 98%",
+    "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
+    "    池         7 天  5 時  重置   近 6 時    預測  判定",
+    "▸ ✗ trinity     31%✗   0%✗ 週五06    +0.3✗    47%✗ 紅 ✗ 見下",
+    "  ✗ twgame      49%    0%  週四09    +1.4     94%  紅 ✗ 見下",
+    "  ▲ team        68%   17%  週六12    +1.9   >100%  黃 約 17 時後用完；判定未知：缺換池資料（capacity）",
+    "  ▲ personal   100%  100%  週四08    +1.1    100%  黃 判定未知：缺換池資料（capacity）",
+    "  ▲ grok        10%    0%  週二00    +0.0     10%  黃 約剩 90% 會浪費",
+    "  ▲ lab         22%    4%  週日10    +0.2     43%  黃 約剩 57% 會浪費",
+    "  ✓ codex       80%   12%  週四21    +0.4     98%  綠 會用到 98%",
     "✗ trinity 180 分未更新（>10 分；statusline 沒在跑）",
     "✗ twgame 席 twgame-2 過期 14 分，舊值 55% 較高",
     "",
-    "── 焦點 personal（[o] 展開各席） ───────────────────────────────────────────────",
-    "席    capacity--claude · hangar--claude · … 共 5 席",
-    "判定  紅：limit_hit 為真，已用完，換池資料無來源",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "  [o] 展開各席",
+    "席    共 1 席",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
   ],
   nopaceNarrow: [
-    "── 額度池 · ✗ 無來源：capacity pace 未接 ────────────────────────── 資料 40 秒前",
-    "    池        7d    5h   重置   速率 · 預測 · 判定",
-    "▸ ✗ personal  100%  100% 週四08 紅 已用完，換池資料無來源",
-    "  ✗ trinity   31%✗  0%✗  週五06 紅 ✗ 見下",
-    "  ✗ twgame    49%   0%   週四09 紅 ✗ 見下",
-    "  ✗ codex     80%   12%  週四21 ✗ 無來源：capacity pace 未接",
-    "  ✗ team      68%   17%  週六12 ✗ 無來源：capacity pace 未接",
-    "  ✗ lab       22%   4%   週日10 ✗ 無來源：capacity pace 未接",
-    "  ✗ grok      10%   0%   週二00 ✗ 無來源：capacity pace 未接",
+    "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────── 資料 40 秒前",
+    "    池         7 天  5 時  重置   速率 · 預測 · 判定",
+    "▸ ✗ trinity     31%✗   0%✗ 週五06 紅 ✗ 見下",
+    "  ✗ twgame      49%    0%  週四09 紅 ✗ 見下",
+    "  ✗ codex       80%   12%  週四21 ✗ 無來源：用量預測未接通",
+    "  ✗ team        68%   17%  週六12 ✗ 無來源：用量預測未接通",
+    "  ✗ lab         22%    4%  週日10 ✗ 無來源：用量預測未接通",
+    "  ✗ grok        10%    0%  週二00 ✗ 無來源：用量預測未接通",
+    "  ▲ personal   100%  100%  週四08 黃 判定未知：缺換池資料（capacity）",
     "✗ trinity 180 分未更新（>10 分；statusline 沒在跑）",
     "✗ twgame 席 twgame-2 過期 14 分，舊值 55% 較高",
     "",
-    "── 焦點 personal（[o] 展開各席） ───────────────────────────────────────────────",
-    "席    capacity--claude · hangar--claude · … 共 5 席",
-    "判定  紅：limit_hit 為真，已用完，換池資料無來源",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "  [o] 展開各席",
+    "席    共 1 席",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
   ],
   nopaceWide: [
-    "── 額度池 · ✗ 無來源：capacity pace 未接 ────────────────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "(seats --quota 逐席列，依 pool_key 分池；池取席內最大值)",
-    "    池                  7 天    5 小時   重置（台北）      速率 · 預測 · 判定",
-    "▸ ✗ personal            100%    100%     11-19 週四 08:00  已用完，換池資料無來源",
-    "  ✗ trinity             31%✗    0%✗      11-20 週五 06:00  ✗ 180 分未更新（>10 分；statusline 沒在跑）",
-    "  ✗ twgame              49%     0%       11-19 週四 09:00  ✗ 席 twgame-2 過期 14 分，舊值 55% 較高",
-    "  ✗ codex               80%     12%      11-19 週四 21:00  ✗ 無來源：capacity pace 未接",
-    "  ✗ team                68%     17%      11-21 週六 12:00  ✗ 無來源：capacity pace 未接",
-    "  ✗ lab                 22%     4%       11-22 週日 10:00  ✗ 無來源：capacity pace 未接",
-    "  ✗ grok                10%     0%       11-24 週二 00:00  ✗ 無來源：capacity pace 未接",
+    "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
+    "(逐席列出，依額度池分組；池取席內最大值)",
+    "    池                     7 天    5 小時  重置（台北）      速率 · 預測 · 判定",
+    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00  ✗ 180 分未更新（>10 分；statusline 沒在跑）",
+    "  ✗ twgame                  49%        0%  11-19 週四 09:00  ✗ 席 twgame-2 過期 14 分，舊值 55% 較高",
+    "  ✗ codex                   80%       12%  11-19 週四 21:00  ✗ 無來源：用量預測未接通",
+    "  ✗ team                    68%       17%  11-21 週六 12:00  ✗ 無來源：用量預測未接通",
+    "  ✗ lab                     22%        4%  11-22 週日 10:00  ✗ 無來源：用量預測未接通",
+    "  ✗ grok                    10%        0%  11-24 週二 00:00  ✗ 無來源：用量預測未接通",
+    "  ▲ personal               100%      100%  11-19 週四 08:00  判定未知：缺換池資料（capacity）",
     "",
-    "── 焦點池 personal（[o] 展開各席） ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
-    "席    capacity--claude · hangar--claude · … 共 5 席",
-    "換池  stranded_seats、switched 都是 null（capacity r5 之前沒有來源）",
-    "判定  紅：limit_hit 為真，已用完，換池資料無來源",
+    "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "  [o] 展開各席",
+    "席    共 1 席",
+    "換池  沒有換池資料（capacity 尚未提供）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
     "排序  已用完 > 過期（最舊在前）> 7 天最高",
   ],
   expanded: [
-    "── 額度池（預測 = fleet 算，pane 不重算；近 6 時 = burn_window_h 6） ────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "    池                  7 天    5 小時   重置（台北）      近 6 時   預測    用完時間      席數   判定",
-    "▸ ✗ personal            100%    100%     11-19 週四 08:00  +1.1/h    100%    已用完        5 席   已用完，換池資料無來源",
-    "  ✗ team                68%     17%      11-21 週六 12:00  +1.9/h    >100%   11-18 18:00   3 席   約 17 時後用完，換池資料無來源",
-    "  ✗ trinity             31%✗    0%✗      11-20 週五 06:00  +0.3/h✗   47%✗    —             1 席   ✗ 180 分未更新（>10 分；statusline 沒在跑）",
-    "  ✗ twgame              49%     0%       11-19 週四 09:00  +1.4/h    94%     —             2 席   ✗ 席 twgame-2 過期 14 分，舊值 55% 較高",
-    "  ▲ grok                10%     0%       11-24 週二 00:00  +0.0/h    10%     —             1 席   約剩 90% 會浪費",
-    "  ▲ lab                 22%     4%       11-22 週日 10:00  +0.2/h    43%     —             2 席   約剩 57% 會浪費",
-    "  ✓ codex               80%     12%      11-19 週四 21:00  +0.4/h    98%     —             2 席   會用到 98%",
+    "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
+    "    池                     7 天    5 小時  重置（台北）        近 6 時     預測  用完時間      席數   判定",
+    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00     +0.3/h✗     47%✗ —             1 席   ✗ 180 分未更新（>10 分；statusline 沒在跑）",
+    "  ✗ twgame                  49%        0%  11-19 週四 09:00     +1.4/h      94%  —             2 席   ✗ 席 twgame-2 過期 14 分，舊值 55% 較高",
+    "  ▲ team                    68%       17%  11-21 週六 12:00     +1.9/h    >100%  11-18 18:00   3 席   約 17 時後用完；判定未知：缺換池資料（capacity）",
+    "  ▲ personal               100%      100%  11-19 週四 08:00     +1.1/h     100%  已用完        5 席   判定未知：缺換池資料（capacity）",
+    "  ▲ grok                    10%        0%  11-24 週二 00:00     +0.0/h      10%  —             1 席   約剩 90% 會浪費",
+    "  ▲ lab                     22%        4%  11-22 週日 10:00     +0.2/h      43%  —             2 席   約剩 57% 會浪費",
+    "  ✓ codex                   80%       12%  11-19 週四 21:00     +0.4/h      98%  —             2 席   會用到 98%",
     "",
-    "── 焦點池 personal（[o] 收合各席） ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
-    "席    capacity--claude · hangar--claude · … 共 5 席",
-    "      capacity--claude  7天 100%  5小時 100%  0 分前",
-    "      hangar--claude  7天 100%  5小時 100%  1 分前",
-    "      old--claude  7天 97%✗  5小時 90%✗  14 分前",
-    "換池  stranded_seats、switched 都是 null（capacity r5 之前沒有來源）",
-    "判定  紅：limit_hit 為真，已用完，換池資料無來源",
+    "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "  [o] 收合各席",
+    "席    共 1 席",
+    "      席位清單沒有這個池的席位",
+    "換池  沒有換池資料（capacity 尚未提供）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
     "排序  紅：已用完 > 最早用完 > 過期（最舊在前）；黃：浪費比例多的在前；最後才是綠",
   ],
 }
@@ -141,7 +145,7 @@ test('quota: Enter (A3) expands the focused pool\'s seats from the seats feed; a
   expect(body(160, 40, consoleOf(POOLS, { seats: SEATS }), { focus: 0, expanded: true })).toEqual(GOLDEN.expanded)
 })
 
-test('quota: frameRows is exactly H rows in every size and state, actions <= A, strip last', () => {
+test('quota: frameRows is at most H rows in every size and state, actions <= A, strip last', () => {
   const states: [string, unknown][] = [
     ['pace', consoleOf(POOLS, { seats: SEATS })], ['no pace', consoleOf(NOPACE, { pace: false })], ['no console', null], ['no quota object', consoleOf(null)],
     ['no pools', consoleOf([])], ['one pool', consoleOf([POOLS[0]])],
@@ -152,7 +156,7 @@ test('quota: frameRows is exactly H rows in every size and state, actions <= A, 
     for (const [name, c] of states) {
       const ctx = ctxOf(cols, rows, c)
       const out = frameRows(page, ctx)
-      if (out.length !== rows) bad.push(`${cols}x${rows}/${name}=${out.length}`)
+      if (out.length > rows) bad.push(`${cols}x${rows}/${name}=${out.length}`)
       if ((page as { render: (x: never) => { actions: unknown[] } }).render(ctx).actions.length > A(rows)) bad.push(`${cols}x${rows}/${name} actions`)
       if (!/1\D*2\D*3\D*4/.test(text(out[out.length - 1]))) bad.push(`${cols}x${rows}/${name} strip`)
     }
@@ -187,7 +191,8 @@ test('quota: red / yellow / green rows use the PALETTE roles on the glyph and th
   const rows = renderQuota(ctxOf(160, 40, consoleOf(POOLS))).body
   const row = (name: string) => rows.find(r => r.some(s => s.text.includes(name))) as never as { text: string; color?: string; background?: unknown; inverse?: unknown; bold?: unknown }[]
   const last = (r: { color?: string }[]) => r[r.length - 1].color
-  expect(last(row('personal'))).toBe(PALETTE.broken)
+  expect(last(row('trinity'))).toBe(PALETTE.broken)
+  expect(last(row('personal'))).toBe(PALETTE.attention) // unknown (no switch data) is warning level, option B
   expect(last(row('grok'))).toBe(PALETTE.attention)
   expect(last(row('codex'))).toBe(PALETTE.done)
   expect(row('trinity').find(s => s.text.includes('31%'))?.color).toBe(PALETTE.broken) // the stale number carries the red mark
@@ -197,7 +202,7 @@ test('quota: red / yellow / green rows use the PALETTE roles on the glyph and th
 test('quota: the action area holds only the [f] switch advice, and only when capacity gave one for the focused pool', () => {
   const none = renderQuota(ctxOf(160, 40, consoleOf(POOLS)))
   expect(none.actions.length).toBe(0)
-  const withAdvice = consoleOf(POOLS.map(p => (p.pool === 'personal' ? { ...p, switch_suggestion: 'personal -> team' } : p)))
+  const withAdvice = consoleOf(POOLS.map(p => (p.pool === 'trinity' ? { ...p, switch_suggestion: 'trinity -> team' } : p)))
   const a = renderQuota(ctxOf(160, 40, withAdvice)).actions
   expect(a.length).toBe(1)
   expect(text(a[0])).toBe('[f] 換池建議填入提示列（不送出）')
@@ -218,10 +223,10 @@ test('quota: the registry carries the framed quota page at key 4', () => {
   expect((page as { key: string }).key).toBe('4')
 })
 
-test('quota: no body row of the pool table is wider than the pane (nothing relies on the frame clip, so a verdict is never cut)', () => {
+test('quota: no body row of the pool table is wider than the pane (every long reason is wrapped by the frame, never cut)', () => {
   const wide: string[] = []
   for (const [cols, rows] of SIZES)
     for (const c of [consoleOf(POOLS, { seats: SEATS }), consoleOf(NOPACE, { pace: false, seats: SEATS })])
-      for (const l of body(cols, rows, c)) if (displayWidth(l) > cols) wide.push(cols + ': ' + l)
+      for (const l of frameRows(page, ctxOf(cols, rows, c)).map(text)) if (displayWidth(l) > cols) wide.push(cols + ': ' + l)
   expect(wide.join('\n')).toBe('')
 })

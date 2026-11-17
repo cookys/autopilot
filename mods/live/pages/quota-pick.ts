@@ -41,7 +41,7 @@ export function classify(p: QuotaPool, nowMs: number, hasPace: boolean, t: T): V
   const sw = p.stranded_seats // null = the switch data has no source
   // 1. the pool is used up (a fact, shown even with no pace)
   if (p.limit_hit === true) {
-    if (sw === null) return out('broken', 'limit_nosw', t('page.quota.v_limit_nosw'))
+    if (sw === null) return out(WARN, 'limit_nosw', t('page.quota.v_limit_nosw')) // used up, but nothing says whether a seat can switch: unknown, not red (PM 01M7NJAS)
     if (sw > 0) return out('broken', 'limit_stranded', t('page.quota.v_limit_stranded', { n: sw }))
     return out(GOOD, 'limit_switched', t('page.quota.v_limit_switched', { pool: typeof p.switched === 'string' ? p.switched : '-' }))
   }
@@ -56,7 +56,7 @@ export function classify(p: QuotaPool, nowMs: number, hasPace: boolean, t: T): V
   if (P === null) return out('broken', 'nopace', t('page.quota.v_nopace'))
   if (P > 100) {
     const h = p.projected_exhaustion_at_ms === null ? '?' : Math.max(0, Math.round((p.projected_exhaustion_at_ms - nowMs) / HOUR))
-    if (sw === null) return out('broken', 'exhaust_nosw', t('page.quota.v_exhaust_nosw', { h }))
+    if (sw === null) return out(WARN, 'exhaust_nosw', t('page.quota.v_exhaust_nosw', { h }))
     if (sw > 0) return out('broken', 'exhaust_stranded', t('page.quota.v_exhaust_stranded', { h, n: sw }))
     return out(GOOD, 'exhaust_ok', t('page.quota.v_exhaust_ok', { h }))
   }
@@ -72,6 +72,7 @@ export function rankPools(pools: QuotaPool[], nowMs: number, t: T = makeT('zh-TW
   const finite = (x: number | null): number => (x === null ? Infinity : x)
   const tier = (r: (typeof rows)[number]): number => {
     if (r.v.role === GOOD) return 3
+    if (r.v.kind === 'limit_nosw' || r.v.kind === 'exhaust_nosw') return 1.5 // unknown: after every red, before every yellow
     if (r.v.role === WARN) return 2
     if (r.p.limit_hit === true) return 0
     if (hasPace && r.v.kind !== 'stale' && r.v.kind !== 'stale_seat' && r.v.kind !== 'nopace') return 0.5 // red with a projection
@@ -87,6 +88,7 @@ export function rankPools(pools: QuotaPool[], nowMs: number, t: T = makeT('zh-TW
       if (!hasPace) return (b.p.seven_day_pct ?? -1) - (a.p.seven_day_pct ?? -1) || a.i - b.i // no pace: highest 7-day % next
       return a.i - b.i
     }
+    if (ta === 1.5) return finite(a.v.exhaustMs) - finite(b.v.exhaustMs) || a.i - b.i
     if (ta === 2) return (b.v.waste ?? 0) - (a.v.waste ?? 0) || a.i - b.i
     return a.i - b.i
   })
@@ -101,7 +103,13 @@ export function worstPool(pools: QuotaPool[] | null, nowMs: number, t: T = makeT
   const src = pools.find(p => p.pool === first.pool)
   // no pace, nothing used up, nothing stale: the pool with the highest 7-day % is named (§4.1 fallback), with that number as its text
   const text = first.kind === 'nopace' && src !== undefined && src.seven_day_pct !== null ? t('page.quota.v_top7', { p: Math.round(src.seven_day_pct) }) : first.text
-  return { pool: first.pool, role: first.role, text }
+  return { pool: poolLabel(first.pool), role: first.role, text }
+}
+
+// the one display name of a pool on every page: `pool-f` / `pool_f` -> `F 池`; any other id (team, personal) is shown as the feed spells it
+export const poolLabel = (pool: string): string => {
+  const m = /^pool[-_]?([a-z])$/i.exec(pool)
+  return m === null ? pool : m[1].toUpperCase() + ' 池'
 }
 
 // The ONE normalisation of the console's pools, used by the 額度 page, the 現況 page and the band (so the three always name the same pool): no forecast source ->
@@ -110,9 +118,12 @@ export function worstPool(pools: QuotaPool[] | null, nowMs: number, t: T = makeT
 export function normalizedPools(con: ConsoleSnapshot | null): QuotaPool[] | null {
   if (con === null || con.quota.pools === null) return null
   const paceOk = con.sources.quota_forecast?.state === 'ok'
-  const blocked = new Set(con.items.filter(i => i.kind === 'seat_blocked' && typeof i.facts.pool === 'string').map(i => i.facts.pool as string))
+  // a seat_blocked item is also proof that a seat is stranded in that pool: with no switch data its count stands in for stranded_seats (so the pool is red, not unknown); a number the feed has stays
+  const blocked = new Map<string, number>()
+  for (const i of con.items) if (i.kind === 'seat_blocked' && typeof i.facts.pool === 'string') blocked.set(i.facts.pool, (blocked.get(i.facts.pool) ?? 0) + 1)
   return con.quota.pools.map(p => {
     const q = paceOk ? p : { ...p, projected_pct_at_reset: null, projected_exhaustion_at_ms: null, burn_pct_per_h: null }
-    return blocked.has(p.pool) ? { ...q, limit_hit: true } : q
+    const n = blocked.get(p.pool)
+    return n === undefined ? q : { ...q, limit_hit: true, stranded_seats: q.stranded_seats ?? n }
   })
 }

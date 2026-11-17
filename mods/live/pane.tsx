@@ -206,7 +206,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
         const letter = hint !== null && !used.has(hint[1]) ? hint[1] : null
         if (letter !== null) used.add(letter)
         const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? x.text.replace(/^\[[a-z]\] /, '') : x.text}</Text>)
-        nodes.push(<Button key={'p:' + i + ':' + j} plain {...(letter === null ? {} : { hotkey: letter })} onPress={() => press(sg.press as string)}>{texts}</Button>)
+        nodes.push(<Button key={'p:' + i + ':' + j} plain {...(letter === null ? {} : { hotkey: letter })} onPress={() => (sg.press as string).startsWith('key:') ? frame.onKey?.(keys[(sg.press as string).slice(4)]) : press(sg.press as string)}>{texts}</Button>)
         j = e
         continue
       }

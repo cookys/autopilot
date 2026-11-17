@@ -7,9 +7,9 @@ import type { ConsoleItem, ConsoleSnapshot } from '../console'
 import type { LiveSnapshot, Seg } from '../model'
 import { displayWidth, isStepCard, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
-import { ROLE_WARNING, normalizedPools, worstPool } from './quota-pick'
+import { ROLE_WARNING, normalizedPools, poolLabel, rankPools, worstPool } from './quota-pick'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, staleBadge } from './rows'
+import { brokenRow, dataMissing, lineTotal, staleBadge } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -129,7 +129,7 @@ const lineWord = (t: T, k: (typeof LINE_ORDER)[number]): string => (k === 'runni
 function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
   const { t, size } = ctx
   const s = con.counts.summary
-  const total = Object.values(s.lines).reduce((a, b) => a + b, 0)
+  const total = lineTotal(con)
   const lead: Seg[] = wide ? [plain('  ' + t('page.now.lines') + ' ' + total + ' ｜ ')] : [plain(t('page.now.lines') + ' ' + total + ' ')]
   const chips: Seg[] = []
   for (const k of LINE_ORDER) {
@@ -146,10 +146,22 @@ function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] 
   else if (typeof h.online === 'number' && typeof h.total === 'number') hosts.push(plain(h.online + '/' + h.total + (wide ? ' ' + t('page.now.hosts_online') : '')))
   const sep = wide ? plain(' ｜ ') : plain(' · ')
   const main: Seg[] = [...lead, ...chips, ...(hosts.length > 0 ? [sep, ...(wide ? [plain(t('page.now.hosts') + ' ')] : [plain(t('page.now.hosts') + ' ')]), ...hosts] : [])]
+  // the pools that need a look are listed one per row under the exceptions (poolRows); the overview names the worst one only when there is nothing to list
+  if (poolRows(ctx, con, wide).length > 0) return [main]
   const q = quotaWorstSeg(ctx, wide)
   const qSegs: Seg[] = [wide ? dim(t('page.now.quota') + ' ') : plain(t('page.now.quota') + ' '), ...q]
   if (wide && size.cols < 150) return [main, labelled(t('page.now.quota'), true, ...q)]
   return [[...main, wide ? plain(' ｜ ') : plain(' · '), ...qSegs]]
+}
+
+// every pool that is red or whose verdict is unknown, in danger order, one row each and in full (the row wraps in the frame, never "+N"); the verdict text is the quota page's (G2, G5, G10)
+function poolRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
+  const pools = normalizedPools(con)
+  if (pools === null) return []
+  return rankPools(pools, ctx.nowMs, ctx.t).filter(v => v.role === 'broken' || v.kind === 'limit_nosw' || v.kind === 'exhaust_nosw').map(v => {
+    const red = v.role === 'broken'
+    return [dim(wide ? '  ' : ''), { text: (red ? GLYPHS.state.failed : GLYPHS.state.need_you) + ' ' + ctx.t('page.now.quota') + ' ' + poolLabel(v.pool) + ' ' + v.text, color: red ? PALETTE.broken : PALETTE.attention }]
+  })
 }
 
 // the items the exceptions block draws: exceptions and quota items the feed sends to the console, plus `seat_blocked:<seat>` items (a seat whose pool is used up);
@@ -255,16 +267,34 @@ function recentRows(live: LiveSnapshot, wide: boolean, cols: number): Row[] {
 }
 
 // ---- the page ----
+// the 待決 page lists the console cards and the seat's own cards the console does not hold yet: the jump counts both, so a lagging or missing cards source cannot hide an own card
+function decisionCount(ctx: PageCtx): number {
+  const { console: con, live } = ctx
+  const ownOnly = live === null ? 0 : live.pending.filter(d => !isStepCard(d) && !(con?.cards ?? []).some(c => c.id === d.id)).length
+  return con !== null ? Math.max(con.counts.decisions, (con.cards?.length ?? 0) + ownOnly) : live === null ? 0 : live.pending.length
+}
 function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const { t, size, console: con, live, nowMs } = ctx
   const wide = size.cols >= 100
   const body: Row[] = []
+  // 1. the pending count and the oldest card's title come first (G2); the [2] jump stays in the action area
+  const decisions = decisionCount(ctx)
+  if (decisions > 0) {
+    const oldest = con === null || con.cards === null || con.cards.length === 0 ? null : [...con.cards].sort((a, b) => a.opened_at_ms - b.opened_at_ms)[0]
+    const title = oldest === null ? '' : '：' + firstLine(oldest.question)
+    const age = oldest === null ? '' : t('page.now.oldest', { age: ageOf(t, nowMs - oldest.opened_at_ms, false) })
+    body.push([{ text: GLYPHS.structure.answer + ' ' + t('page.now.go_decide', { n: decisions }) + age + title, color: PALETTE.attention }])
+  }
   body.push(ruleRow(t('page.now.fleet'), wide))
   if (con === null) body.push(broken(t('page.now.no_console')))
   else {
     body.push(...overviewRows(ctx, con, wide))
+    // 2. the stuck lines and the other exceptions, 3. every red pool in full
     const exc = exceptionRows(ctx, con, wide)
-    body.push(...(exc.length === 0 ? [[dim((wide ? '  ' : '') + t('page.now.exc_none'))] as Row] : exc))
+    const pr = poolRows(ctx, con, wide)
+    body.push(...exc, ...pr)
+    // "no exceptions" is only said when nothing is missing and no pool needs a look (G4)
+    if (exc.length === 0 && pr.length === 0) body.push(dataMissing(con, nowMs, t) ? broken(t('frame.unknown')) : [dim((wide ? '  ' : '') + t('page.now.exc_none'))])
   }
   body.push(blank())
   if (live === null) {
@@ -277,9 +307,6 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     if (rec.length > 0) body.push(blank(), ruleRow(t('page.now.recent'), wide), ...rec)
   }
   const actions: Row[] = []
-  // the 待決 page lists the console cards and the seat's own cards the console does not hold yet: the jump counts both, so a lagging or missing cards source cannot hide an own card
-  const ownOnly = live === null ? 0 : live.pending.filter(d => !isStepCard(d) && !(con?.cards ?? []).some(c => c.id === d.id)).length
-  const decisions = con !== null ? Math.max(con.counts.decisions, (con.cards?.length ?? 0) + ownOnly) : live === null ? 0 : live.pending.length
   if (decisions > 0) {
     const opened = con !== null && con.cards !== null && con.cards.length > 0 ? Math.min(...con.cards.map(c => c.opened_at_ms)) : null
     const oldest = opened === null ? '' : t('page.now.oldest', { age: ageOf(t, nowMs - opened, false) })

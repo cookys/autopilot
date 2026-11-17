@@ -11,7 +11,7 @@ import type { QuotaSeat } from '../console'
 import type { Seg } from '../model'
 import { GLYPHS, PALETTE, displayWidth } from '../ui'
 import type { QuotaPool, Verdict } from './quota-pick'
-import { normalizedPools, rankPools, ROLE_WARNING } from './quota-pick'
+import { normalizedPools, poolLabel, rankPools, ROLE_WARNING } from './quota-pick'
 
 export type QuotaView = { focus: number; expanded: boolean } // the pane's own state (j/k, Enter); the page contract has no place for it yet, so render() uses the default
 
@@ -21,10 +21,13 @@ export type { QuotaSeat }
 const DASH = GLYPHS.structure.empty
 const bad = GLYPHS.state.failed
 const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, w - displayWidth(text)))
+// numbers stand against the right edge of their column (the last two cells are the stale mark's and a gap), so the % signs line up (G8)
+const padL = (text: string, w: number): string => ' '.repeat(Math.max(0, w - displayWidth(text))) + text
 const roleColor = (r: Verdict['role']): Seg['color'] => (r === 'broken' ? PALETTE.broken : r === ROLE_WARNING ? PALETTE.attention : PALETTE.done)
 const roleGlyph = (r: Verdict['role']): string => (r === 'broken' ? GLYPHS.state.failed : r === ROLE_WARNING ? GLYPHS.state.need_you : GLYPHS.state.done)
 const roleWord = (t: PageCtx['t'], r: Verdict['role']): string => (r === 'broken' ? t('page.quota.role_broken') : r === ROLE_WARNING ? t('page.quota.role_warning') : t('page.quota.role_success'))
 const pct = (n: number | null, mark: boolean): string => (n === null ? DASH : Math.round(n) + '%') + (mark ? bad : '')
+const numCell = (text: string, mark: boolean, w: number): string => padL(text, w - 2) + (mark ? bad : ' ') + ' '
 const rate = (n: number | null, unit: boolean, mark: boolean): string => (n === null ? DASH : (n >= 0 ? '+' : '') + n.toFixed(1) + (unit ? '/h' : '')) + (mark ? bad : '')
 
 function tpe(ms: number): { mo: string; d: string; dow: number; hh: string; mm: string } {
@@ -50,9 +53,9 @@ function rule(title: string, right: string | null, cols: number): Row {
 
 type Cols = { pool: number; d7: number; h5: number; reset: number; burn: number; proj: number; exh: number; seats: number }
 const COLS: Record<Tier, Cols> = {
-  wide: { pool: 20, d7: 8, h5: 9, reset: 18, burn: 10, proj: 8, exh: 14, seats: 7 },
-  mid: { pool: 14, d7: 7, h5: 9, reset: 14, burn: 9, proj: 8, exh: 0, seats: 0 },
-  narrow: { pool: 10, d7: 6, h5: 5, reset: 7, burn: 8, proj: 6, exh: 0, seats: 0 },
+  wide: { pool: 20, d7: 9, h5: 10, reset: 18, burn: 11, proj: 9, exh: 14, seats: 7 },
+  mid: { pool: 14, d7: 8, h5: 10, reset: 14, burn: 10, proj: 9, exh: 0, seats: 0 },
+  narrow: { pool: 10, d7: 7, h5: 6, reset: 7, burn: 9, proj: 8, exh: 0, seats: 0 },
 }
 
 function resetText(ms: number | null, tier: Tier, dows: string[]): string {
@@ -93,9 +96,9 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   // column header
   const head: string[] = ['    ' + padR(t('page.quota.col_pool'), c.pool)]
   const short = tier === 'narrow'
-  head.push(padR(t(short ? 'page.quota.col_7d_s' : 'page.quota.col_7d'), c.d7), padR(t(short ? 'page.quota.col_5h_s' : 'page.quota.col_5h'), c.h5), padR(t(short ? 'page.quota.col_reset_s' : 'page.quota.col_reset'), c.reset))
+  head.push(numCell(t(short ? 'page.quota.col_7d_s' : 'page.quota.col_7d'), false, c.d7), numCell(t(short ? 'page.quota.col_5h_s' : 'page.quota.col_5h'), false, c.h5), padR(t(short ? 'page.quota.col_reset_s' : 'page.quota.col_reset'), c.reset))
   if (paceOk) {
-    head.push(padR(t('page.quota.col_burn', { h }), c.burn), padR(t('page.quota.col_proj'), c.proj))
+    head.push(numCell(t('page.quota.col_burn', { h }), false, c.burn), numCell(t('page.quota.col_proj'), false, c.proj))
     if (tier === 'wide') head.push(padR(t('page.quota.col_exh'), c.exh), padR(t('page.quota.col_seats'), c.seats))
     head.push(t('page.quota.col_verdict'))
   } else head.push(t('page.quota.col_rate_proj_verdict'))
@@ -112,16 +115,16 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     const row: Seg[] = [
       seg(i === focus ? GLYPHS.structure.folded + ' ' : '  '),
       seg(roleGlyph(v.role) + ' ', roleColor(v.role)),
-      seg(padR(v.pool, c.pool)),
-      mark(padR(pct(p.seven_day_pct, isStale), c.d7)),
-      mark(padR(pct(p.five_hour_pct, isStale), c.h5)),
+      seg(padR(poolLabel(v.pool), c.pool)),
+      mark(numCell(p.seven_day_pct === null ? DASH : Math.round(p.seven_day_pct) + '%', isStale, c.d7)),
+      mark(numCell(p.five_hour_pct === null ? DASH : Math.round(p.five_hour_pct) + '%', isStale, c.h5)),
       seg(padR(resetText(p.resets_at_ms, tier, dows), c.reset)),
     ]
     // a pace-less pool says so in one merged column; a fact (limit_hit, stale) still says what it says
     const fact = p.limit_hit === true || stalled
     if (paceOk) {
-      row.push(mark(padR(rate(p.burn_pct_per_h, tier !== 'narrow', isStale), c.burn)))
-      row.push(mark(padR(p.projected_pct_at_reset === null ? DASH : (p.projected_pct_at_reset > 100 ? '>100' : Math.round(p.projected_pct_at_reset)) + '%' + (isStale ? bad : ''), c.proj)))
+      row.push(mark(numCell(rate(p.burn_pct_per_h, tier !== 'narrow', false), isStale, c.burn)))
+      row.push(mark(numCell(p.projected_pct_at_reset === null ? DASH : (p.projected_pct_at_reset > 100 ? '>100' : Math.round(p.projected_pct_at_reset)) + '%', isStale, c.proj)))
       if (tier === 'wide') {
         const ex = p.limit_hit === true ? t('page.quota.used_up') : p.projected_exhaustion_at_ms === null ? DASH : (() => { const x = tpe(p.projected_exhaustion_at_ms); return `${x.mo}-${x.d} ${x.hh}:${x.mm}` })()
         row.push(seg(padR(ex, c.exh)), seg(padR(p.seats === null ? DASH : t('page.quota.seats_n', { n: p.seats }), c.seats)))
@@ -130,7 +133,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     const word = roleWord(t, v.role)
     let text: string
     if (!paceOk && !fact) text = bad + ' ' + t('page.quota.v_nopace')
-    else if (tier === 'narrow' && stalled) { text = word + ' ' + bad + ' ' + t('page.quota.f_see_below'); under.push([staleBadge(bad + ' ' + v.pool + ' ' + v.text)]) }
+    else if (tier === 'narrow' && stalled) { text = word + ' ' + bad + ' ' + t('page.quota.f_see_below'); under.push([staleBadge(bad + ' ' + poolLabel(v.pool) + ' ' + v.text)]) }
     else text = (tier === 'narrow' ? word + ' ' : stalled ? bad + ' ' : '') + v.text
     row.push(seg(text, roleColor(v.role)))
     body.push(row.map(sg => ({ ...sg, press: 'quota:pool:' + i }))) // the whole row is one Button: it focuses this pool and shows / folds its seats
@@ -141,7 +144,8 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const fv = ranked[focus]
   const fp = byName.get(fv.pool) as QuotaPool
   body.push([{ text: '' }])
-  body.push(rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: fv.pool }), null, cols))
+  body.push(rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: poolLabel(fv.pool) }), null, cols))
+  body.push([{ text: '  ' }, { text: t(view.expanded ? 'page.quota.act_o_close' : 'page.quota.act_o_open'), color: PALETTE.action, press: 'quota:open' }]) // G11: o is a Button (click works where the pane has no keyboard)
   const kv = (label: string, text: string, color?: Seg['color']): Row => [{ text: padR(label, 6), dim: true }, color === undefined ? { text } : { text, color }]
   const names = q.seats.filter(s => s.pool === fp.pool).map(s => s.seat)
   const count = fp.seats === null ? t('page.quota.f_seats_unknown') : t('page.quota.f_seats_n', { n: fp.seats })

@@ -22,7 +22,7 @@ const dec = (o: Record<string, unknown>) => ({ id: null, title: null, question: 
 const opts = (...labels: string[]) => labels.map(label => ({ label, description: '' }))
 const live = (...pending: unknown[]) => ({ state: 'ok', header: '', pending }) as never
 const okSrc = { at_ms: nowMs - 12000, state: 'ok' }
-const con = (cards: unknown[] | null, items: unknown[], lines: unknown[] = [], sources: Record<string, unknown> = { cards: okSrc }) => ({ generated_at_ms: nowMs, sources, counts: { decisions: 0, exceptions: 0, quota_risk: 0, tabs: {}, summary: { lines: {}, hosts: {}, hints: 0, quota_worst: null } }, items, cards, lines }) as never
+const con = (cards: unknown[] | null, items: unknown[], lines: unknown[] = [], sources: Record<string, unknown> = { cards: okSrc }) => ({ generated_at_ms: nowMs, sources, counts: { decisions: 0, exceptions: 0, quota_risk: 0, tabs: {}, summary: { lines: {}, hosts: {}, hints: 0, quota_worst: null } }, quota: { pools: null, seats: [] }, items, cards, lines }) as never
 const ctxOf = (cols: number, rows: number, l: unknown, c: unknown, decide?: DecideNav) => ({ live: l, console: c, size: { cols, rows }, t, nowMs, ...(decide === undefined ? {} : { decide }) }) as never
 const nav = (o: Partial<DecideNav>): DecideNav => ({ ...NO_NAV, ...o })
 const mirror = (title: string, line: string) => ({ id: 'exc:T7:aa', kind: 'exception', severity: 3, state: 'findings', needs_operator: false, title, text: title + ' d-1c0a77e2', since_ms: nowMs - 3600000, line_id: line, to_console: true, answerable_by: [] })
@@ -196,6 +196,8 @@ const old6 = dec({ id: 'd-2b7710cc', question: '六條合併策略選哪一條�
 
 type Case = { name: string; ctx: unknown; gold: { body: string[]; actions: string[] } }
 const DEVIATIONS: Record<string, [string, string][]> = {
+  // G11: undo is a visible [u] Button (the pane cannot take the keyboard on the real host), so the held row reads `已送出 b  [u] 8 秒內撤回`, not the mockup's `按 u 撤回`.
+  c80_sent: [['已送出 b，8 秒內按 u 撤回', '已送出 b  [u] 8 秒內撤回']],
   // the 120 mockup is "2/3" with the other two cards listed, which leaves no card 1; and its 建議 row reads "[a] 一次全合…" while the star sits on [b]. The page counts 1/3 and draws the recommendation of the starred option.
   w120: [['2/3', '1/3'], ['建議   [a] 一次全合；風險是一支壞全壞', '建議   依序合，每支綠才合下一支']],
 }
@@ -218,13 +220,13 @@ for (const c of CASES) {
     expect(out.body.map(text).map(norm)).toEqual(want(c.gold.body))
     expect(out.actions.map(text).map(norm)).toEqual(want(c.gold.actions))
   })
-  test(`decide ${c.name}: rows fit the width, actions fit the area, frameRows is exactly H rows`, () => {
+  test(`decide ${c.name}: rows fit the width, actions fit the area, frameRows is at most H rows`, () => {
     const ctx = c.ctx as { size: { cols: number; rows: number } }
     const out = decidePage.render(ctx as never)
     expect(out.actions.length <= actionRows(ctx.size.rows)).toBe(true)
     // a body row longer than the pane is cut by frameRows; the page keeps every row within the width except where the mockup's own long sentence is
     const framed = frameRows(decidePage, ctx as never)
-    expect(framed.length).toBe(ctx.size.rows)
+    expect(framed.length).toBeLessThanOrEqual(ctx.size.rows)
     for (const r of framed) expect(displayWidth(text(r)) <= ctx.size.cols).toBe(true)
   })
 }
@@ -243,7 +245,7 @@ test('decide: the shell entry is replaced and the page is framed', () => {
   expect(p.framed).toBe(true)
 })
 
-// ---- every size, every data state: exactly H rows, never a throw ----
+// ---- every size, every data state: at most H rows, never a throw ----
 const SIZES = [[160, 40], [120, 30], [80, 24]] as const
 test('decide: null live and null console render the no-source rows at every size, never throw', () => {
   for (const [cols, rows] of SIZES) {
@@ -251,7 +253,7 @@ test('decide: null live and null console render the no-source rows at every size
     const body = decidePage.render(ctx).body.map(text).join('\n')
     expect(body).toContain('本席待決資料無來源')
     expect(body).toContain('此帳號沒有 console 快照')
-    expect(frameRows(decidePage, ctx).length).toBe(rows)
+    expect(frameRows(decidePage, ctx).length).toBeLessThanOrEqual(rows)
     expect(decidePage.render(ctx).actions).toEqual([])
   }
 })
@@ -271,7 +273,7 @@ test('decide: console cards list missing, or a stale cards source, is a red row 
 test('decide A10: a stale reason is never truncated: at 70 columns it wraps onto further rows, no row ends in …', () => {
   const why = '沒有專案 · 請執行：autopilot status runs --watch 再重新整理本席待決資料'
   const out = frameRows(decidePage, ctxOf(70, 24, { state: 'stale', header: why, pending: [] } as never, con([], [])))
-  expect(out.length).toBe(24)
+  expect(out.length).toBeLessThanOrEqual(24)
   const joined = out.map(text).join('\n')
   expect(joined.replace(/\s+/g, ''), 'the whole reason is on screen').toContain(('本席待決資料不是最新：' + why).replace(/\s+/g, ''))
   expect(out.map(text).filter(r => r.includes('…')), 'no row is cut with …').toEqual([])
@@ -282,8 +284,8 @@ test('decide: a long list never changes the frame height (overflow ends in the m
   const many = Array.from({ length: 30 }, (_, i) => card('d-' + String(i).padStart(8, '0'), '第 ' + i + ' 張', 'PM', H))
   for (const [cols, rows] of SIZES) {
     const out = frameRows(decidePage, ctxOf(cols, rows, live(own80), con(many, [])))
-    expect(out.length).toBe(rows)
-    expect(text(out[rows - 2 - actionRows(rows)])).toContain('還有')
+    expect(out.length).toBe(rows) // an overflowing list fills the surface
+    expect(out.some(r => text(r).includes('還有')), 'the overflow ends in the more row').toBe(true)
   }
 })
 
@@ -300,7 +302,7 @@ test('decide: option 6 of an old card, text mode and a held card draw their own 
   expect(o.body.map(text).some(r => r.includes('補充   先 12_'))).toBe(true)
   expect(o.actions.map(text)).toEqual(['輸入補充中（數字字母都是文字）', 'Enter 存補充   [Esc] 放棄'])
   const held = decidePage.render(ctxOf(160, 40, live(own160), con([], []), nav({ picks: { 'd-89fe394f': 0 }, hold: { 'd-89fe394f': nowMs - 3500 } })))
-  expect(held.actions.map(text)[0]).toBe('已送出 a，7 秒內按 u 撤回')
+  expect(held.actions.map(text)[0]).toBe('已送出 a  [u] 7 秒內撤回')
 })
 
 // ---- the key reducer: routeKey's page-local kinds, applied ----

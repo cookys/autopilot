@@ -7,7 +7,7 @@ import type { Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE, STATES, type StateId } from '../ui'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, staleBadge } from './rows'
+import { brokenRow, lineTotal, staleBadge } from './rows'
 import type { Row } from './rows'
 
 
@@ -61,9 +61,9 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   const cols = ctx.size.cols
   const stale = tasks.state !== 'ok'
   const rows = rowsOf(snap.lines)
-  const total = rows.length
-  const shown = view.expanded ? total : Math.min(FOLD_AT, total)
-  const rest = total - Math.min(FOLD_AT, total)
+  const total = Math.max(lineTotal(snap), rows.length) // the same number 現況 shows (G3); never fewer than the lines listed
+  const shown = view.expanded ? rows.length : Math.min(FOLD_AT, rows.length)
+  const rest = total - Math.min(FOLD_AT, rows.length) // shown + folded = total, always
   const focus = Math.max(0, Math.min(view.focus, Math.max(0, shown - 1)))
   const sum = snap.counts.summary.lines
   const run = sum.running ?? 0, wait = sum.waiting ?? 0, stuck = sum.stalled ?? 0
@@ -88,7 +88,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   const lineRow = (r: FleetRow, i: number): Row => {
     const st = STATES[r.sid]
     const mark = i === focus ? GLYPHS.structure.folded : ' '
-    const word = r.worst === null ? ctx.t('page.fleet.idle') : ctx.t('page.fleet.w_stuck')
+    const word = r.worst === null ? ctx.t('page.fleet.idle') : /offline|離線/i.test(r.worst.rule) ? ctx.t('page.fleet.w_offline') : ctx.t('page.fleet.w_stuck')
     const last = r.worst === null ? GLYPHS.structure.empty : age(r.worst.since_ms, ctx)
     const lastSeg: Seg = stale ? staleBadge(GLYPHS.state.failed + last) : { text: last, ...(st.wordKey === undefined ? {} : { color: st.wordKey }) }
     const press = 'fleet:see:' + r.line.line_id
@@ -101,7 +101,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
     return [{ text: mark, press }, { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }), press }, { text: r.line.label + ' ', press },
       { text: word + ' ', ...(st.wordKey === undefined ? {} : { color: st.wordKey }) }, { text: fit(task(r), Math.max(8, cols - 2 - displayWidth(r.line.label) - 1 - displayWidth(word) - 1 - 6)) + ' ' }, lastSeg]
   }
-  const head = rows.slice(0, Math.min(FOLD_AT, total))
+  const head = rows.slice(0, Math.min(FOLD_AT, rows.length))
   head.forEach((r, i) => body.push(lineRow(r, i)))
   if (rest > 0) {
     body.push([{ text: (wide ? '  ' : ' ') + (stale ? GLYPHS.state.failed + ' ' : '') + GLYPHS.state.pending + ' ' + (view.expanded ? ctx.t('page.fleet.unfolded', { rest, shown: head.length, total }) : ctx.t('page.fleet.folded', { rest, shown: head.length, total })), color: stale ? PALETTE.broken : PALETTE.idle, press: 'fleet:fold' }])

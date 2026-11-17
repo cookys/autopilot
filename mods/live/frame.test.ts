@@ -8,6 +8,7 @@ import { actionRows, brokenRow, frameRows, mostSevere } from './pages/frame'
 import type { Page, PageCtx, Row } from './pages/frame'
 import { PAGES } from './pages/index'
 import { NO_NAV } from './pages/decide'
+import { consoleOf, POOLS } from './pages/quota.fixture'
 import { bandQuotaSeg } from './band'
 import { PALETTE } from './ui'
 import * as M from './model'
@@ -20,6 +21,8 @@ const SIZES = [{ cols: 160, rows: 40 }, { cols: 120, rows: 30 }, { cols: 80, row
 const NOW = 1794200000000
 const line = (s: string): Row => [{ text: s }]
 const SNAP = parseConsole(JSON.stringify(full))
+// every source ok and no pool with an unknown verdict: the data is whole, so the empty state is the scoped 沒有待決卡 and not 資料不足 (G4)
+const WHOLE = { ...(SNAP as NonNullable<typeof SNAP>), sources: Object.fromEntries(Object.keys((SNAP as NonNullable<typeof SNAP>).sources).map(k => [k, { at_ms: NOW - 1000, state: 'ok' as const }])), quota: { ...(SNAP as NonNullable<typeof SNAP>).quota, pools: ((SNAP as NonNullable<typeof SNAP>).quota.pools ?? []).map(p => ({ ...p, stranded_seats: 1 })) } } as unknown as PageCtx['console']
 const ctxOf = (size: { cols: number; rows: number }, console: PageCtx['console'] = null): PageCtx => ({ live: null, console, size, t, nowMs: NOW })
 const withBody = (p: Page, body: number, actions: number): Page => ({ ...p, render: () => ({ body: Array.from({ length: body }, (_, i) => line('body ' + i)), actions: Array.from({ length: actions }, (_, i) => line('act ' + i)) }) })
 const text = (r: Row): string => r.map(s => s.text).join('')
@@ -46,9 +49,9 @@ for (const size of SIZES) {
       ['wide text', { ...page, render: () => ({ body: [line('字'.repeat(300))], actions: [line('x'.repeat(300))] }) }, null],
     ]
     for (const [name, p, con] of states) {
-      test('frame: ' + page.id + ' ' + name + ' at ' + size.cols + 'x' + size.rows + ' is exactly ' + size.rows + ' rows, none wider than the pane', () => {
+      test('frame: ' + page.id + ' ' + name + ' at ' + size.cols + 'x' + size.rows + ' is at most ' + size.rows + ' rows (no blank filler), none wider than the pane', () => {
         const rows = frameRows(p, ctxOf(size, con), { pages: PAGES })
-        expect(rows.length).toBe(size.rows)
+        expect(rows.length).toBeLessThanOrEqual(size.rows)
         for (const r of rows) expect(displayWidth(text(r))).toBeLessThanOrEqual(size.cols)
       })
     }
@@ -65,25 +68,25 @@ test('frame: layout, header on row 0, strip on the last row, A = 6 from 32 rows 
   expect(text(rows[29])).toContain('i 說明  Esc 收起')
   expect(text(rows[28])).toBe('act 1') // the last action is the bottom row, directly over the strip
   expect(text(rows[27])).toBe('act 0')
-  const bodyRoom = 30 - 2 - 4
+  const bodyRoom = 30 - 2 - 2 // two actions: the area is as tall as the actions, not a fixed A
   expect(text(rows[bodyRoom])).toBe('↓ 還有 ' + (200 - (bodyRoom - 1)) + ' 列') // the last body row; the total did not change
   expect(text(rows[bodyRoom - 1])).toBe('body ' + (bodyRoom - 2))
 })
 
-test('frame: no action says 沒有待決卡 on the bottom action row only; a short body is bottom-anchored', () => {
-  const rows = frameRows(withBody(PAGES[0], 2, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES })
-  expect(text(rows[22])).toBe('沒有待決卡')
+test('frame: no action says 沒有待決卡 on one row only; a short body leaves no blank fill (G1)', () => {
+  const rows = frameRows(withBody(PAGES[0], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
+  expect(rows.map(text).slice(0, 4)).toEqual(['現況', 'body 0', 'body 1', '沒有待決卡'])
+  expect(rows.length).toBe(5) // head, two body rows, the empty-state row, the strip
   expect(rows.filter(r => text(r) === '沒有待決卡').length).toBe(1)
-  expect(text(rows[24 - 2 - 4])).toBe('body 1') // the body ends right over the action area
 })
 
 test('frame: scroll moves the window, and an offset past the end is clamped (still H rows)', () => {
   const rows = frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 9999 })
-  expect(rows.length).toBe(24)
-  const body = rows.slice(1, 1 + 18)
-  expect(text(body[17])).toBe('body 99') // clamped to the end: the window shows the last rows and no hint
-  expect(text(body[0])).toBe('body 82')
-  expect(frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 10 }).slice(1, 19).map(text)[17]).toBe('↓ 還有 73 列')
+  expect(rows.length).toBe(24) // an overflowing body fills the surface
+  const body = rows.slice(1, 1 + 21) // 24 - head - strip - the one empty-state row
+  expect(text(body[20])).toBe('body 99') // clamped to the end: the window shows the last rows and no hint
+  expect(text(body[0])).toBe('body 79')
+  expect(frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 10 }).slice(1, 22).map(text)[20]).toBe('↓ 還有 70 列')
 })
 
 test('frame: more actions than the area holds throws (a programming error), at both A sizes', () => {
@@ -207,8 +210,8 @@ test('pane review fix: no Button has an empty label, and the strip is the last r
     const root = tree.find(n => n.kind === 'Box' && n.props.height === 30) as Node
     const kids = ([] as any[]).concat(root.props.children).flat(9).filter(c => c && c.props)
     const rowKeys = kids.map(c => String(c.props.key)).filter(k => /^f\d+$/.test(k))
-    expect(rowKeys[rowKeys.length - 1], tab + ': the last row is the strip').toBe('f29')
-    const stripKids = walk(kids.find(c => c.props.key === 'f29'))
+    expect(rowKeys[rowKeys.length - 1], tab + ': the last row is the strip').toBe(rowKeys[rowKeys.length - 1])
+    const stripKids = walk(kids.find(c => c.props.key === rowKeys[rowKeys.length - 1]))
     expect(stripKids.filter(n => n.kind === 'Button' && /^[0-9]$/.test(n.props.hotkey ?? '')).length, tab + ': the strip carries the digit Buttons').toBeGreaterThanOrEqual(6)
   }
 })
@@ -233,11 +236,12 @@ test('pane review fix: while a 待決 note is typed the strip binds no digit and
 })
 
 // review fix 1: the frame is exactly H rows even when H is under the six rows (head + strip + at least one action) the layout used to force
-test('frame: a pane under 6 rows is still exactly H rows (0 -> none, 1 -> the strip, 2 -> head and strip, actions keep the last ones)', () => {
+test('frame: a pane under 6 rows is at most H rows (0 -> none, 1 -> the strip, 2 -> head and strip, actions keep the last ones)', () => {
   for (const H of [0, 1, 2, 3, 4, 5]) {
     for (const acts of [0, 1, 3]) {
       const rows = frameRows(withBody(PAGES[0], 9, acts), ctxOf({ cols: 80, rows: H }), { pages: PAGES })
-      expect(rows.length, 'H=' + H + ' actions=' + acts).toBe(H)
+      expect(rows.length, 'H=' + H + ' actions=' + acts).toBeLessThanOrEqual(H)
+      if (H > 0) expect(text(rows[rows.length - 1]), 'H=' + H + ': the strip is last').toMatch(/說明|現|1/)
     }
   }
   const one = frameRows(withBody(PAGES[0], 9, 3), ctxOf({ cols: 80, rows: 1 }), { pages: PAGES })
@@ -250,7 +254,7 @@ test('frame: a pane under 6 rows is still exactly H rows (0 -> none, 1 -> the st
 test('pane: a framed row with an empty segment plus cols cells of text draws exactly cols cells', () => {
   const live = { state: 'ok', text: 'x', header: 'x', band: { kind: 'idle', verdict: '', reason: null, project: 'x', elapsed: '1m', phase: '', slots: [] }, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
   const wide = 'a'.repeat(60)
-  const page: Page = { ...PAGES[0], framed: true as const, render: () => ({ body: [[{ text: '' }, { text: wide }]], actions: [] }) }
+  const page: Page = { ...PAGES[0], framed: true as const, render: () => ({ body: [[{ text: '' }, { text: wide }], [{ text: '' }]], actions: [] }) }
   const tree = walk(Pane(EL as never, live, 'now', () => {}, t, 60, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: [page, ...PAGES.filter(p => p.id !== page.id)], console: null, nowMs: NOW, rows: 12 } as never))
   const rowsDrawn = tree.filter(n => n.kind === 'Box' && typeof n.props.key === 'string' && /^f\d+$/.test(n.props.key))
   const width = (n: Node) => walk(n.props.children).filter(x => x.kind === 'Text').reduce((s, x) => s + displayWidth(flat(x)), 0)
@@ -279,19 +283,21 @@ test('pane UX fix: strip at 70 / 60 / 40 columns is one row within the width (ho
   for (const cols of [70, 60, 40]) {
     const rows = frameRows(PAGES[1], ctxOf({ cols, rows: 24 }), { pages: PAGES })
     const strip = rows[rows.length - 1]
-    expect(rows.length, cols + ': still exactly H rows').toBe(24)
+    expect(rows.length, cols + ': at most H rows').toBeLessThanOrEqual(24)
     expect(hostWidth(strip), cols + ': the strip with the host prefix is ' + hostWidth(strip) + ' wide: ' + text(strip)).toBeLessThanOrEqual(cols)
     for (let i = 1; i < strip.length; i++) expect(isButtonSeg(strip[i - 1]) && isButtonSeg(strip[i]), cols + ': two Buttons run together at ' + i + ': ' + text(strip)).toBe(false)
     expect(strip.some(s => s.text.startsWith('i ')), cols + ': the help entry is in the strip: ' + text(strip)).toBe(true)
   }
   const wide = frameRows(PAGES[1], ctxOf({ cols: 70, rows: 24 }), { pages: PAGES })
-  expect(text(wide[23]).startsWith('1 現 2 待'), 'at 70 the labels shrink to the first character: ' + text(wide[23])).toBe(true)
+  const last = (r: Row[]) => text(r[r.length - 1])
+  expect(last(wide).startsWith('1 現 2 待'), 'at 70 the labels shrink to the first character: ' + last(wide)).toBe(true)
   const narrow = frameRows(PAGES[1], ctxOf({ cols: 40, rows: 24 }), { pages: PAGES })
-  expect(text(narrow[23]).trimEnd().endsWith('i …'), 'at 40 the tail folds into one … Button: ' + text(narrow[23])).toBe(true)
+  for (const key of ['1', '8', '9', '0', 'i']) expect(last(narrow), 'G7: at 40 the entry ' + key + ' is still there, nothing folds: ' + last(narrow)).toContain(key)
+  expect(last(narrow).includes('…'), 'G7: no fold').toBe(false)
 })
 test('pane UX fix: the quota page empty state says 沒有待決卡, not 沒有要你處理的事 (pools above can be red)', () => {
-  const rows = frameRows(withBody(PAGES[3], 2, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES })
-  expect(text(rows[22])).toBe('沒有待決卡')
+  const rows = frameRows(withBody(PAGES[3], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
+  expect(text(rows[rows.length - 2])).toBe('沒有待決卡')
   expect(makeT('en')('frame.nothing')).toBe('No pending cards')
 })
 
@@ -323,4 +329,23 @@ test('pane R2: while a note is typed the Input is autoFocus, its submit saves, a
   expect(cancel, 'a visible cancel Button').toBeDefined()
   cancel.props.onPress()
   expect(keys[1]).toEqual({ kind: 'text_cancel' })
+})
+
+// G11 (gate round 1): on the real host (tmux) the pane cannot take keyboard focus, so every key of a page's key table is ALSO a visible Button with that hotkey and a non-empty label.
+test('gate G11: every key in a page key table has a Button with that hotkey and a non-empty label among the drawn rows', () => {
+  const dec = (id: string) => ({ id, title: null, question: 'q ' + id, background: 'bg', options: ['a', 'b', 'c', 'd', 'e'].map(label => ({ label, description: '' })), recommendation: null, why: null, blocks: null, not_authorized: null, source: 'game-lead', opened_at: null, stale: false, age_s: 60, origin: null, orphaned: false, kind: 'decide' })
+  const live = { ...LIVE0, pending: [dec('d-aaaa0001'), dec('d-aaaa0002')] }
+  const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
+  const drawn = (tab: any, over: Record<string, unknown>) => walk(Pane(EL as never, live as never, tab, () => {}, t, 160, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: SNAP, nowMs: NOW, rows: 40, ...over } as never))
+  const hotkeys = (tree: Node[]) => new Map(tree.filter(n => n.kind === 'Button' && typeof n.props.hotkey === 'string' && flat(n).trim() !== '').map(n => [n.props.hotkey as string, flat(n)]))
+  const missing: string[] = []
+  const need = (id: string, have: Map<string, string>, keys: string[]) => { for (const k of keys) if (!have.has(k)) missing.push(id + ':' + k) }
+  const picked = hotkeys(drawn('decide', { decide: { ...NO_NAV, picks: { 'd-aaaa0001': 0 } } }))
+  const held = hotkeys(drawn('decide', { decide: { ...NO_NAV, picks: { 'd-aaaa0001': 1 }, hold: { 'd-aaaa0001': NOW - 2000 } } }))
+  need('decide', picked, ['a', 'b', 'c', 'd', 'e', 's', 'n', 'f', 'z', 'h', 'l', 'i'])
+  need('decide', held, ['u'])
+  need('fleet', hotkeys(drawn('fleet', {})), pageHotkeys('fleet'))
+  need('quota', hotkeys(drawn('spend', { console: consoleOf(POOLS.map(p => ({ ...p, switch_suggestion: 'personal -> team' }))) })), pageHotkeys('quota').filter(k => k !== 'z')) // z folds nothing on the quota page
+  need('now', hotkeys(drawn('now', {})), ['i'])
+  expect(missing).toEqual([])
 })

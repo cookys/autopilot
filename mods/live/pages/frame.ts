@@ -3,16 +3,17 @@
 // (many or few cards, folded, stale, no source) can make the pane taller or shorter than `ctx.size.rows`.
 //
 //   row 0          header: the page name, then the most severe broken marker (staleBadge) when a source is broken
-//   H-2-A rows     body, bottom-anchored; an overflow turns its LAST row into `↓ 還有 N 列`, the total unchanged
-//   A rows         action area, A = 6 when H >= 32 else 4; the last action is the bottom row (next to the tab strip), the rest stand above it in order; none -> `沒有待決卡` on the bottom row
-//   last row       tab strip: `1 現況 2 待決 ...  i 說明  Esc 收起`; each tab entry carries press `tab:<digit>:<id>`
+//   body rows      the page's rows, wrapped (never cut) to the width; an overflow turns the LAST row into `↓ 還有 N 列`, the total unchanged
+//   A rows         the actions (at most 6 when H >= 32 else 4), directly under the body; none -> one row: `沒有待決卡`, or `資料不足，無法判定` when a source is missing or a pool's verdict is unknown
+//   Never a blank filler row between the content and the strip (gate round 1, G1): a page with little to say is drawn SHORTER than the surface, the body takes every row the actions leave.
+//   last row       tab strip: `1 現況 2 待決 ...  i 說明  Esc 收起`; each tab entry carries press `tab:<digit>:<id>`; every entry 1-8, 9, 0 and i stays, the names shorten first (G7)
 import type { ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
 import type { LiveSnapshot, Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import { PAGES } from './index'
-import { brokenRow, staleBadge } from './rows'
+import { brokenRow, dataMissing, staleBadge } from './rows'
 import type { Row } from './rows'
 
 export type { Row } from './rows'
@@ -38,7 +39,9 @@ export function mostSevere(ctx: PageCtx): Seg | null {
   }
   if (best === null) return null
   const mins = best.at === null ? null : Math.max(0, Math.floor((ctx.nowMs - best.at) / 60000))
-  return staleBadge(GLYPHS.state.failed + ' ' + ctx.t('frame.src_' + best.state, { name: best.name, min: mins === null ? '-' : String(mins) }))
+  const known = ctx.t('console.command.src.' + best.name)
+  const name = known === 'console.command.src.' + best.name ? best.name : known // a source with no zh-TW word keeps the feed's id; the known ones never show a field name
+  return staleBadge(GLYPHS.state.failed + ' ' + ctx.t('frame.src_' + best.state, { name, min: mins === null ? '-' : String(mins) }))
 }
 
 // ---- drawing helpers ----
@@ -56,9 +59,35 @@ function clip(row: Row, cols: number): Row {
   return out.length === 0 ? blank() : out
 }
 
+// A row wider than the pane is wrapped onto further rows at the width, never cut with an ellipsis: a reason or a command shown half is worse than a taller page (A10, G6).
+function wrapRow(row: Row, cols: number): Row[] {
+  if (cols <= 0 || row.reduce((w, x) => w + displayWidth(x.text), 0) <= cols) return [row]
+  const out: Row[] = []
+  let cur: Row = []
+  let used = 0
+  for (const seg of row) {
+    let buf = ''
+    for (const ch of seg.text) {
+      const w = displayWidth(ch)
+      if (used + w > cols) {
+        if (buf !== '') cur.push({ ...seg, text: buf })
+        out.push(cur)
+        cur = []
+        buf = ''
+        used = 0
+      }
+      buf += ch
+      used += w
+    }
+    if (buf !== '') cur.push({ ...seg, text: buf })
+  }
+  if (cur.length > 0) out.push(cur)
+  return out
+}
+
 // The host draws every hotkey Button as `<key>: <label>`, so each Button is one cell wider than its text (`1 現況` -> `1: 現況`). A Button is measured with that prefix, and every pair of
-// neighbouring Buttons has a one-cell separator. When the row does not fit: first the page labels shrink to their first character, then the Esc hint goes, then the tail of the pages
-// (9, 0, ...) and the help entry fold into one `i …` Button that opens the help page. The row is always one row, never wider than the surface.
+// neighbouring Buttons has a one-cell separator. When the row does not fit: the page labels shrink to their first character, then the Esc hint goes, then the labels go and only the
+// keys stay. Every entry (1-8, 9, 0, i) is always there: nothing folds into a `…` (G7). The row is always one row, never wider than the surface.
 const HOST_PREFIX = 1
 const HELP_KEY = 'i'
 function strip(page: Page, ctx: PageCtx, opts: FrameOpts): Row {
@@ -68,34 +97,34 @@ function strip(page: Page, ctx: PageCtx, opts: FrameOpts): Row {
   const first = (s: string): string => [...s][0] ?? s
   const helpLabel = ctx.t('frame.help')
   const esc = '  Esc ' + ctx.t('frame.close')
-  const entry = (x: { id: string; key: string; label: string }, short: boolean): Row => {
+  type Form = 'full' | 'short' | 'keys'
+  const labelOf = (x: { label: string }, f: Form): string => (f === 'full' ? x.label : f === 'short' ? first(x.label) : '')
+  const entry = (x: { id: string; key: string; label: string }, f: Form): Row => {
     const on = x.id === active
-    return [{ text: x.key + ' ' + (short ? first(x.label) : x.label), press: 'tab:' + x.key + ':' + x.id, ...(on ? { color: PALETTE.here } : {}) }, { text: ' ' }]
+    const l = labelOf(x, f)
+    return [{ text: l === '' ? x.key : x.key + ' ' + l, press: 'tab:' + x.key + ':' + x.id, ...(on ? { color: PALETTE.here } : {}) }, { text: ' ' }]
   }
-  const entryW = (x: { key: string; label: string }, short: boolean): number => displayWidth(x.key) + 1 + HOST_PREFIX + displayWidth(short ? first(x.label) : x.label) + 1
-  const build = (shown: typeof all, short: boolean, help: string, tail: string): { row: Row; width: number } => ({
-    row: [...shown.flatMap(x => entry(x, short)), { text: ' ' }, { text: HELP_KEY + ' ' + help + tail, dim: true }],
-    width: shown.reduce((w, x) => w + entryW(x, short), 1) + displayWidth(HELP_KEY) + 1 + HOST_PREFIX + displayWidth(help + tail),
+  const entryW = (x: { key: string; label: string }, f: Form): number => displayWidth(x.key) + (labelOf(x, f) === '' ? 0 : 1 + displayWidth(labelOf(x, f))) + HOST_PREFIX + 1
+  const build = (f: Form, help: string, tail: string): { row: Row; width: number } => ({
+    row: [...all.flatMap(x => entry(x, f)), { text: ' ' }, { text: HELP_KEY + (help === '' ? '' : ' ' + help) + tail, dim: true }],
+    width: all.reduce((w, x) => w + entryW(x, f), 1) + displayWidth(HELP_KEY) + HOST_PREFIX + (help === '' ? 0 : 1 + displayWidth(help)) + displayWidth(tail),
   })
-  const tries = [build(all, false, helpLabel, esc), build(all, true, helpLabel, esc), build(all, true, helpLabel, '')]
+  const tries = [build('full', helpLabel, esc), build('short', helpLabel, esc), build('short', helpLabel, ''), build('keys', helpLabel, ''), build('keys', '', '')]
   const fits = tries.find(x => x.width <= ctx.size.cols)
-  if (fits !== undefined) return clip(fits.row, ctx.size.cols)
-  for (let k = all.length; k >= 0; k--) {
-    const f = build(all.slice(0, k), true, '…', '')
-    if (f.width <= ctx.size.cols || k === 0) return clip(f.row, ctx.size.cols)
-  }
-  return blank()
+  return clip((fits ?? tries[tries.length - 1]).row, ctx.size.cols)
 }
 
-// exactly ctx.size.rows rows, whatever the page returned
+// <= ctx.size.rows rows, whatever the page returned: head, the (wrapped) body, the actions right under it, the strip. No blank row fills the gap when the page is short (G1).
 export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
   const H = ctx.size.rows
   const full = actionRows(H)
-  const { body, actions } = page.render(ctx)
+  const { body: raw, actions } = page.render(ctx)
   if (actions.length > full) throw new Error('frame: ' + page.id + ' returned ' + actions.length + ' actions, the action area holds ' + full)
   if (H <= 0) return []
   if (H === 1) return [clip(strip(page, ctx, opts), ctx.size.cols)]
-  const A = Math.min(full, H - 2) // under 6 rows the action area gives way (the last actions stay), then the body: head and strip are always drawn
+  const body = raw.flatMap(r => wrapRow(r, ctx.size.cols))
+  const acts: Row[] = actions.length === 0 ? [[{ text: ctx.t(dataMissing(ctx.console, ctx.nowMs, ctx.t) ? 'frame.unknown' : 'frame.nothing'), dim: true }]] : actions
+  const A = Math.min(acts.length, H - 2) // the action rows give way last-first only when the surface is under 3 rows
   const room = H - 2 - A
   const head: Row = [{ text: ctx.t('tab.' + page.id) }, ...(mostSevere(ctx) === null ? [] : [{ text: '  ' }, mostSevere(ctx) as Seg])]
   let shown: Row[]
@@ -108,10 +137,5 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
       shown = [...body.slice(from, from + keep), ...(room === 0 ? [] : [[{ text: ctx.t('frame.more', { n: body.length - from - keep, arrow: GLYPHS.structure.behind }), dim: true }] as Row])]
     }
   }
-  const bodyBlock: Row[] = [...Array.from({ length: room - shown.length }, blank), ...shown]
-  const actionBlock: Row[] = Array.from({ length: A }, blank)
-  if (A === 0) { /* no room for an action row */ }
-  else if (actions.length === 0) actionBlock[A - 1] = [{ text: ctx.t('frame.nothing'), dim: true }]
-  else actions.slice(-A).forEach((r, i, kept) => { actionBlock[A - kept.length + i] = r })
-  return [head, ...bodyBlock, ...actionBlock, strip(page, ctx, opts)].map(r => clip(r, ctx.size.cols))
+  return [head, ...shown, ...(A === 0 ? [] : acts.slice(-A)), strip(page, ctx, opts)].map(r => clip(r, ctx.size.cols))
 }

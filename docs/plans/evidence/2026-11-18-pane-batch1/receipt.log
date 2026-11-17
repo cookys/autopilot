@@ -65,3 +65,5 @@ mods/live/run-tests.sh: 1392 pass, 15 fail = exactly bandrow-brief/fb.txt (diff 
 > (fail) now R3: a seat_blocked pool is the red worst pool on 現況 and the first red row on 額度
 > (fail) now R4: console cards no_source plus one own pending card still shows the [2] jump
 == R1-R4 GREEN: mods/live/run-tests.sh 1408 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty); sync-all and --check ok
+== GATE1 (G1-G11) RED first: gate1.test.ts "gate G1".."gate G10" and frame.test.ts "gate G11: every key in a page key table has a Button with that hotkey and a non-empty label among the drawn rows" failed against the R1-R4 tree (blank filler rows, 現況 order, per-page line totals, 「沒有要你處理的事」, unknown pools red, truncated reasons, folded strip, raw field names, F 池/離線 words, keys without Buttons).
+== GATE1 GREEN: gate1.test.ts 10 pass; mods/live/run-tests.sh 1419 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty); collateral goldens (fleet/now/quota/frame.golden/integration.golden/decide/frame) moved to the no-filler layout; sync-all and --check ok

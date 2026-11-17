@@ -21,6 +21,7 @@ const MIN = 60000
 const HOUR = 3600000
 
 export type Verdict = { pool: string; role: PoolRole; text: string; kind: string; stale: boolean; staleMin: number | null; waste: number | null; exhaustMs: number | null }
+export const isUnknownPool = (v: Verdict): boolean => v.kind === 'limit_nosw' || v.kind === 'exhaust_nosw'
 
 // minutes since the pool's oldest stale reading: the feed's own number first, else the observed time; null when neither says
 function staleMinutes(p: QuotaPool, nowMs: number): number | null {
@@ -106,24 +107,55 @@ export function worstPool(pools: QuotaPool[] | null, nowMs: number, t: T = makeT
   return { pool: poolLabel(first.pool), role: first.role, text }
 }
 
-// the one display name of a pool on every page: `pool-f` / `pool_f` -> `F 池`; any other id (team, personal) is shown as the feed spells it
+// canonical pool_key across feeds (`pool-f`, `pool_f`, `F 池`, `f池` -> `pool-f`; other names trimmed + lowercased) so duplicate pool entries collapse to one verdict
+export const poolKey = (pool: string): string => {
+  const s = pool.trim()
+  const m = /^pool[-_]?([a-z])$/i.exec(s) ?? /^([a-z])\s*池$/i.exec(s)
+  return m === null ? s.toLowerCase() : 'pool-' + m[1].toLowerCase()
+}
+
+// the one display name of a pool on every page: `pool-f` / `pool_f` / `f 池` -> `F 池`; any other id (team, personal) is shown as the feed spells it
 export const poolLabel = (pool: string): string => {
-  const m = /^pool[-_]?([a-z])$/i.exec(pool)
-  return m === null ? pool : m[1].toUpperCase() + ' 池'
+  const s = pool.trim()
+  const m = /^pool[-_]?([a-z])$/i.exec(s) ?? /^([a-z])\s*池$/i.exec(s)
+  return m === null ? s : m[1].toUpperCase() + ' 池'
 }
 
 // The ONE normalisation of the console's pools, used by the 額度 page, the 現況 page and the band (so the three always name the same pool): no forecast source ->
-// every projection is dropped before the verdict is judged (a leftover number cannot paint a green); a `seat_blocked` item (a seat whose pool is used up) is that pool's limit_hit fact.
-// null = no pools source.
+// every projection is dropped before the verdict is judged (a leftover number cannot paint a green); a `seat_blocked` item (a seat whose pool is used up) is that pool's limit_hit fact;
+// duplicate `pool_key` entries are deduplicated to the single highest-priority verdict. null = no pools source.
 export function normalizedPools(con: ConsoleSnapshot | null): QuotaPool[] | null {
   if (con === null || con.quota.pools === null) return null
   const paceOk = con.sources.quota_forecast?.state === 'ok'
   // a seat_blocked item is also proof that a seat is stranded in that pool: with no switch data its count stands in for stranded_seats (so the pool is red, not unknown); a number the feed has stays
   const blocked = new Map<string, number>()
-  for (const i of con.items) if (i.kind === 'seat_blocked' && typeof i.facts.pool === 'string') blocked.set(i.facts.pool, (blocked.get(i.facts.pool) ?? 0) + 1)
-  return con.quota.pools.map(p => {
+  for (const i of con.items) {
+    if (i.kind === 'seat_blocked' && typeof i.facts.pool === 'string') {
+      const k = poolKey(i.facts.pool)
+      blocked.set(k, (blocked.get(k) ?? 0) + 1)
+    }
+  }
+  const mapped = con.quota.pools.map(p => {
     const q = paceOk ? p : { ...p, projected_pct_at_reset: null, projected_exhaustion_at_ms: null, burn_pct_per_h: null }
-    const n = blocked.get(p.pool)
+    const n = blocked.get(poolKey(p.pool))
     return n === undefined ? q : { ...q, limit_hit: true, stranded_seats: q.stranded_seats ?? n }
   })
+  const groups = new Map<string, QuotaPool[]>()
+  for (const p of mapped) {
+    const k = poolKey(p.pool)
+    const list = groups.get(k)
+    if (list === undefined) groups.set(k, [p])
+    else list.push(p)
+  }
+  const refMs = con.generated_at_ms > 0 ? con.generated_at_ms : 0
+  const out: QuotaPool[] = []
+  for (const list of groups.values()) {
+    if (list.length === 1) { out.push(list[0]); continue }
+    const tagged = list.map((p, idx) => ({ ...p, pool: String(idx) }))
+    const bestIdx = Number(rankPools(tagged, refMs)[0].pool)
+    const chosen = list[bestIdx] ?? list[0]
+    const canonical = list.find(x => /^pool[-_]?[a-z]$/i.test(x.pool.trim()))?.pool ?? list[0].pool
+    out.push({ ...chosen, pool: canonical })
+  }
+  return out
 }

@@ -1,13 +1,16 @@
 // pages/now.test.ts — S3, page 1 現況 (r2 mockups 現況 at 160x40, 120x30, 80x24 and the 80x24 state variants). Golden = the page's content rows (header, blank filler, actions and strip
 // stripped; the frame bottom-anchors the body where the mockup draws it top-anchored, so the blank rows between content and actions are not compared).
 import { test, expect } from 'claude-code/testing'
+import { PAGES } from './index'
 import { frameRows, actionRows, staleBadge as frameBadge, brokenRow as frameBroken } from './frame'
 import { nowPage, seatQuota, parseSeatQuota } from './now'
 import { staleBadge, brokenRow } from './rows'
 import { makeT } from '../i18n'
+import { displayWidth } from '../model'
 import { PALETTE } from '../ui'
 import { renderQuota } from './quota'
-import { POOLS } from './quota.fixture'
+import { poolKey, poolLabel } from './quota-pick'
+import { POOLS, consoleOf } from './quota.fixture'
 import type { ConsoleSnapshot } from '../console'
 
 const t = makeT('zh-TW')
@@ -67,14 +70,14 @@ const GOLD_160 = [
   '▸ ✗ capacity--claude 卡住 2 小時：等待沒寫等誰（wait_untyped）',
   '  ⊘ hangar--claude 01M7N2ZC 證據逾期 40 分',
   '  ▲ 主機 h6 離線 12 分',
-  '  ▲ 額度 personal 判定未知：缺換池資料（capacity）',
+  '  ? 額度 personal 判定未知：缺換池資料（capacity）',
   '── 本席 codeforge--claude ────────────────────────────',
   '  位置   plan/shared-tui · 階段 plan · ctx 41%',
   '  任務   ⋯ 01M7N307 r2 草稿 03:00 · 1/3',
   '  背景   ● 盤點子代理 4 分',
   '  派工   ● 1 執行中（sonnet hand 23 分）',
   '  審查   plan 第 1 代 2/2 席回來',
-  '  花費   本席（池 team）5 小時 17% · 7 天 68% · 今天 $3.10（seats --quota 40 秒前）',
+  '  花費   本席（池 team）5 時 17% · 7 天 68% · 今天 $3.10（seats --quota 40 秒前）',
   '  殘留   2 項可清',
   '── 最近對話 ──────────────────────────────────────────',
   '  PM 01M7N33J 三條硬規定：分頁列在最下一列、高度固定、過期標紅',
@@ -87,7 +90,7 @@ const GOLD_80 = [
   '▸✗ capacity 卡住 2 時：等待沒寫等誰',
   ' ⊘ hangar 01M7N2ZC 證據逾 40 分',
   ' ▲ 主機 h6 離線 12 分',
-  '▲ 額度 personal 判定未知：缺換池資料（capacity）',
+  '? 額度 personal 判定未知：缺換池資料（capacity）',
   '── 本席 codeforge ──',
   'plan/shared-tui · plan · ctx 41%',
   '⋯ 01M7N307 r2 草稿 03:00',
@@ -238,5 +241,82 @@ test('now R4: console cards no_source plus one own pending card still shows the 
   const acts = nowPage.render(ctxOf(160, 40, c, live({ pending: [own] }))).actions.flat()
   expect(acts.some(s => s.text === '[2]'), 'the [2] jump is drawn').toBe(true)
   expect(acts.map(s => s.text).join('')).toContain('[2]')
+})
+
+test('now R1: on every page at 80x24, 120x30, 160x40, each pool_key appears at most once and fleet.brief pool warnings are never drawn separately', () => {
+  seatQuota.reset()
+  const dupPools = [
+    { ...POOLS[3], pool: 'pool-f', limit_hit: true, stranded_seats: null },
+    { ...POOLS[4], pool: 'F 池', limit_hit: false, projected_pct_at_reset: 120 },
+    { ...POOLS[3], pool: 'pool-b', limit_hit: true, stranded_seats: null },
+    POOLS[5], // trinity
+  ]
+  const briefWarnings = [
+    { id: 'quota:pool-f:weekly', kind: 'quota', severity: 1, state: 'failed', needs_operator: true, title: 'F 池重置前用完', text: 'F 池重置前用完：週 99%', since_ms: NOW - 10 * MIN, line_id: null, to_console: true, answerable_by: [], facts: {} },
+    { id: 'seat_blocked:s1', kind: 'seat_blocked', severity: 1, state: 'failed', needs_operator: true, title: 's1 額度用完', text: 's1 額度用完：F 池 7 天用盡', since_ms: NOW - 5 * MIN, line_id: null, to_console: true, answerable_by: [], facts: { seat: 's1', pool: 'pool-f' } },
+  ]
+  const snap = consoleOf(dupPools, { cards: [], items: briefWarnings, sources: { tasks: { at_ms: NOW - 10_000, state: 'ok' }, hosts: { at_ms: NOW - 10_000, state: 'ok' }, cards: { at_ms: NOW - 10_000, state: 'ok' }, quota_now: { at_ms: NOW - 10_000, state: 'ok' }, quota_forecast: { at_ms: NOW - 10_000, state: 'ok' } } }) as ConsoleSnapshot
+  const keys = ['pool-f', 'pool-b', 'trinity']
+  for (const page of PAGES.filter(p => p.framed)) {
+    for (const [cols, rows] of [[80, 24], [120, 30], [160, 40]] as const) {
+      const lines = frameRows(page, ctxOf(cols, rows, snap, null)).map(text)
+      expect(lines.join('\n')).not.toContain('重置前用完')
+      // Exclude the quota focus heading `── 焦點... ──` when counting distinct pool verdict rows per page
+      const verdictLines = lines.filter(l => !l.startsWith('── 焦點'))
+      for (const k of keys) {
+        const label = poolLabel(k)
+        const hits = verdictLines.filter(l => l.includes(label) || l.includes(poolKey(k)))
+        expect(hits.length, `${page.id} ${cols}x${rows} ${k}: ${hits.join(' | ')}`).toBeLessThanOrEqual(1)
+      }
+    }
+  }
+})
+
+test('now R2: shortBody (<= 4 rows) combines Button + pending summary first, orders pending -> red -> unknown -> yellow, and turns overflow into ↓ 還有 N 項', () => {
+  seatQuota.reset()
+  const cards = [
+    { id: 'd-00000001', question: '合併主幹前是否要先凍結第二波評測排程並通知各線負責人確認相容性與回滾方案', status: 'open' as const, opened_at_ms: NOW - 24 * 60 * MIN, executor_display: 'PM' },
+    { id: 'd-00000002', question: 'q2', status: 'open' as const, opened_at_ms: NOW - 2 * 60 * MIN, executor_display: 'PM' },
+    { id: 'd-00000003', question: 'q3', status: 'open' as const, opened_at_ms: NOW - 30 * MIN, executor_display: 'PM' },
+  ]
+  const pools = [
+    POOLS.find(p => p.pool === 'trinity')!, // red
+    POOLS.find(p => p.pool === 'personal')!, // unknown
+    POOLS.find(p => p.pool === 'grok')!, // yellow (waste)
+  ]
+  const lines = [{ line_id: 'rec', label: '復原線', lead_display: 'PM', issues: [{ rule: 'T4', state: 'failed', subject: '成員離線', since_ms: NOW - 20 * MIN, to_console: true }] }]
+  const c = con({ counts: { ...con().counts, decisions: 3 }, cards, items: [], lines, quota: { pools: pools as never, seats: [] }, sources: { hosts: { at_ms: NOW - 10_000, state: 'ok' }, tasks: { at_ms: NOW - 10_000, state: 'ok' }, quota_forecast: { at_ms: NOW - 10_000, state: 'ok' } } })
+  const shortRendered = nowPage.render({ ...(ctxOf(80, 7, c, live({ detail: { ...(live() as any).detail, residue: null } })) as object), shortBody: true } as never)
+  expect(shortRendered.body[0][0].press).toBe('tab:2:decide')
+  expect(text(shortRendered.body[0]).startsWith('→ 待決 3 張（最舊 1 天）：合併主幹前')).toBe(true)
+  expect(text(shortRendered.body[0]).endsWith('…')).toBe(true)
+  const framed = frameRows(nowPage, ctxOf(80, 7, c, live({ detail: { ...(live() as any).detail, residue: null } }))).map(text).slice(1, 5)
+  expect(framed[0]).toContain('→ 待決 3 張（最舊 1 天）：')
+  expect(framed[1]).toContain('復原線')
+  expect(framed[2]).toContain('trinity')
+  expect(framed[3]).toBe('↓ 還有 2 項')
+})
+
+test('now R8 & R11: stale fleet.brief (> 10 min) marks 全艦隊 summary row; stale seat pending marks pending row; wide exception title cuts with … keeping age at right edge', async () => {
+  await feed()
+  const staleCon = con({ generated_at_ms: NOW - 15 * MIN, sources: { hosts: { at_ms: NOW - 15 * MIN, state: 'expired' }, tasks: { at_ms: NOW - 15 * MIN, state: 'stale' } } })
+  const sum80 = content(80, 24, staleCon)[2]
+  expect(sum80).toContain('✗')
+  expect(sum80).toContain('15 分前')
+  expect(sum80).toContain('資料已過期')
+
+  const staleLive = live({ state: 'stale', header: '資料過舊 · watcher 沒有在發佈' })
+  const pRow = nowPage.render(ctxOf(80, 24, con(), staleLive)).body[0]
+  expect(text(pRow)).toContain('✗')
+  expect(text(pRow)).toContain('本席待決過期：資料過舊')
+  expect(pRow.some(s => s.color === PALETTE.broken)).toBe(true)
+
+  const longText = 'capacity--claude 卡住 2 小時：' + '等待下游審批節點回應而且不能換行必須把時間固定在最右邊'.repeat(3)
+  const wideCon = con({ items: [{ ...con().items[0], text: longText, title: longText }] })
+  const exc120 = nowPage.render(ctxOf(120, 30, wideCon)).body.find(r => text(r).includes('capacity--claude'))!
+  const raw120 = text(exc120)
+  expect(displayWidth(raw120)).toBe(119)
+  expect(raw120).toContain('…')
+  expect(raw120.endsWith('2 時前')).toBe(true)
 })
 

@@ -2,9 +2,14 @@
 // the S2 receipt: the parsed snapshot carries no per-line running/waiting state, no host list), the fixed height at 160x40 / 120x30 / 80x24, the §5 no-source row, the red stale markers
 // with the full reason, and the key presses (o looks, z folds, f fills the prompt and never sends).
 import { test, expect } from 'claude-code/testing'
+import { Pane } from '../pane'
+import * as M from '../model'
+import { displayWidth } from '../model'
 import { frameRows, staleBadge as frameBadge, brokenRow as frameBroken, actionRows } from './frame'
+import { PAGES } from './index'
+import { nowPage } from './now'
 import { fleetPage, fleetView, FOLD_AT } from './fleet'
-import { staleBadge, brokenRow } from './rows'
+import { lineState, staleBadge, brokenRow } from './rows'
 import { makeT } from '../i18n'
 import { PALETTE } from '../ui'
 import { closeGap } from './quota.fixture'
@@ -29,75 +34,61 @@ const snapOf = (over: { tasks?: { at_ms: number | null; state: string }; lines?:
   counts: { decisions: 0, exceptions: 0, quota_risk: 0, tabs: {}, summary: { lines: { running: 6, waiting: 40, stalled: 5 }, hosts: { online: 17, total: 18, gpu_busy: 0, gpu_total: 2 }, hints: 0, quota_worst: null } },
   quota: { pools: null, seats: [] }, items: [], cards: [], lines: over.lines === undefined ? LINES : over.lines,
 }) as never
+const lane80 = (n: number) => ' ○ lane-' + String(n).padStart(2, '0') + ' · h1 閒置 —' + ' '.repeat(57) + '—'
 const GOLDEN: Record<string, string[]> = {
   folded80: [
     "艦隊",
     "產線 51 ●6 ⋯40 ⊘5",
-    "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped） 2時",
-    " ⊘ lab · h3 卡住 閒置 6 時（idle） 6時",
-    " ⊘ pinball · h4 卡住 閒置 5 時（idle） 5時",
-    " ⊘ revival · h5 卡住 閒置 3 時（idle） 3時",
-    " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue） 40分",
-    " ○ lane-00 · h1 閒置 — —",
+    "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped）" + ' '.repeat(26) + "2 時",
+    " ⊘ lab · h3 閒置 閒置 6 時（idle）" + ' '.repeat(42) + "6 時",
+    " ⊘ pinball · h4 閒置 閒置 5 時（idle）" + ' '.repeat(38) + "5 時",
+    " ⊘ revival · h5 閒置 閒置 3 時（idle）" + ' '.repeat(38) + "3 時",
+    " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue）" + ' '.repeat(12) + "40 分",
+    lane80(0),
     " ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ──",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
-    "[o] 看 capacity · h1",
-    "[z] 展開／收合其他 45 條",
-    "[f] 催辦填入提示列（不送出）",
+    "[o] 看 · [z] 展開 · [f] 催辦",
   ],
   expanded80: [
     "艦隊",
     "產線 51 ●6 ⋯40 ⊘5",
-    "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped） 2時",
-    " ⊘ lab · h3 卡住 閒置 6 時（idle） 6時",
-    " ⊘ pinball · h4 卡住 閒置 5 時（idle） 5時",
-    " ⊘ revival · h5 卡住 閒置 3 時（idle） 3時",
-    " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue） 40分",
-    " ○ lane-00 · h1 閒置 — —",
+    "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped）" + ' '.repeat(26) + "2 時",
+    " ⊘ lab · h3 閒置 閒置 6 時（idle）" + ' '.repeat(42) + "6 時",
+    " ⊘ pinball · h4 閒置 閒置 5 時（idle）" + ' '.repeat(38) + "5 時",
+    " ⊘ revival · h5 閒置 閒置 3 時（idle）" + ' '.repeat(38) + "3 時",
+    " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue）" + ' '.repeat(12) + "40 分",
+    lane80(0),
     " ○ 已展開 45 條（6+45=51）· z 收合",
-    " ○ lane-01 · h1 閒置 — —",
-    " ○ lane-02 · h1 閒置 — —",
-    " ○ lane-03 · h1 閒置 — —",
-    " ○ lane-04 · h1 閒置 — —",
-    " ○ lane-05 · h1 閒置 — —",
-    " ○ lane-06 · h1 閒置 — —",
-    " ○ lane-07 · h1 閒置 — —",
-    " ○ lane-08 · h1 閒置 — —",
-    " ○ lane-09 · h1 閒置 — —",
-    " ○ lane-10 · h1 閒置 — —",
-    "↓ 還有 37 列",
-    "[o] 看 capacity · h1",
-    "[z] 展開／收合其他 45 條",
-    "[f] 催辦填入提示列（不送出）",
+    ...Array.from({ length: 12 }, (_, i) => lane80(i + 1)),
+    "↓ 還有 35 列",
+    "[o] 看 · [z] 收合 · [f] 催辦",
   ],
   stale80: [
     "艦隊  ✗ 工作 資料過期，6 分鐘前",
     "✗ tasks 已 6 分鐘未更新（console 判定：資料過期）",
     "產線 51 ●6✗ ⋯40✗ ⊘5✗",
-    "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped） ✗2時",
-    " ⊘ lab · h3 卡住 閒置 6 時（idle） ✗6時",
-    " ⊘ pinball · h4 卡住 閒置 5 時（idle） ✗5時",
-    " ⊘ revival · h5 卡住 閒置 3 時（idle） ✗3時",
-    " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue） ✗40分",
-    " ○ lane-00 · h1 閒置 — ✗—",
+    "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped）" + ' '.repeat(25) + "✗2 時",
+    " ⊘ lab · h3 閒置 閒置 6 時（idle）" + ' '.repeat(41) + "✗6 時",
+    " ⊘ pinball · h4 閒置 閒置 5 時（idle）" + ' '.repeat(37) + "✗5 時",
+    " ⊘ revival · h5 閒置 閒置 3 時（idle）" + ' '.repeat(37) + "✗3 時",
+    " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue）" + ' '.repeat(11) + "✗40 分",
+    " ○ lane-00 · h1 閒置 —" + ' '.repeat(56) + "✗—",
     " ✗ ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ──",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
-    "[o] 看 capacity · h1（舊資料）",
-    "[z] 展開／收合其他 45 條",
-    "[f] 催辦填入提示列（不送出）",
+    "[o] 看（舊） · [z] 展開 · [f] 催辦",
   ],
   folded120: [
     "艦隊",
     "── 產線 51：● 執行 6  ⋯ 等待 40  ⊘ 卡住 5 ────────────────────────────────────────────────────────────────",
-    "  產線                  狀態    負責          任務 / 證據                                                        上次",
-    "▸ ✗ capacity · h1       卡住    PM            等待沒寫等誰（wait_untyped）                                       2時",
-    "  ⊘ lab · h3            卡住    PM            閒置 6 時（idle）                                                  6時",
-    "  ⊘ pinball · h4        卡住    game-lead     閒置 5 時（idle）                                                  5時",
-    "  ⊘ revival · h5        卡住    game-lead     閒置 3 時（idle）                                                  3時",
-    "  ⊘ hangar · h2         卡住    PM            01M7N2ZC 證據逾期 40 分（evidence_overdue）                        40分",
-    "  ○ lane-00 · h1        閒置    PM            —                                                                  —",
+    "  產線                  狀態    負責          任務 / 證據" + ' '.repeat(59) + "上次",
+    "▸ ✗ capacity · h1       卡住    PM            等待沒寫等誰（wait_untyped）" + ' '.repeat(42) + "2 時",
+    "  ⊘ lab · h3            閒置    PM            閒置 6 時（idle）" + ' '.repeat(53) + "6 時",
+    "  ⊘ pinball · h4        閒置    game-lead     閒置 5 時（idle）" + ' '.repeat(53) + "5 時",
+    "  ⊘ revival · h5        閒置    game-lead     閒置 3 時（idle）" + ' '.repeat(53) + "3 時",
+    "  ⊘ hangar · h2         卡住    PM            01M7N2ZC 證據逾期 40 分（evidence_overdue）" + ' '.repeat(26) + "40 分",
+    "  ○ lane-00 · h1        閒置    PM            —" + ' '.repeat(72) + "—",
     "  ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ─────────────────────────────────────────────────────────────────────────────────────────────────",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
@@ -109,13 +100,13 @@ const GOLDEN: Record<string, string[]> = {
   folded160: [
     "艦隊",
     "── 產線 51：● 執行 6  ⋯ 等待 40  ⊘ 卡住 5 ────────────────────────────────────────────────────────────────────────────────────────────────────────",
-    "  產線                  狀態    負責          任務 / 證據                                                                                                上次",
-    "▸ ✗ capacity · h1       卡住    PM            等待沒寫等誰（wait_untyped）                                                                               2時",
-    "  ⊘ lab · h3            卡住    PM            閒置 6 時（idle）                                                                                          6時",
-    "  ⊘ pinball · h4        卡住    game-lead     閒置 5 時（idle）                                                                                          5時",
-    "  ⊘ revival · h5        卡住    game-lead     閒置 3 時（idle）                                                                                          3時",
-    "  ⊘ hangar · h2         卡住    PM            01M7N2ZC 證據逾期 40 分（evidence_overdue）                                                                40分",
-    "  ○ lane-00 · h1        閒置    PM            —                                                                                                          —",
+    "  產線                  狀態    負責          任務 / 證據" + ' '.repeat(99) + "上次",
+    "▸ ✗ capacity · h1       卡住    PM            等待沒寫等誰（wait_untyped）" + ' '.repeat(82) + "2 時",
+    "  ⊘ lab · h3            閒置    PM            閒置 6 時（idle）" + ' '.repeat(93) + "6 時",
+    "  ⊘ pinball · h4        閒置    game-lead     閒置 5 時（idle）" + ' '.repeat(93) + "5 時",
+    "  ⊘ revival · h5        閒置    game-lead     閒置 3 時（idle）" + ' '.repeat(93) + "3 時",
+    "  ⊘ hangar · h2         卡住    PM            01M7N2ZC 證據逾期 40 分（evidence_overdue）" + ' '.repeat(66) + "40 分",
+    "  ○ lane-00 · h1        閒置    PM            —" + ' '.repeat(112) + "—",
     "  ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
@@ -222,4 +213,98 @@ test('fleet: o looks (never expands), z folds, f fills the prompt line and is no
 test('fleet: the badge helpers are the shared leaf rows.ts ones that frame.ts re-exports', () => {
   expect(staleBadge('x')).toEqual(frameBadge('x'))
   expect(brokenRow('x')).toEqual(frameBroken('x'))
+})
+
+test('fleet R3: expanded named rows equal the stated unfolded count when summary total exceeds listed lines (8 listed, 9 total), and 現況 & 艦隊 share lineState', () => {
+  const eightLines = Array.from({ length: 8 }, (_, i) => line('L' + i, '線-' + i, 'PM', i === 0 ? [issue('T4', '成員離線', 'failed', 20 * MIN)] : i < 5 ? [issue('T3', '閒置 50 分', 'stalled', 50 * MIN)] : [issue('wait_untyped', '等待中', 'stalled', 30 * MIN)]))
+  const snap9 = {
+    ...snapOf({ lines: eightLines }),
+    counts: { decisions: 0, exceptions: 0, quota_risk: 0, tabs: {}, summary: { lines: { running: 2, waiting: 1, stalled: 6 }, hosts: { online: 2, total: 2, gpu_busy: 0, gpu_total: 0 }, hints: 0, quota_worst: null } },
+  }
+  const openRows = fleetView(ctxOf(120, 30, snap9), EXPANDED).body.map(text)
+  const bannerIdx = openRows.findIndex(r => r.includes('已展開'))
+  expect(bannerIdx).toBeGreaterThan(0)
+  const stated = Number(/已展開 (\d+) 條/.exec(openRows[bannerIdx])?.[1] ?? -1)
+  const afterBannerNamed = openRows.slice(bannerIdx + 1).filter(r => /線-\d/.test(r)).length
+  expect(stated).toBe(2)
+  expect(afterBannerNamed).toBe(stated)
+
+  // Shared line-state parity across 現況 (both normal body and shortBody) and 艦隊 for lines 甲(離線), 丙–己(閒置), 庚(卡住)
+  const named = [
+    line('jia', '甲線', 'PM', [issue('T4', '成員未連線', 'failed', 22 * MIN)]),
+    line('bing', '丙線', 'PM', [issue('T3', '超過 50 分無進度', 'stalled', 52 * MIN)]),
+    line('ding', '丁線', 'PM', [issue('idle', '閒置 3 時', 'stalled', 180 * MIN)]),
+    line('wu', '戊線', 'PM', [issue('T3', '超過 40 分無進度', 'stalled', 40 * MIN)]),
+    line('ji', '己線', 'PM', [issue('T3', '超過 30 分無進度', 'stalled', 30 * MIN)]),
+    line('geng', '庚線', 'PM', [issue('wait_untyped', '等待沒寫等誰', 'stalled', 15 * MIN)]),
+  ]
+  const paritySnap = snapOf({ lines: named })
+  const fleetLines = fleetPage.render(ctxOf(160, 40, paritySnap)).body.map(text)
+  const nowLines = nowPage.render(ctxOf(160, 40, paritySnap)).body.map(text)
+  const nowShort = nowPage.render({ ...(ctxOf(80, 7, paritySnap) as object), shortBody: true } as never).body.map(text)
+  for (const ln of named) {
+    const want = lineState(ln, t).word
+    expect(fleetLines.find(r => r.includes(ln.label))).toContain(want)
+    expect(nowLines.find(r => r.includes(ln.label))).toContain(want)
+  }
+  expect(lineState(named[1], t).word).toBe('閒置')
+  expect(nowShort[0]).toContain('離線')
+})
+
+test('fleet R8: when fleet.brief is stale (> 10 min), 艦隊 summary row carries ✗, N 分前 and the reason', () => {
+  const staleBrief = {
+    ...(snapOf() as Record<string, unknown>),
+    generated_at_ms: NOW - 15 * MIN,
+    sources: { tasks: { at_ms: NOW - 15 * MIN, state: 'stale' }, hosts: { at_ms: NOW - 15 * MIN, state: 'expired' } },
+  }
+  for (const [cols, rows] of [[80, 24], [120, 30]] as const) {
+    const out = fleetPage.render(ctxOf(cols, rows, staleBrief)).body.map(text)
+    const sumRow = out.find(r => r.includes('產線 51'))!
+    expect(sumRow).toContain('✗')
+    expect(sumRow).toContain('15 分前')
+    expect(sumRow).toContain('資料已過期')
+  }
+})
+
+test('fleet R10 & R11: at 80x24 o/z/f are one row with 3 clickable non-empty Buttons; duration column is fixed-width right-aligned and wide titles cut with … without wrapping', () => {
+  type Node = { kind: string; props: Record<string, any> }
+  const mk = (kind: string) => (props: Record<string, any>): Node => ({ kind, props })
+  const EL = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link'), Input: mk('Input') }
+  const walk = (n: any, out: Node[] = []): Node[] => {
+    if (!n || typeof n !== 'object') return out
+    if (Array.isArray(n)) { n.forEach(c => walk(c, out)); return out }
+    if (n.kind !== undefined) out.push(n)
+    walk(n.props?.children, out)
+    return out
+  }
+  const flatText = (n: any): string => {
+    const c = n?.props?.children
+    return typeof c === 'string' ? c : Array.isArray(c) ? c.flat(9).map((x: any) => (typeof x === 'string' ? x : x?.props ? flatText(x) : '')).join('') : c?.props ? flatText(c) : ''
+  }
+  const live0 = { state: 'ok', text: 'x', header: 'x', band: null, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
+  const shown = PAGES.map(p => ({ ...p, framed: true as const }))
+  const out80 = fleetPage.render(ctxOf(80, 24, snapOf()))
+  expect(out80.actions.length).toBe(1)
+  expect(text(out80.actions[0])).toBe('[o] 看 · [z] 展開 · [f] 催辦')
+
+  const pressed: string[] = []
+  const tree = walk(Pane(EL as never, live0, 'fleet', () => {}, t, 80, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: snapOf(), nowMs: NOW, rows: 24, onPress: (id: string) => pressed.push(id), onKey: (k: any) => pressed.push('key:' + k.kind) } as never))
+  for (const [hk, label] of [['o', '看'], ['z', '展開'], ['f', '催辦']] as const) {
+    const btn = tree.find(n => n.kind === 'Button' && n.props.hotkey === hk)!
+    expect(btn).toBeDefined()
+    expect(flatText(btn).trim()).toBe(label)
+    btn.props.onPress()
+  }
+  expect(pressed.length).toBe(3)
+
+  // R11: wide single-row line task cuts with `…` and keeps time fixed at right edge `cols` without wrapping
+  const longSnap = snapOf({ lines: [line('wide', 'capacity · h1', 'PM', [issue('wait_untyped', '這是一條非常非常長的工作描述用來驗證單列標題過寬時會以省略號截斷而時間固定靠右對齊絕不換行', 'failed', 120 * MIN)])] })
+  for (const [cols, rows] of [[80, 24], [120, 30]] as const) {
+    const bodyRows = fleetPage.render(ctxOf(cols, rows, longSnap)).body
+    const lRow = bodyRows.find(r => text(r).includes('capacity · h1'))!
+    const raw = lRow.map(s => s.text).join('')
+    expect(displayWidth(raw)).toBe(cols)
+    expect(raw).toContain('…')
+    expect(raw.endsWith('2 時')).toBe(true)
+  }
 })

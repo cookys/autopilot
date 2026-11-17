@@ -108,15 +108,29 @@ const dimSeg = (text: string): Seg => ({ text, dim: true })
 const widthOf = (segs: Seg[]): number => segs.reduce((w, s) => w + displayWidth(s.text), 0)
 const WIDE = 100 // columns from which the cards use the wide form (labelled rows, the executor at the right)
 
-// left segments, then `right` ending at the right edge (4/5 of the width); two blanks at least, the left part is cut when it does not fit
+function truncateSegs(row: Row, cols: number): Row {
+  if (cols <= 0) return [seg('')]
+  if (widthOf(row) <= cols) return row
+  const out: Row = []
+  let used = 0
+  for (const s of row) {
+    const w = displayWidth(s.text)
+    if (used + w <= cols) { out.push(s); used += w; continue }
+    const room = cols - used
+    if (room > 0) out.push({ ...s, text: truncateToWidth(s.text, room) })
+    break
+  }
+  return out.length === 0 ? [seg('')] : out
+}
+
+// left segments (cut with `…` when too wide), then `right` fixed at the right edge `cols`, never wrapped (R11)
 function leftRight(left: Seg[], right: string, cols: number): Row {
-  if (right === '') return left
+  if (right === '') return truncateSegs(left, cols)
   const rw = displayWidth(right)
-  const edge = Math.round(cols * 0.8)
-  const lw = widthOf(left)
-  const gap = Math.max(2, edge - lw - rw)
-  if (lw + gap + rw <= cols) return [...left, seg(' '.repeat(gap)), dimSeg(right)]
-  return [seg(truncateToWidth(left.map(s => s.text).join(''), Math.max(1, cols - rw - 2))), seg('  '), dimSeg(right)]
+  if (cols <= rw + 2) return truncateSegs(left, cols)
+  const cut = truncateSegs(left, cols - 2 - rw)
+  const lw = widthOf(cut)
+  return [...cut, seg(' '.repeat(Math.max(2, cols - lw - rw))), dimSeg(right)]
 }
 
 const ageOf = (ctx: PageCtx, ms: number | null): string => {
@@ -181,7 +195,7 @@ function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wid
   const mark = seg(GLYPHS.structure.folded + ' ', { color: PALETTE.here })
   const id0 = d.id === null ? '' : d.id + ' '
   if (wide) out.push(leftRight([mark, seg(id0 + pos + '  ' + d.question + old)], who === '' ? age : t('page.decide.exec', { who }) + ' · ' + age, cols))
-  else out.push([mark, seg([id0 + pos, who, age].filter(s => s !== '').join(' · ') + old)], [seg(d.question)])
+  else out.push([mark, seg(d.question)], [dimSeg('  ' + [id0 + pos, who, age].filter(s => s !== '').join(' · ') + old)])
   const sent = d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
   const held = d.id !== null && nav.hold?.[d.id] !== undefined
   const pick = decidePick(d, nav)
@@ -202,19 +216,25 @@ function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wid
   return out
 }
 
-// a console card, seen from this seat: the question and which seat answers it
+// a console card, seen from this seat: the question and which seat answers it (R2: on 80x24 question first, owner seat and age after)
 function conCard(c: ConsoleCard, pos: string, ctx: PageCtx, wide: boolean): Row[] {
   const who = c.executor_display ?? ''
   const age = ageOf(ctx, c.opened_at_ms)
   const mark = seg(GLYPHS.structure.folded + ' ', { color: PALETTE.here })
   if (wide) return [leftRight([mark, seg(c.id + ' ' + pos + '  ' + c.question)], who === '' ? age : ctx.t('page.decide.exec', { who }) + ' · ' + age, ctx.size.cols)]
-  return [[mark, seg([c.id + ' ' + pos, who, age].filter(s => s !== '').join(' · '))], [seg(c.question)]]
+  return [[mark, seg(c.question)], [dimSeg('  ' + [c.id + ' ' + pos, who, age].filter(s => s !== '').join(' · '))]]
 }
 
 function otherRow(id: string, title: string, who: string, age: string, ctx: PageCtx, wide: boolean): Row {
   const tail = [who, age].filter(s => s !== '').join(' · ')
   if (wide) return leftRight([seg('  ' + id + '  ' + title)], tail, ctx.size.cols)
-  return [seg(id + ' ' + title + (age === '' ? '' : ' · ' + age))]
+  if (age === '') return [seg(truncateToWidth(id + ' ' + title, ctx.size.cols))]
+  const right = '· ' + age
+  const rw = displayWidth(right)
+  if (ctx.size.cols <= rw + 2) return [seg(truncateToWidth(id + ' ' + title, ctx.size.cols))]
+  const leftText = truncateToWidth(id + ' ' + title, ctx.size.cols - 1 - rw)
+  const gap = Math.max(1, ctx.size.cols - displayWidth(leftText) - rw)
+  return [seg(leftText + ' '.repeat(gap)), dimSeg(right)]
 }
 
 // A10: a broken-source reason is never cut with `…`: it wraps onto further red rows (the frame's body overflow gives way to other content first, never the reason)
@@ -269,7 +289,10 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
     if (m.far.length === 0) body.push([seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.far_none'))])
     for (const f of m.far) {
       const to = wide && f.seat !== '' ? t('page.decide.far_to', { seat: f.seat }) : t('page.decide.far_to_c')
-      body.push([seg((wide ? '  ' : '') + f.id + (wide ? '  ' : ' ') + f.title + ' ' + GLYPHS.structure.answer + ' ' + to)])
+      const suffix = ' ' + GLYPHS.structure.answer + ' ' + to
+      const prefix = (wide ? '  ' : '') + f.id + (wide ? '  ' : ' ')
+      const maxTitle = Math.max(4, ctx.size.cols - displayWidth(prefix) - displayWidth(suffix))
+      body.push(truncateSegs([seg(prefix + truncateToWidth(f.title, maxTitle) + suffix)], ctx.size.cols))
     }
   }
 
@@ -278,7 +301,7 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
     body.push(header(t('page.decide.sec_steps'), wide))
     for (const s of m.steps) {
       const text = s.title ?? s.question
-      body.push(wide ? [seg('  '), dimSeg(s.kind === 'look' ? t('page.decide.look') : t('page.decide.step')), seg('  ' + text)] : [seg(text)])
+      body.push(truncateSegs(wide ? [seg('  '), dimSeg(s.kind === 'look' ? t('page.decide.look') : t('page.decide.step')), seg('  ' + text)] : [seg(text)], ctx.size.cols))
     }
   }
 

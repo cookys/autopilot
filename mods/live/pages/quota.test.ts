@@ -20,14 +20,14 @@ const body = (cols: number, rows: number, c: unknown, view?: { focus: number; ex
 const GOLDEN = {
   wide: [
     "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "    池                     7 天    5 小時  重置（台北）        近 6 時     預測  用完時間      席數   判定",
-    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00     +0.3/h✗     47%✗ —             1 席   ✗ 180 分未更新",
-    "  ✗ twgame                  49%        0%  11-19 週四 09:00     +1.4/h      94%  —             2 席   ✗ 席過期 14 分",
-    "  ▲ team                    68%       17%  11-21 週六 12:00     +1.9/h    >100%  11-18 18:00   3 席   約 17 時後用完",
-    "  ▲ personal               100%      100%  11-19 週四 08:00     +1.1/h     100%  已用完        5 席   未知·缺換池",
-    "  ▲ grok                    10%        0%  11-24 週二 00:00     +0.0/h      10%  —             1 席   浪費 90%",
-    "  ▲ lab                     22%        4%  11-22 週日 10:00     +0.2/h      43%  —             2 席   浪費 57%",
-    "  ✓ codex                   80%       12%  11-19 週四 21:00     +0.4/h      98%  —             2 席   會用到 98%",
+    "    池                     7 天      5 時  重置（台北）         近 6 時     預測  用完時間      席數   判定",
+    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
+    "  ✗ twgame                  49%        0%  11-19 週四 09:00    +1.4%/時      94%  —             2 席   ✗ 席過期 14 分",
+    "  ? team                    68%       17%  11-21 週六 12:00    +1.9%/時    >100%  11-18 18:00   3 席   未知·17時用完",
+    "  ? personal               100%      100%  11-19 週四 08:00    +1.1%/時     100%  已用完        5 席   未知·缺換池",
+    "  ▲ grok                    10%        0%  11-24 週二 00:00    +0.0%/時      10%  —             1 席   浪費 90%",
+    "  ▲ lab                     22%        4%  11-22 週日 10:00    +0.2%/時      43%  —             2 席   浪費 57%",
+    "  ✓ codex                   80%       12%  11-19 週四 21:00    +0.4%/時      98%  —             2 席   會用到 98%",
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
@@ -38,14 +38,14 @@ const GOLDEN = {
   ],
   mid: [
     "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "    池              7 天    5 小時  重置（台北）   近 6 時     預測  判定",
-    "▸ ✗ trinity          31%✗       0%✗ 週五 06:00      +0.3/h✗     47%✗ ✗ 180 分未更新",
-    "  ✗ twgame           49%        0%  週四 09:00      +1.4/h      94%  ✗ 席過期 14 分",
-    "  ▲ team             68%       17%  週六 12:00      +1.9/h    >100%  約 17 時後用完",
-    "  ▲ personal        100%      100%  週四 08:00      +1.1/h     100%  未知·缺換池",
-    "  ▲ grok             10%        0%  週二 00:00      +0.0/h      10%  浪費 90%",
-    "  ▲ lab              22%        4%  週日 10:00      +0.2/h      43%  浪費 57%",
-    "  ✓ codex            80%       12%  週四 21:00      +0.4/h      98%  會用到 98%",
+    "    池              7 天      5 時  重置（台北）    近 6 時     預測  判定",
+    "▸ ✗ trinity          31%✗       0%✗ 週五 06:00     +0.3%/時✗     47%✗ ✗ 180 分未更新",
+    "  ✗ twgame           49%        0%  週四 09:00     +1.4%/時      94%  ✗ 席過期 14 分",
+    "  ? team             68%       17%  週六 12:00     +1.9%/時    >100%  未知·17時用完",
+    "  ? personal        100%      100%  週四 08:00     +1.1%/時     100%  未知·缺換池",
+    "  ▲ grok             10%        0%  週二 00:00     +0.0%/時      10%  浪費 90%",
+    "  ▲ lab              22%        4%  週日 10:00     +0.2%/時      43%  浪費 57%",
+    "  ✓ codex            80%       12%  週四 21:00     +0.4%/時      98%  會用到 98%",
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
@@ -55,14 +55,14 @@ const GOLDEN = {
   ],
   narrow: [
     "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
-    "    池         7 天  5 時  重置   近 6 時    預測  判定",
-    "▸ ✗ trinity     31%✗   0%✗ 週五06    +0.3✗    47%✗ ✗ 180 分未更新",
-    "  ✗ twgame      49%    0%  週四09    +1.4     94%  ✗ 席過期 14 分",
-    "  ▲ team        68%   17%  週六12    +1.9   >100%  約 17 時後用完",
-    "  ▲ personal   100%  100%  週四08    +1.1    100%  未知·缺換池",
-    "  ▲ grok        10%    0%  週二00    +0.0     10%  浪費 90%",
-    "  ▲ lab         22%    4%  週日10    +0.2     43%  浪費 57%",
-    "  ✓ codex       80%   12%  週四21    +0.4     98%  會用到 98%",
+    "    池         7 天  5 時  重置    近 6 時    預測  判定",
+    "▸ ✗ trinity     31%✗   0%✗ 週五06 +0.3%/時✗    47%✗ ✗ 180 分未更新",
+    "  ✗ twgame      49%    0%  週四09 +1.4%/時     94%  ✗ 席過期 14 分",
+    "  ? team        68%   17%  週六12 +1.9%/時   >100%  未知·17時用完",
+    "  ? personal   100%  100%  週四08 +1.1%/時    100%  未知·缺換池",
+    "  ▲ grok        10%    0%  週二00 +0.0%/時     10%  浪費 90%",
+    "  ▲ lab         22%    4%  週日10 +0.2%/時     43%  浪費 57%",
+    "  ✓ codex       80%   12%  週四21 +0.4%/時     98%  會用到 98%",
     "",
     "── 焦點 trinity ────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
@@ -78,7 +78,7 @@ const GOLDEN = {
     "  ✗ team        68%   17%  週六12 ✗ 無預測來源",
     "  ✗ lab         22%    4%  週日10 ✗ 無預測來源",
     "  ✗ grok        10%    0%  週二00 ✗ 無預測來源",
-    "  ▲ personal   100%  100%  週四08 未知·缺換池",
+    "  ? personal   100%  100%  週四08 未知·缺換池",
     "",
     "── 焦點 trinity ────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
@@ -88,14 +88,14 @@ const GOLDEN = {
   nopaceWide: [
     "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
     "(逐席列出，依額度池分組；池取席內最大值)",
-    "    池                     7 天    5 小時  重置（台北）      速率 · 預測 · 判定",
+    "    池                     7 天      5 時  重置（台北）      速率 · 預測 · 判定",
     "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00  ✗ 180 分未更新",
     "  ✗ twgame                  49%        0%  11-19 週四 09:00  ✗ 席過期 14 分",
     "  ✗ codex                   80%       12%  11-19 週四 21:00  ✗ 無預測來源",
     "  ✗ team                    68%       17%  11-21 週六 12:00  ✗ 無預測來源",
     "  ✗ lab                     22%        4%  11-22 週日 10:00  ✗ 無預測來源",
     "  ✗ grok                    10%        0%  11-24 週二 00:00  ✗ 無預測來源",
-    "  ▲ personal               100%      100%  11-19 週四 08:00  未知·缺換池",
+    "  ? personal               100%      100%  11-19 週四 08:00  未知·缺換池",
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
@@ -106,14 +106,14 @@ const GOLDEN = {
   ],
   expanded: [
     "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "    池                     7 天    5 小時  重置（台北）        近 6 時     預測  用完時間      席數   判定",
-    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00     +0.3/h✗     47%✗ —             1 席   ✗ 180 分未更新",
-    "  ✗ twgame                  49%        0%  11-19 週四 09:00     +1.4/h      94%  —             2 席   ✗ 席過期 14 分",
-    "  ▲ team                    68%       17%  11-21 週六 12:00     +1.9/h    >100%  11-18 18:00   3 席   約 17 時後用完",
-    "  ▲ personal               100%      100%  11-19 週四 08:00     +1.1/h     100%  已用完        5 席   未知·缺換池",
-    "  ▲ grok                    10%        0%  11-24 週二 00:00     +0.0/h      10%  —             1 席   浪費 90%",
-    "  ▲ lab                     22%        4%  11-22 週日 10:00     +0.2/h      43%  —             2 席   浪費 57%",
-    "  ✓ codex                   80%       12%  11-19 週四 21:00     +0.4/h      98%  —             2 席   會用到 98%",
+    "    池                     7 天      5 時  重置（台北）         近 6 時     預測  用完時間      席數   判定",
+    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
+    "  ✗ twgame                  49%        0%  11-19 週四 09:00    +1.4%/時      94%  —             2 席   ✗ 席過期 14 分",
+    "  ? team                    68%       17%  11-21 週六 12:00    +1.9%/時    >100%  11-18 18:00   3 席   未知·17時用完",
+    "  ? personal               100%      100%  11-19 週四 08:00    +1.1%/時     100%  已用完        5 席   未知·缺換池",
+    "  ▲ grok                    10%        0%  11-24 週二 00:00    +0.0%/時      10%  —             1 席   浪費 90%",
+    "  ▲ lab                     22%        4%  11-22 週日 10:00    +0.2%/時      43%  —             2 席   浪費 57%",
+    "  ✓ codex                   80%       12%  11-19 週四 21:00    +0.4%/時      98%  —             2 席   會用到 98%",
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  [o] 收合各席",
@@ -259,12 +259,12 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   const openBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS, cards: [] }))).map(text).slice(1, 5)
   expect(openBody[0]).toContain('personal')
   expect(openBody[1]).toBe('判定  黃：已達額度上限，判定未知：缺換池資料（capacity）')
-  expect(openBody[2]).toBe('席    capacity--claude  7天 100%  5小時 100%  0 分前')
-  expect(openBody[3]).toBe('      hangar--claude  7天 100%  5小時 100%  1 分前')
+  expect(openBody[2]).toBe('席    capacity--claude  7 天 100%  5 時 100%  0 分前')
+  expect(openBody[3]).toBe('      hangar--claude  7 天 100%  5 時 100%  1 分前')
   const scrolledBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS, cards: [] })), { scroll: 1 }).map(text).slice(1, 5)
-  expect(scrolledBody[3]).toBe('      old--claude  7天 97%✗  5小時 90%✗  14 分前')
+  expect(scrolledBody[3]).toBe('      old--claude  7 天 97%✗  5 時 90%✗  14 分前')
 
-  // Pool rows keep priority (red -> unknown -> others) over the detail
+  // R5: Focused pool's full verdict is reserved FIRST, then remaining rows go to other pools in danger order
   const threeBody = frameRows(page, ctxOf(80, 7, consoleOf([codex, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
   expect(threeBody[0]).toContain('trinity')
   expect(threeBody[1]).toContain('personal')
@@ -275,6 +275,50 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   expect(fourBody[0]).toContain('trinity')
   expect(fourBody[1]).toContain('personal')
   expect(fourBody[2]).toContain('grok')
-  expect(fourBody[3]).toContain('codex')
-  expect(fourBody.some(l => l.startsWith('判定'))).toBe(false)
+  expect(fourBody[3]).toBe('判定  紅：180 分未更新（>10 分；statusline 沒在跑）')
+})
+
+test('quota R4 & R10: unknown pools use ? icon and 未知· prefix with warning colour role; rate column has %/時 unit and time headers use 7 天 / 5 時 everywhere', () => {
+  const rows = renderQuota(ctxOf(80, 24, consoleOf(POOLS))).body
+  const teamRow = rows.find(r => text(r).includes('team'))!
+  const personalRow = rows.find(r => text(r).includes('personal'))!
+  const grokRow = rows.find(r => text(r).includes('grok'))!
+  expect(teamRow[1].text).toBe('? ')
+  expect(teamRow[1].color).toBe(PALETTE.attention)
+  expect(text(teamRow)).toContain('未知·17時用完')
+  expect(personalRow[1].text).toBe('? ')
+  expect(personalRow[1].color).toBe(PALETTE.attention)
+  expect(text(personalRow)).toContain('未知·缺換池')
+  expect(grokRow[1].text).toBe('▲ ')
+  expect(grokRow[1].color).toBe(PALETTE.attention)
+  for (const [cols, h] of SIZES) {
+    const b = body(cols, h, consoleOf(POOLS, { seats: SEATS }))
+    expect(b[1]).toContain('7 天')
+    expect(b[1]).toContain('5 時')
+    expect(b[1]).not.toContain('5 小時')
+    expect(b[2]).toContain('%/時')
+  }
+})
+
+test('quota R5: at 120x30 and 80x24 with many pools and a multi-row wrapped verdict, focused pool full reason is kept whole and never cut by ↓ 還有 N 列', () => {
+  const longReason = 'statusline 沒在跑，而且多個席位已超過三小時未上報最新配額數據，完整原因必須換行保留不可被還有幾列截斷'
+  const many = Array.from({ length: 22 }, (_, i) => ({
+    ...POOLS[i % POOLS.length],
+    pool: 'pool-' + String.fromCharCode(97 + (i % 22)),
+    ...(i === 0 ? { stale: true, stale_age_min: 240, stale_note: longReason } : { stale: false, stale_note: null, limit_hit: false }),
+  }))
+  for (const [cols, rows] of [[120, 30], [80, 24]] as const) {
+    const out = frameRows(page, ctxOf(cols, rows, consoleOf(many, { cards: [] }))).map(text)
+    expect(out.length).toBe(rows)
+    expect(out.some(l => l.includes('還有'))).toBe(true)
+    const joined = out.join('').replace(/\s+/g, '')
+    expect(joined).toContain(longReason.replace(/\s+/g, ''))
+    expect(out.filter(l => !l.includes('還有')).some(l => l.includes('…'))).toBe(false)
+    // Verify even when focus is on a lower-ranked pool (focus: 15)
+    const focus15Page = { ...quotaPage, render: (c: Parameters<typeof renderQuota>[0]) => renderQuota(c, { focus: 15, expanded: false }) }
+    const many15 = many.map((p, idx) => (idx === 15 ? { ...p, pool: 'deepfocus', projected_pct_at_reset: 25, stale: false, stale_note: null } : p))
+    const out15 = frameRows(focus15Page, ctxOf(cols, rows, consoleOf(many15, { cards: [] }))).map(text)
+    expect(out15.join('\n')).toContain('deepfocus')
+    expect(out15.join('\n')).toContain('判定  黃：約剩 75% 會浪費')
+  }
 })

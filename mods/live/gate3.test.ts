@@ -56,11 +56,11 @@ test('gate3 item 1: quota draws exactly one row per pool at 160x40, 120x30, 80x2
       const bodyRows = out.slice(1, out.length - stripLen - 1)
       const blankIdx = bodyRows.findIndex(l => l.trim() === '')
       const tableRegion = blankIdx >= 0 ? bodyRows.slice(2, blankIdx) : bodyRows.slice(2)
-      const poolRows = bodyRows.filter(l => /^[▸ ] [✗▲✓] \S/.test(l))
+      const poolRows = bodyRows.filter(l => /^[▸ ] [✗?▲✓] \S/.test(l))
       expect(tableRegion.length, cols + 'x' + rows + ': table region rows == pools shown').toBe(POOLS.length)
       expect(poolRows.length, cols + 'x' + rows + ': pool rows drawn == pools shown').toBe(POOLS.length)
       for (const r of tableRegion) {
-        expect(/^[▸ ] [✗▲✓] \S/.test(r), cols + 'x' + rows + ': not a continuation row: ' + r).toBe(true)
+        expect(/^[▸ ] [✗?▲✓] \S/.test(r), cols + 'x' + rows + ': not a continuation row: ' + r).toBe(true)
         expect(/^\s*[）)：；，]/.test(r), cols + 'x' + rows + ': no punctuation continuation fragment: ' + r).toBe(false)
         expect(displayWidth(r)).toBeLessThanOrEqual(cols)
       }
@@ -73,7 +73,7 @@ test('gate3 item 1: quota draws exactly one row per pool at 160x40, 120x30, 80x2
   const grokRow = wide.find(l => l.includes('grok')) as string
   expect(personalRow).toContain('未知·缺換池')
   expect(personalRow).not.toContain('capacity')
-  expect(teamRow).toContain('約 17 時後用完')
+  expect(teamRow).toContain('未知·17時用完')
   expect(teamRow).not.toContain('capacity')
   expect(grokRow).toContain('浪費 90%')
   expect(wide.join('\n'), 'focused pool gets the full verdict text in the focus area').toContain('已達額度上限，判定未知：缺換池資料（capacity）')
@@ -101,32 +101,56 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     expect(qBody.some(l => l.includes('──')), 'H=' + H + ' quota: no section title').toBe(false)
     expect(qBody.some(l => l.includes('重置') || l.includes('7 天')), 'H=' + H + ' quota: no column header').toBe(false)
     expect(qBody.some(l => l.includes('還有')), 'H=' + H + ' quota: scroll hint does not eat a body row').toBe(false)
-    expect(qBody.filter(l => /^[▸ ] [✗▲✓] \S/.test(l)).length, 'H=' + H + ' quota: >= 1 pool row').toBeGreaterThanOrEqual(1)
+    expect(qBody.filter(l => /^[▸ ] [✗?▲✓] \S/.test(l)).length, 'H=' + H + ' quota: >= 1 pool row').toBeGreaterThanOrEqual(1)
   }
-  // 現況 with 1 red pool, 1 unknown pool, and 1 stuck line in a 4-row body (H = 7: 1 head + 4 body + 1 [2] action + 1 strip = 7)
+  // 現況 with no pending cards, 1 red pool, 1 unknown pool, and 1 offline/stuck line in a 4-row body (no pending -> red items first, then unknown)
   const oneRedOneUnknown = [
     POOLS.find(p => p.pool === 'trinity')!, // red (stale)
     POOLS.find(p => p.pool === 'personal')!, // unknown (limit_nosw)
     POOLS.find(p => p.pool === 'codex')!, // green
   ]
-  const cNow = snap(oneRedOneUnknown)
+  const cNow = { ...(snap(oneRedOneUnknown, { cards: [], lines: [c.lines![1]] }) as object), items: [] } as ConsoleSnapshot
   for (const H of [5, 6, 7]) {
     const nOut = frameRows(nowPage, { ...(ctxOf(80, H, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
     expect(nOut.length).toBe(H)
     const nBody = nOut.slice(1, H - 2)
     expect(nBody.length).toBeLessThanOrEqual(4)
     expect(nBody.some(l => l.includes('──')), 'H=' + H + ' now: no section title').toBe(false)
-    expect(nBody.some(l => l.includes('還有')), 'H=' + H + ' now: no scroll hint in body').toBe(false)
     expect(nBody.filter(l => l.trim() !== '').length, 'H=' + H + ' now: >= 1 item').toBeGreaterThanOrEqual(1)
+    if (H === 5) expect(nBody[1]).toBe('↓ 還有 2 項')
     if (H === 7) {
+      expect(nBody.some(l => l.includes('還有')), 'H=7 now: all 3 items fit without overflow').toBe(false)
+      const iStuck = nBody.findIndex(l => l.includes('復原線'))
       const iRed = nBody.findIndex(l => l.includes('trinity'))
       const iUnknown = nBody.findIndex(l => l.includes('personal'))
-      const iStuck = nBody.findIndex(l => l.includes('復原線'))
-      expect(iRed, 'red pool first').toBe(0)
-      expect(iUnknown, 'unknown pool second').toBe(1)
-      expect(iStuck, 'stuck line third').toBe(2)
+      expect(iStuck, 'red offline/stuck line first').toBe(0)
+      expect(iRed, 'red pool second').toBe(1)
+      expect(iUnknown, 'unknown pool after red items').toBe(2)
     }
   }
+})
+
+test('gate3 item 2 (R2 pending-first): short body with pending cards puts combined Button+summary pending row first, then red -> unknown -> yellow, and ↓ 還有 N 項 for overflow', () => {
+  const c0 = snap()
+  const cards = [
+    { id: 'd-00000001', question: '是否先切流到備援節點再重啟語音線服務', status: 'open' as const, opened_at_ms: NOW - 24 * 60 * MIN, executor_display: 'PM' },
+    { id: 'd-00000002', question: 'q2', status: 'open' as const, opened_at_ms: NOW - 60 * MIN, executor_display: 'PM' },
+    { id: 'd-00000003', question: 'q3', status: 'open' as const, opened_at_ms: NOW - 10 * MIN, executor_display: 'PM' },
+  ]
+  const pools = [
+    POOLS.find(p => p.pool === 'trinity')!,
+    POOLS.find(p => p.pool === 'personal')!,
+    POOLS.find(p => p.pool === 'grok')!,
+  ]
+  const withPending = { ...(snap(pools, { cards, lines: [c0.lines![1]] }) as object), items: [] } as ConsoleSnapshot
+  const out = frameRows(nowPage, { ...(ctxOf(80, 7, withPending) as object), live: LIVE0 } as never, { pages: PAGES })
+  expect(out.length).toBe(7)
+  expect(out[1][0].press).toBe('tab:2:decide')
+  const nBody = out.slice(1, 5).map(text)
+  expect(nBody[0]).toBe('→ 待決 3 張（最舊 1 天）：是否先切流到備援節點再重啟語音線服務')
+  expect(nBody[1]).toContain('復原線')
+  expect(nBody[2]).toContain('trinity')
+  expect(nBody[3]).toBe('↓ 還有 2 項')
 })
 
 test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0, i) and >= 66 uses 1 row across all pages, fitting host "<key>: " width', () => {
@@ -252,15 +276,15 @@ test('gate4 empty state with pending cards: 3 pending cards (console.cards or li
     expect(emptyActRow(page, snap(unknownPools, { cards: [], lines: [] }), LIVE0)).toBe('2 池判定未知（缺換池資料）；沒有待決卡')
   }
 
-  // Short-body priority when pending-cards line competes for the 4-row body on 現況: red pool -> stuck line -> pending-cards line
+  // Short-body priority when pending-cards line competes for the 4-row body on 現況 (R2): pending summary -> red (stuck line, red pool)
   const oneRedOneStuck = snap(
     [POOLS.find(p => p.pool === 'trinity')!, POOLS.find(p => p.pool === 'codex')!],
     { cards: threeConsoleCards, items: [], lines: [{ line_id: 'recovery', label: '復原線', lead_display: null, issues: [{ rule: 'T4', state: 'failed', subject: '復原線成員', since_ms: NOW - 10 * MIN, to_console: true }] }] },
   )
-  // Force empty console items so only 1 red pool + 1 stuck line precede the pending-cards line in H=7 (4-row body)
+  // Force empty console items so pending summary + 1 stuck line + 1 red pool appear in R2 order in H=7 (4-row body)
   const cleanSnap = { ...oneRedOneStuck, items: [] } as ConsoleSnapshot
   const nBody = frameRows(nowPage, { ...(ctxOf(80, 7, cleanSnap) as object), live: LIVE0 } as never, { pages: PAGES }).map(text).slice(1, 5)
-  expect(nBody.findIndex(l => l.includes('trinity'))).toBe(0)
+  expect(nBody.findIndex(l => l.includes('待決 3 張'))).toBe(0)
   expect(nBody.findIndex(l => l.includes('復原線'))).toBe(1)
-  expect(nBody.findIndex(l => l.includes('待決 3 張卡等你'))).toBe(2)
+  expect(nBody.findIndex(l => l.includes('trinity'))).toBe(2)
 })

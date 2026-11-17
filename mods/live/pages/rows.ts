@@ -2,7 +2,7 @@
 // A leaf module: it imports only types, ui.ts and quota-pick.ts (no page), never pages/index or a page, so a page can import it without a load cycle (frame -> index -> page -> frame).
 import { isStepCard } from '../model'
 import type { LiveSnapshot, Seg } from '../model'
-import { PALETTE } from '../ui'
+import { PALETTE, STATES, type StateId } from '../ui'
 
 export type Row = Seg[]
 
@@ -10,12 +10,40 @@ export type Row = Seg[]
 export const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken })
 export const brokenRow = (text: string): Row => [staleBadge(text)]
 
-// ---- shared across pages (gate round 1) ----
+// ---- shared across pages (gate round 1 & round 2) ----
 import type { ConsoleIssue, ConsoleLine, ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
-import { ROLE_SUCCESS, normalizedPools, rankPools } from './quota-pick'
+import { ROLE_SUCCESS, isUnknownPool, normalizedPools, rankPools } from './quota-pick'
 
 const ISSUE_RANK: Record<string, number> = { failed: 0, stalled: 1 }
+export const BRIEF_STALE_MS = 10 * 60_000
+
+export type LineStateInfo = { sid: StateId; word: string; worst: ConsoleIssue | null }
+
+// ONE shared production-line state classifier used by both 現況 and 艦隊 so the same line always gets the same state word (離線 / 閒置 / 卡住)
+export function lineState(line: ConsoleLine, t: T): LineStateInfo {
+  const rank = (x: ConsoleIssue): number => ISSUE_RANK[x.state] ?? 2
+  const surfaced = (x: ConsoleIssue): number => (x.to_console ? 0 : 1)
+  const worst = [...line.issues].sort((a, b) => rank(a) - rank(b) || surfaced(a) - surfaced(b) || a.since_ms - b.since_ms)[0] ?? null
+  if (worst === null) return { sid: 'pending', word: t('page.fleet.idle'), worst: null }
+  const subj = typeof worst.subject === 'string' ? worst.subject : ''
+  const isOffline = /^T4$/i.test(worst.rule) || /offline|離線/i.test(worst.rule) || /offline|離線/i.test(subj)
+  const isIdle = !isOffline && (/^T3$/i.test(worst.rule) || /(?:^|[_-])idle(?:$|[_-])|閒置/i.test(worst.rule) || /閒置|\bidle\b/i.test(subj))
+  const word = isOffline ? t('page.fleet.w_offline') : isIdle ? t('page.fleet.idle') : t('page.fleet.w_stuck')
+  const sid: StateId = worst.state in STATES ? (worst.state as StateId) : 'stalled'
+  return { sid, word, worst }
+}
+
+// true when fleet.brief (console snapshot / tasks source) is older than 10 minutes or expired (R8)
+export function isBriefStale(con: ConsoleSnapshot, nowMs: number): { stale: boolean; min: number; expired: boolean } {
+  const tasks = con.sources.tasks
+  const expired = tasks?.state === 'expired'
+  const genAge = con.generated_at_ms > 0 ? nowMs - con.generated_at_ms : 0
+  const taskAge = tasks?.at_ms != null ? nowMs - tasks.at_ms : 0
+  const over10 = (con.generated_at_ms > 0 && genAge > BRIEF_STALE_MS) || (tasks?.at_ms != null && taskAge > BRIEF_STALE_MS)
+  const ageMs = Math.max(genAge, taskAge)
+  return { stale: over10 || expired, min: Math.max(0, Math.floor(ageMs / 60_000)), expired }
+}
 
 // pending decision cards across console.cards (plus counts.decisions) and this seat's own live.pending (step / look items excluded), deduplicated by id
 export function decisionCount(ctx: { console: ConsoleSnapshot | null; live: LiveSnapshot | null }): number {
@@ -54,7 +82,7 @@ export function sourceMissing(con: ConsoleSnapshot | null): boolean {
 export function unknownPoolCount(con: ConsoleSnapshot | null, nowMs: number, t: T): number {
   if (con === null) return 0
   const pools = normalizedPools(con)
-  return pools === null ? 0 : rankPools(pools, nowMs, t).filter(v => v.kind === 'limit_nosw' || v.kind === 'exhaust_nosw').length
+  return pools === null ? 0 : rankPools(pools, nowMs, t).filter(isUnknownPool).length
 }
 
 // the pool verdicts that need a look (red or unknown or yellow): the calm line is never said beside one

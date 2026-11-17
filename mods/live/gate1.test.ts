@@ -119,7 +119,7 @@ test('gate G7: when the strip does not fit every entry 1-8, 9, 0 and i stays, na
 })
 
 test('gate G8: percentages are right-aligned, the % signs line up in columns', () => {
-  const out = screen(quotaPage, 160, 40, snap()).filter(l => /^[▸ ] [✗▲✓] \S/.test(l) && l.includes('%'))
+  const out = screen(quotaPage, 160, 40, snap()).filter(l => /^[▸ ] [✗?▲✓] \S/.test(l) && l.includes('%'))
   expect(out.length).toBeGreaterThanOrEqual(5)
   const col = (l: string, nth: number): number => { let i = -1; for (let k = 0; k <= nth; k++) i = l.indexOf('%', i + 1); return [...l.slice(0, i)].reduce((w, ch) => w + (ch.charCodeAt(0) > 0x2e80 ? 2 : 1), 0) }
   for (const nth of [0, 1]) expect(new Set(out.map(l => col(l, nth))).size, '% column ' + nth + ' is one column').toBe(1)

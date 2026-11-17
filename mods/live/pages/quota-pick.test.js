@@ -3,7 +3,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { worstPool, rankPools, classify } = require('./quota-pick.ts')
+const { worstPool, rankPools, classify, poolKey, poolLabel, isUnknownPool, normalizedPools } = require('./quota-pick.ts')
 const { makeT } = require('../i18n.ts')
 
 const NOW = 1794200000000
@@ -87,4 +87,36 @@ test('negative control: a broken order (waste ascending) is caught by the same a
   const pools = [pool('lab', { projected_pct_at_reset: 43 }), pool('grok', { projected_pct_at_reset: 10 })]
   assert.notEqual(order(pools), 'lab,grok') // yellow is by waste desc: grok (90) before lab (57); the wrong order would make this equal
   assert.equal(order(pools), 'grok,lab')
+})
+
+test('R1 & R4: poolKey / poolLabel normalise pool ids and normalizedPools deduplicates duplicate pool_key entries to one verdict', () => {
+  assert.equal(poolKey('pool-f'), 'pool-f')
+  assert.equal(poolKey('pool_F'), 'pool-f')
+  assert.equal(poolKey('F 池'), 'pool-f')
+  assert.equal(poolKey('f池'), 'pool-f')
+  assert.equal(poolLabel('pool-f'), 'F 池')
+  assert.equal(poolLabel('f 池'), 'F 池')
+  const t = makeT('zh-TW')
+  assert.equal(isUnknownPool(classify(pool('personal', { limit_hit: true }), NOW, true, t)), true)
+  assert.equal(isUnknownPool(classify(pool('team', { projected_pct_at_reset: 130, projected_exhaustion_at_ms: NOW + 14 * H }), NOW, true, t)), true)
+  assert.equal(isUnknownPool(classify(pool('grok', { projected_pct_at_reset: 10 }), NOW, true, t)), false)
+
+  const snap = {
+    generated_at_ms: NOW,
+    sources: { quota_forecast: { at_ms: NOW, state: 'ok' } },
+    items: [{ kind: 'seat_blocked', facts: { pool: 'F 池' } }],
+    quota: {
+      pools: [
+        pool('F 池', { limit_hit: true, stranded_seats: null, seven_day_pct: 100 }),
+        pool('pool-f', { projected_pct_at_reset: 120, projected_exhaustion_at_ms: NOW + 10 * H, seven_day_pct: 95 }),
+        pool('team', { projected_pct_at_reset: 60, seven_day_pct: 40 }),
+      ],
+      seats: [],
+    },
+  }
+  const norm = normalizedPools(snap)
+  assert.equal(norm.length, 2)
+  assert.equal(norm[0].pool, 'pool-f')
+  assert.equal(norm[0].limit_hit, true)
+  assert.equal(norm[0].stranded_seats, 1)
 })

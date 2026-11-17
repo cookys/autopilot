@@ -83,8 +83,8 @@ const GOLD = {
  },
  "c80": {
   "body": [
-   "▸ d-89fe394f 1/3 · game-lead · 40 分",
-   "payment 和 social-login 依序 --no-ff 合進 legacy？",
+   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
+   "  d-89fe394f 1/3 · game-lead · 40 分",
    "背景 兩支都過審，順序影響 migration",
    "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
@@ -104,8 +104,8 @@ const GOLD = {
  },
  "c80_folded": {
   "body": [
-   "▸ d-89fe394f 1/3 · game-lead · 40 分",
-   "payment 和 social-login 依序 --no-ff 合進 legacy？",
+   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
+   "  d-89fe394f 1/3 · game-lead · 40 分",
    "背景 兩支都過審，順序影響 migration",
    "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
@@ -123,8 +123,8 @@ const GOLD = {
  },
  "c80_open": {
   "body": [
-   "▸ d-89fe394f 1/3 · game-lead · 40 分",
-   "payment 和 social-login 依序 --no-ff 合進 legacy？",
+   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
+   "  d-89fe394f 1/3 · game-lead · 40 分",
    "背景 兩支都過審，順序影響 migration",
    "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
@@ -144,8 +144,8 @@ const GOLD = {
  },
  "c80_sent": {
   "body": [
-   "▸ d-89fe394f 1/3 · game-lead · 40 分",
-   "payment 和 social-login 依序 --no-ff 合進 legacy？",
+   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
+   "  d-89fe394f 1/3 · game-lead · 40 分",
    "已送出：[b] 先不要",
    "── 其他待決 2（z 收合）──",
    "d-fb890f48 [測試卡] 請勿作答 · 2時",
@@ -168,8 +168,8 @@ const GOLD = {
  },
  "c80_old6": {
   "body": [
-   "▸ d-2b7710cc 1/1 · game-lead · 3 時（舊卡，6 個選項）",
-   "六條合併策略選哪一條？",
+   "▸ 六條合併策略選哪一條？",
+   "  d-2b7710cc 1/1 · game-lead · 3 時（舊卡，6 個選項）",
    "[a] 全合  [b] 依序  [c] 兩批",
    "[d] 前兩支  [e] 先不要",
    "[f6] 第 6 項：只合 hotfix",
@@ -292,8 +292,26 @@ test('decide: a long list never changes the frame height (overflow ends in the m
 test('decide: a console card in focus is read-only and names the seat that answers it', () => {
   const ctx = ctxOf(80, 24, live(), con160, nav({}))
   const o = decidePage.render(ctx)
-  expect(text(o.body[0])).toContain('d-fb890f48 1/2 · PM')
+  expect(text(o.body[0])).toContain('[測試卡] carddispatch')
+  expect(text(o.body[1])).toContain('d-fb890f48 1/2 · PM')
   expect(text(o.actions[0])).toBe('這張要到 PM 答，這裡只能看')
+})
+
+test('decide R2 & R11: at 80x24 card question comes before owner seat and age; wide single-row other-card titles cut with … keeping age fixed at right edge', () => {
+  const out80 = decidePage.render(ctxOf(80, 24, live(own80), con80)).body.map(text)
+  expect(out80[0]).toBe('▸ payment 和 social-login 依序 --no-ff 合進 legacy？')
+  expect(out80[1]).toContain('game-lead · 40 分')
+
+  const longTitle = '這是一張標題非常非常長的待決卡用來測試單列清單項目過寬時以省略號截斷且時間固定在右邊界絕不換行'
+  const cWide = con([card('d-aaaaaaaa', longTitle, 'PM', 2 * H)], [])
+  for (const [cols, rows] of [[80, 24], [120, 30]] as const) {
+    const rendered = decidePage.render(ctxOf(cols, rows, live(own80), cWide)).body
+    const row = rendered.find(r => text(r).includes('d-aaaaaaaa'))!
+    const raw = text(row)
+    expect(displayWidth(raw)).toBe(cols)
+    expect(raw).toContain('…')
+    expect(raw.endsWith('2 時')).toBe(true)
+  }
 })
 
 test('decide: option 6 of an old card, text mode and a held card draw their own action rows', () => {

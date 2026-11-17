@@ -146,7 +146,7 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 export type PageView = { focus: number; expanded: boolean }
 // view: focus index + expanded flag per page id (fleet, quota); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons)
 export type FramePane = { pages: readonly Page[]; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void }
-const COMMON_KEYS: Record<string, KeyAction> = { j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here
+const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. No j / k: a key needs a visible Button to carry it, and a row is its own Button (Tab walks the rows)
 const DECIDE_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 }, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
 // o acts on the focused (▸) row: fleet sees that line, quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
 const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
@@ -165,36 +165,65 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
   const press = (id: string) => { frame.onPress?.(id) }
   const noteAt = page.id === 'decide' && frame.decide?.textMode === true && el.Input !== undefined ? rows.length - 2 : -1
+  const typing = frame.decide?.textMode === true // while a note is typed the Input owns every key: the strip binds no digit and no hint binds a letter
+  // A page key is carried by a VISIBLE Button: the action row's own `[x] label` (the host draws `x: label`), never an empty-label Button (the host draws that as a row `x:`).
+  const keys: Record<string, KeyAction> = pageKeys(page.id)
+  const used = new Set<string>()
+  const actOf = (letter: string, own: string | undefined): (() => void) | undefined => {
+    if (own !== undefined) return () => press(own)
+    if (letter === 'i') return () => onTab('legend') // the help page: the old legend tab until its page is drawn
+    if (letter === 'o' && page.id === 'quota') return () => press('quota:open')
+    const act = keys[letter]
+    return act === undefined || letter === 'o' ? undefined : () => frame.onKey?.(act)
+  }
   const drawRow = (r: Row, i: number) => {
     if (i === noteAt && el.Input !== undefined) {
       const Input = el.Input
       return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} /></Box>
     }
-    return (
-      <Box key={'f' + i}>
-        {r.map((sg, j) => {
-          const m = sg.press === undefined ? null : /^tab:(\d):(\w+)$/.exec(sg.press)
-          const text = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{sg.text === '' && r.length === 1 ? ' ' : sg.text}</Text>
-          if (sg.press !== undefined && m === null && Button !== undefined) return <Button key={'p' + j} plain onPress={() => press(sg.press as string)}>{text}</Button>
-          const to = m === null ? undefined : PAGE_TAB[m[2]]
-          if (m === null || to === undefined || Button === undefined) return text
-          // the strip (last row) owns the digit hotkey and the key t<id>; a page's own `[2]` action is a click target only
-          return i === rows.length - 1 ? <Button key={to} plain hotkey={m[1]} onPress={() => onTab(to)}>{text}</Button> : <Button key={'a' + i + m[2]} plain onPress={() => onTab(to)}>{text}</Button>
-        })}
-      </Box>
-    )
+    const isStrip = i === rows.length - 1
+    const nodes: unknown[] = []
+    for (let j = 0; j < r.length; j++) {
+      const sg = r[j]
+      const m = sg.press === undefined ? null : /^tab:(\d):(\w+)$/.exec(sg.press)
+      const to = m === null ? undefined : PAGE_TAB[m[2]]
+      if (m !== null && to !== undefined && Button !== undefined) {
+        // the strip (last row) owns the digit hotkey; the host draws `<digit>: <label>`, so the label is the page name alone. A page's own `[2]` action is a click target only.
+        const label = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{isStrip ? sg.text.replace(/^\d+\s+/, '') : sg.text}</Text>
+        nodes.push(isStrip ? <Button key={m[2]} plain {...(typing ? {} : { hotkey: m[1] })} onPress={() => onTab(to)}>{label}</Button> : <Button key={'a:' + i + ':' + m[2]} plain onPress={() => onTab(to)}>{label}</Button>)
+        continue
+      }
+      if (sg.press !== undefined && m === null && Button !== undefined) {
+        // consecutive segments of one press id are one Button (a fleet line, a quota pool: one row, one Tab stop)
+        let e = j
+        while (e + 1 < r.length && r[e + 1].press === sg.press) e++
+        const run = r.slice(j, e + 1)
+        const hint = typing ? null : /^\[([a-z])\] /.exec(run[0].text)
+        const letter = hint !== null && !used.has(hint[1]) ? hint[1] : null
+        if (letter !== null) used.add(letter)
+        const texts = run.map((x, n) => <Text key={'g' + (j + n)} {...drawSeg(x)} wrap="truncate">{n === 0 && letter !== null ? x.text.replace(/^\[[a-z]\] /, '') : x.text}</Text>)
+        nodes.push(<Button key={'p:' + i + ':' + j} plain {...(letter === null ? {} : { hotkey: letter })} onPress={() => press(sg.press as string)}>{texts}</Button>)
+        j = e
+        continue
+      }
+      const text = (x: string, k: string) => <Text key={k} {...drawSeg(sg)} wrap="truncate">{x === '' && r.length === 1 ? ' ' : x}</Text>
+      if (Button !== undefined && !typing && sg.press === undefined && (isStrip ? sg.text.startsWith('i ') : /\[[a-z]\] /.test(sg.text))) {
+        // hint pieces (`[h] prev  [l] next`) each become a Button carrying their letter; text between stays Text
+        const pieces = isStrip ? [sg.text.replace(/\s{2}Esc.*$/, ''), sg.text.slice(sg.text.replace(/\s{2}Esc.*$/, '').length)].filter(x => x !== '') : sg.text.split(/(?=\[[a-z]\] )/)
+        pieces.forEach((pc, n) => {
+          const hm = isStrip ? (n === 0 && pc.startsWith('i ') ? ['', 'i'] : null) : /^\[([a-z])\] /.exec(pc)
+          const act = hm === null || used.has(hm[1]) ? undefined : actOf(hm[1], undefined)
+          if (hm === null || act === undefined) { nodes.push(text(pc, 'g' + j + '.' + n)); return }
+          used.add(hm[1])
+          nodes.push(<Button key={'h:' + hm[1]} plain hotkey={hm[1]} onPress={act}>{text(pc.replace(/^(\[[a-z]\]|i) /, ''), 'g' + j + '.' + n)}</Button>)
+        })
+        continue
+      }
+      nodes.push(text(sg.text, 'g' + j))
+    }
+    return <Box key={'f' + i}>{nodes}</Box>
   }
-  // page-local keys: zero-width hotkey Buttons (never while a note is typed: the Input owns the keys then). On fleet and quota, f presses the page's own fill action.
-  const keys: Record<string, KeyAction> = pageKeys(page.id)
-  const openPress = page.id === 'quota' ? 'quota:open' : page.id === 'fleet' ? rows.flat().filter(sg => sg.press?.startsWith('fleet:see:')).pop()?.press : undefined // the body rows are clickable too: the LAST one is the focused row's action row
-  const fillPress = rows.flat().find(sg => sg.press?.startsWith('fill:'))?.press
-  const hot = Button === undefined || frame.decide?.textMode === true ? [] : [
-    ...Object.entries(keys).filter(([k]) => k !== 'o' && (page.id === 'decide' || k !== 'f')).map(([k, act]) => <Button key={'k:' + k} plain hotkey={k} onPress={() => frame.onKey?.(act)}><Text>{''}</Text></Button>),
-    ...(openPress === undefined ? [] : [<Button key="k:o" plain hotkey="o" onPress={() => press(openPress)}><Text>{''}</Text></Button>]),
-    <Button key="k:i" plain hotkey="i" onPress={() => onTab('legend')}><Text>{''}</Text></Button>, // the help page: the old legend tab until its page is drawn
-    ...(page.id !== 'decide' && fillPress !== undefined ? [<Button key="k:f" plain hotkey="f" onPress={() => press(fillPress)}><Text>{''}</Text></Button>] : []),
-  ]
-  return <Box flexDirection="column" height={frame.rows}>{rows.map(drawRow)}{hot}{focusAnchor(el)}</Box>
+  return <Box flexDirection="column" height={frame.rows}>{rows.map(drawRow)}{focusAnchor(el)}</Box>
 }
 
 // how one PaneLine is drawn (shared by the tabs and the console's 指揮 page): plain segments, a press row of Buttons, a text field, a toggle Button, a goto Button

@@ -40,3 +40,17 @@ mods/live/run-tests.sh: 1387 pass, 15 fail = exactly bandrow-brief/fb.txt (diff 
 (fail) review fix: band-decide-budget: a card taller than the room keeps the 待決 view open at every maxRows (terminal and desktop)  [maxRows 4: 2 rows, the open view fell back to the closed bar]
 == GREEN (frameRows always H rows; decideContent gets rows - 3; consoleFeed is per session; empty segment is 0 cells unless the row is one empty segment) 2026-11-17T19:26:29Z
 mods/live/run-tests.sh: 1392 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty)
+== RED (source reverted, new tests kept) 2026-11-18T03:52+08
+> (fail) band quota segment: source state no_source -> absent, stale -> warning role, expired -> broken role; an ok source keeps the pool colour
+> (fail) C1 fix: a 待決 band tab left open when console.json appears is closed; the band body is the one a fresh console-mode band draws (terminal)
+> (fail) keys: row 2 of fleet is its own Button (sees line 2), row 2 of quota opens its seats; decide has no o; i rides the strip; no j / k
+> (fail) pane review fix: console mode with a snapshot draws the band (no throw) and no tab row of its own (terminal)
+> (fail) pane review fix: console-pane-legacy-leak: console mode with a snapshot (one fleet line) draws the framed 艦隊 page from it, not the legacy console tabs (terminal)
+> (fail) pane review fix: folding the 艦隊 page clamps the focus to the last shown row (terminal)
+> (fail) pane review fix: no Button has an empty label, and the strip is the last row, on every page
+> (fail) pane review fix: quota and spend share one tab target but their strip Buttons and press rows have unique keys
+> (fail) pane review fix: strip labels are the page name alone (the host draws `<hotkey>: <label>`)
+> (fail) pane review fix: while a 待決 note is typed the strip binds no digit and no letter; the Input owns the keys
+> (fail) speed label: the console mode draws no pet when pet.json and five timed steps exist (desktop)
+> (fail) speed label: the console mode draws no pet when pet.json and five timed steps exist (terminal)
+== GREEN (source restored): fail set == fb.txt exactly, pass=1400 rc=1 (known reds only)

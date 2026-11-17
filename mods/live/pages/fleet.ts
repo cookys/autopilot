@@ -22,7 +22,7 @@ const fit = (s: string, w: number): string => (displayWidth(s) <= w ? s : trunca
 type FleetRow = { line: ConsoleLine; sid: StateId; worst: ConsoleLine['issues'][number] | null }
 const RANK: Record<string, number> = { failed: 0, stalled: 1 }
 
-function rowsOf(lines: ConsoleLine[]): FleetRow[] {
+export function rowsOf(lines: ConsoleLine[]): FleetRow[] {
   const out: FleetRow[] = lines.map(line => {
     const worst = [...line.issues].sort((a, b) => (RANK[a.state] ?? 2) - (RANK[b.state] ?? 2) || a.since_ms - b.since_ms)[0] ?? null
     const sid: StateId = worst === null ? 'pending' : worst.state in STATES ? (worst.state as StateId) : 'stalled'

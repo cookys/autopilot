@@ -662,7 +662,7 @@ for (const surface of SURFACES) {
     const drawn = await readDecidePane($, surface)
     // the framed 待決 page shows the card and its options as rows; attachments are not drawn there (plan r2 §2 row 2), so no show: Button, no Link, and nothing from `javascript:` reaches the tree
     expect(drawn.rows.some(r => r.includes('請確認規格與 PR'))).toBe(true)
-    expect(drawn.rows.some(r => r.includes('[a] 核准') && r.includes('[b] 退回'))).toBe(true)
+    expect(drawn.rows.some(r => r.includes('核准') && r.includes('退回'))).toBe(true)
     expect(drawn.buttons.filter(k => k.startsWith('show:'))).toEqual([])
     expect(drawn.links).toEqual([])
     expect(drawn.rows.some(r => r.includes('javascript:'))).toBe(false)
@@ -807,7 +807,7 @@ for (const surface of SURFACES) {
     expect(stepsHeaderAt).toBeGreaterThan(decCardAt)
     expect(stepCardAt).toBeGreaterThan(stepsHeaderAt)
     expect(lookCardAt).toBeGreaterThan(stepCardAt)
-    expect(drawn.rows.some(r => r.includes('[a] 甲') && r.includes('[b] 乙'))).toBe(true)
+    expect(drawn.rows.some(r => r.includes('甲') && r.includes('乙'))).toBe(true)
     // a decision is never listed under 要你做或看, and a step / look card never takes an option row
     expect(drawn.rows.slice(stepsHeaderAt).some(r => r.includes('要採用哪個方案？'))).toBe(false)
     expect(drawn.rows.slice(0, stepsHeaderAt).some(r => r.includes('請到瀏覽器完成登入') || r.includes('給你看'))).toBe(false)

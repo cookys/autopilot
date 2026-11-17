@@ -7,6 +7,9 @@ import { makeT } from './i18n'
 import { actionRows, brokenRow, frameRows, mostSevere } from './pages/frame'
 import type { Page, PageCtx, Row } from './pages/frame'
 import { PAGES } from './pages/index'
+import { NO_NAV } from './pages/decide'
+import { bandQuotaSeg } from './band'
+import { PALETTE } from './ui'
 import * as M from './model'
 import { displayWidth } from './model'
 import { parseConsole } from './console'
@@ -154,9 +157,9 @@ test('key hints: every [x] in a framed page string is one of that page\'s bound 
   expect(pageHotkeys('decide')).not.toContain('p')
 })
 
-// o = act on the focused (▸) row: j moves the focus to row 2 (view.focus 1), then o presses that row's action. fleet: see that line; quota: show / hide that pool's seats. decide has no o.
-// i is bound beside the digits (help); no key outside the hotkey set is drawn as a hotkey Button.
-test('keys: j then o acts on row 2 (fleet sees line 2, quota opens its seats); decide has no o; i is bound', () => {
+// Every fleet line and every quota pool is its own Button (Tab walks the rows, Enter presses the focused one): pressing row 2 sees line 2 / opens pool 2. There is no j / k, and no
+// Button is drawn with an empty label (the host would draw it as a row `x:`); `o` and `i` ride on a visible Button.
+test('keys: row 2 of fleet is its own Button (sees line 2), row 2 of quota opens its seats; decide has no o; i rides the strip; no j / k', () => {
   const live = { state: 'ok', text: 'x', header: 'x', band: { kind: 'idle', verdict: '', reason: null, project: 'x', elapsed: '1m', phase: '', slots: [] }, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
   const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
   const drawn = (tab: 'fleet' | 'spend' | 'decide', focus: number) => {
@@ -166,20 +169,67 @@ test('keys: j then o acts on row 2 (fleet sees line 2, quota opens its seats); d
     return { tree, pressed }
   }
   const hot = (tree: Node[], k: string) => tree.find(n => n.kind === 'Button' && n.props.hotkey === k)
-  const f0 = drawn('fleet', 0); hot(f0.tree, 'o')!.props.onPress()
-  const f1 = drawn('fleet', 1); hot(f1.tree, 'o')!.props.onPress()
-  expect(f0.pressed[0]).toMatch(/^fleet:see:/)
-  expect(f1.pressed[0]).toMatch(/^fleet:see:/)
-  expect(f1.pressed[0], 'row 2 is another line than row 1').not.toBe(f0.pressed[0])
-  const q = drawn('spend', 1); hot(q.tree, 'o')!.props.onPress()
-  expect(q.pressed).toEqual(['quota:open'])
+  const f = drawn('fleet', 0)
+  const lineBtns = f.tree.filter(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.startsWith('p:'))
+  const seeBtns = lineBtns.filter(n => { const before = f.pressed.length; n.props.onPress(); return f.pressed.length > before && f.pressed[f.pressed.length - 1].startsWith('fleet:see:') })
+  expect(seeBtns.length, 'every shown fleet line is a Button').toBeGreaterThanOrEqual(2)
+  const seen = f.pressed.filter(x => x.startsWith('fleet:see:'))
+  expect(new Set(seen).size, 'row 2 sees another line than row 1').toBeGreaterThanOrEqual(2)
+  const q = drawn('spend', 0)
+  const pools = q.tree.filter(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.startsWith('p:')).filter(n => { n.props.onPress(); return true })
+  expect(q.pressed.filter(x => x.startsWith('quota:pool:')).slice(0, 2), 'quota: row 2 is pool index 1').toEqual(['quota:pool:0', 'quota:pool:1'])
+  expect(pools.length).toBeGreaterThanOrEqual(2)
   expect(hot(drawn('decide', 0).tree, 'o')).toBeUndefined()
-  for (const tab of ['fleet', 'spend', 'decide'] as const) expect(hot(drawn(tab, 0).tree, 'i')).toBeDefined()
   for (const tab of ['fleet', 'spend', 'decide'] as const) {
+    const tree = drawn(tab, 0).tree
+    expect(hot(tree, 'i'), 'i is a Button with a visible label').toBeDefined()
+    expect(flat(hot(tree, 'i') as Node)).toBe('說明')
+    expect(hot(tree, 'j') ?? hot(tree, 'k'), 'no j / k').toBeUndefined()
     const id = tab === 'spend' ? 'quota' : tab
-    const letters = drawn(tab, 0).tree.filter(n => n.kind === 'Button' && /^[a-z]$/.test(n.props.hotkey ?? '')).map(n => n.props.hotkey as string)
+    const letters = tree.filter(n => n.kind === 'Button' && /^[a-z]$/.test(n.props.hotkey ?? '')).map(n => n.props.hotkey as string)
     expect(letters.filter(h => !pageHotkeys(id).includes(h)), id + ' draws a hotkey it does not list').toEqual([])
+    expect(tree.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && flat(n).trim() === '').map(n => n.props.key), id + ': a Button with an empty label').toEqual([])
   }
+  expect(hot(drawn('fleet', 0).tree, 'o'), 'o rides the visible 看 action row').toBeDefined()
+})
+
+// review fix (codeforge screenshot): the pane has no empty-label Button, the strip is the last row on every page, its labels are the page name alone (the host adds `1: `),
+// every Button key is unique among siblings, and a note being typed leaves the digits to the Input.
+const LIVE0 = { state: 'ok', text: 'x', header: 'x', band: { kind: 'idle', verdict: '', reason: null, project: 'x', elapsed: '1m', phase: '', slots: [] }, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
+const framedPane = (tab: any, over: Record<string, unknown> = {}) => {
+  const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
+  return walk(Pane(EL as never, LIVE0, tab, () => {}, t, 160, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: SNAP, nowMs: NOW, rows: 30, ...over } as never))
+}
+test('pane review fix: no Button has an empty label, and the strip is the last row, on every page', () => {
+  for (const tab of ['now', 'decide', 'fleet', 'spend'] as const) {
+    const tree = framedPane(tab)
+    expect(tree.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && flat(n).trim() === '').map(n => n.props.key), tab + ': empty-label Buttons').toEqual([])
+    const root = tree.find(n => n.kind === 'Box' && n.props.height === 30) as Node
+    const kids = ([] as any[]).concat(root.props.children).flat(9).filter(c => c && c.props)
+    const rowKeys = kids.map(c => String(c.props.key)).filter(k => /^f\d+$/.test(k))
+    expect(rowKeys[rowKeys.length - 1], tab + ': the last row is the strip').toBe('f29')
+    const stripKids = walk(kids.find(c => c.props.key === 'f29'))
+    expect(stripKids.filter(n => n.kind === 'Button' && /^[0-9]$/.test(n.props.hotkey ?? '')).length, tab + ': the strip carries the digit Buttons').toBeGreaterThanOrEqual(6)
+  }
+})
+test('pane review fix: strip labels are the page name alone (the host draws `<hotkey>: <label>`)', () => {
+  const tree = framedPane('fleet')
+  const tabs = tree.filter(n => n.kind === 'Button' && /^[0-9]$/.test(n.props.hotkey ?? ''))
+  expect(tabs.length).toBeGreaterThanOrEqual(6)
+  for (const b of tabs) expect(flat(b), 'label of hotkey ' + b.props.hotkey).not.toMatch(/^\s*\d/)
+  expect(flat(tabs[0]).trim()).toBe('現況')
+})
+test('pane review fix: quota and spend share one tab target but their strip Buttons and press rows have unique keys', () => {
+  for (const tab of ['fleet', 'spend'] as const) {
+    const keys = framedPane(tab).filter(n => n.kind === 'Button').map(n => n.props.key).filter(k => k !== undefined)
+    expect(keys.filter((k, i) => keys.indexOf(k) !== i), tab + ': duplicate Button keys').toEqual([])
+  }
+})
+test('pane review fix: while a 待決 note is typed the strip binds no digit and no letter; the Input owns the keys', () => {
+  const typing = { decide: { ...NO_NAV, textMode: true, textBuf: '3' } }
+  const tree = framedPane('decide', typing)
+  expect(tree.filter(n => n.kind === 'Button' && n.props.hotkey !== undefined).map(n => n.props.hotkey), 'no hotkey while typing').toEqual([])
+  expect(framedPane('decide').filter(n => n.kind === 'Button' && /^[0-9]$/.test(n.props.hotkey ?? '')).length, 'control: the digits are bound when not typing').toBeGreaterThanOrEqual(6)
 })
 
 // review fix 1: the frame is exactly H rows even when H is under the six rows (head + strip + at least one action) the layout used to force
@@ -208,4 +258,15 @@ test('pane: a framed row with an empty segment plus cols cells of text draws exa
   expect(wideRow).toBeDefined()
   expect(width(wideRow as Node)).toBe(60)
   expect(rowsDrawn.some(n => width(n) === 1), 'a row that is only one empty segment still draws one cell').toBe(true)
+})
+
+// band-quota-stale-source: the band's quota segment follows the quota SOURCE state, not only the pools: no_source draws nothing, stale takes the warning role, expired the broken one
+test('band quota segment: source state no_source -> absent, stale -> warning role, expired -> broken role; an ok source keeps the pool colour', () => {
+  const pools = (SNAP as NonNullable<typeof SNAP>).quota.pools!.filter(p => p.pool === 'pool-a').map(p => ({ ...p, seven_day_pct: 20, five_hour_pct: 10, projected_pct_at_reset: 97, projected_exhaustion_at_ms: null, burn_pct_per_h: 1, limit_hit: false, observed_at_ms: NOW, stale: false, stale_note: null, stale_age_min: null })) // a healthy pool
+  const ok = bandQuotaSeg(pools, NOW, t, 'ok')
+  expect(ok, 'control: the ok source draws the segment').not.toBeNull()
+  expect(ok!.color, 'control: a healthy pool draws the done colour').toBe(PALETTE.done)
+  expect(bandQuotaSeg(pools, NOW, t, 'no_source'), 'no_source: no segment').toBeNull()
+  expect(bandQuotaSeg(pools, NOW, t, 'stale')!.color, 'stale: warning role').toBe(PALETTE.attention)
+  expect(bandQuotaSeg(pools, NOW, t, 'expired')!.color, 'expired: broken role').toBe(PALETTE.broken)
 })

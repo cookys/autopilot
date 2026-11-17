@@ -78,6 +78,7 @@ import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
 import { paneRows, runAgedOut, runEndedMs, runSubject } from './model'
 import * as ui from './ui'
+import consoleFull from './fixtures/console/console-full.fixture'
 import { FOCUS_ANCHOR_KEY } from './pane'
 import { routeKey } from './pages/keys'
 import { BAND_ROWS } from './band'
@@ -3572,7 +3573,7 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   await w.clock.advance(11_000) // the tick reads the mode: it turns on
   const after = await bandTexts()
   expect(after.length, 'the 待決 body (many rows) is gone').toBeLessThan(before.length)
-  expect(after.join(' ').includes('指揮')).toBe(true)
+  expect(after.join(' ').includes('指揮'), 'the console band draws no tab row: the pane strip is the only one (folds A4)').toBe(false)
 })
 // review fix 3: the console feed (triedMs, snap) belongs to the session; a new session.start must not inherit the 60 s throttle or the first run's snapshot
 test('review fix: consolefeed-session-reset: a second session.start on the same clock asks `fleet console --json` again', async ($, on) => {
@@ -3582,12 +3583,12 @@ test('review fix: consolefeed-session-reset: a second session.start on the same 
   await start($, 'terminal')
   await w.clock.advance(5_000)
   await w.clock.advance(5_000)
-  const first = ran.filter(a => a === 'fleet console --json').length
+  const first = ran.filter(a => a.endsWith(' fleet console --json')).length
   expect(first, 'the first session fetches the console snapshot').toBe(1)
   await start($, 'terminal') // /clear or a new session: the clock has not moved past the 60 s interval
   await w.clock.advance(5_000)
   await w.clock.advance(5_000)
-  expect(ran.filter(a => a === 'fleet console --json').length, 'the second session fetches again').toBe(2)
+  expect(ran.filter(a => a.endsWith(' fleet console --json')).length, 'the second session fetches again').toBe(2)
 })
 // C1 U6: the console pane's pages. The snapshot source answers null until C2, so team / quota / hosts say 無來源 (no table); 本席 folds this session's 現況, 派工 and 審查 under their names.
 test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there is no snapshot, and 本席 carries 現況 · 派工 · 審查 (terminal)', async ($, on) => {
@@ -3614,8 +3615,64 @@ test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there 
   const self = await lines('self')
   for (const name of ['現況', '派工', '審查']) expect(self.includes(name)).toBe(true)
   expect(self.includes('無來源')).toBe(false)
-  expect(ran.filter(a => a.startsWith('fleet console')).length).toBe(1) // the data source (consolefeed.ts) asks once in this minute; its '[]' answer is no source, so the pages above still say 無來源
+  expect(ran.filter(a => a.includes(' fleet console')).length).toBe(1) // the data source (consolefeed.ts) asks once in this minute; its '[]' answer is no source, so the pages above still say 無來源
 })
+// pane review fix 1 (console-pane-legacy-leak): in the console mode the pane draws the FRAMED pages fed from the console snapshot, not the old console tabs (those need `legacyTabs`).
+const CONSOLE_JSON = JSON.stringify(consoleFull)
+const framedWorld = async ($: any, on: any, mutate: (snap: any) => any = x => x) => {
+  on('process.run', ($$: any, e: any) => ({ value: { exitCode: 0, stdout: JSON.stringify(mutate(JSON.parse(CONSOLE_JSON))), stderr: '' } }))
+  const w = world(on, consoleFiles())
+  await start($, 'terminal')
+  await w.clock.advance(5_000) // the tick turns the mode on and starts the fetch
+  await w.clock.advance(5_000) // the next tick draws what the fetch left
+  return w
+}
+const framedMount = ($: any) => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { ...PANE_PROPS, legacyTabs: false }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
+const framedRows = (tree: Node): string[] => { const out: string[] = []; const walk = (n: Node) => { for (const c of (n.children || []) as Node[]) { if (typeof c === 'string') continue; if (/^f\d+$/.test(String((c as Node).props?.key))) out.push(textOf(c as Node)); else walk(c as Node) } }; walk(tree); return out }
+test('pane review fix: console-pane-legacy-leak: console mode with a snapshot (one fleet line) draws the framed 艦隊 page from it, not the legacy console tabs (terminal)', async ($, on) => {
+  await framedWorld($, on)
+  const first = await framedMount($)
+  await first.press({ key: 'fleet' })
+  await first.unmount()
+  const pane = await framedMount($)
+  const tree = (await pane.drawn()) as Node
+  const rows = framedRows(tree)
+  await pane.unmount()
+  expect(rows.some(r => r.includes('復原線')), 'the framed 艦隊 page lists the snapshot line: ' + rows.slice(0, 4).join(' | ')).toBe(true)
+  const all = walkTexts(tree).map(textOf).join(' ')
+  expect(all.includes('本席') || all.includes('指揮'), 'the legacy console strip (指揮 團隊 額度 主機 本席) is not drawn').toBe(false)
+})
+// the band, console mode with a snapshot: bandQuotaSeg used a `nowMs` that only existed in an inner block (ReferenceError, no band drawn); the console band has no tab row of its own
+test('pane review fix: console mode with a snapshot draws the band (no throw) and no tab row of its own (terminal)', async ($, on) => {
+  await framedWorld($, on)
+  const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-bandnow', props: { ...BAND_PROPS, maxRows: 6 }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
+  const tree = (await ui.drawn()) as Node
+  const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
+  await ui.unmount()
+  const text = walkTexts(tree).map(textOf).join(' ')
+  expect(text.includes('疑似卡住'), 'the band drew: ' + text.slice(0, 80)).toBe(true)
+  expect(buttons.filter(b => String(b.props?.key).startsWith('tab:')).map(b => b.props?.key), 'no tab row on the band').toEqual([])
+})
+// pageview-focus-unbounded: the fold clamps the focus to the rows that are still shown, so the next unfold does not put the ▸ back on a row that was folded away
+test('pane review fix: folding the 艦隊 page clamps the focus to the last shown row (terminal)', async ($, on) => {
+  await framedWorld($, on, snap => { snap.lines = [...snap.lines, ...[7, 8, 9].map(n => ({ ...snap.lines[3], line_id: 'zz' + n, label: 'ZZ線' + n, issues: [] }))]; return snap })
+  const first = await framedMount($)
+  await first.press({ key: 'fleet' })
+  await first.unmount()
+  const LINE = /(GPU 線|復原線|遊戲線|語音線|未歸線|ZZ線\d)/
+  const step = async (act: (pane: any) => Promise<void>) => { const pane = await framedMount($); await act(pane); const rows = framedRows((await pane.drawn()) as Node); await pane.unmount(); return rows }
+  const keyOf = async (pane: any, pick: (b: Node) => boolean) => ((await pane.findAll({ type: 'Button' })) as Node[]).find(pick)?.props?.key
+  const fold = (pane: any) => keyOf(pane, b => b.props?.hotkey === 'z').then(k => pane.press({ key: k }))
+  await step(fold) // unfold: all 8 lines
+  const rowKeys = async (pane: any) => { const ks = ((await pane.findAll({ type: 'Button' })) as Node[]).map(b => String(b.props?.key)).filter(k => /^p:\d+:/.test(k)); const ids = [...new Set(ks.map(k => Number(k.split(':')[1])))].sort((a, b) => a - b); return { ks, ids } }
+  await step(async pane => { const { ks, ids } = await rowKeys(pane); await pane.press({ key: ks.find(k => Number(k.split(':')[1]) === ids[8]) }) }) // the 8th line (the head row is not a Button): focus 7
+  await step(fold) // fold: 6 lines shown
+  const rows = await step(fold) // unfold again
+  const lines = rows.filter(r => LINE.test(r)).slice(0, 8)
+  expect(lines.length, 'eight line rows: ' + rows.join(' | ')).toBe(8)
+  expect(lines.findIndex(r => r.trimStart().startsWith('▸')), 'the ▸ stays on the last row that was shown (6th), not the 8th').toBe(5)
+})
+
 // C1 U8 (KR2, KR5): in the console mode the refresh path (ticks, a pane redraw on every tab) starts no runner. KR2: no process.run argv names an LLM runner
 // (claude, codex, gemini, opencode, agy, grok, kimi, the engine or a dispatch script); `fleet` reads are the feed, not a runner. KR5: the only file is band-facts/<sid>.json
 // (and its temp file). `panel_open_at_ms` is $.state, not a file. The two predicates are shown red on a planted call first (the negative control).
@@ -6949,7 +7006,7 @@ for (const surface of SURFACES) {
     expect(speedText).toMatch(/ϟ \d{2} tok\/s [▁▂▃▄▅▆▇█]{5}/)
     expect(speedText).not.toContain('Ferris')
     expect(speedText).not.toContain('Lv.')
-    expect(text).toContain('指揮')
+    expect(text).not.toContain('指揮') // the console band draws no tab row of its own (folds A4)
     expect(text).not.toContain('艦隊')
   })
 

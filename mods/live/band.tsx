@@ -106,14 +106,16 @@ export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; on
 
 // the row, and the column its tabs start in (the rule under it is built from that)
 // r2 §3.1: the right end of the summary row names the most dangerous pool, the same one the 現況 page names (worstPool, folds A7). null = nothing to show (no pools).
-export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T): Seg | null {
+// `source` is the quota source's state in the console snapshot: no_source draws nothing, stale takes the warning colour, expired the broken one (a green on old numbers is a false all-clear)
+export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, source?: string): Seg | null {
+  if (source === 'no_source') return null
   const w = worstPool(pools, nowMs)
   if (w === null) return null
-  const color = w.role === 'broken' ? PALETTE.broken : w.role === ROLE_WARNING ? PALETTE.attention : PALETTE.done
+  const color = source === 'expired' || w.role === 'broken' ? PALETTE.broken : source === 'stale' || w.role === ROLE_WARNING ? PALETTE.attention : PALETTE.done
   return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }
 }
 
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null): { node: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false): { node: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
   const fb = forge === null ? null : forgeBar(forge)
@@ -146,7 +148,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const qw = quota === null ? 0 : displayWidth(quota.text)
   const qpad = quota === null ? 0 : columns - left.width - forgeW - qw
   const qnode = quota === null || qpad < 2 ? [] : [<Text key="[REDACTED]">{' '.repeat(qpad)}</Text>, <Text key="[REDACTED]" {...drawSeg(quota)} wrap="truncate">{quota.text}</Text>]
-  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}</Box>{stripRow}</Box>, stripRow, strip, tabsAt: gap }
+  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}</Box>{noTabs ? null : stripRow}</Box>, stripRow, strip, tabsAt: gap }
 }
 
 // the rule under the bar

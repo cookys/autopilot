@@ -135,7 +135,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     else if (tier === 'narrow' && stalled) { text = word + ' ' + bad + ' ' + t('page.quota.f_see_below'); under.push([staleBadge(bad + ' ' + v.pool + ' ' + v.text)]) }
     else text = (tier === 'narrow' ? word + ' ' : stalled ? bad + ' ' : '') + v.text
     row.push(seg(text, roleColor(v.role)))
-    body.push(row)
+    body.push(row.map(sg => ({ ...sg, press: 'quota:pool:' + i }))) // the whole row is one Button: it focuses this pool and shows / folds its seats
   })
   body.push(...under)
 

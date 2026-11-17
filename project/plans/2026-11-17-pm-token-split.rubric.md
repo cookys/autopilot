@@ -1,6 +1,6 @@
 # Rubric — 2026-11-17-pm-token-split.md
 
-> Source plan: docs/plans/2026-11-17-pm-token-split.md
+> Source plan: project/plans/2026-11-17-pm-token-split.md
 
 R1: Every work-order item (1)–(6) and the added plan-first gate maps to exactly one phase with a dev-flow size and a testable "done when" acceptance.
 R2: Each phase names the concrete files, commands and output shape so a zero-context implementer can start without guessing; no load-bearing TODO/TBD.

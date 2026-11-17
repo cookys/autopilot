@@ -4,7 +4,10 @@
 // spawned or read while drawing, and a failure never throws. Syntax is erasable, so `node` imports this file directly.
 import type { ConsoleSnapshot } from './console'
 
-export const CONSOLE_ARGV = ['fleet', 'console', '--json'] as const
+// the senders whose pace lines the console ingests (fleet 01M7NEJS): capacity's session and the shell cron (fleet-cli). One constant, passed through `env` as ONE
+// argv element (the value has a space; it must never be split)
+export const CONSOLE_INGEST_FROM = 'cookys/courier-a/capacity--claude=pace cookys/courier-a/fleet-cli=pace'
+export const CONSOLE_ARGV = ['env', `FLEET_CONSOLE_INGEST_FROM=${CONSOLE_INGEST_FROM}`, 'fleet', 'console', '--json'] as const
 export const CONSOLE_EVERY_MS = 60_000 // one refresh per interval, success or failure
 export const CONSOLE_TIMEOUT_MS = 5_000
 export const CONSOLE_STALE_MS = 5 * 60_000 // a fallback file older than this is drawn stale

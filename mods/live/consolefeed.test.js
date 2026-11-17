@@ -27,7 +27,9 @@ test('a: the command succeeds -> snapshot from the command, source ok; a second 
   const feed = F.makeConsoleFeed()
   const run = calls(ok(snapText(NOW)))
   assert.equal(await feed.refresh(run, file(null), C.parseConsole, NOW), true)
-  assert.deepEqual(run.argv, ['fleet', 'console', '--json'])
+  // capacity's pace lines are ingested from two sender identities (its session and the shell cron); the whole value is ONE argv element, never split on the space
+  assert.deepEqual(run.argv, ['env', 'FLEET_CONSOLE_INGEST_FROM=cookys/courier-a/capacity--claude=pace cookys/courier-a/fleet-cli=pace', 'fleet', 'console', '--json'])
+  assert.equal(F.CONSOLE_INGEST_FROM, 'cookys/courier-a/capacity--claude=pace cookys/courier-a/fleet-cli=pace')
   const s = feed.current(NOW)
   assert.equal(s.sources.cards.state, 'ok')
   assert.equal(await feed.refresh(run, file(null), C.parseConsole, NOW + 59_000), false)

@@ -28,7 +28,7 @@ PreCompact stdout on exit 0 is merged into the compaction summarizer's custom in
 | code review | `<live>/review-rounds/<project_key>.json` (shared by every worktree of the repo; a round recorded at another head than this checkout's HEAD is kept but marked `[head differs ...]`, or `[head not compared; shared by every worktree]` when this checkout's HEAD cannot be read) |
 | plan review | not collected (its state key cannot be derived from the session) |
 | decision ledger | task card `ledger`, else newest `docs/projects/*/ledger/decisions.jsonl` under 24 h old |
-| dispatches | `${AUTOPILOT_DISPATCH_RUNS_DIR:-$TMPDIR/autopilot-dispatch-runs}/*.manifest.json` with the marker root or a campaign root, not ended, pid alive |
+| dispatches | `$(node scripts/lib/runtime-paths.js runs-dir)/*.manifest.json` with the marker root or a campaign root, not ended, pid alive |
 | subagents | `<live>/agents/<sid>/*.json`, newest 40 read, un-ended and active in the last 30 min |
 
 ## Task card

@@ -48,10 +48,38 @@ function overlay(over = {}) {
 const modeOf = (p) => fs.statSync(p).mode & 0o7777;
 const depsFor = (extra = {}) => ({ home: '/nonexistent-home', ...extra });
 
-test('runsDir precedence: AUTOPILOT_DISPATCH_RUNS_DIR, then TMPDIR, then /tmp', () => {
+test('runsDir precedence: AUTOPILOT_DISPATCH_RUNS_DIR, then a private TMPDIR, then the per-user base', () => {
   assert.strictEqual(rp.runsDir({ AUTOPILOT_DISPATCH_RUNS_DIR: '/x/y', TMPDIR: '/t' }), '/x/y');
   assert.strictEqual(rp.runsDir({ TMPDIR: '/t' }), path.join('/t', rp.RUNS_DIR_NAME));
-  assert.strictEqual(rp.runsDir({}), path.join('/tmp', rp.RUNS_DIR_NAME));
+  assert.strictEqual(rp.runsDir({}, { uid: 4242 }), path.join('/tmp/autopilot-4242', rp.RUNS_DIR_NAME));
+});
+
+// ---- per-user runtime dir: never the shared /tmp root (PM task 01M7J92W) ----
+test('per-user runs dir: a writable XDG_RUNTIME_DIR wins', () => {
+  const xdg = fixture();
+  assert.strictEqual(rp.runsDir({ XDG_RUNTIME_DIR: xdg }), path.join(xdg, 'autopilot', rp.RUNS_DIR_NAME));
+  assert.strictEqual(rp.userRuntimeBase({ XDG_RUNTIME_DIR: xdg }), path.join(xdg, 'autopilot'));
+});
+
+test('per-user runs dir: XDG unset (or unwritable) gives /tmp/autopilot-<uid>, TMPDIR=/tmp is not honoured', () => {
+  assert.strictEqual(rp.runsDir({}, { uid: 4242 }), path.join('/tmp/autopilot-4242', rp.RUNS_DIR_NAME));
+  assert.strictEqual(rp.runsDir({ TMPDIR: '/tmp/' }, { uid: 4242 }), path.join('/tmp/autopilot-4242', rp.RUNS_DIR_NAME));
+  assert.strictEqual(rp.runsDir({ XDG_RUNTIME_DIR: '/nonexistent-xdg-dir' }, { uid: 4242 }), path.join('/tmp/autopilot-4242', rp.RUNS_DIR_NAME));
+});
+
+test('per-user runs dir: /tmp/autopilot-<uid> already owned by another uid is refused, naming path and owner', () => {
+  const base = `/tmp/autopilot-${ME}`;
+  const stat = Object.assign(Object.create(fs.statSync('/tmp')), {});
+  const fake = { isDirectory: () => true, isSymbolicLink: () => false, isFile: () => false, uid: OTHER, gid: OTHER, mode: 0o40700 };
+  const w = Object.assign(Object.create(fs), {
+    lstatSync: (p) => (p === base ? fake : fs.lstatSync(p)),
+    statSync: (p) => (p === base ? fake : fs.statSync(p)),
+  });
+  void stat;
+  const r = rp.evaluateRunsDir({}, depsFor({ fs: w }));
+  assert.strictEqual(r.decision, 'refuse');
+  assert.ok(r.reason.includes(base), r.reason);
+  assert.match(r.reason, new RegExp(`uid ${OTHER}`));
 });
 
 test('leaf symlink is refused', () => {

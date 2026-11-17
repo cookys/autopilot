@@ -212,10 +212,11 @@ const CONSOLE_MODE_EVERY_MS = 10_000 // the config file is read again at most th
 let consoleFeed = makeConsoleFeed() // per session: startLive makes a new one, so the 60 s throttle and the snapshot of an earlier session do not leak
 async function consoleSource($: EngineInterface): Promise<ConsoleSnapshot | null> {
   const nowMs = await $.clock.now()
+  const before = consoleFeed.current(nowMs)
   const home = await $.env.get('HOME').catch(() => undefined)
   const path = typeof home === 'string' && home.trim() !== '' ? home.trim().replace(/\/$/, '') + '/' + CONSOLE_FILE : null
   // not awaited: the command may take its whole timeout; the next tick draws what it left (an unchanged snapshot keeps its identity, so only a change redraws)
-  void consoleFeed.refresh(argv => $.process.run(argv, { timeoutMs: CONSOLE_TIMEOUT_MS }), () => (path === null ? Promise.resolve(null) : readText($, path)), parseConsole, nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => {}).catch(() => {})
+  void consoleFeed.refresh(argv => $.process.run(argv, { timeoutMs: CONSOLE_TIMEOUT_MS }), () => (path === null ? Promise.resolve(null) : readText($, path)), parseConsole, nowMs).then(async () => { if (consoleFeed.current(await $.clock.now()) !== before) void $.ui.invalidate('ui.render') }, () => {}).catch(() => {})
   return consoleFeed.current(nowMs)
 }
 async function consoleTick($: EngineInterface): Promise<void> {

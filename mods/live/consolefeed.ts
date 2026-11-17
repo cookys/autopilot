@@ -4,7 +4,10 @@
 // spawned or read while drawing, and a failure never throws. Syntax is erasable, so `node` imports this file directly.
 import type { ConsoleSnapshot } from './console'
 
-export const CONSOLE_ARGV = ['fleet', 'console', '--json'] as const
+// the senders whose pace lines the console ingests (fleet 01M7NEJS): capacity's session and the shell cron (fleet-cli). One constant, passed through `env` as ONE
+// argv element (the value has a space; it must never be split)
+export const CONSOLE_INGEST_FROM = 'cookys/courier-a/capacity--claude=pace cookys/courier-a/fleet-cli=pace'
+export const CONSOLE_ARGV = ['env', `FLEET_CONSOLE_INGEST_FROM=${CONSOLE_INGEST_FROM}`, 'fleet', 'console', '--json'] as const
 export const CONSOLE_EVERY_MS = 60_000 // one refresh per interval, success or failure
 export const CONSOLE_TIMEOUT_MS = 5_000
 export const CONSOLE_STALE_MS = 5 * 60_000 // a fallback file older than this is drawn stale
@@ -29,12 +32,16 @@ export function staleOf(snap: ConsoleSnapshot): ConsoleSnapshot {
 export function makeConsoleFeed(everyMs = CONSOLE_EVERY_MS, staleMs = CONSOLE_STALE_MS): ConsoleFeed {
   let snap: ConsoleSnapshot | null = null
   let fromFile = false
+  let raw: string | null = null
   let staleSnap: ConsoleSnapshot | null = null // memoised staleOf(snap), so identity holds between ticks
   let triedMs: number | null = null
   let busy = false
-  const accept = (s: ConsoleSnapshot | null, file: boolean): void => {
+  const accept = (s: ConsoleSnapshot | null, file: boolean, text: string | null): void => {
+    const nextRaw = s === null ? null : text
+    if (nextRaw === raw && file === fromFile) return
     snap = s
     fromFile = file
+    raw = nextRaw
     staleSnap = null
   }
   return {
@@ -51,21 +58,22 @@ export function makeConsoleFeed(everyMs = CONSOLE_EVERY_MS, staleMs = CONSOLE_ST
       triedMs = nowMs
       try {
         let got: ConsoleSnapshot | null = null
+        let text: string | null = null
         try {
           const r = await run(CONSOLE_ARGV)
-          if (r.exitCode === 0 && r.isStdoutTruncated !== true && r.stdout.length <= CONSOLE_MAX_BYTES) got = parse(r.stdout)
+          if (r.exitCode === 0 && r.isStdoutTruncated !== true && r.stdout.length <= CONSOLE_MAX_BYTES) { text = r.stdout; got = parse(text) }
         } catch (_e) {
           got = null
         }
-        if (got !== null) { accept(got, false); return true }
+        if (got !== null) { accept(got, false, text); return true }
         let fileSnap: ConsoleSnapshot | null = null
         try {
-          const text = await readFile()
+          text = await readFile()
           if (typeof text === 'string' && text.length <= CONSOLE_MAX_BYTES) fileSnap = parse(text)
         } catch (_e) {
           fileSnap = null
         }
-        accept(fileSnap, fileSnap !== null)
+        accept(fileSnap, fileSnap !== null, text)
       } finally {
         busy = false
       }

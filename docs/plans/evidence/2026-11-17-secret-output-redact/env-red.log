@@ -1,0 +1,296 @@
+✖ env Environment=AUTH_SALT=synthetic-salt-value-0001 (31.033152ms)
+✖ env Environment="API_TOKEN=synthetic token" "DB_PASSWORD=synthetic password" "MODE=debug" (29.864051ms)
+✖ env Environment='SECRET=synthetic secret' API_KEY=synthetic-key-0001 (34.546466ms)
+✖ env export API_KEY=synthetic-key-0001 (30.6975ms)
+✖ env   export DB_PASS='synthetic password'  # keep comment (34.831221ms)
+✖ env auth_salt=synthetic-salt-value-0001 (33.545451ms)
+✖ env SECRET=synthetic value with spaces (35.080351ms)
+✖ env Environment="SECRET=synthetic\"quote" "TOKEN=synthetic-token-0001" (32.448076ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 339.63276
+
+✖ failing tests:
+
+test at hooks/secret-output-redact.test.js:75:3
+✖ env Environment=AUTH_SALT=synthetic-salt-value-0001 (31.033152ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: 'Environment=AUTH_SALT=[REDACTED]',
+  -       stdout: 'Environment=AUTH_SALT=[REDACTED]'
+  -     }
+  -   }
+  - }
+  
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at hooks/secret-output-redact.test.js:75:3
+✖ env Environment="API_TOKEN=synthetic token" "DB_PASSWORD=synthetic password" "MODE=debug" (29.864051ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: 'Environment="API_TOKEN=[REDACTED]" "DB_PASSWORD=[REDACTED]" "MODE=debug"',
+  -       stdout: 'Environment="API_TOKEN=[REDACTED]" "DB_PASSWORD=[REDACTED]" "MODE=debug"'
+  -     }
+  -   }
+  - }
+  
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at hooks/secret-output-redact.test.js:75:3
+✖ env Environment='SECRET=synthetic secret' API_KEY=synthetic-key-0001 (34.546466ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: "Environment='SECRET=[REDACTED]' API_KEY=[REDACTED]",
+  -       stdout: "Environment='SECRET=[REDACTED]' API_KEY=[REDACTED]"
+  -     }
+  -   }
+  - }
+  
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at hooks/secret-output-redact.test.js:75:3
+✖ env export API_KEY=synthetic-key-0001 (30.6975ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: 'export API_KEY=[REDACTED]',
+  -       stdout: 'export API_KEY=[REDACTED]'
+  -     }
+  -   }
+  - }
+  
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at hooks/secret-output-redact.test.js:75:3
+✖ env   export DB_PASS='synthetic password'  # keep comment (34.831221ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: "  export DB_PASS='[REDACTED]'  # keep comment",
+  -       stdout: "  export DB_PASS='[REDACTED]'  # keep comment"
+  -     }
+  -   }
+  - }
+  
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at hooks/secret-output-redact.test.js:75:3
+✖ env auth_salt=synthetic-salt-value-0001 (33.545451ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: 'auth_salt=[REDACTED]',
+  -       stdout: 'auth_salt=[REDACTED]'
+  -     }
+  -   }
+  - }
+  
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at hooks/secret-output-redact.test.js:75:3
+✖ env SECRET=synthetic value with spaces (35.080351ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: 'SECRET=[REDACTED]',
+  -       stdout: 'SECRET=[REDACTED]'
+  -     }
+  -   }
+  - }
+  
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at hooks/secret-output-redact.test.js:75:3
+✖ env Environment="SECRET=synthetic\"quote" "TOKEN=synthetic-token-0001" (32.448076ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: 'Environment="SECRET=[REDACTED]" "TOKEN=[REDACTED]"',
+  -       stdout: 'Environment="SECRET=[REDACTED]" "TOKEN=[REDACTED]"'
+  -     }
+  -   }
+  - }
+  
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:75:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

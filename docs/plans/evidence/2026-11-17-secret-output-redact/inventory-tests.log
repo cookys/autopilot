@@ -1,0 +1,3 @@
+FAIL [check-hook-inventory] codex sync --check rc 0: expected '1', got '0'
+FAIL [check-hook-inventory] 52 passed, 1 failed
+      - codex sync --check rc 0: expected '1', got '0'

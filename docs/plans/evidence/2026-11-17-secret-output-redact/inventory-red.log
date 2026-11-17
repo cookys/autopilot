@@ -1,0 +1,24 @@
+Hook inventory drift:
+
+  ✗ .claude-plugin/plugin.json: total=46 but derived total=47  («"description": "Development autopilot — 31 lifecycle skills + 3 methodology agents + 46 ho»)
+  ✗ .claude-plugin/plugin.json: defaultOn=30 but derived defaultOn=31  («"description": "Development autopilot — 31 lifecycle skills + 3 methodology agents + 46 ho»)
+  ✗ plugin.json: total=46 but derived total=47  («"description": "Development autopilot — 31 lifecycle skills + 3 methodology agents + 46 ho»)
+  ✗ plugin.json: defaultOn=30 but derived defaultOn=31  («"description": "Development autopilot — 31 lifecycle skills + 3 methodology agents + 46 ho»)
+  ✗ .claude-plugin/marketplace.json: total=46 but derived total=47  («"description": "Development autopilot — 31 skills + 3 methodology agents + 46 hooks (30 de»)
+  ✗ .claude-plugin/marketplace.json: defaultOn=30 but derived defaultOn=31  («"description": "Development autopilot — 31 skills + 3 methodology agents + 46 hooks (30 de»)
+  ✗ CLAUDE.md: total=46 but derived total=47  («Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 46 hooks (30 d»)
+  ✗ CLAUDE.md: defaultOn=30 but derived defaultOn=31  («Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 46 hooks (30 d»)
+  ✗ README.md: total=46 but derived total=47  («<img src="https://img.shields.io/badge/hooks-46-6B8E6B?style=flat-square" alt="46 Hooks">»)
+  ✗ README.zh-TW.md: total=46 but derived total=47  («<img src="https://img.shields.io/badge/hooks-46-6B8E6B?style=flat-square" alt="46 Hooks">»)
+  ✗ hooks/README.md: defaultOn=30 but derived defaultOn=31  («46 Claude Code hooks for runtime enforcement of development discipline: **30 default-on** »)
+  ✗ hooks/README.md: header count=30 but derived=31  («## Tier A — Default-On (30 hooks)»)
+  ✗ hooks/README.md: default-on hook "secret-output-redact" is MISSING from the Tier-A table
+
+Derived truth:
+Hook inventory (derived from hooks.json + opt-in-manifest.json):
+
+  total          : 47
+  default-on (31) : advisory-relay, ask-decision, audit-log, awaiting-owner, context-budget, cost-fuse, cost-tracker, depth0-delegate-gate, dirty-protected-paths, dispatch-model-guard, failure-escalation, fleet-send-work-order-guard, foreman-guard, intent-capture, log-error, owner-question-guard, past-reference-recall, reload-watch, residue-auto-reap, run-approval-gate, runs-watch-autostart, scheduled-wakeup-guard, secret-output-redact, session-handoff, session-start, session-tasks, state-checkpoint, subagent-budget, suggest-compact, unmerged-ship-advisory, version-drift-check
+  opt-in     (16) : accumulator, askpm-log, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, design-quality, exec-boundary, fleet-stop, large-file-warner, mcp-health, orchestrator-edit-gate, per-turn-gate, session-summary, test-runner
+  disabled   (0) : 
+  mods: 1   (top-level modules in hooks.json; separate from the hook tiers)

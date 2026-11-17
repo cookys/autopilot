@@ -1,0 +1,27 @@
+sync-version v3.0.0-alpha.6 (hooks=47 = 31 default-on + 16 opt-in + 0 disabled, skills=31) — CHECK (no writes; exit 1 on drift)
+
+=== PASS 1: validate ===
+  [NOOP] .claude-plugin/plugin.json
+    - version field: matched 1/1
+    - description hook-count fragment: matched 1/1
+    - description skill-count fragment: matched 1/1
+  [NOOP] plugin.json
+    - version field: matched 1/1
+    - description hook-count fragment: matched 1/1
+    - description skill-count fragment: matched 1/1
+  [NOOP] .claude-plugin/marketplace.json
+    - version field: matched 1/1
+    - description hook-count fragment: matched 1/1
+    - description skill-count fragment: matched 1/1
+  [NOOP] README.md
+    - version badge: matched 1/1
+    - version badge alt: matched 1/1
+  [NOOP] platforms/codex/plugin/.codex-plugin/plugin.json
+    - version field: matched 1/1
+  [NOOP] platforms/codex/.agents/plugins/marketplace.json
+    - version field: matched 1/1
+  [NOOP] README.zh-TW.md
+    - version badge (zh-TW): matched 1/1
+    - version badge alt (zh-TW): matched 1/1
+
+All mirrors in sync with canonical. ✓

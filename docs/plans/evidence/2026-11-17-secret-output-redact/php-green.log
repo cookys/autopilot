@@ -1,0 +1,17 @@
+✔ PHP define('AUTH_SALT', 'synthetic-salt-value-0001'); (37.874281ms)
+✔ PHP define("DB_PASSWORD", "synthetic-password-0001") (33.993445ms)
+✔ PHP define(	'API_TOKEN' ,	 'synthetic-token-0001'	); (31.608275ms)
+✔ PHP define('API_KEY','synthetic-key-0001') (38.658587ms)
+✔ PHP define('auth_salt','synthetic-salt-value-0001'); (36.913502ms)
+✔ PHP define("PASS",'synthetic "other quote"'); (39.893232ms)
+✔ PHP define('SECRET',"synthetic 'other quote'"); (36.045849ms)
+✔ PHP define('SECRET','synthetic\'quote\\tail'); (37.485649ms)
+✔ PHP define("SECRET","synthetic\"quote\\tail"); (35.678998ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 399.356253

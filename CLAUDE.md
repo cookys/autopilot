@@ -13,7 +13,7 @@ For Claude Code sessions working **on** the autopilot plugin itself. Skill-runti
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 46 hooks (30 default-on,
+Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 47 hooks (31 default-on,
 16 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
 
 ## Scripts (prefer over LLM judgment)

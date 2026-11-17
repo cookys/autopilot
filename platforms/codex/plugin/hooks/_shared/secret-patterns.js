@@ -1,6 +1,6 @@
 /**
  * Shared secret detection patterns for autopilot hooks.
- * Used by: audit-log.js (redact), commit-secret-scan.js (scan).
+ * Used by: audit-log.js (redact), commit-secret-scan.js (scan), secret-output-redact.js (redactOutput).
  * Single source of truth — prevents regex drift between hooks.
  *
  * Patterns sourced from gitleaks/truffleHog canonical lists, filtered to top-10
@@ -30,8 +30,80 @@ const kvPatterns = [
   { find: /Authorization:\s*Bearer\s+[^ '"]*/gi, replace: 'Authorization: Bearer <REDACTED>' },
 ];
 
+const secretName = /SALT|PASSWORD|PASS|SECRET|TOKEN|KEY/i;
+// Quote alternatives are disjoint; escapes consume two characters. Never cross a line.
+const phpDefine = /\bdefine[ \t]*\([ \t]*(?:'([^'\r\n]*)'|"([^"\r\n]*)")[ \t]*,[ \t]*('(?:\\[^\r\n]|[^'\\\r\n])*'|"(?:\\[^\r\n]|[^"\\\r\n])*")/gi;
+
+// Walk quotes/escapes once, including incomplete quoted values (redact to line end).
+function quotedEnd(text, start) {
+  const quote = text[start];
+  for (let i = start + 1; i < text.length; i++) {
+    if (text[i] === '\\') { i++; continue; }
+    if (text[i] === quote) return i + 1;
+  }
+  return text.length;
+}
+
+function redactAssignment(text) {
+  const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(text);
+  if (!match || !secretName.test(match[1])) return text;
+  const prefix = match[1] + '=';
+  const value = match[2];
+  if (value[0] === '"' || value[0] === "'") {
+    const end = quotedEnd(value, 0);
+    const close = end > 1 && value[end - 1] === value[0] ? value[0] : '';
+    return prefix + value[0] + '[REDACTED]' + close + value.slice(end);
+  }
+  return prefix + '[REDACTED]';
+}
+
+function redactEnvironment(text) {
+  const parts = [];
+  let start = 0;
+  for (let i = 0; i < text.length;) {
+    if (text[i] === ' ' || text[i] === '\t') { i++; continue; }
+    parts.push(text.slice(start, i));
+    start = i;
+    // A systemd Environment= line is a whitespace-separated list of assignments;
+    // quoted spaces and escaped quotes belong to their original token.
+    while (i < text.length && text[i] !== ' ' && text[i] !== '\t') {
+      if (text[i] === '"' || text[i] === "'") i = quotedEnd(text, i);
+      else if (text[i] === '\\') i = Math.min(i + 2, text.length);
+      else i++;
+    }
+    const token = text.slice(start, i);
+    const quote = token[0];
+    if ((quote === '"' || quote === "'") && quotedEnd(token, 0) === token.length) {
+      const close = token.length > 1 && token.at(-1) === quote ? quote : '';
+      parts.push(quote + redactAssignment(token.slice(1, close ? -1 : undefined)) + close);
+    } else parts.push(redactAssignment(token));
+    start = i;
+  }
+  parts.push(text.slice(start));
+  return parts.join('');
+}
+
+function redactOutput(text) {
+  let result = text.replace(phpDefine, (match, singleName, doubleName, value) => {
+    if (!secretName.test(singleName ?? doubleName)) return match;
+    return match.slice(0, -value.length) + value[0] + '[REDACTED]' + value.at(-1);
+  });
+  // Match line bodies only, leaving LF/CRLF and all non-matching bytes untouched.
+  result = result.replace(/^[^\r\n]+/gm, (line) => {
+    const env = /^([ \t]*Environment[ \t]*=)(.*)$/.exec(line);
+    if (env) return env[1] + redactEnvironment(env[2]);
+    const plain = /^([ \t]*(?:export[ \t]+)?)([A-Za-z_][A-Za-z0-9_]*=.*)$/.exec(line);
+    return plain ? plain[1] + redactAssignment(plain[2]) : line;
+  });
+  for (const { pattern } of patterns) {
+    result = result.replace(new RegExp(pattern.source, 'g'), '[REDACTED]');
+  }
+  return result;
+}
+
 module.exports = {
   patterns,
+  redactOutput,
 
   /**
    * Redact all known secret patterns in text.

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "pm-token-split-2026-11-17-b",
+  "minimum_distinct_families": 2,
+  "max_attempts_per_seat": 2,
+  "seats": [
+    {
+      "id": "astra_chair",
+      "runner": "codex",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "chair",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    },
+    {
+      "id": "carbon_redteam",
+      "runner": "agy",
+      "model": "gemini-4-carbon-high",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "boundary-redteam",
+      "family": "google",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    }
+  ]
+}

@@ -7205,6 +7205,36 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "JSONL file where the lesson-lint stop-hook rule-capture appends one row per Stop whose last operator message matched a rule marker (outcome block, no_rule or pass; never the message text). Default: $XDG_STATE_HOME/autopilot/rule-capture.jsonl, else ~/.local/state/autopilot/rule-capture.jsonl."
+    },
+    {
+      "name": "pm_output_cap.ledger_search_pattern",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": "",
+      "readers": [
+        "hooks/pm-output-cap.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "hooks.<stem>",
+        "AUTOPILOT_HOOK_<STEM>"
+      ],
+      "summary": "Regex string matched against Bash commands or mcp__* tool names when opt-in pm-output-cap runs in a PM console session; matching calls get a 30-line output cap instead of 40. Empty or unset (the default) leaves this rule disabled.",
+      "type": "string"
+    },
+    {
+      "name": "AUTOPILOT_WAIT_RESULTS_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-panel.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "summary": "Test/path override for the wait-dispatch-results.js binary invoked by scripts/dispatch-panel.js."
     }
   ]
 }

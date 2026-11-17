@@ -178,7 +178,7 @@
         ]
       },
       {
-        "matcher": "mcp__fleet__send",
+        "matcher": "mcp__fleet__send|mcp__fleet__dispatch",
         "hooks": [
           {
             "type": "command",
@@ -239,6 +239,17 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-tasks.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pm-output-cap.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       }
@@ -326,6 +337,17 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/askpm-remind.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       }

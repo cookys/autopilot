@@ -32,10 +32,13 @@
 // open ask. A payload that carries agent_id appends nothing.
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { isEnabled } = require('./_shared/opt-in');
+const { isPmConsole } = require('./_shared/pm-console');
+const { withWriteLock, appendRow } = require('../scripts/lib/jsonl-store');
 
 const SCHEMA = 'autopilot.askpm/1';
 // mods/live/console.ts inlines this schema inside consoleModeOf and does not export it.
@@ -68,9 +71,13 @@ function hasPmConsole(start) {
   }
 }
 
-function isPmSession(input) {
+function cwdOf(input) {
   const given = input && typeof input.cwd === 'string' ? input.cwd : '';
-  return hasPmConsole(given !== '' ? given : process.cwd());
+  return given !== '' ? given : process.cwd();
+}
+
+function isPmSession(input) {
+  return hasPmConsole(cwdOf(input));
 }
 
 function stateDir(env) {
@@ -89,7 +96,7 @@ function isInjected(prompt) {
   if (trimmed === '') return true;
   const first = trimmed.split(/\r?\n/, 1)[0].trim();
   // [待決回覆·更正] does not start with [待決回覆]: the bracket closes before the dot.
-  if (first.startsWith('[待決回覆]') || first.startsWith('[待決回覆·更正]')) return true;
+  if (first.startsWith('[待決回覆]') || first.startsWith('[待決回覆·更正]') || first.startsWith('[voice call · unverified]')) return true;
   if (INJECTED_PREFIXES.some((p) => trimmed.startsWith(p))) return true;
   if (FLEET_CHANNEL.test(prompt)) return true;
   if (trimmed.startsWith('{') && (trimmed.includes('"additionalContext"') || trimmed.includes('"hookSpecificOutput"'))) return true;
@@ -102,13 +109,11 @@ function logFile(env) {
 
 function append(env, row) {
   const dir = stateDir(env);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const fd = fs.openSync(logFile(env), 'a', 0o600);
-  try {
-    fs.writeSync(fd, JSON.stringify(row) + '\n');
-  } finally {
-    fs.closeSync(fd);
-  }
+  const file = logFile(env);
+  withWriteLock(
+    { storeDir: dir, lockFile: path.join(dir, 'askpm.jsonl.lock'), name: 'askpm' },
+    () => appendRow(file, row),
+  );
 }
 
 function clip(text) {
@@ -131,8 +136,8 @@ function onlyToolResult(content) {
   return Array.isArray(content) && content.length > 0 && content.every((b) => b && b.type === 'tool_result');
 }
 
-// Rows this hook wrote. null when the log cannot be read (nothing recorded yet).
-function relevantRows(env) {
+// All schema-matching rows. null when the log cannot be read (nothing recorded yet).
+function readRows(env) {
   let raw;
   try { raw = fs.readFileSync(logFile(env), 'utf8'); } catch { return null; }
   const rows = [];
@@ -141,10 +146,16 @@ function relevantRows(env) {
     let row;
     try { row = JSON.parse(line); } catch { continue; }
     if (!row || row.schema !== SCHEMA) continue;
-    if (row.kind !== 'ask' && row.kind !== 'reply' && row.kind !== 'turn') continue;
     rows.push(row);
   }
   return rows;
+}
+
+// Turn-boundary rows (ask/reply/turn). null when the log cannot be read.
+function relevantRows(env) {
+  const all = readRows(env);
+  if (all === null) return null;
+  return all.filter((row) => row.kind === 'ask' || row.kind === 'reply' || row.kind === 'turn');
 }
 
 // The open ask is the newest ask that no later reply or turn row has closed.
@@ -153,14 +164,14 @@ function relevantRows(env) {
 // closed true: a reply is already stored, or a turn row closed the ask.
 function replyGate(env) {
   const rows = relevantRows(env);
-  if (rows === null || rows.length === 0) return { closed: false, askText: null };
+  if (rows === null || rows.length === 0) return { closed: false, askText: null, ask: null };
   let ask = null;
   for (const row of rows) {
     if (row.kind === 'ask') ask = row;
     else ask = null;
   }
-  if (!ask) return { closed: true, askText: null };
-  return { closed: false, askText: typeof ask.text === 'string' ? ask.text : '' };
+  if (!ask) return { closed: true, askText: null, ask: null };
+  return { closed: false, askText: typeof ask.text === 'string' ? ask.text : '', ask };
 }
 
 // Last assistant text in the current turn, after the last real user entry.
@@ -214,13 +225,28 @@ function transcriptMatchesAsk(input, askText) {
   return normClip(user) === normClip(askText);
 }
 
+function computeAskId(sessionId, at, text) {
+  const sid = typeof sessionId === 'string' ? sessionId : '';
+  const hash = crypto.createHash('sha256').update(`${sid}\n${at}\n${text}`).digest('hex');
+  return `a-${hash.slice(0, 8)}`;
+}
+
 function onPrompt(input, env) {
-  if (input.agent_id) return;
+  if (input.agent_id) return null;
+  const at = new Date().toISOString();
   if (isInjected(input.prompt)) {
-    append(env, { schema: SCHEMA, kind: 'turn', at: new Date().toISOString(), injected: true });
-    return;
+    append(env, { schema: SCHEMA, kind: 'turn', at, injected: true });
+    return { kind: 'turn' };
   }
-  append(env, { schema: SCHEMA, kind: 'ask', at: new Date().toISOString(), text: normClip(input.prompt) });
+  const text = normClip(input.prompt);
+  if (!isPmConsole(input.cwd)) {
+    append(env, { schema: SCHEMA, kind: 'ask', at, text });
+    return { kind: 'ask' };
+  }
+  const sessionId = typeof input.session_id === 'string' ? input.session_id : '';
+  const askId = computeAskId(sessionId, at, text);
+  append(env, { schema: SCHEMA, kind: 'ask', at, ask_id: askId, session_id: sessionId, text });
+  return { kind: 'ask', ask_id: askId };
 }
 
 // The Stop payload's last_assistant_message is the reply of the turn that is
@@ -241,8 +267,15 @@ function replyBody(input) {
   return null;
 }
 
+function writeReply(env, text) {
+  const norm = text.replace(/\r\n/g, '\n');
+  append(env, { schema: SCHEMA, kind: 'reply', at: new Date().toISOString(), lines: norm.split('\n').slice(0, 2), text: clip(norm) });
+}
+
 function onStop(input, env) {
   if (input.agent_id) return;
+  // With askpm-remind on (and PM console gate passing), askpm-remind owns the reply row.
+  if (isEnabled('askpm-remind') && isPmConsole(cwdOf(input))) return;
   // stop_hook_active true is the re-entry after another Stop hook blocked. That
   // call is the one that ends the turn, so it still records when the first Stop
   // wrote nothing. It does not record a second row for the same ask. A turn row
@@ -252,16 +285,16 @@ function onStop(input, env) {
   if (gate.askText !== null && !transcriptMatchesAsk(input, gate.askText)) return;
   const text = replyBody(input);
   if (!text) return;
-  const norm = text.replace(/\r\n/g, '\n');
-  append(env, { schema: SCHEMA, kind: 'reply', at: new Date().toISOString(), lines: norm.split('\n').slice(0, 2), text: clip(norm) });
+  writeReply(env, text);
 }
 
 function handle(input, env) {
-  if (!isEnabled('askpm-log')) return;
-  if (!input || typeof input !== 'object') return;
-  if (!isPmSession(input)) return;
-  if (input.hook_event_name === 'UserPromptSubmit') onPrompt(input, env);
-  else if (input.hook_event_name === 'Stop') onStop(input, env);
+  if (!isEnabled('askpm-log')) return null;
+  if (!input || typeof input !== 'object') return null;
+  if (!isPmSession(input)) return null;
+  if (input.hook_event_name === 'UserPromptSubmit') return onPrompt(input, env);
+  if (input.hook_event_name === 'Stop') onStop(input, env);
+  return null;
 }
 
 function main() {
@@ -275,4 +308,22 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { isPmSession, isInjected, handle, lastAssistantText, SCHEMA };
+module.exports = {
+  isPmSession,
+  isInjected,
+  handle,
+  lastAssistantText,
+  stateDir,
+  logFile,
+  append,
+  readRows,
+  replyGate,
+  replyBody,
+  transcriptMatchesAsk,
+  writeReply,
+  normClip,
+  clip,
+  cwdOf,
+  computeAskId,
+  SCHEMA,
+};

@@ -2,7 +2,7 @@
 
 Every hook knob (config.json keys and environment variables) is indexed in [docs/guide/settings-reference.md](../docs/guide/settings-reference.md).
 
-48 Claude Code hooks for runtime enforcement of development discipline: **30 default-on** (Tier A) + **18 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 18 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+49 Claude Code hooks for runtime enforcement of development discipline: **31 default-on** (Tier A) + **18 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 18 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -89,7 +89,7 @@ do **not** re-init the dispatch table — only a fresh process does.
 ```
 hooks/
   _shared/
-    secret-patterns.js     # Shared secret detection (used by audit-log + commit-secret-scan)
+    secret-patterns.js     # Shared secret detection (audit-log + commit-secret-scan + secret-output-redact)
   hooks.json               # Hook registration (Tier A default-on)
   session-start.js         # SessionStart priming (pre-existing)
   state-checkpoint.js      # Tier A — PreCompact, Node JSONL parser (v2.7.2+)
@@ -112,6 +112,7 @@ hooks/
   live-session-lib.js      # shared helpers for the two live-state writers (lib, not a hook)
   cost-tracker-lib.js      # pure usage/cost aggregation (lib, not a hook)
   audit-log.js             # Tier A
+  secret-output-redact.js  # Tier A — PostToolUse Bash: masks secret values in stdout/stderr
   session-summary.js       # Tier B (opt-in)
   log-error.js             # Tier A
   commit-secret-scan.js    # Tier B (opt-in)
@@ -168,12 +169,13 @@ The queue/relay path uses `additionalContext` on UserPromptSubmit: it is the sam
 
 **Wording rule:** a model-facing advisory must name what it counted (a cumulative sum is not a level) and carry the contradicting-axis number when it is cheaply available (e.g. cost-tracker's cache-read sum prints the real context % from the live file) — a bare proxy gets relayed to the operator as fact.
 
-## Tier A — Default-On (30 hooks)
+## Tier A — Default-On (31 hooks)
 
 Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project. (Three are wired here but **inert by default** — `session-handoff` no-ops unless handoff is enabled, `version-drift-check` is silent outside a behind-upstream dev clone, `run-approval-gate` does nothing until `run_approval.mode` is set — yet they MUST be wired in `hooks.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
+| secret-output-redact | PostToolUse | Bash | Replaces PHP secret `define()` values, env/systemd secret assignment values and shared service tokens with `[REDACTED]` in stdout/stderr. Preserves names, surrounding text and response metadata; returns the `tool_response`-shaped object in `hookSpecificOutput.updatedToolOutput` only when changed. Uses `depth0_delegate_gate.secret_print` / `AUTOPILOT_BASH_GUARD_SECRET_MODE`: `block` and `warn` redact, `off` does nothing (default `block`). No transcript fallback. |
 | state-checkpoint | PreCompact, PostCompact | * | On PreCompact the checkpoint file is built by `scripts/lib/compaction-handoff.js` in injection order: repo state, this session's dispatches, marker/decision-ledger lines, the model's own handoff note (`<live-dir>/handoff/<sid>.md` or `AUTOPILOT_MODEL_HANDOFF_DIR`), machine state, then a short transcript tail; each section is `unavailable: <reason>` when unreadable, body capped (~6 KB). session-start (any source) warns when `context_budget.t2` + `context_budget.gap` (default 50000; env `AUTOPILOT_CONTEXT_BUDGET_GAP`) exceeds the resolved auto-compact window minus 33000, and on `compact` appends the last `compact_boundary` preTokens + window + CC version to `~/.autopilot/calibration/compaction-points.jsonl` (`AUTOPILOT_COMPACTION_POINTS_FILE`). On PostCompact it only checks that `compact_summary` names the session's branch and stage and raises a `compact-summary-lost-state` advisory otherwise (log `postcompact_ok` / `postcompact_summary_missing`; never blocks). On PreCompact it writes `~/.autopilot/compaction-state-<session_id>.md` (no LLM compliance dependency; session-start injects it only on `compact` for the same session id, then deletes it). The file leads with `## Workflow Snapshot` (`scripts/lib/workflow-snapshot.js`, 6000 bytes: stage, next legal node, branch, task card, tasks, review, ledger tail, dispatches, subagents; a missing source is a named `absent` line), then machine state, then a short Node JSONL transcript tail (6 text-bearing turns / 3 KB, tool placeholders dropped). **stdout** (exit 0) is merged by Claude Code into the compaction summarizer's custom instructions (2.1.296 binary), so it carries the 3000-byte snapshot addressed to the summarizer; `AUTOPILOT_PRECOMPACT_STDOUT=0` silences it. Contract: `references/workflow-snapshot.md`; JSONL log at `~/.autopilot/.state-checkpoint.log` (rotate 1MB); visible failure diag inline + stderr (v2.7.2) |
 | session-start | SessionStart | startup\|clear\|compact | `session-start.js` priming: prints cross-session resume hint (reads intent-capture file) + `⚠ intent-capture hook disabled` warning when the self-disable flag is active |
 | intent-capture | PostToolUse | .* | Per-cwd intent file at `~/.autopilot/intent/<sha1(realpath(cwd))>.json` for cross-session resume hint (read by `session-start.js`). Tier A but env opt-out via `AUTOPILOT_INTENT_CAPTURE=false`. Circuit breaker: 10 consecutive fails → `~/.autopilot/intent-capture.disabled` flag (auto-clears at 24h or plugin version bump; manual clear: `rm` the flag) (v2.7.2) |
@@ -325,6 +327,10 @@ Mechanical enforcement of expensive-model dispatch discipline. On `Agent`/`Task`
 - Inline: `--token`, `password=`, `sshpass -p`, `Authorization: Bearer`
 
 When enabled, `commit-secret-scan` (opt-in) and the active `audit-log` share this module.
+The default-on Bash `secret-output-redact` hook uses its `redactOutput()` helper for
+service tokens plus PHP secret defines and env/systemd assignments, preserving
+names and replacing only values with `[REDACTED]`. Existing `redact()` / `scan()`
+contracts are unchanged. Test: `node --test hooks/secret-output-redact.test.js`.
 
 ## Override
 
@@ -401,6 +407,7 @@ gate pass. Knobs: `AUTOPILOT_LIVE_DIR` (override base, still probed), `AUTOPILOT
 | PreToolUse | `depth0-delegate-gate.js` | v2.36.1 default-on: depth0-delegate-gate — nudges depth-0 (the read-burst and wait nudges skip subagents; payload.agent_id present) away from long read bursts toward delegating to an Explore/survey subagent; warns by default, denies the read burst only in block mode against a fresh guarded-model live file. Its Bash-launch guard is the exception: it applies at EVERY depth, and its rule 1 (detached dispatch rail with no waiter) denies in warn mode too (owner ruling 2026-10-13); rule 2 (`pkill -f`/`pgrep -f` whose pattern, as a regex, matches the call's own text) also denies by default (BL-0148) and can be relaxed to `warn`/`off` with `depth0_delegate_gate.pkill_self_match` or `AUTOPILOT_BASH_GUARD_PKILL_MODE`; rule 4 (`bare-ls`), rule 5 (`rm-var-target`) and rule 6 (`subagent-rm-outside-scratch`, non-empty `agent_id`) deny by default (`bare_ls`/`rm_var_target`/`subagent_rm`); rule 7 (`rm-shared-dir`, group/world-writable or foreign-uid dir outside session scratchpad) warns by default (`shared_rm`). Also advises (never denies) on depth-0 foreground sleep >= 20 s / sleep loops / `tail -f`, throttled. AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE=off to opt out. |
 | PostToolUse | `opt-in-multiplexer.js PostToolUse` | D6: PostToolUse opt-in multiplexer (accumulator, test-runner, design-quality). |
 | PostToolUse | `context-budget.js` | v2.35.15 default-on (was opt-in): context-budget — real context size, T1 100k nudge / T2 150k handoff directive (absolute, re-reminded per 50k token step); AUTOPILOT_CONTEXT_BUDGET_MODE=off or config context_budget.mode=off to opt out. |
+| PostToolUse | `secret-output-redact.js` | Default-on, Bash matcher: response-object output redaction. `secret_print=block` or `warn` redacts; `off` skips. Independent of the command guard's depth-0 mode. |
 | PostToolUse | `audit-log.js (hosting awaiting-owner end signal + subagent stamp)` | mods P1W PERF+STAMP: audit-log also hosts awaiting-owner's PostToolUse end signal and the subagent last-tool stamp (no extra node spawn per tool call); knobs AUTOPILOT_AWAITING_OWNER / AUTOPILOT_AGENT_ACTIVITY. |
 | PostToolUse | `run-approval-gate.js PostToolUse` | v2.36.17: run-approval-gate PostToolUse half — the approval RECEIPT. A Task/Agent that reached PostToolUse was allowed by the human at the PreToolUse ask, so this records the run as approved and the gate stays silent for the rest of it. Inert unless run_approval.mode=ask-once. |
 | PostToolUse (task tools) | `session-tasks.js` | mods P1W W1d default-on: session-tasks — folds the task-tool events into <live>/tasks/<sid>.json; AUTOPILOT_SESSION_TASKS=off to opt out. Exact tool-name matcher (never Task/Agent). Task tools need CLAUDE_CODE_ENABLE_TODO_TOOLS=1 for sonnet/opus. |

@@ -1,0 +1,33 @@
+✔ PHP define('AUTH_SALT', 'synthetic-salt-value-0001'); (26.237103ms)
+✔ PHP define("DB_PASSWORD", "synthetic-password-0001") (28.219384ms)
+✔ PHP define(	'API_TOKEN' ,	 'synthetic-token-0001'	); (23.089838ms)
+✔ PHP define('API_KEY','synthetic-key-0001') (27.635385ms)
+✔ PHP define('auth_salt','synthetic-salt-value-0001'); (23.573979ms)
+✔ PHP define("PASS",'synthetic "other quote"'); (22.930768ms)
+✔ PHP define('SECRET',"synthetic 'other quote'"); (24.217551ms)
+✔ PHP define('SECRET','synthetic\'quote\\tail'); (23.617702ms)
+✔ PHP define("SECRET","synthetic\"quote\\tail"); (22.163223ms)
+✔ env Environment=AUTH_SALT=synthetic-salt-value-0001 (27.557218ms)
+✔ env Environment="API_TOKEN=synthetic token" "DB_PASSWORD=synthetic password" "MODE=debug" (23.196539ms)
+✔ env Environment='SECRET=synthetic secret' API_KEY=synthetic-key-0001 (26.420057ms)
+✔ env export API_KEY=synthetic-key-0001 (22.923024ms)
+✔ env   export DB_PASS='synthetic password'  # keep comment (29.067401ms)
+✔ env auth_salt=synthetic-salt-value-0001 (25.575277ms)
+✔ env SECRET=synthetic value with spaces (25.708868ms)
+✔ env Environment="SECRET=synthetic\"quote" "TOKEN=synthetic-token-0001" (23.889394ms)
+✔ service token: shared patterns redact every occurrence (24.857976ms)
+✔ negative: unchanged lines produce no output (19.422765ms)
+✔ negative: preserve surrounding bytes and response metadata (26.99518ms)
+✔ knob off: env and config emit nothing (47.887862ms)
+✔ knob warn: env/config redact and env wins (108.817306ms)
+✔ malformed: string or missing stdout produces null (115.232333ms)
+✔ wrong event/tool: no output (46.121537ms)
+✔ large: several MB of matching and unterminated input completes within hook timeout (73.659809ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 947.552506

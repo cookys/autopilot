@@ -1,0 +1,13 @@
+{
+  "status": "valid",
+  "inventory_sha256": "7360b211338444ef2b6826d15ea0e5c243737a4361b31e351197415d2e1d6944",
+  "canonical_rules": 611,
+  "category_totals": {
+    "core": 146,
+    "guided": 209,
+    "autonomous": 12,
+    "assurance": 102,
+    "topology": 142,
+    "obsolete": 0
+  }
+}

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Secret-output redaction: a default-on PostToolUse Bash hook masks PHP secret defines, env/systemd assignments and shared service tokens in stdout/stderr using a response-shaped `updatedToolOutput` object. `depth0_delegate_gate.secret_print` / `AUTOPILOT_BASH_GUARD_SECRET_MODE` controls both layers: block/warn redact output, off skips. Hook inventory: 47 total, 31 default-on, 16 opt-in. No version bump.
 - Secret-print guard: the existing PreToolUse Bash guard blocks Docker/env/config-file/Kubernetes/systemd unit/drop-in secret dumps by default (`depth0_delegate_gate.secret_print`, `AUTOPILOT_BASH_GUARD_SECRET_MODE`: block/warn/off); `scripts/safe-inspect.js` preserves keys and structure while masking every value with length and SHA-256 prefix.
 - pm-token-split P0 (mechanism, no version bump): work-order plan-first gate (`hooks/_shared/pm-console.js` PM console gate walking up to the first real repo root, `scripts/lib/work-order-plan.js` `Size`/`Plan` marker parser, `session-mode.js set --fleet-task` / `stage-advance.js --to implement` frozen plan receipts, and `hooks/fleet-send-work-order-guard.js` `mcp__fleet__dispatch` check gated on opt-in sub-stem `pm-dispatch-plan-guard`).
 - pm-token-split P1 (mechanism, no version bump): operator ask register (`scripts/pm-ask.js`, `ask_id` rows and opt-in `askpm-remind`-gated `ask_id` context / Stop handoff in `hooks/askpm-log.js`, daily overdue injection in `hooks/advisory-relay.js`, and direct opt-in Stop hook `hooks/askpm-remind.js`).

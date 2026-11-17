@@ -1,0 +1,32 @@
+✔ PHP define('AUTH_SALT', 'synthetic-salt-value-0001'); (36.475217ms)
+✔ PHP define("DB_PASSWORD", "synthetic-password-0001") (34.997696ms)
+✔ PHP define(	'API_TOKEN' ,	 'synthetic-token-0001'	); (29.679454ms)
+✔ PHP define('API_KEY','synthetic-key-0001') (32.079181ms)
+✔ PHP define('auth_salt','synthetic-salt-value-0001'); (37.62973ms)
+✔ PHP define("PASS",'synthetic "other quote"'); (34.123209ms)
+✔ PHP define('SECRET',"synthetic 'other quote'"); (36.380849ms)
+✔ PHP define('SECRET','synthetic\'quote\\tail'); (33.666209ms)
+✔ PHP define("SECRET","synthetic\"quote\\tail"); (30.475592ms)
+✔ env Environment=AUTH_SALT=synthetic-salt-value-0001 (38.953823ms)
+✔ env Environment="API_TOKEN=synthetic token" "DB_PASSWORD=synthetic password" "MODE=debug" (32.006554ms)
+✔ env Environment='SECRET=synthetic secret' API_KEY=synthetic-key-0001 (39.741796ms)
+✔ env export API_KEY=synthetic-key-0001 (38.972147ms)
+✔ env   export DB_PASS='synthetic password'  # keep comment (37.3001ms)
+✔ env auth_salt=synthetic-salt-value-0001 (33.059136ms)
+✔ env SECRET=synthetic value with spaces (36.685583ms)
+✔ env Environment="SECRET=synthetic\"quote" "TOKEN=synthetic-token-0001" (36.307381ms)
+✔ negative: unchanged lines produce no output (29.749555ms)
+✔ negative: preserve surrounding bytes and response metadata (39.076103ms)
+✔ knob off: env and config emit nothing (54.85092ms)
+✔ knob warn: env/config redact and env wins (151.784544ms)
+✔ malformed: string or missing stdout produces null (154.930015ms)
+✔ wrong event/tool: no output (63.439379ms)
+✔ large: several MB of matching and unterminated input completes within hook timeout (90.703134ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1267.535414

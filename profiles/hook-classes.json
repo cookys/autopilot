@@ -38,6 +38,7 @@
     { "stem": "run-approval-gate", "class": "invariant_effect" },
     { "stem": "runs-watch-autostart", "class": "host_only" },
     { "stem": "scheduled-wakeup-guard", "class": "invariant_effect" },
+    { "stem": "secret-output-redact", "class": "invariant_effect" },
     { "stem": "session-handoff", "class": "invariant_effect" },
     { "stem": "session-start", "class": "host_only" },
     { "stem": "session-summary", "class": "invariant_effect" },

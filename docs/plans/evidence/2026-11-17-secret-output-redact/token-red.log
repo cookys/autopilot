@@ -1,0 +1,44 @@
+✖ service token: shared patterns redact every occurrence (28.03075ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 74.656185
+
+✖ failing tests:
+
+test at hooks/secret-output-redact.test.js:78:1
+✖ service token: shared patterns redact every occurrence (28.03075ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + null
+  - {
+  -   hookSpecificOutput: {
+  -     hookEventName: 'PostToolUse',
+  -     updatedToolOutput: {
+  -       interrupted: false,
+  -       isImage: false,
+  -       noOutputExpected: false,
+  -       stderr: 'before [REDACTED]\nafter [REDACTED]',
+  -       stdout: 'before [REDACTED]\nafter [REDACTED]'
+  -     }
+  -   }
+  - }
+
+      at expectRedacted (<worktree>/hooks/secret-output-redact.test.js:39:10)
+      at TestContext.<anonymous> (<worktree>/hooks/secret-output-redact.test.js:80:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { hookSpecificOutput: { hookEventName: 'PostToolUse', updatedToolOutput: [Object] } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

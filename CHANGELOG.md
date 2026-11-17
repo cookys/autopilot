@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- pace-default (Fleet task 01M7K384): hetero, author and reviewer defaults rank eligible engines by remaining quota per reset hour; recent stale readings rank after fresh readings, usage at or above 85% requires a named seat, and selection messages plus `pace_choice` manifests explain each choice.
 - land-branch (mechanism, Fleet task 01M7HT6Y73KP3QADS18HYCRMEK, no version bump): `scripts/land-branch.js` requires `--review-generation <n>` and writes `Review-Generation: <n>` in the merge commit's final paragraph, after `QC-Verdict` and before `Fleet-Task`. n is the generation that passed; 1 = first-pass. Missing or invalid n is usage, exit 2, before any git command. Test: `hooks/tests/land-branch.test.sh`.
 - cntaskclass (mechanism, no version bump): a dispatch to a local-sandbox endpoint (today `qwen_local`) for the family it serves is no longer exempt. The cloud checks still apply, `Task-Class` must be `format-convert`, `log-summary`, `simple-script` or `test-scaffold` (`AUTOPILOT_TASK_CLASS` or a `Task-Class:` header; missing is `unknown-task-class`, any other value is `task-class`), and the repo directory name must not match `local_deny_repos`. A repo `.claude/cn-model-gate.json` may only add to those lists. Cloud endpoints are unchanged. Test: `scripts/cn-model-dispatch-gate.test.js`.
 - land-branch (mechanism, Fleet task 01M7HT6Y, no version bump): `scripts/land-branch.js` merges a SHIP-AS-IS reviewed branch into the base and, with `--push`, pushes `HEAD:develop`. One JSON line on stdout (`landed`, `merged_not_pushed`, or the first failure). Test: `hooks/tests/land-branch.test.sh`.
@@ -512,6 +513,8 @@
 - Kimi K3 and K2.8 sat the 2026-10-16 retake exams (events 304-310; reviewer v6, discuss and K2.8 consult qualified, both brain seats failed); the shipped qualification defaults now carry them (74 to 79 rows; the two failed brain-seat rows, events 306 and 309, are not shipped per policy), evidence under docs/plans/evidence/2026-10-14-reviewer-requalify-minimax-glm-qwen, and BL-0199 tracks the exam-credential rotation hazard.
 
 ### Settings changes
+
+- **New `PACE_CEILING_PCT`** (`scripts/lib/pace-roles.json`, default `85`; override through the existing `$AUTOPILOT_PACE_ROLES` config path): maximum percent used for automatic engine choice; at/above the ceiling is excluded, while a named runner/model dispatches with a warning. `priority.<role>` now only breaks score/slack ties.
 
 - **New `AUTOPILOT_SCHEDULED_WAKEUP_GUARD`** (env; default `on`; only `off` disables). Stops the hook that marks a self-scheduled wakeup as not an authorisation, and that warns when a `ScheduleWakeup` prompt contains a go, an approval word, or a card id. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
 - **New `AUTOPILOT_PAST_RECALL`** (env; default `on`; only `off` disables). Stops the UserPromptSubmit past-reference recall hook. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).

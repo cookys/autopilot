@@ -53,54 +53,62 @@ content fails closed as `output_budget_exhausted`, the same name as the anthropi
 
 ## Pace-aware engine choice
 
-[`scripts/pace-select.js`](../scripts/pace-select.js) picks a role-qualified non-Claude engine from
-`capacity.pace/1` telemetry (`$AUTOPILOT_PACE_FILE`, default `$HOME/projects/capacity/out/pace.v1.json`),
-and [`scripts/dispatch-hetero.sh`](../scripts/dispatch-hetero.sh) exposes it via `--pace-role <role>`:
+[`scripts/pace-select.js`](../scripts/pace-select.js) reads existing `capacity.pace/1` telemetry
+(`$AUTOPILOT_PACE_FILE`, default `$HOME/projects/capacity/out/pace.v1.json`). Quota selection is on by
+default in `dispatch-hetero.sh` (implementer), `dispatch-author.sh` (author) and `dispatch-review.sh`
+(reviewer). A caller-supplied runner or model, including a strict contract/roster tuple, remains pinned.
+Hetero retains `--pace-role <role>` to override the selection role. The review rail's default retreat
+picker also uses pace, excluding the failed model and the implementer's family; explicit roster
+fallback overrides keep their existing precedence.
 
 ```bash
-# Standalone selector (exit 0 = chosen, 2 = usage/schema error, 3 = pace_unknown)
-node scripts/pace-select.js --role implementer [--qualified ~/.autopilot/qualified.v1.json] --json
+# Standalone: 0 = chosen, 2 = invalid input/config, 3 = no admissible reading
+node scripts/pace-select.js --role reviewer --json
 
-# Dispatch rail (only when --runner is NOT passed; explicit --runner always wins)
-scripts/dispatch-hetero.sh --pace-role implementer --branch feat/x --prompt-file brief.md
+# No runner/model: choose by quota
+scripts/dispatch-hetero.sh --branch feat/x --prompt-file brief.md
+scripts/dispatch-author.sh --prompt-file brief.md
+scripts/dispatch-review.sh --diff-file change.diff --spec-file brief.md
 ```
 
-- **Pool + qualification map**: merges [`scripts/lib/noncq-pools.json`](../scripts/lib/noncq-pools.json)
-  with `pools` in [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) (which maps `class: "scarce"`
-  rows such as `codex A` / `codex B` that `noncq` drain intentionally skips). Role eligibility for `--role`
-  (`reviewer` | `implementer` | `author`, minus `--exclude`) comes from `autopilot.qualified/1` (`--qualified <path>`
-  or `$AUTOPILOT_QUALIFIED_FILE`, default `$HOME/.autopilot/qualified.v1.json`, exported by
-  `node scripts/engine-scorecard.js export-qualified`) when that file exists: an engine key is eligible when some row
-  with `result` `"pass"` or `"provisional"` matches its pool `runner` and `model` (`"qualified_source": "<path>"`).
-  When the file is missing, `pace-select.js` falls back to the role lists in
-  [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) and sets `"qualified_source": "pace-roles.json"`.
-  It never considers `class: "claude"` rows, and probes any candidate pool carrying `"endpoint"` via
-  `scripts/resolve-endpoint.sh <endpoint>` (an unconfigured endpoint is listed in `candidates` as
-  `{engine, reason: "endpoint_not_ready"}` and never chosen).
-- **Linear-pace slack (`slack = expected_pct - used_pct`)**: positive slack means the pool is behind linear
-  pace (spare capacity before reset); negative slack means it is ahead of pace. Alias pools sharing one engine
-  key merge by their largest fresh slack.
-- **Role priority walk** (`implementer`): `priority.implementer` in
-  [`scripts/lib/pace-roles.json`](../scripts/lib/pace-roles.json) (`agy` → `grok` → `glm` → `agyclaude`) is walked
-  in order; the first key that is role-eligible, endpoint-ready, fresh and `slack >= 0` wins with
-  `selected_by: "priority"` — a later entry is reached only when every earlier one is ineligible,
-  unready, unknown or behind pace. Via `role_models`, the implementer `agy` key emits
-  `gemini-4-hydrogen-high` (same agy pool and quota as carbon); reviewer and author keep carbon.
-  When no priority entry qualifies — and for roles without a priority list — the `-10` rule decides with
-  `selected_by: "slack"`. The selector output also carries `reviewer_exclude` (the chosen key's family
-  keys; `agy` and `agyclaude` are different families, google vs anthropic, so one never excludes the
-  other) — pass it to a follow-up `pace-select.js --role reviewer --exclude <joined>`.
-- **The `-10` rule**: among candidates with `slack >= -10`, the selector picks the largest slack with
-  `over_pace: false`. Only when every known candidate has `slack < -10` does it fall back to the largest
-  (least negative) slack, setting `over_pace: true`.
-- **`unknown != 0`**: via [`scripts/lib/pace-reading.js`](../scripts/lib/pace-reading.js), any row with
-  `stale !== false` or missing/`null`/non-finite `used_pct` or `expected_pct` is `unknown` — never coerced to
-  `0` (an explicit numeric `0` on a `stale: false` row is valid). If no candidate has a fresh reading,
-  `pace-select.js` emits `{engine: null, reason: "pace_unknown", ...}` and exits `3`; `dispatch-hetero.sh --pace-role`
-  refuses with `precondition_failed` (exit `2`) rather than silently defaulting.
-- **Manifest provenance**: when `--pace-role` chooses the runner/model, `dispatch-hetero.sh` records the full
-  selector JSON as `"engine_choice"` in the run's `.manifest.json`; when `--pace-role` is omitted (or `--runner`
-  was supplied), the manifest is unchanged.
+- **Eligibility before ranking**: merge `scripts/lib/noncq-pools.json` with `pools` in
+  `scripts/lib/pace-roles.json`, including scarce `codex A` / `codex B`. Remove `_disabled` and
+  `--exclude` keys. Eligibility comes from matching runner/model and role in `autopilot.qualified/1`
+  (`pass` or `provisional`; `--qualified` / `$AUTOPILOT_QUALIFIED_FILE`, default
+  `$HOME/.autopilot/qualified.v1.json`); a missing file uses the role lists in `pace-roles.json`.
+  `role_models` applies before qualification, so implementer agy uses hydrogen's qualification.
+  The CN dispatch gate receives the task brief, diff and role before endpoint checks or ranking.
+  Availability windows, seam dates, endpoint readiness and the DeepSeek pairing requirement still apply.
+  `class: "claude"` rows are excluded.
+- **Quota score**: among eligible fresh keys below the ceiling, maximize
+  `(100 - used_pct) / max(hours_to_reset, 1)` to use quota before reset. Equal scores prefer larger
+  slack (`expected_pct - used_pct`), then the existing `priority.<role>` order. Alias pools use the
+  same comparison. Priority, linear pace and `WARN_*_low` no longer override the score;
+  `selected_by` is `quota_score`, `low_keys` is diagnostic, and `over_pace` reports whether the
+  winner's slack is below -10. `reviewer_exclude` still reports the winner's family keys.
+- **Ceiling**: `PACE_CEILING_PCT` in `scripts/lib/pace-roles.json` defaults to **85**; an alternate
+  roles config via `$AUTOPILOT_PACE_ROLES` can override it. Readings at or above it are excluded
+  from automatic selection and listed with `reason: "over_ceiling"`. A fresh high reading is
+  excluded even when its other pace fields are incomplete. If only over-ceiling readings remain,
+  dispatch refuses instead of quietly selecting an over-ceiling default.
+- **Recent stale readings**: `stale === true` is usable as `status: "stale_recent"` only when
+  `used_pct` is finite, `reset_at` is in the future, and `seen_at` is within the preceding 24 hours
+  (inclusive). Every fresh reading ranks ahead of every recent stale reading. Older, future-dated,
+  missing or incomplete stale observations remain unknown. Fresh readings retain the finite
+  `used_pct` / `expected_pct` requirement. Reset hours come from `hours_to_reset`, or a future
+  `reset_at` when hours are absent. Missing slack on recent stale rows remains unknown, never zero.
+  A schedule-only seat without quota ranks below usable readings. No telemetry file/schema is added.
+- **Missing data**: no usable reading yields `pace_unknown`; dispatch prints that reason and keeps
+  its existing behavior. Hetero falls back to its agy default; the review fallback picker retains its
+  configured chain. Author/review single-seat calls retain their existing required-runner/model
+  preconditions when no choice can be made. Missing, unreadable or invalid pace data itself never
+  fails dispatch. Invalid qualification/config data still fails closed for automatic selection.
+- **Messages and manifests**: selection prints one stderr line such as
+  `pace: chose codex (13% used, resets ...) over agy (quota_score; grok: over_ceiling)`.
+  All three run manifests record `pace_choice: {engine, used_pct, reset_at, runner_up, reason}`;
+  hetero also retains the full `engine_choice`. A named engine with fresh usage above the ceiling
+  prints `pace: grok is at 93% of its 7-day window (resets ...); named by caller, dispatching anyway — codex has 87% left`
+  and continues. Named seats do not claim an automatic `pace_choice`.
 
 ## Context-window gate
 

@@ -12,8 +12,9 @@
  * back to pace-roles.json when missing, reporting qualified_source) minus
  * --exclude, checks endpoint readiness for any candidate pool with an
  * `endpoint` field via scripts/resolve-endpoint.sh, and selects the engine
- * whose best fresh pool has the largest linear-pace slack
- * (expected_pct - used_pct).
+ * whose best fresh pool has the largest quota score:
+ * (100 - used_pct) / max(hours_to_reset, 1). Ties use larger linear-pace
+ * slack (expected_pct - used_pct), then priority.<role> order.
  *
  * Rules:
  *   - Rows with class === "claude" are never candidates; class === "scarce"
@@ -21,29 +22,16 @@
  *   - Candidate pools with `endpoint` must pass `resolve-endpoint.sh <endpoint>`
  *     (`ready === true`); otherwise the candidate is listed as
  *     `{ engine, reason: "endpoint_not_ready" }` and never chosen.
- *   - Missing/null used_pct or expected_pct, or stale !== false, is unknown
- *     (never treated as 0) via scripts/lib/pace-reading.js.
- *   - Alias pools sharing an engine key merge by largest fresh slack.
- *   - A key whose fresh reading has a `status` matching /^WARN_.*_low$/ is "low".
- *     In both the priority walk and the largest-slack fallback, a low key is
- *     chosen only when no non-low eligible key qualifies (low keys go after all
- *     others, keeping their relative order). Output gains `low_keys: [...]` (keys
- *     seen low in this run) and, when the chosen key is low,
- *     `demoted_last_resort: true`.
- *   - Roles with a `priority` list in pace-roles.json (`priority.<role>`)
- *     walk that list in order and choose the first non-low key that is eligible
- *     for the role, passes the endpoint check, has a fresh reading and
- *     slack >= 0 (selected_by: "priority"). A later priority entry is
- *     reached only when every earlier one is ineligible, unready, unknown,
- *     behind pace, or low. When no non-low priority entry qualifies — and for
- *     roles without a priority list — non-low keys with slack >= 0 are picked by
- *     largest slack; only when no non-low key has slack >= 0 does the priority
- *     walk / largest-slack fallback choose among low keys (with
- *     demoted_last_resort: true).
- *   - Among remaining keys with slack >= -10, pick the largest slack
- *     (over_pace: false), preferring non-low over low keys.
- *   - If none has slack >= -10 but at least one key has a fresh reading, pick
- *     the largest slack anyway (non-low before low) with over_pace: true.
+ *   - Fresh rows need finite used_pct, expected_pct and reset hours (or a future reset_at).
+ *   - stale === true is usable as stale_recent only with finite used_pct, a
+ *     future reset_at and seen_at within the last 24 h. Every fresh row ranks
+ *     before every stale_recent row. Older/incomplete rows stay unknown.
+ *   - A recent stale row may lack expected_pct: its slack stays unknown, never zero.
+ *   - Alias pools sharing an engine key merge by quota score, then slack.
+ *   - used_pct >= PACE_CEILING_PCT (pace-roles.json, default 85) is over_ceiling
+ *     and cannot be selected automatically.
+ *   - priority.<role> is only a tie-breaker, never a preference before quota.
+ *   - WARN_*_low readings remain visible in low_keys; quota score sets rank.
  *   - The emitted `model` comes from pace-roles.json `role_models.<role>.<key>`
  *     when present (implementer + agy -> gemini-4-hydrogen-high; reviewer and
  *     author keep the pool's model), else the pool entry's model.
@@ -59,8 +47,9 @@
  *     A non-blank non-comment line that is not YYYY-MM-DD: bad_available_dates.
  *     Date not listed: not_seam_day. Outside the window stays outside_window.
  *     Absent the key, the window rule is unchanged. A skipped seat is not chosen.
- *   - If no candidate key has a known fresh reading, emit
+ *   - If no candidate key has a usable reading, emit
  *     { engine: null, reason: "pace_unknown", low_keys: [], ... } and exit 3.
+ *     If ceiling exclusions exhaust the candidates, reason is "over_ceiling".
  *
  * USAGE:
  *   node scripts/pace-select.js --role <reviewer|implementer|author>
@@ -70,7 +59,14 @@
  * Default --pace: $AUTOPILOT_PACE_FILE, else $HOME/projects/capacity/out/pace.v1.json.
  * Default --qualified: $AUTOPILOT_QUALIFIED_FILE, else $HOME/.autopilot/qualified.v1.json.
  *
- * EXIT: 0 engine selected · 2 bad flags / invalid schema · 3 pace_unknown.
+ * --dispatch is the shell adapter: five newline-separated values (runner, model,
+ * endpoint, full selector JSON, pace_choice JSON). It prints the selection to
+ * stderr. --named-runner/--named-model emit only a fresh over-ceiling warning.
+ * Missing/unreadable/invalid pace data emits pace_unknown and exits 0 with no
+ * selection so rails retain their existing defaults. No capacity schema changes.
+ * Task context: --prompt-file/--diff-file (repeatable) feeds the CN gate before
+ * ranking. --exclude-family and --exclude-model constrain reviewer retreats.
+ * EXIT: 0 selected · 2 bad flags/config/schema · 3 no admissible quota reading.
  * Node >= 20.10, built-ins only.
  */
 
@@ -78,7 +74,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { PACE_SCHEMA, freshReading } = require('./lib/pace-reading.js');
+const { PACE_SCHEMA, finiteNum } = require('./lib/pace-reading.js');
 const { sameEngine, isChineseFamily } = require('./lib/engine-spelling.js');
 
 const EXIT_OK = 0;
@@ -436,6 +432,32 @@ function poolEntryEligibleInQualified(entry, role, qualifiedRows) {
   return false;
 }
 
+// Noncq retains its strict freshness contract; only this selector admits recent stale rows.
+function quotaReading(row, now = new Date()) {
+  const used = finiteNum(row.used_pct);
+  if (used === null || ![false, true].includes(row.stale)) return null;
+  const reset = typeof row.reset_at === 'string' ? Date.parse(row.reset_at) : NaN;
+  const seen = typeof row.seen_at === 'string' ? Date.parse(row.seen_at) : NaN;
+  const age = now.getTime() - seen;
+  const recent = row.stale === true;
+  if (recent && !(reset > now.getTime() && age >= 0 && age <= 24 * 3600000)) return null;
+  const hours = finiteNum(row.hours_to_reset)
+    ?? (reset > now.getTime() ? (reset - now.getTime()) / 3600000 : null);
+  if (hours === null) return null;
+  const expected = finiteNum(row.expected_pct);
+  if (!recent && expected === null) return null;
+  return { pool: row.pool, used_pct: used, expected_pct: expected,
+    slack: expected === null ? null : expected - used, hours_to_reset: hours,
+    reset_at: Number.isFinite(reset) ? row.reset_at : null,
+    status: recent ? 'stale_recent' : 'fresh', score: (100 - used) / Math.max(hours, 1) };
+}
+
+function compareReadings(a, b) {
+  const rank = r => r.status === 'schedule_only' ? 2 : Number(r.status === 'stale_recent');
+  return rank(a) - rank(b)
+    || b.score - a.score || (b.slack ?? -Infinity) - (a.slack ?? -Infinity);
+}
+
 function selectEngine({
   pace,
   pools,
@@ -443,6 +465,9 @@ function selectEngine({
   role,
   exclude,
   checkEndpoint,
+  files = [],
+  diffFiles = [],
+  excludeFamily,
   qualified,
   qualifiedSource,
   scope,
@@ -483,7 +508,8 @@ function selectEngine({
     throw usageError(`pace input must have schema ${JSON.stringify(PACE_SCHEMA)} and rows[]`);
   }
 
-  const mergedPools = mergePools(resolvedPools, resolvedRoles);
+  const mergedPools = Object.fromEntries(Object.entries(mergePools(resolvedPools, resolvedRoles)).map(([name, entry]) => [name,
+    entry && typeof entry === 'object' ? { ...entry, model: resolvedRoles.role_models?.[role]?.[entry.key] || entry.model } : entry]));
   const excluded = normalizeExclude(exclude);
   // pace-roles.json `_disabled`: keys kept in the tables but never offered by the picker (operator: test before enabling).
   // kimi has no usage command: a dispatch-observed exhaustion (kimi-quota-observe.js) is unpickable until its reset.
@@ -521,7 +547,7 @@ function selectEngine({
   }
   const allowedSet = new Set(allowedKeys);
 
-  const endpointProbe = checkEndpoint || defaultCheckEndpoint;
+  const endpointProbe = checkEndpoint || ((ep, entry) => defaultCheckEndpoint(ep, resolvedEnv, entry));
   const endpointCache = new Map();
   const isEndpointReady = (ep, entry) => {
     if (endpointCache.has(ep)) return endpointCache.get(ep);
@@ -553,6 +579,12 @@ function selectEngine({
       const seamReason = seamDayBlock(entry, clock, resolvedEnv);
       if (seamReason) blocked = seamReason;
     }
+    const gate = require('./lib/cn-model-dispatch-gate').check({
+      runner: entry.runner, model: entry.model, endpoint: entry.endpoint,
+      files, diffFiles, role, env: resolvedEnv,
+    });
+    if (!blocked && !gate.allowed) blocked = 'cn_model_dispatch_barred';
+    if (excludeFamily && excludeFamily.split(',').map(f => f.trim()).includes(gate.family)) blocked = 'same_family';
     if (blocked) {
       blockedKeys.set(entry.key, blocked);
       continue;
@@ -565,6 +597,8 @@ function selectEngine({
     readyPools.set(poolName, entry);
   }
 
+  const ceiling = Number.isFinite(resolvedRoles.PACE_CEILING_PCT) ? resolvedRoles.PACE_CEILING_PCT : 85;
+  const overCeiling = new Map();
   const bestByKey = new Map();
   for (const row of pace.rows) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
@@ -573,28 +607,35 @@ function selectEngine({
     if (!poolName || !readyPools.has(poolName)) continue;
     const entry = readyPools.get(poolName);
     const key = entry.key;
-    const reading = freshReading(row);
+    // A fresh high reading must not evade the ceiling through missing pace fields.
+    if (row.stale === false && finiteNum(row.used_pct) !== null && row.used_pct >= ceiling) {
+      overCeiling.set(key, { used_pct: row.used_pct, reset_at: row.reset_at ?? null });
+      continue;
+    }
+    const reading = quotaReading(row, now instanceof Date ? now : new Date());
     if (!reading) continue;
+    if (reading.used_pct >= ceiling) {
+      overCeiling.set(key, reading);
+      continue;
+    }
     const low = isLowStatus(row.status);
 
     const prev = bestByKey.get(key);
     if (
       !prev
-      || (prev.low && !low)
-      || (prev.low === low && reading.slack > prev.reading.slack)
+      || compareReadings(reading, prev.reading) < 0
     ) {
       bestByKey.set(key, { key, entry, reading, low });
     }
   }
 
-  // A schedule_only pool (flat local engine, no capacity pace row) reads as slack 0 whenever it is ready, so
-  // it ranks behind every pool that is ahead of pace.
+  // Preserve schedule-only diagnostics, but a seat without quota ranks below every usable reading.
   for (const entry of readyPools.values()) {
     if (entry.schedule_only === true && !bestByKey.has(entry.key)) {
       bestByKey.set(entry.key, {
         key: entry.key,
         entry,
-        reading: { pool: entry.key, slack: 0, used_pct: null, expected_pct: null },
+        reading: { pool: entry.key, slack: 0, used_pct: null, expected_pct: null, score: -Infinity, status: 'schedule_only' },
         low: false,
       });
     }
@@ -637,9 +678,13 @@ function selectEngine({
         engine: key,
         pool: hit.reading.pool,
         slack_pts: hit.reading.slack,
+        ...(hit.reading.status === 'stale_recent' ? { status: 'stale_recent' } : {}),
       });
       known.push(hit);
       if (hit.low) lowKeys.push(key);
+    } else if (overCeiling.has(key)) {
+      const r = overCeiling.get(key);
+      candidates.push({ engine: key, reason: 'over_ceiling', used_pct: r.used_pct, reset_at: r.reset_at });
     } else {
       candidates.push({
         engine: key,
@@ -651,7 +696,7 @@ function selectEngine({
   if (known.length === 0) {
     return {
       engine: null,
-      reason: 'pace_unknown',
+      reason: overCeiling.size ? 'over_ceiling' : 'pace_unknown',
       low_keys: [],
       role,
       qualified_source: resolvedQualifiedSource,
@@ -660,70 +705,13 @@ function selectEngine({
     };
   }
 
-  const qualifying = known.filter((item) => item.reading.slack >= OVER_PACE_SLACK_FLOOR);
-  const poolToPick = qualifying.length > 0 ? qualifying : known;
-  const overPace = qualifying.length === 0;
-
-  // Priority walk + low-quota demotion:
-  // 1) non-low priority key (slack >= 0) -> 2) non-low slack key (slack >= 0)
-  // 3) low priority key (slack >= 0)     -> 4) low slack key (slack >= 0)
-  // 5) remaining poolToPick (non-low before low, largest slack).
-  const priorityList = (
-    resolvedRoles.priority
-    && typeof resolvedRoles.priority === 'object'
-    && !Array.isArray(resolvedRoles.priority)
-    && Array.isArray(resolvedRoles.priority[role])
-  )
-    ? resolvedRoles.priority[role].filter((k) => typeof k === 'string' && k.trim() !== '')
-    : null;
-
-  const findPriorityHit = (wantLow) => {
-    if (!priorityList) return null;
-    for (const key of priorityList) {
-      if (!allowedSet.has(key)) continue;
-      if (keyHadPool.has(key) && !keyHadReadyPool.has(key)) continue;
-      const hit = bestByKey.get(key);
-      if (!hit || hit.low !== wantLow || hit.reading.slack < 0) continue;
-      return hit;
-    }
-    return null;
-  };
-  const pickLargestSlack = (items) => {
-    let best = items[0];
-    for (let i = 1; i < items.length; i += 1) {
-      if (items[i].reading.slack > best.reading.slack) {
-        best = items[i];
-      }
-    }
-    return best;
-  };
-
-  let chosen = null;
-  let selectedBy = null;
-  const nonLowOnPace = known.filter((item) => !item.low && item.reading.slack >= 0);
-  const lowOnPace = known.filter((item) => item.low && item.reading.slack >= 0);
-
-  const priorityNonLow = findPriorityHit(false);
-  if (priorityNonLow) {
-    chosen = priorityNonLow;
-    selectedBy = 'priority';
-  } else if (nonLowOnPace.length > 0) {
-    chosen = pickLargestSlack(nonLowOnPace);
-    selectedBy = 'slack';
-  } else {
-    const priorityLow = findPriorityHit(true);
-    if (priorityLow) {
-      chosen = priorityLow;
-      selectedBy = 'priority';
-    } else if (lowOnPace.length > 0) {
-      chosen = pickLargestSlack(lowOnPace);
-      selectedBy = 'slack';
-    } else {
-      const nonLowPool = poolToPick.filter((item) => !item.low);
-      chosen = pickLargestSlack(nonLowPool.length > 0 ? nonLowPool : poolToPick);
-      selectedBy = 'slack';
-    }
-  }
+  const priorityList = Array.isArray(resolvedRoles.priority?.[role]) ? resolvedRoles.priority[role] : [];
+  const priorityRank = key => { const i = priorityList.indexOf(key); return i < 0 ? Infinity : i; };
+  known.sort((a, b) => compareReadings(a.reading, b.reading)
+    || priorityRank(a.key) - priorityRank(b.key));
+  const chosen = known[0];
+  const overPace = chosen.reading.slack < OVER_PACE_SLACK_FLOOR;
+  const selectedBy = 'quota_score';
 
   // role_models overrides the emitted model per role (implementer + agy ->
   // gemini-4-hydrogen-high); the pool entry's model stays the default.
@@ -749,6 +737,9 @@ function selectEngine({
     slack_pts: chosen.reading.slack,
     used_pct: chosen.reading.used_pct,
     expected_pct: chosen.reading.expected_pct,
+    reset_at: chosen.reading.reset_at ?? null,
+    score: chosen.reading.score,
+    status: chosen.reading.status,
     over_pace: overPace,
     selected_by: selectedBy,
     low_keys: lowKeys,
@@ -757,13 +748,12 @@ function selectEngine({
     qualified_source: resolvedQualifiedSource,
     pace_generated_at: paceGeneratedAt,
     candidates,
+    runner_up: known[1]?.key ?? null,
+    reason: known[1]?.reading.status === 'stale_recent' && chosen.reading.status === 'fresh' ? 'fresh_before_stale_recent' : 'quota_score',
   };
   if (chosen.entry.cn_gate === true) {
     const pair = pairable.reduce((best, h) => (!best || h.reading.slack > best.reading.slack ? h : best), null);
     out.cn_gate = { scope: 'mechanical', never_sole: true, pair_with: pair ? pair.key : null };
-  }
-  if (chosen.low) {
-    out.demoted_last_resort = true;
   }
   if (typeof chosen.entry.endpoint === 'string' && chosen.entry.endpoint.trim() !== '') {
     out.endpoint = chosen.entry.endpoint.trim();
@@ -774,6 +764,13 @@ function selectEngine({
 function parseArgs(argv) {
   const out = {
     help: false,
+    dispatch: false,
+    namedRunner: null,
+    namedModel: null,
+    files: [],
+    diffFiles: [],
+    excludeFamily: null,
+    excludeModel: null,
     role: null,
     pace: null,
     qualified: null,
@@ -786,6 +783,14 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '-h' || a === '--help') {
       out.help = true;
+      continue;
+    }
+    if (a === '--dispatch') { out.dispatch = true; continue; }
+    const extraFlags = { '--named-runner': 'namedRunner', '--named-model': 'namedModel', '--prompt-file': 'files', '--diff-file': 'diffFiles', '--exclude-family': 'excludeFamily', '--exclude-model': 'excludeModel' };
+    if (extraFlags[a]) {
+      const val = argv[++i];
+      if (!val || val.startsWith('--')) throw usageError('flag ' + a + ' requires a value');
+      if (Array.isArray(out[extraFlags[a]])) out[extraFlags[a]].push(val); else out[extraFlags[a]] = val;
       continue;
     }
     if (a === '--json') {
@@ -831,6 +836,43 @@ function parseArgs(argv) {
   return out;
 }
 
+// --dispatch emits five lines: runner, model, endpoint, full choice, pace_choice.
+// Named seats are never changed; only fresh over-ceiling usage produces a warning.
+function emitSelection(result, flags, pace, pools, roles) {
+  if (!flags.dispatch) {
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return result.engine === null ? EXIT_PACE_UNKNOWN : EXIT_OK;
+  }
+  if (flags.namedRunner || flags.namedModel) {
+    const entries = mergePools(pools, roles);
+    const rows = (Array.isArray(pace?.rows) ? pace.rows : []).filter(row => {
+      const entry = entries[row.pool];
+      if (!entry || row.class === 'claude' || row.stale !== false || finiteNum(row.used_pct) === null) return false;
+      if (flags.namedRunner && flags.namedRunner !== 'auto' && normRunner(entry.runner) !== normRunner(flags.namedRunner)) return false;
+      return !flags.namedModel || sameEngine(entry.model, flags.namedModel)
+        || sameEngine(roles.role_models?.[flags.role]?.[entry.key] || '', flags.namedModel)
+        || (flags.namedRunner && flags.namedRunner !== 'agy' && flags.namedRunner === entry.runner);
+    }).sort((a, b) => a.used_pct - b.used_pct);
+    const row = rows[0];
+    if (row && row.used_pct >= (roles.PACE_CEILING_PCT ?? 85)) {
+      const key = entries[row.pool].key;
+      const alternative = result.engine ? result.engine + ' has ' + (100 - result.used_pct) + '% left' : 'no eligible alternative has known quota left';
+      process.stderr.write('pace: ' + key + ' is at ' + row.used_pct + '% of its 7-day window (resets ' + (row.reset_at ?? 'unknown') + '); named by caller, dispatching anyway — ' + alternative + '\n');
+    }
+    return EXIT_OK;
+  }
+  if (!result.engine) {
+    process.stderr.write('pace: ' + result.reason + (result.reason === 'pace_unknown' ? '; using existing dispatch default' : '; no engine below ceiling') + '\n');
+    return result.reason === 'pace_unknown' ? EXIT_OK : EXIT_PACE_UNKNOWN;
+  }
+  const choice = { engine: result.engine, used_pct: result.used_pct, reset_at: result.reset_at,
+    runner_up: result.runner_up, reason: result.reason };
+  const rejected = result.candidates.filter(c => c.reason === 'over_ceiling').map(c => c.engine + ': over_ceiling');
+  process.stderr.write('pace: chose ' + result.engine + ' (' + result.used_pct + '% used, resets ' + result.reset_at + ') over ' + (result.runner_up ?? 'none') + ' (' + [result.reason, ...rejected].join('; ') + ')\n');
+  process.stdout.write([result.runner, result.model, result.endpoint || '', JSON.stringify(result), JSON.stringify(choice)].join('\n') + '\n');
+  return EXIT_OK;
+}
+
 function main(argv = process.argv.slice(2), env = process.env) {
   let flags;
   try {
@@ -849,6 +891,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
     process.stderr.write(`pace-select.js: --role is required\n${USAGE_TEXT}`);
     return EXIT_USAGE;
   }
+  const namedSeat = flags.dispatch && (flags.namedRunner || flags.namedModel);
 
   let pools;
   let roles;
@@ -857,8 +900,16 @@ function main(argv = process.argv.slice(2), env = process.env) {
     roles = loadRoles(env.AUTOPILOT_PACE_ROLES || ROLES_PATH);
     assertValidRole(roles, flags.role);
   } catch (err) {
+    if (namedSeat) return EXIT_OK; // telemetry/config cannot veto an explicit seat
     process.stderr.write(`pace-select.js: ${err.message}\n`);
     return EXIT_USAGE;
+  }
+
+  if (flags.excludeModel) {
+    for (const entry of Object.values(mergePools(pools, roles))) {
+      if (sameEngine(entry.model, flags.excludeModel)
+        || sameEngine(roles.role_models?.[flags.role]?.[entry.key] || '', flags.excludeModel)) flags.exclude.push(entry.key);
+    }
   }
 
   const qualifiedPath = flags.qualified !== null
@@ -872,8 +923,12 @@ function main(argv = process.argv.slice(2), env = process.env) {
     rawQualified = fs.readFileSync(qualifiedPath, 'utf8');
   } catch (err) {
     if (!err || err.code !== 'ENOENT') {
-      process.stderr.write(`pace-select.js: cannot read qualified file (${qualifiedPath}): ${err.message}\n`);
-      return EXIT_USAGE;
+      if (namedSeat) {
+        qualified = { schema: QUALIFIED_SCHEMA, rows: [] }; // no qualified alternative can be claimed
+      } else {
+        process.stderr.write(`pace-select.js: cannot read qualified file (${qualifiedPath}): ${err.message}\n`);
+        return EXIT_USAGE;
+      }
     }
   }
   if (rawQualified !== null) {
@@ -881,8 +936,12 @@ function main(argv = process.argv.slice(2), env = process.env) {
       qualified = JSON.parse(rawQualified);
       validateQualified(qualified);
     } catch (err) {
-      process.stderr.write(`pace-select.js: invalid qualified file (${qualifiedPath}): ${err.message}\n`);
-      return EXIT_USAGE;
+      if (namedSeat) {
+        qualified = { schema: QUALIFIED_SCHEMA, rows: [] };
+      } else {
+        process.stderr.write(`pace-select.js: invalid qualified file (${qualifiedPath}): ${err.message}\n`);
+        return EXIT_USAGE;
+      }
     }
     qualifiedSource = qualifiedPath;
   }
@@ -899,12 +958,13 @@ function main(argv = process.argv.slice(2), env = process.env) {
   const paceRead = readPaceFile(flags.pace, env);
   if (!paceRead.ok) {
     if (paceRead.status === 'missing') {
-      process.stderr.write(`pace-select.js: pace file not found: ${paceRead.path}\n`);
+      if (!flags.dispatch) process.stderr.write(`pace-select.js: pace file not found: ${paceRead.path}\n`);
       const unknownResult = selectEngine({
         pace: { schema: PACE_SCHEMA, generated_at: null, rows: [] },
         pools,
         roles,
         role: flags.role,
+        files: flags.files, diffFiles: flags.diffFiles, excludeFamily: flags.excludeFamily,
         exclude: flags.exclude,
         checkEndpoint,
         qualified,
@@ -913,9 +973,9 @@ function main(argv = process.argv.slice(2), env = process.env) {
         now: nowDate,
         env,
       });
-      process.stdout.write(`${JSON.stringify(unknownResult, null, 2)}\n`);
-      return EXIT_PACE_UNKNOWN;
+      return emitSelection(unknownResult, flags, null, pools, roles);
     }
+    if (flags.dispatch) return emitSelection({ engine: null, reason: 'pace_unknown' }, flags, null, pools, roles);
     if (paceRead.status === 'invalid_json') {
       process.stderr.write(`pace-select.js: pace file is not JSON (${paceRead.path}): ${paceRead.error}\n`);
       return EXIT_USAGE;
@@ -932,6 +992,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
       pools,
       roles,
       role: flags.role,
+      files: flags.files, diffFiles: flags.diffFiles, excludeFamily: flags.excludeFamily,
       exclude: flags.exclude,
       checkEndpoint,
       qualified,
@@ -941,12 +1002,12 @@ function main(argv = process.argv.slice(2), env = process.env) {
       env,
     });
   } catch (err) {
+    if (flags.dispatch) return emitSelection({ engine: null, reason: 'pace_unknown' }, flags, pace, pools, roles);
     process.stderr.write(`pace-select.js: ${err.message}\n`);
     return err.exitCode || EXIT_USAGE;
   }
 
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  return result.engine === null ? EXIT_PACE_UNKNOWN : EXIT_OK;
+  return emitSelection(result, flags, pace, pools, roles);
 }
 
 if (require.main === module) {

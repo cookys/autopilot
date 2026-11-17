@@ -89,3 +89,109 @@ hooks/secret-output-redact.js stays unchanged: its existing handle() already cal
 
 Commit attempt 1: exit=1; lab gitleaks flagged ten fixture lines containing the explicitly synthetic S3cr3t-synthetic-001 value. The hook requires a Lab-Hook-Override trailer explaining this false positive; no product changes follow the green verification.
 git diff --cached --check: exit=0.
+
+Follow-up defects (2026-11-17), base 145407fc8:
+1. Acceptance: correctly parse requested rg/git grep value options, allow rg --files, preserve grep -T boolean semantics; redact both first-list-marker regressions; tests/sync/check green; requested commit subject and Fleet-Task footer. Caller owns independent cross-family review.
+2. Located lines to change:
+   scripts/lib/bash-launch-rules.js: safe-output long-option regex ends count(?:-matches)?|quiet|silent; value-option regex lacks -g/-d/-M/-t/-T, --max-depth and --max-columns.
+   hooks/_shared/secret-patterns.js: const list = /^((?:(?:[^:\r\n]+:)*\d+:)?[ \t]*-[ \t]+)(.*)$/.exec(line);
+3. Guard regressions added before product edits.
+RED node --test --test-name-pattern=secret-print.*grep pattern hooks/bash-launch-guard.test.js: exit=1
+
+Raw local artifact: .context/grep-secret-shapes2/step3-guard-red.tap
+Reporter is spec (not TAP); actual command argument is --test-name-pattern="secret-print.*grep pattern". Assertion summary:
+ℹ tests 56
+ℹ pass 44
+ℹ fail 12
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+✖ secret-print grep pattern denies: rg -t yaml PASSWORD config/
+✖ secret-print grep pattern denies: rg -g '*.yml' PASSWORD config/
+✖ secret-print grep pattern denies: git grep --max-depth 2 DB_PASSWORD
+✖ secret-print grep pattern denies: rg -T json PASSWORD config/
+✖ secret-print grep pattern denies: rg -d 2 PASSWORD config/
+✖ secret-print grep pattern denies: rg --max-depth 2 PASSWORD config/
+✖ secret-print grep pattern denies: rg -M 80 PASSWORD config/
+✖ secret-print grep pattern denies: rg --max-columns 80 PASSWORD config/
+✖ secret-print grep pattern allows: rg -g '!*secret*' mode src
+✖ secret-print grep pattern allows: rg --files src/secret
+✖ secret-print grep pattern allows: rg -t secret mode src
+✖ secret-print grep pattern allows: rg -T secret mode src
+GREEN→GREEN control at base: grep -T -n PASSWORD .env is already blocked.
+GREEN node --test --test-reporter=tap --test-name-pattern="secret-print.*grep pattern" hooks/bash-launch-guard.test.js: exit=0
+# tests 56
+# pass 56
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+Raw local artifact: .context/grep-secret-shapes2/step3-guard-green.tap
+
+4. YAML first-list-marker regressions added before redactor edit.
+RED node --test --test-reporter=tap --test-name-pattern=grep/YAML hooks/secret-output-redact.test.js: exit=1
+not ok 7 - grep/YAML quoted YAML list value with nested list marker
+not ok 8 - grep/YAML YAML list value with nested list marker
+# tests 12
+# pass 10
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+Raw local artifact: .context/grep-secret-shapes2/step4-yaml-red.tap
+GREEN node --test --test-reporter=tap --test-name-pattern=grep/YAML hooks/secret-output-redact.test.js: exit=0
+# tests 12
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+Raw local artifact: .context/grep-secret-shapes2/step4-yaml-green.tap
+
+Follow-up per-case transitions:
+RED→GREEN secret-print grep pattern denies: rg -t yaml PASSWORD config/
+RED→GREEN secret-print grep pattern denies: rg -g '*.yml' PASSWORD config/
+RED→GREEN secret-print grep pattern denies: git grep --max-depth 2 DB_PASSWORD
+RED→GREEN secret-print grep pattern denies: rg -T json PASSWORD config/
+RED→GREEN secret-print grep pattern denies: rg -d 2 PASSWORD config/
+RED→GREEN secret-print grep pattern denies: rg --max-depth 2 PASSWORD config/
+RED→GREEN secret-print grep pattern denies: rg -M 80 PASSWORD config/
+RED→GREEN secret-print grep pattern denies: rg --max-columns 80 PASSWORD config/
+RED→GREEN secret-print grep pattern allows: rg -g '!*secret*' mode src
+RED→GREEN secret-print grep pattern allows: rg --files src/secret
+RED→GREEN secret-print grep pattern allows: rg -t secret mode src
+RED→GREEN secret-print grep pattern allows: rg -T secret mode src
+GREEN→GREEN grep -T -n PASSWORD .env remains blocked.
+RED→GREEN YAML 7:  - "API_KEY=abc:123: - dev" => 7:  - "API_KEY=[REDACTED]"
+RED→GREEN YAML - API_TOKEN=v1:0: - prod => - API_TOKEN=[REDACTED]
+
+5. Final verification:
+node --test hooks/secret-output-redact.test.js hooks/bash-launch-guard.test.js: exit=0
+ℹ tests 1004
+ℹ pass 994
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 10
+ℹ todo 0
+Raw local artifact: .context/grep-secret-shapes2/step5-final-tests.log
+bash scripts/sync-all.sh: exit=0
+{"mode":"generate","changed":false,"ran":["sync-agent-bodies","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","hook-harness-matrix"],"skipped":["sync-version (no generate cmd)","check-canonical-invariants (no generate cmd)","check-readme-parity (no generate cmd)","check-hook-inventory (no generate cmd)","check-config-docs (no generate cmd)","check-quota-adapters (no generate cmd)","check-claude-md-inventory (no generate cmd)","check-js-syntax (no generate cmd)","check-backlog-entries (no generate cmd)","check-contract-schema (no generate cmd)","check-profile-catalog (no generate cmd)"],"unknown_only":[],"failures":[],"ok":true}
+
+Raw local artifact: .context/grep-secret-shapes2/step5-sync-generate.log
+bash scripts/sync-all.sh --check: exit=0
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","hook-harness-matrix","check-config-docs","check-quota-adapters","check-claude-md-inventory","check-js-syntax","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}
+
+Raw local artifact: .context/grep-secret-shapes2/step5-sync-check.log
+
+Follow-up changed files (one line each):
+scripts/lib/bash-launch-rules.js — skip requested rg/git grep option operands and recognize rg --files as safe; keep grep -T boolean.
+hooks/bash-launch-guard.test.js — add all six requested command cases plus coverage for every added value option and secret-like type operands.
+hooks/_shared/secret-patterns.js — prefer the first YAML list marker over marker-like text inside its value.
+hooks/secret-output-redact.test.js — add both exact synthetic marker-in-value regressions through the real output hook.
+platforms/codex/plugin/scripts/lib/bash-launch-rules.js — generated guard mirror from sync-all.
+platforms/codex/plugin/hooks/_shared/secret-patterns.js — generated redactor mirror from sync-all.
+docs/plans/evidence/2026-11-17-grep-secret-shapes/receipt.log — append red→green cases, command exit codes, changed-file reasons and scope.
+
+Follow-up not done / out of scope: no push, merge, deployment, version bump, release notes, live configuration edits, credential reads or network use. Independent cross-family review remains caller-owned and pending; no review PASS is claimed here. All new fixture values are synthetic. Test/sync HOME and TMPDIR are isolated under this worktree; ignored .context/grep-secret-shapes2/ retains raw local evidence. No product behavior beyond the two requested defects was intentionally changed.
+Follow-up git diff --check: exit=0.
+Follow-up git diff --cached --check: exit=0.

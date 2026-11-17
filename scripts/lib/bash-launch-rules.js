@@ -1666,8 +1666,11 @@ function secretWords(head, args, depth, sanitized = false) {
           continue;
         }
         if (SECRET_GREP.has(name) && (/^-[a-zA-Z]*[lLcq]/.test(a)
-          || /^--(?:files-with-matches|files-without-match|count(?:-matches)?|quiet|silent)$/.test(a))) safeOutput = true;
-        if (/^(?:-[mABC]|--(?:max-count|after-context|before-context|context|glob|iglob|type|type-not|include|exclude|exclude-dir))$/.test(a)) i += 1;
+          || /^--(?:files-with-matches|files-without-match|count(?:-matches)?|quiet|silent)$/.test(a)
+          || (name === 'rg' && a === '--files'))) safeOutput = true;
+        // rg's -t/-T take a type; grep's -T is a boolean tab-alignment flag.
+        if (/^(?:-[mABC]|--(?:max-count|max-depth|after-context|before-context|context|glob|iglob|type|type-not|include|exclude|exclude-dir))$/.test(a)
+          || (name === 'rg' && /^(?:-[gdtTM]|--max-columns)$/.test(a))) i += 1;
         continue;
       }
       if (!pattern) {

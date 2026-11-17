@@ -113,7 +113,8 @@ function redactOutput(text) {
     if (env) return env[1] + redactEnvironment(env[2]);
     // grep -n / -Hn and rg prefixes precede YAML list entries. Keep the
     // prefix/outer quotes, but redact the whole value (including spaces).
-    const list = /^((?:(?:[^:\r\n]+:)*\d+:)?[ \t]*-[ \t]+)(.*)$/.exec(line);
+    // Prefer a bare list, then the shortest grep prefix; values may contain ':0: - '.
+    const list = /^((?:(?:[^:\r\n]+:)*?\d+:)??[ \t]*-[ \t]+)(.*)$/.exec(line);
     if (list) {
       const body = list[2];
       if (body[0] === '"' || body[0] === "'") {

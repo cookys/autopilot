@@ -213,6 +213,8 @@ function wrapPreToolCommand(command, outFile, cap) {
 function handlePostToolUse(input, env) {
   const toolName = input.tool_name;
   if (!isTargetPostTool(toolName)) return null;
+  if (toolName === 'Bash' && (!input.tool_response
+    || typeof input.tool_response !== 'object' || Array.isArray(input.tool_response))) return null;
   const fullText = extractResponseText(input);
   if (fullText === null) return null;
 
@@ -235,7 +237,9 @@ function handlePostToolUse(input, env) {
   return {
     hookSpecificOutput: {
       hookEventName: 'PostToolUse',
-      [field]: truncated,
+      [field]: toolName === 'Bash'
+        ? { ...input.tool_response, stdout: truncated, stderr: '' }
+        : truncated,
     },
   };
 }

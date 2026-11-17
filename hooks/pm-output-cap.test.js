@@ -19,6 +19,10 @@ function makeLines(count) {
   return Array.from({ length: count }, (_, i) => `line-${i + 1}`).join('\n') + '\n';
 }
 
+function bashResponse(stdout, overrides = {}) {
+  return { stdout, stderr: '', interrupted: false, isImage: false, noOutputExpected: false, ...overrides };
+}
+
 function withSandbox(fn) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pmcap-'));
   const home = path.join(root, 'home');
@@ -100,13 +104,14 @@ test('pm-console gate: requires first .git + schema autopilot.console/1 + mode p
 test('PostToolUse Bash: 41 lines -> 40 + pointer and full 41 lines on disk (0700/0600)', () => {
   withSandbox(({ home, state, runtime, pmRepo }) => {
     const full = makeLines(41);
+    const response = bashResponse(full, { interrupted: true, noOutputExpected: true, extra: { fake: 'metadata' } });
     const res = runHook(
       {
         hook_event_name: 'PostToolUse',
         tool_name: 'Bash',
         tool_use_id: 'toolu_01ABC_xyz-9',
         tool_input: { command: 'seq 1 41' },
-        tool_response: full,
+        tool_response: response,
         cwd: pmRepo,
       },
       { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
@@ -119,10 +124,13 @@ test('PostToolUse Bash: 41 lines -> 40 + pointer and full 41 lines on disk (0700
     assert.equal(parsed.hookSpecificOutput.hookEventName, 'PostToolUse');
 
     const expectedFile = path.join(runtime, 'autopilot', 'pm-output', 'toolu_01ABC_xyz-9.txt');
-    const outLines = out.split('\n');
+    assert.equal(typeof out, 'object');
+    assert.deepEqual(out, { ...response, stdout: out.stdout, stderr: '' });
+    const outLines = out.stdout.split('\n');
     assert.equal(outLines.length, 41);
     assert.equal(outLines[0], 'line-1');
     assert.equal(outLines[39], 'line-40');
+    assert.deepEqual(outLines.slice(0, 40), makeLines(40).trimEnd().split('\n'));
     assert.equal(outLines[40], `… 1 行已截斷，全文：${expectedFile}`);
 
     assert.equal(fs.readFileSync(expectedFile, 'utf8'), full);
@@ -131,16 +139,19 @@ test('PostToolUse Bash: 41 lines -> 40 + pointer and full 41 lines on disk (0700
   });
 });
 
-test('PostToolUse Bash: object { stdout, stderr } tool_response over 40 lines is truncated', () => {
+test('PostToolUse Bash: caps combined stdout and stderr and preserves response metadata', () => {
   withSandbox(({ home, state, runtime, pmRepo }) => {
-    const full = makeLines(42);
+    const stdout = makeLines(39);
+    const stderr = makeLines(3);
+    const full = stdout + stderr;
+    const response = bashResponse(stdout, { stderr });
     const res = runHook(
       {
         hook_event_name: 'PostToolUse',
         tool_name: 'Bash',
         tool_use_id: 'toolu_obj_1',
         tool_input: { command: 'seq 1 42' },
-        tool_response: { stdout: full, stderr: '', interrupted: false, isImage: false },
+        tool_response: response,
         cwd: pmRepo,
       },
       { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
@@ -150,8 +161,37 @@ test('PostToolUse Bash: object { stdout, stderr } tool_response over 40 lines is
     const parsed = JSON.parse(res.stdout);
     const out = parsed.hookSpecificOutput.updatedToolOutput;
     const expectedFile = path.join(runtime, 'autopilot', 'pm-output', 'toolu_obj_1.txt');
-    assert.match(out, new RegExp(`… 2 行已截斷，全文：${expectedFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+    assert.equal(typeof out, 'object');
+    assert.deepEqual(out, {
+      ...response,
+      stdout: `${stdout}line-1\n… 2 行已截斷，全文：${expectedFile}`,
+      stderr: '',
+    });
+    assert.match(out.stdout, new RegExp(`… 2 行已截斷，全文：${expectedFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
     assert.equal(fs.readFileSync(expectedFile, 'utf8'), full);
+  });
+});
+
+test('PostToolUse Bash: non-object tool_response passes through without writing', () => {
+  withSandbox(({ home, state, runtime, pmRepo }) => {
+    for (const response of [makeLines(41), [{ type: 'text', text: makeLines(41) }], null, undefined, 42, true]) {
+      const res = runHook(
+        {
+          hook_event_name: 'PostToolUse',
+          tool_name: 'Bash',
+          tool_use_id: 'toolu_invalid',
+          tool_input: { command: 'seq 1 41' },
+          tool_response: response,
+          tool_output: bashResponse(makeLines(41)),
+          cwd: pmRepo,
+        },
+        { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
+      );
+      assert.equal(res.status, 0, res.stderr);
+      assert.equal(res.stderr, '');
+      assert.equal(res.stdout, '');
+      assert.equal(fs.existsSync(path.join(runtime, 'autopilot', 'pm-output')), false);
+    }
   });
 });
 
@@ -164,7 +204,7 @@ test('PostToolUse Bash: 40 lines (with or without trailing newline) is untouched
           tool_name: 'Bash',
           tool_use_id: 'toolu_40',
           tool_input: { command: 'seq 1 40' },
-          tool_response: body,
+          tool_response: bashResponse(body),
           cwd: pmRepo,
         },
         { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
@@ -190,7 +230,7 @@ test('PostToolUse: ledger_search_pattern lowers cap to 30 when matched', () => {
         tool_name: 'Bash',
         tool_use_id: 'toolu_ledger_31',
         tool_input: { command: 'pm-ledger search foo' },
-        tool_response: makeLines(31),
+        tool_response: bashResponse(makeLines(31)),
         cwd: pmRepo,
       },
       {
@@ -203,7 +243,7 @@ test('PostToolUse: ledger_search_pattern lowers cap to 30 when matched', () => {
     );
     assert.equal(matchedOver.status, 0, matchedOver.stderr);
     const out = JSON.parse(matchedOver.stdout).hookSpecificOutput.updatedToolOutput;
-    const lines = out.split('\n');
+    const lines = out.stdout.split('\n');
     assert.equal(lines.length, 31);
     assert.equal(lines[29], 'line-30');
     assert.match(lines[30], /^… 1 行已截斷，全文：/);
@@ -214,7 +254,7 @@ test('PostToolUse: ledger_search_pattern lowers cap to 30 when matched', () => {
         tool_name: 'Bash',
         tool_use_id: 'toolu_ledger_30',
         tool_input: { command: 'pm-ledger search foo' },
-        tool_response: makeLines(30),
+        tool_response: bashResponse(makeLines(30)),
         cwd: pmRepo,
       },
       {
@@ -234,7 +274,7 @@ test('PostToolUse: ledger_search_pattern lowers cap to 30 when matched', () => {
         tool_name: 'Bash',
         tool_use_id: 'toolu_other_35',
         tool_input: { command: 'echo other' },
-        tool_response: makeLines(35),
+        tool_response: bashResponse(makeLines(35)),
         cwd: pmRepo,
       },
       {
@@ -262,7 +302,7 @@ test('non-PM repo and opt-in off leave output untouched and write nothing', () =
         tool_name: 'Bash',
         tool_use_id: 'toolu_nonpm',
         tool_input: { command: 'seq 1 50' },
-        tool_response: makeLines(50),
+        tool_response: bashResponse(makeLines(50)),
         cwd: childRepo,
       },
       { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
@@ -278,7 +318,7 @@ test('non-PM repo and opt-in off leave output untouched and write nothing', () =
         tool_name: 'Bash',
         tool_use_id: 'toolu_optoff',
         tool_input: { command: 'seq 1 50' },
-        tool_response: makeLines(50),
+        tool_response: bashResponse(makeLines(50)),
         cwd: pmRepo,
       },
       {
@@ -372,7 +412,7 @@ test('symlinked pm-output directory fails open without writing through symlink',
         tool_name: 'Bash',
         tool_use_id: 'toolu_sym',
         tool_input: { command: 'seq 1 45' },
-        tool_response: makeLines(45),
+        tool_response: bashResponse(makeLines(45)),
         cwd: pmRepo,
       },
       { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: runtime },
@@ -393,14 +433,14 @@ test('unsafe or empty tool_use_id stays inside pm-output dir and falls back to s
           tool_name: 'Bash',
           tool_use_id: badId,
           tool_input: { command: 'seq 1 41' },
-          tool_response: makeLines(41),
+          tool_response: bashResponse(makeLines(41)),
           cwd: pmRepo,
         },
         { HOME: home, AUTOPILOT_STATE_DIR: state, XDG_RUNTIME_DIR: '' },
       );
       assert.equal(res.status, 0, res.stderr);
       const out = JSON.parse(res.stdout).hookSpecificOutput.updatedToolOutput;
-      const m = out.match(/全文：(.+)$/);
+      const m = out.stdout.match(/全文：(.+)$/);
       assert.ok(m, 'pointer path missing');
       const writtenPath = m[1];
       assert.equal(path.dirname(writtenPath), outDir);
@@ -539,7 +579,7 @@ test('PostToolUse: empty ledger_search_pattern leaves 30-line rule off; pattern 
         tool_name: 'Bash',
         tool_use_id: 'toolu_empty_pat',
         tool_input: { command: 'pm-ledger search foo' },
-        tool_response: makeLines(35),
+        tool_response: bashResponse(makeLines(35)),
         cwd: pmRepo,
       },
       {

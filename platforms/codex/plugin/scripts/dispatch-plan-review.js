@@ -57,6 +57,7 @@ const {
 } = require('../src/transport/runner-envelope');
 const {
   normalizePlanReviewPayload,
+  redactLocators,
 } = require('./lib/plan-review-normalize');
 const {
   applyDispositions,
@@ -429,8 +430,9 @@ function canonical(value) {
 
 function atomicWriteJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const persisted = redactLocators(value, { skipKeys: ['repo_identity'] });
   const temp = `${filePath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
-  fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  fs.writeFileSync(temp, `${JSON.stringify(persisted, null, 2)}\n`, { mode: 0o600 });
   fs.renameSync(temp, filePath);
 }
 
@@ -1055,9 +1057,12 @@ function sealSpec(command, specFile, sealPath) {
   if (run.status !== 0) {
     throw new CliError(command === 'seal' ? 'unable to seal frozen input' : 'frozen input drifted', 3);
   }
-  return command === 'seal'
-    ? JSON.parse(fs.readFileSync(sealPath, 'utf8')).spec_sha256
-    : JSON.parse(run.stdout).spec_sha256;
+  if (command === 'seal') {
+    const sealed = JSON.parse(fs.readFileSync(sealPath, 'utf8'));
+    atomicWriteJson(sealPath, sealed);
+    return sealed.spec_sha256;
+  }
+  return JSON.parse(run.stdout).spec_sha256;
 }
 
 function withLock(directory, name, fn) {
@@ -1781,7 +1786,7 @@ function growthRatioValue(planBytes, baselineBytes) {
 }
 
 function publicArtifact(base) {
-  return base;
+  return redactLocators(base);
 }
 
 function firstPreconditionPolicyReason(seatReviews) {

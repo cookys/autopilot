@@ -1888,4 +1888,291 @@ OUT="$(
 )"; EXIT=$?
 assert_exit_code "$EXIT" "0" "explicit absolute --rubric-file outside --repo-root remains allowed"
 
+# --- Locator and absolute-path redaction (01M7K1NC) ---
+# Unit check: redactLocators does not mutate the in-memory envelope, so readBoundRaw keeps reading raw bytes.
+LOCATOR_UNIT_DIR="$TEST_TMP/locator-unit"
+mkdir -p "$LOCATOR_UNIT_DIR"
+LOCATOR_RAW_FILE="$LOCATOR_UNIT_DIR/stdout.raw"
+printf '%s\n' '{"verdict":"READY","findings":[]}' >"$LOCATOR_RAW_FILE"
+node - "$REPO_ROOT" "$LOCATOR_RAW_FILE" <<'NODE'
+const assert = require('assert');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const normalize = require(path.join(process.argv[2], 'scripts/lib/plan-review-normalize'));
+const { createRunnerTransportEnvelope } = require(path.join(process.argv[2], 'src/transport/runner-envelope'));
+
+const fictionalHome = path.posix.join('/', 'home', 'alice');
+const fictionalTmp = `${fictionalHome}/my-tmp`;
+const fictionalRuntime = path.posix.join('/', 'run', 'user', '1000');
+const fictionalRawPath = `${fictionalTmp}/locator-unit/stdout.raw`;
+const unitOpts = {
+  tmpDirs: [path.posix.join('/', 'tmp'), fictionalTmp],
+  runtimeDirs: [fictionalRuntime],
+  homeDirs: [fictionalHome],
+};
+
+const rawPath = process.argv[3];
+const rawBytes = fs.readFileSync(rawPath);
+const rawDigest = crypto.createHash('sha256').update(rawBytes).digest('hex');
+
+const boundEnvelope = createRunnerTransportEnvelope({
+  runner: 'codex',
+  model: 'gpt-fixture',
+  operation: 'plan-review',
+  argv: ['codex', '--prompt-file', `${fictionalTmp}/prompt.txt`],
+  cwd: fictionalHome,
+  child: { status: 0, signal: null, error: null, stdout: rawBytes, stderr: '' },
+  privateRawReference: {
+    kind: 'private-file',
+    locator: rawPath,
+    digest: rawDigest,
+  },
+});
+normalize.redactLocators({ transport_envelope: boundEnvelope }, unitOpts);
+assert.strictEqual(boundEnvelope.private_raw_reference.locator, rawPath);
+assert.strictEqual(normalize.readBoundRaw(boundEnvelope).toString('utf8'), rawBytes.toString('utf8'));
+
+const fictionalEnvelope = createRunnerTransportEnvelope({
+  runner: 'codex',
+  model: 'gpt-fixture',
+  operation: 'plan-review',
+  argv: ['codex', '--prompt-file', `${fictionalTmp}/prompt.txt`],
+  cwd: fictionalHome,
+  child: { status: 0, signal: null, error: null, stdout: rawBytes, stderr: '' },
+  privateRawReference: {
+    kind: 'private-file',
+    locator: fictionalRawPath,
+    digest: rawDigest,
+  },
+});
+
+const redacted = normalize.redactLocators({
+  transport_envelope: fictionalEnvelope,
+  error: `failed reading ${fictionalRawPath} under ${fictionalHome}/work`,
+  nested: ['/var/tmp/keep', `${fictionalHome}2/keep`],
+}, unitOpts);
+
+// In-memory envelope stays unmutated even when the redacted copy rewrites its locator.
+assert.strictEqual(fictionalEnvelope.private_raw_reference.locator, fictionalRawPath);
+
+// Redacted copy carries placeholders instead of temp, runtime, or home prefixes.
+assert.strictEqual(redacted.transport_envelope.private_raw_reference.locator, '<tmp>/locator-unit/stdout.raw');
+assert.strictEqual(redacted.error, 'failed reading <tmp>/locator-unit/stdout.raw under ~/work');
+assert.deepStrictEqual(redacted.nested, ['/var/tmp/keep', `${fictionalHome}2/keep`]);
+
+const runtimeRedacted = normalize.redactLocatorString(`${fictionalRuntime}/socket and /tmp/dispatch-author-x/stdout.raw`, {
+  tmpDirs: [path.posix.join('/', 'tmp')],
+  runtimeDirs: [fictionalRuntime],
+  homeDirs: [fictionalHome],
+});
+assert.strictEqual(runtimeRedacted, '<runtime>/socket and <tmp>/dispatch-author-x/stdout.raw');
+
+// Longest prefix wins when TMPDIR is nested under HOME.
+const nestedTmpRedacted = normalize.redactLocatorString(`${fictionalTmp}/dispatch-author-AbC/stdout.raw`, {
+  tmpDirs: [fictionalTmp],
+  runtimeDirs: [],
+  homeDirs: [fictionalHome],
+});
+assert.strictEqual(nestedTmpRedacted, '<tmp>/dispatch-author-AbC/stdout.raw');
+
+// Path-boundary regression: punctuation (including comma, colon, semicolon, plus),
+// Unicode, and alphanumeric suffixes must not redact, while "/", end-of-string,
+// whitespace, quotes, and closing brackets still redact.
+const boundaryOpts = {
+  tmpDirs: [path.posix.join('/', 'tmp')],
+  runtimeDirs: [],
+  homeDirs: [],
+};
+for (const unchanged of [
+  '/tmp+cache/report.json',
+  '/tmp,cache/report.json',
+  '/tmp:cache/x',
+  '/tmp;x',
+  '/tmp,',
+  '/tmp:',
+  '/tmp資料/x',
+  '/tmpfoo/x',
+  '/資料/tmp/x',
+  '/foo+/tmp/x',
+]) {
+  assert.strictEqual(normalize.redactLocatorString(unchanged, boundaryOpts), unchanged);
+}
+assert.strictEqual(normalize.redactLocatorString('/tmp/x', boundaryOpts), '<tmp>/x');
+assert.strictEqual(normalize.redactLocatorString('/tmp/x,y', boundaryOpts), '<tmp>/x,y');
+assert.strictEqual(normalize.redactLocatorString('/tmp', boundaryOpts), '<tmp>');
+assert.strictEqual(normalize.redactLocatorString('"/tmp"', boundaryOpts), '"<tmp>"');
+assert.strictEqual(normalize.redactLocatorString('(/tmp)', boundaryOpts), '(<tmp>)');
+assert.strictEqual(normalize.redactLocatorString('/tmp x', boundaryOpts), '<tmp> x');
+assert.deepStrictEqual(
+  normalize.redactLocators({ dir: '/tmp', sibling: '/tmp+cache/report.json' }, boundaryOpts),
+  { dir: '<tmp>', sibling: '/tmp+cache/report.json' },
+);
+NODE
+assert_exit_code "$?" "0" "redactLocators unit checks and in-memory readBoundRaw contract pass"
+
+# End-to-end sentinel setup: place the sentinel raw file inside a dispatch-author-* subdir of TEST_TMP
+# and invoke dispatch-plan-review with TMPDIR="$TEST_TMP" so redaction covers all TEST_TMP paths on any host.
+LOCATOR_SENTINEL_DIR="$TEST_TMP/dispatch-author-sentinel-AbC123"
+mkdir -p "$LOCATOR_SENTINEL_DIR"
+LOCATOR_SENTINEL_RAW="$LOCATOR_SENTINEL_DIR/stdout.raw"
+cp "$READY" "$LOCATOR_SENTINEL_RAW"
+LOCATOR_ALL_READY="$(sequence \
+  "architect=$LOCATOR_SENTINEL_RAW" "operations=$LOCATOR_SENTINEL_RAW" \
+  "skeptic=$LOCATOR_SENTINEL_RAW" "product=$LOCATOR_SENTINEL_RAW")"
+LOCATOR_MANIFEST="$TEST_TMP/locator-manifest.json"
+copy_manifest "locator-redaction-plan" "$LOCATOR_MANIFEST"
+
+check_no_abs_leak() {
+  local json_file="$1"
+  node - "$json_file" "$TMPDIR" "$TEST_TMP" "$HOME" "${XDG_RUNTIME_DIR:-}" <<'NODE'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[2], 'utf8');
+const needles = [process.argv[3], process.argv[4], process.argv[5], process.argv[6], '/tmp/'].filter(Boolean);
+for (const needle of needles) {
+  if (raw.includes(needle)) {
+    process.stderr.write(`FOUND LEAK (${needle}) in ${process.argv[2]}\n`);
+    process.exit(1);
+  }
+}
+NODE
+}
+
+# Negative control: on pre-fix unredacted code (redactLocators turned into a no-op), the leak check goes RED.
+LOCATOR_MUTANT_ROOT="$TEST_TMP/locator-mutant-root"
+mkdir -p "$LOCATOR_MUTANT_ROOT"
+cp -R "$REPO_ROOT/scripts" "$LOCATOR_MUTANT_ROOT/scripts"
+ln -s "$REPO_ROOT/src" "$LOCATOR_MUTANT_ROOT/src"
+ln -s "$REPO_ROOT/hooks" "$LOCATOR_MUTANT_ROOT/hooks"
+ln -s "$REPO_ROOT/schemas" "$LOCATOR_MUTANT_ROOT/schemas"
+node - "$LOCATOR_MUTANT_ROOT/scripts/lib/plan-review-normalize.js" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const src = fs.readFileSync(file, 'utf8');
+const patched = src.replace('return walk(value);', 'return value;');
+if (patched === src) throw new Error('negative control patch did not match');
+fs.writeFileSync(file, patched);
+NODE
+LOCATOR_MUTANT_G1="$TEST_TMP/locator-mutant.g1.json"
+TMPDIR="$TEST_TMP" \
+AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$LOCATOR_ALL_READY" \
+  node "$LOCATOR_MUTANT_ROOT/scripts/dispatch-plan-review.js" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$OUTSIDE_RUBRIC" \
+    --ticket "locator-mutant-1" --session-id "locator-mutant-s1" --generation 1 \
+    --manifest-file "$LOCATOR_MANIFEST" --state-dir "$TEST_TMP/locator-mutant-state" \
+  >"$LOCATOR_MUTANT_G1"; EXIT=$?
+assert_exit_code "$EXIT" "0" "negative-control mutant run finishes"
+check_no_abs_leak "$LOCATOR_MUTANT_G1" >/dev/null 2>&1; MUTANT_LEAK_EXIT=$?
+assert_exit_code "$MUTANT_LEAK_EXIT" "1" "negative control: pre-fix unredacted artifact fails leak check"
+
+# Positive test: real dispatch-plan-review redacts stdout artifact and every persisted JSON in state-dir.
+LOCATOR_STATE="$TEST_TMP/locator-state"
+LOCATOR_G1="$TEST_TMP/locator.g1-artifact.json"
+TMPDIR="$TEST_TMP" \
+AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$LOCATOR_ALL_READY" \
+  node "$SCRIPT" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$OUTSIDE_RUBRIC" \
+    --ticket "locator-redaction-1" --session-id "locator-session-1" --generation 1 \
+    --manifest-file "$LOCATOR_MANIFEST" --state-dir "$LOCATOR_STATE" \
+  >"$LOCATOR_G1"; EXIT=$?
+assert_exit_code "$EXIT" "0" "sentinel plan-review g1 succeeds with redaction enabled"
+assert_artifact_schema "$(cat "$LOCATOR_G1")" "redacted g1 artifact satisfies schema"
+
+check_no_abs_leak "$LOCATOR_G1"
+assert_exit_code "$?" "0" "persisted g1 artifact contains no TMPDIR, TEST_TMP, /tmp/, HOME, or XDG_RUNTIME_DIR paths"
+
+G1_LOCATOR="$(node -e '
+const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+process.stdout.write(a.attempts[0].transport_envelope.private_raw_reference.locator);
+' "$LOCATOR_G1")"
+assert_eq "$G1_LOCATOR" "<tmp>/dispatch-author-sentinel-AbC123/stdout.raw" \
+  "g1 artifact locator starts with <tmp>/ placeholder"
+
+LOCATOR_SESSION_KEY="$(json_field "$(cat "$LOCATOR_G1")" session_key)"
+check_no_abs_leak "$LOCATOR_STATE/$LOCATOR_SESSION_KEY/generation-01.json"
+assert_exit_code "$?" "0" "state generation-01.json contains no raw temp or home paths"
+check_no_abs_leak "$LOCATOR_STATE/$LOCATOR_SESSION_KEY/rubric-seal.json"
+assert_exit_code "$?" "0" "state rubric-seal.json redacts spec_path"
+check_no_abs_leak "$LOCATOR_STATE/$LOCATOR_SESSION_KEY/manifest-seal.json"
+assert_exit_code "$?" "0" "state manifest-seal.json redacts spec_path"
+
+node - "$LOCATOR_STATE/$LOCATOR_SESSION_KEY/state.json" "$TMPDIR" "$TEST_TMP" "$HOME" <<'NODE'
+const assert = require('assert');
+const fs = require('fs');
+const state = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const needles = [process.argv[3], process.argv[4], process.argv[5], '/tmp/'].filter(Boolean);
+const joined = JSON.stringify({ artifacts: state.artifacts, claims: state.claims });
+for (const n of needles) {
+  assert(!joined.includes(n), `state.json leaked ${n}: ${joined}`);
+}
+assert(Array.isArray(state.artifacts) && state.artifacts.length === 1);
+assert(!state.artifacts[0].startsWith('/'), `expected redacted artifact path, got ${state.artifacts[0]}`);
+NODE
+assert_exit_code "$?" "0" "state.json redacts artifacts and claims paths without breaking repo_identity"
+
+# Mode B receipt validation and generation-2 resume keep working on redacted persisted artifacts.
+LOCATOR_DISP="$TEST_TMP/locator-mode-b-disp.json"
+node - "$LOCATOR_G1" "$LOCATOR_DISP" <<'NODE'
+const fs = require('fs');
+const art = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+fs.writeFileSync(process.argv[3], `${JSON.stringify({
+  schema_version: 1,
+  logical_plan_id: art.logical_plan_id,
+  generation: art.generation,
+  findings: [],
+}, null, 2)}\n`);
+NODE
+node "$REPO_ROOT/scripts/check-phase-review-receipt.js" \
+  --plan-artifact "$LOCATOR_G1" \
+  --dispositions "$LOCATOR_DISP" \
+  --plan "$PLAN_FILE" \
+  --rubric "$OUTSIDE_RUBRIC" \
+  --repo-root "$PLAN_REPO"
+assert_exit_code "$?" "0" "Mode B check-phase-review-receipt accepts redacted g1 artifact"
+
+# Generation 1 blocker -> Generation 2 resume verifies redacted generation-01.json + seals do not break resume.
+LOCATOR_RESUME_MANIFEST="$TEST_TMP/locator-resume-manifest.json"
+copy_manifest "locator-resume-plan" "$LOCATOR_RESUME_MANIFEST"
+LOCATOR_BLOCKER_SEQ="$(sequence \
+  "architect=$BLOCKER" "operations=$READY" "skeptic=$READY" "product=$READY")"
+LOCATOR_RESUME_G1="$TEST_TMP/locator-resume.g1.json"
+TMPDIR="$TEST_TMP" \
+AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$LOCATOR_BLOCKER_SEQ" \
+  node "$SCRIPT" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$OUTSIDE_RUBRIC" \
+    --ticket "locator-resume-1" --session-id "locator-resume-s1" --generation 1 \
+    --manifest-file "$LOCATOR_RESUME_MANIFEST" --state-dir "$LOCATOR_STATE" \
+  >"$LOCATOR_RESUME_G1"; EXIT=$?
+assert_exit_code "$EXIT" "0" "blocker generation-1 run succeeds for resume check"
+LOCATOR_RESUME_DISP="$TEST_TMP/locator-resume-disp.json"
+node - "$LOCATOR_RESUME_G1" "$LOCATOR_RESUME_DISP" <<'NODE'
+const fs = require('fs');
+const g1 = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const findings = g1.findings
+  .filter((f) => f.candidate_blocker)
+  .map((f) => ({ fingerprint: f.fingerprint, disposition: 'accepted_blocker', rationale: 'fix in g2' }));
+fs.writeFileSync(process.argv[3], `${JSON.stringify({
+  schema_version: 1,
+  logical_plan_id: g1.logical_plan_id,
+  generation: 1,
+  findings,
+}, null, 2)}\n`);
+NODE
+LOCATOR_RESUME_G2="$TEST_TMP/locator-resume.g2.json"
+TMPDIR="$TEST_TMP" \
+AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$LOCATOR_ALL_READY" \
+  node "$SCRIPT" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$OUTSIDE_RUBRIC" \
+    --ticket "locator-resume-1" --session-id "locator-resume-s2" --generation 2 \
+    --disposition-file "$LOCATOR_RESUME_DISP" \
+    --manifest-file "$LOCATOR_RESUME_MANIFEST" --state-dir "$LOCATOR_STATE" \
+  >"$LOCATOR_RESUME_G2"; EXIT=$?
+assert_exit_code "$EXIT" "0" "generation-2 resume succeeds after reading redacted generation-01.json and rubric-seal.json"
+check_no_abs_leak "$LOCATOR_RESUME_G2"
+assert_exit_code "$?" "0" "persisted g2 artifact contains no raw temp or home paths"
+
 finalize_test

@@ -13,8 +13,6 @@
   "band.q_5h": "5h",
   "band.q_7d": "7d",
   "band.q_cap": "cap",
-  "bar.open": "Open panel",
-  "bar.dispatch": "Dispatch",
   "speed.title": "Speed",
   "speed.none": "no requests yet",
   "speed.avg": "average",
@@ -484,5 +482,17 @@
   "console.hosts.summary": "Hosts: online {online}/{total}, GPU busy {busy}/{gpu}",
   "console.self.now": "Now",
   "console.self.dispatch": "Dispatch",
-  "console.self.review": "Review"
+  "console.self.review": "Review",
+  "tab.pet": "Pet",
+  "tab.forge": "forge",
+  "tab.help": "Help",
+  "frame.pet_todo": "The pet page is not live yet",
+  "tab.quota": "Quota",
+  "frame.help": "help",
+  "frame.close": "close",
+  "frame.nothing": "nothing needs you",
+  "frame.more": "{arrow} {n} more rows (PgDn)",
+  "frame.src_no_source": "{name}: no source",
+  "frame.src_expired": "{name}: data expired, {min} min old",
+  "frame.src_stale": "{name}: data stale, {min} min old"
 }

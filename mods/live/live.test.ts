@@ -365,7 +365,9 @@ async function bandLine($: any, surface: (typeof SURFACES)[number], columns = 12
   const tree = (await ui.drawn()) as Node
   const info = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'info') // the slots are Buttons too: the ⓘ is the one keyed info
   await ui.unmount()
-  const texts = walkTexts(tree).map(textOf).join('')
+  // r2 §3.1: the band is two rows, the summary then the tab strip; `text` is the summary row (the strip row is the one holding the `tab:*` Buttons)
+  const noStrip = (n: Node): Node => ({ ...n, children: ((n.children || []) as Node[]).filter(c => typeof c === 'string' || !((c.children || []) as Node[]).some(g => typeof g !== 'string' && String(g.props?.key ?? '').startsWith('tab:'))).map(c => (typeof c === 'string' ? c : noStrip(c))) })
+  const texts = walkTexts(noStrip(tree)).map(textOf).join('')
   return { tree, text: texts + (info ? labelOf(info as Node) : ''), info: info as Node | undefined }
 }
 const labelOf = (n: Node): string => (typeof n.props?.label === 'string' ? (n.props.label as string) : textOf(n))
@@ -2719,7 +2721,10 @@ for (const surface of SURFACES) {
     // one line: a Box row whose children are Texts and the ⓘ Button, no column and no second row
     const tree = line.tree as Drawn
     expect(tree.type).toBe('Box')
-    expect((tree.children || []).every(c => typeof c !== 'string' && ((c as Drawn).type === 'Text' || (c as Drawn).type === 'Button'))).toBe(true)
+    // r2 §3.1: the band is two rows (summary, tab strip). The summary row is still one row of Texts and the ⓘ Button; the strip is the second row.
+    const rows = (tree.children || []) as Drawn[]
+    expect(rows.length).toBe(2)
+    expect((rows[0].children || []).every(c => typeof c !== 'string' && ((c as Drawn).type === 'Text' || (c as Drawn).type === 'Button'))).toBe(true)
   })
 
   for (const [cols, expected] of RICH_WIDTHS) {
@@ -2790,11 +2795,10 @@ for (const surface of SURFACES) {
     expect(w.opens[0]?.closeOnEscape).toBe(true)
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const texts = allRows((await pane.drawn()) as Node)
-    // the keyboard lands on the first-drawn `›` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
+    // S0: no `›` next-tab chip; the eight tabs are Buttons and the digit tabs carry their digit as hotkey
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
-    expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(9) // the section headings are Buttons too
-    expect(tabButtons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['next'])
-    expect(tabButtons.find(b => b.props?.autoFocus === true)?.props?.key).toBe('next')
+    expect(tabButtons.filter(b => b.props?.key === 'next').length).toBe(0)
+    expect(tabButtons.filter(b => (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(8) // the section headings are Buttons too
     await pane.unmount()
     expect(texts[0]).toContain('⊘ 疑似卡住') // the Now tab: its hero row, then the dim header
     expect(texts[0]).toContain('工作階段 $') // and the spend / ctx metrics on its right (P4: one global header)
@@ -2943,40 +2947,40 @@ for (const surface of SURFACES) {
     expect(await shownTab()).toBe('now')
   })
 
-  // Real machine 2026-10-10 (120 columns): Ctrl+x Tab can land the ring on the pane's active tab Button, where Enter pressed the tab it already showed.
-  // The first-drawn Button is now the `›` next-tab chip and it alone carries autoFocus.
+  // S0 (plan r2 §3.2): the `›` chip is gone; a tab is chosen by its digit (Button hotkey) or a click.
   const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
 
-  test('keyboard: Enter on the › chip (where the ring lands) steps through all eight tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
-    const w = world(on, richWorld())
-    await start($, surface)
-    for (const want of ['decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend', 'now', 'decide']) {
-      const pane = await paneTabs($, surface)
-      await pane.press({ key: 'next' })
-      await pane.unmount()
-      expect(await shownTabOf($, surface)).toBe(want)
-    }
-  })
-
-  test('mouse / arrows: a press on a tab Button selects that tab, also the one already showing (' + surface + ')', async ($, on) => {
+  test('keyboard: the tab Buttons carry the digits 1-7 as hotkeys and a press on one shows that tab (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const pane = await paneTabs($, surface)
+    const hot = Object.fromEntries(((await pane.findAll({ type: 'Button' })) as Drawn[]).filter(b => typeof b.props?.hotkey === 'string').map(b => [b.props?.key, b.props?.hotkey]))
+    expect(hot).toEqual({ now: '1', decide: '2', fleet: '3', spend: '4', dispatch: '5', review: '6', hygiene: '8' })
+    await pane.press({ key: 'review' })
+    await pane.unmount()
+    expect(await shownTabOf($, surface)).toBe('review')
+  })
+
+  test('mouse / arrows: a press on a tab Button selects that tab; a press on the one already showing closes the pane (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const pane = await paneTabs($, surface)
+    w.panes.push('autopilot-live') // the host has it open
     await pane.press({ key: 'hygiene' })
-    await pane.press({ key: 'hygiene' }) // the showing tab: unchanged, as before (no step on)
+    expect(w.panes).toContain('autopilot-live')
+    await pane.press({ key: 'hygiene' }) // the showing tab's own press closes the pane (plan r2 §3.2); the tab stays
+    expect(w.panes).not.toContain('autopilot-live')
     await pane.unmount()
     expect(await shownTabOf($, surface)).toBe('hygiene')
   })
 
-  test('keyboard: › and the ⓘ share one order: a ⓘ press after a › press continues from the tab showing (' + surface + ')', async ($, on) => {
+  test('keyboard: the ⓘ continues from the tab a digit press chose (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     await band.press({ key: 'info' }) // closed -> Now
     const pane = await paneTabs($, surface)
-    await pane.press({ key: 'next' }) // -> Decide
-    await pane.press({ key: 'next' }) // -> Dispatch
-    await pane.press({ key: 'next' }) // -> Review
+    await pane.press({ key: 'review' }) // the digit 6
     await pane.unmount()
     await band.press({ key: 'info' }) // the pane is open: the next tab
     await band.unmount()
@@ -3118,7 +3122,7 @@ for (const surface of SURFACES) {
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
     const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^[bg]\d+$/.test(k)) // the body's toggle lines (and the summary rows' goto Buttons) (section headings, recent groups) are Buttons too
-    expect(buttons).toEqual(['next', 'now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend']) // the › chip first (it carries the autoFocus), then the eight tabs in contract order
+    expect(buttons).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend']) // the eight tabs in contract order (no › chip)
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ●N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
@@ -4180,7 +4184,7 @@ for (const surface of SURFACES) {
           const entries = (((((parts.tree.children || []) as Node[])[0].children || []) as Node[])[1].children || []) as Node[]
           const rowsW: number[] = [0]
           for (const e of entries) { const w = displayWidth(fullText(e)); if (rowsW[rowsW.length - 1] > 0 && rowsW[rowsW.length - 1] + w > width) rowsW.push(0); rowsW[rowsW.length - 1] += w }
-          expect(entries.length, width + ' ' + id + ': the strip entries (› chip + 8 tabs)').toBe(9)
+          expect(entries.length, width + ' ' + id + ': the strip entries (8 tabs, the › chip is gone)').toBe(8)
           for (const w of rowsW) expect(w, width + ' ' + id + ' strip row').toBeLessThanOrEqual(width)
           expect(stripOf(parts.tree).includes('…'), width + ' ' + id + ' strip').toBe(false)
           for (const text of parts.texts) {

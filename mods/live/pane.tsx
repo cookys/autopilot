@@ -18,6 +18,9 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
+import { frameRows } from './pages/frame'
+import type { ConsoleSnapshot } from './console'
+import type { Page, Row } from './pages/frame'
 import type { ScrollModel } from './scroll'
 
 export type { PaneTab } from './model'
@@ -31,9 +34,9 @@ export type ConsolePane = { nav: ConsoleNav; onTab: (t: ConsoleTab) => void; onN
 type SelfDraw = (l: PaneLine, i: number, k: string) => unknown
 function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, con: ConsolePane, t: T, cols: number, own: { parts: { title: string | null; lines: PaneLine[] }[]; draw: SelfDraw } | null) {
   const { Box, Text } = el
-  const strip = stripView(el, consoleStrip({ t, cols }, con.nav, el.Button !== undefined), con.onTab, con.onNext)
+  const strip = stripView(el, consoleStrip({ t, cols }, con.nav, false), con.onTab)
   const tab = con.nav.tab
-  const stripRows = consoleStrip({ t, cols }, con.nav, el.Button !== undefined).rows
+  const stripRows = consoleStrip({ t, cols }, con.nav, false).rows
   const win = con.win ?? null
   if (win !== null) win.framed = false
   if (con.nav.snap !== null && tab === 'command') {
@@ -100,31 +103,52 @@ type El = (props: any) => any
 // The tab strip (ui.ts `strip`): Buttons when the surface has them (a click or Enter switches the tab), plain Text otherwise. The active tab is a bold name, and
 // the baseline under the strip carries a `claude` run of `━` beneath it (a strip that wraps keeps the bold alone). A tab that holds something for the owner is
 // drawn attention bold (no badge, no count).
-// The FIRST drawn Button is the `›` next-tab chip and it carries the pane's autoFocus ("of several in one site the first drawn wins"): whenever Ctrl+x Tab or
-// `open({focus})` hands the pane the keyboard, the ring lands on a Button whose Enter steps to the next tab. It used to land on the ACTIVE tab's Button,
-// where Enter pressed the tab already showing (a no-op): "Ctrl+x Tab, Enter, Enter" cycled tabs only when the ring happened to sit on the band's ⓘ
-// (real machine 2026-10-10, 120 columns). The tab Buttons stay pressable (a click, or Tab / arrows + Enter) and still select their own tab.
-function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (t: PaneTab) => void, onNext: () => void, snap: LiveSnapshot | null, t: T, cols: number) {
-  return stripView(el, stripOf(snap, { t, cols }, tab, el.Button !== undefined) as Strip<PaneTab>, onTab, onNext)
+// There is no `›` next-tab chip any more: a tab is chosen by its digit (the Button's hotkey, PAGE_DIGIT) or a click, and the digit of the tab showing closes the pane (register.ts).
+function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (t: PaneTab) => void, snap: LiveSnapshot | null, t: T, cols: number) {
+  return stripView(el, stripOf(snap, { t, cols }, tab, false) as Strip<PaneTab>, onTab, PAGE_DIGIT)
 }
-// the drawing half of the strip, shared with the operator-console pane (same Buttons, same `›` chip, same baseline)
-function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, strip: Strip<Id>, onTab: (t: Id) => void, onNext: () => void) {
+// the digit of each tab (plan r2 §3.2): the four pages of the registry first (the quota page is still the Spend tab until S4 adds its own), then the tabs not moved yet
+export const PAGE_DIGIT: Record<string, string> = { now: '1', decide: '2', fleet: '3', spend: '4', dispatch: '5', review: '6', hygiene: '8' }
+export const DIGIT_TAB: Record<string, PaneTab> = { '1': 'now', '2': 'decide', '3': 'fleet', '4': 'spend', '5': 'dispatch', '6': 'review', '7': 'spend', '8': 'hygiene' }
+// the drawing half of the strip, shared with the operator-console pane (same Buttons, same baseline)
+function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, strip: Strip<Id>, onTab: (t: Id) => void, digits: Record<string, string> = {}) {
   const { Box, Text, Button } = el
   const draw = (s: Seg, k: string | number) => <Text key={k} {...drawSeg(s)} wrap="truncate">{s.text}</Text>
   return (
     <Box key="tabs" flexDirection="column">
       <Box>{strip.rule.map((s, i) => draw(s, 'rule' + i))}</Box>
       <Box flexWrap="wrap">
-        {Button === undefined || strip.next === null ? null : <Box key="next"><Button key="next" plain autoFocus onPress={onNext}>{strip.next.text}</Button><Text> </Text></Box>}
         {strip.tabs.map(x => (
           <Box key={x.id}>
-            {Button === undefined ? draw(x.label, 'label') : <Button key={x.id} plain onPress={() => onTab(x.id)}>{draw(x.label, 'label')}</Button>}
+            {Button === undefined ? draw(x.label, 'label') : <Button key={x.id} plain {...(digits[x.id] === undefined ? {} : { hotkey: digits[x.id] })} onPress={() => onTab(x.id)}>{draw(x.label, 'label')}</Button>}
             <Text> </Text>
           </Box>
         ))}
       </Box>
     </Box>
   )
+}
+
+// A page of the registry (pages/index.ts) drawn through frameRows: exactly `rows` rows, the strip entries are Buttons with the digit as hotkey.
+export type FramePane = { pages: readonly Page[]; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number }
+// quota (4) and spend (7) both show the Spend tab until S4 gives the quota page its own tab; pet / forge / help have no old tab and no Button yet (a PaneTab for them comes with their pages)
+const PAGE_TAB: Record<string, PaneTab> = { now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend', dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene' }
+export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => (frame === null ? undefined : frame.pages.find(p => p.framed === true && PAGE_TAB[p.id] === tab))
+function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, cols: number) {
+  const { Box, Text, Button } = el
+  const rows: Row[] = frameRows(page, { live: snap, console: frame.console, size: { cols, rows: frame.rows }, t, nowMs: frame.nowMs }, { pages: frame.pages, ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
+  const drawRow = (r: Row, i: number) => (
+    <Box key={'f' + i}>
+      {r.map((sg, j) => {
+        const m = sg.press === undefined ? null : /^tab:(\d):(\w+)$/.exec(sg.press)
+        const text = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{sg.text === '' ? ' ' : sg.text}</Text>
+        const to = m === null ? undefined : PAGE_TAB[m[2]]
+        if (m === null || to === undefined || Button === undefined) return text
+        return <Button key={'t' + m[2]} plain hotkey={m[1]} onPress={() => onTab(to)}>{text}</Button>
+      })}
+    </Box>
+  )
+  return <Box flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
 }
 
 // how one PaneLine is drawn (shared by the tabs and the console's 指揮 page): plain segments, a press row of Buttons, a text field, a toggle Button, a goto Button
@@ -181,7 +205,7 @@ function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, 
   return line
 }
 
-export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null, win: ScrollModel | null = null, fleet: FleetView | null = null, con: ConsolePane | null = null) {
+export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null, win: ScrollModel | null = null, fleet: FleetView | null = null, con: ConsolePane | null = null, frame: FramePane | null = null) {
   const { Box, Text, Link, Button, Input } = el
   const cols = paneWidth(bodyColumns)
   const ctx = { t, cols, expanded, folded, fleet, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), ...(decide.now === undefined ? {} : { now: decide.now }), inputs: decide.inputs && Input !== undefined } }) }
@@ -191,7 +215,9 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
     const own = snap === null ? null : { parts: [{ title: null, lines: headerLines(snap, ctx) }, { title: t('console.self.now'), lines: nowLines(snap, ctx) }, { title: t('console.self.dispatch'), lines: dispatchLines(snap, ctx) }, { title: t('console.self.review'), lines: reviewTabLines(snap, ctx) }], draw: line }
     return consolePane(el, con, t, cols, own)
   }
-  const strip = tabStrip(el, tab, onTab, onNext, snap, t, cols)
+  const framed = framedPage(frame, tab)
+  if (frame !== null && framed !== undefined) return framedView(el, framed, frame, snap, onTab, t, cols)
+  const strip = tabStrip(el, tab, onTab, snap, t, cols)
   if (snap === null) {
     return (
       <Box flexDirection="column" height={scroll?.bodyRows} justifyContent="flex-end">
@@ -204,7 +230,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   // The frame keeps its upward overflow hint apart from these shared facts.
   const body: PaneLine[] = tab === 'legend' ? legendLines(ctx) : tab === 'now' ? nowLines(snap, ctx) : tab === 'decide' ? decideTabLines(snap, ctx) : tab === 'review' ? reviewTabLines(snap, ctx) : tab === 'spend' ? spendTabLines(snap, ctx) : tab === 'hygiene' ? hygieneTabLines(snap, ctx) : tab === 'fleet' ? fleetTabLines(snap, ctx) : dispatchLines(snap, ctx)
   const link = tab === 'dispatch' && snap.link !== null
-  const stripH = stripOf(snap, ctx, tab, Button !== undefined)
+  const stripH = stripOf(snap, ctx, tab, false)
   const plainHead = headerLines(snap, ctx)
   // Every tab shares a bottom window: cold header/body rows scroll above the
   // fixed submit controls and navigation. No padding separates L2 from L3.

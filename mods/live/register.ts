@@ -67,7 +67,9 @@ import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, le
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
-import { Pane, noteInputKey, resetNoteInputs } from './pane'
+import { DIGIT_TAB, PAGE_DIGIT, Pane, noteInputKey, resetNoteInputs } from './pane'
+import { routeKey } from './pages/keys'
+import { PAGES } from './pages/index'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
@@ -239,7 +241,7 @@ const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['
   const now = await $.clock.now()
   return Pane($.ui.resolve(e), snapshot, 'now', () => {}, tr, e.props.bodyColumns, () => {}, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, null, null, null, null, {
     nav: consoleNav(),
-    onTab: (tab: ConsoleTab) => { consoleTab = tab; $.ui.invalidate('ui.render'); void ringToNext($) },
+    onTab: (tab: ConsoleTab) => { consoleTab = tab; $.ui.invalidate('ui.render') },
     onNext: () => { consoleTab = nextConsoleTab(consoleTab); $.ui.invalidate('ui.render') },
     live: snapshot,
     now,
@@ -1251,14 +1253,22 @@ const SPEED_PLACEMENT: SpeedPlacement = 'beside'
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
 
-// After a press on a tab Button (a click, or Tab / arrows + Enter) the keyboard ring returns to the `›` chip, so the next Enter steps on instead of
-// re-pressing the tab that was just chosen. Best effort: a pane that does not hold the keys refuses, and the tab has switched anyway.
-async function ringToNext($: EngineInterface): Promise<void> {
-  try {
-    await $.ui.focus({ requestId: PANE_ID, key: 'next' })
-  } catch (_e) {
-    // not holding the keyboard: nothing to move
+// A press on a pane tab Button (its digit hotkey or a click; plan r2 §3.2): the digit of the tab showing closes the pane, another digit shows that tab. The decision is paneKey's (pages/frame.ts, tested
+// without a host). The old decide hotkeys 1-6 / 0 / 7-9 live on the band's card view and are not remapped here (S1): on the pane a digit is a page switch.
+async function paneTabPress($: EngineInterface, t: PaneTab): Promise<void> {
+  const page = (x: string): string => (x === 'spend' ? 'quota' : x) // the quota page is still the Spend tab until S4
+  const digit = PAGE_DIGIT[t]
+  const act = digit === undefined || !PAGES.some(p => p.id === page(t)) ? null : routeKey(digit, { page: page(paneTab), paneFocus: true, focusedButton: true, textMode: false })
+  if (act === null ? t === paneTab : act.kind === 'close') {
+    try {
+      await $.ui.close({ id: PANE_ID })
+    } catch (_e) {
+      // already closed
+    }
+    return
   }
+  paneTab = t
+  $.ui.invalidate('ui.render')
 }
 
 // the live mod's session start. A function of its own because Claude Code refuses a second matcher-less `session.start` hook in one plugin: the composed module
@@ -1636,7 +1646,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => consoleOn ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($))))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => consoleOn ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($), null, { pages: PAGES, console: null, nowMs: await $.clock.now(), rows: e.props.scroll?.bodyRows ?? 24 })))
 
   // All live and console tabs share the bottom window; scroll keys move its
   // offset. A host without a frame still receives the event through next(e).

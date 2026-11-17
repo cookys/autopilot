@@ -115,7 +115,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot, preset)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
-  const gap = Math.max(1, columns - fittedBandWidth(segW, forge, more) - strip.width)
+  const gap = Math.max(0, columns - strip.width - moreW)
   const moreText = <Text key="m" {...drawSeg(moreSeg())} wrap="truncate">{GLYPHS.structure.goto}</Text>
   const moreNode = !more ? [] : [<Box key="more">{Button === undefined ? moreText : <Button key="more" plain onPress={() => hd.onTab(moreTo as BarTabId)}>{moreText}</Button>}<Text> </Text></Box>]
   const texts = fb === null ? [] : fb.segs.map((s, i) => <Text key={'f' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
@@ -129,7 +129,8 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       </Box>
     )
   })
-  return { node: <Box>{left.nodes}{speed}<Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box>, strip, tabsAt: fittedBandWidth(segW, forge, false) + gap }
+  // r2 §3.1: the band is two rows, always. Row 1 is the summary (cells, ⓘ, speed); row 2 is the tab strip, right-aligned to the bottom edge.
+  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}</Box><Box><Text>{' '.repeat(gap)}</Text>{tabs}{moreNode}</Box></Box>, strip, tabsAt: gap }
 }
 
 // the rule under the bar
@@ -149,7 +150,7 @@ export function BarButton(el: { Text: El; Button?: El }, id: string, label: stri
 // Progress and spend left the collapsed slots, so the Now preview has no row. Dispatch shows the stalled chip. Review shows QC.
 export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): { rows: unknown[]; quick: unknown[] } {
   const { Box, Text } = el
-  if (tab === 'usage') return { rows: [], quick: [<Box key="buttons">{BarButton(el, 'open:usage', t('bar.open'), () => o.onOpen('spend'))}</Box>] }
+  if (tab === 'usage') return { rows: [], quick: [] }
   if (snap === null || snap.band === null) return { rows: [], quick: [] }
   const band = snap.band
   const sel = (ids: SlotId[]) => band.slots.filter(s => ids.includes(s.id))
@@ -157,11 +158,10 @@ export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnaps
     const slots = sel(ids)
     return slots.length === 0 ? [] : [<Box key="line">{drawSegs(el, layoutBand(slots, columns).segs.slice(0, -1), o.onSlot)}</Box>]
   }
-  const open = <Box key="buttons">{BarButton(el, 'open:' + tab, t('bar.open'), () => o.onOpen(tab))}</Box>
-  if (tab === 'decide') return { rows: [], quick: [open] }
-  if (tab === 'now') return { rows: [], quick: [<Box key="buttons">{BarButton(el, 'open:now', t('bar.open'), () => o.onOpen('now'))}<Text>{'  '}</Text>{BarButton(el, 'open:dispatch', t('bar.dispatch'), () => o.onOpen('dispatch'))}</Box>] }
-  if (tab === 'dispatch') return { rows: lineOf(['dispatch']), quick: [open] }
-  if (tab === 'review') return { rows: lineOf(['review']), quick: [open] }
+  if (tab === 'decide') return { rows: [], quick: [] }
+  if (tab === 'now') return { rows: [], quick: [] }
+  if (tab === 'dispatch') return { rows: lineOf(['dispatch']), quick: [] }
+  if (tab === 'review') return { rows: lineOf(['review']), quick: [] }
   return { rows: [], quick: [] }
 }
 export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab | 'usage', columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {

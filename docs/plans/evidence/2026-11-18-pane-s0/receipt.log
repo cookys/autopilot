@@ -1,0 +1,30 @@
+# S0 receipt, 2026-11-17T16:28:59Z (base 45fcbcd34, branch feat/pane-s0)
+## RED: codeforge tests on the base tree (no frame/keys/index yet)
+(fail) band: 160 columns, 2 rows closed and on every tab, in every state (r2 §3.1)
+  AssertionError: band row count must be 2 everywhere; got one card/closed=1 one card/now=2 one card/decide=2 one card/dispatch=2 one card/review=2 one card/usage=2 no card/closed=1 no card/now=2 no c
+(fail) band: 120 columns, 2 rows closed and on every tab, in every state (r2 §3.1)
+  AssertionError: band row count must be 2 everywhere; got one card/closed=1 one card/now=2 one card/decide=2 one card/dispatch=2 one card/review=2 one card/usage=2 no card/closed=1 no card/now=2 no c
+(fail) band: 80 columns, 2 rows closed and on every tab, in every state (r2 §3.1)
+  AssertionError: band row count must be 2 everywhere; got one card/closed=1 one card/now=2 one card/decide=2 one card/dispatch=2 one card/review=2 one card/usage=2 no card/closed=1 no card/now=2 no c
+(fail) band: no transition artefacts — no open-panel button, no › next chip (r2 §3.2, UX gate 沒有過渡產物)
+  AssertionError: band must open the pane from the tab strip only
+(fail) the file did not load
+(fail) the file did not load
+ 3 pass
+ 6 fail
+## GREEN: same three files on feat/pane-s0 working tree
+ 23 pass
+ 0 fail
+## NEGATIVE CONTROL: frameRows with one extra row injected (line 92), expect red
+ 7 pass
+ 81 fail
+## reverted, same files:
+ 88 pass
+ 0 fail
+
+## UPDATE 2026-11-18 (g2 folds A4-A7 + 0003.patch)
+- 0003.patch (keys.test: every key passes when the prompt box has focus; ALL accepts pet/forge/help): applied to keys.test.ts, red on the S0 tree before routeKey's `!paneFocus` branch, green after. Assertions were not edited.
+- PAGES is now 1-8, 9 pet, 0 forge, ? help (frame.test.ts registry test updated).
+- Focused set (frame, keys, fixed-height, frame.golden, bottom-anchor): 267 pass, 0 fail.
+- live.test.ts rebaselined for the 2-row band: bandLine text is the summary row only; the 209-column test checks row 0 of 2; the strip-entries count is 8 (no chip).
+- OPEN: 28 legacy live.test.ts tests (56 runs) still assert the old band (open-panel buttons, one row, E1 rule/tabs); they need rebaselining in a follow-up, no codeforge assertion was touched.

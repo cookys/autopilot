@@ -91,7 +91,9 @@ function screen(tree, cols, rows) {
 }
 function footer(tree, out) {
   const nodes = walk(tree)
-  const strip = nodes.find(n => n.type === 'Box' && n.children.some(c => c?.props?.key === 'next'))
+  // the pane's strip is the 'tabs' Box (the `›` chip is gone); the renderer-control fixture still marks its strip with a 'next' child
+  const tabsBox = nodes.find(n => n.type === 'Box' && n.props?.key === 'tabs')
+  const strip = (tabsBox === undefined ? undefined : tabsBox.children[tabsBox.children.length - 1]) ?? nodes.find(n => n.type === 'Box' && n.children.some(c => c?.props?.key === 'next'))
   assert.ok(strip, 'real tab strip exists')
   const label = textOf(strip).trim()
   assert.ok(out[lastInk(out)].includes(label), 'last visible row must be the tab labels: ' + JSON.stringify(out[lastInk(out)]))
@@ -181,7 +183,10 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
     const view = speedView([], 6, cols, t)
     const tree = B.stackBand(el, bar.node, B.speedContent(el, view.columns, null, 'stack'))
     const out = render(tree, cols)
-    assert.equal(textOf(bar.node).trim(), out[lastInk(out)].trim())
+    // the band is two rows (summary, then the strip); the last ink row is the strip, first tab label to last
+    const tabs = walk(bar.node).filter(n => String(n.props?.key ?? '').startsWith('tab:') || n.props?.key === 'forge')
+    const last = out[lastInk(out)].trim()
+    assert.ok(tabs.length > 0 && last.startsWith(textOf(tabs[0]).trim()) && last.endsWith(textOf(tabs[tabs.length - 1]).trim()), JSON.stringify(last))
   })
 }
 

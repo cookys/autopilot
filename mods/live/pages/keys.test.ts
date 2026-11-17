@@ -16,7 +16,7 @@ import { PAGES } from './index'
 
 type St = { page: string; paneFocus: boolean; focusedButton: boolean; textMode: boolean }
 const st = (o: Partial<St>): St => ({ page: 'now', paneFocus: true, focusedButton: false, textMode: false, ...o })
-const ALL = [...PAGES.map(p => p.id as string), 'pet', 'forge', 'help']
+const ALL = [...new Set([...PAGES.map(p => p.id as string), 'pet', 'forge', 'help'])]
 const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8']
 const LETTERS = ['a', 'b', 'c', 'd', 'e']
 const show = (x: unknown) => JSON.stringify(x)
@@ -40,6 +40,17 @@ test('keys: Esc with focus in the prompt box is passed to Claude Code on every p
     for (const textMode of page === 'decide' ? [false, true] : [false]) {
       const a = routeKey('Escape', st({ page, paneFocus: false, textMode }))
       if (a.kind !== 'pass') bad.push(`${page}${textMode ? '/text' : ''}=${show(a)}`)
+    }
+  expect(bad.join(' ')).toBe('')
+})
+
+test('keys: with focus in the prompt box no pane/band hotkey fires — every key is passed to Claude Code (g2 folds A5)', () => {
+  const bad: string[] = []
+  const keys = [...DIGITS, '9', '0', '?', ...LETTERS, 'n', 'u', 'x', 'f', 'j', 'k', '[', ']', ' ', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape']
+  for (const page of ALL)
+    for (const k of keys) {
+      const a = routeKey(k, st({ page, paneFocus: false }))
+      if (a.kind !== 'pass') bad.push(`${page}:${JSON.stringify(k)}=${show(a)}`)
     }
   expect(bad.join(' ')).toBe('')
 })

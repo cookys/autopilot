@@ -8,10 +8,11 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const here = __dirname;
-const FILES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'speedview.ts', 'register.ts', 'i18n.ts', 'shell.ts', 'consoletabs.ts', 'commandtab.ts', 'consolepages.ts', 'askpm.ts', 'locales.ts'];
+const FILES = ['model.ts', 'tabs.ts', 'ui.ts', 'pane.tsx', 'band.tsx', 'speedview.ts', 'register.ts', 'i18n.ts', 'shell.ts', 'consoletabs.ts', 'commandtab.ts', 'consolepages.ts', 'askpm.ts', 'pages/frame.ts', 'pages/index.ts', 'locales.ts'];
 function fixture(extra) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'genloc-'));
   fs.mkdirSync(path.join(dir, 'locales'));
+  fs.mkdirSync(path.join(dir, 'pages'));
   for (const f of FILES) fs.copyFileSync(path.join(here, f), path.join(dir, f));
   for (const f of ['en.json', 'zh-TW.json']) fs.copyFileSync(path.join(here, 'locales', f), path.join(dir, 'locales', f));
   fs.copyFileSync(path.join(here, 'gen-locales.js'), path.join(dir, 'gen-locales.js'));

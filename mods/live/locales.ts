@@ -17,8 +17,6 @@ export const EN: Record<string, string> = {
   "band.q_5h": "5h",
   "band.q_7d": "7d",
   "band.q_cap": "cap",
-  "bar.open": "Open panel",
-  "bar.dispatch": "Dispatch",
   "speed.title": "Speed",
   "speed.none": "no requests yet",
   "speed.avg": "average",
@@ -488,7 +486,19 @@ export const EN: Record<string, string> = {
   "console.hosts.summary": "Hosts: online {online}/{total}, GPU busy {busy}/{gpu}",
   "console.self.now": "Now",
   "console.self.dispatch": "Dispatch",
-  "console.self.review": "Review"
+  "console.self.review": "Review",
+  "tab.pet": "Pet",
+  "tab.forge": "forge",
+  "tab.help": "Help",
+  "frame.pet_todo": "The pet page is not live yet",
+  "tab.quota": "Quota",
+  "frame.help": "help",
+  "frame.close": "close",
+  "frame.nothing": "nothing needs you",
+  "frame.more": "{arrow} {n} more rows (PgDn)",
+  "frame.src_no_source": "{name}: no source",
+  "frame.src_expired": "{name}: data expired, {min} min old",
+  "frame.src_stale": "{name}: data stale, {min} min old"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -506,8 +516,6 @@ export const ZH_TW: Record<string, string> = {
   "band.q_5h": "5時",
   "band.q_7d": "7日",
   "band.q_cap": "上限",
-  "bar.open": "開面板",
-  "bar.dispatch": "看派工",
   "speed.title": "速度",
   "speed.none": "還沒有請求",
   "speed.avg": "平均",
@@ -977,5 +985,17 @@ export const ZH_TW: Record<string, string> = {
   "console.hosts.summary": "主機：在線 {online}/{total}　GPU 忙 {busy}/{gpu}",
   "console.self.now": "現況",
   "console.self.dispatch": "派工",
-  "console.self.review": "審查"
+  "console.self.review": "審查",
+  "tab.pet": "寵物",
+  "tab.forge": "forge",
+  "tab.help": "說明",
+  "frame.pet_todo": "寵物分頁還沒上線",
+  "tab.quota": "額度",
+  "frame.help": "說明",
+  "frame.close": "收起",
+  "frame.nothing": "沒有要你處理的事",
+  "frame.more": "{arrow} 還有 {n} 列（PgDn）",
+  "frame.src_no_source": "{name} 無來源",
+  "frame.src_expired": "{name} 資料已過期，{min} 分鐘前",
+  "frame.src_stale": "{name} 資料過期，{min} 分鐘前"
 }

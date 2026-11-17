@@ -1,0 +1,36 @@
+base (faa6b4cb6): node tests all pass (gen-locales 6, ui-lint 56, band-split 3, shell 50, console 11, consolestrip 14, commandtab 14, consolepages 8); claude plugin test 1084 pass / 15 fail (U7 x2, G33a x3, speed tab x10 names)
+RED 1 (consolefeed.ts absent):
+✖ a: the command succeeds -> snapshot from the command, source ok; a second call within 60 s does not run it again
+✖ b: the command exits non-zero or throws
+✖ c: a fallback older than 5 minutes is stale
+✖ d: command fails and the file is missing or is a fleet.brief/1 -> no source
+✖ d2: a failed refresh after a good one drops to no source
+✖ e: garbage stdout and a garbage file -> no exception, no source
+✖ f: an item with no line_id is kept with line_id null; a present non-string line_id is still dropped
+✖ g: an item of a kind this build does not know
+ℹ tests 8
+ℹ pass 0
+ℹ fail 8
+✖ failing tests:
+✖ a: the command succeeds -> snapshot from the command, source ok; a second call within 60 s does not run it again
+✖ b: the command exits non-zero or throws
+✖ c: a fallback older than 5 minutes is stale
+✖ d: command fails and the file is missing or is a fleet.brief/1 -> no source
+✖ d2: a failed refresh after a good one drops to no source
+✖ e: garbage stdout and a garbage file -> no exception, no source
+✖ f: an item with no line_id is kept with line_id null; a present non-string line_id is still dropped
+✖ g: an item of a kind this build does not know
+RED 2 (consolefeed.ts present, console.ts line_id not fixed):
+✖ f: an item with no line_id is kept with line_id null; a present non-string line_id is still dropped
+✖ g: an item of a kind this build does not know
+ℹ tests 8
+ℹ pass 6
+ℹ fail 2
+✖ failing tests:
+✖ f: an item with no line_id is kept with line_id null; a present non-string line_id is still dropped
+✖ g: an item of a kind this build does not know
+GREEN (consolefeed.ts + console.ts line_id fix + register wiring): consolefeed.test.js tests 8 pass 8 fail 0; console.test.js 11/11
+run-tests.sh with the real claude: claude plugin test 1099 tests, 15 fail = exactly the 15 base failures (same names); live.test.ts C1 U6 assertion 'no fleet console run' changed to 'ran once, still no source' (old contract: until C2). One earlier run showed band height golden red while two runs overlapped; clean rerun = base set.
+ℹ tests 19
+ℹ pass 19
+ℹ fail 0

@@ -35,6 +35,8 @@ node --test "$here/consolestrip.test.js"
 node --test "$here/commandtab.test.js"
 # the console pane's team / quota / hosts skeleton pages (consolepages.ts): 無來源 for a missing source, the red light with the fixture's lines deleted
 node --test "$here/consolepages.test.js"
+# the console data source (consolefeed.ts: fleet console --json, the 60 s interval, the console.json fallback, staleness, garbage input)
+node --test "$here/consolefeed.test.js"
 # console.test.ts (C1 U8: KR8 order and counts, the leak red light) is picked up by `claude plugin test` below with the other *.test.ts files
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

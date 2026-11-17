@@ -49,7 +49,8 @@ import type { DecideBatch } from './decidebatch'
 import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
 import type { ClaimCard, UndoDeps } from './decideundo'
 import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
-import { findConsoleMode } from './console'
+import { findConsoleMode, parseConsole } from './console'
+import { CONSOLE_FILE, CONSOLE_TIMEOUT_MS, makeConsoleFeed } from './consolefeed'
 import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
@@ -194,14 +195,23 @@ let decideCursor = 0 // the card the O4 shell's main window shows (an index into
 let decideLastId: string | null = null // the card answered last from the shell (the progress row names it)
 // ---- the operator-console mode (plan §3.1; consoletabs.ts): on only where the session's repo has .claude/console.json = {"schema":"autopilot.console/1","mode":"program"} (findConsoleMode). Off, every line
 // below that reads these is skipped and the band and the pane are what they were. ONE navigation state (consoleTab) for the band's tabs and the pane's: pressing either sets it, both draw it.
-// The snapshot comes from consoleSource (a top-level function declaration: the mod loader follows `$` only into declared functions, so it cannot be a swappable variable); until the real `fleet console --json` runner lands (C2) it answers null = no source, and nothing is spawned. ----
+// The snapshot comes from consoleSource (a top-level function declaration: the mod loader follows `$` only into declared functions, so it cannot be a swappable variable); it comes from consolefeed.ts: `fleet console --json` (at most once a minute, never while drawing), else the courier's HOME/.local/state/fleet/console.json; neither = null = no source. ----
 let consoleOn = false
 let consoleTab: ConsoleTab = 'command'
 let consoleSnap: ConsoleSnapshot | null = null
 let consoleCwd: string | null = null // the cwd the mode was last read for; a different cwd (a new session in another repo) reads it again at the next tick
 let consoleReadMs = -Infinity
 const CONSOLE_MODE_EVERY_MS = 10_000 // the config file is read again at most this often
-async function consoleSource(_$: EngineInterface): Promise<ConsoleSnapshot | null> { return null }
+const consoleFeed = makeConsoleFeed()
+async function consoleSource($: EngineInterface): Promise<ConsoleSnapshot | null> {
+  const nowMs = await $.clock.now()
+  const before = consoleFeed.current(nowMs)
+  const home = await $.env.get('HOME').catch(() => undefined)
+  const path = typeof home === 'string' && home.trim() !== '' ? home.trim().replace(/\/$/, '') + '/' + CONSOLE_FILE : null
+  // not awaited: the command may take its whole timeout; the next tick draws what it left (an unchanged snapshot keeps its identity, so only a change redraws)
+  void consoleFeed.refresh(argv => $.process.run(argv, { timeoutMs: CONSOLE_TIMEOUT_MS }), () => (path === null ? Promise.resolve(null) : readText($, path)), parseConsole, nowMs).then(async () => { if (consoleFeed.current(await $.clock.now()) !== before) void $.ui.invalidate('ui.render') }, () => {}).catch(() => {})
+  return consoleFeed.current(nowMs)
+}
 async function consoleTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   const cwd = await $.session.cwd()

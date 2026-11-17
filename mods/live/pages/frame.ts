@@ -4,7 +4,7 @@
 //
 //   row 0          header: the page name, then the most severe broken marker (staleBadge) when a source is broken
 //   H-2-A rows     body, bottom-anchored; an overflow turns its LAST row into `↓ 還有 N 列`, the total unchanged
-//   A rows         action area, A = 6 when H >= 32 else 4; the last action is the bottom row (next to the tab strip), the rest stand above it in order; none -> `沒有要你處理的事` on the bottom row
+//   A rows         action area, A = 6 when H >= 32 else 4; the last action is the bottom row (next to the tab strip), the rest stand above it in order; none -> `沒有待決卡` on the bottom row
 //   last row       tab strip: `1 現況 2 待決 ...  i 說明  Esc 收起`; each tab entry carries press `tab:<digit>:<id>`
 import type { ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
@@ -56,15 +56,35 @@ function clip(row: Row, cols: number): Row {
   return out.length === 0 ? blank() : out
 }
 
+// The host draws every hotkey Button as `<key>: <label>`, so each Button is one cell wider than its text (`1 現況` -> `1: 現況`). A Button is measured with that prefix, and every pair of
+// neighbouring Buttons has a one-cell separator. When the row does not fit: first the page labels shrink to their first character, then the Esc hint goes, then the tail of the pages
+// (9, 0, ...) and the help entry fold into one `i …` Button that opens the help page. The row is always one row, never wider than the surface.
+const HOST_PREFIX = 1
+const HELP_KEY = 'i'
 function strip(page: Page, ctx: PageCtx, opts: FrameOpts): Row {
   const pages = opts.pages ?? PAGES
   const active = opts.active ?? page.id
-  const entry = (id: string, key: string, label: string): Row => {
-    const on = id === active
-    return [{ text: key + ' ' + label, press: 'tab:' + key + ':' + id, ...(on ? { color: PALETTE.here } : {}) }, { text: ' ' }]
+  const all = [...pages.filter(p => p.id !== 'help').map(p => ({ id: p.id as string, key: p.key, label: ctx.t('tab.' + p.id) })), ...(opts.extra ?? [])]
+  const first = (s: string): string => [...s][0] ?? s
+  const helpLabel = ctx.t('frame.help')
+  const esc = '  Esc ' + ctx.t('frame.close')
+  const entry = (x: { id: string; key: string; label: string }, short: boolean): Row => {
+    const on = x.id === active
+    return [{ text: x.key + ' ' + (short ? first(x.label) : x.label), press: 'tab:' + x.key + ':' + x.id, ...(on ? { color: PALETTE.here } : {}) }, { text: ' ' }]
   }
-  const tabs = [...pages.filter(p => p.id !== 'help').map(p => entry(p.id, p.key, ctx.t('tab.' + p.id))), ...(opts.extra ?? []).map(x => entry(x.id, x.key, x.label))].flat()
-  return clip([...tabs, { text: ' ' }, { text: 'i ' + ctx.t('frame.help') + '  Esc ' + ctx.t('frame.close'), dim: true }], ctx.size.cols)
+  const entryW = (x: { key: string; label: string }, short: boolean): number => displayWidth(x.key) + 1 + HOST_PREFIX + displayWidth(short ? first(x.label) : x.label) + 1
+  const build = (shown: typeof all, short: boolean, help: string, tail: string): { row: Row; width: number } => ({
+    row: [...shown.flatMap(x => entry(x, short)), { text: ' ' }, { text: HELP_KEY + ' ' + help + tail, dim: true }],
+    width: shown.reduce((w, x) => w + entryW(x, short), 1) + displayWidth(HELP_KEY) + 1 + HOST_PREFIX + displayWidth(help + tail),
+  })
+  const tries = [build(all, false, helpLabel, esc), build(all, true, helpLabel, esc), build(all, true, helpLabel, '')]
+  const fits = tries.find(x => x.width <= ctx.size.cols)
+  if (fits !== undefined) return clip(fits.row, ctx.size.cols)
+  for (let k = all.length; k >= 0; k--) {
+    const f = build(all.slice(0, k), true, '…', '')
+    if (f.width <= ctx.size.cols || k === 0) return clip(f.row, ctx.size.cols)
+  }
+  return blank()
 }
 
 // exactly ctx.size.rows rows, whatever the page returned

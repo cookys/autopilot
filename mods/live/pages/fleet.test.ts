@@ -199,7 +199,7 @@ const GOLDEN: Record<string, string[]> = {
     "",
     "",
     "",
-    "沒有要你處理的事",
+    "沒有待決卡",
   ],
 }
 

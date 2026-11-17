@@ -3573,7 +3573,7 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   await w.clock.advance(11_000) // the tick reads the mode: it turns on
   const after = await bandTexts()
   expect(after.length, 'the 待決 body (many rows) is gone').toBeLessThan(before.length)
-  expect(after.join(' ').includes('指揮'), 'the console band draws no tab row: the pane strip is the only one (folds A4)').toBe(false)
+  expect(after.join(' ').includes('指揮'), 'the pane is closed: the console band draws its tab row').toBe(true)
 })
 // review fix 3: the console feed (triedMs, snap) belongs to the session; a new session.start must not inherit the 60 s throttle or the first run's snapshot
 test('review fix: consolefeed-session-reset: a second session.start on the same clock asks `fleet console --json` again', async ($, on) => {
@@ -3642,16 +3642,27 @@ test('pane review fix: console-pane-legacy-leak: console mode with a snapshot (o
   const all = walkTexts(tree).map(textOf).join(' ')
   expect(all.includes('本席') || all.includes('指揮'), 'the legacy console strip (指揮 團隊 額度 主機 本席) is not drawn').toBe(false)
 })
-// the band, console mode with a snapshot: bandQuotaSeg used a `nowMs` that only existed in an inner block (ReferenceError, no band drawn); the console band has no tab row of its own
-test('pane review fix: console mode with a snapshot draws the band (no throw) and no tab row of its own (terminal)', async ($, on) => {
-  await framedWorld($, on)
+// the band, console mode with a snapshot: bandQuotaSeg used a `nowMs` that only existed in an inner block (ReferenceError, no band drawn).
+// Band tab row rule (pane batch 1 UX): pane open -> no tab row (A4: one tab row on screen, the pane's strip); pane closed -> the band draws its tab row (row 2).
+const bandTabKeys = async ($: any, opts: { panesOpen: boolean }, w: any) => {
+  w.panes = opts.panesOpen ? ['autopilot-live'] : []
   const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-bandnow', props: { ...BAND_PROPS, maxRows: 6 }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
   const tree = (await ui.drawn()) as Node
   const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
   await ui.unmount()
-  const text = walkTexts(tree).map(textOf).join(' ')
-  expect(text.includes('疑似卡住'), 'the band drew: ' + text.slice(0, 80)).toBe(true)
-  expect(buttons.filter(b => String(b.props?.key).startsWith('tab:')).map(b => b.props?.key), 'no tab row on the band').toEqual([])
+  return { text: walkTexts(tree).map(textOf).join(' '), tabs: buttons.filter(b => String(b.props?.key).startsWith('tab:')).map(b => String(b.props?.key)) }
+}
+test('pane review fix: console mode, pane OPEN: the band draws (no throw) and no tab row of its own (terminal)', async ($, on) => {
+  const w = await framedWorld($, on)
+  const r = await bandTabKeys($, { panesOpen: true }, w)
+  expect(r.text.includes('疑似卡住'), 'the band drew: ' + r.text.slice(0, 80)).toBe(true)
+  expect(r.tabs, 'no tab row on the band while the pane is open').toEqual([])
+})
+test('pane UX fix: console mode, pane CLOSED: the band draws its tab row (row 2) (terminal)', async ($, on) => {
+  const w = await framedWorld($, on)
+  const r = await bandTabKeys($, { panesOpen: false }, w)
+  expect(r.text.includes('疑似卡住'), 'the band drew: ' + r.text.slice(0, 80)).toBe(true)
+  expect(r.tabs.length, 'the closed pane leaves the tab row on the band: ' + r.text.slice(0, 160)).toBeGreaterThanOrEqual(3)
 })
 // pageview-focus-unbounded: the fold clamps the focus to the rows that are still shown, so the next unfold does not put the ▸ back on a row that was folded away
 test('pane review fix: folding the 艦隊 page clamps the focus to the last shown row (terminal)', async ($, on) => {
@@ -7006,7 +7017,7 @@ for (const surface of SURFACES) {
     expect(speedText).toMatch(/ϟ \d{2} tok\/s [▁▂▃▄▅▆▇█]{5}/)
     expect(speedText).not.toContain('Ferris')
     expect(speedText).not.toContain('Lv.')
-    expect(text).not.toContain('指揮') // the console band draws no tab row of its own (folds A4)
+    expect(text).toContain('指揮') // the pane is closed: the band draws its tab row (plan: row 2 is the tab row)
     expect(text).not.toContain('艦隊')
   })
 

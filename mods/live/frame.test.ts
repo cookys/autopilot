@@ -70,10 +70,10 @@ test('frame: layout, header on row 0, strip on the last row, A = 6 from 32 rows 
   expect(text(rows[bodyRoom - 1])).toBe('body ' + (bodyRoom - 2))
 })
 
-test('frame: no action says 沒有要你處理的事 on the bottom action row only; a short body is bottom-anchored', () => {
+test('frame: no action says 沒有待決卡 on the bottom action row only; a short body is bottom-anchored', () => {
   const rows = frameRows(withBody(PAGES[0], 2, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES })
-  expect(text(rows[22])).toBe('沒有要你處理的事')
-  expect(rows.filter(r => text(r) === '沒有要你處理的事').length).toBe(1)
+  expect(text(rows[22])).toBe('沒有待決卡')
+  expect(rows.filter(r => text(r) === '沒有待決卡').length).toBe(1)
   expect(text(rows[24 - 2 - 4])).toBe('body 1') // the body ends right over the action area
 })
 
@@ -269,4 +269,28 @@ test('band quota segment: source state no_source -> absent, stale -> warning rol
   expect(bandQuotaSeg(pools, NOW, t, 'no_source'), 'no_source: no segment').toBeNull()
   expect(bandQuotaSeg(pools, NOW, t, 'stale')!.color, 'stale: warning role').toBe(PALETTE.attention)
   expect(bandQuotaSeg(pools, NOW, t, 'expired')!.color, 'expired: broken role').toBe(PALETTE.broken)
+})
+
+// ---- pane UX fix (real-host screenshots, 160x40, pane ~70 columns): the strip counts the host's `<key>: ` prefix, folds when it must ----
+// The host draws each hotkey Button as `<key>: <label>`: one cell wider than the segment text. A strip segment is a Button when it carries a tab press or is the help entry `i ...`.
+const isButtonSeg = (s: { text: string; press?: string }): boolean => (s.press !== undefined && s.press.startsWith('tab:')) || s.text.startsWith('i ')
+const hostWidth = (r: Row): number => r.reduce((w, s) => w + displayWidth(s.text) + (isButtonSeg(s) ? 1 : 0), 0)
+test('pane UX fix: strip at 70 / 60 / 40 columns is one row within the width (host prefix counted), no two Buttons touch, help stays reachable', () => {
+  for (const cols of [70, 60, 40]) {
+    const rows = frameRows(PAGES[1], ctxOf({ cols, rows: 24 }), { pages: PAGES })
+    const strip = rows[rows.length - 1]
+    expect(rows.length, cols + ': still exactly H rows').toBe(24)
+    expect(hostWidth(strip), cols + ': the strip with the host prefix is ' + hostWidth(strip) + ' wide: ' + text(strip)).toBeLessThanOrEqual(cols)
+    for (let i = 1; i < strip.length; i++) expect(isButtonSeg(strip[i - 1]) && isButtonSeg(strip[i]), cols + ': two Buttons run together at ' + i + ': ' + text(strip)).toBe(false)
+    expect(strip.some(s => s.text.startsWith('i ')), cols + ': the help entry is in the strip: ' + text(strip)).toBe(true)
+  }
+  const wide = frameRows(PAGES[1], ctxOf({ cols: 70, rows: 24 }), { pages: PAGES })
+  expect(text(wide[23]).startsWith('1 現 2 待'), 'at 70 the labels shrink to the first character: ' + text(wide[23])).toBe(true)
+  const narrow = frameRows(PAGES[1], ctxOf({ cols: 40, rows: 24 }), { pages: PAGES })
+  expect(text(narrow[23]).trimEnd().endsWith('i …'), 'at 40 the tail folds into one … Button: ' + text(narrow[23])).toBe(true)
+})
+test('pane UX fix: the quota page empty state says 沒有待決卡, not 沒有要你處理的事 (pools above can be red)', () => {
+  const rows = frameRows(withBody(PAGES[3], 2, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES })
+  expect(text(rows[22])).toBe('沒有待決卡')
+  expect(makeT('en')('frame.nothing')).toBe('No pending cards')
 })

@@ -490,7 +490,7 @@
   "tab.quota": "Quota",
   "frame.help": "help",
   "frame.close": "close",
-  "frame.nothing": "nothing needs you",
+  "frame.nothing": "No pending cards",
   "frame.more": "{arrow} {n} more rows",
   "frame.src_no_source": "{name}: no source",
   "frame.src_expired": "{name}: data expired, {min} min old",

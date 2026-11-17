@@ -490,7 +490,7 @@
   "tab.quota": "額度",
   "frame.help": "說明",
   "frame.close": "收起",
-  "frame.nothing": "沒有要你處理的事",
+  "frame.nothing": "沒有待決卡",
   "frame.more": "{arrow} 還有 {n} 列",
   "frame.src_no_source": "{name} 無來源",
   "frame.src_expired": "{name} 資料已過期，{min} 分鐘前",

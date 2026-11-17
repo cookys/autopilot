@@ -42,7 +42,7 @@ for (const [cols, rows] of SIZES) {
     expect(out[rows - 2]).toContain('ACT-2')
     const empty = frameRows({ ...PAGES[0], render: () => ({ body: [], actions: [] }) } as never, ctxOf(cols, rows, null)).map(text)
     expect(empty.length).toBe(rows)
-    expect(empty[rows - 2]).toContain('沒有要你處理的事')
+    expect(empty[rows - 2]).toContain('沒有待決卡')
   })
 
   test(`frame: ${cols}x${rows}, more than ${A(rows)} actions is a programming error`, () => {

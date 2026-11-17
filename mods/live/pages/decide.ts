@@ -8,7 +8,7 @@
 import type { ConsoleCard } from '../console'
 import { DECIDE_UNDO_MS, NO_DECIDE, decideDialog, decideFillText, decideLine, decidePick, displayWidth, isStepCard, recommendedIndex, truncateToWidth } from '../model'
 import type { DecideState, LiveDecision, Seg } from '../model'
-import { GLYPHS, PALETTE } from '../ui'
+import { GLYPHS, PALETTE, wrapPlain } from '../ui'
 import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
 import { brokenRow } from './rows'
@@ -215,6 +215,8 @@ function otherRow(id: string, title: string, who: string, age: string, ctx: Page
   return [seg(id + ' ' + title + (age === '' ? '' : ' · ' + age))]
 }
 
+// A10: a broken-source reason is never cut with `…`: it wraps onto further red rows (the frame's body overflow gives way to other content first, never the reason)
+const brokenRows = (text: string, cols: number): Row[] => wrapPlain(text, cols, cols).map(l => brokenRow(l))
 const noSource = (ctx: PageCtx, id: string): Row => brokenRow(GLYPHS.state.failed + ' ' + ctx.t(id))
 
 function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
@@ -226,10 +228,10 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
   const body: Row[] = []
   // §5: a source that is stale or missing says so in red, with its reason
   if (ctx.live === null) body.push(noSource(ctx, 'page.decide.nosrc_live'))
-  else if (ctx.live.state !== 'ok') body.push(brokenRow(GLYPHS.state.failed + ' ' + t('page.decide.stale_live', { why: ctx.live.header })))
+  else if (ctx.live.state !== 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('page.decide.stale_live', { why: ctx.live.header }), ctx.size.cols))
   if (ctx.console !== null) {
     const src = ctx.console.sources.cards
-    if (src !== undefined && src.state !== 'ok') body.push(brokenRow(GLYPHS.state.failed + ' ' + t('frame.src_' + src.state, { name: 'cards', min: src.at_ms === null ? '-' : String(Math.max(0, Math.floor((ctx.nowMs - src.at_ms) / 60000))) })))
+    if (src !== undefined && src.state !== 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('frame.src_' + src.state, { name: 'cards', min: src.at_ms === null ? '-' : String(Math.max(0, Math.floor((ctx.nowMs - src.at_ms) / 60000))) }), ctx.size.cols))
     else if (ctx.console.cards === null) body.push(noSource(ctx, 'page.decide.nosrc_cards'))
   }
 

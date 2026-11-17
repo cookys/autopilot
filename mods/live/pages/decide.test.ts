@@ -268,6 +268,16 @@ test('decide: console cards list missing, or a stale cards source, is a red row 
   expect(decidePage.render(ctxOf(80, 24, { state: 'stale', header: '15 分鐘前', pending: [] } as never, con([], []))).body.map(text).join('\n')).toContain('本席待決資料不是最新：15 分鐘前')
 })
 
+test('decide A10: a stale reason is never truncated: at 70 columns it wraps onto further rows, no row ends in …', () => {
+  const why = '沒有專案 · 請執行：autopilot status runs --watch 再重新整理本席待決資料'
+  const out = frameRows(decidePage, ctxOf(70, 24, { state: 'stale', header: why, pending: [] } as never, con([], [])))
+  expect(out.length).toBe(24)
+  const joined = out.map(text).join('\n')
+  expect(joined.replace(/\s+/g, ''), 'the whole reason is on screen').toContain(('本席待決資料不是最新：' + why).replace(/\s+/g, ''))
+  expect(out.map(text).filter(r => r.includes('…')), 'no row is cut with …').toEqual([])
+  expect(out.every(r => displayWidth(text(r)) <= 70)).toBe(true)
+})
+
 test('decide: a long list never changes the frame height (overflow ends in the more row)', () => {
   const many = Array.from({ length: 30 }, (_, i) => card('d-' + String(i).padStart(8, '0'), '第 ' + i + ' 張', 'PM', H))
   for (const [cols, rows] of SIZES) {

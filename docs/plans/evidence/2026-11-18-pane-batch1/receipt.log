@@ -54,3 +54,10 @@ mods/live/run-tests.sh: 1392 pass, 15 fail = exactly bandrow-brief/fb.txt (diff 
 > (fail) speed label: the console mode draws no pet when pet.json and five timed steps exist (desktop)
 > (fail) speed label: the console mode draws no pet when pet.json and five timed steps exist (terminal)
 == GREEN (source restored): fail set == fb.txt exactly, pass=1400 rc=1 (known reds only)
+== UX4 RED (source reverted, new tests kept) 2026-11-18
+> (fail) pane UX fix: strip at 70 / 60 / 40 columns is one row within the width (host prefix counted), no two Buttons touch, help stays reachable
+> (fail) pane UX fix: the quota page empty state says 沒有待決卡, not 沒有要你處理的事 (pools above can be red)
+> (fail) frame: no action says 沒有待決卡 on the bottom action row only; a short body is bottom-anchored
+> (fail) decide A10: a stale reason is never truncated: at 70 columns it wraps onto further rows, no row ends in …
+> (fail) pane UX fix: console mode, pane CLOSED: the band draws its tab row (row 2) (terminal)
+== UX4 GREEN: mods/live/run-tests.sh 1404 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty)

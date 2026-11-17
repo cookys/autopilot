@@ -5,7 +5,7 @@ The existing `depth0-delegate-gate` PreToolUse Bash guard checks every depth, in
 The denial is one line, without the original command or its arguments:
 
 ```text
-這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行 (secret-print)
+這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行。整行指令一起判斷：同一行若也在建檔或寫檔，請把建檔和讀取拆成兩次執行。 (secret-print)
 ```
 
 Use the shared viewer from the plugin checkout:

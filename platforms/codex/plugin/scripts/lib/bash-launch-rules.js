@@ -30,7 +30,7 @@ const { executableText } = require('./bash-wait-rules.js');
 
 // Rail entrypoints that LAUNCH a worker (an explicit list: dispatch-status.js / dispatch-contract.js /
 // dispatch-tree.js are observers and validators, not launchers). Never a *.test.* file.
-const RAIL_NAMES = 'hetero|review|author|author-kimi|consult|discuss|explore|foreman|batch|anthropic-review|local-openai|plan-review|experience-critic';
+const RAIL_NAMES = 'hetero|review|author|author-kimi|consult|discuss|explore|foreman|batch|anthropic-review|local-openai|plan-review|experience-critic|panel';
 // Any path (or none) in front of a listed rail file name counts: `cd scripts && bash dispatch-review.sh &`.
 const RAIL_PATH_RE = new RegExp(`(?:^|/)dispatch-(?:${RAIL_NAMES})\\.(?:sh|js)$`);
 const WAKE_HEADS = new Set(['wait']);
@@ -1581,7 +1581,7 @@ function detectRmSharedDirUnguarded(cmd, opts = {}) {
 const SECRET_RETAIN = new Set(['env', 'bash', 'sh', 'dash', 'zsh']);
 const SECRET_READERS = new Set(['cat', 'less', 'more', 'head', 'tail', 'bat', 'sed', 'awk', 'grep', 'rg', 'ugrep']);
 const SECRET_GREP = new Set(['grep', 'rg', 'ugrep']);
-const SECRET_MESSAGE = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行';
+const SECRET_MESSAGE = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行。整行指令一起判斷：同一行若也在建檔或寫檔，請把建檔和讀取拆成兩次執行。';
 function secretPath(word) {
   const base = path.posix.basename(word);
   return /^(?:\.env(?:\..*)?|.*\.env|config_main\.php|dbdef\.h|.*\.(?:pem|key|token)|auth\.json|credentials.*|.*secret.*|\.netrc|\.pgpass|my\.cnf)$/i.test(base)

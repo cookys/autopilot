@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0462 -->
+<!-- next-id: BL-0467 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1824,3 +1824,88 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: autopilot lane 2026-11-16
 - **Pointer**: none
 - **Context**: When the selector marks at least half the suites, tip verify hits its 1800s cap and returns timeout instead of a verdict. Run the full suite or raise the cap at that threshold. Related: BL-0407.
+
+### D9 PM 專用驗證器：S4 檢查結尾行與快照執行、S9 統計抓漏數
+- **Id**: BL-0462
+- **Status**: open
+- **Since**: 2026-11-14
+- **Origin**: peer
+- **Reporter**: pm--claude
+- **Report**: fleet 01M7DKWKB6 (PM, 2026-11-14)
+- **Reply**: unknown
+- **Problem**: PM 專用驗證器目前缺這兩項檢查：S4 應檢查結尾行並確認快照指令真的執行過，S9 應統計抓漏數。完整規格在 PM 的合成文件 D9 列，目前這份文件還沒附上全文。
+- **Impact**: 沒有 S4 與 S9 驗證，PM 收尾漏跑快照或驗證抓漏率時無從自動把關。
+- **Trigger**: PM 附上 SYNTHESIS.md D9 全文
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PM 01M7DKWK sub-item 1 (D9), fleet task 01M7DM1C8S49GM08JYEX2MN07Q
+- **Pointer**: project/backlog/pm-01m7dkwk-subitems.md
+- **Context**: Spec defined in PM SYNTHESIS.md row D9; awaiting full text from PM before implementation.
+
+### D13 第二部分：以合成的 Stop-hook 重放測資做 role-kit lint
+- **Id**: BL-0463
+- **Status**: open
+- **Since**: 2026-11-14
+- **Origin**: peer
+- **Reporter**: pm--claude
+- **Report**: fleet 01M7DKWKB6 (PM, 2026-11-14)
+- **Reply**: unknown
+- **Problem**: role-kit 檢查的第一部分（A9 靜態規則）已經合併，但第二部分尚未實作：需要用合成的停止掛鉤重放測資來驗證角色套件行為，目前還在等新版停止掛鉤合入主線。
+- **Impact**: 角色套件在真實停止掛鉤流程下的退步無法靠重放測資自動攔截。
+- **Trigger**: Stop-hook v2 進 develop
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 01M7DKWK sub-item 2 (D13), fleet task 01M7DM1FHVSJGKNMSZ25F2XRP2
+- **Pointer**: project/backlog/pm-01m7dkwk-subitems.md
+- **Context**: Part 1 (A9 lint) merged at 717f85ef2 (scripts/lib/role-kit.js). Part 2 adds synthetic Stop-hook replay fixtures.
+
+### D14 lead-watch 改版：資料源改快照事件並補齊兩列停滯、熱池改道與 needs_queue
+- **Id**: BL-0464
+- **Status**: open
+- **Since**: 2026-11-14
+- **Origin**: peer
+- **Reporter**: pm--claude
+- **Report**: fleet 01M7DKWKB6 (PM, 2026-11-14)
+- **Reply**: unknown
+- **Problem**: 目前的 lead-watch 技能仍以時間作為判斷依據，尚未改用快照事件作為資料來源，也缺少兩列停滯偵測、熱池改道與佇列需求標記，且指引改動需附評測。
+- **Impact**: 主管無法從快照即時掌握兩列停滯、熱池改道與排隊需求，仍依賴粗略的時間閾值誤判進度。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PM 01M7DKWK sub-item 3 (D14), fleet task 01M7DM1JSMA467YV28Y5FB471W
+- **Pointer**: project/backlog/pm-01m7dkwk-subitems.md
+- **Context**: skills/lead-watch currently uses elapsed time; migrate data source to snapshot events, add two-row stall, hot-pool reroute, and needs_queue with eval.
+
+### 5a 本地模型分流：文件化並接上可改走本地的四處呼叫點
+- **Id**: BL-0465
+- **Status**: open
+- **Since**: 2026-11-14
+- **Origin**: peer
+- **Reporter**: pm--claude
+- **Report**: fleet 01M7DKWKB6 (PM, 2026-11-14)
+- **Reply**: unknown
+- **Problem**: 閘道允許清單與 qwen 金絲雀文件已經合併，但另外四處可改走本地模型的呼叫點尚未寫成文件也還沒接上；且依既有決策，AR 對話內容不可交給 qwen 或任何中國模型。
+- **Impact**: 非敏感工作仍繼續消耗雲端模型額度，無法在符合隔離限制下切流至本地端點。
+- **Trigger**: qwen 恢復上線
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PM 01M7DKWK sub-item 4 (5a), fleet task 01M7DM1SER20CGEHFSNBRWKCPM
+- **Pointer**: project/backlog/pm-01m7dkwk-subitems.md
+- **Context**: Gateway allowlist 9962787d0 and qwen canary docs merged. Four remaining local-offload sites undocumented and unwired. Constraint: AR dialog must never go to qwen or any Chinese model (d-1dfcf757).
+
+### 5b+5c 實作 ctx-reset W2 掃描重開：解決長 session 喚醒燒額度與 context 快滿停等
+- **Id**: BL-0466
+- **Status**: open
+- **Since**: 2026-11-14
+- **Origin**: peer
+- **Reporter**: pm--claude
+- **Report**: fleet 01M7DKWKB6 (PM, 2026-11-14)
+- **Reply**: unknown
+- **Problem**: 長工作階段每次喚醒都重讀整個脈絡而燒額度，脈絡快滿時工作線也只能停下等人工重開。第一階段的量測與判定已合併，第二階段掃描重開計畫也已就緒，但尚未實作。
+- **Impact**: 高脈絡工作階段持續消耗額度，且滿載時無人值守的工作線仍無法自動安全交接重啟。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PM 01M7DKWK sub-item 5 (5b+5c), fleet task 01M7DM1XGAHFBJSG6RBE12R382
+- **Pointer**: project/plans/2026-11-12-ctx-reset-sweep.md
+- **Context**: ctx-reset W1 merged (d32f422c3); W2 sweep plan merged at project/plans/2026-11-12-ctx-reset-sweep.md, not yet implemented. Also indexed in project/backlog/pm-01m7dkwk-subitems.md.

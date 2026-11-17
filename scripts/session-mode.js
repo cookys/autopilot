@@ -856,7 +856,16 @@ function cmdSetPlain(args) {
 const SIZES = Object.freeze(['XS', 'S', 'M', 'L', 'XL']);
 const INIT_FLAGS = ['size', 'urgent', 'bug', 'base-ref', 'new-task', 'fleet-task', 'refresh'];
 const FLEET_TASK_ID_MAX = 64;
-const AT_OR_PAST_IMPLEMENT = new Set(['implement', 'verify', 'code-review', 'qc-gate', 'finish']);
+const STAGE_GRAPH_PATH = path.join(__dirname, '..', 'references', 'stage-graph.json');
+function loadAtOrPastImplement() {
+  try {
+    const ids = JSON.parse(fs.readFileSync(STAGE_GRAPH_PATH, 'utf8')).node_ids;
+    const idx = Array.isArray(ids) ? ids.indexOf('implement') : -1;
+    if (idx >= 0) return new Set(ids.slice(idx));
+  } catch { /* fall back to canonical nodes if graph file is absent */ }
+  return new Set(['implement', 'verify', 'code-review', 'qc-gate', 'finish']);
+}
+const AT_OR_PAST_IMPLEMENT = loadAtOrPastImplement();
 const GIT_OID_RE = /^[0-9a-f]{40,64}$/u;
 
 // non-empty, no whitespace, at most 64 characters. null when the value is legal.
@@ -1030,18 +1039,21 @@ function applyWorkOrderToMarker(marker, taskId, fetchRes, prior, repoRoot) {
     delete marker.plan_receipt;
   }
 
-  if (marker.wo_state === 'resolved' && SIZES.includes(marker.wo_size)) {
+  // Raise marker size whenever the work order states a valid Size, even if Plan resolution
+  // left wo_state unresolved, so pre-implement stage-advance calls (e.g. --to plan) know the graph.
+  if (SIZES.includes(marker.wo_size)) {
     const woIdx = SIZES.indexOf(marker.wo_size);
     const curIdx = SIZES.includes(marker.size) ? SIZES.indexOf(marker.size) : -1;
     if (woIdx > curIdx) {
       marker.size = marker.wo_size;
     }
     if (workOrderPlan.isMPlus(marker.wo_size) && typeof marker.stage === 'string' && AT_OR_PAST_IMPLEMENT.has(marker.stage)) {
-      if (!isReceiptBlobValid(repoRoot, marker.plan_receipt)) {
+      if (marker.wo_state !== 'resolved' || !isReceiptBlobValid(repoRoot, marker.plan_receipt)) {
         const oldStage = marker.stage;
         marker.stage = 'plan';
         marker.stage_set_at = nowIso;
-        return `session-mode: fleet task ${taskId} requires a valid plan receipt for ${marker.wo_size}; stage reset from ${oldStage} to plan\n`;
+        const resetMsg = `session-mode: fleet task ${taskId} requires a valid plan receipt for ${marker.wo_size}; stage reset from ${oldStage} to plan\n`;
+        return fetchRes.stderr ? `${fetchRes.stderr}${resetMsg}` : resetMsg;
       }
     }
   }

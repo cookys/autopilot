@@ -793,8 +793,16 @@ function verifyLargePlanReview(repoRoot, marker, receipt, opts) {
   };
 }
 
+function loadAtOrPastImplement() {
+  const ids = JSON.parse(fs.readFileSync(GRAPH_JSON, 'utf8')).node_ids;
+  const idx = ids.indexOf('implement');
+  if (idx === -1) throw new Error(`${GRAPH_JSON} missing "implement" node`);
+  return new Set(ids.slice(idx));
+}
+
 function checkWorkOrderImplementGate(marker, opts, repoRoot, from, to) {
-  if (to !== 'implement' || typeof marker.fleet_task_id !== 'string' || marker.fleet_task_id.length === 0) {
+  const atOrPastImplement = loadAtOrPastImplement();
+  if (!atOrPastImplement.has(to) || typeof marker.fleet_task_id !== 'string' || marker.fleet_task_id.length === 0) {
     return { ok: true, patch: {} };
   }
   const refuse = (errCode, reason) => ({
@@ -942,7 +950,7 @@ function decide(marker, opts, repoRootArg, sid) {
     }
   }
 
-  // P0 work-order plan-first gate: fires only when a fleet_task_id is attached and entering `implement`.
+  // P0 work-order plan-first gate: fires only when a fleet_task_id is attached and targeting `implement` or a later stage.
   const woGate = checkWorkOrderImplementGate(marker, opts, repoRoot, from, to);
   if (!woGate.ok) return woGate.result;
 

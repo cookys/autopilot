@@ -480,3 +480,34 @@ test('lane: size floor refuses downward --size, raises size + resets stage to pl
     sb.cleanup();
   }
 });
+
+test('lane: unresolved order allows all pre-implement stages (incl. L plan-review) and refuses implement and post-implement stages', () => {
+  const sb = makeSandbox();
+  try {
+    // 1. L unresolved order: intent -> proposal -> plan -> plan-review allowed; --to implement refused
+    const sidL = sb.newSession();
+    sb.setTaskFixture('T_L_UNRES', 'Size: L\nPlan: docs/plans/missing.md@deadbeef');
+    const rL = sb.sm(sidL, ['set', '--fleet-task', 'T_L_UNRES', '--repo-root', sb.repo]);
+    assert.equal(rL.status, 0, rL.stderr);
+    const mL = sb.assertSchemaValid(sidL);
+    assert.equal(mL.wo_state, 'unresolved');
+    assert.equal(mL.size, 'L');
+    for (const node of ['intent', 'proposal', 'plan', 'plan-review']) {
+      const r = sb.sa(sidL, ['--to', node, '--repo-root', sb.repo]);
+      assert.equal(r.status, 0, `unresolved L should allow --to ${node}: ${r.stderr}`);
+    }
+    const rLImpl = sb.sa(sidL, ['--to', 'implement', '--repo-root', sb.repo]);
+    assert.equal(rLImpl.status, 5, 'unresolved L must refuse --to implement');
+
+    // 2. Session already at implement when unresolved order attaches: --to verify (post-implement) refused
+    const sidS = sb.newSession();
+    assert.equal(sb.sm(sidS, ['set', '--size', 'S', '--repo-root', sb.repo]).status, 0);
+    assert.equal(sb.sa(sidS, ['--to', 'implement', '--repo-root', sb.repo]).status, 0);
+    sb.setTaskFixture('T_S_UNRES', 'Size: S\nPlan: docs/plans/missing.md@deadbeef');
+    assert.equal(sb.sm(sidS, ['set', '--fleet-task', 'T_S_UNRES', '--repo-root', sb.repo]).status, 0);
+    const rVerify = sb.sa(sidS, ['--to', 'verify', '--repo-root', sb.repo]);
+    assert.equal(rVerify.status, 5, 'unresolved order must refuse --to verify');
+  } finally {
+    sb.cleanup();
+  }
+});

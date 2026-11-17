@@ -8,9 +8,9 @@ export type KeyAction =
   | { kind: 'page'; to: string } | { kind: 'close' } | { kind: 'pass' } | { kind: 'button' } | { kind: 'submit' }
   | { kind: 'pick'; index: number } | { kind: 'text'; ch: string } | { kind: 'text_save' } | { kind: 'text_cancel' }
   | { kind: 'note' } | { kind: 'undo' } | { kind: 'prev' } | { kind: 'next' } | { kind: 'fill' }
-  | { kind: 'move'; by: 1 | -1 } | { kind: 'fold' } | { kind: 'none' }
+  | { kind: 'move'; by: 1 | -1 } | { kind: 'fold' } | { kind: 'open' } | { kind: 'none' }
 
-const SPECIAL: Record<string, string> = { '9': 'pet', '0': 'forge', '?': 'help' } // the ids are PAGES entries 9, 0, ? (pages/index.ts)
+const SPECIAL: Record<string, string> = { '9': 'pet', '0': 'forge', 'i': 'help' } // the ids are PAGES entries 9, 0, i (pages/index.ts); the host takes only a digit or a lowercase letter as a hotkey
 const PICKS = ['a', 'b', 'c', 'd', 'e']
 
 export function routeKey(key: string, st: KeyState): KeyAction {
@@ -23,15 +23,17 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   if (/^[1-9]$/.test(key)) return { kind: 'none' } // a digit with no page yet
   if (key === 'j' || key === 'ArrowDown') return { kind: 'move', by: 1 }
   if (key === 'k' || key === 'ArrowUp') return { kind: 'move', by: -1 }
-  if (key === ' ') return { kind: 'fold' }
+  if (key === 'z') return { kind: 'fold' }
+  if (key === 'o' && st.page !== 'decide') return { kind: 'open' } // act on the focused row (fleet: see it, quota: show its seats)
   if (st.page === 'decide') {
     const pick = PICKS.indexOf(key)
     if (pick >= 0) return { kind: 'pick', index: pick }
     if (key === 'n') return { kind: 'note' }
     if (key === 'u') return { kind: 'undo' }
-    if (key === '[') return { kind: 'prev' }
-    if (key === ']') return { kind: 'next' }
+    if (key === 'h') return { kind: 'prev' }
+    if (key === 'l') return { kind: 'next' }
     if (key === 'f') return { kind: 'fill' }
+    if (key === 's') return { kind: 'submit' }
   }
   return { kind: 'none' }
 }

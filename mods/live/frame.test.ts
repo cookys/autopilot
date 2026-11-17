@@ -1,7 +1,8 @@
 // mods/live/frame.test.ts — S0 of the pane tab merge (plan r2 §3.1, §3.2, §5): the fixed-height frame, the page registry and the pane's key table.
 // Pure: frameRows and paneKey are called directly; the strip is also drawn through the real Pane with fake elements.
 import { test, expect } from 'claude-code/testing'
-import { FOCUS_ANCHOR_KEY, Pane } from './pane'
+import { FOCUS_ANCHOR_KEY, Pane, pageHotkeys } from './pane'
+import { EN, ZH_TW } from './locales'
 import { makeT } from './i18n'
 import { actionRows, brokenRow, frameRows, mostSevere } from './pages/frame'
 import type { Page, PageCtx, Row } from './pages/frame'
@@ -21,8 +22,8 @@ const withBody = (p: Page, body: number, actions: number): Page => ({ ...p, rend
 const text = (r: Row): string => r.map(s => s.text).join('')
 const stale = (): NonNullable<PageCtx['console']> => ({ ...(SNAP as NonNullable<typeof SNAP>), sources: { fleet: { at_ms: NOW - 6 * 60000, state: 'stale' }, quota: { at_ms: null, state: 'no_source' } } })
 
-test('registry: eleven pages in key order 1-8, 9 pet, 0 forge, ? help; shells are empty, the pet page is a placeholder (g2 folds A6)', () => {
-  expect(PAGES.map(p => p.id + p.key)).toEqual(['now1', 'decide2', 'fleet3', 'quota4', 'dispatch5', 'review6', 'spend7', 'hygiene8', 'pet9', 'forge0', 'help?'])
+test('registry: eleven pages in key order 1-8, 9 pet, 0 forge, i help; shells are empty, the pet page is a placeholder (g2 folds A6)', () => {
+  expect(PAGES.map(p => p.id + p.key)).toEqual(['now1', 'decide2', 'fleet3', 'quota4', 'dispatch5', 'review6', 'spend7', 'hygiene8', 'pet9', 'forge0', 'helpi'])
   for (const p of PAGES) {
     const r = p.render(ctxOf(SIZES[0]))
     if (p.id === 'pet') expect(r.body.map(x => x.map(g => g.text).join(''))).toEqual(['寵物分頁還沒上線'])
@@ -58,11 +59,11 @@ test('frame: layout, header on row 0, strip on the last row, A = 6 from 32 rows 
   expect(text(rows[0])).toBe('待決')
   expect(text(rows[29])).toContain('1 現況')
   expect(text(rows[29])).toContain('2 待決')
-  expect(text(rows[29])).toContain('? 說明  Esc 收起')
+  expect(text(rows[29])).toContain('i 說明  Esc 收起')
   expect(text(rows[28])).toBe('act 1') // the last action is the bottom row, directly over the strip
   expect(text(rows[27])).toBe('act 0')
   const bodyRoom = 30 - 2 - 4
-  expect(text(rows[bodyRoom])).toBe('↓ 還有 ' + (200 - (bodyRoom - 1)) + ' 列（PgDn）') // the last body row; the total did not change
+  expect(text(rows[bodyRoom])).toBe('↓ 還有 ' + (200 - (bodyRoom - 1)) + ' 列') // the last body row; the total did not change
   expect(text(rows[bodyRoom - 1])).toBe('body ' + (bodyRoom - 2))
 })
 
@@ -79,7 +80,7 @@ test('frame: scroll moves the window, and an offset past the end is clamped (sti
   const body = rows.slice(1, 1 + 18)
   expect(text(body[17])).toBe('body 99') // clamped to the end: the window shows the last rows and no hint
   expect(text(body[0])).toBe('body 82')
-  expect(frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 10 }).slice(1, 19).map(text)[17]).toBe('↓ 還有 73 列（PgDn）')
+  expect(frameRows(withBody(PAGES[0], 100, 0), ctxOf({ cols: 80, rows: 24 }), { pages: PAGES, scroll: 10 }).slice(1, 19).map(text)[17]).toBe('↓ 還有 73 列')
 })
 
 test('frame: more actions than the area holds throws (a programming error), at both A sizes', () => {
@@ -130,4 +131,52 @@ test('pane strip: no `›` next chip anywhere, every digit tab is a Button with 
   expect(btn.map(n => n.props.hotkey).filter(h => /^[0-9]$/.test(h))).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'])
   expect(btn.some(n => flat(n).includes('›'))).toBe(false)
   expect(framed.find(n => n.kind === 'Box' && n.props.height === 30)).toBeDefined()
+})
+
+// every visible key hint `[x]` in a framed page's action rows (all states are the page.<id>.* strings, in both locales) is a hotkey the page binds. [Enter] and [Esc] are the
+// host's own keys (Enter presses the focused Button, an Input ends on Enter / Esc), so they are not hotkeys and are not checked.
+test('key hints: every [x] in a framed page string is one of that page\'s bound hotkeys, in en and zh-TW', () => {
+  const bad: string[] = []
+  for (const [loc, table] of [['en', EN], ['zh-TW', ZH_TW]] as const) {
+    for (const [id, text] of Object.entries(table as Record<string, string>)) {
+      const m = /^page\.(now|decide|fleet|quota)\./.exec(id)
+      if (m === null) continue
+      const bound = pageHotkeys(m[1])
+      for (const h of text.matchAll(/\[([^\]\s]+)\]/g)) {
+        if (h[1] === 'Enter' || h[1] === 'Esc' || h[1].includes('{')) continue
+        if (!bound.includes(h[1])) bad.push(loc + ' ' + id + ' [' + h[1] + ']')
+      }
+    }
+  }
+  expect(bad).toEqual([])
+  expect(pageHotkeys('decide')).toContain('h')
+  expect(pageHotkeys('decide')).not.toContain('p')
+})
+
+// o = act on the focused (▸) row: j moves the focus to row 2 (view.focus 1), then o presses that row's action. fleet: see that line; quota: show / hide that pool's seats. decide has no o.
+// i is bound beside the digits (help); no key outside the hotkey set is drawn as a hotkey Button.
+test('keys: j then o acts on row 2 (fleet sees line 2, quota opens its seats); decide has no o; i is bound', () => {
+  const live = { state: 'ok', text: 'x', header: 'x', band: { kind: 'idle', verdict: '', reason: null, project: 'x', elapsed: '1m', phase: '', slots: [] }, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
+  const shown: Page[] = PAGES.map(p => ({ ...p, framed: true as const }))
+  const drawn = (tab: 'fleet' | 'spend' | 'decide', focus: number) => {
+    const pressed: string[] = []
+    const pageId = tab === 'spend' ? 'quota' : tab
+    const tree = walk(Pane(EL as never, live, tab, () => {}, t, 120, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: SNAP, nowMs: NOW, rows: 30, view: { [pageId]: { focus, expanded: false } }, onPress: (id: string) => { pressed.push(id) } } as never))
+    return { tree, pressed }
+  }
+  const hot = (tree: Node[], k: string) => tree.find(n => n.kind === 'Button' && n.props.hotkey === k)
+  const f0 = drawn('fleet', 0); hot(f0.tree, 'o')!.props.onPress()
+  const f1 = drawn('fleet', 1); hot(f1.tree, 'o')!.props.onPress()
+  expect(f0.pressed[0]).toMatch(/^fleet:see:/)
+  expect(f1.pressed[0]).toMatch(/^fleet:see:/)
+  expect(f1.pressed[0], 'row 2 is another line than row 1').not.toBe(f0.pressed[0])
+  const q = drawn('spend', 1); hot(q.tree, 'o')!.props.onPress()
+  expect(q.pressed).toEqual(['quota:open'])
+  expect(hot(drawn('decide', 0).tree, 'o')).toBeUndefined()
+  for (const tab of ['fleet', 'spend', 'decide'] as const) expect(hot(drawn(tab, 0).tree, 'i')).toBeDefined()
+  for (const tab of ['fleet', 'spend', 'decide'] as const) {
+    const id = tab === 'spend' ? 'quota' : tab
+    const letters = drawn(tab, 0).tree.filter(n => n.kind === 'Button' && /^[a-z]$/.test(n.props.hotkey ?? '')).map(n => n.props.hotkey as string)
+    expect(letters.filter(h => !pageHotkeys(id).includes(h)), id + ' draws a hotkey it does not list').toEqual([])
+  }
 })

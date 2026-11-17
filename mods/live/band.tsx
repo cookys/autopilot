@@ -350,7 +350,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
       ? <Text key="b" {...dim(v.grey)} wrap="truncate">{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Text>
       : !hasKey
       ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + head}</Text>
-      : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
+      : <Button key={o.key} plain onPress={() => v.onPress(k)}>{head + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(head)))}</Button>
     const star = o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>
     if (hasKey) keyed.push({ k, at: v.split ? null : rows.length })
     optTo.push(
@@ -407,7 +407,7 @@ export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQ
   const { Box, Text, Button } = el
   const slot = (key: string, hotkey: string, label: string, width: number, press: () => void, sep: boolean) => (
     <Box key={'s-' + key} width={width} flexShrink={0}>
-      {Button === undefined ? <Text key="b">{hotkey + ': ' + label}</Text> : <Button key={key} plain hotkey={hotkey} onPress={press}>{label}</Button>}
+      {Button === undefined ? <Text key="b">{hotkey + ': ' + label}</Text> : <Button key={key} plain onPress={press}>{label}</Button>}
       {sep ? <Text key="sep" {...drawSeg(QUICK_SEP)}>{QUICK_SEP.text}</Text> : <Text key="sep">{''}</Text>}
     </Box>
   )

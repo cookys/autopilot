@@ -147,7 +147,12 @@ export type PageView = { focus: number; expanded: boolean }
 // view: focus index + expanded flag per page id (fleet, quota); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons)
 export type FramePane = { pages: readonly Page[]; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void }
 const COMMON_KEYS: Record<string, KeyAction> = { j: { kind: 'move', by: 1 }, k: { kind: 'move', by: -1 }, z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here
-const DECIDE_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 }, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, n: { kind: 'note' }, u: { kind: 'undo' }, p: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
+const DECIDE_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 }, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
+// o acts on the focused (▸) row: fleet sees that line, quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
+const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
+const pageKeys = (id: string): Record<string, KeyAction> => (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'fleet' || id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS)
+// every hotkey a framed page binds (f on fleet / quota is the page's own fill action): a visible `[x]` key hint must be one of these (frame.test.ts)
+export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'fleet' || id === 'quota' ? ['f'] : []), 'i']
 // quota (4) and spend (7) both show the Spend tab until S4 gives the quota page its own tab; pet / forge / help have no old tab and no Button yet (a PaneTab for them comes with their pages)
 const PAGE_TAB: Record<string, PaneTab> = { now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend', dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene' }
 export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => (frame === null ? undefined : frame.pages.find(p => p.framed === true && PAGE_TAB[p.id] === tab))
@@ -180,10 +185,13 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
     )
   }
   // page-local keys: zero-width hotkey Buttons (never while a note is typed: the Input owns the keys then). On fleet and quota, f presses the page's own fill action.
-  const keys: Record<string, KeyAction> = page.id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : COMMON_KEYS
+  const keys: Record<string, KeyAction> = pageKeys(page.id)
+  const openPress = page.id === 'quota' ? 'quota:open' : page.id === 'fleet' ? rows.flat().filter(sg => sg.press?.startsWith('fleet:see:')).pop()?.press : undefined // the body rows are clickable too: the LAST one is the focused row's action row
   const fillPress = rows.flat().find(sg => sg.press?.startsWith('fill:'))?.press
   const hot = Button === undefined || frame.decide?.textMode === true ? [] : [
-    ...Object.entries(keys).filter(([k]) => page.id === 'decide' || k !== 'f').map(([k, act]) => <Button key={'k:' + k} plain hotkey={k} onPress={() => frame.onKey?.(act)}><Text>{''}</Text></Button>),
+    ...Object.entries(keys).filter(([k]) => k !== 'o' && (page.id === 'decide' || k !== 'f')).map(([k, act]) => <Button key={'k:' + k} plain hotkey={k} onPress={() => frame.onKey?.(act)}><Text>{''}</Text></Button>),
+    ...(openPress === undefined ? [] : [<Button key="k:o" plain hotkey="o" onPress={() => press(openPress)}><Text>{''}</Text></Button>]),
+    <Button key="k:i" plain hotkey="i" onPress={() => onTab('legend')}><Text>{''}</Text></Button>, // the help page: the old legend tab until its page is drawn
     ...(page.id !== 'decide' && fillPress !== undefined ? [<Button key="k:f" plain hotkey="f" onPress={() => press(fillPress)}><Text>{''}</Text></Button>] : []),
   ]
   return <Box flexDirection="column" height={frame.rows}>{rows.map(drawRow)}{hot}{focusAnchor(el)}</Box>

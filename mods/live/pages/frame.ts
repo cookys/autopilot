@@ -3,9 +3,9 @@
 // (many or few cards, folded, stale, no source) can make the pane taller or shorter than `ctx.size.rows`.
 //
 //   row 0          header: the page name, then the most severe broken marker (staleBadge) when a source is broken
-//   H-2-A rows     body, bottom-anchored; an overflow turns its LAST row into `↓ 還有 N 列（PgDn）`, the total unchanged
+//   H-2-A rows     body, bottom-anchored; an overflow turns its LAST row into `↓ 還有 N 列`, the total unchanged
 //   A rows         action area, A = 6 when H >= 32 else 4; the last action is the bottom row (next to the tab strip), the rest stand above it in order; none -> `沒有要你處理的事` on the bottom row
-//   last row       tab strip: `1 現況 2 待決 ...  ? 說明  Esc 收起`; each tab entry carries press `tab:<digit>:<id>`
+//   last row       tab strip: `1 現況 2 待決 ...  i 說明  Esc 收起`; each tab entry carries press `tab:<digit>:<id>`
 import type { ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
 import type { LiveSnapshot, Seg } from '../model'
@@ -64,7 +64,7 @@ function strip(page: Page, ctx: PageCtx, opts: FrameOpts): Row {
     return [{ text: key + ' ' + label, press: 'tab:' + key + ':' + id, ...(on ? { color: PALETTE.here } : {}) }, { text: ' ' }]
   }
   const tabs = [...pages.filter(p => p.id !== 'help').map(p => entry(p.id, p.key, ctx.t('tab.' + p.id))), ...(opts.extra ?? []).map(x => entry(x.id, x.key, x.label))].flat()
-  return clip([...tabs, { text: ' ' }, { text: '? ' + ctx.t('frame.help') + '  Esc ' + ctx.t('frame.close'), dim: true }], ctx.size.cols)
+  return clip([...tabs, { text: ' ' }, { text: 'i ' + ctx.t('frame.help') + '  Esc ' + ctx.t('frame.close'), dim: true }], ctx.size.cols)
 }
 
 // exactly ctx.size.rows rows, whatever the page returned

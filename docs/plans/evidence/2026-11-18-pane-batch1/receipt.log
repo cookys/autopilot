@@ -8,3 +8,15 @@
 == integration.golden.test.ts
  6 pass
  0 fail
+== RED (follow-up: key hints vs bound hotkeys; locales still say [Space]) 2026-11-17T18:52:09Z
+== frame.test.ts
+(fail) key hints: every [x] in a framed page string is one of that page's bound hotkeys, in en and zh-TW
+ 205 pass
+ 1 fail
+== RED (follow-up A: band Buttons still carry digit hotkeys 0-9) 2026-11-17T18:59:31Z
+== live.test.ts (desktop+terminal)
+(fail) O4 shell v7: the 待決 left column is the card list (◐ current, ○ open), the main window titles the card, the foot of the left window says its place (termin
+(fail) bandinput: no Button in the band tree has a digit hotkey (a bare digit in an empty composer presses a band Button, host d.ts): clicks and tab + Enter onl
+(fail) O4 shell quick row: the 待決 tab with cards has the four keys 0 / 7 / 8 / 9 and no open-panel button (desktop)
+== GREEN (band Buttons have no hotkey; keys h l z s o i; labels follow) 2026-11-17T18:59:31Z
+mods/live/run-tests.sh: 1387 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty)

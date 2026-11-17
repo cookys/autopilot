@@ -140,13 +140,13 @@ test('now: null console and null live draw the no-source row, never throw', asyn
   for (const s of red) expect(s.color).toBe(staleBadge('x').color)
 })
 
-test('now: overflow at 80x24 ends in the PgDn row and keeps 24 rows', async () => {
+test('now: overflow at 80x24 ends in the more row and keeps 24 rows', async () => {
   await feed()
   const ex = Array.from({ length: 9 }, (_, i) => ({ ...con().items[0], id: 'e' + i, title: 'lane' + i + ' 卡住' }))
   const out = frameRows(nowPage, ctxOf(80, 24, con({ items: ex as never }))).map(text)
   expect(out.length).toBe(24)
   expect(out[24 - 2 - 4]).toContain('還有')
-  expect(out[24 - 2 - 4]).toContain('PgDn')
+  expect(out[24 - 2 - 4]).toContain('還有')
 })
 
 test('now: a console seat shows the same body rows with a two minute old snapshot (the age is the frame header\'s)', async () => {

@@ -46,7 +46,7 @@ test('keys: Esc with focus in the prompt box is passed to Claude Code on every p
 
 test('keys: with focus in the prompt box no pane/band hotkey fires — every key is passed to Claude Code (g2 folds A5)', () => {
   const bad: string[] = []
-  const keys = [...DIGITS, '9', '0', '?', ...LETTERS, 'n', 'u', 'x', 'f', 'j', 'k', '[', ']', ' ', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape']
+  const keys = [...DIGITS, '9', '0', 'i', ...LETTERS, 'n', 'u', 'x', 'f', 'j', 'k', 'h', 'l', 'o', 'z', 's', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape']
   for (const page of ALL)
     for (const k of keys) {
       const a = routeKey(k, st({ page, paneFocus: false }))
@@ -63,7 +63,7 @@ test('keys: Esc with the pane focused closes it; in text mode it only leaves tex
 test('keys: decide text mode (`n`) — 1–8 and a–e are text, not page switches or picks', () => {
   expect(routeKey('n', st({ page: 'decide' })).kind).toBe('note')
   const bad: string[] = []
-  for (const ch of [...DIGITS, ...LETTERS, 'n', 'u', 'x', 'f', 'j', 'k', '[', ']', '?', '9', '0']) {
+  for (const ch of [...DIGITS, ...LETTERS, 'n', 'u', 'x', 'f', 'j', 'k', 'h', 'l', 'i', '9', '0']) {
     const a = routeKey(ch, st({ page: 'decide', textMode: true }))
     if (show(a) !== show({ kind: 'text', ch })) bad.push(`${ch}=${show(a)}`)
   }
@@ -89,7 +89,7 @@ test('keys: decide (not text mode) — 1–8 only switch page (own key closes), 
 
 test('keys: one meaning per key — digits, 9, 0, ? switch page identically on every page', () => {
   const bad: string[] = []
-  const special: Record<string, string> = { '9': 'pet', '0': 'forge', '?': 'help' }
+  const special: Record<string, string> = { '9': 'pet', '0': 'forge', 'i': 'help' }
   for (const page of ALL) {
     for (const [k, to] of [...DIGITS.map((d, i) => [d, PAGES[i]?.id as string | undefined] as const), ...Object.entries(special)]) {
       if (to === undefined) continue
@@ -99,7 +99,7 @@ test('keys: one meaning per key — digits, 9, 0, ? switch page identically on e
     }
     // a–e and n/u/[/] mean something only on decide; elsewhere they are not page switches or picks
     if (page !== 'decide')
-      for (const k of [...LETTERS, 'n', 'u', '[', ']']) {
+      for (const k of [...LETTERS, 'n', 'u', 'h', 'l']) {
         const a = routeKey(k, st({ page }))
         if (a.kind === 'pick' || a.kind === 'page' || a.kind === 'note') bad.push(`${page}:${k}=${show(a)}`)
       }

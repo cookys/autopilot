@@ -1312,6 +1312,7 @@ async function fillPrompt($: EngineInterface, text: string): Promise<void> {
 async function framePress($: EngineInterface, id: string): Promise<void> {
   try {
     if (id === 'fleet:fold') pageView.fleet = { ...(pageView.fleet ?? { focus: 0, expanded: false }), expanded: !(pageView.fleet?.expanded ?? false) }
+    else if (id === 'quota:open') pageView.quota = { ...(pageView.quota ?? { focus: 0, expanded: false }), expanded: !(pageView.quota?.expanded ?? false) }
     else if (id.startsWith('fleet:see:')) pageView.fleet = { ...(pageView.fleet ?? { focus: 0, expanded: false }), expanded: true }
     else if (id.startsWith('fill:quota:')) {
       const pool = id.slice('fill:quota:'.length)

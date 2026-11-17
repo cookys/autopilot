@@ -41,7 +41,7 @@ const GOLD = {
    "  [a] 可以 ★    [b] 先不要",
    "  補充   （按 n 寫補充，會跟答案一起送）",
    "",
-   "── 其他待決 2（Space 收合）──────────────────────────────",
+   "── 其他待決 2（z 收合）──────────────────────────────",
    "  d-fb890f48  [測試卡] carddispatch 真 courier 紅綠，請勿在面板作答                       PM · 2 時",
    "  d-fd51ee8d  下次到 308 現場時量 30 格（要你到場，只能回報）                             308 · 1 天",
    "── 別台的卡（唯讀，到那一席答）────────────────────────────",
@@ -52,8 +52,8 @@ const GOLD = {
   "actions": [
    "已選 a 可以（尚未送出）",
    "[a]–[b] 選項（每張卡最多 5 個選項 a–e）   [n] 補充（輸入中數字字母都是文字，Enter/Esc 結束）",
-   "[Enter] 送出焦點卡   [u] 送出後 10 秒內撤回",
-   "「[」上一張  「]」下一張  [Space] 收合其他待決",
+   "[s] 送出焦點卡（Enter 按下焦點按鈕）   [u] 送出後 10 秒內撤回",
+   "[h] 上一張  [l] 下一張  [z] 收合其他待決",
    "[f] 回報填入提示列（不送出）"
   ]
  },
@@ -70,15 +70,15 @@ const GOLD = {
    "  [e] 先不要",
    "  補充   （按 n 寫補充，會跟答案一起送）",
    "",
-   "── 其他待決 2（Space 收合）───────────────────────────────",
+   "── 其他待決 2（z 收合）───────────────────────────────",
    "  d-fb890f48  [測試卡] carddispatch 真 courier 紅綠，請勿在面板作答               PM · 2 時",
    "  d-fd51ee8d  下次到 308 現場時量 30 格（要你到場，只能回報）                     308 · 1 天"
   ],
   "actions": [
    "已選 c 拆兩批，每批 2–3 支（尚未送出）",
    "[a]–[e] 選項（卡上限 5 個）   [n] 補充（輸入中數字字母都是文字，Enter/Esc 結束）",
-   "[Enter] 送出焦點卡   [u] 送出後 10 秒內撤回   [f] 回報填入提示列（不送出）",
-   "「[」上一張  「]」下一張  [Space] 收合其他待決"
+   "[s] 送出焦點卡（Enter 按下焦點按鈕）   [u] 送出後 10 秒內撤回   [f] 回報填入提示列（不送出）",
+   "[h] 上一張  [l] 下一張  [z] 收合其他待決"
   ]
  },
  "c80": {
@@ -88,7 +88,7 @@ const GOLD = {
    "背景 兩支都過審，順序影響 migration",
    "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
-   "── 其他待決 2（Space 收合）──",
+   "── 其他待決 2（z 收合）──",
    "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
    "── 別台（唯讀）──",
@@ -98,8 +98,8 @@ const GOLD = {
   ],
   "actions": [
    "已選 a（尚未送出） [n] 補充",
-   "[Enter] 送出  [u] 10 秒內撤回",
-   "「[」上張 「]」下張 [f] 填入提示列"
+   "[s] 送出  [u] 10 秒內撤回",
+   "[h] 上張 [l] 下張 [f] 填入提示列"
   ]
  },
  "c80_folded": {
@@ -109,7 +109,7 @@ const GOLD = {
    "背景 兩支都過審，順序影響 migration",
    "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
-   "── 其他待決 2（Space 展開）──",
+   "── 其他待決 2（z 展開）──",
    "── 別台（唯讀）──",
    "d-1c0a77e2 h6：GPU 重排 → 到該席答",
    "── 要你做或看 ──",
@@ -117,8 +117,8 @@ const GOLD = {
   ],
   "actions": [
    "已選 a（尚未送出） [n] 補充",
-   "[Enter] 送出  [u] 10 秒內撤回",
-   "「[」上張 「]」下張 [Space] 展開其他"
+   "[s] 送出  [u] 10 秒內撤回",
+   "[h] 上張 [l] 下張 [z] 展開其他"
   ]
  },
  "c80_open": {
@@ -128,7 +128,7 @@ const GOLD = {
    "背景 兩支都過審，順序影響 migration",
    "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
-   "── 其他待決 2（Space 收合）──",
+   "── 其他待決 2（z 收合）──",
    "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
    "── 別台（唯讀）──",
@@ -138,8 +138,8 @@ const GOLD = {
   ],
   "actions": [
    "已選 a（尚未送出） [n] 補充",
-   "[Enter] 送出  [u] 10 秒內撤回",
-   "「[」上張 「]」下張 [f] 填入提示列"
+   "[s] 送出  [u] 10 秒內撤回",
+   "[h] 上張 [l] 下張 [f] 填入提示列"
   ]
  },
  "c80_sent": {
@@ -147,7 +147,7 @@ const GOLD = {
    "▸ d-89fe394f 1/3 · game-lead · 40 分",
    "payment 和 social-login 依序 --no-ff 合進 legacy？",
    "已送出：[b] 先不要",
-   "── 其他待決 2（Space 收合）──",
+   "── 其他待決 2（z 收合）──",
    "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
    "── 別台（唯讀）──",
@@ -155,7 +155,7 @@ const GOLD = {
   ],
   "actions": [
    "已送出 b，8 秒內按 u 撤回",
-   "「[」上張 「]」下張（可先看別張）"
+   "[h] 上張 [l] 下張（可先看別張）"
   ]
  },
  "c80_zero": {
@@ -182,7 +182,7 @@ const GOLD = {
   ],
   "actions": [
    "已選 第 6 項 只合 hotfix（尚未送出）",
-   "[Enter] 選／送出焦點項   [u] 10 秒內撤回",
+   "[s] 送出焦點項（Enter 按下焦點按鈕）   [u] 10 秒內撤回",
    "j/k 移焦點   [n] 補充"
   ]
  }
@@ -273,12 +273,12 @@ test('decide: console cards list missing, or a stale cards source, is a red row 
   expect(decidePage.render(ctxOf(80, 24, { state: 'stale', header: '15 分鐘前', pending: [] } as never, con([], []))).body.map(text).join('\n')).toContain('本席待決資料不是最新：15 分鐘前')
 })
 
-test('decide: a long list never changes the frame height (overflow ends in the PgDn row)', () => {
+test('decide: a long list never changes the frame height (overflow ends in the more row)', () => {
   const many = Array.from({ length: 30 }, (_, i) => card('d-' + String(i).padStart(8, '0'), '第 ' + i + ' 張', 'PM', H))
   for (const [cols, rows] of SIZES) {
     const out = frameRows(decidePage, ctxOf(cols, rows, live(own80), con(many, [])))
     expect(out.length).toBe(rows)
-    expect(text(out[rows - 2 - actionRows(rows)])).toContain('PgDn')
+    expect(text(out[rows - 2 - actionRows(rows)])).toContain('還有')
   }
 })
 
@@ -340,14 +340,14 @@ test('decide keys: n opens the note mode; digits and letters are text until Ente
   expect(routeKey('2', { page: 'decide', paneFocus: true, focusedButton: false, textMode: false }).kind).toBe('close') // outside text mode the page digit wins again (routeKey: same page closes)
 })
 
-test('decide keys: [ ] move between cards (clamped), Space folds, f fills the prompt without sending', () => {
-  let n = press(']', NO_NAV, C160).nav
+test('decide keys: h l move between cards (clamped), z folds, f fills the prompt without sending', () => {
+  let n = press('l', NO_NAV, C160).nav
   expect(n.cursor).toBe(1)
-  n = press(']', press(']', n, C160).nav, C160).nav
+  n = press('l', press('l', n, C160).nav, C160).nav
   expect(n.cursor).toBe(2)
-  expect(press('[', n, C160).nav.cursor).toBe(1)
-  expect(press('[', NO_NAV, C160).nav.cursor).toBe(0)
-  expect(press(' ', NO_NAV, C160).nav.folded).toBe(true)
+  expect(press('h', n, C160).nav.cursor).toBe(1)
+  expect(press('h', NO_NAV, C160).nav.cursor).toBe(0)
+  expect(press('z', NO_NAV, C160).nav.folded).toBe(true)
   const f = press('f', NO_NAV, C160)
   expect(f.effect?.kind).toBe('fill')
   expect((f.effect as { text: string }).text.startsWith('[待決回覆]')).toBe(true)

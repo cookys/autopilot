@@ -1,6 +1,6 @@
 // fleet.test.ts — S2 (page 3 艦隊): the page drawn through frameRows from a fixture console, row for row against the golden rows (the mockups' 艦隊 drawings; the differences are listed in
 // the S2 receipt: the parsed snapshot carries no per-line running/waiting state, no host list), the fixed height at 160x40 / 120x30 / 80x24, the §5 no-source row, the red stale markers
-// with the full reason, and the key presses (Enter looks, Space folds, f fills the prompt and never sends).
+// with the full reason, and the key presses (o looks, z folds, f fills the prompt and never sends).
 import { test, expect } from 'claude-code/testing'
 import { frameRows, staleBadge as frameBadge, brokenRow as frameBroken, actionRows } from './frame'
 import { fleetPage, fleetView, FOLD_AT } from './fleet'
@@ -46,12 +46,12 @@ const GOLDEN: Record<string, string[]> = {
     " ⊘ revival · h5 卡住 閒置 3 時（idle） 3時",
     " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue） 40分",
     " ○ lane-00 · h1 無異常 — —",
-    " ○ 另 45 條折疊（6+45=51）· Space 展開",
+    " ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ──",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
     "",
-    "[Enter] 看 capacity · h1",
-    "[Space] 展開／收合其他 45 條",
+    "[o] 看 capacity · h1",
+    "[z] 展開／收合其他 45 條",
     "[f] 催辦填入提示列（不送出）",
   ],
   expanded80: [
@@ -63,7 +63,7 @@ const GOLDEN: Record<string, string[]> = {
     " ⊘ revival · h5 卡住 閒置 3 時（idle） 3時",
     " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue） 40分",
     " ○ lane-00 · h1 無異常 — —",
-    " ○ 已展開 45 條（6+45=51）· Space 收合",
+    " ○ 已展開 45 條（6+45=51）· z 收合",
     " ○ lane-01 · h1 無異常 — —",
     " ○ lane-02 · h1 無異常 — —",
     " ○ lane-03 · h1 無異常 — —",
@@ -73,10 +73,10 @@ const GOLDEN: Record<string, string[]> = {
     " ○ lane-07 · h1 無異常 — —",
     " ○ lane-08 · h1 無異常 — —",
     " ○ lane-09 · h1 無異常 — —",
-    "↓ 還有 38 列（PgDn）",
+    "↓ 還有 38 列",
     "",
-    "[Enter] 看 capacity · h1",
-    "[Space] 展開／收合其他 45 條",
+    "[o] 看 capacity · h1",
+    "[z] 展開／收合其他 45 條",
     "[f] 催辦填入提示列（不送出）",
   ],
   stale80: [
@@ -96,12 +96,12 @@ const GOLDEN: Record<string, string[]> = {
     " ⊘ revival · h5 卡住 閒置 3 時（idle） ✗3時",
     " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue） ✗40分",
     " ○ lane-00 · h1 無異常 — ✗—",
-    " ✗ ○ 另 45 條折疊（6+45=51）· Space 展開",
+    " ✗ ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ──",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
     "",
-    "[Enter] 看 capacity · h1（舊資料）",
-    "[Space] 展開／收合其他 45 條",
+    "[o] 看 capacity · h1（舊資料）",
+    "[z] 展開／收合其他 45 條",
     "[f] 催辦填入提示列（不送出）",
   ],
   folded120: [
@@ -127,12 +127,12 @@ const GOLDEN: Record<string, string[]> = {
     "  ⊘ revival · h5        卡住    game-lead     閒置 3 時（idle）                                                  3時",
     "  ⊘ hangar · h2         卡住    PM            01M7N2ZC 證據逾期 40 分（evidence_overdue）                        40分",
     "  ○ lane-00 · h1        無異常  PM            —                                                                  —",
-    "  ○ 另 45 條折疊（6+45=51）· Space 展開",
+    "  ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ─────────────────────────────────────────────────────────────────────────────────────────────────",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
     "▸ 焦點 capacity · h1：等待沒寫等誰（wait_untyped）",
-    "[Enter] 看 capacity · h1",
-    "[Space] 展開／收合其他 45 條",
+    "[o] 看 capacity · h1",
+    "[z] 展開／收合其他 45 條",
     "[f] 催辦填入提示列（不送出）",
   ],
   folded160: [
@@ -166,14 +166,14 @@ const GOLDEN: Record<string, string[]> = {
     "  ⊘ revival · h5        卡住    game-lead     閒置 3 時（idle）                                                                                          3時",
     "  ⊘ hangar · h2         卡住    PM            01M7N2ZC 證據逾期 40 分（evidence_overdue）                                                                40分",
     "  ○ lane-00 · h1        無異常  PM            —                                                                                                          —",
-    "  ○ 另 45 條折疊（6+45=51）· Space 展開",
+    "  ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
     "",
     "",
     "▸ 焦點 capacity · h1：等待沒寫等誰（wait_untyped）",
-    "[Enter] 看 capacity · h1",
-    "[Space] 展開／收合其他 45 條",
+    "[o] 看 capacity · h1",
+    "[z] 展開／收合其他 45 條",
     "[f] 催辦填入提示列（不送出）",
   ],
   nosrc80: [
@@ -257,7 +257,7 @@ test('fleet: the fold shows FOLD_AT lines and the count adds up to the total; ex
   expect(rowsText.some(r => r.includes('6+45=51'))).toBe(true)
   const open = fleetView(ctxOf(120, 30, snapOf()), EXPANDED).body.map(text)
   expect(open.filter(r => /lane-\d\d|capacity|hangar|lab ·|pinball|revival/.test(r)).length).toBe(51)
-  expect(open.some(r => r.includes('Space 收合'))).toBe(true)
+  expect(open.some(r => r.includes('z 收合'))).toBe(true)
 })
 
 test('fleet: stale tasks are red with the full reason on its own row, never cut, and every age and count carries the marker', () => {
@@ -272,17 +272,17 @@ test('fleet: stale tasks are red with the full reason on its own row, never cut,
   expect(text(frameOut[0])).toContain('tasks')
 })
 
-test('fleet: Enter looks (never expands), Space folds, f fills the prompt line and is not a send', () => {
+test('fleet: o looks (never expands), z folds, f fills the prompt line and is not a send', () => {
   const out = fleetPage.render(ctxOf(120, 30, snapOf()))
   const acts = out.actions.flat()
-  const see = acts.find(s => s.text.startsWith('[Enter]'))
+  const see = acts.find(s => s.text.startsWith('[o]'))
   expect(see?.press).toBe('fleet:see:capacity')
-  expect(acts.find(s => s.text.startsWith('[Space]'))?.press).toBe('fleet:fold')
+  expect(acts.find(s => s.text.startsWith('[z]'))?.press).toBe('fleet:fold')
   const nudge = acts.find(s => s.text.startsWith('[f]'))
   expect(nudge?.press?.startsWith('fill:')).toBe(true)
   expect(nudge?.press).toContain('capacity · h1')
   expect(text(out.actions[out.actions.length - 1])).toContain('不送出')
-  const moved = fleetView(ctxOf(120, 30, snapOf()), { focus: 2, expanded: false }).actions.flat().find(s => s.text.startsWith('[Enter]'))
+  const moved = fleetView(ctxOf(120, 30, snapOf()), { focus: 2, expanded: false }).actions.flat().find(s => s.text.startsWith('[o]'))
   expect(moved?.press).toBe('fleet:see:pinball')
 })
 

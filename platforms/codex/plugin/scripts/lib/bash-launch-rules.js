@@ -1581,7 +1581,7 @@ function detectRmSharedDirUnguarded(cmd, opts = {}) {
 const SECRET_RETAIN = new Set(['env', 'bash', 'sh', 'dash', 'zsh']);
 const SECRET_READERS = new Set(['cat', 'less', 'more', 'head', 'tail', 'bat', 'sed', 'awk', 'grep', 'rg', 'ugrep']);
 const SECRET_GREP = new Set(['grep', 'rg', 'ugrep']);
-const SECRET_MESSAGE = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行';
+const SECRET_MESSAGE = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行。整行指令一起判斷：同一行若也在建檔或寫檔，請把建檔和讀取拆成兩次執行。';
 function secretPath(word) {
   const base = path.posix.basename(word);
   return /^(?:\.env(?:\..*)?|.*\.env|config_main\.php|dbdef\.h|.*\.(?:pem|key|token)|auth\.json|credentials.*|.*secret.*|\.netrc|\.pgpass|my\.cnf)$/i.test(base)

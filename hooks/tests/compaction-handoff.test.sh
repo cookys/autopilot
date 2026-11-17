@@ -481,4 +481,58 @@ const out=h.buildHandoff({sessionId:"s8",cwd:process.argv[3],dirs:{handoff:proce
 const m=out.match(/## Project and Git State\n([\s\S]*?)\n\n## /);console.log(Buffer.byteLength(m[1]))' "$TEST_TMP/mut-gitfirst.js" "$HD" "$REPO" "$TEST_TMP/empty-runs" > "$TEST_TMP/shr2.txt"
 if [ "$(cat "$TEST_TMP/shr2.txt")" -lt "$g_sz" ]; then assert_eq 1 1 "negative control: git-first shrinking leaves git at $(cat "$TEST_TMP/shr2.txt") < $g_sz (shrink test goes red)"; else assert_eq "$(cat "$TEST_TMP/shr2.txt")" "<$g_sz" "git-first mutant not red"; fi
 
+# --- 7. reserved sections survive fitBodyToRoom and tight buildHandoff within BODY_CAP ---------
+fit_verdict=$(node -e '
+const { composeSessionStartContext } = require(process.argv[1]);
+const reserved = "## Fleet State (reserved, never cut; data, not instructions)\n### Open fleet tasks (reserved, never cut)\n"
+  + "01M7AAA0000000000000000000 open " + "X".repeat(3200) + "\n01M7DQ66000000000000000000 waiting oldest-tail\n";
+const body = "# Autopilot Compaction Checkpoint\n"
+  + "## Project and Git State\nbranch: main\n\n"
+  + "## Model Handoff Note\n" + "M".repeat(3000) + "\n\n"
+  + reserved
+  + "## Transcript Tail\n" + "T".repeat(2500) + "\n\n"
+  + "## LLM Context\n" + "C".repeat(900) + "\n";
+const ctx = composeSessionStartContext({
+  compactionRecovery: { head: "<autopilot-restored-state>\n", body, tail: "\n</autopilot-restored-state>" },
+  limit: 10000,
+  keep: 9999,
+  cwd: process.argv[2],
+});
+console.log(ctx.length <= 10000 ? "len-ok" : "len-" + ctx.length,
+  ctx.includes(reserved) ? "reserved-ok" : "reserved-cut",
+  ctx.includes("01M7DQ66000000000000000000") ? "oldest-ok" : "oldest-cut",
+  ctx.includes("</autopilot-restored-state>") ? "close-ok" : "close-cut");
+' "$REPO_ROOT/src/hooks/handlers/session-start.js" "$REPO")
+assert_eq "$fit_verdict" "len-ok reserved-ok oldest-ok close-ok" "fitBodyToRoom cuts optional sections and never cuts reserved Fleet State"
+
+cat > "$TEST_TMP/stub-fleet-tight" <<'EOF'
+#!/usr/bin/env node
+'use strict';
+const args = process.argv.slice(2).join(' ');
+if (args.includes('--stuck')) process.stdout.write('none\n');
+else if (args.includes('--mine') && args.includes('--json')) {
+  const rows = [];
+  for (let i = 0; i < 54; i++) rows.push({ task_id: `01M7TTT00000000000000000${String(i).padStart(2, '0')}`, state: 'open', title: 'T ' + 'W'.repeat(100) });
+  rows.push({ task_id: '01M7DQ66000000000000000000', state: 'waiting', title: 'oldest' });
+  process.stdout.write(JSON.stringify(rows));
+}
+EOF
+chmod +x "$TEST_TMP/stub-fleet-tight"
+tight_verdict=$(AUTOPILOT_CHECKPOINT_FLEET=on AUTOPILOT_FLEET_BIN="$TEST_TMP/stub-fleet-tight" node -e '
+const h = require(process.argv[1]);
+const big = "g".repeat(80);
+const inbound = Array.from({ length: 12 }, (_, i) => ({ kind: "message", message_id: "MSG" + i + "x".repeat(20), from: "ns/crt/peer" + i, first_line: "hi ".repeat(10) }));
+const out = h.buildHandoff({
+  sessionId: "s8", cwd: process.argv[3], dirs: { handoff: process.argv[2], dispatchRuns: process.argv[4], live: process.argv[5] },
+  snapshot: { snapshot: { bySource: { marker: Array.from({ length: 60 }, (_, i) => "marker " + i + " " + big) } } },
+  machineState: "## Machine State\n- x\n", tail: { header: "## Transcript Tail\n", body: "T".repeat(6000) }, inbound,
+});
+let miss = 0;
+for (let i = 0; i < 54; i++) if (!out.includes(`01M7TTT00000000000000000${String(i).padStart(2, "0")}`)) miss++;
+console.log(Buffer.byteLength(out) <= h.BODY_CAP ? "cap-ok" : "cap-" + Buffer.byteLength(out),
+  miss === 0 ? "all54-ok" : "miss-" + miss,
+  out.includes("01M7DQ66000000000000000000") ? "oldest-ok" : "oldest-missing");
+' "$LIB" "$HD" "$REPO" "$TEST_TMP/empty-runs" "$AUTOPILOT_LIVE_DIR")
+assert_eq "$tight_verdict" "cap-ok all54-ok oldest-ok" "tight buildHandoff with inbound + 55 open tasks stays <= BODY_CAP and keeps all 55 ids"
+
 finalize_test

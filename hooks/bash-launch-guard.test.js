@@ -1847,7 +1847,7 @@ test('rules 6 & 7 fail open (no throw) on deeply nested quote/substitution input
 });
 
 // Rule 8: never print secrets into a Bash transcript. Commands are hook input only; never executed.
-const secretDenial = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行 (secret-print)';
+const secretDenial = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行。整行指令一起判斷：同一行若也在建檔或寫檔，請把建檔和讀取拆成兩次執行。 (secret-print)';
 const secretDenied = [
   'docker inspect web', 'docker container inspect web',
   "docker inspect --format '{{.Config.Env}}' web",

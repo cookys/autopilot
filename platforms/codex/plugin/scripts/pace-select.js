@@ -767,6 +767,7 @@ function parseArgs(argv) {
     dispatch: false,
     namedRunner: null,
     namedModel: null,
+    namedEndpoint: null,
     files: [],
     diffFiles: [],
     excludeFamily: null,
@@ -786,7 +787,7 @@ function parseArgs(argv) {
       continue;
     }
     if (a === '--dispatch') { out.dispatch = true; continue; }
-    const extraFlags = { '--named-runner': 'namedRunner', '--named-model': 'namedModel', '--prompt-file': 'files', '--diff-file': 'diffFiles', '--exclude-family': 'excludeFamily', '--exclude-model': 'excludeModel' };
+    const extraFlags = { '--named-runner': 'namedRunner', '--named-model': 'namedModel', '--named-endpoint': 'namedEndpoint', '--prompt-file': 'files', '--diff-file': 'diffFiles', '--exclude-family': 'excludeFamily', '--exclude-model': 'excludeModel' };
     if (extraFlags[a]) {
       const val = argv[++i];
       if (!val || val.startsWith('--')) throw usageError('flag ' + a + ' requires a value');
@@ -843,15 +844,30 @@ function emitSelection(result, flags, pace, pools, roles) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return result.engine === null ? EXIT_PACE_UNKNOWN : EXIT_OK;
   }
-  if (flags.namedRunner || flags.namedModel) {
+  if (flags.namedRunner || flags.namedModel || flags.namedEndpoint) {
     const entries = mergePools(pools, roles);
+    const namedRunner = flags.namedRunner && flags.namedRunner !== 'auto' ? flags.namedRunner : null;
+    const runnerKeys = new Set();
+    if (namedRunner) {
+      const targetRunner = normRunner(namedRunner);
+      for (const e of Object.values(entries)) {
+        if (e && typeof e === 'object' && typeof e.key === 'string' && e.key && normRunner(e.runner) === targetRunner) {
+          runnerKeys.add(e.key);
+        }
+      }
+    }
+    const singleKeyRunner = runnerKeys.size === 1;
     const rows = (Array.isArray(pace?.rows) ? pace.rows : []).filter(row => {
       const entry = entries[row.pool];
       if (!entry || row.class === 'claude' || row.stale !== false || finiteNum(row.used_pct) === null) return false;
-      if (flags.namedRunner && flags.namedRunner !== 'auto' && normRunner(entry.runner) !== normRunner(flags.namedRunner)) return false;
-      return !flags.namedModel || sameEngine(entry.model, flags.namedModel)
-        || sameEngine(roles.role_models?.[flags.role]?.[entry.key] || '', flags.namedModel)
-        || (flags.namedRunner && flags.namedRunner !== 'agy' && flags.namedRunner === entry.runner);
+      if (namedRunner && normRunner(entry.runner) !== normRunner(namedRunner)) return false;
+      if (flags.namedEndpoint && (entry.endpoint || '') !== flags.namedEndpoint) return false;
+      if (flags.namedModel) {
+        return sameEngine(entry.model, flags.namedModel)
+          || sameEngine(roles.role_models?.[flags.role]?.[entry.key] || '', flags.namedModel)
+          || singleKeyRunner;
+      }
+      return Boolean(flags.namedEndpoint) || singleKeyRunner;
     }).sort((a, b) => a.used_pct - b.used_pct);
     const row = rows[0];
     if (row && row.used_pct >= (roles.PACE_CEILING_PCT ?? 85)) {
@@ -891,7 +907,7 @@ function main(argv = process.argv.slice(2), env = process.env) {
     process.stderr.write(`pace-select.js: --role is required\n${USAGE_TEXT}`);
     return EXIT_USAGE;
   }
-  const namedSeat = flags.dispatch && (flags.namedRunner || flags.namedModel);
+  const namedSeat = flags.dispatch && (flags.namedRunner || flags.namedModel || flags.namedEndpoint);
 
   let pools;
   let roles;

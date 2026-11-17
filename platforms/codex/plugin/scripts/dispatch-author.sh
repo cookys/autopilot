@@ -908,15 +908,18 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-# Default quota choice; nonempty runner/model (including strict roster tuples) are caller pins.
+# Default quota choice; nonempty runner/model/endpoint (including strict roster tuples) are caller pins.
 PACE_CHOICE_JSON=""
 _ps_args=(--dispatch --role author)
-[ -z "$RUNNER" ] || _ps_args+=(--named-runner "$RUNNER")
-[ -z "$MODEL" ] || _ps_args+=(--named-model "$MODEL")
-[ -z "$PROMPT_FILE" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")
+[ -z "${RUNNER:-}" ] || _ps_args+=(--named-runner "$RUNNER")
+[ -z "${MODEL:-}" ] || _ps_args+=(--named-model "$MODEL")
+[ -z "${ENDPOINT:-}" ] || _ps_args+=(--named-endpoint "$ENDPOINT")
+[ -z "${PROMPT_FILE:-}" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")
 _ps_parsed="$(node "$_AUTHOR_SELF_DIR/pace-select.js" "${_ps_args[@]}")" || die_precondition "pace selection refused"
 if [ -n "$_ps_parsed" ]; then
-  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r ENDPOINT; IFS= read -r _ps_full; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  _ps_ep=""
+  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r _ps_full; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
 fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|cursor)"

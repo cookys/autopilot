@@ -1847,3 +1847,68 @@ test('quota review: every comma-separated implementer family is excluded before 
   assert.equal(result.engine, 'grok');
   for (const engine of ['codex', 'agy']) assert.equal(result.candidates.find(c => c.engine === engine).reason, 'same_family');
 });
+
+test('cc-shim named pool matching: --named-endpoint isolates pools and runner-only fallback requires single key', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-ccshim-'));
+  try {
+    const pace = readFixture('quota-default.json');
+    pace.rows.push(
+      { pool: 'glm', class: 'other', used_pct: 90, expected_pct: 60, stale: false, hours_to_reset: 12, reset_at: '2026-11-17T12:00:00.000Z', seen_at: '2026-11-16T23:00:00Z', status: 'ok' },
+      { pool: 'minimax', class: 'other', used_pct: 0, expected_pct: 60, stale: false, hours_to_reset: 12, reset_at: '2026-11-17T12:00:00.000Z', seen_at: '2026-11-16T23:00:00Z', status: 'ok' },
+    );
+    const pacePath = path.join(dir, 'pace.json');
+    fs.writeFileSync(pacePath, JSON.stringify(pace));
+
+    // Direction 1: cc-shim + glm endpoint while glm >=85% and minimax 0% must still warn about glm.
+    for (const extra of [
+      ['--named-runner', 'cc-shim', '--named-endpoint', 'glm'],
+      ['--named-endpoint', 'glm'],
+      ['--named-runner', 'cc-shim', '--named-model', 'glm-5.3', '--named-endpoint', 'glm'],
+    ]) {
+      const r = cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, ...extra]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '');
+      assert.match(r.stderr, /pace: glm is at 90% of its 7-day window.*named by caller, dispatching anyway — codex has 87% left/);
+    }
+
+    // Direction 2: naming minimax while glm >=85% must not warn about glm.
+    for (const extra of [
+      ['--named-runner', 'cc-shim', '--named-model', 'MiniMax-M3.1-Flash'],
+      ['--named-runner', 'cc-shim', '--named-endpoint', 'minimax'],
+      ['--named-runner', 'cc-shim', '--named-model', 'MiniMax-M3.1-Flash', '--named-endpoint', 'minimax'],
+      ['--named-runner', 'cc-shim', '--named-endpoint', 'qwen_local'],
+      ['--named-runner', 'cc-shim'],
+    ]) {
+      const r = cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, ...extra]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '');
+      assert.equal(r.stderr, '', `expected no warning for ${extra.join(' ')}`);
+    }
+
+    // Single-key runner fallback still works for grok and codex, not multi-key agy.
+    const grokDiffModel = cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, '--named-runner', 'grok', '--named-model', 'grok-4.6']);
+    assert.equal(grokDiffModel.status, 0, grokDiffModel.stderr);
+    assert.match(grokDiffModel.stderr, /pace: grok is at 93% of its 7-day window/);
+
+    const multiPace = structuredClone(pace);
+    multiPace.rows.find(r => r.pool === 'codex A').used_pct = 90;
+    multiPace.rows.find(r => r.pool === 'agy').used_pct = 90;
+    multiPace.rows.push({ pool: 'agyclaude', class: 'other', used_pct: 0, expected_pct: 60, stale: false, hours_to_reset: 12, reset_at: '2026-11-17T12:00:00.000Z', seen_at: '2026-11-16T23:00:00Z', status: 'ok' });
+    const multiPacePath = path.join(dir, 'pace-multi.json');
+    fs.writeFileSync(multiPacePath, JSON.stringify(multiPace));
+
+    const codexOnly = cli(['--role', 'implementer', '--dispatch', '--pace', multiPacePath, '--named-runner', 'codex']);
+    assert.equal(codexOnly.status, 0, codexOnly.stderr);
+    assert.match(codexOnly.stderr, /pace: codex is at 90% of its 7-day window/);
+
+    const agyOnly = cli(['--role', 'implementer', '--dispatch', '--pace', multiPacePath, '--named-runner', 'agy']);
+    assert.equal(agyOnly.status, 0, agyOnly.stderr);
+    assert.equal(agyOnly.stderr, '');
+
+    // parseArgs rejects empty/missing --named-endpoint.
+    assert.equal(cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, '--named-endpoint', '']).status, 2);
+    assert.equal(cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, '--named-endpoint']).status, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

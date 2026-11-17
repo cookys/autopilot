@@ -532,7 +532,8 @@ for (const x of a) process.stdout.write(String(x).replace(/\n/g, " ") + "\n");
 
   # An unpinned retreat uses quota among cross-family seats first. Missing pace
   # retains the existing fallback chain; explicit roster overrides above stay pinned.
-  local _pace_args=(--dispatch --role reviewer --exclude-family "${IMPLEMENTER_FAMILY:-unknown}") _pace_pick=""
+  local _pace_args=(--dispatch --role reviewer) _pace_pick=""
+  [ -z "${IMPLEMENTER_FAMILY:-}" ] || _pace_args+=(--exclude-family "$IMPLEMENTER_FAMILY")
   [ -z "${MODEL:-}" ] || _pace_args+=(--exclude-model "$MODEL")
   [ -z "${SPEC_FILE:-}" ] || _pace_args+=(--prompt-file "$SPEC_FILE")
   [ -z "${DIFF_FILE:-}" ] || _pace_args+=(--diff-file "$DIFF_FILE")
@@ -606,16 +607,22 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
 }
 
-# Default quota choice; nonempty runner/model (including strict roster tuples) are caller pins.
+# Default quota choice; nonempty runner/model/endpoint (including strict roster tuples) are caller pins.
 _ps_args=(--dispatch --role reviewer)
-[ -z "$RUNNER" ] || _ps_args+=(--named-runner "$RUNNER")
-[ -z "$MODEL" ] || _ps_args+=(--named-model "$MODEL")
-[ -z "$SPEC_FILE" ] || _ps_args+=(--prompt-file "$SPEC_FILE")
-[ -z "$DIFF_FILE" ] || _ps_args+=(--diff-file "$DIFF_FILE")
-if [ -z "$RUNNER$MODEL" ]; then family_guard_bind; _ps_args+=(--exclude-family "$IMPLEMENTER_FAMILY"); fi
+[ -z "${RUNNER:-}" ] || _ps_args+=(--named-runner "$RUNNER")
+[ -z "${MODEL:-}" ] || _ps_args+=(--named-model "$MODEL")
+[ -z "${ENDPOINT:-}" ] || _ps_args+=(--named-endpoint "$ENDPOINT")
+[ -z "${SPEC_FILE:-}" ] || _ps_args+=(--prompt-file "$SPEC_FILE")
+[ -z "${DIFF_FILE:-}" ] || _ps_args+=(--diff-file "$DIFF_FILE")
+if [ -z "${RUNNER:-}${MODEL:-}${ENDPOINT:-}" ]; then
+  family_guard_bind
+  [ -z "${IMPLEMENTER_FAMILY:-}" ] || _ps_args+=(--exclude-family "$IMPLEMENTER_FAMILY")
+fi
 _ps_parsed="$(node "$_REVIEW_SELF_DIR/pace-select.js" "${_ps_args[@]}")" || die_precondition "pace selection refused"
 if [ -n "$_ps_parsed" ]; then
-  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r ENDPOINT; IFS= read -r _ps_full; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  _ps_ep=""
+  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r _ps_full; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
 fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor|opencode)"

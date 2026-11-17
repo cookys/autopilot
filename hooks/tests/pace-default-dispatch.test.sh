@@ -158,4 +158,114 @@ AUTOPILOT_AGY_REVIEW_RETREATED=1 AUTOPILOT_AGY_RETREAT_LOG_ROW="$(cat "$TEST_TMP
 assert_eq "$?" 0 'review retry completes through the real rail'
 result="$(node -e 'const m=require(process.argv[1]); console.log(m.pace_choice?.engine);' "$AUTOPILOT_DISPATCH_RUNS_DIR/pace-retreat-child.manifest.json")"
 assert_eq "$result" codex 'retry child retains pace_choice in its manifest'
+
+# Empty IMPLEMENTER_FAMILY must not pass an empty --exclude-family to pace-select.
+(
+  . "$TEST_TMP/picker.sh"
+  family_guard_bind() { :; }
+  _REVIEW_SELF_DIR="$REPO_ROOT/scripts"
+  IMPLEMENTER_FAMILY='' RUNNER=grok MODEL=grok-4.7 SPEC_FILE="$TEST_TMP/brief" DIFF_FILE="$TEST_TMP/diff"
+  family_guard_select '' '' '' '{}'
+  printf '%s|%s\n' "$_FG_RUNNER" "$_FG_ENGINE"
+) > "$TEST_TMP/pick-empty.out" 2> "$TEST_TMP/pick-empty.err"
+assert_eq "$?" 0 'reviewer retreat tolerates empty IMPLEMENTER_FAMILY'
+assert_contains "$(cat "$TEST_TMP/pick-empty.out")" 'codex|gpt-6.1-sol' 'reviewer retreat with empty IMPLEMENTER_FAMILY picks codex'
+
+node - "$REPO_ROOT/scripts/dispatch-review.sh" "$TEST_TMP/review-pace.sh" <<'NODE_REV_PACE'
+const fs=require('node:fs'); const s=fs.readFileSync(process.argv[2],'utf8');
+fs.writeFileSync(process.argv[3], s.slice(s.indexOf('# Default quota choice'), s.indexOf('[[ -n "$RUNNER" ]] || die_precondition')));
+NODE_REV_PACE
+(
+  RUNNER='' MODEL='' ENDPOINT='' SPEC_FILE="$TEST_TMP/brief" DIFF_FILE="$TEST_TMP/diff"
+  IMPLEMENTER_FAMILY='' _REVIEW_SELF_DIR="$REPO_ROOT/scripts"
+  family_guard_bind() { IMPLEMENTER_FAMILY=''; }
+  die_precondition() { echo "$*" >&2; exit 2; }
+  . "$TEST_TMP/review-pace.sh"
+  printf '%s|%s|%s\n' "$RUNNER" "$MODEL" "$ENDPOINT"
+) > "$TEST_TMP/rev-empty.out" 2> "$TEST_TMP/rev-empty.err"
+assert_eq "$?" 0 'review default selection tolerates empty IMPLEMENTER_FAMILY'
+assert_eq "$(cat "$TEST_TMP/rev-empty.out")" 'codex|gpt-6.1-sol|' 'review default selection chooses codex when IMPLEMENTER_FAMILY is empty'
+
+# --runner auto is unpinned and uses pace selection.
+(cd "$repo" && bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch feat/pace-auto --runner auto --prompt-file "$TEST_TMP/brief" --codex-bin "$TEST_TMP/bin/codex-impl" --run-id pace-hetero-auto) > "$TEST_TMP/hetero-auto.out" 2> "$TEST_TMP/hetero-auto.err"
+assert_eq "$?" 0 'hetero --runner auto runs pace selection and commits'
+assert_contains "$(cat "$TEST_TMP/hetero-auto.err")" 'pace: chose codex' 'hetero --runner auto chooses codex by pace'
+result="$(node -e 'const m=require(process.argv[1]); console.log(m.pace_choice?.engine)' "$AUTOPILOT_DISPATCH_RUNS_DIR/pace-hetero-auto.manifest.json" 2>/dev/null)"
+assert_eq "$result" codex 'hetero --runner auto manifest records pace_choice'
+
+# ENDPOINT without MODEL passes --named-endpoint instead of empty/default --named-model, and matches glm over minimax 0%.
+node - "$REPO_ROOT/scripts/fixtures/pace-select/quota-default.json" "$TEST_TMP/glm-over-minimax-zero.json" <<'NODE_GLM'
+const fs=require('node:fs');
+const p=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+p.rows.push(
+  { pool:'glm', class:'other', used_pct:90, expected_pct:60, stale:false, hours_to_reset:12, reset_at:'2026-11-17T12:00:00.000Z', seen_at:'2026-11-16T23:00:00Z', status:'ok' },
+  { pool:'minimax', class:'other', used_pct:0, expected_pct:60, stale:false, hours_to_reset:12, reset_at:'2026-11-17T12:00:00.000Z', seen_at:'2026-11-16T23:00:00Z', status:'ok' }
+);
+fs.writeFileSync(process.argv[3], JSON.stringify(p));
+NODE_GLM
+(
+  export AUTOPILOT_PACE_FILE="$TEST_TMP/glm-over-minimax-zero.json"
+  export AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOKEN=test-glm-token
+  STRICT_CONTRACT=0 RUNNER_SUPPLIED=1 MODEL_SUPPLIED=0
+  RUNNER=cc-shim MODEL='' ENDPOINT=glm PACE_ROLE=implementer
+  PROMPT_FILE="$TEST_TMP/brief" SELF_DIR="$REPO_ROOT/scripts"
+  die_precondition() { echo "$*" >&2; exit 2; }
+  . "$TEST_TMP/strict-pace.sh"
+  printf '%s|%s|%s\n' "$RUNNER" "$MODEL" "$ENDPOINT"
+) > "$TEST_TMP/ep-nomodel.out" 2> "$TEST_TMP/ep-nomodel.err"
+assert_eq "$?" 0 'hetero ENDPOINT without MODEL does not fail pace-select'
+assert_eq "$(cat "$TEST_TMP/ep-nomodel.out")" 'cc-shim||glm' 'hetero ENDPOINT without MODEL preserves runner and endpoint'
+assert_contains "$(cat "$TEST_TMP/ep-nomodel.err")" 'glm is at 90% of its 7-day window' 'hetero ENDPOINT without MODEL warns about glm even when minimax is 0%'
+
+(
+  export AUTOPILOT_PACE_FILE="$TEST_TMP/glm-over-minimax-zero.json"
+  export AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOKEN=test-glm-token
+  STRICT_CONTRACT=0 RUNNER_SUPPLIED=1 MODEL_SUPPLIED=0
+  RUNNER=auto MODEL='gemini-4-carbon-low' ENDPOINT=glm PACE_ROLE=implementer
+  PROMPT_FILE="$TEST_TMP/brief" SELF_DIR="$REPO_ROOT/scripts"
+  die_precondition() { echo "$*" >&2; exit 2; }
+  . "$TEST_TMP/strict-pace.sh"
+  printf '%s|%s|%s\n' "$RUNNER" "$MODEL" "$ENDPOINT"
+) > "$TEST_TMP/auto-ep.out" 2> "$TEST_TMP/auto-ep.err"
+assert_eq "$?" 0 'hetero --runner auto with ENDPOINT and no MODEL exits 0'
+assert_eq "$(cat "$TEST_TMP/auto-ep.out")" 'auto|gemini-4-carbon-low|glm' 'hetero --runner auto with ENDPOINT preserves endpoint'
+assert_contains "$(cat "$TEST_TMP/auto-ep.err")" 'glm is at 90% of its 7-day window' 'hetero --runner auto with ENDPOINT warns about glm'
+
+# Caller-supplied --endpoint is preserved in dispatch-author and dispatch-review when --runner/--model are absent.
+node - "$REPO_ROOT/scripts/dispatch-author.sh" "$TEST_TMP/author-pace.sh" <<'NODE_AUTH_PACE'
+const fs=require('node:fs'); const s=fs.readFileSync(process.argv[2],'utf8');
+fs.writeFileSync(process.argv[3], s.slice(s.indexOf('# Default quota choice'), s.indexOf('[[ -n "$RUNNER" ]] || die_precondition')));
+NODE_AUTH_PACE
+for rail in review author; do
+  (
+    export AUTOPILOT_PACE_FILE="$TEST_TMP/glm-over-minimax-zero.json"
+    export AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOKEN=test-glm-token
+    RUNNER='' MODEL='' ENDPOINT='glm' PROMPT_FILE="$TEST_TMP/brief" SPEC_FILE="$TEST_TMP/brief" DIFF_FILE="$TEST_TMP/diff"
+    IMPLEMENTER_FAMILY=google _REVIEW_SELF_DIR="$REPO_ROOT/scripts" _AUTHOR_SELF_DIR="$REPO_ROOT/scripts"
+    family_guard_bind() { :; }
+    die_precondition() { echo "$*" >&2; exit 2; }
+    . "$TEST_TMP/$rail-pace.sh"
+    printf '%s|%s|%s\n' "$RUNNER" "$MODEL" "$ENDPOINT"
+  ) > "$TEST_TMP/$rail-ep-only.out" 2> "$TEST_TMP/$rail-ep-only.err"
+  assert_eq "$?" 0 "$rail pace block with caller --endpoint exits 0"
+  assert_eq "$(cat "$TEST_TMP/$rail-ep-only.out")" '||glm' "$rail preserves caller --endpoint when --runner/--model absent"
+  assert_contains "$(cat "$TEST_TMP/$rail-ep-only.err")" 'glm is at 90% of its 7-day window' "$rail warns on over-ceiling caller --endpoint"
+done
+
+: > "$PACE_SENTINEL_LOG"
+AUTOPILOT_PACE_FILE="$TEST_TMP/glm-over-minimax-zero.json" \
+AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOKEN=test-glm-token \
+  bash "$REPO_ROOT/scripts/dispatch-author.sh" --prompt-file "$TEST_TMP/brief" --endpoint glm --timeout 10s \
+  > "$TEST_TMP/author-ep-real.out" 2> "$TEST_TMP/author-ep-real.err"
+assert_eq "$?" 2 'real author rail with --endpoint only does not discard endpoint or pick codex'
+assert_contains "$(cat "$TEST_TMP/author-ep-real.out")" '--runner is required' 'real author rail with --endpoint only refuses missing runner'
+assert_contains "$(cat "$TEST_TMP/author-ep-real.err")" 'glm is at 90% of its 7-day window' 'real author rail with --endpoint only warns on glm quota'
+AUTOPILOT_PACE_FILE="$TEST_TMP/glm-over-minimax-zero.json" \
+AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid/v1 AUTOPILOT_ENDPOINT_GLM_TOKEN=test-glm-token \
+  bash "$REPO_ROOT/scripts/dispatch-review.sh" --diff-file "$TEST_TMP/diff" --spec-file "$TEST_TMP/brief" --endpoint glm --timeout 10s \
+  > "$TEST_TMP/review-ep-real.out" 2> "$TEST_TMP/review-ep-real.err"
+assert_eq "$?" 2 'real review rail with --endpoint only does not discard endpoint or pick codex'
+assert_contains "$(cat "$TEST_TMP/review-ep-real.out")" '--runner is required' 'real review rail with --endpoint only refuses missing runner'
+assert_contains "$(cat "$TEST_TMP/review-ep-real.err")" 'glm is at 90% of its 7-day window' 'real review rail with --endpoint only warns on glm quota'
+assert_eq "" "$(cat "$PACE_SENTINEL_LOG" 2>/dev/null)" 'caller --endpoint without --runner/--model never spawns codex sentinel'
 finalize_test

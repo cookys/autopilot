@@ -3099,12 +3099,20 @@ DISPATCH_LANE_JSON=null # read from the original brief before it is repacked; cr
 declare -F dispatch_lane_json >/dev/null 2>&1 && DISPATCH_LANE_JSON="$(dispatch_lane_json "$PROMPT_FILE")"
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "$PROMPT_FILE" # the child (its cost-tracker rows) inherits lane + fleet task
 # Pace is the default only for an unpinned seat. Strict contracts carry their own tuple.
-_ps_args=(--dispatch --role "${PACE_ROLE:-implementer}" --prompt-file "$PROMPT_FILE")
-if [ "$RUNNER_SUPPLIED" -eq 1 ] || [ "$STRICT_CONTRACT" -eq 1 ]; then _ps_args+=(--named-runner "$RUNNER"); fi
-if [ "$MODEL_SUPPLIED" -eq 1 ] || [ -n "$ENDPOINT" ] || [ "$STRICT_CONTRACT" -eq 1 ]; then _ps_args+=(--named-model "$MODEL"); fi
+_ps_args=(--dispatch --role "${PACE_ROLE:-implementer}")
+[ -z "${PROMPT_FILE:-}" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")
+if [ -n "${RUNNER:-}" ] && [ "$RUNNER" != "auto" ] && { [ "$RUNNER_SUPPLIED" -eq 1 ] || [ "$STRICT_CONTRACT" -eq 1 ]; }; then
+  _ps_args+=(--named-runner "$RUNNER")
+fi
+if [ -n "${MODEL:-}" ] && { [ "$MODEL_SUPPLIED" -eq 1 ] || [ "$STRICT_CONTRACT" -eq 1 ]; }; then
+  _ps_args+=(--named-model "$MODEL")
+fi
+[ -z "${ENDPOINT:-}" ] || _ps_args+=(--named-endpoint "$ENDPOINT")
 _ps_parsed="$(node "$SELF_DIR/pace-select.js" "${_ps_args[@]}")" || die_precondition "pace selection refused"
 if [ -n "$_ps_parsed" ]; then
-  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r ENDPOINT; IFS= read -r ENGINE_CHOICE_JSON; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  _ps_ep=""
+  { IFS= read -r RUNNER; IFS= read -r MODEL; IFS= read -r _ps_ep; IFS= read -r ENGINE_CHOICE_JSON; IFS= read -r PACE_CHOICE_JSON; } <<< "$_ps_parsed"
+  [ -n "${ENDPOINT:-}" ] || ENDPOINT="$_ps_ep"
   MODEL_IS_DEFAULT=0
 fi
 # Saved before skill-pack / scaffold prepend text, which would hide image magic bytes.

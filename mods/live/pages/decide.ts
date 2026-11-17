@@ -194,11 +194,6 @@ function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wid
   if (decideDialog(d)) out.push([seg(wide ? '  ' : ''), dimSeg(t('page.decide.in_dialog'))])
   else {
     out.push(...optionRows(d, nav, ctx, wide))
-    if (d.options.length > MAX_OPTS) {
-      if (nav.opt !== null) out.push([mark, seg(t('page.decide.opt_focus', { n: nav.opt + 1 }))])
-      out.push([seg('')])
-      out.push([seg(wide ? '  ' : ''), seg(t('page.decide.opt6_h1', { n: MAX_OPTS + 1 }))], [seg(wide ? '  ' : ''), seg(t('page.decide.opt6_h2', { n: MAX_OPTS + 1 }))], [seg(wide ? '  ' : ''), seg(t('page.decide.opt6_h3'))])
-    }
   }
   if (d.options.length <= MAX_OPTS) out.push(...noteRow(d, nav, ctx, wide))
   else if (nav.textMode) out.push(...noteRow(d, nav, ctx, wide))

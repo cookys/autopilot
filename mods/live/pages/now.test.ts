@@ -103,7 +103,7 @@ test('now: golden at 160x40, 120x30 and 80x24 matches the mockup rows', async ()
   expect(diffRows(flat(content(120, 30, con())), GOLD_120)).toEqual([])
   expect(diffRows(flat(content(80, 24, con())), GOLD_80)).toEqual([])
   expect(content(160, 40, con())[2]).toMatch(/2 時前$/)
-  expect(actionsOf(160, 40, con())).toEqual(['→ 待決 3 張卡等你（最舊 40 分）  [2]', '→ 殘留 2 項可清  [8]', '[Enter] 看焦點項'])
+  expect(actionsOf(160, 40, con())).toEqual(['→ 待決 3 張卡等你（最舊 40 分）  [2]', '→ 殘留 2 項可清  [8]'])
 })
 
 test('now: negative control, a broken golden row is reported (the comparator is not vacuous)', async () => {

@@ -285,7 +285,6 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   }
   const residue = live?.detail.residue?.reapable ?? 0
   if (residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }])
-  if (con !== null && exceptionRows(ctx, con, wide).length > 0) actions.push([dim(t('page.now.enter'))])
   return { body, actions }
 }
 // the seat's name comes from the quota feed's own row; unknown until the first good `seats --quota`

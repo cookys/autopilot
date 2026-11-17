@@ -30,8 +30,9 @@ test('keys: Enter on a focused Button is that Button only, on every page (never 
   expect(bad.join(' ')).toBe('')
 })
 
-test('keys: decide, Enter with nothing focused = submit (once)', () => {
-  expect(routeKey('Enter', st({ page: 'decide' }))).toEqual({ kind: 'submit' })
+test('keys: decide, Enter with nothing focused = none (submit is s only); decide, s = submit', () => {
+  expect(routeKey('Enter', st({ page: 'decide' }))).toEqual({ kind: 'none' })
+  expect(routeKey('s', st({ page: 'decide' }))).toEqual({ kind: 'submit' })
 })
 
 test('keys: Esc with focus in the prompt box is passed to Claude Code on every page and in text mode', () => {

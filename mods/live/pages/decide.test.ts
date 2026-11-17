@@ -173,11 +173,6 @@ const GOLD = {
    "[a] 全合  [b] 依序  [c] 兩批",
    "[d] 前兩支  [e] 先不要",
    "[f6] 第 6 項：只合 hotfix",
-   "▸ 焦點在第 6 項",
-   "",
-   "第 6 項不能用 a–e 選：",
-   "按 j/k 把焦點移到第 6 項，",
-   "再按 Enter 選它（不用滑鼠）",
    "── 其他待決 0 ──"
   ],
   "actions": [
@@ -293,7 +288,7 @@ test('decide: option 6 of an old card, text mode and a held card draw their own 
   const wide = ctxOf(160, 40, live(own160), con([], []), nav({ textMode: true, textBuf: '先 12' })).valueOf() as never
   const o = decidePage.render(wide)
   expect(o.body.map(text).some(r => r.includes('補充   先 12_'))).toBe(true)
-  expect(o.actions.map(text)).toEqual(['輸入補充中（數字字母都是文字）', '[Enter] 存補充   [Esc] 放棄'])
+  expect(o.actions.map(text)).toEqual(['輸入補充中（數字字母都是文字）', 'Enter 存補充   [Esc] 放棄'])
   const held = decidePage.render(ctxOf(160, 40, live(own160), con([], []), nav({ picks: { 'd-89fe394f': 0 }, hold: { 'd-89fe394f': nowMs - 3500 } })))
   expect(held.actions.map(text)[0]).toBe('已送出 a，7 秒內按 u 撤回')
 })
@@ -310,11 +305,11 @@ test('decide keys: a-e pick an option of the focused card, a letter past its opt
   expect(r.nav.picks).toEqual({ 'd-89fe394f': 1 })
   const none = press('Enter', NO_NAV, C160)
   expect(none.effect).toBe(null)
-  const sent = press('Enter', r.nav, C160)
+  const sent = press('s', r.nav, C160)
   expect(sent.effect?.kind).toBe('send')
   expect((sent.effect as { line: string }).line.startsWith('d-89fe394f｜')).toBe(true)
   expect(sent.nav.hold).toEqual({ 'd-89fe394f': nowMs })
-  expect(press('Enter', sent.nav, C160).effect).toBe(null) // already held: no second send
+  expect(press('s', sent.nav, C160).effect).toBe(null) // already held: no second send
   expect(press('a', sent.nav, C160).nav.picks).toEqual({ 'd-89fe394f': 1 }) // a held card takes no pick
   const late = press('u', sent.nav, C160, nowMs + 10000)
   expect(late.effect).toBe(null)
@@ -360,10 +355,10 @@ test('decide keys: an old 6-option card — j moves the focus to option 6, Enter
   let r = press('j', NO_NAV, c)
   expect(r.nav.opt).toBe(5)
   expect(press('j', r.nav, c).nav.opt).toBe(5)
-  r = press('Enter', r.nav, c)
+  r = press('s', r.nav, c)
   expect(r.effect).toBe(null)
   expect(r.nav.picks).toEqual({ 'd-2b7710cc': 5 })
-  const s = press('Enter', r.nav, c)
+  const s = press('s', r.nav, c)
   expect(s.effect?.kind).toBe('send')
   expect(press('k', r.nav, c).nav.opt).toBe(null)
   expect(press('f', NO_NAV, c).nav.picks).toEqual({})

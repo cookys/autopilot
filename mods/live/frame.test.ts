@@ -133,9 +133,10 @@ test('pane strip: no `›` next chip anywhere, every digit tab is a Button with 
   expect(framed.find(n => n.kind === 'Box' && n.props.height === 30)).toBeDefined()
 })
 
-// every visible key hint `[x]` in a framed page's action rows (all states are the page.<id>.* strings, in both locales) is a hotkey the page binds. [Enter] and [Esc] are the
-// host's own keys (Enter presses the focused Button, an Input ends on Enter / Esc), so they are not hotkeys and are not checked.
-test('key hints: every [x] in a framed page string is one of that page\'s bound hotkeys, in en and zh-TW', () => {
+// every visible key hint `[x]` in a framed page's action rows (all states are the page.<id>.* strings, in both locales) is a hotkey the page binds. [Esc] is the
+// host's own key (an Input ends on Esc), so it is not a hotkey and is not checked. [Enter] is never a hint and never a bound hotkey: the host cannot bind Enter
+// (it presses the focused Button), so a hint "[Enter]" on any framed page is a failure.
+test('key hints: every [x] in a framed page string is one of that page\'s bound hotkeys, in en and zh-TW; no page draws [Enter]', () => {
   const bad: string[] = []
   for (const [loc, table] of [['en', EN], ['zh-TW', ZH_TW]] as const) {
     for (const [id, text] of Object.entries(table as Record<string, string>)) {
@@ -143,7 +144,7 @@ test('key hints: every [x] in a framed page string is one of that page\'s bound 
       if (m === null) continue
       const bound = pageHotkeys(m[1])
       for (const h of text.matchAll(/\[([^\]\s]+)\]/g)) {
-        if (h[1] === 'Enter' || h[1] === 'Esc' || h[1].includes('{')) continue
+        if (h[1] === 'Esc' || h[1].includes('{')) continue
         if (!bound.includes(h[1])) bad.push(loc + ' ' + id + ' [' + h[1] + ']')
       }
     }

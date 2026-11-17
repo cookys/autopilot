@@ -17,7 +17,7 @@ export function routeKey(key: string, st: KeyState): KeyAction {
   if (!st.paneFocus) return { kind: 'pass' } // focus in the prompt box: every key goes back to Claude Code (g2 folds A5); enter the pane with Ctrl+x Tab or a click
   if (st.textMode) return key === 'Enter' ? { kind: 'text_save' } : key === 'Escape' ? { kind: 'text_cancel' } : { kind: 'text', ch: key }
   if (key === 'Escape') return { kind: 'close' }
-  if (key === 'Enter') return st.focusedButton ? { kind: 'button' } : st.page === 'decide' ? { kind: 'submit' } : { kind: 'none' }
+  if (key === 'Enter') return st.focusedButton ? { kind: 'button' } : { kind: 'none' } // submit is s only, never Enter
   const target = /^[1-8]$/.test(key) ? PAGES[Number(key) - 1]?.id : SPECIAL[key]
   if (target !== undefined) return target === st.page ? { kind: 'close' } : { kind: 'page', to: target }
   if (/^[1-9]$/.test(key)) return { kind: 'none' } // a digit with no page yet

@@ -20,3 +20,16 @@
 (fail) O4 shell quick row: the 待決 tab with cards has the four keys 0 / 7 / 8 / 9 and no open-panel button (desktop)
 == GREEN (band Buttons have no hotkey; keys h l z s o i; labels follow) 2026-11-17T18:59:31Z
 mods/live/run-tests.sh: 1387 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty)
+== RED (drop the Enter hints the host cannot bind: frame [Enter] check, before locale/page edits) 2026-11-17T19:11:28Z
+== mods/live/run-tests.sh (full)
+(fail) key hints: every [x] in a framed page string is one of that page's bound hotkeys, in en and zh-TW; no page draws [Enter]
+ 1386 pass
+ 16 fail
+== RED (keys: decide Enter with nothing focused must be none; s is submit; keys.ts still submits on Enter) 2026-11-17T19:11:28Z
+== mods/live/run-tests.sh (full)
+(fail) keys: decide, Enter with nothing focused = none (submit is s only); decide, s = submit
+ 1385 pass
+ 17 fail
+== GREEN (page.now.enter and page.decide.opt6_*/opt_focus removed; keys Enter = none; text hint Enter not bracketed; decide tests send with s) 2026-11-17T19:11:28Z
+== mods/live/run-tests.sh (full)
+mods/live/run-tests.sh: 1387 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty)

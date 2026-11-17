@@ -1,0 +1,41 @@
+# S2 fleet page receipt, 2026-11-18 (base cdf73aad6)
+## green
+mods/live/pages/fleet.test.ts:
+(pass) fleet golden: 80x24 folded, expanded, stale and no-source rows [8.88ms]
+(pass) fleet golden: 120x30 and 160x40 folded [2.24ms]
+(pass) fleet: every state is exactly H rows at 160x40, 120x30, 80x24, actions within A, the strip last [14.19ms]
+(pass) fleet: a null console and a null live render the no-source row and do not throw; actions are empty [0.87ms]
+(pass) fleet: the fold shows FOLD_AT lines and the count adds up to the total; expanded draws all of them [1.69ms]
+(pass) fleet: stale tasks are red with the full reason on its own row, never cut, and every age and count carries the marker [1.32ms]
+(pass) fleet: Enter looks (never expands), Space folds, f fills the prompt line and is not a send [1.01ms]
+(pass) fleet: the local badge helpers equal frame.ts (a value import would be a cycle through pages/index.ts) [0.70ms]
+ 8 pass
+ 0 fail
+Ran 8 tests across 1 file. [0.47s]
+## negative control: golden folded80 row '產線 51 ●6 ⋯40 ⊘5' changed to 52
+mods/live/pages/fleet.test.ts:
+(fail) fleet golden: 80x24 folded, expanded, stale and no-source rows [6.53ms]
+(pass) fleet golden: 120x30 and 160x40 folded [2.06ms]
+(pass) fleet: every state is exactly H rows at 160x40, 120x30, 80x24, actions within A, the strip last [13.84ms]
+(pass) fleet: a null console and a null live render the no-source row and do not throw; actions are empty [0.88ms]
+(pass) fleet: the fold shows FOLD_AT lines and the count adds up to the total; expanded draws all of them [1.84ms]
+(pass) fleet: stale tasks are red with the full reason on its own row, never cut, and every age and count carries the marker [1.33ms]
+(pass) fleet: Enter looks (never expands), Space folds, f fills the prompt line and is not a send [0.95ms]
+(pass) fleet: the local badge helpers equal frame.ts (a value import would be a cycle through pages/index.ts) [0.66ms]
+ 7 pass
+ 1 fail
+Ran 8 tests across 1 file. [0.49s]
+## reverted, green again
+mods/live/pages/fleet.test.ts:
+(pass) fleet golden: 80x24 folded, expanded, stale and no-source rows [8.17ms]
+(pass) fleet golden: 120x30 and 160x40 folded [1.80ms]
+(pass) fleet: every state is exactly H rows at 160x40, 120x30, 80x24, actions within A, the strip last [12.13ms]
+(pass) fleet: a null console and a null live render the no-source row and do not throw; actions are empty [0.67ms]
+(pass) fleet: the fold shows FOLD_AT lines and the count adds up to the total; expanded draws all of them [1.49ms]
+(pass) fleet: stale tasks are red with the full reason on its own row, never cut, and every age and count carries the marker [1.13ms]
+(pass) fleet: Enter looks (never expands), Space folds, f fills the prompt line and is not a send [0.82ms]
+(pass) fleet: the local badge helpers equal frame.ts (a value import would be a cycle through pages/index.ts) [0.52ms]
+ 8 pass
+ 0 fail
+Ran 8 tests across 1 file. [0.45s]
+## base vs tip: base cdf73aad6 live.test.ts 'the file did not load' (isolated run, 300 s timeout, pre-existing); tip same single failure; all other files 258 pass 0 fail (fleet/frame/keys/golden/fixed-height)

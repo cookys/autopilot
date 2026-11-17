@@ -16,6 +16,41 @@
 const fs = require('fs');
 const path = require('path');
 
+// The checkout's HEAD, without a git spawn on the per-tool-call path. A linked worktree keeps HEAD in its gitdir and shared refs in
+// commondir; packed refs and detached HEADs count too. Missing/unreadable metadata (including a non-git install) is unknown, never stale.
+function readCodeVersion(root) {
+  try {
+    let gitdir = path.join(root, '.git');
+    if (fs.statSync(gitdir).isFile()) {
+      const pointer = /^gitdir: (.+)$/.exec(fs.readFileSync(gitdir, 'utf8').trim());
+      if (!pointer) return null;
+      gitdir = path.resolve(root, pointer[1]);
+    }
+    const dirs = [gitdir];
+    try { dirs.push(path.resolve(gitdir, fs.readFileSync(path.join(gitdir, 'commondir'), 'utf8').trim())); } catch (_error) { /* ordinary checkout */ }
+    let ref = 'HEAD';
+    for (let depth = 0; depth < 8; depth += 1) {
+      let value = null;
+      for (const dir of dirs) {
+        try { value = fs.readFileSync(path.join(dir, ref), 'utf8').trim(); break; } catch (_error) { /* try the common dir */ }
+      }
+      if (value === null && ref !== 'HEAD') {
+        for (const dir of dirs) {
+          try {
+            const line = fs.readFileSync(path.join(dir, 'packed-refs'), 'utf8').split('\n').find((l) => l.endsWith(` ${ref}`));
+            if (line) { value = line.split(' ')[0]; break; }
+          } catch (_error) { /* no packed refs */ }
+        }
+      }
+      if (typeof value !== 'string') return null;
+      if (/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value)) return value;
+      if (!value.startsWith('ref: refs/')) return null;
+      ref = value.slice(5);
+    }
+  } catch (_error) { /* unknown */ }
+  return null;
+}
+
 function projectOf(argv) {
   for (let i = 5; i < argv.length; i += 1) {
     if (argv[i] === '--project') return argv[i + 1] === undefined ? null : argv[i + 1];
@@ -50,4 +85,4 @@ function classifyWatcher(pid, key, lockPath) {
   }
 }
 
-module.exports = { classifyWatcher, projectOf };
+module.exports = { classifyWatcher, projectOf, readCodeVersion };

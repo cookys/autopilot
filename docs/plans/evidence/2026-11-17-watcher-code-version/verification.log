@@ -1,0 +1,206 @@
+RED: baseline b28dbc5e661625dfc12531c20545eed2741491a2; regression tests added before production edits
+$ bash hooks/tests/runs-watch-autostart.test.sh
+exit=1
+FAIL [runs-watch-autostart] WATCHVER writer records the plugin checkout HEAD at start: expected 'b28dbc5e661625dfc12531c20545eed2741491a2', got 'undefined'
+FAIL [runs-watch-autostart] (a) same root, recorded A and current HEAD B: stale with reason code_version: expected 'stale:code_version', got 'current:'
+FAIL [runs-watch-autostart] (a) run() reaps and relaunches the different-code watcher: expected != '3149909', got '3149909'
+FAIL [runs-watch-autostart] (a) replacement records the current HEAD: expected 'b28dbc5e661625dfc12531c20545eed2741491a2', got '0000000000000000000000000000000000000000'
+FAIL [runs-watch-autostart] (d) legacy writer without code version and known current HEAD: stale once: expected 'stale:code_version', got 'current:'
+FAIL [runs-watch-autostart] (d) run() reaps and relaunches the legacy watcher: expected != '3149909', got '3149909'
+FAIL [runs-watch-autostart] (d) relaunched legacy writer records HEAD: expected 'b28dbc5e661625dfc12531c20545eed2741491a2', got 'undefined'
+FAIL [runs-watch-autostart] 59 passed, 7 failed
+      - WATCHVER writer records the plugin checkout HEAD at start: expected 'b28dbc5e661625dfc12531c20545eed2741491a2', got 'undefined'
+      - (a) same root, recorded A and current HEAD B: stale with reason code_version: expected 'stale:code_version', got 'current:'
+      - (a) run() reaps and relaunches the different-code watcher: expected != '3149909', got '3149909'
+      - (a) replacement records the current HEAD: expected 'b28dbc5e661625dfc12531c20545eed2741491a2', got '0000000000000000000000000000000000000000'
+      - (d) legacy writer without code version and known current HEAD: stale once: expected 'stale:code_version', got 'current:'
+      - (d) run() reaps and relaunches the legacy watcher: expected != '3149909', got '3149909'
+      - (d) relaunched legacy writer records HEAD: expected 'b28dbc5e661625dfc12531c20545eed2741491a2', got 'undefined'
+
+RED: new writer field rejected by the existing strict schema, before schema extension
+$ node --test scripts/p7-watcher-data.test.js
+exit=1
+✖ D1 envelope carries host-today brain-tier spend (cents) and the cap from config (118.494243ms)
+✔ D1 env override AUTOPILOT_COST_FUSE_DAILY_USD wins over config; default cap 150; missing costs file -> null (190.454292ms)
+✔ D1 cost-fuse hook and the watcher report the same number for the same fixture (142.631383ms)
+✔ D1 subagent rows are excluded from the brain spend (one-shot sum and incremental reader); main rows still count (14.360415ms)
+✔ D1 incremental: an appended row is picked up; a shrunk or rotated file is re-read in full (277.265039ms)
+✔ D1 an existing but unreadable costs file publishes null, never 0 (96.688372ms)
+✔ D2 ladder = latest ladder row under the repo+root filter; telemetry stays out of rows/count (1.850824ms)
+✔ D2 the watcher publishes ladder in <project>.decisions.json (109.810394ms)
+✔ D3 residue: one clean-integrated + one dirty worktree -> reapable_worktrees 1; throttled; second call within 60 s does not spawn (393.153336ms)
+✔ D3 residue: clean-integrated + missing-dir + dirty -> reapable_worktrees 2 (a deleted worktree directory counts) (347.217338ms)
+✔ D3 residue: a watcher whose cwd is a linked worktree still scans the main worktree (the main checkout is never counted) (403.098007ms)
+✔ R4 residue: the list comes from the scan, sizes by path from the auto record, auto_* from the record; the fact validates and the schema id is unchanged (370.171731ms)
+✔ R4 residue: no auto record (never ran, or residue.auto_reap=false) still publishes the list; a foreign/garbage record adds no auto_* and no sizes (1437.1263ms)
+✔ R4 residue: an entry the person resolved after the last auto run disappears on the next scan (the stale auto record does not resurrect it) (689.380832ms)
+✔ R4 residue: an old archive-ref (kind archive-ref, class archive-old) is counted and published, schema-valid (0.853456ms)
+✔ R4 residue: needs_human rows are capped at 20 (the count keeps the true total) (0.719224ms)
+✔ R4 residue: the watcher never starts du (sizes come only from the auto record) (0.262654ms)
+✔ D3 residue: a failing scan keeps the previous file and logs one line (380.423401ms)
+✔ D3 residue: if the main worktree cannot be resolved the publish is skipped (old file kept, one log line) (324.81798ms)
+✔ D3 residue: the watcher tick spawns the scan off the tick and publishes the file (460.265658ms)
+✔ D4 stage walk file equals `stage-graph.js nodes` for the marker; unchanged marker -> no rewrite (252.769735ms)
+✔ D4 a new task_seq resets the published walk: no carry-over of the previous task, task_seq published and schema-valid (186.284953ms)
+✔ D4 a new-task marker without size removes the previous task stage file (101.040505ms)
+✔ D4 a marker that disappears takes its own stage file with it (104.81973ms)
+✔ C spend history: the first tick samples host_today_brain_usd into <live>/runs/spend-history.json (host-wide file, schema-valid) (92.71396ms)
+✔ C spend history: at most one sample per 15 minutes, however many ticks (and a second watcher reads the throttle from the file) (2999.970281ms)
+✔ C spend history: no costs file (null spend) adds no sample and creates no file; an unreadable history is started afresh (386.496894ms)
+✔ C spend history: samples older than 48 hours are dropped, the rest kept in order; the count is capped; the write leaves no tmp file (0.909622ms)
+✔ C spend history: a history above MAX_SAMPLES is cut to the newest MAX_SAMPLES on the next write (2.226191ms)
+✔ C spend history: a last sample dated more than 15 minutes in the future is stale: dropped, and sampling resumes (0.569672ms)
+✔ C spend history: a write failure is logged once and the tick survives (0.284736ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 30
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10092.760529
+
+✖ failing tests:
+
+test at scripts/p7-watcher-data.test.js:77:1
+✖ D1 envelope carries host-today brain-tier spend (cents) and the cap from config (118.494243ms)
+  AssertionError [ERR_ASSERTION]: envelope still validates against runs-live.schema.json
+
+  false !== true
+
+      at TestContext.<anonymous> (<worktree>/scripts/p7-watcher-data.test.js:90:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+FINAL
+$ bash hooks/tests/runs-watch-autostart.test.sh
+exit=0
+PASS [runs-watch-autostart] 77 assertions
+
+FINAL
+$ bash hooks/tests/open-decision-card-visible.test.sh
+exit=0
+hooks/tests/open-decision-card-visible.test.sh: line 188: 482385 Killed                     ( exec -a x "$@" )
+hooks/tests/open-decision-card-visible.test.sh: line 188: 483139 Killed                     ( exec -a x "$@" )
+hooks/tests/open-decision-card-visible.test.sh: line 188: 484939 Killed                     ( exec -a x "$@" )
+hooks/tests/open-decision-card-visible.test.sh: line 39: 486166 Killed                     ( exec -a x "$@" )
+PASS [open-decision-card-visible] 51 assertions
+
+FINAL
+$ node --test hooks/runs-watch-hotpath.test.js
+exit=0
+✔ PostToolUse hot path (watcher alive; throttle holding): no mkdir, no chmod, nothing printed (95.750717ms)
+✔ negative control: the temp-directory ensure moved into the hot path makes a directory and is caught (201.805672ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 369.692318
+
+FINAL
+$ node --test scripts/watch-code-change.test.js
+exit=0
+✔ fingerprint: nothing changed -> false, every time (2.851048ms)
+✔ fingerprint: an edited src/status module -> true (1.821269ms)
+✔ fingerprint: a plugin.json (version) edit -> true; render-review-page.js edit -> true (1.452344ms)
+✔ fingerprint: a bare touch (mtime moves, bytes equal) is not a change (0.835303ms)
+✔ fingerprint: a file removed, or a new src/status module added -> true (1.228052ms)
+✔ fingerprint: hashes only when the stat signature moved (a quiet tick reads no file contents) (0.767205ms)
+✔ fingerprint: an unreadable src/status listing is no change (fail-open) (0.735555ms)
+✔ watcher tick: unchanged code keeps ticking; changed code returns exit code_changed, logs the reason, publishes nothing more (113.637971ms)
+✔ watcher tick with the real fingerprint over a temp code root: an edit exits within ONE tick (102.319122ms)
+✔ process: a real watcher exits cleanly and frees its lock after its code changes; the lock is then takeable (1710.597346ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2178.937485
+
+FINAL
+$ node --test scripts/p7-watcher-data.test.js
+exit=0
+✔ D1 envelope carries host-today brain-tier spend (cents) and the cap from config (121.161735ms)
+✔ D1 env override AUTOPILOT_COST_FUSE_DAILY_USD wins over config; default cap 150; missing costs file -> null (206.078355ms)
+✔ D1 cost-fuse hook and the watcher report the same number for the same fixture (146.970622ms)
+✔ D1 subagent rows are excluded from the brain spend (one-shot sum and incremental reader); main rows still count (16.278054ms)
+✔ D1 incremental: an appended row is picked up; a shrunk or rotated file is re-read in full (328.750353ms)
+✔ D1 an existing but unreadable costs file publishes null, never 0 (105.140203ms)
+✔ D2 ladder = latest ladder row under the repo+root filter; telemetry stays out of rows/count (1.934442ms)
+✔ D2 the watcher publishes ladder in <project>.decisions.json (112.860917ms)
+✔ D3 residue: one clean-integrated + one dirty worktree -> reapable_worktrees 1; throttled; second call within 60 s does not spawn (392.663814ms)
+✔ D3 residue: clean-integrated + missing-dir + dirty -> reapable_worktrees 2 (a deleted worktree directory counts) (434.436764ms)
+✔ D3 residue: a watcher whose cwd is a linked worktree still scans the main worktree (the main checkout is never counted) (376.352608ms)
+✔ R4 residue: the list comes from the scan, sizes by path from the auto record, auto_* from the record; the fact validates and the schema id is unchanged (396.323765ms)
+✔ R4 residue: no auto record (never ran, or residue.auto_reap=false) still publishes the list; a foreign/garbage record adds no auto_* and no sizes (1503.474184ms)
+✔ R4 residue: an entry the person resolved after the last auto run disappears on the next scan (the stale auto record does not resurrect it) (772.445226ms)
+✔ R4 residue: an old archive-ref (kind archive-ref, class archive-old) is counted and published, schema-valid (0.805838ms)
+✔ R4 residue: needs_human rows are capped at 20 (the count keeps the true total) (0.721127ms)
+✔ R4 residue: the watcher never starts du (sizes come only from the auto record) (0.263556ms)
+✔ D3 residue: a failing scan keeps the previous file and logs one line (459.08695ms)
+✔ D3 residue: if the main worktree cannot be resolved the publish is skipped (old file kept, one log line) (379.900566ms)
+✔ D3 residue: the watcher tick spawns the scan off the tick and publishes the file (511.490323ms)
+✔ D4 stage walk file equals `stage-graph.js nodes` for the marker; unchanged marker -> no rewrite (242.670091ms)
+✔ D4 a new task_seq resets the published walk: no carry-over of the previous task, task_seq published and schema-valid (183.51065ms)
+✔ D4 a new-task marker without size removes the previous task stage file (99.347257ms)
+✔ D4 a marker that disappears takes its own stage file with it (105.427324ms)
+✔ C spend history: the first tick samples host_today_brain_usd into <live>/runs/spend-history.json (host-wide file, schema-valid) (102.170532ms)
+✔ C spend history: at most one sample per 15 minutes, however many ticks (and a second watcher reads the throttle from the file) (1767.253414ms)
+✔ C spend history: no costs file (null spend) adds no sample and creates no file; an unreadable history is started afresh (193.177007ms)
+✔ C spend history: samples older than 48 hours are dropped, the rest kept in order; the count is capped; the write leaves no tmp file (0.918839ms)
+✔ C spend history: a history above MAX_SAMPLES is cut to the newest MAX_SAMPLES on the next write (1.834443ms)
+✔ C spend history: a last sample dated more than 15 minutes in the future is stale: dropped, and sampling resumes (0.464033ms)
+✔ C spend history: a write failure is logged once and the tick survives (0.270469ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9158.153853
+
+FINAL
+$ bash scripts/sync-all.sh
+exit=0
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --write
+{"mode":"generate","changed":false,"ran":["sync-agent-bodies","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","hook-harness-matrix"],"skipped":["sync-version (no generate cmd)","check-canonical-invariants (no generate cmd)","check-readme-parity (no generate cmd)","check-hook-inventory (no generate cmd)","check-config-docs (no generate cmd)","check-quota-adapters (no generate cmd)","check-claude-md-inventory (no generate cmd)","check-js-syntax (no generate cmd)","check-backlog-entries (no generate cmd)","check-contract-schema (no generate cmd)","check-profile-catalog (no generate cmd)"],"unknown_only":[],"failures":[],"ok":true}
+
+FINAL
+$ bash scripts/sync-all.sh --check
+exit=0
+── sync-version: node scripts/sync-version.js --check
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh --check
+── check-canonical-invariants: bash scripts/check-canonical-invariants.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh --check
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh --check
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh --check
+── check-readme-parity: node scripts/check-readme-parity.js
+── check-hook-inventory: node scripts/check-hook-inventory.js --check
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --check
+── check-config-docs: node scripts/check-config-docs.js
+── check-quota-adapters: node scripts/check-quota-adapters.js
+── check-claude-md-inventory: node scripts/check-claude-md-inventory.js
+── check-js-syntax: node scripts/check-js-syntax.js
+── check-backlog-entries: node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md
+── check-contract-schema: node scripts/check-contract-schema.js
+── check-profile-catalog: node scripts/build-profile-payload.js catalog --check --repo .
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","hook-harness-matrix","check-config-docs","check-quota-adapters","check-claude-md-inventory","check-js-syntax","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}

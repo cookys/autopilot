@@ -1,0 +1,352 @@
+BASELINE at 8ae6f4e74
+$ node --test hooks/plain-session-marker.test.js
+✔ writer: bare `set` writes level:null with a job root, a project key and no mission fields (122.996054ms)
+✔ writer: --level none --phase X is a usage error naming stage-advance.js; nothing is written (121.03891ms)
+✔ writer: root_run_id is --root-run-id, else AUTOPILOT_ROOT_RUN_ID, else minted (358.61147ms)
+✔ writer: invalid --level is still refused (only absent / none mean plain) (106.640349ms)
+✔ status prints level "none" for a plain marker; the file keeps null (335.67566ms)
+✔ phase removed: `set --phase` over a plain marker exits 2 with the replacement named, bytes untouched; no phase fields are ever written (357.044471ms)
+✔ phase removed: `set --phase` with no marker at all exits 2 and creates nothing (112.691558ms)
+✔ writer: `set --level l3` over a plain marker works and mints a job root; `clear` removes a plain marker (650.629148ms)
+✔ readMarker / root: a plain marker is not an orchestrator marker; its root (when given) is read by `root` (574.631274ms)
+✔ dispatch-hetero classifier: a plain marker is skipped as if absent; the run gets past the session-mode gate (7877.595119ms)
+✔ dispatch-hetero classifier: an expired or other-repo plain marker is skipped too; l5 in the same dir still blocks (4807.437383ms)
+✔ dispatch-hetero classifier: a malformed level (not null, not l3-l6) stays invalid (6701.789242ms)
+✔ dispatch-hetero campaign bridge: a plain marker is INACTIVE (no TypeError); a malformed level still fails (102.482052ms)
+✔ orchestrator-edit-gate: plain marker behaves exactly like no marker (l5 control still denies) (296.616183ms)
+✔ foreman-guard: plain marker behaves exactly like no marker (l5 control denies a subagent Monitor) (345.51506ms)
+✔ run-approval-gate: plain marker behaves exactly like no marker (l5 control asks) (357.826693ms)
+✔ codex pre-effect: a plain marker reads as "session marker absent" (same denial as no marker) (208.928136ms)
+✔ decision-ledger stamp: a plain marker without a root stamps null like no marker; with a root it stamps it (276.554112ms)
+✔ next-pick: readMarker stays l3-l6 only, but next-pick's activity probe uses the plain-inclusive readSessionRecord (REPAIR-2: a plain session records its picks; behaviour pinned in next-pick.test.sh) (121.796135ms)
+✔ mission-routing-admission: a plain marker file is observed as absent (never corrupt) (233.61429ms)
+✔ validateManagedDevFlowAdmission: a plain marker is rejected as "session marker absent" (116.784031ms)
+✔ dispatch-author gate: a plain marker does not block non-strict dispatch (same as l3 / absent) (110.950671ms)
+✔ runs-watch liveness: a plain marker does not keep the watcher alive; an l5 marker does (313.608516ms)
+✔ runs-watch cost: a plain marker adds no session to the cost summary; an l3 marker does (266.317785ms)
+✔ dev-flow plain marker: the watcher inputs resolve the session project and stage from it (115.980519ms)
+✔ ensure: startup in an opted-in repo creates a plain marker (level null, minted root, project key) (126.211466ms)
+✔ ensure: compact and resume never overwrite a live l5 marker (bytes unchanged) (508.625918ms)
+✔ ensure: a live plain marker is kept byte-for-byte on compact/resume (234.533961ms)
+✔ ensure: an expired marker is replaced by a plain one; a corrupt marker is left alone (244.460866ms)
+✔ ensure: a repo that is not opted in gets no marker (and no pointer) (110.66814ms)
+✔ ensure: the knob =0 disables it; UserPromptSubmit and a payload without a session id never create one (246.433148ms)
+✔ ensure: a worktree of an opted-in main checkout is opted in; a path that normalises to another session id is refused (145.938556ms)
+✔ UserPromptSubmit in a repo that is not opted in spawns no git; an opted-in repo still does (169.004231ms)
+✔ UserPromptSubmit opt-in signals without git: knob =1, config in the work tree or the main checkout, this session's own marker (336.837107ms)
+✔ negative control: the real ~/.autopilot session-mode dir, live pointer and /run/user autopilot dir are untouched (31.942913ms)
+✔ watcher tick publishes the session phase (source session) from a plain marker for an unbound dev-flow scope (425.778793ms)
+✖ ensure on the fast path: SessionStart with the watcher alive still creates the plain marker, with no git spawn (180.045823ms)
+✔ ensure on the fast path: an active l5 marker is kept byte-for-byte on startup/resume/compact (542.18334ms)
+✔ ensure on the fast path: a cache without repo_root (written before MARKER) takes the full path once and is rewritten (193.772891ms)
+✔ plain set refuses to replace an unexpired l3 / l5 / l6 marker of this session (exit 2, points at clear, bytes unchanged) (971.183416ms)
+✔ plain set replaces an expired l5 marker and a plain marker; clear keeps its close-evidence rule for l5 (332.820907ms)
+✔ live-pointer: a plain marker changes nothing (pointer content equals the no-marker pointer; it only derives the dir) (245.87639ms)
+✔ autopilot-engine: its only marker access is validateManagedDevFlowAdmission, which treats a plain marker like an absent file (l3 control differs) (325.890162ms)
+✔ context-budget, transcript-reader-lib, merge/cli, repair-lineage-cleanup do not read the session-mode marker (source pin: nothing to mis-handle level null) (1.799537ms)
+ℹ tests 44
+ℹ suites 0
+ℹ pass 43
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30696.881956
+
+✖ failing tests:
+
+test at hooks/plain-session-marker.test.js:717:1
+✖ ensure on the fast path: SessionStart with the watcher alive still creates the plain marker, with no git spawn (180.045823ms)
+  AssertionError [ERR_ASSERTION]: zero-spawn: git never ran
+
+  true !== false
+
+      at TestContext.<anonymous> (<worktree>/hooks/plain-session-marker.test.js:726:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+EXIT_CODE=1
+
+STEP 3: current-watcher fixture only
+$ node --test hooks/plain-session-marker.test.js
+✔ writer: bare `set` writes level:null with a job root, a project key and no mission fields (87.10556ms)
+✔ writer: --level none --phase X is a usage error naming stage-advance.js; nothing is written (77.166263ms)
+✔ writer: root_run_id is --root-run-id, else AUTOPILOT_ROOT_RUN_ID, else minted (266.008553ms)
+✔ writer: invalid --level is still refused (only absent / none mean plain) (78.814826ms)
+✔ status prints level "none" for a plain marker; the file keeps null (252.088543ms)
+✔ phase removed: `set --phase` over a plain marker exits 2 with the replacement named, bytes untouched; no phase fields are ever written (214.010492ms)
+✔ phase removed: `set --phase` with no marker at all exits 2 and creates nothing (81.084357ms)
+✔ writer: `set --level l3` over a plain marker works and mints a job root; `clear` removes a plain marker (425.272821ms)
+✔ readMarker / root: a plain marker is not an orchestrator marker; its root (when given) is read by `root` (384.407123ms)
+✔ dispatch-hetero classifier: a plain marker is skipped as if absent; the run gets past the session-mode gate (7218.681349ms)
+✔ dispatch-hetero classifier: an expired or other-repo plain marker is skipped too; l5 in the same dir still blocks (4896.23078ms)
+✔ dispatch-hetero classifier: a malformed level (not null, not l3-l6) stays invalid (6753.475756ms)
+✔ dispatch-hetero campaign bridge: a plain marker is INACTIVE (no TypeError); a malformed level still fails (125.551554ms)
+✔ orchestrator-edit-gate: plain marker behaves exactly like no marker (l5 control still denies) (337.818173ms)
+✔ foreman-guard: plain marker behaves exactly like no marker (l5 control denies a subagent Monitor) (294.759047ms)
+✔ run-approval-gate: plain marker behaves exactly like no marker (l5 control asks) (325.369723ms)
+✔ codex pre-effect: a plain marker reads as "session marker absent" (same denial as no marker) (187.448977ms)
+✔ decision-ledger stamp: a plain marker without a root stamps null like no marker; with a root it stamps it (225.402454ms)
+✔ next-pick: readMarker stays l3-l6 only, but next-pick's activity probe uses the plain-inclusive readSessionRecord (REPAIR-2: a plain session records its picks; behaviour pinned in next-pick.test.sh) (113.822357ms)
+✔ mission-routing-admission: a plain marker file is observed as absent (never corrupt) (225.520465ms)
+✔ validateManagedDevFlowAdmission: a plain marker is rejected as "session marker absent" (84.883969ms)
+✔ dispatch-author gate: a plain marker does not block non-strict dispatch (same as l3 / absent) (89.562655ms)
+✔ runs-watch liveness: a plain marker does not keep the watcher alive; an l5 marker does (278.889868ms)
+✔ runs-watch cost: a plain marker adds no session to the cost summary; an l3 marker does (245.244851ms)
+✔ dev-flow plain marker: the watcher inputs resolve the session project and stage from it (109.685691ms)
+✔ ensure: startup in an opted-in repo creates a plain marker (level null, minted root, project key) (115.107035ms)
+✔ ensure: compact and resume never overwrite a live l5 marker (bytes unchanged) (482.284759ms)
+✔ ensure: a live plain marker is kept byte-for-byte on compact/resume (234.02831ms)
+✔ ensure: an expired marker is replaced by a plain one; a corrupt marker is left alone (251.365752ms)
+✔ ensure: a repo that is not opted in gets no marker (and no pointer) (90.21342ms)
+✔ ensure: the knob =0 disables it; UserPromptSubmit and a payload without a session id never create one (224.3484ms)
+✔ ensure: a worktree of an opted-in main checkout is opted in; a path that normalises to another session id is refused (122.544855ms)
+✔ UserPromptSubmit in a repo that is not opted in spawns no git; an opted-in repo still does (150.252416ms)
+✔ UserPromptSubmit opt-in signals without git: knob =1, config in the work tree or the main checkout, this session's own marker (374.195453ms)
+✔ negative control: the real ~/.autopilot session-mode dir, live pointer and /run/user autopilot dir are untouched (35.882077ms)
+✔ watcher tick publishes the session phase (source session) from a plain marker for an unbound dev-flow scope (401.578162ms)
+✔ ensure on the fast path: SessionStart with the watcher alive still creates the plain marker, with no git spawn (180.978949ms)
+✔ ensure on the fast path: an active l5 marker is kept byte-for-byte on startup/resume/compact (365.823054ms)
+✔ ensure on the fast path: a cache without repo_root (written before MARKER) takes the full path once and is rewritten (161.797906ms)
+✔ plain set refuses to replace an unexpired l3 / l5 / l6 marker of this session (exit 2, points at clear, bytes unchanged) (968.313725ms)
+✔ plain set replaces an expired l5 marker and a plain marker; clear keeps its close-evidence rule for l5 (328.261175ms)
+✔ live-pointer: a plain marker changes nothing (pointer content equals the no-marker pointer; it only derives the dir) (196.470148ms)
+✔ autopilot-engine: its only marker access is validateManagedDevFlowAdmission, which treats a plain marker like an absent file (l3 control differs) (321.588726ms)
+✔ context-budget, transcript-reader-lib, merge/cli, repair-lineage-cleanup do not read the session-mode marker (source pin: nothing to mis-handle level null) (0.988921ms)
+ℹ tests 44
+ℹ suites 0
+ℹ pass 44
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 28647.649741
+EXIT_CODE=0
+
+STEP 4: legacy replacement regression
+$ node --test hooks/plain-session-marker.test.js
+✔ writer: bare `set` writes level:null with a job root, a project key and no mission fields (91.816998ms)
+✔ writer: --level none --phase X is a usage error naming stage-advance.js; nothing is written (81.206357ms)
+✔ writer: root_run_id is --root-run-id, else AUTOPILOT_ROOT_RUN_ID, else minted (228.888364ms)
+✔ writer: invalid --level is still refused (only absent / none mean plain) (76.308779ms)
+✔ status prints level "none" for a plain marker; the file keeps null (220.524743ms)
+✔ phase removed: `set --phase` over a plain marker exits 2 with the replacement named, bytes untouched; no phase fields are ever written (202.107508ms)
+✔ phase removed: `set --phase` with no marker at all exits 2 and creates nothing (81.323778ms)
+✔ writer: `set --level l3` over a plain marker works and mints a job root; `clear` removes a plain marker (368.384115ms)
+✔ readMarker / root: a plain marker is not an orchestrator marker; its root (when given) is read by `root` (330.641034ms)
+✔ dispatch-hetero classifier: a plain marker is skipped as if absent; the run gets past the session-mode gate (5319.917506ms)
+✔ dispatch-hetero classifier: an expired or other-repo plain marker is skipped too; l5 in the same dir still blocks (3128.582043ms)
+✔ dispatch-hetero classifier: a malformed level (not null, not l3-l6) stays invalid (3759.74982ms)
+✔ dispatch-hetero campaign bridge: a plain marker is INACTIVE (no TypeError); a malformed level still fails (63.207149ms)
+✔ orchestrator-edit-gate: plain marker behaves exactly like no marker (l5 control still denies) (186.64791ms)
+✔ foreman-guard: plain marker behaves exactly like no marker (l5 control denies a subagent Monitor) (181.803932ms)
+✔ run-approval-gate: plain marker behaves exactly like no marker (l5 control asks) (173.472551ms)
+✔ codex pre-effect: a plain marker reads as "session marker absent" (same denial as no marker) (93.074245ms)
+✔ decision-ledger stamp: a plain marker without a root stamps null like no marker; with a root it stamps it (148.304249ms)
+✔ next-pick: readMarker stays l3-l6 only, but next-pick's activity probe uses the plain-inclusive readSessionRecord (REPAIR-2: a plain session records its picks; behaviour pinned in next-pick.test.sh) (59.779487ms)
+✔ mission-routing-admission: a plain marker file is observed as absent (never corrupt) (133.953147ms)
+✔ validateManagedDevFlowAdmission: a plain marker is rejected as "session marker absent" (48.02366ms)
+✔ dispatch-author gate: a plain marker does not block non-strict dispatch (same as l3 / absent) (55.444498ms)
+✔ runs-watch liveness: a plain marker does not keep the watcher alive; an l5 marker does (160.504232ms)
+✔ runs-watch cost: a plain marker adds no session to the cost summary; an l3 marker does (159.057419ms)
+✔ dev-flow plain marker: the watcher inputs resolve the session project and stage from it (66.37993ms)
+✔ ensure: startup in an opted-in repo creates a plain marker (level null, minted root, project key) (74.235707ms)
+✔ ensure: compact and resume never overwrite a live l5 marker (bytes unchanged) (296.221009ms)
+✔ ensure: a live plain marker is kept byte-for-byte on compact/resume (135.129432ms)
+✔ ensure: an expired marker is replaced by a plain one; a corrupt marker is left alone (145.880567ms)
+✔ ensure: a repo that is not opted in gets no marker (and no pointer) (61.813536ms)
+✔ ensure: the knob =0 disables it; UserPromptSubmit and a payload without a session id never create one (149.996695ms)
+✔ ensure: a worktree of an opted-in main checkout is opted in; a path that normalises to another session id is refused (83.203105ms)
+✔ UserPromptSubmit in a repo that is not opted in spawns no git; an opted-in repo still does (92.712173ms)
+✔ UserPromptSubmit opt-in signals without git: knob =1, config in the work tree or the main checkout, this session's own marker (236.73841ms)
+✔ negative control: the real ~/.autopilot session-mode dir, live pointer and /run/user autopilot dir are untouched (26.255899ms)
+✔ watcher tick publishes the session phase (source session) from a plain marker for an unbound dev-flow scope (272.466268ms)
+✔ ensure on the fast path: SessionStart with the watcher alive still creates the plain marker, with no git spawn (102.602799ms)
+✔ ensure replaces a legacy watcher record without plugin_code_version instead of taking the fast path (243.626595ms)
+✔ ensure on the fast path: an active l5 marker is kept byte-for-byte on startup/resume/compact (202.399667ms)
+✔ ensure on the fast path: a cache without repo_root (written before MARKER) takes the full path once and is rewritten (101.268217ms)
+✔ plain set refuses to replace an unexpired l3 / l5 / l6 marker of this session (exit 2, points at clear, bytes unchanged) (557.80316ms)
+✔ plain set replaces an expired l5 marker and a plain marker; clear keeps its close-evidence rule for l5 (187.495355ms)
+✔ live-pointer: a plain marker changes nothing (pointer content equals the no-marker pointer; it only derives the dir) (122.131165ms)
+✔ autopilot-engine: its only marker access is validateManagedDevFlowAdmission, which treats a plain marker like an absent file (l3 control differs) (200.143992ms)
+✔ context-budget, transcript-reader-lib, merge/cli, repair-lineage-cleanup do not read the session-mode marker (source pin: nothing to mis-handle level null) (0.687063ms)
+ℹ tests 45
+ℹ suites 0
+ℹ pass 45
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18915.943234
+EXIT_CODE=0
+
+NEGATIVE CONTROL: test copy retains plugin_code_version; must reject current as legacy
+$ node --test --test-name-pattern=ensure replaces a legacy watcher record hooks/plain-session-marker.legacy-control.test.js
+✖ ensure replaces a legacy watcher record without plugin_code_version instead of taking the fast path (68.557459ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 227.592556
+
+✖ failing tests:
+
+test at hooks/plain-session-marker.legacy-control.test.js:735:1
+✖ ensure replaces a legacy watcher record without plugin_code_version instead of taking the fast path (68.557459ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  'current' !== 'stale'
+
+      at TestContext.<anonymous> (<worktree>/hooks/plain-session-marker.legacy-control.test.js:747:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'current',
+    expected: 'stale',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+EXIT_CODE=1 (expected 1)
+
+MERGE local origin/develop=b28dbc5e661625dfc12531c20545eed2741491a2
+$ git merge --no-ff origin/develop
+Already up to date.
+EXIT_CODE=0
+
+STEP 4: regenerate derived files after merge
+$ bash scripts/sync-all.sh
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --write
+{"mode":"generate","changed":false,"ran":["sync-agent-bodies","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","hook-harness-matrix"],"skipped":["sync-version (no generate cmd)","check-canonical-invariants (no generate cmd)","check-readme-parity (no generate cmd)","check-hook-inventory (no generate cmd)","check-config-docs (no generate cmd)","check-quota-adapters (no generate cmd)","check-claude-md-inventory (no generate cmd)","check-js-syntax (no generate cmd)","check-backlog-entries (no generate cmd)","check-contract-schema (no generate cmd)","check-profile-catalog (no generate cmd)"],"unknown_only":[],"failures":[],"ok":true}
+EXIT_CODE=0
+
+STEP 5: FINAL VERIFICATION
+
+$ node --test hooks/plain-session-marker.test.js
+✔ writer: bare `set` writes level:null with a job root, a project key and no mission fields (84.468527ms)
+✔ writer: --level none --phase X is a usage error naming stage-advance.js; nothing is written (83.352006ms)
+✔ writer: root_run_id is --root-run-id, else AUTOPILOT_ROOT_RUN_ID, else minted (340.434748ms)
+✔ writer: invalid --level is still refused (only absent / none mean plain) (119.23768ms)
+✔ status prints level "none" for a plain marker; the file keeps null (347.836911ms)
+✔ phase removed: `set --phase` over a plain marker exits 2 with the replacement named, bytes untouched; no phase fields are ever written (277.207452ms)
+✔ phase removed: `set --phase` with no marker at all exits 2 and creates nothing (132.465457ms)
+✔ writer: `set --level l3` over a plain marker works and mints a job root; `clear` removes a plain marker (568.483182ms)
+✔ readMarker / root: a plain marker is not an orchestrator marker; its root (when given) is read by `root` (497.893317ms)
+✔ dispatch-hetero classifier: a plain marker is skipped as if absent; the run gets past the session-mode gate (8798.625357ms)
+✔ dispatch-hetero classifier: an expired or other-repo plain marker is skipped too; l5 in the same dir still blocks (4892.062205ms)
+✔ dispatch-hetero classifier: a malformed level (not null, not l3-l6) stays invalid (6178.095061ms)
+✔ dispatch-hetero campaign bridge: a plain marker is INACTIVE (no TypeError); a malformed level still fails (105.44031ms)
+✔ orchestrator-edit-gate: plain marker behaves exactly like no marker (l5 control still denies) (335.160731ms)
+✔ foreman-guard: plain marker behaves exactly like no marker (l5 control denies a subagent Monitor) (341.361282ms)
+✔ run-approval-gate: plain marker behaves exactly like no marker (l5 control asks) (331.700268ms)
+✔ codex pre-effect: a plain marker reads as "session marker absent" (same denial as no marker) (178.174271ms)
+✔ decision-ledger stamp: a plain marker without a root stamps null like no marker; with a root it stamps it (260.59323ms)
+✔ next-pick: readMarker stays l3-l6 only, but next-pick's activity probe uses the plain-inclusive readSessionRecord (REPAIR-2: a plain session records its picks; behaviour pinned in next-pick.test.sh) (126.142286ms)
+✔ mission-routing-admission: a plain marker file is observed as absent (never corrupt) (246.96577ms)
+✔ validateManagedDevFlowAdmission: a plain marker is rejected as "session marker absent" (84.114691ms)
+✔ dispatch-author gate: a plain marker does not block non-strict dispatch (same as l3 / absent) (105.20082ms)
+✔ runs-watch liveness: a plain marker does not keep the watcher alive; an l5 marker does (300.563873ms)
+✔ runs-watch cost: a plain marker adds no session to the cost summary; an l3 marker does (285.39366ms)
+✔ dev-flow plain marker: the watcher inputs resolve the session project and stage from it (108.568078ms)
+✔ ensure: startup in an opted-in repo creates a plain marker (level null, minted root, project key) (125.734939ms)
+✔ ensure: compact and resume never overwrite a live l5 marker (bytes unchanged) (501.303737ms)
+✔ ensure: a live plain marker is kept byte-for-byte on compact/resume (214.183507ms)
+✔ ensure: an expired marker is replaced by a plain one; a corrupt marker is left alone (246.553814ms)
+✔ ensure: a repo that is not opted in gets no marker (and no pointer) (93.192137ms)
+✔ ensure: the knob =0 disables it; UserPromptSubmit and a payload without a session id never create one (231.885827ms)
+✔ ensure: a worktree of an opted-in main checkout is opted in; a path that normalises to another session id is refused (137.440612ms)
+✔ UserPromptSubmit in a repo that is not opted in spawns no git; an opted-in repo still does (158.072936ms)
+✔ UserPromptSubmit opt-in signals without git: knob =1, config in the work tree or the main checkout, this session's own marker (340.04819ms)
+✔ negative control: the real ~/.autopilot session-mode dir, live pointer and /run/user autopilot dir are untouched (31.454524ms)
+✔ watcher tick publishes the session phase (source session) from a plain marker for an unbound dev-flow scope (409.513468ms)
+✔ ensure on the fast path: SessionStart with the watcher alive still creates the plain marker, with no git spawn (190.32423ms)
+✔ ensure replaces a legacy watcher record without plugin_code_version instead of taking the fast path (406.06052ms)
+✔ ensure on the fast path: an active l5 marker is kept byte-for-byte on startup/resume/compact (372.177925ms)
+✔ ensure on the fast path: a cache without repo_root (written before MARKER) takes the full path once and is rewritten (174.066148ms)
+✔ plain set refuses to replace an unexpired l3 / l5 / l6 marker of this session (exit 2, points at clear, bytes unchanged) (984.547741ms)
+✔ plain set replaces an expired l5 marker and a plain marker; clear keeps its close-evidence rule for l5 (365.551152ms)
+✔ live-pointer: a plain marker changes nothing (pointer content equals the no-marker pointer; it only derives the dir) (225.410328ms)
+✔ autopilot-engine: its only marker access is validateManagedDevFlowAdmission, which treats a plain marker like an absent file (l3 control differs) (327.688738ms)
+✔ context-budget, transcript-reader-lib, merge/cli, repair-lineage-cleanup do not read the session-mode marker (source pin: nothing to mis-handle level null) (1.246346ms)
+ℹ tests 45
+ℹ suites 0
+ℹ pass 45
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30943.444637
+EXIT_CODE=0
+
+$ bash hooks/tests/runs-watch-autostart.test.sh
+PASS [runs-watch-autostart] 77 assertions
+EXIT_CODE=0
+
+$ node --test hooks/runs-watch-hotpath.test.js
+✔ PostToolUse hot path (watcher alive; throttle holding): no mkdir, no chmod, nothing printed (89.667754ms)
+✔ negative control: the temp-directory ensure moved into the hot path makes a directory and is caught (204.413649ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 354.390846
+EXIT_CODE=0
+
+$ bash scripts/sync-all.sh
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --write
+{"mode":"generate","changed":false,"ran":["sync-agent-bodies","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","hook-harness-matrix"],"skipped":["sync-version (no generate cmd)","check-canonical-invariants (no generate cmd)","check-readme-parity (no generate cmd)","check-hook-inventory (no generate cmd)","check-config-docs (no generate cmd)","check-quota-adapters (no generate cmd)","check-claude-md-inventory (no generate cmd)","check-js-syntax (no generate cmd)","check-backlog-entries (no generate cmd)","check-contract-schema (no generate cmd)","check-profile-catalog (no generate cmd)"],"unknown_only":[],"failures":[],"ok":true}
+EXIT_CODE=0
+
+$ bash scripts/sync-all.sh --check
+── sync-version: node scripts/sync-version.js --check
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh --check
+── check-canonical-invariants: bash scripts/check-canonical-invariants.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh --check
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh --check
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh --check
+── check-readme-parity: node scripts/check-readme-parity.js
+── check-hook-inventory: node scripts/check-hook-inventory.js --check
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --check
+── check-config-docs: node scripts/check-config-docs.js
+── check-quota-adapters: node scripts/check-quota-adapters.js
+── check-claude-md-inventory: node scripts/check-claude-md-inventory.js
+── check-js-syntax: node scripts/check-js-syntax.js
+── check-backlog-entries: node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md
+── check-contract-schema: node scripts/check-contract-schema.js
+── check-profile-catalog: node scripts/build-profile-payload.js catalog --check --repo .
+{"mode":"check","changed":false,"ran":["sync-version","sync-agent-bodies","check-canonical-invariants","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","check-readme-parity","check-hook-inventory","hook-harness-matrix","check-config-docs","check-quota-adapters","check-claude-md-inventory","check-js-syntax","check-backlog-entries","check-contract-schema","check-profile-catalog"],"skipped":[],"unknown_only":[],"failures":[],"ok":true}
+EXIT_CODE=0
+
+PRESERVATION AND WHITESPACE CHECKS
+$ git merge-base --is-ancestor origin/develop HEAD
+EXIT_CODE=0
+$ git diff --exit-code 8ae6f4e74 -- src/ schemas/ platforms/ hooks/runs-watch-autostart.js hooks/README.md hooks/runs-watch-hotpath.test.js hooks/tests/runs-watch-autostart.test.sh
+EXIT_CODE=0
+$ git diff --check
+EXIT_CODE=0

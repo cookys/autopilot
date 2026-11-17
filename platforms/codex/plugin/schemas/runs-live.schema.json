@@ -98,6 +98,12 @@
                 "string",
                 "null"
               ]
+            },
+            "plugin_code_version": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         }

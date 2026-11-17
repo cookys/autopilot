@@ -71,7 +71,7 @@
  *            scratchpad and is a group/world-writable directory (mode & 0o022) or owned by another uid. Knob:
  *            depth0_delegate_gate.shared_rm or env AUTOPILOT_BASH_GUARD_SHARED_RM_MODE = off|warn|deny (default warn;
  *            garbage ⇒ warn). Rule 2d's deny wins when both apply.
- *   2f. BLOCK secret-print: Docker/env/config-file/Kubernetes value dumps. Knob: depth0_delegate_gate.secret_print
+ *   2f. BLOCK secret-print: Docker/env/config-file/Kubernetes/systemd unit/drop-in dumps. Knob: depth0_delegate_gate.secret_print
  *            or AUTOPILOT_BASH_GUARD_SECRET_MODE = block|warn|off (default block; invalid env ⇒ block).
  *            Use node scripts/safe-inspect.js for masked inspection; docs/guide/safe-inspect.md.
  *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`

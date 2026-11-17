@@ -1,6 +1,6 @@
 # Plan — PM seat token split: scripted PM chores (fleet task 01M7KZZ1ZT3V1KTKNR3E4MFK4B)
 
-Status: generation cap reached, depth-0 adjudicated, for PM ruling · logical_plan_id: `pm-token-split-2026-11-17-b` · Size: L (seven phases P0–P6 plus two integration steps A-int, B-int)
+Status: frozen (PM ruling 01M7M32A, option A) · logical_plan_id: `pm-token-split-2026-11-17-b` · Size: L (eight phases P0–P6 and Q, plus two integration steps A-int, B-int)
 
 ## 0. Context / thesis
 
@@ -78,15 +78,15 @@ The PM must spend context on decisions, not bookkeeping: no operator request los
 
 ## 4. Phases
 
-Dependencies (code edges): Delivery A: P0 ∥ P1 ∥ P2 ∥ P3 → A-int → A pin (2026-11-18 15:00) → A real runs. Delivery B: A-int → P5 ∥ P6 ∥ P4 (P4 imports P0's `work-order-plan.js`; P4 also needs the fleet signing interface, §8 Q4) → B-int → B pin (2026-11-20 15:00) → B real runs. P4 does not depend on P5 or P6; P6 does not depend on P1. Parallel phases share no file.
+Dependencies (code edges): Delivery A: P0 ∥ P1 ∥ P2 ∥ P3 → A-int → A pin (2026-11-18 15:00) → A real runs. Delivery B: A-int → P5 ∥ P6 ∥ P4 (P4 imports P0's `work-order-plan.js`; P4 also needs the fleet signing interface, §8 Q4); P6 → Q → B-int → B pin (2026-11-20 15:00) → B real runs. P4 does not depend on P5 or P6; P6 does not depend on P1. Parallel phases share no file.
 
 ### P0 — work-order plan-first gate (Size M)
 
 1. `work-order-plan.js parse(text)`: field lines only.
    - Size: `/^\s*(?:[-*]\s+)?(?:\*\*)?Size(?:\*\*)?\s*:\s*(?:\*\*)?\s*(XS|S|M|L|XL)\b/m`, or the brief header form `| Size: X |` on line 1.
    - Plan: `/^\s*(?:[-*]\s+)?(?:\*\*)?Plan(?:\*\*)?\s*:\s*(?:\*\*)?\s*(?:plan-first|(\S+)@([0-9a-f]{7,40}))\s*$/m`, or a line consisting only of `plan-first`. The word `plan-first` inside prose is not a marker.
-   - Returns `{size|null, plan:{path,sha}|'plan-first'|null}`; two different Size field lines → `size:'conflict'` (treated as M+ unmarked).
-2. PM side: when opt-in `pm-dispatch-plan-guard` is on, the PM gate passes and the tool is `mcp__fleet__dispatch`: parse `task`; size M/L/XL/conflict without a Plan marker → deny with `工單 Size M 以上要帶「Plan: 路徑@sha」或「Plan: plan-first」`. No Size field → allowed (the PM rule covers declared sizes). The fleet CLI has no dispatch subcommand (`fleet task --help`); P4's dispatch path runs the same parse in its preflight.
+   - Returns `{size|null, plan:{path,sha}|'plan-first'|null}`; two different Size field lines → `size:'conflict'`.
+2. PM side: when opt-in `pm-dispatch-plan-guard` is on, the PM gate passes and the tool is `mcp__fleet__dispatch`: parse `task`; no Size field or `conflict` → deny with `每張派工都要帶 Size（XS|S|M|L|XL），請補上`; size M/L/XL without a Plan marker → deny with `工單 Size M 以上要帶「Plan: 路徑@sha」或「Plan: plan-first」` (PM ruling 01M7M32A: every PM dispatch carries a Size). The fleet CLI has no dispatch subcommand (`fleet task --help`); P4's dispatch path runs the same parse in its preflight.
 3. Lane side, `session-mode.js set --fleet-task <id>`: runs `fleet task show <id> --json`, parses `title`, stores `wo_task`, `wo_size`, `wo_plan`, `wo_state:'resolved'|'unresolved'`, `wo_fetched_at`.
    - Fetch failure, timeout or unparseable JSON: keep any previously resolved `wo_*` for the same task; with none, store `wo_state:'unresolved'` and print one stderr line. A non-M+ resolved order prints nothing.
    - `--refresh` re-fetches the same task; a new id replaces all `wo_*` (recovery when the PM issues a corrected order).
@@ -96,11 +96,11 @@ Dependencies (code edges): Delivery A: P0 ∥ P1 ∥ P2 ∥ P3 → A-int → A p
    - `plan-first` orders: `stage-advance.js --to implement --plan <path>` writes or replaces the receipt from HEAD (refused if the file is uncommitted or dirty). It can be re-run after plan-review generations change the plan.
    - `--to implement` with an attached task: refused when `wo_state:'unresolved'`; with `wo_size` M+: refused without a receipt whose blob resolves (`git cat-file -e`); for L/XL also refused unless `check-phase-review-receipt.js --plan-artifact` passes with the same `plan_sha256`.
 5. Title truncation: P0 does not start until the fleet lane answers 01M7M1GE item 3 (or the fleet source shows the field is the full body). If it can be truncated, P0 reads the untruncated field the fleet lane names. A truncated Plan line can only make an M+ order look unmarked, which refuses (fails closed); the PM recovers by re-issuing.
-Acceptance (unguarded stubs: `work-order-plan.js` returning `{size:null,plan:null}`; `pm-console.js` returning true): PM side — `Size: M` unmarked denied; `- **Size**: L` unmarked denied; `Plan: docs/plans/x.md@abc1234` allowed; `Plan: plan-first` allowed; prose `we follow plan-first` with `Size: M` denied; no Size allowed; opt-in off untouched; child repo with its own `.git` under the PM workspace untouched; `mode` not `program` untouched. Lane — no task attached: no output, unchanged; `wo_size=M` no receipt → `--to implement` refused; `--plan` dirty file refused; valid receipt allowed; blob gone refused; L receipt without plan-review pass refused; L after a second plan-review generation: `--to implement --plan` re-records and passes; fetch outage with a previous resolved M → still refused; outage with nothing resolved → `unresolved` refused; `set --size S` on `wo_size=M` refused; `set --size S`, enter implement, then `--fleet-task` (M) → stage reset to plan; new task id replaces `wo_*`.
+Acceptance (unguarded stubs: `work-order-plan.js` returning `{size:null,plan:null}`; `pm-console.js` returning true): PM side — `Size: M` unmarked denied; `- **Size**: L` unmarked denied; `Plan: docs/plans/x.md@abc1234` allowed; `Plan: plan-first` allowed; prose `we follow plan-first` with `Size: M` denied; no Size denied with the Size message; two conflicting Size lines denied; `Size: S` unmarked allowed; opt-in off untouched; child repo with its own `.git` under the PM workspace untouched; `mode` not `program` untouched. Lane — no task attached: no output, unchanged; `wo_size=M` no receipt → `--to implement` refused; `--plan` dirty file refused; valid receipt allowed; blob gone refused; L receipt without plan-review pass refused; L after a second plan-review generation: `--to implement --plan` re-records and passes; fetch outage with a previous resolved M → still refused; outage with nothing resolved → `unresolved` refused; `set --size S` on `wo_size=M` refused; `set --size S`, enter implement, then `--fleet-task` (M) → stage reset to plan; new task id replaces `wo_*`.
 
 ### P1 — request register (Size M)
 
-1. Every row carries `schema:'autopilot.askpm/1'` and `at`. Ask row adds `ask_id`, `session_id`, `text`; `ask_id = 'a-' + sha256(session_id + '\n' + at + '\n' + text).slice(0,8)`. Rows written before P1 have no `ask_id` and are ignored by every `pm-ask` view (cutoff = first row with an `ask_id`).
+1. Every row carries `schema:'autopilot.askpm/1'` and `at`. Ask row adds `ask_id`, `session_id`, `text`; `ask_id = 'a-' + sha256(session_id + '\n' + at + '\n' + text).slice(0,8)`. Rows written before P1 have no `ask_id` and are ignored by every `pm-ask` view (cutoff = first row with an `ask_id`). A prompt starting with `[voice call · unverified]` is not operator input (PM ruling 01M7M32A): it is logged as an injected turn, never an ask.
 2. The `ask_id a-xxxxxxxx` additionalContext line is emitted only when `askpm-remind` is on. `askpm-remind` on with `askpm-log` off does nothing (no rows to read) and says so once on stderr.
 3. `scripts/pm-ask.js` writes `{kind:'disposition', ask_id, action:'close'|'progress'|'supersede', evidence?, task?, superseded_by?}`:
    - every referenced id must exist as an ask row; `supersede <old> <new>` requires old ≠ new and new newer than old;
@@ -113,7 +113,7 @@ Acceptance (unguarded stubs: `work-order-plan.js` returning `{size:null,plan:nul
    - ask already disposed at Stop 1: writes the reply row as askpm-log does today.
    With `askpm-remind` on, askpm-log's own Stop half skips the reply row (one writer per reply). With it off, askpm-log behaves exactly as today.
 5. Daily overdue: on the first UserPromptSubmit of a UTC+8 day with `askpm-remind` on, advisory-relay adds `pm-ask overdue` output (≤ 30 lines) to additionalContext; a `remind-day` file in the state dir records the day.
-Acceptance (askpm-log changes: red on base; unguarded stubs: `pm-ask.js` that appends any disposition unchecked, `askpm-remind.js` that always exits 0 silently): ask gets id; id line absent with `askpm-remind` off; injected prompt gets none; close without evidence / with "done" refused; supersede a-x a-x refused; unknown id refused; Stop 1 blocks, Stop 2 does not and writes the reply equal to Stop 1's assistant text; a later fleet turn never blocks; exactly one reply row per ask with both opt-ins on; `askpm-remind` off → no stdout, rows as today; overdue shows a 25 h ask, not a 23 h one; legacy rows ignored; 31 asks → 30 lines + `… 1 more`; child repo under the PM workspace untouched.
+Acceptance (askpm-log changes: red on base; unguarded stubs: `pm-ask.js` that appends any disposition unchecked, `askpm-remind.js` that always exits 0 silently): ask gets id; id line absent with `askpm-remind` off; injected prompt and `[voice call · unverified]` prompt get none; close without evidence / with "done" refused; supersede a-x a-x refused; unknown id refused; Stop 1 blocks, Stop 2 does not and writes the reply equal to Stop 1's assistant text; a later fleet turn never blocks; exactly one reply row per ask with both opt-ins on; `askpm-remind` off → no stdout, rows as today; overdue shows a 25 h ask, not a 23 h one; legacy rows ignored; 31 asks → 30 lines + `… 1 more`; child repo under the PM workspace untouched.
 
 ### P2 — parallel consultant barrier with de-identification (Size M)
 
@@ -148,7 +148,7 @@ Acceptance (unguarded stub: always ACCEPT): all hold → ACCEPT; each condition 
 ### P6 — switchboard runner, shadow mode (Size L)
 
 1. Export: `scripts/switchboard-export.js --date D` runs in the PM's own session (the PM reads only its own session transcript, per card d-522f32f4) and writes two content-minimal jsonl files: inbound fleet messages `{message_id, from, kind, task_id?, reply_to?, at, text}` and PM handling events `{at, action:'reply'|'dispatch'|'task_result'|'send'|'turn', ref_message_id?, task_id?}` taken from the PM's `mcp__fleet__*` tool calls and turn starts. The runner never reads the PM's transcript or inbox itself.
-2. Input allowlist (code, before any model): config `switchboard.operator_addresses` must be non-empty (else exit 2, zero model calls). A row enters only if `from` is not in that list, `from` is a member listed by `fleet directory`, and `kind` ∈ {`chat`, `dispatch`, `broadcast`, `wake`}; everything else (including `decision_answer`, `decision_close`, unknown kinds, rows without `from`) is dropped and counted.
+2. Input allowlist (code, before any model). The operator has no fleet address (PM ruling 01M7M32A); operator input is the PM session's UserPromptSubmit plus `decision_answer` messages. So: the export (step 1) takes only fleet channel messages and never a UserPromptSubmit prompt; a row enters only if `from` is a member listed by `fleet directory` and `kind` ∈ {`chat`, `dispatch`, `broadcast`, `wake`}; everything else (`decision_answer`, `decision_close`, unknown kinds, rows without `from`, text starting with `[待決回覆` or `[voice call · unverified]`) is dropped and counted. An empty `fleet directory` result → exit 2, zero model calls.
 3. Deterministic pre-classification (code): rows with a question mark or 嗎/呢 at line end, `rc=[1-9]`, `unhealthy`, `FAIL`, `blocked`, `A/B`, `例外|特例`, a shared-pool name from config `switchboard.pool_names`, or unparseable text → `escalate` items built by code without the model.
 4. Model call per batch for the rest: `claude -p --model sonnet --output-format json --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources "" --disable-slash-commands`, cwd = empty 0700 temp dir, config dir and env per §2.5, cn gate first. Batch ≤ 30,000 estimated tokens.
 5. Item contract (`autopilot.switchboard-item/1`, ten fields): `item_no` (int), `lane` (string), `task_id` (ULID|null), `type` (`提問`|`疑似該退件`|`越權`|`失敗`|`逾期`|`卡片就緒`|`看不懂`|`auto`), `ask_ref` (ask_id|null), `facts` (≤ 3 × `{text ≤ 200 chars, ref}`), `options` (string[] ≤ 4), `recommendation` (string, code appends `（建議，非決定）`), `deadline` (RFC 3339|null), `source_message_ids` (string[] ≥ 1).
@@ -157,7 +157,7 @@ Acceptance (unguarded stub: always ACCEPT): all hold → ACCEPT; each condition 
 8. Compare: `switchboard-run.js compare --date D --handling <export>` reports per inbound message: escalated & handled, escalated & no recorded handling, auto & handled by PM (possible swallow), auto & not handled; messages answered by `send` without `reply_to` are counted `unobservable`; plus the PM's turns per day (wake count) from the turn events.
 9. Kill switch: `switchboard.enabled=false` or `AUTOPILOT_SWITCHBOARD=off` → exit 0, zero model calls.
 10. `skills/switchboard/SKILL.md` (contract-card shape): when to run, allowlist, packet contract, shadow only.
-Acceptance (unguarded stubs: a runner passing all rows to the model; a builder truncating at 1,500; stub `claude` recording argv/env/cwd/config-dir contents): empty `operator_addresses` → exit 2, zero calls; operator, `decision_answer`, unknown-kind and non-member rows never reach the stub; argv has the five isolation flags, cwd empty, config dir holds only the fake `.credentials.json` and is gone after normal exit, after SIGTERM and after a thrown error; scrubbed vars absent; question row escalated with zero model calls; model output missing one input id → `看不懂` with the raw text; duplicate id → one item; field missing → `看不懂`; 7 items → 5 + 2; 4,000-token CJK item and a 6,000-char unbroken ASCII line → parts ≤ 1,500 each, concatenation equal; long samples → each clipped to one line ≤ 60; batch over 30k → ≥ 2 calls; kill switch → zero calls; compare marks an inbound with a matching PM reply `handled` and one answered by `send` `unobservable`.
+Acceptance (unguarded stubs: a runner passing all rows to the model; a builder truncating at 1,500; stub `claude` recording argv/env/cwd/config-dir contents): empty directory → exit 2, zero calls; `decision_answer`, `[待決回覆`, `[voice call · unverified]`, unknown-kind and non-member rows never reach the stub; the export contains no UserPromptSubmit text; argv has the five isolation flags, cwd empty, config dir holds only the fake `.credentials.json` and is gone after normal exit, after SIGTERM and after a thrown error; scrubbed vars absent; question row escalated with zero model calls; model output missing one input id → `看不懂` with the raw text; duplicate id → one item; field missing → `看不懂`; 7 items → 5 + 2; 4,000-token CJK item and a 6,000-char unbroken ASCII line → parts ≤ 1,500 each, concatenation equal; long samples → each clipped to one line ≤ 60; batch over 30k → ≥ 2 calls; kill switch → zero calls; compare marks an inbound with a matching PM reply `handled` and one answered by `send` `unobservable`.
 
 ### P4 — `pm-act` macro (Size M)
 
@@ -167,6 +167,20 @@ Acceptance (unguarded stubs: a runner passing all rows to the model; a builder t
 4. Journal: `<state>/pm-act/<sha256 of act.json>.json` records each completed action before the next starts; a re-run with the same file skips completed actions and says so.
 5. Signing: dispatch and reply use the interface the fleet lane names in answer to 01M7M1GE (session-bound CLI identity, which `pm-act` calls directly; or a batched MCP tool, in which case `pm-act` does preflight + ledger + journal and prints the one MCP call for the PM to make, and the journal marks the fleet actions done when the PM re-runs with `--confirm <message ids>`). The shell CLI identity is never used.
 Acceptance (unguarded stub: a `pm-act.js` that executes without preflight; stub fleet and ledger CLIs): valid plan → ledger, dispatch, reply in order, each once, signed as the session; one bad ledger entry → zero side effects; unmarked Size M dispatch → zero side effects; failure at reply → report done/done/failed, re-run sends only the reply; `--check` sends nothing.
+
+### Q — quality measurement and rollback (Size M; PM ruling 01M7M32A)
+
+Must be complete before B-int, and before the switchboard ever handles real traffic.
+
+1. Baseline: `scripts/switchboard-quality.js baseline --days 7` runs the PM's own `extract.py` (PM repo `knowledge/sources/2026-11-17-pm-token`, path from config `switchboard.extract_script`, run in the PM's session) and stores per-day tokens per turn and turns per day in `<state>/switchboard/quality/baseline.json`. This lane does not copy or edit `extract.py`.
+2. Daily checks (`switchboard-quality.js daily --date D`), from the shadow packets and the handling export:
+   - auto-intake audit: a deterministic 10 % sample (at least 1) of `auto` items re-classified by a second, non-CN family engine (astra or carbon; same isolation as P6 step 4); a disagreement where the second engine says escalate counts as a wrong intake;
+   - swallow review: 50 random non-escalated messages (all when fewer) reviewed the same way; one judged a question counts as swallowed;
+   - decision latency: for escalated items with a recorded PM handling event, p50 and p95 of (handling at − item at);
+   - output `quality/<date>.json` and one summary line.
+3. Rollback rules (synthesis "回滾"): 1 authority breach, 1 missed operator ask (P1 overdue), 1 wrong executor, 1 sensitive-data send, ≥ 2 wrong intakes in a day, ≥ 1 swallowed question, or re-ask rate / p95 latency ≥ 20 % worse than baseline two days running. Any trigger sets `switchboard.mode` in `<state>/switchboard/mode.json` to `shadow` (the runner refuses any other mode change from code) and writes the unresolved items of the affected days as packets addressed to the PM (`replay/<date>/`), then prints one line naming the rule.
+4. The PM's one-key bypass is P6's kill switch.
+Acceptance (unguarded stub: `daily` that always reports pass): a fixture with 2 wrong intakes → rollback to shadow + replay packets; 1 swallowed → rollback; clean day → no change; sample size is 10 % rounded up; second engine is never a CN family (cn gate test); p50/p95 computed on a fixture with known values; baseline reads only the configured script's output. Real run: baseline over the PM's last 7 days and one `daily` on the replayed P6 day, on the PM host.
 
 ### A-int / B-int — integration (Size S each)
 
@@ -200,7 +214,8 @@ Done when: both checks green, suites green against the develop baseline, review 
 
 ## 7. Out of scope
 
-- Card-answer auto-forward (synthesis item 2): not among the work order's six (§8 Q1).
+- Card-answer auto-forward (synthesis item 2): owned by the fleet lane (01M7KZZ8). This lane only adds, when the fleet lane asks for it, per-option executor and command fields to `scripts/open-decision.js`.
+- 200k autocompact and the daily new PM session: owned by hangar (wrapper and restart). This lane provides the handover state files: the ask register (P1 jsonl + `pm-ask list --open`) and PM-STATE.
 - `pm-act` card opening, ask disposition and intake actions (`pm-ask` and `pm-accept-check` stay separate commands).
 - Switchboard live mode, Haiku classification, Sonnet shadow PM, autocompact changes, daily new PM session.
 - Any change to `~/.claude`; turning the opt-ins on at the PM host (the PM does it).
@@ -208,9 +223,9 @@ Done when: both checks green, suites green against the develop baseline, review 
 
 ## 8. Open questions (PM)
 
-1. Card-answer auto-forward (synthesis item 2): a later phase, or out?
-2. The ledger CLI names for `pm_output_cap.ledger_search_pattern`, `pm_act.ledger_lint_cmd`, `pm_act.ledger_write_cmd`, and `switchboard.operator_addresses` / `switchboard.pool_names` values (this lane never reads the ledger). Without them the 30-line rule is off, P4 ledger entries fail preflight and P6 exits 2.
-3. "Real run on the PM's machine" = the PM account on the PM host after a live pin: confirm.
+1. Answered (01M7M32A): card-answer auto-forward belongs to the fleet lane (§7).
+2. Answered (01M7M32A): `scripts/ledger.sh` stays the only ledger write path; commands are `pm-ledger lint`, `pm-ledger write` (wraps `ledger.sh`) and `pm-ledger search` (≤ 30 lines). Config defaults: `pm_act.ledger_lint_cmd = "pm-ledger lint"`, `pm_act.ledger_write_cmd = "pm-ledger write"`, `pm_output_cap.ledger_search_pattern = "^pm-ledger search\\b"`. The operator has no fleet address (P6 step 2). Still open: `switchboard.pool_names` values.
+3. Answered (01M7M32A): real runs are on the PM host, in the PM session under the cookys account.
 4. P4 signing interface: pending the fleet lane (01M7M1GE, acknowledged; answer next session). P4 starts when it arrives; if none by 2026-11-19 12:00, P4 ships the `--check` + ledger + journal half on 11-20 and the fleet half follows the interface.
 5. Should `pm-act` also carry `pm-ask` dispositions (the synthesis puts "close with evidence" in item 1, not item 5)? Default: no.
 
@@ -220,3 +235,4 @@ Done when: both checks green, suites green against the develop baseline, review 
 - Generation 1 (logical id `pm-token-split-2026-11-17`): no semantic verdict; required seat grok_redteam failed both attempts with HTTP 402. Re-opened as `pm-token-split-2026-11-17-b` with the red-team seat on agy gemini-4-carbon-high (google); ticket `01M7KZZ1ZT3V1KTKNR3E4MFK4B-b`.
 - Generation 1 (`-b`, astra + carbon, both STOP): 11 blocking, 7 non-blocking, all accepted; repaired in 82a975f2b.
 - Generation 2 (`-b`, reviewed 82a975f2b, both STOP, CONDITIONAL at the generation cap): 12 blocking, 2 non-blocking. Depth-0 accepted all 12 and repaired them in this revision (post-head delta, not re-reviewed): P0 fail-closed on unresolved orders, anchored markers, L/XL receipt re-record at `--to implement --plan`, stage reset, new-id replace; new PM gate stopping at `.git` with `mode:"program"`; P1 reminder as a direct Stop hook with `pending_reply` and one reply writer, full row schema, id validation; P2 scan in memory before any write, fail closed on `fleet directory`, env scrub, unknown seats barred; P3 stubs, probe evidence outside the plan, newline-safe fallback; P5 `--head` at intake, record schema, ancestry and empty-list rules; P6 ten-field contract, allowlist with mandatory operator list, Node config-dir cleanup, 1-to-1 accounting, conservative estimator and codepoint split, compare from the PM's own export with wake count; P4 limited to dispatch + reply + ledger with a journal; dependencies by code edge with A-int → B phases; real runs after each pin; A-int/B-int done-when and negative controls. Not repaired in the plan: the P4 signing interface (external, §8 Q4) — the PM rules on it at the cap.
+- PM ruling 01M7M32A (2026-11-17): option A, frozen at d8fab0048 and implementation starts; the PM checked all 12 G2 items (10 fixed; #5 and #11 wait only on P4 signing, handled per §8 Q4). Three additions folded in without another review generation, as ruled: phase Q (quality measurement and rollback, before B-int); P0 denies a PM dispatch with no Size; §7 names owners for the two excluded items. §8 answers recorded.

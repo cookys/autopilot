@@ -26,7 +26,7 @@ test('registry: eleven pages in key order 1-8, 9 pet, 0 forge, ? help; shells ar
   for (const p of PAGES) {
     const r = p.render(ctxOf(SIZES[0]))
     if (p.id === 'pet') expect(r.body.map(x => x.map(g => g.text).join(''))).toEqual(['寵物分頁還沒上線'])
-    else expect(r).toEqual({ body: [], actions: [] })
+    else if (p.id !== 'quota') expect(r).toEqual({ body: [], actions: [] }) // quota is filled in (pages/quota.ts, S4); the rest are still shells
   }
 })
 

@@ -494,5 +494,16 @@
   "frame.more": "{arrow} {n} more rows (PgDn)",
   "frame.src_no_source": "{name}: no source",
   "frame.src_expired": "{name}: data expired, {min} min old",
-  "frame.src_stale": "{name}: data stale, {min} min old"
+  "frame.src_stale": "{name}: data stale, {min} min old",
+  "page.quota.v_limit_nosw": "used up, no switch data",
+  "page.quota.v_limit_stranded": "used up, {n} seats stalled",
+  "page.quota.v_limit_switched": "used up, seats switched to {pool}",
+  "page.quota.v_exhaust_stranded": "runs out in about {h} h, {n} seats have no pool to switch to",
+  "page.quota.v_exhaust_ok": "runs out in about {h} h, seats can switch pools",
+  "page.quota.v_exhaust_nosw": "runs out in about {h} h, no switch data",
+  "page.quota.v_use": "will use {p}%",
+  "page.quota.v_waste": "about {y}% will go unused",
+  "page.quota.v_stale": "{min} min since update (over 10 min){why}",
+  "page.quota.v_nopace": "no source: capacity pace is not connected",
+  "page.quota.v_top7": "7-day {p}% is the highest, no pace"
 }

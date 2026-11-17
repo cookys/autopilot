@@ -498,7 +498,18 @@ export const EN: Record<string, string> = {
   "frame.more": "{arrow} {n} more rows (PgDn)",
   "frame.src_no_source": "{name}: no source",
   "frame.src_expired": "{name}: data expired, {min} min old",
-  "frame.src_stale": "{name}: data stale, {min} min old"
+  "frame.src_stale": "{name}: data stale, {min} min old",
+  "page.quota.v_limit_nosw": "used up, no switch data",
+  "page.quota.v_limit_stranded": "used up, {n} seats stalled",
+  "page.quota.v_limit_switched": "used up, seats switched to {pool}",
+  "page.quota.v_exhaust_stranded": "runs out in about {h} h, {n} seats have no pool to switch to",
+  "page.quota.v_exhaust_ok": "runs out in about {h} h, seats can switch pools",
+  "page.quota.v_exhaust_nosw": "runs out in about {h} h, no switch data",
+  "page.quota.v_use": "will use {p}%",
+  "page.quota.v_waste": "about {y}% will go unused",
+  "page.quota.v_stale": "{min} min since update (over 10 min){why}",
+  "page.quota.v_nopace": "no source: capacity pace is not connected",
+  "page.quota.v_top7": "7-day {p}% is the highest, no pace"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -997,5 +1008,16 @@ export const ZH_TW: Record<string, string> = {
   "frame.more": "{arrow} 還有 {n} 列（PgDn）",
   "frame.src_no_source": "{name} 無來源",
   "frame.src_expired": "{name} 資料已過期，{min} 分鐘前",
-  "frame.src_stale": "{name} 資料過期，{min} 分鐘前"
+  "frame.src_stale": "{name} 資料過期，{min} 分鐘前",
+  "page.quota.v_limit_nosw": "已用完，換池資料無來源",
+  "page.quota.v_limit_stranded": "已用完，{n} 席停擺",
+  "page.quota.v_limit_switched": "已用完，席位已切到 {pool}",
+  "page.quota.v_exhaust_stranded": "約 {h} 時後用完，{n} 席沒池可切",
+  "page.quota.v_exhaust_ok": "約 {h} 時後用完，席位可切池",
+  "page.quota.v_exhaust_nosw": "約 {h} 時後用完，換池資料無來源",
+  "page.quota.v_use": "會用到 {p}%",
+  "page.quota.v_waste": "約剩 {y}% 會浪費",
+  "page.quota.v_stale": "{min} 分未更新（>10 分{why}）",
+  "page.quota.v_nopace": "無來源：capacity pace 未接",
+  "page.quota.v_top7": "7 天 {p}% 最高，沒有 pace"
 }

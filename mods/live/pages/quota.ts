@@ -202,22 +202,33 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   // the focused pool's detail carries the full verdict text
   const fv = ranked[focus]
   const fp = byName.get(fv.pool) as QuotaPool
-  if (!ctx.shortBody) {
+  const kv = (label: string, text: string, color?: Seg['color']): Row => [{ text: padR(label, 6), dim: true }, color === undefined ? { text } : { text, color }]
+  const openRow: Row = [{ text: '  ' }, { text: t(view.expanded ? 'page.quota.act_o_close' : 'page.quota.act_o_open'), color: PALETTE.action, press: 'quota:open' }] // G11: o is a Button (click works where the pane has no keyboard)
+  const mine = q.seats.filter(s => s.pool === fp.pool)
+  const names = mine.map(s => s.seat)
+  const count = fp.seats === null ? t('page.quota.f_seats_unknown') : t('page.quota.f_seats_n', { n: fp.seats })
+  const seatsSummary = kv(t('page.quota.f_seats'), (names.length === 0 ? '' : names.slice(0, 2).join(' · ') + (names.length > 2 || (fp.seats ?? 0) > 2 ? ' · … ' : ' ')) + count)
+  const seatRowText = (s: QuotaSeat): string => t('page.quota.seat_row', { seat: s.seat, a: pct(s.seven_day_pct, s.stale === true), b: pct(s.five_hour_pct, s.stale === true), age: s.age_min === null ? DASH : t('page.quota.age_m', { n: s.age_min }) })
+  const fact = fp.limit_hit === true ? t('page.quota.f_limit_hit') + '，' : ''
+  const verdictRow = kv(t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role))
+  if (ctx.shortBody) {
+    // Compact mode (<= 4 body rows): suppress only section headings and column header; full verdict first (wrapped by frameRows), then seats.
+    body.push(verdictRow)
+    if (view.expanded) {
+      if (mine.length === 0) body.push(kv(t('page.quota.f_seats'), t('page.quota.seat_none')))
+      else mine.forEach((s, i) => body.push(kv(i === 0 ? t('page.quota.f_seats') : '', seatRowText(s), s.stale === true ? PALETTE.broken : undefined)))
+      body.push(openRow)
+    } else {
+      body.push(seatsSummary, openRow)
+    }
+  } else {
     body.push([{ text: '' }])
     body.push(rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: poolLabel(fv.pool) }), null, cols))
-    body.push([{ text: '  ' }, { text: t(view.expanded ? 'page.quota.act_o_close' : 'page.quota.act_o_open'), color: PALETTE.action, press: 'quota:open' }]) // G11: o is a Button (click works where the pane has no keyboard)
-    const kv = (label: string, text: string, color?: Seg['color']): Row => [{ text: padR(label, 6), dim: true }, color === undefined ? { text } : { text, color }]
-    const names = q.seats.filter(s => s.pool === fp.pool).map(s => s.seat)
-    const count = fp.seats === null ? t('page.quota.f_seats_unknown') : t('page.quota.f_seats_n', { n: fp.seats })
-    body.push(kv(t('page.quota.f_seats'), (names.length === 0 ? '' : names.slice(0, 2).join(' · ') + (names.length > 2 || (fp.seats ?? 0) > 2 ? ' · … ' : ' ')) + count))
+    body.push(openRow)
+    body.push(seatsSummary)
     if (view.expanded) {
-      const mine = q.seats.filter(s => s.pool === fp.pool)
       if (mine.length === 0) body.push(kv('', t('page.quota.seat_none')))
-      for (const s of mine) {
-        const sage = s.age_min === null ? DASH : t('page.quota.age_m', { n: s.age_min })
-        const row = t('page.quota.seat_row', { seat: s.seat, a: pct(s.seven_day_pct, s.stale === true), b: pct(s.five_hour_pct, s.stale === true), age: sage })
-        body.push(kv('', row, s.stale === true ? PALETTE.broken : undefined))
-      }
+      for (const s of mine) body.push(kv('', seatRowText(s), s.stale === true ? PALETTE.broken : undefined))
     }
     if (tier !== 'narrow') {
       const none = fp.stranded_seats === null && fp.switched === null
@@ -227,8 +238,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
       const stale = it.facts.stale === true
       body.push(kv(t('page.quota.f_blocked'), (stale ? bad + ' ' : '') + it.text + (stale ? ' ' + bad + ' ' + t('page.quota.blocked_stale', { source: String(it.facts.source ?? '?') }) : ''), stale ? PALETTE.broken : undefined))
     }
-    const fact = fp.limit_hit === true ? t('page.quota.f_limit_hit') + '，' : ''
-    body.push(kv(t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role)))
+    body.push(verdictRow)
     if (tier === 'wide') body.push(kv(t('page.quota.f_order'), t(paceOk ? 'page.quota.f_order_pace' : 'page.quota.f_order_nopace'), undefined))
   }
 

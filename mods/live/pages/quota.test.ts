@@ -6,7 +6,7 @@ import { test, expect } from 'claude-code/testing'
 import { frameRows } from './frame'
 import { PAGES } from './index'
 import { PALETTE, displayWidth } from '../ui'
-import { renderQuota } from './quota'
+import { quotaPage, renderQuota } from './quota'
 import { worstPool } from './quota-pick'
 import { NOW, POOLS, SEATS, MIN, consoleOf, ctxOf } from './quota.fixture'
 
@@ -225,4 +225,56 @@ test('quota: no body row of the pool table is wider than the pane (every long re
     for (const c of [consoleOf(POOLS, { seats: SEATS }), consoleOf(NOPACE, { pace: false, seats: SEATS })])
       for (const l of frameRows(page, ctxOf(cols, rows, c)).map(text)) if (displayWidth(l) > cols) wide.push(cols + ': ' + l)
   expect(wide.join('\n')).toBe('')
+})
+
+test('quota: compact mode (80x7, shortBody) suppresses only headings and column header, then uses remaining body rows for full verdict (wrapped, never truncated) and seats while pool rows keep priority', () => {
+  const trinity = POOLS.find(p => p.pool === 'trinity')!
+  const personal = POOLS.find(p => p.pool === 'personal')!
+  const codex = POOLS.find(p => p.pool === 'codex')!
+  const grok = POOLS.find(p => p.pool === 'grok')!
+
+  // 80 columns, H=7, one pool whose full verdict is longer than the short one, no explicit actions
+  const out = frameRows(page, ctxOf(80, 7, consoleOf([trinity], { cards: [] }))).map(text)
+  expect(out.length).toBe(7)
+  const compactBody = out.slice(1, 5)
+  expect(compactBody.some(l => l.includes('──'))).toBe(false)
+  expect(compactBody.some(l => l.includes('重置') || l.includes('7 天'))).toBe(false)
+  expect(compactBody[0]).toContain('✗ 180 分未更新')
+  expect(compactBody[0]).not.toContain('statusline 沒在跑')
+  expect(compactBody[1]).toBe('判定  紅：180 分未更新（>10 分；statusline 沒在跑）')
+  expect(compactBody[2]).toBe('席    共 1 席')
+  expect(compactBody[3]).toBe('  [o] 展開各席')
+
+  // Long full verdict (> 80 cols) wraps across remaining body rows and is never truncated
+  const longNote = 'statusline 沒在跑，而且本席上一次回報已經超過三小時，必須把完整原因換行顯示出來不能截斷'
+  const wrappedOut = frameRows(page, ctxOf(80, 7, consoleOf([{ ...trinity, stale_note: longNote }], { cards: [] }))).map(text)
+  expect(wrappedOut.every(l => displayWidth(l) <= 80)).toBe(true)
+  const wrappedBody = wrappedOut.slice(1, 5)
+  expect(wrappedBody.join('').replace(/\s+/g, '')).toContain(('判定紅：180分未更新（>10分；' + longNote + '）').replace(/\s+/g, ''))
+  expect(wrappedBody.some(l => l.includes('…'))).toBe(false)
+  expect(wrappedBody[3]).toBe('席    共 1 席')
+
+  // Expanded seats follow the full verdict in the remaining body rows
+  const openPage = { ...quotaPage, render: (c: Parameters<typeof renderQuota>[0]) => renderQuota(c, { focus: 0, expanded: true }) }
+  const openBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS, cards: [] }))).map(text).slice(1, 5)
+  expect(openBody[0]).toContain('personal')
+  expect(openBody[1]).toBe('判定  黃：已達額度上限，判定未知：缺換池資料（capacity）')
+  expect(openBody[2]).toBe('席    capacity--claude  7天 100%  5小時 100%  0 分前')
+  expect(openBody[3]).toBe('      hangar--claude  7天 100%  5小時 100%  1 分前')
+  const scrolledBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS, cards: [] })), { scroll: 1 }).map(text).slice(1, 5)
+  expect(scrolledBody[3]).toBe('      old--claude  7天 97%✗  5小時 90%✗  14 分前')
+
+  // Pool rows keep priority (red -> unknown -> others) over the detail
+  const threeBody = frameRows(page, ctxOf(80, 7, consoleOf([codex, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
+  expect(threeBody[0]).toContain('trinity')
+  expect(threeBody[1]).toContain('personal')
+  expect(threeBody[2]).toContain('codex')
+  expect(threeBody[3]).toBe('判定  紅：180 分未更新（>10 分；statusline 沒在跑）')
+
+  const fourBody = frameRows(page, ctxOf(80, 7, consoleOf([codex, grok, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
+  expect(fourBody[0]).toContain('trinity')
+  expect(fourBody[1]).toContain('personal')
+  expect(fourBody[2]).toContain('grok')
+  expect(fourBody[3]).toContain('codex')
+  expect(fourBody.some(l => l.startsWith('判定'))).toBe(false)
 })

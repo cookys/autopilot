@@ -662,6 +662,7 @@
   "page.decide.act_send_c": "[s] 送出",
   "page.decide.act_sent": "已送出 {k}，等處理",
   "page.decide.act_text": "輸入補充中（數字字母都是文字）",
+  "page.decide.act_cancel": "放棄",
   "page.decide.act_text_keys": "Enter 存補充   [Esc] 放棄",
   "page.decide.act_undo": "[u] 送出後 10 秒內撤回",
   "page.decide.act_undo_c": "[u] 10 秒內撤回",

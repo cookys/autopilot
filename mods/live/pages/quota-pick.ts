@@ -13,7 +13,7 @@ export type PoolRole = 'broken' | typeof WARN | typeof GOOD
 export const ROLE_WARNING: PoolRole = WARN
 export const ROLE_SUCCESS: PoolRole = GOOD
 // one element of console `quota.pools[]` (fleet 01M7N4EK): parsed by console.ts's parseConsole, a field the feed lacks is null, never 0
-import type { QuotaPool } from '../console.ts'
+import type { ConsoleSnapshot, QuotaPool } from '../console.ts'
 export type { QuotaPool }
 
 export const STALE_MIN = 10 // minutes; only the quota page uses this threshold (§4.1)
@@ -95,11 +95,24 @@ export function rankPools(pools: QuotaPool[], nowMs: number, t: T = makeT('zh-TW
 
 // the one pool the band's right side and the 現況 page's quota row name; null when there is no pool at all (no source: the caller draws that)
 // text is the zh-TW verdict (the signature takes no translator); the page calls rankPools with its own `t`
-export function worstPool(pools: QuotaPool[] | null, nowMs: number): { pool: string; role: PoolRole; text: string } | null {
+export function worstPool(pools: QuotaPool[] | null, nowMs: number, t: T = makeT('zh-TW')): { pool: string; role: PoolRole; text: string } | null {
   if (pools === null || pools.length === 0) return null
-  const first = rankPools(pools, nowMs)[0]
+  const first = rankPools(pools, nowMs, t)[0]
   const src = pools.find(p => p.pool === first.pool)
   // no pace, nothing used up, nothing stale: the pool with the highest 7-day % is named (§4.1 fallback), with that number as its text
-  const text = first.kind === 'nopace' && src !== undefined && src.seven_day_pct !== null ? makeT('zh-TW')('page.quota.v_top7', { p: Math.round(src.seven_day_pct) }) : first.text
+  const text = first.kind === 'nopace' && src !== undefined && src.seven_day_pct !== null ? t('page.quota.v_top7', { p: Math.round(src.seven_day_pct) }) : first.text
   return { pool: first.pool, role: first.role, text }
+}
+
+// The ONE normalisation of the console's pools, used by the 額度 page, the 現況 page and the band (so the three always name the same pool): no forecast source ->
+// every projection is dropped before the verdict is judged (a leftover number cannot paint a green); a `seat_blocked` item (a seat whose pool is used up) is that pool's limit_hit fact.
+// null = no pools source.
+export function normalizedPools(con: ConsoleSnapshot | null): QuotaPool[] | null {
+  if (con === null || con.quota.pools === null) return null
+  const paceOk = con.sources.quota_forecast?.state === 'ok'
+  const blocked = new Set(con.items.filter(i => i.kind === 'seat_blocked' && typeof i.facts.pool === 'string').map(i => i.facts.pool as string))
+  return con.quota.pools.map(p => {
+    const q = paceOk ? p : { ...p, projected_pct_at_reset: null, projected_exhaustion_at_ms: null, burn_pct_per_h: null }
+    return blocked.has(p.pool) ? { ...q, limit_hit: true } : q
+  })
 }

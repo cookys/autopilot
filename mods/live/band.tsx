@@ -109,7 +109,7 @@ export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; on
 // `source` is the quota source's state in the console snapshot: no_source draws nothing, stale takes the warning colour, expired the broken one (a green on old numbers is a false all-clear)
 export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, source?: string): Seg | null {
   if (source === 'no_source') return null
-  const w = worstPool(pools, nowMs)
+  const w = worstPool(pools, nowMs, t)
   if (w === null) return null
   const color = source === 'expired' || w.role === 'broken' ? PALETTE.broken : source === 'stale' || w.role === ROLE_WARNING ? PALETTE.attention : PALETTE.done
   return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }

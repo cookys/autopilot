@@ -662,6 +662,7 @@
   "page.decide.act_send_c": "[s] send",
   "page.decide.act_sent": "Sent {k}; waiting to be handled",
   "page.decide.act_text": "Typing a note (letters and digits are text)",
+  "page.decide.act_cancel": "Discard",
   "page.decide.act_text_keys": "Enter save note   [Esc] discard",
   "page.decide.act_undo": "[u] undo within 10 s after sending",
   "page.decide.act_undo_c": "[u] undo within 10 s",

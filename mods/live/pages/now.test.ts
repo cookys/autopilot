@@ -5,6 +5,9 @@ import { frameRows, actionRows, staleBadge as frameBadge, brokenRow as frameBrok
 import { nowPage, seatQuota, parseSeatQuota } from './now'
 import { staleBadge, brokenRow } from './rows'
 import { makeT } from '../i18n'
+import { PALETTE } from '../ui'
+import { renderQuota } from './quota'
+import { POOLS } from './quota.fixture'
 import type { ConsoleSnapshot } from '../console'
 
 const t = makeT('zh-TW')
@@ -208,4 +211,26 @@ test('now: the quota line is worstPool\'s pool; a pace-less console with no pool
   const two = con({ quota: { pools: [{ pool: 'team', limit_hit: false, seven_day_pct: 50, stale: false, observed_at_ms: NOW }, { pool: 'personal', limit_hit: true, stranded_seats: null, seven_day_pct: 100, stale: false, observed_at_ms: NOW }] } } as never)
   expect(content(160, 40, two)[1]).toContain('personal')
   expect(content(160, 40, con({ quota: { pools: null, seats: [] } } as never))[1]).toContain('無來源：console 沒有 quota.pools')
+})
+
+// R3 now-quota-worstpool-drift: 現況 and 額度 normalise the pools the same way (no forecast source -> no projection; a seat_blocked item is that pool's limit_hit), so a pool blocked by a seat is red on both
+test('now R3: a seat_blocked pool is the red worst pool on 現況 and the first red row on 額度', () => {
+  const grokCodex = POOLS.filter(p => p.pool === 'grok' || p.pool === 'codex')
+  const b = { ...(blocked(false) as Record<string, any>), facts: { ...(blocked(false) as Record<string, any>).facts, pool: 'codex' } }
+  const c = con({ items: [b as never, ...con().items], quota: { pools: grokCodex as never, seats: [] } })
+  const seg = nowPage.render(ctxOf(160, 40, c)).body.flat().find(s => s.text.includes('codex'))
+  expect(seg, '現況 names codex').toBeDefined()
+  expect(seg?.color, '現況 paints it red').toBe(PALETTE.broken)
+  const q = renderQuota(ctxOf(160, 40, c)).body.map(text).find(l => l.startsWith('▸')) as string
+  expect(q, '額度 ranks codex first and red').toContain('codex')
+  expect(q).toContain('✗')
+})
+// R4 now-decide-count-ignores-live: the jump counts the seat's own cards the console does not list, so a missing or lagging cards source cannot hide them
+test('now R4: console cards no_source plus one own pending card still shows the [2] jump', () => {
+  const own = { id: 'd-11111111', title: null, question: 'q', background: null, options: [], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: null, origin: null, orphaned: false, kind: 'decide' }
+  const base = con()
+  const c = con({ counts: { ...base.counts, decisions: 0 }, cards: null, sources: { ...base.sources, cards: { at_ms: null, state: 'no_source' } } })
+  const acts = nowPage.render(ctxOf(160, 40, c, live({ pending: [own] }))).actions.flat()
+  expect(acts.some(s => s.text === '[2]'), 'the [2] jump is drawn').toBe(true)
+  expect(acts.map(s => s.text).join('')).toContain('1')
 })

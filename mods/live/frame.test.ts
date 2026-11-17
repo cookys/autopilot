@@ -294,3 +294,33 @@ test('pane UX fix: the quota page empty state says 沒有待決卡, not 沒有�
   expect(text(rows[22])).toBe('沒有待決卡')
   expect(makeT('en')('frame.nothing')).toBe('No pending cards')
 })
+
+// R1 pane-inline-hint-hijack: a `[x] ` inside a head / body row (a question, code) is text, never a hotkey. Only an action row's own hint (at the start or after two spaces, with a label)
+// and the strip's `i ` bind a letter; the decide option rows carry their press id and keep a-e.
+test('pane R1: a question with [a] / [b] and code with [i] in the body leave a-e on the option rows and i on the strip', () => {
+  const body: Row[] = [[{ text: 'Use [a] sync or [b] async?' }], [{ text: 'buf[i] == 0' }]]
+  const actions: Row[] = [[{ text: '[a] 同步', press: 'decide:pick:0' }], [{ text: '[b] 非同步', press: 'decide:pick:1' }], [{ text: '[n] 補充  [s] 送出' }]]
+  const page: Page = { ...PAGES[1], framed: true as const, render: () => ({ body, actions }) }
+  const tree = walk(Pane(EL as never, LIVE0, 'decide', () => {}, t, 160, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: [PAGES[0], page, ...PAGES.slice(2)], console: null, nowMs: NOW, rows: 30 } as never))
+  const hot = tree.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && /^[a-z]$/.test(n.props.hotkey ?? ''))
+  const by = (k: string) => hot.filter(n => n.props.hotkey === k)
+  expect(by('a').map(n => flat(n).trim()), 'option A keeps a').toEqual(['同步'])
+  expect(by('b').map(n => flat(n).trim()), 'option B keeps b').toEqual(['非同步'])
+  expect(by('i').map(n => flat(n).trim()), 'the strip keeps i').toEqual(['說明'])
+  expect(by('n').length + by('s').length, 'a real action-row hint ([n] / [s] after two spaces) is still a key').toBe(2)
+})
+
+// R2 decide-textmode: the host gives no raw Enter / Esc / Backspace, so the note Input must be the focused element (autoFocus) to receive typing, and cancelling needs a visible Button
+test('pane R2: while a note is typed the Input is autoFocus, its submit saves, and a visible 放棄 Button cancels', () => {
+  const keys: any[] = []
+  const tree = framedPane('decide', { decide: { ...NO_NAV, textMode: true, textBuf: '先' }, onKey: (k: any) => keys.push(k) })
+  const input = tree.find(n => n.kind === 'Input') as Node
+  expect(input, 'the note Input is mounted').toBeDefined()
+  expect(input.props.autoFocus, 'the Input takes the focus when n is pressed').toBe(true)
+  input.props.onSubmit('先')
+  expect(keys).toEqual([{ kind: 'text_save' }])
+  const cancel = tree.find(n => n.kind === 'Button' && flat(n).trim() === '放棄') as Node
+  expect(cancel, 'a visible cancel Button').toBeDefined()
+  cancel.props.onPress()
+  expect(keys[1]).toEqual({ kind: 'text_cancel' })
+})

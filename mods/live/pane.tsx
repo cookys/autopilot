@@ -18,7 +18,7 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
-import { frameRows } from './pages/frame'
+import { actionRows, frameRows } from './pages/frame'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
 import type { DecideNav } from './pages/decide'
@@ -156,6 +156,8 @@ export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id
 // quota (4) and spend (7) both show the Spend tab until S4 gives the quota page its own tab; pet / forge / help have no old tab and no Button yet (a PaneTab for them comes with their pages)
 const PAGE_TAB: Record<string, PaneTab> = { now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend', dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene' }
 export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => (frame === null ? undefined : frame.pages.find(p => p.framed === true && PAGE_TAB[p.id] === tab))
+const HINT_AT = /(^|  )\[[a-z]\] \S/
+const HINT_SPLIT = /(?<=^|  )(?=\[[a-z]\] \S)/
 function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, cols: number) {
   const { Box, Text, Button } = el
   const ctx = { live: snap, console: frame.console, size: { cols, rows: frame.rows }, t, nowMs: frame.nowMs, ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
@@ -179,9 +181,11 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const drawRow = (r: Row, i: number) => {
     if (i === noteAt && el.Input !== undefined) {
       const Input = el.Input
-      return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} /></Box>
+      return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} autoFocus />{Button === undefined ? null : <Button key="note:cancel" plain onPress={() => frame.onKey?.({ kind: 'text_cancel' })}><Text>{t('page.decide.act_cancel')}</Text></Button>}</Box>
     }
     const isStrip = i === rows.length - 1
+    // a `[x] label` hint binds a letter only in an ACTION row (a head or body row can quote `[a]` or `buf[i]`), at the start of the text or after two spaces
+    const isActionRow = i >= rows.length - 1 - Math.min(actionRows(frame.rows), frame.rows - 2) && !isStrip
     const nodes: unknown[] = []
     for (let j = 0; j < r.length; j++) {
       const sg = r[j]
@@ -207,9 +211,9 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
         continue
       }
       const text = (x: string, k: string) => <Text key={k} {...drawSeg(sg)} wrap="truncate">{x === '' && r.length === 1 ? ' ' : x}</Text>
-      if (Button !== undefined && !typing && sg.press === undefined && (isStrip ? sg.text.startsWith('i ') : /\[[a-z]\] /.test(sg.text))) {
+      if (Button !== undefined && !typing && sg.press === undefined && (isStrip ? sg.text.startsWith('i ') : isActionRow && HINT_AT.test(sg.text))) {
         // hint pieces (`[h] prev  [l] next`) each become a Button carrying their letter; text between stays Text
-        const pieces = isStrip ? [sg.text.replace(/\s{2}Esc.*$/, ''), sg.text.slice(sg.text.replace(/\s{2}Esc.*$/, '').length)].filter(x => x !== '') : sg.text.split(/(?=\[[a-z]\] )/)
+        const pieces = isStrip ? [sg.text.replace(/\s{2}Esc.*$/, ''), sg.text.slice(sg.text.replace(/\s{2}Esc.*$/, '').length)].filter(x => x !== '') : sg.text.split(HINT_SPLIT)
         pieces.forEach((pc, n) => {
           const hm = isStrip ? (n === 0 && pc.startsWith('i ') ? ['', 'i'] : null) : /^\[([a-z])\] /.exec(pc)
           const act = hm === null || used.has(hm[1]) ? undefined : actOf(hm[1], undefined)

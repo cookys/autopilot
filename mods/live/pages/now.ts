@@ -5,9 +5,9 @@
 // A broken or missing source is a red row with the reason (§5): the number stays beside it, never replaced by a dash. Colours go through PALETTE only.
 import type { ConsoleItem, ConsoleSnapshot } from '../console'
 import type { LiveSnapshot, Seg } from '../model'
-import { displayWidth, truncateToWidth } from '../model'
+import { displayWidth, isStepCard, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
-import { ROLE_WARNING, worstPool } from './quota-pick'
+import { ROLE_WARNING, normalizedPools, worstPool } from './quota-pick'
 import type { Page, PageCtx } from './frame'
 import { brokenRow, staleBadge } from './rows'
 import type { Row } from './rows'
@@ -116,9 +116,9 @@ const labelled = (label: string, wide: boolean, ...rest: Seg[]): Row => (wide ? 
 // `quota.pools` (null = no source: the §5 row).
 function quotaWorstSeg(ctx: PageCtx, wide: boolean): Seg[] {
   const { t } = ctx
-  const pools = ctx.console === null ? null : ctx.console.quota.pools
+  const pools = normalizedPools(ctx.console)
   if (pools === null) return [staleBadge(GLYPHS.state.failed + ' ' + t('page.now.quota_no_source'))]
-  const w = worstPool(pools, ctx.nowMs)
+  const w = worstPool(pools, ctx.nowMs, t)
   if (w === null) return [dim(t('page.now.quota_empty'))]
   const color = w.role === 'broken' ? PALETTE.broken : w.role === ROLE_WARNING ? PALETTE.attention : PALETTE.done
   return [{ text: (w.role === 'broken' && !wide ? GLYPHS.state.failed + ' ' : '') + (wide ? t('page.now.quota_worst') + ' ' : '') + w.pool + ' ' + w.text, color }]
@@ -277,7 +277,9 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     if (rec.length > 0) body.push(blank(), ruleRow(t('page.now.recent'), wide), ...rec)
   }
   const actions: Row[] = []
-  const decisions = con !== null ? con.counts.decisions : live === null ? 0 : live.pending.length
+  // the 待決 page lists the console cards and the seat's own cards the console does not hold yet: the jump counts both, so a lagging or missing cards source cannot hide an own card
+  const ownOnly = live === null ? 0 : live.pending.filter(d => !isStepCard(d) && !(con?.cards ?? []).some(c => c.id === d.id)).length
+  const decisions = con !== null ? Math.max(con.counts.decisions, (con.cards?.length ?? 0) + ownOnly) : live === null ? 0 : live.pending.length
   if (decisions > 0) {
     const opened = con !== null && con.cards !== null && con.cards.length > 0 ? Math.min(...con.cards.map(c => c.opened_at_ms)) : null
     const oldest = opened === null ? '' : t('page.now.oldest', { age: ageOf(t, nowMs - opened, false) })

@@ -61,3 +61,7 @@ mods/live/run-tests.sh: 1392 pass, 15 fail = exactly bandrow-brief/fb.txt (diff 
 > (fail) decide A10: a stale reason is never truncated: at 70 columns it wraps onto further rows, no row ends in …
 > (fail) pane UX fix: console mode, pane CLOSED: the band draws its tab row (row 2) (terminal)
 == UX4 GREEN: mods/live/run-tests.sh 1404 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty)
+== R1-R4 RED (source stashed, tests kept): frame.test.ts R1 inline-hint hijack, R2 decide note Input autofocus + cancel; now.test.ts
+> (fail) now R3: a seat_blocked pool is the red worst pool on 現況 and the first red row on 額度
+> (fail) now R4: console cards no_source plus one own pending card still shows the [2] jump
+== R1-R4 GREEN: mods/live/run-tests.sh 1408 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty); sync-all and --check ok

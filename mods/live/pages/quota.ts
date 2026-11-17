@@ -11,7 +11,7 @@ import type { QuotaSeat } from '../console'
 import type { Seg } from '../model'
 import { GLYPHS, PALETTE, displayWidth } from '../ui'
 import type { QuotaPool, Verdict } from './quota-pick'
-import { rankPools, ROLE_WARNING } from './quota-pick'
+import { normalizedPools, rankPools, ROLE_WARNING } from './quota-pick'
 
 export type QuotaView = { focus: number; expanded: boolean } // the pane's own state (j/k, Enter); the page contract has no place for it yet, so render() uses the default
 
@@ -72,12 +72,10 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const c = COLS[tier]
   const dows = t('page.quota.dow').split(' ')
   const paceOk = ctx.console.sources.quota_forecast?.state === 'ok'
-  // no forecast source: every projection is dropped before the verdict is judged, so a leftover number cannot paint a green
-  // seat_blocked items (a seat whose pool is used up) are that pool's limit_hit fact; stale=true adds the reason to the focused detail
+  // normalizedPools (quota-pick.ts) is the one place that drops projections without a forecast source and turns a seat_blocked item into its pool's limit_hit
   const blocked = ctx.console.items.filter(i => i.kind === 'seat_blocked' && typeof i.facts.pool === 'string')
   const blockedBy = (pool: string) => blocked.filter(i => i.facts.pool === pool)
-  const paced = paceOk ? q.pools : q.pools.map(p => ({ ...p, projected_pct_at_reset: null, projected_exhaustion_at_ms: null, burn_pct_per_h: null }))
-  const pools = paced.map(p => (blockedBy(p.pool).length === 0 ? p : { ...p, limit_hit: true }))
+  const pools = normalizedPools(ctx.console) as QuotaPool[]
   const ranked = rankPools(pools, ctx.nowMs, t)
   const byName = new Map(pools.map(p => [p.pool, p]))
   const focus = Math.max(0, Math.min(view.focus, ranked.length - 1))

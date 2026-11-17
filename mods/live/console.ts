@@ -33,8 +33,9 @@ function parseItem(v: Obj): ConsoleItem | null {
   const text = s(v.text)
   const since_ms = n(v.since_ms)
   if (id === null || kind === null || severity === null || state === null || needs_operator === null || title === null || text === null || since_ms === null) return null
-  const line_id: unknown = v.line_id
-  if (line_id !== null && typeof line_id !== 'string') return null
+  const lineIn: unknown = v.line_id
+  if (lineIn !== undefined && lineIn !== null && typeof lineIn !== 'string') return null // absent = null (the real feed omits it); a present non-string is refused
+  const line_id: string | null = typeof lineIn === 'string' ? lineIn : null
   const answerable_by: unknown = v.answerable_by
   if (answerable_by !== undefined && !Array.isArray(answerable_by)) return null
   return {

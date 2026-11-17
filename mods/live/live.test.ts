@@ -3556,7 +3556,7 @@ test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there 
   const self = await lines('self')
   for (const name of ['現況', '派工', '審查']) expect(self.includes(name)).toBe(true)
   expect(self.includes('無來源')).toBe(false)
-  expect(ran.some(a => a.startsWith('fleet console'))).toBe(false) // nothing is fetched for the console pages
+  expect(ran.filter(a => a.startsWith('fleet console')).length).toBe(1) // the data source (consolefeed.ts) asks once in this minute; its '[]' answer is no source, so the pages above still say 無來源
 })
 // C1 U8 (KR2, KR5): in the console mode the refresh path (ticks, a pane redraw on every tab) starts no runner. KR2: no process.run argv names an LLM runner
 // (claude, codex, gemini, opencode, agy, grok, kimi, the engine or a dispatch script); `fleet` reads are the feed, not a runner. KR5: the only file is band-facts/<sid>.json

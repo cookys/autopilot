@@ -1,0 +1,19 @@
+{
+  "schema": "fleet.console/1",
+  "generated_at_ms": 1794930334310,
+  "producer": "fleet-console",
+  "sources": {
+    "tasks": { "at_ms": 1794930334310, "state": "ok" },
+    "cards": { "at_ms": 1794930334310, "state": "ok" },
+    "quota_now": { "state": "no_source", "reason": "not sourced" }
+  },
+  "counts": { "decisions": 0, "exceptions": 2, "tabs": {}, "summary": { "lines": {}, "hosts": {}, "hints": 0 } },
+  "items": [
+    { "id": "patrol:wait_untyped:TASKID0001:2026-11-17", "kind": "exception", "severity": 3, "state": "findings", "needs_operator": false, "title": "wait untyped", "text": "wait_untyped", "facts": { "rule": "wait_untyped", "task_id": "TASKID0001", "basis": "2026-11-17", "value": "", "card_id": "", "card_state": "", "lanes": [], "message_id": "", "from": "" }, "since_ms": 1794930280033, "rule": "wait_untyped" },
+    { "id": "patrol:quiet_seat:TASKID0002:2026-11-17", "kind": "exception", "severity": 2, "state": "findings", "needs_operator": false, "title": "quiet seat", "text": "quiet_seat", "facts": { "rule": "quiet_seat", "task_id": "TASKID0002", "basis": "2026-11-17", "value": "", "card_id": "", "card_state": "", "lanes": [], "message_id": "", "from": "" }, "since_ms": 1794930200000, "rule": "quiet_seat" },
+    { "id": "seat:blocked:1", "kind": "seat_blocked", "severity": 3, "state": "findings", "needs_operator": false, "title": "seat blocked", "text": "seat_blocked", "facts": { "rule": "seat_blocked" }, "since_ms": 1794930100000, "rule": "seat_blocked" },
+    { "id": "bad:1", "kind": "exception", "severity": 1, "state": "findings", "needs_operator": false, "title": "x", "text": "x", "line_id": 7, "since_ms": 1794930100000 }
+  ],
+  "cards": [],
+  "lines": []
+}

@@ -27,8 +27,8 @@ test('integration: parseConsole keeps quota.pools, quota.seats and the seat_bloc
 })
 
 for (const id of ['now', 'decide', 'fleet', 'quota']) {
-  test('integration: ' + id + ' draws at most ' + H + ' rows at ' + COLS + 'x' + H + ' from the parsed feed', () => {
-    expect(frameRows(pageOf(id), ctx).length).toBeLessThanOrEqual(H)
+  test('integration: ' + id + ' draws exactly ' + H + ' rows at ' + COLS + 'x' + H + ' from the parsed feed', () => {
+    expect(frameRows(pageOf(id), ctx).length).toBe(H)
   })
 }
 

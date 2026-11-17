@@ -34,3 +34,12 @@ export const consoleOf = (pools: unknown[] | null, o: { pace?: boolean; seats?: 
   quota: pools === null ? undefined : { pools, seats: o.seats ?? [] },
 }))
 export const ctxOf = (cols: number, rows: number, console: unknown) => ({ live: null, console, size: { cols, rows }, t: makeT('zh-TW'), nowMs: NOW }) as never
+
+// A golden lists the rows a page draws; the frame puts the left-over blank rows between the body and the action rows (fixed height). `closeGap` takes that run out of the rows
+// (the strip already cut off) so a golden stays the page's own rows: `acts` = the rows the action area took (the empty-state row counts as one).
+export const closeGap = (rows: string[], acts: number): string[] => {
+  const n = rows.length - acts
+  let a = n
+  while (a > 1 && rows[a - 1].trim() === '') a--
+  return [...rows.slice(0, a), ...rows.slice(n)]
+}

@@ -3666,7 +3666,7 @@ test('pane UX fix: console mode, pane CLOSED: the band draws its tab row (row 2)
 })
 // pageview-focus-unbounded: the fold clamps the focus to the rows that are still shown, so the next unfold does not put the ▸ back on a row that was folded away
 test('pane review fix: folding the 艦隊 page clamps the focus to the last shown row (terminal)', async ($, on) => {
-  await framedWorld($, on, snap => { snap.lines = [...snap.lines, ...[7, 8, 9].map(n => ({ ...snap.lines[3], line_id: 'zz' + n, label: 'ZZ線' + n, issues: [] }))]; return snap })
+  await framedWorld($, on, snap => { snap.lines = [...snap.lines, ...Array.from({ length: 24 }, (_, i) => i + 7).map(n => ({ ...snap.lines[3], line_id: 'zz' + n, label: 'ZZ線' + n, issues: [] }))]; return snap })
   const first = await framedMount($)
   await first.press({ key: 'fleet' })
   await first.unmount()

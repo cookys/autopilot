@@ -492,6 +492,7 @@
   "frame.close": "close",
   "frame.nothing": "No pending cards",
   "frame.unknown": "Not enough data to judge",
+  "frame.unknown_pools": "{n} pools: verdict unknown (no rebalance data)",
   "frame.more": "{arrow} {n} more rows",
   "frame.src_no_source": "{name}: no source",
   "frame.src_expired": "{name}: data expired, {min} min old",
@@ -551,7 +552,7 @@
   "page.quota.f_order_nopace": "used up, then stale (oldest first), then highest 7-day %",
   "page.quota.f_limit_hit": "quota limit reached",
   "page.quota.no_console": "Quota: no source, there is no console snapshot",
-  "page.quota.no_pools": "Quota: no source, quota.pools is empty",
+  "page.quota.no_pools": "Quota: no source, no pool data",
   "page.quota.seat_row": "{seat}  7d {a}  5h {b}  {age}",
   "page.quota.seat_none": "the seat list has no seat of this pool",
   "page.quota.action_f": "[f] fill the switch advice into the prompt line (not sent)",
@@ -605,6 +606,7 @@
   "page.now.ago": "{age} ago",
   "page.now.oldest": " (oldest {age})",
   "page.now.go_decide": "{n} cards wait for you",
+  "page.now.jump_decide": "Open the pending page",
   "page.now.go_residue": "{n} residue items can be cleared",
   "page.now.quota_empty": "no quota pools",
   "page.now.quota_worst": "worst",
@@ -660,7 +662,7 @@
   "page.decide.act_picked_c": "Picked {k} (not sent)",
   "page.decide.act_pick_roomy": "options (at most 5 per card, a-e)",
   "page.decide.act_pick_tight": "options (5 at most)",
-  "page.decide.act_range": "[a]-[{last}]",
+  "page.decide.act_range": "a-{last}:",
   "page.decide.act_readonly": "This card is answered at {seat}; read-only here",
   "page.decide.act_send": "[s] send the focused card (Enter presses the focused button)",
   "page.decide.act_send_c": "[s] send",
@@ -702,5 +704,6 @@
   "page.decide.stale_live": "this seat's decision data is not current: {why}",
   "page.decide.step": "Step",
   "page.quota.f_blocked": "blocked",
-  "page.quota.blocked_stale": "data stale: {source} is not running"
+  "page.quota.blocked_stale": "data stale: {source} is not running",
+  "frame.calm": "Nothing needs you"
 }

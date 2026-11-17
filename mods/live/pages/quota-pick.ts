@@ -43,7 +43,7 @@ export function classify(p: QuotaPool, nowMs: number, hasPace: boolean, t: T): V
   if (p.limit_hit === true) {
     if (sw === null) return out(WARN, 'limit_nosw', t('page.quota.v_limit_nosw')) // used up, but nothing says whether a seat can switch: unknown, not red (PM 01M7NJAS)
     if (sw > 0) return out('broken', 'limit_stranded', t('page.quota.v_limit_stranded', { n: sw }))
-    return out(GOOD, 'limit_switched', t('page.quota.v_limit_switched', { pool: typeof p.switched === 'string' ? p.switched : '-' }))
+    return out(GOOD, 'limit_switched', t('page.quota.v_limit_switched', { pool: typeof p.switched === 'string' ? poolLabel(p.switched) : '-' }))
   }
   // a stale pool is broken with the full reason (A10): never shortened, the number stays
   if (stale) {

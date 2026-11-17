@@ -307,11 +307,8 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     if (rec.length > 0) body.push(blank(), ruleRow(t('page.now.recent'), wide), ...rec)
   }
   const actions: Row[] = []
-  if (decisions > 0) {
-    const opened = con !== null && con.cards !== null && con.cards.length > 0 ? Math.min(...con.cards.map(c => c.opened_at_ms)) : null
-    const oldest = opened === null ? '' : t('page.now.oldest', { age: ageOf(t, nowMs - opened, false) })
-    actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_decide', { n: decisions }) + oldest), plain('  '), { text: '[2]', press: 'tab:2:decide', color: PALETTE.action }])
-  }
+  // the pending sentence is the first body row; the action row is only the jump (item 5: one sentence, not two)
+  if (decisions > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.jump_decide')), plain('  '), { text: '[2]', press: 'tab:2:decide', color: PALETTE.action }])
   const residue = live?.detail.residue?.reapable ?? 0
   if (residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }])
   return { body, actions }

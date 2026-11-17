@@ -7,6 +7,7 @@ import { fleetPage, fleetView, FOLD_AT } from './fleet'
 import { staleBadge, brokenRow } from './rows'
 import { makeT } from '../i18n'
 import { PALETTE } from '../ui'
+import { closeGap } from './quota.fixture'
 
 const t = makeT('zh-TW')
 // ---- fixture (fictional names; 51 lines = 5 with an issue + 46 without; the counts are the feed's own) ----
@@ -126,7 +127,7 @@ const GOLDEN: Record<string, string[]> = {
   nosrc80: [
     "艦隊",
     "✗ 艦隊：無來源（console 沒有 tasks 資料）",
-    "沒有待決卡",
+    "資料不足，無法判定",
   ],
 }
 
@@ -134,7 +135,12 @@ const text = (row: { text: string }[]) => row.map(s => s.text).join('').replace(
 const ctxOf = (cols: number, rows: number, console: unknown) => ({ live: null, console, size: { cols, rows }, t, nowMs: NOW }) as never
 const EXPANDED = { focus: 0, expanded: true }
 const viewPage = (view: { focus: number; expanded: boolean }) => ({ ...fleetPage, render: (c: never) => fleetView(c, view) }) as never
-const drawn = (cols: number, rows: number, snap: unknown, view?: { focus: number; expanded: boolean }) => frameRows(view === undefined ? fleetPage : viewPage(view), ctxOf(cols, rows, snap)).slice(0, -1).map(text)
+const drawn = (cols: number, rows: number, snap: unknown, view?: { focus: number; expanded: boolean }) => {
+  const page = view === undefined ? fleetPage : viewPage(view)
+  const out = frameRows(page, ctxOf(cols, rows, snap))
+  expect(out.length, 'fixed height').toBe(rows)
+  return closeGap(out.slice(0, -1).map(text), Math.max(1, page.render(ctxOf(cols, rows, snap)).actions.length))
+}
 const STALE = () => snapOf({ tasks: { at_ms: NOW - 6 * MIN, state: 'stale' } })
 
 test('fleet golden: 80x24 folded, expanded, stale and no-source rows', () => {
@@ -149,7 +155,7 @@ test('fleet golden: 120x30 and 160x40 folded', () => {
   expect(drawn(160, 40, snapOf())).toEqual(GOLDEN.folded160)
 })
 
-test('fleet: every state is at most H rows at 160x40, 120x30, 80x24, actions within A, the strip last', () => {
+test('fleet: every state is exactly H rows at 160x40, 120x30, 80x24, actions within A, the strip last', () => {
   const states: [string, unknown, { focus: number; expanded: boolean } | undefined][] = [
     ['folded', snapOf(), undefined], ['expanded', snapOf(), EXPANDED], ['focus past the end', snapOf(), { focus: 99, expanded: false }], ['stale', STALE(), undefined],
     ['expired hosts', snapOf({ hosts: { at_ms: NOW - 30 * MIN, state: 'expired' } }), undefined], ['hosts no_source', snapOf({ hosts: { at_ms: null, state: 'no_source' } }), undefined],
@@ -161,7 +167,7 @@ test('fleet: every state is at most H rows at 160x40, 120x30, 80x24, actions wit
       const page = view === undefined ? fleetPage : viewPage(view)
       const ctx = ctxOf(cols, rows, snap)
       const out = frameRows(page, ctx)
-      if (out.length > rows) bad.push(`${name}@${cols}x${rows}=${out.length}`)
+      if (out.length !== rows) bad.push(`${name}@${cols}x${rows}=${out.length}`)
       if (page.render(ctx).actions.length > actionRows(rows)) bad.push(`${name}@${cols}x${rows} actions`)
       if (!/1\D*2\D*3\D*4/.test(text(out[out.length - 1]))) bad.push(`${name}@${cols}x${rows} strip`)
     }

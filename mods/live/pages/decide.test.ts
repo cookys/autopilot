@@ -51,7 +51,7 @@ const GOLD = {
   ],
   "actions": [
    "已選 a 可以（尚未送出）",
-   "[a]–[b] 選項（每張卡最多 5 個選項 a–e）   [n] 補充（輸入中數字字母都是文字，Enter/Esc 結束）",
+   "a–b: 選項（每張卡最多 5 個選項 a–e）   [n] 補充（輸入中數字字母都是文字，Enter/Esc 結束）",
    "[s] 送出焦點卡（Enter 按下焦點按鈕）   [u] 送出後 10 秒內撤回",
    "[h] 上一張  [l] 下一張  [z] 收合其他待決",
    "[f] 回報填入提示列（不送出）"
@@ -76,7 +76,7 @@ const GOLD = {
   ],
   "actions": [
    "已選 c 拆兩批，每批 2–3 支（尚未送出）",
-   "[a]–[e] 選項（卡上限 5 個）   [n] 補充（輸入中數字字母都是文字，Enter/Esc 結束）",
+   "a–e: 選項（卡上限 5 個）   [n] 補充（輸入中數字字母都是文字，Enter/Esc 結束）",
    "[s] 送出焦點卡（Enter 按下焦點按鈕）   [u] 送出後 10 秒內撤回   [f] 回報填入提示列（不送出）",
    "[h] 上一張  [l] 下一張  [z] 收合其他待決"
   ]
@@ -220,13 +220,13 @@ for (const c of CASES) {
     expect(out.body.map(text).map(norm)).toEqual(want(c.gold.body))
     expect(out.actions.map(text).map(norm)).toEqual(want(c.gold.actions))
   })
-  test(`decide ${c.name}: rows fit the width, actions fit the area, frameRows is at most H rows`, () => {
+  test(`decide ${c.name}: rows fit the width, actions fit the area, frameRows is exactly H rows`, () => {
     const ctx = c.ctx as { size: { cols: number; rows: number } }
     const out = decidePage.render(ctx as never)
     expect(out.actions.length <= actionRows(ctx.size.rows)).toBe(true)
     // a body row longer than the pane is cut by frameRows; the page keeps every row within the width except where the mockup's own long sentence is
     const framed = frameRows(decidePage, ctx as never)
-    expect(framed.length).toBeLessThanOrEqual(ctx.size.rows)
+    expect(framed.length).toBe(ctx.size.rows)
     for (const r of framed) expect(displayWidth(text(r)) <= ctx.size.cols).toBe(true)
   })
 }
@@ -245,7 +245,7 @@ test('decide: the shell entry is replaced and the page is framed', () => {
   expect(p.framed).toBe(true)
 })
 
-// ---- every size, every data state: at most H rows, never a throw ----
+// ---- every size, every data state: exactly H rows, never a throw ----
 const SIZES = [[160, 40], [120, 30], [80, 24]] as const
 test('decide: null live and null console render the no-source rows at every size, never throw', () => {
   for (const [cols, rows] of SIZES) {
@@ -253,7 +253,7 @@ test('decide: null live and null console render the no-source rows at every size
     const body = decidePage.render(ctx).body.map(text).join('\n')
     expect(body).toContain('本席待決資料無來源')
     expect(body).toContain('此帳號沒有 console 快照')
-    expect(frameRows(decidePage, ctx).length).toBeLessThanOrEqual(rows)
+    expect(frameRows(decidePage, ctx).length).toBe(rows)
     expect(decidePage.render(ctx).actions).toEqual([])
   }
 })
@@ -263,17 +263,17 @@ test('decide: console cards list missing, or a stale cards source, is a red row 
   expect(decidePage.render(ctx).body.map(text).join('\n')).toContain('console 沒有卡片資料來源')
   const stale = ctxOf(80, 24, live(own80), con([], [], [], { cards: { at_ms: nowMs - 12 * 60000, state: 'stale' } }))
   const rows = decidePage.render(stale).body
-  expect(text(rows[0])).toContain('cards 資料過期，12 分鐘前')
+  expect(text(rows[0])).toContain('卡 資料過期，12 分鐘前')
   expect(rows[0][0].color).toBe('error' as never) // the broken role (frame.ts brokenRow)
   const expired = ctxOf(80, 24, live(own80), con([], [], [], { cards: { at_ms: null, state: 'no_source' } }))
-  expect(text(decidePage.render(expired).body[0])).toContain('cards 無來源')
+  expect(text(decidePage.render(expired).body[0])).toContain('卡 無來源')
   expect(decidePage.render(ctxOf(80, 24, { state: 'stale', header: '15 分鐘前', pending: [] } as never, con([], []))).body.map(text).join('\n')).toContain('本席待決資料不是最新：15 分鐘前')
 })
 
 test('decide A10: a stale reason is never truncated: at 70 columns it wraps onto further rows, no row ends in …', () => {
   const why = '沒有專案 · 請執行：autopilot status runs --watch 再重新整理本席待決資料'
   const out = frameRows(decidePage, ctxOf(70, 24, { state: 'stale', header: why, pending: [] } as never, con([], [])))
-  expect(out.length).toBeLessThanOrEqual(24)
+  expect(out.length).toBe(24)
   const joined = out.map(text).join('\n')
   expect(joined.replace(/\s+/g, ''), 'the whole reason is on screen').toContain(('本席待決資料不是最新：' + why).replace(/\s+/g, ''))
   expect(out.map(text).filter(r => r.includes('…')), 'no row is cut with …').toEqual([])

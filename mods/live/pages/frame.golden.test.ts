@@ -18,13 +18,13 @@ const consoles = [['console', () => parseConsole(JSON.stringify(full))], ['no co
 const ctxOf = (cols: number, rows: number, console: unknown) => ({ live: null, console, size: { cols, rows }, t, nowMs }) as never
 
 for (const [cols, rows] of SIZES) {
-  test(`frame: ${cols}x${rows}, every registered page × console state is at most ${rows} rows, strip last`, () => {
+  test(`frame: ${cols}x${rows}, every registered page × console state is exactly ${rows} rows, strip last`, () => {
     const bad: string[] = []
     for (const page of PAGES)
       for (const [name, c] of consoles) {
         const ctx = ctxOf(cols, rows, c())
         const out = frameRows(page, ctx)
-        if (out.length > rows) bad.push(`${page.id}/${name}=${out.length}`)
+        if (out.length !== rows) bad.push(`${page.id}/${name}=${out.length}`)
         if (page.render(ctx).actions.length > A(rows)) bad.push(`${page.id}/${name} actions>${A(rows)}`)
         if (!/1\D*2\D*3\D*4/.test(text(out[out.length - 1]))) bad.push(`${page.id}/${name} strip not last`)
       }
@@ -41,8 +41,8 @@ for (const [cols, rows] of SIZES) {
     expect(out[rows - 3]).toContain('ACT-1')
     expect(out[rows - 2]).toContain('ACT-2')
     const empty = frameRows({ ...PAGES[0], render: () => ({ body: [], actions: [] }) } as never, ctxOf(cols, rows, null)).map(text)
-    expect(empty.length).toBeLessThanOrEqual(rows)
-    expect(/1\D*2\D*3\D*4/.test(empty[empty.length - 1])).toBe(true) // the frame draws no filler and no empty-state text; each page says its own empty state (G4)
+    expect(empty.length).toBe(rows)
+    expect(/1\D*2\D*3\D*4/.test(empty[empty.length - 1])).toBe(true) // the strip is row H-1 even when the page has nothing to say
   })
 
   test(`frame: ${cols}x${rows}, more than ${A(rows)} actions is a programming error`, () => {

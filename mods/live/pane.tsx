@@ -24,7 +24,7 @@ import { renderQuota } from './pages/quota'
 import type { DecideNav } from './pages/decide'
 import type { KeyAction } from './pages/keys'
 import type { ConsoleSnapshot } from './console'
-import type { Page, Row } from './pages/frame'
+import type { Page, PageCtx, Row } from './pages/frame'
 import type { ScrollModel } from './scroll'
 
 export type { PaneTab } from './model'
@@ -156,15 +156,19 @@ export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id
 // quota (4) and spend (7) both show the Spend tab until S4 gives the quota page its own tab; pet / forge / help have no old tab and no Button yet (a PaneTab for them comes with their pages)
 const PAGE_TAB: Record<string, PaneTab> = { now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend', dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene' }
 export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => (frame === null ? undefined : frame.pages.find(p => p.framed === true && PAGE_TAB[p.id] === tab))
-const HINT_AT = /(^|  )\[[a-z]\] \S/
-const HINT_SPLIT = /(?<=^|  )(?=\[[a-z]\] \S)/
+const HINT_AT = /(^|\s)\[[a-z]\] \S/
+const HINT_SPLIT = /(?<=^|\s)(?=\[[a-z]\] \S)/
 function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, cols: number) {
   const { Box, Text, Button } = el
   const ctx = { live: snap, console: frame.console, size: { cols, rows: frame.rows }, t, nowMs: frame.nowMs, ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
   const view = frame.view?.[page.id] ?? { focus: 0, expanded: false }
   // the pages that take a view are drawn through their view functions; the registry's render() keeps the default view
   const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page
-  const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
+  // free rows go to content first: a folded page (fleet lines, a pool's seats) is drawn open when the open body fits whole in the rows the surface has left
+  const unfold = view.expanded ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : undefined
+  const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
+  // the action rows are exactly the ones the page returned (the frame pads nothing): only those rows may bind a `[x]` hint, never the body rows above them
+  const actionCount = Math.max(0, Math.min(Math.max(drawn.render(ctx).actions.length, unfold === undefined ? 0 : unfold(ctx).actions.length), frame.rows - 2))
   const press = (id: string) => { frame.onPress?.(id) }
   const noteAt = page.id === 'decide' && frame.decide?.textMode === true && el.Input !== undefined ? rows.length - 2 : -1
   const typing = frame.decide?.textMode === true // while a note is typed the Input owns every key: the strip binds no digit and no hint binds a letter
@@ -184,8 +188,8 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} autoFocus />{Button === undefined ? null : <Button key="note:cancel" plain onPress={() => frame.onKey?.({ kind: 'text_cancel' })}><Text>{t('page.decide.act_cancel')}</Text></Button>}</Box>
     }
     const isStrip = i === rows.length - 1
-    // a `[x] label` hint binds a letter only in an ACTION row (a head or body row can quote `[a]` or `buf[i]`), at the start of the text or after two spaces
-    const isActionRow = i >= rows.length - 1 - Math.min(actionRows(frame.rows), frame.rows - 2) && !isStrip
+    // a `[x] label` hint binds a letter only in an ACTION row (a head or body row can quote `[a]` or `buf[i]`), at the start of the text or after a space (one form: the host draws the Button `x: label`, so the text never also carries `[x]`)
+    const isActionRow = i >= rows.length - 1 - actionCount && !isStrip
     const nodes: unknown[] = []
     for (let j = 0; j < r.length; j++) {
       const sg = r[j]

@@ -233,7 +233,7 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
   else if (ctx.live.state !== 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('page.decide.stale_live', { why: ctx.live.header }), ctx.size.cols))
   if (ctx.console !== null) {
     const src = ctx.console.sources.cards
-    if (src !== undefined && src.state !== 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('frame.src_' + src.state, { name: 'cards', min: src.at_ms === null ? '-' : String(Math.max(0, Math.floor((ctx.nowMs - src.at_ms) / 60000))) }), ctx.size.cols))
+    if (src !== undefined && src.state !== 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('frame.src_' + src.state, { name: t('console.command.src.cards'), min: src.at_ms === null ? '-' : String(Math.max(0, Math.floor((ctx.nowMs - src.at_ms) / 60000))) }), ctx.size.cols))
     else if (ctx.console.cards === null) body.push(noSource(ctx, 'page.decide.nosrc_cards'))
   }
 
@@ -314,7 +314,7 @@ function actionRows(cur: Item, cursor: number, nav: DecideNav, ctx: PageCtx, wid
   if (!wide) {
     return [R(picked + ' ' + t('page.decide.act_note_c')), R(t('page.decide.act_send_c') + '  ' + t('page.decide.act_undo_c')), R(navKeys + ' ' + (nav.folded ? fold : t('page.decide.act_fill_c')))]
   }
-  const range = n <= 1 ? '[a]' : t('page.decide.act_range', { last: letterOf(n - 1) })
+  const range = n <= 1 ? 'a:' : t('page.decide.act_range', { last: letterOf(n - 1) })
   const pickHelp = roomy ? t('page.decide.act_pick_roomy') : t('page.decide.act_pick_tight')
   const rows = [R(picked), R(range + ' ' + pickHelp + '   ' + t('page.decide.act_note')), R(t('page.decide.act_send') + '   ' + t('page.decide.act_undo') + (roomy ? '' : '   ' + t('page.decide.act_fill'))), R(navKeys + '  ' + fold)]
   if (roomy) rows.push(R(t('page.decide.act_fill')))

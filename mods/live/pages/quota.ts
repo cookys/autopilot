@@ -58,6 +58,23 @@ const COLS: Record<Tier, Cols> = {
   narrow: { pool: 10, d7: 7, h5: 6, reset: 7, burn: 9, proj: 8, exh: 0, seats: 0 },
 }
 
+// the text cut into pieces of at most `w` display cells (a wide character is never split); a piece ends after a clause mark (；，：or a space) when one lies in the last
+// three quarters of it, so a word is not cut in the middle when the text has a place to break
+function chunkWidth(text: string, w: number): string[] {
+  const out: string[] = []
+  let cur = ''
+  for (const ch of text) {
+    if (displayWidth(cur + ch) > w) {
+      const cut = Math.max(...[...'；，：、 '].map(m => cur.lastIndexOf(m)))
+      if (cut >= 0 && displayWidth(cur.slice(0, cut + 1)) * 4 >= w) { out.push(cur.slice(0, cut + 1).trimEnd()); cur = cur.slice(cut + 1) }
+      else { out.push(cur); cur = '' }
+    }
+    cur += ch
+  }
+  if (cur !== '') out.push(cur)
+  return out
+}
+
 function resetText(ms: number | null, tier: Tier, dows: string[]): string {
   if (ms === null) return DASH
   const x = tpe(ms)
@@ -135,8 +152,19 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     if (!paceOk && !fact) text = bad + ' ' + t('page.quota.v_nopace')
     else if (tier === 'narrow' && stalled) { text = word + ' ' + bad + ' ' + t('page.quota.f_see_below'); under.push([staleBadge(bad + ' ' + poolLabel(v.pool) + ' ' + v.text)]) }
     else text = (tier === 'narrow' ? word + ' ' : stalled ? bad + ' ' : '') + v.text
-    row.push(seg(text, roleColor(v.role)))
-    body.push(row.map(sg => ({ ...sg, press: 'quota:pool:' + i }))) // the whole row is one Button: it focuses this pool and shows / folds its seats
+    // the verdict is the last column: a text wider than what is left wraps onto rows indented to the verdict column (never back to column 0, which cuts through the table).
+    // When even that leaves under 10 cells, the table carries the short verdict (the role word) and the full text is in the focus area under the table (A10: never truncated).
+    const indent = row.reduce((w, sg) => w + displayWidth(sg.text), 0)
+    const room = cols - indent
+    const press = 'quota:pool:' + i // the whole row is one Button: it focuses this pool and shows / folds its seats
+    if (displayWidth(text) <= room) { row.push(seg(text, roleColor(v.role))); body.push(row.map(sg => ({ ...sg, press }))) }
+    else if (room < 10) { row.push(seg(word, roleColor(v.role))); body.push(row.map(sg => ({ ...sg, press }))) }
+    else {
+      const parts = chunkWidth(text, room)
+      row.push(seg(parts[0], roleColor(v.role)))
+      body.push(row.map(sg => ({ ...sg, press })))
+      for (const part of parts.slice(1)) body.push([{ text: ' '.repeat(indent), press }, { text: part, color: roleColor(v.role), press }])
+    }
   })
   body.push(...under)
 

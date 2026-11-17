@@ -110,7 +110,7 @@ test('now: golden at 160x40, 120x30 and 80x24 matches the mockup rows', async ()
   expect(diffRows(flat(content(120, 30, con())), GOLD_120)).toEqual([])
   expect(diffRows(flat(content(80, 24, con())), GOLD_80)).toEqual([])
   expect(content(160, 40, con())[3]).toMatch(/2 時前$/)
-  expect(actionsOf(160, 40, con())).toEqual(['→ 待決 3 張卡等你（最舊 40 分）  [2]', '→ 殘留 2 項可清  [8]'])
+  expect(actionsOf(160, 40, con())).toEqual(['→ 到待決頁  [2]', '→ 殘留 2 項可清  [8]'])
 })
 
 test('now: negative control, a broken golden row is reported (the comparator is not vacuous)', async () => {
@@ -120,7 +120,7 @@ test('now: negative control, a broken golden row is reported (the comparator is 
   expect(diffRows(flat(content(80, 24, con())), broken).length).toBe(1)
 })
 
-test('now: frameRows is at most H rows at every size and every state, actions never exceed A', async () => {
+test('now: frameRows is exactly H rows at every size and every state, actions never exceed A', async () => {
   await feed()
   const states: [string, ConsoleSnapshot | null, unknown][] = [
     ['console', con(), live()], ['no console', null, live()], ['no live', con(), null], ['neither', null, null], ['blocked', withItems([blocked(false)]), live()], ['blocked stale', withItems([blocked(true)]), live()],
@@ -131,7 +131,7 @@ test('now: frameRows is at most H rows at every size and every state, actions ne
   for (const [cols, rows] of [[160, 40], [120, 30], [80, 24]] as const)
     for (const [name, c, l] of states) {
       const ctx = ctxOf(cols, rows, c, l)
-      if (frameRows(nowPage, ctx).length > rows) bad.push(`${name}@${cols}x${rows} rows`)
+      if (frameRows(nowPage, ctx).length !== rows) bad.push(`${name}@${cols}x${rows} rows`)
       if (nowPage.render(ctx).actions.length > actionRows(rows)) bad.push(`${name}@${cols}x${rows} actions`)
     }
   expect(bad.join(' ')).toBe('')
@@ -151,7 +151,7 @@ test('now: overflow at 80x24 ends in the more row and keeps 24 rows', async () =
   await feed()
   const ex = Array.from({ length: 9 }, (_, i) => ({ ...con().items[0], id: 'e' + i, title: 'lane' + i + ' 卡住' }))
   const out = frameRows(nowPage, ctxOf(80, 24, con({ items: ex as never }))).map(text)
-  expect(out.length).toBeLessThanOrEqual(24)
+  expect(out.length).toBe(24)
   expect(out.some(r => r.includes('還有'))).toBe(true)
   expect(out[out.length - 1]).toMatch(/1\D*2\D*3/)
 })
@@ -237,6 +237,6 @@ test('now R4: console cards no_source plus one own pending card still shows the 
   const c = con({ counts: { ...base.counts, decisions: 0 }, cards: null, sources: { ...base.sources, cards: { at_ms: null, state: 'no_source' } } })
   const acts = nowPage.render(ctxOf(160, 40, c, live({ pending: [own] }))).actions.flat()
   expect(acts.some(s => s.text === '[2]'), 'the [2] jump is drawn').toBe(true)
-  expect(acts.map(s => s.text).join('')).toContain('1')
+  expect(acts.map(s => s.text).join('')).toContain('[2]')
 })
 

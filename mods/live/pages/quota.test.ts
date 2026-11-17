@@ -58,8 +58,10 @@ const GOLDEN = {
     "    池         7 天  5 時  重置   近 6 時    預測  判定",
     "▸ ✗ trinity     31%✗   0%✗ 週五06    +0.3✗    47%✗ 紅 ✗ 見下",
     "  ✗ twgame      49%    0%  週四09    +1.4     94%  紅 ✗ 見下",
-    "  ▲ team        68%   17%  週六12    +1.9   >100%  黃 約 17 時後用完；判定未知：缺換池資料（capacity）",
-    "  ▲ personal   100%  100%  週四08    +1.1    100%  黃 判定未知：缺換池資料（capacity）",
+    "  ▲ team        68%   17%  週六12    +1.9   >100%  黃 約 17 時後用完；判定未知：",
+    "                                                   缺換池資料（capacity）",
+    "  ▲ personal   100%  100%  週四08    +1.1    100%  黃 判定未知：",
+    "                                                   缺換池資料（capacity）",
     "  ▲ grok        10%    0%  週二00    +0.0     10%  黃 約剩 90% 會浪費",
     "  ▲ lab         22%    4%  週日10    +0.2     43%  黃 約剩 57% 會浪費",
     "  ✓ codex       80%   12%  週四21    +0.4     98%  綠 會用到 98%",
@@ -145,7 +147,7 @@ test('quota: Enter (A3) expands the focused pool\'s seats from the seats feed; a
   expect(body(160, 40, consoleOf(POOLS, { seats: SEATS }), { focus: 0, expanded: true })).toEqual(GOLDEN.expanded)
 })
 
-test('quota: frameRows is at most H rows in every size and state, actions <= A, strip last', () => {
+test('quota: frameRows is exactly H rows in every size and state, actions <= A, strip last', () => {
   const states: [string, unknown][] = [
     ['pace', consoleOf(POOLS, { seats: SEATS })], ['no pace', consoleOf(NOPACE, { pace: false })], ['no console', null], ['no quota object', consoleOf(null)],
     ['no pools', consoleOf([])], ['one pool', consoleOf([POOLS[0]])],
@@ -156,7 +158,7 @@ test('quota: frameRows is at most H rows in every size and state, actions <= A, 
     for (const [name, c] of states) {
       const ctx = ctxOf(cols, rows, c)
       const out = frameRows(page, ctx)
-      if (out.length > rows) bad.push(`${cols}x${rows}/${name}=${out.length}`)
+      if (out.length !== rows) bad.push(`${cols}x${rows}/${name}=${out.length}`)
       if ((page as { render: (x: never) => { actions: unknown[] } }).render(ctx).actions.length > A(rows)) bad.push(`${cols}x${rows}/${name} actions`)
       if (!/1\D*2\D*3\D*4/.test(text(out[out.length - 1]))) bad.push(`${cols}x${rows}/${name} strip`)
     }

@@ -49,9 +49,9 @@ for (const size of SIZES) {
       ['wide text', { ...page, render: () => ({ body: [line('字'.repeat(300))], actions: [line('x'.repeat(300))] }) }, null],
     ]
     for (const [name, p, con] of states) {
-      test('frame: ' + page.id + ' ' + name + ' at ' + size.cols + 'x' + size.rows + ' is at most ' + size.rows + ' rows (no blank filler), none wider than the pane', () => {
+      test('frame: ' + page.id + ' ' + name + ' at ' + size.cols + 'x' + size.rows + ' is exactly ' + size.rows + ' rows, none wider than the pane', () => {
         const rows = frameRows(p, ctxOf(size, con), { pages: PAGES })
-        expect(rows.length).toBeLessThanOrEqual(size.rows)
+        expect(rows.length).toBe(size.rows)
         for (const r of rows) expect(displayWidth(text(r))).toBeLessThanOrEqual(size.cols)
       })
     }
@@ -73,10 +73,11 @@ test('frame: layout, header on row 0, strip on the last row, A = 6 from 32 rows 
   expect(text(rows[bodyRoom - 1])).toBe('body ' + (bodyRoom - 2))
 })
 
-test('frame: no action says 沒有待決卡 on one row only; a short body leaves no blank fill (G1)', () => {
-  const rows = frameRows(withBody(PAGES[0], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
-  expect(rows.map(text).slice(0, 4)).toEqual(['現況', 'body 0', 'body 1', '沒有待決卡'])
-  expect(rows.length).toBe(5) // head, two body rows, the empty-state row, the strip
+test('frame: no action says 沒有待決卡 on one row only; a short body keeps the strip on the last row, blank rows only between the body and the actions', () => {
+  const rows = frameRows(withBody(PAGES[2], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
+  expect(rows.map(text).slice(0, 3)).toEqual(['艦隊', 'body 0', 'body 1'])
+  expect(rows.length).toBe(24)
+  expect(text(rows[22])).toBe('沒有待決卡') // directly above the strip
   expect(rows.filter(r => text(r) === '沒有待決卡').length).toBe(1)
 })
 
@@ -236,11 +237,11 @@ test('pane review fix: while a 待決 note is typed the strip binds no digit and
 })
 
 // review fix 1: the frame is exactly H rows even when H is under the six rows (head + strip + at least one action) the layout used to force
-test('frame: a pane under 6 rows is at most H rows (0 -> none, 1 -> the strip, 2 -> head and strip, actions keep the last ones)', () => {
+test('frame: a pane under 6 rows is exactly H rows (0 -> none, 1 -> the strip, 2 -> head and strip, actions keep the last ones)', () => {
   for (const H of [0, 1, 2, 3, 4, 5]) {
     for (const acts of [0, 1, 3]) {
       const rows = frameRows(withBody(PAGES[0], 9, acts), ctxOf({ cols: 80, rows: H }), { pages: PAGES })
-      expect(rows.length, 'H=' + H + ' actions=' + acts).toBeLessThanOrEqual(H)
+      expect(rows.length, 'H=' + H + ' actions=' + acts).toBe(H)
       if (H > 0) expect(text(rows[rows.length - 1]), 'H=' + H + ': the strip is last').toMatch(/說明|現|1/)
     }
   }
@@ -283,7 +284,7 @@ test('pane UX fix: strip at 70 / 60 / 40 columns is one row within the width (ho
   for (const cols of [70, 60, 40]) {
     const rows = frameRows(PAGES[1], ctxOf({ cols, rows: 24 }), { pages: PAGES })
     const strip = rows[rows.length - 1]
-    expect(rows.length, cols + ': at most H rows').toBeLessThanOrEqual(24)
+    expect(rows.length, cols + ': exactly H rows').toBe(24)
     expect(hostWidth(strip), cols + ': the strip with the host prefix is ' + hostWidth(strip) + ' wide: ' + text(strip)).toBeLessThanOrEqual(cols)
     for (let i = 1; i < strip.length; i++) expect(isButtonSeg(strip[i - 1]) && isButtonSeg(strip[i]), cols + ': two Buttons run together at ' + i + ': ' + text(strip)).toBe(false)
     expect(strip.some(s => s.text.startsWith('i ')), cols + ': the help entry is in the strip: ' + text(strip)).toBe(true)
@@ -292,7 +293,7 @@ test('pane UX fix: strip at 70 / 60 / 40 columns is one row within the width (ho
   const last = (r: Row[]) => text(r[r.length - 1])
   expect(last(wide).startsWith('1 現 2 待'), 'at 70 the labels shrink to the first character: ' + last(wide)).toBe(true)
   const narrow = frameRows(PAGES[1], ctxOf({ cols: 40, rows: 24 }), { pages: PAGES })
-  for (const key of ['1', '8', '9', '0', 'i']) expect(last(narrow), 'G7: at 40 the entry ' + key + ' is still there, nothing folds: ' + last(narrow)).toContain(key)
+  for (const key of ['1', '2', 'i']) expect(last(narrow), 'G7: at 40 the entry ' + key + ' is still there, nothing folds: ' + last(narrow)).toContain(key)
   expect(last(narrow).includes('…'), 'G7: no fold').toBe(false)
 })
 test('pane UX fix: the quota page empty state says 沒有待決卡, not 沒有要你處理的事 (pools above can be red)', () => {

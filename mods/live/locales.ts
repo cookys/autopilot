@@ -496,6 +496,7 @@ export const EN: Record<string, string> = {
   "frame.close": "close",
   "frame.nothing": "No pending cards",
   "frame.unknown": "Not enough data to judge",
+  "frame.unknown_pools": "{n} pools: verdict unknown (no rebalance data)",
   "frame.more": "{arrow} {n} more rows",
   "frame.src_no_source": "{name}: no source",
   "frame.src_expired": "{name}: data expired, {min} min old",
@@ -555,7 +556,7 @@ export const EN: Record<string, string> = {
   "page.quota.f_order_nopace": "used up, then stale (oldest first), then highest 7-day %",
   "page.quota.f_limit_hit": "quota limit reached",
   "page.quota.no_console": "Quota: no source, there is no console snapshot",
-  "page.quota.no_pools": "Quota: no source, quota.pools is empty",
+  "page.quota.no_pools": "Quota: no source, no pool data",
   "page.quota.seat_row": "{seat}  7d {a}  5h {b}  {age}",
   "page.quota.seat_none": "the seat list has no seat of this pool",
   "page.quota.action_f": "[f] fill the switch advice into the prompt line (not sent)",
@@ -609,6 +610,7 @@ export const EN: Record<string, string> = {
   "page.now.ago": "{age} ago",
   "page.now.oldest": " (oldest {age})",
   "page.now.go_decide": "{n} cards wait for you",
+  "page.now.jump_decide": "Open the pending page",
   "page.now.go_residue": "{n} residue items can be cleared",
   "page.now.quota_empty": "no quota pools",
   "page.now.quota_worst": "worst",
@@ -664,7 +666,7 @@ export const EN: Record<string, string> = {
   "page.decide.act_picked_c": "Picked {k} (not sent)",
   "page.decide.act_pick_roomy": "options (at most 5 per card, a-e)",
   "page.decide.act_pick_tight": "options (5 at most)",
-  "page.decide.act_range": "[a]-[{last}]",
+  "page.decide.act_range": "a-{last}:",
   "page.decide.act_readonly": "This card is answered at {seat}; read-only here",
   "page.decide.act_send": "[s] send the focused card (Enter presses the focused button)",
   "page.decide.act_send_c": "[s] send",
@@ -706,7 +708,8 @@ export const EN: Record<string, string> = {
   "page.decide.stale_live": "this seat's decision data is not current: {why}",
   "page.decide.step": "Step",
   "page.quota.f_blocked": "blocked",
-  "page.quota.blocked_stale": "data stale: {source} is not running"
+  "page.quota.blocked_stale": "data stale: {source} is not running",
+  "frame.calm": "Nothing needs you"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -1203,6 +1206,7 @@ export const ZH_TW: Record<string, string> = {
   "frame.close": "收起",
   "frame.nothing": "沒有待決卡",
   "frame.unknown": "資料不足，無法判定",
+  "frame.unknown_pools": "{n} 池判定未知（缺換池資料）",
   "frame.more": "{arrow} 還有 {n} 列",
   "frame.src_no_source": "{name} 無來源",
   "frame.src_expired": "{name} 資料已過期，{min} 分鐘前",
@@ -1262,7 +1266,7 @@ export const ZH_TW: Record<string, string> = {
   "page.quota.f_order_nopace": "已用完 > 過期（最舊在前）> 7 天最高",
   "page.quota.f_limit_hit": "已達額度上限",
   "page.quota.no_console": "額度 無來源：沒有 console 快照",
-  "page.quota.no_pools": "額度 無來源：quota.pools 是空的",
+  "page.quota.no_pools": "額度 無來源：沒有任何額度池資料",
   "page.quota.seat_row": "{seat}  7天 {a}  5小時 {b}  {age}",
   "page.quota.seat_none": "席位清單沒有這個池的席位",
   "page.quota.action_f": "[f] 換池建議填入提示列（不送出）",
@@ -1316,6 +1320,7 @@ export const ZH_TW: Record<string, string> = {
   "page.now.ago": "{age}前",
   "page.now.oldest": "（最舊 {age}）",
   "page.now.go_decide": "待決 {n} 張卡等你",
+  "page.now.jump_decide": "到待決頁",
   "page.now.go_residue": "殘留 {n} 項可清",
   "page.now.quota_empty": "沒有額度池",
   "page.now.quota_worst": "最緊",
@@ -1371,7 +1376,7 @@ export const ZH_TW: Record<string, string> = {
   "page.decide.act_picked_c": "已選 {k}（尚未送出）",
   "page.decide.act_pick_roomy": "選項（每張卡最多 5 個選項 a–e）",
   "page.decide.act_pick_tight": "選項（卡上限 5 個）",
-  "page.decide.act_range": "[a]–[{last}]",
+  "page.decide.act_range": "a–{last}:",
   "page.decide.act_readonly": "這張要到 {seat} 答，這裡只能看",
   "page.decide.act_send": "[s] 送出焦點卡（Enter 按下焦點按鈕）",
   "page.decide.act_send_c": "[s] 送出",
@@ -1413,5 +1418,6 @@ export const ZH_TW: Record<string, string> = {
   "page.decide.stale_live": "本席待決資料不是最新：{why}",
   "page.decide.step": "步驟",
   "page.quota.f_blocked": "用完",
-  "page.quota.blocked_stale": "資料過期：{source} 沒在跑"
+  "page.quota.blocked_stale": "資料過期：{source} 沒在跑",
+  "frame.calm": "沒有要你處理的事"
 }

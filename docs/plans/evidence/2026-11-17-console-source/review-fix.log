@@ -1,0 +1,82 @@
+Console source redraw review fix
+Base: 45fcbcd34; branch: fix/console-source-redraw
+
+Step 1 - task and acceptance
+Keep snap/staleSnap identity for equal raw JSON and command/file origin.
+Invalidate consoleSource only if current() identity changes across refresh, using completion time; fallback fresh -> stale must still invalidate once.
+Acceptance: null -> null, unchanged command JSON, unchanged fresh/stale fallback JSON, changed JSON, changed origin, stale threshold; red before green; no additional plugin failures; sync generate/check exit 0.
+
+Step 2 - exact original production lines changed
+consolefeed.ts:35:   const accept = (s: ConsoleSnapshot | null, file: boolean): void => {
+consolefeed.ts:36:     snap = s
+consolefeed.ts:37:     fromFile = file
+consolefeed.ts:38:     staleSnap = null
+consolefeed.ts:56:           if (r.exitCode === 0 && r.isStdoutTruncated !== true && r.stdout.length <= CONSOLE_MAX_BYTES) got = parse(r.stdout)
+consolefeed.ts:60:         if (got !== null) { accept(got, false); return true }
+consolefeed.ts:63:           const text = await readFile()
+consolefeed.ts:68:         accept(fileSnap, fileSnap !== null)
+register.ts:211:   void consoleFeed.refresh(argv => $.process.run(argv, { timeoutMs: CONSOLE_TIMEOUT_MS }), () => (path === null ? Promise.resolve(null) : readText($, path)), parseConsole, nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => {}).catch(() => {})
+
+Step 3 - negative control, new tests against unchanged production code
+node --test mods/live/consolefeed.test.js: exit=1; ℹ tests 16; ℹ pass 11; ℹ fail 5
+✖ i: unchanged command JSON keeps the held snapshot
+✖ j: unchanged fallback JSON keeps both fresh and stale snapshot identity
+✖ m: fresh -> stale changes current() once even when the fallback JSON is unchanged
+✖ n: consoleSource does not invalidate after null -> null or unchanged command/fallback refreshes
+✖ o: consoleSource invalidates once when the fallback crosses the stale boundary during refresh
+Failures are ERR_ASSERTION: reference identity and redundant ui.render invalidations.
+Feed identity fix only:
+node --test --test-name-pattern=^[h-m]: mods/live/consolefeed.test.js: exit=0; ℹ tests 6; ℹ pass 6; ℹ fail 0
+node --test mods/live/consolefeed.test.js: exit=1; ℹ tests 16; ℹ pass 14; ℹ fail 2; only n/o (consoleSource) still fail.
+
+Step 4 - consoleSource identity comparison fix
+node --test mods/live/consolefeed.test.js: exit=0; ℹ tests 16; ℹ pass 16; ℹ fail 0
+n/o execute the shipped consoleSource function with synthetic engine/clock/file/command stubs, including stale crossing during refresh.
+
+Step 5 - final verification
+45fcbcd34 baseline: bash mods/live/run-tests.sh < /dev/null: exit=1; 1084 pass; 15 fail; Ran 1099 tests across 17 files. [302.38s]
+Final: bash mods/live/run-tests.sh < /dev/null: exit=1; 1084 pass; 15 fail; Ran 1099 tests across 17 files. [316.54s]
+Both use the real claude binary through AUTOPILOT_MODS_REAL_CLAUDE and the runner empty-config guard; TMPDIR is inside this worktree. Runs were sequential.
+Baseline was reconstructed with git archive 45fcbcd34 inside this worktree.
+Initial 180 s capture was interrupted (SIGTERM) and superseded by these completed runs.
+Failure-name comparison: exit=0; new names=0; baseline/final sets equal=true.
+Unchanged failing test names (from completed runner output; count matches Summary):
+  G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal)
+  G33a: the feed runs with no summary_row heartbeat, and before any run the band has no fleet counts; the reader is never asked (terminal)
+  G33a: a stale, foreign, unreadable or oversized heartbeat does not stop the fetch, and the band stays one row (terminal)
+  C1 U7: console mode: an alive forge-stats with summary_row is never asked for the second row (next(e) 0 calls) and the band row carries the console tab names (terminal)
+  C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal)
+  speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (terminal)
+  speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (terminal)
+  speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (terminal)
+  speed tab: pressing it again closes it, and the speed view is gone (terminal)
+  speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (terminal)
+  speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (desktop)
+  speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (desktop)
+  speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (desktop)
+  speed tab: pressing it again closes it, and the speed view is gone (desktop)
+  speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (desktop)
+
+Every node --test file listed by run-tests.sh (baseline -> final; all exit codes):
+node --test mods/live/gen-locales.test.js: baseline exit=0; final exit=0; ℹ tests 6; ℹ pass 6; ℹ fail 0
+node --test mods/live/ui-lint.test.js: baseline exit=0; final exit=0; ℹ tests 56; ℹ pass 56; ℹ fail 0
+node --test mods/live/band-split.test.js: baseline exit=0; final exit=0; ℹ tests 3; ℹ pass 3; ℹ fail 0
+node --test mods/live/shell.test.js: baseline exit=0; final exit=0; ℹ tests 50; ℹ pass 50; ℹ fail 0
+node --test mods/live/console.test.js: baseline exit=0; final exit=0; ℹ tests 11; ℹ pass 11; ℹ fail 0
+node --test mods/live/consolestrip.test.js: baseline exit=0; final exit=0; ℹ tests 14; ℹ pass 14; ℹ fail 0
+node --test mods/live/commandtab.test.js: baseline exit=0; final exit=0; ℹ tests 14; ℹ pass 14; ℹ fail 0
+node --test mods/live/consolepages.test.js: baseline exit=0; final exit=0; ℹ tests 8; ℹ pass 8; ℹ fail 0
+node --test mods/live/consolefeed.test.js: baseline exit=0; final exit=0; ℹ tests 16; ℹ pass 16; ℹ fail 0
+bash scripts/sync-all.sh: exit=0; ok=true; no tracked generated changes.
+bash scripts/sync-all.sh --check: exit=0; ok=true; all 16 checks ran; failures=[].
+git diff --check: exit=0.
+bash .githooks/pre-commit (staged gate): exit=0.
+
+Changed files (one line each):
+mods/live/consolefeed.ts - retain held fresh/stale snapshots when raw JSON and origin match.
+mods/live/register.ts - compare current() identity before refresh and at completion before invalidating.
+mods/live/consolefeed.test.js - eight synthetic regression tests covering identity, origins, stale aging, and real consoleSource invalidations.
+docs/plans/evidence/2026-11-17-console-source/review-fix.log - record negative control, incremental verification, final command exit codes, and baseline comparison.
+
+Not done / out of scope: repair the 15 unrelated baseline plugin failures; merge/push; deploy or contact a live fleet; add dependencies or change other behavior. Independent cross-family review is the caller pipeline handoff.
+Boundary: no network or real credentials; all fixture data synthetic; parent session marker refused writes (exit 3), left untouched.

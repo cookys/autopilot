@@ -75,6 +75,37 @@ for (const [input, expected] of assignments) {
   test(`env ${input}`, () => expectRedacted(input, expected));
 }
 
+const grepYaml = [
+  ['grep -n YAML list assignment', '7:      - MYSQL_ROOT_PASSWORD=S3cr3t-synthetic-001 with spaces',
+    '7:      - MYSQL_ROOT_PASSWORD=[REDACTED]'],
+  ['grep -Hn YAML list assignment', 'docker-compose.yml:7:      - DB_PASSWORD=S3cr3t-synthetic-001 with spaces',
+    'docker-compose.yml:7:      - DB_PASSWORD=[REDACTED]'],
+  ['rg YAML list assignment', 'config/docker-compose.yml:7:  - API_KEY=S3cr3t-synthetic-001 with spaces',
+    'config/docker-compose.yml:7:  - API_KEY=[REDACTED]'],
+  ['YAML list mapping', '7:      - MYSQL_ROOT_PASSWORD: S3cr3t-synthetic-001',
+    '7:      - MYSQL_ROOT_PASSWORD: [REDACTED]'],
+  ['grep -Hn YAML list mapping', 'docker-compose.yml:7:  - PRIVATE_KEY: S3cr3t-synthetic-001',
+    'docker-compose.yml:7:  - PRIVATE_KEY: [REDACTED]'],
+  ['quoted YAML list assignment', '7:  - "API_KEY=S3cr3t-synthetic-001"',
+    '7:  - "API_KEY=[REDACTED]"'],
+  ['single-quoted YAML list assignment', "- 'TOKEN=S3cr3t-synthetic-001 with spaces' # comment",
+    "- 'TOKEN=[REDACTED]' # comment"],
+  ['credential YAML list mapping', '- CREDENTIALS: S3cr3t-synthetic-001',
+    '- CREDENTIALS: [REDACTED]'],
+  ['passwd YAML list mapping', '- db_passwd: S3cr3t-synthetic-001',
+    '- db_passwd: [REDACTED]'],
+];
+for (const [name, input, expected] of grepYaml) {
+  test(`grep/YAML ${name}`, () => expectRedacted(input, expected));
+}
+test('grep/YAML exact incident and negative controls retain existing behavior', () => {
+  expectRedacted('7:      - MYSQL_ROOT_PASSWORD=S3cr3t-synthetic-001',
+    '7:      - MYSQL_ROOT_PASSWORD=[REDACTED]');
+  assert.equal(run(response('7:  - IMAGE=percona:8.0\r\n- MODE: debug\n- "IMAGE=percona:8.0"')), null);
+  // The existing secretName rule treats KEY_COUNT as secret; preserve that contract.
+  expectRedacted('- KEY_COUNT=3', '- KEY_COUNT=[REDACTED]');
+});
+
 const spacedAssignments = [
   ['DB_PASSWORD = "synthetic"', 'DB_PASSWORD = "[REDACTED]"'],
   ['api_key = synthetic', 'api_key = [REDACTED]'],

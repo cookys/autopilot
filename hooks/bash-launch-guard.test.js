@@ -1876,6 +1876,7 @@ const secretDenied = [
   "kubectl -n prod get secret db --output=jsonpath='{.data}'",
   "kubectl get secrets -o go-template='{{.data}}'", 'kubectl describe secret db',
   'kubectl describe secrets', 'kubectl --context prod describe secret db',
+  "grep -n 'secret' README.md",
 ];
 for (const cmd of secretDenied) {
   test(`secret-print denies: ${cmd}`, () => {
@@ -1895,10 +1896,50 @@ for (const cmd of [
   'cat README.md', 'cat id_rsa.pub', 'cat /tmp/id_ed25519.pub',
   'echo "cat .env"', "cat <<'EOF'\ncat .env\nEOF", '# cat .env\necho ok',
   'kubectl get secrets', 'kubectl get pods -o yaml', 'docker compose ps',
-  "grep -n 'secret' README.md",
 ]) {
   test(`secret-print allows: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
 }
+
+for (const cmd of [
+  'grep -n PASSWORD .env', 'grep -n PASSWORD config.yml',
+  "rg -i 'api_key|secret' config/", "grep -E 'TOKEN' a.yml", 'git grep -n DB_PASSWORD',
+  'egrep -n passwd config.yml', 'grep -P PRIVATE_KEY config.yml',
+  'grep -e MODE -e DB_PASSWORD config.yml', 'grep -nEe DB_PASSWORD config.yml',
+  'grep -ePASSWORD config.yml', 'rg --regexp=api_key config/',
+  'git -C src grep -n DB_PASSWORD', 'grep -- DB_PASSWORD config.yml',
+  "grep -e '-q|TOKEN' config.yml", "rg -e '-c|SECRET' config.yml",
+  'grep -n KEY config.yml', 'grep -n KEY_ID config.yml', 'rg encryption_key config/',
+  'grep -n PASSWORD config.yml; mask-secrets',
+  'grep -n PASSWORD config.yml || mask-secrets',
+  'grep -n PASSWORD config.yml | tee /dev/stderr | mask-secrets',
+  'echo mask-secrets; grep -n PASSWORD config.yml',
+]) {
+  test(`secret-print grep pattern denies: ${cmd}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(r.deny, true);
+    assert.strictEqual(r.reason, secretDenial);
+  });
+}
+for (const cmd of [
+  'grep -c PASSWORD .env', 'grep -l SECRET -r config', 'rg -q TOKEN x',
+  'egrep -L SECRET config.yml', 'git grep -l DB_PASSWORD',
+  'grep --count PASSWORD .env', 'grep --files-with-matches SECRET config.yml',
+  'grep --files-without-match TOKEN config.yml', 'rg --quiet TOKEN x',
+  'grep --silent PASSWORD .env', 'grep -ne PASSWORD -c .env',
+  'grep -n PASSWORD .env | mask-secrets',
+  'grep -n PASSWORD .env | safe-inspect',
+  'rg TOKEN config/ | node scripts/safe-inspect.js',
+  'git grep DB_PASSWORD | ./mask-secrets',
+  'grep -n image: docker-compose.yml', 'grep -rn keyboard src', 'grep -n MonkeyPatch x',
+  "grep -e mode --include='*secret*' src", 'git log --grep=SECRET',
+  // MYSQL_ROOT alone has no secret key-name word. The real incident is caught
+  // by output redaction (layer 1), rather than the pattern guard (layer 2).
+  "grep -nE 'percona|my.cnf|custom.cnf|MYSQL_ROOT|image:' docker-compose.yml",
+]) {
+  test(`secret-print grep pattern allows: ${cmd}`, () => assert.strictEqual(run(cmd).deny, false));
+}
+
 test('secret-print mode config, env precedence, defaults and every-depth enforcement', () => {
   for (const mode of ['block', 'garbage']) {
     assert.strictEqual(run('printenv NAME', { env: { AUTOPILOT_BASH_GUARD_SECRET_MODE: mode } }).deny, true);

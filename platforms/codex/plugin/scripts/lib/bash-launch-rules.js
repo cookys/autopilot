@@ -1579,8 +1579,9 @@ function detectRmSharedDirUnguarded(cmd, opts = {}) {
 
 // Reuse the guard's lexer, segment expansion and prefix handling. No files or commands are opened here.
 const SECRET_RETAIN = new Set(['env', 'bash', 'sh', 'dash', 'zsh']);
-const SECRET_READERS = new Set(['cat', 'less', 'more', 'head', 'tail', 'bat', 'sed', 'awk', 'grep', 'rg', 'ugrep']);
-const SECRET_GREP = new Set(['grep', 'rg', 'ugrep']);
+const SECRET_READERS = new Set(['cat', 'less', 'more', 'head', 'tail', 'bat', 'sed', 'awk', 'grep', 'egrep', 'rg', 'ugrep']);
+const SECRET_GREP = new Set(['grep', 'egrep', 'rg', 'ugrep']);
+const SECRET_GREP_NAME = /(?:^|[^A-Za-z0-9])(?:PASSWORD|PASSWD|SECRET|TOKEN|KEY)(?=$|[^A-Za-z0-9])/i;
 const SECRET_MESSAGE = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行。整行指令一起判斷：同一行若也在建檔或寫檔，請把建檔和讀取拆成兩次執行。';
 function secretPath(word) {
   const base = path.posix.basename(word);
@@ -1589,7 +1590,7 @@ function secretPath(word) {
     || /(?:^|\/)[^/]+\.service\.d\/[^/]+$/.test(word)
     || /(?:^|\/)systemd\/[^/]+\/[^/]+\.conf$/.test(word);
 }
-function secretWords(head, args, depth) {
+function secretWords(head, args, depth, sanitized = false) {
   if (depth > MAX_EXPAND_DEPTH || !head) return false;
   const name = path.posix.basename(head);
   if (name === 'env') {
@@ -1602,12 +1603,12 @@ function secretWords(head, args, depth) {
       if (options && ['--help', '--version'].includes(a)) return false;
       if (options && ['-u', '--unset', '-C', '--chdir'].includes(a)) { i += 1; continue; }
       if (options && (a === '-S' || a === '--split-string')) {
-        return secretWords('env', [...tokens(args[i + 1] || '').map((t) => dequote(t.raw)), ...args.slice(i + 2)], depth + 1);
+        return secretWords('env', [...tokens(args[i + 1] || '').map((t) => dequote(t.raw)), ...args.slice(i + 2)], depth + 1, sanitized);
       }
       if ((options && a.startsWith('-')) || /^[A-Za-z_]\w*=/.test(a)) continue;
       break;
     }
-    return i >= args.length || secretInvocation(args.slice(i), depth + 1);
+    return i >= args.length || secretInvocation(args.slice(i), depth + 1, sanitized);
   }
   if (['bash', 'sh', 'zsh', 'dash'].includes(name)) {
     const i = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
@@ -1617,11 +1618,20 @@ function secretWords(head, args, depth) {
   if (name === 'printenv') return !args.some((a) => a === '--help' || a === '--version');
   if (name === 'set') return operands.length === 0;
   if (name === 'export') return args.some((a) => /^-[a-zA-Z]*p/.test(a));
+  if (name === 'git') {
+    let i = 0;
+    while (i < args.length && args[i].startsWith('-')) {
+      if (['-C', '-c', '--git-dir', '--work-tree', '--namespace'].includes(args[i])) i += 1;
+      i += 1;
+    }
+    return args[i] === 'grep' && secretWords('grep', args.slice(i + 1), depth + 1, sanitized);
+  }
   if (SECRET_READERS.has(name)) {
     if (name === 'sed' && !args.some((a) => /^-[a-zA-Z]*n/.test(a) || a === '--quiet' || a === '--silent')) return false;
     const files = [];
+    const searchPatterns = [];
     let options = true;
-    let pattern = !['grep', 'rg', 'ugrep', 'sed', 'awk'].includes(name);
+    let pattern = !SECRET_GREP.has(name) && !['sed', 'awk'].includes(name);
     let safeOutput = false;
     for (let i = 0; i < args.length; i += 1) {
       const a = args[i];
@@ -1633,22 +1643,42 @@ function secretWords(head, args, depth) {
       }
       if (options && a === '--') { options = false; continue; }
       if (options && a.startsWith('-') && !REDIR_RE.test(a)) {
+        // -e/-f consume the rest of a short-option cluster, or the next word.
+        // Their operands are never output flags (e.g. -e '-q|TOKEN').
+        const shortPattern = SECRET_GREP.has(name) && /^-([a-zA-Z]*?)([ef])(.*)$/.exec(a);
+        if (shortPattern) {
+          if (/[lLcq]/.test(shortPattern[1])) safeOutput = true;
+          const value = shortPattern[3] || args[++i] || '';
+          (shortPattern[2] === 'e' ? searchPatterns : files).push(value);
+          pattern = true;
+          continue;
+        }
         // A pattern supplied with -e/-f replaces the first positional pattern. Never treat its text as flags or a file.
         if (/^(?:-[ef]|--regexp|--file)$/.test(a)) {
           pattern = true;
           if (a === '-f' || a === '--file') files.push(args[i + 1] || '');
+          else if (SECRET_GREP.has(name)) searchPatterns.push(args[i + 1] || '');
           i += 1; continue;
         }
-        if (/^(?:-[ef].|--(?:regexp|file)=)/.test(a)) { pattern = true; continue; }
+        if (/^(?:-[ef].|--(?:regexp|file)=)/.test(a)) {
+          pattern = true;
+          if (SECRET_GREP.has(name) && a.startsWith('--regexp=')) searchPatterns.push(a.slice(9));
+          continue;
+        }
         if (SECRET_GREP.has(name) && (/^-[a-zA-Z]*[lLcq]/.test(a)
           || /^--(?:files-with-matches|files-without-match|count(?:-matches)?|quiet|silent)$/.test(a))) safeOutput = true;
-        if (/^(?:-[mABC]|--(?:max-count|after-context|before-context|context|glob|iglob|type|type-not))$/.test(a)) i += 1;
+        if (/^(?:-[mABC]|--(?:max-count|after-context|before-context|context|glob|iglob|type|type-not|include|exclude|exclude-dir))$/.test(a)) i += 1;
         continue;
       }
-      if (!pattern) { pattern = true; continue; }
+      if (!pattern) {
+        pattern = true;
+        if (SECRET_GREP.has(name)) searchPatterns.push(a);
+        continue;
+      }
       files.push(a);
     }
-    return !safeOutput && files.some(secretPath);
+    return !safeOutput && !(sanitized && SECRET_GREP.has(name))
+      && (files.some(secretPath) || searchPatterns.some((p) => SECRET_GREP_NAME.test(p)));
   }
   if (name === 'systemctl') {
     // Options may precede the verb. Their values are not verbs (e.g. --host cat status).
@@ -1731,17 +1761,24 @@ function secretWords(head, args, depth) {
   }
   return false;
 }
-function secretInvocation(words, depth) {
+function secretInvocation(words, depth, sanitized = false) {
   const pos = commandPosition('', { words, retain: SECRET_RETAIN, decode: true });
-  return secretWords(pos.head, pos.rest, depth);
+  return secretWords(pos.head, pos.rest, depth, sanitized);
 }
 function secretText(cmd, depth = 0) {
   if (depth > MAX_EXPAND_DEPTH) return false;
   const exec = executableText(typeof cmd === 'string' ? cmd : '');
   const text = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
-  return expandSegments(text).some((seg) => {
+  const segs = expandSegments(text);
+  return segs.some((seg, i) => {
     const pos = commandPosition(seg.text, { retain: SECRET_RETAIN, decode: true });
-    return secretWords(pos.head, pos.rest, depth);
+    const next = segs[i + 1];
+    // Only an immediate pipe into a sanitizer exempts grep. A name elsewhere
+    // in a list/conditional or after tee cannot prevent earlier value output.
+    const sink = next && seg.pipe && next.pipe && !next.cond && next.lvl === seg.lvl && next.list === seg.list
+      ? commandPosition(next.text, { decode: true }).head : null;
+    const sanitized = !!sink && /^(?:mask-secrets|safe-inspect)(?:\.js)?$/.test(path.posix.basename(sink));
+    return secretWords(pos.head, pos.rest, depth, sanitized);
   });
 }
 function detectSecretPrint(cmd) {

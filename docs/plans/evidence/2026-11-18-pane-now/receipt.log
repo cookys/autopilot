@@ -1,0 +1,4 @@
+S3 now page, negative control (2026-11-18, Taipei 01:5x)
+1. golden row 2 of GOLD_80 edited to "卡住 3 時" -> (fail) now: golden at 160x40, 120x30 and 80x24 matches the mockup rows
+2. edit reverted -> (pass) now: golden at 160x40, 120x30 and 80x24 matches the mockup rows
+now.test.ts: 11 pass, 0 fail (single-file run under claude plugin test)

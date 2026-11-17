@@ -26,6 +26,7 @@ test('registry: eleven pages in key order 1-8, 9 pet, 0 forge, ? help; shells ar
   for (const p of PAGES) {
     const r = p.render(ctxOf(SIZES[0]))
     if (p.id === 'pet') expect(r.body.map(x => x.map(g => g.text).join(''))).toEqual(['寵物分頁還沒上線'])
+    else if (p.id === 'now') expect(r.body.length).toBeGreaterThan(0) // S3: the 現況 page is built; its goldens are in pages/now.test.ts
     else expect(r).toEqual({ body: [], actions: [] })
   }
 })

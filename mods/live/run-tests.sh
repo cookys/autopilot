@@ -41,6 +41,7 @@ node --test "$here/consolefeed.test.js"
 node --test "$here/pages/quota-pick.test.js" < /dev/null
 # console.test.ts (C1 U8: KR8 order and counts, the leak red light) is picked up by `claude plugin test` below with the other *.test.ts files
 # frame.test.ts (S0: the fixed-height pane frame, the page registry, the pane key table, the strip without the › chip) is picked up the same way
+# now.test.ts (S3: the 現況 page goldens at 160x40 / 120x30 / 80x24, the seat_blocked rows, the own-seat quota feed) is picked up the same way
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

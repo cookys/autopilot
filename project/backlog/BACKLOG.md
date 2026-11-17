@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0467 -->
+<!-- next-id: BL-0469 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -13,6 +13,38 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`<host>` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
+
+### affected-suites 選取超過一半時沒有警告
+- **Id**: BL-0467
+- **Status**: open
+- **Since**: 2026-11-17
+- **Origin**: peer
+- **Reporter**: PM
+- **Report**: 01M7MW5VV0CK85HZ4AY57WPZ1Y
+- **Reply**: 2026-11-17 01M7MW3W1FBJ5Q006DH26FTWT3
+- **Problem**: watcher 合併只改幾個檔，affected-suites 卻選了 889/892，等於跑全套，沒有任何提示。
+- **Impact**: 推送延誤一小時以上，席位空等；靠人盯才會發現。
+- **Trigger**: ready；選取量超過 50% 就報警，並列出是哪個檔案的改動把全套拉進來
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED PM 2026-11-17
+- **Pointer**: none
+
+### 配速選擇器沒把超前／落後算進分數，候選也沒有 cursor
+- **Id**: BL-0468
+- **Status**: open
+- **Since**: 2026-11-17
+- **Origin**: peer
+- **Reporter**: PM
+- **Report**: 01M7MP7R
+- **Reply**: unknown
+- **Problem**: pace 選擇只看剩餘額度，沒讀 pace.v1.json 的 ahead/behind；cursor 等額度充足的引擎不在候選裡。
+- **Impact**: 已超前的引擎繼續被選，落後的額度到重置時浪費掉。
+- **Trigger**: ready；由非 codex 引擎實作
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED PM 2026-11-17
+- **Pointer**: none
 
 ### band 加一個寵物分頁，先查 codepower 有沒有在做
 - **Id**: BL-0413

@@ -9,6 +9,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 |---|---|---|---|---|
 | `advisory-relay` | UserPromptSubmit<br>未驗證 | — | — | — |
 | `ask-decision` | PreToolUse<br>未驗證 | — | — | — |
+| `askpm-remind` | Stop<br>未驗證 | — | — | — |
 | `audit-log` | PostToolUse<br>未驗證 | — | — | — |
 | `awaiting-owner` | Notification, PermissionRequest, SessionEnd, Stop, SubagentStart, SubagentStop<br>未驗證 | — | — | — |
 | `context-budget` | PostToolUse<br>未驗證 | — | — | — |
@@ -27,6 +28,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `owner-question-guard` | Stop<br>未驗證 | — | — | — |
 | `past-reference-recall` | UserPromptSubmit<br>未驗證 | — | — | — |
 | `per-turn-gate` | Stop, SubagentStop<br>未驗證 | — | — | — |
+| `pm-output-cap` | PostToolUse<br>未驗證 | — | — | — |
 | `post-compact` | — | PostCompact<br>已打包（未驗證觸發）: PostCompact 2026-08-05 | — | — |
 | `post-tool-chain` | PostToolUse<br>未驗證 | — | — | — |
 | `reload-watch` | PostToolUse<br>未驗證 | — | — | — |

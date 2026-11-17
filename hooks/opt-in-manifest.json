@@ -1,8 +1,9 @@
 {
- "//": "Declarative SSOT for which hooks wired in hooks.json are OPT-IN (default-off, gated by hooks/_shared/opt-in.js). check-hook-inventory.js derives the opt-in tier from this list; everything else wired in hooks.json is default-on. Enable a listed hook via ~/.autopilot/config.json {\"hooks\":{\"<stem>\":true}} or env AUTOPILOT_HOOK_<STEM_UPPER>. Every stem here MUST be wired in hooks.json AND self-gate via opt-in.js.",
+ "//": "Declarative SSOT for which hooks wired in hooks.json are OPT-IN (default-off, gated by hooks/_shared/opt-in.js). check-hook-inventory.js derives the opt-in tier from opt_in; everything else wired in hooks.json is default-on. Enable a listed hook or opt-in sub-stem via ~/.autopilot/config.json {\"hooks\":{\"<stem>\":true}} or env AUTOPILOT_HOOK_<STEM_UPPER>. Every stem in opt_in MUST be wired in hooks.json AND self-gate via opt-in.js; opt_in_sub_stems maps opt-in feature stems hosted inside a default-on hook script.",
  "opt_in": [
   "accumulator",
   "askpm-log",
+  "askpm-remind",
   "batch-format",
   "branch-protection",
   "check-console",
@@ -15,7 +16,11 @@
   "mcp-health",
   "orchestrator-edit-gate",
   "per-turn-gate",
+  "pm-output-cap",
   "session-summary",
   "test-runner"
- ]
+ ],
+ "opt_in_sub_stems": {
+  "pm-dispatch-plan-guard": "fleet-send-work-order-guard"
+ }
 }

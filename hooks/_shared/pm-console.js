@@ -2,8 +2,8 @@
 /**
  * pm-console.js — shared PM session gate (§2.5 of 2026-11-17-pm-token-split).
  *
- * Walk up from the hook cwd to the FIRST directory holding `.git` (a directory
- * or a gitfile), read that repo's `.claude/console.json`, and require
+ * Walk up from the hook cwd to the FIRST repo root (`.git` regular file
+ * gitfile, or `.git` directory containing a `HEAD` file), read that repo's `.claude/console.json`, and require
  * schema === "autopilot.console/1" AND mode === "program" (the same rule as
  * mods/live/console.ts). A child repo inside the PM workspace stops at its own
  * `.git` and never borrows the parent workspace's console.json.
@@ -36,9 +36,12 @@ function consoleModeOf(text) {
 }
 
 function hasGitMarker(dir) {
+  const gitPath = path.join(dir, '.git');
   try {
-    const st = fs.statSync(path.join(dir, '.git'));
-    return st.isFile() || st.isDirectory();
+    const st = fs.statSync(gitPath);
+    if (st.isFile()) return true;
+    if (!st.isDirectory()) return false;
+    return fs.statSync(path.join(gitPath, 'HEAD')).isFile();
   } catch {
     return false;
   }

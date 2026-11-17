@@ -70,10 +70,13 @@ function strip(page: Page, ctx: PageCtx, opts: FrameOpts): Row {
 // exactly ctx.size.rows rows, whatever the page returned
 export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
   const H = ctx.size.rows
-  const A = actionRows(H)
+  const full = actionRows(H)
   const { body, actions } = page.render(ctx)
-  if (actions.length > A) throw new Error('frame: ' + page.id + ' returned ' + actions.length + ' actions, the action area holds ' + A)
-  const room = Math.max(0, H - 2 - A)
+  if (actions.length > full) throw new Error('frame: ' + page.id + ' returned ' + actions.length + ' actions, the action area holds ' + full)
+  if (H <= 0) return []
+  if (H === 1) return [clip(strip(page, ctx, opts), ctx.size.cols)]
+  const A = Math.min(full, H - 2) // under 6 rows the action area gives way (the last actions stay), then the body: head and strip are always drawn
+  const room = H - 2 - A
   const head: Row = [{ text: ctx.t('tab.' + page.id) }, ...(mostSevere(ctx) === null ? [] : [{ text: '  ' }, mostSevere(ctx) as Seg])]
   let shown: Row[]
   if (body.length <= room) shown = body
@@ -87,7 +90,8 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   }
   const bodyBlock: Row[] = [...Array.from({ length: room - shown.length }, blank), ...shown]
   const actionBlock: Row[] = Array.from({ length: A }, blank)
-  if (actions.length === 0) actionBlock[A - 1] = [{ text: ctx.t('frame.nothing'), dim: true }]
-  else actions.forEach((r, i) => { actionBlock[A - actions.length + i] = r })
+  if (A === 0) { /* no room for an action row */ }
+  else if (actions.length === 0) actionBlock[A - 1] = [{ text: ctx.t('frame.nothing'), dim: true }]
+  else actions.slice(-A).forEach((r, i, kept) => { actionBlock[A - kept.length + i] = r })
   return [head, ...bodyBlock, ...actionBlock, strip(page, ctx, opts)].map(r => clip(r, ctx.size.cols))
 }

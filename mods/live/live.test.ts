@@ -3574,6 +3574,21 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   expect(after.length, 'the 待決 body (many rows) is gone').toBeLessThan(before.length)
   expect(after.join(' ').includes('指揮')).toBe(true)
 })
+// review fix 3: the console feed (triedMs, snap) belongs to the session; a new session.start must not inherit the 60 s throttle or the first run's snapshot
+test('review fix: consolefeed-session-reset: a second session.start on the same clock asks `fleet console --json` again', async ($, on) => {
+  const ran: string[] = []
+  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } })
+  const w = world(on, consoleFiles())
+  await start($, 'terminal')
+  await w.clock.advance(5_000)
+  await w.clock.advance(5_000)
+  const first = ran.filter(a => a === 'fleet console --json').length
+  expect(first, 'the first session fetches the console snapshot').toBe(1)
+  await start($, 'terminal') // /clear or a new session: the clock has not moved past the 60 s interval
+  await w.clock.advance(5_000)
+  await w.clock.advance(5_000)
+  expect(ran.filter(a => a === 'fleet console --json').length, 'the second session fetches again').toBe(2)
+})
 // C1 U6: the console pane's pages. The snapshot source answers null until C2, so team / quota / hosts say 無來源 (no table); 本席 folds this session's 現況, 派工 and 審查 under their names.
 test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there is no snapshot, and 本席 carries 現況 · 派工 · 審查 (terminal)', async ($, on) => {
   const ran: string[] = []
@@ -7355,6 +7370,25 @@ for (const surface of SURFACES) {
   }
   const textD = (n: Node): string => cellsOf(n).map(c => c.text).join('')
 
+  // review fix 2: the open band has 3 chrome rows (the 2-row bar and the rule); decideContent must get rows - 3, so a card that fills its budget never tips the check `rows < 3 + content.length`
+  test('review fix: band-decide-budget: a card taller than the room keeps the 待決 view open at every maxRows (' + surface + ')', async ($, on) => {
+    const five = { id: 'd-5optcard', question: '五個選項的卡要選哪一個', options: [1, 2, 3, 4, 5].map(n => ({ label: '選項' + n, description: '' })) }
+    decideBand(on, [five])
+    await start($, surface)
+    const heights: number[] = []
+    for (let m = 4; m <= 10; m++) {
+      await start($, surface)
+      const first = await mountD($, { maxRows: m })
+      await first.press({ key: 'tab:decide' })
+      await first.unmount()
+      const ui = await mountD($, { maxRows: m })
+      const tree = (await ui.drawn()) as Node
+      await ui.unmount()
+      heights.push(((tree.children || []) as unknown[]).length)
+    }
+    console.log('decide band top-level rows by maxRows 4..10: ' + heights.join(','))
+    heights.forEach((h, i) => { expect(h, 'maxRows ' + (i + 4) + ' keeps the 待決 view open (rule + content above the 2-row bar)').toBeGreaterThan(2) })
+  })
   test('E1 待決: the first question and its options and the send row, from the pane\'s own lines; no text field, not the other questions (' + surface + ')', async ($, on) => {
     decideBand(on)
     await start($, surface)

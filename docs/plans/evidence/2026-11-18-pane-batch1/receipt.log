@@ -33,3 +33,10 @@ mods/live/run-tests.sh: 1387 pass, 15 fail = exactly bandrow-brief/fb.txt (diff 
 == GREEN (page.now.enter and page.decide.opt6_*/opt_focus removed; keys Enter = none; text hint Enter not bracketed; decide tests send with s) 2026-11-17T19:11:28Z
 == mods/live/run-tests.sh (full)
 mods/live/run-tests.sh: 1387 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty)
+== RED (review fix, four defects: tests added before the fixes) 2026-11-17T19:26:29Z
+(fail) frame: a pane under 6 rows is still exactly H rows (0 -> none, 1 -> the strip, 2 -> head and strip, actions keep the last ones)  [H=0: expected 0, received 6]
+(fail) pane: a framed row with an empty segment plus cols cells of text draws exactly cols cells  [expected 60, received 61]
+(fail) review fix: consolefeed-session-reset: a second session.start on the same clock asks `fleet console --json` again  [expected 2 calls, received 1]
+(fail) review fix: band-decide-budget: a card taller than the room keeps the 待決 view open at every maxRows (terminal and desktop)  [maxRows 4: 2 rows, the open view fell back to the closed bar]
+== GREEN (frameRows always H rows; decideContent gets rows - 3; consoleFeed is per session; empty segment is 0 cells unless the row is one empty segment) 2026-11-17T19:26:29Z
+mods/live/run-tests.sh: 1392 pass, 15 fail = exactly bandrow-brief/fb.txt (diff empty)

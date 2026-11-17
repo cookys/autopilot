@@ -174,7 +174,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       <Box key={'f' + i}>
         {r.map((sg, j) => {
           const m = sg.press === undefined ? null : /^tab:(\d):(\w+)$/.exec(sg.press)
-          const text = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{sg.text === '' ? ' ' : sg.text}</Text>
+          const text = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{sg.text === '' && r.length === 1 ? ' ' : sg.text}</Text>
           if (sg.press !== undefined && m === null && Button !== undefined) return <Button key={'p' + j} plain onPress={() => press(sg.press as string)}>{text}</Button>
           const to = m === null ? undefined : PAGE_TAB[m[2]]
           if (m === null || to === undefined || Button === undefined) return text

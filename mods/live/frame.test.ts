@@ -181,3 +181,31 @@ test('keys: j then o acts on row 2 (fleet sees line 2, quota opens its seats); d
     expect(letters.filter(h => !pageHotkeys(id).includes(h)), id + ' draws a hotkey it does not list').toEqual([])
   }
 })
+
+// review fix 1: the frame is exactly H rows even when H is under the six rows (head + strip + at least one action) the layout used to force
+test('frame: a pane under 6 rows is still exactly H rows (0 -> none, 1 -> the strip, 2 -> head and strip, actions keep the last ones)', () => {
+  for (const H of [0, 1, 2, 3, 4, 5]) {
+    for (const acts of [0, 1, 3]) {
+      const rows = frameRows(withBody(PAGES[0], 9, acts), ctxOf({ cols: 80, rows: H }), { pages: PAGES })
+      expect(rows.length, 'H=' + H + ' actions=' + acts).toBe(H)
+    }
+  }
+  const one = frameRows(withBody(PAGES[0], 9, 3), ctxOf({ cols: 80, rows: 1 }), { pages: PAGES })
+  expect(text(one[0])).toContain('說明') // the strip
+  const four = frameRows(withBody(PAGES[0], 9, 3), ctxOf({ cols: 80, rows: 4 }), { pages: PAGES })
+  expect(four.map(text).slice(1, 3)).toEqual(['act 1', 'act 2']) // the last actions that fit
+})
+
+// review fix 4: an empty segment is 0 cells in clip(); the pane must not draw it as one blank cell
+test('pane: a framed row with an empty segment plus cols cells of text draws exactly cols cells', () => {
+  const live = { state: 'ok', text: 'x', header: 'x', band: { kind: 'idle', verdict: '', reason: null, project: 'x', elapsed: '1m', phase: '', slots: [] }, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
+  const wide = 'a'.repeat(60)
+  const page: Page = { ...PAGES[0], framed: true as const, render: () => ({ body: [[{ text: '' }, { text: wide }]], actions: [] }) }
+  const tree = walk(Pane(EL as never, live, 'now', () => {}, t, 60, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: [page, ...PAGES.filter(p => p.id !== page.id)], console: null, nowMs: NOW, rows: 12 } as never))
+  const rowsDrawn = tree.filter(n => n.kind === 'Box' && typeof n.props.key === 'string' && /^f\d+$/.test(n.props.key))
+  const width = (n: Node) => walk(n.props.children).filter(x => x.kind === 'Text').reduce((s, x) => s + displayWidth(flat(x)), 0)
+  const wideRow = rowsDrawn.find(n => walk(n.props.children).some(x => flat(x).includes(wide)))
+  expect(wideRow).toBeDefined()
+  expect(width(wideRow as Node)).toBe(60)
+  expect(rowsDrawn.some(n => width(n) === 1), 'a row that is only one empty segment still draws one cell').toBe(true)
+})

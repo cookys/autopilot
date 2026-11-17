@@ -183,7 +183,7 @@ export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSna
 
 // the 待決 tab's compact form: the first open question's title and its options, then the send row the pane's own builder made (the same lines, the same press ids: a press is
 // decidePress, so a pick or a send here is the one the pane makes). This compact form (the tab-row layout, for a host that gives fewer than 12 rows) has no note and no typed answer: those are the card view's 附註／其他回答 and 打字回答 buttons (`cardMain`, O4 shell) and the pane's text fields; the rest of the questions are the pane's too.
-// The rows come from `decideBandPlan` (tabs.ts): wrapped, never cut; a pointer row for what the pane alone shows; `maxRows` is the room under the bar and rule (rows - 2).
+// The rows come from `decideBandPlan` (tabs.ts): wrapped, never cut; a pointer row for what the pane alone shows; `maxRows` is the room under the bar and rule (rows - 3: the two-row bar and the rule).
 export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, state: DecideState, columns: number, t: T, onPress: (id: string) => void, maxRows?: number): unknown[] {
   const { Box, Text, Button } = el
   if (snap === null || snap.band === null) return []

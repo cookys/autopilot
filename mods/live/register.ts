@@ -209,7 +209,7 @@ let consoleSnap: ConsoleSnapshot | null = null
 let consoleCwd: string | null = null // the cwd the mode was last read for; a different cwd (a new session in another repo) reads it again at the next tick
 let consoleReadMs = -Infinity
 const CONSOLE_MODE_EVERY_MS = 10_000 // the config file is read again at most this often
-const consoleFeed = makeConsoleFeed()
+let consoleFeed = makeConsoleFeed() // per session: startLive makes a new one, so the 60 s throttle and the snapshot of an earlier session do not leak
 async function consoleSource($: EngineInterface): Promise<ConsoleSnapshot | null> {
   const nowMs = await $.clock.now()
   const home = await $.env.get('HOME').catch(() => undefined)
@@ -1337,6 +1337,7 @@ export async function startLive($: EngineInterface): Promise<void> {
   pageView = {}
   decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
   resetNoteInputs()
+  consoleFeed = makeConsoleFeed()
   barTab = null
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
@@ -1685,7 +1686,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       }
     } else if (active === 'decide') {
       // the pane's own 待決 lines, compact; a press is the pane's decidePress, and the draw is asked again once it has written the state
-      content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, rows - 2)
+      content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, rows - 3)
     } else if (active !== null) {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot })
     }

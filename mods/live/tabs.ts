@@ -483,7 +483,7 @@ function decideLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 export const decideTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(decideLinesRaw(snap, ctx), ctx.cols)
 // The 待決 band's compact form (band.tsx draws it): the first open question's title rows and option rows (the pane's own lines, wrapped at `ctx.cols`, never cut), a pointer row,
 // then the send row(s). The background and the option descriptions stay in the pane: when the first card has any, the pointer row `decide.band_bg` says so instead of showing half a
-// sentence. `maxRows` is the room the band has under its bar and rule (register.ts passes rows - 2): when title + options + pointer + send row do not fit, the rows from the top stay
+// sentence. `maxRows` is the room the band has under its bar and rule (register.ts passes rows - 3): when title + options + pointer + send row do not fit, the rows from the top stay
 // up to the room and the pointer becomes `decide.band_more` (the pane has the rest); the send row always stays. No `maxRows` = no limit.
 export function decideBandPlan(snap: LiveSnapshot, ctx: PaneCtx, maxRows?: number): { rows: PaneLine[]; pointer: 'decide.band_bg' | 'decide.band_more' | null; bars: PaneLine[]; empty: boolean } {
   const lines = decideTabLines(snap, ctx)

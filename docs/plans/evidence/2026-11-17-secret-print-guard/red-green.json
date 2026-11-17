@@ -184,6 +184,51 @@
         "ℹ todo 0",
         "ℹ duration_ms 3234.496603"
       ]
+    },
+    {
+      "command": "node --test scripts/safe-inspect.test.js (before YAML/comment block repair)",
+      "rc": 1,
+      "log": ".claude/secret-print-evidence/viewer-block-red.log",
+      "tail": [
+        "ℹ tests 9",
+        "ℹ suites 0",
+        "ℹ pass 6",
+        "ℹ fail 3",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 748.729459"
+      ]
+    },
+    {
+      "command": "node --test scripts/safe-inspect.test.js (before YAML indicator/list repair)",
+      "rc": 1,
+      "log": ".claude/secret-print-evidence/viewer-yaml-red.log",
+      "tail": [
+        "ℹ tests 9",
+        "ℹ suites 0",
+        "ℹ pass 8",
+        "ℹ fail 1",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 710.876566"
+      ]
+    },
+    {
+      "command": "node --test scripts/safe-inspect.test.js (final block-aware viewer)",
+      "rc": 0,
+      "log": ".claude/secret-print-evidence/viewer-green.log",
+      "tail": [
+        "ℹ tests 9",
+        "ℹ suites 0",
+        "ℹ pass 9",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 664.783609"
+      ]
     }
   ]
 }

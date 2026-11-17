@@ -38,11 +38,27 @@ function literal(value) {
   if (single) return single[1].replace(/\\(['\\])/g, '$1');
   return text.replace(/\s+(?:#|\/\/).*$/, '');
 }
+const YAML_BLOCK = /^([|>](?:[+-]?\d?|\d[+-]?))(?:\s+#.*)?$/;
 function maskFile(text) {
   try { return `${JSON.stringify(maskObject(JSON.parse(text)), null, 2)}\n`; }
   catch { /* Not JSON: parse known line shapes, mask every other non-empty line in full. */ }
+  let yamlBlockIndent = null;
+  let commentBlock = false;
   return text.split(/\r?\n/).map((line) => {
     if (!line.trim()) return '';
+    const indent = /^\s*/.exec(line)[0];
+    if (yamlBlockIndent !== null) {
+      if (indent.length > yamlBlockIndent) return `${indent}${mask(line.trim())}`;
+      yamlBlockIndent = null;
+    }
+    if (commentBlock) {
+      if (line.includes('*/')) commentBlock = false;
+      return `${indent}${mask(line.trim())}`;
+    }
+    const commentCode = line.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '');
+    const commentStart = commentCode.indexOf('/*');
+    if (commentStart >= 0 && !commentCode.slice(commentStart + 2).includes('*/')) commentBlock = true;
+    if (/^\s*\/\*/.test(line)) return `${indent}${mask(line.trim())}`;
     if (/^\s*(?:<\?php|\?>)\s*$/.test(line)) return line.trim();
     let m = /^(\s*)define\(\s*(['"])([A-Za-z_]\w*)\2\s*,\s*(.*?)\s*\);(?:\s*\/\/.*)?\s*$/.exec(line);
     if (m) return `${m[1]}define(${m[2]}${m[3]}${m[2]}, ${JSON.stringify(mask(literal(m[4])))});`;
@@ -56,10 +72,16 @@ function maskFile(text) {
     if (m) {
       // YAML nested mappings and block indicators are structure; block body lines are masked below.
       const value = m[4].trim();
-      return `${m[1]}${m[2]}${m[3]}${value === '' || /^[|>][-+]?\d?$/.test(value) ? value : mask(literal(value))}`;
+      const block = YAML_BLOCK.exec(value);
+      if (block) yamlBlockIndent = indent.length;
+      return `${m[1]}${m[2]}${m[3]}${value === '' ? '' : block ? block[1] : mask(literal(value))}`;
     }
     m = /^(\s*-\s+)(.*)$/.exec(line);
-    if (m) return `${m[1]}${mask(literal(m[2]))}`;
+    if (m) {
+      const block = YAML_BLOCK.exec(m[2].trim());
+      if (block) yamlBlockIndent = indent.length;
+      return `${m[1]}${block ? block[1] : mask(literal(m[2]))}`;
+    }
     // Comments, unknown syntax and multiline continuations may also contain secrets. Never echo them.
     return `${/^\s*/.exec(line)[0]}${mask(line.trim())}`;
   }).join('\n');

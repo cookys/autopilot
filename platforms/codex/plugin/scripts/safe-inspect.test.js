@@ -30,10 +30,10 @@ test('safe-inspect env masks every value, even innocently named ones', () => {
 });
 for (const [name, content, key] of [
   ['fixture.env', `PASSWORD=${fake}\nexport DB_PASS='${fake}'\n`, 'PASSWORD='],
-  ['fixture.php', `<?php\ndefine('DB_PASSWORD', '${fake}');\n$db_pass = '${fake}';\n`, 'DB_PASSWORD'],
-  ['fixture.h', `#define DB_PASSWORD "${fake}"\n#define TIMEOUT 30\n`, '#define DB_PASSWORD'],
+  ['fixture.php', `<?php\ndefine('DB_PASSWORD', '${fake}');\n$db_pass = '${fake}';\n/*\n${fake}=hidden\n*/\n`, 'DB_PASSWORD'],
+  ['fixture.h', `#define DB_PASSWORD "${fake}"\n#define TIMEOUT 30\n/*\n${fake}=hidden\n*/\n`, '#define DB_PASSWORD'],
   ['fixture.json', JSON.stringify({ ordinary: fake, nested: { password: fake }, list: [fake, 42, true, null] }), 'ordinary'],
-  ['fixture.yaml', `database:\n  password: ${fake}\n  list:\n    - ${fake}\n  cert: |\n    ${fake}\n`, 'password:'],
+  ['fixture.yaml', `database:\n  password: ${fake}\n  list:\n    - ${fake}\n    - | # ${fake}\n      ${fake}: hidden\n  cert: |2- # ${fake}\n    ${fake}: hidden\n    ${fake}=hidden\n  next: value\n`, 'password:'],
   ['fixture.unknown', `# ${fake}\n${fake}\n`, '***len='],
 ]) {
   test(`safe-inspect file masks ${name} and preserves keys`, () => {

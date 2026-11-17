@@ -511,3 +511,173 @@ test('lane: unresolved order allows all pre-implement stages (incl. L plan-revie
     sb.cleanup();
   }
 });
+
+test('lane: set --level preserves fleet_task_id, wo_*, plan_receipt and enforces wo_size floor', () => {
+  const sb = makeSandbox();
+  try {
+    const planRel = 'docs/plans/lvl-keep.md';
+    fs.mkdirSync(path.join(sb.repo, 'docs', 'plans'), { recursive: true });
+    fs.writeFileSync(path.join(sb.repo, planRel), '# Level Keep Plan\n');
+    git(sb.repo, ['add', planRel]);
+    git(sb.repo, ['commit', '-q', '-m', 'add lvl keep plan']);
+    const headSha = git(sb.repo, ['rev-parse', 'HEAD']);
+
+    const sid = sb.newSession();
+    sb.setTaskFixture('T_LVL_KEEP', `Size: M\nPlan: ${planRel}@${headSha}`);
+    const rAttach = sb.sm(sid, ['set', '--fleet-task', 'T_LVL_KEEP', '--repo-root', sb.repo]);
+    assert.equal(rAttach.status, 0, rAttach.stderr);
+
+    const rFloor = sb.sm(sid, ['set', '--level', 'l4', '--size', 'S', '--repo-root', sb.repo]);
+    assert.equal(rFloor.status, 2, 'set --level with --size below wo_size must be refused');
+
+    const rLevel = sb.sm(sid, ['set', '--level', 'l4', '--repo-root', sb.repo]);
+    assert.equal(rLevel.status, 0, rLevel.stderr);
+    const m = sb.assertSchemaValid(sid);
+    assert.equal(m.level, 'l4');
+    assert.equal(m.fleet_task_id, 'T_LVL_KEEP');
+    assert.equal(m.wo_task, 'T_LVL_KEEP');
+    assert.equal(m.wo_size, 'M');
+    assert.equal(m.wo_state, 'resolved');
+    assert.equal(m.size, 'M');
+    assert.ok(m.wo_fetched_at);
+    assert.ok(m.plan_receipt && m.plan_receipt.plan_sha256);
+
+    for (const node of ['intent', 'proposal', 'plan', 'implement']) {
+      const rAdv = sb.sa(sid, ['--to', node, '--repo-root', sb.repo]);
+      assert.equal(rAdv.status, 0, `--to ${node} should pass after set --level: ${rAdv.stderr}`);
+    }
+    assert.equal(sb.assertSchemaValid(sid).stage, 'implement');
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test('lane: set --new-task without --fleet-task clears wo_* and fleet_task_id and --new-task --refresh does not inherit old id', () => {
+  const sb = makeSandbox();
+  try {
+    const planRel = 'docs/plans/prev-task.md';
+    fs.mkdirSync(path.join(sb.repo, 'docs', 'plans'), { recursive: true });
+    fs.writeFileSync(path.join(sb.repo, planRel), '# Prev Task Plan\n');
+    git(sb.repo, ['add', planRel]);
+    git(sb.repo, ['commit', '-q', '-m', 'add prev plan']);
+    const headSha = git(sb.repo, ['rev-parse', 'HEAD']);
+
+    const sid = sb.newSession();
+    sb.setTaskFixture('T_PREV_L', `Size: L\nPlan: ${planRel}@${headSha}`);
+    assert.equal(sb.sm(sid, ['set', '--fleet-task', 'T_PREV_L', '--repo-root', sb.repo]).status, 0);
+    assert.equal(sb.readMarker(sid).wo_size, 'L');
+
+    // --new-task --refresh without --fleet-task must not inherit T_PREV_L
+    const rNewRefresh = sb.sm(sid, ['set', '--new-task', '--refresh', '--repo-root', sb.repo]);
+    assert.equal(rNewRefresh.status, 2, '--new-task --refresh without --fleet-task must fail');
+
+    // --new-task without --fleet-task starts clean and does not enforce previous task wo_size
+    const rNewClean = sb.sm(sid, ['set', '--new-task', '--size', 'S', '--repo-root', sb.repo]);
+    assert.equal(rNewClean.status, 0, rNewClean.stderr);
+    const mClean = sb.assertSchemaValid(sid);
+    assert.equal(mClean.size, 'S');
+    assert.equal(mClean.fleet_task_id, undefined);
+    assert.equal(mClean.wo_task, undefined);
+    assert.equal(mClean.wo_size, undefined);
+    assert.equal(mClean.wo_plan, undefined);
+    assert.equal(mClean.wo_state, undefined);
+    assert.equal(mClean.wo_fetched_at, undefined);
+    assert.equal(mClean.plan_receipt, undefined);
+
+    // Session without any fleet task attached keeps existing --new-task behaviour
+    const sidPlain = sb.newSession();
+    assert.equal(sb.sm(sidPlain, ['set', '--size', 'S', '--repo-root', sb.repo]).status, 0);
+    const rPlainNew = sb.sm(sidPlain, ['set', '--new-task', '--size', 'M', '--repo-root', sb.repo]);
+    assert.equal(rPlainNew.status, 0, rPlainNew.stderr);
+    const mPlain = sb.assertSchemaValid(sidPlain);
+    assert.equal(mPlain.size, 'M');
+    assert.equal(mPlain.task_seq, 2);
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test('lane: L plan-review scans docs/plans/evidence/<slug>/ subdirs and ignores mismatched-sha plan_review_artifact as disposition', () => {
+  const sb = makeSandbox();
+  try {
+    const sid = sb.newSession();
+    const planRel = 'docs/plans/sub-ev-plan.md';
+    const rubricRel = 'docs/plans/sub-ev-rubric.md';
+    fs.mkdirSync(path.join(sb.repo, 'docs', 'plans'), { recursive: true });
+    fs.writeFileSync(path.join(sb.repo, planRel), '# Subdir Plan g1\n');
+    fs.writeFileSync(path.join(sb.repo, rubricRel), '# Rubric\n- R1\n');
+    git(sb.repo, ['add', planRel, rubricRel]);
+    git(sb.repo, ['commit', '-q', '-m', 'add subdir plan g1']);
+    const g1PlanSha = sha256Hex(fs.readFileSync(path.join(sb.repo, planRel)));
+
+    fs.writeFileSync(path.join(sb.repo, planRel), '# Subdir Plan g2\n');
+    git(sb.repo, ['add', planRel]);
+    git(sb.repo, ['commit', '-q', '-m', 'add subdir plan g2']);
+    const g2PlanSha = sha256Hex(fs.readFileSync(path.join(sb.repo, planRel)));
+    const rubricSha = sha256Hex(fs.readFileSync(path.join(sb.repo, rubricRel)));
+
+    sb.setTaskFixture('T_L_SUBDIR', 'Size: L\nPlan: plan-first');
+    assert.equal(sb.sm(sid, ['set', '--fleet-task', 'T_L_SUBDIR', '--repo-root', sb.repo]).status, 0);
+    for (const node of ['intent', 'proposal', 'plan', 'plan-review']) {
+      assert.equal(sb.sa(sid, ['--to', node, '--repo-root', sb.repo]).status, 0);
+    }
+
+    const evSubdir = path.join(sb.repo, 'docs', 'plans', 'evidence', 'sub-ev-plan');
+    fs.mkdirSync(evSubdir, { recursive: true });
+
+    // Matching g2 artifact + stale mismatched-sha g1 artifact (must NOT be treated as a disposition)
+    fs.writeFileSync(
+      path.join(evSubdir, 'gen2-artifact.json'),
+      JSON.stringify({
+        schema_version: 1,
+        artifact_type: 'plan_review_artifact',
+        logical_plan_id: 'sub-ev-plan',
+        generation: 2,
+        plan_sha256: g2PlanSha,
+        rubric_sha256: rubricSha,
+        plan_path: planRel,
+        rubric_path: rubricRel,
+        findings: [],
+        reviewer_verdicts: [
+          { seat_id: 'chair', runner: 'codex', model: 'gpt-5', family: 'openai', verdict: 'READY' },
+        ],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(evSubdir, 'gen1-stale-artifact.json'),
+      JSON.stringify({
+        schema_version: 1,
+        artifact_type: 'plan_review_artifact',
+        logical_plan_id: 'sub-ev-plan',
+        generation: 2,
+        plan_sha256: g1PlanSha,
+        rubric_sha256: rubricSha,
+        plan_path: planRel,
+        rubric_path: rubricRel,
+        findings: [],
+        reviewer_verdicts: [
+          { seat_id: 'chair', runner: 'codex', model: 'gpt-5', family: 'openai', verdict: 'READY' },
+        ],
+      }),
+    );
+
+    // Without real disposition file, stale plan_review_artifact must not suffice
+    const rWithoutDisp = sb.sa(sid, ['--to', 'implement', '--plan', planRel, '--repo-root', sb.repo]);
+    assert.notEqual(rWithoutDisp.status, 0, 'mismatched-sha plan_review_artifact must not satisfy dispositions');
+
+    // Add real disposition inside docs/plans/evidence/<slug>/; auto-discovery must find both and advance
+    fs.writeFileSync(
+      path.join(evSubdir, 'gen2-disposition.json'),
+      JSON.stringify({
+        logical_plan_id: 'sub-ev-plan',
+        generation: 2,
+        findings: [],
+      }),
+    );
+    const rWithDisp = sb.sa(sid, ['--to', 'implement', '--plan', planRel, '--repo-root', sb.repo]);
+    assert.equal(rWithDisp.status, 0, `docs/plans/evidence/<slug>/ should resolve L plan review: ${rWithDisp.stderr}`);
+    assert.equal(sb.assertSchemaValid(sid).plan_receipt.plan_sha256, g2PlanSha);
+  } finally {
+    sb.cleanup();
+  }
+});

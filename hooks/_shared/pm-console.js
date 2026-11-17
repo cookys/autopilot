@@ -48,16 +48,20 @@ function hasGitMarker(dir) {
 }
 
 function resolveStartDir(cwdOrInput) {
-  if (typeof cwdOrInput === 'string' && cwdOrInput !== '') return cwdOrInput;
-  if (cwdOrInput && typeof cwdOrInput === 'object' && typeof cwdOrInput.cwd === 'string' && cwdOrInput.cwd !== '') {
+  if (typeof cwdOrInput === 'string') {
+    return cwdOrInput.trim() === '' ? null : cwdOrInput;
+  }
+  if (cwdOrInput && typeof cwdOrInput === 'object' && typeof cwdOrInput.cwd === 'string' && cwdOrInput.cwd.trim() !== '') {
     return cwdOrInput.cwd;
   }
-  return process.cwd();
+  return null;
 }
 
 function isPmConsole(cwdOrInput) {
   try {
-    let dir = path.resolve(resolveStartDir(cwdOrInput));
+    const startDir = resolveStartDir(cwdOrInput);
+    if (!startDir) return false;
+    let dir = path.resolve(startDir);
     for (;;) {
       if (hasGitMarker(dir)) {
         try {

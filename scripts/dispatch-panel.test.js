@@ -571,3 +571,177 @@ test('cross-runner model mismatch and unknown models on known runners are barred
     sb.cleanup();
   }
 });
+
+test('real fleet directory --json shape extracts identifiers recursively, splits @, excludes structural keys, handles empty & --json fallback', () => {
+  const { extractDirectoryIdentifiers } = require('./dispatch-panel');
+
+  const realDirectory = {
+    members: [
+      {
+        member: 'member-delta@courier-bravo',
+        courier: 'courier-bravo',
+        namespace: 'ns-ops',
+        state: 'online',
+        channels: ['ops-chat'],
+        message_kinds: ['chat', 'dispatch'],
+      },
+    ],
+    hosts: [
+      {
+        namespace: 'ns-ops',
+        courier: 'courier-bravo',
+        info: {
+          declared: { hostname: 'declared-box-01', host: 'declared-host-01' },
+          observed: { name: 'observed-node-01' },
+          labels: { tier: 'compute' },
+        },
+        courier_online: true,
+        liveness: 'alive',
+        tasks: false,
+      },
+    ],
+  };
+
+  const ids = extractDirectoryIdentifiers(realDirectory);
+  for (const expected of [
+    'member-delta@courier-bravo',
+    'member-delta',
+    'courier-bravo',
+    'ns-ops',
+    'declared-box-01',
+    'declared-host-01',
+    'observed-node-01',
+  ]) {
+    assert.ok(ids.includes(expected), `missing identifier: ${expected}`);
+  }
+  for (const forbidden of [
+    'members', 'hosts', 'couriers', 'entries', 'directory', 'peers', 'nodes',
+    'schema', 'info', 'declared', 'observed', 'labels', 'channels', 'message_kinds', 'state',
+    'online', 'alive', 'ops-chat', 'chat', 'dispatch', 'compute',
+  ]) {
+    assert.equal(ids.includes(forbidden), false, `structural/non-id key leaked as identifier: ${forbidden}`);
+  }
+  assert.deepEqual(extractDirectoryIdentifiers({ members: [], hosts: [] }), []);
+
+  // End-to-end: clean prompt with structural words passes; identifier prompt exits 2; empty dir exits 4
+  const sb = makeSandbox();
+  try {
+    fs.writeFileSync(
+      sb.fleetBin,
+      `#!/usr/bin/env node
+'use strict';
+if (process.argv[2] === 'directory' && process.argv.includes('--json')) {
+  process.stderr.write("unknown option '--json'\\n");
+  process.exit(1);
+}
+if (process.argv[2] === 'directory') {
+  const mode = process.env.DP_TEST_DIR_MODE || 'real';
+  if (mode === 'empty') {
+    process.stdout.write(JSON.stringify({ members: [], hosts: [] }) + '\\n');
+  } else {
+    process.stdout.write(${JSON.stringify(JSON.stringify(realDirectory))} + '\\n');
+  }
+  process.exit(0);
+}
+process.exit(1);
+`,
+      { mode: 0o755 },
+    );
+
+    const structuralPrompt = writePrompt(
+      sb,
+      'structural.txt',
+      'Compare members, hosts, info, declared, observed, labels, channels, message_kinds, state, schema.\n',
+    );
+    const outClean = path.join(sb.dir, 'out-real-dir');
+    const rClean = runPanel(sb, [
+      '--prompt-file', structuralPrompt,
+      '--seat', 'grok:grok-4.7',
+      '--out-dir', outClean,
+      '--author-cmd', sb.authorStub,
+    ]);
+    assert.equal(rClean.status, 0, rClean.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(outClean, 'panel.json'), 'utf8')).seats[0].status, 'ok');
+
+    const leakedPrompt = writePrompt(sb, 'leaked.txt', 'Check observed-node-01 status.\n');
+    const outLeak = path.join(sb.dir, 'out-leak-dir');
+    const rLeak = runPanel(sb, [
+      '--prompt-file', leakedPrompt,
+      '--seat', 'grok:grok-4.7',
+      '--out-dir', outLeak,
+      '--author-cmd', sb.authorStub,
+    ]);
+    assert.equal(rLeak.status, 2);
+
+    const outEmpty = path.join(sb.dir, 'out-empty-dir');
+    const rEmpty = runPanel(
+      sb,
+      [
+        '--prompt-file', structuralPrompt,
+        '--seat', 'grok:grok-4.7',
+        '--out-dir', outEmpty,
+        '--author-cmd', sb.authorStub,
+      ],
+      { DP_TEST_DIR_MODE: 'empty' },
+    );
+    assert.equal(rEmpty.status, 4);
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test('extractSeatOutput marks status "authored" failed when raw_log is missing, empty, unreadable, or non-regular file', () => {
+  const { extractSeatOutput } = require('./dispatch-panel');
+  const sb = makeSandbox();
+  try {
+    const emptyFile = path.join(sb.dir, 'empty.txt');
+    fs.writeFileSync(emptyFile, '');
+    const subDir = path.join(sb.dir, 'subdir');
+    fs.mkdirSync(subDir);
+    const validFile = path.join(sb.dir, 'valid.txt');
+    fs.writeFileSync(validFile, 'valid output\n');
+
+    for (const payload of [
+      JSON.stringify({ status: 'authored' }),
+      JSON.stringify({ status: 'authored', raw_log: '' }),
+      JSON.stringify({ status: 'authored', raw_log: null }),
+      JSON.stringify({ status: 'authored', raw_log: path.join(sb.dir, 'does-not-exist.txt') }),
+      JSON.stringify({ status: 'authored', raw_log: subDir }),
+      JSON.stringify({ status: 'authored', raw_log: emptyFile }),
+    ]) {
+      const res = extractSeatOutput(Buffer.from(payload, 'utf8'));
+      assert.equal(res.envelopeOk, false, `expected envelopeOk=false for ${payload}`);
+      assert.equal(res.bytesBuf.length, 0);
+    }
+
+    const good = extractSeatOutput(Buffer.from(JSON.stringify({ status: 'authored', raw_log: validFile }), 'utf8'));
+    assert.equal(good.envelopeOk, true);
+    assert.equal(good.bytesBuf.toString('utf8'), 'valid output\n');
+
+    // End-to-end panel: stub author prints authored envelope with missing raw_log
+    const badAuthor = path.join(sb.binDir, 'bad-raw-log-author.js');
+    fs.writeFileSync(
+      badAuthor,
+      `#!/usr/bin/env node
+process.stdout.write(JSON.stringify({ status: 'authored', raw_log: '' }) + '\\n');
+process.exit(0);
+`,
+      { mode: 0o755 },
+    );
+    const promptFile = writePrompt(sb, 'clean-env.txt', 'Check envelope error handling.\n');
+    const outDir = path.join(sb.dir, 'out-bad-env');
+    const rPanel = runPanel(sb, [
+      '--prompt-file', promptFile,
+      '--seat', 'grok:grok-4.7',
+      '--out-dir', outDir,
+      '--author-cmd', badAuthor,
+    ]);
+    assert.equal(rPanel.status, 0, rPanel.stderr);
+    const panel = JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'), 'utf8'));
+    assert.equal(panel.seats[0].status, 'failed');
+    assert.equal(panel.seats[0].bytes, 0);
+    assert.equal(panel.seats[0].out_path, null);
+  } finally {
+    sb.cleanup();
+  }
+});

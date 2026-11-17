@@ -238,8 +238,12 @@ function onPrompt(input, env) {
     append(env, { schema: SCHEMA, kind: 'turn', at, injected: true });
     return { kind: 'turn' };
   }
-  const sessionId = typeof input.session_id === 'string' ? input.session_id : '';
   const text = normClip(input.prompt);
+  if (!isPmConsole(input.cwd)) {
+    append(env, { schema: SCHEMA, kind: 'ask', at, text });
+    return { kind: 'ask' };
+  }
+  const sessionId = typeof input.session_id === 'string' ? input.session_id : '';
   const askId = computeAskId(sessionId, at, text);
   append(env, { schema: SCHEMA, kind: 'ask', at, ask_id: askId, session_id: sessionId, text });
   return { kind: 'ask', ask_id: askId };

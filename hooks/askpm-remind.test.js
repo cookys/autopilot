@@ -130,7 +130,19 @@ test('pm-console gate stops at first .git and requires schema + mode:"program"',
     fs.mkdirSync(path.join(bareDir, '.git'), { recursive: true });
     assert.equal(isPmConsole(bareDir), true, 'walks past .git directory lacking HEAD');
 
-    assert.equal(isPmConsole(''), false);
+    // Even when process.cwd() is a PM console repo, empty/missing cwd returns false without falling back
+    const prevCwd = process.cwd();
+    try {
+      process.chdir(pm);
+      assert.equal(isPmConsole(''), false);
+      assert.equal(isPmConsole('   '), false);
+      assert.equal(isPmConsole(undefined), false);
+      assert.equal(isPmConsole(null), false);
+      assert.equal(isPmConsole({}), false);
+      assert.equal(isPmConsole({ cwd: '' }), false);
+    } finally {
+      process.chdir(prevCwd);
+    }
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -345,6 +357,16 @@ test('child repo under PM workspace is untouched by askpm-remind and advisory-re
     assert.equal(relay.status, 0, relay.stderr);
     assert.equal(relay.stdout, '');
     assert.equal(fs.existsSync(path.join(s.state, 'remind-day')), false);
+
+    // askpm-log prompt in child repo: passive ask row without ask_id or session_id
+    const logPrompt = s.runLog({ hook_event_name: 'UserPromptSubmit', prompt: 'child log prompt', cwd: child });
+    assert.equal(logPrompt.status, 0, logPrompt.stderr);
+    assert.equal(logPrompt.stdout, '');
+    const askRows = s.readRows().filter((r) => r.kind === 'ask');
+    assert.equal(askRows.length, 1);
+    assert.equal(askRows[0].text, 'child log prompt');
+    assert.equal(askRows[0].ask_id, undefined);
+    assert.equal(askRows[0].session_id, undefined);
 
     // Stop in child repo: askpm-remind never blocks, and askpm-log still writes reply because PM console gate is false
     const tp = s.writeTranscript('child.jsonl', [

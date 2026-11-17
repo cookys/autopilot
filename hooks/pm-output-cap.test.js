@@ -525,3 +525,61 @@ test('PreToolUse fallback: preserves heredoc, exit 3, trailing # comment, trunca
     assert.equal(hookRead.stdout, '');
   });
 });
+
+test('PostToolUse: empty ledger_search_pattern leaves 30-line rule off; pattern matches mcp__* tool names', () => {
+  withSandbox(({ root, home, state, runtime, pmRepo }) => {
+    const cfgEmpty = path.join(root, 'cfg-empty.json');
+    fs.writeFileSync(cfgEmpty, JSON.stringify({
+      hooks: { 'pm-output-cap': true },
+      pm_output_cap: { ledger_search_pattern: '' },
+    }));
+    const emptyRuleRes = runHook(
+      {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_use_id: 'toolu_empty_pat',
+        tool_input: { command: 'pm-ledger search foo' },
+        tool_response: makeLines(35),
+        cwd: pmRepo,
+      },
+      {
+        HOME: home,
+        AUTOPILOT_STATE_DIR: state,
+        XDG_RUNTIME_DIR: runtime,
+        AUTOPILOT_HOOK_PM_OUTPUT_CAP: '',
+        AUTOPILOT_CONFIG_FILE: cfgEmpty,
+      },
+    );
+    assert.equal(emptyRuleRes.status, 0, emptyRuleRes.stderr);
+    assert.equal(emptyRuleRes.stdout, '', 'empty ledger_search_pattern must leave 30-line rule off');
+
+    const cfgMcp = path.join(root, 'cfg-mcp.json');
+    fs.writeFileSync(cfgMcp, JSON.stringify({
+      hooks: { 'pm-output-cap': true },
+      pm_output_cap: { ledger_search_pattern: 'fleet__inbox' },
+    }));
+    const mcpRes = runHook(
+      {
+        hook_event_name: 'PostToolUse',
+        tool_name: 'mcp__fleet__inbox',
+        tool_use_id: 'toolu_mcp_pat',
+        tool_input: {},
+        tool_response: makeLines(35),
+        cwd: pmRepo,
+      },
+      {
+        HOME: home,
+        AUTOPILOT_STATE_DIR: state,
+        XDG_RUNTIME_DIR: runtime,
+        AUTOPILOT_HOOK_PM_OUTPUT_CAP: '',
+        AUTOPILOT_CONFIG_FILE: cfgMcp,
+      },
+    );
+    assert.equal(mcpRes.status, 0, mcpRes.stderr);
+    const out = JSON.parse(mcpRes.stdout).hookSpecificOutput.updatedMCPToolOutput;
+    const lines = out.split('\n');
+    assert.equal(lines.length, 31);
+    assert.equal(lines[29], 'line-30');
+    assert.match(lines[30], /^… 5 行已截斷，全文：/);
+  });
+});

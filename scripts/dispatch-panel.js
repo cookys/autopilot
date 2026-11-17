@@ -299,6 +299,22 @@ function readPromptOnce(promptFile) {
   return text;
 }
 
+const DIRECTORY_ID_KEYS = new Set([
+  'member', 'courier', 'namespace', 'host', 'hostname', 'name', 'address',
+]);
+const DIRECTORY_SKIP_KEYS = new Set([
+  'labels', 'channels', 'message_kinds', 'state', 'liveness', 'schema',
+  'courier_online', 'tasks',
+]);
+const DIRECTORY_CONTAINER_KEYS = new Set([
+  'members', 'couriers', 'hosts', 'entries', 'directory', 'peers', 'nodes',
+]);
+const DIRECTORY_STRUCTURAL_KEYS = new Set([
+  ...DIRECTORY_CONTAINER_KEYS,
+  ...DIRECTORY_SKIP_KEYS,
+  'info', 'declared', 'observed',
+]);
+
 function extractDirectoryIdentifiers(doc) {
   if (doc === null || typeof doc !== 'object') return null;
   const names = new Set();
@@ -307,46 +323,45 @@ function extractDirectoryIdentifiers(doc) {
     const s = val.trim();
     if (s.length < 2) return;
     names.add(s);
-    const parts = s.split('/');
-    if (parts.length === 3) {
-      if (parts[1].trim().length >= 2) names.add(parts[1].trim());
-      if (parts[2].trim().length >= 2) names.add(parts[2].trim());
-    } else if (parts.length === 2) {
-      if (parts[0].trim().length >= 2) names.add(parts[0].trim());
-      if (parts[1].trim().length >= 2) names.add(parts[1].trim());
-    }
-  };
-  const visitRow = (row) => {
-    if (typeof row === 'string') {
-      add(row);
-      return;
-    }
-    if (!row || typeof row !== 'object' || Array.isArray(row)) return;
-    for (const key of ['courier', 'member', 'host', 'hostname', 'name', 'address']) {
-      if (typeof row[key] === 'string') add(row[key]);
-    }
-    if (Array.isArray(row.members)) row.members.forEach(visitRow);
-    if (Array.isArray(row.hosts)) row.hosts.forEach(visitRow);
-    if (Array.isArray(row.couriers)) row.couriers.forEach(visitRow);
-  };
-  if (Array.isArray(doc)) {
-    doc.forEach(visitRow);
-  } else {
-    for (const key of ['courier', 'member', 'host', 'hostname']) {
-      if (typeof doc[key] === 'string') add(doc[key]);
-    }
-    for (const listKey of ['members', 'couriers', 'hosts', 'entries', 'directory', 'peers', 'nodes']) {
-      const val = doc[listKey];
-      if (Array.isArray(val)) {
-        val.forEach(visitRow);
-      } else if (val && typeof val === 'object') {
-        for (const [mapKey, mapVal] of Object.entries(val)) {
-          add(mapKey);
-          visitRow(mapVal);
-        }
+    const segments = s.split(/[/@]+/);
+    if (segments.length > 1) {
+      for (const seg of segments) {
+        const part = seg.trim();
+        if (part.length >= 2) names.add(part);
       }
     }
-  }
+  };
+  const visit = (node) => {
+    if (typeof node === 'string') {
+      add(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    for (const [k, v] of Object.entries(node)) {
+      const lower = k.toLowerCase();
+      if (DIRECTORY_SKIP_KEYS.has(lower)) continue;
+      if (DIRECTORY_ID_KEYS.has(lower)) {
+        if (typeof v === 'string') add(v);
+        else if (v && typeof v === 'object') visit(v);
+        continue;
+      }
+      if (DIRECTORY_CONTAINER_KEYS.has(lower) && v && typeof v === 'object' && !Array.isArray(v)) {
+        for (const [mapKey, mapVal] of Object.entries(v)) {
+          if (!DIRECTORY_STRUCTURAL_KEYS.has(mapKey.toLowerCase()) && !Array.isArray(mapVal)) {
+            add(mapKey);
+          }
+          if (mapVal && typeof mapVal === 'object') visit(mapVal);
+        }
+        continue;
+      }
+      if (v && typeof v === 'object') visit(v);
+    }
+  };
+  visit(doc);
   return [...names];
 }
 
@@ -357,7 +372,7 @@ function loadFleetIdentifiers() {
     timeout: FLEET_TIMEOUT_MS,
     maxBuffer: 8 * 1024 * 1024,
   });
-  if (!res.error && (res.status === 2 || res.status === 64) && /--json|unknown|unexpected|usage/i.test(res.stderr || '')) {
+  if (!res.error && res.status !== 0 && /--json/i.test(res.stderr || '')) {
     res = spawnSync(fleetBin, ['directory'], {
       encoding: 'utf8',
       timeout: FLEET_TIMEOUT_MS,
@@ -575,16 +590,30 @@ function extractSeatOutput(stdoutBuf) {
   const text = stdoutBuf.toString('utf8');
   const trimmed = text.trim();
   if (trimmed.startsWith('{')) {
+    let obj = null;
+    let isJson = false;
     try {
-      const obj = JSON.parse(trimmed);
-      if (obj && typeof obj === 'object' && typeof obj.status === 'string' && Object.prototype.hasOwnProperty.call(obj, 'raw_log')) {
-        if (obj.status !== 'authored') return { envelopeOk: false, bytesBuf: Buffer.alloc(0) };
-        if (typeof obj.raw_log === 'string' && obj.raw_log && fs.existsSync(obj.raw_log)) {
-          return { envelopeOk: true, bytesBuf: fs.readFileSync(obj.raw_log) };
-        }
-        return { envelopeOk: true, bytesBuf: stdoutBuf };
+      obj = JSON.parse(trimmed);
+      isJson = true;
+    } catch {
+      isJson = false;
+    }
+    if (isJson && obj && typeof obj === 'object' && typeof obj.status === 'string'
+        && (Object.prototype.hasOwnProperty.call(obj, 'raw_log') || obj.status === 'authored')) {
+      if (obj.status !== 'authored') return { envelopeOk: false, bytesBuf: Buffer.alloc(0) };
+      if (typeof obj.raw_log !== 'string' || obj.raw_log.trim() === '') {
+        return { envelopeOk: false, bytesBuf: Buffer.alloc(0) };
       }
-    } catch { /* plain text stdout */ }
+      try {
+        const st = fs.statSync(obj.raw_log);
+        if (!st.isFile()) return { envelopeOk: false, bytesBuf: Buffer.alloc(0) };
+        const bytesBuf = fs.readFileSync(obj.raw_log);
+        if (!bytesBuf || bytesBuf.length === 0) return { envelopeOk: false, bytesBuf: Buffer.alloc(0) };
+        return { envelopeOk: true, bytesBuf };
+      } catch {
+        return { envelopeOk: false, bytesBuf: Buffer.alloc(0) };
+      }
+    }
   }
   return { envelopeOk: true, bytesBuf: stdoutBuf };
 }
@@ -817,4 +846,6 @@ module.exports = {
   sanitizeOutName,
   safeOutPath,
   isKnownModelForRunner,
+  extractDirectoryIdentifiers,
+  extractSeatOutput,
 };

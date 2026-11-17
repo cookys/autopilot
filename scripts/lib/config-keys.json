@@ -7175,7 +7175,7 @@
       "kind": "config_key",
       "audience": "user",
       "group": "hooks",
-      "default": "^pm-ledger search\\b",
+      "default": "",
       "readers": [
         "hooks/pm-output-cap.js"
       ],
@@ -7184,7 +7184,7 @@
         "hooks.<stem>",
         "AUTOPILOT_HOOK_<STEM>"
       ],
-      "summary": "Regex string matched against Bash commands when opt-in pm-output-cap runs in a PM console session; matching calls are steered to compact pm-ledger search. Empty or unset leaves this steer rule disabled in the hook; recommended PM default: ^pm-ledger search\\b.",
+      "summary": "Regex string matched against Bash commands or mcp__* tool names when opt-in pm-output-cap runs in a PM console session; matching calls get a 30-line output cap instead of 40. Empty or unset (the default) leaves this rule disabled.",
       "type": "string"
     },
     {

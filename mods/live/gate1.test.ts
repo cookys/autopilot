@@ -3,7 +3,7 @@ import { test, expect } from 'claude-code/testing'
 import { frameRows } from './pages/frame'
 import { nowPage } from './pages/now'
 import { fleetPage } from './pages/fleet'
-import { quotaPage } from './pages/quota'
+import { quotaPage, renderQuota } from './pages/quota'
 import { PAGES } from './pages/index'
 import { classify, normalizedPools, worstPool } from './pages/quota-pick'
 import { bandQuotaSeg } from './band'
@@ -86,8 +86,10 @@ test('gate G5: a used-up pool with no rebalance data is unknown (warning role, n
   const unk = [p('personal'), p('grok')]
   expect(worstPool(unk, NOW, t)?.pool, 'unknown before yellow').toBe('personal')
   expect(worstPool([...unk, p('trinity')], NOW, t)?.pool, 'red before unknown').toBe('trinity')
-  const quotaRow = screen(quotaPage, 160, 40, snap()).find(l => l.includes('personal') && l.includes('✗') === false && l.includes('缺換池資料'))
-  expect(quotaRow, '額度 page shows the unknown verdict').toBeDefined()
+  const quotaRow = screen(quotaPage, 160, 40, snap()).find(l => l.includes('personal') && l.includes('✗') === false && l.includes('未知·缺換池'))
+  expect(quotaRow, '額度 table row shows the short unknown verdict').toBeDefined()
+  const focusDetail = renderQuota(ctxOf(160, 40, snap()) as never, { focus: 3, expanded: false }).body.map(text).join('\n')
+  expect(focusDetail, 'focused personal pool shows full verdict in focus area').toContain('缺換池資料（capacity）')
   const now = nowPage.render(ctxOf(160, 40, snap()) as never).body.flat().find(s => s.text.includes('缺換池資料'))
   expect(now?.color, '現況 draws unknown at the warning level').toBe(PALETTE.attention)
   const noRed = normalizedPools(snap())!.filter(x => x.pool === 'personal' || x.pool === 'grok')
@@ -107,11 +109,11 @@ test('gate G6: a stale reason is wrapped, never cut with an ellipsis', () => {
   expect(now.filter(l => !l.includes('還有')).some(l => l.endsWith('…'))).toBe(false)
 })
 
-test('gate G7: when the strip does not fit every entry 1-8, 9, 0 and i stays, names shorten first', () => {
+test('gate G7: when the strip does not fit every entry 1-8, 9, 0 and i stays, names shorten first (2 rows under 66 columns)', () => {
   for (const cols of [100, 70, 60, 50, 40]) {
-    const strip = screen(nowPage, cols, 30, snap()).at(-1) as string
-    // a Button keeps a label (the host draws `k: label`), so under about 66 columns the last page entries give way; the help entry `i` never does
-    for (const k of cols >= 70 ? ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'i'] : ['1', '2', 'i']) expect(strip, 'cols ' + cols + ' keeps ' + k).toMatch(new RegExp('(^|\\s)' + k + '(\\s|$)'))
+    const out = screen(nowPage, cols, 30, snap())
+    const strip = (cols < 66 ? out.slice(-2) : out.slice(-1)).join(' ')
+    for (const k of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'i']) expect(strip, 'cols ' + cols + ' keeps ' + k).toMatch(new RegExp('(^|\\s)' + k + '(\\s|$)'))
     expect(strip.includes('…'), 'cols ' + cols + ': no fold').toBe(false)
   }
 })

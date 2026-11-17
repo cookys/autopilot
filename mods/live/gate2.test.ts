@@ -32,8 +32,11 @@ test('gate2 item 1: the height is fixed min(available, 24); every page at every 
     const H = hOf(rows)
     const out = frameRows(page, ctxOf(cols, H, c) as never, { pages: PAGES })
     if (out.length !== H) bad.push(page.id + ' ' + cols + 'x' + rows + ' ' + name + ': ' + out.length + ' rows, want ' + H)
-    const at = out.findIndex(r => r.some(s => s.press !== undefined && /^tab:1:/.test(s.press)))
-    if (at !== H - 1) bad.push(page.id + ' ' + cols + 'x' + rows + ' ' + name + ': strip on row ' + at + ', want ' + (H - 1))
+    const at1 = out.findIndex(r => r.some(s => s.press !== undefined && /^tab:1:/.test(s.press)))
+    const want1 = cols < 66 ? H - 2 : H - 1
+    if (at1 !== want1) bad.push(page.id + ' ' + cols + 'x' + rows + ' ' + name + ': strip row 1 on ' + at1 + ', want ' + want1)
+    const atLast = out.findIndex(r => r.some(s => s.press !== undefined && /^tab:7:/.test(s.press)))
+    if (atLast !== H - 1) bad.push(page.id + ' ' + cols + 'x' + rows + ' ' + name + ': strip last row on ' + atLast + ', want ' + (H - 1))
   }
   expect(bad).toEqual([])
 })
@@ -75,7 +78,7 @@ test('gate2 item 1: free rows unfold first (folded fleet lines, a pool\'s seats)
   expect(renderQuota(ctxOf(160, 40, c) as never, { focus: 0, expanded: true }).body.length).toBeGreaterThan(renderQuota(ctxOf(160, 40, c) as never, { focus: 0, expanded: false }).body.length - 1)
 })
 
-test('gate2 item 2: a wrapped 額度 verdict continues at the verdict column, never at column 0 through the table', () => {
+test('gate2 item 2: each 額度 pool row stays one row (no continuation rows in the table), and the full verdict is on screen in the focus area', () => {
   const long = '這是一段很長的判定文字用來測試換行縮排不會切到表格裡面去而且每一個字都要完整顯示出來不能被截斷'
   const pools = POOLS.map(p => (p.pool === 'team' ? { ...p, stale_note: long, stale: true, stale_age_min: 200 } : p))
   const c = snap(pools)
@@ -83,15 +86,9 @@ test('gate2 item 2: a wrapped 額度 verdict continues at the verdict column, ne
     const out = frameRows(quotaPage, ctxOf(cols, rows, c) as never).map(text)
     const at = out.findIndex(l => /^[▸ ] [✗▲✓]/.test(l) && l.includes('team'))
     expect(at).toBeGreaterThan(0)
-    // every row of the table region after the team row that is a continuation (starts with spaces, not a pool/marker row) is indented to one column
     const cont: string[] = []
     for (let i = at + 1; i < out.length - 1 && /^\s{20,}\S/.test(out[i]); i++) cont.push(out[i])
-    if (cols === 160) {
-      expect(cont.length, 'the long verdict wraps onto indented rows at 160').toBeGreaterThan(0)
-      const indents = new Set(cont.map(l => l.length - l.trimStart().length))
-      expect(indents.size, 'one indent for every continuation row').toBe(1)
-      expect([...indents][0]).toBeGreaterThan(60)
-    }
+    expect(cont.length, cols + ': pool table rows never wrap onto continuation rows').toBe(0)
     expect(out.join('').replace(/\s+/g, ''), cols + ': the whole verdict is on screen').toContain(long)
   }
 })
@@ -205,12 +202,17 @@ test('gate2 item 7: only the rendered action rows bind a [x] hint; a body row qu
   expect(act.buttons.some(b => b.props.hotkey === 'h')).toBe(true)
 })
 
-test('gate2 item 8: the strip never has a label-less Button; i keeps its Button at every width; only trailing pages give way under about 56 columns', () => {
+test('gate2 item 8: the strip never has a label-less Button; i keeps its Button at every width; under 66 columns the strip splits onto two rows', () => {
   for (const cols of [120, 80, 70, 60, 56, 50, 40, 36]) {
-    const strip = frameRows(nowPage, ctxOf(cols, 24, snap()) as never, { pages: PAGES }).pop() as { text: string; press?: string }[]
-    for (const s of strip.filter(x => x.press !== undefined)) expect(s.text, cols + ': a Button has a label').toMatch(/^\S+ \S/)
-    expect(strip.some(s => s.text.startsWith('i ') && s.text.length > 2), cols + ': i keeps its label').toBe(true)
-    expect(displayWidth(text(strip)) + strip.filter(s => s.press !== undefined).length, cols + ': within the width with the host prefix').toBeLessThanOrEqual(cols)
+    const out = frameRows(nowPage, ctxOf(cols, 24, snap()) as never, { pages: PAGES })
+    const sRows = cols < 66 ? out.slice(-2) : out.slice(-1)
+    for (const r of sRows) {
+      for (const s of r.filter(x => x.press !== undefined)) expect(s.text, cols + ': a Button has a label').toMatch(/^\S+ \S/)
+      const helpCount = r.filter(s => s.text.startsWith('i ')).length
+      expect(displayWidth(text(r)) + r.filter(s => s.press !== undefined).length + helpCount, cols + ': within the width with the host prefix').toBeLessThanOrEqual(cols)
+    }
+    const last = sRows[sRows.length - 1]
+    expect(last.some(s => s.text.startsWith('i ') && s.text.length > 2), cols + ': i keeps its label').toBe(true)
   }
 })
 

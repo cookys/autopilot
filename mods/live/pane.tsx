@@ -18,13 +18,13 @@ import { commandView } from './commandtab'
 import { consolePage } from './consolepages'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { keyed, scrollFrame } from './scroll'
-import { actionRows, frameRows } from './pages/frame'
+import { actionRows, frameRows, STRIP_SPLIT_COLS } from './pages/frame'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
 import type { DecideNav } from './pages/decide'
 import type { KeyAction } from './pages/keys'
 import type { ConsoleSnapshot } from './console'
-import type { Page, PageCtx, Row } from './pages/frame'
+import type { Page, PageCtx, PageId, Row } from './pages/frame'
 import type { ScrollModel } from './scroll'
 
 export type { PaneTab } from './model'
@@ -145,7 +145,7 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 // A page of the registry (pages/index.ts) drawn through frameRows: exactly `rows` rows, the strip entries are Buttons with the digit as hotkey.
 export type PageView = { focus: number; expanded: boolean }
 // view: focus index + expanded flag per page id (fleet, quota); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons)
-export type FramePane = { pages: readonly Page[]; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void }
+export type FramePane = { pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void }
 const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. No j / k: a key needs a visible Button to carry it, and a row is its own Button (Tab walks the rows)
 const DECIDE_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 }, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
 // o acts on the focused (▸) row: fleet sees that line, quota shows / hides that pool's seats. decide has no o (a-e pick there); now has no focused row yet, so o is not bound there
@@ -153,9 +153,13 @@ const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
 const pageKeys = (id: string): Record<string, KeyAction> => (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'fleet' || id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS)
 // every hotkey a framed page binds (f on fleet / quota is the page's own fill action): a visible `[x]` key hint must be one of these (frame.test.ts)
 export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'fleet' || id === 'quota' ? ['f'] : []), 'i']
-// quota (4) and spend (7) both show the Spend tab until S4 gives the quota page its own tab; pet / forge / help have no old tab and no Button yet (a PaneTab for them comes with their pages)
+// quota (4) and spend (7) both show the Spend tab when pageId is unset; when pageId is set, quota renders framed quotaPage and spend renders spendTabLines
 const PAGE_TAB: Record<string, PaneTab> = { now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend', dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene' }
-export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => (frame === null ? undefined : frame.pages.find(p => p.framed === true && PAGE_TAB[p.id] === tab))
+export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => {
+  if (frame === null) return undefined
+  if (frame.pageId !== undefined) return frame.pages.find(p => p.framed === true && p.id === frame.pageId)
+  return frame.pages.find(p => p.framed === true && PAGE_TAB[p.id] === tab)
+}
 const HINT_AT = /(^|\s)\[[a-z]\] \S/
 const HINT_SPLIT = /(?<=^|\s)(?=\[[a-z]\] \S)/
 function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, cols: number) {
@@ -167,17 +171,18 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   // free rows go to content first: a folded page (fleet lines, a pool's seats) is drawn open when the open body fits whole in the rows the surface has left
   const unfold = view.expanded ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : undefined
   const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
+  const stripCount = cols < STRIP_SPLIT_COLS ? Math.min(2, rows.length) : Math.min(1, rows.length)
   // the action rows are exactly the ones the page returned (the frame pads nothing): only those rows may bind a `[x]` hint, never the body rows above them
-  const actionCount = Math.max(0, Math.min(Math.max(drawn.render(ctx).actions.length, unfold === undefined ? 0 : unfold(ctx).actions.length), frame.rows - 2))
+  const actionCount = Math.max(0, Math.min(Math.max(drawn.render(ctx).actions.length, unfold === undefined ? 0 : unfold(ctx).actions.length), Math.max(0, frame.rows - 1 - stripCount)))
   const press = (id: string) => { frame.onPress?.(id) }
-  const noteAt = page.id === 'decide' && frame.decide?.textMode === true && el.Input !== undefined ? rows.length - 2 : -1
+  const noteAt = page.id === 'decide' && frame.decide?.textMode === true && el.Input !== undefined ? rows.length - stripCount - 1 : -1
   const typing = frame.decide?.textMode === true // while a note is typed the Input owns every key: the strip binds no digit and no hint binds a letter
   // A page key is carried by a VISIBLE Button: the action row's own `[x] label` (the host draws `x: label`), never an empty-label Button (the host draws that as a row `x:`).
   const keys: Record<string, KeyAction> = pageKeys(page.id)
   const used = new Set<string>()
   const actOf = (letter: string, own: string | undefined): (() => void) | undefined => {
     if (own !== undefined) return () => press(own)
-    if (letter === 'i') return () => onTab('legend') // the help page: the old legend tab until its page is drawn
+    if (letter === 'i') return () => (frame.onPage !== undefined ? frame.onPage('help') : onTab('legend')) // the help page: the old legend tab until its page is drawn
     if (letter === 'o' && page.id === 'quota') return () => press('quota:open')
     const act = keys[letter]
     return act === undefined || letter === 'o' ? undefined : () => frame.onKey?.(act)
@@ -187,18 +192,19 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       const Input = el.Input
       return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} autoFocus />{Button === undefined ? null : <Button key="note:cancel" plain onPress={() => frame.onKey?.({ kind: 'text_cancel' })}><Text>{t('page.decide.act_cancel')}</Text></Button>}</Box>
     }
-    const isStrip = i === rows.length - 1
+    const isStrip = i >= rows.length - stripCount
     // a `[x] label` hint binds a letter only in an ACTION row (a head or body row can quote `[a]` or `buf[i]`), at the start of the text or after a space (one form: the host draws the Button `x: label`, so the text never also carries `[x]`)
-    const isActionRow = i >= rows.length - 1 - actionCount && !isStrip
+    const isActionRow = i >= rows.length - stripCount - actionCount && !isStrip
     const nodes: unknown[] = []
     for (let j = 0; j < r.length; j++) {
       const sg = r[j]
       const m = sg.press === undefined ? null : /^tab:(\d):(\w+)$/.exec(sg.press)
       const to = m === null ? undefined : PAGE_TAB[m[2]]
       if (m !== null && to !== undefined && Button !== undefined) {
-        // the strip (last row) owns the digit hotkey; the host draws `<digit>: <label>`, so the label is the page name alone. A page's own `[2]` action is a click target only.
+        // the strip owns the digit hotkey; the host draws `<digit>: <label>`, so the label is the page name alone. A page's own `[2]` action is a click target only.
         const label = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{isStrip ? sg.text.replace(/^\d+\s+/, '') : sg.text}</Text>
-        nodes.push(isStrip ? <Button key={m[2]} plain {...(typing ? {} : { hotkey: m[1] })} onPress={() => onTab(to)}>{label}</Button> : <Button key={'a:' + i + ':' + m[2]} plain onPress={() => onTab(to)}>{label}</Button>)
+        const choose = () => (frame.onPage !== undefined ? frame.onPage(m[2] as PageId) : onTab(to))
+        nodes.push(isStrip ? <Button key={m[2]} plain {...(typing ? {} : { hotkey: m[1] })} onPress={choose}>{label}</Button> : <Button key={'a:' + i + ':' + m[2]} plain onPress={choose}>{label}</Button>)
         continue
       }
       if (sg.press !== undefined && m === null && Button !== undefined) {

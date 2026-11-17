@@ -82,9 +82,11 @@ export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, h
 // ---- the band's own tab row (layout E1): the first four pane tabs, the band's own 用量 tab and, when a mod below draws one, a forge tab, right-aligned on the band's row. The labels and their weights are
 // ui.strip()'s (` name ` per tab, one space after each); the rule under an open tab is built from the SAME widths (ui.tabRule), so the `━` stands exactly under the label by construction. ----
 export type BarTabId = 'now' | 'decide' | 'dispatch' | 'review' | 'usage' | 'forge'
+export const BAND_PAGE_TABS = ['now', 'decide', 'fleet', 'quota', 'dispatch', 'review', 'spend', 'hygiene'] as const
+export type BandPageId = (typeof BAND_PAGE_TABS)[number]
 // 'usage' is the band's own tab (the token table of forge-stats, drawn in the O4 shell); it is no pane tab: where the shell is not drawn its open button opens the pane's 花費 tab
 export const BAR_PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'usage'] as const
-export type BarTab = { id: BarTabId | ConsoleTab; label: Seg; width: number; start: number } // start counts from the row's first tab
+export type BarTab = { id: BarTabId | ConsoleTab | BandPageId; label: Seg; width: number; start: number } // start counts from the row's first tab
 export type BarStrip = { tabs: BarTab[]; width: number } // width counts the space after each tab
 // forge: the forge tab's text (one string the mod below drew), or null for no forge tab
 // usage: false leaves the 用量 tab out (the band has no room for it; a dim `›` ends the row instead, see usageTabFits; forgeTab is the forge tab's text, the caller's glyph)
@@ -102,6 +104,29 @@ export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | Con
     x += width + 1
   }
   return { tabs, width: x }
+}
+// Console band row 2 when the pane is closed: the new page names 1-8 (same names as the pane strip, without digits), shortening to first character only when narrow.
+export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, active: BarTabId | ConsoleTab | BandPageId | null, forge: string | null): BarStrip {
+  const needs = snap === null ? {} : tabNeeds(snap)
+  const first = (s: string): string => [...s][0] ?? s
+  const build = (short: boolean): BarStrip => {
+    const list = BAND_PAGE_TABS.map(id => {
+      const full = t('tab.' + id)
+      return { id: id as BandPageId | 'forge', label: short ? first(full) : full, ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }
+    })
+    const act = active === 'forge' ? ('forge' as const) : null
+    const built = ui.strip<BandPageId | 'forge'>({ t, cols: 100000 }, act, forge === null ? list : [...list, { id: 'forge' as const, label: forge }], false)
+    const tabs: BarTab[] = []
+    let x = 0
+    for (const b of built.tabs) {
+      const width = displayWidth(b.label.text)
+      tabs.push({ id: b.id, label: b.label, width, start: x })
+      x += width + 1
+    }
+    return { tabs, width: x }
+  }
+  const full = build(false)
+  return full.width <= columns ? full : build(true)
 }
 // The forge tab's label room: the narrowest worth asking for, and the cells the indicator keeps at least (register.ts reads both).
 export const FORGE_LABEL_MIN = 5

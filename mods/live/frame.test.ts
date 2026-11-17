@@ -280,21 +280,24 @@ test('band quota segment: source state no_source -> absent, stale -> warning rol
 // The host draws each hotkey Button as `<key>: <label>`: one cell wider than the segment text. A strip segment is a Button when it carries a tab press or is the help entry `i ...`.
 const isButtonSeg = (s: { text: string; press?: string }): boolean => (s.press !== undefined && s.press.startsWith('tab:')) || s.text.startsWith('i ')
 const hostWidth = (r: Row): number => r.reduce((w, s) => w + displayWidth(s.text) + (isButtonSeg(s) ? 1 : 0), 0)
-test('pane UX fix: strip at 70 / 60 / 40 columns is one row within the width (host prefix counted), no two Buttons touch, help stays reachable', () => {
+test('pane UX fix: strip at 70 / 60 / 40 columns stays within the width (host prefix counted, 2 rows under 66 cols), no two Buttons touch, help and all entries stay reachable', () => {
   for (const cols of [70, 60, 40]) {
     const rows = frameRows(PAGES[1], ctxOf({ cols, rows: 24 }), { pages: PAGES })
-    const strip = rows[rows.length - 1]
+    const sRows = cols < 66 ? rows.slice(-2) : rows.slice(-1)
     expect(rows.length, cols + ': exactly H rows').toBe(24)
-    expect(hostWidth(strip), cols + ': the strip with the host prefix is ' + hostWidth(strip) + ' wide: ' + text(strip)).toBeLessThanOrEqual(cols)
-    for (let i = 1; i < strip.length; i++) expect(isButtonSeg(strip[i - 1]) && isButtonSeg(strip[i]), cols + ': two Buttons run together at ' + i + ': ' + text(strip)).toBe(false)
-    expect(strip.some(s => s.text.startsWith('i ')), cols + ': the help entry is in the strip: ' + text(strip)).toBe(true)
+    for (const strip of sRows) {
+      expect(hostWidth(strip), cols + ': the strip with the host prefix is ' + hostWidth(strip) + ' wide: ' + text(strip)).toBeLessThanOrEqual(cols)
+      for (let i = 1; i < strip.length; i++) expect(isButtonSeg(strip[i - 1]) && isButtonSeg(strip[i]), cols + ': two Buttons run together at ' + i + ': ' + text(strip)).toBe(false)
+    }
+    expect(rows[rows.length - 1].some(s => s.text.startsWith('i ')), cols + ': the help entry is in the strip').toBe(true)
   }
   const wide = frameRows(PAGES[1], ctxOf({ cols: 70, rows: 24 }), { pages: PAGES })
   const last = (r: Row[]) => text(r[r.length - 1])
   expect(last(wide).startsWith('1 現 2 待'), 'at 70 the labels shrink to the first character: ' + last(wide)).toBe(true)
   const narrow = frameRows(PAGES[1], ctxOf({ cols: 40, rows: 24 }), { pages: PAGES })
-  for (const key of ['1', '2', 'i']) expect(last(narrow), 'G7: at 40 the entry ' + key + ' is still there, nothing folds: ' + last(narrow)).toContain(key)
-  expect(last(narrow).includes('…'), 'G7: no fold').toBe(false)
+  const joined = narrow.slice(-2).map(text).join(' ')
+  for (const key of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'i']) expect(joined, 'G7: at 40 the entry ' + key + ' is still there: ' + joined).toMatch(new RegExp('(^|\\s)' + key + '(\\s|$)'))
+  expect(joined.includes('…'), 'G7: no fold').toBe(false)
 })
 test('pane UX fix: the quota page empty state says 沒有待決卡, not 沒有要你處理的事 (pools above can be red)', () => {
   const rows = frameRows(withBody(PAGES[3], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })

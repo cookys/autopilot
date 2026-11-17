@@ -17,7 +17,7 @@ import { brokenRow, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount }
 import type { Row } from './rows'
 
 export type { Row } from './rows'
-export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number }
+export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean }
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'forge' | 'help'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[] } }
@@ -101,12 +101,12 @@ function wrapRow(row: Row, cols: number): Row[] {
 }
 
 // The host draws every hotkey Button as `<key>: <label>`, so each Button is one cell wider than its text (`1 現況` -> `1: 現況`). A Button is measured with that prefix, and every pair of
-// neighbouring Buttons has a one-cell separator. When the row does not fit: the page labels shrink to their first character, then the Esc hint goes, then the help label shrinks to its
-// first character. Every Button keeps a non-empty label (the host would draw a bare `k:`). Only when even that is wider than the surface (under about 56 columns) do the last page entries
-// give way, from the end; the help entry `i` always stays.
+// neighbouring Buttons has a one-cell separator. Under 66 columns the strip takes 2 rows (entries 1-6 on row 1, then 7, 8, 9, 0, i on row 2); at 66+ columns it takes 1 row. Labels shorten to
+// their first character only when a row does not fit; no entry is ever dropped and every Button keeps a non-empty label.
+export const STRIP_SPLIT_COLS = 66
 const HOST_PREFIX = 1
 const HELP_KEY = 'i'
-function strip(page: Page, ctx: PageCtx, opts: FrameOpts): Row {
+export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
   const pages = opts.pages ?? PAGES
   const active = opts.active ?? page.id
   const all = [...pages.filter(p => p.id !== 'help').map(p => ({ id: p.id as string, key: p.key, label: ctx.t('tab.' + p.id) })), ...(opts.extra ?? [])]
@@ -115,25 +115,47 @@ function strip(page: Page, ctx: PageCtx, opts: FrameOpts): Row {
   const esc = '  Esc ' + ctx.t('frame.close')
   type Form = 'full' | 'short'
   const labelOf = (x: { label: string }, f: Form): string => (f === 'full' ? x.label : first(x.label))
-  const entry = (x: { id: string; key: string; label: string }, f: Form): Row => {
+  const entrySeg = (x: { id: string; key: string; label: string }, f: Form): Seg => {
     const on = x.id === active
-    return [{ text: x.key + ' ' + labelOf(x, f), press: 'tab:' + x.key + ':' + x.id, ...(on ? { color: PALETTE.here } : {}) }, { text: ' ' }]
+    return { text: x.key + ' ' + labelOf(x, f), press: 'tab:' + x.key + ':' + x.id, ...(on ? { color: PALETTE.here } : {}) }
   }
-  const entryW = (x: { key: string; label: string }, f: Form): number => displayWidth(x.key) + 1 + displayWidth(labelOf(x, f)) + HOST_PREFIX + 1
-  const build = (list: typeof all, f: Form, help: string, tail: string): { row: Row; width: number } => ({
-    row: [...list.flatMap(x => entry(x, f)), { text: ' ' }, { text: HELP_KEY + ' ' + help + tail, dim: true }],
-    width: list.reduce((w, x) => w + entryW(x, f), 1) + displayWidth(HELP_KEY) + HOST_PREFIX + 1 + displayWidth(help) + displayWidth(tail),
+  const entryW = (x: { key: string; label: string }, f: Form): number => displayWidth(x.key) + 1 + displayWidth(labelOf(x, f)) + HOST_PREFIX
+  const buildEntries = (list: typeof all, f: Form): { row: Row; width: number } => ({
+    row: list.flatMap((x, i) => (i === 0 ? [entrySeg(x, f)] : [{ text: ' ' }, entrySeg(x, f)])),
+    width: list.reduce((w, x, i) => w + (i === 0 ? 0 : 1) + entryW(x, f), 0),
   })
-  const tries = [build(all, 'full', helpLabel, esc), build(all, 'short', helpLabel, esc), build(all, 'short', helpLabel, ''), build(all, 'short', first(helpLabel), '')]
-  const fits = tries.find(x => x.width <= ctx.size.cols)
-  if (fits !== undefined) return fits.row
-  let list = all
-  let last = tries[tries.length - 1]
-  while (last.width > ctx.size.cols && list.length > 0) { list = list.slice(0, -1); last = build(list, 'short', first(helpLabel), '') }
-  return last.row
+  const buildWithHelp = (list: typeof all, f: Form, gap: string, help: string, tail: string): { row: Row; width: number } => {
+    const head = buildEntries(list, f)
+    const sep = head.row.length === 0 ? '' : gap
+    return {
+      row: [...head.row, ...(sep === '' ? [] : [{ text: sep }]), { text: HELP_KEY + ' ' + help + tail, dim: true }],
+      width: head.width + displayWidth(sep) + displayWidth(HELP_KEY) + HOST_PREFIX + 1 + displayWidth(help) + displayWidth(tail),
+    }
+  }
+  const pick = (tries: { row: Row; width: number }[]): Row => (tries.find(x => x.width <= ctx.size.cols) ?? tries[tries.length - 1]).row
+  if (ctx.size.cols < STRIP_SPLIT_COLS) {
+    const top = all.slice(0, 6)
+    const bot = all.slice(6)
+    const row1 = pick([buildEntries(top, 'full'), buildEntries(top, 'short')])
+    const row2 = pick([
+      buildWithHelp(bot, 'full', '  ', helpLabel, esc),
+      buildWithHelp(bot, 'full', '  ', helpLabel, ''),
+      buildWithHelp(bot, 'short', '  ', helpLabel, ''),
+      buildWithHelp(bot, 'short', ' ', first(helpLabel), ''),
+    ])
+    return [row1, row2]
+  }
+  return [pick([
+    buildWithHelp(all, 'full', '  ', helpLabel, esc),
+    buildWithHelp(all, 'full', '  ', helpLabel, ''),
+    buildWithHelp(all, 'short', '  ', helpLabel, esc),
+    buildWithHelp(all, 'short', '  ', helpLabel, ''),
+    buildWithHelp(all, 'short', ' ', helpLabel, ''),
+    buildWithHelp(all, 'short', ' ', first(helpLabel), ''),
+  ])]
 }
 
-// EXACTLY ctx.size.rows rows, whatever the page returned, and the strip is always the last row (fixed height, PM 01M7N33J): head, the body laid out from the top, the actions right above the strip.
+// EXACTLY ctx.size.rows rows, whatever the page returned, and the strip is always at the bottom (fixed height, PM 01M7N33J): head, the body laid out from the top, the actions right above the strip.
 // Free rows go to content first: when the body is shorter than its room and the caller offers `unfold` (the page drawn with its folds open), the unfolded body is used if it fits whole.
 // Only the rows that are really left over stay blank, between the body and the action rows (G1: never squeeze the content to nothing while blank rows exist).
 export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
@@ -142,14 +164,20 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const first = page.render(ctx)
   if (first.actions.length > full) throw new Error('frame: ' + page.id + ' returned ' + first.actions.length + ' actions, the action area holds ' + full)
   if (H <= 0) return []
-  if (H === 1) return [clip(strip(page, ctx, opts), ctx.size.cols)]
+  const sRows = stripRows(page, ctx, opts)
+  const S = sRows.length
+  if (H <= S) return sRows.slice(-H).map(r => clip(r, ctx.size.cols))
+  const avail = H - 1 - S
   const layout = (r: { body: Row[]; actions: Row[] }) => {
     const body = r.body.flatMap(x => wrapRow(x, ctx.size.cols))
     const acts: Row[] = r.actions.length === 0 ? [[{ text: emptyState(ctx, page), dim: true }]] : r.actions
-    return { body, acts, room: H - 2 - Math.min(acts.length, H - 2) }
+    return { body, acts, room: avail - Math.min(acts.length, avail) }
   }
   let lay = layout(first)
-  if (opts.unfold !== undefined && lay.body.length < lay.room) {
+  if (lay.room <= 4 && ctx.shortBody !== true) {
+    const compact = page.render({ ...ctx, shortBody: true })
+    if (compact.actions.length <= full) lay = layout(compact)
+  } else if (opts.unfold !== undefined && lay.body.length < lay.room && lay.room > 4) {
     const open = opts.unfold(ctx)
     if (open.actions.length <= full) {
       const alt = layout(open)
@@ -157,18 +185,18 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     }
   }
   const { body, acts, room } = lay
-  const A = Math.min(acts.length, H - 2) // the action rows give way last-first only when the surface is under 3 rows
+  const A = Math.min(acts.length, avail) // the action rows give way last-first only when the surface cannot hold head + actions + strip
   const head: Row = [{ text: ctx.t('tab.' + page.id) }, ...(mostSevere(ctx) === null ? [] : [{ text: '  ' }, mostSevere(ctx) as Seg])]
   let shown: Row[]
   if (body.length <= room) shown = body
   else {
     const from = Math.max(0, Math.min(opts.scroll ?? 0, body.length - room))
-    if (from + room >= body.length) shown = body.slice(from) // the window reached the end: every row is a body row
+    if (from + room >= body.length || room <= 4) shown = body.slice(from, from + room) // at the end, or in short-body mode (<= 4 rows): drop the scroll hint so every row shows an item
     else {
       const keep = Math.max(0, room - 1)
       shown = [...body.slice(from, from + keep), ...(room === 0 ? [] : [[{ text: ctx.t('frame.more', { n: body.length - from - keep, arrow: GLYPHS.structure.behind }), dim: true }] as Row])]
     }
   }
   const gap: Row[] = Array.from({ length: room - shown.length }, blank)
-  return [head, ...shown, ...gap, ...(A === 0 ? [] : acts.slice(-A)), strip(page, ctx, opts)].map(r => clip(r, ctx.size.cols))
+  return [head, ...shown, ...gap, ...(A === 0 ? [] : acts.slice(-A)), ...sRows].map(r => clip(r, ctx.size.cols))
 }

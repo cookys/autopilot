@@ -13,13 +13,13 @@ import { actionSeg, cardParas, dimProps, drawSeg, forgeBar, GLYPHS, moreSeg, PAL
 import { fixedWindow, followsTail, thumbOf } from './scrollmath'
 import type { ScrollModel } from './scrollmath'
 import type { ForgeSegment } from './ui'
-import { barRule, barStrip, decideBandPlan } from './tabs'
+import { barRule, barStrip, decideBandPlan, pageBarStrip } from './tabs'
 import { ROLE_WARNING, worstPool } from './pages/quota-pick'
 import type { QuotaPool } from './console'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
-import type { BarStrip, BarTabId } from './tabs'
+import type { BandPageId, BarStrip, BarTabId } from './tabs'
 
 type El = (props: any) => any
 
@@ -102,7 +102,7 @@ export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot 
 
 // ---- layout E1: the band row is the indicator on the left and the tabs on the right; an open tab draws its content under a rule ----
 
-export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; onTab: (id: BarTabId | ConsoleTab) => void }
+export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; onTab: (id: BarTabId | ConsoleTab | BandPageId) => void }
 
 // the row, and the column its tabs start in (the rule under it is built from that)
 // r2 §3.1: the right end of the summary row names the most dangerous pool, the same one the 現況 page names (worstPool, folds A7). null = nothing to show (no pools).
@@ -115,18 +115,21 @@ export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, sou
   return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }
 }
 
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false): { node: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
   const fb = forge === null ? null : forgeBar(forge)
-  const strip = barStrip(snap, t, active, fb === null ? null : GLYPHS.structure.speed, usage, con)
+  const speedGlyph = fb === null ? null : GLYPHS.structure.speed
+  const row1Strip = barStrip(snap, t, active as BarTabId | ConsoleTab | null, speedGlyph, usage, con)
   const forgeW = fb === null ? 0 : fb.width
   // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab
   const more = moreTo !== null
   const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
-  const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot, preset)
+  const strip = con === null ? row1Strip : pageBarStrip(snap, t, Math.max(0, columns - moreW), active, speedGlyph)
+  const left = bandCells(el, snap, Math.max(1, columns - row1Strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot, preset)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
+  void segW
   const gap = Math.max(0, columns - strip.width - moreW)
   const moreText = <Text key="m" {...drawSeg(moreSeg())} wrap="truncate">{GLYPHS.structure.goto}</Text>
   const moreNode = !more ? [] : [<Box key="more">{Button === undefined ? moreText : <Button key="more" plain onPress={() => hd.onTab(moreTo as BarTabId)}>{moreText}</Button>}<Text> </Text></Box>]
@@ -152,9 +155,9 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
 }
 
 // the rule under the bar
-export function BarRule(el: { Box: El; Text: El }, strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | ConsoleTab | null) {
+export function BarRule(el: { Box: El; Text: El }, strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | ConsoleTab | BandPageId | null) {
   const { Box, Text } = el
-  return <Box>{barRule(strip, columns, tabsAt, active).map((s, i) => <Text key={'r' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)}</Box>
+  return <Box>{barRule(strip, columns, tabsAt, active as BarTabId | ConsoleTab | null).map((s, i) => <Text key={'r' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)}</Box>
 }
 
 // `[ label ]` in the action colour: a pressable control

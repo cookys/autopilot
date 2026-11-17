@@ -3532,9 +3532,10 @@ test('C1 U7: console mode: an alive forge-stats with summary_row is never asked 
   expect(asks).toEqual([])
   expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
   const row = texts.join(' ')
-  for (const name of ['指揮', '團隊', '額度', '主機', '本席']) expect(row.includes(name)).toBe(true)
+  for (const name of ['現況', '待決', '艦隊', '額度', '派工', '審查', '花費', '殘留']) expect(row.includes(name)).toBe(true)
+  for (const old of ['指揮', '團隊', '主機', '本席']) expect(row.includes(old)).toBe(false)
   const flat = texts.join('')
-  expect(flat.includes('艦隊')).toBe(false) // the console band does not grow a fleet segment
+  expect(flat.includes('⊘ 2')).toBe(false) // the console band does not grow a fleet segment on row 1
   expect(flat.includes('⋯')).toBe(false)
 })
 test('C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
@@ -3573,7 +3574,7 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
   await w.clock.advance(11_000) // the tick reads the mode: it turns on
   const after = await bandTexts()
   expect(after.length, 'the 待決 body (many rows) is gone').toBeLessThan(before.length)
-  expect(after.join(' ').includes('指揮'), 'the pane is closed: the console band draws its tab row').toBe(true)
+  expect(after.join(' ').includes('艦隊') && !after.join(' ').includes('指揮'), 'the pane is closed: the console band draws the new page names 1-8').toBe(true)
 })
 // review fix 3: the console feed (triedMs, snap) belongs to the session; a new session.start must not inherit the 60 s throttle or the first run's snapshot
 test('review fix: consolefeed-session-reset: a second session.start on the same clock asks `fleet console --json` again', async ($, on) => {
@@ -3663,6 +3664,44 @@ test('pane UX fix: console mode, pane CLOSED: the band draws its tab row (row 2)
   const r = await bandTabKeys($, { panesOpen: false }, w)
   expect(r.text.includes('疑似卡住'), 'the band drew: ' + r.text.slice(0, 80)).toBe(true)
   expect(r.tabs.length, 'the closed pane leaves the tab row on the band: ' + r.text.slice(0, 160)).toBeGreaterThanOrEqual(3)
+})
+test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names 1-8 without digit hotkeys and no old tab name, and pressing any name opens the pane on that page (terminal)', async ($, on) => {
+  const w = await framedWorld($, on)
+  w.panes = []
+  const bandUi = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-gate3-band', props: { ...BAND_PROPS, maxRows: 6 }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
+  const bandTree = (await bandUi.drawn()) as Node
+  const bandBtns = (await bandUi.findAll({ type: 'Button' })) as Node[]
+  await bandUi.unmount()
+  const [, row2] = ((bandTree.children || []) as Node[])
+  const row2Text = walkTexts(row2).map(textOf).join(' ')
+  for (const name of ['現況', '待決', '艦隊', '額度', '派工', '審查', '花費', '殘留']) expect(row2Text, 'row 2 carries ' + name).toContain(name)
+  for (const old of ['指揮', '團隊', '主機', '本席']) expect(row2Text, 'row 2 drops old tab ' + old).not.toContain(old)
+  const tabBtns = bandBtns.filter(b => String(b.props?.key).startsWith('tab:'))
+  expect(tabBtns.map(b => String(b.props?.key))).toEqual(['tab:now', 'tab:decide', 'tab:fleet', 'tab:quota', 'tab:dispatch', 'tab:review', 'tab:spend', 'tab:hygiene'])
+  for (const b of bandBtns) expect(b.props?.hotkey, 'no hotkey on band Button ' + String(b.props?.key)).toBeUndefined()
+  const cases: [string, string, boolean][] = [
+    ['tab:now', '現況', true],
+    ['tab:decide', '待決', true],
+    ['tab:fleet', '艦隊', true],
+    ['tab:quota', '額度', true],
+    ['tab:dispatch', '這是執行狀態，不是進度', false],
+    ['tab:review', '推送前檢查', false],
+    ['tab:spend', '今日花費', false],
+    ['tab:hygiene', '自動清理', false],
+  ]
+  for (const [key, marker, isFramed] of cases) {
+    w.panes = []
+    w.opens.length = 0
+    const b = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-gate3-' + key, props: { ...BAND_PROPS, maxRows: 6 }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
+    await b.press({ key })
+    await b.unmount()
+    expect(w.opens.map(o => o.id), key + ' opens the pane').toEqual(['autopilot-live'])
+    const p = await framedMount($)
+    const pTree = (await p.drawn()) as Node
+    await p.unmount()
+    if (isFramed) expect(framedRows(pTree)[0], key + ' header').toContain(marker)
+    else expect(walkTexts(pTree).map(textOf).join(' '), key + ' unframed content').toContain(marker)
+  }
 })
 // pageview-focus-unbounded: the fold clamps the focus to the rows that are still shown, so the next unfold does not put the ▸ back on a row that was folded away
 test('pane review fix: folding the 艦隊 page clamps the focus to the last shown row (terminal)', async ($, on) => {
@@ -7017,8 +7056,8 @@ for (const surface of SURFACES) {
     expect(speedText).toMatch(/ϟ \d{2} tok\/s [▁▂▃▄▅▆▇█]{5}/)
     expect(speedText).not.toContain('Ferris')
     expect(speedText).not.toContain('Lv.')
-    expect(text).toContain('指揮') // the pane is closed: the band draws its tab row (plan: row 2 is the tab row)
-    expect(text).not.toContain('艦隊')
+    expect(text).toContain('艦隊') // the pane is closed: row 2 draws the new 1-8 page names
+    expect(text).not.toContain('指揮')
   })
 
   // the drawn band row's cells, summed with displayWidth. A row that wraps is wider than the columns the band was given.

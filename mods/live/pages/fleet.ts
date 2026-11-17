@@ -72,19 +72,21 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   const tasksReason = sourceReason(ctx, snap, 'tasks')
   if (tasksReason !== null) body.push(brokenRow(tasksReason))
   const num = (text: string, color?: Seg['color']): Seg => (stale ? staleBadge(text + GLYPHS.state.failed) : { text, ...(color === undefined ? {} : { color }) })
-  if (wide) {
-    body.push([{ text: RULE2 + ' ' + ctx.t('page.fleet.lines_title', { n: total }) + '：', color: PALETTE.structure },
-      { text: STATES.running.glyph + ' ' + ctx.t('page.fleet.w_run') + ' ' }, num(String(run), STATES.running.key),
-      { text: '  ' + STATES.waiting.glyph + ' ' + ctx.t('page.fleet.w_wait') + ' ' }, num(String(wait), STATES.waiting.key),
-      { text: '  ' + STATES.stalled.glyph + ' ' + ctx.t('page.fleet.w_stuck') + ' ' }, num(String(stuck), STATES.stalled.key),
-      { text: ' ' + GLYPHS.structure.rule.repeat(Math.max(3, cols - 56)), color: PALETTE.structure }])
-  } else {
-    body.push([{ text: ctx.t('page.fleet.lines_title', { n: total }) + ' ' }, num(STATES.running.glyph + String(run), STATES.running.key), { text: ' ' }, num(STATES.waiting.glyph + String(wait), STATES.waiting.key), { text: ' ' }, num(STATES.stalled.glyph + String(stuck), STATES.stalled.key)])
+  if (!ctx.shortBody) {
+    if (wide) {
+      body.push([{ text: RULE2 + ' ' + ctx.t('page.fleet.lines_title', { n: total }) + '：', color: PALETTE.structure },
+        { text: STATES.running.glyph + ' ' + ctx.t('page.fleet.w_run') + ' ' }, num(String(run), STATES.running.key),
+        { text: '  ' + STATES.waiting.glyph + ' ' + ctx.t('page.fleet.w_wait') + ' ' }, num(String(wait), STATES.waiting.key),
+        { text: '  ' + STATES.stalled.glyph + ' ' + ctx.t('page.fleet.w_stuck') + ' ' }, num(String(stuck), STATES.stalled.key),
+        { text: ' ' + GLYPHS.structure.rule.repeat(Math.max(3, cols - 56)), color: PALETTE.structure }])
+    } else {
+      body.push([{ text: ctx.t('page.fleet.lines_title', { n: total }) + ' ' }, num(STATES.running.glyph + String(run), STATES.running.key), { text: ' ' }, num(STATES.waiting.glyph + String(wait), STATES.waiting.key), { text: ' ' }, num(STATES.stalled.glyph + String(stuck), STATES.stalled.key)])
+    }
   }
   if (total === 0) body.push([{ text: ctx.t('page.fleet.none'), dim: true }])
 
   const wLine = 20, wState = 8, wOwner = 14, wLast = 7
-  if (wide && total > 0) body.push([{ text: '  ' + pad(ctx.t('page.fleet.col_line'), wLine + 2) + pad(ctx.t('page.fleet.col_state'), wState) + pad(ctx.t('page.fleet.col_owner'), wOwner) + pad(ctx.t('page.fleet.col_task'), Math.max(10, cols - 2 - wLine - 2 - wState - wOwner - wLast)) + ctx.t('page.fleet.col_last'), color: PALETTE.structure }])
+  if (!ctx.shortBody && wide && total > 0) body.push([{ text: '  ' + pad(ctx.t('page.fleet.col_line'), wLine + 2) + pad(ctx.t('page.fleet.col_state'), wState) + pad(ctx.t('page.fleet.col_owner'), wOwner) + pad(ctx.t('page.fleet.col_task'), Math.max(10, cols - 2 - wLine - 2 - wState - wOwner - wLast)) + ctx.t('page.fleet.col_last'), color: PALETTE.structure }])
   const lineRow = (r: FleetRow, i: number): Row => {
     const st = STATES[r.sid]
     const mark = i === focus ? GLYPHS.structure.folded : ' '
@@ -109,7 +111,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   }
 
   // hosts: the console's own counts (summary.hosts); the per-host list is not in the parsed snapshot
-  body.push(...hostsRows(ctx, snap, wide))
+  if (!ctx.shortBody) body.push(...hostsRows(ctx, snap, wide))
 
   const f = rows[focus]
   const actions: Row[] = []

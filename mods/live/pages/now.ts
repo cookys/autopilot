@@ -273,12 +273,68 @@ function decisionCount(ctx: PageCtx): number {
   const ownOnly = live === null ? 0 : live.pending.filter(d => !isStepCard(d) && !(con?.cards ?? []).some(c => c.id === d.id)).length
   return con !== null ? Math.max(con.counts.decisions, (con.cards?.length ?? 0) + ownOnly) : live === null ? 0 : live.pending.length
 }
+function clipRowPlain(row: Row, cols: number): Row {
+  if (cols <= 0) return [{ text: '' }]
+  const out: Row = []
+  let used = 0
+  for (const s of row) {
+    const w = displayWidth(s.text)
+    if (used + w <= cols) { out.push(s); used += w; continue }
+    let buf = ''
+    let cw = 0
+    for (const ch of s.text) {
+      const n = displayWidth(ch)
+      if (used + cw + n > cols) break
+      buf += ch
+      cw += n
+    }
+    if (buf !== '') out.push({ ...s, text: buf })
+    break
+  }
+  return out.length === 0 ? [{ text: '' }] : out
+}
+
 function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const { t, size, console: con, live, nowMs } = ctx
   const wide = size.cols >= 100
+  const decisions = decisionCount(ctx)
+  const actions: Row[] = []
+  // the pending sentence is the first body row; the action row is only the jump (item 5: one sentence, not two)
+  if (decisions > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.jump_decide')), plain('  '), { text: '[2]', press: 'tab:2:decide', color: PALETTE.action }])
+  const residue = live?.detail.residue?.reapable ?? 0
+  if (residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }])
+
+  if (ctx.shortBody === true) {
+    // Short body (<= 4 rows): no section titles, no column headers; priority order: red pools -> unknown pools -> stuck lines.
+    const compact: Row[] = []
+    if (con !== null) {
+      const pr = poolRows(ctx, con, wide)
+      const exc = exceptionRows(ctx, con, wide)
+      const stuckLines: Row[] = exc.length > 0 || con.lines === null ? [] : con.lines.filter(l => l.issues.length > 0).map(l => {
+        const w = l.issues[0]
+        const g = glyph(w.state)
+        return [{ text: g.text + ' ', ...(g.color === undefined ? {} : { color: g.color }) }, plain(l.label + ' ' + w.subject)]
+      })
+      compact.push(...pr, ...exc, ...stuckLines)
+    }
+    if (compact.length === 0) {
+      if (decisions > 0) {
+        const oldest = con === null || con.cards === null || con.cards.length === 0 ? null : [...con.cards].sort((a, b) => a.opened_at_ms - b.opened_at_ms)[0]
+        const title = oldest === null ? '' : '：' + firstLine(oldest.question)
+        const age = oldest === null ? '' : t('page.now.oldest', { age: ageOf(t, nowMs - oldest.opened_at_ms, false) })
+        compact.push([{ text: GLYPHS.structure.answer + ' ' + t('page.now.go_decide', { n: decisions }) + age + title, color: PALETTE.attention }])
+      }
+      if (con === null) compact.push(broken(t('page.now.no_console')))
+      else if (dataMissing(con, nowMs, t)) compact.push(broken(t('frame.unknown')))
+      if (live !== null) compact.push(...seatRows(ctx, live, wide))
+      else if (compact.length === 0) compact.push(broken(t('page.now.no_live')))
+      if (compact.length === 0) compact.push([dim((wide ? '  ' : '') + t('page.now.exc_none'))])
+    }
+    return { body: compact.map(r => clipRowPlain(r, size.cols)), actions }
+  }
+
   const body: Row[] = []
   // 1. the pending count and the oldest card's title come first (G2); the [2] jump stays in the action area
-  const decisions = decisionCount(ctx)
   if (decisions > 0) {
     const oldest = con === null || con.cards === null || con.cards.length === 0 ? null : [...con.cards].sort((a, b) => a.opened_at_ms - b.opened_at_ms)[0]
     const title = oldest === null ? '' : '：' + firstLine(oldest.question)
@@ -306,11 +362,6 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     const rec = recentRows(live, wide, size.cols)
     if (rec.length > 0) body.push(blank(), ruleRow(t('page.now.recent'), wide), ...rec)
   }
-  const actions: Row[] = []
-  // the pending sentence is the first body row; the action row is only the jump (item 5: one sentence, not two)
-  if (decisions > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.jump_decide')), plain('  '), { text: '[2]', press: 'tab:2:decide', color: PALETTE.action }])
-  const residue = live?.detail.residue?.reapable ?? 0
-  if (residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }])
   return { body, actions }
 }
 // the seat's name comes from the quota feed's own row; unknown until the first good `seats --quota`

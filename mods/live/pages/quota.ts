@@ -5,7 +5,7 @@
 //   stale (> 10 min or flagged): the row is red with the full reason, the numbers stay and carry a ✗ (A1, A10); 80x24 writes the reason in a row under the table, untruncated
 //   Enter (A3) expands the focused pool's seats from `fleet seats --quota --json`; the page draws them from `quota.seats` when the feed carries them
 import type { Page, PageCtx } from './frame'
-import { brokenRow, staleBadge } from './rows'
+import { brokenRow } from './rows'
 import type { Row } from './rows'
 import type { QuotaSeat } from '../console'
 import type { Seg } from '../model'
@@ -46,9 +46,9 @@ function ageText(ctx: PageCtx, ms: number | null): string | null {
 // "── title ─────── right"
 function rule(title: string, right: string | null, cols: number): Row {
   const left = GLYPHS.structure.rule.repeat(2) + ' ' + title + ' '
-  const r = right === null ? '' : ' ' + right
+  const r = right !== null && displayWidth(left) + 2 + displayWidth(' ' + right) <= cols ? ' ' + right : ''
   const fill = Math.max(2, cols - displayWidth(left) - displayWidth(r))
-  return [{ text: left, color: PALETTE.structure }, { text: GLYPHS.structure.rule.repeat(fill), color: PALETTE.structure }, ...(right === null ? [] : [{ text: r, dim: true }])]
+  return clipRowPlain([{ text: left, color: PALETTE.structure }, { text: GLYPHS.structure.rule.repeat(fill), color: PALETTE.structure }, ...(r === '' ? [] : [{ text: r, dim: true }])], cols)
 }
 
 type Cols = { pool: number; d7: number; h5: number; reset: number; burn: number; proj: number; exh: number; seats: number }
@@ -58,21 +58,55 @@ const COLS: Record<Tier, Cols> = {
   narrow: { pool: 10, d7: 7, h5: 6, reset: 7, burn: 9, proj: 8, exh: 0, seats: 0 },
 }
 
-// the text cut into pieces of at most `w` display cells (a wide character is never split); a piece ends after a clause mark (；，：or a space) when one lies in the last
-// three quarters of it, so a word is not cut in the middle when the text has a place to break
-function chunkWidth(text: string, w: number): string[] {
-  const out: string[] = []
-  let cur = ''
+function clipPlain(text: string, w: number): string {
+  if (displayWidth(text) <= w) return text
+  let out = ''
+  let used = 0
   for (const ch of text) {
-    if (displayWidth(cur + ch) > w) {
-      const cut = Math.max(...[...'；，：、 '].map(m => cur.lastIndexOf(m)))
-      if (cut >= 0 && displayWidth(cur.slice(0, cut + 1)) * 4 >= w) { out.push(cur.slice(0, cut + 1).trimEnd()); cur = cur.slice(cut + 1) }
-      else { out.push(cur); cur = '' }
-    }
-    cur += ch
+    const cw = displayWidth(ch)
+    if (used + cw > w) break
+    out += ch
+    used += cw
   }
-  if (cur !== '') out.push(cur)
   return out
+}
+
+function fitCellR(text: string, w: number): string {
+  if (w <= 0) return ''
+  const fitted = displayWidth(text) < w ? text : clipPlain(text, Math.max(1, w - 1))
+  return padR(fitted, w)
+}
+
+function clipRowPlain(row: Row, cols: number): Row {
+  if (cols <= 0) return [{ text: '' }]
+  const out: Row = []
+  let used = 0
+  for (const s of row) {
+    const w = displayWidth(s.text)
+    if (used + w <= cols) { out.push(s); used += w; continue }
+    const room = cols - used
+    if (room > 0) out.push({ ...s, text: clipPlain(s.text, room) })
+    break
+  }
+  return out.length === 0 ? [{ text: '' }] : out
+}
+
+function shortVerdict(p: QuotaPool, v: Verdict, nowMs: number, paceOk: boolean, t: PageCtx['t']): string {
+  const stalled = v.kind === 'stale' || v.kind === 'stale_seat'
+  const fact = p.limit_hit === true || stalled
+  if (!paceOk && !fact) return bad + ' ' + t('page.quota.sv_nopace')
+  if (v.kind === 'limit_nosw') return t('page.quota.sv_limit_nosw')
+  if (v.kind === 'limit_stranded') return t('page.quota.sv_limit_stranded', { n: p.stranded_seats ?? 0 })
+  if (v.kind === 'limit_switched') return t('page.quota.sv_limit_switched', { pool: typeof p.switched === 'string' ? poolLabel(p.switched) : DASH })
+  if (v.kind === 'stale') return bad + ' ' + t('page.quota.sv_stale', { min: v.staleMin === null ? DASH : v.staleMin })
+  if (v.kind === 'stale_seat') return bad + ' ' + (v.staleMin === null ? t('page.quota.sv_stale_seat_plain') : t('page.quota.sv_stale_seat', { min: v.staleMin }))
+  if (v.kind === 'exhaust_nosw' || v.kind === 'exhaust_stranded' || v.kind === 'exhaust_ok') {
+    const h = p.projected_exhaustion_at_ms === null ? '?' : Math.max(0, Math.round((p.projected_exhaustion_at_ms - nowMs) / 3600000))
+    return t('page.quota.sv_exhaust', { h })
+  }
+  if (v.kind === 'use') return t('page.quota.sv_use', { p: p.projected_pct_at_reset === null ? 0 : Math.round(p.projected_pct_at_reset) })
+  if (v.kind === 'waste') return t('page.quota.sv_waste', { y: Math.round(v.waste ?? 0) })
+  return bad + ' ' + t('page.quota.sv_nopace')
 }
 
 function resetText(ms: number | null, tier: Tier, dows: string[]): string {
@@ -101,103 +135,102 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const focus = Math.max(0, Math.min(view.focus, ranked.length - 1))
   const win = pools.map(p => p.burn_window_h).find((h): h is number => h !== null)
   const h = win === undefined ? '-' : String(win)
+  const svs = ranked.map(v => shortVerdict(byName.get(v.pool) as QuotaPool, v, ctx.nowMs, paceOk, t))
+  const verdictHead = paceOk ? t('page.quota.col_verdict') : t('page.quota.col_rate_proj_verdict')
+  const verdictW = Math.max(displayWidth(verdictHead), ...svs.map(displayWidth))
+  const widthWith = (withReset: boolean, withBurn: boolean): number => {
+    const resetW = withReset ? c.reset : 0
+    if (!paceOk) return 4 + c.pool + c.d7 + c.h5 + resetW + verdictW
+    const burnW = withBurn ? c.burn : 0
+    const wideExtra = tier === 'wide' ? c.exh + c.seats : 0
+    return 4 + c.pool + c.d7 + c.h5 + resetW + burnW + c.proj + wideExtra + verdictW
+  }
+  // When columns do not fit: drop 重置 first, then 近 6 時. Never wrap a table row.
+  const showReset = widthWith(true, true) <= cols
+  const showBurn = paceOk && (showReset || widthWith(false, true) <= cols)
   const body: Row[] = []
 
-  // title row, with the age of the quota source on the right
-  const age = ageText(ctx, ctx.console.sources.quota_now?.at_ms ?? null)
-  const right = age === null ? null : t('page.quota.data_age', { age })
-  const title = paceOk ? t(tier === 'wide' ? 'page.quota.title_pace' : 'page.quota.title_pace_s', { h }) : t('page.quota.title_nopace') + ' · ' + bad + ' ' + t('page.quota.v_nopace')
-  body.push(rule(title, right, cols))
-  if (!paceOk && tier !== 'narrow') body.push([{ text: '(' + t('page.quota.title_nopace_note') + ')', dim: true }])
+  if (!ctx.shortBody) {
+    // title row, with the age of the quota source on the right
+    const age = ageText(ctx, ctx.console.sources.quota_now?.at_ms ?? null)
+    const right = age === null ? null : t('page.quota.data_age', { age })
+    const title = paceOk ? t(tier === 'wide' ? 'page.quota.title_pace' : 'page.quota.title_pace_s', { h }) : t('page.quota.title_nopace') + ' · ' + bad + ' ' + t('page.quota.v_nopace')
+    body.push(rule(title, right, cols))
+    if (!paceOk && tier !== 'narrow') body.push(clipRowPlain([{ text: '(' + t('page.quota.title_nopace_note') + ')', dim: true }], cols))
 
-  // column header
-  const head: string[] = ['    ' + padR(t('page.quota.col_pool'), c.pool)]
-  const short = tier === 'narrow'
-  head.push(numCell(t(short ? 'page.quota.col_7d_s' : 'page.quota.col_7d'), false, c.d7), numCell(t(short ? 'page.quota.col_5h_s' : 'page.quota.col_5h'), false, c.h5), padR(t(short ? 'page.quota.col_reset_s' : 'page.quota.col_reset'), c.reset))
-  if (paceOk) {
-    head.push(numCell(t('page.quota.col_burn', { h }), false, c.burn), numCell(t('page.quota.col_proj'), false, c.proj))
-    if (tier === 'wide') head.push(padR(t('page.quota.col_exh'), c.exh), padR(t('page.quota.col_seats'), c.seats))
-    head.push(t('page.quota.col_verdict'))
-  } else head.push(t('page.quota.col_rate_proj_verdict'))
-  body.push([{ text: head.join(''), dim: true }])
+    // column header
+    const head: string[] = ['    ' + padR(t('page.quota.col_pool'), c.pool)]
+    const short = tier === 'narrow'
+    head.push(numCell(t(short ? 'page.quota.col_7d_s' : 'page.quota.col_7d'), false, c.d7), numCell(t(short ? 'page.quota.col_5h_s' : 'page.quota.col_5h'), false, c.h5))
+    if (showReset) head.push(padR(t(short ? 'page.quota.col_reset_s' : 'page.quota.col_reset'), c.reset))
+    if (paceOk) {
+      if (showBurn) head.push(numCell(t('page.quota.col_burn', { h }), false, c.burn))
+      head.push(numCell(t('page.quota.col_proj'), false, c.proj))
+      if (tier === 'wide') head.push(padR(t('page.quota.col_exh'), c.exh), padR(t('page.quota.col_seats'), c.seats))
+    }
+    head.push(verdictHead)
+    body.push(clipRowPlain([{ text: head.join(''), dim: true }], cols))
+  }
 
-  // one row per pool
-  const under: Row[] = [] // narrow: the stale reasons, written whole under the table (A10)
+  // exactly one row per pool at every width
   ranked.forEach((v, i) => {
     const p = byName.get(v.pool) as QuotaPool
     const isStale = v.kind === 'stale' // the pool as a whole is old: its numbers carry the mark
     const seg = (text: string, color?: Seg['color']): Seg => (color === undefined ? { text } : { text, color })
-    const stalled = v.kind === 'stale' || v.kind === 'stale_seat'
     const mark = (x: string): Seg => seg(x, isStale ? PALETTE.broken : undefined)
     const row: Seg[] = [
       seg(i === focus ? GLYPHS.structure.folded + ' ' : '  '),
       seg(roleGlyph(v.role) + ' ', roleColor(v.role)),
-      seg(padR(poolLabel(v.pool), c.pool)),
+      seg(fitCellR(poolLabel(v.pool), c.pool)),
       mark(numCell(p.seven_day_pct === null ? DASH : Math.round(p.seven_day_pct) + '%', isStale, c.d7)),
       mark(numCell(p.five_hour_pct === null ? DASH : Math.round(p.five_hour_pct) + '%', isStale, c.h5)),
-      seg(padR(resetText(p.resets_at_ms, tier, dows), c.reset)),
     ]
-    // a pace-less pool says so in one merged column; a fact (limit_hit, stale) still says what it says
-    const fact = p.limit_hit === true || stalled
+    if (showReset) row.push(seg(padR(resetText(p.resets_at_ms, tier, dows), c.reset)))
     if (paceOk) {
-      row.push(mark(numCell(rate(p.burn_pct_per_h, tier !== 'narrow', false), isStale, c.burn)))
+      if (showBurn) row.push(mark(numCell(rate(p.burn_pct_per_h, tier !== 'narrow', false), isStale, c.burn)))
       row.push(mark(numCell(p.projected_pct_at_reset === null ? DASH : (p.projected_pct_at_reset > 100 ? '>100' : Math.round(p.projected_pct_at_reset)) + '%', isStale, c.proj)))
       if (tier === 'wide') {
         const ex = p.limit_hit === true ? t('page.quota.used_up') : p.projected_exhaustion_at_ms === null ? DASH : (() => { const x = tpe(p.projected_exhaustion_at_ms); return `${x.mo}-${x.d} ${x.hh}:${x.mm}` })()
         row.push(seg(padR(ex, c.exh)), seg(padR(p.seats === null ? DASH : t('page.quota.seats_n', { n: p.seats }), c.seats)))
       }
     }
-    const word = roleWord(t, v.role)
-    let text: string
-    if (!paceOk && !fact) text = bad + ' ' + t('page.quota.v_nopace')
-    else if (tier === 'narrow' && stalled) { text = word + ' ' + bad + ' ' + t('page.quota.f_see_below'); under.push([staleBadge(bad + ' ' + poolLabel(v.pool) + ' ' + v.text)]) }
-    else text = (tier === 'narrow' ? word + ' ' : stalled ? bad + ' ' : '') + v.text
-    // the verdict is the last column: a text wider than what is left wraps onto rows indented to the verdict column (never back to column 0, which cuts through the table).
-    // When even that leaves under 10 cells, the table carries the short verdict (the role word) and the full text is in the focus area under the table (A10: never truncated).
-    const indent = row.reduce((w, sg) => w + displayWidth(sg.text), 0)
-    const room = cols - indent
     const press = 'quota:pool:' + i // the whole row is one Button: it focuses this pool and shows / folds its seats
-    if (displayWidth(text) <= room) { row.push(seg(text, roleColor(v.role))); body.push(row.map(sg => ({ ...sg, press }))) }
-    else if (room < 10) { row.push(seg(word, roleColor(v.role))); body.push(row.map(sg => ({ ...sg, press }))) }
-    else {
-      const parts = chunkWidth(text, room)
-      row.push(seg(parts[0], roleColor(v.role)))
-      body.push(row.map(sg => ({ ...sg, press })))
-      for (const part of parts.slice(1)) body.push([{ text: ' '.repeat(indent), press }, { text: part, color: roleColor(v.role), press }])
-    }
+    row.push(seg(svs[i], roleColor(v.role)))
+    body.push(clipRowPlain(row.map(sg => ({ ...sg, press })), cols))
   })
-  body.push(...under)
 
-  // the focused pool's detail
+  // the focused pool's detail carries the full verdict text
   const fv = ranked[focus]
   const fp = byName.get(fv.pool) as QuotaPool
-  body.push([{ text: '' }])
-  body.push(rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: poolLabel(fv.pool) }), null, cols))
-  body.push([{ text: '  ' }, { text: t(view.expanded ? 'page.quota.act_o_close' : 'page.quota.act_o_open'), color: PALETTE.action, press: 'quota:open' }]) // G11: o is a Button (click works where the pane has no keyboard)
-  const kv = (label: string, text: string, color?: Seg['color']): Row => [{ text: padR(label, 6), dim: true }, color === undefined ? { text } : { text, color }]
-  const names = q.seats.filter(s => s.pool === fp.pool).map(s => s.seat)
-  const count = fp.seats === null ? t('page.quota.f_seats_unknown') : t('page.quota.f_seats_n', { n: fp.seats })
-  body.push(kv(t('page.quota.f_seats'), (names.length === 0 ? '' : names.slice(0, 2).join(' · ') + (names.length > 2 || (fp.seats ?? 0) > 2 ? ' · … ' : ' ')) + count))
-  if (view.expanded) {
-    const mine = q.seats.filter(s => s.pool === fp.pool)
-    if (mine.length === 0) body.push(kv('', t('page.quota.seat_none')))
-    for (const s of mine) {
-      const sage = s.age_min === null ? DASH : t('page.quota.age_m', { n: s.age_min })
-      const row = t('page.quota.seat_row', { seat: s.seat, a: pct(s.seven_day_pct, s.stale === true), b: pct(s.five_hour_pct, s.stale === true), age: sage })
-      body.push(kv('', row, s.stale === true ? PALETTE.broken : undefined))
+  if (!ctx.shortBody) {
+    body.push([{ text: '' }])
+    body.push(rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: poolLabel(fv.pool) }), null, cols))
+    body.push([{ text: '  ' }, { text: t(view.expanded ? 'page.quota.act_o_close' : 'page.quota.act_o_open'), color: PALETTE.action, press: 'quota:open' }]) // G11: o is a Button (click works where the pane has no keyboard)
+    const kv = (label: string, text: string, color?: Seg['color']): Row => [{ text: padR(label, 6), dim: true }, color === undefined ? { text } : { text, color }]
+    const names = q.seats.filter(s => s.pool === fp.pool).map(s => s.seat)
+    const count = fp.seats === null ? t('page.quota.f_seats_unknown') : t('page.quota.f_seats_n', { n: fp.seats })
+    body.push(kv(t('page.quota.f_seats'), (names.length === 0 ? '' : names.slice(0, 2).join(' · ') + (names.length > 2 || (fp.seats ?? 0) > 2 ? ' · … ' : ' ')) + count))
+    if (view.expanded) {
+      const mine = q.seats.filter(s => s.pool === fp.pool)
+      if (mine.length === 0) body.push(kv('', t('page.quota.seat_none')))
+      for (const s of mine) {
+        const sage = s.age_min === null ? DASH : t('page.quota.age_m', { n: s.age_min })
+        const row = t('page.quota.seat_row', { seat: s.seat, a: pct(s.seven_day_pct, s.stale === true), b: pct(s.five_hour_pct, s.stale === true), age: sage })
+        body.push(kv('', row, s.stale === true ? PALETTE.broken : undefined))
+      }
     }
+    if (tier !== 'narrow') {
+      const none = fp.stranded_seats === null && fp.switched === null
+      body.push(kv(t('page.quota.f_switch'), none ? t('page.quota.f_switch_null') : t('page.quota.f_switch_data', { n: fp.stranded_seats === null ? DASH : fp.stranded_seats, pool: typeof fp.switched === 'string' ? poolLabel(fp.switched) : DASH })))
+    }
+    for (const it of blockedBy(fp.pool)) {
+      const stale = it.facts.stale === true
+      body.push(kv(t('page.quota.f_blocked'), (stale ? bad + ' ' : '') + it.text + (stale ? ' ' + bad + ' ' + t('page.quota.blocked_stale', { source: String(it.facts.source ?? '?') }) : ''), stale ? PALETTE.broken : undefined))
+    }
+    const fact = fp.limit_hit === true ? t('page.quota.f_limit_hit') + '，' : ''
+    body.push(kv(t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role)))
+    if (tier === 'wide') body.push(kv(t('page.quota.f_order'), t(paceOk ? 'page.quota.f_order_pace' : 'page.quota.f_order_nopace'), undefined))
   }
-  if (tier !== 'narrow') {
-    const none = fp.stranded_seats === null && fp.switched === null
-    body.push(kv(t('page.quota.f_switch'), none ? t('page.quota.f_switch_null') : t('page.quota.f_switch_data', { n: fp.stranded_seats === null ? DASH : fp.stranded_seats, pool: typeof fp.switched === 'string' ? fp.switched : DASH })))
-  }
-  for (const it of blockedBy(fp.pool)) {
-    const stale = it.facts.stale === true
-    body.push(kv(t('page.quota.f_blocked'), (stale ? bad + ' ' : '') + it.text + (stale ? ' ' + bad + ' ' + t('page.quota.blocked_stale', { source: String(it.facts.source ?? '?') }) : ''), stale ? PALETTE.broken : undefined))
-  }
-  const fact = fp.limit_hit === true ? t('page.quota.f_limit_hit') + '，' : ''
-  body.push(kv(t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role)))
-  if (tier === 'wide') body.push(kv(t('page.quota.f_order'), t(paceOk ? 'page.quota.f_order_pace' : 'page.quota.f_order_nopace'), undefined))
 
   const actions: Row[] = fp.switch_suggestion === null ? [] : [[{ text: t('page.quota.action_f'), color: PALETTE.action, press: 'fill:quota:' + fp.pool }]]
   return { body, actions }

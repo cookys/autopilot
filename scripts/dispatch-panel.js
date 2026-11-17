@@ -645,11 +645,10 @@ function spawnWaitResults(waitBin, resultsDir, expectKeys, timeoutSecs) {
 
 async function runPanel(opts, outDir, promptPath) {
   const waitBin = process.env.AUTOPILOT_WAIT_RESULTS_BIN || path.join(SELF_DIR, 'wait-dispatch-results.js');
-  const resultsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-panel-res-'));
-  fs.chmodSync(resultsDir, 0o700);
+  let resultsDir;
   const runId = `panel-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
 
-  const tempDirs = new Set([resultsDir]);
+  const tempDirs = new Set();
   const activeChildren = new Map();
   const timedOutKeys = new Set();
   let cleaned = false;
@@ -681,6 +680,9 @@ async function runPanel(opts, outDir, promptPath) {
   process.once('SIGTERM', onSig);
 
   try {
+    resultsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-panel-res-'));
+    tempDirs.add(resultsDir);
+    fs.chmodSync(resultsDir, 0o700);
     const resolvedSeats = opts.seats.map((s) => ({
       parsed: s,
       resolved: resolveSeat(s, promptPath),
@@ -712,9 +714,17 @@ async function runPanel(opts, outDir, promptPath) {
       const expectKey = `${runId}.${stage}`;
       expectKeys.push(expectKey);
 
-      const seatCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-panel-cwd-'));
-      fs.chmodSync(seatCwd, 0o700);
-      tempDirs.add(seatCwd);
+      let seatCwd;
+      try {
+        seatCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-panel-cwd-'));
+        fs.chmodSync(seatCwd, 0o700);
+        tempDirs.add(seatCwd);
+      } finally {
+        // Registered directories stay alive until the panel barrier's cleanup.
+        if (seatCwd && !tempDirs.has(seatCwd)) {
+          fs.rmSync(seatCwd, { recursive: true, force: true });
+        }
+      }
 
       const outPath = safeOutPath(outDir, i, resolved.model);
       const args = [
@@ -822,6 +832,7 @@ async function runPanel(opts, outDir, promptPath) {
     process.removeListener('SIGINT', onSig);
     process.removeListener('SIGTERM', onSig);
     cleanup();
+    if (resultsDir) fs.rmSync(resultsDir, { recursive: true, force: true });
   }
 }
 

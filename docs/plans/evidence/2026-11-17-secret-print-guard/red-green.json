@@ -1,0 +1,144 @@
+{
+  "task": "01M7KW98HVPK9B9Y73DTDFP251",
+  "base": "b28dbc5e661625dfc12531c20545eed2741491a2",
+  "fixtures": "Fake values only; Docker is a local executable stub. No real Docker/container/credential inspection.",
+  "runs": [
+    {
+      "command": "node --test hooks/bash-launch-guard.test.js hooks/depth0-delegate-gate.test.js",
+      "rc": 0,
+      "log": ".claude/secret-print-evidence/guard-baseline.log",
+      "tail": [
+        "ℹ tests 738",
+        "ℹ suites 0",
+        "ℹ pass 728",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 10",
+        "ℹ todo 0",
+        "ℹ duration_ms 54581.255429"
+      ]
+    },
+    {
+      "command": "node --test --test-name-pattern=secret-print hooks/bash-launch-guard.test.js (before implementation)",
+      "rc": 1,
+      "log": ".claude/secret-print-evidence/guard-red.log",
+      "tail": [
+        "ℹ tests 81",
+        "ℹ suites 0",
+        "ℹ pass 25",
+        "ℹ fail 56",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 3560.846268"
+      ]
+    },
+    {
+      "command": "node --test --test-name-pattern=\"secret-print prefix/option\" hooks/bash-launch-guard.test.js (before prefix repair)",
+      "rc": 1,
+      "log": ".claude/secret-print-evidence/guard-prefix-red.log",
+      "tail": [
+        "ℹ tests 7",
+        "ℹ suites 0",
+        "ℹ pass 3",
+        "ℹ fail 4",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 395.517698"
+      ]
+    },
+    {
+      "command": "node --test --test-name-pattern=\"secret-print (redirection/output|output path)\" hooks/bash-launch-guard.test.js (before redirection repair)",
+      "rc": 1,
+      "log": ".claude/secret-print-evidence/guard-redirect-red.log",
+      "tail": [
+        "ℹ tests 4",
+        "ℹ suites 0",
+        "ℹ pass 0",
+        "ℹ fail 4",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 300.744621"
+      ]
+    },
+    {
+      "command": "node --test --test-name-pattern=secret-print hooks/bash-launch-guard.test.js",
+      "rc": 0,
+      "log": ".claude/secret-print-evidence/guard-green.log",
+      "tail": [
+        "ℹ tests 92",
+        "ℹ suites 0",
+        "ℹ pass 92",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 4432.718912"
+      ]
+    },
+    {
+      "command": "node --test scripts/safe-inspect.test.js (mask deliberately returns raw value)",
+      "rc": 1,
+      "log": ".claude/secret-print-evidence/viewer-negative-control.log",
+      "tail": [
+        "ℹ tests 9",
+        "ℹ suites 0",
+        "ℹ pass 1",
+        "ℹ fail 8",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 706.217107"
+      ]
+    },
+    {
+      "command": "node --test scripts/safe-inspect.test.js (mask restored)",
+      "rc": 0,
+      "log": ".claude/secret-print-evidence/viewer-green.log",
+      "tail": [
+        "ℹ tests 9",
+        "ℹ suites 0",
+        "ℹ pass 9",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 0",
+        "ℹ todo 0",
+        "ℹ duration_ms 685.85096"
+      ]
+    },
+    {
+      "command": "node --test hooks/bash-launch-guard.test.js hooks/depth0-delegate-gate.test.js scripts/safe-inspect.test.js",
+      "rc": 0,
+      "log": ".claude/secret-print-evidence/guard-suites.log",
+      "tail": [
+        "ℹ tests 839",
+        "ℹ suites 0",
+        "ℹ pass 829",
+        "ℹ fail 0",
+        "ℹ cancelled 0",
+        "ℹ skipped 10",
+        "ℹ todo 0",
+        "ℹ duration_ms 60725.362977"
+      ]
+    },
+    {
+      "command": "node scripts/check-config-docs.js (before registration)",
+      "rc": 1,
+      "log": ".claude/secret-print-evidence/config-red.log",
+      "tail": [
+        "FAIL env_unregistered: AUTOPILOT_BASH_GUARD_SECRET_MODE - read in hooks/depth0-delegate-gate.js but not in the registry",
+        "DRIFT: 501 registered (253 user, 248 internal); 399 env tokens and 55 config properties scanned; 1 finding(s)"
+      ]
+    },
+    {
+      "command": "node scripts/check-config-docs.js",
+      "rc": 0,
+      "log": ".claude/secret-print-evidence/config-green.log",
+      "tail": [
+        "OK: 503 registered (255 user, 248 internal); 399 env tokens and 55 config properties scanned; 0 finding(s)"
+      ]
+    }
+  ]
+}

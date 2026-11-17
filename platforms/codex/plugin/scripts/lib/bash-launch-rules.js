@@ -16,6 +16,7 @@
 //   5. rm-var-target (DENY by default; knob off|warn|deny) — recursive `rm` with a runtime-expanding target.
 //   6. subagent-rm-outside-scratch (DENY by default; knob off|warn|deny) — subagent recursive `rm` with a literal target outside the session scratchpad.
 //   7. rm-shared-dir (WARN by default; knob off|warn|deny) — recursive `rm` targeting an existing group/world-writable or foreign-owned directory outside the session scratchpad.
+//   8. secret-print (BLOCK by default; knob block|warn|off) — commands that dump secret values; use safe-inspect.js.
 // Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js).
 //
 // scripts/lib/dispatch-detach.sh is NOT a launcher: it is a sourceable helper the read rails
@@ -364,14 +365,18 @@ const unq = (w) => w.replace(/^['"]|['"]$/g, '');
 // their flags). Returns { head, detach, rest }: head is the first real command word, detach is true when
 // `setsid -f` / `--fork` (a real background fork) was stripped. A bare `nohup X` or `setsid X` runs in the
 // FOREGROUND (the tool call waits for it) and is not a detach; only a trailing `&` or `setsid -f` is.
-function commandPosition(segText) {
-  const w = tokens(segText).map((t) => unq(t.raw));
+function commandPosition(segText, opts = {}) {
+  const w = opts.words || tokens(segText).map((t) => opts.decode ? dequote(t.raw) : unq(t.raw));
   let detach = false;
   let armStart = false;
   let bg = false; // `coproc`: always asynchronous, but a plain background job (`wait` does see it)
   let i = 0;
   while (i < w.length) {
     const a = w[i];
+    if (opts.decode && REDIR_RE.test(a)) {
+      if (REDIR_RE.exec(a)[1] === '') i += 1;
+      i += 1; continue;
+    }
     if (/^[A-Za-z_]\w*=/.test(a) || KEYWORDS.has(a)) { i += 1; continue; }
     if (a === 'coproc') {
       bg = true; i += 1;
@@ -389,7 +394,7 @@ function commandPosition(segText) {
     if (/^\(?[^()]*\)$/.test(a) && (armStart || (i === 0 && !isRail(a.replace(/\)+$/, ''))))) { i += 1; armStart = false; continue; }
     armStart = false;
     const base = a.replace(/^.*\//, '');
-    if (PREFIX_CMDS.has(base)) {
+    if (PREFIX_CMDS.has(base) && !(opts.retain && opts.retain.has(base))) {
       i += 1;
       let positional = POSITIONAL[base] || 0;
       while (i < w.length && /^-/.test(w[i])) {
@@ -1572,7 +1577,151 @@ function detectRmSharedDirUnguarded(cmd, opts = {}) {
   return null;
 }
 
+// Reuse the guard's lexer, segment expansion and prefix handling. No files or commands are opened here.
+const SECRET_RETAIN = new Set(['env', 'bash', 'sh', 'dash', 'zsh']);
+const SECRET_READERS = new Set(['cat', 'less', 'more', 'head', 'tail', 'bat', 'sed', 'awk', 'grep', 'rg', 'ugrep']);
+const SECRET_GREP = new Set(['grep', 'rg', 'ugrep']);
+const SECRET_MESSAGE = '這個指令會印出秘密。要檢查設定，請用 safe-inspect（自動遮罩），或用 grep -c / -l 只看有沒有、在哪一行';
+function secretPath(word) {
+  const base = path.posix.basename(word);
+  return /^(?:\.env(?:\..*)?|.*\.env|config_main\.php|dbdef\.h|.*\.(?:pem|key|token)|auth\.json|credentials.*|.*secret.*|\.netrc|\.pgpass|my\.cnf)$/i.test(base)
+    || (/^id_/.test(base) && !/\.pub$/.test(base));
+}
+function secretWords(head, args, depth) {
+  if (depth > MAX_EXPAND_DEPTH || !head) return false;
+  const name = path.posix.basename(head);
+  if (name === 'env') {
+    let i = 0;
+    for (; i < args.length; i += 1) {
+      const a = args[i];
+      if (a === '--') { i += 1; break; }
+      if (['--help', '--version'].includes(a)) return false;
+      if (['-u', '--unset', '-C', '--chdir'].includes(a)) { i += 1; continue; }
+      if (a === '-S' || a === '--split-string') return secretText(args.slice(i + 1).join(' '), depth + 1);
+      if (a.startsWith('-') || /^[A-Za-z_]\w*=/.test(a)) continue;
+      break;
+    }
+    return i >= args.length || secretInvocation(args.slice(i), depth + 1);
+  }
+  if (['bash', 'sh', 'zsh', 'dash'].includes(name)) {
+    const i = args.findIndex((a) => /^-[a-zA-Z]*c[a-zA-Z]*$/.test(a));
+    return i >= 0 && secretText(args[i + 1] || '', depth + 1);
+  }
+  const operands = args.filter((a) => !REDIR_RE.test(a));
+  if (name === 'printenv') return !args.some((a) => a === '--help' || a === '--version');
+  if (name === 'set') return operands.length === 0;
+  if (name === 'export') return args.some((a) => /^-[a-zA-Z]*p/.test(a));
+  if (SECRET_READERS.has(name)) {
+    if (name === 'sed' && !args.some((a) => /^-[a-zA-Z]*n/.test(a) || a === '--quiet' || a === '--silent')) return false;
+    const files = [];
+    let options = true;
+    let pattern = !['grep', 'rg', 'ugrep', 'sed', 'awk'].includes(name);
+    let safeOutput = false;
+    for (let i = 0; i < args.length; i += 1) {
+      const a = args[i];
+      const redirect = REDIR_RE.exec(a);
+      if (redirect) {
+        const target = redirect[1] || args[++i] || '';
+        if (/^(?:\d+)?</.test(a)) files.push(target);
+        continue;
+      }
+      if (options && a === '--') { options = false; continue; }
+      if (options && a.startsWith('-') && !REDIR_RE.test(a)) {
+        // A pattern supplied with -e/-f replaces the first positional pattern. Never treat its text as flags or a file.
+        if (/^(?:-[ef]|--regexp|--file)$/.test(a)) {
+          pattern = true;
+          if (a === '-f' || a === '--file') files.push(args[i + 1] || '');
+          i += 1; continue;
+        }
+        if (/^(?:-[ef].|--(?:regexp|file)=)/.test(a)) { pattern = true; continue; }
+        if (SECRET_GREP.has(name) && (/^-[a-zA-Z]*[lLcq]/.test(a)
+          || /^--(?:files-with-matches|files-without-match|count(?:-matches)?|quiet|silent)$/.test(a))) safeOutput = true;
+        if (/^(?:-[mABC]|--(?:max-count|after-context|before-context|context|glob|iglob|type|type-not))$/.test(a)) i += 1;
+        continue;
+      }
+      if (!pattern) { pattern = true; continue; }
+      files.push(a);
+    }
+    return !safeOutput && files.some(secretPath);
+  }
+  if (name === 'docker' || name === 'docker-compose') {
+    let i = 0;
+    // Docker global options with an operand (all other global flags are unary or = forms).
+    while (name === 'docker' && i < args.length && args[i].startsWith('-')) {
+      if (['--context', '-c', '--host', '-H', '--config', '--log-level', '-l', '--tlscacert', '--tlscert', '--tlskey'].includes(args[i])) i += 1;
+      i += 1;
+    }
+    let sub = args[i++];
+    if (name === 'docker-compose' || sub === 'compose') {
+      if (name === 'docker-compose') i -= 1;
+      while (i < args.length && args[i].startsWith('-')) {
+        if (['-f', '--file', '-p', '--project-name', '--project-directory', '--env-file', '--profile', '--parallel'].includes(args[i])) i += 1;
+        i += 1;
+      }
+      return args[i] === 'config';
+    }
+    if (sub === 'container') sub = args[i++];
+    if (sub === 'inspect') {
+      const formats = [];
+      for (; i < args.length; i += 1) {
+        const a = args[i];
+        if (a === '--format' || a === '-f') formats.push(args[++i] || '');
+        else if (a.startsWith('--format=')) formats.push(a.slice(9));
+        else if (a.startsWith('-f')) formats.push(a.slice(2).replace(/^=/, ''));
+      }
+      // Any .Config access can expose Env (including index/with/range); .State remains useful.
+      return !formats.length || formats.some((f) => /\.Config\b|\bindex\s+\.\s+["']Config["']|\{\{\s*(?:json\s+)?\.\s*\}\}/.test(f));
+    }
+    if (sub === 'exec') {
+      while (i < args.length && args[i].startsWith('-')) {
+        if (['-e', '--env', '--env-file', '-u', '--user', '-w', '--workdir', '--detach-keys'].includes(args[i])) i += 1;
+        i += 1;
+      }
+      i += 1; // container
+      return secretInvocation(args.slice(i), depth + 1);
+    }
+  }
+  if (name === 'kubectl') {
+    let i = 0;
+    while (i < args.length && args[i].startsWith('-')) {
+      if (!args[i].includes('=') && !['--as-current-user', '--insecure-skip-tls-verify', '--disable-compression'].includes(args[i])) i += 1;
+      i += 1;
+    }
+    const verb = args[i++];
+    while (i < args.length && args[i].startsWith('-')) {
+      if (['-n', '--namespace', '--context', '--kubeconfig', '-o', '--output'].includes(args[i])) i += 1;
+      i += 1;
+    }
+    if (!/^secrets?(?:\/|$)/.test(args[i] || '')) return false;
+    if (verb === 'describe') return true;
+    return verb === 'get' && args.some((a, n, rest) => {
+      const output = a === '-o' || a === '--output' ? rest[n + 1]
+        : /^(?:--output=|-o.)/.test(a) ? a.replace(/^(?:--output=|-o=?)/, '') : '';
+      return /^(?:yaml|json|jsonpath(?:-as-json)?|go-template(?:-file)?)(?:=|$)/.test(output || '');
+    });
+  }
+  return false;
+}
+function secretInvocation(words, depth) {
+  const pos = commandPosition('', { words, retain: SECRET_RETAIN, decode: true });
+  return secretWords(pos.head, pos.rest, depth);
+}
+function secretText(cmd, depth = 0) {
+  if (depth > MAX_EXPAND_DEPTH) return false;
+  const exec = executableText(typeof cmd === 'string' ? cmd : '');
+  const text = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
+  return expandSegments(text).some((seg) => {
+    const pos = commandPosition(seg.text, { retain: SECRET_RETAIN, decode: true });
+    return secretWords(pos.head, pos.rest, depth);
+  });
+}
+function detectSecretPrint(cmd) {
+  try { return secretText(cmd) ? { rule: 'secret-print', why: SECRET_MESSAGE } : null; }
+  catch { return null; } // same bounded/fail-open policy as the other Bash guard rules
+}
+
 module.exports = {
+  detectSecretPrint,
   detectRecursiveRmVar,
   detectSubagentRmOutsideScratch,
   detectRmSharedDir,

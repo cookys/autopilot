@@ -1902,6 +1902,11 @@ for (const cmd of [
 
 for (const cmd of [
   'grep -n PASSWORD .env', 'grep -n PASSWORD config.yml',
+  'rg -t yaml PASSWORD config/', "rg -g '*.yml' PASSWORD config/",
+  'git grep --max-depth 2 DB_PASSWORD', 'grep -T -n PASSWORD .env',
+  'rg -T json PASSWORD config/', 'rg -d 2 PASSWORD config/',
+  'rg --max-depth 2 PASSWORD config/', 'rg -M 80 PASSWORD config/',
+  'rg --max-columns 80 PASSWORD config/',
   "rg -i 'api_key|secret' config/", "grep -E 'TOKEN' a.yml", 'git grep -n DB_PASSWORD',
   'egrep -n passwd config.yml', 'grep -P PRIVATE_KEY config.yml',
   'grep -e MODE -e DB_PASSWORD config.yml', 'grep -nEe DB_PASSWORD config.yml',
@@ -1931,6 +1936,8 @@ for (const cmd of [
   'grep -n PASSWORD .env | safe-inspect',
   'rg TOKEN config/ | node scripts/safe-inspect.js',
   'git grep DB_PASSWORD | ./mask-secrets',
+  "rg -g '!*secret*' mode src", 'rg --files src/secret',
+  'rg -t secret mode src', 'rg -T secret mode src',
   'grep -n image: docker-compose.yml', 'grep -rn keyboard src', 'grep -n MonkeyPatch x',
   "grep -e mode --include='*secret*' src", 'git log --grep=SECRET',
   // MYSQL_ROOT alone has no secret key-name word. The real incident is caught

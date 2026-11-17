@@ -98,6 +98,72 @@ FIRST_PID="$W_PID"
 eq "$LOCK" "$(readlink "/proc/$FIRST_PID/fd/9" 2> /dev/null)" "writer.pid holds fd 9 on the project lock"
 eq "1" "$(count_watchers)" "exactly one watcher after the first run"
 
+# --- 1b. WATCHVER: an in-place checkout move and a legacy writer both get replaced once ------------------
+writer_field() { node -e 'const w=JSON.parse(require("fs").readFileSync(process.argv[1])).writer; process.stdout.write(String(w[process.argv[2]]))' "$ENV_FILE" "$1"; }
+inspect_writer() { wenv "$NODE" -e 'const w=require(process.argv[1]).inspectWatcher(process.argv[2],process.argv[3],process.argv[4]); process.stdout.write(w ? `${w.state}:${w.reason || ""}` : "none")' "$HOOK" "$LIVE" "$KEY" "${1:-$REPO_ROOT}"; }
+edit_writer() { node -e 'const fs=require("fs"), f=process.argv[1], e=JSON.parse(fs.readFileSync(f)); Object.assign(e.writer,JSON.parse(process.argv[2])); if(process.argv[3]) delete e.writer[process.argv[3]]; fs.writeFileSync(f,JSON.stringify(e))' "$ENV_FILE" "$1" "${2:-}"; }
+CODE_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+eq "$CODE_HEAD" "$(writer_field plugin_code_version)" "WATCHVER writer records the plugin checkout HEAD at start"
+edit_writer '{"plugin_code_version":"0000000000000000000000000000000000000000"}'
+eq "stale:code_version" "$(inspect_writer)" "(a) same root, recorded A and current HEAD B: stale with reason code_version"
+run_hook_in "$REPO"
+wait_writer "$FIRST_PID"
+VERSION_PID="$(envelope_pid)"
+assert_neq "$FIRST_PID" "$VERSION_PID" "(a) run() reaps and relaunches the different-code watcher"
+eq "no" "$([ -r "/proc/$FIRST_PID/cmdline" ] && tr '\0' ' ' < "/proc/$FIRST_PID/cmdline" | grep -q . && echo yes || echo no)" "(a) old watcher process is gone"
+eq "$CODE_HEAD" "$(writer_field plugin_code_version)" "(a) replacement records the current HEAD"
+eq "current:" "$(inspect_writer)" "(b) same root and code version: current"
+edit_writer '{"plugin_code_version":null}'
+eq "current:" "$(inspect_writer)" "unknown recorded code version: current (no restart loop)"
+mkdir -p "$NONREPO/.claude-plugin"
+cp "$REPO_ROOT/.claude-plugin/plugin.json" "$NONREPO/.claude-plugin/plugin.json"
+edit_writer "{\"plugin_root\":\"$NONREPO\",\"plugin_code_version\":\"$CODE_HEAD\"}"
+eq "current:" "$(inspect_writer "$NONREPO")" "(c) current root is not a git checkout: current"
+edit_writer '{}' plugin_code_version
+eq "current:" "$(inspect_writer "$NONREPO")" "(c) legacy writer and unknown current version: current"
+edit_writer "{\"plugin_root\":\"$REPO_ROOT\"}" plugin_code_version
+eq "stale:code_version" "$(inspect_writer)" "(d) legacy writer without code version and known current HEAD: stale once"
+run_hook_in "$REPO"
+wait_writer "$VERSION_PID"
+LEGACY_PID="$(envelope_pid)"
+assert_neq "$VERSION_PID" "$LEGACY_PID" "(d) run() reaps and relaunches the legacy watcher"
+eq "$CODE_HEAD" "$(writer_field plugin_code_version)" "(d) relaunched legacy writer records HEAD"
+eq "current:" "$(inspect_writer)" "(d) relaunched legacy writer is current"
+run_hook_in "$REPO"
+eq "$LEGACY_PID" "$(envelope_pid)" "(d) next ensure keeps the replacement (no restart loop)"
+eq "1" "$(count_watchers)" "WATCHVER replacement leaves exactly one watcher"
+FIRST_PID="$LEGACY_PID"
+
+# The per-tool-call stamp must not hide an old-code watcher from run() either (the full path retains its 60 s throttle).
+post_version_hook() { wenv "$NODE" -e 'require(process.argv[1]).run({hook_event_name:"PostToolUse",session_id:"code-version",cwd:process.argv[2]})' "$HOOK" "$REPO"; }
+post_version_hook
+STAMP="$LIVE/autostart/code-version.ensure"
+eq "$CODE_HEAD" "$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1])).plugin_code_version))' "$STAMP")" "PostToolUse stamps the confirmed code version"
+edit_writer '{"plugin_code_version":"0000000000000000000000000000000000000000"}'
+node -e 'const fs=require("fs"), f=process.argv[1], d=JSON.parse(fs.readFileSync(f)); d.plugin_code_version="0000000000000000000000000000000000000000"; fs.writeFileSync(f,JSON.stringify(d))' "$STAMP"
+touch -d '2 minutes ago' "$STAMP"
+post_version_hook
+wait_writer "$FIRST_PID"
+STAMP_PID="$(envelope_pid)"
+assert_neq "$FIRST_PID" "$STAMP_PID" "PostToolUse rejects the old-code stamp and replaces the old-code watcher"
+eq "current:" "$(inspect_writer)" "PostToolUse replacement is current"
+FIRST_PID="$STAMP_PID"
+node -e 'require("fs").unlinkSync(process.argv[1])' "$STAMP"
+
+# HEAD lookup covers both ordinary and linked checkouts, loose/packed refs and detached HEAD; it ignores ambient git selectors.
+identity_version() { wenv "$NODE" -e 'process.stdout.write(String(require(process.argv[1]).pluginIdentity(process.argv[2]).plugin_code_version))' "$REPO_ROOT/src/status/code-fingerprint.js" "$1"; }
+FIXTURE_HEAD="$(git -C "$REPO" rev-parse HEAD)"
+eq "$FIXTURE_HEAD" "$(identity_version "$REPO")" "code identity resolves an ordinary checkout's loose HEAD ref"
+git -C "$REPO" worktree add -q -b code-version-probe "$SB/plugin-wt" HEAD
+eq "$FIXTURE_HEAD" "$(identity_version "$SB/plugin-wt")" "code identity resolves a linked worktree's shared loose ref"
+git -C "$REPO" pack-refs --all
+eq "$FIXTURE_HEAD" "$(identity_version "$REPO")" "code identity resolves packed refs"
+eq "$FIXTURE_HEAD" "$(identity_version "$SB/plugin-wt")" "code identity resolves a linked worktree's shared packed ref"
+git -C "$SB/plugin-wt" checkout -q --detach HEAD
+eq "$FIXTURE_HEAD" "$(identity_version "$SB/plugin-wt")" "code identity resolves detached HEAD in a linked worktree"
+eq "$FIXTURE_HEAD" "$(GIT_DIR="$NONREPO" GIT_WORK_TREE="$NONREPO" identity_version "$SB/plugin-wt")" "code identity ignores ambient git repository selectors"
+eq "null" "$(identity_version "$NONREPO")" "code identity explicitly records null for a non-git plugin root"
+
 # --- 2. second run while held: starts nothing, silent, fast ---------------------------------------------
 run_hook_in "$REPO"
 eq "0" "$HOOK_RC" "second run exits 0"

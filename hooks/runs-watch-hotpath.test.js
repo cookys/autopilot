@@ -51,7 +51,8 @@ function scenario(root, kind) {
     const pid = kind === 'alive' ? watcher.pid : 2 ** 22 - 3; // a pid that is not a watcher
     fs.mkdirSync(path.join(live, 'autostart'), { recursive: true, mode: 0o700 });
     const stamp = path.join(live, 'autostart', `${SID}.ensure`);
-    fs.writeFileSync(stamp, JSON.stringify({ cwd: repo, project_key: KEY, pid, plugin_root: realRoot, plugin_version: version }));
+    fs.writeFileSync(stamp, JSON.stringify({ cwd: repo, project_key: KEY, pid, plugin_root: realRoot, plugin_version: version,
+      plugin_code_version: require('../src/status/watcher-identity').readCodeVersion(realRoot) }));
     // alive: the stamp is OLD, so only the "pid is a watcher of this project" answer can end the hook early (the throttle would not)
     if (kind === 'alive') { const old = new Date(Date.now() - 600000); fs.utimesSync(stamp, old, old); }
     const payload = JSON.stringify({ hook_event_name: 'PostToolUse', session_id: SID, tool_name: 'Bash', cwd: repo, tool_input: { command: 'ls' } });

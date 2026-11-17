@@ -704,7 +704,8 @@ function fastPathFixture() {
   fs.mkdirSync(path.join(f.live, 'autostart'), { recursive: true });
   fs.writeFileSync(path.join(f.live, 'autostart', `${name}.json`), JSON.stringify({ cwd, project_key: sc.project_key, repo_identity: sc.repo_identity, repo_root: cwd }));
   fs.mkdirSync(path.join(f.live, 'runs'), { recursive: true });
-  fs.writeFileSync(path.join(f.live, 'runs', `${sc.project_key}.json`), JSON.stringify({ schema: 'x', writer: { pid: w.pid, plugin_root: fs.realpathSync(path.join(__dirname, '..')), plugin_version: JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version } }));
+  fs.writeFileSync(path.join(f.live, 'runs', `${sc.project_key}.json`), JSON.stringify({ schema: 'x', writer: { pid: w.pid, plugin_root: fs.realpathSync(path.join(__dirname, '..')), plugin_version: JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version,
+    plugin_code_version: require('../src/status/watcher-identity').readCodeVersion(fs.realpathSync(path.join(__dirname, '..'))) } }));
   fs.mkdirSync(path.join(f.home, '.autopilot'), { recursive: true });
   fs.writeFileSync(path.join(f.home, '.autopilot', 'live-pointer.json'), '{}');
   const bin = path.join(f.base, 'bin'); fs.mkdirSync(bin);
@@ -729,6 +730,38 @@ test('ensure on the fast path: SessionStart with the watcher alive still creates
     startHook(x.f, 'UserPromptSubmit', null, { cwd: x.cwd, env: x.env });
     assert.strictEqual(fs.existsSync(x.f.marker), false);
   } finally { try { process.kill(x.w.pid, 'SIGKILL'); } catch (_e) { /* gone */ } }
+});
+
+test('ensure replaces a legacy watcher record without plugin_code_version instead of taking the fast path', () => {
+  const x = fastPathFixture();
+  const key = scopeFromCwd(x.f.repo).project_key;
+  const record = path.join(x.f.live, 'runs', `${key}.json`);
+  let replacement = null;
+  try {
+    const legacy = readJson(record);
+    const current = legacy.writer.plugin_code_version;
+    assert.match(current, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
+    delete legacy.writer.plugin_code_version;
+    fs.writeFileSync(record, JSON.stringify(legacy));
+    const stale = require('./runs-watch-autostart').inspectWatcher(x.f.live, key, ROOT);
+    assert.strictEqual(stale.state, 'stale');
+    assert.strictEqual(stale.reason, 'code_version');
+    const r = startHook(x.f, 'SessionStart', 'startup', { cwd: x.cwd, env: { ...quiet.env, ...x.env } });
+    assert.strictEqual(r.status, 0, r.stderr);
+    assert.ok(fs.existsSync(x.log), 'legacy record takes the full path and runs git');
+    const end = Date.now() + 5000;
+    do {
+      replacement = readJson(record).writer;
+      if (replacement.pid !== x.w.pid) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+    } while (Date.now() < end);
+    assert.notStrictEqual(replacement.pid, x.w.pid, 'a new watcher replaces the legacy writer record');
+    assert.strictEqual(replacement.plugin_code_version, current);
+  } finally {
+    for (const pid of [replacement && replacement.pid, x.w.pid]) {
+      if (pid) { try { process.kill(pid, 'SIGKILL'); } catch (_e) { /* gone */ } }
+    }
+  }
 });
 
 test('ensure on the fast path: an active l5 marker is kept byte-for-byte on startup/resume/compact', () => {

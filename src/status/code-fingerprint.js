@@ -73,13 +73,14 @@ function createCodeFingerprint({ root = REPO_ROOT } = {}) {
 
 // Where this process's code lives: realpath of the plugin root and the version from its .claude-plugin/plugin.json (null when
 // unreadable). Recorded in the envelope writer block so autostart can tell an old watcher from a current one even when an update
-// installed into a NEW version directory (the old directory's files never change, so the fingerprint alone cannot see it).
+// installed into a NEW version directory (the old directory's files never change, so the fingerprint alone cannot see it). The checkout
+// HEAD also distinguishes code loaded before an in-place live pin, even when the root and manifest version stay the same.
 function pluginIdentity(root = REPO_ROOT) {
   let real = root;
   try { real = fs.realpathSync(root); } catch (_error) { /* keep as given */ }
   let version = null;
   try { const v = JSON.parse(fs.readFileSync(path.join(real, '.claude-plugin', 'plugin.json'), 'utf8')).version; version = typeof v === 'string' && v ? v : null; } catch (_error) { /* unknown */ }
-  return { plugin_root: real, plugin_version: version };
+  return { plugin_root: real, plugin_version: version, plugin_code_version: require('./watcher-identity').readCodeVersion(real) };
 }
 
 module.exports = { createCodeFingerprint, pluginIdentity, REPO_ROOT };

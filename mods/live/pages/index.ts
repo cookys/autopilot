@@ -5,6 +5,7 @@
 import type { Page } from './frame'
 import { quotaPage } from './quota'
 import { nowPage } from './now'
+import { fleetPage } from './fleet'
 
 const shell = (id: Page['id'], key: string, title: string): Page => ({ id, key, title, render: () => ({ body: [], actions: [] }) })
 
@@ -15,8 +16,9 @@ const pet = (): Page => ({ id: 'pet', key: '9', title: '寵物', framed: true, r
 export const PAGES: Page[] = [
   nowPage,
   shell('decide', '2', '待決'),
-  shell('fleet', '3', '艦隊'),
+  fleetPage,
   quotaPage,
+import { fleetPage } from './fleet'
   shell('dispatch', '5', '派工'),
   shell('review', '6', '審查'),
   shell('spend', '7', '花費'),

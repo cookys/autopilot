@@ -45,8 +45,12 @@ const SCORECARD_CLI = path.join(__dirname, 'engine-scorecard.js');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
 const MISSING_PACE = path.join(FIXTURES_DIR, '__missing_pace__.json');
 const allEndpointsReady = () => true;
-// Small public-doc work admits CN seats; the dedicated gate test passes its own M facts.
-const testTask = { AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_SCOPE: 'docs/example.md', AUTOPILOT_TASK_ROLE: 'reviewer' };
+// Small public-doc work admits CN seats for non-review roles; review roles are barred by the CN gate.
+// Omit AUTOPILOT_TASK_ROLE so each call uses its own rail role (env wins over rail role in the gate).
+const testTask = { AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_SCOPE: 'docs/example.md' };
+for (const k of ['AUTOPILOT_TASK_ROLE', 'AUTOPILOT_TASK_NOVEL', 'AUTOPILOT_TASK_READS_TRANSCRIPT', 'AUTOPILOT_TASK_CLASS']) {
+  delete process.env[k];
+}
 Object.assign(process.env, testTask);
 
 function withEnv(vars, fn) {
@@ -341,7 +345,7 @@ test('(b) stale row and null expected_pct/used_pct rows are reported as unknown 
   // agy is stale (+76 if read as fresh); glm has expected_pct:null, used_pct:0 (0 slack if null read as 0);
   // grok-cli has used_pct:null, expected_pct:70 (+70 slack if null read as 0);
   // grok-cli(alias 2) is fresh with slack -6. Every broken reading would beat -6 if misread.
-  const r = cli(['--role', 'reviewer', '--pace', fixturePath('stale-and-null.json'), '--json']);
+  const r = cli(['--role', 'author', '--pace', fixturePath('stale-and-null.json'), '--json']);
   assert.equal(r.status, 0, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.engine, 'grok');
@@ -365,7 +369,7 @@ test('(b) stale row and null expected_pct/used_pct rows are reported as unknown 
       pace: nullAsZeroPace,
       pools,
       roles,
-      role: 'reviewer',
+      role: 'author',
       checkEndpoint: allEndpointsReady,
     }).engine,
     'glm',
@@ -378,7 +382,7 @@ test('(b) stale row and null expected_pct/used_pct rows are reported as unknown 
       pace: staleIgnoredPace,
       pools,
       roles,
-      role: 'reviewer',
+      role: 'author',
       checkEndpoint: allEndpointsReady,
     }).engine,
     'agy',
@@ -386,7 +390,7 @@ test('(b) stale row and null expected_pct/used_pct rows are reported as unknown 
 });
 
 test('(c) only ahead keys (< -10 slack) -> largest slack chosen with over_pace: true', () => {
-  const r = cli(['--role', 'reviewer', '--pace', fixturePath('only-ahead.json'), '--json']);
+  const r = cli(['--role', 'author', '--pace', fixturePath('only-ahead.json'), '--json']);
   assert.equal(r.status, 0, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.engine, 'glm');
@@ -450,7 +454,7 @@ test('(d) all unknown -> exit 3 with engine: null and reason: pace_unknown', () 
   assert.equal(out.pace_generated_at, '2026-11-13T02:15:00Z');
   assert.deepEqual(out.candidates, [
     { engine: 'agy', reason: 'unknown' },
-    { engine: 'glm', reason: 'unknown' },
+    { engine: 'glm', reason: 'cn_model_dispatch_barred' },
     { engine: 'codex', reason: 'unknown' },
     { engine: 'grok', reason: 'unknown' },
     { engine: 'agyclaude', reason: 'unknown' },
@@ -483,11 +487,11 @@ test('(d) all unknown -> exit 3 with engine: null and reason: pace_unknown', () 
 test('(e) --exclude removes keys from consideration', () => {
   const file = fixturePath('ahead-vs-behind.json');
 
-  const base = cli(['--role', 'reviewer', '--pace', file, '--json']);
+  const base = cli(['--role', 'author', '--pace', file, '--json']);
   assert.equal(base.status, 0, base.stderr);
   assert.equal(JSON.parse(base.stdout).engine, 'glm');
 
-  const noGrok = cli(['--role', 'reviewer', '--pace', file, '--exclude', 'grok', '--json']);
+  const noGrok = cli(['--role', 'author', '--pace', file, '--exclude', 'grok', '--json']);
   assert.equal(noGrok.status, 0, noGrok.stderr);
   const noGrokOut = JSON.parse(noGrok.stdout);
   assert.equal(noGrokOut.engine, 'glm');
@@ -495,14 +499,14 @@ test('(e) --exclude removes keys from consideration', () => {
   assert.equal(noGrokOut.over_pace, false);
   assert.equal(noGrokOut.candidates.some((c) => c.engine === 'grok'), false);
 
-  const noGrokGlm = cli(['--role', 'reviewer', '--pace', file, '--exclude', 'grok,glm', '--json']);
+  const noGrokGlm = cli(['--role', 'author', '--pace', file, '--exclude', 'grok,glm', '--json']);
   assert.equal(noGrokGlm.status, 0, noGrokGlm.stderr);
   const noGrokGlmOut = JSON.parse(noGrokGlm.stdout);
   assert.equal(noGrokGlmOut.engine, 'agy');
   assert.equal(noGrokGlmOut.slack_pts, -25);
   assert.equal(noGrokGlmOut.over_pace, true);
 
-  const noneLeft = cli(['--role', 'reviewer', '--pace', file, '--exclude', 'grok,glm,agy', '--json']);
+  const noneLeft = cli(['--role', 'author', '--pace', file, '--exclude', 'grok,glm,agy', '--json']);
   assert.equal(noneLeft.status, 3);
   assert.equal(JSON.parse(noneLeft.stdout).reason, 'pace_unknown');
 });
@@ -621,7 +625,7 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     pace,
     pools,
     roles,
-    role: 'reviewer',
+    role: 'author',
     checkEndpoint: (ep) => {
       checkedReady.push(ep);
       return true;
@@ -639,7 +643,7 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     pace: grokBehind,
     pools,
     roles,
-    role: 'reviewer',
+    role: 'author',
     checkEndpoint: () => true,
   });
   assert.equal(glmWhenGrokBehind.engine, 'glm');
@@ -649,7 +653,7 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     pace: grokBehind,
     pools,
     roles,
-    role: 'reviewer',
+    role: 'author',
     checkEndpoint: (ep) => ep !== 'glm',
   });
   assert.equal(glmDown.engine, 'agy');
@@ -664,7 +668,7 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     pace,
     pools,
     roles,
-    role: 'reviewer',
+    role: 'author',
     checkEndpoint: (ep) => {
       checkedUnready.push(ep);
       return ep !== 'glm';
@@ -686,7 +690,7 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
 
   // End-to-end CLI check through resolve-endpoint.sh when GLM credentials are unconfigured.
   const unconfiguredCli = cli(
-    ['--role', 'reviewer', '--pace', fixturePath('glm-best-slack.json'), '--json'],
+    ['--role', 'author', '--pace', fixturePath('glm-best-slack.json'), '--json'],
     {
       AUTOPILOT_ENDPOINT_GLM_URL: '',
       AUTOPILOT_ENDPOINT_GLM_TOKEN: '',
@@ -717,14 +721,14 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
       schema: QUALIFIED_SCHEMA,
       generated_at: '2026-11-13T03:00:00.000Z',
       rows: [
-        { engine: 'grok-4.7', runner: 'grok', role: 'reviewer', result: 'fail', date: '2026-11-12', event_id: 1 },
-        { engine: 'glm-5.3', runner: 'cc-shim', role: 'reviewer', result: 'provisional', date: '2026-11-11', event_id: 2 },
-        { engine: 'gemini-4-carbon-high', runner: 'agy', role: 'reviewer', result: 'pass', date: '2026-11-10', event_id: 3 },
+        { engine: 'grok-4.7', runner: 'grok', role: 'author', result: 'fail', date: '2026-11-12', event_id: 1 },
+        { engine: 'glm-5.3', runner: 'cc-shim', role: 'author', result: 'provisional', date: '2026-11-11', event_id: 2 },
+        { engine: 'gemini-4-carbon-high', runner: 'agy', role: 'author', result: 'pass', date: '2026-11-10', event_id: 3 },
       ],
     };
     fs.writeFileSync(qPath, `${JSON.stringify(qualifiedDoc, null, 2)}\n`, 'utf8');
 
-    const viaFlag = cli(['--role', 'reviewer', '--pace', paceFile, '--qualified', qPath, '--json']);
+    const viaFlag = cli(['--role', 'author', '--pace', paceFile, '--qualified', qPath, '--json']);
     assert.equal(viaFlag.status, 0, viaFlag.stderr);
     const flagOut = JSON.parse(viaFlag.stdout);
     assert.equal(flagOut.engine, 'glm');
@@ -739,7 +743,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
       { engine: 'glm', pool: 'glm', slack_pts: -3 },
     ]);
 
-    const viaEnv = cli(['--role', 'reviewer', '--pace', paceFile, '--json'], {
+    const viaEnv = cli(['--role', 'author', '--pace', paceFile, '--json'], {
       AUTOPILOT_QUALIFIED_FILE: qPath,
     });
     assert.equal(viaEnv.status, 0, viaEnv.stderr);
@@ -770,7 +774,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
 
     // 3. Missing qualified file falls back to scripts/lib/pace-roles.json with qualified_source: "pace-roles.json".
     const missingPath = path.join(tmpDir, 'does-not-exist.json');
-    const viaMissingFlag = cli(['--role', 'reviewer', '--pace', paceFile, '--qualified', missingPath, '--json']);
+    const viaMissingFlag = cli(['--role', 'author', '--pace', paceFile, '--qualified', missingPath, '--json']);
     assert.equal(viaMissingFlag.status, 0, viaMissingFlag.stderr);
     const missingFlagOut = JSON.parse(viaMissingFlag.stdout);
     assert.equal(missingFlagOut.engine, 'glm');
@@ -780,7 +784,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
       defaultQualifiedPath({ HOME: tmpDir }),
       path.join(tmpDir, '.autopilot', 'qualified.v1.json'),
     );
-    const viaMissingDefault = cli(['--role', 'reviewer', '--pace', paceFile, '--json'], {
+    const viaMissingDefault = cli(['--role', 'author', '--pace', paceFile, '--json'], {
       HOME: tmpDir,
       AUTOPILOT_QUALIFIED_FILE: undefined,
     });
@@ -1474,7 +1478,8 @@ const dsSelect = (extra) => selectEngine({
   checkEndpoint: allEndpointsReady,
   env: dsSeamEnv,
   ...extra,
-  env: { ...testTask, ...(extra?.env || dsSeamEnv) },
+  // CN gate bars cloud review_roles unconditionally; scope the test seam to these unit tests of cn_gate/seam-day logic.
+  env: { ...testTask, AUTOPILOT_TEST_CN_GATE_OFF: '1', ...(extra?.env || dsSeamEnv) },
   // only the deepseek seat is under test: take the other pools out of the walk unless the case wants them
 });
 const dsRolesDated = (fileOrNull) => {
@@ -1550,7 +1555,7 @@ test('(deepseek 6) never the sole reviewer: with no non-Chinese key to pair, it 
   const only = { ...roles, priority: { ...roles.priority, reviewer: ['deepseek'] } };
   const paired = selectEngine({
     pace: dsPace([...dsPace().rows, { pool: 'deepseek', class: 'other', stale: false, used_pct: 0, expected_pct: 0, hours_to_reset: 1 }]), pools: loadPools(), roles: only, role: 'reviewer', scope: 'mechanical', now: DS_IN_WINDOW,
-    checkEndpoint: allEndpointsReady, exclude: ['glm', 'codex', 'grok', 'agyclaude'], env: dsSeamEnv,
+    checkEndpoint: allEndpointsReady, exclude: ['glm', 'codex', 'grok', 'agyclaude'], env: { ...dsSeamEnv, AUTOPILOT_TEST_CN_GATE_OFF: '1' },
   });
   assert.equal(paired.engine, 'deepseek');
   assert.deepEqual(paired.cn_gate, { scope: 'mechanical', never_sole: true, pair_with: 'agy' });
@@ -1819,6 +1824,14 @@ test('quota gates: CN review gate, qualification and disabled keys precede ranki
     checkEndpoint: () => { throw Error('barred endpoint must not be probed'); }, ...extra });
   assert.equal(run().engine, 'codex');
   assert.equal(run().candidates.find(c => c.engine === 'glm').reason, 'cn_model_dispatch_barred');
+  // Even at Size S / public docs, reviewer role bars glm and deepseek via CN gate, while author/implementer allows glm.
+  const revSmall = selectEngine({
+    pace, role: 'reviewer', scope: 'mechanical', now: DS_IN_WINDOW,
+    env: { ...dsSeamEnv },
+    checkEndpoint: (ep) => { if (ep === 'glm' || ep === 'deepseek') throw Error('barred endpoint must not be probed'); return true; },
+  });
+  assert.equal(revSmall.candidates.find(c => c.engine === 'glm').reason, 'cn_model_dispatch_barred');
+  assert.equal(revSmall.candidates.find(c => c.engine === 'deepseek').reason, 'cn_model_dispatch_barred');
   assert.equal(run({ roles: { ...loadRoles(), _disabled: ['codex'] } }).engine, 'agy');
   const qualified = { schema: QUALIFIED_SCHEMA, rows: [
     { runner: 'codex', engine: 'gpt-6.1-sol', role: 'reviewer', result: 'fail' },

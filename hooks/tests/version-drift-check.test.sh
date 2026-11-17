@@ -31,19 +31,19 @@ assert_not_contains "$(ctx_of "$OUT")" "behind" "unset root: no drift warning"
 REMOTE="$TEST_TMP/remote.git"; WORK="$TEST_TMP/clone"
 $GIT init --bare -q "$REMOTE"
 $GIT clone -q "$REMOTE" "$WORK" 2>/dev/null
-( cd "$WORK"
+( cd "$WORK" || exit 1
   echo a > f.txt; $GIT add f.txt; $GIT commit -qm init
   $GIT push -q origin HEAD:main 2>/dev/null
   $GIT branch -q --set-upstream-to=origin/main 2>/dev/null || $GIT push -q -u origin main 2>/dev/null
 )
 # Advance the remote by 2 commits via a second clone, then fetch (no merge) in WORK
 SEED="$TEST_TMP/seed"; $GIT clone -q "$REMOTE" "$SEED" 2>/dev/null
-( cd "$SEED"
+( cd "$SEED" || exit 1
   echo b > f.txt; $GIT commit -qam c1
   echo c > f.txt; $GIT commit -qam c2
   $GIT push -q origin HEAD:main 2>/dev/null
 )
-( cd "$WORK"; $GIT fetch -q origin 2>/dev/null; $GIT branch -q --set-upstream-to=origin/main 2>/dev/null )
+( cd "$WORK" || exit 1; $GIT fetch -q origin 2>/dev/null; $GIT branch -q --set-upstream-to=origin/main 2>/dev/null )
 
 # P7a advisory bridge: the drift text goes to <live>/advisories/<sid>.jsonl (shown by the live mod), not model context.
 # AUTOPILOT_ADVISORY_BRIDGE_VERSION_DRIFT=inject restores the SessionStart injection. Tests give an empty-HOME sandbox

@@ -49,7 +49,7 @@ test('gate2 item 1: the strip row does not move between a short page and a long 
 })
 
 test('gate2 item 1: actions sit directly above the strip, the body starts under the head, only the leftover is blank between them', () => {
-  const out = frameRows(PAGES.find(p => p.id === 'pet') as Page, ctxOf(160, 24, snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })))) as never, { pages: PAGES }).map(text)
+  const out = frameRows(PAGES.find(p => p.id === 'pet') as Page, ctxOf(160, 24, snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] })) as never, { pages: PAGES }).map(text)
   expect(out.length).toBe(24)
   const last = out.length - 1
   expect(out[last - 1]).toContain('沒有待決卡') // the action row is right above the strip
@@ -168,10 +168,10 @@ test('gate2 item 6: 資料不足 only for a missing or not-ok source; unknown po
   const last = (c: unknown) => frameRows(quotaPage, ctxOf(120, 24, c) as never).map(text).slice(-2, -1)[0]
   const miss = snap(POOLS, { sources: { ...ALL_OK, quota_forecast: { at_ms: null, state: 'no_source' } } })
   expect(last(miss)).toContain('資料不足，無法判定')
-  const unknown = snap()
+  const unknown = snap(POOLS, { cards: [] })
   expect(last(unknown)).toBe('2 池判定未知（缺換池資料）；沒有待決卡')
   expect(last(unknown)).not.toContain('資料不足')
-  const known = snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })))
+  const known = snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] })
   expect(last(known)).toContain('沒有待決卡')
 })
 
@@ -226,11 +226,11 @@ test('gate2 item 9: the zh-TW decide nav hints split into [h] and [l] Buttons (s
 })
 
 test('gate2 item 10: empty state three ways (calm / unknown pools / source or seat feed not ok)', () => {
-  const green = snap([POOLS.find(p => p.pool === 'codex')])
+  const green = snap([POOLS.find(p => p.pool === 'codex')], { cards: [] })
   const last = (p: Page, c: unknown, live: unknown = null) => frameRows(p, { ...(ctxOf(120, 24, c) as object), live } as never).map(text).slice(-2, -1)[0]
   expect(last(quotaPage, green)).toBe('沒有要你處理的事')
-  expect(last(quotaPage, snap())).toBe('2 池判定未知（缺換池資料）；沒有待決卡')
-  expect(last(quotaPage, snap(POOLS.map(p => ({ ...p, stranded_seats: 1 }))))).toBe('沒有待決卡')
+  expect(last(quotaPage, snap(POOLS, { cards: [] }))).toBe('2 池判定未知（缺換池資料）；沒有待決卡')
+  expect(last(quotaPage, snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] }))).toBe('沒有待決卡')
   const emptyNow: Page = { ...nowPage, render: () => ({ body: [], actions: [] }) }
   expect(last(emptyNow, green, null), 'a 現況 with no seat feed is missing data').toContain('資料不足，無法判定')
   expect(last(emptyNow, green, { state: 'stale', header: 'x', pending: [] })).toContain('資料不足，無法判定')

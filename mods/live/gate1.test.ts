@@ -69,7 +69,7 @@ test('gate G4: missing data never reads as nothing to do; red pools never read �
     expect(out.join('\n')).not.toContain('沒有要你處理的事')
   }
   expect(screen(quotaPage, 120, 30, miss).slice(-2, -1)[0]).toContain('資料不足，無法判定')
-  const known = snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })))
+  const known = snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] })
   expect(screen(quotaPage, 120, 30, known).slice(-2, -1)[0], 'all sources ok, every verdict known: the scoped line').toContain('沒有待決卡')
   expect(screen(quotaPage, 120, 30, null).slice(-2, -1)[0]).toContain('資料不足，無法判定')
   expect(screen(nowPage, 160, 40, miss).join('\n'), '現況 does not claim 沒有例外 beside red data').not.toContain('沒有例外')

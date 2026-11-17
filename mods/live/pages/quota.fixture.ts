@@ -27,9 +27,12 @@ export const SEATS = [
 ]
 export type Sources = Record<string, { at_ms: number | null; state: 'ok' | 'stale' | 'expired' | 'no_source' }>
 // the raw feed goes through parseConsole (the trust boundary), as it does in the pane: the page only ever sees what the parser keeps
-export const consoleOf = (pools: unknown[] | null, o: { pace?: boolean; seats?: unknown[]; quotaNowAt?: number | null; sources?: Sources; items?: unknown[] } = {}): unknown => parseConsole(JSON.stringify({
+export const consoleOf = (pools: unknown[] | null, o: { pace?: boolean; seats?: unknown[]; quotaNowAt?: number | null; sources?: Sources; items?: unknown[]; cards?: unknown[] | null; decisions?: number; lines?: unknown[] | null } = {}): unknown => parseConsole(JSON.stringify({
   ...full,
   ...(o.items === undefined ? {} : { items: [...(full as { items: unknown[] }).items, ...o.items] }),
+  ...(o.cards === undefined ? {} : { cards: o.cards }),
+  ...(o.lines === undefined ? {} : { lines: o.lines }),
+  ...(o.decisions === undefined && o.cards === undefined ? {} : { counts: { ...(full as { counts: Record<string, unknown> }).counts, decisions: o.decisions ?? (Array.isArray(o.cards) ? o.cards.length : 0) } }),
   sources: o.sources ?? { quota_now: { at_ms: o.quotaNowAt === undefined ? NOW - 40000 : o.quotaNowAt, state: 'ok' }, quota_forecast: o.pace === false ? { at_ms: null, state: 'no_source' } : { at_ms: NOW - 40000, state: 'ok' } },
   quota: pools === null ? undefined : { pools, seats: o.seats ?? [] },
 }))

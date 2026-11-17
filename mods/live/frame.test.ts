@@ -21,8 +21,8 @@ const SIZES = [{ cols: 160, rows: 40 }, { cols: 120, rows: 30 }, { cols: 80, row
 const NOW = 1794200000000
 const line = (s: string): Row => [{ text: s }]
 const SNAP = parseConsole(JSON.stringify(full))
-// every source ok and no pool with an unknown verdict: the data is whole, so the empty state is the scoped 沒有待決卡 and not 資料不足 (G4)
-const WHOLE = { ...(SNAP as NonNullable<typeof SNAP>), sources: Object.fromEntries(Object.keys((SNAP as NonNullable<typeof SNAP>).sources).map(k => [k, { at_ms: NOW - 1000, state: 'ok' as const }])), quota: { ...(SNAP as NonNullable<typeof SNAP>).quota, pools: ((SNAP as NonNullable<typeof SNAP>).quota.pools ?? []).map(p => ({ ...p, stranded_seats: 1 })) } } as unknown as PageCtx['console']
+// every source ok, 0 pending cards, and no pool with an unknown verdict: the data is whole, so the empty state is the scoped 沒有待決卡 and not 資料不足 (G4)
+const WHOLE = { ...(SNAP as NonNullable<typeof SNAP>), cards: [], counts: { ...(SNAP as NonNullable<typeof SNAP>).counts, decisions: 0 }, sources: Object.fromEntries(Object.keys((SNAP as NonNullable<typeof SNAP>).sources).map(k => [k, { at_ms: NOW - 1000, state: 'ok' as const }])), quota: { ...(SNAP as NonNullable<typeof SNAP>).quota, pools: ((SNAP as NonNullable<typeof SNAP>).quota.pools ?? []).map(p => ({ ...p, stranded_seats: 1 })) } } as unknown as PageCtx['console']
 const ctxOf = (size: { cols: number; rows: number }, console: PageCtx['console'] = null): PageCtx => ({ live: null, console, size, t, nowMs: NOW })
 const withBody = (p: Page, body: number, actions: number): Page => ({ ...p, render: () => ({ body: Array.from({ length: body }, (_, i) => line('body ' + i)), actions: Array.from({ length: actions }, (_, i) => line('act ' + i)) }) })
 const text = (r: Row): string => r.map(s => s.text).join('')

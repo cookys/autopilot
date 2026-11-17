@@ -13,7 +13,7 @@ import type { LiveSnapshot, Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import { PAGES } from './index'
-import { brokenRow, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount } from './rows'
+import { brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount } from './rows'
 import type { Row } from './rows'
 
 export type { Row } from './rows'
@@ -48,14 +48,16 @@ export function mostSevere(ctx: PageCtx): Seg | null {
   return staleBadge(GLYPHS.state.failed + ' ' + ctx.t('frame.src_' + best.state, { name, min: mins === null ? '-' : String(mins) }))
 }
 
-// the one row an action area with no action says: a missing / not ok source -> 資料不足; unknown pools -> how many; else 沒有待決卡 (item 6)
-// three ways: a missing / not ok source (the console's, or the seat's own feed on the pages that read it) -> 資料不足; else unknown pools -> how many, beside the scoped 沒有待決卡; else 沒有待決卡,
-// or 沒有要你處理的事 only when every source is ok, no pool needs a look and nothing is unknown (calm)
+// the one row an action area with no action says: a missing / not ok source -> 資料不足; unknown pools -> how many, beside 待決 N 張卡等你 (when pending > 0) or 沒有待決卡;
+// else 待決 N 張卡等你 when pending > 0; else 沒有待決卡 when pools need a look, or 沒有要你處理的事 only when 0 pending cards, all sources ok and no unknown or needing pool
 function emptyState(ctx: PageCtx, page: Page): string {
   const liveBacked = page.id === 'now' || page.id === 'decide'
   if (sourceMissing(ctx.console) || (page.id === 'fleet' && ctx.console !== null && ctx.console.lines === null) || (liveBacked && (ctx.live === null || ctx.live.state !== 'ok'))) return ctx.t('frame.unknown')
+  const pending = decisionCount(ctx)
+  const tail = pending > 0 ? ctx.t('page.now.go_decide', { n: pending }) : ctx.t('frame.nothing')
   const n = unknownPoolCount(ctx.console, ctx.nowMs, ctx.t)
-  if (n > 0) return ctx.t('frame.unknown_pools', { n }) + '；' + ctx.t('frame.nothing')
+  if (n > 0) return ctx.t('frame.unknown_pools', { n }) + '；' + tail
+  if (pending > 0) return tail
   return poolsNeedLook(ctx.console, ctx.nowMs, ctx.t) ? ctx.t('frame.nothing') : ctx.t('frame.calm')
 }
 

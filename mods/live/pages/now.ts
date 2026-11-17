@@ -5,11 +5,12 @@
 // A broken or missing source is a red row with the reason (§5): the number stays beside it, never replaced by a dash. Colours go through PALETTE only.
 import type { ConsoleItem, ConsoleSnapshot } from '../console'
 import type { LiveSnapshot, Seg } from '../model'
-import { displayWidth, isStepCard, truncateToWidth } from '../model'
+import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import { ROLE_WARNING, normalizedPools, poolLabel, rankPools, worstPool } from './quota-pick'
+import type { Verdict } from './quota-pick'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, dataMissing, lineTotal, staleBadge } from './rows'
+import { brokenRow, dataMissing, decisionCount, lineTotal, staleBadge, stuckLinesOf } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -155,13 +156,14 @@ function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] 
 }
 
 // every pool that is red or whose verdict is unknown, in danger order, one row each and in full (the row wraps in the frame, never "+N"); the verdict text is the quota page's (G2, G5, G10)
+function poolRowOf(ctx: PageCtx, v: Verdict, wide: boolean): Row {
+  const red = v.role === 'broken'
+  return [dim(wide ? '  ' : ''), { text: (red ? GLYPHS.state.failed : GLYPHS.state.need_you) + ' ' + ctx.t('page.now.quota') + ' ' + poolLabel(v.pool) + ' ' + v.text, color: red ? PALETTE.broken : PALETTE.attention }]
+}
 function poolRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
   const pools = normalizedPools(con)
   if (pools === null) return []
-  return rankPools(pools, ctx.nowMs, ctx.t).filter(v => v.role === 'broken' || v.kind === 'limit_nosw' || v.kind === 'exhaust_nosw').map(v => {
-    const red = v.role === 'broken'
-    return [dim(wide ? '  ' : ''), { text: (red ? GLYPHS.state.failed : GLYPHS.state.need_you) + ' ' + ctx.t('page.now.quota') + ' ' + poolLabel(v.pool) + ' ' + v.text, color: red ? PALETTE.broken : PALETTE.attention }]
-  })
+  return rankPools(pools, ctx.nowMs, ctx.t).filter(v => v.role === 'broken' || v.kind === 'limit_nosw' || v.kind === 'exhaust_nosw').map(v => poolRowOf(ctx, v, wide))
 }
 
 // the items the exceptions block draws: exceptions and quota items the feed sends to the console, plus `seat_blocked:<seat>` items (a seat whose pool is used up);
@@ -267,12 +269,6 @@ function recentRows(live: LiveSnapshot, wide: boolean, cols: number): Row[] {
 }
 
 // ---- the page ----
-// the 待決 page lists the console cards and the seat's own cards the console does not hold yet: the jump counts both, so a lagging or missing cards source cannot hide an own card
-function decisionCount(ctx: PageCtx): number {
-  const { console: con, live } = ctx
-  const ownOnly = live === null ? 0 : live.pending.filter(d => !isStepCard(d) && !(con?.cards ?? []).some(c => c.id === d.id)).length
-  return con !== null ? Math.max(con.counts.decisions, (con.cards?.length ?? 0) + ownOnly) : live === null ? 0 : live.pending.length
-}
 function clipRowPlain(row: Row, cols: number): Row {
   if (cols <= 0) return [{ text: '' }]
   const out: Row = []
@@ -305,31 +301,40 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   if (residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }])
 
   if (ctx.shortBody === true) {
-    // Short body (<= 4 rows): no section titles, no column headers; priority order: red pools -> unknown pools -> stuck lines.
+    // Short body (<= 4 rows): no section titles, no column headers; priority order: red pools -> unknown pools -> stuck lines -> lower-priority rows.
     const compact: Row[] = []
     if (con !== null) {
-      const pr = poolRows(ctx, con, wide)
-      const exc = exceptionRows(ctx, con, wide)
-      const stuckLines: Row[] = exc.length > 0 || con.lines === null ? [] : con.lines.filter(l => l.issues.length > 0).map(l => {
-        const w = l.issues[0]
-        const g = glyph(w.state)
-        return [{ text: g.text + ' ', ...(g.color === undefined ? {} : { color: g.color }) }, plain(l.label + ' ' + w.subject)]
+      const pools = normalizedPools(con)
+      const ranked = pools === null ? [] : rankPools(pools, nowMs, t)
+      const redPools = ranked.filter(v => v.role === 'broken').map(v => poolRowOf(ctx, v, wide))
+      const unknownPools = ranked.filter(v => v.kind === 'limit_nosw' || v.kind === 'exhaust_nosw').map(v => poolRowOf(ctx, v, wide))
+      const stuck = stuckLinesOf(con)
+      const stuckIds = new Set(stuck.map(s => s.line.line_id))
+      const stuckRows: Row[] = stuck.map(({ line, worst }) => {
+        const g = glyph(worst.state)
+        return [...(wide ? [dim('  ')] : []), { text: g.text + ' ', ...(g.color === undefined ? {} : { color: g.color }) }, plain(line.label + ' ' + worst.subject)]
       })
-      compact.push(...pr, ...exc, ...stuckLines)
+      const otherExc: Row[] = [...con.items]
+        .filter((i: ConsoleItem) => (i.kind === 'exception' && i.to_console === true && (i.line_id === null || !stuckIds.has(i.line_id))) || (isSeatBlocked(i) && i.to_console !== false && pools === null))
+        .sort((a, b) => (a.line_id !== null ? 0 : 1) - (b.line_id !== null ? 0 : 1))
+        .map(it => {
+          const g = glyph(it.state)
+          const body = wide ? it.text : it.title
+          return [...(wide ? [dim('  ')] : []), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }, plain(' ' + body)]
+        })
+      compact.push(...redPools, ...unknownPools, ...stuckRows, ...otherExc)
     }
-    if (compact.length === 0) {
-      if (decisions > 0) {
-        const oldest = con === null || con.cards === null || con.cards.length === 0 ? null : [...con.cards].sort((a, b) => a.opened_at_ms - b.opened_at_ms)[0]
-        const title = oldest === null ? '' : '：' + firstLine(oldest.question)
-        const age = oldest === null ? '' : t('page.now.oldest', { age: ageOf(t, nowMs - oldest.opened_at_ms, false) })
-        compact.push([{ text: GLYPHS.structure.answer + ' ' + t('page.now.go_decide', { n: decisions }) + age + title, color: PALETTE.attention }])
-      }
-      if (con === null) compact.push(broken(t('page.now.no_console')))
-      else if (dataMissing(con, nowMs, t)) compact.push(broken(t('frame.unknown')))
-      if (live !== null) compact.push(...seatRows(ctx, live, wide))
-      else if (compact.length === 0) compact.push(broken(t('page.now.no_live')))
-      if (compact.length === 0) compact.push([dim((wide ? '  ' : '') + t('page.now.exc_none'))])
+    if (decisions > 0) {
+      const oldest = con === null || con.cards === null || con.cards.length === 0 ? null : [...con.cards].sort((a, b) => a.opened_at_ms - b.opened_at_ms)[0]
+      const title = oldest === null ? '' : '：' + firstLine(oldest.question)
+      const age = oldest === null ? '' : t('page.now.oldest', { age: ageOf(t, nowMs - oldest.opened_at_ms, false) })
+      compact.push([{ text: GLYPHS.structure.answer + ' ' + t('page.now.go_decide', { n: decisions }) + age + title, color: PALETTE.attention }])
     }
+    if (con === null) compact.push(broken(t('page.now.no_console')))
+    else if (compact.length === 0 && dataMissing(con, nowMs, t)) compact.push(broken(t('frame.unknown')))
+    if (live !== null) compact.push(...seatRows(ctx, live, wide))
+    else if (compact.length === 0) compact.push(broken(t('page.now.no_live')))
+    if (compact.length === 0) compact.push([dim((wide ? '  ' : '') + t('page.now.exc_none'))])
     return { body: compact.map(r => clipRowPlain(r, size.cols)), actions }
   }
 

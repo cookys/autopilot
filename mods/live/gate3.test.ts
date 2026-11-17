@@ -9,6 +9,7 @@ import { FOCUS_ANCHOR_KEY, Pane } from './pane'
 import { frameHeight, frameRows, stripRows, STRIP_SPLIT_COLS } from './pages/frame'
 import type { Page, Row } from './pages/frame'
 import { nowPage } from './pages/now'
+import { fleetPage } from './pages/fleet'
 import { quotaPage, renderQuota } from './pages/quota'
 import { PAGES } from './pages/index'
 import { consoleOf, ctxOf, MIN, NOW, POOLS, SEATS, type Sources } from './pages/quota.fixture'
@@ -195,4 +196,71 @@ test('gate3 item 4: BandBar with pane closed in console mode draws new page name
   }
   expect(pressed).toEqual(['now', 'decide', 'fleet', 'quota', 'dispatch', 'review', 'spend', 'hygiene'])
   void MIN
+})
+
+test('gate4 empty state with pending cards: 3 pending cards (console.cards or live.pending) with sources ok on 艦隊 and 額度 shows page.now.go_decide (after frame.unknown_pools when n > 0), never 沒有要你處理的事 or 沒有待決卡', () => {
+  const threeConsoleCards = [
+    { id: 'd-00000001', question: 'q1', status: 'open', opened_at_ms: NOW - 3 * MIN, executor_display: null },
+    { id: 'd-00000002', question: 'q2', status: 'open', opened_at_ms: NOW - 2 * MIN, executor_display: null },
+    { id: 'd-00000003', question: 'q3', status: 'open', opened_at_ms: NOW - MIN, executor_display: null },
+  ]
+  const mkOwn = (id: string, kind = 'decide') => ({ id, title: null, question: 'q ' + id, background: null, options: [], recommendation: null, why: null, blocks: null, not_authorized: null, source: null, opened_at: null, stale: false, age_s: 60, origin: null, orphaned: false, kind })
+  const threeLiveCards = [mkOwn('d-aaaa0001'), mkOwn('d-aaaa0002'), mkOwn('d-aaaa0003')]
+  const greenPools = [POOLS.find(p => p.pool === 'codex')!]
+  const redPools = POOLS.map(p => ({ ...p, stranded_seats: 1 }))
+  const unknownPools = POOLS // 2 unknown pools (personal, team)
+
+  const emptyActRow = (page: Page, c: ConsoleSnapshot, live: unknown = null, loc = tZh): string => {
+    const out = frameRows(page, { ...(ctxOf(120, 24, c) as object), live, t: loc } as never, { pages: PAGES }).map(text)
+    return out[out.length - 2]
+  }
+
+  // 1. 3 pending cards in ctx.console.cards, all sources ok, empty page actions on 艦隊 (lines: []) and 額度
+  for (const page of [fleetPage, quotaPage]) {
+    const green3 = snap(greenPools, { cards: threeConsoleCards, lines: [] })
+    expect(green3.cards?.length).toBe(3)
+    expect(emptyActRow(page, green3)).toBe('待決 3 張卡等你')
+    expect(emptyActRow(page, green3)).not.toContain('沒有要你處理的事')
+    expect(emptyActRow(page, green3)).not.toContain('沒有待決卡')
+    expect(emptyActRow(page, green3, null, tEn)).toBe('3 cards wait for you')
+
+    const red3 = snap(redPools, { cards: threeConsoleCards, lines: [] })
+    expect(emptyActRow(page, red3)).toBe('待決 3 張卡等你')
+    expect(emptyActRow(page, red3)).not.toContain('沒有待決卡')
+
+    const unk3 = snap(unknownPools, { cards: threeConsoleCards, lines: [] })
+    expect(emptyActRow(page, unk3)).toBe('2 池判定未知（缺換池資料）；待決 3 張卡等你')
+    expect(emptyActRow(page, unk3)).not.toContain('沒有待決卡')
+    expect(emptyActRow(page, unk3, null, tEn)).toBe('2 pools: verdict unknown (no rebalance data)；3 cards wait for you')
+
+    // 2. 3 pending cards in ctx.live.pending (0 console cards), all sources ok
+    const liveWith3 = { ...(LIVE0 as object), pending: threeLiveCards }
+    const green0 = snap(greenPools, { cards: [], lines: [] })
+    expect(emptyActRow(page, green0, liveWith3)).toBe('待決 3 張卡等你')
+    expect(emptyActRow(page, snap(redPools, { cards: [], lines: [] }), liveWith3)).toBe('待決 3 張卡等你')
+    expect(emptyActRow(page, snap(unknownPools, { cards: [], lines: [] }), liveWith3)).toBe('2 池判定未知（缺換池資料）；待決 3 張卡等你')
+
+    // Deduplication across console.cards and live.pending, and step cards excluded
+    const overlapConsole = snap(greenPools, { cards: threeConsoleCards.slice(0, 2), lines: [] })
+    const overlapLive = { ...(LIVE0 as object), pending: [mkOwn('d-00000002'), mkOwn('d-aaaa0003'), mkOwn('d-aaaa0009', 'step')] }
+    expect(emptyActRow(page, overlapConsole, overlapLive)).toBe('待決 3 張卡等你')
+
+    // 3. 0 pending cards control: 沒有要你處理的事 only with 0 pending cards, all sources ok and no unknown/needing pool
+    const stepOnlyLive = { ...(LIVE0 as object), pending: [mkOwn('d-aaaa0009', 'step')] }
+    expect(emptyActRow(page, green0, stepOnlyLive)).toBe('沒有要你處理的事')
+    expect(emptyActRow(page, snap(redPools, { cards: [], lines: [] }), LIVE0)).toBe('沒有待決卡')
+    expect(emptyActRow(page, snap(unknownPools, { cards: [], lines: [] }), LIVE0)).toBe('2 池判定未知（缺換池資料）；沒有待決卡')
+  }
+
+  // Short-body priority when pending-cards line competes for the 4-row body on 現況: red pool -> stuck line -> pending-cards line
+  const oneRedOneStuck = snap(
+    [POOLS.find(p => p.pool === 'trinity')!, POOLS.find(p => p.pool === 'codex')!],
+    { cards: threeConsoleCards, items: [], lines: [{ line_id: 'recovery', label: '復原線', lead_display: null, issues: [{ rule: 'T4', state: 'failed', subject: '復原線成員', since_ms: NOW - 10 * MIN, to_console: true }] }] },
+  )
+  // Force empty console items so only 1 red pool + 1 stuck line precede the pending-cards line in H=7 (4-row body)
+  const cleanSnap = { ...oneRedOneStuck, items: [] } as ConsoleSnapshot
+  const nBody = frameRows(nowPage, { ...(ctxOf(80, 7, cleanSnap) as object), live: LIVE0 } as never, { pages: PAGES }).map(text).slice(1, 5)
+  expect(nBody.findIndex(l => l.includes('trinity'))).toBe(0)
+  expect(nBody.findIndex(l => l.includes('復原線'))).toBe(1)
+  expect(nBody.findIndex(l => l.includes('待決 3 張卡等你'))).toBe(2)
 })

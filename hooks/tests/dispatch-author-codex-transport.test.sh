@@ -1036,4 +1036,402 @@ else
   fail "codex argv must include --skip-git-repo-check (dispatch runs from a non-git mkdtemp cwd; without it codex refuses and emits zero bytes while the harness still reports a verdict)"
 fi
 
+# ---------------------------------------------------------------------------
+# Sudo environment-preservation warning + plan-review codex stderr_sha256
+# (Fleet-Task: 01M7QW3FG7KTM0X1GB1HRDE43B)
+#
+# When userns is blocked and sudo prints
+#   sudo: preserving the entire environment is not supported, '--preserve-env' is ignored
+# on --preserve-env / -E, real worker_mount_isolation_detect must omit
+# --preserve-env (and fallback -E) so worker stderr starts cleanly with
+# "Reading prompt from stdin..." and codex_transport_has_chrome_frame passes;
+# silent sudo keeps --preserve-env / -E; and plan-review attempt envelopes
+# record output_digests.stderr_sha256 of the actual codex stderr file bytes.
+# ---------------------------------------------------------------------------
+SQ_DIR="$TEST_TMP/sudo-quiet"
+SQ_BIN="$SQ_DIR/bin"
+SQ_BIN_NO_SP="$SQ_DIR/bin-no-setpriv"
+SQ_MINBIN="$SQ_DIR/minbin"
+SQ_REPO="$SQ_DIR/repo"
+SQ_TMP="$SQ_DIR/tmp"
+mkdir -p "$SQ_BIN" "$SQ_BIN_NO_SP" "$SQ_MINBIN" "$SQ_REPO" "$SQ_TMP"
+
+for tool in bash sed id head env; do
+  ln -s "$(command -v "$tool")" "$SQ_MINBIN/$tool"
+done
+if [ -x /usr/bin/true ]; then
+  ln -s /usr/bin/true "$SQ_MINBIN/true"
+else
+  ln -s /bin/true "$SQ_MINBIN/true"
+fi
+
+cat > "$SQ_BIN/sudo" <<'SQ_SUDO'
+#!/bin/bash
+sq_dir="${0%/*}/.."
+warn_mode="$(cat "$sq_dir/sudo-mode" 2>/dev/null || printf 'warn')"
+saw_preserve=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n)
+      shift
+      ;;
+    --preserve-env|--preserve-env=*|-E)
+      saw_preserve=1
+      shift
+      ;;
+    -u)
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+if [ "$saw_preserve" -eq 1 ] && [ "$warn_mode" = "warn" ]; then
+  printf '%s\n' "sudo: preserving the entire environment is not supported, '--preserve-env' is ignored" >&2
+fi
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export USER=root
+export LOGNAME=root
+export HOME=/root
+export SUDO_USER=x
+[ $# -eq 0 ] && exit 0
+exec "$@"
+SQ_SUDO
+
+cat > "$SQ_BIN/unshare" <<'SQ_UNSHARE'
+#!/bin/bash
+for a in "$@"; do
+  if [ "$a" = "--user" ] || [ "$a" = "-U" ]; then
+    printf '%s\n' "unshare: unshare failed: Operation not permitted" >&2
+    exit 1
+  fi
+done
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --)
+      shift
+      break
+      ;;
+    --propagation)
+      shift 2
+      ;;
+    --mount|-m|-*)
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+[ $# -eq 0 ] && exit 0
+exec "$@"
+SQ_UNSHARE
+
+cat > "$SQ_BIN/setpriv" <<'SQ_SETPRIV'
+#!/bin/bash
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --)
+      shift
+      break
+      ;;
+    --reuid=*|--regid=*|--init-groups|-*)
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+[ $# -eq 0 ] && exit 0
+exec "$@"
+SQ_SETPRIV
+
+cat > "$SQ_BIN/codex" <<'SQ_CODEX'
+#!/bin/bash
+set -uo pipefail
+sq_dir="${0%/*}/.."
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' "OpenAI Codex v0.166.0"
+  exit 0
+fi
+for arg in "$@"; do
+  if [ "$arg" = "--help" ]; then
+    printf '%s\n' "Usage: codex exec [--output-last-message PATH]"
+    exit 0
+  fi
+done
+readlink "/proc/$$/fd/2" > "$sq_dir/last-stderr-path" 2>/dev/null || : > "$sq_dir/last-stderr-path"
+sidecar=""
+args=("$@")
+idx=0
+while [ "$idx" -lt "${#args[@]}" ]; do
+  if [ "${args[$idx]}" = "--output-last-message" ]; then
+    idx=$((idx + 1))
+    if [ "$idx" -lt "${#args[@]}" ]; then
+      sidecar="${args[$idx]}"
+    fi
+  fi
+  idx=$((idx + 1))
+done
+cat > /dev/null
+if [ -s "$sq_dir/codex-prewarn" ]; then
+  cat "$sq_dir/codex-prewarn" >&2
+fi
+printf '%s\n' \
+  "Reading prompt from stdin..." \
+  "OpenAI Codex v0.166.0" \
+  "--------" \
+  "workdir: /fixture/repo" \
+  "model: gpt-5.5" \
+  "provider: openai" \
+  "sandbox: read-only" \
+  "reasoning effort: high" \
+  "session id: 11111111-1111-4111-8111-111111111111" \
+  "--------" \
+  "user" \
+  "plan review payload verified" >&2
+payload='{"verdict":"READY","findings":[]}'
+if [ -n "$sidecar" ]; then
+  printf '%s' "$payload" > "$sidecar"
+fi
+printf '%s\n' "$payload"
+exit 0
+SQ_CODEX
+
+chmod +x "$SQ_BIN/sudo" "$SQ_BIN/unshare" "$SQ_BIN/setpriv" "$SQ_BIN/codex"
+ln -s "$SQ_BIN/sudo" "$SQ_BIN_NO_SP/sudo"
+ln -s "$SQ_BIN/unshare" "$SQ_BIN_NO_SP/unshare"
+
+git -C "$SQ_REPO" init -q
+printf '%s\n' '# Plan' 'Quiet sudo prefix and codex stderr digest.' > "$SQ_REPO/plan.md"
+printf '%s\n' '# Rubric' '- R1: transport integrity' > "$SQ_REPO/rubric.md"
+SQ_MANIFEST="$SQ_DIR/manifest.json"
+cat > "$SQ_MANIFEST" <<'SQ_JSON'
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "sudo-quiet-codex-plan",
+  "minimum_distinct_families": 1,
+  "max_attempts_per_seat": 1,
+  "seats": [
+    {
+      "id": "architect",
+      "runner": "codex",
+      "model": "gpt-5.5",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "architecture",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    }
+  ]
+}
+SQ_JSON
+
+SQ_STATUS0="$SQ_DIR/proc-status"
+printf 'Name:\tx\nCapEff:\t0000000000000000\n' > "$SQ_STATUS0"
+SQ_USER="${USER:-$(id -un)}"
+SQ_EMPTY_SHA="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+sq_detect_prefix() {
+  local path_val="$1"
+  env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE \
+    HOME="$HOOK_HOME" USER="$SQ_USER" PATH="$path_val" WORKER_MOUNT_PROC_STATUS="$SQ_STATUS0" \
+    bash -c '. "$1"; worker_mount_isolation_detect; printf "%s\n%s" "$WORKER_MOUNT_MODE" "${WORKER_MOUNT_PREFIX[*]}"' \
+    _ "$REPO_ROOT/scripts/lib/worker-containment.sh"
+}
+
+sq_first_nonblank_line() {
+  node -e '
+const fs = require("fs");
+const lines = fs.readFileSync(process.argv[1], "utf8").split(/\r?\n/);
+process.stdout.write(lines.find((line) => line !== "") || "");
+' "$1"
+}
+
+sq_file_sha256() {
+  node -e '
+const crypto = require("crypto"), fs = require("fs");
+process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+' "$1"
+}
+
+sq_artifact_field() {
+  node -e '
+let cur = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+for (const part of process.argv[2].split(".")) {
+  cur = cur == null ? undefined : cur[part];
+}
+process.stdout.write(cur === undefined || cur === null ? "" : String(cur));
+' "$1" "$2"
+}
+
+sq_chrome_passes() {
+  (
+    # shellcheck source=/dev/null
+    . "$REPO_ROOT/scripts/lib/dispatch-author-codex-transport.sh"
+    codex_transport_has_chrome_frame "$1"
+  )
+}
+
+# 1. Warning sudo: real detection omits --preserve-env (setpriv) and both --preserve-env and -E (fallback).
+printf 'warn' > "$SQ_DIR/sudo-mode"
+SQ_DET_WARN="$(sq_detect_prefix "$SQ_BIN:$PATH")"
+assert_eq "${SQ_DET_WARN%%$'\n'*}" "sudo_private_ns" "sudo warning: real detection selects sudo_private_ns"
+assert_not_contains "${SQ_DET_WARN#*$'\n'}" "--preserve-env" "sudo warning: setpriv prefix omits --preserve-env"
+assert_not_contains "${SQ_DET_WARN#*$'\n'}" " -E " "sudo warning: setpriv prefix has no -E"
+
+SQ_DET_WARN_FB="$(sq_detect_prefix "$SQ_BIN_NO_SP:$SQ_MINBIN")"
+assert_eq "${SQ_DET_WARN_FB%%$'\n'*}" "sudo_private_ns" "sudo warning without setpriv: fallback selects sudo_private_ns"
+assert_not_contains "${SQ_DET_WARN_FB#*$'\n'}" "--preserve-env" "sudo warning without setpriv: fallback omits --preserve-env"
+assert_not_contains "${SQ_DET_WARN_FB#*$'\n'}" " -E " "sudo warning without setpriv: fallback omits -E"
+
+# 2. Control: silent sudo accepting --preserve-env keeps --preserve-env (and fallback -E).
+printf 'silent' > "$SQ_DIR/sudo-mode"
+SQ_DET_SILENT="$(sq_detect_prefix "$SQ_BIN:$PATH")"
+assert_eq "${SQ_DET_SILENT%%$'\n'*}" "sudo_private_ns" "control silent sudo: selects sudo_private_ns"
+assert_contains "${SQ_DET_SILENT#*$'\n'}" "--preserve-env" "control silent sudo: setpriv prefix keeps --preserve-env"
+
+SQ_DET_SILENT_FB="$(sq_detect_prefix "$SQ_BIN_NO_SP:$SQ_MINBIN")"
+assert_eq "${SQ_DET_SILENT_FB%%$'\n'*}" "sudo_private_ns" "control silent sudo without setpriv: selects sudo_private_ns"
+assert_contains "${SQ_DET_SILENT_FB#*$'\n'}" "--preserve-env" "control silent sudo without setpriv: fallback keeps --preserve-env"
+assert_contains "${SQ_DET_SILENT_FB#*$'\n'}" " -E " "control silent sudo without setpriv: fallback keeps -E"
+
+# 3. End-to-end real detection + launch + plan-review envelope under warning sudo.
+printf 'warn' > "$SQ_DIR/sudo-mode"
+rm -f "$SQ_DIR/last-stderr-path" "$SQ_DIR/codex-prewarn"
+SQ_OUT_GREEN="$SQ_DIR/plan-review-green.json"
+SQ_ERR_GREEN="$SQ_DIR/plan-review-green.stderr"
+env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
+  HOME="$HOOK_HOME" USER="$SQ_USER" TMPDIR="$SQ_TMP" PATH="$SQ_BIN:$PATH" \
+  AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 \
+  AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_MS=0 AUTOPILOT_STABLE_POLLS=1 \
+  node "$REPO_ROOT/scripts/dispatch-plan-review.js" \
+    --repo-root "$SQ_REPO" --plan-file "$SQ_REPO/plan.md" --rubric-file "$SQ_REPO/rubric.md" \
+    --ticket sq-green --session-id sq-green --generation 1 \
+    --manifest-file "$SQ_MANIFEST" --state-dir "$SQ_DIR/state-green" --timeout 30s \
+    --no-topology-fallbacks --allow-unregistered \
+  > "$SQ_OUT_GREEN" 2> "$SQ_ERR_GREEN" < /dev/null
+SQ_GREEN_RC=$?
+assert_eq "$SQ_GREEN_RC" "0" "sudo warning e2e: dispatch-plan-review exits 0 ($(cat "$SQ_ERR_GREEN" 2>/dev/null))"
+assert_eq "$(sq_artifact_field "$SQ_OUT_GREEN" verdict)" "READY" "sudo warning e2e: plan-review verdict is READY"
+
+SQ_GREEN_STDERR="$(cat "$SQ_DIR/last-stderr-path" 2>/dev/null || true)"
+assert_file_exists "$SQ_GREEN_STDERR" "sudo warning e2e: codex private stderr file exists on disk"
+assert_eq "$(sq_first_nonblank_line "$SQ_GREEN_STDERR")" "Reading prompt from stdin..." \
+  "sudo warning e2e: worker stderr first non-blank line is 'Reading prompt from stdin...'"
+if sq_chrome_passes "$SQ_GREEN_STDERR"; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "sudo warning e2e: codex_transport_has_chrome_frame must pass on worker stderr"
+fi
+
+SQ_GREEN_WANT_SHA="$(sq_file_sha256 "$SQ_GREEN_STDERR")"
+SQ_GREEN_GOT_SHA="$(sq_artifact_field "$SQ_OUT_GREEN" attempts.0.transport_envelope.output_digests.stderr_sha256)"
+assert_neq "$SQ_GREEN_GOT_SHA" "$SQ_EMPTY_SHA" "sudo warning e2e: stderr_sha256 is not the empty-string sha256"
+assert_eq "$SQ_GREEN_GOT_SHA" "$SQ_GREEN_WANT_SHA" "sudo warning e2e: envelope stderr_sha256 equals sha256 of codex stderr file"
+
+# 4. Failed chrome-frame codex run still records sha256 of the actual stderr file (not empty string).
+printf '%s\n' "unexpected pre-banner stderr noise" > "$SQ_DIR/codex-prewarn"
+rm -f "$SQ_DIR/last-stderr-path"
+SQ_OUT_FAIL="$SQ_DIR/plan-review-fail.json"
+SQ_ERR_FAIL="$SQ_DIR/plan-review-fail.stderr"
+env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
+  HOME="$HOOK_HOME" USER="$SQ_USER" TMPDIR="$SQ_TMP" PATH="$SQ_BIN:$PATH" \
+  AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 \
+  AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_MS=0 AUTOPILOT_STABLE_POLLS=1 \
+  node "$REPO_ROOT/scripts/dispatch-plan-review.js" \
+    --repo-root "$SQ_REPO" --plan-file "$SQ_REPO/plan.md" --rubric-file "$SQ_REPO/rubric.md" \
+    --ticket sq-fail --session-id sq-fail --generation 1 \
+    --manifest-file "$SQ_MANIFEST" --state-dir "$SQ_DIR/state-fail" --timeout 30s \
+    --no-topology-fallbacks --allow-unregistered \
+  > "$SQ_OUT_FAIL" 2> "$SQ_ERR_FAIL" < /dev/null
+SQ_FAIL_RC=$?
+rm -f "$SQ_DIR/codex-prewarn"
+assert_eq "$SQ_FAIL_RC" "4" "failed chrome check e2e: dispatch-plan-review exits 4 (transport_exhausted)"
+assert_eq "$(sq_artifact_field "$SQ_OUT_FAIL" attempts.0.transport_envelope.outcome.exit_status)" "3" \
+  "failed chrome check e2e: codex seat attempt records exit_status 3"
+SQ_FAIL_STDERR="$(cat "$SQ_DIR/last-stderr-path" 2>/dev/null || true)"
+assert_file_exists "$SQ_FAIL_STDERR" "failed chrome check e2e: codex stderr file retained on disk"
+assert_eq "$(sq_artifact_field "$SQ_OUT_FAIL" attempts.0.transport_envelope.output_digests.stderr_sha256)" \
+  "$(sq_file_sha256 "$SQ_FAIL_STDERR")" \
+  "failed chrome check e2e: envelope stderr_sha256 equals sha256 of retained codex stderr file"
+
+# 5. Negative control (reproducing develop pre-fix sources): both new assertions go RED.
+SQ_MUT_ROOT="$SQ_DIR/mutant-root"
+mkdir -p "$SQ_MUT_ROOT"
+cp -R "$REPO_ROOT/scripts" "$SQ_MUT_ROOT/scripts"
+ln -s "$REPO_ROOT/src" "$SQ_MUT_ROOT/src"
+ln -s "$REPO_ROOT/hooks" "$SQ_MUT_ROOT/hooks"
+ln -s "$REPO_ROOT/schemas" "$SQ_MUT_ROOT/schemas"
+node - "$SQ_MUT_ROOT" <<'SQ_PATCH'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+
+const wcPath = path.join(root, 'scripts/lib/worker-containment.sh');
+const wcSrc = fs.readFileSync(wcPath, 'utf8');
+const wcTarget = [
+  '  probe_err="$("$sudo_bin" -n --preserve-env "$unshare_bin" --mount --propagation private -- true 2>&1 >/dev/null)" || preserve_rc=$?',
+  '  if [ "$preserve_rc" -eq 0 ] && [ -z "$probe_err" ]; then',
+  '    sudo_preserve=(--preserve-env)',
+  '    sudo_drop_preserve=(-E)',
+  '  fi',
+].join('\n');
+const wcPatched = wcSrc.replace(wcTarget, '  sudo_preserve=(--preserve-env)\n  sudo_drop_preserve=(-E)');
+if (wcPatched === wcSrc) throw new Error('worker-containment mutant patch did not match');
+fs.writeFileSync(wcPath, wcPatched);
+
+const prPath = path.join(root, 'scripts/dispatch-plan-review.js');
+const prSrc = fs.readFileSync(prPath, 'utf8');
+const prPatched = prSrc.replace('        stderr,\n', "        stderr: run.stderr || '',\n");
+if (prPatched === prSrc) throw new Error('dispatch-plan-review mutant patch did not match');
+fs.writeFileSync(prPath, prPatched);
+SQ_PATCH
+assert_eq "$?" "0" "negative control: pre-fix mutant sources constructed"
+
+printf 'warn' > "$SQ_DIR/sudo-mode"
+rm -f "$SQ_DIR/last-stderr-path"
+SQ_OUT_MUT="$SQ_DIR/plan-review-mutant.json"
+SQ_ERR_MUT="$SQ_DIR/plan-review-mutant.stderr"
+env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
+  HOME="$HOOK_HOME" USER="$SQ_USER" TMPDIR="$SQ_TMP" PATH="$SQ_BIN:$PATH" \
+  AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 \
+  AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_MS=0 AUTOPILOT_STABLE_POLLS=1 \
+  node "$SQ_MUT_ROOT/scripts/dispatch-plan-review.js" \
+    --repo-root "$SQ_REPO" --plan-file "$SQ_REPO/plan.md" --rubric-file "$SQ_REPO/rubric.md" \
+    --ticket sq-mut --session-id sq-mut --generation 1 \
+    --manifest-file "$SQ_MANIFEST" --state-dir "$SQ_DIR/state-mut" --timeout 30s \
+    --no-topology-fallbacks --allow-unregistered \
+  > "$SQ_OUT_MUT" 2> "$SQ_ERR_MUT" < /dev/null
+SQ_MUT_RC=$?
+assert_eq "$SQ_MUT_RC" "4" "negative control red (Fix 1): pre-fix --preserve-env warning exhausts codex seat (exit 4)"
+assert_eq "$(sq_artifact_field "$SQ_OUT_MUT" attempts.0.transport_envelope.outcome.exit_status)" "3" \
+  "negative control red (Fix 1): pre-fix codex seat attempt failed with exit_status 3"
+SQ_MUT_STDERR="$(cat "$SQ_DIR/last-stderr-path" 2>/dev/null || true)"
+assert_eq "$(sq_first_nonblank_line "$SQ_MUT_STDERR")" \
+  "sudo: preserving the entire environment is not supported, '--preserve-env' is ignored" \
+  "negative control red (Fix 1): pre-fix worker stderr starts with sudo warning line"
+if sq_chrome_passes "$SQ_MUT_STDERR"; then
+  fail "negative control stayed green: codex_transport_has_chrome_frame accepted sudo warning line"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+assert_eq "$(sq_artifact_field "$SQ_OUT_MUT" attempts.0.transport_envelope.output_digests.stderr_sha256)" \
+  "$SQ_EMPTY_SHA" \
+  "negative control red (Fix 2): pre-fix dispatch-plan-review hashed empty wrapper stderr instead of codex stderr file"
+
 finalize_test

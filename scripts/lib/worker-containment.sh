@@ -35,8 +35,12 @@
 #      sudo_private_ns  unprivileged user namespaces are blocked, the dispatcher is not
 #                       root, `sudo -n true` succeeds, and
 #                       `sudo -n unshare --mount --propagation private -- true` succeeds.
-#                       Prefix (absolute `command -v` paths, so it survives `env -i`):
-#                         sudo -n --preserve-env unshare --mount --propagation private --
+#                       Prefix (absolute `command -v` paths, so it survives `env -i`;
+#                       `--preserve-env` and fallback `-E` are kept only when
+#                       `sudo -n --preserve-env unshare --mount --propagation private -- true`
+#                       exits 0 with empty stderr, so hosts whose sudoers policy warns and
+#                       ignores `--preserve-env` emit nothing on worker stderr):
+#                         sudo -n [--preserve-env] unshare --mount --propagation private --
 #                           setpriv --reuid=<uid> --regid=<gid> --init-groups --
 #                           <env> -u SUDO_USER -u SUDO_UID -u SUDO_GID -u SUDO_COMMAND
 #                             -u SUDO_HOME PATH=<dispatcher PATH> HOME=<dispatcher HOME>
@@ -54,7 +58,7 @@
 #                       is refused. The probe requires `id -u`, HOME, PATH and USER inside the
 #                       prefix to equal the outside values. No new account and no credential
 #                       handling. If `setpriv` is missing, or that identity probe fails, the
-#                       drop is `sudo -n -E -u <user> --` behind the same unshare, with the
+#                       drop is `sudo -n [-E] -u <user> --` behind the same unshare, with the
 #                       same env step after it. If neither drop works, detection falls through
 #                       to refuse with the old passwordless-sudo reason. A failed unshare
 #                       probe does the same.
@@ -171,7 +175,8 @@ _worker_mount_append_dispatcher_env() {
 # and `sudo -n true` succeeded. A failure leaves mode unset so the caller refuses.
 _worker_mount_try_sudo_private_ns() {
   local sudo_bin unshare_bin setpriv_bin uid gid user home disp_path disp_user
-  local -a prefix=()
+  local probe_err="" preserve_rc=0
+  local -a prefix=() sudo_preserve=() sudo_drop_preserve=()
   uid="$(id -u 2>/dev/null || true)"
   gid="$(id -g 2>/dev/null || true)"
   user="$(id -un 2>/dev/null || true)"
@@ -188,9 +193,14 @@ _worker_mount_try_sudo_private_ns() {
   if ! "$sudo_bin" -n "$unshare_bin" --mount --propagation private -- true >/dev/null 2>&1; then
     return 1
   fi
+  probe_err="$("$sudo_bin" -n --preserve-env "$unshare_bin" --mount --propagation private -- true 2>&1 >/dev/null)" || preserve_rc=$?
+  if [ "$preserve_rc" -eq 0 ] && [ -z "$probe_err" ]; then
+    sudo_preserve=(--preserve-env)
+    sudo_drop_preserve=(-E)
+  fi
   setpriv_bin="$(command -v setpriv 2>/dev/null || true)"
   if [ -n "$setpriv_bin" ]; then
-    prefix=("$sudo_bin" -n --preserve-env "$unshare_bin" --mount --propagation private -- "$setpriv_bin" --reuid="$uid" --regid="$gid" --init-groups --)
+    prefix=("$sudo_bin" -n ${sudo_preserve[@]+"${sudo_preserve[@]}"} "$unshare_bin" --mount --propagation private -- "$setpriv_bin" --reuid="$uid" --regid="$gid" --init-groups --)
     _worker_mount_append_dispatcher_env prefix "$disp_path" "$home" "$disp_user" || return 1
     if _worker_mount_prefix_holds_identity "$uid" "$home" "$disp_path" "$disp_user" "${prefix[@]}"; then
       WORKER_MOUNT_MODE="sudo_private_ns"
@@ -200,7 +210,14 @@ _worker_mount_try_sudo_private_ns() {
     fi
   fi
   [ -n "$user" ] || return 1
-  prefix=("$sudo_bin" -n --preserve-env "$unshare_bin" --mount --propagation private -- "$sudo_bin" -n -E -u "$user" --)
+  if [ "${#sudo_drop_preserve[@]}" -gt 0 ]; then
+    local drop_err="" drop_rc=0
+    drop_err="$("$sudo_bin" -n "${sudo_preserve[@]}" "$unshare_bin" --mount --propagation private -- "$sudo_bin" -n -E -u "$user" -- true 2>&1 >/dev/null)" || drop_rc=$?
+    if [ "$drop_rc" -ne 0 ] || [ -n "$drop_err" ]; then
+      sudo_drop_preserve=()
+    fi
+  fi
+  prefix=("$sudo_bin" -n ${sudo_preserve[@]+"${sudo_preserve[@]}"} "$unshare_bin" --mount --propagation private -- "$sudo_bin" -n ${sudo_drop_preserve[@]+"${sudo_drop_preserve[@]}"} -u "$user" --)
   _worker_mount_append_dispatcher_env prefix "$disp_path" "$home" "$disp_user" || return 1
   if _worker_mount_prefix_holds_identity "$uid" "$home" "$disp_path" "$disp_user" "${prefix[@]}"; then
     WORKER_MOUNT_MODE="sudo_private_ns"

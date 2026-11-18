@@ -2176,4 +2176,89 @@ assert_exit_code "$EXIT" "0" "generation-2 resume succeeds after reading redacte
 check_no_abs_leak "$LOCATOR_RESUME_G2"
 assert_exit_code "$?" "0" "persisted g2 artifact contains no raw temp or home paths"
 
+# --- Codex plan-review seat records output_digests.stderr_sha256 of actual codex stderr file (01M7QW3FG7KTM0X1GB1HRDE43B) ---
+CODEX_SHA_DIR="$TEST_TMP/codex-stderr-digest"
+CODEX_SHA_BIN="$CODEX_SHA_DIR/bin"
+CODEX_SHA_TMP="$CODEX_SHA_DIR/tmp"
+mkdir -p "$CODEX_SHA_BIN" "$CODEX_SHA_TMP"
+cat > "$CODEX_SHA_BIN/codex" <<'CODEX_SHA_FAKE'
+#!/bin/bash
+set -uo pipefail
+dir="${0%/*}/.."
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' "OpenAI Codex v0.166.0"
+  exit 0
+fi
+readlink "/proc/$$/fd/2" > "$dir/stderr-path" 2>/dev/null || : > "$dir/stderr-path"
+sidecar=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--output-last-message" ]; then
+    i=$((i + 1))
+    [ "$i" -lt "${#args[@]}" ] && sidecar="${args[$i]}"
+  fi
+  i=$((i + 1))
+done
+cat > /dev/null
+printf '%s\n' \
+  "Reading prompt from stdin..." \
+  "OpenAI Codex v0.166.0" \
+  "--------" \
+  "model: gpt-5.5" \
+  "session id: 11111111-1111-4111-8111-111111111111" \
+  "--------" \
+  "codex stderr body bytes" >&2
+payload='{"verdict":"READY","findings":[]}'
+[ -n "$sidecar" ] && printf '%s' "$payload" > "$sidecar"
+printf '%s\n' "$payload"
+exit 0
+CODEX_SHA_FAKE
+chmod +x "$CODEX_SHA_BIN/codex"
+CODEX_SHA_MANIFEST="$CODEX_SHA_DIR/manifest.json"
+cat > "$CODEX_SHA_MANIFEST" <<'JSON'
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "codex-stderr-digest-plan",
+  "minimum_distinct_families": 1,
+  "max_attempts_per_seat": 1,
+  "seats": [
+    {
+      "id": "architect",
+      "runner": "codex",
+      "model": "gpt-5.5",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "architecture",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    }
+  ]
+}
+JSON
+CODEX_SHA_OUT="$CODEX_SHA_DIR/out.json"
+TMPDIR="$CODEX_SHA_TMP" PATH="$CODEX_SHA_BIN:$PATH" WORKER_MOUNT_FORCE_MODE=no_root \
+AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_MS=0 AUTOPILOT_STABLE_POLLS=1 \
+  node "$SCRIPT" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+    --ticket "codex-stderr-digest-1" --session-id "codex-stderr-digest-s1" --generation 1 \
+    --manifest-file "$CODEX_SHA_MANIFEST" --state-dir "$CODEX_SHA_DIR/state" --timeout 30s \
+    --no-topology-fallbacks --allow-unregistered \
+  > "$CODEX_SHA_OUT"; EXIT=$?
+assert_exit_code "$EXIT" "0" "codex seat review succeeds for stderr_sha256 check"
+CODEX_SHA_STDERR_FILE="$(cat "$CODEX_SHA_DIR/stderr-path" 2>/dev/null || true)"
+assert_file_exists "$CODEX_SHA_STDERR_FILE" "codex private stderr file captured"
+CODEX_SHA_EXPECTED="$(node -e '
+const crypto = require("crypto"), fs = require("fs");
+process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+' "$CODEX_SHA_STDERR_FILE")"
+CODEX_SHA_ACTUAL="$(json_field "$(cat "$CODEX_SHA_OUT")" attempts.0.transport_envelope.output_digests.stderr_sha256)"
+assert_eq "$CODEX_SHA_ACTUAL" "$CODEX_SHA_EXPECTED" \
+  "codex attempt envelope stderr_sha256 equals sha256 of actual codex stderr file bytes"
+
 finalize_test

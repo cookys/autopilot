@@ -187,6 +187,69 @@ eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" | cut -d
 eq "$FALLBACK_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0")" "setpriv missing prefix drops with sudo -n -E -u then env"
 FB_OUT="$(run_inside "$LIB" "$SUDO_PATH" "$HOME" worker 2>&1)"; FB_RC=$?
 eq "0" "$FB_RC" "sudo -u fallback: inside PATH HOME USER LOGNAME are the dispatcher's and no SUDO_* (${FB_OUT:-ok})"
+
+# sudo policy that warns and ignores --preserve-env / -E (01M7QW3FG7KTM0X1GB1HRDE43B):
+# omit --preserve-env (and fallback -E) when the preserve-env probe writes to stderr; keep when silent.
+cp "$SHIMS/sudo" "$TEST_TMP/orig-sudo"
+cat > "$SHIMS/sudo" <<'EOF'
+#!/bin/sh
+if [ "${SUDO_SHIM_FAIL_UNSHARE:-}" = 1 ]; then
+  for a in "$@"; do b="${a##*/}"; [ "$b" = unshare ] && exit 1; done
+fi
+saw_preserve=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n) shift ;;
+    --preserve-env|--preserve-env=*|-E) saw_preserve=1; shift ;;
+    -u) shift 2 ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+if [ "$saw_preserve" -eq 1 ] && [ "${SHIM_WARN_PRESERVE:-0}" = 1 ]; then
+  printf '%s\n' "sudo: preserving the entire environment is not supported, '--preserve-env' is ignored" >&2
+fi
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export USER=root
+export LOGNAME=root
+export HOME=/root
+export SUDO_USER=x
+[ $# -eq 0 ] && exit 0
+exec "$@"
+EOF
+chmod +x "$SHIMS/sudo"
+FALLBACK_QUIET_PFX="$SHIMS/sudo -n $SHIMS/unshare --mount --propagation private -- $SHIMS/sudo -n -u worker -- $ENV_RESTORE"
+eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1 | cut -d'|' -f1)" "sudo preserve-env warning without setpriv still detects sudo_private_ns"
+eq "$FALLBACK_QUIET_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1)" "sudo preserve-env warning omits --preserve-env and -E in fallback prefix"
+eq "$FALLBACK_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=0)" "control: silent sudo keeps --preserve-env and -E in fallback prefix"
+FB_QUIET_OUT="$(SHIM_WARN_PRESERVE=1 run_inside "$LIB" "$SUDO_PATH" "$HOME" worker 2>&1)"; FB_QUIET_RC=$?
+eq "0" "$FB_QUIET_RC" "sudo preserve-env warning fallback holds dispatcher identity and env (${FB_QUIET_OUT:-ok})"
+FB_QUIET_ERR="$(env USER=worker PATH="$SUDO_PATH" HOME="${HOME-}" WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1 \
+  "$REAL_BASH" -c '. "$1"; worker_mount_isolation_detect; [ "$WORKER_MOUNT_MODE" = sudo_private_ns ] || exit 4; exec "${WORKER_MOUNT_PREFIX[@]}" "$2" -c "printf ok"' _ "$LIB" "$REAL_BASH" 2>&1 >/dev/null)"
+eq "" "$FB_QUIET_ERR" "sudo preserve-env warning fallback emits empty worker stderr"
+
+cat > "$SHIMS/setpriv" <<'EOF'
+#!/bin/sh
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--" ]; then shift; [ $# -eq 0 ] && exit 0; exec "$@"; fi
+  shift
+done
+exit 1
+EOF
+chmod +x "$SHIMS/setpriv"
+SETPRIV_QUIET_PFX="$SHIMS/sudo -n $SHIMS/unshare --mount --propagation private -- $SHIMS/setpriv --reuid=4242 --regid=4343 --init-groups -- $ENV_RESTORE"
+eq "sudo_private_ns" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1 | cut -d'|' -f1)" "sudo preserve-env warning with setpriv detects sudo_private_ns"
+eq "$SETPRIV_QUIET_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1)" "sudo preserve-env warning omits --preserve-env in setpriv prefix"
+eq "$SETPRIV_PFX" "$(prefix_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=0)" "control: silent sudo keeps --preserve-env in setpriv prefix"
+SP_QUIET_OUT="$(SHIM_WARN_PRESERVE=1 run_inside "$LIB" "$SUDO_PATH" "$HOME" worker 2>&1)"; SP_QUIET_RC=$?
+eq "0" "$SP_QUIET_RC" "sudo preserve-env warning setpriv holds dispatcher identity and env (${SP_QUIET_OUT:-ok})"
+SP_QUIET_ERR="$(env USER=worker PATH="$SUDO_PATH" HOME="${HOME-}" WORKER_MOUNT_PROC_STATUS="$STATUS0" SHIM_WARN_PRESERVE=1 \
+  "$REAL_BASH" -c '. "$1"; worker_mount_isolation_detect; [ "$WORKER_MOUNT_MODE" = sudo_private_ns ] || exit 4; exec "${WORKER_MOUNT_PREFIX[@]}" "$2" -c "printf ok"' _ "$LIB" "$REAL_BASH" 2>&1 >/dev/null)"
+eq "" "$SP_QUIET_ERR" "sudo preserve-env warning setpriv emits empty worker stderr"
+eq "true" "$(node -e 'const fs=require("fs"),p=require("path"),r=process.argv[1];process.stdout.write(String(fs.readFileSync(p.join(r,"scripts/lib/worker-containment.sh")).equals(fs.readFileSync(p.join(r,"platforms/codex/plugin/scripts/lib/worker-containment.sh")))))' "$REPO_ROOT")" "codex plugin mirror of worker-containment.sh stays byte-identical"
+rmshim setpriv
+mv -f "$TEST_TMP/orig-sudo" "$SHIMS/sudo"
 SUDO_SHIM_FAIL_UNSHARE=1
 eq "refuse" "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SUDO_SHIM_FAIL_UNSHARE=1 | cut -d'|' -f1)" "unshare probe fails -> refuse"
 assert_contains "$(detect_sudo WORKER_MOUNT_PROC_STATUS="$STATUS0" SUDO_SHIM_FAIL_UNSHARE=1)" "passwordless sudo is available" "probe failure keeps the old refuse reason"

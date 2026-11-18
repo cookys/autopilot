@@ -1,0 +1,108 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [13.11ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [3.08ms]
+(pass) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [3.54ms]
+(pass) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [5.59ms]
+(pass) V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row [5.60ms]
+(pass) V4: quota always puts o and previous/next pool in the action row directly above tabs, even twelve pools fit [4.37ms]
+(pass) U1: band keeps the 艦隊 section name at 160 and 120 columns when optional speed competes for cells [3.03ms]
+(pass) U3: now and fleet summaries sort failed before stalled before normal [1.98ms]
+(pass) W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome [1.78ms]
+
+mods/live/pages/quota.test.ts:
+(pass) quota: 160x40 pace (the mockup): one row per pool in danger order, verdict text per A7, no arrows [7.71ms]
+(pass) quota: 120x30 pace (the mockup) [1.57ms]
+(fail) quota: 80x24 pace: one row per pool, all six columns abbreviated, the stale reasons whole under the table (A10), the full verdict in the focus detail [1.66ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: [
+    "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
+    "    池         7 天  5 時  重置    近 6 時    預測  判定",
+    "▸ ✗ trinity   7天 31%✗ · 5時 0%✗ · 預 47%✗",
+    "  ✗ twgame    7天 49% · 5時 0% · 預 94% · ✗ 席過期 14 分",
+    "  ? team      7天 68% · 5時 17% · 預 130% · 未知·17時用完",
+    "  ? personal  7天 100% · 5時 100% · 預 100% · 未知·缺換池",
+    "  ▲ grok      7天 10% · 5時 0% · 預 10% · 浪費 90%",
+    "  ▲ lab       7天 22% · 5時 4% · 預 43% · 浪費 57%",
+    "  ✓ codex     7天 80% · 5時 12% · 預 98% · 會用到 98%",
+    "",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "席    共 1 席（席位清單沒有明細）",
+    "trinity 判定紅：180 分未更新（>10 分；statusline 沒在跑）"
+  ]
+  Received: [
+    "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
+    "    池         7 天  5 時  重置    近 6 時    預測  判定",
+    "▸ ✗ trinity   7天 31%✗ · 5時 0%✗ · 預 47%✗",
+    "  ✗ twgame    7天 49% · 5時 0% · 預 94% · ✗ 席過期 14 分",
+    "  ? team      7天 68% · 5時 17% · 預 130% · 未知·17時用完",
+    "  ? personal  7天 100% · 5時 100% · 預 100% · 未知·缺換池",
+    "  ▲ grok      7天 10% · 5時 0% · 預 10% · 浪費 90%",
+    "  ▲ lab       7天 22% · 5時 4% · 預 43% · 浪費 57%",
+    "  ✓ codex     7天 80% · 5時 12% · 預 98% · 會用到 98%",
+    "",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "席    共 1 席（席位清單沒有明細）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
+  ]
+(fail) quota: no pace (sources.quota_forecast no_source): rate, projection, verdict read "無來源：capacity pace 未接", except limit_hit and a stale pool [1.17ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: [
+    "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────── 資料 40 秒前",
+    "    池         7 天  5 時  重置   速率 · 預測 · 判定",
+    "▸ ✗ trinity   7天 31%✗ · 5時 0%✗",
+    "  ✗ twgame    7天 49% · 5時 0% · ✗ 席過期 14 分",
+    "  ✗ codex     7天 80% · 5時 12% · ✗ 無預測來源",
+    "  ✗ team      7天 68% · 5時 17% · ✗ 無預測來源",
+    "  ✗ lab       7天 22% · 5時 4% · ✗ 無預測來源",
+    "  ✗ grok      7天 10% · 5時 0% · ✗ 無預測來源",
+    "  ? personal  7天 100% · 5時 100% · 未知·缺換池",
+    "",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "席    共 1 席（席位清單沒有明細）",
+    "trinity 判定紅：180 分未更新（>10 分；statusline 沒在跑）"
+  ]
+  Received: [
+    "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────── 資料 40 秒前",
+    "    池         7 天  5 時  重置   速率 · 預測 · 判定",
+    "▸ ✗ trinity   7天 31%✗ · 5時 0%✗",
+    "  ✗ twgame    7天 49% · 5時 0% · ✗ 席過期 14 分",
+    "  ✗ codex     7天 80% · 5時 12% · ✗ 無預測來源",
+    "  ✗ team      7天 68% · 5時 17% · ✗ 無預測來源",
+    "  ✗ lab       7天 22% · 5時 4% · ✗ 無預測來源",
+    "  ✗ grok      7天 10% · 5時 0% · ✗ 無預測來源",
+    "  ? personal  7天 100% · 5時 100% · 未知·缺換池",
+    "",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "席    共 1 席（席位清單沒有明細）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
+  ]
+(pass) quota: Enter (A3) expands the focused pool's seats from the seats feed; a stale seat carries the mark [1.18ms]
+(pass) quota: frameRows is exactly H rows in every size and state, actions <= A, strip last [14.88ms]
+(pass) quota: 30 pools still frame to H rows (the body scrolls, the page never grows the pane) [6.39ms]
+(pass) quota: no console / no quota / no pools draw the section 5 "no source" row in the broken colour, and never throw [3.39ms]
+(pass) quota: null stays null: an empty pool draws dashes, never 0%, and ranks below a pool with a number [0.82ms]
+(pass) quota: red / yellow / green rows use the PALETTE roles on the glyph and the verdict; no background, no inverse, bold only never [5.62ms]
+(fail) quota: the action area holds only the [f] switch advice, and only when capacity gave one for the focused pool [2.01ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: "[o] 展開各席 · 上一池 · 下一池 (1/7) · [f] 換池建議"
+  Received: "[o] 展開各席 · 上一池 · 下一池 (1/7) · [f] 換池"
+(pass) quota: the page row order and the band pick agree (rank 0 = worstPool), and a pool past 10 minutes is stale without the feed flag [1.67ms]
+(pass) quota: the registry carries the framed quota page at key 4 [0.22ms]
+(pass) quota: no body row of the pool table is wider than the pane (every long reason is wrapped by the frame, never cut) [4.84ms]
+(pass) quota: compact mode (80x7, shortBody) suppresses only headings and column header, then uses remaining body rows for full verdict (wrapped, never truncated) and seats while pool rows keep priority [7.36ms]
+(pass) quota R4 & R10: unknown pools use ? icon and 未知· prefix with warning colour role; rate column has %/時 unit and time headers use 7 天 / 5 時 everywhere [3.31ms]
+(pass) quota R1: a blocked seat without facts.seat uses its id, retaining stale source without repeating the pool verdict [2.42ms]
+(fail) quota R5: at 120x30 and 80x24 with many pools and a multi-row wrapped verdict, focused pool full reason is kept whole and never cut by ↓ 還有 N 列 [5.57ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "deepfocus 判定黃：約剩 75% 會浪費"
+  Received: "額度\n\n── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前\n    池         7 天  5 時  重置    近 6 時    預測  判定\n  ▲ A 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ B 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ C 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ D 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ E 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ F 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ G 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ H 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ I 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ J 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ K 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ L 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n  ▲ M 池      7天 10% · 5時 0% · 預 10% · 浪費 90%\n▸ ▲ deepfocus 7天 10% · 5時 0% · 預 25% · 浪費 75%\n↓ 還有 8 池（▲2 ✓6）\n── 焦點 deepfocus ──────────────────────────────────────────────────────────────\n席    共 1 席（席位清單沒有明細）\n判定  黃：約剩 75% 會浪費\n[o] 展開各席 · 上一池 · 下一池 (16/22)\n1 現 2 待 3 艦 4 額 5 派 6 審 7 花 8 殘 9 寵 0 鍛  i 說明  Esc 收起"
+(pass) quota shortBody & poolRoom: focused verdict is never cut and renderQuota wrapped rows stay <= room across 80x7 (3 pools + 1-row warning/unknown, 2 pools + 2-row wrapped) and 80x5 (1 pool + 1-row) [8.59ms]
+
+ 24 pass
+ 4 fail
+Ran 28 tests across 2 files. [0.66s]

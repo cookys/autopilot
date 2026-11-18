@@ -1,0 +1,27 @@
+
+mods/live/gate1.test.ts:
+(pass) gate G1 (gate 2 layout): exactly H rows, the row above the strip has content, page separators only; 80x24 現況 keeps content rows [25.78ms]
+(pass) gate G2: 現況 at 80 columns: pending count + oldest card title, then stuck lines, then every red pool in full [2.22ms]
+(pass) gate G3: one production-line total on every page, and shown + folded = total [3.51ms]
+(pass) gate G4: missing data never reads as nothing to do; red pools never read 沒有要你處理的事 [6.71ms]
+(pass) gate G5: a used-up pool with no rebalance data is unknown (warning role, names the missing data and capacity); order red > unknown > yellow > green [4.78ms]
+(pass) gate G6: a stale reason is wrapped, never cut with an ellipsis [3.62ms]
+(pass) gate G7: when the strip does not fit every entry 1-8, 9, 0 and i stays, names shorten first (2 rows under 66 columns) [8.20ms]
+(pass) gate G8: percentages are right-aligned, the % signs line up in columns [1.87ms]
+(pass) gate G9: no raw field names on any framed page at three sizes [15.25ms]
+(pass) gate G10: one set of names: pool "F 池" on every page, line states 離線 / 閒置 / 卡住 [2.99ms]
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [10.33ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [2.88ms]
+(pass) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [3.10ms]
+(pass) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [4.69ms]
+(pass) V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row [4.35ms]
+(pass) V4: quota always puts o and previous/next pool in the action row directly above tabs, even twelve pools fit [3.05ms]
+(pass) U1: band keeps the 艦隊 section name at 160 and 120 columns when optional speed competes for cells [2.30ms]
+(pass) U3: now and fleet summaries sort failed before stalled before normal [1.70ms]
+(pass) W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome [1.13ms]
+
+ 19 pass
+ 0 fail
+Ran 19 tests across 2 files. [0.61s]

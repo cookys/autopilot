@@ -1,0 +1,11 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(fail) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [5.67ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "grok"
+  Received: "── 全艦隊 ────────────────────────────────────────────\n  產線 0 ｜  ｜ 額度 最緊 G 池 約剩 90% 會浪費\n  沒有例外\n\n── 本席 ──────────────────────────────────────────────\n  花費   ✗ 無來源：fleet seats --quota 還沒有結果"
+
+ 0 pass
+ 1 fail
+Ran 1 test across 1 file. [0.51s]

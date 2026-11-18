@@ -1,3 +1,4 @@
+// V4: quota always has navigation; frame empty-state tests explicitly supply an actionless page.
 // gate2.test.ts — real-host check of 4844e16db (FIX-GATE2): a FIXED pane height with the strip on the last row, the 額度 verdict wrap indent, one key hint form, 80x24 uses every row,
 // the pending sentence once on 現況, and the honest empty state with unknown pools. Each test reproduces one finding.
 import { test, expect } from 'claude-code/testing'
@@ -167,7 +168,7 @@ test('gate2 item 5: 現況 at 80 columns says the pending sentence once; the act
 
 // ---- item 6 ----
 test('gate2 item 6: 資料不足 only for a missing or not-ok source; unknown pools say how many (缺換池資料)', () => {
-  const last = (c: unknown) => frameRows(quotaPage, ctxOf(120, 24, c) as never).map(text).slice(-2, -1)[0]
+  const last = (c: unknown) => frameRows({ ...quotaPage, render: ctx => ({ ...quotaPage.render(ctx), actions: [] }) }, ctxOf(120, 24, c) as never).map(text).slice(-2, -1)[0]
   const miss = snap(POOLS, { sources: { ...ALL_OK, quota_forecast: { at_ms: null, state: 'no_source' } } })
   expect(last(miss)).toContain('資料不足，無法判定')
   const unknown = snap(POOLS, { cards: [] })
@@ -229,7 +230,7 @@ test('gate2 item 9: the zh-TW decide nav hints split into [h] and [l] Buttons (s
 
 test('gate2 item 10: empty state three ways (calm / unknown pools / source or seat feed not ok)', () => {
   const green = snap([POOLS.find(p => p.pool === 'codex')], { cards: [] })
-  const last = (p: Page, c: unknown, live: unknown = null) => frameRows(p, { ...(ctxOf(120, 24, c) as object), live } as never).map(text).slice(-2, -1)[0]
+  const last = (p: Page, c: unknown, live: unknown = null) => frameRows({ ...p, render: ctx => ({ ...p.render(ctx), actions: [] }) }, { ...(ctxOf(120, 24, c) as object), live } as never).map(text).slice(-2, -1)[0]
   expect(last(quotaPage, green)).toBe('沒有要你處理的事')
   expect(last(quotaPage, snap(POOLS, { cards: [] }))).toBe('2 池判定未知（缺換池資料）；沒有待決卡')
   expect(last(quotaPage, snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] }))).toBe('沒有待決卡')

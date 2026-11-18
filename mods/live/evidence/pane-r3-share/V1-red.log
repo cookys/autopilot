@@ -1,0 +1,14 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [8.89ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [2.34ms]
+(pass) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [2.66ms]
+(fail) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [2.40ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "7天 31%✗"
+  Received: "▸ ✗ C 池        31%✗   0%✗ 週五06 +0.3%/時✗    47%✗ ✗ 12 分未更新"
+
+ 3 pass
+ 1 fail
+Ran 4 tests across 1 file. [0.44s]

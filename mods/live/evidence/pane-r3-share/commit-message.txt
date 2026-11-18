@@ -1,0 +1,13 @@
+fix(live): address assigned pane round 3 UX findings
+
+W2: show waste pools and percentages with quota-source overflow labels
+W4: count bus cards and hidden pools once, excluding represented categories
+W5: show stale source classes, ages, causes and repair; mark missing console red
+V1: label narrow quota values and compact verdict pools; preserve red pools, reset and rate
+V2: combine fleet controls and retain summary, focused line and severe anomalies
+V4: keep pool expansion and navigation directly above tabs at every width
+U1: retain the fleet section name in 120/160-column bands
+U3: order fleet summary counts by failed, stalled, then normal severity
+
+Lab-Hook-Override: false positive; the verification executable path was explicitly supplied in the task and contains no credentials or LAN host data
+Fleet-Task: 01M7PC93PGG8FQ28EMT6ZDP7NY

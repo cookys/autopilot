@@ -1,0 +1,80 @@
+{
+  "base": "cc9bde3db",
+  "full_suite_command": "AUTOPILOT_MODS_REAL_CLAUDE=/home/team/.local/share/claude/versions/2.1.327 bash mods/live/run-tests.sh < /dev/null",
+  "base_suite": {
+    "exit_code": 1,
+    "pass": 1567,
+    "fail": 15,
+    "failures": [
+      "G33a: a stale, foreign, unreadable or oversized heartbeat does not stop the fetch, and the band stays one row (terminal)",
+      "speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (terminal)",
+      "speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (desktop)",
+      "speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (desktop)",
+      "G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal)",
+      "C1 U7: console mode: an alive forge-stats with summary_row is never asked for the second row (next(e) 0 calls) and the band row carries the console tab names (terminal)",
+      "speed tab: pressing it again closes it, and the speed view is gone (terminal)",
+      "speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (terminal)",
+      "speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (desktop)",
+      "G33a: the feed runs with no summary_row heartbeat, and before any run the band has no fleet counts; the reader is never asked (terminal)",
+      "C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal)",
+      "speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (terminal)",
+      "speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (terminal)",
+      "speed tab: pressing it again closes it, and the speed view is gone (desktop)",
+      "speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (desktop)"
+    ]
+  },
+  "final_suite": {
+    "exit_code": 1,
+    "pass": 1576,
+    "fail": 15,
+    "failures": [
+      "G33a: a stale, foreign, unreadable or oversized heartbeat does not stop the fetch, and the band stays one row (terminal)",
+      "speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (terminal)",
+      "speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (desktop)",
+      "speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (desktop)",
+      "G33a: the tick publishes `autopilot.fleet` and the band draws those counts on its own line; the reader beneath is never asked for a second row (terminal)",
+      "C1 U7: console mode: an alive forge-stats with summary_row is never asked for the second row (next(e) 0 calls) and the band row carries the console tab names (terminal)",
+      "speed tab: pressing it again closes it, and the speed view is gone (terminal)",
+      "speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (terminal)",
+      "speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (desktop)",
+      "G33a: the feed runs with no summary_row heartbeat, and before any run the band has no fleet counts; the reader is never asked (terminal)",
+      "C1 U7 control: without the console config the same fetch draws the counts on the band line and still never asks for a second row (terminal)",
+      "speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (terminal)",
+      "speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (terminal)",
+      "speed tab: pressing it again closes it, and the speed view is gone (desktop)",
+      "speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (desktop)"
+    ]
+  },
+  "new_failure_names": [],
+  "removed_failure_names": [],
+  "new_regressions": {
+    "pass": 9,
+    "fail": 0
+  },
+  "final_tests_on_base": {
+    "exit_code": 1,
+    "pass": 0,
+    "fail": 9
+  },
+  "ui_lint": {
+    "command": "node --test mods/live/ui-lint.test.js",
+    "exit_code": 0,
+    "pass": 56,
+    "fail": 0
+  },
+  "affected_suite": {
+    "artifact": "affected-final.log",
+    "exit_code": 0,
+    "pass": 425,
+    "fail": 0
+  },
+  "final_band_integration": {
+    "artifact": "U1-preset-green.log",
+    "exit_code": 0,
+    "pass": 28,
+    "fail": 0
+  },
+  "acceptance_gate_exit_code": 0,
+  "scope_only_mods_live": true,
+  "independent_review": "caller review pending; not claimed complete"
+}

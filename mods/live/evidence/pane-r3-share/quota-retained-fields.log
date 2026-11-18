@@ -1,0 +1,117 @@
+
+mods/live/gate3.test.ts:
+(pass) gate3 item 1: quota draws exactly one row per pool at 160x40, 120x30, 80x24 and narrow docked widths, no continuation fragment, short verdict in table, full verdict in focus, dropping 重置 then 近 6 時 [21.96ms]
+(pass) gate3 item 2: when body has 4 rows or fewer, no section title and no column header are drawn; 額度 shows >= 1 pool row and 現況 shows >= 1 item ordered red pools -> unknown pools -> stuck lines [8.42ms]
+(pass) gate3 item 2 (R2/C1 pending-first): short body with pending cards puts combined Button+summary pending row first, drops duplicate 到待決頁 action row, orders red pools -> offline hosts -> stuck lines -> unknown -> yellow, and uses 另有 N 項 for overflow [2.17ms]
+(pass) gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0, i) and >= 66 uses 1 row across all pages, fitting host "<key>: " width [73.09ms]
+(pass) gate3 item 4: BandBar with pane closed in console mode draws new page names 1-8 as Buttons without digit hotkeys and no old console tab names [2.52ms]
+(pass) gate4 empty state with pending cards: 3 pending cards (console.cards or live.pending) with sources ok on 艦隊 and 額度 shows page.now.go_decide (after frame.unknown_pools when n > 0), never 沒有要你處理的事 or 沒有待決卡 [9.13ms]
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [8.83ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [2.49ms]
+(pass) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [6.18ms]
+(pass) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [4.78ms]
+(pass) V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row [4.17ms]
+(pass) V4: quota always puts o and previous/next pool in the action row directly above tabs, even twelve pools fit [2.60ms]
+(pass) U1: band keeps the 艦隊 section name at 160 and 120 columns when optional speed competes for cells [1.84ms]
+(pass) U3: now and fleet summaries sort failed before stalled before normal [1.57ms]
+(pass) W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome [0.99ms]
+
+mods/live/pages/quota.test.ts:
+(pass) quota: 160x40 pace (the mockup): one row per pool in danger order, verdict text per A7, no arrows [6.17ms]
+(pass) quota: 120x30 pace (the mockup) [1.17ms]
+(fail) quota: 80x24 pace: one row per pool, all six columns abbreviated, the stale reasons whole under the table (A10), the full verdict in the focus detail [1.25ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: [
+    "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
+    "    池         7 天  5 時  重置    近 6 時    預測  判定",
+    "▸ ✗ trinity   7天 31%✗ · 5時 0%✗ · 預 47%✗",
+    "  ✗ twgame    7天 49% · 5時 0% · 預 94% · ✗ 席過期 14 分",
+    "  ? team      7天 68% · 5時 17% · 預 130% · 未知·17時用完",
+    "  ? personal  7天 100% · 5時 100% · 預 100% · 未知·缺換池",
+    "  ▲ grok      7天 10% · 5時 0% · 預 10% · 浪費 90%",
+    "  ▲ lab       7天 22% · 5時 4% · 預 43% · 浪費 57%",
+    "  ✓ codex     7天 80% · 5時 12% · 預 98% · 會用到 98%",
+    "",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "席    共 1 席（席位清單沒有明細）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
+  ]
+  Received: [
+    "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
+    "    池 · 7 天 · 5 時 · 預測 · 重置 · 近 6 時 · 判定",
+    "▸ ✗ trinity   7天 31%✗ · 5時 0%✗ · 預 47%✗ · 週五06 · +0.3%/時✗",
+    "  ✗ twgame    7天 49% · 5時 0% · 預 94% · 週四09 · +1.4%/時 · ✗ 席過期 14 分",
+    "  ? team      7天 68% · 5時 17% · 預 130% · 週六12 · +1.9%/時 · 未知·17時用完",
+    "  ? personal  7天 100% · 5時 100% · 預 100% · 週四08 · +1.1%/時 · 未知·缺換池",
+    "  ▲ grok      7天 10% · 5時 0% · 預 10% · 週二00 · +0.0%/時 · 浪費 90%",
+    "  ▲ lab       7天 22% · 5時 4% · 預 43% · 週日10 · +0.2%/時 · 浪費 57%",
+    "  ✓ codex     7天 80% · 5時 12% · 預 98% · 週四21 · +0.4%/時 · 會用到 98%",
+    "",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "席    共 1 席（席位清單沒有明細）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
+  ]
+(fail) quota: no pace (sources.quota_forecast no_source): rate, projection, verdict read "無來源：capacity pace 未接", except limit_hit and a stale pool [0.90ms]
+  AssertionError: expect(received).toEqual()
+
+  Expected: [
+    "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────── 資料 40 秒前",
+    "    池         7 天  5 時  重置   速率 · 預測 · 判定",
+    "▸ ✗ trinity   7天 31%✗ · 5時 0%✗",
+    "  ✗ twgame    7天 49% · 5時 0% · ✗ 席過期 14 分",
+    "  ✗ codex     7天 80% · 5時 12% · ✗ 無預測來源",
+    "  ✗ team      7天 68% · 5時 17% · ✗ 無預測來源",
+    "  ✗ lab       7天 22% · 5時 4% · ✗ 無預測來源",
+    "  ✗ grok      7天 10% · 5時 0% · ✗ 無預測來源",
+    "  ? personal  7天 100% · 5時 100% · 未知·缺換池",
+    "",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "席    共 1 席（席位清單沒有明細）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
+  ]
+  Received: [
+    "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────── 資料 40 秒前",
+    "    池 · 7 天 · 5 時 · 重置 · 速率 · 預測 · 判定",
+    "▸ ✗ trinity   7天 31%✗ · 5時 0%✗ · 週五06",
+    "  ✗ twgame    7天 49% · 5時 0% · 週四09 · ✗ 席過期 14 分",
+    "  ✗ codex     7天 80% · 5時 12% · 週四21 · ✗ 無預測來源",
+    "  ✗ team      7天 68% · 5時 17% · 週六12 · ✗ 無預測來源",
+    "  ✗ lab       7天 22% · 5時 4% · 週日10 · ✗ 無預測來源",
+    "  ✗ grok      7天 10% · 5時 0% · 週二00 · ✗ 無預測來源",
+    "  ? personal  7天 100% · 5時 100% · 週四08 · 未知·缺換池",
+    "",
+    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+    "席    共 1 席（席位清單沒有明細）",
+    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
+  ]
+(pass) quota: Enter (A3) expands the focused pool's seats from the seats feed; a stale seat carries the mark [0.87ms]
+(pass) quota: frameRows is exactly H rows in every size and state, actions <= A, strip last [12.01ms]
+(pass) quota: 30 pools still frame to H rows (the body scrolls, the page never grows the pane) [4.84ms]
+(pass) quota: no console / no quota / no pools draw the section 5 "no source" row in the broken colour, and never throw [2.34ms]
+(pass) quota: null stays null: an empty pool draws dashes, never 0%, and ranks below a pool with a number [0.72ms]
+(pass) quota: red / yellow / green rows use the PALETTE roles on the glyph and the verdict; no background, no inverse, bold only never [4.76ms]
+(pass) quota: the action area holds only the [f] switch advice, and only when capacity gave one for the focused pool [1.61ms]
+(pass) quota: the page row order and the band pick agree (rank 0 = worstPool), and a pool past 10 minutes is stale without the feed flag [1.09ms]
+(pass) quota: the registry carries the framed quota page at key 4 [0.16ms]
+(pass) quota: no body row of the pool table is wider than the pane (every long reason is wrapped by the frame, never cut) [3.05ms]
+(pass) quota: compact mode (80x7, shortBody) suppresses only headings and column header, then uses remaining body rows for full verdict (wrapped, never truncated) and seats while pool rows keep priority [4.79ms]
+(pass) quota R4 & R10: unknown pools use ? icon and 未知· prefix with warning colour role; rate column has %/時 unit and time headers use 7 天 / 5 時 everywhere [2.03ms]
+(pass) quota R1: a blocked seat without facts.seat uses its id, retaining stale source without repeating the pool verdict [1.36ms]
+(pass) quota R5: at 120x30 and 80x24 with many pools and a multi-row wrapped verdict, focused pool full reason is kept whole and never cut by ↓ 還有 N 列 [4.04ms]
+(pass) quota shortBody & poolRoom: focused verdict is never cut and renderQuota wrapped rows stay <= room across 80x7 (3 pools + 1-row warning/unknown, 2 pools + 2-row wrapped) and 80x5 (1 pool + 1-row) [6.47ms]
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [10.28ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [4.72ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [2.07ms]
+(pass) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.86ms]
+(pass) Z3: a project hash without stage has a Chinese explanation and missing context says 上下文 — [3.08ms]
+(pass) Z4: the focused decision title keeps (1/3 · 1 天) on the same row at every pane width [4.49ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [3.35ms]
+
+ 39 pass
+ 2 fail
+Ran 41 tests across 4 files. [0.67s]

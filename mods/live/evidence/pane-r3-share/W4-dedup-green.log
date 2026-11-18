@@ -1,0 +1,15 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [13.40ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [3.61ms]
+(pass) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [4.00ms]
+(pass) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [7.24ms]
+(pass) V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row [6.09ms]
+(pass) V4: quota always puts o and previous/next pool in the action row directly above tabs, even twelve pools fit [3.79ms]
+(pass) U1: band keeps the 艦隊 section name at 160 and 120 columns when optional speed competes for cells [2.67ms]
+(pass) U3: now and fleet summaries sort failed before stalled before normal [2.74ms]
+(pass) W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome [1.96ms]
+
+ 9 pass
+ 0 fail
+Ran 9 tests across 1 file. [0.79s]

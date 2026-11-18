@@ -1,0 +1,36 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [8.55ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [2.53ms]
+(pass) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [2.77ms]
+(pass) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [4.18ms]
+(pass) V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row [3.53ms]
+(pass) V4: quota always puts o and previous/next pool in the action row directly above tabs, even twelve pools fit [2.22ms]
+(pass) U1: band keeps the 艦隊 section name at 160 and 120 columns when optional speed competes for cells [1.79ms]
+(pass) U3: now and fleet summaries sort failed before stalled before normal [1.34ms]
+(pass) W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome [0.84ms]
+
+mods/live/pages/quota.test.ts:
+(pass) quota: 160x40 pace (the mockup): one row per pool in danger order, verdict text per A7, no arrows [6.23ms]
+(pass) quota: 120x30 pace (the mockup) [1.43ms]
+(pass) quota: 80x24 pace: one row per pool, all six columns abbreviated, the stale reasons whole under the table (A10), the full verdict in the focus detail [1.27ms]
+(pass) quota: no pace (sources.quota_forecast no_source): rate, projection, verdict read "無來源：capacity pace 未接", except limit_hit and a stale pool [1.51ms]
+(pass) quota: Enter (A3) expands the focused pool's seats from the seats feed; a stale seat carries the mark [0.80ms]
+(pass) quota: frameRows is exactly H rows in every size and state, actions <= A, strip last [10.11ms]
+(pass) quota: 30 pools still frame to H rows (the body scrolls, the page never grows the pane) [3.85ms]
+(pass) quota: no console / no quota / no pools draw the section 5 "no source" row in the broken colour, and never throw [1.73ms]
+(pass) quota: null stays null: an empty pool draws dashes, never 0%, and ranks below a pool with a number [0.50ms]
+(pass) quota: red / yellow / green rows use the PALETTE roles on the glyph and the verdict; no background, no inverse, bold only never [4.34ms]
+(pass) quota: the action area holds only the [f] switch advice, and only when capacity gave one for the focused pool [1.44ms]
+(pass) quota: the page row order and the band pick agree (rank 0 = worstPool), and a pool past 10 minutes is stale without the feed flag [1.05ms]
+(pass) quota: the registry carries the framed quota page at key 4 [0.16ms]
+(pass) quota: no body row of the pool table is wider than the pane (every long reason is wrapped by the frame, never cut) [2.89ms]
+(pass) quota: compact mode (80x7, shortBody) suppresses only headings and column header, then uses remaining body rows for full verdict (wrapped, never truncated) and seats while pool rows keep priority [4.24ms]
+(pass) quota R4 & R10: unknown pools use ? icon and 未知· prefix with warning colour role; rate column has %/時 unit and time headers use 7 天 / 5 時 everywhere [1.84ms]
+(pass) quota R1: a blocked seat without facts.seat uses its id, retaining stale source without repeating the pool verdict [1.56ms]
+(pass) quota R5: at 120x30 and 80x24 with many pools and a multi-row wrapped verdict, focused pool full reason is kept whole and never cut by ↓ 還有 N 列 [3.83ms]
+(pass) quota shortBody & poolRoom: focused verdict is never cut and renderQuota wrapped rows stay <= room across 80x7 (3 pools + 1-row warning/unknown, 2 pools + 2-row wrapped) and 80x5 (1 pool + 1-row) [6.29ms]
+
+ 28 pass
+ 0 fail
+Ran 28 tests across 2 files. [0.48s]

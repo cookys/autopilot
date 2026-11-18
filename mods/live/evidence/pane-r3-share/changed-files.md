@@ -1,0 +1,66 @@
+- `mods/live/band.tsx` — W5/U1: aggregate source class/age/cause, preserve stale live information with missing console, and restore fleet labels in wide-band presets.
+- `mods/live/evidence/pane-r3-share/U1-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/U1-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/U3-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/U3-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/V1-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/V1-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/V2-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/V2-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/V4-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/V4-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/W2-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/W2-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/W4-dedup-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/W4-dedup-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/W4-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/W4-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/W5-combined-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/W5-combined-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/W5-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/W5-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/affected-2.log` — Retained diagnostic/affected-test output; final verdict uses final.log and verification.json.
+- `mods/live/evidence/pane-r3-share/affected-3.log` — Retained diagnostic/affected-test output; final verdict uses final.log and verification.json.
+- `mods/live/evidence/pane-r3-share/affected-4.log` — Retained diagnostic/affected-test output; final verdict uses final.log and verification.json.
+- `mods/live/evidence/pane-r3-share/affected-final.log` — Retained diagnostic/affected-test output; final verdict uses final.log and verification.json.
+- `mods/live/evidence/pane-r3-share/affected.log` — Retained diagnostic/affected-test output; final verdict uses final.log and verification.json.
+- `mods/live/evidence/pane-r3-share/band-integration.log` — Final source/missing/stale band real-mount validation (28 pass).
+- `mods/live/evidence/pane-r3-share/base.log` — Unmodified base named full-suite output (1567 pass, 15 fail).
+- `mods/live/evidence/pane-r3-share/final-tests-on-base.log` — Final nine regression assertions rerun against immutable base; all nine fail.
+- `mods/live/evidence/pane-r3-share/final.log` — Final named full-suite raw output.
+- `mods/live/evidence/pane-r3-share/focused.sh` — Evidence-only selective real-engine wrapper; optionally overlays immutable-base product code without modifying the worktree.
+- `mods/live/evidence/pane-r3-share/gate1-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/locales-cleanup.log` — Retained diagnostic/affected-test output; final verdict uses final.log and verification.json.
+- `mods/live/evidence/pane-r3-share/overflow-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/evidence/pane-r3-share/overflow-red.log` — Behavioral assertion failure captured before the matching fix.
+- `mods/live/evidence/pane-r3-share/prefinal.log` — Retained first full diagnostic output before integration fixes.
+- `mods/live/evidence/pane-r3-share/receipt.md` — Acceptance, ordered process, exact original statements, per-finding exits, final verification and scope record.
+- `mods/live/evidence/pane-r3-share/ui-lint.log` — Final semantic glyph/colour/UI rules validation (56 pass).
+- `mods/live/evidence/pane-r3-share/verdict-green.log` — Matching per-finding or supplementary green verification output.
+- `mods/live/gate1.test.ts` — V4: preserve actionless frame fallback assertions and assert real quota navigation.
+- `mods/live/gate2.test.ts` — V4: exercise empty frame states explicitly with actionless pages.
+- `mods/live/gate3.test.ts` — W2/W4/W5/V4: update conflicting static summary/age expectations and isolate frame empty states.
+- `mods/live/locales.ts` — Regenerate runtime locale table from the two JSON sources.
+- `mods/live/locales/en.json` — Matching translation keys/placeholders; remove unused short o labels.
+- `mods/live/locales/zh-TW.json` — Traditional Chinese source/age/forecast and compact quota labels; remove unused short o labels.
+- `mods/live/model.ts` — U1: retain fleet label during optional narrowing at 120+ columns.
+- `mods/live/pages/batch2-mn.test.ts` — U3: update the expected severity order.
+- `mods/live/pages/fleet.test.ts` — V2/U3: update static goldens for one operation row, reclaimed line and severity order.
+- `mods/live/pages/fleet.ts` — V2/U3: one narrow operation row, tiny focus/anomaly preservation and severity order.
+- `mods/live/pages/now.test.ts` — W2/W4/W5/U3/V1: update conflicting goldens/counts/source/age expectations and distinguish focus from duplicate table pools.
+- `mods/live/pages/now.ts` — W2/W4/W5/U3: waste pools, true overflow counts, stale red age and severity order.
+- `mods/live/pages/pane-r3-share.test.ts` — Nine regression tests covering all eight assigned findings and long overflow.
+- `mods/live/pages/quota.test.ts` — V1/V4: update static narrow goldens, compact verdict labels and fixed operation expectations.
+- `mods/live/pages/quota.ts` — V1/V4: labelled narrow values, pool-labelled compact verdict, severe single-row summary and fixed pool controls.
+- `mods/live/pages/ux-gate2-share.test.ts` — W2/W4/V2: update true card counts/source labels, represented-vs-hidden semantics and reclaimed fleet row.
+- `mods/live/ux-gate2.test.ts` — W5: expired band assertion names the fleet class and compact age.
+- `mods/live/evidence/pane-r3-share/changed-files.md` — Actual per-file change inventory.
+- `mods/live/evidence/pane-r3-share/verification.json` — Final exit codes and exact baseline/final failure-name comparison.
+- `mods/live/evidence/pane-r3-share/commit-message.txt` — Required per-finding commit message and Fleet task footer.
+- `mods/live/evidence/pane-r3-share/V1-retain-fields-green.log` — Supplementary regression/verification evidence for V1 or the final full-suite rerun.
+- `mods/live/evidence/pane-r3-share/V1-retain-fields-red.log` — Supplementary regression/verification evidence for V1 or the final full-suite rerun.
+- `mods/live/evidence/pane-r3-share/prefinal-band-green.log` — Supplementary regression/verification evidence for V1 or the final full-suite rerun.
+- `mods/live/evidence/pane-r3-share/quota-retained-fields.log` — Supplementary regression/verification evidence for V1 or the final full-suite rerun.
+- `mods/live/evidence/pane-r3-share/U1-preset-green.log` — Supplementary regression/verification evidence for final band preset handling.
+- `mods/live/evidence/pane-r3-share/U1-preset-red.log` — Supplementary regression/verification evidence for final band preset handling.
+- `mods/live/evidence/pane-r3-share/prefinal-quota-green.log` — Supplementary regression/verification evidence for final band preset handling.

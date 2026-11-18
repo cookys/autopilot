@@ -1,3 +1,4 @@
+// U3/V2: severity-first counts and a single compact operation row.
 // fleet.test.ts — S2 (page 3 艦隊): the page drawn through frameRows from a fixture console, row for row against the golden rows (the mockups' 艦隊 drawings; the differences are listed in
 // the S2 receipt: the parsed snapshot carries no per-line running/waiting state, no host list), the fixed height at 160x40 / 120x30 / 80x24, the §5 no-source row, the red stale markers
 // with the full reason, and the key presses (o looks, z folds, f fills the prompt and never sends).
@@ -38,7 +39,7 @@ const snapOf = (over: { tasks?: { at_ms: number | null; state: string }; lines?:
 const GOLDEN: Record<string, string[]> = {
   "folded80": [
     "艦隊",
-    "產線 51 ⊘4 ✗1 ○46 · ✗ 離線 1 台主機",
+    "產線 51 ✗1 ⊘4 ○46 · ✗ 離線 1 台主機",
     "▸✗ capacity · h1 卡住（2 時）  等待沒寫等誰（wait_untyped）",
     " ⊘ lab · h3 閒置（6 時）",
     " ⊘ pinball · h4 閒置（5 時）",
@@ -48,12 +49,11 @@ const GOLDEN: Record<string, string[]> = {
     " ○ 另 45 條折疊（6+45=51）· z 展開（○45）",
     "── 主機 17/18 在線 ──",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
-    "[o] 看 · [z] 展開 · [f] 催辦",
-    "上一線 · 下一線"
+    "[o] 看 · [z] 展開 · [f] 催辦 · 上一線 · 下一線"
   ],
   "expanded80": [
     "艦隊",
-    "產線 51 ⊘4 ✗1 ○46 · ✗ 離線 1 台主機",
+    "產線 51 ✗1 ⊘4 ○46 · ✗ 離線 1 台主機",
     "▸✗ capacity · h1 卡住（2 時）  等待沒寫等誰（wait_untyped）",
     " ⊘ lab · h3 閒置（6 時）",
     " ⊘ pinball · h4 閒置（5 時）",
@@ -72,14 +72,14 @@ const GOLDEN: Record<string, string[]> = {
     " ○ lane-09 · h1 正常（無異常明細）",
     " ○ lane-10 · h1 正常（無異常明細）",
     " ○ lane-11 · h1 正常（無異常明細）",
-    " ↓ 還有 34 項（○34）",
-    "[o] 看 · [z] 收合 · [f] 催辦",
-    "上一線 · 下一線"
+    " ○ lane-12 · h1 正常（無異常明細）",
+    " ↓ 還有 33 項（○33）",
+    "[o] 看 · [z] 收合 · [f] 催辦 · 上一線 · 下一線"
   ],
   "stale80": [
     "艦隊  ✗ 工作 資料過期，6 分鐘前",
     "✗ tasks 已 6 分鐘未更新（console 判定：資料過期）",
-    "產線 51 ⊘4✗ ✗1✗ ○46✗ · ✗ 離線 1 台主機",
+    "產線 51 ✗1✗ ⊘4✗ ○46✗ · ✗ 離線 1 台主機",
     "▸✗ capacity · h1 卡住（2 時）  等待沒寫等誰（wait_untyped） ✗",
     " ⊘ lab · h3 閒置（6 時） ✗",
     " ⊘ pinball · h4 閒置（5 時） ✗",
@@ -89,12 +89,11 @@ const GOLDEN: Record<string, string[]> = {
     " ✗ ○ 另 45 條折疊（6+45=51）· z 展開（○45）",
     "── 主機 17/18 在線 ──",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
-    "[o] 看（舊） · [z] 展開 · [f] 催辦",
-    "上一線 · 下一線"
+    "[o] 看（舊） · [z] 展開 · [f] 催辦 · 上一線 · 下一線"
   ],
   "folded120": [
     "艦隊",
-    "── 產線 51：⊘ 卡住 4  ✗ 離線 1  ○ 正常 46 ────────────────────────────────────────────────────────────────",
+    "── 產線 51：✗ 離線 1  ⊘ 卡住 4  ○ 正常 46 ────────────────────────────────────────────────────────────────",
     "  產線 / 狀態                                     負責          任務 / 證據",
     "▸ ✗ capacity · h1 卡住（2 時）                    PM              等待沒寫等誰（wait_untyped）",
     "  ⊘ lab · h3 閒置（6 時）                         PM",
@@ -112,7 +111,7 @@ const GOLDEN: Record<string, string[]> = {
   ],
   "folded160": [
     "艦隊",
-    "── 產線 51：⊘ 卡住 4  ✗ 離線 1  ○ 正常 46 ────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "── 產線 51：✗ 離線 1  ⊘ 卡住 4  ○ 正常 46 ────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  產線 / 狀態                                     負責          任務 / 證據",
     "▸ ✗ capacity · h1 卡住（2 時）                    PM              等待沒寫等誰（wait_untyped）",
     "  ⊘ lab · h3 閒置（6 時）                         PM",
@@ -300,8 +299,8 @@ test('fleet R10 & R11: at 80x24 o/z/f are one row with 3 clickable non-empty But
   const live0 = { state: 'ok', text: 'x', header: 'x', band: null, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: M.NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...M.NO_DETAIL, now_ms: NOW } } as never
   const shown = PAGES.map(p => ({ ...p, framed: true as const }))
   const out80 = fleetPage.render(ctxOf(80, 24, snapOf()))
-  expect(out80.actions.length).toBe(2) // Y1: navigation has its own row.
-  expect(text(out80.actions[0])).toBe('[o] 看 · [z] 展開 · [f] 催辦')
+  expect(out80.actions.length).toBe(1) // V2: navigation joins o/z/f.
+  expect(text(out80.actions[0])).toBe('[o] 看 · [z] 展開 · [f] 催辦 · 上一線 · 下一線') // V2
 
   const pressed: string[] = []
   const tree = walk(Pane(EL as never, live0, 'fleet', () => {}, t, 80, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: snapOf(), nowMs: NOW, rows: 24, onPress: (id: string) => pressed.push(id), onKey: (k: any) => pressed.push('key:' + k.kind) } as never))

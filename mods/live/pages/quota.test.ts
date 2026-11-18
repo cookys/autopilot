@@ -1,3 +1,4 @@
+// V1/V4: percentages and verdicts name their data; o/prev/next live in the fixed action row.
 // Z2: positive seat totals retain the count and explain the missing detail list.
 // quota.test.ts — the 額度 page (plan r2 §4.1, g2 A1 / A3 / A7 / A10 / A11): golden rows of the mockup states, exactly H rows through frameRows at 160x40 / 120x30 / 80x24,
 // the no-source rows, null staying null, the action area, the red markers (theme keys through PALETTE only, no background, no inverse).
@@ -20,71 +21,67 @@ const body = (cols: number, rows: number, c: unknown, view?: { focus: number; ex
 
 const GOLDEN = {
   wide: [
-    "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "    池                     7 天      5 時  重置（台北）         近 6 時     預測  用完時間      席數   判定",
-    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
-    "  ✗ twgame                  49%        0%  11-19 週四 09:00    +1.4%/時      94%  —             2 席   ✗ 席過期 14 分",
-    "  ? team                    68%       17%  11-21 週六 12:00    +1.9%/時    >100%  11-18 18:00   3 席   未知·17時用完",
-    "  ? personal               100%      100%  11-19 週四 08:00    +1.1%/時     100%  已用完        5 席   未知·缺換池",
-    "  ▲ grok                    10%        0%  11-24 週二 00:00    +0.0%/時      10%  —             1 席   浪費 90%",
-    "  ▲ lab                     22%        4%  11-22 週日 10:00    +0.2%/時      43%  —             2 席   浪費 57%",
-    "  ✓ codex                   80%       12%  11-19 週四 21:00    +0.4%/時      98%  —             2 席   會用到 98%",
-    "",
-    "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
-    "  [o] 展開各席",
-    "席    共 1 席（席位清單沒有明細）",
-    "換池  沒有換池資料（capacity 尚未提供）",
-    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
-    "排序  紅：已用完 > 最早用完 > 過期（最舊在前）；黃：浪費比例多的在前；最後才是綠",
+      "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
+      "    池                     7 天      5 時  重置（台北）         近 6 時     預測  用完時間      席數   判定",
+      "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
+      "  ✗ twgame                  49%        0%  11-19 週四 09:00    +1.4%/時      94%  —             2 席   ✗ 席過期 14 分",
+      "  ? team                    68%       17%  11-21 週六 12:00    +1.9%/時    >100%  11-18 18:00   3 席   未知·17時用完",
+      "  ? personal               100%      100%  11-19 週四 08:00    +1.1%/時     100%  已用完        5 席   未知·缺換池",
+      "  ▲ grok                    10%        0%  11-24 週二 00:00    +0.0%/時      10%  —             1 席   浪費 90%",
+      "  ▲ lab                     22%        4%  11-22 週日 10:00    +0.2%/時      43%  —             2 席   浪費 57%",
+      "  ✓ codex                   80%       12%  11-19 週四 21:00    +0.4%/時      98%  —             2 席   會用到 98%",
+      "",
+      "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "席    共 1 席（席位清單沒有明細）",
+      "換池  沒有換池資料（capacity 尚未提供）",
+      "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
+      "排序  紅：已用完 > 最早用完 > 過期（最舊在前）；黃：浪費比例多的在前；最後才是綠"
   ],
   mid: [
-    "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "    池              7 天      5 時  重置（台北）    近 6 時     預測  判定",
-    "▸ ✗ trinity          31%✗       0%✗ 週五 06:00     +0.3%/時✗     47%✗ ✗ 180 分未更新",
-    "  ✗ twgame           49%        0%  週四 09:00     +1.4%/時      94%  ✗ 席過期 14 分",
-    "  ? team             68%       17%  週六 12:00     +1.9%/時    >100%  未知·17時用完",
-    "  ? personal        100%      100%  週四 08:00     +1.1%/時     100%  未知·缺換池",
-    "  ▲ grok             10%        0%  週二 00:00     +0.0%/時      10%  浪費 90%",
-    "  ▲ lab              22%        4%  週日 10:00     +0.2%/時      43%  浪費 57%",
-    "  ✓ codex            80%       12%  週四 21:00     +0.4%/時      98%  會用到 98%",
-    "",
-    "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────",
-    "  [o] 展開各席",
-    "席    共 1 席（席位清單沒有明細）",
-    "換池  沒有換池資料（capacity 尚未提供）",
-    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
+      "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────────────────────────────────────────────── 資料 40 秒前",
+      "    池              7 天      5 時  重置（台北）    近 6 時     預測  判定",
+      "▸ ✗ trinity          31%✗       0%✗ 週五 06:00     +0.3%/時✗     47%✗ ✗ 180 分未更新",
+      "  ✗ twgame           49%        0%  週四 09:00     +1.4%/時      94%  ✗ 席過期 14 分",
+      "  ? team             68%       17%  週六 12:00     +1.9%/時    >100%  未知·17時用完",
+      "  ? personal        100%      100%  週四 08:00     +1.1%/時     100%  未知·缺換池",
+      "  ▲ grok             10%        0%  週二 00:00     +0.0%/時      10%  浪費 90%",
+      "  ▲ lab              22%        4%  週日 10:00     +0.2%/時      43%  浪費 57%",
+      "  ✓ codex            80%       12%  週四 21:00     +0.4%/時      98%  會用到 98%",
+      "",
+      "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "席    共 1 席（席位清單沒有明細）",
+      "換池  沒有換池資料（capacity 尚未提供）",
+      "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
   ],
   narrow: [
-    "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
-    "    池         7 天  5 時  重置    近 6 時    預測  判定",
-    "▸ ✗ trinity     31%✗   0%✗ 週五06 +0.3%/時✗    47%✗ ✗ 180 分未更新",
-    "  ✗ twgame      49%    0%  週四09 +1.4%/時     94%  ✗ 席過期 14 分",
-    "  ? team        68%   17%  週六12 +1.9%/時   >100%  未知·17時用完",
-    "  ? personal   100%  100%  週四08 +1.1%/時    100%  未知·缺換池",
-    "  ▲ grok        10%    0%  週二00 +0.0%/時     10%  浪費 90%",
-    "  ▲ lab         22%    4%  週日10 +0.2%/時     43%  浪費 57%",
-    "  ✓ codex       80%   12%  週四21 +0.4%/時     98%  會用到 98%",
-    "",
-    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
-    "  [o] 展開各席",
-    "席    共 1 席（席位清單沒有明細）",
-    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
+      "── 額度池 · 預測由 fleet 算 · 近 6 時 ───────────────────────────── 資料 40 秒前",
+      "    池 · 7 天 · 5 時 · 預測 · 重置 · 近 6 時 · 判定",
+      "▸ ✗ trinity   7天 31%✗ · 5時 0%✗ · 預 47%✗ · 週五06 · +0.3%/時✗",
+      "  ✗ twgame    7天 49% · 5時 0% · 預 94% · 週四09 · +1.4%/時 · ✗ 席過期 14 分",
+      "  ? team      7天 68% · 5時 17% · 預 130% · 週六12 · +1.9%/時 · 未知·17時用完",
+      "  ? personal  7天 100% · 5時 100% · 預 100% · 週四08 · +1.1%/時 · 未知·缺換池",
+      "  ▲ grok      7天 10% · 5時 0% · 預 10% · 週二00 · +0.0%/時 · 浪費 90%",
+      "  ▲ lab       7天 22% · 5時 4% · 預 43% · 週日10 · +0.2%/時 · 浪費 57%",
+      "  ✓ codex     7天 80% · 5時 12% · 預 98% · 週四21 · +0.4%/時 · 會用到 98%",
+      "",
+      "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+      "席    共 1 席（席位清單沒有明細）",
+      "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
   ],
   nopaceNarrow: [
-    "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────── 資料 40 秒前",
-    "    池         7 天  5 時  重置   速率 · 預測 · 判定",
-    "▸ ✗ trinity     31%✗   0%✗ 週五06 ✗ 180 分未更新",
-    "  ✗ twgame      49%    0%  週四09 ✗ 席過期 14 分",
-    "  ✗ codex       80%   12%  週四21 ✗ 無預測來源",
-    "  ✗ team        68%   17%  週六12 ✗ 無預測來源",
-    "  ✗ lab         22%    4%  週日10 ✗ 無預測來源",
-    "  ✗ grok        10%    0%  週二00 ✗ 無預測來源",
-    "  ? personal   100%  100%  週四08 未知·缺換池",
-    "",
-    "── 焦點 trinity ────────────────────────────────────────────────────────────────",
-    "  [o] 展開各席",
-    "席    共 1 席（席位清單沒有明細）",
-    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
+      "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────── 資料 40 秒前",
+      "    池 · 7 天 · 5 時 · 重置 · 速率 · 預測 · 判定",
+      "▸ ✗ trinity   7天 31%✗ · 5時 0%✗ · 週五06",
+      "  ✗ twgame    7天 49% · 5時 0% · 週四09 · ✗ 席過期 14 分",
+      "  ✗ codex     7天 80% · 5時 12% · 週四21 · ✗ 無預測來源",
+      "  ✗ team      7天 68% · 5時 17% · 週六12 · ✗ 無預測來源",
+      "  ✗ lab       7天 22% · 5時 4% · 週日10 · ✗ 無預測來源",
+      "  ✗ grok      7天 10% · 5時 0% · 週二00 · ✗ 無預測來源",
+      "  ? personal  7天 100% · 5時 100% · 週四08 · 未知·缺換池",
+      "",
+      "── 焦點 trinity ────────────────────────────────────────────────────────────────",
+      "席    共 1 席（席位清單沒有明細）",
+      "判定  紅：180 分未更新（>10 分；statusline 沒在跑）"
   ],
   nopaceWide: [
     "── 額度池 · ✗ 無來源：用量預測未接通 ────────────────────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
@@ -99,30 +96,27 @@ const GOLDEN = {
     "  ? personal               100%      100%  11-19 週四 08:00  未知·缺換池",
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
-    "  [o] 展開各席",
     "席    共 1 席（席位清單沒有明細）",
     "換池  沒有換池資料（capacity 尚未提供）",
     "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
     "排序  已用完 > 過期（最舊在前）> 7 天最高",
   ],
   expanded: [
-    "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
-    "    池                     7 天      5 時  重置（台北）         近 6 時     預測  用完時間      席數   判定",
-    "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
-    "  ✗ twgame                  49%        0%  11-19 週四 09:00    +1.4%/時      94%  —             2 席   ✗ 席過期 14 分",
-    "  ? team                    68%       17%  11-21 週六 12:00    +1.9%/時    >100%  11-18 18:00   3 席   未知·17時用完",
-    "  ? personal               100%      100%  11-19 週四 08:00    +1.1%/時     100%  已用完        5 席   未知·缺換池",
-    "  ▲ grok                    10%        0%  11-24 週二 00:00    +0.0%/時      10%  —             1 席   浪費 90%",
-    "  ▲ lab                     22%        4%  11-22 週日 10:00    +0.2%/時      43%  —             2 席   浪費 57%",
-    "  ✓ codex                   80%       12%  11-19 週四 21:00    +0.4%/時      98%  —             2 席   會用到 98%",
-    "",
-    "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
-    "  [o] 收合各席",
-    "席    共 1 席（席位清單沒有明細）",
-    // Z2: the count row explains the missing detail; no contradictory empty row.
-    "換池  沒有換池資料（capacity 尚未提供）",
-    "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
-    "排序  紅：已用完 > 最早用完 > 過期（最舊在前）；黃：浪費比例多的在前；最後才是綠",
+      "── 額度池（預測由 fleet 算，面板不重算；近 6 時） ───────────────────────────────────────────────────────────────────────────────────────────────── 資料 40 秒前",
+      "    池                     7 天      5 時  重置（台北）         近 6 時     預測  用完時間      席數   判定",
+      "▸ ✗ trinity                 31%✗       0%✗ 11-20 週五 06:00    +0.3%/時✗     47%✗ —             1 席   ✗ 180 分未更新",
+      "  ✗ twgame                  49%        0%  11-19 週四 09:00    +1.4%/時      94%  —             2 席   ✗ 席過期 14 分",
+      "  ? team                    68%       17%  11-21 週六 12:00    +1.9%/時    >100%  11-18 18:00   3 席   未知·17時用完",
+      "  ? personal               100%      100%  11-19 週四 08:00    +1.1%/時     100%  已用完        5 席   未知·缺換池",
+      "  ▲ grok                    10%        0%  11-24 週二 00:00    +0.0%/時      10%  —             1 席   浪費 90%",
+      "  ▲ lab                     22%        4%  11-22 週日 10:00    +0.2%/時      43%  —             2 席   浪費 57%",
+      "  ✓ codex                   80%       12%  11-19 週四 21:00    +0.4%/時      98%  —             2 席   會用到 98%",
+      "",
+      "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "席    共 1 席（席位清單沒有明細）",
+      "換池  沒有換池資料（capacity 尚未提供）",
+      "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
+      "排序  紅：已用完 > 最早用完 > 過期（最舊在前）；黃：浪費比例多的在前；最後才是綠"
   ],
 }
 
@@ -198,13 +192,14 @@ test('quota: red / yellow / green rows use the PALETTE roles on the glyph and th
 
 test('quota: the action area holds only the [f] switch advice, and only when capacity gave one for the focused pool', () => {
   const none = renderQuota(ctxOf(160, 40, consoleOf(POOLS)))
-  expect(none.actions.length).toBe(0)
+  expect(none.actions.length).toBe(1)
+  expect(text(none.actions[0])).toBe('[o] 展開各席 · 上一池 · 下一池 (1/7)')
   const withAdvice = consoleOf(POOLS.map(p => (p.pool === 'trinity' ? { ...p, switch_suggestion: 'trinity -> team' } : p)))
   const a = renderQuota(ctxOf(160, 40, withAdvice)).actions
   expect(a.length).toBe(1)
-  expect(text(a[0])).toBe('[f] 換池建議填入提示列（不送出）')
+  expect(text(a[0])).toBe('[o] 展開各席 · 上一池 · 下一池 (1/7) · [f] 換池')
   // focus on a pool with no advice: no action
-  expect(renderQuota(ctxOf(160, 40, withAdvice), { focus: 1, expanded: false }).actions.length).toBe(0)
+  expect(renderQuota(ctxOf(160, 40, withAdvice), { focus: 1, expanded: false }).actions.flat().some(s => s.press?.startsWith('fill:'))).toBe(false)
 })
 
 test('quota: the page row order and the band pick agree (rank 0 = worstPool), and a pool past 10 minutes is stale without the feed flag', () => {
@@ -237,14 +232,14 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   // 80 columns, H=7, one pool whose full verdict is longer than the short one, no explicit actions
   const out = frameRows(page, ctxOf(80, 7, consoleOf([trinity], { cards: [] }))).map(text)
   expect(out.length).toBe(7)
-  const compactBody = out.slice(1, 5)
+  const compactBody = out.slice(1, 5).filter(l => l.trim() !== '')
   expect(compactBody.some(l => l.includes('──'))).toBe(false)
   expect(compactBody.some(l => l.includes('重置') || l.includes('7 天'))).toBe(false)
-  expect(compactBody[0]).toContain('✗ 180 分未更新')
+  expect(compactBody[0]).toContain('7天 31%✗ · 5時 0%✗ · 預 47%✗')
   expect(compactBody[0]).not.toContain('statusline 沒在跑')
-  expect(compactBody[1]).toBe('判定  紅：180 分未更新（>10 分；statusline 沒在跑）')
+  expect(compactBody[1]).toBe('trinity 判定紅：180 分未更新（>10 分；statusline 沒在跑）')
   expect(compactBody[2]).toBe('席    共 1 席（席位清單沒有明細）')
-  expect(compactBody[3]).toBe('  [o] 展開各席')
+  expect(out[5]).toBe('[o] 展開各席 · 上一池 · 下一池 (1/1)')
 
   // Long full verdict (> 80 cols) wraps across remaining body rows and is never truncated
   const longNote = 'statusline 沒在跑，而且本席上一次回報已經超過三小時，必須把完整原因換行顯示出來不能截斷'
@@ -259,7 +254,7 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   const openPage = { ...quotaPage, render: (c: Parameters<typeof renderQuota>[0]) => renderQuota(c, { focus: 0, expanded: true }) }
   const openBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS, cards: [] }))).map(text).slice(1, 5)
   expect(openBody[0]).toContain('personal')
-  expect(openBody[1]).toBe('判定  黃：已達額度上限，判定未知：缺換池資料（capacity）')
+  expect(openBody[1]).toBe('personal 判定黃：已達額度上限，判定未知：缺換池資料（capacity）')
   expect(openBody[2]).toBe('席    capacity--claude  7 天 100%  5 時 100%  0 分前')
   expect(openBody[3]).toBe('      hangar--claude  7 天 100%  5 時 100%  1 分前')
   const scrolledBody = frameRows(openPage, ctxOf(80, 7, consoleOf([personal], { seats: SEATS, cards: [] })), { scroll: 1 }).map(text).slice(1, 5)
@@ -272,14 +267,14 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   expect(threeBody[0]).toContain('trinity')
   expect(threeBody[1]).toContain('personal')
   expect(threeBody[2]).toContain('codex')
-  expect(threeBody[3]).toBe('判定  紅：180 分未更新（>10 分；statusline 沒在跑）')
+  expect(threeBody[3]).toBe('trinity 判定紅：180 分未更新（>10 分；statusline 沒在跑）')
 
   const fourBody = frameRows(page, ctxOf(80, 7, consoleOf([codex, grok, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
   expect(fourBody[0]).toContain('trinity')
   expect(fourBody[1]).toContain('personal')
   // M2 (codeforge B49-B54, S1-full-p4-80x24 row 15): a cut 80-column table says what it hides instead of silently dropping grok and codex
   expect(fourBody[2]).toBe('↓ 還有 2 池（▲1 ✓1）')
-  expect(fourBody[3]).toBe('判定  紅：180 分未更新（>10 分；statusline 沒在跑）')
+  expect(fourBody[3]).toBe('trinity 判定紅：180 分未更新（>10 分；statusline 沒在跑）')
 })
 
 test('quota R4 & R10: unknown pools use ? icon and 未知· prefix with warning colour role; rate column has %/時 unit and time headers use 7 天 / 5 時 everywhere', () => {
@@ -300,7 +295,7 @@ test('quota R4 & R10: unknown pools use ? icon and 未知· prefix with warning 
     expect(b[1]).toContain('7 天')
     expect(b[1]).toContain('5 時')
     expect(b[1]).not.toContain('5 小時')
-    expect(b[2]).toContain('%/時')
+    expect(b[2]).toContain('%/時') // V1: labels fit without dropping the existing rate.
   }
 })
 
@@ -313,7 +308,7 @@ test('quota R1: a blocked seat without facts.seat uses its id, retaining stale s
   const c = consoleOf([{ ...POOLS[3], pool: 'pool-f' }], { cards: [], items: [blocked] })
   for (const [cols, rows] of SIZES) {
     const out = frameRows(quotaPage, ctxOf(cols, rows, c)).map(text)
-    const verdicts = out.filter(l => !l.startsWith('── 焦點') && l.includes('F 池'))
+    const verdicts = out.filter(l => !l.startsWith('── 焦點') && !l.startsWith('F 池 判定') && l.includes('F 池'))
     expect(verdicts.length).toBe(1)
     const seat = out.find(l => l.startsWith('用完'))!
     expect(seat).toContain('s1')
@@ -366,31 +361,31 @@ test('quota shortBody & poolRoom: focused verdict is never cut and renderQuota w
       name: '80x7 3 pools + 1-row unknown verdict',
       cols: 80, rows: 7, room: 4,
       pools: [personal, grok, codex],
-      wantVerdict: '判定  黃：已達額度上限，判定未知：缺換池資料（capacity）',
+      wantVerdict: 'personal 判定黃：已達額度上限，判定未知：缺換池資料（capacity）',
     },
     {
       name: '80x7 3 pools + 1-row warning verdict',
       cols: 80, rows: 7, room: 4,
       pools: [grok, lab, codex],
-      wantVerdict: '判定  黃：約剩 90% 會浪費',
+      wantVerdict: 'grok 判定黃：約剩 90% 會浪費',
     },
     {
       name: '80x7 2 pools + 2-row wrapped verdict',
       cols: 80, rows: 7, room: 4,
       pools: [{ ...trinity, stale_note: longNote }, codex],
-      wantVerdict: '判定  紅：180 分未更新（>10 分；' + longNote + '）',
+      wantVerdict: 'trinity 判定紅：180 分未更新（>10 分；' + longNote + '）',
     },
     {
       name: '80x5 1 pool + 1-row verdict',
       cols: 80, rows: 5, room: 2,
       pools: [trinity],
-      wantVerdict: '判定  紅：180 分未更新（>10 分；statusline 沒在跑）',
+      wantVerdict: 'trinity 判定紅：180 分未更新（>10 分；statusline 沒在跑）',
     },
     {
       name: '80x5 2 pools + 2-row wrapped verdict (room - vLen === 0)',
       cols: 80, rows: 5, room: 2,
       pools: [{ ...trinity, stale_note: longNote }, codex],
-      wantVerdict: '判定  紅：180 分未更新（>10 分；' + longNote + '）',
+      wantVerdict: 'trinity 判定紅：180 分未更新（>10 分；' + longNote + '）',
     },
   ]
 
@@ -411,7 +406,7 @@ test('quota shortBody & poolRoom: focused verdict is never cut and renderQuota w
   // room <= 0 fallback keeps the focused pool row plus its verdict
   const zeroRoom = renderQuota({ ...(ctxOf(80, 2, consoleOf([personal, codex], { cards: [] })) as object), shortBody: true } as Parameters<typeof renderQuota>[0])
   expect(text(zeroRoom.body[0])).toContain('personal')
-  expect(zeroRoom.body.map(text).join('\n')).toContain('判定  黃：已達額度上限，判定未知：缺換池資料（capacity）')
+  expect(zeroRoom.body.map(text).join('\n')).toContain('personal 判定黃：已達額度上限，判定未知：缺換池資料（capacity）')
 
   // poolRoom clamped with Math.max(0, ...) when room > 4 (80x8 -> room 5) and a 5-row wrapped verdict fills room
   const fiveRowNote = '甲'.repeat(160)

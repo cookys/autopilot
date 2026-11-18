@@ -1,0 +1,15 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [7.53ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [2.08ms]
+(pass) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [2.42ms]
+(pass) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [3.55ms]
+(fail) V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row [1.61ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: 1
+  Received: 2
+
+ 4 pass
+ 1 fail
+Ran 5 tests across 1 file. [0.40s]

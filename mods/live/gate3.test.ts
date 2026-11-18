@@ -1,3 +1,4 @@
+// W2/W4/W5/V4: changed waste/overflow/stale wording; empty-action checks explicitly exercise the frame fallback.
 // gate3.test.ts — four real-host defects on feat/pane-batch1:
 //   1. Quota page (額度): one row per pool at every width, short verdict via locales, full verdict in focus area, drop 重置 first then 近 6 時, never wrap a table row.
 //   2. Short body (<= 4 body rows): no section titles and no column header, priority red pools -> unknown pools -> stuck lines, drop scroll hint from body; 額度 >= 1 pool, 現況 >= 1 item.
@@ -118,7 +119,7 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     POOLS.find(p => p.pool === 'codex')!, // green
   ]
   const cNow = { ...(snap(oneRedOneUnknown, { cards: [], lines: [c.lines![1]] }) as object), items: [] } as ConsoleSnapshot
-  expect(frameRows(nowPage, { ...(ctxOf(80, 4, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗1 · 額度 ✗1 ?1 trinity · 另有 4 項') // X2b: severe classes lead; pool identity and overflow remain visible.
+  expect(frameRows(nowPage, { ...(ctxOf(80, 4, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗1 · 額度 ✗1 ?1 trinity') // X2b: severe classes lead; pool identity and overflow remain visible.
   for (const H of [5, 6, 7]) {
     const nOut = frameRows(nowPage, { ...(ctxOf(80, H, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
     expect(nOut.length).toBe(H)
@@ -129,7 +130,7 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     const first = nBody.findIndex(l => l.trim() !== '')
     if (H === 5) {
       expect(nBody[first]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 2/3（離線 1）')
-      expect(nBody[first + 1]).toBe('✗ 額度 紅 1（trinity）· ? 未知 1（personal）')
+      expect(nBody[first + 1]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分· ? 未知 1（personal）')
     }
     if (H === 7) {
       expect(nBody.some(l => l.includes('另有') || l.includes('還有')), 'H=7 now: both class summary rows fit without overflow').toBe(false)
@@ -165,8 +166,8 @@ test('gate3 item 2 (R2/C1 pending-first): short body with pending cards puts com
   expect(nBody[0]).toBe('')
   expect(nBody[1]).toBe('→ 待決 3 張（最舊 1 天）：是否先切流到備援節點再重啟語音線服務')
   expect(nBody[2]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 2/3（離線 1）')
-  expect(nBody[3]).toBe('✗ 額度 紅 1（trinity）· ? 未知 1（personal）')
-  expect(nBody[4]).toBe('另有 1 項（現況 ▲1）') // X2: include hidden category/severity.
+  expect(nBody[3]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分· ? 未知 1（personal）')
+  expect(nBody[4]).toBe('額度浪費 ▲1') // X2: include hidden category/severity.
 })
 
 test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0, i) and >= 66 uses 1 row across all pages, fitting host "<key>: " width', () => {
@@ -252,7 +253,7 @@ test('gate4 empty state with pending cards: 3 pending cards (console.cards or li
   const unknownPools = POOLS // 2 unknown pools (personal, team)
 
   const emptyActRow = (page: Page, c: ConsoleSnapshot, live: unknown = null, loc = tZh): string => {
-    const out = frameRows(page, { ...(ctxOf(120, 24, c) as object), live, t: loc } as never, { pages: PAGES }).map(text)
+    const out = frameRows({ ...page, render: ctx => ({ ...page.render(ctx), actions: [] }) }, { ...(ctxOf(120, 24, c) as object), live, t: loc } as never, { pages: PAGES }).map(text)
     return out[out.length - 2]
   }
 
@@ -306,6 +307,6 @@ test('gate4 empty state with pending cards: 3 pending cards (console.cards or li
   const pending = nBody.findIndex(l => l.includes('待決 3 張'))
   expect(pending).toBe(nBody.findIndex(l => l.trim() !== ''))
   expect(nBody[pending + 1]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 2/3（離線 1）')
-  expect(nBody[pending + 2]).toBe('✗ 額度 紅 1（trinity）')
+  expect(nBody[pending + 2]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分')
   expect(pending + 2, 'last item directly above strip').toBe(nBody.length - 1)
 })

@@ -1,0 +1,51 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(fail) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [5.74ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "grok"
+  Received: "── 全艦隊 ────────────────────────────────────────────\n  產線 0 ｜  ｜ 額度 最緊 G 池 約剩 90% 會浪費\n  沒有例外\n\n── 本席 ──────────────────────────────────────────────\n  花費   ✗ 無來源：fleet seats --quota 還沒有結果"
+(fail) W4: overflow uses three real cards and counts only categories absent from the same row [2.87ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "待決 3 張"
+  Received: "現況\n✗ 額度 ✗2 ?3 C 池 · 現況 ▲5 · 待決 1 · 另有 11 項\n1 現 2 待 3 艦 4 額 5 派 6 審 7 花 8 殘 9 寵 0 鍛  i 說明  Esc 收起"
+(fail) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [2.21ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "艦隊過期 12 分"
+  Received: "✗ 額度預測 無來源 · autopilot status runs --watch │ [+面板]                                                                                         1 現況 2 待決 3 艦隊 4 額度(✗2) 5 派工 6 審查 7 花費 8 殘留 9 寵物 0 鍛 "
+(fail) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [2.68ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "7天 31%✗"
+  Received: "▸ ✗ C 池        31%✗   0%✗ 週五06 +0.3%/時✗    47%✗ ✗ 12 分未更新"
+(fail) V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row [2.19ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: 1
+  Received: 2
+(fail) V4: quota always puts o and previous/next pool in the action row directly above tabs, even twelve pools fit [1.36ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: 1
+  Received: 0
+(fail) U1: band keeps the 艦隊 section name at 160 and 120 columns when optional speed competes for cells [1.53ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "艦隊"
+  Received: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx │ ✗ 2  ⊘ 4 │ "
+(fail) U3: now and fleet summaries sort failed before stalled before normal [1.14ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "產線 9 ✗2 ⊘4 ○3"
+  Received: "產線 9 ⊘4 ✗2 ○3 · 主機 4/6 · 額度 沒有額度池"
+(fail) W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome [1.23ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "額度浪費 ▲5"
+  Received: "現況\n── 全艦隊 ────────────────────────────────────────────\n  產線 0 ｜ \n  ✗ 額度 C 池 12 分未更新（>10 分；statusline 沒在跑）\n  ✗ 額度 D 池 12 分未更新（>10 分；statusline 沒在跑）\n另有 4 項（額度 ?3 · 本席 1）\n3 池判定未知（缺換池資料）；沒有待決卡\n1 現況 2 待決 3 艦隊 4 額度 5 派工 6 審查 7 花費 8 殘留 9 寵物 0 鍛  i 說明  Esc 收起"
+
+ 0 pass
+ 9 fail
+Ran 9 tests across 1 file. [0.48s]

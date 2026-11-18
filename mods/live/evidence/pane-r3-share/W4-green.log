@@ -1,0 +1,8 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [8.43ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [2.35ms]
+
+ 2 pass
+ 0 fail
+Ran 2 tests across 1 file. [0.48s]

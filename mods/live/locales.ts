@@ -874,15 +874,20 @@ export const EN: Record<string, string> = {
   "page.fleet.more_items": "{arrow} {n} more items",
   "page.quota.more_pools": "{arrow} {n} more pools ({detail})",
   "page.quota.more_pools_plain": "{arrow} {n} more pools",
-  "page.quota.act_o_short_open": "[o] Seats",
-  "page.quota.act_o_short_close": "[o] Fold",
   "page.quota.act_prev_pool": "Prev pool",
   "page.quota.act_next_pool": "Next pool ({cur}/{total})",
   "page.quota.action_f_c": "[f] Switch",
   "page.decide.act_fold_close_c": "[z] fold others",
   "page.fleet.act_prev_line": "Previous line",
   "page.fleet.act_next_line": "Next line",
-  "page.quota.f_seats_no_detail": "{n} seats total (no seat list details)"
+  "page.quota.f_seats_no_detail": "{n} seats total (no seat list details)",
+  "band.no_console": "No console snapshot",
+  "band.fleet_stale": "Fleet expired {min} min",
+  "band.quota_nopace": "Quota forecast missing",
+  "page.now.quota_stale": "Data expired {min} min",
+  "page.now.quota_waste": "Quota waste",
+  "page.quota.col_proj_s": "Proj",
+  "page.quota.red_summary": "Quota red {n} ({names})"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -1757,13 +1762,18 @@ export const ZH_TW: Record<string, string> = {
   "page.fleet.more_items": "{arrow} 還有 {n} 項",
   "page.quota.more_pools": "{arrow} 還有 {n} 池（{detail}）",
   "page.quota.more_pools_plain": "{arrow} 還有 {n} 池",
-  "page.quota.act_o_short_open": "[o] 各席",
-  "page.quota.act_o_short_close": "[o] 收席",
   "page.quota.act_prev_pool": "上一池",
   "page.quota.act_next_pool": "下一池 ({cur}/{total})",
   "page.quota.action_f_c": "[f] 換池",
   "page.decide.act_fold_close_c": "[z] 收合其他",
   "page.fleet.act_prev_line": "上一線",
   "page.fleet.act_next_line": "下一線",
-  "page.quota.f_seats_no_detail": "共 {n} 席（席位清單沒有明細）"
+  "page.quota.f_seats_no_detail": "共 {n} 席（席位清單沒有明細）",
+  "band.no_console": "沒有 console 快照",
+  "band.fleet_stale": "艦隊過期 {min} 分",
+  "band.quota_nopace": "額度無預測來源",
+  "page.now.quota_stale": "資料過期 {min} 分",
+  "page.now.quota_waste": "額度浪費",
+  "page.quota.col_proj_s": "預",
+  "page.quota.red_summary": "額度紅 {n}（{names}）"
 }

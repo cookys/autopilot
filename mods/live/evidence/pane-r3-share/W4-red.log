@@ -1,0 +1,12 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [8.72ms]
+(fail) W4: overflow uses three real cards and counts only categories absent from the same row [1.60ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "待決 3 張"
+  Received: "現況\n✗ 額度 紅 2（C 池、D 池）· ? 未知 3（A 池、B 池、F 池）\n另有 6 項（待決 1 · 額度浪費 ▲5）\n1 現 2 待 3 艦 4 額 5 派 6 審 7 花 8 殘 9 寵 0 鍛  i 說明  Esc 收起"
+
+ 1 pass
+ 1 fail
+Ran 2 tests across 1 file. [0.47s]

@@ -1850,7 +1850,10 @@ export function layoutBandLine(slots: readonly Slot[], columns: number, speed: r
     let last: BandLineLayout | null = null
     for (let n = 0; n <= steps.length; n++) {
       const drop = new Set<BandNarrowId>()
-      for (const step of steps.slice(0, n)) for (const id of step) drop.add(id)
+      for (const step of steps.slice(0, n)) for (const id of step) {
+        if (id === 'fleetWord' && columns >= 120) continue // U1: wide bands always name the fleet group.
+        drop.add(id)
+      }
       const band = layoutBand(narrowSlots(list, drop), bandCols)
       const nextSpeed = narrowSpeed(speed, drop)
       last = { band, speed: nextSpeed, applied: n }

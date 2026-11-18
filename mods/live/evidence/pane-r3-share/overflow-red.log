@@ -1,0 +1,19 @@
+
+mods/live/pages/pane-r3-share.test.ts:
+(pass) W2: 現況 lists five waste pools and percentages wide; overflow names 額度浪費 [8.24ms]
+(pass) W4: overflow uses three real cards and counts only categories absent from the same row [2.30ms]
+(pass) W5: band names stale fleet age plus quota cause and repair; missing console is red; narrow quota explains stale red [2.75ms]
+(pass) V1: narrow quota labels percentages and focused verdict; one row keeps both red pools and unknown count [3.84ms]
+(pass) V2: fleet compact controls occupy one row, leaving summary and focused line visible down to one row [3.38ms]
+(pass) V4: quota always puts o and previous/next pool in the action row directly above tabs, even twelve pools fit [2.11ms]
+(pass) U1: band keeps the 艦隊 section name at 160 and 120 columns when optional speed competes for cells [1.63ms]
+(pass) U3: now and fleet summaries sort failed before stalled before normal [1.29ms]
+(fail) W2 W4: wide overflow counts real hidden pools and calls them 額度浪費, excluding seat chrome [0.98ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "額度浪費 ▲5"
+  Received: "現況\n── 全艦隊 ────────────────────────────────────────────\n  產線 0 ｜ \n  ✗ 額度 C 池 12 分未更新（>10 分；statusline 沒在跑）\n  ✗ 額度 D 池 12 分未更新（>10 分；statusline 沒在跑）\n另有 9 項（額度 ?3 ▲5 · 本席 1）\n3 池判定未知（缺換池資料）；沒有待決卡\n1 現況 2 待決 3 艦隊 4 額度 5 派工 6 審查 7 花費 8 殘留 9 寵物 0 鍛  i 說明  Esc 收起"
+
+ 8 pass
+ 1 fail
+Ran 9 tests across 1 file. [0.45s]

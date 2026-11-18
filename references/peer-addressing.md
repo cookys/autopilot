@@ -9,11 +9,11 @@ that binds any skill sending peer traffic. (The hangar-bridge relay, `send_to_pe
 
 ## The one address form
 
-`namespace/courier/member` — for example `cookys/cuda/autopilot--claude`.
+`namespace/courier/member` — for example `acme/testhost-a/autopilot--claude`.
 
 - `namespace` owns couriers and their credentials; your own namespace may be omitted
   when sending (the sending courier fills it in on the wire).
-- `courier` is one per OS account, named after its machine (`openclaw`, `cuda`, `gentoo`, ...).
+- `courier` is one per OS account, named after its machine (`testhost-a`, `host-b`, ...).
 - `member` is one session or pane: `<project>--<harness>` for Claude and tmux panes, a plain
   name for services (`chatgpt`, `trinity`). A collision gets `-2`, `-3`.
 - There are no wildcards. `@channel` is the only broadcast.

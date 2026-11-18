@@ -173,7 +173,10 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
   const stripCount = cols < STRIP_SPLIT_COLS ? Math.min(2, rows.length) : Math.min(1, rows.length)
   // the action rows are exactly the ones the page returned (the frame pads nothing): only those rows may bind a `[x]` hint, never the body rows above them
-  const actionCount = Math.max(0, Math.min(Math.max(drawn.render(ctx).actions.length, unfold === undefined ? 0 : unfold(ctx).actions.length), Math.max(0, frame.rows - 1 - stripCount)))
+  const avail = Math.max(0, frame.rows - 1 - stripCount)
+  const firstActs = drawn.render(ctx).actions.length
+  const effActs = avail - Math.min(Math.max(1, firstActs), avail) <= 4 ? drawn.render({ ...ctx, shortBody: true }).actions.length : Math.max(firstActs, unfold === undefined ? 0 : unfold(ctx).actions.length)
+  const actionCount = Math.max(0, Math.min(effActs, avail))
   const press = (id: string) => { frame.onPress?.(id) }
   const noteAt = page.id === 'decide' && frame.decide?.textMode === true && el.Input !== undefined ? rows.length - stripCount - 1 : -1
   const typing = frame.decide?.textMode === true // while a note is typed the Input owns every key: the strip binds no digit and no hint binds a letter

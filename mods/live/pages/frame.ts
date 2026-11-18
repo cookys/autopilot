@@ -171,30 +171,31 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const S = sRows.length
   if (H <= S) return sRows.slice(-H).map(r => clip(r, ctx.size.cols))
   const avail = H - 1 - S
-  const layout = (r: { body: Row[]; actions: Row[] }) => {
+  const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const body = r.body.flatMap(x => wrapRow(x, ctx.size.cols))
-    const acts: Row[] = r.actions.length === 0 ? [[{ text: emptyState(ctx, page), dim: true }]] : r.actions
-    return { body, acts, room: avail - Math.min(acts.length, avail) }
+    const hasPendingBtn = short && page.id === 'now' && body.some(x => x.some(s => s.press === 'tab:2:decide'))
+    const acts: Row[] = r.actions.length === 0 ? (hasPendingBtn ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
+    return { body, acts, room: avail - Math.min(acts.length, avail), short }
   }
-  let lay = layout(first)
+  let lay = layout(first, ctx.shortBody === true)
   if (lay.room <= 4 && ctx.shortBody !== true) {
     const compact = page.render({ ...ctx, shortBody: true })
-    if (compact.actions.length <= full) lay = layout(compact)
+    if (compact.actions.length <= full) lay = layout(compact, true)
   } else if (opts.unfold !== undefined && lay.body.length < lay.room && lay.room > 4) {
     const open = opts.unfold(ctx)
     if (open.actions.length <= full) {
-      const alt = layout(open)
+      const alt = layout(open, false)
       if (alt.body.length <= alt.room) lay = alt
     }
   }
-  const { body, acts, room } = lay
+  const { body, acts, room, short } = lay
   const A = Math.min(acts.length, avail) // the action rows give way last-first only when the surface cannot hold head + actions + strip
   const head: Row = [{ text: ctx.t('tab.' + page.id) }, ...(mostSevere(ctx) === null ? [] : [{ text: '  ' }, mostSevere(ctx) as Seg])]
   let shown: Row[]
   if (body.length <= room) shown = body
   else {
     const from = Math.max(0, Math.min(opts.scroll ?? 0, body.length - room))
-    if (from + room >= body.length || room <= 4) shown = body.slice(from, from + room) // at the end, or in short-body mode (<= 4 rows): drop the scroll hint so every row shows an item
+    if (from + room >= body.length || short || room <= 4) shown = body.slice(from, from + room) // at the end, or in short-body mode (<= 4 rows): drop the scroll hint so every row shows an item
     else {
       const keep = Math.max(0, room - 1)
       shown = [...body.slice(from, from + keep), ...(room === 0 ? [] : [[{ text: ctx.t('frame.more', { n: body.length - from - keep, arrow: GLYPHS.structure.behind }), dim: true }] as Row])]

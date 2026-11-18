@@ -721,7 +721,7 @@
   "page.quota.rate_unit": "%/h",
   "page.quota.sv_exhaust_nosw": "unknown · ~{h} h",
   "page.now.pending_short": "Pending {n}",
-  "page.now.more_items": "{arrow} {n} more items",
+  "page.now.more_items": "{n} more items",
   "page.now.brief_stale": "{min} min ago ({why})",
   "page.now.pending_stale": "seat pending stale: {why}",
   "page.fleet.folded_unlisted": "{exp} folded, {unlisted} unlisted ({shown}+{rest}={total}) · z to unfold",

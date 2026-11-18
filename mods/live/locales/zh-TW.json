@@ -721,7 +721,7 @@
   "page.quota.rate_unit": "%/時",
   "page.quota.sv_exhaust_nosw": "未知·{h}時用完",
   "page.now.pending_short": "待決 {n} 張",
-  "page.now.more_items": "{arrow} 還有 {n} 項",
+  "page.now.more_items": "另有 {n} 項",
   "page.now.brief_stale": "{min} 分前（{why}）",
   "page.now.pending_stale": "本席待決過期：{why}",
   "page.fleet.folded_unlisted": "另 {exp} 條折疊、{unlisted} 條未列名（{shown}+{rest}={total}）· z 展開",

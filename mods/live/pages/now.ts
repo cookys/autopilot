@@ -189,15 +189,26 @@ function poolRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
 
 // the items the exceptions block draws: non-quota exceptions, surfaced line issues (via shared lineState, R3), and `seat_blocked` items whose pool is not already in quota.pools (R1)
 const isSeatBlocked = (i: ConsoleItem): boolean => i.kind === 'seat_blocked'
+const HOST_OFFLINE_RE = /主機.*離線|離線.*主機|\bhosts?\b.*\boffline\b|\boffline\b.*\bhosts?\b/i
+const isOfflineHostExc = (i: ConsoleItem): boolean =>
+  i.kind === 'exception' && i.to_console === true && !i.id.startsWith('quota:') && i.line_id === null
+  && (/^exc:host[_:-]?offline\b/i.test(i.id) || HOST_OFFLINE_RE.test(i.title) || HOST_OFFLINE_RE.test(i.text))
 function exceptionRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
   const { t, nowMs, size } = ctx
   const pools = normalizedPools(con)
-  const knownPools = new Set((pools ?? []).map(p => poolKey(p.pool)))
+  const seenPools = new Set((pools ?? []).map(p => poolKey(p.pool)))
   const lineMap = new Map((con.lines ?? []).map(l => [l.line_id, l]))
   const stateWords = [t('page.fleet.w_offline'), t('page.fleet.idle'), t('page.fleet.w_stuck')]
   const items = con.items.filter((i: ConsoleItem) => {
     if (i.kind === 'quota' || i.id.startsWith('quota:')) return false
-    if (isSeatBlocked(i)) return i.to_console !== false && (pools === null || typeof i.facts.pool !== 'string' || !knownPools.has(poolKey(i.facts.pool)))
+    if (isSeatBlocked(i)) {
+      if (i.to_console === false) return false
+      if (typeof i.facts.pool !== 'string') return true
+      const pk = poolKey(i.facts.pool)
+      if (seenPools.has(pk)) return false
+      seenPools.add(pk)
+      return true
+    }
     if (i.kind !== 'exception' || i.to_console !== true) return false
     if (i.line_id !== null && i.id.startsWith('exc:T3:')) {
       const ln = lineMap.get(i.line_id)
@@ -388,18 +399,19 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   if (residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }])
 
   if (ctx.shortBody === true) {
-    // R2: Short body (<= 4 rows): pending summary (Button + summary on one row) -> red (offline/stalled lines, red pools) -> unknown pools -> yellow; overflow -> `↓ 還有 N 項`
-    const shortActions: Row[] = decisions > 0 && residue > 0 ? actions.slice(1) : actions
+    // C1 (PM ruling): Short body: pending Button row (drop duplicate jump_decide action row so its row goes to content) ->
+    // red pools -> offline hosts -> stuck/offline lines -> unknown pools -> yellow; overflow -> `另有 N 項`
+    const shortActions: Row[] = decisions > 0 ? actions.slice(1) : actions
     const stripLen = size.cols < STRIP_SPLIT_COLS ? Math.min(2, size.rows) : Math.min(1, size.rows)
     const avail = Math.max(0, size.rows - 1 - stripLen)
-    const actLen = Math.max(1, shortActions.length)
+    const actLen = decisions > 0 ? shortActions.length : Math.max(1, shortActions.length)
     const room = Math.max(0, avail - Math.min(actLen, avail))
     const items: Row[] = []
     const pRow = pendingRowOf(ctx, decisions, true)
-    if (pRow !== null) items.push(pRow)
+    if (pRow !== null) items.push(truncateSegs(pRow, size.cols))
     if (con !== null) {
       const pools = normalizedPools(con)
-      const knownPools = new Set((pools ?? []).map(p => poolKey(p.pool)))
+      const seenPools = new Set((pools ?? []).map(p => poolKey(p.pool)))
       const ranked = pools === null ? [] : rankPools(pools, nowMs, t)
       const stateWords = [t('page.fleet.w_offline'), t('page.fleet.idle'), t('page.fleet.w_stuck')]
       const stuck = stuckLinesOf(con)
@@ -411,33 +423,57 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
         const desc = subj !== '' && stateWords.some(w => subj.includes(w)) ? line.label + ' ' + subj : line.label + ' ' + ls.word + (subj === '' ? '' : '：' + subj)
         return truncateSegs([...(wide ? [dim('  ')] : []), { text: g.text + ' ', ...(g.color === undefined ? {} : { color: g.color }) }, plain(desc)], size.cols)
       })
-      const rawExc = [...con.items]
-        .filter((i: ConsoleItem) => (i.kind === 'exception' && i.to_console === true && !i.id.startsWith('quota:') && (i.line_id === null || !stuckIds.has(i.line_id)))
-          || (isSeatBlocked(i) && i.to_console !== false && (pools === null || typeof i.facts.pool !== 'string' || !knownPools.has(poolKey(i.facts.pool)))))
-        .sort((a, b) => (a.line_id !== null ? 0 : 1) - (b.line_id !== null ? 0 : 1))
       const toShortExc = (it: ConsoleItem): Row => {
         const g = glyph(it.state)
         const body = wide ? it.text : it.title
         return truncateSegs([...(wide ? [dim('  ')] : []), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }, plain(' ' + body)], size.cols)
       }
+      const unpooledBlocked: Row[] = con.items
+        .filter((i: ConsoleItem) => {
+          if (!isSeatBlocked(i) || i.to_console === false) return false
+          if (typeof i.facts.pool !== 'string') return true
+          const pk = poolKey(i.facts.pool)
+          if (seenPools.has(pk)) return false
+          seenPools.add(pk)
+          return true
+        })
+        .map(toShortExc)
+      const hostExcItems = con.items.filter(isOfflineHostExc)
+      const hs = con.sources.hosts
+      const h = con.counts.summary.hosts
+      const summaryOffline = hs?.state === 'no_source' ? 0 : typeof h.online === 'number' && typeof h.total === 'number' ? Math.max(0, h.total - h.online) : 0
+      const unnamedOffline = Math.max(0, summaryOffline - hostExcItems.length)
+      const offlineHosts: Row[] = [
+        ...hostExcItems.map(toShortExc),
+        ...(unnamedOffline > 0 ? [truncateSegs([...(wide ? [dim('  ')] : []), { text: GLYPHS.state.failed + ' ' + t('page.now.hosts') + ' ' + t('page.fleet.hosts_off', { n: unnamedOffline }), color: PALETTE.broken }], size.cols)] : []),
+      ]
+      const seenExcLines = new Set(stuckIds)
+      const rawExc = con.items
+        .filter((i: ConsoleItem) => {
+          if (i.kind !== 'exception' || i.to_console !== true || i.id.startsWith('quota:') || isOfflineHostExc(i)) return false
+          if (i.line_id === null) return true
+          if (seenExcLines.has(i.line_id)) return false
+          seenExcLines.add(i.line_id)
+          return true
+        })
+        .sort((a, b) => (a.line_id !== null ? 0 : 1) - (b.line_id !== null ? 0 : 1))
       const redExc = rawExc.filter(i => i.state === 'failed' || i.state === 'stalled').map(toShortExc)
       const yellowExc = rawExc.filter(i => i.state !== 'failed' && i.state !== 'stalled').map(toShortExc)
-      const redPools = ranked.filter(v => v.role === 'broken').map(v => truncateSegs(poolRowOf(ctx, v, wide), size.cols))
+      const redPools = [...ranked.filter(v => v.role === 'broken').map(v => truncateSegs(poolRowOf(ctx, v, wide), size.cols)), ...unpooledBlocked]
       const unknownPools = ranked.filter(isUnknownPool).map(v => truncateSegs(poolRowOf(ctx, v, wide), size.cols))
       const yellowPools = ranked.filter(v => v.role === ROLE_WARNING && !isUnknownPool(v)).map(v => truncateSegs(poolRowOf(ctx, v, wide), size.cols))
-      items.push(...stuckRows, ...redExc, ...redPools, ...unknownPools, ...yellowPools, ...yellowExc)
+      items.push(...redPools, ...offlineHosts, ...stuckRows, ...redExc, ...unknownPools, ...yellowPools, ...yellowExc)
     }
-    if (con === null) items.push(broken(t('page.now.no_console')))
-    else if (items.length === 0 && dataMissing(con, nowMs, t)) items.push(broken(t('frame.unknown')))
+    if (con === null) items.push(truncateSegs(broken(t('page.now.no_console')), size.cols))
+    else if (items.length === 0 && dataMissing(con, nowMs, t)) items.push(truncateSegs(broken(t('frame.unknown')), size.cols))
     if (items.length === 0) {
       if (live !== null) items.push(...seatRows(ctx, live, wide).map(r => truncateSegs(r, size.cols)))
-      else items.push(broken(t('page.now.no_live')))
+      else items.push(truncateSegs(broken(t('page.now.no_live')), size.cols))
     }
     if (items.length === 0) items.push([dim((wide ? '  ' : '') + t('page.now.exc_none'))])
     if (room > 0 && items.length > room) {
-      if (room === 1) return { body: items.slice(0, 1), actions: shortActions }
       const keep = room - 1
-      return { body: [...items.slice(0, keep), [{ text: t('page.now.more_items', { n: items.length - keep, arrow: GLYPHS.structure.behind }), dim: true }]], actions: shortActions }
+      return { body: [...items.slice(0, keep), truncateSegs([{ text: t('page.now.more_items', { n: items.length - keep }), dim: true }], size.cols)], actions: shortActions }
     }
     return { body: items, actions: shortActions }
   }

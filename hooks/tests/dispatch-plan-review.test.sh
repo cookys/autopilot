@@ -2180,16 +2180,24 @@ assert_exit_code "$?" "0" "persisted g2 artifact contains no raw temp or home pa
 CODEX_SHA_DIR="$TEST_TMP/codex-stderr-digest"
 CODEX_SHA_BIN="$CODEX_SHA_DIR/bin"
 CODEX_SHA_TMP="$CODEX_SHA_DIR/tmp"
+CODEX_SHA_STDERR_PATH_FILE="$CODEX_SHA_DIR/stderr-path"
 mkdir -p "$CODEX_SHA_BIN" "$CODEX_SHA_TMP"
 cat > "$CODEX_SHA_BIN/codex" <<'CODEX_SHA_FAKE'
-#!/bin/bash
+#!/usr/bin/env bash
 set -uo pipefail
 dir="${0%/*}/.."
 if [ "${1:-}" = "--version" ]; then
   printf '%s\n' "OpenAI Codex v0.166.0"
   exit 0
 fi
-readlink "/proc/$$/fd/2" > "$dir/stderr-path" 2>/dev/null || : > "$dir/stderr-path"
+for arg in "$@"; do
+  if [ "$arg" = "--help" ]; then
+    printf '%s\n' "Usage: codex exec [--output-last-message PATH]"
+    exit 0
+  fi
+done
+stderr_record="${CODEX_SHA_STDERR_PATH_FILE:-$dir/stderr-path}"
+readlink "/proc/$$/fd/2" > "$stderr_record" 2>/dev/null || : > "$stderr_record"
 sidecar=""
 args=("$@")
 i=0
@@ -2222,7 +2230,7 @@ cat > "$CODEX_SHA_MANIFEST" <<'JSON'
   "artifact_type": "plan_review_manifest",
   "logical_plan_id": "codex-stderr-digest-plan",
   "minimum_distinct_families": 1,
-  "max_attempts_per_seat": 1,
+  "max_attempts_per_seat": 2,
   "seats": [
     {
       "id": "architect",
@@ -2241,7 +2249,12 @@ cat > "$CODEX_SHA_MANIFEST" <<'JSON'
   ]
 }
 JSON
+node "$SCHEMA_CHECK" --schema "$REPO_ROOT/schemas/plan-review-manifest.schema.json" \
+  --document "$CODEX_SHA_MANIFEST" >/dev/null
+assert_exit_code "$?" "0" "codex stderr_sha256 fixture manifest matches closed schema"
 CODEX_SHA_OUT="$CODEX_SHA_DIR/out.json"
+CODEX_SHA_EMPTY_DIGEST="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+CODEX_SHA_STDERR_PATH_FILE="$CODEX_SHA_STDERR_PATH_FILE" \
 TMPDIR="$CODEX_SHA_TMP" PATH="$CODEX_SHA_BIN:$PATH" WORKER_MOUNT_FORCE_MODE=no_root \
 AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_MS=0 AUTOPILOT_STABLE_POLLS=1 \
   node "$SCRIPT" \
@@ -2251,14 +2264,65 @@ AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_M
     --no-topology-fallbacks --allow-unregistered \
   > "$CODEX_SHA_OUT"; EXIT=$?
 assert_exit_code "$EXIT" "0" "codex seat review succeeds for stderr_sha256 check"
-CODEX_SHA_STDERR_FILE="$(cat "$CODEX_SHA_DIR/stderr-path" 2>/dev/null || true)"
+assert_artifact_schema "$(cat "$CODEX_SHA_OUT")" "codex stderr_sha256 artifact matches schema"
+CODEX_SHA_STDERR_FILE="$(cat "$CODEX_SHA_STDERR_PATH_FILE" 2>/dev/null || true)"
+assert_neq "$CODEX_SHA_STDERR_FILE" "" "codex stderr path recorded by fake binary"
 assert_file_exists "$CODEX_SHA_STDERR_FILE" "codex private stderr file captured"
-CODEX_SHA_EXPECTED="$(node -e '
+CODEX_SHA_EXPECTED="$(
+  [ -f "$CODEX_SHA_STDERR_FILE" ] && node -e '
 const crypto = require("crypto"), fs = require("fs");
 process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
-' "$CODEX_SHA_STDERR_FILE")"
-CODEX_SHA_ACTUAL="$(json_field "$(cat "$CODEX_SHA_OUT")" attempts.0.transport_envelope.output_digests.stderr_sha256)"
+' "$CODEX_SHA_STDERR_FILE" || printf 'missing-expected-stderr-file'
+)"
+CODEX_SHA_ACTUAL="$(json_field "$(cat "$CODEX_SHA_OUT")" attempts.0.transport_envelope.output_digests.stderr_sha256 2>/dev/null || printf 'missing-actual-stderr-sha256')"
+assert_neq "$CODEX_SHA_EXPECTED" "$CODEX_SHA_EMPTY_DIGEST" \
+  "captured codex stderr bytes are non-empty"
+assert_neq "$CODEX_SHA_ACTUAL" "$CODEX_SHA_EMPTY_DIGEST" \
+  "codex attempt envelope stderr_sha256 is not the empty-string sha256"
 assert_eq "$CODEX_SHA_ACTUAL" "$CODEX_SHA_EXPECTED" \
   "codex attempt envelope stderr_sha256 equals sha256 of actual codex stderr file bytes"
+
+# Negative control: reverting the codex stderr read falls back to empty wrapper stderr_sha256 and mismatches actual codex stderr.
+CODEX_SHA_MUTANT_TREE="$CODEX_SHA_DIR/mutant-tree"
+node - "$REPO_ROOT" "$CODEX_SHA_MUTANT_TREE" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [repoRoot, mutantRoot] = process.argv.slice(2);
+fs.mkdirSync(path.join(mutantRoot, 'scripts'), { recursive: true });
+for (const name of fs.readdirSync(repoRoot)) {
+  if (name === 'scripts' || name === '.git') continue;
+  fs.symlinkSync(path.join(repoRoot, name), path.join(mutantRoot, name));
+}
+for (const name of fs.readdirSync(path.join(repoRoot, 'scripts'))) {
+  if (name === 'dispatch-plan-review.js') continue;
+  fs.symlinkSync(path.join(repoRoot, 'scripts', name), path.join(mutantRoot, 'scripts', name));
+}
+NODE
+sed_mutant "$SCRIPT" "$CODEX_SHA_MUTANT_TREE/scripts/dispatch-plan-review.js" \
+  's/stderr = fs\.readFileSync(codexStderrPath);/void codexStderrPath;/'
+CODEX_SHA_MUTANT_MANIFEST="$CODEX_SHA_DIR/mutant-manifest.json"
+node - "$CODEX_SHA_MANIFEST" "$CODEX_SHA_MUTANT_MANIFEST" <<'NODE'
+const fs = require('fs');
+const m = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+m.logical_plan_id = 'codex-stderr-digest-mutant-plan';
+fs.writeFileSync(process.argv[3], `${JSON.stringify(m, null, 2)}\n`);
+NODE
+CODEX_SHA_MUTANT_OUT="$CODEX_SHA_DIR/mutant-out.json"
+CODEX_SHA_MUTANT_STDERR_PATH_FILE="$CODEX_SHA_DIR/mutant-stderr-path"
+CODEX_SHA_STDERR_PATH_FILE="$CODEX_SHA_MUTANT_STDERR_PATH_FILE" \
+TMPDIR="$CODEX_SHA_TMP" PATH="$CODEX_SHA_BIN:$PATH" WORKER_MOUNT_FORCE_MODE=no_root \
+AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_MS=0 AUTOPILOT_STABLE_POLLS=1 \
+  node "$CODEX_SHA_MUTANT_TREE/scripts/dispatch-plan-review.js" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+    --ticket "codex-stderr-digest-mutant-1" --session-id "codex-stderr-digest-mutant-s1" --generation 1 \
+    --manifest-file "$CODEX_SHA_MUTANT_MANIFEST" --state-dir "$CODEX_SHA_DIR/mutant-state" --timeout 30s \
+    --no-topology-fallbacks --allow-unregistered \
+  > "$CODEX_SHA_MUTANT_OUT"; EXIT=$?
+assert_exit_code "$EXIT" "0" "negative-control mutant codex seat review finishes"
+CODEX_SHA_MUTANT_ACTUAL="$(json_field "$(cat "$CODEX_SHA_MUTANT_OUT")" attempts.0.transport_envelope.output_digests.stderr_sha256 2>/dev/null || printf 'missing-mutant-stderr-sha256')"
+assert_eq "$CODEX_SHA_MUTANT_ACTUAL" "$CODEX_SHA_EMPTY_DIGEST" \
+  "negative control: without codex stderr read, stderr_sha256 collapses to empty-string sha256"
+assert_neq "$CODEX_SHA_MUTANT_ACTUAL" "$CODEX_SHA_EXPECTED" \
+  "negative control: empty-string stderr_sha256 fails the actual-stderr digest equality check"
 
 finalize_test

@@ -143,7 +143,7 @@ accident. Each of the four tracked knowledge files got there through an explicit
 
 The consequence is absolute and worth stating in the bluntest available terms:
 
-> **A write to `.claude/knowledge/` that is not committed did not happen.**
+> **A write to `.claude/knowledge/` that is not committed did not happen** — a write there is not saved until `git add -f` + commit (read `.claude/knowledge/INDEX.md` first).
 > 不 commit 就等於沒寫。
 
 An uncommitted file there is not "saved pending review". It is invisible to `git status` (ignored),

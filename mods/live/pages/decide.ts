@@ -45,7 +45,12 @@ function modelOf(ctx: PageCtx): Model {
       far.push({ id: /\bd-[0-9a-z-]+/.exec(it.text)?.[0] ?? it.id, title: it.title, seat: line?.lead_display ?? '' })
     }
   }
-  return { all: [...own.map((d): Item => ({ kind: 'own', d })), ...cons.map((c): Item => ({ kind: 'con', c }))], steps: pending.filter(isStepCard), far }
+  // N1: priority order, then the longest wait first: the seat's own cards (answerable here) before the console cards, each group oldest first, so the default focus is the card
+  // that has waited longest (the one 現況 names as 最舊 when it is a console card); a card with no open time keeps its place after the dated ones of its group
+  const byAge = <X>(list: X[], at: (x: X) => number | null): X[] =>
+    list.map((x, i) => ({ x, i, at: at(x) })).sort((a, b) => (a.at === null ? (b.at === null ? a.i - b.i : 1) : b.at === null ? -1 : a.at - b.at || a.i - b.i)).map(e => e.x)
+  const all: Item[] = [...byAge(own, d => openedMs(d, ctx)).map((d): Item => ({ kind: 'own', d })), ...byAge(cons, c => c.opened_at_ms).map((c): Item => ({ kind: 'con', c }))]
+  return { all, steps: pending.filter(isStepCard), far }
 }
 
 const clampCursor = (nav: DecideNav, n: number): number => (n === 0 ? 0 : Math.max(0, Math.min(n - 1, nav.cursor)))
@@ -311,15 +316,17 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
   }
 
   // the action area: the state of the focused card, then the keys that work now
-  if (cur !== undefined) actions.push(...actionRows(cur, cursor, nav, ctx, wide, roomy))
+  if (cur !== undefined) actions.push(...actionRows(cur, cursor, nav, ctx, wide, roomy, total))
   return { body, actions }
 }
 
-function actionRows(cur: Item, cursor: number, nav: DecideNav, ctx: PageCtx, wide: boolean, roomy: boolean): Row[] {
+function actionRows(cur: Item, cursor: number, nav: DecideNav, ctx: PageCtx, wide: boolean, roomy: boolean, total = 1): Row[] {
   const { t } = ctx
   const R = (text: string): Row => [seg(text)]
   const navKeys = wide ? t('page.decide.act_nav') : t('page.decide.act_nav_c')
-  if (cur.kind === 'con') return [R(t('page.decide.act_readonly', { seat: cur.c.executor_display ?? '-' })), R(navKeys)]
+  // M3: the `其他待決 N（z 收合）` header asks for z, so the read-only card's key row carries the z Button too (2.1.327 + tmux types a bare z into the prompt)
+  const conFold = nav.folded ? (wide ? t('page.decide.act_fold_open') : t('page.decide.act_fold_open_c')) : wide ? t('page.decide.act_fold_close') : t('page.decide.act_fold_close_c')
+  if (cur.kind === 'con') return [R(t('page.decide.act_readonly', { seat: cur.c.executor_display ?? '-' })), R(navKeys + (total > 1 ? '  ' + conFold : ''))]
   const d = cur.d
   const sent = d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
   const hold = d.id === null ? undefined : nav.hold?.[d.id]

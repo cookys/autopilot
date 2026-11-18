@@ -11,7 +11,7 @@ import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankP
 import type { Verdict } from './quota-pick'
 import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, dataMissing, decisionCount, isBriefStale, lineState, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, wrapRow } from './rows'
+import { WRAP_HANG, brokenRow, dataMissing, decisionCount, isBriefStale, lineState, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, wrapRow } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -149,7 +149,11 @@ function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] 
   const { t, size } = ctx
   const s = con.counts.summary
   const total = lineTotal(con)
-  const lead: Seg[] = wide ? [plain('  ' + t('page.now.lines') + ' ' + total + ' ｜ ')] : [plain(t('page.now.lines') + ' ' + total + ' ')]
+  // N4: an old snapshot keeps its old values, each with the ✗ mark, and says its age once (`產線 9✗ ●2 ⋯1 ⊘6 · 主機 4/6✗ · ✗ 資料已過期 12 分前`)
+  const bs = isBriefStale(con, ctx.nowMs)
+  const totalText = String(total)
+  const totalSeg: Seg = bs.stale ? staleBadge(totalText + GLYPHS.state.failed) : plain(totalText)
+  const lead: Seg[] = wide ? [plain('  ' + t('page.now.lines') + ' '), totalSeg, plain(' ｜ ')] : [plain(t('page.now.lines') + ' '), totalSeg, plain(' ')]
   const chips: Seg[] = []
   for (const k of LINE_ORDER) {
     const n = s.lines[k]
@@ -161,10 +165,11 @@ function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] 
   const hosts: Seg[] = []
   const h = s.hosts
   const hs = con.sources.hosts
-  if (hs !== undefined && (hs.state === 'expired' || hs.state === 'no_source')) hosts.push(staleBadge(GLYPHS.state.failed + ' ' + t(hs.state === 'expired' ? 'page.now.hosts_expired' : 'page.now.hosts_no_source')))
-  else if (typeof h.online === 'number' && typeof h.total === 'number') hosts.push(plain(h.online + '/' + h.total + (wide ? ' ' + t('page.now.hosts_online') : '')))
+  const hasCounts = typeof h.online === 'number' && typeof h.total === 'number'
+  if (hs !== undefined && hs.state === 'expired' && hasCounts) hosts.push(staleBadge(h.online + '/' + h.total + GLYPHS.state.failed + (wide ? ' ' + t('page.now.hosts_online') : '')))
+  else if (hs !== undefined && (hs.state === 'expired' || hs.state === 'no_source')) hosts.push(staleBadge(GLYPHS.state.failed + ' ' + t(hs.state === 'expired' ? 'page.now.hosts_expired' : 'page.now.hosts_no_source')))
+  else if (hasCounts) hosts.push(plain(h.online + '/' + h.total + (wide ? ' ' + t('page.now.hosts_online') : '')))
   const sep = wide ? plain(' ｜ ') : plain(' · ')
-  const bs = isBriefStale(con, ctx.nowMs)
   const staleSegs: Seg[] = bs.stale ? [sep, staleBadge(GLYPHS.state.failed + ' ' + t('page.now.brief_stale', { min: bs.min, why: t('page.now.hosts_expired') }))] : []
   const main: Seg[] = [...lead, ...chips, ...(hosts.length > 0 ? [sep, ...(wide ? [plain(t('page.now.hosts') + ' ')] : [plain(t('page.now.hosts') + ' ')]), ...hosts] : []), ...staleSegs]
   // the pools that need a look are listed one per row under the exceptions (poolRows); the overview names the worst one only when there is nothing to list
@@ -217,7 +222,11 @@ function exceptionRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[]
     return true
   })
   const coveredLines = new Set<string>()
-  const rows: Row[] = items.map((it, idx) => {
+  // N2: this page has no row action, so no row carries the ▸ focus mark; the production-line rows take the 艦隊 page's order (failed, then stalled, each longest first)
+  // in the places line rows hold, and a narrow line row says how long (`甲線 離線：成員離線（20 分）`), like the wide row's right-hand age
+  const RANK: Record<string, number> = { failed: 0, stalled: 1 }
+  type Entry = { row: Row; line: boolean; rank: number; since: number }
+  const entries: Entry[] = items.map(it => {
     if (it.line_id !== null) coveredLines.add(it.line_id)
     const ln = it.line_id === null ? undefined : lineMap.get(it.line_id)
     const ls = ln !== undefined && ln.issues.some(x => x.to_console) ? lineState(ln, t) : null
@@ -227,10 +236,13 @@ function exceptionRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[]
     const stale = isSeatBlocked(it) && f.stale === true
     let body = wide ? it.text : it.title
     if (useLs && !stateWords.some(w => body.includes(w))) body = (ln?.label ?? '') + ' ' + ls.word + '：' + body
-    const lead: Seg[] = [dim((idx === 0 ? GLYPHS.structure.folded : ' ') + (wide ? ' ' : '')), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }]
-    if (stale) return [...lead, staleBadge(' ' + body + ' ' + GLYPHS.state.failed + ' ' + t('page.now.seat_blocked_stale', { source: String(f.source ?? '?') }))]
-    const left: Seg[] = [...lead, plain(' ' + body)]
-    return wide ? rightAlign(left, ageOf(t, nowMs - it.since_ms), size.cols - 1) : truncateSegs(left, size.cols)
+    const line = ln !== undefined
+    const since = useLs && ls.worst !== null ? ls.worst.since_ms : it.since_ms
+    const meta = { line, rank: RANK[useLs ? ls.sid : it.state] ?? 2, since }
+    const lead: Seg[] = [dim(' ' + (wide ? ' ' : '')), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }]
+    if (stale) return { row: [...lead, staleBadge(' ' + body + ' ' + GLYPHS.state.failed + ' ' + t('page.now.seat_blocked_stale', { source: String(f.source ?? '?') }))], ...meta }
+    const left: Seg[] = [...lead, plain(' ' + body + (line && !wide ? '（' + ageUnit(t, nowMs - since) + '）' : ''))]
+    return { row: wide ? rightAlign(left, ageOf(t, nowMs - it.since_ms), size.cols - 1) : truncateSegs(left, size.cols), ...meta }
   })
   for (const ln of con.lines ?? []) {
     if (coveredLines.has(ln.line_id) || !ln.issues.some(x => x.to_console)) continue
@@ -239,11 +251,13 @@ function exceptionRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[]
     const g = glyph(ls.sid)
     const subj = typeof ls.worst.subject === 'string' ? ls.worst.subject : ''
     const body = subj !== '' && stateWords.some(w => subj.includes(w)) ? ln.label + ' ' + subj : ln.label + ' ' + ls.word + (subj === '' ? '' : '：' + subj)
-    const lead: Seg[] = [dim((rows.length === 0 ? GLYPHS.structure.folded : ' ') + (wide ? ' ' : '')), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }]
-    const left: Seg[] = [...lead, plain(' ' + body)]
-    rows.push(wide ? rightAlign(left, ageOf(t, nowMs - ls.worst.since_ms), size.cols - 1) : truncateSegs(left, size.cols))
+    const lead: Seg[] = [dim(' ' + (wide ? ' ' : '')), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }]
+    const left: Seg[] = [...lead, plain(' ' + body + (wide ? '' : '（' + ageUnit(t, nowMs - ls.worst.since_ms) + '）'))]
+    entries.push({ row: wide ? rightAlign(left, ageOf(t, nowMs - ls.worst.since_ms), size.cols - 1) : truncateSegs(left, size.cols), line: true, rank: RANK[ls.sid] ?? 2, since: ls.worst.since_ms })
   }
-  return rows
+  const lineSorted = entries.filter(e => e.line).sort((a, b) => a.rank - b.rank || a.since - b.since)
+  let k = 0
+  return entries.map(e => (e.line ? lineSorted[k++] : e).row)
 }
 
 // ---- this seat ----
@@ -617,7 +631,7 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     const entries: ShortEntry[] = []
     const pRow = pendingRowOf(ctx, decisions, true)
     const pNoTruncate = pendingSourceMissing(ctx) || (live !== null && live.state !== 'ok')
-    if (pRow !== null) entries.push({ rows: pNoTruncate ? wrapRow(pRow, size.cols) : [truncateSegs(pRow, size.cols)], count: 1 })
+    if (pRow !== null) entries.push({ rows: pNoTruncate ? wrapRow(pRow, size.cols, WRAP_HANG) : [truncateSegs(pRow, size.cols)], count: 1 })
     let extraRows: Row[] = []
     if (con !== null) {
       const fleet = fleetShortSummary(ctx, con, wide)
@@ -680,7 +694,8 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const body: Row[] = []
   // 1. the pending count and the oldest card's title come first (G2, R2, R8); the [2] jump stays in the action area
   const pRow = pendingRowOf(ctx, decisions, false)
-  if (pRow !== null) body.push(...(pendingSourceMissing(ctx) || (live !== null && live.state !== 'ok') ? wrapRow(pRow, size.cols) : [pRow]))
+  // N3: a pending reason kept whole wraps at a clause boundary with the 2-cell hanging indent, so no orphan word sits under the status-glyph column
+  if (pRow !== null) body.push(...(pendingSourceMissing(ctx) || (live !== null && live.state !== 'ok') ? wrapRow(pRow, size.cols, WRAP_HANG) : [pRow]))
   body.push(ruleRow(t('page.now.fleet'), wide))
   if (con === null) body.push(broken(t('page.now.no_console')))
   else {

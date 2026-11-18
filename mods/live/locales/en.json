@@ -869,7 +869,6 @@
   "page.fleet.hosts_off_short": "{n} hosts offline",
   "page.fleet.hosts_ok_short": "hosts {online}/{total}",
   "page.fleet.more_items": "{arrow} {n} more items",
-  "page.fleet.act_next_c": "Next {arrow}",
   "page.quota.more_pools": "{arrow} {n} more pools ({detail})",
   "page.quota.more_pools_plain": "{arrow} {n} more pools",
   "page.quota.act_o_short_open": "[o] Seats",

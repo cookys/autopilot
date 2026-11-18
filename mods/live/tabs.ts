@@ -1,7 +1,8 @@
 // mods/live/tabs.ts — the tab builders of the live pane (project/plans/2026-10-13-live-pane-design-system.md §6.1): 現況, 派工, 審查, 用量, 殘留 and ?.
 // Every line is built by a ui.ts component; this file writes no theme key, no glyph literal and no hand-made line (ui-lint.test.js L1, L2, L4-L7).
 
-import { decisionCount, pendingSourceMissing, stuckLinesOf } from './pages/rows'
+import { decisionCount, lineState, pendingSourceMissing, stuckLinesOf } from './pages/rows'
+import { ROLE_WARNING, isUnknownPool, normalizedPools, rankPools } from './pages/quota-pick'
 import type { ConsoleSnapshot } from './console'
 import { T_EN } from './i18n'
 import { ratioLevel } from './band-contract.ts'
@@ -112,16 +113,36 @@ export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, a
   const needs = snap === null ? {} : tabNeeds(snap)
   const noPendingSrc = pendingSourceMissing({ live: snap, console: con })
   const pending = decisionCount({ live: snap, console: con })
-  const faults = stuckLinesOf(con).length
+  // M6: the fleet count marks only failed / stuck lines with ✗; idle lines are counted apart with ⊘ (an idle line is not an error)
+  const stuck = stuckLinesOf(con)
+  const idleWord = t('page.fleet.idle')
+  const idleN = stuck.filter(s => lineState(s.line, t).word === idleWord).length
+  const faults = stuck.length - idleN
+  // M6: 額度 carries the same pool counts the quota page draws: red ✗, unknown ?, yellow ▲ (a closed band must not read as all-clear)
+  const pools = normalizedPools(con)
+  const verdicts = pools === null ? [] : rankPools(pools, con?.generated_at_ms ?? 0, t)
+  const qRed = verdicts.filter(v => v.role === 'broken' && !isUnknownPool(v)).length
+  const qUnk = verdicts.filter(v => isUnknownPool(v)).length
+  const qWarn = verdicts.filter(v => v.role === ROLE_WARNING && !isUnknownPool(v)).length
+  const G = ui.GLYPHS.state
+  const marks = (name: string, parts: [string, number][]): string => {
+    const p = parts.filter(([, n]) => n > 0)
+    return p.length === 0 ? name : name + '(' + p.map(([g, n]) => g + n).join(' ') + ')'
+  }
   const first = (s: string): string => [...s][0] ?? s
   const build = (short: boolean): BarStrip => {
     const list = BAND_PAGE_TABS.map(id => {
       const full = t('tab.' + id)
-      const label = ui.tabCountLabel(short ? first(full) : full, id === 'decide' ? (noPendingSrc ? null : pending) : id === 'fleet' ? faults : 0, id === 'fleet')
+      const name = short ? first(full) : full
+      const label = id === 'fleet' && idleN > 0 ? marks(name, [[G.failed, faults], [G.stalled, idleN]])
+        : id === 'quota' ? marks(name, [[G.failed, qRed], [G.unknown, qUnk], [G.need_you, qWarn]])
+          : ui.tabCountLabel(name, id === 'decide' ? (noPendingSrc ? null : pending) : id === 'fleet' ? faults : 0, id === 'fleet')
       return { id: id as BandPageId | 'forge', label, ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }
     })
+    // M6: the closed band lists every pane page the pane strip has: 9 寵物 and 0 鍛 too (the forge label is the mod's own when one is drawn)
+    const pet = { id: 'pet' as BandPageId | 'forge', label: short ? first(t('tab.pet')) : t('tab.pet') }
     const act = active === 'forge' ? ('forge' as const) : null
-    const built = ui.strip<BandPageId | 'forge'>({ t, cols: 100000 }, act, forge === null ? list : [...list, { id: 'forge' as const, label: forge }], false)
+    const built = ui.strip<BandPageId | 'forge'>({ t, cols: 100000 }, act, [...list, pet, { id: 'forge' as const, label: forge ?? t('tab.forge_band') }], false)
     const tabs: BarTab[] = []
     let x = 0
     for (const b of built.tabs) {

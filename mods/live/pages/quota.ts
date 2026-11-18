@@ -6,7 +6,7 @@
 //   Enter (A3) expands the focused pool's seats from `fleet seats --quota --json`; the page draws them from `quota.seats` when the feed carries them
 import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
-import { brokenRow } from './rows'
+import { WRAP_HANG, brokenRow, wrapRow } from './rows'
 import type { Row } from './rows'
 import type { QuotaSeat } from '../console'
 import type { Seg } from '../model'
@@ -122,23 +122,8 @@ function resetText(ms: number | null, tier: Tier, dows: string[]): string {
 }
 
 function rowWrappedLen(row: Row, cols: number): number {
-  if (cols <= 0 || row.reduce((w, x) => w + displayWidth(x.text), 0) <= cols) return 1
-  let lines = 0
-  let used = 0
-  let hasCur = false
-  for (const seg of row) {
-    for (const ch of seg.text) {
-      const w = displayWidth(ch)
-      if (used + w > cols) {
-        lines++
-        used = 0
-        hasCur = false
-      }
-      used += w
-      hasCur = true
-    }
-  }
-  return lines + (hasCur ? 1 : 0)
+  // the frame wraps a body row with the N3 hanging indent; measure the same way so the page's own room arithmetic matches what the frame draws
+  return wrapRow(row, cols, WRAP_HANG).length
 }
 export const rowsWrappedLen = (list: Row[], cols: number): number => list.reduce((n, r) => n + rowWrappedLen(r, cols), 0)
 
@@ -254,30 +239,58 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   })
   const verdictBlock: Row[] = [...blockedRows, verdictRow]
 
-  const pickPools = (maxRows: number, withMore: boolean): Row[] => {
-    if (maxRows <= 0) return []
-    if (poolRowsAll.length <= maxRows) return poolRowsAll
+  // M2: the hint row under a cut table. At 80 columns it says how many pools are hidden and of which kind (`↓ 還有 10 池（?3 ▲5 ✓2）`); wider pages keep the frame's `↓ 還有 N 列`
+  const moreRow = (hidden: number[]): Row => {
+    const arrow = GLYPHS.structure.behind
+    if (tier !== 'narrow') return [{ text: t('frame.more', { n: hidden.length, arrow }), dim: true }]
+    const cnt = (f: (v: Verdict) => boolean, g: string): string => { const k = hidden.filter(i => f(ranked[i])).length; return k > 0 ? g + k : '' }
+    const detail = [
+      cnt(v => v.role === 'broken' && !isUnknownPool(v), GLYPHS.state.failed),
+      cnt(v => isUnknownPool(v), GLYPHS.state.unknown),
+      cnt(v => v.role === ROLE_WARNING && !isUnknownPool(v), GLYPHS.state.need_you),
+      cnt(v => v.role !== 'broken' && v.role !== ROLE_WARNING && !isUnknownPool(v), GLYPHS.state.done),
+    ].filter(s => s !== '').join(' ')
+    return [{ text: detail === '' ? t('page.quota.more_pools_plain', { n: hidden.length, arrow }) : t('page.quota.more_pools', { n: hidden.length, arrow, detail }), dim: true }]
+  }
+  const pickPools = (maxRows: number, withMore: boolean): { rows: Row[]; clipped: boolean } => {
+    if (maxRows <= 0) return { rows: [], clipped: poolRowsAll.length > 0 }
+    if (poolRowsAll.length <= maxRows) return { rows: poolRowsAll, clipped: false }
+    const all = poolRowsAll.map((_, i) => i)
     if (!withMore || maxRows === 1) {
-      if (focus < maxRows) return poolRowsAll.slice(0, maxRows)
-      return [...poolRowsAll.slice(0, maxRows - 1), poolRowsAll[focus]]
+      const idx = focus < maxRows ? all.slice(0, maxRows) : [...all.slice(0, maxRows - 1), focus]
+      return { rows: idx.map(i => poolRowsAll[i]), clipped: true }
     }
     const keep = maxRows - 1
-    const picked = focus < keep ? poolRowsAll.slice(0, keep) : [...poolRowsAll.slice(0, keep - 1), poolRowsAll[focus]]
-    return [...picked, [{ text: t('frame.more', { n: poolRowsAll.length - keep, arrow: GLYPHS.structure.behind }), dim: true }]]
+    const idx = focus < keep ? all.slice(0, keep) : [...all.slice(0, keep - 1), focus]
+    const hidden = all.filter(i => !idx.includes(i))
+    return { rows: [...idx.map(i => poolRowsAll[i]), moreRow(hidden)], clipped: true }
   }
+  // M2: at 80 columns a cut table keeps its controls in the action row: `[o] 各席 · 上一池 · 下一池 (1/12)` (each a Button), plus `[f] 換池` when capacity gave advice
+  const n = ranked.length
+  const navRow = (): Row => clipRowPlain([
+    { text: t(view.expanded ? 'page.quota.act_o_short_close' : 'page.quota.act_o_short_open'), color: PALETTE.action, press: 'quota:open' },
+    { text: ' · ', dim: true },
+    { text: t('page.quota.act_prev_pool'), color: PALETTE.action, press: 'quota:pool:' + Math.max(0, focus - 1) },
+    { text: ' · ', dim: true },
+    { text: t('page.quota.act_next_pool', { cur: focus + 1, total: n }), color: PALETTE.action, press: 'quota:pool:' + Math.min(n - 1, focus + 1) },
+    ...(fp.switch_suggestion === null ? [] : [{ text: ' · ', dim: true }, { text: t('page.quota.action_f_c'), color: PALETTE.action, press: 'fill:quota:' + fp.pool }]),
+  ], cols)
+  const cutActions = (clipped: boolean): Row[] => (clipped && tier === 'narrow' ? [navRow()] : actions)
 
   if (ctx.shortBody) {
     // R5 compact mode (<= 4 body rows): reserve the focused pool's full wrapped verdict first, then fit pool rows and tail rows within room.
     const vLen = rowsWrappedLen(verdictBlock, cols)
     if (room <= 0) return { body: [poolRowsAll[focus], ...verdictBlock], actions }
-    const shownPools = pickPools(Math.max(0, room - vLen), false)
+    const picked = pickPools(Math.max(0, room - vLen), tier === 'narrow')
+    const shownPools = picked.rows
+    const navOn = picked.clipped && tier === 'narrow' // the o Button is in the action row then, not in the body
     const tailCandidates: Row[] = []
     if (view.expanded) {
       if (mine.length === 0) tailCandidates.push(kv(t('page.quota.f_seats'), t('page.quota.seat_none')))
       else mine.forEach((s, i) => tailCandidates.push(kv(i === 0 ? t('page.quota.f_seats') : '', seatRowText(s), s.stale === true ? PALETTE.broken : undefined)))
-      tailCandidates.push(openRow)
+      if (!navOn) tailCandidates.push(openRow)
     } else {
-      tailCandidates.push(seatsSummary, openRow)
+      tailCandidates.push(seatsSummary, ...(navOn ? [] : [openRow]))
     }
     let rem = room - rowsWrappedLen(shownPools, cols) - vLen
     const tail: Row[] = []
@@ -287,7 +300,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
       tail.push(r)
       rem -= w
     }
-    return { body: [...shownPools, ...verdictBlock, ...tail], actions }
+    return { body: [...shownPools, ...verdictBlock, ...tail], actions: cutActions(picked.clipped) }
   }
 
   const focusTitle = rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: poolLabel(fv.pool) }), null, cols)
@@ -326,8 +339,8 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   let keptHeader = headerRows
   if (headLen + 1 + rowsWrappedLen(keptFocus, cols) > room) keptHeader = []
   const poolRoom = Math.max(0, room - rowsWrappedLen(keptHeader, cols) - rowsWrappedLen(keptFocus, cols))
-  const shownPools = pickPools(poolRoom, true)
-  return { body: [...keptHeader, ...shownPools, ...keptFocus], actions }
+  const picked = pickPools(poolRoom, true)
+  return { body: [...keptHeader, ...picked.rows, ...keptFocus], actions: cutActions(picked.clipped) }
 }
 
 export const quotaPage: Page = { id: 'quota', key: '4', title: '額度', framed: true, render: ctx => renderQuota(ctx) }

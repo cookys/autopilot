@@ -9,7 +9,8 @@ import type { Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE, STATES, type StateId } from '../ui'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, isBriefStale, lineState, lineTotal, staleBadge } from './rows'
+import { STRIP_SPLIT_COLS } from './layout'
+import { WRAP_HANG, brokenRow, isBriefStale, lineState, lineTotal, staleBadge, wrapRow } from './rows'
 import type { Row } from './rows'
 
 
@@ -51,7 +52,8 @@ function sourceReason(ctx: PageCtx, snap: ConsoleSnapshot, name: string): string
 }
 
 const task = (r: FleetRow): string => (r.worst === null ? GLYPHS.structure.empty : r.worst.subject + '（' + r.worst.rule + '）')
-const whyOf = (r: FleetRow, ctx: PageCtx): string => (r.worst === null ? ctx.t('page.fleet.idle') : r.worst.subject + '（' + r.worst.rule + '）')
+// M4: a line with no issue record is normal, said so with the reason the detail is missing (never 閒置)
+const whyOf = (r: FleetRow, ctx: PageCtx): string => (r.worst === null ? ctx.t('page.fleet.no_issue_detail') : r.worst.subject + '（' + r.worst.rule + '）')
 
 export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body: Row[]; actions: Row[] } {
   const snap = ctx.console
@@ -79,7 +81,16 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   if (tasksReason !== null) body.push(brokenRow(tasksReason))
   else if (bs.stale) body.push(brokenRow(GLYPHS.state.failed + ' ' + ctx.t('page.fleet.reason', { name: 'fleet.brief', min: String(bs.min), state: ctx.t('page.fleet.state_stale') })))
   const num = (text: string, color?: Seg['color']): Seg => (stale ? staleBadge(text + GLYPHS.state.failed) : { text, ...(color === undefined ? {} : { color }) })
-  if (!ctx.shortBody) {
+  // M1: the narrow summary keeps the hosts in one short note (`✗ 離線 2 台主機`), so a cut list never hides an offline host; the short body says `主機 4/6` when none is offline
+  const hostNote = (): Seg[] => {
+    const hs = snap.sources.hosts
+    const h = snap.counts.summary.hosts
+    if (hs === undefined || hs.state === 'no_source' || typeof h.online !== 'number' || typeof h.total !== 'number') return []
+    const off = Math.max(0, h.total - h.online)
+    if (off > 0) return [{ text: ' · ' }, { text: GLYPHS.state.failed + ' ' + ctx.t('page.fleet.hosts_off_short', { n: off }), color: PALETTE.broken }]
+    return ctx.shortBody ? [{ text: ' · ' + ctx.t('page.fleet.hosts_ok_short', { online: h.online, total: h.total }) }] : []
+  }
+  if (!ctx.shortBody || !wide) {
     const staleNote = bs.stale ? GLYPHS.state.failed + ' ' + ctx.t('page.fleet.sum_stale', { min: bs.min, why: ctx.t('page.now.hosts_expired') }) : null
     if (wide) {
       const core: Row = [{ text: RULE2 + ' ' + ctx.t('page.fleet.lines_title', { n: total }) + '：', color: PALETTE.structure },
@@ -96,7 +107,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
         body.push(core)
       }
     } else {
-      const core: Row = [{ text: ctx.t('page.fleet.lines_title', { n: total }) + ' ' }, num(STATES.running.glyph + String(run), STATES.running.key), { text: ' ' }, num(STATES.waiting.glyph + String(wait), STATES.waiting.key), { text: ' ' }, num(STATES.stalled.glyph + String(stuck), STATES.stalled.key)]
+      const core: Row = [{ text: ctx.t('page.fleet.lines_title', { n: total }) + ' ' }, num(STATES.running.glyph + String(run), STATES.running.key), { text: ' ' }, num(STATES.waiting.glyph + String(wait), STATES.waiting.key), { text: ' ' }, num(STATES.stalled.glyph + String(stuck), STATES.stalled.key), ...hostNote()]
       if (staleNote !== null) core.push(staleBadge('  ' + staleNote))
       body.push(core)
     }
@@ -159,6 +170,17 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
         { text: ' · ', dim: true },
         { text: ctx.t('page.fleet.act_nudge_c'), color: PALETTE.action, press: FILL_PRESS + ctx.t('page.fleet.nudge_text', { label, why: whyOf(f, ctx) }) },
       ])
+    }
+  }
+  // M1: a short body (<= 4 rows) that cannot hold every row ends in `↓ 還有 N 項` instead of dropping rows without a word (the frame drops its own hint in short mode)
+  if (ctx.shortBody === true) {
+    const stripLen = cols < STRIP_SPLIT_COLS ? Math.min(2, ctx.size.rows) : Math.min(1, ctx.size.rows)
+    const avail = Math.max(0, ctx.size.rows - 1 - stripLen)
+    const room = Math.max(0, avail - Math.min(Math.max(1, actions.length), avail))
+    const flat = body.flatMap(r => wrapRow(r, cols, WRAP_HANG))
+    if (room >= 2 && flat.length > room) {
+      const keep = flat.slice(0, room - 1)
+      return { body: [...keep, [{ text: (wide ? '  ' : ' ') + ctx.t('page.fleet.more_items', { n: flat.length - keep.length, arrow: GLYPHS.structure.behind }), color: stale ? PALETTE.broken : PALETTE.idle }]], actions }
     }
   }
   return { body, actions }

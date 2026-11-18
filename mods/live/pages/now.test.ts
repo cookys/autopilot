@@ -68,7 +68,8 @@ const GOLD_160 = [
   '→ 待決 3 張卡等你（最舊 40 分）：q',
   '── 全艦隊 ────────────────────────────────────────────',
   '  產線 51 ｜ ● 執行 6  ⋯ 等待 40  ⊘ 卡住 5 ｜ 主機 17/18 在線',
-  '▸ ✗ capacity--claude 卡住 2 小時：等待沒寫等誰（wait_untyped）',
+  // N2 (codeforge B49-B54): 現況 has no row action, so no row carries the ▸ focus mark
+  '  ✗ capacity--claude 卡住 2 小時：等待沒寫等誰（wait_untyped）',
   '  ⊘ hangar--claude 01M7N2ZC 證據逾期 40 分',
   '  ▲ 主機 h6 離線 12 分',
   '  ? 額度 personal 判定未知：缺換池資料（capacity）',
@@ -88,7 +89,7 @@ const GOLD_80 = [
   '→ 待決 3 張卡等你（最舊 40 分）：q',
   '── 全艦隊 ──',
   '產線 51 ●6 ⋯40 ⊘5 · 主機 17/18',
-  '▸✗ capacity 卡住 2 時：等待沒寫等誰',
+  ' ✗ capacity 卡住 2 時：等待沒寫等誰',
   ' ⊘ hangar 01M7N2ZC 證據逾 40 分',
   ' ▲ 主機 h6 離線 12 分',
   '? 額度 personal 判定未知：缺換池資料（capacity）',
@@ -120,7 +121,7 @@ test('now: golden at 160x40, 120x30 and 80x24 matches the mockup rows', async ()
 test('now: negative control, a broken golden row is reported (the comparator is not vacuous)', async () => {
   await feed()
   const broken = GOLD_80.slice()
-  broken[3] = '▸✗ capacity 卡住 3 時：等待沒寫等誰'
+  broken[3] = ' ✗ capacity 卡住 3 時：等待沒寫等誰'
   expect(diffRows(flat(content(80, 24, con())), broken).length).toBe(1)
 })
 
@@ -544,13 +545,15 @@ test('now M7: pending_no_source derives missing reason from pointer file / conso
     const framed = frameRows(nowPage, ctxOf(cols, rows, null, noPointerLive), { pages: PAGES }).map(text)
     expect(framed.length).toBe(rows)
     for (const r of framed) expect(displayWidth(r)).toBeLessThanOrEqual(cols)
-    const joined = framed.join('')
-    expect(joined).toContain('✗ 待決 ? 張（無來源：沒有指標檔、沒有 console 快照）')
+    // N3 (codeforge B49-B54): a wrapped reason continues on a 2-cell hanging indent at a clause boundary, so the whole reason is compared with the indent blanks removed
+    const squash = (s: string) => s.replace(/\s+/g, '')
+    const joined = squash(framed.join(''))
+    expect(joined).toContain(squash('✗ 待決 ? 張（無來源：沒有指標檔、沒有 console 快照）'))
     const reasonRows = framed.filter(r => r.includes('待決 ? 張') || r.includes('console 快照）'))
     for (const r of reasonRows) expect(r).not.toContain('…')
 
     const enFramed = frameRows(nowPage, { ...(ctxOf(cols, rows, null, noPointerLive) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
-    expect(enFramed.join('')).toContain('✗ Pending ? (no source: no pointer file, no console snapshot)')
+    expect(squash(enFramed.join(''))).toContain(squash('✗ Pending ? (no source: no pointer file, no console snapshot)'))
   }
 
   // 2. Only pointer file absent (console snapshot exists, but has no card source)

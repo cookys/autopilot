@@ -34,11 +34,14 @@ const snapOf = (over: { tasks?: { at_ms: number | null; state: string }; lines?:
   counts: { decisions: 0, exceptions: 0, quota_risk: 0, tabs: {}, summary: { lines: { running: 6, waiting: 40, stalled: 5 }, hosts: { online: 17, total: 18, gpu_busy: 0, gpu_total: 2 }, hints: 0, quota_worst: null } },
   quota: { pools: null, seats: [] }, items: [], cards: [], lines: over.lines === undefined ? LINES : over.lines,
 }) as never
-const lane80 = (n: number) => ' ○ lane-' + String(n).padStart(2, '0') + ' · h1 閒置 —' + ' '.repeat(57) + '—'
+// M4 (codeforge B49-B54): a line with no issue record is drawn 正常, never 閒置 (the old golden's 閒置 contradicted the feed's own running / waiting counts)
+const lane80 = (n: number) => ' ○ lane-' + String(n).padStart(2, '0') + ' · h1 正常 —' + ' '.repeat(57) + '—'
+// M1 (codeforge B49-B54): the narrow summary row names the offline hosts, so a cut list never hides them
+const SUM80 = "產線 51 ●6 ⋯40 ⊘5 · ✗ 離線 1 台主機"
 const GOLDEN: Record<string, string[]> = {
   folded80: [
     "艦隊",
-    "產線 51 ●6 ⋯40 ⊘5",
+    SUM80,
     "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped）" + ' '.repeat(26) + "2 時",
     " ⊘ lab · h3 閒置 閒置 6 時（idle）" + ' '.repeat(42) + "6 時",
     " ⊘ pinball · h4 閒置 閒置 5 時（idle）" + ' '.repeat(38) + "5 時",
@@ -52,7 +55,7 @@ const GOLDEN: Record<string, string[]> = {
   ],
   expanded80: [
     "艦隊",
-    "產線 51 ●6 ⋯40 ⊘5",
+    SUM80,
     "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped）" + ' '.repeat(26) + "2 時",
     " ⊘ lab · h3 閒置 閒置 6 時（idle）" + ' '.repeat(42) + "6 時",
     " ⊘ pinball · h4 閒置 閒置 5 時（idle）" + ' '.repeat(38) + "5 時",
@@ -67,13 +70,13 @@ const GOLDEN: Record<string, string[]> = {
   stale80: [
     "艦隊  ✗ 工作 資料過期，6 分鐘前",
     "✗ tasks 已 6 分鐘未更新（console 判定：資料過期）",
-    "產線 51 ●6✗ ⋯40✗ ⊘5✗",
+    "產線 51 ●6✗ ⋯40✗ ⊘5✗ · ✗ 離線 1 台主機",
     "▸✗ capacity · h1 卡住 等待沒寫等誰（wait_untyped）" + ' '.repeat(25) + "✗2 時",
     " ⊘ lab · h3 閒置 閒置 6 時（idle）" + ' '.repeat(41) + "✗6 時",
     " ⊘ pinball · h4 閒置 閒置 5 時（idle）" + ' '.repeat(37) + "✗5 時",
     " ⊘ revival · h5 閒置 閒置 3 時（idle）" + ' '.repeat(37) + "✗3 時",
     " ⊘ hangar · h2 卡住 01M7N2ZC 證據逾期 40 分（evidence_overdue）" + ' '.repeat(11) + "✗40 分",
-    " ○ lane-00 · h1 閒置 —" + ' '.repeat(56) + "✗—",
+    " ○ lane-00 · h1 正常 —" + ' '.repeat(56) + "✗—",
     " ✗ ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ──",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
@@ -88,7 +91,7 @@ const GOLDEN: Record<string, string[]> = {
     "  ⊘ pinball · h4        閒置    game-lead     閒置 5 時（idle）" + ' '.repeat(53) + "5 時",
     "  ⊘ revival · h5        閒置    game-lead     閒置 3 時（idle）" + ' '.repeat(53) + "3 時",
     "  ⊘ hangar · h2         卡住    PM            01M7N2ZC 證據逾期 40 分（evidence_overdue）" + ' '.repeat(26) + "40 分",
-    "  ○ lane-00 · h1        閒置    PM            —" + ' '.repeat(72) + "—",
+    "  ○ lane-00 · h1        正常    PM            —" + ' '.repeat(72) + "—",
     "  ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ─────────────────────────────────────────────────────────────────────────────────────────────────",
     "  ✗ 離線 1 台  GPU 0/2 使用中",
@@ -106,7 +109,7 @@ const GOLDEN: Record<string, string[]> = {
     "  ⊘ pinball · h4        閒置    game-lead     閒置 5 時（idle）" + ' '.repeat(93) + "5 時",
     "  ⊘ revival · h5        閒置    game-lead     閒置 3 時（idle）" + ' '.repeat(93) + "3 時",
     "  ⊘ hangar · h2         卡住    PM            01M7N2ZC 證據逾期 40 分（evidence_overdue）" + ' '.repeat(66) + "40 分",
-    "  ○ lane-00 · h1        閒置    PM            —" + ' '.repeat(112) + "—",
+    "  ○ lane-00 · h1        正常    PM            —" + ' '.repeat(112) + "—",
     "  ○ 另 45 條折疊（6+45=51）· z 展開",
     "── 主機 17/18 在線 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  ✗ 離線 1 台  GPU 0/2 使用中",

@@ -11,8 +11,13 @@ export const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken 
 export const brokenRow = (text: string): Row => [staleBadge(text)]
 
 // Wrap a row onto further rows at `cols` without dropping or truncating characters, so a broken/no-source reason is never cut with `…` (A10, G6, M7).
-export function wrapRow(row: Row, cols: number): Row[] {
+// `hang` > 0 (N3): every continuation row starts with `hang` blank cells (a hanging indent, so the left status-glyph column stays clean), and a row breaks after a clause
+// boundary (：，、；。· ） / blank) when that boundary is in the second half of the row; otherwise it breaks at the width as before.
+const CLAUSE_END = /[：，、；。·）／\s]/
+export const WRAP_HANG = 2 // the hang the frame wraps a body row with (frame.ts re-exports it)
+export function wrapRow(row: Row, cols: number, hang = 0): Row[] {
   if (cols <= 0 || row.reduce((w, x) => w + displayWidth(x.text), 0) <= cols) return [row]
+  if (hang > 0 && hang < cols - 1) return wrapHanging(row, cols, hang)
   const out: Row[] = []
   let cur: Row = []
   let used = 0
@@ -36,6 +41,37 @@ export function wrapRow(row: Row, cols: number): Row[] {
   return out
 }
 
+function wrapHanging(row: Row, cols: number, hang: number): Row[] {
+  const chars: { ch: string; si: number; w: number }[] = []
+  row.forEach((s, si) => { for (const ch of s.text) chars.push({ ch, si, w: displayWidth(ch) }) })
+  const lines: { ch: string; si: number; w: number }[][] = []
+  let i = 0
+  while (i < chars.length) {
+    const lim = lines.length === 0 ? cols : cols - hang
+    let used = 0
+    let j = i
+    while (j < chars.length && used + chars[j].w <= lim) { used += chars[j].w; j++ }
+    if (j < chars.length) {
+      let k = j
+      while (k > i && !CLAUSE_END.test(chars[k - 1].ch)) k--
+      if (k > i && (k - i) * 2 >= j - i) j = k
+    }
+    if (j === i) j = i + 1
+    lines.push(chars.slice(i, j))
+    i = j
+    while (i < chars.length && chars[i].ch === ' ') i++ // a continuation never starts with a blank of its own (the indent is the hang)
+  }
+  return lines.map((ln, li) => {
+    const out: Row = li === 0 ? [] : [{ text: ' '.repeat(hang) }]
+    let lastSi = -1
+    for (const c of ln) {
+      if (c.si === lastSi) { const prev = out[out.length - 1]; out[out.length - 1] = { ...prev, text: prev.text + c.ch } }
+      else { out.push({ ...row[c.si], text: c.ch }); lastSi = c.si }
+    }
+    return out
+  })
+}
+
 // ---- shared across pages (gate round 1 & round 2) ----
 import type { ConsoleIssue, ConsoleLine, ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
@@ -51,7 +87,8 @@ export function lineState(line: ConsoleLine, t: T): LineStateInfo {
   const rank = (x: ConsoleIssue): number => ISSUE_RANK[x.state] ?? 2
   const surfaced = (x: ConsoleIssue): number => (x.to_console ? 0 : 1)
   const worst = [...line.issues].sort((a, b) => rank(a) - rank(b) || surfaced(a) - surfaced(b) || a.since_ms - b.since_ms)[0] ?? null
-  if (worst === null) return { sid: 'pending', word: t('page.fleet.idle'), worst: null }
+  // M4: a line with no issue record is a normal line (the feed's summary counts it as running / waiting); it is never drawn as 閒置
+  if (worst === null) return { sid: 'pending', word: t('page.fleet.w_normal'), worst: null }
   const subj = typeof worst.subject === 'string' ? worst.subject : ''
   const isOffline = /^T4$/i.test(worst.rule) || /offline|離線/i.test(worst.rule) || /offline|離線/i.test(subj)
   const isIdle = !isOffline && (/^T3$/i.test(worst.rule) || /(?:^|[_-])idle(?:$|[_-])|閒置/i.test(worst.rule) || /閒置|\bidle\b/i.test(subj))

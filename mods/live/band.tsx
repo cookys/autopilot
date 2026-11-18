@@ -25,6 +25,8 @@ type El = (props: any) => any
 
 // the band is this many rows tall (one Box of one line); the mods drawn below it are given the rows that remain
 export const BAND_ROWS = 1
+// M5: the cells row 1 of the console band keeps free at its right end for the `[-]` control (three cells and a gap)
+export const BAND_CLOSE_ROOM = 4
 
 // The band is the final row next to the prompt; open content grows above it.
 export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
@@ -127,7 +129,10 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const more = moreTo !== null
   const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
   const strip = con === null ? row1Strip : pageBarStrip(snap, t, Math.max(0, columns - moreW), active, speedGlyph, con.snap)
-  const left = bandCells(el, snap, Math.max(1, columns - row1Strip.width - 1 - forgeW - moreW), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? '[+] ' : BAND_INFO_LABEL)
+  // M5: in the console band the tab strip is row 2 (pageBarStrip), so row 1 gives the left text every idle cell up to the right-hand controls (BAND_CLOSE_ROOM keeps
+  // the `[-]` cell): the stale reason and its whole fix command (`autopilot status runs --watch`) are never cut while blank cells are left. M6: the open Button says what it opens.
+  const leftRoom = con !== null ? columns - BAND_CLOSE_ROOM - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2) : columns - row1Strip.width - 1 - forgeW - moreW
+  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
   void segW

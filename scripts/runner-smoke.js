@@ -116,7 +116,7 @@ function usage(code) {
     '  --notify <fleet-addr>  On failure only, send one line per failed runner via `fleet send`.',
     '  --pins <path>          Override path to config/runner-pins.json.',
     '  --receipt-dir <dir>    Override receipt output directory.',
-    '  --date <YYYY-MM-DD>    Override UTC date stamp for receipt filename.',
+    '  --date <YYYY-MM-DD>    Override local date stamp for receipt filename.',
     '  --timeout <dur>        Per-runner dispatch timeout (default: 3m).',
     '  --fleet-bin <bin>      Override `fleet` executable name/path.',
     '  -h, --help             Print this help message.',
@@ -180,8 +180,11 @@ function parseArgs(argv) {
   return opts;
 }
 
-function utcDateString() {
-  return new Date().toISOString().slice(0, 10);
+function localDateString(now = new Date()) {
+  const year = String(now.getFullYear()).padStart(4, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function resolveReceiptDir(explicitDir, env = process.env) {
@@ -510,7 +513,7 @@ function main() {
     process.exit(2);
   }
 
-  const dateStr = opts.date || utcDateString();
+  const dateStr = opts.date || localDateString();
   const receiptDir = resolveReceiptDir(opts.receiptDir);
   const receiptPath = path.join(receiptDir, `${dateStr}.json`);
 
@@ -617,6 +620,7 @@ if (require.main === module) {
 module.exports = {
   SMOKE_SCHEMA,
   RUNNER_SMOKE_TARGETS,
+  localDateString,
   parseArgs,
   resolveReceiptDir,
   resolveTargetSpec,

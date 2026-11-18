@@ -148,7 +148,7 @@ cat > "$FAKE_BIN/agy" <<'EOF'
 #!/usr/bin/env bash
 printf 'agy %s\n' "$*" >> "$CALL_LOG"
 if [ "${1:-}" = "--version" ]; then
-  printf '%s\n' "${FAKE_AGY_VERSION:-1.5.2}"
+  printf '%s\n' "${FAKE_AGY_VERSION:-1.5.11}"
   exit 0
 fi
 printf 'agy %s\n' "$*" >> "$PROMPT_LOG"
@@ -178,7 +178,7 @@ cat > "$FAKE_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
 printf 'claude %s\n' "$*" >> "$CALL_LOG"
 if [ "${1:-}" = "--version" ]; then
-  printf '%s\n' "${FAKE_CLAUDE_VERSION:-2.1.325 (Claude Code)}"
+  printf '%s\n' "${FAKE_CLAUDE_VERSION:-2.1.327 (Claude Code)}"
   exit 0
 fi
 printf 'claude %s\n' "$*" >> "$PROMPT_LOG"
@@ -190,7 +190,7 @@ cat > "$FAKE_BIN/grok" <<'EOF'
 #!/usr/bin/env bash
 printf 'grok %s\n' "$*" >> "$CALL_LOG"
 if [ "${1:-}" = "--version" ]; then
-  printf '%s\n' "${FAKE_GROK_VERSION:-grok 1.0.70 (f50904eaee6c) [stable]}"
+  printf '%s\n' "${FAKE_GROK_VERSION:-grok 1.0.77 (50ca579fa996) [stable]}"
   exit 0
 fi
 case "$*" in
@@ -218,7 +218,7 @@ cat > "$FAKE_BIN/cursor-agent" <<'EOF'
 #!/usr/bin/env bash
 printf 'cursor-agent %s\n' "$*" >> "$CALL_LOG"
 if [ "${1:-}" = "--version" ]; then
-  printf '%s\n' "${FAKE_CURSOR_VERSION:-2026.10.19-6bbf2c4}"
+  printf '%s\n' "${FAKE_CURSOR_VERSION:-2026.11.17-f532c45}"
   exit 0
 fi
 printf 'cursor-agent %s\n' "$*" >> "$PROMPT_LOG"
@@ -226,7 +226,9 @@ exec node "$FAKE_FRAME_HELPER" cursor
 EOF
 chmod +x "$FAKE_BIN/cursor-agent"
 
-cat > "$FAKE_BIN/opencode" <<'EOF'
+FAKE_OC_BIN="$TEST_TMP/fake-oc-bin"
+mkdir -p "$FAKE_OC_BIN"
+cat > "$FAKE_OC_BIN/opencode" <<'EOF'
 #!/usr/bin/env bash
 printf 'opencode %s\n' "$*" >> "$CALL_LOG"
 if [ "${1:-}" = "--version" ]; then
@@ -242,14 +244,69 @@ const reply = process.env.FAKE_BAD_RUNNER === "opencode" ? "WRONG-REPLY-NO-TOKEN
 process.stdout.write(JSON.stringify({ type: "text", part: { type: "text", text: reply } }) + "\n");
 '
 EOF
-chmod +x "$FAKE_BIN/opencode"
+chmod +x "$FAKE_OC_BIN/opencode"
 
-export PATH="$FAKE_BIN:$PATH"
+# Scrub any host-installed absent runners (kimi, qwen, opencode) from inherited PATH dirs.
+export AUTOPILOT_RUNNER_HOME_FALLBACK=off
+CLEAN_PATH="$(node -e '
+const fs = require("fs");
+const path = require("path");
+const absent = new Set(["kimi", "qwen", "opencode"]);
+const tmpRoot = process.argv[1];
+const out = [process.argv[2]];
+let idx = 0;
+for (const dir of (process.env.PATH || "").split(path.delimiter).filter(Boolean)) {
+  const hasAbsent = [...absent].some((b) => {
+    try { fs.accessSync(path.join(dir, b), fs.constants.X_OK); return true; } catch { return false; }
+  });
+  if (!hasAbsent) {
+    out.push(dir);
+    continue;
+  }
+  const shadow = path.join(tmpRoot, `path-shadow-${idx++}`);
+  fs.mkdirSync(shadow, { recursive: true });
+  for (const ent of fs.readdirSync(dir)) {
+    if (absent.has(ent)) continue;
+    try { fs.symlinkSync(path.join(dir, ent), path.join(shadow, ent)); } catch {}
+  }
+  out.push(shadow);
+}
+process.stdout.write(out.join(path.delimiter));
+' "$TEST_TMP" "$FAKE_BIN")"
+export PATH="$CLEAN_PATH"
 
 # Configure fake $HOME autoupdate files (never touching real $HOME or forbidden dirs)
 mkdir -p "$HOME/.codex" "$HOME/.config/opencode"
 printf 'check_for_update_on_startup = false\n' > "$HOME/.codex/config.toml"
 printf '{"autoupdate": false}\n' > "$HOME/.config/opencode/opencode.json"
+
+FIXTURE_OC_PINS="$TEST_TMP/fixture-oc-pins.json"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+doc.runners.codex.autoupdate = {
+  kind: "config",
+  file: ".codex/config.toml",
+  key: "check_for_update_on_startup",
+  value: false,
+  source: "fixture-toml-autoupdate-test",
+};
+doc.runners.opencode = {
+  ...doc.runners.opencode,
+  installed: true,
+  version: "1.19.5",
+  autoupdate: {
+    kind: "config",
+    file: ".config/opencode/opencode.json",
+    key: "autoupdate",
+    value: false,
+    env: "OPENCODE_DISABLE_AUTOUPDATE",
+    env_value: "true",
+    source: "fixture-json-autoupdate-test",
+  },
+};
+fs.writeFileSync(process.argv[2], JSON.stringify(doc, null, 2) + "\n");
+' "$PINS_JSON" "$FIXTURE_OC_PINS"
 
 # --- 1. runner-pin-check.js: matching fake versions -> exit 0, drift false ---
 PIN_JSONL_OUT="$(DISABLE_AUTOUPDATER=1 node "$PIN_CHECK_JS" < /dev/null 2>&1)"; PIN_JSONL_RC=$?
@@ -260,11 +317,11 @@ const lines = fs.readFileSync(0, "utf8").trim().split("\n").filter(Boolean).map(
 if (lines.length !== 8) process.exit(10);
 if (lines.some((r) => r.drift !== false)) process.exit(11);
 const byRunner = Object.fromEntries(lines.map((r) => [r.runner, r]));
-if (byRunner.codex.autoupdate_state !== "disabled") process.exit(12);
+if (byRunner.codex.autoupdate_state !== "none-known") process.exit(12);
 if (byRunner.claude.autoupdate_state !== "disabled") process.exit(13);
-if (byRunner.opencode.autoupdate_state !== "disabled") process.exit(14);
+if (byRunner.opencode.autoupdate_state !== "none-known") process.exit(14);
 if (byRunner.agy.autoupdate_state !== "none-known") process.exit(15);
-if (byRunner.kimi.actual !== null || byRunner.qwen.actual !== null) process.exit(16);
+if (byRunner.kimi.actual !== null || byRunner.qwen.actual !== null || byRunner.opencode.actual !== null) process.exit(16);
 process.stdout.write("ok");
 ')"
 assert_eq "$PIN_JSONL_CHECK" "ok" "pin-check JSONL emits 8 rows with drift:false and verified autoupdate_state"
@@ -279,6 +336,25 @@ if (!Array.isArray(doc.runners) || doc.runners.length !== 8) process.exit(3);
 process.stdout.write("ok");
 ')"
 assert_eq "$PIN_DOC_CHECK" "ok" "pin-check --json returns valid autopilot.runner-pins/1 document"
+
+# --- 1b. config autoupdate inspection + unpinned-runner drift + opencode containment smoke ---
+PIN_CFG_OUT="$(DISABLE_AUTOUPDATER=1 PATH="$FAKE_OC_BIN:$PATH" node "$PIN_CHECK_JS" --pins "$FIXTURE_OC_PINS" < /dev/null 2>&1)"; PIN_CFG_RC=$?
+assert_eq "$PIN_CFG_RC" "0" "pin-check fixture config autoupdate exits 0"
+PIN_CFG_CHECK="$(printf '%s\n' "$PIN_CFG_OUT" | node -e '
+const rows = require("fs").readFileSync(0, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+const byRunner = Object.fromEntries(rows.map((r) => [r.runner, r]));
+if (byRunner.codex.autoupdate_state !== "disabled") process.exit(1);
+if (byRunner.claude.autoupdate_state !== "disabled") process.exit(2);
+if (byRunner.opencode.autoupdate_state !== "disabled") process.exit(3);
+process.stdout.write("ok");
+')"
+assert_eq "$PIN_CFG_CHECK" "ok" "pin-check inspects TOML and JSON config autoupdate files"
+
+UNPINNED_OUT="$(PATH="$FAKE_OC_BIN:$PATH" node "$PIN_CHECK_JS" < /dev/null 2>&1)"; UNPINNED_RC=$?
+assert_eq "$UNPINNED_RC" "1" "pin-check flags installed=false runner when binary appears on PATH"
+
+OC_SMOKE_OUT="$(PATH="$FAKE_OC_BIN:$PATH" node "$SMOKE_JS" --pins "$FIXTURE_OC_PINS" --only opencode --date 2026-11-18 < /dev/null 2>&1)"; OC_SMOKE_RC=$?
+assert_eq "$OC_SMOKE_RC" "0" "runner-smoke exercises opencode-containment wrapper via fixture pins"
 
 # --- 2. runner-pin-check.js: one fake prints a different version -> exit 1, drift true ---
 PIN_DRIFT_OUT="$(FAKE_GROK_VERSION="grok 1.9.99 (unvetted) [stable]" node "$PIN_CHECK_JS" < /dev/null 2>&1)"; PIN_DRIFT_RC=$?
@@ -305,10 +381,35 @@ if (doc.schema !== "autopilot.runner-smoke/1" || doc.dry_run !== true) process.e
 const codex = doc.runners.find((r) => r.runner === "codex");
 if (!codex || codex.effort !== "high") process.exit(2);
 if (doc.runners.some((r) => r.effort === "xhigh")) process.exit(3);
-if (doc.runners.length !== 6) process.exit(4);
+if (doc.runners.length !== 5) process.exit(4);
 process.stdout.write("ok");
 ')"
 assert_eq "$DRY_PLAN_CHECK" "ok" "--dry-run plan uses schema autopilot.runner-smoke/1 and codex effort high"
+
+# --- 3b. runner-smoke.js default receipt filename uses host local date, not UTC date ---
+FAKE_CLOCK_JS="$TEST_TMP/fake-clock.js"
+cat > "$FAKE_CLOCK_JS" <<'EOF'
+'use strict';
+const RealDate = Date;
+const FIXED_MS = RealDate.parse('2026-11-18T19:45:00Z');
+class MockDate extends RealDate {
+  constructor(...args) {
+    if (args.length === 0) super(FIXED_MS);
+    else super(...args);
+  }
+  static now() { return FIXED_MS; }
+}
+global.Date = MockDate;
+EOF
+LOCAL_DATE_OUT="$(NODE_OPTIONS="--require $FAKE_CLOCK_JS" TZ=Asia/Taipei node "$SMOKE_JS" --dry-run < /dev/null 2>&1)"; LOCAL_DATE_RC=$?
+assert_eq "$LOCAL_DATE_RC" "0" "runner-smoke --dry-run with TZ=Asia/Taipei exits 0"
+LOCAL_DATE_CHECK="$(printf '%s' "$LOCAL_DATE_OUT" | node -e '
+const doc = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (doc.date !== "2026-11-19") process.exit(1);
+if (!doc.receipt_path.endsWith("/2026-11-19.json")) process.exit(2);
+process.stdout.write("ok");
+')"
+assert_eq "$LOCAL_DATE_CHECK" "ok" "runner-smoke default receipt filename uses local date (2026-11-19 in +08:00 vs 2026-11-18Z)"
 
 # --- 4. runner-smoke.js: all fakes echo PINEAPPLE token -> exit 0, receipt written, fleet NOT called ---
 rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG"
@@ -321,7 +422,7 @@ PASS_RECEIPT_CHECK="$(node -e '
 const fs = require("fs");
 const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 if (doc.schema !== "autopilot.runner-smoke/1") process.exit(1);
-if (doc.ok !== true || doc.pass_count !== 6 || doc.fail_count !== 0) process.exit(2);
+if (doc.ok !== true || doc.pass_count !== 5 || doc.fail_count !== 0) process.exit(2);
 for (const r of doc.runners) {
   if (r.pass !== true || r.result !== "pass") process.exit(3);
   if (r.rail_exit !== 0 || r.rail_classification !== "authored") process.exit(4);
@@ -351,12 +452,12 @@ assert_not_contains "$FLEET_LINE" "cursor" "fleet notification omits passing run
 FAIL_RECEIPT_CHECK="$(node -e '
 const fs = require("fs");
 const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-if (doc.ok !== false || doc.pass_count !== 5 || doc.fail_count !== 1) process.exit(1);
+if (doc.ok !== false || doc.pass_count !== 4 || doc.fail_count !== 1) process.exit(1);
 const grok = doc.runners.find((r) => r.runner === "grok");
 if (!grok || grok.pass !== false || grok.result !== "fail") process.exit(2);
 process.stdout.write("ok");
 ' "$FAIL_RECEIPT")"
-assert_eq "$FAIL_RECEIPT_CHECK" "ok" "failure receipt records grok fail and 5 passes"
+assert_eq "$FAIL_RECEIPT_CHECK" "ok" "failure receipt records grok fail and 4 passes"
 
 # --- 6. runner-smoke.js: --only <runner> + ~/.autopilot/runner-smoke fallback when XDG_RUNTIME_DIR unset ---
 rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG"
@@ -392,5 +493,9 @@ done
 sed_mutant "$SMOKE_JS" "$MUT_DIR/scripts/runner-smoke.js" 's/answer\.includes(token)/true/'
 MUT_SMOKE_OUT="$(FAKE_BAD_RUNNER=cursor node "$MUT_DIR/scripts/runner-smoke.js" --pins "$PINS_JSON" --only cursor --receipt-dir "$TEST_TMP/mut-receipts" --date 2026-11-22 < /dev/null 2>&1)"; MUT_SMOKE_RC=$?
 assert_eq "$MUT_SMOKE_RC" "0" "negative control: mutating runner-smoke.js token check lets wrong answer pass"
+
+sed_mutant "$SMOKE_JS" "$MUT_DIR/scripts/runner-smoke-utc.js" 's/localDateString()/new Date().toISOString().slice(0, 10)/'
+MUT_UTC_DATE="$(NODE_OPTIONS="--require $FAKE_CLOCK_JS" TZ=Asia/Taipei node "$MUT_DIR/scripts/runner-smoke-utc.js" --pins "$PINS_JSON" --dry-run < /dev/null | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).date)')"
+assert_eq "$MUT_UTC_DATE" "2026-11-18" "negative control: reverting localDateString() to UTC date mis-stamps +08:00 receipt as 2026-11-18"
 
 finalize_test

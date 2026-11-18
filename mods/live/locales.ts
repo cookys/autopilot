@@ -726,7 +726,7 @@ export const EN: Record<string, string> = {
   "page.quota.sv_exhaust_nosw": "unknown · ~{h} h",
   "page.now.pending_short": "Pending {n}",
   "page.now.more_items": "{n} more items",
-  "page.now.brief_stale": "{min} min ago ({why})",
+  "page.now.brief_stale": "{why} {min} min ago",
   "page.now.pending_stale": "seat pending stale: {why}",
   "page.fleet.folded_unlisted": "{exp} folded, {unlisted} unlisted ({shown}+{rest}={total}) · z to unfold",
   "page.fleet.unfolded_unlisted": "{exp} unfolded ({shown}+{exp}={listed}, {unlisted} unlisted, {total} total) · z to fold",
@@ -865,7 +865,22 @@ export const EN: Record<string, string> = {
   "page.spend.fold_close": "[z] Hide details",
   "page.spend.host_split": "host today {host} (brain {brain} · other tiers {other})",
   "page.spend.host_only": "host today {host} (all tiers)",
-  "page.spend.last24_sum": "24h total {total} · peak {peak}/h"
+  "page.spend.last24_sum": "24h total {total} · peak {peak}/h",
+  "band.open_pane": "[+Pane]",
+  "tab.forge_band": "Forge",
+  "page.fleet.w_normal": "normal",
+  "page.fleet.no_issue_detail": "normal (no issue detail)",
+  "page.fleet.hosts_off_short": "{n} hosts offline",
+  "page.fleet.hosts_ok_short": "hosts {online}/{total}",
+  "page.fleet.more_items": "{arrow} {n} more items",
+  "page.quota.more_pools": "{arrow} {n} more pools ({detail})",
+  "page.quota.more_pools_plain": "{arrow} {n} more pools",
+  "page.quota.act_o_short_open": "[o] Seats",
+  "page.quota.act_o_short_close": "[o] Fold",
+  "page.quota.act_prev_pool": "Prev pool",
+  "page.quota.act_next_pool": "Next pool ({cur}/{total})",
+  "page.quota.action_f_c": "[f] Switch",
+  "page.decide.act_fold_close_c": "[z] fold others"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -1592,7 +1607,7 @@ export const ZH_TW: Record<string, string> = {
   "page.quota.sv_exhaust_nosw": "未知·{h}時用完",
   "page.now.pending_short": "待決 {n} 張",
   "page.now.more_items": "另有 {n} 項",
-  "page.now.brief_stale": "{min} 分前（{why}）",
+  "page.now.brief_stale": "{why} {min} 分前",
   "page.now.pending_stale": "本席待決過期：{why}",
   "page.fleet.folded_unlisted": "另 {exp} 條折疊、{unlisted} 條未列名（{shown}+{rest}={total}）· z 展開",
   "page.fleet.unfolded_unlisted": "已展開 {exp} 條（{shown}+{exp}={listed}，另 {unlisted} 條未列名，共 {total}）· z 收合",
@@ -1731,5 +1746,20 @@ export const ZH_TW: Record<string, string> = {
   "page.spend.fold_close": "[z] 收合明細",
   "page.spend.host_split": "本機今日 {host}（brain {brain} · 其他層 {other}）",
   "page.spend.host_only": "本機今日 {host}（所有層）",
-  "page.spend.last24_sum": "24 時合計 {total} · 尖峰 {peak}／小時"
+  "page.spend.last24_sum": "24 時合計 {total} · 尖峰 {peak}／小時",
+  "band.open_pane": "[+面板]",
+  "tab.forge_band": "鍛",
+  "page.fleet.w_normal": "正常",
+  "page.fleet.no_issue_detail": "正常（無異常明細）",
+  "page.fleet.hosts_off_short": "離線 {n} 台主機",
+  "page.fleet.hosts_ok_short": "主機 {online}/{total}",
+  "page.fleet.more_items": "{arrow} 還有 {n} 項",
+  "page.quota.more_pools": "{arrow} 還有 {n} 池（{detail}）",
+  "page.quota.more_pools_plain": "{arrow} 還有 {n} 池",
+  "page.quota.act_o_short_open": "[o] 各席",
+  "page.quota.act_o_short_close": "[o] 收席",
+  "page.quota.act_prev_pool": "上一池",
+  "page.quota.act_next_pool": "下一池 ({cur}/{total})",
+  "page.quota.action_f_c": "[f] 換池",
+  "page.decide.act_fold_close_c": "[z] 收合其他"
 }

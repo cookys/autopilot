@@ -42,8 +42,8 @@ const GOLD = {
    "  補充   （按 n 寫補充，會跟答案一起送）",
    "",
    "── 其他待決 2（z 收合）──────────────────────────────",
-   "  d-fb890f48  [測試卡] carddispatch 真 courier 紅綠，請勿在面板作答                       PM · 2 時",
    "  d-fd51ee8d  下次到 308 現場時量 30 格（要你到場，只能回報）                             308 · 1 天",
+   "  d-fb890f48  [測試卡] carddispatch 真 courier 紅綠，請勿在面板作答                       PM · 2 時",
    "── 別台的卡（唯讀，到那一席答）────────────────────────────",
    "  d-1c0a77e2  h6 席：GPU slot 重排要你點頭 → 到 cookys/h6/game-lead--claude 答",
    "── 要你做或看 ──────────────────────────────────────────",
@@ -71,8 +71,8 @@ const GOLD = {
    "  補充   （按 n 寫補充，會跟答案一起送）",
    "",
    "── 其他待決 2（z 收合）───────────────────────────────",
-   "  d-fb890f48  [測試卡] carddispatch 真 courier 紅綠，請勿在面板作答               PM · 2 時",
-   "  d-fd51ee8d  下次到 308 現場時量 30 格（要你到場，只能回報）                     308 · 1 天"
+   "  d-fd51ee8d  下次到 308 現場時量 30 格（要你到場，只能回報）                     308 · 1 天",
+   "  d-fb890f48  [測試卡] carddispatch 真 courier 紅綠，請勿在面板作答               PM · 2 時"
   ],
   "actions": [
    "已選 c 拆兩批，每批 2–3 支（尚未送出）",
@@ -89,8 +89,8 @@ const GOLD = {
    "[a] 可以 ★   [b] 先不要",
    "建議 可以：先 payment 再 social",
    "── 其他待決 2（z 收合）──",
-   "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
+   "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "── 別台（唯讀）──",
    "d-1c0a77e2 h6：GPU 重排 → 到該席答",
    "── 要你做或看 ──",
@@ -129,8 +129,8 @@ const GOLD = {
    "[a] 可以 ★   [b] 先不要",
    "建議 可以：先 payment 再 social",
    "── 其他待決 2（z 收合）──",
-   "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
+   "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "── 別台（唯讀）──",
    "d-1c0a77e2 h6：GPU 重排 → 到該席答",
    "── 要你做或看 ──",
@@ -148,8 +148,8 @@ const GOLD = {
    "  d-89fe394f 1/3 · game-lead · 40 分",
    "已送出：[b] 先不要",
    "── 其他待決 2（z 收合）──",
-   "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
+   "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "── 別台（唯讀）──",
    "d-1c0a77e2 h6：GPU 重排 → 到該席答"
   ],
@@ -312,11 +312,12 @@ test('decide: a long list never changes the frame height (overflow ends in the m
 })
 
 test('decide: a console card in focus is read-only and names the seat that answers it', () => {
+  // N1 (codeforge B49-B54, S1-full-p2-160x40 row 27): with no own card the card that has waited longest (d-fd51ee8d, 1 天) is focused, not the 2 時 one
   const ctx = ctxOf(80, 24, live(), con160, nav({}))
   const o = decidePage.render(ctx)
-  expect(text(o.body[0])).toContain('[測試卡] carddispatch')
-  expect(text(o.body[1])).toContain('d-fb890f48 1/2 · PM')
-  expect(text(o.actions[0])).toBe('這張要到 PM 答，這裡只能看')
+  expect(text(o.body[0])).toContain('下次到 308 現場時量 30 格')
+  expect(text(o.body[1])).toContain('d-fd51ee8d 1/2 · 308')
+  expect(text(o.actions[0])).toBe('這張要到 308 答，這裡只能看')
 })
 
 test('decide R2 & R11: at 80x24 card question comes before owner seat and age; wide single-row other-card titles cut with … keeping age fixed at right edge', () => {

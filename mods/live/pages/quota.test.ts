@@ -276,7 +276,8 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   const fourBody = frameRows(page, ctxOf(80, 7, consoleOf([codex, grok, personal, trinity], { cards: [] }))).map(text).slice(1, 5)
   expect(fourBody[0]).toContain('trinity')
   expect(fourBody[1]).toContain('personal')
-  expect(fourBody[2]).toContain('grok')
+  // M2 (codeforge B49-B54, S1-full-p4-80x24 row 15): a cut 80-column table says what it hides instead of silently dropping grok and codex
+  expect(fourBody[2]).toBe('↓ 還有 2 池（▲1 ✓1）')
   expect(fourBody[3]).toBe('判定  紅：180 分未更新（>10 分；statusline 沒在跑）')
 })
 

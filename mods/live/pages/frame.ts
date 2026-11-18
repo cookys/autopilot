@@ -14,7 +14,7 @@ import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import { PAGES } from './index'
 import { STRIP_SPLIT_COLS } from './layout'
-import { brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
+import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
 
 export type { Row } from './rows'
@@ -31,6 +31,8 @@ export const FRAME_MAX_ROWS = 24
 export const frameHeight = (available: number, placement: 'dock' | 'inline' = 'inline'): number => Math.max(0, placement === 'dock' ? available : Math.min(available, FRAME_MAX_ROWS))
 
 export const actionRows = (rows: number): number => (rows >= 32 ? 6 : 4)
+// N3: the hanging indent of a body row the frame has to wrap (the cells under the left status-glyph column stay blank); rows.ts owns the number so a page can measure the same way
+export { WRAP_HANG }
 
 export { staleBadge, brokenRow }
 
@@ -147,7 +149,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const avail = H - 1 - S
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
-    const body = r.body.flatMap(x => wrapRow(x, ctx.size.cols))
+    const body = r.body.flatMap(x => wrapRow(x, ctx.size.cols, WRAP_HANG)) // N3: a kept-whole reason wraps at a clause boundary with a 2-cell hanging indent, never back to column 0
     const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || decisionCount(ctx) > 0 || body.some(x => x.some(s => s.press === 'tab:2:decide')))
     const acts: Row[] = r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
     return { body, acts, room: avail - Math.min(acts.length, avail), short }

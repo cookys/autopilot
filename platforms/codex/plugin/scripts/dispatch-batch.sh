@@ -401,6 +401,9 @@ if [ "$MODE" = merge-back ]; then
   # ownership marker, belongs to no worktree-lifecycle root, and is removed in this same function, so the
   # intent format (root, loop, branch required; reconciled per root) cannot describe it and nothing
   # inventories it. A crash here leaves a plain detached worktree that `git worktree prune`/`list` shows.
+  # Disk guard (build-artifact-reap): only exit 3 refuses; a guard crash degrades.
+  _dg_out="$(node "$(dirname "${BASH_SOURCE[0]}")/lib/disk-guard.js" check --path "$INTEG_WT" --repo "$REPO" 2>&1 >/dev/null)" && _dg_rc=0 || _dg_rc=$?
+  [ "$_dg_rc" -ne 3 ] || err_usage "$_dg_out"
   if ! git -C "$REPO" worktree add --quiet --detach "$INTEG_WT" "$base_sha" >/dev/null 2>&1; then
     err_usage "could not create integration worktree"
   fi

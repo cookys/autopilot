@@ -1161,6 +1161,10 @@ for path in "${snapshot_paths[@]}"; do
       || raced_reason="inventory_persist_failed"
   fi
 
+  # Build output the repo declares (.autopilot/build-artifacts.json) goes first, whatever the merge
+  # status; best-effort, a failure here never blocks the removal.
+  [ -n "$raced_reason" ] \
+    || node "$(dirname "${BASH_SOURCE[0]}")/reap-build-artifacts.js" reap --worktree "$path" >/dev/null 2>&1 || true
   if [ -z "$raced_reason" ] && git_common worktree remove "$path" >/dev/null 2>&1; then
     reaped_item="$(worktree_object "$path" "$branch" "$tip" "reaped" "dead_clean_exact")"
     append_item reaped_items "$reaped_item"

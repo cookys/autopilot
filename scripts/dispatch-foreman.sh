@@ -334,6 +334,9 @@ if [ "$RESUME" -eq 0 ]; then
   cp -- "$BRIEF_FILE" "$RUN_DIR/brief.md" && cp -- "$PLAN_FILE" "$RUN_DIR/plan.md" || die_precondition "cannot copy brief/plan into $RUN_DIR"
   chmod 0444 "$RUN_DIR/brief.md" "$RUN_DIR/plan.md"
   WT="$(mktemp -u -d "$WT_TEMPLATE")"; WT="$(realpath -m "$WT")"
+  # Disk guard (build-artifact-reap): only exit 3 refuses; a guard crash degrades.
+  _dg_out="$(node "$SELF_DIR/lib/disk-guard.js" check --path "$WT" --repo "$MAIN_CHECKOUT" 2>&1 >/dev/null)" && _dg_rc=0 || _dg_rc=$?
+  [ "$_dg_rc" -ne 3 ] || die_precondition "$_dg_out"
   # Intent record BEFORE the add (BL-0082): a worktree built but never marked stays discoverable.
   worktree_intent_write "$(git rev-parse --path-format=absolute --git-common-dir)" \
     "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$RUN_ID" "$RUN_ID" "$BRANCH" "$BASE_SHA" "$WT" \

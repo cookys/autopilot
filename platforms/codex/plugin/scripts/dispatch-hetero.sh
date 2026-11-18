@@ -4446,6 +4446,13 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
 fi
 
+if [ "$WORKTREE_REUSED" -eq 0 ]; then
+  # Disk guard (build-artifact-reap): sweeps idle declared build output, then refuses on a nearly full
+  # disk, before any record, branch or worktree exists. Only exit 3 refuses; a guard crash degrades.
+  _dg_out="$(node "$SELF_DIR/lib/disk-guard.js" check --path "$WT" --repo "$(git rev-parse --show-toplevel 2>/dev/null)" 2>&1 >/dev/null)" && _dg_rc=0 || _dg_rc=$?
+  [ "$_dg_rc" -ne 3 ] || die_precondition "$_dg_out"
+fi
+
 if [ "$WORKTREE_REUSED" -eq 0 ] && [ "$WORKTREE_MANAGED" -eq 1 ]; then
   # Admission must precede the first pending record, branch, or worktree. Once
   # active, evidence loss cannot be reinterpreted as an empty lifecycle root.

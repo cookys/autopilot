@@ -210,6 +210,7 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `residue.archive_remind_days` (config.json) | Age in days after which an old archive ref is only listed as needing a human, never deleted. | `90` | `AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS`: Positive number; environment override of residue.archive_remind_days. |
 | `residue.branch_prefixes` (config.json) | Extra branch prefixes the reaper treats as dispatch branches (letters, digits, . _ - and an optional trailing /). | `[]` |  |
 | `AUTOPILOT_TMP_LOG_RETENTION_DAYS` | Days dispatch scripts keep their temp logs; 0 disables the prune. | `3` |  |
+| `AUTOPILOT_DISK_GUARD_MIN_FREE_PCT` | Minimum free disk percent below which `dispatch-hetero.sh`, `dispatch-foreman.sh` and `dispatch-batch.sh` refuse to create a worktree (precondition failure). Below it they first sweep idle build output a repo declares in `.autopilot/build-artifacts.json` (`scripts/reap-build-artifacts.js`) and re-check. | `20` |  |
 
 ## Dispatch, topology and endpoints
 
@@ -456,6 +457,7 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `residue.archive_remind_days` (config.json) | Age in days after which an old archive ref is only listed as needing a human, never deleted. | `90` | `AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS`: Positive number; environment override of residue.archive_remind_days. |
 | `residue.branch_prefixes` (config.json) | Extra branch prefixes the reaper treats as dispatch branches (letters, digits, . _ - and an optional trailing /). | `[]` |  |
 | `AUTOPILOT_TMP_LOG_RETENTION_DAYS` | Days dispatch scripts keep their temp logs; 0 disables the prune. | `3` |  |
+| `AUTOPILOT_DISK_GUARD_MIN_FREE_PCT` | Minimum free disk percent below which `dispatch-hetero.sh`, `dispatch-foreman.sh` and `dispatch-batch.sh` refuse to create a worktree (precondition failure). Below it they first sweep idle build output a repo declares in `.autopilot/build-artifacts.json` (`scripts/reap-build-artifacts.js`) and re-check. | `20` |  |
 
 ## Dispatch, topology and endpoints
 

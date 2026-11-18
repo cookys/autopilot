@@ -425,4 +425,15 @@ git -C "$SBX" worktree list --porcelain | awk '/^worktree /{print $2}' | grep -v
 done
 git -C "$SBX" worktree prune >/dev/null 2>&1 || true
 
+# ======================================================================= disk guard
+# A nearly full disk refuses BEFORE any worktree, branch or creation record (precondition, exit 2).
+printf '{"free_pct":1}\n' > "$TEST_TMP/dg-statfs.json"
+WT_BEFORE="$(git -C "$SBX" worktree list --porcelain | grep -c '^worktree ')"
+AUTOPILOT_DISK_GUARD_FAKE_STATFS="$TEST_TMP/dg-statfs.json" run_foreman complete rdisk --model kimi-code/k3
+assert_eq "$RC" "2" "disk guard: low free space → precondition exit 2"
+assert_eq "$(field "$OUT" status)" "precondition_failed" "disk guard: status precondition_failed"
+assert_contains "$OUT" "disk-guard: refused" "disk guard: reason names the guard"
+assert_eq "$(git -C "$SBX" worktree list --porcelain | grep -c '^worktree ')" "$WT_BEFORE" "disk guard: no worktree created"
+assert_eq "$(git -C "$SBX" branch --list '*rdisk*' | wc -l | tr -d ' ')" "0" "disk guard: no branch created"
+
 finalize_test

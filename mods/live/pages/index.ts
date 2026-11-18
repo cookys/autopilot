@@ -11,8 +11,8 @@ import { hygienePage } from './hygiene'
 import { reviewPage } from './review'
 import { dispatchPage } from './dispatch'
 import { spendPage } from './spend'
-
-const shell = (id: Page['id'], key: string, title: string): Page => ({ id, key, title, render: () => ({ body: [], actions: [] }) })
+import { forgePage } from './forge'
+import { legendLines } from '../tabs'
 
 // A6 (g2 folds): 1-8, then 9 pet, 0 forge, i help, all drawn through frameRows. The pet page is a placeholder until P2 (the body says so); 5-8 are shells
 // that keep their old tab's content until batch 2 moves it; forge and help are shells.
@@ -28,6 +28,7 @@ export const PAGES: Page[] = [
   spendPage,
   hygienePage,
   pet(),
-  shell('forge', '0', 'forge'),
-  shell('help', 'i', '說明'),
+  forgePage,
+  // K1: help keeps its existing content inside the same frame and navigation.
+  { id: 'help', key: 'i', title: '說明', framed: true, render: ctx => ({ body: legendLines({ t: ctx.t, cols: ctx.size.cols }).map(l => l.segs ?? [{ text: l.text }]), actions: [] }) },
 ]

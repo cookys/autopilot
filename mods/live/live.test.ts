@@ -311,7 +311,9 @@ async function mountAbove($: any, spec: any) {
   return out as any
 }
 
-const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 120, scroll: { offset: 0, bodyRows: 5 }, view: { agentId: undefined } }
+// X1: these legacy band contracts use the same explicit opt-in as PANE_PROPS;
+// ux-gate2.test.ts covers the default shared navigation without this prop.
+const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 120, scroll: { offset: 0, bodyRows: 5 }, view: { agentId: undefined }, legacyTabs: true }
 // Semantic snapshot cases need the whole page; viewport geometry is pinned by
 // SCROLL below and bottom-anchor.test.ts at the actual 160x40 / 80x24 sizes.
 // legacyTabs: the old now / decide / fleet / spend tabs these suites test stay drawn the old way until batch 3 deletes them (register.ts hands the Pane no framed pages); pane-attach.test.ts and pages/*.test.ts cover the framed pages

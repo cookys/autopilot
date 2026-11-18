@@ -298,7 +298,9 @@ test('R14 mounted: every page keeps content adjacent to actions at 80x24 inline 
       expect(rendered.length, label + ' fixed height').toBe(rows)
       expect(rendered[action].trim(), label + ' action exists').not.toBe('')
       expect(rendered[action - 1].trim(), label + ' content touches action').not.toBe('')
-      expect(rendered[1].trim(), label + ' spare rows precede content').toBe('')
+      // K1: help now starts at its header in the shared frame; its long body fills the room.
+      if (page.id === 'help') expect(rendered[0].trim(), label + ' header first').toMatch(/^(Help|說明)$/)
+      else expect(rendered[1].trim(), label + ' spare rows precede content').toBe('')
     }
     await mounted.unmount()
   }

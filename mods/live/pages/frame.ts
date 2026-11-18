@@ -16,9 +16,10 @@ import { PAGES } from './index'
 import { STRIP_SPLIT_COLS } from './layout'
 import { WRAP_HANG, brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
+import type { Step } from '../speed'
 
 export type { Row } from './rows'
-export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean }
+export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[] }
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'forge' | 'help'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
 export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[] } }
@@ -83,12 +84,13 @@ function clip(row: Row, cols: number): Row {
 // neighbouring Buttons has a one-cell separator. Under 66 columns the strip takes 2 rows (entries 1-6 on row 1, then 7, 8, 9, 0, i on row 2); at 66+ columns it takes 1 row. Labels shorten to
 // compact localized names only when a row does not fit; pet, forge and Fleet never become ambiguous action letters. No entry is dropped.
 export { STRIP_SPLIT_COLS } from './layout'
+import { PAGE_KEYS } from './layout'
 const HOST_PREFIX = 1
 const HELP_KEY = 'i'
 export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
   const pages = opts.pages ?? PAGES
   const active = opts.active ?? page.id
-  const all = [...pages.filter(p => p.id !== 'help').map(p => ({ id: p.id as string, key: p.key, label: ctx.t('tab.' + p.id) })), ...(opts.extra ?? [])]
+  const all = [...pages.filter(p => p.id !== 'help').map(p => ({ id: p.id as string, key: PAGE_KEYS[p.id] ?? p.key, label: ctx.t('tab.' + p.id) })), ...(opts.extra ?? [])]
   const first = (s: string): string => [...s][0] ?? s
   const helpLabel = ctx.t('frame.help')
   const esc = '  Esc ' + ctx.t('frame.close')

@@ -658,6 +658,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
     published_at: published,
     session_as_of: sessionUsd(env, sid).as_of,
     host_as_of: typeof env.host_today_as_of === 'string' ? env.host_today_as_of : null,
+    detail: { ...NO_DETAIL, now_ms: nowMs }, // X4: non-ok snapshots still need the clock to show their data age.
   }
   if (fresh.length === 0) {
     const failure = await launchFailure($, autopilotHome, scope.key)
@@ -1292,6 +1293,8 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
   if (id === panePage) return
   panePage = id
   paneTab = PAGE_TAB_OF[id] ?? paneTab
+  keyed(decideScroll, 'page:' + id) // K1: a different page starts at its first row.
+  void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
   decideLocal = { ...decideLocal, textMode: false, textBuf: '' } // a tab press ends a note being typed: the mode must not outlive the page
   $.ui.invalidate('ui.render')
 }
@@ -1538,10 +1541,12 @@ export function registerLive(on: Parameters<Register>[0]): void {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
+    const legacyTabs = (e.props as { legacyTabs?: boolean }).legacyTabs === true
     // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
     // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
     // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.
     const info = async () => {
+      if (!legacyTabs) return pageOpen('now')
       if (consoleOn) return consoleInfo()
       const seq = ++pressSeq
       const prev = decided
@@ -1574,7 +1579,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const seq = ++pressSeq
       decided = Promise.resolve(tab)
       paneTab = tab
-      panePage = pageId
+      await panePagePress($, pageId) // K1: band and slot navigation also enter at the top.
       if (unfold !== null) folded.delete(unfold)
       try {
         markPaneOpen()
@@ -1602,6 +1607,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
     // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a page tab opens the pane on that page (the forge tab keeps its band behaviour)
     const onTab = (id: BarTabId | ConsoleTab | BandPageId) => {
+      if (!legacyTabs) { void pageOpen(id as BandPageId); return }
       if (consoleOn && id !== 'forge') { void pageOpen(id as BandPageId); return }
       barTab = barTab === id ? null : (id as BarTabId)
       $.ui.invalidate('ui.render')
@@ -1626,7 +1632,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest.
     // Console mode stays at FORGE_LABEL_MAX and never draws the pet (the console band's bytes stay what they were). Outside it, 48 holds a 5-step spark plus the pet: that label is 31 cells and 30 drops the pet.
     const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
-    const con = consoleOn ? { ...consoleNav(), cols: columns } : null // the console mode's band strip (consoletabs.ts), null = the tabs the band always had
+    const con = !legacyTabs || consoleOn ? { ...consoleNav(), cols: columns } : null // X1/X4: the shared strip reads the same source health and counts as the pages in every mode.
     const usageOn = con !== null || usageTabFits(columns, t, GLYPHS.structure.speed) // no 用量 tab in the console mode, so it is never hidden behind the `›`
     const labelMax = consoleOn ? FORGE_LABEL_MAX : 48
     const labelCols = Math.min(labelMax, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn, con).width - 1 - 2)
@@ -1676,8 +1682,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const qSrc = consoleSnap?.sources.quota?.state
     // the band is two rows: row 2 is the tab row while the pane is closed. With the pane open the pane's own strip is the only tab row on screen (folds A4).
     let paneOpen = false
-    if (consoleOn) { try { paneOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, consoleOn && paneOpen)
+    if (!legacyTabs || consoleOn) { try { paneOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs)
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
     if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
@@ -1865,7 +1871,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       folded, e.props.scroll ?? null,
       { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
       decideScroll, fleet, null,
-      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch },
+      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}) },
     )
   })
 

@@ -1434,6 +1434,27 @@ function dispatchSeat(
       ? canonicalFile(authorEnvelope.raw_log, 'dispatch-author raw_log')
       : path.join(tempDir, 'missing.raw');
     const raw = fs.existsSync(rawPath) ? fs.readFileSync(rawPath) : Buffer.alloc(0);
+    // dispatch-author writes codex's stderr to the sibling `stderr` artifact next to
+    // `stdout` (`raw_log`), while `run.stderr` is the wrapper's own stderr (empty on
+    // authored runs and on post-exit transport gates under DISPATCH_QUIET=1).
+    let stderr = run.stderr || '';
+    if (target.runner === 'codex'
+        && authorEnvelope
+        && authorEnvelope.raw_log
+        && path.basename(rawPath) === 'stdout') {
+      const codexStderrPath = path.join(path.dirname(rawPath), 'stderr');
+      try {
+        const stat = fs.lstatSync(codexStderrPath);
+        if (stat.isFile()
+            && !stat.isSymbolicLink()
+            && stat.nlink === 1
+            && (typeof process.getuid !== 'function' || stat.uid === process.getuid())) {
+          stderr = fs.readFileSync(codexStderrPath);
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
     // The runner's own binary is absent (codex/agy/grok/kimi `<runner> binary not found: ...`): that is
     // the SEAT being unavailable, exactly like a quota or a dead pipe, and a fallback seat of another
     // family heals it. Classifying it as a policy precondition made reviewSeat break out of the attempt
@@ -1464,7 +1485,7 @@ function dispatchSeat(
         signal: run.signal || null,
         error: run.error || null,
         stdout: raw,
-        stderr: run.stderr || '',
+        stderr,
       },
       outcomeHints: {
         preconditionFailed: policyRefuse,

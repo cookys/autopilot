@@ -3230,6 +3230,12 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
     "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
 fi
 set_runner_flags
+# codex effort cap (Fleet task 01M7PQN6WXP5H9Q7QXPQM97V22, temporary until feat/codex-effort-high lands): the literal
+# EFFORT="xhigh" is a script default, not a seat decision. An unpinned codex call sends high; an explicit
+# --effort always wins. Other runners are unchanged.
+if [ "${IS_CODEX:-0}" -eq 1 ] && [ "$EFFORT_EXPLICIT" -eq 0 ]; then
+  EFFORT="high"
+fi
 # The local-implementer gate runs at the end of set_runner_flags, after the runner
 # (including auto + a listed endpoint) is resolved, still before resolve-endpoint.
 # agy is the else-case rail (no IS_* flag). Refuse an unusable --timeout HERE, in the parent: the agy

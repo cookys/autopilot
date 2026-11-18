@@ -7,7 +7,7 @@ import { frameRows } from './frame'
 import { PAGES } from './index'
 import { PALETTE, displayWidth } from '../ui'
 import { quotaPage, renderQuota } from './quota'
-import { worstPool } from './quota-pick'
+import { normalizedPools, rankPools, worstPool } from './quota-pick'
 import { NOW, POOLS, SEATS, MIN, consoleOf, ctxOf } from './quota.fixture'
 
 const text = (row: { text: string }[]) => row.map(s => s.text).join('').trimEnd()
@@ -300,6 +300,25 @@ test('quota R4 & R10: unknown pools use ? icon and 未知· prefix with warning 
   }
 })
 
+test('quota R1: a blocked seat without facts.seat uses its id, retaining stale source without repeating the pool verdict', () => {
+  const blocked = {
+    id: 'seat_blocked:s1', kind: 'seat_blocked', severity: 1, state: 'failed', needs_operator: true,
+    title: 's1：F 池額度用完', text: 's1 額度用完：F 池 7 天用盡', since_ms: NOW - 5 * MIN,
+    line_id: null, to_console: true, answerable_by: [], facts: { pool: 'pool-f', stale: true, source: 'statusline' },
+  }
+  const c = consoleOf([{ ...POOLS[3], pool: 'pool-f' }], { cards: [], items: [blocked] })
+  for (const [cols, rows] of SIZES) {
+    const out = frameRows(quotaPage, ctxOf(cols, rows, c)).map(text)
+    const verdicts = out.filter(l => !l.startsWith('── 焦點') && l.includes('F 池'))
+    expect(verdicts.length).toBe(1)
+    const seat = out.find(l => l.startsWith('用完'))!
+    expect(seat).toContain('s1')
+    expect(seat).toContain('✗')
+    expect(seat).toContain('資料過期：statusline 沒在跑')
+    expect(seat).not.toContain('F 池')
+  }
+})
+
 test('quota R5: at 120x30 and 80x24 with many pools and a multi-row wrapped verdict, focused pool full reason is kept whole and never cut by ↓ 還有 N 列', () => {
   const longReason = 'statusline 沒在跑，而且多個席位已超過三小時未上報最新配額數據，完整原因必須換行保留不可被還有幾列截斷'
   const many = Array.from({ length: 22 }, (_, i) => ({
@@ -316,8 +335,15 @@ test('quota R5: at 120x30 and 80x24 with many pools and a multi-row wrapped verd
     expect(out.filter(l => !l.includes('還有')).some(l => l.includes('…'))).toBe(false)
     // Verify even when focus is on a lower-ranked pool (focus: 15)
     const focus15Page = { ...quotaPage, render: (c: Parameters<typeof renderQuota>[0]) => renderQuota(c, { focus: 15, expanded: false }) }
-    const many15 = many.map((p, idx) => (idx === 15 ? { ...p, pool: 'deepfocus', projected_pct_at_reset: 25, stale: false, stale_note: null } : p))
-    const out15 = frameRows(focus15Page, ctxOf(cols, rows, consoleOf(many15, { cards: [] }))).map(text)
+    // Focus is a rank in danger order, not the source-array index. Put fifteen
+    // more wasteful pools before the target and calmer pools after it.
+    const many15 = many.map((p, idx) => ({
+      ...POOLS[1], pool: idx === 15 ? 'deepfocus' : p.pool,
+      projected_pct_at_reset: idx < 15 ? 10 : idx === 15 ? 25 : 98,
+    }))
+    const deepSnap = consoleOf(many15, { cards: [] }) as Parameters<typeof normalizedPools>[0]
+    expect(rankPools(normalizedPools(deepSnap)!, NOW)[15].pool).toBe('deepfocus')
+    const out15 = frameRows(focus15Page, ctxOf(cols, rows, deepSnap)).map(text)
     expect(out15.join('\n')).toContain('deepfocus')
     expect(out15.join('\n')).toContain('判定  黃：約剩 75% 會浪費')
   }

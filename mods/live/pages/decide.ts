@@ -124,13 +124,13 @@ function truncateSegs(row: Row, cols: number): Row {
 }
 
 // left segments (cut with `…` when too wide), then `right` fixed at the right edge `cols`, never wrapped (R11)
-function leftRight(left: Seg[], right: string, cols: number): Row {
+function leftRight(left: Seg[], right: string, cols: number, gap = 2): Row {
   if (right === '') return truncateSegs(left, cols)
   const rw = displayWidth(right)
-  if (cols <= rw + 2) return truncateSegs(left, cols)
-  const cut = truncateSegs(left, cols - 2 - rw)
+  if (cols <= rw + gap) return truncateSegs(left, cols)
+  const cut = truncateSegs(left, cols - gap - rw)
   const lw = widthOf(cut)
-  return [...cut, seg(' '.repeat(Math.max(2, cols - lw - rw))), dimSeg(right)]
+  return [...cut, seg(' '.repeat(Math.max(gap, cols - lw - rw))), dimSeg(right)]
 }
 
 const ageOf = (ctx: PageCtx, ms: number | null): string => {
@@ -225,9 +225,12 @@ function conCard(c: ConsoleCard, pos: string, ctx: PageCtx, wide: boolean): Row[
   return [[mark, seg(c.question)], [dimSeg('  ' + [c.id + ' ' + pos, who, age].filter(s => s !== '').join(' · '))]]
 }
 
+// Keep a visible gutter between each list question and its owner/age column;
+// truncate the title before it reaches that column, leaving the age at the edge.
+const OTHER_CARD_GUTTER = 4
 function otherRow(id: string, title: string, who: string, age: string, ctx: PageCtx, wide: boolean): Row {
   const tail = [who, age].filter(s => s !== '').join(' · ')
-  if (wide) return leftRight([seg('  ' + id + '  ' + title)], tail, ctx.size.cols)
+  if (wide) return leftRight([seg('  ' + id + '  ' + title)], tail, ctx.size.cols, OTHER_CARD_GUTTER)
   if (age === '') return [seg(truncateToWidth(id + ' ' + title, ctx.size.cols))]
   const right = '· ' + age
   const rw = displayWidth(right)

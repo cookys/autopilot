@@ -104,3 +104,7 @@ FINAL: bash scripts/sync-all.sh exit 0; bash scripts/sync-all.sh --check exit 0;
 File inventory and explicit deferred/out-of-scope items: chrome-report.md. No push; independent cross-family review remains with caller.
 Evidence hygiene: scripts/redact-personal.js redacted fixture home paths and host names in the two full-suite logs; failure names and counts unchanged.
 Evidence formatting: log-line trailing whitespace normalized; test names/results unchanged. Repository pre-commit gate and staged leak guard both exit 0.
+red -> green decide R2 & R11: at 80x24 card question comes before owner seat and age; wide single-row other-card titles cut with … keeping age fixed at right edge
+red -> green now R1: on every page at 80x24, 120x30, 160x40, each pool_key appears at most once and fleet.brief pool warnings are never drawn separately
+red -> green quota R5: at 120x30 and 80x24 with many pools and a multi-row wrapped verdict, focused pool full reason is kept whole and never cut by ↓ 還有 N 列
+red -> green quota R1: a blocked seat without facts.seat uses its id, retaining stale source without repeating the pool verdict

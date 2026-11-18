@@ -13,6 +13,7 @@ import type { LiveSnapshot, Seg } from '../model'
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import { PAGES } from './index'
+import { STRIP_SPLIT_COLS } from './layout'
 import { brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount } from './rows'
 import type { Row } from './rows'
 
@@ -105,7 +106,7 @@ function wrapRow(row: Row, cols: number): Row[] {
 // The host draws every hotkey Button as `<key>: <label>`, so each Button is one cell wider than its text (`1 現況` -> `1: 現況`). A Button is measured with that prefix, and every pair of
 // neighbouring Buttons has a one-cell separator. Under 66 columns the strip takes 2 rows (entries 1-6 on row 1, then 7, 8, 9, 0, i on row 2); at 66+ columns it takes 1 row. Labels shorten to
 // compact localized names only when a row does not fit; pet, forge and Fleet never become ambiguous action letters. No entry is dropped.
-export const STRIP_SPLIT_COLS = 66
+export { STRIP_SPLIT_COLS } from './layout'
 const HOST_PREFIX = 1
 const HELP_KEY = 'i'
 export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {

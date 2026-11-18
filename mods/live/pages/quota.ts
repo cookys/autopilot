@@ -4,7 +4,7 @@
 //   pace missing (sources.quota_forecast is not ok): rate, projection and verdict columns read "✗ 無來源：capacity pace 未接", except limit_hit (a fact) and a stale pool (a fact)
 //   stale (> 10 min or flagged): the row is red with the full reason, the numbers stay and carry a ✗ (A1, A10); 80x24 writes the reason in a row under the table, untruncated
 //   Enter (A3) expands the focused pool's seats from `fleet seats --quota --json`; the page draws them from `quota.seats` when the feed carries them
-import { STRIP_SPLIT_COLS } from './frame'
+import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
 import { brokenRow } from './rows'
 import type { Row } from './rows'
@@ -246,7 +246,11 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const verdictRow = kv(t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role))
   const blockedRows: Row[] = blockedBy(fp.pool).map(it => {
     const stale = it.facts.stale === true
-    return kv(t('page.quota.f_blocked'), (stale ? bad + ' ' : '') + it.text + (stale ? ' ' + bad + ' ' + t('page.quota.blocked_stale', { source: String(it.facts.source ?? '?') }) : ''), stale ? PALETTE.broken : undefined)
+    // Name the blocked seat here; the pool table and focused verdict already
+    // explain its quota. Repeating fleet.brief's text draws a second pool verdict.
+    const idSeat = it.id.startsWith('seat_blocked:') ? it.id.slice('seat_blocked:'.length) : ''
+    const seat = typeof it.facts.seat === 'string' ? it.facts.seat : idSeat || t('page.quota.f_seats')
+    return kv(t('page.quota.f_blocked'), (stale ? bad + ' ' : '') + seat + (stale ? ' ' + bad + ' ' + t('page.quota.blocked_stale', { source: String(it.facts.source ?? '?') }) : ''), stale ? PALETTE.broken : undefined)
   })
   const verdictBlock: Row[] = [...blockedRows, verdictRow]
 

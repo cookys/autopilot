@@ -1,0 +1,96 @@
+{
+  "schema": "autopilot.runner-pins/1",
+  "runners": {
+    "codex": {
+      "bin": "codex",
+      "installed": true,
+      "version": "codex-cli 0.166.0",
+      "version_cmd": ["codex", "--version"],
+      "autoupdate": {
+        "kind": "config",
+        "file": ".codex/config.toml",
+        "key": "check_for_update_on_startup",
+        "value": false,
+        "source": "https://learn.chatgpt.com/docs/config-file/config-reference"
+      },
+      "vetted_at": "2026-11-19",
+      "vetted_by": "manual"
+    },
+    "agy": {
+      "bin": "agy",
+      "installed": true,
+      "version": "1.5.2",
+      "version_cmd": ["agy", "--version"],
+      "autoupdate": "none-known",
+      "vetted_at": "2026-11-19",
+      "vetted_by": "manual"
+    },
+    "claude": {
+      "bin": "claude",
+      "installed": true,
+      "version": "2.1.325 (Claude Code)",
+      "version_cmd": ["claude", "--version"],
+      "autoupdate": {
+        "kind": "env",
+        "env": "DISABLE_AUTOUPDATER",
+        "value": "1",
+        "source": "https://code.claude.com/docs/en/settings"
+      },
+      "vetted_at": "2026-11-19",
+      "vetted_by": "manual"
+    },
+    "grok": {
+      "bin": "grok",
+      "installed": true,
+      "version": "grok 1.0.70 (f50904eaee6c) [stable]",
+      "version_cmd": ["grok", "--version"],
+      "autoupdate": "none-known",
+      "vetted_at": "2026-11-19",
+      "vetted_by": "manual"
+    },
+    "cursor": {
+      "bin": "cursor-agent",
+      "installed": true,
+      "version": "2026.10.19-6bbf2c4",
+      "version_cmd": ["cursor-agent", "--version"],
+      "autoupdate": "none-known",
+      "vetted_at": "2026-11-19",
+      "vetted_by": "manual"
+    },
+    "kimi": {
+      "bin": "kimi",
+      "installed": false,
+      "version": null,
+      "version_cmd": ["kimi", "--version"],
+      "autoupdate": "none-known",
+      "vetted_at": "2026-11-19",
+      "vetted_by": "manual"
+    },
+    "qwen": {
+      "bin": "qwen",
+      "installed": false,
+      "version": null,
+      "version_cmd": ["qwen", "--version"],
+      "autoupdate": "none-known",
+      "vetted_at": "2026-11-19",
+      "vetted_by": "manual"
+    },
+    "opencode": {
+      "bin": "opencode",
+      "installed": true,
+      "version": "1.19.5",
+      "version_cmd": ["opencode", "--version"],
+      "autoupdate": {
+        "kind": "config",
+        "file": ".config/opencode/opencode.json",
+        "key": "autoupdate",
+        "value": false,
+        "env": "OPENCODE_DISABLE_AUTOUPDATE",
+        "env_value": "true",
+        "source": "https://opencode.ai/docs/config/"
+      },
+      "vetted_at": "2026-11-19",
+      "vetted_by": "manual"
+    }
+  }
+}

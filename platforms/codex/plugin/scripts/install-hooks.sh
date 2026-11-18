@@ -2,8 +2,9 @@
 # install-hooks.sh — point git at .githooks/ for repo-tracked git hooks.
 #
 # Makes git run the scripts in .githooks/ on their git events (mode below):
-#   - pre-commit : version/agent-body drift gate (blocks the commit on drift)
-#   - pre-push   : qc-gate anti-skip forcing function — blocks/warns a push whose
+#   - pre-commit       : version/agent-body/single-writer drift gate (blocks the commit on drift)
+#   - pre-merge-commit : test-identity + backlog single-writer gate on non-ff merges
+#   - pre-push         : qc-gate anti-skip forcing function — blocks/warns a push whose
 #                  range touches a protected path without QC-Verdict evidence
 #                  (strength per .claude/qc-gate-config.md → scripts/resolve-qc-gate.sh)
 #   - post-merge : release-ritual advisory (prints merge SHA + preflight status

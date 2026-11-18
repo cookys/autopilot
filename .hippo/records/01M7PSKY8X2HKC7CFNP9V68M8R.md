@@ -1,0 +1,13 @@
+---
+id: 01M7PSKY8X2HKC7CFNP9V68M8R
+kind: issue
+created: 2026-11-18T07:40:53.405Z
+---
+- **Since**: 2026-11-17
+- **Report**: 01M7MW5VV0CK85HZ4AY57WPZ1Y
+- **Reply**: 2026-11-17 01M7MW3W1FBJ5Q006DH26FTWT3
+- **Problem**: watcher 合併只改幾個檔，affected-suites 卻選了 889/892，等於跑全套，沒有任何提示。
+- **Impact**: 推送延誤一小時以上，席位空等；靠人盯才會發現。
+- **Trigger**: ready；選取量超過 50% 就報警，並列出是哪個檔案的改動把全套拉進來
+- **Source**: PEER-REPORTED PM 2026-11-17
+- **Pointer**: none

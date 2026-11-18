@@ -176,6 +176,22 @@ function backlogHasRow(repo, id) {
   }
 }
 
+function backlogReadRow(repo, id) {
+  const cfg = gateConfig(repo);
+  if ((cfg.style || 'heading') !== 'heading') throw new RecordError('unsupported_style', `backlog style ${cfg.style} is not read by project-record`);
+  const backlogAbs = backlogFile(repo);
+  const text = fs.readFileSync(backlogAbs, 'utf8');
+  let loc;
+  try {
+    loc = locateRow(text, id);
+  } catch (e) {
+    if (e instanceof RecordError && e.rule === 'row_not_found') e.exitCode = 4;
+    throw e;
+  }
+  const fields = rowFields(loc, text, Object.assign({}, cfg, { next_id_mark: true }));
+  return { abs: backlogAbs, rel: rel(repo, backlogAbs), id, fields };
+}
+
 function backlogNew(repo, input, opts) {
   const o = opts || {};
   const inp = Object.assign({}, input);
@@ -523,7 +539,7 @@ function handoffClose(repo, input, opts) {
 
 module.exports = {
   RecordError, RuleViolationError,
-  backlogNew, backlogReply, backlogClose, backlogView, backlogHasRow,
+  backlogNew, backlogReply, backlogClose, backlogView, backlogHasRow, backlogReadRow,
   decisionNew, decisionSupersede,
   adrNew, adrSupersede,
   lessonNew,

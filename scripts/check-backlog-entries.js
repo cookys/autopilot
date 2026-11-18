@@ -43,12 +43,14 @@
  *
  *   node scripts/check-backlog-entries.js --hippo --reconcile [--target <dir>] [--backlog <file>] [--adr-dir <dir>]
  *     every backlog row Id (BL-NNNN) and ADR file number (ADR-NNNN) needs a hippo record with that provenance value, else
- *     backlog_unimported (block). Exit 2 no store, 5 hippo unusable. The only `--hippo` mode is --reconcile.
+ *     backlog_unimported (block). Exit 2 no store, 5 hippo unusable. The only `--hippo` mode is --reconcile (default mode: block).
  *     The file is a view of the store, so it also checks agreement the other way (the store is read from the working tree), each
  *     a block finding naming the writer `node scripts/project-record.js backlog ...`: backlog_unprojected (an open issue record
  *     has no row), backlog_stale_row (the record is closed but its row still says open) and backlog_store_mismatch (a row field
  *     differs from its record's: Title, Since, Problem, Impact, Trigger, Source, Pointer, Context, Report, Reply, Origin, Effort,
- *     Trigger-Type). report.reconcile.drift lists them one per record, for scripts/check-backlog-single-writer.js.
+ *     Trigger-Type). Known store drift listed in project/backlog/store-drift.json ({"records": {"<ULID>": "reason"}}) is reported
+ *     with allowed: true (counted in allowed_count, not new_count); a listed record that no longer drifts fails with
+ *     backlog_store_drift_stale until removed. scripts/check-backlog-single-writer.js delegates directly to this reconcile.
  *
  * Exit: 0 clean or warn · 1 block with new violations · 2 usage / unreadable / self-test fail
  */
@@ -1488,6 +1490,19 @@ function runReconcile(args) {
   let text;
   try { text = fs.readFileSync(backlogPath, 'utf8'); } catch (e) { return die(2, `unreadable backlog: ${e.message}`); }
   const cfg = loadGateConfig(args, root);
+  const reconcileCfg = Object.assign({}, cfg, { mode: args.mode || 'block' });
+  const STORE_DRIFT_REL = 'project/backlog/store-drift.json';
+  let debt = {};
+  try {
+    const rawDebt = JSON.parse(fs.readFileSync(path.join(root, STORE_DRIFT_REL), 'utf8'));
+    if (!rawDebt || typeof rawDebt !== 'object' || Array.isArray(rawDebt)
+        || (rawDebt.records !== undefined && (!rawDebt.records || typeof rawDebt.records !== 'object' || Array.isArray(rawDebt.records)))) {
+      die(2, `${STORE_DRIFT_REL}: expected {"records": {"<ULID>": "reason"}}`);
+    }
+    debt = rawDebt.records || {};
+  } catch (e) {
+    if (e.code !== 'ENOENT') die(2, `${STORE_DRIFT_REL}: ${e.message}`);
+  }
   const want = new Set();
   for (const ent of collectEntries(text, cfg.style || 'heading', cfg)) {
     const id = ent.id ? String(ent.id).trim().split(/\s+/)[0] : '';
@@ -1521,26 +1536,41 @@ function runReconcile(args) {
     if (missing.some((i) => i.startsWith('ADR-'))) froms.push(`--from adr-dir ${rel(adrDir)}`);
     fix = `hippo import ${froms.join(' ')} --only ${missing.join(',')}`;
     annotated.push({ code: 'backlog_unimported', title: '', field: 'Id', level: 'block', allowed: false,
-      detail: `${missing.join(', ')} ${missing.length === 1 ? 'has' : 'have'} no record; from the repo root run: ${fix}` });
+      detail: `${missing.join(', ')} ${missing.length === 1 ? 'has' : 'have'} no record; from the repo root run: node scripts/project-record.js backlog import <BL-id> (or ${fix})` });
   }
   const showBody = (id) => {
     const r = hippo.run(root, ['show', id]);
     if (r.exit !== 0) die(5, `hippo show ${id} failed: ${r.error && r.error.message}`);
     return r.data.record;
   };
-  const drift = reconcileAgreement(collectEntries(text, cfg.style || 'heading', cfg), ex.data.records, showBody);
+  const drift = reconcileAgreement(collectEntries(text, cfg.style || 'heading', cfg), ex.data.records, showBody)
+    .map((d) => Object.assign({}, d, {
+      allowed: Object.prototype.hasOwnProperty.call(debt, d.record),
+    }));
   const WRITER = 'node scripts/project-record.js backlog';
   const driftMsg = {
-    backlog_unprojected: (d) => ({ field: 'Id', detail: `open store record(s) with no BACKLOG.md row: ${d.join(', ')}; run: ${WRITER} sync <id> (or close the record: ${WRITER} close <id> done)` }),
-    backlog_stale_row: (d) => ({ field: 'Status', detail: `row(s) still open while the store record is closed: ${d.join(', ')}; a close goes through ${WRITER} close` }),
-    backlog_store_mismatch: (d) => ({ field: 'row', detail: `row field(s) differ from the store: ${d.join('; ')}; BACKLOG.md is written only by ${WRITER} new|reply|close|sync, so a hand edit must be redone through it` }),
+    backlog_unprojected: (d) => ({ field: 'Id', detail: `open store record(s) with no BACKLOG.md row: ${d.detail}; run: ${WRITER} sync ${d.record} (or close the record: ${WRITER} close ${d.record} done)` }),
+    backlog_stale_row: (d) => ({ field: 'Status', detail: `row(s) still open while the store record is closed: ${d.detail} (${d.record}); a close goes through ${WRITER} close` }),
+    backlog_store_mismatch: (d) => ({ field: 'row', detail: `row field(s) differ from the store: ${d.detail} (${d.record}); BACKLOG.md is written only by ${WRITER} new|reply|close|sync|import, so a hand edit must be redone through it` }),
   };
-  for (const code of Object.keys(driftMsg)) {
-    const items = drift.filter((d) => d.code === code).map((d) => d.detail);
-    if (items.length) annotated.push(Object.assign({ code, title: '', level: 'block', allowed: false }, driftMsg[code](items)));
+  for (const d of drift) {
+    const fmt = driftMsg[d.code];
+    if (fmt) annotated.push(Object.assign({ code: d.code, title: '', level: 'block', allowed: d.allowed }, fmt(d)));
   }
-  const report = buildReport(cfg, backlogPath, cfg.style || 'heading', want.size, byteLen(text), annotated);
-  report.reconcile = { checked: want.size, missing, fix, adr_note: adrNote, drift };
+  const live = new Set(drift.map((d) => d.record));
+  const staleDebt = Object.keys(debt).sort().filter((id) => !live.has(id));
+  for (const id of staleDebt) {
+    annotated.push({
+      code: 'backlog_store_drift_stale',
+      title: '',
+      field: 'records',
+      level: 'block',
+      allowed: false,
+      detail: `${STORE_DRIFT_REL}: ${id} no longer drifts; remove it from the list`,
+    });
+  }
+  const report = buildReport(reconcileCfg, backlogPath, cfg.style || 'heading', want.size, byteLen(text), annotated);
+  report.reconcile = { checked: want.size, missing, fix, adr_note: adrNote, drift, stale_store_drift: staleDebt };
   process.stdout.write(JSON.stringify(report) + '\n');
   process.exit(report.exit);
 }

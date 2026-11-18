@@ -108,13 +108,14 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     expect(qBody.some(l => l.includes('還有')), 'H=' + H + ' quota: scroll hint does not eat a body row').toBe(false)
     expect(qBody.filter(l => /^[▸ ] [✗?▲✓] \S/.test(l)).length, 'H=' + H + ' quota: >= 1 pool row').toBeGreaterThanOrEqual(1)
   }
-  // 現況 with no pending cards, 1 red pool, 1 unknown pool, and 1 offline/stuck line in a 4-row body (no pending -> red items first, then unknown)
+  // 現況 with no pending cards, 1 red pool, 1 unknown pool, and 1 offline/stuck line in a short body (C1: one summary row per class: fleet -> quota -> 另有 N 項)
   const oneRedOneUnknown = [
     POOLS.find(p => p.pool === 'trinity')!, // red (stale)
     POOLS.find(p => p.pool === 'personal')!, // unknown (limit_nosw)
     POOLS.find(p => p.pool === 'codex')!, // green
   ]
   const cNow = { ...(snap(oneRedOneUnknown, { cards: [], lines: [c.lines![1]] }) as object), items: [] } as ConsoleSnapshot
+  expect(frameRows(nowPage, { ...(ctxOf(80, 4, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('另有 4 項')
   for (const H of [5, 6, 7]) {
     const nOut = frameRows(nowPage, { ...(ctxOf(80, H, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
     expect(nOut.length).toBe(H)
@@ -123,18 +124,18 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     expect(nBody.some(l => l.includes('──')), 'H=' + H + ' now: no section title').toBe(false)
     expect(nBody.filter(l => l.trim() !== '').length, 'H=' + H + ' now: >= 1 item').toBeGreaterThanOrEqual(1)
     const first = nBody.findIndex(l => l.trim() !== '')
-    if (H === 5) expect(nBody[first + 1]).toBe('另有 3 項')
+    if (H === 5) {
+      expect(nBody[first]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 2/3（離線 1）')
+      expect(nBody[first + 1]).toBe('✗ 額度 紅 1（trinity）· ? 未知 1（personal）')
+    }
     if (H === 7) {
-      expect(nBody.some(l => l.includes('另有') || l.includes('還有')), 'H=7 now: all 4 items fit without overflow').toBe(false)
-      const iRed = nBody.findIndex(l => l.includes('trinity'))
-      const iHost = nBody.findIndex(l => l.includes('主機 離線 1 台'))
-      const iStuck = nBody.findIndex(l => l.includes('復原線'))
-      const iUnknown = nBody.findIndex(l => l.includes('personal'))
-      expect(iRed, 'red pool first').toBe(first)
-      expect(iHost, 'offline host directly after red pool').toBe(iRed + 1)
-      expect(iStuck, 'stuck/offline line directly after offline host').toBe(iHost + 1)
-      expect(iUnknown, 'unknown pool directly after stuck line').toBe(iStuck + 1)
-      expect(iUnknown, 'last item directly above actions').toBe(nBody.length - 1)
+      expect(nBody.some(l => l.includes('另有') || l.includes('還有')), 'H=7 now: both class summary rows fit without overflow').toBe(false)
+      const iFleet = nBody.findIndex(l => l.includes('復原線') && l.includes('主機 2/3（離線 1）'))
+      const iQuota = nBody.findIndex(l => l.includes('trinity') && l.includes('personal'))
+      expect(iFleet, 'fleet class summary row first (no pending)').toBe(first)
+      expect(iQuota, 'quota class summary row directly after fleet').toBe(iFleet + 1)
+      expect(nBody[iQuota].indexOf('trinity')).toBeLessThan(nBody[iQuota].indexOf('personal'))
+      expect(iQuota, 'last class row directly above actions').toBe(nBody.length - 1)
     }
   }
 })
@@ -154,14 +155,15 @@ test('gate3 item 2 (R2/C1 pending-first): short body with pending cards puts com
   const withPending = { ...(snap(pools, { cards, lines: [c0.lines![1]] }) as object), items: [] } as ConsoleSnapshot
   const out = frameRows(nowPage, { ...(ctxOf(80, 7, withPending) as object), live: LIVE0 } as never, { pages: PAGES })
   expect(out.length).toBe(7)
-  expect(out[1][0].press).toBe('tab:2:decide')
+  expect(out[1]).toEqual([{ text: '' }])
+  expect(out[2][0].press).toBe('tab:2:decide')
   expect(out.map(text).join('\n')).not.toContain('到待決頁')
   const nBody = out.slice(1, 6).map(text)
-  expect(nBody[0]).toBe('→ 待決 3 張（最舊 1 天）：是否先切流到備援節點再重啟語音線服務')
-  expect(nBody[1]).toContain('trinity')
-  expect(nBody[2]).toBe('✗ 主機 離線 1 台')
-  expect(nBody[3]).toContain('復原線')
-  expect(nBody[4]).toBe('另有 2 項')
+  expect(nBody[0]).toBe('')
+  expect(nBody[1]).toBe('→ 待決 3 張（最舊 1 天）：是否先切流到備援節點再重啟語音線服務')
+  expect(nBody[2]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 2/3（離線 1）')
+  expect(nBody[3]).toBe('✗ 額度 紅 1（trinity）· ? 未知 1（personal）')
+  expect(nBody[4]).toBe('另有 1 項')
 })
 
 test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0, i) and >= 66 uses 1 row across all pages, fitting host "<key>: " width', () => {
@@ -287,7 +289,7 @@ test('gate4 empty state with pending cards: 3 pending cards (console.cards or li
     expect(emptyActRow(page, snap(unknownPools, { cards: [], lines: [] }), LIVE0)).toBe('2 池判定未知（缺換池資料）；沒有待決卡')
   }
 
-  // Short-body priority when pending-cards line competes for the short body on 現況 (R2/C1): pending Button -> red pool -> offline host -> stuck line, bottom-anchored with no duplicate 到待決頁
+  // Short-body priority when pending-cards line competes for the short body on 現況 (R2/C1): pending Button -> fleet class summary -> quota class summary, bottom-anchored with no duplicate 到待決頁
   const oneRedOneStuck = snap(
     [POOLS.find(p => p.pool === 'trinity')!, POOLS.find(p => p.pool === 'codex')!],
     { cards: threeConsoleCards, items: [], lines: [{ line_id: 'recovery', label: '復原線', lead_display: null, issues: [{ rule: 'T4', state: 'failed', subject: '復原線成員', since_ms: NOW - 10 * MIN, to_console: true }] }] },
@@ -296,11 +298,10 @@ test('gate4 empty state with pending cards: 3 pending cards (console.cards or li
   const fullOut = frameRows(nowPage, { ...(ctxOf(80, 7, cleanSnap) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
   expect(fullOut.join('\n')).not.toContain('到待決頁')
   const nBody = fullOut.slice(1, 6)
-  expect(nBody[0]).toBe('')
+  expect(nBody.slice(0, 2)).toEqual(['', ''])
   const pending = nBody.findIndex(l => l.includes('待決 3 張'))
   expect(pending).toBe(nBody.findIndex(l => l.trim() !== ''))
-  expect(nBody.findIndex(l => l.includes('trinity'))).toBe(pending + 1)
-  expect(nBody.findIndex(l => l.includes('主機 離線 1 台'))).toBe(pending + 2)
-  expect(nBody.findIndex(l => l.includes('復原線'))).toBe(pending + 3)
-  expect(pending + 3, 'last item directly above strip').toBe(nBody.length - 1)
+  expect(nBody[pending + 1]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 2/3（離線 1）')
+  expect(nBody[pending + 2]).toBe('✗ 額度 紅 1（trinity）')
+  expect(pending + 2, 'last item directly above strip').toBe(nBody.length - 1)
 })

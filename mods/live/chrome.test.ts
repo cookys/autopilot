@@ -138,21 +138,22 @@ test('M7: missing pending-card source shows ? (never 0) on 現況, 待決 and ba
   const baseCon = { ...(consoleOf([], { cards: null, lines: [] }) as ConsoleSnapshot), items: [], counts: { decisions: 0, exceptions: 0, quota_risk: 0, tabs: {}, summary: { lines: {}, hosts: {}, hints: 0, quota_worst: null } } }
   const conCardsNull: ConsoleSnapshot = { ...baseCon, cards: null, sources: { cards: { at_ms: null, state: 'no_source' }, tasks: { at_ms: NOW, state: 'ok' }, hosts: { at_ms: NOW, state: 'ok' }, quota_now: { at_ms: NOW, state: 'ok' }, quota_forecast: { at_ms: NOW, state: 'ok' } } }
   const conCardsNoSrc: ConsoleSnapshot = { ...conCardsNull, cards: [] }
-  const missingCases: [string, unknown, ConsoleSnapshot | null][] = [
-    ['null/null', null, null],
-    ['null/cards-null', null, conCardsNull],
-    ['no-project/null', makeLive('no-project', 'no project'), null],
-    ['stale/cards-no-source', makeLive('stale', 'stale'), conCardsNoSrc],
+  const missingCases: [string, unknown, ConsoleSnapshot | null, string, string][] = [
+    ['null/null', null, null, '待決 ? 張（無來源：沒有指標檔、沒有 console 快照）', 'Pending ? (no source: no pointer file, no console snapshot)'],
+    ['null/cards-null', null, conCardsNull, '待決 ? 張（無來源：沒有指標檔）', 'Pending ? (no source: no pointer file)'],
+    ['no-project/null', makeLive('no-project', 'no project'), null, '待決 ? 張（無來源：沒有 console 快照）', 'Pending ? (no source: no console snapshot)'],
+    ['stale/cards-no-source', makeLive('stale', 'stale'), conCardsNoSrc, '待決 ? 張（無來源：console 沒有卡片資料來源）', 'Pending ? (no source: the console has no card source)'],
   ]
 
   for (const locale of ['zh-TW', 'en'] as const) {
     const t = makeT(locale)
-    const wantPage = locale === 'zh-TW' ? '待決 ? 張（無來源）' : 'Pending ? (no source)'
+    const wantNoSourcePrefix = locale === 'zh-TW' ? '待決 ? 張（無來源' : 'Pending ? (no source'
     const wantBandFull = locale === 'zh-TW' ? '待決(?)' : 'Decide(?)'
     const wantBandShort = locale === 'zh-TW' ? '待(?)' : 'D(?)'
     const wantBandZero = locale === 'zh-TW' ? '待決' : 'Decide'
 
-    for (const [name, live, con] of missingCases) {
+    for (const [name, live, con, wantZh, wantEn] of missingCases) {
+      const wantPage = locale === 'zh-TW' ? wantZh : wantEn
       for (const [cols, rows] of [[160, 40], [120, 30], [80, 24], [80, 7]] as const) {
         const stripLen = cols < STRIP_SPLIT_COLS ? 2 : 1
         const ctx = { live: live as never, console: con, size: { cols, rows }, t, nowMs: NOW }
@@ -186,10 +187,10 @@ test('M7: missing pending-card source shows ? (never 0) on 現況, 待決 and ba
       const decideBtn = walk(bandRows[1]).find(n => n.kind === 'Button' && n.props.key === 'tab:decide')!
       expect(flat(decideBtn).trim()).toBe(wantBandZero)
       const nowText = frameRows(nowPage, { live: live as never, console: con, size: { cols: 120, rows: 30 }, t, nowMs: NOW }).map(rowText).join('\n')
-      expect(nowText).not.toContain(wantPage)
+      expect(nowText).not.toContain(wantNoSourcePrefix)
     }
     const zeroDecText = frameRows(decidePage, { live: okLiveZero as never, console: okConZero, size: { cols: 120, rows: 30 }, t, nowMs: NOW }).map(rowText).join('\n')
     expect(zeroDecText).toContain(t('page.decide.none_cards'))
-    expect(zeroDecText).not.toContain(wantPage)
+    expect(zeroDecText).not.toContain(wantNoSourcePrefix)
   }
 })

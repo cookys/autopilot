@@ -375,8 +375,12 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(en7.length).toBe(7)
   expect(en7.join('\n')).not.toContain('Open the pending page')
   expect(en7[3]).toContain('→ Pending 3 (oldest 45m)：')
-  expect(en7[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊戲線) · hosts 17/18 (1 offline)')
+  expect(displayWidth(en7[4])).toBeLessThanOrEqual(80)
+  expect(en7[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊…) · hosts 17/18 (1 offline)')
   expect(en7[5]).toBe('✗ quota red 2 (F 池, trinity)')
+  // At 84 cols (untruncated English fleet row is 83 display cells), neither CJK lane name is truncated
+  const en84 = frameRows(nowPage, { ...(ctxOf(84, 7, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
+  expect(en84[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊戲線) · hosts 17/18 (1 offline)')
 
   // Summary-only offline host (no host item in console.items, summary.hosts 17/18) also surfaces in the fleet summary row
   const summaryOnlySnap = con({ ...c1Snap, items: dupPoolItems as never })
@@ -457,7 +461,7 @@ test('now C1 acceptance: at 80x24 inline (4 body rows) with pending + 2 offline 
     { ...baseRed, pool: 'C' },
     { ...baseRed, pool: 'D' },
     { ...baseUnk, pool: 'F' },
-    { ...baseUnk, pool: 'G-unknown-pool-alpha-long-label' },
+    { ...baseUnk, pool: 'G-unknown-pool-alpha-very-long-display-label' },
     { ...baseUnk, pool: 'H-unknown-pool-beta-long-label' },
   ]
   const okSources = { hosts: { at_ms: NOW - 10_000, state: 'ok' as const }, tasks: { at_ms: NOW - 10_000, state: 'ok' as const }, cards: { at_ms: NOW - 10_000, state: 'ok' as const }, quota_now: { at_ms: NOW - 10_000, state: 'ok' as const }, quota_forecast: { at_ms: NOW - 10_000, state: 'ok' as const } }

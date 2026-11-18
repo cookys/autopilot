@@ -1006,4 +1006,184 @@ assert_eq "$?" "0" "tree-symlink NC: 120000 skip restored in mutant copy"
 (cd "$LSYM" && node "$MUT4/scripts/leak-guard.js" --tree "$LSYM_PUB" --registry "$REG" >/dev/null 2>&1)
 assert_eq "$?" "0" "tree-symlink NC: with 120000 skipped, --tree misses the symlink host leak"
 
+# ── Part 5: --tree sha256-pinned frozen eval-pack exemptions (PM ruling 01M7PFWX) ──
+LPK="$TEST_TMP/lgpack"
+git init -q "$LPK"
+git -C "$LPK" config core.hooksPath /dev/null
+git -C "$LPK" config commit.gpgsign false
+PK_HOSTS="$TEST_TMP/pack-hosts.json"
+printf '{"strong":["testhost-a"],"contextual":[]}\n' > "$PK_HOSTS"
+PK_EXEMPT_PATH="evals/skill-onoff/packs/fixture-scripts-sg/scripts/resolve-review-loop.sh"
+mkdir -p "$LPK/src" "$LPK/$(dirname "$PK_EXEMPT_PATH")"
+echo "clean file" > "$LPK/src/ok.txt"
+printf '#!/usr/bin/env bash\n# frozen pack fixture on testhost-a\necho ok\n' > "$LPK/$PK_EXEMPT_PATH"
+PK_PIN_SHA="$(node -e 'const c=require("crypto"),fs=require("fs");process.stdout.write(c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));' "$LPK/$PK_EXEMPT_PATH")"
+PK_EXEMPT_LIST="$TEST_TMP/pack-exempt.json"
+printf '[{"path":"%s","sha256":"%s"}]\n' "$PK_EXEMPT_PATH" "$PK_PIN_SHA" > "$PK_EXEMPT_LIST"
+PK_EMPTY_LIST="$TEST_TMP/pack-exempt-empty.json"
+printf '[]\n' > "$PK_EMPTY_LIST"
+git -C "$LPK" add src evals
+git -C "$LPK" commit -q -m "pinned pack fixture"
+LPK_PIN="$(git -C "$LPK" rev-parse HEAD)"
+
+# Negative control (red without matching sha256 exemption): empty exempt list or non-matching production pin exits 1
+PK_NC_OUT="$(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$PK_EMPTY_LIST" node "$GUARD" --tree "$LPK_PIN" --categories host --registry "$REG" 2>&1)"
+PK_NC_RC=$?
+assert_eq "$PK_NC_RC" "1" "tree-pack NC: without exemption, exempt path containing testhost-a exits 1"
+assert_contains "$PK_NC_OUT" "$PK_EXEMPT_PATH:2" "tree-pack NC: reports file:line"
+assert_contains "$PK_NC_OUT" "[host]" "tree-pack NC: reports host category"
+
+PK_PROD_NC_OUT="$(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" env -u LEAK_GUARD_TEST_TREE_EXEMPT node "$GUARD" --tree "$LPK_PIN" --categories host --registry "$REG" 2>&1)"
+PK_PROD_NC_RC=$?
+assert_eq "$PK_PROD_NC_RC" "1" "tree-pack NC2: production sha256 pin rejects unpinned content at exempt path"
+assert_contains "$PK_PROD_NC_OUT" "$PK_EXEMPT_PATH:2" "tree-pack NC2: reports exempt path when sha256 differs from production pin"
+
+# (5a) Exempt path with pinned content containing fake host: --tree exits 0 (+ codex mirror; tree mode only)
+PK_A_OUT="$(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$PK_EXEMPT_LIST" node "$GUARD" --tree "$LPK_PIN" --categories host --registry "$REG" 2>&1)"
+PK_A_RC=$?
+assert_eq "$PK_A_RC" "0" "tree-pack (a): exempt path with pinned sha256 content exits 0"
+assert_eq "$PK_A_OUT" "" "tree-pack (a): clean exit prints nothing"
+
+PK_A_MIRROR_OUT="$(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$PK_EXEMPT_LIST" node "$REPO_ROOT/platforms/codex/plugin/scripts/leak-guard.js" --tree "$LPK_PIN" --categories host --registry "$REG" 2>&1)"
+assert_eq "$?" "0" "tree-pack (a) mirror: codex mirror also skips exempt path with matching sha256"
+
+LPK_EMPTY_TREE="$(git -C "$LPK" hash-object -t tree /dev/null)"
+PK_RANGE_OUT="$(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$PK_EXEMPT_LIST" node "$GUARD" --range "${LPK_EMPTY_TREE}..${LPK_PIN}" --categories host --registry "$REG" 2>&1)"
+assert_eq "$?" "1" "tree-pack scope: --range is NOT exempted by tree exemptions"
+assert_contains "$PK_RANGE_OUT" "$PK_EXEMPT_PATH:2" "tree-pack scope: --range still flags added host in exempt path"
+
+# (5b) Same path with one byte changed: --tree exits 1 and reports it
+printf '#!/usr/bin/env bash\n# frozen pack fixture on testhost-a\necho ox\n' > "$LPK/$PK_EXEMPT_PATH"
+git -C "$LPK" add "$PK_EXEMPT_PATH"
+git -C "$LPK" commit -q -m "one byte changed in exempt pack file"
+LPK_CHANGED="$(git -C "$LPK" rev-parse HEAD)"
+PK_B_OUT="$(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$PK_EXEMPT_LIST" node "$GUARD" --tree "$LPK_CHANGED" --categories host --registry "$REG" 2>&1)"
+PK_B_RC=$?
+assert_eq "$PK_B_RC" "1" "tree-pack (b): one-byte change in exempt file exits 1"
+assert_contains "$PK_B_OUT" "$PK_EXEMPT_PATH:2" "tree-pack (b): reports changed exempt file:line"
+assert_contains "$PK_B_OUT" "[host]" "tree-pack (b): reports host category"
+assert_contains "$PK_B_OUT" "testhost-a" "tree-pack (b): reports matched fake host"
+
+(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$PK_EXEMPT_LIST" node "$GUARD" --tree "$LPK_PIN" --categories host --registry "$REG" >/dev/null 2>&1)
+assert_eq "$?" "0" "tree-pack (b) rev-binding: --tree checks blob sha256 at the named revision, not working tree"
+
+# (5c) New file under evals/skill-onoff/packs/ containing fake host: --tree exits 1 (both distinct content and shared blob OID)
+printf '#!/usr/bin/env bash\n# frozen pack fixture on testhost-a\necho ok\n' > "$LPK/$PK_EXEMPT_PATH"
+PK_NEW_OTHER="evals/skill-onoff/packs/fixture-scripts-other/scripts/helper.sh"
+mkdir -p "$LPK/$(dirname "$PK_NEW_OTHER")"
+printf '#!/usr/bin/env bash\n# new pack file on testhost-a\n' > "$LPK/$PK_NEW_OTHER"
+git -C "$LPK" add "$PK_EXEMPT_PATH" "$PK_NEW_OTHER"
+git -C "$LPK" commit -q -m "restore exempt file and add new pack file"
+LPK_NEW1="$(git -C "$LPK" rev-parse HEAD)"
+PK_C1_OUT="$(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$PK_EXEMPT_LIST" node "$GUARD" --tree "$LPK_NEW1" --categories host --registry "$REG" 2>&1)"
+PK_C1_RC=$?
+assert_eq "$PK_C1_RC" "1" "tree-pack (c): new file under evals/skill-onoff/packs/ exits 1"
+assert_contains "$PK_C1_OUT" "$PK_NEW_OTHER:2" "tree-pack (c): reports new file under packs/"
+assert_not_contains "$PK_C1_OUT" "$PK_EXEMPT_PATH" "tree-pack (c): restored exempt file remains skipped"
+
+git -C "$LPK" rm -q "$PK_NEW_OTHER"
+PK_NEW_CLONE="evals/skill-onoff/packs/fixture-scripts-new/scripts/resolve-review-loop.sh"
+mkdir -p "$LPK/$(dirname "$PK_NEW_CLONE")"
+cp "$LPK/$PK_EXEMPT_PATH" "$LPK/$PK_NEW_CLONE"
+git -C "$LPK" add "$PK_NEW_CLONE"
+git -C "$LPK" commit -q -m "add non-exempt pack file sharing blob oid with exempt file"
+LPK_NEW2="$(git -C "$LPK" rev-parse HEAD)"
+PK_C2_OUT="$(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$PK_EXEMPT_LIST" node "$GUARD" --tree "$LPK_NEW2" --categories host --registry "$REG" 2>&1)"
+PK_C2_RC=$?
+assert_eq "$PK_C2_RC" "1" "tree-pack (c) shared-oid: non-exempt copy with identical blob oid still exits 1"
+assert_contains "$PK_C2_OUT" "$PK_NEW_CLONE:2" "tree-pack (c) shared-oid: reports non-exempt copy"
+assert_not_contains "$PK_C2_OUT" "$PK_EXEMPT_PATH" "tree-pack (c) shared-oid: exempt path stays skipped"
+
+# Fail-closed check for malformed test override
+(cd "$LPK" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_HOSTS" LEAK_GUARD_TEST_TREE_EXEMPT="$TEST_TMP/no-such-exempt.json" node "$GUARD" --tree "$LPK_PIN" --categories host --registry "$REG" >/dev/null 2>&1)
+assert_eq "$?" "2" "tree-pack fail-closed: missing override file exits 2"
+
+# Production constant end-to-end check (no LEAK_GUARD_TEST_TREE_EXEMPT override) with all 14 frozen pack files
+LPK_PROD="$TEST_TMP/lgpack-prod"
+git init -q "$LPK_PROD"
+git -C "$LPK_PROD" config core.hooksPath /dev/null
+git -C "$LPK_PROD" config commit.gpgsign false
+PK_PROD_HOSTS="$TEST_TMP/pack-prod-hosts.json"
+printf '{"strong":["generation-adversarial"],"contextual":[]}\n' > "$PK_PROD_HOSTS"
+node - "$REPO_ROOT" "$LPK_PROD" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [repoRoot, dstRoot] = process.argv.slice(2);
+const { TREE_EXEMPT_FILES } = require(path.join(repoRoot, 'scripts/leak-guard.js'));
+for (const { path: rel } of TREE_EXEMPT_FILES) {
+  const dst = path.join(dstRoot, rel);
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
+  fs.copyFileSync(path.join(repoRoot, rel), dst);
+}
+NODE
+git -C "$LPK_PROD" add evals
+git -C "$LPK_PROD" commit -q -m "all 14 frozen pack files"
+LPK_PROD_HEAD="$(git -C "$LPK_PROD" rev-parse HEAD)"
+(cd "$LPK_PROD" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_PROD_HOSTS" env -u LEAK_GUARD_TEST_TREE_EXEMPT node "$GUARD" --tree "$LPK_PROD_HEAD" --categories host --registry "$REG" >/dev/null 2>&1)
+assert_eq "$?" "0" "tree-pack prod: all 14 unchanged frozen pack files pass with production constant"
+printf '\n' >> "$LPK_PROD/evals/skill-onoff/packs/fixture-scripts-dc/scripts/resolve-review-loop.sh"
+git -C "$LPK_PROD" add evals/skill-onoff/packs/fixture-scripts-dc/scripts/resolve-review-loop.sh
+git -C "$LPK_PROD" commit -q -m "touch dc pack file"
+PK_PROD_MOD_OUT="$(cd "$LPK_PROD" && AUTOPILOT_LEAK_GUARD_HOSTS="$PK_PROD_HOSTS" env -u LEAK_GUARD_TEST_TREE_EXEMPT node "$GUARD" --tree HEAD --categories host --registry "$REG" 2>&1)"
+assert_eq "$?" "1" "tree-pack prod NC: 1-byte change in real dc pack path exits 1 under production constant"
+assert_contains "$PK_PROD_MOD_OUT" "evals/skill-onoff/packs/fixture-scripts-dc/scripts/resolve-review-loop.sh" "tree-pack prod NC: names modified dc pack file"
+
+# (5d) In-code TREE_EXEMPT_FILES matches evals/skill-onoff/packs/manifest.json and HEAD blobs (+ negative control)
+PK_MANIFEST_CHECK="$(node - "$REPO_ROOT" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const [repoRoot] = process.argv.slice(2);
+const { TREE_EXEMPT_FILES } = require(path.join(repoRoot, 'scripts/leak-guard.js'));
+const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'evals/skill-onoff/packs/manifest.json'), 'utf8'));
+const prefix = 'evals/skill-onoff/packs/';
+
+function verify(list) {
+  if (!Array.isArray(list) || list.length !== 14) {
+    return 'expected 14 entries, got ' + (Array.isArray(list) ? list.length : typeof list);
+  }
+  const seen = new Set();
+  for (const e of list) {
+    if (!e || typeof e.path !== 'string' || !e.path.startsWith(prefix)) return 'bad path: ' + (e && e.path);
+    if (seen.has(e.path)) return 'duplicate path: ' + e.path;
+    seen.add(e.path);
+    const rel = e.path.slice(prefix.length);
+    const packId = rel.split('/')[0];
+    const pack = manifest.packs && manifest.packs[packId];
+    if (!pack || !Object.prototype.hasOwnProperty.call(pack, rel)) return 'missing in manifest.json: ' + rel;
+    if (pack[rel] !== e.sha256) return 'manifest drift for ' + rel + ': code=' + e.sha256 + ' manifest=' + pack[rel];
+    const diskSha = crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, e.path))).digest('hex');
+    if (diskSha !== e.sha256) return 'worktree sha256 drift for ' + e.path + ': code=' + e.sha256 + ' disk=' + diskSha;
+    const blob = spawnSync('git', ['cat-file', 'blob', 'HEAD:' + e.path], { cwd: repoRoot, maxBuffer: 16 * 1024 * 1024 });
+    if (blob.status !== 0) return 'git cat-file failed for HEAD:' + e.path;
+    const headSha = crypto.createHash('sha256').update(blob.stdout).digest('hex');
+    if (headSha !== e.sha256) return 'HEAD blob sha256 drift for ' + e.path + ': code=' + e.sha256 + ' head=' + headSha;
+  }
+  return 'OK';
+}
+
+const realRes = verify(TREE_EXEMPT_FILES);
+if (realRes !== 'OK') {
+  process.stdout.write(realRes);
+  process.exitCode = 1;
+} else {
+  const drifted = TREE_EXEMPT_FILES.map((e, i) => (i === 0
+    ? { path: e.path, sha256: (e.sha256[0] === '0' ? '1' : '0') + e.sha256.slice(1) }
+    : e));
+  const driftRes = verify(drifted);
+  if (!driftRes.startsWith('manifest drift for ')) {
+    process.stdout.write('NC failed: ' + driftRes);
+    process.exitCode = 1;
+  } else {
+    process.stdout.write('OK');
+  }
+}
+NODE
+)"
+PK_MANIFEST_RC=$?
+assert_eq "$PK_MANIFEST_RC" "0" "tree-pack manifest: TREE_EXEMPT_FILES (14 entries) matches manifest.json and HEAD sha256"
+assert_eq "$PK_MANIFEST_CHECK" "OK" "tree-pack manifest: drift check and negative control pass"
+
 finalize_test

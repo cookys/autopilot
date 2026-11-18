@@ -14,7 +14,7 @@ const { spawnSync } = require('child_process');
 
 const { freshReading } = require('./lib/pace-reading.js');
 const {
-  selectEngine,
+  selectEngine: rawSelectEngine,
   loadPools,
   loadRoles,
   mergePools,
@@ -52,6 +52,30 @@ for (const k of ['AUTOPILOT_TASK_ROLE', 'AUTOPILOT_TASK_NOVEL', 'AUTOPILOT_TASK_
   delete process.env[k];
 }
 Object.assign(process.env, testTask);
+
+// Every test owns its observer store; explicit env objects must inherit it too.
+let testLiveDir;
+function makeLiveDir() {
+  try {
+    return fs.mkdtempSync('/dev/shm/pace-select-live-');
+  } catch (err) {
+    if (!['ENOENT', 'EACCES', 'EROFS'].includes(err.code)) throw err;
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'pace-select-live-'));
+  }
+}
+test.beforeEach(() => {
+  testLiveDir = makeLiveDir();
+  process.env.AUTOPILOT_LIVE_DIR = testLiveDir;
+});
+test.afterEach(() => {
+  fs.rmSync(testLiveDir, { recursive: true, force: true });
+});
+
+function selectEngine(options = {}) {
+  const env = { ...(options.env || process.env) };
+  env.AUTOPILOT_LIVE_DIR = options.env?.AUTOPILOT_LIVE_DIR || testLiveDir;
+  return rawSelectEngine({ ...options, env });
+}
 
 function withEnv(vars, fn) {
   const prev = {};
@@ -96,7 +120,7 @@ function readFixture(name) {
 }
 
 function cli(args, envExtra = {}) {
-  const env = { ...process.env };
+  const env = { ...process.env, AUTOPILOT_LIVE_DIR: testLiveDir };
   delete env.AUTOPILOT_PACE_FILE;
   delete env.AUTOPILOT_NONCQ_POOLS;
   delete env.AUTOPILOT_PACE_ROLES;
@@ -110,6 +134,7 @@ function cli(args, envExtra = {}) {
   env.AUTOPILOT_ENDPOINT_GLM_TOKEN = 'test-glm-token';
   delete env.AUTOPILOT_ENDPOINT_GLM_TRANSPORT;
   Object.assign(env, envExtra);
+  env.AUTOPILOT_LIVE_DIR = envExtra.AUTOPILOT_LIVE_DIR || testLiveDir;
   if (
     Object.prototype.hasOwnProperty.call(envExtra, 'AUTOPILOT_QUALIFIED_FILE')
     && envExtra.AUTOPILOT_QUALIFIED_FILE === undefined
@@ -336,6 +361,59 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
   assert.equal(agyClaudeWin.pool, 'agyclaude(alias 2)');
   assert.equal(agyClaudeWin.selected_by, 'quota_score');
   assert.equal(agyClaudeWin.slack_pts, 70);
+});
+
+test('observer stores are isolated by default; explicit env opts into cursor and kimi observations', () => {
+  const observedLiveDir = makeLiveDir();
+  try {
+    const cursor = require('./lib/cursor-quota-observe');
+    assert.equal(cursor.observe({ verdict: 'done', liveDir: observedLiveDir }).wrote, true);
+    const options = {
+      pace: readFixture('ahead-vs-behind.json'),
+      role: 'implementer',
+      checkEndpoint: allEndpointsReady,
+    };
+    const baseline = selectEngine(options);
+    assert.equal(baseline.engine, 'glm');
+    assert.equal(baseline.runner_up, 'grok');
+    assert.equal(baseline.candidates.some(c => c.engine === 'cursor'), false);
+    const args = ['--role', 'implementer', '--pace', fixturePath('ahead-vs-behind.json'), '--json'];
+
+    withEnv({ AUTOPILOT_LIVE_DIR: observedLiveDir }, () => {
+      for (const liveDir of [undefined, '']) {
+        const env = { ...testTask, AUTOPILOT_LIVE_DIR: liveDir };
+        assert.deepEqual(selectEngine({ ...options, env }), baseline);
+        const isolatedCli = cli(args, env);
+        assert.equal(isolatedCli.status, 0, isolatedCli.stderr);
+        assert.deepEqual(JSON.parse(isolatedCli.stdout), baseline);
+      }
+      assert.deepEqual(selectEngine(options), baseline);
+      const defaultCli = cli(args);
+      assert.equal(defaultCli.status, 0, defaultCli.stderr);
+      assert.deepEqual(JSON.parse(defaultCli.stdout), baseline);
+
+      const optedInEnv = { ...testTask, AUTOPILOT_LIVE_DIR: observedLiveDir };
+      const optedIn = selectEngine({ ...options, env: optedInEnv });
+      assert.equal(optedIn.engine, 'glm');
+      assert.ok(optedIn.candidates.some(c => c.engine === 'cursor' && c.pool === 'cursor'));
+      const optedInCli = cli(args, optedInEnv);
+      assert.equal(optedInCli.status, 0, optedInCli.stderr);
+      assert.deepEqual(JSON.parse(optedInCli.stdout), optedIn);
+
+      const kimi = require('./lib/kimi-quota-observe');
+      assert.equal(kimi.observe({ rc: 1, text: '429 retry-after: 3600', liveDir: observedLiveDir }).wrote, true);
+      const kimiOptions = {
+        pace: priorityPace([paceRow('kimi', 10, 40)]),
+        role: 'implementer',
+        roles: { implementer: ['kimi'], _disabled: [] },
+        checkEndpoint: allEndpointsReady,
+      };
+      assert.equal(selectEngine(kimiOptions).engine, 'kimi');
+      assert.equal(selectEngine({ ...kimiOptions, env: optedInEnv }).engine, null);
+    });
+  } finally {
+    fs.rmSync(observedLiveDir, { recursive: true, force: true });
+  }
 });
 
 test('(b) stale row and null expected_pct/used_pct rows are reported as unknown and never selected', () => {

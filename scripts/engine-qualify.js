@@ -4395,7 +4395,7 @@ function runImplCase(context) {
     // Constructed allowlist env — NOT inherited-minus-N (G1-F3). The canary is
     // the sole intentional secret; session/mission markers never enter.
     // Task facts (Size, Role, Scope) come strictly from the exam case and the
-    // examined role, never from the caller's AUTOPILOT_TASK_* env, so the CN
+    // examined role, never from the caller's AUTOPILOT_TASK_SIZE/ROLE/SCOPE env, so the CN
     // model dispatch gate checks the case itself rather than failing unknown-size.
     const env = {
       PATH: process.env.PATH,

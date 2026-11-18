@@ -18,9 +18,12 @@
  *
  * Author prompts list each input by absolute path, byte size and sha256.
  * Input contents are never inlined. `add` refuses (exit 2) when that prompt,
- * plus diff and spec bytes for review-seat1, exceeds 150000 bytes, and when
- * two `--input` files share a basename. `--needs-shell` stores
- * `needs_shell: true`; drain will not assign that item to a runner of `agy`.
+ * plus diff and spec bytes for review-seat1, exceeds 150000 bytes, when
+ * two `--input` files share a basename, or when the `--brief` file's first
+ * 8 lines omit any gate header (`Size:`, `Role:`, `Scope:`, `Task-Class:`) or
+ * use a `Task-Class:` outside `cn-model-dispatch-gate.js` `local_task_classes`.
+ * `--needs-shell` stores `needs_shell: true`; drain will not assign that item
+ * to a runner of `agy`.
  * Notify copies `result.md` to `share/result.md` (0640), uploads it with the
  * fleet bin, and puts `ref=<sha256>` on the line (`upload_failed:<reason>` if
  * upload fails). A rail failure whose stderr or raw log contains `agy_stdin_ceiling`
@@ -65,6 +68,11 @@ const {
   isFreshRow,
   rowRemaining,
 } = require('./lib/pace-reading.js');
+const {
+  taskFacts,
+  loadConfig,
+  repoRootOf,
+} = require('./lib/cn-model-dispatch-gate.js');
 
 const SCHEMA = 'noncq/1';
 const KINDS = Object.freeze(['review-seat1', 'research', 'replay', 'data', 'draft']);
@@ -77,6 +85,12 @@ const DEFAULT_WALL_MIN = 20;
 const DEFAULT_EXPIRES_H = 72;
 const LANE_RE = /^[^/\s]+\/[^/\s]+\/[^/\s]+$/;
 const POOLS_PATH = path.join(__dirname, 'lib', 'noncq-pools.json');
+const BRIEF_HEADER_EXAMPLE = [
+  'Size: S',
+  'Role: implementer',
+  'Scope: docs/example.md',
+  'Task-Class: simple-script',
+].join('\n');
 
 function usage(msg) {
   if (msg) process.stderr.write(`noncq.js: ${msg}\n`);
@@ -84,6 +98,7 @@ function usage(msg) {
     'usage: noncq.js add --lane A --kind K --brief F --accept S [--accept S]...\n'
     + '                --prefer k1,k2 [--input F]... [--needs-shell] [--wall 20m] [--expires 72h]\n'
     + '                [--diff F --spec F]\n'
+    + '                (--brief first 8 lines must include Size:, Role:, Scope:, Task-Class:)\n'
     + '       noncq.js list [--state S] [--json]\n'
     + '       noncq.js drain --pace <pace.v1.json> [--dry-run] [--json]\n',
   );
@@ -331,6 +346,31 @@ function validateLane(lane) {
   }
 }
 
+function validateBriefHeader(briefPath, cwd = process.cwd()) {
+  const facts = taskFacts({ files: [briefPath], env: {} });
+  const missing = [];
+  if (!facts.size) missing.push('Size:');
+  if (!facts.headerRole) missing.push('Role:');
+  if (facts.scope.length === 0) missing.push('Scope:');
+  if (!facts.taskClass) missing.push('Task-Class:');
+  if (missing.length > 0) {
+    throw new Error(
+      `--brief 標頭（前 8 行）缺少必要欄位：${missing.join(', ')}\n`
+      + '範例標頭區塊：\n'
+      + `${BRIEF_HEADER_EXAMPLE}`,
+    );
+  }
+  const cfg = loadConfig(repoRootOf(cwd));
+  const allowed = Array.isArray(cfg.local_task_classes) ? cfg.local_task_classes : [];
+  if (!allowed.includes(facts.taskClass)) {
+    throw new Error(
+      `--brief 標頭的 Task-Class ${JSON.stringify(facts.taskClass)} 不在允許清單內；允許值：${allowed.join(', ')}\n`
+      + '範例標頭區塊：\n'
+      + `${BRIEF_HEADER_EXAMPLE}`,
+    );
+  }
+}
+
 function cmdAdd(flags, env = process.env) {
   const pools = loadPools();
   const keys = knownEngineKeys(pools);
@@ -391,6 +431,7 @@ function cmdAdd(flags, env = process.env) {
   // Basename is the on-disk name under inputs/. Two sources with the same
   // basename would copy onto one path; refuse before any item dir is created.
   refuseDuplicateInputBasenames(inputs);
+  validateBriefHeader(brief);
 
   const root = queueRoot(env);
   const id = makeId(at);
@@ -1127,6 +1168,7 @@ module.exports = {
   cmdAdd,
   cmdList,
   cmdDrain,
+  validateBriefHeader,
   qualifyingEngines,
   knownEngineKeys,
   loadPools,

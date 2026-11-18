@@ -129,6 +129,7 @@ assert_contains "$SERVICE_TEXT" "@REPO_PATH@/scripts/pm-switchboard.js run" "ser
 assert_contains "$SERVICE_TEXT" "AUTOPILOT_FLEET_REPO=@FLEET_REPO@" "service template uses @FLEET_REPO@"
 assert_contains "$SERVICE_TEXT" "UnsetEnvironment=AUTOPILOT_TOKEN_SEAT AUTOPILOT_SESSION_ID" "service unsets session vars"
 assert_contains "$SERVICE_TEXT" "StandardInput=null" "service sets StandardInput=null"
+assert_contains "$SERVICE_TEXT" "SuccessExitStatus=3" "service sets SuccessExitStatus=3 for waiting exit"
 assert_contains "$TIMER_TEXT" "OnCalendar=*:0/10" "timer schedules every 10 minutes"
 assert_contains "$TIMER_TEXT" "Persistent=true" "timer sets Persistent=true"
 
@@ -1205,9 +1206,38 @@ assert_eq "$KILL_RC" "0" "kill switch AUTOPILOT_PM_SWITCHBOARD=off exits 0"
 assert_eq "$KILL_OUT" "" "kill switch produces no output"
 assert_file_absent "$RECEIPTS_KILL" "kill switch creates no receipt directory"
 
-NO_FLEET_OUT="$(env -u AUTOPILOT_FLEET_REPO AUTOPILOT_PM_INBOX_ADAPTER=fleet node "$SWITCHBOARD_JS" run --receipt-dir "$TEST_TMP/r-nofleet" < /dev/null 2>&1)"; NO_FLEET_RC=$?
-assert_eq "$NO_FLEET_RC" "2" "fleet mode without AUTOPILOT_FLEET_REPO exits 2"
-assert_contains "$NO_FLEET_OUT" "AUTOPILOT_FLEET_REPO" "missing AUTOPILOT_FLEET_REPO error names the variable"
+NO_FLEET_STDOUT="$TEST_TMP/nofleet.stdout"
+NO_FLEET_STDERR="$TEST_TMP/nofleet.stderr"
+NO_FLEET_STATE="$TEST_TMP/s-nofleet.json"
+RECEIPTS_NOFLEET="$TEST_TMP/r-nofleet"
+env -u AUTOPILOT_FLEET_REPO AUTOPILOT_PM_INBOX_ADAPTER=fleet node "$SWITCHBOARD_JS" run --receipt-dir "$RECEIPTS_NOFLEET" --state-file "$NO_FLEET_STATE" >"$NO_FLEET_STDOUT" 2>"$NO_FLEET_STDERR" < /dev/null
+NO_FLEET_RC=$?
+NO_FLEET_OUT="$(cat "$NO_FLEET_STDERR")"
+NO_FLEET_LINES="$(wc -l < "$NO_FLEET_STDERR" | tr -d ' ')"
+assert_eq "$NO_FLEET_RC" "3" "fleet mode without AUTOPILOT_FLEET_REPO exits 3"
+assert_eq "$NO_FLEET_LINES" "1" "unset AUTOPILOT_FLEET_REPO prints one line to stderr"
+assert_eq "$(cat "$NO_FLEET_STDOUT")" "" "unset AUTOPILOT_FLEET_REPO writes nothing to stdout"
+assert_eq "$NO_FLEET_OUT" "pm-switchboard: waiting_on fleet 01M7R4FA (AUTOPILOT_FLEET_REPO unset)" "unset AUTOPILOT_FLEET_REPO prints waiting_on message"
+assert_file_absent "$RECEIPTS_NOFLEET" "unset AUTOPILOT_FLEET_REPO creates no receipt dir"
+assert_file_absent "$NO_FLEET_STATE" "unset AUTOPILOT_FLEET_REPO writes no state file"
+
+MISSING_FLEET_REPO="$TEST_TMP/empty-fleet-repo"
+mkdir -p "$MISSING_FLEET_REPO"
+EXPECTED_CLI_PATH="$MISSING_FLEET_REPO/plugins/claude/src/inbox-cli.ts"
+NO_CLI_STDOUT="$TEST_TMP/nocli.stdout"
+NO_CLI_STDERR="$TEST_TMP/nocli.stderr"
+NO_CLI_STATE="$TEST_TMP/s-nocli.json"
+RECEIPTS_NOCLI="$TEST_TMP/r-nocli"
+AUTOPILOT_FLEET_REPO="$MISSING_FLEET_REPO" AUTOPILOT_PM_INBOX_ADAPTER=fleet node "$SWITCHBOARD_JS" run --receipt-dir "$RECEIPTS_NOCLI" --state-file "$NO_CLI_STATE" >"$NO_CLI_STDOUT" 2>"$NO_CLI_STDERR" < /dev/null
+NO_CLI_RC=$?
+NO_CLI_OUT="$(cat "$NO_CLI_STDERR")"
+NO_CLI_LINES="$(wc -l < "$NO_CLI_STDERR" | tr -d ' ')"
+assert_eq "$NO_CLI_RC" "3" "fleet mode with missing inbox-cli.ts exits 3"
+assert_eq "$NO_CLI_LINES" "1" "missing inbox-cli.ts prints one line to stderr"
+assert_eq "$(cat "$NO_CLI_STDOUT")" "" "missing inbox-cli.ts writes nothing to stdout"
+assert_eq "$NO_CLI_OUT" "pm-switchboard: waiting_on fleet 01M7R4FA (inbox CLI missing at $EXPECTED_CLI_PATH)" "missing inbox-cli.ts prints waiting_on message with path"
+assert_file_absent "$RECEIPTS_NOCLI" "missing inbox-cli.ts creates no receipt dir"
+assert_file_absent "$NO_CLI_STATE" "missing inbox-cli.ts writes no state file"
 
 FAKE_FLEET="$TEST_TMP/fake-fleet"
 mkdir -p "$FAKE_FLEET/plugins/claude/src"
@@ -1435,5 +1465,18 @@ mkdir -p "$FX_MUT_DONE"
 printf '[]\n' > "$FX_MUT_DONE/inbox.json"
 MUT_DONE_OUT="$(AUTOPILOT_PM_INBOX_ADAPTER="fixture:$FX_MUT_DONE" node "$MUT_DIR/scripts/pm-inbox-done.js" msg-999 < /dev/null 2>&1)"; MUT_DONE_RC=$?
 assert_neq "$MUT_DONE_OUT" "" "negative control: mutating pm-inbox-done flag guard shifts failure downstream to adapter mark guard"
+
+rm -f "$MUT_DIR/scripts/pm-switchboard.js" "$MUT_DIR/scripts/lib/pm-inbox-adapter.js"
+cp "$SWITCHBOARD_JS" "$MUT_DIR/scripts/pm-switchboard.js"
+sed_mutant "$ADAPTER_JS" "$MUT_DIR/scripts/lib/pm-inbox-adapter.js" "s/, 3, 'FLEET_REPO_UNSET'/, 2, 'FLEET_REPO_UNSET_MUT'/"
+MUT_NOFLEET_OUT="$(env -u AUTOPILOT_FLEET_REPO AUTOPILOT_PM_INBOX_ADAPTER=fleet node "$MUT_DIR/scripts/pm-switchboard.js" run --receipt-dir "$TEST_TMP/r-mut-nofleet" --state-file "$TEST_TMP/s-mut-nofleet.json" < /dev/null 2>&1)"; MUT_NOFLEET_RC=$?
+assert_eq "$MUT_NOFLEET_RC" "2" "negative control: reverting FLEET_REPO_UNSET exit code returns 2 instead of 3"
+assert_not_contains "$MUT_NOFLEET_OUT" "waiting_on fleet 01M7R4FA" "negative control: reverting FLEET_REPO_UNSET drops waiting_on message"
+
+rm -f "$MUT_DIR/scripts/lib/pm-inbox-adapter.js"
+sed_mutant "$ADAPTER_JS" "$MUT_DIR/scripts/lib/pm-inbox-adapter.js" "s/, 3, 'FLEET_CLI_MISSING'/, 2, 'FLEET_CLI_MISSING_MUT'/g"
+MUT_NOCLI_OUT="$(AUTOPILOT_FLEET_REPO="$MISSING_FLEET_REPO" AUTOPILOT_PM_INBOX_ADAPTER=fleet node "$MUT_DIR/scripts/pm-switchboard.js" run --receipt-dir "$TEST_TMP/r-mut-nocli" --state-file "$TEST_TMP/s-mut-nocli.json" < /dev/null 2>&1)"; MUT_NOCLI_RC=$?
+assert_eq "$MUT_NOCLI_RC" "2" "negative control: reverting FLEET_CLI_MISSING exit code returns 2 instead of 3"
+assert_not_contains "$MUT_NOCLI_OUT" "waiting_on fleet 01M7R4FA" "negative control: reverting FLEET_CLI_MISSING drops waiting_on message"
 
 finalize_test

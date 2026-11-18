@@ -9,7 +9,7 @@
 //     array in AUTOPILOT_PM_ACCEPT_CMD (with taskId appended) for accept(), and runs
 //     the JSON argv array in AUTOPILOT_PM_TASK_SHOW_CMD (with taskId appended) for
 //     getTask(taskId) (unset => returns null => cannot auto-accept => pending).
-//     Refuses to run (exitCode 2) when AUTOPILOT_FLEET_REPO is unset.
+//     Exits with code 3 when AUTOPILOT_FLEET_REPO is unset or inbox-cli.ts is missing.
 //   - "fixture:<dir>": reads <dir>/inbox.json and optional <dir>/tasks.json, and
 //     appends JSONL records to <dir>/marks.jsonl, <dir>/wakes.jsonl, <dir>/accepts.jsonl.
 //
@@ -302,15 +302,22 @@ function createFixtureAdapter(dir, member, env) {
 function createFleetAdapter(env, member) {
   const fleetRepo = typeof env.AUTOPILOT_FLEET_REPO === 'string' ? env.AUTOPILOT_FLEET_REPO.trim() : '';
   if (!fleetRepo) {
-    throw adapterError('AUTOPILOT_FLEET_REPO is unset; set it to the fleet repo path to run in fleet mode', 2, 'FLEET_REPO_UNSET');
+    throw adapterError('AUTOPILOT_FLEET_REPO is unset; set it to the fleet repo path to run in fleet mode', 3, 'FLEET_REPO_UNSET');
   }
   const cliPath = path.join(path.resolve(fleetRepo), FLEET_CLI_REL);
+  if (!fs.existsSync(cliPath)) {
+    const err = adapterError(`fleet inbox CLI not found at ${cliPath}`, 3, 'FLEET_CLI_MISSING');
+    err.cliPath = cliPath;
+    throw err;
+  }
   const acceptArgv = parseCmdArgv(env.AUTOPILOT_PM_ACCEPT_CMD, 'AUTOPILOT_PM_ACCEPT_CMD', 'INVALID_ACCEPT_CMD');
   const taskShowArgv = parseCmdArgv(env.AUTOPILOT_PM_TASK_SHOW_CMD, 'AUTOPILOT_PM_TASK_SHOW_CMD', 'INVALID_TASK_SHOW_CMD');
 
   function runInboxCli(cliArgs) {
     if (!fs.existsSync(cliPath)) {
-      throw adapterError(`fleet inbox CLI not found at ${cliPath}`, 2, 'FLEET_CLI_MISSING');
+      const err = adapterError(`fleet inbox CLI not found at ${cliPath}`, 3, 'FLEET_CLI_MISSING');
+      err.cliPath = cliPath;
+      throw err;
     }
     const res = spawnSync(process.execPath, ['--experimental-transform-types', cliPath, ...cliArgs], {
       env: cleanChildEnv(env),

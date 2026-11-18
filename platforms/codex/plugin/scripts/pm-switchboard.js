@@ -21,7 +21,7 @@
 //   AUTOPILOT_PM_AUTO_ACCEPT=on|off        (default on; off stops auto-accept -> pending)
 //   AUTOPILOT_PM_LEAK_STATUS_FILE=<json>   (4 leak check counts for fallback-status)
 //
-// Exit codes: 0 ok | 2 CLI usage, model refusal, or adapter precondition | 1 runtime error.
+// Exit codes: 0 ok | 1 runtime error | 2 CLI usage, model refusal, or adapter precondition | 3 waiting on fleet inbox CLI (systemd service uses SuccessExitStatus=3).
 // Node built-ins only.
 
 const fs = require('fs');
@@ -949,6 +949,27 @@ function hasHourlyResidueBurst(receiptDir, nowMs = Date.now()) {
   return false;
 }
 
+function openInboxAdapter(env) {
+  try {
+    return createAdapter(env);
+  } catch (err) {
+    if (err && err.code === 'FLEET_REPO_UNSET') {
+      const waitErr = new Error('pm-switchboard: waiting_on fleet 01M7R4FA (AUTOPILOT_FLEET_REPO unset)');
+      waitErr.exitCode = 3;
+      waitErr.code = err.code;
+      throw waitErr;
+    }
+    if (err && err.code === 'FLEET_CLI_MISSING') {
+      const missingPath = err.cliPath || '<unknown>';
+      const waitErr = new Error(`pm-switchboard: waiting_on fleet 01M7R4FA (inbox CLI missing at ${missingPath})`);
+      waitErr.exitCode = 3;
+      waitErr.code = err.code;
+      throw waitErr;
+    }
+    throw err;
+  }
+}
+
 function runSwitchboard(opts, env = process.env) {
   const switchVal = typeof env.AUTOPILOT_PM_SWITCHBOARD === 'string'
     ? env.AUTOPILOT_PM_SWITCHBOARD.trim().toLowerCase()
@@ -971,7 +992,7 @@ function runSwitchboard(opts, env = process.env) {
   const fallbackReopened = fallbackKnob === 'off' && hasHourlyResidueBurst(receiptDir, nowMs);
   const fallbackEnabled = fallbackKnob === 'on' || fallbackReopened;
 
-  const adapter = createAdapter(env);
+  const adapter = openInboxAdapter(env);
   const unreadAll = adapter.listUnread();
   const batch = unreadAll.slice(0, opts.maxItems);
   const canAccept = adapter.canAccept();

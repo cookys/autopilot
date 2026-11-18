@@ -2,12 +2,14 @@
 # Systemd user service template for the 10-minute PM inbox batch switchboard.
 # Substitute @REPO_PATH@ and @FLEET_REPO@ at install time, write under
 # ~/.config/systemd/user/, then enable pm-switchboard.timer manually.
+# Exit 3 (waiting on fleet inbox CLI) is treated as success via SuccessExitStatus=3.
 # Fixed rules only; opens no credential files.
 [Unit]
 Description=Autopilot PM inbox batch switchboard (fixed rules)
 
 [Service]
 Type=oneshot
+SuccessExitStatus=3
 UnsetEnvironment=AUTOPILOT_TOKEN_SEAT AUTOPILOT_SESSION_ID
 Environment=AUTOPILOT_FLEET_REPO=@FLEET_REPO@
 StandardInput=null

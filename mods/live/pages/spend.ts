@@ -78,8 +78,9 @@ function seatHeaderTitle(t: T, wide: boolean, row: SeatQuotaRow | null, ageMs: n
   return !staleQuota && age !== null ? t('page.spend.head_narrow_age', { age }) : t('page.now.seat_plain')
 }
 
-function meterRow(opts: { focused: boolean; label: string; pct: number | null; reset: string; wide: boolean; stale: boolean }): Row {
-  const { focused, label, pct, reset, wide, stale } = opts
+function meterRow(opts: { focused: boolean; label: string; pct: number | null; reset: string; wide: boolean; stale: boolean; press?: string }): Row {
+  const { focused, label, pct, reset, wide, stale, press } = opts
+  const withPress = (r: Row): Row => (press === undefined ? r : r.map(s => ({ ...s, press })))
   const mark = wide ? (focused ? GLYPHS.structure.folded : ' ') + ' ' : focused ? GLYPHS.structure.folded : ' '
   const lblW = wide ? 8 : displayWidth(label) <= 2 ? 2 : 3
   const lbl = wide ? padR(label, lblW) : padR(label, lblW) + ' '
@@ -87,13 +88,13 @@ function meterRow(opts: { focused: boolean; label: string; pct: number | null; r
   const tail: Seg[] = wide
     ? stale
       ? [staleBadge(' ' + GLYPHS.state.failed), { text: '  ' + reset }]
-      : [{ text: '    ' + reset }]
+    : [{ text: '    ' + reset }]
     : stale
       ? [staleBadge(' ' + GLYPHS.state.failed), { text: ' ' + reset }]
       : [{ text: ' ' + reset }]
   if (pct === null) {
     const pctMissing = ' ' + padL(DASH, wide ? 4 : 3)
-    return [{ text: mark + lbl }, { text: GLYPHS.chart.meterOff.repeat(cells), color: PALETTE.idle }, { text: pctMissing, color: PALETTE.idle }, ...tail]
+    return withPress([{ text: mark + lbl }, { text: GLYPHS.chart.meterOff.repeat(cells), color: PALETTE.idle }, { text: pctMissing, color: PALETTE.idle }, ...tail])
   }
   const clamped = Math.max(0, Math.min(100, pct))
   const ratio = clamped / 100
@@ -105,7 +106,7 @@ function meterRow(opts: { focused: boolean; label: string; pct: number | null; r
   if (on > 0) segs.push({ text: GLYPHS.chart.meterOn.repeat(on), ...(barColor === undefined ? {} : { color: barColor }) })
   if (off > 0) segs.push({ text: GLYPHS.chart.meterOff.repeat(off), color: PALETTE.idle })
   segs.push({ text: pctStr, ...(barColor === undefined ? {} : { color: barColor }) }, ...tail)
-  return segs
+  return withPress(segs)
 }
 
 function matchedPoolResetMs(con: ConsoleSnapshot | null, pool: string | null): number | null {
@@ -235,8 +236,8 @@ export function renderSpend(ctx: PageCtx, view: SpendViewOpts = DEFAULT_VIEW): {
     const reset7 = reset7Text(win7?.resetsAtMs ?? matchedPoolResetMs(con, row?.pool ?? null), wide, t)
     const label5 = wide ? t('label.quota_5h') : t('page.spend.q_5h_narrow')
     const label7 = wide ? t('label.quota_7d') : t('page.spend.q_7d_narrow')
-    body.push(meterRow({ focused: focus === 0, label: label5, pct: pct5, reset: reset5, wide, stale: staleQuota }))
-    body.push(meterRow({ focused: focus === 1, label: label7, pct: pct7, reset: reset7, wide, stale: staleQuota }))
+    body.push(meterRow({ focused: focus === 0, label: label5, pct: pct5, reset: reset5, wide, stale: staleQuota, press: 'spend:meter:0' }))
+    body.push(meterRow({ focused: focus === 1, label: label7, pct: pct7, reset: reset7, wide, stale: staleQuota, press: 'spend:meter:1' }))
   }
   if (row !== null) {
     if (staleQuota) {

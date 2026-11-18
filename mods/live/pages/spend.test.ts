@@ -313,6 +313,7 @@ function setupMountedSpend(on: On, rateLimits: object[] = [
       },
     }),
     [REPO + '/.git/HEAD']: 'ref: refs/heads/main\n',
+    [REPO + '/.claude/console.json']: JSON.stringify({ schema: 'autopilot.console/1', mode: 'program' }),
   }
   const env: Record<string, string> = { HOME, AUTOPILOT_LOCALE: 'zh-TW' }
   let invalidates = 0
@@ -340,7 +341,7 @@ function setupMountedSpend(on: On, rateLimits: object[] = [
     throw new Error('ENOENT ' + p)
   }
 
-  mock.clock(on, { now: NOW })
+  const clock = mock.clock(on, { now: NOW })
   on('env.get', (_$, e) => ({ value: env[e.name] }))
   on('fs.read', (_$, e) => {
     const v = files[e.path]
@@ -367,7 +368,11 @@ function setupMountedSpend(on: On, rateLimits: object[] = [
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.close', (_$, e) => { closes.push(e.id); return { value: undefined } })
   on('ui.panes', () => ({ value: [] }))
-  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false as const, isStderrTruncated: false as const } }))
+  on('process.run', (_$, e) => ({
+    value: e.argv[0] === 'fleet' && e.argv[1] === 'seats'
+      ? { exitCode: 0, stdout: SEAT_JSON, stderr: '', isStdoutTruncated: false as const, isStderrTruncated: false as const }
+      : { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false as const, isStderrTruncated: false as const },
+  }))
 
   const eng = {
     clock: { now: async () => NOW, every: () => ({ cancel: () => {} }) },
@@ -381,7 +386,7 @@ function setupMountedSpend(on: On, rateLimits: object[] = [
     },
   } as unknown as EngineInterface
 
-  return { eng, closes, getInvalidates: () => invalidates }
+  return { eng, clock, closes, getInvalidates: () => invalidates }
 }
 
 async function readMountedPane($: any, bodyRows: number, bodyColumns = 120) {
@@ -399,7 +404,7 @@ async function readMountedPane($: any, bodyRows: number, bodyColumns = 120) {
   return { tree, rows: framedRowsOf(tree), buttons }
 }
 
-async function pressMountedButton($: any, bodyRows: number, match: (b: HostNode) => boolean) {
+async function pressMountedButton($: any, bodyRows: number, match: (b: HostNode) => boolean, clock?: { advance: (ms: number) => Promise<void> }) {
   const m = await $.ui.mount({
     plugin: 'autopilot',
     surface: 'terminal',
@@ -412,17 +417,19 @@ async function pressMountedButton($: any, bodyRows: number, match: (b: HostNode)
   const target = buttons.find(match)
   expect(target).toBeDefined()
   await m.press({ key: target!.props?.key as string })
-  await Promise.resolve()
+  if (clock !== undefined) await clock.advance(0)
+  else await Promise.resolve()
   await m.unmount()
 }
 
 test('spend real path (120x12): register key handler -> mounted Pane render toggles z expand/collapse and moves focus with j/k', async ($, on) => {
   await feedFresh()
-  const { eng } = setupMountedSpend(on)
+  const { eng, clock } = setupMountedSpend(on)
   await $.session.start({ surface: 'terminal', cwd: CWD })
+  await clock.advance(5_000)
 
   // Switch to page 7 (spend) via the mounted strip Button
-  await pressMountedButton($, 12, b => b.props?.key === 'spend' && b.props?.hotkey === '7')
+  await pressMountedButton($, 12, b => b.props?.key === 'spend' && b.props?.hotkey === '7', clock)
 
   // Initial render at 12 rows (room = 9 < 12 expanded rows): starts collapsed, focus marker on 5 小時
   const init = await readMountedPane($, 12)
@@ -434,7 +441,7 @@ test('spend real path (120x12): register key handler -> mounted Pane render togg
   expect(init.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
 
   // Press z on the spend page -> render: expanded content shows (with overflow ↓ 還有 4 列)
-  await paneKey(eng, 'z')
+  await pressMountedButton($, 12, b => b.props?.hotkey === 'z', clock)
   const open1 = await readMountedPane($, 12)
   expect(open1.rows.length).toBe(12)
   expect(open1.rows.some(l => l.includes('收合明細'))).toBe(true)
@@ -443,36 +450,43 @@ test('spend real path (120x12): register key handler -> mounted Pane render togg
   expect(open1.rows.some(l => l.startsWith('↓ 還有 '))).toBe(true)
 
   // Press z again -> render: collapsed
-  await paneKey(eng, 'z')
+  await pressMountedButton($, 12, b => b.props?.hotkey === 'z', clock)
   const shut = await readMountedPane($, 12)
   expect(shut.rows.length).toBe(12)
   expect(shut.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
   expect(shut.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
   expect(shut.rows.some(l => l.startsWith('↓ 還有 '))).toBe(false)
 
-  // Press j -> render: focus marker moved one row (and clamps on extra ArrowDown)
-  await paneKey(eng, 'j')
-  await paneKey(eng, 'ArrowDown')
+  // Press 7 天 meter row Button -> render: focus marker moved one row while staying collapsed
+  await pressMountedButton($, 12, b => String(b.props?.key ?? '').startsWith('p:') && hostNodeText(b).includes('7 天'), clock)
   const movedDown = await readMountedPane($, 12)
   expect(movedDown.rows.some(l => l.startsWith('  5 小時'))).toBe(true)
   expect(movedDown.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
   expect(movedDown.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
 
-  // Press k -> render: focus marker moved back to 5 小時 (and clamps on extra ArrowUp)
-  await paneKey(eng, 'k')
-  await paneKey(eng, 'ArrowUp')
+  // Press 5 小時 meter row Button -> render: focus marker moved back to 5 小時
+  await pressMountedButton($, 12, b => String(b.props?.key ?? '').startsWith('p:') && hostNodeText(b).includes('5 小時'), clock)
   const movedUp = await readMountedPane($, 12)
   expect(movedUp.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
   expect(movedUp.rows.some(l => l.startsWith('  7 天'))).toBe(true)
+
+  // Direct register key handler routing on '7', 'z', 'j'/'ArrowDown', and 'k'/'ArrowUp'
+  expect(await paneKey(eng, '7')).toEqual({ kind: 'page', to: 'spend' })
+  expect(await paneKey(eng, 'z')).toEqual({ kind: 'fold' })
+  expect(await paneKey(eng, 'j')).toEqual({ kind: 'move', by: 1 })
+  expect(await paneKey(eng, 'ArrowDown')).toEqual({ kind: 'move', by: 1 })
+  expect(await paneKey(eng, 'k')).toEqual({ kind: 'move', by: -1 })
+  expect(await paneKey(eng, 'ArrowUp')).toEqual({ kind: 'move', by: -1 })
 })
 
 test('spend real path (120x30): unfold callback, z / [z] Button, j / k focus movement, [4] quota jump, and direct renderSpend view parameter', async ($, on) => {
   await feedFresh()
-  const { eng } = setupMountedSpend(on)
+  const { clock } = setupMountedSpend(on)
   await $.session.start({ surface: 'terminal', cwd: CWD })
+  await clock.advance(5_000)
 
-  // Switch to spend via register key handler ('7')
-  await paneKey(eng, '7')
+  // Switch to spend via strip hotkey '7' Button
+  await pressMountedButton($, 30, b => b.props?.key === 'spend' && b.props?.hotkey === '7', clock)
 
   // Initial tall dock render (120x30): unfold opens details when they fit whole; no empty-label or j/k Buttons
   const initial = await readMountedPane($, 30)
@@ -484,7 +498,7 @@ test('spend real path (120x30): unfold callback, z / [z] Button, j / k focus mov
   expect(initial.rows.some(l => l.includes('dev@example.com'))).toBe(true)
 
   // Press z -> render: expanded content shows
-  await paneKey(eng, 'z')
+  await pressMountedButton($, 30, b => b.props?.hotkey === 'z', clock)
   const afterZ1 = await readMountedPane($, 30)
   expect(afterZ1.rows.some(l => l.includes('收合明細'))).toBe(true)
   expect(afterZ1.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(true)
@@ -493,37 +507,37 @@ test('spend real path (120x30): unfold callback, z / [z] Button, j / k focus mov
   expect(afterZ1.rows.some(l => l.includes('dev@example.com'))).toBe(true)
 
   // Press z again -> render: collapsed (explicit fold suppresses auto-unfold)
-  await paneKey(eng, 'z')
+  await pressMountedButton($, 30, b => b.props?.hotkey === 'z', clock)
   const afterZ2 = await readMountedPane($, 30)
   expect(afterZ2.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
   expect(afterZ2.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
   expect(afterZ2.rows.some(l => l.includes('dev@example.com'))).toBe(false)
 
-  // Press j -> render: focus marker moved one row to 7 天 while staying collapsed
-  await paneKey(eng, 'j')
+  // Press 7 天 meter row Button -> render: focus marker moved one row to 7 天 while staying collapsed
+  await pressMountedButton($, 30, b => String(b.props?.key ?? '').startsWith('p:') && hostNodeText(b).includes('7 天'), clock)
   const afterJ = await readMountedPane($, 30)
   expect(afterJ.rows.some(l => l.startsWith('  5 小時'))).toBe(true)
   expect(afterJ.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
   expect(afterJ.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
 
   // Press visible [z] Button directly on mounted Pane -> expands while keeping focus on 7 天; press [z] Button again -> collapses
-  await pressMountedButton($, 30, b => b.props?.hotkey === 'z')
+  await pressMountedButton($, 30, b => b.props?.hotkey === 'z', clock)
   const btnOpen = await readMountedPane($, 30)
   expect(btnOpen.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
   expect(btnOpen.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(true)
-  await pressMountedButton($, 30, b => b.props?.hotkey === 'z')
+  await pressMountedButton($, 30, b => b.props?.hotkey === 'z', clock)
   const btnShut = await readMountedPane($, 30)
   expect(btnShut.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
   expect(btnShut.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
 
-  // Press k -> render: focus marker moved back to 5 小時
-  await paneKey(eng, 'k')
+  // Press 5 小時 meter row Button -> render: focus marker moved back to 5 小時
+  await pressMountedButton($, 30, b => String(b.props?.key ?? '').startsWith('p:') && hostNodeText(b).includes('5 小時'), clock)
   const afterK = await readMountedPane($, 30)
   expect(afterK.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
   expect(afterK.rows.some(l => l.startsWith('  7 天'))).toBe(true)
 
   // Press [4] jump Button in body -> switches mounted Pane to quota (額度)
-  await pressMountedButton($, 30, b => String(b.props?.key ?? '').endsWith(':quota'))
+  await pressMountedButton($, 30, b => String(b.props?.key ?? '').endsWith(':quota'), clock)
   const onQuota = await readMountedPane($, 30)
   expect(onQuota.rows[0]).toContain('額度')
 

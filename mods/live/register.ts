@@ -1376,6 +1376,11 @@ async function framePress($: EngineInterface, id: string): Promise<void> {
       const v = pageView.quota ?? { focus: 0, expanded: false }
       const expanded = v.focus === at ? !v.expanded : true
       pageView.quota = { focus: at, expanded, folded: !expanded } // the pool's own row: press it to show its seats, press it again to fold them
+    } else if (id.startsWith('spend:meter:')) {
+      const at = Number(id.slice('spend:meter:'.length))
+      const v = pageView.spend ?? { focus: 0, expanded: false }
+      const last = Math.max(0, focusRows('spend', v.expanded) - 1)
+      if (Number.isFinite(at)) pageView.spend = { ...v, focus: Math.min(last, Math.max(0, at)) } // a meter row is its own Button: pressing it moves the focus marker
     }
     else if (id.startsWith('fill:quota:')) {
       const pool = id.slice('fill:quota:'.length)

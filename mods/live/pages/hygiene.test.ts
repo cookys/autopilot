@@ -266,7 +266,7 @@ test('hygiene empty state: renders ○ 沒有要清的殘留 only when load_sour
 })
 
 test('hygiene fixed height & overflow: many items end in ↓ 還有 N 列 and never push the tab strip across all sizes and locales', () => {
-  const manyClean: M.NeedsHumanEntry[] = Array.from({ length: 24 }, (_, i) => ({
+  const manyClean: M.NeedsHumanEntry[] = Array.from({ length: 36 }, (_, i) => ({
     kind: 'worktree',
     target: `/tmp/wt-clean-${String(i).padStart(2, '0')}`,
     class: 'clean-integrated',
@@ -276,7 +276,7 @@ test('hygiene fixed height & overflow: many items end in ↓ 還有 N 列 and ne
     command: null,
   }))
   const bigLive = liveOf({
-    residue: { ...MOCK_RESIDUE, reapable: 24, needs_human_count: 25, needs_human: [MOCK_RESIDUE.needs_human[0], ...manyClean] },
+    residue: { ...MOCK_RESIDUE, reapable: 36, needs_human_count: 37, needs_human: [MOCK_RESIDUE.needs_human[0], ...manyClean] },
   })
   for (const locale of ['zh-TW', 'en'] as const) {
     for (const [cols, rows] of SIZES) {

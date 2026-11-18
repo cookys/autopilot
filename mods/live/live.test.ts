@@ -3683,17 +3683,17 @@ test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names
   const tabBtns = bandBtns.filter(b => String(b.props?.key).startsWith('tab:'))
   expect(tabBtns.map(b => String(b.props?.key))).toEqual(['tab:now', 'tab:decide', 'tab:fleet', 'tab:quota', 'tab:dispatch', 'tab:review', 'tab:spend', 'tab:hygiene'])
   for (const b of bandBtns) expect(b.props?.hotkey, 'no hotkey on band Button ' + String(b.props?.key)).toBeUndefined()
-  const cases: [string, string, boolean][] = [
-    ['tab:now', '現況', true],
-    ['tab:decide', '待決', true],
-    ['tab:fleet', '艦隊', true],
-    ['tab:quota', '額度', true],
-    ['tab:dispatch', '這是執行狀態，不是進度', false],
-    ['tab:review', '推送前檢查', false],
-    ['tab:spend', '今日花費', false],
-    ['tab:hygiene', '自動清理', false],
+  const cases: [string, string, string][] = [
+    ['tab:now', '現況', '── 全艦隊'],
+    ['tab:decide', '待決', '記憶線：測試綠了，合併到 develop 嗎？'],
+    ['tab:fleet', '艦隊', '復原線'],
+    ['tab:quota', '額度', '── 額度池'],
+    ['tab:dispatch', '派工', '── 執行中 2'],
+    ['tab:review', '審查', '還沒有審查紀錄'],
+    ['tab:spend', '花費', '今天    $0.42'],
+    ['tab:hygiene', '殘留', '殘留：無來源（沒有 worktree 殘留資料）'],
   ]
-  for (const [key, marker, isFramed] of cases) {
+  for (const [key, header, bodyMarker] of cases) {
     w.panes = []
     w.opens.length = 0
     const b = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-gate3-' + key, props: { ...BAND_PROPS, maxRows: 6 }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
@@ -3703,8 +3703,9 @@ test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names
     const p = await framedMount($)
     const pTree = (await p.drawn()) as Node
     await p.unmount()
-    if (isFramed) expect(framedRows(pTree)[0], key + ' header').toContain(marker)
-    else expect(walkTexts(pTree).map(textOf).join(' '), key + ' unframed content').toContain(marker)
+    const rows = framedRows(pTree)
+    expect(rows[0].startsWith(header), key + ' header').toBe(true)
+    expect(rows.slice(1, -1).join('\n'), key + ' body').toContain(bodyMarker)
   }
 })
 // pageview-focus-unbounded: the fold clamps the focus to the rows that are still shown, so the next unfold does not put the ▸ back on a row that was folded away

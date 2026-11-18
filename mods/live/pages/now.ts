@@ -420,6 +420,7 @@ function formatFleetBody(groups: { labels: string[]; fmt: (names: string | null)
     const picked: (string | null)[] = Array.from({ length: groups.length }, () => null)
     const needCut: number[] = []
     let rem = totalInner
+    const minSlot = (idx: number): number => Math.min(Math.max(1, displayWidth(fullNames[idx])), Math.max(1, displayWidth(truncateToWidth(groups[idx].labels[0] ?? '', 3))))
     const equalShare = Math.floor(totalInner / m)
     for (let i = 0; i < m; i++) {
       const w = displayWidth(fullNames[i])
@@ -432,7 +433,14 @@ function formatFleetBody(groups: { labels: string[]; fmt: (names: string | null)
     }
     needCut.forEach((idx, k) => {
       const left = needCut.length - k
-      const budget = Math.max(1, k === needCut.length - 1 ? rem : Math.floor(rem / left))
+      const laterMin = needCut.slice(k + 1).reduce((s, j) => s + minSlot(j), 0)
+      const w = displayWidth(fullNames[idx])
+      if (w >= 1 && w <= rem - laterMin) {
+        picked[idx] = fullNames[idx]
+        rem -= w
+        return
+      }
+      const budget = Math.max(1, k === needCut.length - 1 ? rem : Math.ceil(rem / left))
       const got = fitNameList(groups[idx].labels, listSep, budget) ?? '…'
       picked[idx] = got
       rem -= displayWidth(got)

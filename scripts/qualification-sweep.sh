@@ -398,8 +398,10 @@ stage0_probe() { # runner model effort [endpoint] -> rc 0 ok
   local runner="$1" model="$2" effort="${3:-high}" endpoint="${4:-}"
   # Throwaway scratch dir (mktemp without a template).
   local pd; pd=$(mktemp -d)
+  # Keep growing dispatch output outside the checkout's boundary snapshot.
+  local po; po=$(mktemp -d -t qualification-sweep-raw-XXXXXX)
   ( cd "$pd" && git init -q -b main && git config user.email t@t.invalid && git config user.name t \
-    && printf 'placeholder\n' > note.md && git add -A && git commit -q -m base ) || { rm -rf "$pd"; return 3; }
+    && printf 'placeholder\n' > note.md && git add -A && git commit -q -m base ) || { rm -rf "$pd" "$po"; return 3; }
   cat > "$pd/.prompt.txt" <<'EOF'
 GOAL: Append a single line "verified" to note.md.
 SCOPE: modify ONLY note.md.
@@ -414,13 +416,13 @@ EOF
     local_sandbox_endpoint_listed "$endpoint" || listed_rc=$?
     if [ "$listed_rc" -eq 0 ]; then
       wtparent="$(local_sandbox_worktree_parent)" || {
-        rm -rf "$pd"
+        rm -rf "$pd" "$po"
         echo "PROBE: local sandbox worktree parent unavailable; refusing unsandboxed local probe" >&2
         return 1
       }
       sbx_args=(--endpoint "$endpoint" --sandbox bwrap --worktree-parent "$wtparent")
     elif [ "$listed_rc" -ne 1 ]; then
-      rm -rf "$pd"
+      rm -rf "$pd" "$po"
       echo "PROBE: local sandbox registry unreadable; refusing unsandboxed local probe" >&2
       return 1
     fi
@@ -429,12 +431,12 @@ EOF
   out=$(cd "$pd" && timeout 320 bash "$REPO_ROOT/scripts/dispatch-hetero.sh" \
     --branch probe-1 --prompt-file "$pd/.prompt.txt" --runner "$runner" --model "$model" \
     --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off --no-verify-tip \
-    ${sbx_args[@]+"${sbx_args[@]}"} 2>"$pd/.dispatch.err" | tee "$pd/.dispatch.out" | tail -1)
+    ${sbx_args[@]+"${sbx_args[@]}"} 2>"$po/.dispatch.err" | tee "$po/.dispatch.out" | tail -1)
   # BL-0294: a probe that died on authentication means every later seat dies the same way. Read every output of
   # the call (full stdout, stderr, and the runner's agent_log the result names) BEFORE the scratch dir is removed.
   # failed = the probe's result is not committed / reviewed (--failed-from; a runner that exited 0 with no commit is no_op = failed)
-  auth_stop_check "probe-$runner/$model" --failed-from "$pd/.dispatch.out" --dispatch "$pd/.dispatch.out" --stderr "$pd/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
-  rm -rf "$pd"
+  auth_stop_check "probe-$runner/$model" --failed-from "$po/.dispatch.out" --dispatch "$po/.dispatch.out" --stderr "$po/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
+  rm -rf "$pd" "$po"
   # Leave the shared per-uid parent. Removing it would delete sibling worktrees.
   # dispatch-hetero already removes this probe's child worktree.
   grep -q '"status": *"committed"' < <(echo "$out") && return 0

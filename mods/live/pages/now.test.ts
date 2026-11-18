@@ -370,7 +370,7 @@ test('now C1: 80x24 short 現況 with 3 pending cards, 2 red pools, 1 offline ho
   expect(zh7[3]).toContain('trinity')
   expect(zh7[4]).toContain('主機 h6 離線 12 分')
   expect(zh7[5]).toBe('另有 2 項')
-  expect(zh7[6]).toContain('1 現況')
+  expect(zh7[6]).toContain('1 現 2 待')
 
   const en7 = frameRows(nowPage, { ...(ctxOf(80, 7, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
   expect(en7.length).toBe(7)

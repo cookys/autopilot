@@ -30,8 +30,24 @@ test('fyi true fact report is allowed', () => {
   assert.equal(call('mcp__fleet__send', FACT_FYI, { fyi: true }), null);
 });
 
-test('fyi true allows the work order itself', () => {
-  assert.equal(call('mcp__fleet__send', WORK, { fyi: true }), null);
+test('fyi true still denies a work order carrying [no-task', () => {
+  const out = call('mcp__fleet__send', WORK, { fyi: true });
+  assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+});
+
+test('fyi true + [no-task + 回報 denies (case-insensitive)', () => {
+  const denyLower = call('mcp__fleet__send', '進度同步，請處理完回報。[no-task: quick]', { fyi: true });
+  assert.equal(denyLower.hookSpecificOutput.permissionDecision, 'deny');
+  const denyUpper = call('mcp__fleet__send', '進度同步，請處理完回報。[NO-TASK: quick]', { fyi: true });
+  assert.equal(denyUpper.hookSpecificOutput.permissionDecision, 'deny');
+});
+
+test('fyi true + 回報 without [no-task is allowed', () => {
+  assert.equal(call('mcp__fleet__send', '剛測完這批數據，晚點補完整回報。', { fyi: true }), null);
+});
+
+test('fyi true + [no-task without any work-order phrase is allowed', () => {
+  assert.equal(call('mcp__fleet__send', 'FYI 狀態同步而已。[no-task: status]', { fyi: true }), null);
 });
 
 test('dispatch of the same text is allowed', () => {

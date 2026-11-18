@@ -1282,6 +1282,13 @@ NODE
     --started-at "${DISPATCH_STARTED_EPOCH:-}" --endpoint "${ENDPOINT:-}" \
     --provider-session-id "${PROVIDER_SESSION_ID:-${CHILD_SESSION_ID:-}}" \
     ${ledger_usage_json:+--usage-json "$ledger_usage_json"} || true
+  if [ -n "${HETERO_FLEET_TASK_ID:-}" ]; then
+    local _ft_sha="${2:-}" _ft_log="${LOG:-}"
+    [ -n "$_ft_sha" ] && [ "$_ft_sha" != "null" ] || _ft_sha="-"
+    [ -n "$_ft_log" ] && [ "$_ft_log" != "null" ] || _ft_log="-"
+    node "$SELF_DIR/lib/fleet-task-ref.js" progress "$HETERO_FLEET_TASK_ID" \
+      "[dispatch:${AUTOPILOT_DISPATCH_ROLE:-implementer}] ${DISPATCH_RUN_ID:-unknown} $1 sha=${_ft_sha} log=${_ft_log}" >/dev/null 2>&1 || true
+  fi
 }
 
 check_session_mode_gate() {
@@ -3101,9 +3108,11 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+HETERO_FLEET_TASK_ID="$(node "$SELF_DIR/lib/fleet-task-ref.js" resolve-parent --prompt-file "$PROMPT_FILE" 2>/dev/null || true)"
 DISPATCH_LANE_JSON=null # read from the original brief before it is repacked; crosses the detach boundary via declare -p
 declare -F dispatch_lane_json >/dev/null 2>&1 && DISPATCH_LANE_JSON="$(dispatch_lane_json "$PROMPT_FILE")"
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "$PROMPT_FILE" # the child (its cost-tracker rows) inherits lane + fleet task
+[ -z "${HETERO_FLEET_TASK_ID:-}" ] || export AUTOPILOT_FLEET_TASK="$HETERO_FLEET_TASK_ID"
 # Pace is the default only for an unpinned seat. Strict contracts carry their own tuple.
 _ps_args=(--dispatch --role "${PACE_ROLE:-implementer}")
 [ -z "${PROMPT_FILE:-}" ] || _ps_args+=(--prompt-file "$PROMPT_FILE")
@@ -6977,7 +6986,7 @@ dispatch_detached_run() {
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \
       CLASSIFIED_ERROR \
-      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_JOB_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \
+      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_JOB_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH HETERO_FLEET_TASK_ID \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_MOUNT_CONTAINMENT WORKER_MOUNT_MODE WORKER_MOUNT_PREFIX MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS \
@@ -7132,6 +7141,10 @@ node "$SELF_DIR/lib/dispatch-usage.js" start --role "${AUTOPILOT_DISPATCH_ROLE:-
   --run-id "${DISPATCH_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
   --started-at "${DISPATCH_STARTED_EPOCH:-}" --runner "$(current_runner_name)" --model "${MODEL:-}" --endpoint "${ENDPOINT:-}" \
   --provider-session-id "${PROVIDER_SESSION_ID:-${CHILD_SESSION_ID:-}}" || true
+if [ -n "${HETERO_FLEET_TASK_ID:-}" ]; then
+  node "$SELF_DIR/lib/fleet-task-ref.js" progress "$HETERO_FLEET_TASK_ID" \
+    "[dispatch:${AUTOPILOT_DISPATCH_ROLE:-implementer}] ${DISPATCH_RUN_ID:-unknown} start" >/dev/null 2>&1 || true
+fi
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: run_id=${DISPATCH_RUN_ID} manifest=${MANIFEST_FILE:-none} log=${LOG} (watch: scripts/dispatch-status.js --run ${DISPATCH_RUN_ID})" >&2
 if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${HAVE_SETSID:-0}" -eq 1 ]; then
   RESULTS_DIR="${LEDGER}.results"

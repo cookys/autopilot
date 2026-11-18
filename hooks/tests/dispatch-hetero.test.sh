@@ -13,7 +13,7 @@
 # Ambient mission harness env must not poison hermetic unit tests.
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
-  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
+  AUTOPILOT_DISPATCH_DEPTH AUTOPILOT_FLEET_TASK AUTOPILOT_UPSTREAM_TASK_ID 2>/dev/null || true
 # Harness GIT_CONFIG_COUNT protocol.*=never overrides repo-level protocol.file.allow
 # and makes 22b/22m control pushes fail closed (exit 128 / helper never invoked).
 unset GIT_CONFIG_COUNT GIT_ALLOW_PROTOCOL
@@ -2842,5 +2842,67 @@ OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$PACE_RUNS_DIR" \
 assert_eq "2" "$EXIT" "hetero --pace-role with pace_unknown exits 2 (no silent default)"
 assert_contains "$OUT" '"status": "precondition_failed"' "hetero --pace-role pace_unknown emits precondition_failed"
 assert_contains "$OUT" "pace_unknown" "hetero --pace-role failure message names pace_unknown"
+
+# ─── Commit 2: parent Fleet-Task inheritance + fail-soft progress updates ───
+HT_TASK_ID="01M7R609WK44HJP629E6C93Q9N"
+HT_FLEET_LOG="$TEST_TMP/ht-fleet-argv.log"
+HT_FLEET_STUB="$TEST_TMP/ht-fleet-stub"
+cat > "$HT_FLEET_STUB" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$HT_FLEET_LOG"
+exit 0
+EOF
+HT_FLEET_EXIT3="$TEST_TMP/ht-fleet-exit3"
+printf '#!/usr/bin/env bash\nexit 3\n' > "$HT_FLEET_EXIT3"
+chmod +x "$HT_FLEET_STUB" "$HT_FLEET_EXIT3"
+
+HT_ENV_LOG="$TEST_TMP/ht-child-env.txt"
+HT_GROK_STUB="$TEST_TMP/ht-grok-stub"
+cat > "$HT_GROK_STUB" <<EOF
+#!/usr/bin/env bash
+case " \$* " in *" __autopilot_probe__ "*)
+  echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: high, medium, low" >&2
+  exit 1 ;;
+esac
+printf '%s\n' "\${AUTOPILOT_FLEET_TASK:-}" > "$HT_ENV_LOG"
+printf 'ht stub\n' > ht-stub.txt
+echo "stub-done"
+exit 0
+EOF
+chmod +x "$HT_GROK_STUB"
+
+# (a) AUTOPILOT_FLEET_TASK writes start + end progress lines and exports to child env; never calls task done
+# AUTOPILOT_DISPATCH_USAGE=off suppresses dispatch-usage.js's unconditional `fleet whoami` probe.
+rm -f "$HT_FLEET_LOG" "$HT_ENV_LOG"
+OUT="$(cd "$SBX" && env -u AUTOPILOT_UPSTREAM_TASK_ID FLEET_BIN="$HT_FLEET_STUB" AUTOPILOT_FLEET_TASK="$HT_TASK_ID" \
+  AUTOPILOT_DISPATCH_ROLE="worker-lane" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 \
+  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
+  --run-id ht-prog-1 --branch feat/ht-prog-1 --prompt-file "$PROMPT" 2>"$TEST_TMP/ht-prog-1.err")"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero progress run exits 0"
+HT_ARGV="$(cat "$HT_FLEET_LOG" 2>/dev/null || true)"
+assert_contains "$HT_ARGV" "task update $HT_TASK_ID [dispatch:worker-lane] ht-prog-1 start" "hetero writes start progress line"
+assert_contains "$HT_ARGV" "task update $HT_TASK_ID [dispatch:worker-lane] ht-prog-1 committed sha=" "hetero writes end progress line"
+assert_contains "$HT_ARGV" " log=" "hetero end progress line carries sha= and log="
+assert_not_contains "$HT_ARGV" " sha=- " "hetero committed end progress line records real commit sha"
+assert_not_contains "$HT_ARGV" "task done" "hetero never auto-marks done"
+assert_not_contains "$HT_ARGV" "task result" "hetero never calls task result"
+assert_eq "$HT_TASK_ID" "$(cat "$HT_ENV_LOG" 2>/dev/null)" "hetero exports AUTOPILOT_FLEET_TASK to child env"
+
+# (b) No task id writes no progress line
+rm -f "$HT_FLEET_LOG"
+OUT="$(cd "$SBX" && env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID FLEET_BIN="$HT_FLEET_STUB" \
+  AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 \
+  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
+  --run-id ht-prog-none --branch feat/ht-prog-none --prompt-file "$PROMPT" 2>"$TEST_TMP/ht-prog-none.err")"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero no-task run exits 0"
+assert_file_absent "$HT_FLEET_LOG" "hetero no-task writes no progress line"
+
+# (c) Fail-soft: FLEET_BIN exit 3 does not alter stdout JSON or exit code
+OUT="$(cd "$SBX" && env -u AUTOPILOT_FLEET_TASK FLEET_BIN="$HT_FLEET_EXIT3" AUTOPILOT_UPSTREAM_TASK_ID="$HT_TASK_ID" \
+  AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 \
+  "$SCRIPT" --no-verify-tip --runner grok --model grok-4.5 --effort high --grok-bin "$HT_GROK_STUB" \
+  --run-id ht-prog-failsoft --branch feat/ht-prog-failsoft --prompt-file "$PROMPT" 2>"$TEST_TMP/ht-prog-fs.err")"; EXIT=$?
+assert_eq "0" "$EXIT" "hetero fail-soft preserves exit 0 when FLEET_BIN exits 3"
+assert_contains "$OUT" '"run_id": "ht-prog-failsoft"' "hetero fail-soft preserves stdout JSON"
 
 finalize_test

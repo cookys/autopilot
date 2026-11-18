@@ -514,4 +514,74 @@ assert_eq 0 "$__RUN_EXIT" "d8b-no-lane-exit"
 assert_eq "" "$__RUN_STDOUT" "d8b-no-lane untouched in deny mode"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
+# ─── PM Console Fleet-Task hard block (dispatch/task binding commit 1) ───
+PM_TASK_ID="01M7R609WK44HJP629E6C93Q9N"
+PM_REPO="$TEST_TMP/pm-console-repo"
+NON_PM_REPO="$TEST_TMP/non-pm-console-repo"
+mkdir -p "$PM_REPO/.git" "$PM_REPO/.claude" "$NON_PM_REPO/.git"
+printf 'ref: refs/heads/main\n' > "$PM_REPO/.git/HEAD"
+printf 'ref: refs/heads/main\n' > "$NON_PM_REPO/.git/HEAD"
+printf '{"schema":"autopilot.console/1","mode":"program"}\n' > "$PM_REPO/.claude/console.json"
+
+FLEET_STUB_OPEN="$TEST_TMP/fleet-open"
+FLEET_STUB_DONE="$TEST_TMP/fleet-done"
+FLEET_STUB_NF="$TEST_TMP/fleet-nf"
+printf '#!/usr/bin/env bash\nprintf '\''{"id":"%s","status":"open"}\\n'\'' "$3"\n' "$PM_TASK_ID" > "$FLEET_STUB_OPEN"
+printf '#!/usr/bin/env bash\nprintf '\''{"id":"%s","status":"done"}\\n'\'' "$3"\n' "$PM_TASK_ID" > "$FLEET_STUB_DONE"
+printf '#!/usr/bin/env bash\nprintf '\''{"error":"not_found"}\\n'\'' ; exit 1\n' > "$FLEET_STUB_NF"
+chmod +x "$FLEET_STUB_OPEN" "$FLEET_STUB_DONE" "$FLEET_STUB_NF"
+
+# 1. missing id -> deny (zh-TW with fleet task show + Fleet-Task + first 10 lines)
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "pm-fleet-missing-exit"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-missing denies"
+assert_contains "$__RUN_STDOUT" "fleet task show" "pm-fleet-missing names fleet task show"
+assert_contains "$__RUN_STDOUT" "Fleet-Task:" "pm-fleet-missing names Fleet-Task"
+
+# Fleet-Task below first 10 lines -> still deny
+TEN_PAD='\n2\n3\n4\n5\n6\n7\n8\n9\n10\nFleet-Task: '"$PM_TASK_ID"''
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku'"$TEN_PAD"'"},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-past-head10 denies"
+
+# 2. stub done -> deny
+PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nFleet-Task: '"$PM_TASK_ID"'\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_DONE" run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-done denies"
+
+# 3. stub not_found -> deny
+FLEET_BIN="$FLEET_STUB_NF" run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-not-found denies"
+
+# 4. stub open -> allow
+FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "pm-fleet-open-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-open allows"
+
+# 5. Explore / Plan without id -> allow
+PAYLOAD_EXPLORE='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"Explore","prompt":"Engine: haiku\nRead files."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_EXPLORE"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-explore exempt"
+PAYLOAD_PLAN='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"Plan","prompt":"Engine: haiku\nPlan work."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_PLAN"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-plan exempt"
+
+# 5b. brief without Engine: (with require_engine_header: off) -> allow
+printf '%s\n' "- require_engine_header: off" > "$TEST_TMP/config-no-engine.md"
+PAYLOAD_NO_ENG='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Just do a quick read without Engine header."},"hook_event_name":"PreToolUse","cwd":"'"$PM_REPO"'"}'
+DISPATCH_GUARD_CONFIG_OVERRIDE="$TEST_TMP/config-no-engine.md" FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_NO_ENG"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-no-engine exempt"
+
+# 6. FLEET_BIN missing binary -> allow (fail-open + stderr note)
+FLEET_BIN="/nonexistent/fleet-binary-missing-check" run_hook dispatch-model-guard.js "$PAYLOAD"
+assert_eq 0 "$__RUN_EXIT" "pm-fleet-unavailable-exit"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "pm-fleet-unavailable allows (fail-open)"
+assert_contains "$__RUN_STDERR" "unavailable" "pm-fleet-unavailable logs stderr note"
+
+# 7. non-PM console without id -> allow
+PAYLOAD_NONPM='{"tool_name":"Agent","tool_input":{"model":"haiku","subagent_type":"general-purpose","prompt":"Engine: haiku\nDo work."},"hook_event_name":"PreToolUse","cwd":"'"$NON_PM_REPO"'"}'
+FLEET_BIN="$FLEET_STUB_OPEN" run_hook dispatch-model-guard.js "$PAYLOAD_NONPM"
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "non-pm-console allows without id"
+
 finalize_test

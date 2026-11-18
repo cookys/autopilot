@@ -45,6 +45,7 @@
     { "stem": "session-tasks", "class": "invariant_effect" },
     { "stem": "state-checkpoint", "class": "invariant_effect" },
     { "stem": "subagent-budget", "class": "invariant_effect" },
+    { "stem": "subagent-fleet-task", "class": "invariant_effect" },
     { "stem": "suggest-compact", "class": "guidance", "profiles": ["guided"] },
     { "stem": "test-runner", "class": "invariant_effect" },
     { "stem": "unmerged-ship-advisory", "class": "invariant_effect" },

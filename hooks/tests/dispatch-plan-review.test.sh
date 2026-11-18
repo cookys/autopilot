@@ -2325,4 +2325,47 @@ assert_eq "$CODEX_SHA_MUTANT_ACTUAL" "$CODEX_SHA_EMPTY_DIGEST" \
 assert_neq "$CODEX_SHA_MUTANT_ACTUAL" "$CODEX_SHA_EXPECTED" \
   "negative control: empty-string stderr_sha256 fails the actual-stderr digest equality check"
 
+# ─── PM Console Fleet-Task gate (Commit 1) ───
+PR_PM_DIR="$TEST_TMP/pr-pm-console"
+PR_PM_REPO="$PR_PM_DIR/repo"
+PR_PM_TASK="01M7R609WK44HJP629E6C93Q9N"
+mkdir -p "$PR_PM_REPO"
+git -C "$PR_PM_REPO" init -q
+git -C "$PR_PM_REPO" config user.email "t@t"; git -C "$PR_PM_REPO" config user.name "t"
+cp "$PLAN_FILE" "$PR_PM_REPO/plan.md"
+cp "$RUBRIC_FILE" "$PR_PM_REPO/rubric.md"
+git -C "$PR_PM_REPO" add plan.md rubric.md
+git -C "$PR_PM_REPO" commit -q -m "seed plan"
+mkdir -p "$PR_PM_REPO/.claude"
+printf '{"schema":"autopilot.console/1","mode":"program"}\n' > "$PR_PM_REPO/.claude/console.json"
+
+PR_FLEET_OPEN="$PR_PM_DIR/fleet-open"
+PR_FLEET_DONE="$PR_PM_DIR/fleet-done"
+PR_FLEET_NF="$PR_PM_DIR/fleet-nf"
+printf '#!/usr/bin/env bash\nprintf '\''{"status":"open"}\\n'\''\n' > "$PR_FLEET_OPEN"
+printf '#!/usr/bin/env bash\nprintf '\''{"status":"done"}\\n'\''\n' > "$PR_FLEET_DONE"
+printf '#!/usr/bin/env bash\nprintf '\''{"error":"not_found"}\\n'\'' ; exit 1\n' > "$PR_FLEET_NF"
+chmod +x "$PR_FLEET_OPEN" "$PR_FLEET_DONE" "$PR_FLEET_NF"
+
+PR_OUT="$(FLEET_BIN="$PR_FLEET_OPEN" node "$SCRIPT" --repo-root "$PR_PM_REPO" --plan-file "$PR_PM_REPO/plan.md" --rubric-file "$PR_PM_REPO/rubric.md" --ticket "pm-miss-1" --session-id "pm-s1" --generation 1 --manifest-file "$CODEX_SHA_MANIFEST" --state-dir "$PR_PM_DIR/state1" --allow-unregistered 2>&1)"; PR_RC=$?
+assert_exit_code "$PR_RC" "2" "plan-review PM missing Fleet-Task exits 2"
+assert_contains "$PR_OUT" "Fleet-Task" "plan-review PM missing names Fleet-Task"
+
+PR_OUT="$(FLEET_BIN="$PR_FLEET_DONE" node "$SCRIPT" --repo-root "$PR_PM_REPO" --plan-file "$PR_PM_REPO/plan.md" --rubric-file "$PR_PM_REPO/rubric.md" --ticket "pm-done-1" --session-id "pm-s2" --generation 1 --manifest-file "$CODEX_SHA_MANIFEST" --state-dir "$PR_PM_DIR/state2" --fleet-task "$PR_PM_TASK" --allow-unregistered 2>&1)"; PR_RC=$?
+assert_exit_code "$PR_RC" "2" "plan-review PM closed Fleet-Task exits 2"
+
+PR_OUT="$(FLEET_BIN="$PR_FLEET_NF" AUTOPILOT_FLEET_TASK="$PR_PM_TASK" node "$SCRIPT" --repo-root "$PR_PM_REPO" --plan-file "$PR_PM_REPO/plan.md" --rubric-file "$PR_PM_REPO/rubric.md" --ticket "pm-nf-1" --session-id "pm-s3" --generation 1 --manifest-file "$CODEX_SHA_MANIFEST" --state-dir "$PR_PM_DIR/state3" --allow-unregistered 2>&1)"; PR_RC=$?
+assert_exit_code "$PR_RC" "2" "plan-review PM not_found Fleet-Task exits 2"
+
+TMPDIR="$CODEX_SHA_TMP" PATH="$CODEX_SHA_BIN:$PATH" WORKER_MOUNT_FORCE_MODE=no_root \
+AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_MS=0 AUTOPILOT_STABLE_POLLS=1 \
+FLEET_BIN="$PR_FLEET_OPEN" \
+  node "$SCRIPT" \
+    --repo-root "$PR_PM_REPO" --plan-file "$PR_PM_REPO/plan.md" --rubric-file "$PR_PM_REPO/rubric.md" \
+    --ticket "pm-open-1" --session-id "pm-s4" --generation 1 \
+    --manifest-file "$CODEX_SHA_MANIFEST" --state-dir "$PR_PM_DIR/state4" --timeout 30s \
+    --fleet-task "$PR_PM_TASK" --no-topology-fallbacks --allow-unregistered \
+  > "$PR_PM_DIR/open-out.json" 2> "$PR_PM_DIR/open.err"; PR_RC=$?
+assert_exit_code "$PR_RC" "0" "plan-review PM open Fleet-Task allows and succeeds (exits 0)"
+
 finalize_test

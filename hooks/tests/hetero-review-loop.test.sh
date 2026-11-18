@@ -2972,4 +2972,56 @@ fg_mutate fg6c 'for (const e of c) delete e.implementer_engine'
 fg_check fg6c >/dev/null; FG_F6_RC=$?
 assert_exit_code "$FG_F6_RC" "1" "famgate F6: a chain that records no implementer is red, not silently allowed"
 
+# ─── PM Console Fleet-Task gate on collect (Commit 1) ───
+HRL_TASK_ID="01M7R609WK44HJP629E6C93Q9N"
+HRL_PM_REPO="$TEST_TMP/hrl-pm-repo"
+mkdir -p "$HRL_PM_REPO"
+git -C "$HRL_PM_REPO" init -q
+git -C "$HRL_PM_REPO" config user.email "t@t"; git -C "$HRL_PM_REPO" config user.name "t"
+printf 'base\n' > "$HRL_PM_REPO/f.txt"
+git -C "$HRL_PM_REPO" add f.txt
+git -C "$HRL_PM_REPO" commit -q -m "base"
+HRL_BASE="$(git -C "$HRL_PM_REPO" rev-parse HEAD)"
+git -C "$HRL_PM_REPO" checkout -q -b work
+mkdir -p "$HRL_PM_REPO/.claude" "$HRL_PM_REPO/scripts"
+printf '{"schema":"autopilot.console/1","mode":"program"}\n' > "$HRL_PM_REPO/.claude/console.json"
+cp "$SCRATCH_REPO/scripts/dispatch-review.sh" "$HRL_PM_REPO/scripts/dispatch-review.sh"
+chmod +x "$HRL_PM_REPO/scripts/dispatch-review.sh"
+printf 'work\n' >> "$HRL_PM_REPO/f.txt"
+git -C "$HRL_PM_REPO" add f.txt
+git -C "$HRL_PM_REPO" commit -q -m "work"
+
+HRL_FLEET_OPEN="$TEST_TMP/hrl-fleet-open"
+HRL_FLEET_DONE="$TEST_TMP/hrl-fleet-done"
+HRL_FLEET_NF="$TEST_TMP/hrl-fleet-nf"
+printf '#!/usr/bin/env bash\nprintf '\''{"id":"%s","status":"open"}\\n'\'' "$3"\n' "$HRL_TASK_ID" > "$HRL_FLEET_OPEN"
+printf '#!/usr/bin/env bash\nprintf '\''{"id":"%s","status":"done"}\\n'\'' "$3"\n' "$HRL_TASK_ID" > "$HRL_FLEET_DONE"
+printf '#!/usr/bin/env bash\nprintf '\''{"error":"not_found"}\\n'\'' ; exit 1\n' > "$HRL_FLEET_NF"
+chmod +x "$HRL_FLEET_OPEN" "$HRL_FLEET_DONE" "$HRL_FLEET_NF"
+
+HRL_L="$TEST_TMP/hrl_pm_ledger"; mkdir -p "$HRL_L"
+HRL_SPEC_WITH_ID="$TEST_TMP/hrl_spec_id.md"
+printf 'Spec\nFleet-Task: %s\n' "$HRL_TASK_ID" > "$HRL_SPEC_WITH_ID"
+
+HRL_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$HRL_PM_REPO/scripts/dispatch-review.sh" FLEET_BIN="$HRL_FLEET_OPEN" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$HRL_PM_REPO" --ledger "$HRL_L" --phase p_miss --generation 1 --branch work --phase-base "$HRL_BASE" --seats "gpt-5/low@codex" 2>&1); HRL_RC=$?
+assert_exit_code "$HRL_RC" "2" "hrl collect PM missing id exits 2"
+assert_file_absent "$HRL_L/review-p_miss/g1" "hrl collect PM missing id creates no generation dir"
+
+HRL_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$HRL_PM_REPO/scripts/dispatch-review.sh" FLEET_BIN="$HRL_FLEET_DONE" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$HRL_PM_REPO" --ledger "$HRL_L" --phase p_done --generation 1 --branch work --phase-base "$HRL_BASE" --seats "gpt-5/low@codex" --fleet-task "$HRL_TASK_ID" 2>&1); HRL_RC=$?
+assert_exit_code "$HRL_RC" "2" "hrl collect PM done id exits 2"
+assert_file_absent "$HRL_L/review-p_done/g1" "hrl collect PM done creates no generation dir"
+
+HRL_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$HRL_PM_REPO/scripts/dispatch-review.sh" FLEET_BIN="$HRL_FLEET_NF" AUTOPILOT_FLEET_TASK="$HRL_TASK_ID" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$HRL_PM_REPO" --ledger "$HRL_L" --phase p_nf --generation 1 --branch work --phase-base "$HRL_BASE" --seats "gpt-5/low@codex" 2>&1); HRL_RC=$?
+assert_exit_code "$HRL_RC" "2" "hrl collect PM not_found id exits 2"
+assert_file_absent "$HRL_L/review-p_nf/g1" "hrl collect PM not_found creates no generation dir"
+
+HRL_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$HRL_PM_REPO/scripts/dispatch-review.sh" FLEET_BIN="$HRL_FLEET_OPEN" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$HRL_PM_REPO" --ledger "$HRL_L" --phase p_open --generation 1 --branch work --phase-base "$HRL_BASE" --seats "gpt-5/low@codex" --spec-file "$HRL_SPEC_WITH_ID" 2>&1); HRL_RC=$?
+assert_exit_code "$HRL_RC" "0" "hrl collect PM open id from spec-file allows (exits 0)"
+
+HRL_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$HRL_PM_REPO/scripts/dispatch-review.sh" FLEET_BIN="/nonexistent/missing-fleet-hrl" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$HRL_PM_REPO" --ledger "$HRL_L" --phase p_unavail --generation 1 --branch work --phase-base "$HRL_BASE" --seats "gpt-5/low@codex" --fleet-task "$HRL_TASK_ID" 2>&1); HRL_RC=$?
+assert_exit_code "$HRL_RC" "0" "hrl collect PM missing FLEET_BIN fails open (exits 0)"
+
+HRL_OUT=$(AUTOPILOT_DISPATCH_REVIEW_SCRIPT="$HRL_PM_REPO/scripts/dispatch-review.sh" FLEET_BIN="$HRL_FLEET_DONE" AUTOPILOT_PARENT_RUN_ID="parent-r1" node "$SCRIPT" collect --implementer-engine claude-sonnet-5 --repo-root "$HRL_PM_REPO" --ledger "$HRL_L" --phase p_inh --generation 1 --branch work --phase-base "$HRL_BASE" --seats "gpt-5/low@codex" 2>&1); HRL_RC=$?
+assert_exit_code "$HRL_RC" "0" "hrl collect PM AUTOPILOT_PARENT_RUN_ID inherited (exits 0)"
+
 finalize_test

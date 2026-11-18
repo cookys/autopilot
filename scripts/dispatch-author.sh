@@ -169,7 +169,8 @@ if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || tru
 
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 ROLE_KIT_DIR=""   # --role-kit (lib/role-kit.sh)
-RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; BIN=""; ENDPOINT=""
+RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; BIN=""; BIN_SUPPLIED=0; ENDPOINT=""
+FLEET_TASK_ARG=""; AUTHOR_FLEET_TASK_ID=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
 POLARITY_RECEIPT=""; REQUIRE_POLARITY_RECEIPT=0; POLARITY_RECEIPT_DIGEST=""
@@ -189,7 +190,8 @@ while [[ $# -gt 0 ]]; do
     --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; EFFORT_EXPLICIT=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --role-kit)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--role-kit requires a non-empty directory path" >&2; exit 2; }; ROLE_KIT_DIR="$2"; shift 2 ;;
-    --bin)         BIN="${2:-}"; shift 2 ;;
+    --bin)         BIN="${2:-}"; BIN_SUPPLIED=1; shift 2 ;;
+    --fleet-task)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--fleet-task requires a non-empty value" >&2; exit 2; }; FLEET_TASK_ARG="$2"; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
     --run-id)      RUN_ID="${2:-}"; shift 2 ;;
@@ -542,6 +544,12 @@ emit_result() {
       --run-id "${AUTHOR_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
       --started-at "${AUTHOR_STARTED_EPOCH:-}" --endpoint "${ENDPOINT:-}" \
       --provider-session-id "${CHILD_SESSION_ID:-}" || true
+    if [ -n "${AUTHOR_FLEET_TASK_ID:-}" ]; then
+      local _ft_log="-"
+      [ -n "$raw_log" ] && [ "$raw_log" != "null" ] && _ft_log="$raw_log"
+      node "$_AUTHOR_SELF_DIR/lib/fleet-task-ref.js" progress "$AUTHOR_FLEET_TASK_ID" \
+        "[dispatch:${_au_role}] ${AUTHOR_RUN_ID:-unknown} ${status} sha=- log=${_ft_log}" >/dev/null 2>&1 || true
+    fi
   fi
   exit "$exit_code"
 }
@@ -946,6 +954,26 @@ if [[ "$RUNNER" = "cursor" ]]; then
   cursor_is_family_alias "$MODEL" && die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models"
 fi
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
+# PM Console hard block: before any runner probe/launch, require open Fleet-Task unless exempt.
+_pm_repo="${REPO_ROOT:-}"
+if [ -z "$_pm_repo" ]; then
+  _pm_repo="$(git rev-parse --show-toplevel 2>/dev/null || pwd -P 2>/dev/null || true)"
+fi
+_pm_out_err="$(mktemp -t dispatch-author-pm-XXXXXX)"
+if _pm_resolved="$(node "$_AUTHOR_SELF_DIR/lib/fleet-task-ref.js" pm-check \
+    --repo-root "${_pm_repo:-$PWD}" \
+    ${FLEET_TASK_ARG:+--fleet-task "$FLEET_TASK_ARG"} \
+    --prompt-file "$PROMPT_FILE" \
+    --bin-stub "${BIN_SUPPLIED:-0}" 2>"$_pm_out_err")"; then
+  if [ -s "$_pm_out_err" ]; then cat "$_pm_out_err" >&2 || true; fi
+  [ -n "$_pm_resolved" ] && [ -z "${FLEET_TASK_ARG:-}" ] && FLEET_TASK_ARG="$_pm_resolved"
+  rm -f "$_pm_out_err" 2>/dev/null || true
+else
+  _pm_msg="$(tr '\n' ' ' < "$_pm_out_err" 2>/dev/null | sed 's/[[:space:]]*$//')"
+  rm -f "$_pm_out_err" 2>/dev/null || true
+  die_precondition "${_pm_msg:-PM Console requires an open Fleet-Task}"
+fi
+unset _pm_repo _pm_out_err _pm_resolved _pm_msg
 # d-1dfcf757 / 01M7E2A1: Chinese-model dispatch gate (barred family blocked for transcript, sensitive, core, novel or unknown-scope/size/role tasks).
 _tfg_msg="$(node "$_AUTHOR_SELF_DIR/lib/cn-model-dispatch-gate.js" check --role author --runner "$RUNNER" --model "$MODEL" ${ENDPOINT:+--endpoint "$ENDPOINT"} --prompt-file "$PROMPT_FILE" 2>&1 >/dev/null)" \
   || die_precondition "${_tfg_msg:-cn_model_dispatch_barred unknown unknown (01M7E2A1, d-1dfcf757)}"
@@ -1090,7 +1118,9 @@ RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
 AUTHOR_RUN_ID="${RUN_ID:-}"
 [ -n "$AUTHOR_RUN_ID" ] || AUTHOR_RUN_ID="author-$(date +%s)-$$"
 PROMPT_FILE_ORIG="${PROMPT_FILE_ORIG:-$PROMPT_FILE}"
+AUTHOR_FLEET_TASK_ID="$(node "$_AUTHOR_SELF_DIR/lib/fleet-task-ref.js" resolve-parent ${FLEET_TASK_ARG:+--fleet-task "$FLEET_TASK_ARG"} --prompt-file "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" 2>/dev/null || true)"
 declare -F dispatch_export_attribution >/dev/null 2>&1 && dispatch_export_attribution "${PROMPT_FILE_ORIG:-$PROMPT_FILE}" # child cost rows inherit lane + fleet task
+[ -z "${AUTHOR_FLEET_TASK_ID:-}" ] || export AUTOPILOT_FLEET_TASK="$AUTHOR_FLEET_TASK_ID"
 # Lineage — same env names as dispatch-hetero.sh. parent/root JSON null and depth 0
 # when the corresponding env is unexported; with a parent, root falls back to parent.
 LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
@@ -1360,6 +1390,10 @@ if [ "${AUTOPILOT_DISPATCH_USAGE:-}" != "off" ]; then
     --run-id "${AUTHOR_RUN_ID:-}" --parent-run-id "${LINEAGE_PARENT:-}" --root-run-id "${LINEAGE_ROOT:-}" \
     --started-at "${AUTHOR_STARTED_EPOCH:-}" --runner "$RUNNER" --model "$MODEL" --endpoint "${ENDPOINT:-}" \
     --provider-session-id "${CHILD_SESSION_ID:-}" || true
+fi
+if [ -n "${AUTHOR_FLEET_TASK_ID:-}" ]; then
+  node "$_AUTHOR_SELF_DIR/lib/fleet-task-ref.js" progress "$AUTHOR_FLEET_TASK_ID" \
+    "[dispatch:${AUTOPILOT_DISPATCH_ROLE:-author}] ${AUTHOR_RUN_ID:-unknown} start" >/dev/null 2>&1 || true
 fi
 
 # Mount isolation (01M7E4JC): refuse before any other runner process spawns (after the manifest exists, so it records

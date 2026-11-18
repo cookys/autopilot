@@ -211,12 +211,9 @@ function contentText(content) {
 
 // ---- transcript parsing --------------------------------------------------------------------------------------------
 
-function parseTranscript(file, metaFile) {
-  const { parseAssistantTurns, costOf } = require('./cost-tracker-lib.js');
-  const raw = fs.readFileSync(file, 'utf8'); // EACCES etc. throw => fail-open
+function firstUserFromLines(lines) {
   let valid = 0;
   let firstUser = null;
-  const lines = raw.split('\n');
   for (const line of lines) {
     if (!line.trim()) continue;
     let rec;
@@ -225,6 +222,19 @@ function parseTranscript(file, metaFile) {
     valid += 1;
     if (firstUser === null && rec.type === 'user' && rec.message) firstUser = contentText(rec.message.content);
   }
+  return { valid, firstUser };
+}
+
+function firstUserMessage(file) {
+  const raw = fs.readFileSync(file, 'utf8');
+  return firstUserFromLines(raw.split('\n')).firstUser || '';
+}
+
+function parseTranscript(file, metaFile) {
+  const { parseAssistantTurns, costOf } = require('./cost-tracker-lib.js');
+  const raw = fs.readFileSync(file, 'utf8'); // EACCES etc. throw => fail-open
+  const lines = raw.split('\n');
+  const { valid, firstUser } = firstUserFromLines(lines);
   if (raw.trim() && valid === 0) throw new Error(`corrupt transcript: ${path.basename(file)}`);
   const head = firstUser || '';
   const briefLane = laneFromBrief(head);
@@ -592,7 +602,7 @@ function run(payload) {
   });
 }
 
-module.exports = { run, collect, withLanes, tally, resolveDir, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, isReviewer, isEngineBrief };
+module.exports = { run, collect, withLanes, tally, resolveDir, contentText, firstUserMessage, laneOf, laneFromBrief, laneFromDescription, ackFromBrief, isReviewer, isEngineBrief };
 
 if (require.main === module) {
   try {

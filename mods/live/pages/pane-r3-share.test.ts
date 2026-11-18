@@ -77,9 +77,10 @@ test('V1: narrow quota labels percentages and focused verdict; one row keeps bot
   const table = frameRows(quotaPage, ctx(80, 8, con)).map(text)
   const c = table.find(r => r.includes('C 池') && r.includes('31%'))
   expect(c).toBeDefined()
-  expect(c).toContain('7天 31%✗')
-  expect(c).toContain('5時 0%✗')
-  expect(c).toContain('預 47%✗')
+  expect(c).toContain('31%✗') // R4-2: this table has a header; compact headerless rows retain labels.
+  expect(c).toContain('0%✗')
+  expect(c).not.toContain('7天')
+  expect(c).toContain('47%✗')
   expect(c).toContain('+0.3%/時✗') // V1: label values without dropping existing rate/reset facts.
   expect(c).toContain('週五06')
   const compact = frameRows(quotaPage, ctx(80, 5, con)).map(text).join('\n')

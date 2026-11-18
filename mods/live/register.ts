@@ -34,6 +34,7 @@
 // $.session.id() is read on EVERY tick: /clear gives the session a new id while the timer keeps running (S7).
 // Every clock comparison uses $.clock.now(), so a test with a mocked clock decides fresh / stale.
 
+import { probePane } from './pane-probe'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { newTracker, parseAdvisories, takeNew } from './advisories'
@@ -1858,7 +1859,11 @@ export function registerLive(on: Parameters<Register>[0]): void {
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     const legacy = (e.props as { legacyTabs?: boolean }).legacyTabs === true
-    if (consoleOn && legacy) return consolePaneOf($, e)
+    if (consoleOn && legacy) {
+      const tree = await consolePaneOf($, e)
+      await probePane($, e, tree)
+      return tree
+    }
     hostScrollHome($, e.props.scroll, paneTab)
     decideCols = paneWidth(e.props.bodyColumns)
     decideInputs = inputsFor(e.surface)
@@ -1868,7 +1873,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const fleet = await fleetFor($)
     const frameNow = legacy ? 0 : await $.clock.now()
     const epoch = legacy ? 0 : syncPanePlacement($, e.props.placement, e.props.isFocused)
-    return Pane(
+    const tree = Pane(
       $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
       () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') },
       expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') },
@@ -1877,6 +1882,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
       decideScroll, fleet, null,
       legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}) },
     )
+    await probePane($, e, tree)
+    return tree
   })
 
   // All live and console tabs share the bottom window; scroll keys move its

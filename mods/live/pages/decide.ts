@@ -311,6 +311,15 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
   const total = m.all.length
   const hasOwn = cur !== undefined && cur.kind === 'own'
 
+  // R4-3: like fleet/quota, the only content slot carries the focused fact, not controls.
+  const available = ctx.size.rows - 1 - (ctx.size.cols < STRIP_SPLIT_COLS ? 2 : 1)
+  if (available === 1 && cur !== undefined) {
+    const title = cur.kind === 'own' ? cur.d.title ?? cur.d.question : cur.c.question
+    const age = ageOf(ctx, cur.kind === 'own' ? openedMs(cur.d, ctx) : cur.c.opened_at_ms)
+    const position = t('page.decide.position', { n: cursor + 1, total })
+    return { body: [], actions: [leftRight([seg(GLYPHS.structure.folded + ' ', { color: PALETTE.here }), seg(title)], position + (age === '' ? '' : ' · ' + age), ctx.size.cols)] }
+  }
+
   if (cur === undefined) {
     if (!noPendingSrc && ctx.live !== null) body.push([seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.none_cards'))])
   } else {

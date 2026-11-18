@@ -60,8 +60,18 @@ test('Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, 
     const firstPool = out.findIndex(r => r.includes('31%'))
     const head = out.findIndex(r => r.includes('7 天') && r.includes('5 時') && r.includes('預測'))
     expect(firstPool).toBeGreaterThanOrEqual(0)
-    expect(head, 'one compact header before the percentages').toBeGreaterThanOrEqual(0)
-    expect(head).toBeLessThan(firstPool)
+    if (shortBody) {
+      // R4-2: headerless compact rows own their labels; headed tables do not repeat them.
+      expect(head).toBe(-1)
+      expect(out[firstPool]).toContain('7天 31%✗')
+      expect(out[firstPool]).toContain('5時 0%✗')
+      expect(out[firstPool]).toContain('預 47%✗')
+    } else {
+      expect(head, 'one header before the percentages').toBeGreaterThanOrEqual(0)
+      expect(head).toBeLessThan(firstPool)
+      expect(out[firstPool]).not.toContain('7天')
+      expect(out[firstPool]).not.toContain('5時')
+    }
   }
 })
 

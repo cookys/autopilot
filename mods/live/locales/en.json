@@ -682,6 +682,7 @@
   "page.decide.nosrc_console": "this account has no console snapshot",
   "page.decide.nosrc_live": "this seat's decision data has no source",
   "page.decide.note_ph": "(press n to write a note; it is sent with the answer)",
+  "page.decide.position": "Card {n}/{total}",
   "page.decide.old": " (old card, {n} options)",
   "page.decide.opt_n": "option {n}: {label}",
   "page.decide.sec_far": "Other seats (read-only)",

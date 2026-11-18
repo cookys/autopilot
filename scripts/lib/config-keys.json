@@ -3158,6 +3158,20 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_MODS_PANE_PROBE",
+      "kind": "env",
+      "audience": "user",
+      "group": "ui",
+      "default": null,
+      "readers": [
+        "mods/live/pane-probe.ts"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Optional JSONL output path for each live Pane render: host placement/bodyRows, returned rows, final-row tabs and terminal size. Unset or empty performs no probe file I/O.",
+      "type": "string"
+    },
+    {
       "name": "AUTOPILOT_MODS_REAL_CLAUDE",
       "kind": "env",
       "audience": "internal",

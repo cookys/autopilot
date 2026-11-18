@@ -524,6 +524,7 @@ Set by the layer, not by you: `AUTOPILOT_ACCOUNT` (the alias a child runs as). T
 |---|---|---|---|
 | `ui.locale` (config.json) | Language of the live band and pane: "en", "zh-TW" or "auto" (follow Claude Code). | auto | `AUTOPILOT_LOCALE`: en or zh-TW; used when ui.locale is auto or absent. |
 | `review.port` (config.json) | Port of the local review page server (bound to 127.0.0.1 only). A busy port is reported, never replaced. | `8787` | `AUTOPILOT_REVIEW_SERVER_AUTOSTART`: Set to "0" to stop the runs watcher from starting the review page server. |
+| `AUTOPILOT_MODS_PANE_PROBE` | 設為 JSONL 檔案路徑，逐次記錄 live Pane 的 host 配置、正文配給、回傳列數與末列分頁狀態；未設定或空字串不做探針檔案 I/O。啟用與截圖核對方式見 [W1 探針](../../mods/live/docs/w1-host-row.md#r4-5真機-host-props-opt-in-探針)。 | unset |  |
 | `AUTOPILOT_RUNS_WATCH_AUTOSTART` | Set to "0" (or false, off, no) to stop sessions from starting the live runs watcher. | on |  |
 | `AUTOPILOT_CARD_NOTIFY` | Set to "off" (or 0, false, no) to stop `open-decision.js` from sending the card open/close notice to the program PM. | on |  |
 | `AUTOPILOT_CARD_NOTIFY_TO` | Fleet address (`namespace/courier/member`, e.g. `example/host-a/pm--claude`) that receives the card open/close notice. No default: unset or empty sends nothing (environment variable only; set it per host, never in the repo); "off" or "none" also sends nothing. | unset |  |

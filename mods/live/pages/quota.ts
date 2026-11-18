@@ -78,7 +78,19 @@ function fitCellR(text: string, w: number): string {
   return padR(fitted, w)
 }
 
-function clipRowPlain(row: Row, cols: number): Row {
+// R4-2: words and percentage numbers are atomic; a partial value must never look complete.
+function clipVerdict(text: string, cols: number): string {
+  if (displayWidth(text) <= cols) return text
+  if (cols <= 0) return ''
+  let out = ''
+  for (const token of text.match(/\d+(?:\.\d+)?%?|[A-Za-z]+|[\p{Script=Han}]+|./gu) ?? []) {
+    if (displayWidth(out + token) > cols - 1) break
+    out += token
+  }
+  return out.trimEnd() + '…'
+}
+
+function clipRowPlain(row: Row, cols: number, verdict = false): Row {
   if (cols <= 0) return [{ text: '' }]
   const out: Row = []
   let used = 0
@@ -86,7 +98,7 @@ function clipRowPlain(row: Row, cols: number): Row {
     const w = displayWidth(s.text)
     if (used + w <= cols) { out.push(s); used += w; continue }
     const room = cols - used
-    if (room > 0) out.push({ ...s, text: clipPlain(s.text, room) })
+    if (room > 0) out.push({ ...s, text: verdict && s === row[row.length - 1] ? clipVerdict(s.text, room) : clipPlain(s.text, room) })
     break
   }
   return out.length === 0 ? [{ text: '' }] : out
@@ -135,6 +147,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   if (q.pools === null || q.pools.length === 0) return { body: [brokenRow(bad + ' ' + t('page.quota.no_pools'))], actions: [] }
   const tier = tierOf(cols)
   const c = COLS[tier]
+  const inlineLabels = tier === 'narrow' && ctx.shortBody === true // R4-2: only headerless compact rows need per-cell labels.
   const dows = t('page.quota.dow').split(' ')
   const paceOk = ctx.console.sources.quota_forecast?.state === 'ok'
   // normalizedPools (quota-pick.ts) is the one place that drops projections without a forecast source, folds seat_blocked, and deduplicates by pool_key (R1)
@@ -171,7 +184,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
 
   }
 
-  { // Y4: the percentage columns keep one compact header, even without section chrome.
+  if (!inlineLabels) { // R4-2: table headers own the labels; compact rows label themselves.
     const head: string[] = ['    ' + padR(t('page.quota.col_pool'), c.pool)]
     const short = tier === 'narrow'
     head.push(numCell(t(short ? 'page.quota.col_7d_s' : 'page.quota.col_7d'), false, c.d7), numCell(t(short ? 'page.quota.col_5h_s' : 'page.quota.col_5h'), false, c.h5))
@@ -182,11 +195,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
       if (tier === 'wide') head.push(padR(t('page.quota.col_exh'), c.exh), padR(t('page.quota.col_seats'), c.seats))
     }
     head.push(verdictHead)
-    const narrowHead = '    ' + t('page.quota.col_pool') + ' · ' + t('page.quota.col_7d_s') + ' · ' + t('page.quota.col_5h_s')
-      + (paceOk ? ' · ' + t('page.quota.col_proj') : '')
-      + (showReset ? ' · ' + t('page.quota.col_reset_s') : '')
-      + (showBurn ? ' · ' + t('page.quota.col_burn', { h }) : '') + ' · ' + verdictHead
-    headerRows.push(clipRowPlain([{ text: tier === 'narrow' ? narrowHead : head.join(''), dim: true }], cols))
+    headerRows.push(clipRowPlain([{ text: head.join(''), dim: true }], cols))
   }
 
   // exactly one row per pool at every width; R4: unknown pools use `?` icon with warning colour role; R10: rate carries `%/時`
@@ -213,7 +222,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
       }
     }
     // V1: narrow rows carry their own column names when the header gives way.
-    if (tier === 'narrow') {
+    if (inlineLabels) {
       row.splice(3)
       row.push(mark(t('page.quota.col_7d_s').replace(/ /g, '') + ' ' + pct(p.seven_day_pct, isStale) + ' · '),
         mark(t('page.quota.col_5h_s').replace(/ /g, '') + ' ' + pct(p.five_hour_pct, isStale)))
@@ -224,8 +233,8 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
       if (!isStale) row.push(seg(' · ' + svs[i], roleColor(v.role)))
     }
     const press = 'quota:pool:' + i // the whole row is one Button: it focuses this pool and shows / folds its seats
-    if (tier !== 'narrow') row.push(seg(svs[i], roleColor(v.role)))
-    return clipRowPlain(row.map(sg => ({ ...sg, press })), cols)
+    if (!inlineLabels) row.push(seg(svs[i], roleColor(v.role)))
+    return clipRowPlain(row.map(sg => ({ ...sg, press })), cols, true)
   })
 
   // the focused pool's detail carries the full verdict text (R5: reserved whole before non-focused pools can push it into `↓ 還有 N 列`)

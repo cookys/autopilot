@@ -86,7 +86,7 @@ for (const [cols, rows] of [[120, 30], [160, 40]]) for (const open of [false, tr
     expect(summary).toContain('✗')
     expect(summary).toContain('12 分')
     expect(summary).toContain('watcher 沒有在發佈')
-    expect(summary).toContain('autopilot status runs --watch')
+    expect(open ? text(tree) : summary).toContain('autopilot status runs --watch') // R4-1: open-pane repairs occupy band row 2.
     expect(displayWidth(summary)).toBeLessThanOrEqual(cols - 4)
     expect(walk(tree.children?.[0]).some(n => n.props?.color === PALETTE.broken)).toBe(true)
     expect(tree.children?.filter(n => n?.type === 'Box').length).toBe(2)

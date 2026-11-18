@@ -682,6 +682,7 @@
   "page.decide.nosrc_console": "此帳號沒有 console 快照",
   "page.decide.nosrc_live": "本席待決資料無來源",
   "page.decide.note_ph": "（按 n 寫補充，會跟答案一起送）",
+  "page.decide.position": "第 {n} 張／共 {total} 張",
   "page.decide.old": "（舊卡，{n} 個選項）",
   "page.decide.opt_n": "第 {n} 項：{label}",
   "page.decide.sec_far": "別台（唯讀）",

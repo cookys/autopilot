@@ -93,7 +93,7 @@ function staleLiveReason(snap: LiveSnapshot, t: T): string {
 }
 
 // the band's own cells (the line and the ⓘ), and the width they take
-function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, sourceFailure: Seg | null = null): { nodes: unknown[]; width: number } {
+function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, sourceFailure: Seg | null = null, repairInline = true): { nodes: unknown[]; width: number } {
   const { Text, Button } = el
   const extra = displayWidth(infoLabel) - displayWidth(BAND_INFO_LABEL)
   // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
@@ -103,7 +103,7 @@ function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | 
   // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + ⓘ), never preset.width on its own.
   const segW = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
   if (sourceFailure !== null) {
-    const line = plainBandText(sourceFailure.text + ' · autopilot status runs --watch', columns - extra) + BAND_SEP
+    const line = plainBandText(sourceFailure.text + (repairInline ? ' · autopilot status runs --watch' : ''), columns - extra) + BAND_SEP
     return { nodes: [<Text key="w" {...drawSeg(sourceFailure)} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
   }
   if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: fittedBandWidth(segW(preset.segs), null, false) + extra }
@@ -112,7 +112,7 @@ function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | 
     // X4: replace the redundant publication clock with an age, keeping the
     // complete cause and repair command in the summary's reclaimed cells.
     if (!legacyTabs && snap?.state === 'stale') {
-      reason = GLYPHS.state.failed + ' ' + staleLiveReason(snap, t) + ' · autopilot status runs --watch'
+      reason = GLYPHS.state.failed + ' ' + staleLiveReason(snap, t) + (repairInline ? ' · autopilot status runs --watch' : '')
     }
     const line = plainBandText(reason, columns - extra) + BAND_SEP
     return { nodes: [<Text key="w" {...(!legacyTabs && snap?.state === 'stale' ? drawSeg(staleBadge(line)) : dimProps())} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
@@ -143,9 +143,9 @@ export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, sou
 
 export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
-  // U1: a caller may have fitted the preset to the old one-row tab budget.
-  // The two-row band has room for the fleet's section name at these widths.
-  if (!legacyTabs && columns >= 120 && preset !== null && preset.segs.some(s => s.slot === 'fleet') && !preset.segs.some(s => s.slot === 'fleet' && s.tag === 'fleetWord')) {
+  // R4-4: the host may reduce band columns beside an open pane; the terminal's
+  // width is not this budget. A visible fleet group always keeps its name.
+  if (!legacyTabs && preset !== null && preset.segs.some(s => s.slot === 'fleet') && !preset.segs.some(s => s.slot === 'fleet' && s.tag === 'fleetWord')) {
     const at = preset.segs.findIndex(s => s.slot === 'fleet')
     const label = slotFleet({ stuck: 0, running: 0, waiting: 0 }, t)!.segs.filter(s => s.tag === 'fleetWord').map(s => ({ ...s, slot: 'fleet' as const }))
     preset = { segs: [...preset.segs.slice(0, at), ...label, ...preset.segs.slice(at)], width: preset.width + label.reduce((n, s) => n + displayWidth(s.text), 0) }
@@ -186,7 +186,9 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   // the `[-]` cell): the stale reason and its whole fix command (`autopilot status runs --watch`) are never cut while blank cells are left. M6: the open Button says what it opens.
   if (sourceFailure !== null || (!legacyTabs && snap?.state === 'stale')) quota = null
   const leftRoom = legacyTabs && con === null ? columns - (oldStrip as BarStrip).width - 1 - forgeW - moreW : columns - BAND_CLOSE_ROOM - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2)
-  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, sourceFailure)
+  // R4-1: the open pane owns navigation; its spare band row holds the repair whole.
+  const repairBelow = noTabs && !legacyTabs && (sourceFailure !== null || snap?.state === 'stale')
+  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, sourceFailure, !repairBelow)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
   void segW
@@ -211,7 +213,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const qw = quota === null ? 0 : displayWidth(quota.text)
   const qpad = quota === null ? 0 : columns - left.width - forgeW - qw
   const qnode = quota === null || qpad < 2 ? [] : [<Text key="[REDACTED]">{' '.repeat(qpad)}</Text>, <Text key="[REDACTED]" {...drawSeg(quota)} wrap="truncate">{quota.text}</Text>]
-  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}</Box>{noTabs ? <Box height={1} width={columns} /> : stripRow}</Box>, stripRow, strip, tabsAt: gap }
+  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}</Box>{repairBelow ? <Box height={1} width={columns}><Text {...drawSeg(staleBadge('  autopilot status runs --watch'))}>{'  autopilot status runs --watch'}</Text></Box> : noTabs ? <Box height={1} width={columns} /> : stripRow}</Box>, stripRow, strip, tabsAt: gap }
 }
 
 // the rule under the bar

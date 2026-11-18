@@ -4,9 +4,9 @@
 import { test, expect } from 'claude-code/testing'
 import { PAGES } from './index'
 import { frameRows, actionRows, staleBadge as frameBadge, brokenRow as frameBroken } from './frame'
-import type { Page, PageCtx } from './frame'
+import type { PageCtx } from './frame'
 import { dispatchPage, dispatchView, DEFAULT_VIEW } from './dispatch'
-import type { DispatchView } from './dispatch'
+import type { DispatchCtx, DispatchView } from './dispatch'
 import { brokenRow, staleBadge } from './rows'
 import { FOCUS_ANCHOR_KEY, Pane, pageHotkeys } from '../pane'
 import { EN, ZH_TW } from '../locales'
@@ -102,18 +102,14 @@ const ctxOf = (cols: number, rows: number, live: LiveSnapshot | null, console: C
   nowMs: NOW,
 })
 
-const viewPage = (view: DispatchView): Page => ({
-  ...dispatchPage,
-  render: c => dispatchView(c, view),
-})
+const withView = (ctx: PageCtx, view?: DispatchView): DispatchCtx => (view === undefined ? ctx : { ...ctx, dispatch: view })
 
 const drawn = (cols: number, rows: number, live: LiveSnapshot | null, view?: DispatchView, console: ConsoleSnapshot | null = CALM_CONSOLE): string[] => {
-  const page = view === undefined ? dispatchPage : viewPage(view)
-  const ctx = ctxOf(cols, rows, live, console)
-  const out = frameRows(page, ctx, { pages: PAGES })
+  const ctx = withView(ctxOf(cols, rows, live, console), view)
+  const out = frameRows(dispatchPage, ctx, { pages: PAGES })
   expect(out.length, `${cols}x${rows} fixed height`).toBe(rows)
   expect(text(out[out.length - 1]), `${cols}x${rows} strip last`).toMatch(/1\D*2\D*3\D*4\D*5/)
-  const acts = Math.max(1, page.render(ctx).actions.length)
+  const acts = Math.max(1, dispatchPage.render(ctx).actions.length)
   return closeGap(out.slice(0, -1).map(text), acts)
 }
 
@@ -257,7 +253,9 @@ test('dispatch: fixed height H, actions <= A, row width <= cols, strip last acro
     ['aged-out >6h becomes empty', liveOf(agedOut), undefined, CALM_CONSOLE],
     ['only running', liveOf([WIDE_RUNS[0]]), undefined, CALM_CONSOLE],
     ['only finished', liveOf(WIDE_RUNS.slice(1)), undefined, CALM_CONSOLE],
+    ['only finished folded', liveOf(WIDE_RUNS.slice(1)), { focus: 0, expanded: false }, CALM_CONSOLE],
     ['active foreman', liveOf([WIDE_RUNS[0]], {}, activeForeman), undefined, CALM_CONSOLE],
+    ['active foreman + finished folded', liveOf(WIDE_RUNS, {}, activeForeman), { focus: 0, expanded: false }, CALM_CONSOLE],
     ['foreman only', liveOf([], {}, activeForeman), undefined, CALM_CONSOLE],
     ['30 finished overflow', liveOf(manyFinished), undefined, CALM_CONSOLE],
     ['null live', null, undefined, null],
@@ -270,11 +268,10 @@ test('dispatch: fixed height H, actions <= A, row width <= cols, strip last acro
   for (const [cols, rows] of [[160, 40], [120, 30], [80, 24], [80, 7]] as const) {
     for (const loc of ['zh-TW', 'en'] as const) {
       for (const [name, live, view, con] of states) {
-        const page = view === undefined ? dispatchPage : viewPage(view)
-        const ctx = ctxOf(cols, rows, live, con, loc)
-        const out = frameRows(page, ctx, { pages: PAGES })
+        const ctx = withView(ctxOf(cols, rows, live, con, loc), view)
+        const out = frameRows(dispatchPage, ctx, { pages: PAGES })
         if (out.length !== rows) bad.push(`${loc}:${name}@${cols}x${rows}=${out.length}`)
-        if (page.render(ctx).actions.length > actionRows(rows)) bad.push(`${loc}:${name}@${cols}x${rows}:actions`)
+        if (dispatchPage.render(ctx).actions.length > actionRows(rows)) bad.push(`${loc}:${name}@${cols}x${rows}:actions`)
         for (const r of out) {
           if (displayWidth(r.map(s => s.text).join('')) > cols) bad.push(`${loc}:${name}@${cols}x${rows}:width`)
         }
@@ -294,6 +291,125 @@ test('dispatch: fixed height H, actions <= A, row width <= cols, strip last acro
     expect(over[rows - 3]).toMatch(/^↓ 還有 \d+ 列$/)
     expect(over[rows - 2]).toBe('[z] 收合已完成')
   }
+})
+
+test('dispatch [short-body-foreman-loss]: shortBody appends active foreman rows even when run rows are rendered and lets frameRows handle overflow', () => {
+  const activeForeman: ForemanView = {
+    binding: 'session',
+    agents: [
+      { id: 'fm-1', description: 'b2-foreman', label: 'foreman', at_ms: NOW - 2 * MIN, age_s: 120, stale: false, stamped: true, ended: false },
+      { id: 'fm-2', description: 'stalled-foreman', label: 'foreman', at_ms: NOW - 12 * MIN, age_s: 720, stale: true, stamped: true, ended: false },
+    ],
+    stage: 'implement',
+    stage_source: 'marker',
+    stage_at_ms: NOW - 5 * MIN,
+    stage_age_s: 300,
+  }
+
+  const oneRunWithForeman = liveOf([NARROW_RUNS[0]], {}, activeForeman)
+  const shortNarrow = dispatchPage.render({ ...ctxOf(80, 7, oneRunWithForeman), shortBody: true })
+  expect(shortNarrow.actions).toEqual([])
+  expect(shortNarrow.body.map(text)).toEqual([
+    '▸● console-source hand sonnet 23分',
+    ' ● b2-foreman 2分前',
+    ' ⊘ stalled-foreman 12分前',
+    ' 階段 implement · 5分前',
+  ])
+
+  // Real dispatchPage render path through frameRows at 80x7 and 120x7 (auto shortBody when room <= 4)
+  const framed80x7 = frameRows(dispatchPage, ctxOf(80, 7, oneRunWithForeman), { pages: PAGES }).map(text)
+  expect(framed80x7.length).toBe(7)
+  expect(framed80x7.slice(1, 5)).toEqual([
+    '▸● console-source hand sonnet 23分',
+    ' ● b2-foreman 2分前',
+    ' ⊘ stalled-foreman 12分前',
+    ' 階段 implement · 5分前',
+  ])
+  expect(framed80x7[5]).toBe('沒有要你處理的事')
+
+  const framed120x7 = frameRows(dispatchPage, ctxOf(120, 7, oneRunWithForeman), { pages: PAGES }).map(text)
+  expect(framed120x7.length).toBe(7)
+  expect(framed120x7.slice(1, 5)).toEqual([
+    '▸ ● console-source            hand        sonnet           23 分    1 分前',
+    '  ● b2-foreman · foreman · 2 分前',
+    '  ⊘ stalled-foreman · foreman · 12 分前 · 久未動',
+    '  階段 implement · 5 分前',
+  ])
+
+  // When running + foreman rows exceed shortBody room, foreman rows stay appended in body so frameRows owns overflow/scroll
+  const threeRunning = [
+    runRow({ run_id: 'run-alpha', role: 'hand', runner: 'sonnet', elapsed_s: 5 * 60, probe_age_s: 30 }),
+    runRow({ run_id: 'run-beta', role: 'reviewer', runner: 'codex', model: 'astra', elapsed_s: 10 * 60, probe_age_s: 30 }),
+    runRow({ run_id: 'run-gamma', role: 'implementer', runner: 'agy', model: 'carbon', elapsed_s: 15 * 60, probe_age_s: 30 }),
+  ]
+  const manyWithForeman = liveOf(threeRunning, {}, activeForeman)
+  const shortOverflow = dispatchPage.render({ ...ctxOf(80, 7, manyWithForeman), shortBody: true })
+  expect(shortOverflow.body.length).toBe(6)
+  expect(shortOverflow.body.slice(3).map(text)).toEqual([
+    ' ● b2-foreman 2分前',
+    ' ⊘ stalled-foreman 12分前',
+    ' 階段 implement · 5分前',
+  ])
+  const scrolled80x7 = frameRows(dispatchPage, ctxOf(80, 7, manyWithForeman), { pages: PAGES, scroll: 2 }).map(text)
+  expect(scrolled80x7.length).toBe(7)
+  expect(scrolled80x7.slice(1, 5)).toEqual([
+    ' ● run-gamma implementer agy/carbon 15分',
+    ' ● b2-foreman 2分前',
+    ' ⊘ stalled-foreman 12分前',
+    ' 階段 implement · 5分前',
+  ])
+})
+
+test('dispatch [short-body-false-empty]: shortBody renders recent finished runs when expanded=false instead of a false empty state', () => {
+  const onlyFinished = liveOf(NARROW_RUNS.slice(1))
+
+  const direct = dispatchView({ ...ctxOf(80, 7, onlyFinished), shortBody: true }, { focus: 1, expanded: false })
+  expect(direct.actions).toEqual([])
+  expect(direct.body.map(text)).toEqual([
+    ' ✓ astra g1 reviewer 18分 5時前',
+    '▸✓ carbon g1 reviewer 21分 5時前',
+    ' ✓ inventory explore 1分 4分前',
+  ])
+
+  const framed80x7 = frameRows(
+    dispatchPage,
+    withView(ctxOf(80, 7, onlyFinished), { focus: 0, expanded: false }),
+    { pages: PAGES },
+  ).map(text)
+  expect(framed80x7.length).toBe(7)
+  expect(framed80x7.some(l => l.includes('沒有執行中的派工，也沒有最近完成的'))).toBe(false)
+  expect(framed80x7.slice(2, 5)).toEqual([
+    '▸✓ astra g1 reviewer 18分 5時前',
+    ' ✓ carbon g1 reviewer 21分 5時前',
+    ' ✓ inventory explore 1分 4分前',
+  ])
+  expect(framed80x7[5]).toBe('沒有要你處理的事')
+
+  const framed120x7 = frameRows(
+    dispatchPage,
+    withView(ctxOf(120, 7, liveOf(WIDE_RUNS.slice(1))), { focus: 0, expanded: false }),
+    { pages: PAGES },
+  ).map(text)
+  expect(framed120x7.length).toBe(7)
+  expect(framed120x7.slice(2, 5)).toEqual([
+    '▸ ✓ plan-review astra g1      reviewer    codex/astra      18 分    5 時前',
+    '  ✓ plan-review carbon g1     reviewer    agy/carbon       21 分    5 時前',
+    '  ✓ inventory                 explore     sonnet           1 分     4 分前',
+  ])
+
+  // Running + finished with expanded=false in shortBody also includes finished rows since fold controls are suppressed
+  const mixed = frameRows(
+    dispatchPage,
+    withView(ctxOf(80, 7, liveOf(NARROW_RUNS)), { focus: 0, expanded: false }),
+    { pages: PAGES },
+  ).map(text)
+  expect(mixed.length).toBe(7)
+  expect(mixed.slice(1, 5)).toEqual([
+    '▸● console-source hand sonnet 23分',
+    ' ✓ astra g1 reviewer 18分 5時前',
+    ' ✓ carbon g1 reviewer 21分 5時前',
+    ' ✓ inventory explore 1分 4分前',
+  ])
 })
 
 test('dispatch §5: null live, null rows, and stale live draw red PALETTE.broken rows that wrap without ellipsis truncation', () => {

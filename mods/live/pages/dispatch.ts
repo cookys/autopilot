@@ -205,17 +205,15 @@ export function dispatchView(ctx: PageCtx, view: DispatchView = DEFAULT_VIEW): {
     return { body, actions: [] }
   }
 
-  const shownFinished = view.expanded ? finished : []
+  const shownFinished = ctx.shortBody === true || view.expanded ? finished : []
   const visibleTotal = running.length + shownFinished.length
   const focus = Math.max(0, Math.min(view.focus, Math.max(0, visibleTotal - 1)))
   let rowIdx = 0
 
   if (ctx.shortBody === true) {
-    const baseLen = body.length
     for (const item of running) body.push(drawRunRow(item, rowIdx++ === focus, false, wide, stale, cols, nowMs, t))
     for (const item of shownFinished) body.push(drawRunRow(item, rowIdx++ === focus, true, wide, stale, cols, nowMs, t))
-    if (body.length === baseLen && hasForeman) body.push(...foremanRowsOf(fm, wide, cols, nowMs, t).slice(1))
-    if (body.length === baseLen) body.push([{ text: GLYPHS.state.pending + ' ', color: PALETTE.idle }, { text: t('page.dispatch.none'), dim: true }])
+    if (hasForeman) body.push(...foremanRowsOf(fm, wide, cols, nowMs, t).slice(1))
     return { body, actions: [] }
   }
 

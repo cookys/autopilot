@@ -112,7 +112,7 @@ MS_AT_COMMIT=1700001000000
 
 # ── Case 1: seat whose clone pulled the commit and started after it -> effective, exit 0 ──
 INV_EFF="$TEST_TMP/inv-effective.json"
-node - "$INV_EFF" "$LOCAL_HOST" "$CLONE_PULLED" "$ISO_AFTER" "$MS_AFTER" <<'NODE' < /dev/null
+node - "$INV_EFF" "$LOCAL_HOST" "$CLONE_PULLED" "$ISO_AFTER" "$MS_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, host, repo, isoAfter, msAfter] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -154,7 +154,7 @@ assert_eq "$JSON_SCHEMA" "autopilot.rule-effect/1|2|2|2" "--json emits autopilot
 
 # ── Case 2: clone not pulled (HEAD lacks commit) -> stale, failed includes head ──
 INV_HEAD="$TEST_TMP/inv-unpulled.json"
-node - "$INV_HEAD" "$LOCAL_HOST" "$CLONE_UNPULLED" "$ISO_AFTER" <<'NODE' < /dev/null
+node - "$INV_HEAD" "$LOCAL_HOST" "$CLONE_UNPULLED" "$ISO_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, host, repo, started] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -174,7 +174,7 @@ assert_eq "$HEAD_CHECK" "stale|head|${SHA_BASE}|1" "unpulled clone -> verdict st
 
 # ── Case 3: remote lacks commit (pushed nowhere) -> stale, failed includes remote ──
 INV_REMOTE="$TEST_TMP/inv-unpushed.json"
-node - "$INV_REMOTE" "$LOCAL_HOST" "$CLONE_UNPUSHED" "$REPO_NOREMOTE" "$ISO_AFTER" <<'NODE' < /dev/null
+node - "$INV_REMOTE" "$LOCAL_HOST" "$CLONE_UNPUSHED" "$REPO_NOREMOTE" "$ISO_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, host, repo1, repo2, started] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -196,7 +196,7 @@ assert_eq "$REMOTE_CHECK" "seat-ahead-of-origin:stale:remote;seat-no-origin-ref:
 
 # ── Case 4: session started before (or at) commit time -> stale, failed includes session_start ──
 INV_START="$TEST_TMP/inv-old-session.json"
-node - "$INV_START" "$LOCAL_HOST" "$CLONE_PULLED" "$ISO_BEFORE" "$MS_AT_COMMIT" <<'NODE' < /dev/null
+node - "$INV_START" "$LOCAL_HOST" "$CLONE_PULLED" "$ISO_BEFORE" "$MS_AT_COMMIT" <<'NODE'
 const fs = require('fs');
 const [out, host, repo, isoBefore, msAt] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -218,7 +218,7 @@ assert_eq "$START_CHECK" "seat-before:stale:session_start;seat-exact-same-sec:st
 
 # ── Case 5: probe ok:false -> stale, failed includes probe (+ multi-failure accumulation) ──
 INV_PROBE="$TEST_TMP/inv-probe.json"
-node - "$INV_PROBE" "$LOCAL_HOST" "$CLONE_PULLED" "$CLONE_UNPULLED" "$ISO_AFTER" "$ISO_BEFORE" <<'NODE' < /dev/null
+node - "$INV_PROBE" "$LOCAL_HOST" "$CLONE_PULLED" "$CLONE_UNPULLED" "$ISO_AFTER" "$ISO_BEFORE" <<'NODE'
 const fs = require('fs');
 const [out, host, repoOk, repoUnpulled, isoAfter, isoBefore] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -241,7 +241,7 @@ assert_eq "$PROBE_CHECK" "seat-probe-fail:stale:probe;seat-multi-fail:stale:head
 # ── Case 6: missing repo path / null start / other host / unresolved sha -> unknown with reason, exit 2 ──
 INV_UNK="$TEST_TMP/inv-unknown.json"
 MISSING_PATH="$TEST_TMP/does-not-exist-repo"
-node - "$INV_UNK" "$LOCAL_HOST" "$OTHER_HOST" "$CLONE_PULLED" "$MISSING_PATH" "$CLONE_UNFETCHED" "$ISO_AFTER" <<'NODE' < /dev/null
+node - "$INV_UNK" "$LOCAL_HOST" "$OTHER_HOST" "$CLONE_PULLED" "$MISSING_PATH" "$CLONE_UNFETCHED" "$ISO_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, host, otherHost, repoOk, missingPath, unfetchedRepo, isoAfter] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -272,7 +272,7 @@ assert_eq "$UNFETCHED_REMOTE_TIP" "$SHA_BASE" "default check never runs git fetc
 
 # --all-hosts inspects seat-other-host locally instead of reporting other_host
 INV_ALLHOSTS="$TEST_TMP/inv-all-hosts.json"
-node - "$INV_ALLHOSTS" "$OTHER_HOST" "$CLONE_PULLED" "$ISO_AFTER" <<'NODE' < /dev/null
+node - "$INV_ALLHOSTS" "$OTHER_HOST" "$CLONE_PULLED" "$ISO_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, otherHost, repoOk, isoAfter] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -286,7 +286,7 @@ assert_exit_code "$RC" 0 "--all-hosts checks foreign host path locally -> exit 0
 
 # --fetch opt-in fetches origin on CLONE_UNFETCHED so SHA_RULE resolves on origin/main while HEAD stays stale
 INV_FETCH="$TEST_TMP/inv-fetch.json"
-node - "$INV_FETCH" "$LOCAL_HOST" "$CLONE_UNFETCHED" "$ISO_AFTER" <<'NODE' < /dev/null
+node - "$INV_FETCH" "$LOCAL_HOST" "$CLONE_UNFETCHED" "$ISO_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, host, repo, isoAfter] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -305,7 +305,7 @@ assert_eq "$FETCH_CHECK" "stale:head" "--fetch leaves HEAD untouched and flags f
 
 # ── Case 7: --commit repoA=<sha> mapping picks the right sha per repo (basename + path + origin/develop) ──
 INV_MAP="$TEST_TMP/inv-map.json"
-node - "$INV_MAP" "$LOCAL_HOST" "$CLONE_PULLED" "$CLONE_B" "$MS_AFTER" <<'NODE' < /dev/null
+node - "$INV_MAP" "$LOCAL_HOST" "$CLONE_PULLED" "$CLONE_B" "$MS_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, host, repoA, repoB, msAfter] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -342,7 +342,7 @@ assert_exit_code "$RC" 3 "missing --commit -> exit 3"
 MUT_REMOTE="$TEST_TMP/mut-remote.js"
 sed_mutant "$SRC" "$MUT_REMOTE" 's#if (remoteAnc.status !== 0) {#if (false) {#'
 INV_ONE_UNPUSHED="$TEST_TMP/inv-one-unpushed.json"
-node - "$INV_ONE_UNPUSHED" "$LOCAL_HOST" "$CLONE_UNPUSHED" "$ISO_AFTER" <<'NODE' < /dev/null
+node - "$INV_ONE_UNPUSHED" "$LOCAL_HOST" "$CLONE_UNPUSHED" "$ISO_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, host, repo, started] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -372,7 +372,7 @@ assert_exit_code "$RC" 1 "real checker blocks pre-commit session"
 MUT_PROBE="$TEST_TMP/mut-probe.js"
 sed_mutant "$SRC" "$MUT_PROBE" 's#if (seat.probe.ok !== true) {#if (false) {#'
 INV_ONE_PROBE="$TEST_TMP/inv-one-probe.json"
-node - "$INV_ONE_PROBE" "$LOCAL_HOST" "$CLONE_PULLED" "$ISO_AFTER" <<'NODE' < /dev/null
+node - "$INV_ONE_PROBE" "$LOCAL_HOST" "$CLONE_PULLED" "$ISO_AFTER" <<'NODE'
 const fs = require('fs');
 const [out, host, repo, started] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({

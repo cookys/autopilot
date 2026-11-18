@@ -4172,10 +4172,32 @@ function runImplQualification(options) {
 const IMPL_LOG_TAIL_LINES = 40;
 const IMPL_LOG_TAIL_BYTES = 8 * 1024;
 
-// redactSecrets already masks sk-..., Bearer, and token=. This extra pass
-// catches an sk-ant- key that somehow survived, without changing redactSecrets.
+const SNAKE_CODE_SHIELD = '\uE000';
+const SECRET_KEY_WORD_RE = /(?:token|secret|passw(?:or)?d|pwd|authorization|auth|cookie|session|sid|api_?key|key|credentials?|csrf|jwt|otp)/u;
+const TOKEN_UNDERSCORE_PREFIX_RE = /^(?:gh[pousr]_|github_pat_|hf_|whsec_|(?:sk|pk|rk)_(?:live|test)_)/u;
+
+// redactSecrets already masks sk-..., Bearer, and token=, then masks any 20+
+// char [A-Za-z0-9+/_.~-] run. That final opaque-run pass also hits >=20-char
+// lowercase snake_case refusal/category codes (e.g. cn_model_dispatch_barred,
+// endpoint_unreachable, transport_optin_required, worktree_gitfile_tampered).
+// Shield standalone lowercase snake_case code words across redactSecrets so
+// refusal and category codes reach the receipt verbatim while keyed values,
+// headers, Bearer tokens, prefixed keys, and sk-ant- keys stay redacted.
 function redactLedgerText(text) {
-  return redactSecrets(text).replace(/\bsk-ant-[A-Za-z0-9_-]+/gu, '[redacted]');
+  const clean = String(text).replace(/\uE000/gu, '\uFFFD');
+  const shielded = clean.replace(
+    /(?<![A-Za-z0-9+/_.~=-])[a-z]{1,15}(?:_[a-z]{1,15})+(?![A-Za-z0-9+/_.~=-])/gu,
+    (match, offset, source) => {
+      if (TOKEN_UNDERSCORE_PREFIX_RE.test(match)) return match;
+      const tail = source.slice(offset + match.length);
+      if (/^["']?\s*=/u.test(tail) || /^["']\s*:/u.test(tail)) return match;
+      if (/^\s*:/u.test(tail) && SECRET_KEY_WORD_RE.test(match)) return match;
+      return match.replace(/_/gu, SNAKE_CODE_SHIELD);
+    },
+  );
+  return redactSecrets(shielded)
+    .replace(/\bsk-ant-[A-Za-z0-9_-]+/gu, '[redacted]')
+    .replace(/\uE000/gu, '_');
 }
 
 function capUtf8Tail(text, maxBytes) {
@@ -4395,7 +4417,7 @@ function runImplCase(context) {
     // Constructed allowlist env — NOT inherited-minus-N (G1-F3). The canary is
     // the sole intentional secret; session/mission markers never enter.
     // Task facts (Size, Role, Scope) come strictly from the exam case and the
-    // examined role, never from the caller's AUTOPILOT_TASK_* env, so the CN
+    // examined role, never from the caller's AUTOPILOT_TASK_SIZE/ROLE/SCOPE env, so the CN
     // model dispatch gate checks the case itself rather than failing unknown-size.
     const env = {
       PATH: process.env.PATH,

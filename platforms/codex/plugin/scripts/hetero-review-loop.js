@@ -20,6 +20,7 @@ const familyGate = require('./lib/review-family-gate');
 const { invalidSeatModels } = require('./lib/seat-model-id');
 const { portableRawLogInPlace } = require('./lib/raw-log-path');
 const codexFallback = require('./lib/qc-panel-codex-fallback');
+const { resolvePmGate } = require('./lib/fleet-task-ref');
 
 function assertSafeSeatId(id) {
   if (!isSafeSeatId(id)) {
@@ -1120,6 +1121,25 @@ async function handleCollect(flags) {
         console.error(`ERROR: --strict-range: declared range does not match; no seat was dispatched and generation ${generation} was not consumed`);
         process.exit(1);
       }
+    }
+  }
+
+  // PM Console hard block (before g<N>/ exists, so blocked collect consumes no generation).
+  {
+    const hasBinStub = Object.keys(flags).some((k) => k === 'bin' || k.endsWith('-bin'));
+    const pmGate = resolvePmGate({
+      repoRoot: repoRoot || process.cwd(),
+      fleetTaskArg: typeof flags['fleet-task'] === 'string' ? flags['fleet-task'] : '',
+      text: specText,
+      hasBinStub,
+    });
+    if (!pmGate.allowed) {
+      console.error(`ERROR: ${pmGate.reason}`);
+      process.exit(2);
+    }
+    if (pmGate.note) console.error(pmGate.note);
+    if (pmGate.taskId && (!process.env.AUTOPILOT_FLEET_TASK || process.env.AUTOPILOT_FLEET_TASK === 'none')) {
+      process.env.AUTOPILOT_FLEET_TASK = pmGate.taskId;
     }
   }
 

@@ -1025,4 +1025,88 @@ OUT="$("$REPO_ROOT/scripts/verify-red-green.sh" --base "$POL_BASE" --head "$POL_
 assert_eq "3" "$EXIT" "an out-of-repo verify command is still INCONCLUSIVE under a symlinked repo path"
 assert_contains "$OUT" 'verification-command-does-not-execute-bound-assertion' "out-of-repo verify command is named as not binding the assertion"
 
+# ─── PM Console Fleet-Task gate (Commit 1) + parent progress log (Commit 2) ───
+AU_TASK_ID="01M7R609WK44HJP629E6C93Q9N"
+AU_PM_REPO="$TEST_TMP/au-pm-repo"
+AU_NON_PM_REPO="$TEST_TMP/au-non-pm-repo"
+mkdir -p "$AU_PM_REPO/.git" "$AU_PM_REPO/.claude" "$AU_NON_PM_REPO/.git"
+printf 'ref: refs/heads/main\n' > "$AU_PM_REPO/.git/HEAD"
+printf 'ref: refs/heads/main\n' > "$AU_NON_PM_REPO/.git/HEAD"
+printf '{"schema":"autopilot.console/1","mode":"program"}\n' > "$AU_PM_REPO/.claude/console.json"
+
+AU_FLEET_LOG="$TEST_TMP/au-fleet-argv.log"
+AU_FLEET_OPEN="$TEST_TMP/au-fleet-open"
+cat > "$AU_FLEET_OPEN" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$AU_FLEET_LOG"
+if [ "\${1:-}" = "task" ] && [ "\${2:-}" = "show" ]; then
+  printf '{"id":"%s","status":"open"}\n' "\${3:-$AU_TASK_ID}"
+fi
+exit 0
+EOF
+AU_FLEET_DONE="$TEST_TMP/au-fleet-done"
+printf '#!/usr/bin/env bash\nprintf '\''{"id":"%s","status":"done"}\\n'\'' "$3"\n' "$AU_TASK_ID" > "$AU_FLEET_DONE"
+AU_FLEET_NF="$TEST_TMP/au-fleet-nf"
+printf '#!/usr/bin/env bash\nprintf '\''{"error":"not_found"}\\n'\'' ; exit 1\n' > "$AU_FLEET_NF"
+AU_FLEET_EXIT3="$TEST_TMP/au-fleet-exit3"
+cat > "$AU_FLEET_EXIT3" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "task" ] && [ "${2:-}" = "show" ]; then
+  printf '{"status":"open"}\n'; exit 0
+fi
+exit 3
+EOF
+chmod +x "$AU_FLEET_OPEN" "$AU_FLEET_DONE" "$AU_FLEET_NF" "$AU_FLEET_EXIT3"
+
+# Path-based codex stub (no --bin) so PM Console gate runs without triggering --bin stub exemption.
+AU_PATH_BIN="$TEST_TMP/au-path-bin"
+mkdir -p "$AU_PATH_BIN"
+cp "$STUB_COD" "$AU_PATH_BIN/codex"
+chmod +x "$AU_PATH_BIN/codex"
+
+# PM Console matrix (negative controls first):
+OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "author PM missing Fleet-Task exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "author PM missing Fleet-Task emits precondition_failed"
+
+OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_FLEET_TASK="$AU_TASK_ID" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "author PM done Fleet-Task exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "author PM done Fleet-Task emits precondition_failed"
+
+OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_NF" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --fleet-task "$AU_TASK_ID" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "author PM not_found Fleet-Task exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "author PM not_found Fleet-Task emits precondition_failed"
+
+rm -f "$AU_FLEET_LOG"
+OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" AUTOPILOT_FLEET_TASK="$AU_TASK_ID" AUTOPILOT_DISPATCH_ROLE="author-test" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --run-id au-pm-open-1 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author PM open Fleet-Task exits 0"
+assert_contains "$OUT" '"status": "authored"' "author PM open Fleet-Task returns authored"
+AU_LOG_CONTENT="$(cat "$AU_FLEET_LOG")"
+assert_contains "$AU_LOG_CONTENT" "task update $AU_TASK_ID [dispatch:author-test] au-pm-open-1 start" "author emits start progress line"
+assert_contains "$AU_LOG_CONTENT" "task update $AU_TASK_ID [dispatch:author-test] au-pm-open-1 authored sha=- log=" "author emits final progress line"
+
+OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="/nonexistent/missing-fleet-bin" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --fleet-task "$AU_TASK_ID" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author PM missing FLEET_BIN fails open (exit 0)"
+
+OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_NON_PM_REPO" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author non-PM console without id exits 0"
+
+# Exemptions: --bin stub, engine-qualify role, AUTOPILOT_PARENT_RUN_ID inheritance
+OUT="$(FLEET_BIN="$AU_FLEET_DONE" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author PM --bin stub exempt"
+OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_DISPATCH_ROLE="engine-qualify" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author PM engine-qualify exempt"
+OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_PARENT_RUN_ID="parent-r1" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author PM AUTOPILOT_PARENT_RUN_ID inherited without re-check"
+
+# Fail-soft progress: exit 3 stub never changes stdout JSON or exit code; no id writes no line
+rm -f "$AU_FLEET_LOG"
+OUT="$(FLEET_BIN="$AU_FLEET_OPEN" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author no-task exits 0"
+assert_file_absent "$AU_FLEET_LOG" "author no-task writes no progress line"
+
+OUT="$(FLEET_BIN="$AU_FLEET_EXIT3" AUTOPILOT_UPSTREAM_TASK_ID="$AU_TASK_ID" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "author fail-soft keeps exit 0 when FLEET_BIN exits 3"
+assert_contains "$OUT" '"status": "authored"' "author fail-soft keeps authored JSON"
+
 finalize_test

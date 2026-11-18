@@ -263,6 +263,17 @@
             "onFailure": "continue"
           }
         ]
+      },
+      {
+        "matcher": "TaskStop",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-fleet-task.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [
@@ -386,6 +397,12 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/subagent-fleet-task.js",
+            "timeout": 5,
+            "onFailure": "continue"
           }
         ]
       }

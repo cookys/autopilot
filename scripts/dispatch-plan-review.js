@@ -73,6 +73,7 @@ const familyGate = require('./lib/review-family-gate');
 const cnGate = require('./lib/cn-model-dispatch-gate');
 const { loadContextFiles, renderContextBlock } = require('./lib/plan-review-context');
 const LAYOUT = require('./lib/repo-layout.js'); // work-record locations (plans dir, projects index) come from the registry
+const { resolvePmGate } = require('./lib/fleet-task-ref');
 
 const SCRIPT_DIR = __dirname;
 const DISPATCH_AUTHOR = path.join(SCRIPT_DIR, 'dispatch-author.sh');
@@ -195,6 +196,7 @@ function parseArgs(argv) {
     ['--growth-stop-ratio', 'growthStopRatio'],
     ['--now', 'now'],
     ['--same-family-exception', 'sameFamilyExceptionRaw'],
+    ['--fleet-task', 'fleetTask'],
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -1413,7 +1415,17 @@ function dispatchSeat(
   try {
     const run = spawnSync(DISPATCH_AUTHOR, args, {
       cwd: childCwd,
-      env: { ...process.env, DISPATCH_QUIET: '1', DISPATCH_DETACH: '0', AUTOPILOT_DISPATCH_ROLE: 'plan-review' },
+      env: {
+        ...process.env,
+        DISPATCH_QUIET: '1',
+        DISPATCH_DETACH: '0',
+        AUTOPILOT_DISPATCH_ROLE: 'plan-review',
+        ...(process.env.AUTOPILOT_PARENT_RUN_ID
+          ? {}
+          : (process.env.AUTOPILOT_FLEET_TASK && process.env.AUTOPILOT_FLEET_TASK !== 'none'
+            ? { AUTOPILOT_PARENT_RUN_ID: `plan-review-${process.pid}` }
+            : {})),
+      },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 16 * 1024 * 1024,
@@ -1961,6 +1973,18 @@ function main() {
     // The plan is read exactly once; the same Buffer feeds provenance, --expect-revision,
     // plan_sha256 and the seat prompts.
     var planBytes = fs.readFileSync(opts.planFile);
+    const pmGate = resolvePmGate({
+      repoRoot: opts.repoRoot,
+      fleetTaskArg: opts.fleetTask || '',
+      text: planBytes.toString('utf8'),
+    });
+    if (!pmGate.allowed) {
+      throw new CliError(pmGate.reason, 2);
+    }
+    if (pmGate.note) process.stderr.write(`dispatch-plan-review: ${pmGate.note}\n`);
+    if (pmGate.taskId && (!process.env.AUTOPILOT_FLEET_TASK || process.env.AUTOPILOT_FLEET_TASK === 'none')) {
+      process.env.AUTOPILOT_FLEET_TASK = pmGate.taskId;
+    }
     var provenance = planProvenance(opts, planBytes);
     checkExpectedRevision(opts, provenance);
     if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS === '1' && process.env.AUTOPILOT_TEST_AFTER_PLAN_READ) {

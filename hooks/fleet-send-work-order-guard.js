@@ -83,7 +83,8 @@ function decide(input, env = envBag()) {
   if (knobOff(env)) return null;
   if (input.tool_name !== 'mcp__fleet__send') return null;
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
-  if (toolInput.fyi === true) return null;
+  const hasNoTask = typeof toolInput.content === 'string' && /\[no-task/i.test(toolInput.content);
+  if (toolInput.fyi === true && !(hasNoTask && isWorkOrder(toolInput.content))) return null;
   if (typeof toolInput.to === 'string' && toolInput.to.startsWith('@')) return null;
   if (!isWorkOrder(toolInput.content)) return null;
   return preToolDeny(DENY_REASON);

@@ -45,6 +45,9 @@ const {
   missingCostLine,
   costLineFor,
 } = require('./lib/brief-header-template.js');
+const { BRIEF_HEAD_WINDOW, headLines, findHeadMatch } = require('./lib/brief-head.js');
+const { isPmConsole } = require('./_shared/pm-console.js');
+const { findTaskId, checkTaskOpen } = require('../scripts/lib/fleet-task-ref.js');
 // default-on since v2.35.15 (was opt-in). Opt out: AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off
 // (or `- mode: off` in .claude/dispatch-guard-config.md). The 2026-09-04 cuda quota digest:
 // subagents inherited the session's [1m] Fable model because nothing asked.
@@ -261,6 +264,38 @@ function engineTokenFromPrompt(prompt) {
   return m ? m[1] : '';
 }
 
+function checkPmFleetTask(input, toolInput, prompt) {
+  if (!isPmConsole(input)) return;
+  const subagentType = String(toolInput.subagent_type || '').trim();
+  if (subagentType === 'Explore' || subagentType === 'Plan') return;
+  const hasEngine = Boolean(engineTokenFromPrompt(prompt))
+    || Boolean(findHeadMatch(prompt, /^Engine:\s*\S/));
+  if (!hasEngine) return;
+
+  const head = headLines(prompt, BRIEF_HEAD_WINDOW).join('\n');
+  const taskId = findTaskId(head);
+  if (!taskId) {
+    emitDeny(
+      'PM Console 派工硬阻擋：此 subagent brief 帶有 Engine: 標頭，但前 10 行缺少 Fleet-Task: <26-char id> 綁定。請先開啟或挑選對應的 fleet 任務（使用 fleet task show <id> 確認狀態為 open），並將「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。'
+    );
+  }
+
+  const probe = checkTaskOpen(taskId);
+  if (probe.state === 'open') return;
+  if (probe.state === 'unavailable') {
+    process.stderr.write(`dispatch-model-guard: fleet task ${taskId} check unavailable — allowing (fail-open)\n`);
+    return;
+  }
+  if (probe.state === 'not_found') {
+    emitDeny(
+      `PM Console 派工硬阻擋：brief 中的 Fleet-Task: ${taskId} 找不到對應任務（not_found）。請先開啟或挑選有效的 open 任務（使用 fleet task show ${taskId} 確認），並將「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。`
+    );
+  }
+  emitDeny(
+    `PM Console 派工硬阻擋：brief 中的 Fleet-Task: ${taskId} 已結束（closed: done/failed/cancelled）。請開啟或挑選進行中的 open 任務（使用 fleet task show ${taskId} 確認），並將新的「Fleet-Task: <id>」加入 brief 前 10 行後再重新派工。`
+  );
+}
+
 // Fable/opus only. Intentional does not skip this. Exits on deny.
 // Model present: after the engine-header check, before the guarded-engine allow.
 // Model absent: before the on_missing_model allow / ask / deny paths, with the
@@ -385,6 +420,7 @@ try {
     const engineTok = engineTokenFromPrompt(promptAbsent);
     denyIfMissingCostLine(config, promptAbsent, engineTok);
     if (config.on_missing_model === 'allow') {
+      checkPmFleetTask(input, toolInput, promptAbsent);
       checkBriefSizeUsedByStages(config, promptAbsent, advisories);
       exitAllow();
     }
@@ -441,6 +477,9 @@ try {
   // Cost line, after the header check and before the guarded-engine allow.
   // `(intentional: …)` does not skip it: handleGuard's allow path is below.
   denyIfMissingCostLine(config, promptRaw, modelRaw);
+
+  // PM Console hard block: Agent calls with Engine: (non-Explore/Plan) require an open Fleet-Task in head 10 lines.
+  checkPmFleetTask(input, toolInput, promptRaw);
 
   // Size / Used-by / Stages check for autopilot briefs (Lane: present).
   checkBriefSizeUsedByStages(config, promptRaw, advisories);

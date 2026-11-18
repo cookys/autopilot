@@ -350,8 +350,7 @@ function oldestDecision(ctx: PageCtx): { question: string; openedMs: number | nu
   return dated[0] ?? entries[0]
 }
 
-// combined pending Button + summary row (R2, R8, R11): single-row `…` cut on title when fresh (short class-summary mode caps the question excerpt to 24 cells); `✗` + short reason when seat pending snapshot is stale
-const SHORT_PENDING_EXCERPT_COLS = 24
+// combined pending Button + summary row (R2, R8, R11): single-row `…` cut on title when fresh; `✗` + short reason when seat pending snapshot is stale
 function pendingRowOf(ctx: PageCtx, decisions: number, short: boolean): Row | null {
   const { t, size, live, nowMs } = ctx
   const liveStale = live !== null && live.state !== 'ok'
@@ -384,8 +383,7 @@ function pendingRowOf(ctx: PageCtx, decisions: number, short: boolean): Row | nu
   let text = prefix
   if (q !== '') {
     const rem = size.cols - displayWidth(prefix) - displayWidth('：')
-    const qCols = short ? Math.min(rem, SHORT_PENDING_EXCERPT_COLS) : rem
-    if (qCols >= 2) text = prefix + '：' + truncateToWidth(q, qCols)
+    if (rem >= 2) text = prefix + '：' + truncateToWidth(q, rem)
   }
   return [{ text: truncateToWidth(text, size.cols), color: PALETTE.attention, press: 'tab:2:decide' }]
 }

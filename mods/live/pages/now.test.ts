@@ -447,7 +447,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
 test('now C1 acceptance: at 80x24 inline (4 body rows) with pending + 2 offline lanes + 2 offline hosts + 2 red pools + 3 unknown pools, each of the three class rows appears exactly once; empty classes are omitted and wide names truncate with …', () => {
   seatQuota.reset()
   const cards = [
-    { id: 'd-a0000001', question: '是否批准第二階段產線切換與額度重分配方案', status: 'open' as const, opened_at_ms: NOW - 24 * 60 * MIN, executor_display: 'PM' },
+    { id: 'd-a0000001', question: '是否批准第二階段產線切換與人力重分配方案', status: 'open' as const, opened_at_ms: NOW - 24 * 60 * MIN, executor_display: 'PM' },
     { id: 'd-a0000002', question: 'q2', status: 'open' as const, opened_at_ms: NOW - 60 * MIN, executor_display: 'PM' },
     { id: 'd-a0000003', question: 'q3', status: 'open' as const, opened_at_ms: NOW - 10 * MIN, executor_display: 'PM' },
   ]

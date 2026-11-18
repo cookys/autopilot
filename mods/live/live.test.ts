@@ -3579,17 +3579,21 @@ test('C1 fix: a 待決 band tab left open when console.json appears is closed; t
 // review fix 3: the console feed (triedMs, snap) belongs to the session; a new session.start must not inherit the 60 s throttle or the first run's snapshot
 test('review fix: consolefeed-session-reset: a second session.start on the same clock asks `fleet console --json` again', async ($, on) => {
   const ran: string[] = []
-  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } })
-  const w = world(on, consoleFiles())
+  const argvs: string[][] = []
+  on('process.run', ($$: any, e: any) => { const a = [...(e.argv as string[])]; argvs.push(a); ran.push(a.join(' ')); return { value: { exitCode: 0, stdout: '[]', stderr: '' } } })
+  const files = consoleFiles()
+  const w = world(on, files)
   await start($, 'terminal')
   await w.clock.advance(5_000)
   await w.clock.advance(5_000)
-  const first = ran.filter(a => a.endsWith(' fleet console --json')).length
-  expect(first, 'the first session fetches the console snapshot').toBe(1)
+  const first = ran.filter(a => a === 'fleet console --json').length
+  expect(first, 'the first session fetches the console snapshot without env prefix when ingest_from is absent').toBe(1)
+  files[CWD + '/.claude/console.json'] = j({ schema: 'autopilot.console/1', mode: 'program', ingest_from: 'ns/courier-a/capacity=pace bad!! ns/courier-a/fleet-cli=pace' })
   await start($, 'terminal') // /clear or a new session: the clock has not moved past the 60 s interval
   await w.clock.advance(5_000)
   await w.clock.advance(5_000)
-  expect(ran.filter(a => a.endsWith(' fleet console --json')).length, 'the second session fetches again').toBe(2)
+  expect(ran.filter(a => a === 'fleet console --json' || a.endsWith(' fleet console --json')).length, 'the second session fetches again').toBe(2)
+  expect(argvs.find(a => a[0] === 'env')).toEqual(['env', 'FLEET_CONSOLE_INGEST_FROM=ns/courier-a/capacity=pace ns/courier-a/fleet-cli=pace', 'fleet', 'console', '--json'])
 })
 // C1 U6: the console pane's pages. The snapshot source answers null until C2, so team / quota / hosts say 無來源 (no table); 本席 folds this session's 現況, 派工 and 審查 under their names.
 test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there is no snapshot, and 本席 carries 現況 · 派工 · 審查 (terminal)', async ($, on) => {
@@ -3616,7 +3620,7 @@ test('C1 U6: console pane: 團隊 · 額度 · 主機 say 無來源 while there 
   const self = await lines('self')
   for (const name of ['現況', '派工', '審查']) expect(self.includes(name)).toBe(true)
   expect(self.includes('無來源')).toBe(false)
-  expect(ran.filter(a => a.includes(' fleet console')).length).toBe(1) // the data source (consolefeed.ts) asks once in this minute; its '[]' answer is no source, so the pages above still say 無來源
+  expect(ran.filter(a => a === 'fleet console --json' || a.includes(' fleet console')).length).toBe(1) // the data source (consolefeed.ts) asks once in this minute; its '[]' answer is no source, so the pages above still say 無來源
 })
 // pane review fix 1 (console-pane-legacy-leak): in the console mode the pane draws the FRAMED pages fed from the console snapshot, not the old console tabs (those need `legacyTabs`).
 const CONSOLE_JSON = JSON.stringify(consoleFull)

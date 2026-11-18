@@ -194,24 +194,43 @@ export function parseConsole(text: string): ConsoleSnapshot | null {
   }
 }
 
-// the repo config .claude/console.json: true only for an object whose schema is exactly autopilot.console/1 and whose mode is exactly program
-export function consoleModeOf(text: string | null): boolean {
-  if (text === null) return false
-  let raw: unknown
-  try { raw = JSON.parse(text) } catch { return false }
-  if (!isObj(raw)) return false
-  return s(raw.schema) === 'autopilot.console/1' && s(raw.mode) === 'program'
+export const INGEST_FROM_TOKEN = /^[a-z0-9._-]+\/[a-z0-9._-]+\/[a-z0-9._-]+=[a-z]+$/
+export type ConsoleConfig = { on: boolean; ingestFrom: string | null }
+
+export function parseIngestFrom(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const kept = v.split(/\s+/).filter(tok => INGEST_FROM_TOKEN.test(tok))
+  return kept.length > 0 ? kept.join(' ') : null
 }
 
-// the mode of the session's repo: walk up from `cwd` to the FIRST directory that holds a `.git` (a directory with HEAD, or a gitfile) and read that repo's `.claude/console.json`; a parent repo's file is never
-// borrowed. The mod cannot run git, so `readText` is the caller's file reader (null = absent or unreadable). false for no repo, no file, broken JSON, a foreign schema and any mode but program.
-export async function findConsoleMode(cwd: string, readText: (path: string) => Promise<string | null>): Promise<boolean> {
+// the repo config .claude/console.json: on only for an object whose schema is exactly autopilot.console/1 and whose mode is exactly program;
+// optional ingest_from ("<address>=pace ...") keeps only tokens matching ^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+=[a-z]+$ (joined by ' '; null when absent or none match)
+export function consoleConfigOf(text: string | null): ConsoleConfig {
+  if (text === null) return { on: false, ingestFrom: null }
+  let raw: unknown
+  try { raw = JSON.parse(text) } catch { return { on: false, ingestFrom: null } }
+  if (!isObj(raw)) return { on: false, ingestFrom: null }
+  if (s(raw.schema) !== 'autopilot.console/1' || s(raw.mode) !== 'program') return { on: false, ingestFrom: null }
+  return { on: true, ingestFrom: parseIngestFrom(raw.ingest_from) }
+}
+
+export function consoleModeOf(text: string | null): boolean {
+  return consoleConfigOf(text).on
+}
+
+// the config of the session's repo: walk up from `cwd` to the FIRST directory that holds a `.git` (a directory with HEAD, or a gitfile) and read that repo's `.claude/console.json`; a parent repo's file is never
+// borrowed. The mod cannot run git, so `readText` is the caller's file reader (null = absent or unreadable). on is false (ingestFrom null) for no repo, no file, broken JSON, a foreign schema and any mode but program.
+export async function findConsoleConfig(cwd: string, readText: (path: string) => Promise<string | null>): Promise<ConsoleConfig> {
   let dir = cwd
   for (let i = 0; i < 16 && dir !== ''; i++) {
-    if ((await readText(dir + '/.git/HEAD')) !== null || (await readText(dir + '/.git')) !== null) return consoleModeOf(await readText(dir + '/.claude/console.json'))
+    if ((await readText(dir + '/.git/HEAD')) !== null || (await readText(dir + '/.git')) !== null) return consoleConfigOf(await readText(dir + '/.claude/console.json'))
     const cut = dir.lastIndexOf('/')
     if (cut <= 0) break
     dir = dir.slice(0, cut)
   }
-  return false
+  return { on: false, ingestFrom: null }
+}
+
+export async function findConsoleMode(cwd: string, readText: (path: string) => Promise<string | null>): Promise<boolean> {
+  return (await findConsoleConfig(cwd, readText)).on
 }

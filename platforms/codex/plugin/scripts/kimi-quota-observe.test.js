@@ -59,7 +59,10 @@ test('pace-select never returns an exhausted kimi (negative control: available i
     try { return selectEngine({ pace, role: 'implementer', pools: undefined, roles: { implementer: ['kimi'], _disabled: [] } }); } catch (e) { return { error: e.code || e.message }; }
   };
   const saved = process.env.AUTOPILOT_LIVE_DIR;
+  const savedKimiAllow = process.env.AUTOPILOT_KIMI_LOCAL_ALLOW;
   process.env.AUTOPILOT_LIVE_DIR = live;
+  // kimi-local-stop: let this quota test select Kimi in-process and in inherited child envs.
+  process.env.AUTOPILOT_KIMI_LOCAL_ALLOW = '1';
   try {
     q.observe({ rc: 0, text: 'ok', liveDir: live, now: Date.now() });
     const ok = pick();
@@ -67,7 +70,10 @@ test('pace-select never returns an exhausted kimi (negative control: available i
     const bad = pick();
     assert.notEqual(JSON.stringify(ok), JSON.stringify(bad), 'exhaustion changes the pick');
     assert.doesNotMatch(JSON.stringify(bad), /"key":"kimi"|"engine":"kimi/);
-  } finally { if (saved === undefined) delete process.env.AUTOPILOT_LIVE_DIR; else process.env.AUTOPILOT_LIVE_DIR = saved; }
+  } finally {
+    if (saved === undefined) delete process.env.AUTOPILOT_LIVE_DIR; else process.env.AUTOPILOT_LIVE_DIR = saved;
+    if (savedKimiAllow === undefined) delete process.env.AUTOPILOT_KIMI_LOCAL_ALLOW; else process.env.AUTOPILOT_KIMI_LOCAL_ALLOW = savedKimiAllow;
+  }
 });
 
 test.after(() => { fs.rmSync(live, { recursive: true, force: true }); });

@@ -66,10 +66,10 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BandPageId, BarTabId, ScrollView } from './tabs'
-import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
+import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, legacyUsageRows, newestSeq, parseRoom, progressSegs, shellPlan } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
-import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
+import type { FleetLaneSum, RoomRow } from './shell'
 import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
@@ -1696,7 +1696,6 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const panelRaw = await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
       const fleet = await read($, FLEET)
       const lanes: FleetLaneSum[] = fleet.lanes.map(l => ({ lane: l.lane, needYou: l.needYou, failed: l.failed, stuck: l.stuck, running: l.running, waiting: l.waiting }))
-      const panel: PanelRead = parsePanel(panelRaw, nowMs)
       const strip = barStrip(snapshot, t, active, null) // the shell's menu lists every tab, the 用量 one too
       // ux-v7: the 待決 tab is a card view. One card in the main window (decideCursor), the card list on the left, the progress row and the four quick slots under it.
       const st = active === 'decide' ? await read($, DECIDE) : null
@@ -1725,7 +1724,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const planInp = {
         columns, t, menuTitle: leftTitle(cards.length > 0 ? 'cards' : 'tabs', (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(), t),
         mainTitle: cards.length > 0 ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
-        room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes, awaiting: (snapshot.awaiting ?? []).length,
+        room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panelRaw, nowMs, fleet: lanes, awaiting: (snapshot.awaiting ?? []).length,
         ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}), // the card view re-plans with the hint of the options it actually draws
         ...(cardMode ? { noRight: true } : {}),
       }
@@ -1807,7 +1806,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           })
         } else {
           const parts = active === 'usage'
-            ? usageDraw(el, usageRows(panel, mainCols, MAIN_CONTENT_ROWS, t))
+            ? usageDraw(el, legacyUsageRows(panelRaw, nowMs, mainCols, MAIN_CONTENT_ROWS, t))
             : active === 'decide'
             ? decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, MAIN_CONTENT_ROWS)
             : barParts(el, snapshot, active, mainCols, t, { onSlot: slot }).rows
@@ -1873,6 +1872,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const fleet = await fleetFor($)
     const frameNow = legacy ? 0 : await $.clock.now()
     const epoch = legacy ? 0 : syncPanePlacement($, e.props.placement, e.props.isFocused)
+    const petPanel = !legacy && panePage === 'pet'
+      ? await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
+      : undefined
     const tree = Pane(
       $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
       () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') },
@@ -1880,7 +1882,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       folded, e.props.scroll ?? null,
       { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
       decideScroll, fleet, null,
-      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}) },
+      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
     )
     await probePane($, e, tree)
     return tree

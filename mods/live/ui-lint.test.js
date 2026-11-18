@@ -691,3 +691,118 @@ test('L11 control: the previous pattern (whitespace outside the lookahead, no op
     assert.ok(L11_RE.test(miss), miss)
   }
 })
+
+// ---- P2 pet tab: GLYPHS.pet.icons whitelist, petIconViolations, and L19 boundary ----
+test('pet icons: GLYPHS.pet.icons entries (cat, chick, crab) pass petIconViolations and verifiedOk; tableGlyphs excludes them and EMOJI_BANNED exception is only pet.icons', () => {
+  assert.deepEqual(Object.keys(ui.GLYPHS.pet.icons).sort(), ['cat', 'chick', 'crab'])
+  assert.deepEqual(ui.petIconViolations(ui.GLYPHS), [])
+  for (const [id, emoji, fallback] of [['cat', '🐱', ':3'], ['chick', '🐣', 'o<'], ['crab', '🦀', '}{']]) {
+    assert.deepEqual(ui.GLYPHS.pet.icons[id], { id, emoji, fallback, verified: 'pending-owner' })
+    assert.equal(ui.verifiedOk(ui.GLYPHS.pet.icons[id].verified), true)
+    assert.equal(ui.tableGlyphs(ui.GLYPHS).includes(emoji), false, 'tableGlyphs excludes ' + emoji)
+  }
+  assert.deepEqual(ui.glyphTableViolations(ui.GLYPHS), [], 'other glyph tables stay valid without pet.icons')
+  // EMOJI_BANNED exception applies ONLY to GLYPHS.pet.icons: planting an emoji into any other key of GLYPHS fails glyphTableViolations
+  const nonPetEmoji = clone()
+  nonPetEmoji.state.running = '🐱'
+  assert.ok(ui.glyphTableViolations(nonPetEmoji).some(v => v.includes('🐱')), 'emoji outside pet.icons is rejected')
+  const nonPetBanned = clone()
+  nonPetBanned.structure.bullet = '⚠'
+  assert.ok(ui.glyphTableViolations(nonPetBanned).some(v => v.includes('⚠')), 'EMOJI_BANNED outside pet.icons is rejected')
+})
+
+test('petIconViolations controls: ⚠️, emoji with U+FE0F, width-1 char, bad fallback and bad verified are each reported', () => {
+  for (const [label, patch] of [
+    ['⚠️', e => { e.emoji = '⚠️' }],
+    ['emoji with U+FE0F', e => { e.emoji = '🐱\uFE0F' }],
+    ['width-1 char', e => { e.emoji = 'x' }],
+    ['width-1 symbol', e => { e.emoji = '★' }],
+    ['single-char fallback', e => { e.fallback = ':' }],
+    ['three-char fallback', e => { e.fallback = ':3)' }],
+    ['CJK fallback', e => { e.fallback = '寵' }],
+    ['East Asian Ambiguous fallback', e => { e.fallback = '★!' }],
+    ['bad verified', e => { e.verified = 'owner-11-18' }],
+  ]) {
+    const g = clone()
+    patch(g.pet.icons.cat)
+    const v = ui.petIconViolations(g)
+    assert.ok(v.length > 0, label + ': ' + JSON.stringify(v))
+  }
+})
+
+// L19 (tux-guidelines.md): render modules (shell.ts, band.tsx, consolepages.ts; exceptions panel.ts, pettab.ts) must not reference
+// `pace.v1`, `capacity.quota-pane`, `codeforge.panel`, nor import/re-export mods/live/panel.ts (except P6b transitional `readLegacyUsage` in shell.ts).
+const L19_RENDER_MODULES = ['shell.ts', 'band.tsx', 'consolepages.ts']
+const L19_EXCEPTIONS = ['panel.ts', 'pettab.ts']
+const L19_FORBIDDEN_STRINGS = /\bpace\.v1\b|capacity\.quota-pane|codeforge\.panel/
+const L19_PANEL_REEXPORT = /\bexport\s+(?:\*|\{[^}]*\})\s*from\s*['"]\.\/panel(?:\.ts)?['"]/
+const L19_PANEL_REQUIRE = /\brequire\s*\(\s*['"]\.\/panel(?:\.ts)?['"]\s*\)/
+const L19_PANEL_IMPORT = /\bimport\s+((?:type\s+)?(?:\{[^}]*\}|[^\n;{}]+))\s+from\s+['"]\.\/panel(?:\.ts)?['"]/g
+const L19_PANEL_SIDE_EFFECT = /\bimport\s+['"]\.\/panel(?:\.ts)?['"]/
+function l19Violations(file, src) {
+  const c = code(src)
+  const out = []
+  for (const h of hits(src, L19_FORBIDDEN_STRINGS)) out.push(file + ' forbidden string ' + h)
+  if (L19_PANEL_REEXPORT.test(c)) out.push(file + ' re-exports panel.ts')
+  if (L19_PANEL_REQUIRE.test(c)) out.push(file + ' requires panel.ts')
+  if (L19_PANEL_SIDE_EFFECT.test(c)) out.push(file + ' side-effect imports panel.ts')
+  for (const m of c.matchAll(L19_PANEL_IMPORT)) {
+    const clause = m[1].trim()
+    if (file !== 'shell.ts') { out.push(file + ' imports panel.ts: ' + clause); continue }
+    if (clause.startsWith('type ')) continue
+    const named = /^\{([^}]*)\}$/.exec(clause)
+    if (named === null) { out.push(file + ' non-named import of panel.ts: ' + clause); continue }
+    const ids = named[1].split(',').map(x => x.trim()).filter(Boolean).filter(x => !x.startsWith('type '))
+    if (ids.some(x => x !== 'readLegacyUsage' && x !== 'STALE_MS')) out.push(file + ' imports disallowed symbol from panel.ts: ' + ids.join(','))
+  }
+  return out
+}
+// Reverse check on pettab.ts: must never touch pace.v1, quota, usage, or .side
+const L19_REVERSE_RE = /pace\.v1|quota|usage|\.side/i
+const l19ReverseViolations = src => src.split('\n').flatMap((l, i) => (L19_REVERSE_RE.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : []))
+
+test('L19: render modules (shell.ts, band.tsx, consolepages.ts) hold no forbidden strings or panel.ts imports/re-exports; exceptions panel.ts and pettab.ts are explicit', () => {
+  assert.deepEqual(L19_RENDER_MODULES, ['shell.ts', 'band.tsx', 'consolepages.ts'])
+  assert.deepEqual(L19_EXCEPTIONS, ['panel.ts', 'pettab.ts'])
+  for (const f of L19_RENDER_MODULES) assert.deepEqual(l19Violations(f, read(f)), [], f)
+  // panel.ts is the only non-test source mentioning codeforge.panel
+  for (const rel of modSources()) {
+    if (rel === path.join('live', 'panel.ts')) continue
+    assert.deepEqual(hits(readMod(rel), /codeforge\.panel/), [], rel + ' must not contain codeforge.panel')
+  }
+  assert.deepEqual(l19ReverseViolations(read('pettab.ts')), [], 'pettab.ts reverse check')
+})
+
+test('L19 controls: planted literals, panel.ts imports/re-exports in render modules, and planted panel.usage in a temp copy of pettab.ts all turn red', async () => {
+  for (const f of L19_RENDER_MODULES) {
+    const clean = read(f)
+    assert.ok(l19Violations(f, clean + "\nconst x = 'codeforge.panel/1'").length > 0, f + ' codeforge.panel')
+    assert.ok(l19Violations(f, clean + "\nconst x = 'pace.v1'").length > 0, f + ' pace.v1')
+    assert.ok(l19Violations(f, clean + "\nexport { readPet } from './panel.ts'").length > 0, f + ' re-export panel.ts')
+    assert.ok(l19Violations(f, clean + "\nimport { readPet } from './panel.ts'").length > 0, f + ' import readPet from panel.ts')
+  }
+  assert.ok(l19Violations('band.tsx', read('band.tsx') + "\nimport { readLegacyUsage } from './panel.ts'").length > 0, 'band.tsx cannot import readLegacyUsage')
+  assert.ok(l19Violations('consolepages.ts', read('consolepages.ts') + "\nimport { readLegacyUsage } from './panel.ts'").length > 0, 'consolepages.ts cannot import readLegacyUsage')
+  // Reverse check negative control on a temp copy of pettab.ts
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'pettab-l19-'))
+  try {
+    const tmpPet = path.join(tmp, 'pettab.ts')
+    fs.copyFileSync(path.join(__dirname, 'pettab.ts'), tmpPet)
+    assert.deepEqual(l19ReverseViolations(fs.readFileSync(tmpPet, 'utf8')), [])
+    fs.appendFileSync(tmpPet, '\nconst leak = panel.usage\n')
+    assert.ok(l19ReverseViolations(fs.readFileSync(tmpPet, 'utf8')).length > 0, 'planted panel.usage in temp pettab.ts is red')
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+  // readPet with usage/side poison fields returns identical output
+  const panelMod = await import(path.join(__dirname, 'panel.ts'))
+  const basePanel = {
+    schema: 'codeforge.panel/1',
+    updated_at_ms: 1_000_000,
+    pet: { title: 'Cat', sprite: [[{ text: 'ok' }]], tiers: { 40: [[{ text: 'HP 10/10' }]] }, icon: { id: 'cat', emoji: '🐱', fallback: ':3', text: '🐱' } },
+  }
+  const poisoned = {
+    ...basePanel,
+    usage: { tiers: { 40: [[{ text: '$99.00' }], [{ text: '5h 99%' }]] } },
+    side: { usage: { tiers: { 30: [[{ text: '$50' }]] } }, memory: { tiers: { 30: [[{ text: 'poison' }]] } } },
+  }
+  assert.deepEqual(panelMod.readPet(poisoned), panelMod.readPet(basePanel))
+})

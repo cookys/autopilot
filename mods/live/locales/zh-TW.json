@@ -490,7 +490,7 @@
   "tab.pet_short": "寵",
   "tab.forge_short": "鍛",
   "tab.help": "說明",
-  "frame.pet_todo": "寵物分頁還沒上線",
+  "page.pet.none": "沒有寵物資料",
   "tab.quota": "額度",
   "frame.help": "說明",
   "frame.nothing": "沒有待決卡",

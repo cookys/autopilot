@@ -15,9 +15,9 @@ This repo is yours and you are its long-term maintainer. When you see something 
 
 Work inside your grant stops only at acceptance: a real user has walked the core path on the real build, with one line of evidence (screenshot, command or URL). Green tests, a passing review and a push are intermediate steps. Stop midway only for a tier-2 destructive op, something outside your grant, or a Goal/milestone change; when you stop, say so once with options and a recommendation.
 
-For Claude Code sessions working **on** the autopilot plugin itself. Skill-runtime conventions live in each skill's `SKILL.md`. Other agents (Codex, OpenCode, Antigravity): [`AGENTS.md`](AGENTS.md); portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
+For Claude Code sessions working **on** the autopilot plugin itself. Other agents (Codex, OpenCode, Antigravity): [`AGENTS.md`](AGENTS.md); portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
 
-[Original wording](docs/dev/_archive/entry-docs/claude-md-detail.md). Directory rules load when a session reads or edits a file there: `scripts/CLAUDE.md`, `skills/CLAUDE.md`, `references/CLAUDE.md`, `platforms/CLAUDE.md`, `mods/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below.
+[Original wording](docs/dev/_archive/entry-docs/claude-md-detail.md). Directory rules load when a session reads or edits a file there: `{scripts,skills,references,platforms,mods}/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below.
 
 ## What this repo is
 
@@ -26,7 +26,7 @@ Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 49 h
 
 ## Scripts (prefer over LLM judgment)
 
-`scripts/` ships deterministic tooling the skills use instead of LLM judgment. **Before hand-coding any mechanical step, check whether a script already covers it**: group index below, full name list in `scripts/CLAUDE.md`, descriptions in [`docs/scripts-inventory.md`](docs/scripts-inventory.md).
+**Before hand-coding any mechanical step, check `scripts/` first**: group index below, full name list in `scripts/CLAUDE.md`, descriptions in [`docs/scripts-inventory.md`](docs/scripts-inventory.md).
 
 - A script existing is not evidence it is running: when one is meant to protect something, check that it actually fires; read [`references/evidence-discipline.md`](references/evidence-discipline.md) before recording anything as verified.
 - Every new or modified check (gate, hook, scan) ships a negative control: a deliberately broken case shown red before green ([evidence-discipline §58](references/evidence-discipline.md)).
@@ -49,7 +49,7 @@ Standalone lifecycle orchestration plugin: 31 skills, 3 methodology agents, 49 h
 
 - Boy-scout: any touch of a skill trims it toward contract-card shape ([`references/skill-contract-card.md`](references/skill-contract-card.md)).
 - Scorecard-first: rewriting or deleting a skill needs prior eval ON/OFF evidence.
-- Mechanism vs guidance: making an already-stated gate genuinely block needs no eval; changing what it demands does. A mechanism change must not also edit the requirement text; ship them as two commits.
+- Mechanism vs guidance: making a stated gate block needs no eval; changing its demands does (ship as two commits, never mixed).
 
 ## Severity vocabulary
 
@@ -86,12 +86,12 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 | Cross-skill references | `references/{blind-dispatch,model-routing}.md` |
 | Project tracking | `docs/projects/` (active + `_archive/`) |
 | Backlog | `project/backlog/BACKLOG.md` |
-| Plans | `docs/plans/` — registered in `project/projects/INDEX.md` (Version `active`; `check-plan-graduation.js`'s `plan_unregistered` gate) |
-| Architecture decisions | `docs/dev/adr/` (ADR-0001: verification over attestation — binding on governance work) |
+| Plans | `docs/plans/` (`project/projects/INDEX.md`, `references/plan-template.md`) |
+| Architecture decisions | `docs/dev/adr/` |
 | Release notes | `CHANGELOG.md` |
 | Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |
-| Dogfood / coexistence knowledge | `.claude/knowledge/` — read `INDEX.md` first. Gitignored on purpose: a write there is not saved until `git add -f` + commit (`references/knowledge-routing.md`) |
-| Directory rules (loaded on first touch) | `scripts/CLAUDE.md`, `skills/CLAUDE.md`, `references/CLAUDE.md`, `platforms/CLAUDE.md`, `mods/CLAUDE.md`; mod surface colour/emphasis rules in `mods/CLAUDE.md` |
+| Dogfood / coexistence knowledge | `.claude/knowledge/` — read `INDEX.md` first (`references/knowledge-routing.md`) |
+| Directory rules | `{scripts,skills,references,platforms,mods}/CLAUDE.md` |
 
 ## Reply preference
 
@@ -104,7 +104,7 @@ Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `g
 - Don't write "manually check for TODO/FIXME" in a reference doc — call `scripts/completeness-scan.sh`.
 - Don't enumerate forbidden phrases inline in code-review logic — call `scripts/check-redispatch-prompt.sh`.
 - Don't introduce new severity vocabulary — use the unified 4-tier above.
-- Don't add trust machinery (hash chains, event ledgers, witness receipts, attestation, trust roots) — settled by [ADR-0001](docs/dev/adr/0001-verification-over-attestation.md); verification is independent re-derivation, never tamper-evidence of a claim.
+- Don't add trust machinery (hash chains, event ledgers, witness receipts, attestation, trust roots) — verify by independent re-derivation ([ADR-0001](docs/dev/adr/0001-verification-over-attestation.md)).
 - Don't add a second canonical statement of "what the reviewer reads" — code-review.md Invocation § is canonical; reviewer.md Workflow §1 references it.
-- Don't append per-release notes to a Scripts-inventory row — `CHANGELOG.md` owns history; the row is an index entry (see Row shape rule).
-- Don't claim cross-platform env vars or CLI subcommands without verifying — by official doc URL OR by running the real tool. Both fabrication (`CODEX_PLUGIN_ROOT` etc. shipped to main) and over-correction (`agy plugin validate` wrongly called fabricated) happened; no URL or tool run means a Spike candidate, not a fact. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) "Corrected — previously mislabelled" §.
+- Don't append per-release notes to a Scripts-inventory row — `CHANGELOG.md` owns history (`scripts/CLAUDE.md`).
+- Don't claim cross-platform env vars or CLI subcommands without verifying ([`references/multi-agent-portability.md`](references/multi-agent-portability.md) § "Corrected — previously mislabelled").

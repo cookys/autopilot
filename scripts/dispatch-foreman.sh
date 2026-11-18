@@ -400,6 +400,7 @@ depth 0 (the dispatcher that started you), and it is reached from git, not from 
 - Outputs: \`$RUN_DIR/REPORT.md\` when done — list what was completed AND what was not, by name.
   A question only depth 0 can answer: write it to \`$RUN_DIR/ESCALATION.md\` and stop; you will be
   resumed with the answer in \`$RUN_DIR/ANSWER.md\`.
+- To delete files, use one standalone rm command whose targets are literal paths under the scratchpad or \$TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and other text files with the Write tool, not a heredoc inside bash -c.
 - If this run's OWN status ever comes back \`main_checkout_mutated\` for a reason you did not
   cause: the 308 SOP rule is that depth 0 (the operator) must not touch the main checkout while
   a hand or foreman is still running. That is depth 0's mistake, not yours — the round is

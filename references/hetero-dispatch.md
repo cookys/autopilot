@@ -603,7 +603,7 @@ marker clear; a previously green receipt cannot authorize a later mutation bound
 
 ### Cleanup (caller's responsibility — both are deliberate persistence)
 
-- `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.
+- `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading. To delete files, use one standalone rm command whose targets are literal paths under the scratchpad or $TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and other text files with the Write tool, not a heredoc inside bash -c.
 - Kept managed worktrees (exit 1, or `--keep-worktree`): inspect, then immediately use the exact root-run lifecycle below. Do not bypass its write-ahead branch inventory with a manual `git worktree remove --force`, and never use a bare `git branch -D`.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
 

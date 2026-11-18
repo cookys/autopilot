@@ -207,7 +207,10 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    lineage exists needs a new lineage (amend `intent.objective`) — same adoption key + new digest is
    `MISSION_BINDING_MISMATCH`.
 8. **Brief** ≤ 8 KB: paste `output_paths` verbatim; say the harness commits; forbid `git stash`
-   and pushes; list the verify commands. Nothing the hand cannot see (evidence dirs) may be cited
+   and pushes; list the verify commands. State the file-deletion rule: "To delete files, use one
+   standalone rm command whose targets are literal paths under the scratchpad or $TMPDIR. Never put
+   rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and other text
+   files with the Write tool, not a heredoc inside bash -c." Nothing the hand cannot see (evidence dirs) may be cited
    as a reading assignment. **Commit or keep OUTSIDE the repo every depth-0 evidence file (grant
    json, brief, run outputs) before dispatch** — the contract checker refuses a dirty tree and the
    refusal consumes the attempt (2026-09-15: attempt 1).

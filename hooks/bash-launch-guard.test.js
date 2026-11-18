@@ -37,6 +37,7 @@ function run(cmd, { shell = 'bash', extra = {}, env = {}, lsDefault = false } = 
   delete baseEnv.AUTOPILOT_BASH_GUARD_RMVAR_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SUBAGENT_RM_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SHARED_RM_MODE;
+  delete baseEnv.AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE;
   delete baseEnv.AUTOPILOT_BASH_GUARD_SECRET_MODE;
   delete baseEnv.AUTOPILOT_CONFIG_FILE;
   delete baseEnv.CLAUDE_CODE_TMPDIR;
@@ -1587,10 +1588,11 @@ test('rule6 heredoc script runs in the cwd of the segment that runs it, not the 
   });
   assert.strictEqual(outside.deny, true, JSON.stringify(outside));
   assert.match(outside.reason, /subagent-rm-outside-scratch/);
-  // payload cwd is outside, a preceding `cd` moves the heredoc shell into the scratchpad: allow
+  // payload cwd is outside, a preceding `cd` moves the heredoc shell into the scratchpad: rule 6 allows
+  // (isolate rule 6 cwd tracking from rule 9's heredoc-rm deny; rule 9 tests the default deny on this shape)
   const inside = run(`cd ${scratch} && bash <<'EOF'\nrm -rf x\nEOF`, {
     extra: { agent_id: 'sub-1', cwd: sandbox },
-    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot, AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE: 'off' },
   });
   assert.strictEqual(inside.deny, false, inside.reason);
 });
@@ -2093,3 +2095,174 @@ for (const cmd of ['systemctl --user cat x', 'systemctl show -p Environment x', 
     assert.strictEqual(run(cmd, { env: { AUTOPILOT_CONFIG_FILE: cfgFile } }).ctx, secretDenial);
   });
 }
+
+// ---- Rule 9 (rm-wrapped): deny rm inside sh -c / bash -c / zsh -c, executed heredoc, loop, xargs, or find ----
+const RM_WRAPPED_SHELL_C_DENY = [
+  "sh -c 'rm /abs/scratch/a.txt'",
+  'bash -c "rm -f /abs/scratch/a.txt /abs/scratch/b.txt"',
+  "zsh -c 'rm -f /abs/scratch/a.txt'",
+  "dash -c 'rm /abs/scratch/a.txt'",
+  "/bin/bash -lc 'rm -f /abs/scratch/a.txt'",
+  "bash -euo pipefail -c 'rm -f /abs/scratch/a.txt'",
+  "bash -c $'rm -f /abs/scratch/a.txt\\nrm -f /abs/scratch/b.txt'",
+  'bash -c rm\\ -f\\ /abs/scratch/a.txt',
+  "sudo env FOO=1 bash -c 'rm -f /abs/scratch/a.txt'",
+  "out=$(sh -c 'rm -f /abs/scratch/a.txt')",
+  "printf '%s\\n' /abs/scratch/a.txt | xargs sh -c 'rm -f \"$@\"' _",
+  "find /abs/scratch -type f -exec sh -c 'rm -f \"$@\"' _ {} +",
+];
+for (const cmd of RM_WRAPPED_SHELL_C_DENY) {
+  test(`rule9 denies shell -c rm: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true, r.reason);
+    assert.match(r.reason, /rm-wrapped/);
+    assert.match(r.reason, /rm inside sh -c \/ heredoc \/ loop cannot be permission-checked and stalls on a prompt/);
+    assert.match(r.reason, /Rewrite as one standalone command: rm <literal path> \[<literal path> \.\.\.\] with paths under the scratchpad or \$TMPDIR/);
+    assert.match(r.reason, /write briefs and other text files with the Write tool, not a heredoc inside bash -c/);
+  });
+}
+
+// Third observed case: standalone `rm` appears ONLY as prose inside a heredoc writing a brief inside sh/bash/zsh -c.
+const RM_WRAPPED_PROSE_HEREDOC_IN_C = [
+  "bash -c \"cat > /tmp/blg-brief.md <<'EOF'\nTo delete scratch files, run rm /abs/scratch/a.txt.\nEOF\"",
+  "bash -c '\ncat > /tmp/blg-brief.md <<EOF\nDelete files only by literal path with one standalone rm.\nEOF\n'",
+  "sh -c 'cat <<EOF > /tmp/blg-brief.md\nNever wrap `rm` inside a loop.\nEOF'",
+  "zsh -c \"tee /tmp/blg-brief.md <<'EOF' >/dev/null\nProse mentioning (rm) only.\nEOF\"",
+];
+for (const cmd of RM_WRAPPED_PROSE_HEREDOC_IN_C) {
+  test(`rule9 denies prose rm inside heredoc inside shell -c: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true, r.reason);
+    assert.match(r.reason, /rm-wrapped/);
+    assert.match(r.reason, /Rewrite as one standalone command: rm <literal path>/);
+    assert.match(r.reason, /write briefs and other text files with the Write tool, not a heredoc inside bash -c/);
+  });
+}
+
+const RM_WRAPPED_OTHER_DENY = [
+  // Heredoc fed directly or via pipe to a shell
+  'bash <<EOF\nrm -f /abs/scratch/a.txt\nEOF',
+  "sh <<'EOF'\nrm -f /abs/scratch/a.txt /abs/scratch/b.txt\nEOF",
+  'zsh <<-EOF\n\trm -f /abs/scratch/a.txt\nEOF',
+  "cat <<'EOF' | bash\nrm -f /abs/scratch/a.txt\nEOF",
+  "out=$(bash <<'EOF'\nrm -f /abs/scratch/a.txt\nEOF\n)",
+  // Heredoc written to a script file that the same command then runs
+  "cat > /tmp/blg-clean.sh <<'EOF'\nrm -f /abs/scratch/a.txt\nEOF\nbash /tmp/blg-clean.sh",
+  "cat <<'EOF' > /tmp/blg-clean.sh\nrm -f /abs/scratch/a.txt\nEOF\nchmod +x /tmp/blg-clean.sh && /tmp/blg-clean.sh",
+  "tee /tmp/blg-clean.sh <<'EOF' >/dev/null\nrm -f /abs/scratch/a.txt\nEOF\nsh /tmp/blg-clean.sh",
+  "cat > /tmp/blg-clean.sh <<'EOF'\nrm -f /abs/scratch/a.txt\nEOF\n. /tmp/blg-clean.sh",
+  // Loops (for / while / until)
+  'for f in /abs/scratch/a.txt /abs/scratch/b.txt; do rm -f "$f"; done',
+  'for f in /abs/scratch/a.txt /abs/scratch/b.txt\ndo\n  rm -f "$f"\ndone',
+  'for ((i=0; i<2; i++)); do rm -f "/abs/scratch/$i.txt"; done',
+  'while read -r f; do rm -f "$f"; done < /abs/scratch/list.txt',
+  'until [ ! -f /abs/scratch/a.txt ]; do rm -f /abs/scratch/a.txt; done',
+  // xargs rm and find -exec rm / -delete
+  "printf '%s\\n' /abs/scratch/a.txt /abs/scratch/b.txt | xargs rm",
+  "printf '%s\\0' /abs/scratch/a.txt /abs/scratch/b.txt | xargs -0 -r rm -f",
+  'cat /abs/scratch/list.txt | xargs -I{} rm -f {}',
+  "find /abs/scratch -name '*.tmp' -exec rm -f {} +",
+  'find /abs/scratch -type f -exec /bin/rm {} \\;',
+  'find /abs/scratch -execdir rm -f {} +',
+  'find /abs/scratch -ok rm {} \\;',
+  'find /abs/scratch -type f -delete',
+  'find . -name "*.tmp" -delete',
+  'find . -delete',
+];
+for (const cmd of RM_WRAPPED_OTHER_DENY) {
+  test(`rule9 denies wrapped rm: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, true, r.reason);
+    assert.match(r.reason, /rm-wrapped/);
+    assert.match(r.reason, /rm inside sh -c \/ heredoc \/ loop cannot be permission-checked and stalls on a prompt/);
+    assert.match(r.reason, /Rewrite as one standalone command: rm <literal path> \[<literal path> \.\.\.\] with paths under the scratchpad or \$TMPDIR/);
+  });
+}
+
+const RM_WRAPPED_ALLOW = [
+  // Standalone rm with literal paths
+  'rm -f /abs/scratch/a.txt /abs/scratch/b.txt',
+  'rm /abs/scratch/a.txt',
+  // Top-level echo / printf / grep mentioning rm (not inside sh -c)
+  'echo "rm -f /abs/scratch/a.txt"',
+  "printf '%s\\n' 'rm /abs/scratch/a.txt'",
+  "grep 'rm -rf' hooks/depth0-delegate-gate.js",
+  // git rm across contexts
+  'git rm a.txt',
+  "bash -c 'git rm -f a.txt'",
+  'for f in a.txt b.txt; do git rm "$f"; done',
+  "bash <<'EOF'\ngit rm a.txt\nEOF",
+  "git ls-files -z '*.old' | xargs -0 git rm",
+  "find . -name '*.old' -exec git rm {} +",
+  // Words that merely contain "rm" + out-of-scope rmdir
+  'terraform plan',
+  "bash -c 'terraform plan && git log --format=%H && chmod 600 perm'",
+  'for x in a b; do terraform validate --format=json; done',
+  'rmdir /abs/scratch/empty',
+  "bash -c 'rmdir /abs/scratch/empty'",
+  'for d in /abs/scratch/d1 /abs/scratch/d2; do rmdir "$d"; done',
+  "bash <<'EOF'\nrmdir /abs/scratch/empty\nEOF",
+  'find /abs/scratch -type d -empty -exec rmdir {} +',
+  'find /abs/scratch -name -delete',
+  'find . -name x -print',
+  'grep -- -delete f',
+  "printf '%s\\n' a b | xargs echo rm",
+  'while read -r f; do echo "$f"; done < /abs/scratch/list.txt && rm -f /abs/scratch/list.txt',
+  // Top-level heredoc writing a text file whose body mentions rm without executing it
+  "cat > /tmp/blg-brief.md <<'EOF'\nTo delete files, use standalone rm /abs/scratch/a.txt, never bash -c 'rm /abs/scratch/a.txt'.\nEOF",
+  "cat <<'EOF' > /tmp/blg-brief.md\nrm -rf /abs/scratch/a.txt\nEOF",
+  "tee /tmp/blg-brief.md <<'EOF' >/dev/null\nUse rm on literal paths.\nEOF",
+  "git commit -m \"$(cat <<'EOF'\ndeny rm wrapped in bash -c / heredoc / loop\nEOF\n)\"",
+  'echo "v $(bash --version)" <<\'EOF\'\nrm -f /abs/scratch/a.txt\nEOF',
+  'echo $(bash --version) <<\'EOF\'\nrm -f /abs/scratch/a.txt\nEOF',
+  "echo 'x; bash' <<'EOF'\nrm -f /abs/scratch/a.txt\nEOF",
+  'echo "a | bash" <<\'EOF\'\nrm -f /abs/scratch/a.txt\nEOF',
+];
+for (const cmd of RM_WRAPPED_ALLOW) {
+  test(`rule9 allows: ${JSON.stringify(cmd)}`, () => {
+    const r = run(cmd);
+    assert.strictEqual(r.deny, false, r.reason);
+    assert.doesNotMatch(r.ctx, /rm-wrapped/);
+  });
+}
+
+test('rule9 denies subagent wrapped rm even inside session scratchpad, and respects mode/config knobs', () => {
+  const { tmpRoot, sandbox, scratch } = mkScratchSandbox('blg');
+  const subHeredoc = run(`cd ${scratch} && bash <<'EOF'\nrm -rf x\nEOF`, {
+    extra: { agent_id: 'sub-1', cwd: sandbox },
+    env: { CLAUDE_CODE_TMPDIR: tmpRoot },
+  });
+  assert.strictEqual(subHeredoc.deny, true, subHeredoc.reason);
+  assert.match(subHeredoc.reason, /rm-wrapped/);
+
+  const cmd = "bash -c 'rm -f /abs/scratch/a.txt'";
+  const subC = run(cmd, { extra: { agent_id: 'sub-1' } });
+  assert.strictEqual(subC.deny, true, subC.reason);
+  assert.match(subC.reason, /rm-wrapped/);
+
+  const off = run(cmd, { env: { AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE: 'off' } });
+  assert.strictEqual(off.deny, false);
+  assert.doesNotMatch(off.ctx, /rm-wrapped/);
+
+  const warn = run(cmd, { env: { AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE: 'warn' } });
+  assert.strictEqual(warn.deny, false);
+  assert.match(warn.ctx, /rm-wrapped/);
+
+  assert.strictEqual(run(cmd, { env: { AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE: 'bogus' } }).deny, true);
+
+  const cfgFile = path.join(mk('blg-rmwrap-cfg-'), 'config.json');
+  fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { rm_wrapped: 'off' } }));
+  assert.strictEqual(run(cmd, { env: { AUTOPILOT_CONFIG_FILE: cfgFile } }).deny, false);
+  assert.strictEqual(run(cmd, {
+    env: { AUTOPILOT_CONFIG_FILE: cfgFile, AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE: 'deny' },
+  }).deny, true);
+  fs.writeFileSync(cfgFile, JSON.stringify({ depth0_delegate_gate: { rm_wrapped: 'warn' } }));
+  assert.match(run(cmd, { env: { AUTOPILOT_CONFIG_FILE: cfgFile } }).ctx, /rm-wrapped/);
+});
+
+test('rule9 fails open (no throw) on deeply nested quote/substitution input', () => {
+  const { detectWrappedRm } = require('../scripts/lib/bash-launch-rules.js');
+  for (const unit of ['a=( "$(', 'x="$(', '"`', '"((', "'((", '"<(', '"a=(']) {
+    assert.doesNotThrow(() => detectWrappedRm(`echo rm ${unit.repeat(25000)}`));
+  }
+});

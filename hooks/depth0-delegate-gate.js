@@ -74,6 +74,13 @@
  *   2f. BLOCK secret-print: Docker/env/config-file/Kubernetes/systemd unit/drop-in dumps. Knob: depth0_delegate_gate.secret_print
  *            or AUTOPILOT_BASH_GUARD_SECRET_MODE = block|warn|off (default block; invalid env ⇒ block).
  *            Use node scripts/safe-inspect.js for masked inspection; docs/guide/safe-inspect.md.
+ *   2g. DENY `rm` wrapped in `sh -c` / `bash -c` / `zsh -c` (including standalone `rm` prose inside a heredoc inside `-c`),
+ *            in an executed heredoc (`bash <<EOF`, `cat > f <<EOF && bash f`), in a `for`/`while` loop, or via `xargs rm` /
+ *            `find -exec rm` / `find -delete`. Rule: "To delete files, use one standalone rm command whose targets are literal
+ *            paths under the scratchpad or $TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while
+ *            loop. Write briefs and other text files with the Write tool, not a heredoc inside bash -c." Knob:
+ *            depth0_delegate_gate.rm_wrapped or env AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE = off|warn|deny (default deny;
+ *            garbage ⇒ deny). Runs at every depth, subagents included.
  *   3. WARN  (only when the shell is zsh; never a deny, by owner ruling) a word starting with `=`
  *            or an unquoted glob that matches nothing — zsh aborts the whole line.
  * Gate mode `off` silences all rules. Per-rule blocks apply in both gate `warn` and `block` modes.
@@ -97,7 +104,7 @@ const { executableText, detectForegroundWait } = require('../scripts/lib/bash-wa
 const {
   detectDetachNoWake, detectPkillSelfMatch, detectZshExpansion,
   detectBareLs, detectRecursiveRmVar, detectSubagentRmOutsideScratch, detectRmSharedDir,
-  detectSecretPrint,
+  detectSecretPrint, detectWrappedRm,
 } = require('../scripts/lib/bash-launch-rules.js');
 
 const DEFAULT_THRESHOLD = 8;
@@ -122,6 +129,7 @@ function loadConfig() {
     rmVarMode: 'deny',
     subagentRmMode: 'deny',
     sharedRmMode: 'warn',
+    rmWrappedMode: 'deny',
     secretMode: 'block',
     threshold: DEFAULT_THRESHOLD,
     guardedModels: DEFAULT_GUARDED,
@@ -139,6 +147,7 @@ function loadConfig() {
         if (['off', 'warn', 'deny'].includes(g.rm_var_target)) cfg.rmVarMode = g.rm_var_target;
         if (['off', 'warn', 'deny'].includes(g.subagent_rm)) cfg.subagentRmMode = g.subagent_rm;
         if (['off', 'warn', 'deny'].includes(g.shared_rm)) cfg.sharedRmMode = g.shared_rm;
+        if (['off', 'warn', 'deny'].includes(g.rm_wrapped)) cfg.rmWrappedMode = g.rm_wrapped;
         if (['block', 'warn', 'off'].includes(g.secret_print)) cfg.secretMode = g.secret_print;
         if (Number.isInteger(g.threshold) && g.threshold > 0) cfg.threshold = g.threshold;
         if (Number.isInteger(g.wait_advice_every) && g.wait_advice_every > 0) cfg.waitAdviceEvery = g.wait_advice_every;
@@ -164,6 +173,8 @@ function loadConfig() {
   if (envSr !== undefined && envSr !== '') cfg.subagentRmMode = ['off', 'warn', 'deny'].includes(envSr) ? envSr : 'deny';
   const envSh = process.env.AUTOPILOT_BASH_GUARD_SHARED_RM_MODE;
   if (envSh !== undefined && envSh !== '') cfg.sharedRmMode = ['off', 'warn', 'deny'].includes(envSh) ? envSh : 'warn';
+  const envRw = process.env.AUTOPILOT_BASH_GUARD_RM_WRAPPED_MODE;
+  if (envRw !== undefined && envRw !== '') cfg.rmWrappedMode = ['off', 'warn', 'deny'].includes(envRw) ? envRw : 'deny';
   const envEvery = process.env.AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY;
   const envSecret = process.env.AUTOPILOT_BASH_GUARD_SECRET_MODE;
   if (envSecret !== undefined && envSecret !== '') cfg.secretMode = ['block', 'warn', 'off'].includes(envSecret) ? envSecret : 'block';
@@ -313,6 +324,12 @@ function classify(tool, input) {
         process.exit(0);
       }
       if (sh) launchWarns.push(`bash-launch-guard (${sh.rule}): ${sh.why}`);
+      const rw = cfg.rmWrappedMode === 'off' ? null : detectWrappedRm(cmd);
+      if (rw && cfg.rmWrappedMode === 'deny') {
+        emitDeny(`bash-launch-guard (${rw.rule}): ${rw.why}`);
+        process.exit(0);
+      }
+      if (rw) launchWarns.push(`bash-launch-guard (${rw.rule}): ${rw.why}`);
       const shellName = path.basename(process.env.AUTOPILOT_BASH_GUARD_SHELL || process.env.SHELL || '');
       if (shellName === 'zsh') {
         const z = detectZshExpansion(cmd, typeof payload.cwd === 'string' ? payload.cwd : process.cwd());

@@ -61,7 +61,7 @@ Every Task Prompt MUST contain all **six elements**. Missing any is a violation:
 3. **Input** — upstream dependencies: schemas, API specs, data contracts, prior subtask outputs
 4. **Output** — deliverables: file list, new APIs, tests, docs
 5. **Acceptance** — how to verify completion (tests pass, behaviors observed, checks green). Acceptance criteria are attached from `references/acceptance-patterns.md` (pattern ids + evidence incl. each pattern's negative control); custom criteria require a written justification and a named negative control.
-6. **Boundaries** — what the subtask must NOT touch, to prevent side effects
+6. **Boundaries** — what the subtask must NOT touch, to prevent side effects. Include: "To delete files, use one standalone rm command whose targets are literal paths under the scratchpad or $TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and other text files with the Write tool, not a heredoc inside bash -c."
 
 ### Phase 3: Execution Ordering
 

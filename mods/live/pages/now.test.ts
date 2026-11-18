@@ -143,10 +143,11 @@ test('now: frameRows is exactly H rows at every size and every state, actions ne
 test('now: null console and null live draw the no-source row, never throw', async () => {
   seatQuota.reset()
   const out = content(80, 24, null, null)
+  expect(out.some(r => r.includes('待決 ? 張（無來源）'))).toBe(true)
   expect(out.some(r => r.includes('無來源：沒有 console 資料'))).toBe(true)
   expect(out.some(r => r.includes('無來源：本席沒有 live 資料'))).toBe(true)
   const red = nowPage.render(ctxOf(80, 24, null, null)).body.flat().filter(s => s.text.includes('無來源'))
-  expect(red.length).toBe(2)
+  expect(red.length).toBe(3)
   for (const s of red) expect(s.color).toBe(staleBadge('x').color)
 })
 

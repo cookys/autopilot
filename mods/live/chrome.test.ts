@@ -6,8 +6,9 @@ import { consoleOf, NOW } from './pages/quota.fixture'
 import type { ConsoleSnapshot } from './console'
 import { Pane, FOCUS_ANCHOR_KEY } from './pane'
 import { routeKey } from './pages/keys'
-import { frameHeight, frameRows } from './pages/frame'
+import { frameHeight, frameRows, STRIP_SPLIT_COLS } from './pages/frame'
 import { PAGES } from './pages/index'
+import { seatQuota } from './pages/now'
 import { makeT } from './i18n'
 import { displayWidth } from './model'
 
@@ -121,4 +122,74 @@ test('R13 mounted: host dock bodyRows reaches the last row at 160x40 and 120x30;
 test('R12 legend: action help follows the link role instead of promising purple', () => {
   expect(makeT('en')('legend.action')).not.toContain('purple')
   expect(makeT('zh-TW')('legend.action')).not.toContain('紫色')
+})
+
+test('M7: missing pending-card source shows ? (never 0) on 現況, 待決 and band row 2; real source with 0 cards keeps current text', () => {
+  seatQuota.reset()
+  const nowPage = PAGES.find(p => p.id === 'now')!
+  const decidePage = PAGES.find(p => p.id === 'decide')!
+  const rowText = (r: { text: string }[]): string => r.map(s => s.text).join('')
+  const makeLive = (state: string, header: string) => ({
+    state, text: header, band: null, header, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null,
+    sections: { attention: null, attentionNotWired: false, tasks: null, tasksNote: null, decisionsNotWired: false, foreman: null },
+    review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null,
+    detail: { counts: null, stalled: 0, now_ms: null, project: null, marker: null, qc: null, stage: null, decisions: null, load_source: null, residue: null, spend: null },
+  })
+  const baseCon = { ...(consoleOf([], { cards: null, lines: [] }) as ConsoleSnapshot), items: [], counts: { decisions: 0, exceptions: 0, quota_risk: 0, tabs: {}, summary: { lines: {}, hosts: {}, hints: 0, quota_worst: null } } }
+  const conCardsNull: ConsoleSnapshot = { ...baseCon, cards: null, sources: { cards: { at_ms: null, state: 'no_source' }, tasks: { at_ms: NOW, state: 'ok' }, hosts: { at_ms: NOW, state: 'ok' }, quota_now: { at_ms: NOW, state: 'ok' }, quota_forecast: { at_ms: NOW, state: 'ok' } } }
+  const conCardsNoSrc: ConsoleSnapshot = { ...conCardsNull, cards: [] }
+  const missingCases: [string, unknown, ConsoleSnapshot | null][] = [
+    ['null/null', null, null],
+    ['null/cards-null', null, conCardsNull],
+    ['no-project/null', makeLive('no-project', 'no project'), null],
+    ['stale/cards-no-source', makeLive('stale', 'stale'), conCardsNoSrc],
+  ]
+
+  for (const locale of ['zh-TW', 'en'] as const) {
+    const t = makeT(locale)
+    const wantPage = locale === 'zh-TW' ? '待決 ? 張（無來源）' : 'Pending ? (no source)'
+    const wantBandFull = locale === 'zh-TW' ? '待決(?)' : 'Decide(?)'
+    const wantBandShort = locale === 'zh-TW' ? '待(?)' : 'D(?)'
+    const wantBandZero = locale === 'zh-TW' ? '待決' : 'Decide'
+
+    for (const [name, live, con] of missingCases) {
+      for (const [cols, rows] of [[160, 40], [120, 30], [80, 24], [80, 7]] as const) {
+        const stripLen = cols < STRIP_SPLIT_COLS ? 2 : 1
+        const ctx = { live: live as never, console: con, size: { cols, rows }, t, nowMs: NOW }
+        const msg = `${locale} ${name} ${cols}x${rows}`
+        const nowAboveStrip = frameRows(nowPage, ctx).slice(0, -stripLen).map(rowText).join('\n')
+        const decAboveStrip = frameRows(decidePage, ctx).slice(0, -stripLen).map(rowText).join('\n')
+        expect(nowAboveStrip, msg + ' now has ?').toContain(wantPage)
+        expect(decAboveStrip, msg + ' decide has ?').toContain(wantPage)
+        expect(nowAboveStrip, msg + ' now no 0 pending').not.toMatch(/待決\s*0|Pending\s*0|\b0\s*cards|\(0\)|沒有待決卡|No open decision|No pending cards/)
+        expect(decAboveStrip, msg + ' decide no 0').not.toContain('0')
+        expect(decAboveStrip, msg + ' decide no none_cards').not.toMatch(/沒有待決卡|No open decision|No pending cards/)
+        if (con === null) expect(nowAboveStrip, msg + ' now no 0').not.toContain('0')
+      }
+
+      for (const cols of [160, 120, 80, 40] as const) {
+        const msg = `${locale} ${name} band@${cols}`
+        const tree = BandBar(EL as never, live as never, cols, t, { onInfo() {}, onSlot() {}, onTab() {} }, null, null, true, null, { snap: con, tab: 'command', cols }).node as Node
+        const bandRows = (tree.props.children as Node[]).flat().filter(Boolean)
+        const decideBtn = walk(bandRows[1]).find(n => n.kind === 'Button' && n.props.key === 'tab:decide')!
+        expect(flat(decideBtn).trim(), msg).toBe(cols >= 80 ? wantBandFull : wantBandShort)
+        expect(flat(bandRows[1]), msg + ' no 0').not.toContain('0')
+      }
+    }
+
+    // Positive control: a real source with 0 cards keeps current text (no ?)
+    const okConZero: ConsoleSnapshot = { ...conCardsNull, cards: [], sources: { ...conCardsNull.sources, cards: { at_ms: NOW, state: 'ok' } } }
+    const okLiveZero = makeLive('ok', '')
+    for (const [live, con] of [[null, okConZero], [okLiveZero, null], [okLiveZero, okConZero]] as const) {
+      const tree = BandBar(EL as never, live as never, 120, t, { onInfo() {}, onSlot() {}, onTab() {} }, null, null, true, null, { snap: con, tab: 'command', cols: 120 }).node as Node
+      const bandRows = (tree.props.children as Node[]).flat().filter(Boolean)
+      const decideBtn = walk(bandRows[1]).find(n => n.kind === 'Button' && n.props.key === 'tab:decide')!
+      expect(flat(decideBtn).trim()).toBe(wantBandZero)
+      const nowText = frameRows(nowPage, { live: live as never, console: con, size: { cols: 120, rows: 30 }, t, nowMs: NOW }).map(rowText).join('\n')
+      expect(nowText).not.toContain(wantPage)
+    }
+    const zeroDecText = frameRows(decidePage, { live: okLiveZero as never, console: okConZero, size: { cols: 120, rows: 30 }, t, nowMs: NOW }).map(rowText).join('\n')
+    expect(zeroDecText).toContain(t('page.decide.none_cards'))
+    expect(zeroDecText).not.toContain(wantPage)
+  }
 })

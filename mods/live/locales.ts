@@ -736,7 +736,9 @@ export const EN: Record<string, string> = {
   "page.fleet.act_see_c_stale": "[o] Look (old)",
   "page.fleet.act_fold_c": "[z] Unfold",
   "page.fleet.act_fold_c_open": "[z] Fold",
-  "page.fleet.act_nudge_c": "[f] Nudge"
+  "page.fleet.act_nudge_c": "[f] Nudge",
+  "page.now.pending_no_source": "Pending ? (no source)",
+  "page.decide.pending_no_source": "Pending ? (no source)"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -1473,5 +1475,7 @@ export const ZH_TW: Record<string, string> = {
   "page.fleet.act_see_c_stale": "[o] 看（舊）",
   "page.fleet.act_fold_c": "[z] 展開",
   "page.fleet.act_fold_c_open": "[z] 收合",
-  "page.fleet.act_nudge_c": "[f] 催辦"
+  "page.fleet.act_nudge_c": "[f] 催辦",
+  "page.now.pending_no_source": "待決 ? 張（無來源）",
+  "page.decide.pending_no_source": "待決 ? 張（無來源）"
 }

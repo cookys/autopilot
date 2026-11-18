@@ -11,7 +11,7 @@ import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankP
 import type { Verdict } from './quota-pick'
 import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, dataMissing, decisionCount, isBriefStale, lineState, lineTotal, staleBadge, stuckLinesOf } from './rows'
+import { brokenRow, dataMissing, decisionCount, isBriefStale, lineState, lineTotal, pendingSourceMissing, staleBadge, stuckLinesOf } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -343,6 +343,14 @@ function oldestDecision(ctx: PageCtx): { question: string; openedMs: number | nu
 function pendingRowOf(ctx: PageCtx, decisions: number, short: boolean): Row | null {
   const { t, size, live, nowMs } = ctx
   const liveStale = live !== null && live.state !== 'ok'
+  if (pendingSourceMissing(ctx)) {
+    if (live !== null && live.state === 'stale') {
+      const raw = (live.header ?? '').trim()
+      const shortWhy = (raw.split(' · ')[0] ?? '').trim() || t('page.fleet.state_stale')
+      return [staleBadge(GLYPHS.state.failed + ' ' + t('page.now.pending_no_source') + '  ' + GLYPHS.state.failed + ' ' + t('page.now.pending_stale', { why: shortWhy }))]
+    }
+    return [staleBadge(GLYPHS.state.failed + ' ' + t('page.now.pending_no_source'))]
+  }
   if (decisions <= 0 && !liveStale) return null
   const oldest = oldestDecision(ctx)
   const countText = t(short ? 'page.now.pending_short' : 'page.now.go_decide', { n: decisions })
@@ -357,7 +365,7 @@ function pendingRowOf(ctx: PageCtx, decisions: number, short: boolean): Row | nu
       const head = q === '' ? prefix : prefix + '：' + truncateToWidth(q, Math.max(4, Math.floor(size.cols / 3)))
       return [{ text: head, color: PALETTE.attention, press: 'tab:2:decide' }, staleBadge('  ' + staleMark)]
     }
-    return [staleBadge(prefix + '  ' + staleMark)]
+    return [staleBadge(staleMark)]
   }
   const q = oldest === null ? '' : firstLine(oldest.question)
   let text = prefix

@@ -1,7 +1,7 @@
 // mods/live/tabs.ts — the tab builders of the live pane (project/plans/2026-10-13-live-pane-design-system.md §6.1): 現況, 派工, 審查, 用量, 殘留 and ?.
 // Every line is built by a ui.ts component; this file writes no theme key, no glyph literal and no hand-made line (ui-lint.test.js L1, L2, L4-L7).
 
-import { decisionCount, stuckLinesOf } from './pages/rows'
+import { decisionCount, pendingSourceMissing, stuckLinesOf } from './pages/rows'
 import type { ConsoleSnapshot } from './console'
 import { T_EN } from './i18n'
 import { ratioLevel } from './band-contract.ts'
@@ -110,13 +110,14 @@ export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | Con
 // Console band row 2 when the pane is closed: the new page names 1-8 (same names as the pane strip, without digits), shortening to first character only when narrow.
 export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, active: BarTabId | ConsoleTab | BandPageId | null, forge: string | null, con: ConsoleSnapshot | null = null): BarStrip {
   const needs = snap === null ? {} : tabNeeds(snap)
+  const noPendingSrc = pendingSourceMissing({ live: snap, console: con })
   const pending = decisionCount({ live: snap, console: con })
   const faults = stuckLinesOf(con).length
   const first = (s: string): string => [...s][0] ?? s
   const build = (short: boolean): BarStrip => {
     const list = BAND_PAGE_TABS.map(id => {
       const full = t('tab.' + id)
-      const label = ui.tabCountLabel(short ? first(full) : full, id === 'decide' ? pending : id === 'fleet' ? faults : 0, id === 'fleet')
+      const label = ui.tabCountLabel(short ? first(full) : full, id === 'decide' ? (noPendingSrc ? null : pending) : id === 'fleet' ? faults : 0, id === 'fleet')
       return { id: id as BandPageId | 'forge', label, ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }
     })
     const act = active === 'forge' ? ('forge' as const) : null

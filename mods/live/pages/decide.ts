@@ -11,7 +11,7 @@ import type { DecideState, LiveDecision, Seg } from '../model'
 import { GLYPHS, PALETTE, wrapPlain } from '../ui'
 import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
-import { brokenRow } from './rows'
+import { brokenRow, pendingSourceMissing } from './rows'
 import type { Row } from './rows'
 
 // ---- view state and the key reducer ----
@@ -250,7 +250,9 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
   const nav = ctx.decide ?? NO_NAV
   const wide = ctx.size.cols >= WIDE
   const m = modelOf(ctx)
+  const noPendingSrc = pendingSourceMissing(ctx)
   const body: Row[] = []
+  if (noPendingSrc) body.push(noSource(ctx, 'page.decide.pending_no_source'))
   // §5: a source that is stale or missing says so in red, with its reason
   if (ctx.live === null) body.push(noSource(ctx, 'page.decide.nosrc_live'))
   else if (ctx.live.state !== 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('page.decide.stale_live', { why: ctx.live.header }), ctx.size.cols))
@@ -268,7 +270,7 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
   const hasOwn = cur !== undefined && cur.kind === 'own'
 
   if (cur === undefined) {
-    if (ctx.live !== null) body.push([seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.none_cards'))])
+    if (!noPendingSrc && ctx.live !== null) body.push([seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.none_cards'))])
   } else {
     const pos = String(cursor + 1) + '/' + String(total)
     body.push(...(cur.kind === 'own' ? ownCard(cur.d, pos, nav, ctx, wide) : conCard(cur.c, pos, ctx, wide)))

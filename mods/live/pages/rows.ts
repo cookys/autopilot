@@ -53,6 +53,14 @@ export function decisionCount(ctx: { console: ConsoleSnapshot | null; live: Live
   return con !== null ? Math.max(con.counts.decisions, (con.cards?.length ?? 0) + ownOnly) : own.length
 }
 
+// true when neither console.cards nor live.pending has a card source (the source is missing, not empty)
+export function pendingSourceMissing(ctx: { console: ConsoleSnapshot | null; live: LiveSnapshot | null }): boolean {
+  const { console: con, live } = ctx
+  const hasConsole = con !== null && con.cards !== null && con.sources.cards?.state !== 'no_source'
+  const hasLive = live !== null && (live.state === 'ok' || live.pending.some(d => !isStepCard(d)))
+  return !hasConsole && !hasLive
+}
+
 // production lines that carry at least one issue, ordered failed -> stalled -> console-surfaced -> oldest issue first
 export function stuckLinesOf(con: ConsoleSnapshot | null): { line: ConsoleLine; worst: ConsoleIssue }[] {
   if (con === null || con.lines === null) return []

@@ -732,5 +732,7 @@
   "page.fleet.act_see_c_stale": "[o] Look (old)",
   "page.fleet.act_fold_c": "[z] Unfold",
   "page.fleet.act_fold_c_open": "[z] Fold",
-  "page.fleet.act_nudge_c": "[f] Nudge"
+  "page.fleet.act_nudge_c": "[f] Nudge",
+  "page.now.pending_no_source": "Pending ? (no source)",
+  "page.decide.pending_no_source": "Pending ? (no source)"
 }

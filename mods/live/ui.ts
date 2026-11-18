@@ -1173,7 +1173,8 @@ export type Strip<Id extends string = PaneTab> = {
 // Q1 (owner 2026-10-13, revised 2026-10-16): no background; the active tab name is bold default text (attention bold when it needs the owner) and the `here` colour
 // is only the run of `━` in the baseline; a strip that wraps falls back to bold alone. The `›` next-page button is an action, not a place: dim.
 // Band tab badges keep their glyph and number formatting in the shared UI layer.
-export const tabCountLabel = (label: string, count: number, broken = false): string => label + (count > 0 ? '(' + (broken ? GLYPHS.state.failed : '') + count + ')' : '')
+export const tabCountLabel = (label: string, count: number | null, broken = false): string =>
+  count === null ? label + '(?)' : label + (count > 0 ? '(' + (broken ? GLYPHS.state.failed : '') + count + ')' : '')
 export function strip<Id extends string = PaneTab>(u: Ctx, active: Id | null, tabs: readonly StripTab<Id>[], hasNext: boolean): Strip<Id> {
   const next = hasNext ? sg(GLYPHS.structure.goto, { dim: true, role: 'glyph' }) : null
   const built = tabs.map(tb => {

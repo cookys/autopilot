@@ -9,6 +9,7 @@ import { fleetPage } from './fleet'
 import { decidePage } from './decide'
 import { hygienePage } from './hygiene'
 import { reviewPage } from './review'
+import { dispatchPage } from './dispatch'
 
 const shell = (id: Page['id'], key: string, title: string): Page => ({ id, key, title, render: () => ({ body: [], actions: [] }) })
 
@@ -23,6 +24,8 @@ export const PAGES: Page[] = [
   quotaPage,
   shell('dispatch', '5', '派工'),
   reviewPage,
+  dispatchPage,
+  shell('review', '6', '審查'),
   shell('spend', '7', '花費'),
   hygienePage,
   pet(),

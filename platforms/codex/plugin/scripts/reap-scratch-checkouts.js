@@ -9,7 +9,17 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
+
+let removalLog = null;
+for (const candidate of [
+  path.join(__dirname, 'lib', 'worktree-removal-log.js'),
+  path.resolve(process.cwd(), 'scripts', 'lib', 'worktree-removal-log.js'),
+]) {
+  try {
+    if (fs.existsSync(candidate)) { removalLog = require(candidate); break; }
+  } catch { /* standalone mutant copy outside repo */ }
+}
 
 class UsageError extends Error {}
 function run(argv, inj) {
@@ -50,23 +60,69 @@ function run(argv, inj) {
   // is an inspection failure: we cannot tell whether that process sits inside root.
   // Test seam: REAP_SCRATCH_PROC=DIR reads DIR/<pid>/cwd (symlink) and DIR/<pid>/cwd.err (error code) instead of /proc.
   const procDir = inj.procDir || '/proc';
+  const rawRoot = path.resolve(opt.root).replace(/\/+$/, '');
+  function matchScratchEntry(cwdRaw) {
+    const c = String(cwdRaw || '').replace(/ \(deleted\)$/, '').replace(/\/+$/, '');
+    if (c.startsWith(root + '/')) return c.slice(root.length + 1).split('/')[0];
+    if (rawRoot && rawRoot !== root && c.startsWith(rawRoot + '/')) return c.slice(rawRoot.length + 1).split('/')[0];
+    return null;
+  }
   function readLive() {
     const names = new Set();
+    const pidsByName = new Map();
     const failures = [];
+    const addPid = (entryName, pidNum) => {
+      if (!entryName) return;
+      names.add(entryName);
+      if (Number.isSafeInteger(pidNum) && pidNum > 0) {
+        if (!pidsByName.has(entryName)) pidsByName.set(entryName, []);
+        const arr = pidsByName.get(entryName);
+        if (!arr.includes(pidNum)) arr.push(pidNum);
+      }
+    };
+    const sharedCwds = removalLog ? removalLog.readProcCwds(procDir) : null;
+    if (sharedCwds) {
+      for (const [pidNum, cwdRaw] of sharedCwds.entries()) {
+        if (pidNum === process.pid) continue;
+        addPid(matchScratchEntry(cwdRaw), pidNum);
+      }
+    }
     for (const p of fs.readdirSync(procDir)) {
       if (!/^\d+$/.test(p)) continue;
+      const pidNum = Number(p);
+      if (pidNum === process.pid) continue;
       try {
         const errf = path.join(procDir, p, 'cwd.err');
         if (inj.procDir && fs.existsSync(errf)) {
           const e = new Error('fake'); e.code = fs.readFileSync(errf, 'utf8').trim(); throw e;
         }
         const c = fs.readlinkSync(path.join(procDir, p, 'cwd'));
-        if (c.startsWith(root + '/')) names.add(c.slice(root.length + 1).split('/')[0]);
+        if (!sharedCwds) addPid(matchScratchEntry(c), pidNum);
       } catch (e) {
         if (e.code !== 'ENOENT' && e.code !== 'ESRCH') failures.push({ pid: p, code: e.code || 'UNKNOWN' });
       }
     }
-    return { names, failures };
+    for (const arr of pidsByName.values()) arr.sort((a, b) => a - b);
+    return { names, pidsByName, failures };
+  }
+  function worktreeLockState(dir) {
+    return removalLog ? removalLog.probeWorktreeLock(dir) : 'free';
+  }
+  function hasUnexpiredLease(dir) {
+    const markerPath = path.join(dir, '.autopilot-worktree');
+    try {
+      const st = fs.lstatSync(markerPath);
+      if (!st.isFile() || st.isSymbolicLink()) return false;
+      const kv = {};
+      for (const line of fs.readFileSync(markerPath, 'utf8').split('\n')) {
+        const eq = line.indexOf('=');
+        if (eq > 0) kv[line.slice(0, eq)] = line.slice(eq + 1).trim();
+      }
+      return kv.schema === '2' && kv.retention === 'lease' && Number(kv.retention_expires_at) > Date.now() / 1000;
+    } catch { return false; }
+  }
+  function emitAudit(entry) {
+    if (removalLog) removalLog.logWorktreeRemoval({ remover: 'reap-scratch-checkouts.js', ...entry });
   }
   // An ancestor of root (root included) that is mode 0700 and owned by the caller keeps every other non-root user out.
   function privateAncestor() {
@@ -83,6 +139,8 @@ function run(argv, inj) {
   const live = snap.names;
 
   const rows = [];
+  const branchByName = new Map();
+  const skipAuditByName = new Map();
   for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
     if (!ent.isDirectory()) continue;
     const name = ent.name;
@@ -97,10 +155,42 @@ function run(argv, inj) {
         const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir');
         const st = git(dir, 'status', '--porcelain', '--ignore-submodules');
         const head = git(dir, 'rev-parse', 'HEAD');
+        const branch = git(dir, 'symbolic-ref', '--quiet', '--short', 'HEAD');
+        branchByName.set(name, branch);
         row.cls = 'KEEP';
         if (common === null || fs.realpathSync(common) !== path.join(main, '.git')) row.reason = 'worktree of another repo';
         else if (opt.keep.has(name)) row.reason = 'in --keep';
-        else if (live.has(name)) row.reason = 'live process cwd inside';
+        else if (live.has(name)) {
+          row.reason = 'live process cwd inside';
+          skipAuditByName.set(name, {
+            path: dir,
+            branch,
+            reason: row.reason,
+            lock: worktreeLockState(dir),
+            live_pids: snap.pidsByName.get(name) || [],
+            outcome: 'skipped',
+          });
+        } else if (worktreeLockState(dir) === 'unavailable') {
+          row.reason = 'worktree lock held';
+          skipAuditByName.set(name, {
+            path: dir,
+            branch,
+            reason: row.reason,
+            lock: 'unavailable',
+            live_pids: [],
+            outcome: 'skipped',
+          });
+        } else if (hasUnexpiredLease(dir)) {
+          row.reason = 'unexpired retention lease';
+          skipAuditByName.set(name, {
+            path: dir,
+            branch,
+            reason: row.reason,
+            lock: worktreeLockState(dir),
+            live_pids: [],
+            outcome: 'skipped',
+          });
+        }
         else if (st === null) row.reason = 'git status failed';
         else if (st !== '') row.reason = 'dirty: uncommitted or untracked files';
         else if (!reachable(head)) row.reason = 'unreachable commit: HEAD is in no ref of the main repo';
@@ -124,20 +214,58 @@ function run(argv, inj) {
       process.stderr.write('reap-scratch: refusing --apply, nothing removed. ' + ruleNote + '\n');
       return 1;
     }
+    for (const skipEntry of skipAuditByName.values()) emitAudit(skipEntry);
     if (inj.afterClassify) inj.afterClassify();
     for (const r of rows) {
       if (r.cls !== 'REAP') continue;
       const target = path.join(root, r.name);
+      const branch = branchByName.get(r.name) || null;
       const now = readLive(); // live cwds right before this removal, not the classification snapshot
       if (now.failures.length && !priv) {
         process.stderr.write('reap-scratch: stopping, unreadable process cwd appeared. ' + ruleNote + '\n');
         code = 1;
         break;
       }
-      if (now.names.has(r.name)) { r.cls = 'KEEP'; r.reason = 'live process cwd inside (appeared after classification)'; continue; }
-      git(main, 'worktree', 'remove', target);
+      if (now.names.has(r.name)) {
+        r.cls = 'KEEP';
+        r.reason = 'live process cwd inside (appeared after classification)';
+        emitAudit({
+          path: target,
+          branch,
+          reason: r.reason,
+          lock: worktreeLockState(target),
+          live_pids: (now.pidsByName && now.pidsByName.get(r.name)) || [],
+          outcome: 'skipped',
+        });
+        continue;
+      }
+      const lockFile = path.join(target, '.autopilot-worktree.lock');
+      let lockState = 'free';
+      if (fs.existsSync(lockFile)) {
+        const fr = spawnSync('flock', ['-n', '-E', '75', lockFile, 'git', '-C', main, 'worktree', 'remove', target], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        if (fr.status === 75) {
+          r.cls = 'KEEP';
+          r.reason = 'worktree lock held (appeared after classification)';
+          emitAudit({ path: target, branch, reason: r.reason, lock: 'unavailable', live_pids: [], outcome: 'skipped' });
+          continue;
+        }
+        lockState = fr.error ? 'unavailable' : 'held_by_us';
+      } else {
+        git(main, 'worktree', 'remove', target);
+      }
       r.removed = !fs.existsSync(target);
       if (!r.removed) r.reason = 'git worktree remove refused';
+      emitAudit({
+        path: target,
+        branch,
+        reason: r.removed ? 'clean, HEAD reachable' : r.reason,
+        lock: lockState,
+        live_pids: [],
+        outcome: r.removed ? 'removed' : 'failed',
+      });
     }
   }
   const gb = (kb) => kb / 1048576;

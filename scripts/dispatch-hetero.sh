@@ -4231,7 +4231,13 @@ try {
          && _wt_is_clean "$record_path"; then
         # No --force: git is the last compare/remove guard if dirt appears
         # after the immediately preceding cleanliness read.
-        git -C "$repo" worktree remove "$record_path" >/dev/null 2>&1 || true
+        if _wt_check_live_or_log_skip "dispatch-hetero.sh" "$record_path" "$record_branch" "pending_crash_window" "held_by_us"; then
+          if git -C "$repo" worktree remove "$record_path" >/dev/null 2>&1; then
+            _wt_log_removal "dispatch-hetero.sh" "$record_path" "$record_branch" "pending_crash_window" "held_by_us" "removed"
+          else
+            _wt_log_removal "dispatch-hetero.sh" "$record_path" "$record_branch" "pending_crash_window" "held_by_us" "failed"
+          fi
+        fi
         _wt_is_registered_path "$repo" "$record_path"; registered_rc=$?
         [ "$registered_rc" -ne 2 ] || {
           [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
@@ -4309,7 +4315,13 @@ try {
        && [ "$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)" = "$actual_head" ] \
        && [ "$(git -C "$repo" rev-parse --verify --quiet "refs/heads/$_WT_MARKER_BRANCH" 2>/dev/null || true)" = "$actual_head" ] \
        && _wt_is_clean "$wt"; then
-      git -C "$repo" worktree remove "$wt" >/dev/null 2>&1 || true
+      if _wt_check_live_or_log_skip "dispatch-hetero.sh" "$wt" "$actual_branch" "dead_clean_budget_reconcile" "held_by_us"; then
+        if git -C "$repo" worktree remove "$wt" >/dev/null 2>&1; then
+          _wt_log_removal "dispatch-hetero.sh" "$wt" "$actual_branch" "dead_clean_budget_reconcile" "held_by_us" "removed"
+        else
+          _wt_log_removal "dispatch-hetero.sh" "$wt" "$actual_branch" "dead_clean_budget_reconcile" "held_by_us" "failed"
+        fi
+      fi
     fi
     [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
     _WT_PROBE_FD=""
@@ -4428,8 +4440,22 @@ _wt_lock_fail() {
     WT_BUDGET_LOCK_FD=""
     die_precondition "$1"
   fi
-  git worktree remove "$WT" >/dev/null 2>&1 || true
-  if [ -z "$WT_PENDING_RECORD" ]; then
+  local _fail_lock_state="free"
+  if [ -n "${WT_LOCK_FD:-}" ]; then
+    _fail_lock_state="held_by_us"
+    exec {WT_LOCK_FD}>&- || true
+    WT_LOCK_FD=""
+  fi
+  if [ -n "${WT:-}" ] && [ -d "$WT" ]; then
+    if _wt_check_live_or_log_skip "dispatch-hetero.sh" "$WT" "$BRANCH" "lock_or_marker_setup_failed" "$_fail_lock_state"; then
+      if git worktree remove "$WT" >/dev/null 2>&1; then
+        _wt_log_removal "dispatch-hetero.sh" "$WT" "$BRANCH" "lock_or_marker_setup_failed" "$_fail_lock_state" "removed"
+      else
+        _wt_log_removal "dispatch-hetero.sh" "$WT" "$BRANCH" "lock_or_marker_setup_failed" "$_fail_lock_state" "failed"
+      fi
+    fi
+  fi
+  if [ -z "$WT_PENDING_RECORD" ] && [ ! -d "${WT:-/nonexistent}" ]; then
     git update-ref -d "refs/heads/$BRANCH" "$BASE_SHA" >/dev/null 2>&1 || true
   fi
   if [ -n "$WT_PENDING_RECORD" ]; then
@@ -4575,6 +4601,16 @@ if [ "$WORKTREE_REUSED" -eq 0 ] \
   # even when dir creation fails (verified 2026-06-22). Reap it before bailing.
   _wt_lock_fail "git worktree add failed"
 fi
+# Acquire the exclusive lifetime lock IMMEDIATELY after directory creation — BEFORE
+# publishing the branch ledger row or .autopilot-worktree marker — so no external
+# reaper can ever observe a marked, unlocked worktree. Never close early; preserve
+# across setsid detach so detached_main holds it until the round's last write.
+if [ "$WORKTREE_REUSED" -eq 0 ]; then
+  _wt_open_lock_fd "$WT/.autopilot-worktree.lock" \
+    || _wt_lock_fail "cannot open worktree lifetime lock"
+  WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
+  flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
+fi
 # Branch->session ledger row (close-out ownership). Fail-open: never fails the dispatch.
 # An enforce --no-campaign admission adds campaign_scope and the mode seen to that
 # same appended line. Every other dispatch passes empty args and the row is unchanged.
@@ -4621,15 +4657,6 @@ _wt_marker_tmp="$WT/.autopilot-worktree.tmp.$$"
 mv -f -- "$_wt_marker_tmp" "$WT/.autopilot-worktree" \
   || _wt_lock_fail "cannot publish worktree ownership marker"
 _wt_creation_test_checkpoint after-marker
-# Hold exclusive lock on a dedicated fd for the whole dispatch life. Never close
-# early; never exec-replace this shell (would release the lock silently).
-# On lock failure, clean up the just-created worktree+branch before dying.
-if [ "$WORKTREE_REUSED" -eq 0 ]; then
-  _wt_open_lock_fd "$WT/.autopilot-worktree.lock" \
-    || _wt_lock_fail "cannot open worktree lifetime lock"
-  WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
-  flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
-fi
 if ! _wt_read_schema2_marker "$WT/.autopilot-worktree" \
    || [ "$_WT_MARKER_RUN_ID" != "$WT_RUN_ID" ] \
    || [ "$_WT_MARKER_ROOT_RUN_ID" != "$WORKTREE_ROOT_RUN_ID" ] \
@@ -4710,25 +4737,28 @@ abort_dispatch() {
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ]; then
-    local abort_tip
-    abort_tip=""; wt_gitfile_check && abort_tip="$(_wt_git rev-parse HEAD 2>/dev/null || true)"
-    if [ -n "${WT_LOCK_FD:-}" ]; then
-      exec {WT_LOCK_FD}>&- || true
-      WT_LOCK_FD=""
-    fi
-    if [[ "$abort_tip" =~ ^[0-9a-f]{40,64}$ ]] \
-       && bash "$SELF_DIR/reap-dispatch-worktrees.sh" journal \
-      --repo "$_wt_repo_root" \
-      --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
-      --path "$WT" >/dev/null 2>&1; then
-      bash "$SELF_DIR/reap-dispatch-worktrees.sh" reap \
+    local abort_tip abort_lock_state="free"
+    [ -n "${WT_LOCK_FD:-}" ] && abort_lock_state="held_by_us"
+    if _wt_check_live_or_log_skip "dispatch-hetero.sh" "$WT" "$BRANCH" "managed_abort_reap" "$abort_lock_state"; then
+      abort_tip=""; wt_gitfile_check && abort_tip="$(_wt_git rev-parse HEAD 2>/dev/null || true)"
+      if [ -n "${WT_LOCK_FD:-}" ]; then
+        exec {WT_LOCK_FD}>&- || true
+        WT_LOCK_FD=""
+      fi
+      if [[ "$abort_tip" =~ ^[0-9a-f]{40,64}$ ]] \
+         && bash "$SELF_DIR/reap-dispatch-worktrees.sh" journal \
         --repo "$_wt_repo_root" \
         --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
-        --path "$WT" --expected-tip "$abort_tip" --yes >/dev/null 2>&1 || true
+        --path "$WT" >/dev/null 2>&1; then
+        bash "$SELF_DIR/reap-dispatch-worktrees.sh" reap \
+          --repo "$_wt_repo_root" \
+          --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+          --path "$WT" --expected-tip "$abort_tip" --yes >/dev/null 2>&1 || true
+      fi
     fi
   else
     reap_worktree_minimal "$WT"
-    git branch -D "$BRANCH" >/dev/null 2>&1
+    [ ! -d "$WT" ] && git branch -D "$BRANCH" >/dev/null 2>&1
   fi
   exit 2
 }
@@ -7015,7 +7045,8 @@ dispatch_detached_run() {
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
-      _wt_read_schema2_marker _wt_record_retention _wt_residue_lease_hours 2>/dev/null || true
+      _wt_read_schema2_marker _wt_record_retention _wt_residue_lease_hours \
+      _wt_removal_log_script _wt_check_live_or_log_skip _wt_log_removal 2>/dev/null || true
   } > "$state_file"
   # In detach mode the DETACHED child owns the worktree/branch lifecycle. A caller signal must
   # NOT reap the worktree out from under it — replace the reaping trap with a bare exit.
@@ -7029,7 +7060,14 @@ dispatch_detached_run() {
   _CONT_WO_PARENT_TRANSFERRED=1
   # The child removes the state file right after sourcing (before the long run) so a caller-kill
   # of the parent — which skips the parent's own cleanup below — cannot leak it.
-  setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
+  # Preserve WT_LOCK_FD across setsid/execve via POSIX fd 9, then re-dup to a CLOEXEC shell fd
+  # inside detached_main's shell so the lifetime flock stays held until detached_main exits
+  # without leaking into worker subprocesses.
+  if [ -n "${WT_LOCK_FD:-}" ]; then
+    setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; exec {_wt_detached_fd}>&9 && exec 9>&- && WT_LOCK_FD="$_wt_detached_fd"; rm -f "$1"; detached_main' bash "$state_file" 9>&"$WT_LOCK_FD" >/dev/null 2>&1 &
+  else
+    setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
+  fi
   local child=$!
   # Clear parent claim after child is launched so parent EXIT cleanup cannot fail-mark the WO.
   _CONT_WO_CLAIMED_ROOT=""

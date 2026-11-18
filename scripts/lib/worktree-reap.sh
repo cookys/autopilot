@@ -280,6 +280,59 @@ _wt_residue_lease_hours() {
   printf '%s' "$h"
 }
 
+_wt_removal_log_script() {
+  local dir="${SELF_DIR:-${self_dir:-}}"
+  if [ -n "$dir" ]; then
+    printf '%s/lib/worktree-removal-log.js' "$dir"
+  else
+    printf '%s/worktree-removal-log.js' "$_WT_REAP_LIB_DIR"
+  fi
+}
+
+# _wt_check_live_or_log_skip <remover> <path> <branch> <reason> [lock]
+# Returns 0 when no process has its cwd inside <path>; returns 1 (and appends a
+# skipped audit line with live_pids) when any live process cwd is inside <path>.
+_wt_check_live_or_log_skip() {
+  local remover="${1:-worktree-reap.sh}" path="${2:-}" branch="${3:-}" reason="${4:-live_process_cwd}" lock="${5:-}"
+  local js rc=0
+  _WT_LIVE_PIDS_JSON="[]"
+  [ -n "$path" ] || return 0
+  js="$(_wt_removal_log_script)"
+  [ -f "$js" ] || return 0
+  _WT_LIVE_PIDS_JSON="$(
+    node "$js" check-live \
+      --path "$path" \
+      --log-skip \
+      --remover "$remover" \
+      --branch "$branch" \
+      --reason "$reason" \
+      ${lock:+--lock "$lock"} 2>/dev/null
+  )" || rc=$?
+  if [ "$rc" -eq 1 ]; then
+    return 1
+  fi
+  _WT_LIVE_PIDS_JSON="[]"
+  return 0
+}
+
+# _wt_log_removal <remover> <path> <branch> <reason> [lock] <outcome> [live_pids]
+_wt_log_removal() {
+  local remover="${1:-worktree-reap.sh}" path="${2:-}" branch="${3:-}" reason="${4:-}" lock="${5:-}" outcome="${6:-failed}" live_pids="${7:-}"
+  local js
+  [ -n "$path" ] || return 0
+  js="$(_wt_removal_log_script)"
+  [ -f "$js" ] || return 0
+  node "$js" log \
+    --remover "$remover" \
+    --path "$path" \
+    --branch "$branch" \
+    --reason "$reason" \
+    ${lock:+--lock "$lock"} \
+    --outcome "$outcome" \
+    ${live_pids:+--live-pids "$live_pids"} >/dev/null 2>&1 || true
+  return 0
+}
+
 # _wt_record_retention <worktree> <reason> [hours]
 # Called by a rail at the moment it decides to KEEP a worktree, while it still holds
 # the worktree's lifetime flock. Rewrites the schema-2 marker atomically (tmp + mv)
@@ -433,6 +486,7 @@ _wt_ensure_config() {
 reap_worktree() {
   local wt="${1:-}"
   local hook_abs="" repo_root hook_rc rm_status rm_stderr managed_tip=""
+  local wt_branch="" wt_lock_state=""
 
   OUTCOME_ORPHAN="${OUTCOME_ORPHAN:-}"
   if [ -z "$wt" ]; then
@@ -440,6 +494,14 @@ reap_worktree() {
   fi
   if _wt_has_control_chars "$wt"; then
     printf 'WARN: worktree path contains control characters; refusing reap: %s\n' "$wt" >&2
+    OUTCOME_ORPHAN="$wt"
+    return 0
+  fi
+
+  wt_branch="$(git -C "$wt" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  [ -n "${WT_LOCK_FD:-}" ] && wt_lock_state="held_by_us"
+  if ! _wt_check_live_or_log_skip "worktree-reap.sh" "$wt" "$wt_branch" "live_process_cwd" "$wt_lock_state"; then
+    printf 'WARN: live process cwd inside worktree (%s); refusing reap: %s\n' "$_WT_LIVE_PIDS_JSON" "$wt" >&2
     OUTCOME_ORPHAN="$wt"
     return 0
   fi
@@ -461,6 +523,7 @@ reap_worktree() {
        || ! bash "$SELF_DIR/reap-dispatch-worktrees.sh" journal \
       --repo "$repo_root" --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
       --path "$wt" >/dev/null 2>&1; then
+      _wt_log_removal "worktree-reap.sh" "$wt" "$wt_branch" "managed_journal_failed" "free" "failed"
       printf 'WARN: managed worktree journal failed; preserving %s\n' "$wt" >&2
       OUTCOME_ORPHAN="$wt"
       return 0
@@ -493,12 +556,17 @@ reap_worktree() {
     # Managed leaves must enter the exact branch journal before their worktree
     # disappears. Release this leaf's lifetime proof, then let the lifecycle
     # controller perform the write-ahead inventory + compare/remove sequence.
+    local hook_removed=0
+    [ ! -d "$wt" ] && hook_removed=1
     rm_stderr="$(
       bash "$SELF_DIR/reap-dispatch-worktrees.sh" reap \
         --repo "$repo_root" --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
         --path "$wt" --expected-tip "$managed_tip" --yes 2>&1
     )"
     rm_status=$?
+    if [ "$hook_removed" -eq 1 ] && [ ! -d "$wt" ]; then
+      _wt_log_removal "worktree-reap.sh" "$wt" "$wt_branch" "teardown_hook_removed" "free" "removed"
+    fi
     if [ "$rm_status" -eq 0 ] && [ -d "$wt" ]; then
       rm_status=1
       rm_stderr="lifecycle controller preserved the managed worktree"
@@ -506,6 +574,11 @@ reap_worktree() {
   else
     rm_stderr="$(_wt_git_worktree_remove "$wt")"
     rm_status=$?
+    if [ "$rm_status" -ne 0 ] && [ -d "$wt" ]; then
+      _wt_log_removal "worktree-reap.sh" "$wt" "$wt_branch" "remove_failed" "$wt_lock_state" "failed"
+    else
+      _wt_log_removal "worktree-reap.sh" "$wt" "$wt_branch" "round_committed_reap" "$wt_lock_state" "removed"
+    fi
   fi
 
   if [ "$rm_status" -ne 0 ] && [ -d "$wt" ]; then
@@ -538,15 +611,24 @@ _wt_append_orphan_path() {
 # Signal-safe path: remove worktree only; on failure append path to ORPHAN_LOG.
 # Does NOT run the project hook. Does NOT delete a branch (caller does).
 reap_worktree_minimal() {
-  local wt="${1:-}"
+  local wt="${1:-}" wt_branch="" wt_lock_state=""
   if [ -z "$wt" ]; then
+    return 0
+  fi
+  wt_branch="$(git -C "$wt" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+  [ -n "${WT_LOCK_FD:-}" ] && wt_lock_state="held_by_us"
+  if ! _wt_check_live_or_log_skip "worktree-reap.sh" "$wt" "$wt_branch" "live_process_cwd" "$wt_lock_state"; then
+    _wt_append_orphan_path "$wt" || printf 'WARN: cannot record orphan worktree: %s\n' "$wt" >&2
     return 0
   fi
   # Honor the WT_RM test seam (same as _wt_git_worktree_remove) so the failure
   # branch is testable; array-exec keeps this signal-handler-safe (no subshell).
   local _rm=(git); [ -n "${WT_RM:-}" ] && _rm=("$WT_RM")
   if ! "${_rm[@]}" worktree remove --force "$wt" >/dev/null 2>&1; then
+    _wt_log_removal "worktree-reap.sh" "$wt" "$wt_branch" "remove_failed" "$wt_lock_state" "failed"
     _wt_append_orphan_path "$wt" || printf 'WARN: cannot record orphan worktree: %s\n' "$wt" >&2
+  else
+    _wt_log_removal "worktree-reap.sh" "$wt" "$wt_branch" "minimal_abort_reap" "$wt_lock_state" "removed"
   fi
   return 0
 }

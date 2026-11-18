@@ -21,6 +21,7 @@ Shared Cursor/Kimi broker transport and clone rail use the cursor-named helpers;
 `lib/local-sandbox-endpoints.json` `lib/local-sandbox-endpoint.sh` `lib/local-sandbox-parent.js` `pace-select.js` `pace-select.test.js` `lib/pace-reading.js` `lib/pace-roles.json`
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `reap-build-artifacts.js` `lib/build-artifacts.js` `lib/disk-guard.js` `accept-dev-channel-prompt.sh` `reap-scratch-checkouts.js` `scratch-closeout.sh` `repo-residue-sweep.js` `prune-plugin-cache.js` `resolve-repo-placement.js` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `write-task-status-input.js` `record-integration.js` `check-inputs-landed.js` `check-containment.js` `land-branch.js` `lib/worktree-reap.sh` `lib/worktree-intent.sh` `lib/prune-tmp-residue.sh` `lib/worktree-activity.js` `lib/tmp-residue.js` `lib/tmp-residue-registry.json` `register-external-run.js`
+`lib/worktree-removal-log.js`
 
 **Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `open-decision.js` `decision-claim.js` `fleet-card-mirror.js` `lib/card-notice.js` `probe-unknown.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js`
 **Mission, campaign & session state (cont.)** — `request-decision.js` `lib/team.js` `lib/menu-card-content.js` `lib/team.test.js` `open-decision-role-gate.test.js` `open-decision-attach-step.test.js` `request-decision.test.js` `pm-ask.js` `lib/work-order-plan.js`

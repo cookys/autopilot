@@ -79,6 +79,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const runtimePaths = require('./lib/runtime-paths');
+const { findLivePids, logWorktreeRemoval } = require('./lib/worktree-removal-log');
 
 const DEFAULT_STALL_SECS = 180;
 const TIP_VERIFY_VALUES = new Set(['pass', 'fail', 'timeout', 'no_source', 'skipped_by_flag']);
@@ -755,7 +756,28 @@ function reapRuns(dir, days, dryRun) {
       // never authorize deletion (gpt-5.5 R1 Major). Such dirs stay — the
       // pre-reaper status quo — rather than being reaped on a guess.
       if (fs.existsSync(marker) && probeLock(wtLock) === 'free') {
-        if (dryRun) {
+        let wtBranch = typeof m.branch === 'string' && m.branch ? m.branch : null;
+        if (!wtBranch) {
+          try {
+            const mb = fs.readFileSync(marker, 'utf8').match(/^branch=(.+)$/m);
+            if (mb) wtBranch = mb[1].trim();
+          } catch { /* best-effort branch read */ }
+        }
+        const livePids = findLivePids(wt);
+        if (livePids.length > 0) {
+          wtRemovalFailed = true;
+          if (!dryRun) {
+            logWorktreeRemoval({
+              remover: 'dispatch-status.js',
+              path: wt,
+              branch: wtBranch,
+              reason: 'live_process_cwd',
+              lock: 'free',
+              live_pids: livePids,
+              outcome: 'skipped',
+            });
+          }
+        } else if (dryRun) {
           out.reaped_worktrees.push(wt);
         } else {
           try {
@@ -765,12 +787,30 @@ function reapRuns(dir, days, dryRun) {
               spawnSync('git', ['-C', repoRoot, 'worktree', 'prune'], { stdio: 'ignore', timeout: 10000 });
             }
             out.reaped_worktrees.push(wt);
+            logWorktreeRemoval({
+              remover: 'dispatch-status.js',
+              path: wt,
+              branch: wtBranch,
+              reason: 'aged_dead_manifest_reap',
+              lock: 'free',
+              live_pids: [],
+              outcome: 'removed',
+            });
           } catch (e) {
             // Keep the manifest when the paired worktree delete errored (gpt-5.5
             // R2 Minor): deleting it would orphan a large failure-kept worktree
             // where a later --reap retry could no longer find it.
             wtRemovalFailed = true;
             out.errors.push({ file, error: `worktree: ${e.message}` });
+            logWorktreeRemoval({
+              remover: 'dispatch-status.js',
+              path: wt,
+              branch: wtBranch,
+              reason: `worktree: ${e.message}`,
+              lock: 'free',
+              live_pids: [],
+              outcome: 'failed',
+            });
           }
         }
       }

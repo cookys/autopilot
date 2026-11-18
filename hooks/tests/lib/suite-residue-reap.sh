@@ -460,8 +460,23 @@ suite_residue_reap() {
           _SRR_PROBE_FD=""
           continue
         fi
-        # live_rc == 0 and lock is stale: safe to reap; close probe fd after.
+        # live_rc == 0 and lock is stale: safe to reap unless a live process cwd sits inside.
         if [ "$dry_run" -eq 0 ]; then
+          local srr_branch=""
+          if [ -f "$marker" ]; then
+            srr_branch="$(sed -n 's/^branch=//p' "$marker" 2>/dev/null | head -1)"
+          fi
+          if { [ "$is_hetero" -eq 0 ] || [ -f "$marker" ]; } \
+             && command -v _wt_check_live_or_log_skip >/dev/null 2>&1 \
+             && ! _wt_check_live_or_log_skip "suite-residue-reap.sh" "$entry" "$srr_branch" "live_process_cwd" "held_by_us"; then
+            skipped_live=$((skipped_live + 1))
+            if [ -n "$probe_fd" ]; then
+              { exec {probe_fd}>&-; } 2>/dev/null || true
+            fi
+            _WT_PROBE_FD=""
+            _SRR_PROBE_FD=""
+            continue
+          fi
           local did_remove=0
           # finding suite-residue-reap-2: a raw `rm -rf` on a directory that
           # is a REGISTERED git worktree of this repo leaves a dangling
@@ -482,6 +497,12 @@ suite_residue_reap() {
             else
               errors+=("remove failed: $entry")
             fi
+          fi
+          if { [ "$is_hetero" -eq 0 ] || [ -n "$srr_branch" ]; } \
+             && command -v _wt_log_removal >/dev/null 2>&1; then
+            _wt_log_removal "suite-residue-reap.sh" "$entry" "$srr_branch" \
+              "stale_free_lock_in_tmpdir" "held_by_us" \
+              "$([ "$did_remove" -eq 1 ] && echo removed || echo failed)"
           fi
           if [ "$did_remove" -eq 1 ]; then
             reaped=$((reaped + 1))

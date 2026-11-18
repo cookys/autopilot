@@ -352,6 +352,7 @@ if [ "$RESUME" -eq 0 ]; then
   # Branch->session ledger row (close-out ownership). Fail-open: never fails the dispatch.
   dispatch_branch_ledger_append "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" "$BRANCH" "$RUN_ID" "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$BASE_SHA"
   # Schema-2 marker + lifetime flock so reap-dispatch-worktrees.sh treats this like any rail's.
+  # Acquire the lock BEFORE writing .autopilot-worktree so no reaper sees an unlocked marked tree.
   _excl="$(git rev-parse --git-common-dir)/info/exclude"; mkdir -p "$(dirname "$_excl")"
   _names=(.autopilot-worktree .autopilot-worktree.lock)
   # A worktree inside the main checkout must not show there as untracked.
@@ -359,6 +360,9 @@ if [ "$RESUME" -eq 0 ]; then
   for _name in "${_names[@]}"; do
     grep -qxF "$_name" "$_excl" 2>/dev/null || printf '%s\n' "$_name" >> "$_excl"
   done
+  WT_LOCK_FD=""
+  exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" && flock -n "$WT_LOCK_FD" \
+    || { worktree_intent_clear; die_precondition "cannot take the worktree lock on $WT (another rail holds it)"; }
   {
     printf 'created_at=%s\nbranch=%s\nbase_sha=%s\nrun_id=%s\nroot_run_id=%s\nloop_id=%s\nretention=inspect\nschema=2\n' \
       "$(date +%s)" "$BRANCH" "$BASE_SHA" "$RUN_ID" "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-$RUN_ID}" "$RUN_ID"
@@ -419,9 +423,11 @@ EOF
   ' "$RUN_DIR/protocol.md" || die_precondition "cannot write verify flags into protocol.md"
 fi
 
-WT_LOCK_FD=""
-exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" && flock -n "$WT_LOCK_FD" \
-  || die_precondition "cannot take the worktree lock on $WT (another rail holds it)"
+if [ "$RESUME" -eq 1 ]; then
+  WT_LOCK_FD=""
+  exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" && flock -n "$WT_LOCK_FD" \
+    || die_precondition "cannot take the worktree lock on $WT (another rail holds it)"
+fi
 
 # ---------------------------------------------------------------- env (allowlist)
 FOREMAN_ENV=()
@@ -700,8 +706,17 @@ fi
 # Retain on anything but a clean completion (inspect), and on --keep. An escalated run MUST
 # keep its worktree: resume is only possible from the same cwd.
 if [ "$STATUS" = completed ] && [ "$KEEP" -eq 0 ]; then
-  exec {WT_LOCK_FD}>&-
-  git worktree remove --force "$WT" >/dev/null 2>&1 || true
+  if _wt_check_live_or_log_skip "dispatch-foreman.sh" "$WT" "$BRANCH" "foreman_completed_reap" "held_by_us"; then
+    exec {WT_LOCK_FD}>&-
+    WT_LOCK_FD=""
+    if git worktree remove --force "$WT" >/dev/null 2>&1; then
+      _wt_log_removal "dispatch-foreman.sh" "$WT" "$BRANCH" "foreman_completed_reap" "free" "removed"
+    else
+      _wt_log_removal "dispatch-foreman.sh" "$WT" "$BRANCH" "foreman_completed_reap" "free" "failed"
+    fi
+  else
+    _wt_record_retention "$WT" "live_process_cwd" || true
+  fi
 elif [ -n "${WT:-}" ] && [ -d "$WT" ]; then
   # R1 retention record: the worktree stays, so its marker says why and until when
   # (residue.lease_hours, default 72 h; repo-residue-sweep.js reap --auto reads it). The

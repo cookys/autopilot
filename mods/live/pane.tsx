@@ -234,7 +234,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       const text = (x: string, k: string) => <Text key={k} {...drawSeg(sg)} wrap="truncate">{x === '' && r.length === 1 ? ' ' : x}</Text>
       if (Button !== undefined && !typing && sg.press === undefined && (isStrip ? sg.text.startsWith('i ') : isActionRow && HINT_AT.test(sg.text))) {
         // hint pieces (`[h] prev  [l] next`) each become a Button carrying their letter; text between stays Text
-        const pieces = isStrip ? [sg.text.replace(/\s{2}Esc.*$/, ''), sg.text.slice(sg.text.replace(/\s{2}Esc.*$/, '').length)].filter(x => x !== '') : sg.text.split(HINT_SPLIT)
+        const pieces = isStrip ? [sg.text] : sg.text.split(HINT_SPLIT) // V5: the strip advertises no Escape action.
         pieces.forEach((pc, n) => {
           const hm = isStrip ? (n === 0 && pc.startsWith('i ') ? ['', 'i'] : null) : /^\[([a-z])\] /.exec(pc)
           const act = hm === null || used.has(hm[1]) ? undefined : actOf(hm[1], undefined)

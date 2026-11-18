@@ -1,0 +1,46 @@
+
+mods/live/gate2.test.ts:
+(pass) gate2 item 1: W1: the height uses the host allocation; every page at every size is exactly H rows with the strip on row H-1 [45.15ms]
+(pass) gate2 item 1: the strip row does not move between a short page and a long page (no jump on page switch) [3.24ms]
+(pass) gate2 item 1: actions sit directly above the strip, the body touches the actions, only the leftover above the body is blank [1.02ms]
+(pass) gate2 item 1: free rows unfold first (folded fleet lines, a pool's seats) and the surface stays H rows [3.43ms]
+(pass) gate2 item 2: each 額度 pool row stays one row (no continuation rows in the table), and the full verdict is on screen in the focus area [3.08ms]
+(pass) gate2 item 3: no drawn row has both hint forms ("x: label" and "[x] label"), and no label repeats its own hotkey [21.77ms]
+(pass) gate2 item 4: 80x24 額度 shows at least one pool row, and the frame is exactly the available height [2.87ms]
+(pass) gate2 item 5: 現況 at 80 columns says the pending sentence once; the action row is only the jump [1.54ms]
+(pass) gate2 item 6: 資料不足 only for a missing or not-ok source; unknown pools say how many (缺換池資料) [2.97ms]
+(pass) gate2 item 1: the pane unfolds a folded fleet when the rows are free, and stays H rows [2.52ms]
+(pass) gate2 item 7: only the rendered action rows bind a [x] hint; a body row quoting "[s] ..." near the strip stays text [1.06ms]
+(pass) gate2 item 8: the strip never has a label-less Button; i keeps its Button at every width; under 66 columns the strip splits onto two rows [6.56ms]
+(pass) gate2 item 9: the zh-TW decide nav hints split into [h] and [l] Buttons (single space before [l]) [2.69ms]
+(pass) gate2 item 10: empty state three ways (calm / unknown pools / source or seat feed not ok) [1.94ms]
+(pass) gate2 item 11: no raw field or pool names (cards source, quota.pools, switched pool) [1.32ms]
+(pass) gate2 item 12: one line total: 現況 and 艦隊 and the band read lineTotal, never fewer than the lines listed [0.30ms]
+
+mods/live/pages/batch2-mn.test.ts:
+(pass) M1 (S1-full-p3-80x24 row 16): a cut 80-column 艦隊 page keeps the summary with the offline hosts on top and ends in ↓ 還有 N 項 [6.23ms]
+(pass) M2 (S1-full-p4-80x24 row 15): a cut 80-column 額度 table says how many pools of which kind are hidden, and keeps o / prev / next as Buttons [5.20ms]
+(pass) M3 (S1-full-p2-160x40 row 29 / 33): the read-only card the `z 收合` header sits over has a z Button in its key row [1.77ms]
+(pass) M4 (S1-full-p3-160x40 row 29): an expanded line with no issue record is 正常, never 閒置; its focus says the detail is missing [1.43ms]
+(pass) M5 (S5-console-exit1-nofile-p1-160x40 row 34): the console band gives the idle cells to the left text, so the fix command is whole [1.86ms]
+(pass) M6 (nojump-f23 row 34): the closed band row 2 counts quota pools, does not mark idle lines ✗, and lists 9 寵物 and 0 鍛 [0.95ms]
+(pass) N1 (S1-full-p2-160x40 row 27): 待決 focuses the card that has waited longest (the one 現況 names as 最舊) by default [0.52ms]
+(pass) N2 (S1-full-p1-160x40 row 19): 現況 draws no ▸ focus mark and orders the line rows like 艦隊 (longest first), with the duration [2.85ms]
+(pass) N3 (S1-full-p1-160x40 row 16): a reason kept whole wraps at a clause boundary on a 2-cell hanging indent, never back to column 0 [0.99ms]
+(pass) N4 (S5-stale-10min-p1-160x40 row 11): a stale overview keeps the old host value with ✗ and says 資料已過期 once [0.82ms]
+
+mods/live/pages/ux-gate3-decide.test.ts:
+(pass) W3: one action row leaves the own and remote answer summary visible at 80x24 host body height 9 [10.30ms]
+(pass) W3: a missing blocks value still renders a labelled 卡住 — row on both kinds of card [1.34ms]
+(pass) W3: long card details have working next/back buttons while the first view retains clickable choices [7.10ms]
+(pass) V3: own cards show z and f together, and both card kinds use the same fold control [9.98ms]
+(pass) U2: an unanswered remote card has 補充 — and names its answering destination once [1.61ms]
+
+mods/live/pages/ux-gate3-frame.test.ts:
+(pass) W1: the tab bar uses the last allocated row at 160x40 and 120x30 [7.47ms]
+(pass) V5: the tab bar never advertises Escape to close while the prompt may own it [14.10ms]
+
+ 33 pass
+ 0 fail
+Ran 33 tests across 4 files. [0.63s]
+exit=0

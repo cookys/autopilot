@@ -6,7 +6,7 @@
 //   body rows      the page's rows, wrapped (never cut) to the width; an overflow turns the LAST row into `↓ 還有 N 列`, the total unchanged
 //   A rows         the actions (at most 6 when H >= 32 else 4), directly under the body; none -> one row: `沒有待決卡`, or `資料不足，無法判定` when a source is missing or a pool's verdict is unknown
 //   Spare body rows go ABOVE the content (R14): the pane keeps its fixed height and the last content row touches the actions.
-//   last row       tab strip: `1 現況 2 待決 ...  i 說明  Esc 收起`; each tab entry carries press `tab:<digit>:<id>`; every entry 1-8, 9, 0 and i stays, the names shorten first (G7)
+//   last row       tab strip: `1 現況 2 待決 ...  i 說明` (V5: the host ✕ and band [-] close it); each tab entry carries press `tab:<digit>:<id>`; every entry 1-8, 9, 0 and i stays, the names shorten first (G7)
 import type { ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
 import type { LiveSnapshot, Seg } from '../model'
@@ -27,9 +27,10 @@ export interface Page { id: PageId; key: string; title: string; framed?: true; r
 export type ExtraTab = { id: string; key: string; label: string }
 export type FrameOpts = { scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
 
-// Height is fixed for the host allocation: a dock beside chat uses every row; an inline (stacked) pane is capped at 24.
+// W1: the host already budgets pane borders and chat space. Use every allocated
+// body row in either placement; a second inline cap leaves padding below the strip.
 export const FRAME_MAX_ROWS = 24
-export const frameHeight = (available: number, placement: 'dock' | 'inline' = 'inline'): number => Math.max(0, placement === 'dock' ? available : Math.min(available, FRAME_MAX_ROWS))
+export const frameHeight = (available: number, _placement: 'dock' | 'inline' = 'inline'): number => Math.max(0, available)
 
 export const actionRows = (rows: number): number => (rows >= 32 ? 6 : 4)
 // N3: the hanging indent of a body row the frame has to wrap (the cells under the left status-glyph column stay blank); rows.ts owns the number so a page can measure the same way
@@ -93,7 +94,6 @@ export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const all = [...pages.filter(p => p.id !== 'help').map(p => ({ id: p.id as string, key: PAGE_KEYS[p.id] ?? p.key, label: ctx.t('tab.' + p.id) })), ...(opts.extra ?? [])]
   const first = (s: string): string => [...s][0] ?? s
   const helpLabel = ctx.t('frame.help')
-  const esc = '  Esc ' + ctx.t('frame.close')
   type Form = 'full' | 'short'
   const labelOf = (x: { id?: string; label: string }, f: Form): string => (f === 'full' ? x.label : x.id === 'pet' || x.id === 'forge' || x.id === 'fleet' ? ctx.t('tab.' + x.id + '_short') : first(x.label))
   const entrySeg = (x: { id: string; key: string; label: string }, f: Form): Seg => {
@@ -105,12 +105,12 @@ export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     row: list.flatMap((x, i) => (i === 0 ? [entrySeg(x, f)] : [{ text: ' ' }, entrySeg(x, f)])),
     width: list.reduce((w, x, i) => w + (i === 0 ? 0 : 1) + entryW(x, f), 0),
   })
-  const buildWithHelp = (list: typeof all, f: Form, gap: string, help: string, tail: string): { row: Row; width: number } => {
+  const buildWithHelp = (list: typeof all, f: Form, gap: string, help: string): { row: Row; width: number } => {
     const head = buildEntries(list, f)
     const sep = head.row.length === 0 ? '' : gap
     return {
-      row: [...head.row, ...(sep === '' ? [] : [{ text: sep }]), { text: HELP_KEY + ' ' + help + tail, dim: true }],
-      width: head.width + displayWidth(sep) + displayWidth(HELP_KEY) + HOST_PREFIX + 1 + displayWidth(help) + displayWidth(tail),
+      row: [...head.row, ...(sep === '' ? [] : [{ text: sep }]), { text: HELP_KEY + ' ' + help, dim: true }],
+      width: head.width + displayWidth(sep) + displayWidth(HELP_KEY) + HOST_PREFIX + 1 + displayWidth(help),
     }
   }
   const pick = (tries: { row: Row; width: number }[]): Row => (tries.find(x => x.width <= ctx.size.cols) ?? tries[tries.length - 1]).row
@@ -119,20 +119,17 @@ export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     const bot = all.slice(6)
     const row1 = pick([buildEntries(top, 'full'), buildEntries(top, 'short')])
     const row2 = pick([
-      buildWithHelp(bot, 'full', '  ', helpLabel, esc),
-      buildWithHelp(bot, 'full', '  ', helpLabel, ''),
-      buildWithHelp(bot, 'short', '  ', helpLabel, ''),
-      buildWithHelp(bot, 'short', ' ', first(helpLabel), ''),
+      buildWithHelp(bot, 'full', '  ', helpLabel),
+      buildWithHelp(bot, 'short', '  ', helpLabel),
+      buildWithHelp(bot, 'short', ' ', first(helpLabel)),
     ])
     return [row1, row2]
   }
   return [pick([
-    buildWithHelp(all, 'full', '  ', helpLabel, esc),
-    buildWithHelp(all, 'full', '  ', helpLabel, ''),
-    buildWithHelp(all, 'short', '  ', helpLabel, esc),
-    buildWithHelp(all, 'short', '  ', helpLabel, ''),
-    buildWithHelp(all, 'short', ' ', helpLabel, ''),
-    buildWithHelp(all, 'short', ' ', first(helpLabel), ''),
+    buildWithHelp(all, 'full', '  ', helpLabel),
+    buildWithHelp(all, 'short', '  ', helpLabel),
+    buildWithHelp(all, 'short', ' ', helpLabel),
+    buildWithHelp(all, 'short', ' ', first(helpLabel)),
   ])]
 }
 

@@ -188,7 +188,7 @@ test('spend golden: 160x40, 120x30, 80x24 and 80x24 stale match the four mockups
   expect(diffRows(out160.slice(33, 38), GOLD_WIDE_BODY)).toEqual([])
   expect(out160[38]).toBe('沒有要你處理的事')
   expect(out160[39]).toContain('7 花費')
-  expect(out160[39]).toContain('i 說明  Esc 收起')
+  expect(out160[39]).toContain('i 說明') // V5: close with host ✕ / band [-]; Escape belongs to its focused surface.
 
   // X5: 120x30 (header 1 + blank gap 22 + body 5 + calm empty state 1 + strip 1 = 30)
   const out120 = frameRows(spendPage, ctxOf(120, 30)).map(text)

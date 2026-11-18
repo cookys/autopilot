@@ -1,0 +1,14 @@
+
+mods/live/pages/ux-gate3-frame.test.ts:
+(fail) W1: the tab bar uses the last allocated row at 160x40 and 120x30 [6.58ms]
+  AssertionError: 120x30: use all host body rows
+
+  expect(received).toBe()
+
+  Expected: 25
+  Received: 24
+
+ 0 pass
+ 1 fail
+Ran 1 test across 1 file. [0.44s]
+exit=1

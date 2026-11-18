@@ -96,8 +96,8 @@ test('R12: action role uses the accessible light-theme link token with contrast 
   for (const light of [[255, 255, 255], [245, 245, 245]]) expect(contrast([0, 0, 255], light)).toBeGreaterThanOrEqual(4.5)
 })
 
-test('R13: dock uses all 40 available rows with strip last; inline stays capped at 24', () => {
-  for (const [placement, available, want] of [['dock', 40, 40], ['dock', 30, 30], ['inline', 40, 24], ['inline', 24, 24], ['inline', 12, 12]] as const) {
+test('W1: dock and inline use all host body rows with the strip last', () => {
+  for (const [placement, available, want] of [['dock', 40, 40], ['dock', 30, 30], ['inline', 40, 40], ['inline', 24, 24], ['inline', 12, 12]] as const) {
     const height = frameHeight(available, placement)
     expect(height, placement + ' ' + available).toBe(want)
     const rows = frameRows(PAGES[0], { live: null, console: null, t: makeT('zh-TW'), nowMs: 0, size: { cols: 80, rows: height } })
@@ -106,9 +106,9 @@ test('R13: dock uses all 40 available rows with strip last; inline stays capped 
   }
 })
 
-test('R13 mounted: host dock bodyRows reaches the last row at 160x40 and 120x30; inline 80x24 stays capped', async ($, on) => {
+test('W1: mounted dock and inline bodyRows reach the last host body row', async ($, on) => {
   on('clock.now', () => ({ value: NOW }))
-  for (const [columns, rows, placement, available, want] of [[160, 40, 'dock', 40, 40], [120, 30, 'dock', 30, 30], [80, 24, 'inline', 30, 24]] as const) {
+  for (const [columns, rows, placement, available, want] of [[160, 40, 'dock', 40, 40], [120, 30, 'dock', 30, 30], [80, 24, 'inline', 30, 30]] as const) {
     const pane = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { title: 'Autopilot', isFocused: true, bodyColumns: placement === 'dock' ? columns / 2 : columns, placement, scroll: { offset: 0, bodyRows: available }, view: { agentId: undefined } }, viewport: { columns, rows, isFullscreen: true } })
     const boxes = await pane.findAll({ type: 'Box' })
     const framed = boxes.filter((b: any) => /^f\d+$/.test(b.props?.key ?? ''))

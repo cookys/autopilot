@@ -1,0 +1,22 @@
+
+mods/live/pages/ux-gate3-decide.test.ts:
+(fail) W3: one action row leaves the own and remote answer summary visible at 80x24 host body height 9 [6.79ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: 1
+  Received: 3
+(fail) W3: a missing blocks value still renders a labelled 卡住 — row on both kinds of card [2.66ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: true
+  Received: false
+(fail) W3: long card details have working next/back buttons while the first view retains clickable choices [4.00ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: true
+  Received: false
+
+ 0 pass
+ 3 fail
+Ran 3 tests across 1 file. [0.56s]
+exit=1

@@ -434,6 +434,7 @@
  "cards": [
   {
    "id": "d-fe000001",
+   "blocks": "合成卡住：等待操作員確認，才能繼續派工",
    "question": "記憶線：測試綠了，合併到 develop 嗎？",
    "background": "fixture：--no-ff，測試在 tip 全綠。",
    "options": [
@@ -452,6 +453,7 @@
   },
   {
    "id": "d-fe000002",
+   "blocks": "合成卡住：等待操作員確認，才能繼續派工",
    "question": "評測機第二槽插電",
    "background": "你答「我來」；插好後回報。",
    "options": [
@@ -466,6 +468,7 @@
   },
   {
    "id": "d-fe000003",
+   "blocks": "合成卡住：等待操作員確認，才能繼續派工",
    "question": "GPU 線：雲端 B 池快用完，3 個評估改派本地模型？",
    "background": "B 池週額度預估明早前用完；本地模型有 2 格空槽。",
    "options": [
@@ -488,6 +491,7 @@
   },
   {
    "id": "d-fe000004",
+   "blocks": "合成卡住：等待操作員確認，才能繼續派工",
    "question": "語音線轉述：你在語音 session 說「先停推播」，確認嗎？",
    "background": "lane 轉述的答案，等你一鍵確認。",
    "options": [

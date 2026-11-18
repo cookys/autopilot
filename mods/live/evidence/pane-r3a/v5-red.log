@@ -1,0 +1,13 @@
+
+mods/live/pages/ux-gate3-frame.test.ts:
+(pass) W1: the tab bar uses the last allocated row at 160x40 and 120x30 [7.95ms]
+(fail) V5: the tab bar never advertises Escape to close while the prompt may own it [1.59ms]
+  AssertionError: expect(received).not.toContain()
+
+  Expected: not containing "Esc"
+  Received: "1 現況 2 待決 3 艦隊 4 額度 5 派工 6 審查\n7 花費 8 殘留 9 寵物 0 鍛  i 說明  Esc 收起"
+
+ 1 pass
+ 1 fail
+Ran 2 tests across 1 file. [0.50s]
+exit=1

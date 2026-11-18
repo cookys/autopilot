@@ -76,8 +76,8 @@ const CARDS = [card('d-c0000005', '丙線：測試綠了，可以合嗎', 'PM', 
 
 test('M3 (S1-full-p2-160x40 row 29 / 33): the read-only card the `z 收合` header sits over has a z Button in its key row', () => {
   const wide = decidePage.render(ctx(160, 40, decideCon(CARDS), decideLive)).actions.map(text)
-  expect(wide[wide.length - 1]).toContain('[h] 上一張  [l] 下一張')
-  expect(wide[wide.length - 1]).toContain('[z] 收合其他待決')
+  expect(wide[wide.length - 1]).toContain('[h] 上張 [l] 下張') // W3: compact single action row.
+  expect(wide[wide.length - 1]).toContain('[z] 收合其他') // V3: both cards share compact fold controls.
   const narrow = decidePage.render(ctx(80, 24, decideCon(CARDS), decideLive)).actions.map(text)
   expect(narrow[narrow.length - 1]).toContain('[z] 收合其他')
 })

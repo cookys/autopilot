@@ -174,13 +174,29 @@ function loadSourceIssues(ls: LoadSourceView, t: T): string[] {
   return issues
 }
 
+function isLoadSourceBroken(ls: LoadSourceView | null): boolean {
+  if (ls === null) return true
+  const src = ls.source.toLowerCase()
+  if (src === 'unknown' || src === 'missing') return true
+  return ls.marketplace === 'missing' || ls.flags.includes('dev_link_missing_or_stale')
+}
+
 function loadSourceIsClean(ls: LoadSourceView): boolean {
+  if (isLoadSourceBroken(ls)) return false
   const src = ls.source.toLowerCase()
   const isDev = src === 'dev' || src === 'directory' || src.startsWith('dev:')
   if (!isDev) return false
-  if ((ls.behind_upstream ?? 0) > 0 || ls.marketplace === 'missing') return false
+  if ((ls.behind_upstream ?? 0) > 0) return false
   if (ls.flags.some(f => BAD_SOURCE_FLAGS.includes(f))) return false
   return ls.stale_cache_dirs.every(d => d.alive.length === 0)
+}
+
+function brokenSourceRows(leadText: string, reason: string, cols: number): Row[] {
+  const errText = GLYPHS.state.failed + ' ' + reason
+  if (displayWidth(leadText) + displayWidth(errText) <= cols) {
+    return [[{ text: leadText, color: PALETTE.structure }, staleBadge(errText)]]
+  }
+  return [[{ text: leadText.trimEnd(), color: PALETTE.structure }], ...brokenRows(errText, cols)]
 }
 
 function loadSourceRows(ls: LoadSourceView | null, wide: boolean, cols: number, t: T): Row[] {
@@ -188,11 +204,7 @@ function loadSourceRows(ls: LoadSourceView | null, wide: boolean, cols: number, 
     ? RULE2 + ' ' + t('hygiene.load') + ' ' + RULE2 + ' '
     : RULE2 + ' ' + t('residue.why.hyg_load_short') + ' '
   if (ls === null) {
-    const errText = GLYPHS.state.failed + ' ' + t('residue.why.hyg_no_load_source')
-    if (displayWidth(leadText) + displayWidth(errText) <= cols) {
-      return [[{ text: leadText, color: PALETTE.structure }, staleBadge(errText)]]
-    }
-    return [[{ text: leadText.trimEnd(), color: PALETTE.structure }], ...brokenRows(errText, cols)]
+    return brokenSourceRows(leadText, t('residue.why.hyg_no_load_source'), cols)
   }
   if (loadSourceIsClean(ls)) {
     const ref = devRefOf(ls)
@@ -203,19 +215,18 @@ function loadSourceRows(ls: LoadSourceView | null, wide: boolean, cols: number, 
     ]]
   }
   const src = ls.source.toLowerCase()
-  if (src === 'unknown') {
-    const errText = GLYPHS.state.failed + ' ' + t('src.unknown')
-    if (displayWidth(leadText) + displayWidth(errText) <= cols) {
-      return [[{ text: leadText, color: PALETTE.structure }, staleBadge(errText)]]
-    }
-    return [[{ text: leadText.trimEnd(), color: PALETTE.structure }], ...brokenRows(errText, cols)]
-  }
   const issues = loadSourceIssues(ls, t)
+  const detailSuffix = issues.length > 0 ? '（' + issues.join('；') + '）' : ''
+  if (src === 'unknown' || src === 'missing') {
+    return brokenSourceRows(leadText, t('src.unknown') + detailSuffix, cols)
+  }
   const cacheV = src.startsWith('cache:') ? ls.source.slice('cache:'.length) : null
   const baseText = cacheV !== null
     ? (wide ? t('src.cache', { v: cacheV }) : t('band.src_cache') + ' ' + cacheV)
     : (wide ? t('residue.why.hyg_load_dev_w', { ref: devRefOf(ls) }) : devRefOf(ls))
-  const detailSuffix = issues.length > 0 ? '（' + issues.join('；') + '）' : ''
+  if (isLoadSourceBroken(ls)) {
+    return brokenSourceRows(leadText, baseText + detailSuffix, cols)
+  }
   return [[
     { text: leadText, color: PALETTE.structure },
     { text: GLYPHS.state.need_you, color: PALETTE.attention },
@@ -242,8 +253,12 @@ export function hygieneView(ctx: HygieneCtx, view?: Partial<HygieneView>): { bod
   const residue = live.detail.residue
   const ls = live.detail.load_source
   if (residue === null) {
-    if (live.state === 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_no_residue'), cols))
-    if (ls !== null) body.push(...loadSourceRows(ls, wide, cols, t))
+    if (live.state === 'ok') {
+      body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('residue.why.hyg_no_residue'), cols))
+      body.push(...loadSourceRows(ls, wide, cols, t))
+    } else if (ls !== null) {
+      body.push(...loadSourceRows(ls, wide, cols, t))
+    }
     return { body, actions: [] }
   }
 
@@ -252,7 +267,7 @@ export function hygieneView(ctx: HygieneCtx, view?: Partial<HygieneView>): { bod
   const auto = autoInfoOf(residue, ctx)
   const focus = Math.max(0, Math.min(rawFocus, Math.max(0, cleanItems.length - 1)))
 
-  if (live.state === 'ok' && tl.judgeCount === 0 && cleanItems.length === 0 && auto === null && (ls === null || loadSourceIsClean(ls))) {
+  if (live.state === 'ok' && tl.judgeCount === 0 && cleanItems.length === 0 && auto === null && ls !== null && loadSourceIsClean(ls)) {
     return {
       body: [[{ text: GLYPHS.state.pending + ' ', color: PALETTE.idle }, { text: t('residue.why.hyg_empty'), dim: true }]],
       actions: [],
@@ -262,6 +277,7 @@ export function hygieneView(ctx: HygieneCtx, view?: Partial<HygieneView>): { bod
   if (ctx.shortBody === true) {
     for (const e of tl.judge) body.push(judgeRow(e, wide, t))
     cleanItems.forEach((it, i) => body.push(cleanRow(it, i === focus, wide)))
+    if (isLoadSourceBroken(ls)) body.push(...loadSourceRows(ls, wide, cols, t))
     if (body.length === 0 && auto !== null) {
       const text = wide
         ? '  ' + (auto.age === '' ? auto.wideDetail : t('residue.why.hyg_auto_line_w', { age: auto.age, n: auto.total, detail: auto.wideDetail }))

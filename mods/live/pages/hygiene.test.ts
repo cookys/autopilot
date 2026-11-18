@@ -6,10 +6,10 @@ import { FOCUS_ANCHOR_KEY, Pane } from '../pane'
 import * as M from '../model'
 import { displayWidth } from '../model'
 import { actionRows, brokenRow as frameBroken, frameRows, staleBadge as frameBadge } from './frame'
-import type { Page, PageCtx, Row } from './frame'
+import type { PageCtx } from './frame'
 import { PAGES } from './index'
 import { hygienePage, hygieneView } from './hygiene'
-import type { HygieneView } from './hygiene'
+import type { HygieneCtx, HygieneView } from './hygiene'
 import { brokenRow, staleBadge } from './rows'
 import { makeT } from '../i18n'
 import { PALETTE } from '../ui'
@@ -125,15 +125,14 @@ function liveOf(over: { state?: M.LiveSnapshot['state']; header?: string; residu
   }
 }
 
-const ctxOf = (cols: number, rows: number, live: M.LiveSnapshot | null = liveOf(), con: PageCtx['console'] = CALM_CON, locale: 'zh-TW' | 'en' = 'zh-TW'): PageCtx => ({
+const ctxOf = (cols: number, rows: number, live: M.LiveSnapshot | null = liveOf(), con: PageCtx['console'] = CALM_CON, locale: 'zh-TW' | 'en' = 'zh-TW', view?: Partial<HygieneView>): HygieneCtx => ({
   live,
   console: con,
   size: { cols, rows },
   t: locale === 'zh-TW' ? t : makeT('en'),
   nowMs: NOW,
+  ...(view === undefined ? {} : { hygiene: view }),
 })
-
-const viewPage = (view: Partial<HygieneView>): Page => ({ ...hygienePage, render: c => hygieneView(c, view) })
 
 // Note on wide (160x40 / 120x30) action rows: G11 ("Every clickable action is a Button bound to its key; a hint text must have a matching Button")
 // adds `[z] 收合自動清理` to the wide action area alongside `[o]` and `[x]` because the body header displays `（z 收合）`.
@@ -188,12 +187,11 @@ const GOLDEN = {
 }
 
 function drawn(cols: number, rows: number, live: M.LiveSnapshot | null = liveOf(), con: PageCtx['console'] = CALM_CON, view?: Partial<HygieneView>): string[] {
-  const page = view === undefined ? hygienePage : viewPage(view)
-  const ctx = ctxOf(cols, rows, live, con)
-  const out = frameRows(page, ctx)
+  const ctx = ctxOf(cols, rows, live, con, 'zh-TW', view)
+  const out = frameRows(hygienePage, ctx)
   expect(out.length, `fixed height ${cols}x${rows}`).toBe(rows)
   expect(text(out[out.length - 1]), 'tab strip is last row').toMatch(/1\D*2\D*3\D*4\D*5\D*6\D*7\D*8/)
-  return closeGap(out.slice(0, -1).map(text), Math.max(1, page.render(ctx).actions.length))
+  return closeGap(out.slice(0, -1).map(text), Math.max(1, hygienePage.render(ctx).actions.length))
 }
 
 test('hygiene registry: replaces the shell at key 8 with a framed page', () => {
@@ -234,7 +232,7 @@ test('hygiene fold pair: collapsed (z 展開) hides the auto-cleanup detail row 
   expect(folded120[folded120.length - 1]).toBe('[z] 展開自動清理')
 })
 
-test('hygiene empty state: renders ○ 沒有要清的殘留 with empty actions and 沒有要你處理的事 at 160x40, 120x30, 80x24', () => {
+test('hygiene empty state: renders ○ 沒有要清的殘留 only when load_source is present and clean; missing load_source renders red error', () => {
   for (const [cols, rows] of SIZES) {
     const emptyLive = liveOf({ residue: EMPTY_RESIDUE, load_source: LOAD_DEV })
     const rendered = hygienePage.render(ctxOf(cols, rows, emptyLive, CALM_CON))
@@ -243,9 +241,28 @@ test('hygiene empty state: renders ○ 沒有要清的殘留 with empty actions 
     expect(rendered.body[0][0].color).toBe(PALETTE.idle)
     expect(rendered.body[0][1].dim).toBe(true)
     expect(drawn(cols, rows, emptyLive, CALM_CON)).toEqual(GOLDEN.empty)
+
+    // Absent load_source with zero residue must NOT suppress the missing source as a calm empty state
+    const missingLoadEmpty = liveOf({ residue: EMPTY_RESIDUE, load_source: null })
+    const missingRendered = hygienePage.render(ctxOf(cols, rows, missingLoadEmpty, CALM_CON))
+    expect(missingRendered.actions).toEqual([])
+    expect(missingRendered.body.map(text).join('\n')).not.toContain('沒有要清的殘留')
+    expect(missingRendered.body.some(r => r.some(s => s.color === PALETTE.broken && s.text.includes('✗ 無來源：沒有載入來源資料')))).toBe(true)
+    const missingDrawn = drawn(cols, rows, missingLoadEmpty, CALM_CON)
+    expect(missingDrawn).not.toEqual(GOLDEN.empty)
+    expect(missingDrawn.some(r => r.includes('沒有要清的殘留'))).toBe(false)
+    expect(missingDrawn.some(r => r.includes('✗ 無來源：沒有載入來源資料'))).toBe(true)
   }
-  // Absent load_source (isolated env) with zero residue also renders the calm empty state
-  expect(drawn(80, 24, liveOf({ residue: EMPTY_RESIDUE, load_source: null }), CALM_CON)).toEqual(GOLDEN.empty)
+  expect(drawn(80, 24, liveOf({ residue: EMPTY_RESIDUE, load_source: null }), CALM_CON)).toEqual([
+    '殘留',
+    '── 外掛 ✗ 無來源：沒有載入來源資料',
+    '沒有要你處理的事',
+  ])
+  expect(drawn(120, 30, liveOf({ residue: EMPTY_RESIDUE, load_source: null }), CALM_CON)).toEqual([
+    '殘留',
+    '── 外掛來源 ── ✗ 無來源：沒有載入來源資料',
+    '沒有要你處理的事',
+  ])
 })
 
 test('hygiene fixed height & overflow: many items end in ↓ 還有 N 列 and never push the tab strip across all sizes and locales', () => {
@@ -315,6 +332,80 @@ test('hygiene §5: missing and stale sources render in red (PALETTE.broken) with
   const loadRow = missingLoad.body[missingLoad.body.length - 1]
   expect(text(loadRow)).toContain('✗ 無來源：沒有載入來源資料')
   expect(loadRow.some(s => s.color === PALETTE.broken)).toBe(true)
+
+  // 5. marketplace='missing' and dev_link_missing_or_stale render in red (PALETTE.broken) with ✗, never attention ▲
+  const brokenLoadCases: [string, M.LoadSourceView, string][] = [
+    ['marketplace missing', { ...LOAD_DEV, marketplace: 'missing' }, '市集不是指向這個 repo 的目錄，/reload-plugins 可能載到舊版'],
+    ['dev link missing or stale', { ...LOAD_DEV, flags: ['dev_link_missing_or_stale'] }, '開發連結不見了或過期'],
+    ['both marketplace missing and dev link stale', { ...LOAD_DEV, marketplace: 'missing', flags: ['dev_link_missing_or_stale'] }, '開發連結不見了或過期；市集不是指向這個 repo 的目錄，/reload-plugins 可能載到舊版'],
+  ]
+  for (const [name, lsBroken, expectedReason] of brokenLoadCases) {
+    for (const [cols, rows] of SIZES) {
+      const ctx = ctxOf(cols, rows, liveOf({ residue: EMPTY_RESIDUE, load_source: lsBroken }), CALM_CON)
+      const rendered = hygienePage.render(ctx)
+      const joined = rendered.body.map(text).join('')
+      expect(joined, `${name} at ${cols}x${rows} carries ✗`).toContain('✗')
+      expect(joined.replace(/\s+/g, ''), `${name} at ${cols}x${rows} keeps full reason`).toContain(expectedReason.replace(/\s+/g, ''))
+      expect(joined.includes('…'), `${name} at ${cols}x${rows} never truncates`).toBe(false)
+      expect(joined.includes('▲'), `${name} at ${cols}x${rows} never uses attention glyph`).toBe(false)
+      for (const r of rendered.body) {
+        expect(displayWidth(text(r)), `${name} at ${cols}x${rows} width <= ${cols}`).toBeLessThanOrEqual(cols)
+        expect(r.some(s => s.color === PALETTE.attention), `${name} at ${cols}x${rows} never uses PALETTE.attention`).toBe(false)
+      }
+      const errSegs = rendered.body.flatMap(r => r.filter(s => s.color !== PALETTE.structure))
+      expect(errSegs.length, `${name} at ${cols}x${rows} has error segments`).toBeGreaterThan(0)
+      for (const s of errSegs) expect(s.color, `${name} at ${cols}x${rows} error segment is PALETTE.broken`).toBe(PALETTE.broken)
+    }
+  }
+
+  // 6. Width-exceeding reasons on marketplace='missing' and dev_link_missing_or_stale wrap across multiple red rows without truncation
+  const wrappingCases: [string, M.LoadSourceView, 'zh-TW' | 'en', number, string][] = [
+    [
+      'zh-TW combined missing marketplace + stale dev link at 80 cols',
+      { ...LOAD_DEV, marketplace: 'missing', flags: ['dev_link_missing_or_stale'] },
+      'zh-TW',
+      80,
+      '✗ develop（開發連結不見了或過期；市集不是指向這個 repo 的目錄，/reload-plugins 可能載到舊版）',
+    ],
+    [
+      'en missing marketplace at 80 cols',
+      { ...LOAD_DEV, marketplace: 'missing' },
+      'en',
+      80,
+      '✗ develop（the marketplace does not point to a directory of this repo; /reload-plugins may load an old version）',
+    ],
+    [
+      'zh-TW stale dev link on long branch ref at 80 cols',
+      { ...LOAD_DEV, source: 'dev:hetero-fix-pane-b2-hygiene-r1-very-long-branch-ref-for-wrapping-check', flags: ['dev_link_missing_or_stale'] },
+      'zh-TW',
+      80,
+      '✗ hetero-fix-pane-b2-hygiene-r1-very-long-branch-ref-for-wrapping-check（開發連結不見了或過期）',
+    ],
+  ]
+  for (const [label, lsLong, locale, cols, fullErr] of wrappingCases) {
+    expect(displayWidth(fullErr), `${label} fixture exceeds ${cols} cols`).toBeGreaterThan(cols)
+    const ctx = ctxOf(cols, 24, liveOf({ residue: EMPTY_RESIDUE, load_source: lsLong }), CALM_CON, locale)
+    const raw = hygienePage.render(ctx)
+    // Row 0 is the section lead; rows 1+ are wrapped red error lines
+    expect(raw.body.length, `${label} wraps onto multiple rows`).toBeGreaterThanOrEqual(3)
+    expect(raw.body[0][0].color, `${label} row 0 is structure lead`).toBe(PALETTE.structure)
+    const wrappedErrRows = raw.body.slice(1)
+    for (const r of wrappedErrRows) {
+      expect(r.length, `${label} wrapped row is single broken segment`).toBe(1)
+      expect(r[0].color, `${label} wrapped row is PALETTE.broken`).toBe(PALETTE.broken)
+      expect(displayWidth(text(r)), `${label} wrapped row fits ${cols}`).toBeLessThanOrEqual(cols)
+      expect(text(r).includes('…'), `${label} wrapped row has no ellipsis`).toBe(false)
+    }
+    expect(wrappedErrRows.map(text).join('').replace(/\s+/g, '')).toBe(fullErr.replace(/\s+/g, ''))
+    const framed = frameRows(hygienePage, ctx)
+    expect(framed.length).toBe(24)
+    expect(framed.map(text).join('').replace(/\s+/g, '')).toContain(fullErr.replace(/\s+/g, ''))
+    expect(framed.map(text).filter(r => r.includes('…'))).toEqual([])
+  }
+
+  // Negative control: non-missing/non-stale behind_upstream keeps attention ▲ (not broken ✗)
+  const behindOnly = hygienePage.render(ctxOf(80, 24, liveOf({ residue: EMPTY_RESIDUE, load_source: { ...LOAD_DEV, behind_upstream: 3 } }), CALM_CON))
+  expect(behindOnly.body[0].some(s => s.color === PALETTE.attention && s.text === '▲')).toBe(true)
 
   expect(staleBadge('x')).toEqual(frameBadge('x'))
   expect(brokenRow('x')).toEqual(frameBroken('x'))
@@ -396,7 +487,10 @@ test('hygiene buttons & design rules: table rows have no Buttons; [o], [x], [z] 
     expect(events).toEqual(['press:clean:/dev/shm/petshot-1001', 'press:clean:all', 'key:fold'])
   }
 
-  // Moving focus to index 1 retargets [o] to the second cleanable item
+  // Moving focus to index 1 retargets [o] to the second cleanable item (both via real hygienePage.render and hygieneView)
+  const focusPage1 = hygienePage.render(ctxOf(120, 30, liveOf(), CALM_CON, 'zh-TW', { focus: 1, expanded: true }))
+  expect(text(focusPage1.actions[0])).toBe('▸ 焦點：target/flaky-tests.log')
+  expect(focusPage1.actions[1][0].press).toBe('clean:target/flaky-tests.log')
   const focus1 = hygieneView(ctxOf(120, 30), { focus: 1, expanded: true })
   expect(text(focus1.actions[0])).toBe('▸ 焦點：target/flaky-tests.log')
   expect(focus1.actions[1][0].press).toBe('clean:target/flaky-tests.log')

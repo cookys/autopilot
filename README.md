@@ -211,7 +211,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 | Harness | How to start | Supported today | Known limits |
 |---|---|---|---|
-| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 31 skills, 3 methodology agents, 49 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 31 skills, 3 methodology agents, 50 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
 | **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills, generated support payload, and one production `PostCompact` recovery hook (`manual\|auto`) | This is a Codex-native recovery boundary, not Claude hook parity; no Claude hook bundle, apps, or MCP servers are loaded. Subagent model routing via `spawn_agent` needs a user opt-in — see `platforms/codex/README.md` |
 | **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
 | **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
@@ -231,7 +231,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Claude accounts** — aliases and automatic switching between subscriptions | [docs/guide/accounts.md](docs/guide/accounts.md) |
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | **Review-only candidate review** — managed review of a range someone else wrote | [docs/guide/review-candidate.md](docs/guide/review-candidate.md) |
-| **Hooks** — 49 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
+| **Hooks** — 50 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

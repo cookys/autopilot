@@ -5,7 +5,8 @@
 . "$(dirname "$0")/lib.sh"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 
-# Isolate from ambient session markers
+# Isolate from ambient session markers and inherited fleet task env
+unset AUTOPILOT_FLEET_TASK AUTOPILOT_UPSTREAM_TASK_ID 2>/dev/null || true
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session_isolation"
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 
@@ -1065,47 +1066,48 @@ cp "$STUB_COD" "$AU_PATH_BIN/codex"
 chmod +x "$AU_PATH_BIN/codex"
 
 # PM Console matrix (negative controls first):
-OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
+# AUTOPILOT_DISPATCH_USAGE=off suppresses dispatch-usage.js's unconditional `fleet whoami` probe.
+OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "author PM missing Fleet-Task exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "author PM missing Fleet-Task emits precondition_failed"
 
-OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_FLEET_TASK="$AU_TASK_ID" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_FLEET_TASK="$AU_TASK_ID" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "author PM done Fleet-Task exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "author PM done Fleet-Task emits precondition_failed"
 
-OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_NF" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --fleet-task "$AU_TASK_ID" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_NF" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --fleet-task "$AU_TASK_ID" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "author PM not_found Fleet-Task exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "author PM not_found Fleet-Task emits precondition_failed"
 
 rm -f "$AU_FLEET_LOG"
-OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" AUTOPILOT_FLEET_TASK="$AU_TASK_ID" AUTOPILOT_DISPATCH_ROLE="author-test" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --run-id au-pm-open-1 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" AUTOPILOT_FLEET_TASK="$AU_TASK_ID" AUTOPILOT_DISPATCH_ROLE="author-test" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --run-id au-pm-open-1 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author PM open Fleet-Task exits 0"
 assert_contains "$OUT" '"status": "authored"' "author PM open Fleet-Task returns authored"
 AU_LOG_CONTENT="$(cat "$AU_FLEET_LOG")"
 assert_contains "$AU_LOG_CONTENT" "task update $AU_TASK_ID [dispatch:author-test] au-pm-open-1 start" "author emits start progress line"
 assert_contains "$AU_LOG_CONTENT" "task update $AU_TASK_ID [dispatch:author-test] au-pm-open-1 authored sha=- log=" "author emits final progress line"
 
-OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="/nonexistent/missing-fleet-bin" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --fleet-task "$AU_TASK_ID" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="/nonexistent/missing-fleet-bin" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --fleet-task "$AU_TASK_ID" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author PM missing FLEET_BIN fails open (exit 0)"
 
-OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_NON_PM_REPO" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_OPEN" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_NON_PM_REPO" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author non-PM console without id exits 0"
 
 # Exemptions: --bin stub, engine-qualify role, AUTOPILOT_PARENT_RUN_ID inheritance
-OUT="$(FLEET_BIN="$AU_FLEET_DONE" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" --bin "$STUB_COD" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author PM --bin stub exempt"
-OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_DISPATCH_ROLE="engine-qualify" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_DISPATCH_ROLE="engine-qualify" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author PM engine-qualify exempt"
-OUT="$(PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_PARENT_RUN_ID="parent-r1" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID PATH="$AU_PATH_BIN:$PATH" FLEET_BIN="$AU_FLEET_DONE" AUTOPILOT_PARENT_RUN_ID="parent-r1" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --repo-root "$AU_PM_REPO" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author PM AUTOPILOT_PARENT_RUN_ID inherited without re-check"
 
 # Fail-soft progress: exit 3 stub never changes stdout JSON or exit code; no id writes no line
 rm -f "$AU_FLEET_LOG"
-OUT="$(FLEET_BIN="$AU_FLEET_OPEN" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_FLEET_TASK -u AUTOPILOT_UPSTREAM_TASK_ID FLEET_BIN="$AU_FLEET_OPEN" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author no-task exits 0"
 assert_file_absent "$AU_FLEET_LOG" "author no-task writes no progress line"
 
-OUT="$(FLEET_BIN="$AU_FLEET_EXIT3" AUTOPILOT_UPSTREAM_TASK_ID="$AU_TASK_ID" DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+OUT="$(env -u AUTOPILOT_FLEET_TASK FLEET_BIN="$AU_FLEET_EXIT3" AUTOPILOT_UPSTREAM_TASK_ID="$AU_TASK_ID" AUTOPILOT_DISPATCH_USAGE=off DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "author fail-soft keeps exit 0 when FLEET_BIN exits 3"
 assert_contains "$OUT" '"status": "authored"' "author fail-soft keeps authored JSON"
 

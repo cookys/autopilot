@@ -8,7 +8,8 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveDir, firstUserMessage } = require('./subagent-budget.js');
-const { readAgentFile } = require('./live-session-lib.js');
+const { liveBase, readJsonFile } = require('./live-session-lib.js');
+const { sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
 const { findTaskId, emitProgressFailSoft } = require('../scripts/lib/fleet-task-ref.js');
 
 const SAFE_ID_RE = /^[A-Za-z0-9._-]{1,128}$/;
@@ -47,6 +48,17 @@ function readTaskIdFromSubagent(payload, agentId) {
   }
 }
 
+function readAgentStamp(sessionId, agentId) {
+  if (typeof sessionId !== 'string' || !sessionId || typeof agentId !== 'string' || !agentId) return null;
+  try {
+    const file = path.join(liveBase(), 'agents', sanitizeSessionId(sessionId), `${sanitizeSessionId(agentId)}.json`);
+    const v = readJsonFile(file);
+    return v && v.schema === 'autopilot.agent-activity/1' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 function handleHookPayload(payload) {
   if (!payload || typeof payload !== 'object') return;
   const ev = String(payload.hook_event_name || '');
@@ -58,7 +70,7 @@ function handleHookPayload(payload) {
     if (!taskIdArg || !SAFE_ID_RE.test(taskIdArg)) return;
 
     const transcript = findSubagentTranscript(payload, taskIdArg);
-    const stamp = payload.session_id ? readAgentFile(payload.session_id, taskIdArg) : null;
+    const stamp = readAgentStamp(payload.session_id, taskIdArg);
     if (!transcript && !stamp) return; // Non-subagent TaskStop (e.g. background bash) is ignored.
 
     const fleetTaskId = transcript ? findTaskId((() => { try { return firstUserMessage(transcript); } catch { return ''; } })()) : null;

@@ -525,6 +525,7 @@
 
 ### Settings changes
 
+- **New `AUTOPILOT_DISK_GUARD_MIN_FREE_PCT`** (env; percent; default `20`). Minimum free disk percent below which `scripts/lib/disk-guard.js` first sweeps declared build artifacts and then refuses to create a worktree; `--min-free-pct` wins over it.
 - **New `AUTOPILOT_LEAK_GUARD_HOSTS`** (env; file path; default `~/.autopilot/leak-guard-hosts.json`). Path of the per-user host deny list (`{"strong":[...],"contextual":[...]}`) read by `scripts/lib/personal-data-patterns.js`; when missing, leak-guard runs with the local hostname only and writes one stderr line naming the expected path; unreadable or malformed JSON exits 2. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
 - **New `depth0_delegate_gate.secret_print`** (config.json; `block`, `warn` or `off`; default `block`). Blocks Bash commands that would print secret values, including systemd unit/drop-in dumps. Use [safe-inspect](docs/guide/safe-inspect.md) for masked inspection.
 - **New `pm_output_cap.ledger_search_pattern`** (config.json; regex string; default `""`). Matches `Bash` commands or `mcp__*` tool names in opt-in `pm-output-cap` to apply the tighter 30-line cap instead of 40.

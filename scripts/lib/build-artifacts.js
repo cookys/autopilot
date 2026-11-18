@@ -30,20 +30,33 @@ function loadDeclaration(worktreeDir) {
   }
 }
 
-// Absolute path of the main checkout of the repo that owns `dir`, or null (bare repo / not a repo).
-function mainCheckoutOf(dir) {
-  let common;
-  try { common = git(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']); } catch { return null; }
-  if (path.basename(common) !== '.git') return null;
-  try { return fs.realpathSync(path.dirname(common)); } catch { return null; }
+// Registered worktree roots of the repo that owns `dir`, realpath'd; the first entry is the main one.
+function registeredWorktrees(dir) {
+  let porcelain;
+  try { porcelain = git(dir, ['worktree', 'list', '--porcelain']); } catch { return []; }
+  const list = [];
+  for (const line of porcelain.split('\n')) {
+    if (!line.startsWith('worktree ')) continue;
+    try { list.push(fs.realpathSync(line.slice(9))); } catch { list.push(null); }
+  }
+  return list;
 }
 
-function isMainCheckout(worktreeDir) {
-  const main = mainCheckoutOf(worktreeDir);
-  if (!main) return false;
+// Absolute path of the main checkout of the repo that owns `dir`, or null. Works for
+// --separate-git-dir repos because it asks `git worktree list`, not the git dir's name.
+function mainCheckoutOf(dir) {
+  return registeredWorktrees(dir)[0] || null;
+}
+
+// Positive confirmation: `dir` is the root of a registered LINKED worktree (not the first/main entry,
+// not a subdirectory, not an unrelated directory). Anything unrecognised is refused.
+function linkedWorktreeStatus(dir) {
   let real;
-  try { real = fs.realpathSync(worktreeDir); } catch { return false; }
-  return real === main;
+  try { real = fs.realpathSync(dir); } catch { return 'worktree_missing'; }
+  const list = registeredWorktrees(real);
+  if (!list.length) return 'not_a_git_worktree';
+  if (list[0] === real) return 'main_checkout_refused';
+  return list.slice(1).includes(real) ? null : 'not_linked_worktree_root';
 }
 
 function treeBytes(p) {
@@ -76,7 +89,8 @@ function reapArtifacts(worktreeDir, opts = {}) {
   const out = { worktree: worktreeDir, dryRun, removed: [], skipped: [] };
   let worktreeReal;
   try { worktreeReal = fs.realpathSync(worktreeDir); } catch { out.skipped.push({ path: '.', reason: 'worktree_missing' }); return out; }
-  if (isMainCheckout(worktreeReal)) { out.skipped.push({ path: '.', reason: 'main_checkout_refused' }); return out; }
+  const why = linkedWorktreeStatus(worktreeReal);
+  if (why) { out.skipped.push({ path: '.', reason: why }); return out; }
   const decl = loadDeclaration(worktreeReal);
   if (decl.error) out.skipped.push({ path: DECLARATION, reason: 'declaration_invalid' });
   for (const rel of decl.paths) {
@@ -98,19 +112,7 @@ function reapArtifacts(worktreeDir, opts = {}) {
 // ---- sweep -------------------------------------------------------------------------------------
 
 function linkedWorktrees(repo) {
-  const main = mainCheckoutOf(repo);
-  let porcelain = '';
-  try { porcelain = git(repo, ['worktree', 'list', '--porcelain']); } catch { return []; }
-  const list = [];
-  for (const line of porcelain.split('\n')) {
-    if (!line.startsWith('worktree ')) continue;
-    const p = line.slice(9);
-    let real;
-    try { real = fs.realpathSync(p); } catch { continue; }
-    if (real === main) continue;
-    list.push(real);
-  }
-  return list;
+  return registeredWorktrees(repo).slice(1).filter(Boolean);
 }
 
 // True when anything under `dir` was modified at or after cutoffMs (early exit).
@@ -176,4 +178,4 @@ function audit(record) {
   } catch { /* the audit line must never fail a reap */ }
 }
 
-module.exports = { DECLARATION, loadDeclaration, reapArtifacts, sweep, mainCheckoutOf, isMainCheckout, treeBytes, audit, auditFile };
+module.exports = { DECLARATION, loadDeclaration, reapArtifacts, sweep, mainCheckoutOf, linkedWorktreeStatus, treeBytes, audit, auditFile };

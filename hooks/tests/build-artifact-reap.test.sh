@@ -49,6 +49,34 @@ node "$REAP" reap --worktree "$REPO" --json > "$TEST_TMP/main.json"
 assert_file_exists "$REPO/courier/target/debug/artifact.bin" "main checkout artifacts untouched"
 assert_eq "$(jq -r '.skipped[0].reason' < "$TEST_TMP/main.json")" "main_checkout_refused" "main checkout refused with reason"
 
+# ---- unit: main-check bypasses --------------------------------------------------------------------
+# (a) main checkout made with --separate-git-dir: its git dir is not named .git
+SEP="$TEST_TMP/sepmain"; mkdir -p "$SEP"
+git init -q -b develop --separate-git-dir "$TEST_TMP/sep.gitdir" "$SEP"
+mkdir -p "$SEP/.autopilot"; printf '{"paths":["courier/target"]}\n' > "$SEP/.autopilot/build-artifacts.json"
+"${GIT[@]}" -C "$SEP" add .autopilot/build-artifacts.json; "${GIT[@]}" -C "$SEP" commit -q -m base
+git -C "$SEP" worktree add -q -b seplinked "$TEST_TMP/sep-linked" develop
+build "$SEP"; build "$TEST_TMP/sep-linked"
+node "$REAP" reap --worktree "$SEP" --json > "$TEST_TMP/sep.json"
+assert_file_exists "$SEP/courier/target/debug/artifact.bin" "separate-git-dir main: artifacts untouched"
+# git lists a separate-git-dir repo's main entry as the git dir, so main is refused as not-a-linked-root
+assert_contains "main_checkout_refused not_linked_worktree_root" "$(jq -r '.skipped[0].reason' < "$TEST_TMP/sep.json")" "separate-git-dir main refused"
+node "$REAP" sweep --repo "$SEP" --idle-min 0 > /dev/null
+assert_file_exists "$SEP/courier/target/debug/artifact.bin" "separate-git-dir main untouched by sweep"
+assert_file_absent "$TEST_TMP/sep-linked/courier/target" "its linked worktree is still reaped by sweep"
+# (b) a subdirectory of main carrying its own declaration
+mkdir -p "$REPO/sub/.autopilot" "$REPO/sub/out"
+printf '{"paths":["out"]}\n' > "$REPO/sub/.autopilot/build-artifacts.json"; echo x > "$REPO/sub/out/x"
+node "$REAP" reap --worktree "$REPO/sub" --json > "$TEST_TMP/sub.json"
+assert_file_exists "$REPO/sub/out/x" "subdirectory of main: artifacts untouched"
+assert_eq "$(jq -r '.skipped[0].reason' < "$TEST_TMP/sub.json")" "not_linked_worktree_root" "subdirectory of main refused"
+# and a subdirectory of a linked worktree
+mkdir -p "$TEST_TMP/sep-linked/sub/.autopilot" "$TEST_TMP/sep-linked/sub/out"
+printf '{"paths":["out"]}\n' > "$TEST_TMP/sep-linked/sub/.autopilot/build-artifacts.json"; echo x > "$TEST_TMP/sep-linked/sub/out/x"
+node "$REAP" reap --worktree "$TEST_TMP/sep-linked/sub" > /dev/null
+assert_file_exists "$TEST_TMP/sep-linked/sub/out/x" "subdirectory of a linked worktree: artifacts untouched"
+rm -rf "$REPO/sub" "$SEP/courier/target"
+
 # ---- unit: missing declaration = no-op; dry-run deletes nothing --------------------------------
 git -C "$REPO" worktree add -q -b nodecl "$TEST_TMP/nodecl" develop
 rm -f "$TEST_TMP/nodecl/.autopilot/build-artifacts.json"

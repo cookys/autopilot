@@ -315,6 +315,9 @@ function providerObservation(tuple, axis, status, now, ttlSeconds, evidenceClass
 const SAFE_BINARY_PROBE_TIMEOUT_MS = 20000;
 
 function probeSafeSurface({ tuple }) {
+  if (tuple.runner === 'kimi' && require('../../scripts/lib/kimi-local-stop').isStopped()) {
+    return { status: 'blocked', evidence_class: 'safe-surface', reason: 'kimi_local_stopped' };
+  }
   const binary = BINARY_BY_RUNNER[tuple.runner] || tuple.runner;
   const version = spawnSync(binary, ['--version'], {
     cwd: REPO_ROOT,

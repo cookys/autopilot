@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
 # hooks/tests/runner-binary.test.sh — scripts/lib/runner-binary.js coverage.
 #
 # THE REGRESSION THIS EXISTS FOR (2026-08-27): a runner whose version probe emits an

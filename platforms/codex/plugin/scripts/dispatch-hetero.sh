@@ -3416,6 +3416,7 @@ elif [ "$IS_OPENCODE" -eq 1 ]; then
     || { _oc_msg="$(cat "$_oc_verr")"; rm -f "$_oc_verr"; die_precondition "opencode version not usable: ${_oc_msg}"; }
   rm -f "$_oc_verr"
 elif [ "$IS_KIMI" -eq 1 ]; then
+  _kimi_stop="$(node "$SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || die_precondition "$_kimi_stop"
   command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
 elif [ "$IS_QODER" -eq 1 ]; then
   # command -v only. runner_bin_fallback would resolve the host install; tests pass --qoder-bin.

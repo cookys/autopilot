@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
 # Independent depth-0 harness for scripts/probe-engine-capability.sh
 # Proves that safe probes do not spend quota / run model queries.
 

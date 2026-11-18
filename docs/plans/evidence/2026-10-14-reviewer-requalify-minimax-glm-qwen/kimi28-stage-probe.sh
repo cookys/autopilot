@@ -4,6 +4,7 @@
 # model list), proves the CLI's own config labels that alias "2.8", then one tiny prompt. The real ~/.kimi-code is only read (copy-in); on exit the newest credential is written back after a .bak-<UTC> backup (BL-0199).
 # exit 0 usable, 3 credential/model unusable (uncharged beyond one tiny prompt).
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+node "$REPO/scripts/lib/kimi-local-stop.js" check || exit $?
 source "$REPO/scripts/lib/qualify-stage-credentials.sh"
 ROOT="$HOME/.autopilot/qualify-staging/reviewer-kimi-k2.8-preview"; H="$ROOT/kimi-home"; KD="$H/.kimi-code"
 # 2026-10-16: the real ~/.kimi-code credential is stale (kimi rotates the refresh token inside the staged homes, so the

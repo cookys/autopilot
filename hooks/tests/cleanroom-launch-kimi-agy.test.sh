@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
 # cleanroom-launch-kimi-agy.test.sh — final-panel isolation phase 2: launcher profiles kimi and agy.
 #
 # Part A (always runs, fake bwrap seam): argv design, no credential/repo in the preflight argv,
@@ -416,6 +417,7 @@ set -e
 
 # real binaries, MODEL-FREE: preflight only (--version / `agy agents`); never a prompt
 for R in kimi agy; do
+  if [ "$R" = kimi ]; then echo "SKIP real kimi: local CLI is stopped until the broker ships"; continue; fi
   if ! command -v "$R" >/dev/null 2>&1; then
     echo "SKIP real $R preflight: $R not installed on this host"
     continue
@@ -431,7 +433,7 @@ for R in kimi agy; do
   assert_eq "3" "$?" "real $R preflight with a readable deny path exits 3"
   set -e
 done
-if command -v kimi >/dev/null 2>&1; then
+if false; then  # Real Kimi is stopped; only fake-Kimi cases above use the test seam.
   set +e
   "$LAUNCHER" --preflight --profile kimi --deny-path "$REPO_ABS" --agent-file "$STUBS/broken-agent.md" \
     > /dev/null 2> "$TEST_TMP/real-kimi-broken.err"

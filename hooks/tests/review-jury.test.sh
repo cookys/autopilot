@@ -38,7 +38,7 @@ run_jury() {
   [ "$kimi" = nokimi ] && { mkdir -p "$dir/stubs"; cp "$STUBS/grok" "$dir/stubs/"; p="$dir/stubs:/usr/bin:/bin"; }
   local epenv=()
   [ "$eps" = yes ] && epenv=(AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example.invalid AUTOPILOT_ENDPOINT_GLM_TOKEN=FAKE-glm AUTOPILOT_ENDPOINT_MINIMAX_URL=https://mm.example.invalid AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=FAKE-mm)
-  env -i AUTOPILOT_TEST_CN_GATE_OFF=1 PATH="$p" HOME="$dir/home" AUTOPILOT_ENDPOINTS_ENV="$dir/none.env" FAKE_DIR="$dir/fake" "${epenv[@]}" \
+  env -i AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_KIMI_LOCAL_ALLOW=1 PATH="$p" HOME="$dir/home" AUTOPILOT_ENDPOINTS_ENV="$dir/none.env" FAKE_DIR="$dir/fake" "${epenv[@]}" \
     "$NODE" "$script" run --pack "$TEST_TMP/pack.txt" --dispatch-bin "$TEST_TMP/fake-dispatch.sh" --scorecard-bin "$TEST_TMP/fake-scorecard.js" \
     --out "$dir/out" "$@" > "$dir/stdout" 2> "$dir/stderr" < /dev/null
   echo $? > "$dir/rc"
@@ -137,7 +137,7 @@ mkpack() { # mkpack <dir>: diff + QUESTIONS (Q1, Q2) + NOTE + a matching FILES.s
 }
 run_pack() { # run_pack <script> <case-dir> <pack> args...: rc in <case-dir>/rc
   local script="$1" d="$2" pk="$3"; shift 3; mkdir -p "$d/fake" "$d/home"
-  env -i AUTOPILOT_TEST_CN_GATE_OFF=1 PATH="$STUBS:/usr/bin:/bin" HOME="$d/home" AUTOPILOT_ENDPOINTS_ENV="$d/none.env" FAKE_DIR="$d/fake" \
+  env -i AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_KIMI_LOCAL_ALLOW=1 PATH="$STUBS:/usr/bin:/bin" HOME="$d/home" AUTOPILOT_ENDPOINTS_ENV="$d/none.env" FAKE_DIR="$d/fake" \
     "$NODE" "$script" run --pack "$pk" --dispatch-bin "$TEST_TMP/fake-dispatch.sh" --scorecard-bin "$TEST_TMP/fake-scorecard.js" --out "$d/out" "$@" \
     > "$d/stdout" 2> "$d/stderr" < /dev/null
   echo $? > "$d/rc"

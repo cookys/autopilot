@@ -2459,7 +2459,7 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   fs.mkdirSync(path.join(kimiTemplate, '.kimi-code'), { recursive: true });
   fs.writeFileSync(path.join(kimiTemplate, '.kimi-code', 'config.toml'), '# stub\n');
   const kimiEnv = (wire, extra = {}) => ({
-    QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi,
+    AUTOPILOT_KIMI_LOCAL_ALLOW: '1', QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi,
     QRP_CLI_HOME: kimiTemplate, STUB_KIMI_FIX: KIMI_FIX, STUB_KIMI_WIRE: wire, ...extra,
   });
   // Green: tool-less agent passed, clean wire -> answer accepted.
@@ -2509,7 +2509,7 @@ server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.STUB_PORT_FILE,
   fs.rmSync(path.join(kimiTemplate, '.kimi-code', 'sessions'), { recursive: true, force: true });
   // Fail closed: no QRP_CLI_HOME -> refuse before spawn.
   const bare = runProvider({
-    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi, STUB_KIMI_FIX: KIMI_FIX },
+    env: { AUTOPILOT_KIMI_LOCAL_ALLOW: '1', QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'kimi', QRP_CLI_BIN: stubKimi, STUB_KIMI_FIX: KIMI_FIX },
     request: reviewerRequest(), stubOutput: REVIEWER_MODEL_OUTPUT,
   });
   equal(bare.child.status, 1, 'kimi without QRP_CLI_HOME fails the case');

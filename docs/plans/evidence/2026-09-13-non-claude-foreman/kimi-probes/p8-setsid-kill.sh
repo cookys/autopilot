@@ -1,3 +1,4 @@
+node "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)/scripts/lib/kimi-local-stop.js" check || exit $?
 cd /tmp/claude-1000/-home-cookys-projects-autopilot/d1423f91-4e83-43b9-ae77-3de0367aa10a/scratchpad/kimi-probe/ws4
 setsid kimi -m kimi-code/k3 -p 'Using your shell tool, run these one at a time as separate tool calls: echo one; sleep 4; echo two; sleep 4; echo three; sleep 4; echo four. Then reply DONE.' --output-format stream-json > /tmp/claude-1000/-home-cookys-projects-autopilot/d1423f91-4e83-43b9-ae77-3de0367aa10a/scratchpad/kimi-probe/p8-kill.jsonl 2>&1 &
 pid=$!

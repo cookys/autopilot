@@ -124,6 +124,7 @@ function normalizeRung(entry) {
   const model = String(entry.model || entry.engine || '').trim();
   const runner = String(entry.runner || '').trim();
   if (!model || !runner) return null;
+  if (runner === 'kimi' && require('./kimi-local-stop').isStopped()) return null;
   const effort = String(entry.effort || 'high').trim() || 'high';
   const endpoint = entry.endpoint ? String(entry.endpoint).trim() : null;
   const key = entry.key ? String(entry.key).trim() : model;

@@ -2187,6 +2187,7 @@ elif [[ "$RUNNER" = "cursor" ]]; then
   fi
   PARSE_INPUT="$CURSOR_OUT"
 elif [[ "$RUNNER" = "kimi" ]]; then
+  _kimi_stop="$(node "$_REVIEW_SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || die_precondition "$_kimi_stop"
   # Kimi Code CLI (Moonshot) — Revival review seat for kimi-code/k3 (user 2026-07-28).
   # Binary: `kimi` from PATH (typical: ~/.kimi-code/bin/kimi). Model alias e.g. kimi-code/k3.
   # READ-ONLY posture (best-effort): scratch cwd; prompt via -p from PROMPT_FILE; no --auto/--plan

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
 # Worker mount isolation (01M7E4JC): a dispatched worker must never be able to change the HOST mount
 # table (cuda lost /sys/fs/cgroup when a lane ran `mount --rbind /sys` then `umount -l`).
 # SAFETY: shim cases never run real sudo/mount/umount/unshare. The real sudo_private_ns case runs

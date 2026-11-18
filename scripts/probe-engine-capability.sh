@@ -238,6 +238,10 @@ case "$RUNNER" in
     fi
     ;;
   kimi)
+    _kimi_stop="$(node "$SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || {
+      KIMI_STOP_REASON="$_kimi_stop" node -e 'console.log(JSON.stringify({runner:"kimi",status:"precondition_failed",error:process.env.KIMI_STOP_REASON}))'
+      exit 3
+    }
     # Kimi Code CLI is routinely NOT on bare PATH. Mirror dispatch-review.sh's
     # resolution order exactly (PATH, then the well-known install path) — a probe
     # that resolves the binary differently from the dispatcher would report on a

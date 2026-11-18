@@ -311,10 +311,15 @@ function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
   const ladderKey = ladderKeyForRole(role);
   const excludeSet = (deriveOptions && deriveOptions.excludeSet) || new Set();
   const ladder = (Array.isArray(topology[ladderKey]) ? topology[ladderKey] : [])
+    .filter((r) => !(r && r.runner === 'kimi' && require('./lib/kimi-local-stop').isStopped()))
     .filter((r) => !(r && excludeSet.size > 0 && seatMatchesExcluded(r.engine, r.effort, r.runner, excludeSet)));
   const ladderTuple = tupleFromLadderRung(ladder[0]);
 
   const pin = readPinForRole(repoRoot, role, storeArg);
+  if (pin && pin.runner === 'kimi' && require('./lib/kimi-local-stop').isStopped()) {
+    process.stderr.write(`${require('./lib/kimi-local-stop').REASON}\n`);
+    process.exit(3);
+  }
   let preferred_tuple;
   let effective_tuple;
   // Substitution when a pinned seat is unusable is a later deliverable (P4).
@@ -428,6 +433,7 @@ function getInstalledRunners(repoRoot) {
 }
 
 function resolveBinaryPath(binaryName, runner) {
+  if (runner === 'kimi' && require('./lib/kimi-local-stop').isStopped()) return null;
   if (!binaryName) return null;
   if (binaryName.includes(path.sep)) {
     try {

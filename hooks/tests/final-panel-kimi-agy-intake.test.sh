@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
 # final-panel-kimi-agy-intake.test.sh — final-panel isolation phase 4: kimi/agy become cleanroom tier
 # behind a per-runner host probe; tier tables (JS, dispatch-review.sh, resolve-review-loop.sh) agree.
 #

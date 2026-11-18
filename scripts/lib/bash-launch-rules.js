@@ -17,7 +17,12 @@
 //   6. subagent-rm-outside-scratch (DENY by default; knob off|warn|deny) — subagent recursive `rm` with a literal target outside the session scratchpad.
 //   7. rm-shared-dir (WARN by default; knob off|warn|deny) — recursive `rm` targeting an existing group/world-writable or foreign-owned directory outside the session scratchpad.
 //   8. secret-print (BLOCK by default; knob block|warn|off) — commands that dump secret values; use safe-inspect.js.
-// Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js).
+//   9. rm-wrapped (DENY by default; knob off|warn|deny) — `rm` inside `sh -c` / `bash -c` / `zsh -c` (including prose inside
+//      a heredoc inside `-c`), inside an executed heredoc, inside a `for`/`while` loop, or via `xargs rm` / `find -exec rm` /
+//      `find -delete`. Rule: "To delete files, use one standalone rm command whose targets are literal paths under the
+//      scratchpad or $TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and
+//      other text files with the Write tool, not a heredoc inside bash -c."
+// Rules run on EXECUTABLE text (heredoc bodies / comments stripped by bash-wait-rules.js, except Rule 9's multi-line `-c` scan).
 //
 // scripts/lib/dispatch-detach.sh is NOT a launcher: it is a sourceable helper the read rails
 // source to detach THEMSELVES (setsid supervisor + durable result file). Nothing to allow here.
@@ -703,6 +708,13 @@ function introRunsShell(intro) {
   return false;
 }
 
+function heredocRuns(intro, segs) {
+  if (introRunsShell(intro)) return { runs: true, file: null };
+  const fm = /(?:>>?|\btee(?:\s+-a)?)\s*(?:"([^"]+)"|'([^']+)'|([^\s<>|;&]+))/.exec(intro);
+  const file = (fm && (fm[1] || fm[2] || fm[3])) || null;
+  return { runs: !!file && executesFile(segs, file), file };
+}
+
 // Same, with where the body is run from: `op` is the `<<TAG` operator text, `file` the script file it was written to
 // (null when fed straight to a shell), so the caller can find the segment that runs it.
 function runHeredocBodiesMeta(raw, segs) {
@@ -715,14 +727,7 @@ function runHeredocBodiesMeta(raw, segs) {
     const body = [];
     let j = i + 1;
     for (; j < lines.length; j += 1) { if ((m[1] ? lines[j].replace(/^\t+/, '') : lines[j]) === tag) break; body.push(lines[j]); }
-    const intro = lines[i];
-    let file = null;
-    let runs = introRunsShell(intro);
-    if (!runs) {
-      const fm = /(?:>>?|\btee(?:\s+-a)?)\s*(?:"([^"]+)"|'([^']+)'|([^\s<>|;&]+))/.exec(intro);
-      file = fm && (fm[1] || fm[2] || fm[3]);
-      runs = !!file && executesFile(segs, file);
-    }
+    const { runs, file } = heredocRuns(lines[i], segs);
     if (runs) out.push({ body: body.join('\n'), op: m[0], file });
     i = j;
   }
@@ -1789,7 +1794,578 @@ function detectSecretPrint(cmd) {
   catch { return null; } // same bounded/fail-open policy as the other Bash guard rules
 }
 
+// ---- Rule 9 (rm-wrapped): deny rm inside sh -c / bash -c / zsh -c, executed heredoc, loop, xargs, or find ----
+// Rule text (also carried in subagent and hetero-hand briefs):
+//   "To delete files, use one standalone rm command whose targets are literal paths under the scratchpad or $TMPDIR.
+//   Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and other text files
+//   with the Write tool, not a heredoc inside bash -c."
+const RM_WRAPPED_REWRITE = 'rm inside sh -c / heredoc / loop cannot be permission-checked and stalls on a prompt. '
+  + 'Rewrite as one standalone command: rm <literal path> [<literal path> ...] with paths under the scratchpad or $TMPDIR.';
+const RM_WRAPPED_SHELL_C_REWRITE = `${RM_WRAPPED_REWRITE.slice(0, -1)}; `
+  + 'write briefs and other text files with the Write tool, not a heredoc inside bash -c.';
+
+const RM_SHELL_NAMES = new Set(['sh', 'bash', 'zsh', 'dash']);
+const RM_RETAIN = new Set(['sh', 'bash', 'zsh', 'dash', 'xargs', 'find', 'eval', 'env']);
+const RM_SHELL_VALUE_FLAGS = new Set(['--rcfile', '--init-file', '-O', '+O', '-o', '+o']);
+const RM_XARGS_VALUE_FLAGS = new Set([
+  '-I', '-J', '-L', '-n', '-P', '-s', '-a', '-d', '-E', '-R', '-S',
+  '--arg-file', '--delimiter', '--eof', '--max-args', '--max-lines', '--max-procs', '--max-chars', '--process-slot-var', '--replace',
+]);
+const RM_FIND_ONE_ARG_PREDS = new Set([
+  '-name', '-iname', '-path', '-ipath', '-wholename', '-iwholename', '-regex', '-iregex', '-lname', '-ilname',
+  '-samefile', '-newer', '-anewer', '-cnewer', '-type', '-xtype', '-perm', '-user', '-group', '-uid', '-gid',
+  '-links', '-size', '-inum', '-mindepth', '-maxdepth', '-printf', '-fprint', '-fprint0', '-fls', '-fstype',
+  '-atime', '-ctime', '-mtime', '-amin', '-cmin', '-mmin', '-used', '-regextype', '-files0-from',
+]);
+const RM_FIND_TWO_ARG_PREDS = new Set(['-fprintf']);
+const RM_FIND_EXEC_PREDS = new Set(['-exec', '-execdir', '-ok', '-okdir']);
+const RM_GIT_SUBCMD_RE = /(^|[^A-Za-z0-9_./-])git(?:\s+(?:-[Cc]\s+\S+|--(?:git-dir|work-tree|namespace)(?:=\S+|\s+\S+)|--[a-z-]+(?:=\S+)?|-[a-zA-Z]+))*\s+rm(?=$|[^A-Za-z0-9_.-])/g;
+const RM_STANDALONE_IN_C_RE = /(?:^|[\s'"`;|&()[\]{}<>,:=!?])(?:\\|(?:[A-Za-z0-9_./-]*\/)?s?bin\/)?rm(?=$|[\s'"`;|&()[\]{}<>,:!?]|(?:\.(?=$|[\s'"`;|&()[\]{}<>,:!?])))/;
+
+function shellWords(segText) {
+  const s = String(segText);
+  const out = [];
+  let i = 0;
+  while (i < s.length) {
+    while (i < s.length && /\s/.test(s[i])) i += 1;
+    if (i >= s.length) break;
+    let raw = '';
+    let val = '';
+    while (i < s.length && !/\s/.test(s[i])) {
+      const c = s[i];
+      if (c === "'") {
+        const e = s.indexOf("'", i + 1);
+        const stop = e < 0 ? s.length : e;
+        raw += s.slice(i, stop + 1);
+        val += s.slice(i + 1, stop);
+        i = stop + 1;
+        continue;
+      }
+      if (c === '$' && s[i + 1] === '"') {
+        raw += '$';
+        i += 1;
+        continue;
+      }
+      if (c === '"') {
+        const start = i;
+        i += 1;
+        while (i < s.length && s[i] !== '"') {
+          if (s[i] === '\\' && i + 1 < s.length && '"$`\\\n'.includes(s[i + 1])) {
+            if (s[i + 1] !== '\n') val += s[i + 1];
+            i += 2;
+            continue;
+          }
+          val += s[i];
+          i += 1;
+        }
+        if (i < s.length && s[i] === '"') i += 1;
+        raw += s.slice(start, i);
+        continue;
+      }
+      if (c === '\\' && i + 1 < s.length) {
+        raw += s.slice(i, i + 2);
+        if (s[i + 1] !== '\n') val += s[i + 1];
+        i += 2;
+        continue;
+      }
+      raw += c;
+      val += c;
+      i += 1;
+    }
+    out.push({ raw, val });
+  }
+  return out;
+}
+
+function stripRedirWords(wordObjs) {
+  const out = [];
+  for (let i = 0; i < wordObjs.length; i += 1) {
+    const r = /^(?:\d*|&)(?:>>|>\||>&|<&|<<<|<<|>|<|&>)(.*)$/s.exec(wordObjs[i].raw);
+    if (r) {
+      if (r[1] === '') i += 1;
+      continue;
+    }
+    out.push(wordObjs[i].val);
+  }
+  return out;
+}
+
+// Multi-line quote-aware lexer: keeps multi-line '...', "...", and $'...' strings intact so a heredoc inside
+// `bash -c '\ncat <<EOF\n... rm ...\nEOF\n'` remains part of the `-c` string, while extracting unquoted heredocs.
+function lexScriptAndHeredocs(raw) {
+  const s = String(raw);
+  let exec = '';
+  const heredocs = [];
+  const rootCode = { k: 'code', p: 0, line: '', parent: null };
+  const stack = [rootCode];
+  let curCode = rootCode;
+  let pending = [];
+  let hdSeq = 0;
+  let wordStart = true;
+  let i = 0;
+  while (i < s.length) {
+    const top = stack[stack.length - 1];
+    const c = s[i];
+    if (top.k === 'sq') {
+      exec += c;
+      curCode.line += c;
+      if (c === "'") stack.pop();
+      i += 1;
+      continue;
+    }
+    if (top.k === 'ansic') {
+      if (c === '\\' && i + 1 < s.length) {
+        const esc = s[i + 1];
+        let rep = esc;
+        if (esc === "'") rep = "'\"'\"'";
+        else if (esc === 'n') rep = '\n';
+        else if (esc === 't') rep = '\t';
+        else if (esc === 'r') rep = '\r';
+        else if (esc === '\\') rep = '\\';
+        exec += rep;
+        curCode.line += rep;
+        i += 2;
+        continue;
+      }
+      if (c === "'") {
+        exec += "'";
+        curCode.line += "'";
+        stack.pop();
+        i += 1;
+        continue;
+      }
+      exec += c;
+      curCode.line += c;
+      i += 1;
+      continue;
+    }
+    if (top.k === 'dq') {
+      if (c === '\\' && i + 1 < s.length) {
+        const pair = s.slice(i, i + 2);
+        exec += pair;
+        if (s[i + 1] !== '\n') curCode.line += pair;
+        i += 2;
+        continue;
+      }
+      if (c === '"') {
+        exec += c;
+        curCode.line += c;
+        stack.pop();
+        i += 1;
+        continue;
+      }
+      if (c === '$' && s[i + 1] === '(' && s[i + 2] !== '(') {
+        exec += '$(';
+        const nextCode = { k: 'code', p: 1, line: '', parent: curCode };
+        stack.push(nextCode);
+        curCode = nextCode;
+        wordStart = true;
+        i += 2;
+        continue;
+      }
+      if (c === '`') {
+        exec += c;
+        const nextBt = { k: 'bt', p: 0, line: '', parent: curCode };
+        stack.push(nextBt);
+        curCode = nextBt;
+        wordStart = true;
+        i += 1;
+        continue;
+      }
+      exec += c;
+      curCode.line += c;
+      i += 1;
+      continue;
+    }
+    if (c === '\\' && i + 1 < s.length) {
+      const pair = s.slice(i, i + 2);
+      exec += pair;
+      if (s[i + 1] !== '\n') curCode.line += pair;
+      wordStart = false;
+      i += 2;
+      continue;
+    }
+    if (c === '$' && s[i + 1] === "'") {
+      exec += "'";
+      curCode.line += "'";
+      stack.push({ k: 'ansic', p: 0 });
+      wordStart = false;
+      i += 2;
+      continue;
+    }
+    if (c === "'") {
+      exec += c;
+      curCode.line += c;
+      stack.push({ k: 'sq', p: 0 });
+      wordStart = false;
+      i += 1;
+      continue;
+    }
+    if (c === '"') {
+      exec += c;
+      curCode.line += c;
+      stack.push({ k: 'dq', p: 0 });
+      wordStart = false;
+      i += 1;
+      continue;
+    }
+    if (c === '`') {
+      exec += c;
+      if (top.k === 'bt') {
+        const done = stack.pop();
+        curCode = done.parent;
+        curCode.line += '`_`';
+        wordStart = false;
+      } else {
+        const nextBt = { k: 'bt', p: 0, line: '', parent: curCode };
+        stack.push(nextBt);
+        curCode = nextBt;
+        wordStart = true;
+      }
+      i += 1;
+      continue;
+    }
+    if (top.k === 'code' && c === '$' && s[i + 1] === '(' && s[i + 2] !== '(') {
+      exec += '$(';
+      const nextCode = { k: 'code', p: 1, line: '', parent: curCode };
+      stack.push(nextCode);
+      curCode = nextCode;
+      wordStart = true;
+      i += 2;
+      continue;
+    }
+    if (top.k === 'code' && top.p > 0) {
+      if (c === '(') top.p += 1;
+      else if (c === ')') {
+        top.p -= 1;
+        if (top.p === 0 && stack.length > 1) {
+          exec += c;
+          const done = stack.pop();
+          curCode = done.parent;
+          curCode.line += '$(_)';
+          wordStart = false;
+          i += 1;
+          continue;
+        }
+      }
+    }
+    if (c === '#' && wordStart) {
+      const nl = s.indexOf('\n', i);
+      if (nl < 0) break;
+      i = nl;
+      continue;
+    }
+    if (c === '<' && s[i + 1] === '<' && s[i + 2] !== '<' && s[i + 2] !== '(') {
+      const hm = /^<<(-?)[ \t]*(?:'([^']*)'|"([^"]*)"|\\?([A-Za-z0-9_.-]+))/.exec(s.slice(i, i + 200));
+      if (hm) {
+        const tag = hm[2] !== undefined ? hm[2] : (hm[3] !== undefined ? hm[3] : hm[4]);
+        hdSeq += 1;
+        const token = `<<__HD_${hdSeq}__`;
+        curCode.line += ` ${token} `;
+        pending.push({ tag, dash: hm[1] === '-', frame: curCode, token });
+        i += hm[0].length;
+        wordStart = true;
+        continue;
+      }
+    }
+    if (c === '\n') {
+      const pendingBatch = pending;
+      const introSnapshots = pendingBatch.map((h) => {
+        let intro = h.frame.line;
+        if (pendingBatch.length > 1) {
+          for (const other of pendingBatch) {
+            if (other !== h && other.frame === h.frame) intro = intro.replace(other.token, '');
+          }
+        }
+        return intro;
+      });
+      exec += '\n';
+      curCode.line = '';
+      i += 1;
+      if (pendingBatch.length) {
+        for (let hi = 0; hi < pendingBatch.length; hi += 1) {
+          const h = pendingBatch[hi];
+          const bodyLines = [];
+          while (i < s.length) {
+            let nl = s.indexOf('\n', i);
+            if (nl < 0) nl = s.length;
+            const line = s.slice(i, nl).replace(/\r$/, '');
+            i = nl < s.length ? nl + 1 : s.length;
+            if ((h.dash ? line.replace(/^\t+/, '') : line) === h.tag) break;
+            bodyLines.push(line);
+          }
+          heredocs.push({ intro: introSnapshots[hi], body: bodyLines.join('\n') });
+        }
+        pending = [];
+      }
+      wordStart = true;
+      continue;
+    }
+    wordStart = /[\s;&|({]/.test(c);
+    exec += c;
+    curCode.line += c;
+    i += 1;
+  }
+  return { exec, heredocs };
+}
+
+function unwrapRmCommandWords(words, depth = 0) {
+  if (depth > MAX_EXPAND_DEPTH || !words.length) return { head: null, rest: [] };
+  const pos = commandPosition('', { words, retain: RM_RETAIN, decode: true });
+  if (!pos.head) return { head: null, rest: [] };
+  const base = path.posix.basename(pos.head);
+  if (base === 'env') {
+    let i = 0;
+    let opts = true;
+    for (; i < pos.rest.length; i += 1) {
+      const a = pos.rest[i];
+      if (opts && a === '--') { opts = false; continue; }
+      if (opts && (a === '-u' || a === '--unset' || a === '-C' || a === '--chdir')) { i += 1; continue; }
+      if (opts && (a === '-S' || a === '--split-string')) {
+        const splitWords = stripRedirWords(shellWords(pos.rest[i + 1] || ''));
+        return unwrapRmCommandWords([...splitWords, ...pos.rest.slice(i + 2)], depth + 1);
+      }
+      if ((opts && a.startsWith('-')) || /^[A-Za-z_]\w*=/.test(a)) continue;
+      break;
+    }
+    return unwrapRmCommandWords(pos.rest.slice(i), depth + 1);
+  }
+  return pos;
+}
+
+function shellCScriptFromArgs(args) {
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if (a === '--' || a === '-') return null;
+    if (RM_SHELL_VALUE_FLAGS.has(a)) { i += 1; continue; }
+    if (/^--[a-z-]+=/.test(a)) continue;
+    if (a.startsWith('--')) continue;
+    if (/^\+[a-zA-Z]+$/.test(a)) continue;
+    if (/^-[a-zA-Z]+$/.test(a)) {
+      const flags = a.slice(1);
+      if (flags.includes('c')) {
+        const oCount = (flags.match(/[oO]/g) || []).length;
+        return i + 1 + oCount < args.length ? args[i + 1 + oCount] : null;
+      }
+      if (flags.includes('o') || flags.includes('O')) {
+        i += (flags.match(/[oO]/g) || []).length;
+      }
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
+function hasStandaloneRmInShellC(cBody) {
+  const withoutGitRm = String(cBody).replace(RM_GIT_SUBCMD_RE, '$1git');
+  return RM_STANDALONE_IN_C_RE.test(withoutGitRm);
+}
+
+function scanDirectRmCommand(rawScript, depth) {
+  if (depth > MAX_EXPAND_DEPTH || !rawScript) return false;
+  const { exec, heredocs } = lexScriptAndHeredocs(rawScript);
+  const clean = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
+  const allSegs = expandSegments(clean);
+  for (const seg of allSegs) {
+    const pos = unwrapRmCommandWords(stripRedirWords(shellWords(seg.text)), depth);
+    if (!pos.head) continue;
+    const base = path.posix.basename(pos.head);
+    if (base === 'rm' && !/^\(/.test(pos.rest[0] || '')) return true;
+    if (base === 'eval' && scanDirectRmCommand(pos.rest.join(' '), depth + 1)) return true;
+  }
+  for (const h of heredocs) {
+    if (heredocRuns(h.intro, allSegs).runs && scanDirectRmCommand(h.body, depth + 1)) return true;
+  }
+  return false;
+}
+
+function checkShellCBody(cBody, depth) {
+  if (cBody === null || cBody === undefined) return null;
+  if (hasStandaloneRmInShellC(cBody) || scanWrappedRmRaw(cBody, depth) !== null || scanDirectRmCommand(cBody, depth)) {
+    return { rule: 'rm-wrapped', shape: 'shell-c', why: RM_WRAPPED_SHELL_C_REWRITE };
+  }
+  return null;
+}
+
+function checkDirectUtilityWords(words, wrapperShape, depth) {
+  if (depth > MAX_EXPAND_DEPTH || !words.length) return null;
+  const pos = unwrapRmCommandWords(words, depth);
+  if (!pos.head) return null;
+  const base = path.posix.basename(pos.head);
+  if (base === 'rm') return { rule: 'rm-wrapped', shape: wrapperShape, why: RM_WRAPPED_REWRITE };
+  if (RM_SHELL_NAMES.has(base)) {
+    const cBody = shellCScriptFromArgs(pos.rest);
+    const ch = checkShellCBody(cBody, depth + 1);
+    if (ch) return ch;
+  }
+  if (base === 'xargs') return checkXargsWords(pos.rest, depth + 1);
+  if (base === 'find') return checkFindWords(pos.rest, depth + 1);
+  return null;
+}
+
+function checkXargsWords(args, depth) {
+  if (depth > MAX_EXPAND_DEPTH) return null;
+  let i = 0;
+  while (i < args.length) {
+    const a = args[i];
+    if (a === '--') { i += 1; break; }
+    if (!a.startsWith('-') || a === '-') break;
+    if (RM_XARGS_VALUE_FLAGS.has(a)) { i += 2; continue; }
+    if (/^--(?:arg-file|delimiter|eof|max-args|max-lines|max-procs|max-chars|process-slot-var|replace)=/.test(a)) { i += 1; continue; }
+    if (/^-[IJLnPsadERS].+/.test(a)) { i += 1; continue; }
+    if (/^-[0rtpx]+[IJLnPsadERS]$/.test(a)) { i += 2; continue; }
+    if (/^-[0rtpx]+[IJLnPsadERS].+/.test(a)) { i += 1; continue; }
+    i += 1;
+  }
+  if (i >= args.length) return null;
+  return checkDirectUtilityWords(args.slice(i), 'xargs', depth);
+}
+
+function checkFindWords(args, depth) {
+  if (depth > MAX_EXPAND_DEPTH) return null;
+  let i = 0;
+  while (i < args.length) {
+    const a = args[i];
+    if (a === '-D') { i += 2; continue; }
+    if (/^-(?:[HLP]|O\d*)$/.test(a)) { i += 1; continue; }
+    break;
+  }
+  for (; i < args.length; i += 1) {
+    const a = args[i];
+    if (a === '-delete') return { rule: 'rm-wrapped', shape: 'find-delete', why: RM_WRAPPED_REWRITE };
+    if (RM_FIND_ONE_ARG_PREDS.has(a) || /^-newer[a-zA-Z]{2}$/.test(a)) { i += 1; continue; }
+    if (RM_FIND_TWO_ARG_PREDS.has(a)) { i += 2; continue; }
+    if (RM_FIND_EXEC_PREDS.has(a)) {
+      const execWords = [];
+      i += 1;
+      while (i < args.length && args[i] !== ';') {
+        if (args[i] === '+' && execWords[execWords.length - 1] === '{}') break;
+        execWords.push(args[i]);
+        i += 1;
+      }
+      if (execWords.length) {
+        const hit = checkDirectUtilityWords(execWords, 'find-exec', depth + 1);
+        if (hit) return hit;
+      }
+    }
+  }
+  return null;
+}
+
+function inspectWrappedRmWords(words, inLoop, depth) {
+  if (depth > MAX_EXPAND_DEPTH || !words.length) return null;
+  const pos = unwrapRmCommandWords(words, depth);
+  if (!pos.head) return null;
+  const base = path.posix.basename(pos.head);
+  if (RM_SHELL_NAMES.has(base)) {
+    const cBody = shellCScriptFromArgs(pos.rest);
+    const ch = checkShellCBody(cBody, depth + 1);
+    if (ch) return ch;
+  }
+  if (base === 'xargs') {
+    const xh = checkXargsWords(pos.rest, depth + 1);
+    if (xh) return xh;
+  }
+  if (base === 'find') {
+    const fh = checkFindWords(pos.rest, depth + 1);
+    if (fh) return fh;
+  }
+  if (base === 'eval') {
+    const evalBody = pos.rest.join(' ');
+    const eh = scanWrappedRmRaw(evalBody, depth + 1);
+    if (eh) return eh;
+    if (inLoop && scanDirectRmCommand(evalBody, depth + 1)) {
+      return { rule: 'rm-wrapped', shape: 'loop', why: RM_WRAPPED_REWRITE };
+    }
+  }
+  if (inLoop && base === 'rm' && !/^\(/.test(pos.rest[0] || '')) {
+    return { rule: 'rm-wrapped', shape: 'loop', why: RM_WRAPPED_REWRITE };
+  }
+  return null;
+}
+
+function scanWrappedRmExec(cleanText, inheritedLoop, depth) {
+  if (depth > MAX_EXPAND_DEPTH) return null;
+  const segs = segments(cleanText);
+  let loopDepth = inheritedLoop ? 1 : 0;
+  let braceLoopDepth = 0;
+  for (const seg of segs) {
+    const maskedTrim = maskQuotes(seg.text).trim();
+    if (/^done(?:\s|[<>0-9&}]|$)/.test(maskedTrim)) {
+      loopDepth = Math.max(inheritedLoop ? 1 : 0, loopDepth - 1);
+    } else if (/^\}(?:\s|[<>0-9&]|$)/.test(maskedTrim) && braceLoopDepth > 0) {
+      braceLoopDepth -= 1;
+      loopDepth = Math.max(inheritedLoop ? 1 : 0, loopDepth - 1);
+    }
+    const afterKw = maskedTrim.replace(/^(?:(?:do|then|else|elif|\{|!|time)\s+)+/, '');
+    let braceCmdWords = null;
+    if (/^(?:for|while|until)\b/.test(afterKw)) {
+      loopDepth += 1;
+      if (/^for\b[^{]*\{/.test(afterKw)) {
+        braceLoopDepth += 1;
+        const braceIdx = seg.text.indexOf('{');
+        if (braceIdx >= 0) {
+          braceCmdWords = stripRedirWords(shellWords(seg.text.slice(braceIdx + 1).replace(/\}\s*$/, '')));
+        }
+      }
+    }
+    const inLoop = loopDepth > 0;
+    const words = stripRedirWords(shellWords(seg.text));
+    const hit = inspectWrappedRmWords(words, inLoop, depth);
+    if (hit) return hit;
+    if (braceCmdWords && braceCmdWords.length) {
+      const bh = inspectWrappedRmWords(braceCmdWords, true, depth);
+      if (bh) return bh;
+    }
+    if (seg.text.length <= SEG_MAX_TEXT) {
+      for (const sub of findSubstitutions(seg.text)) {
+        const subHit = scanWrappedRmRaw(sub, depth + 1, inLoop);
+        if (subHit) return subHit;
+      }
+    }
+  }
+  return null;
+}
+
+function scanWrappedRmRaw(rawText, depth = 0, inheritedLoop = false) {
+  if (depth > MAX_EXPAND_DEPTH || !rawText) return null;
+  const { exec, heredocs } = lexScriptAndHeredocs(rawText);
+  const clean = stripArrayAssigns(stripArithmetic(rewriteProcSubst(exec)));
+  const execHit = scanWrappedRmExec(clean, inheritedLoop, depth);
+  if (execHit) return execHit;
+  if (heredocs.length) {
+    const allSegs = expandSegments(clean);
+    for (const h of heredocs) {
+      if (!heredocRuns(h.intro, allSegs).runs) continue;
+      const nested = scanWrappedRmRaw(h.body, depth + 1, false);
+      if (nested) return nested;
+      if (scanDirectRmCommand(h.body, depth + 1)) {
+        return { rule: 'rm-wrapped', shape: 'heredoc', why: RM_WRAPPED_REWRITE };
+      }
+    }
+  }
+  return null;
+}
+
+function hasWrappedRmCandidateChars(raw) {
+  if (raw.includes('r') && raw.includes('m')) return true;
+  return raw.includes('f') && raw.includes('i') && raw.includes('n') && raw.includes('d')
+    && raw.includes('-') && raw.includes('e') && raw.includes('l') && raw.includes('t');
+}
+
+function detectWrappedRm(cmd) {
+  try {
+    const raw = typeof cmd === 'string' ? cmd : '';
+    if (!hasWrappedRmCandidateChars(raw)) return null;
+    return scanWrappedRmRaw(raw, 0, false);
+  } catch {
+    return null; // bounded/fail-open on pathological nesting
+  }
+}
+
 module.exports = {
+  detectWrappedRm,
   detectSecretPrint,
   detectRecursiveRmVar,
   detectSubagentRmOutsideScratch,

@@ -73,6 +73,7 @@ dev-flow's intent-node skill routing enforces on the main session, applied to su
 - Do not [feature beyond current sprint]
 - Do not introduce new dependencies unless strictly necessary
 - Do not modify [files owned by other agents]
+- To delete files, use one standalone rm command whose targets are literal paths under the scratchpad or $TMPDIR. Never put rm inside sh -c / bash -c / zsh -c, a heredoc, or a for/while loop. Write briefs and other text files with the Write tool, not a heredoc inside bash -c.
 ```
 
 ### Why SKILLS is a separate element (not just a WHY/WHAT line)

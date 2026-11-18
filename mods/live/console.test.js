@@ -145,6 +145,37 @@ test('consoleModeOf: true only for the exact program object', () => {
   ]) assert.equal(C.consoleModeOf(text), false, label)
 })
 
+test('consoleConfigOf and findConsoleConfig: reads optional ingest_from and drops tokens outside ^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+=[a-z]+$', async () => {
+  assert.deepEqual(
+    C.consoleConfigOf(JSON.stringify({ schema: 'autopilot.console/1', mode: 'program', ingest_from: 'ns.1/courier_a/capacity--claude=pace ns.1/courier_a/fleet-cli=pace' })),
+    { on: true, ingestFrom: 'ns.1/courier_a/capacity--claude=pace ns.1/courier_a/fleet-cli=pace' },
+  )
+  assert.deepEqual(
+    C.consoleConfigOf(JSON.stringify({ schema: 'autopilot.console/1', mode: 'program' })),
+    { on: true, ingestFrom: null },
+  )
+  assert.deepEqual(
+    C.consoleConfigOf(JSON.stringify({ schema: 'autopilot.console/1', mode: 'program', ingest_from: 'BAD/x/y=pace ns/courier-a/capacity=pace bad=pace ns/courier-a/fleet-cli=pace1' })),
+    { on: true, ingestFrom: 'ns/courier-a/capacity=pace' },
+  )
+  assert.deepEqual(
+    C.consoleConfigOf(JSON.stringify({ schema: 'autopilot.console/1', mode: 'program', ingest_from: 'BAD/x/y=pace missing' })),
+    { on: true, ingestFrom: null },
+  )
+  assert.deepEqual(
+    C.consoleConfigOf(JSON.stringify({ schema: 'autopilot.console/1', mode: 'off', ingest_from: 'ns/courier-a/capacity=pace' })),
+    { on: false, ingestFrom: null },
+  )
+  const files = {
+    '/r/.git/HEAD': 'ref: refs/heads/x\n',
+    '/r/.claude/console.json': JSON.stringify({ schema: 'autopilot.console/1', mode: 'program', ingest_from: 'ns/courier-a/capacity=pace ns/courier-a/fleet-cli=pace' }),
+    '/r/sub/.git': 'gitdir: /elsewhere\n',
+  }
+  const read = async p => (Object.hasOwn(files, p) ? files[p] : null)
+  assert.deepEqual(await C.findConsoleConfig('/r/a/b', read), { on: true, ingestFrom: 'ns/courier-a/capacity=pace ns/courier-a/fleet-cli=pace' })
+  assert.deepEqual(await C.findConsoleConfig('/r/sub/deep', read), { on: false, ingestFrom: null })
+})
+
 test('C1 fix: parseCard keeps only ids of the decision card form d-<8 hex>; any other id drops the card (trust boundary)', () => {
   const raw = RAW('normal.json')
   const good = raw.cards.length

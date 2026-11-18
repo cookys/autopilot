@@ -49,7 +49,7 @@ import type { DecideBatch } from './decidebatch'
 import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
 import type { ClaimCard, UndoDeps } from './decideundo'
 import { BAND_MIN_COLS, BAND_PAGE_TABS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
-import { findConsoleMode, parseConsole } from './console'
+import { findConsoleConfig, parseConsole } from './console'
 import { CONSOLE_FILE, CONSOLE_TIMEOUT_MS, makeConsoleFeed } from './consolefeed'
 import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
@@ -204,7 +204,8 @@ async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
 }
 let decideCursor = 0 // the card the O4 shell's main window shows (an index into the band's batch, bandBatch: the pending cards and the ones closed elsewhere; clamped at every draw)
 let decideLastId: string | null = null // the card answered last from the shell (the progress row names it)
-// ---- the operator-console mode (plan §3.1; consoletabs.ts): on only where the session's repo has .claude/console.json = {"schema":"autopilot.console/1","mode":"program"} (findConsoleMode). Off, every line
+// ---- the operator-console mode (plan §3.1; consoletabs.ts): on only where the session's repo has .claude/console.json = {"schema":"autopilot.console/1","mode":"program"} (findConsoleConfig; optional
+// "ingest_from": "<address>=pace ..." passes validated ^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+=[a-z]+$ tokens via FLEET_CONSOLE_INGEST_FROM, omitted when absent/empty). Off, every line
 // below that reads these is skipped and the band and the pane are what they were. ONE navigation state (consoleTab) for the band's tabs and the pane's: pressing either sets it, both draw it.
 // The snapshot comes from consoleSource (a top-level function declaration: the mod loader follows `$` only into declared functions, so it cannot be a swappable variable); it comes from consolefeed.ts: `fleet console --json` (at most once a minute, never while drawing), else the courier's HOME/.local/state/fleet/console.json; neither = null = no source. ----
 let consoleOn = false
@@ -212,6 +213,7 @@ let consoleTab: ConsoleTab = 'command'
 let consoleSnap: ConsoleSnapshot | null = null
 let consoleCwd: string | null = null // the cwd the mode was last read for; a different cwd (a new session in another repo) reads it again at the next tick
 let consoleReadMs = -Infinity
+let consoleIngestFrom: string | null = null
 const CONSOLE_MODE_EVERY_MS = 10_000 // the config file is read again at most this often
 let consoleFeed = makeConsoleFeed() // per session: startLive makes a new one, so the 60 s throttle and the snapshot of an earlier session do not leak
 async function consoleSource($: EngineInterface): Promise<ConsoleSnapshot | null> {
@@ -228,12 +230,14 @@ async function consoleTick($: EngineInterface): Promise<void> {
   const cwd = await $.session.cwd()
   let changed = false
   if (cwd !== consoleCwd || nowMs - consoleReadMs >= CONSOLE_MODE_EVERY_MS) {
-    const on = await findConsoleMode(cwd, p => readText($, p))
+    const found = await findConsoleConfig(cwd, p => readText($, p))
     consoleCwd = cwd
     consoleReadMs = nowMs
-    changed = on !== consoleOn
-    if (on && !consoleOn && barTab !== 'forge') barTab = null // the strip turns to the console tabs: a band tab left open would keep its body under a 指揮 highlight
-    consoleOn = on
+    consoleIngestFrom = found.ingestFrom
+    consoleFeed.setIngestFrom(found.ingestFrom)
+    changed = found.on !== consoleOn
+    if (found.on && !consoleOn && barTab !== 'forge') barTab = null // the strip turns to the console tabs: a band tab left open would keep its body under a 指揮 highlight
+    consoleOn = found.on
   }
   const snap = consoleOn ? await consoleSource($) : null
   if (snap !== consoleSnap) { consoleSnap = snap; changed = true }
@@ -1376,7 +1380,8 @@ export async function startLive($: EngineInterface): Promise<void> {
   pageView = {}
   decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
   resetNoteInputs()
-  consoleFeed = makeConsoleFeed()
+  consoleReadMs = -Infinity
+  consoleFeed = makeConsoleFeed(undefined, undefined, consoleIngestFrom)
   barTab = null
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone

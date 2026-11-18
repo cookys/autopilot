@@ -1367,3 +1367,7 @@ Rules:
 - The selector is known to miss three dependency kinds: layout copies, whole-tree content scans, and the frozen copies inside eval packs. Keep the repo-audit (`always_run`) suites in every selection for that reason, and treat the at-least-half rule as the net for the rest.
 
 Preventing artifact: `scripts/affected-suites.js` (selector), `tools/migrate/suite-baseline.js run-all` (full run); the l5 acceptance step in `skills/l5/references/hetero-impl-loop.md` points here.
+
+## 66. Verify a rule rollout — a pushed rule commit is not a running rule
+
+Pushing a `CLAUDE.md` edit to a lane repository proves the rule exists on the remote, not that any live seat is following it: `CLAUDE.md` is loaded at session start, so a running session only applies the rule when its remote branch contains the commit, its worktree `HEAD` has pulled it, the session started after the commit's committer timestamp, and any optional behaviour probe passed. Verify a rule rollout across fleet seats with `node scripts/rule-effect-check.js --inventory <seats.json> --commit <sha>` (`--commit <repo>=<sha>` when repos carry distinct rule commits; `--json` for `autopilot.rule-effect/1`), and treat any `stale` (exit 1) or `unknown` (exit 2) seat as not yet proven to run the current rules (`hooks/tests/rule-effect-check.test.sh`).

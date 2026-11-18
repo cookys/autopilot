@@ -9,8 +9,13 @@
  *                   also the flattened Claude Code project-dir form  -home-<user>-
  *   tmp_claude_path /tmp/claude-<digits>
  *   run_user_path   /run/user/<digits>
- *   host            local hostname + the fleet host list (scripts/lib/leak-guard-hosts.json).
- *                   Ordinary words (pico, cuda, gentoo) count ONLY in a host context:
+ *   host            local hostname + the per-user fleet host list outside the repo:
+ *                   $AUTOPILOT_LEAK_GUARD_HOSTS if set, else ~/.autopilot/leak-guard-hosts.json
+ *                   (shape {"strong":[...],"contextual":[...]}; example with fake names at
+ *                   scripts/lib/leak-guard-hosts.example.json). When that file is missing, runs
+ *                   with the local hostname only and writes one stderr line naming the expected
+ *                   path; an unreadable or malformed file fails closed (exit 2 in CLI callers).
+ *                   Ordinary words (e.g. alpha, beta, testnode) count ONLY in a host context:
  *                   "@name", "ssh name", "name:" not followed by a digit, "/name/" not under
  *                   local|opt|lib|usr|share, "name.local", "cookys-name".
  *   private_ip      10/8, 172.16/12, 192.168/16, 100.64/10
@@ -43,13 +48,48 @@ function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function hostsFilePath() {
+  const envPath = process.env.AUTOPILOT_LEAK_GUARD_HOSTS;
+  if (typeof envPath === 'string' && envPath.trim() !== '') return envPath.trim();
+  return path.join(os.homedir(), '.autopilot', 'leak-guard-hosts.json');
+}
+
 function loadHosts() {
-  const file = path.join(__dirname, 'leak-guard-hosts.json');
-  const j = JSON.parse(fs.readFileSync(file, 'utf8')); // throws when missing or malformed: fail closed
-  if (!Array.isArray(j.strong) || !Array.isArray(j.contextual)) throw new Error(`${file}: need "strong" and "contextual" arrays`);
-  const strong = j.strong.slice();
+  const file = hostsFilePath();
+  let strong = [];
+  let contextual = [];
+  let raw = null;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    if (e && e.code === 'ENOENT') {
+      process.stderr.write(`leak-guard: host list not found at ${file}; running with local hostname only\n`);
+    } else {
+      throw new Error(`host list unreadable: ${file} (${(e && (e.code || e.message)) || e})`);
+    }
+  }
+  if (raw !== null) {
+    let j;
+    try {
+      j = JSON.parse(raw);
+    } catch (e) {
+      throw new Error(`host list is not valid JSON: ${file} (${e.message})`);
+    }
+    if (
+      !j ||
+      typeof j !== 'object' ||
+      Array.isArray(j) ||
+      !Array.isArray(j.strong) ||
+      !Array.isArray(j.contextual) ||
+      !j.strong.every((s) => typeof s === 'string' && s.trim() !== '') ||
+      !j.contextual.every((s) => typeof s === 'string' && s.trim() !== '')
+    ) {
+      throw new Error(`host list malformed: ${file} needs {"strong":[...],"contextual":[...]} of non-empty strings`);
+    }
+    strong = j.strong.slice();
+    contextual = j.contextual.slice();
+  }
   const local = os.hostname().split('.')[0];
-  const contextual = j.contextual.slice();
   if (local.length >= 4 && local.toLowerCase() !== 'localhost') {
     // A name with a digit, hyphen or underscore is distinctive: match it anywhere. A plain word (a machine
     // named like a common English word) would block every added use of that word, so it only counts in a
@@ -81,25 +121,33 @@ let CACHE = null;
 function rules() {
   if (CACHE) return CACHE;
   const { strong, contextual } = loadHosts();
-  const S = strong.map(escapeRe).join('|');
-  const C = contextual.map(escapeRe).join('|');
   const list = [
     { kind: 'home_path', category: 'home_path', re: /(?<![A-Za-z0-9_.-])\/(?:home|Users)\/(?!\.)[A-Za-z0-9_][A-Za-z0-9._-]*/g },
     { kind: 'home_flat', category: 'home_path', re: /(?<![A-Za-z0-9_])-(?:home|Users)-(?!\.)[A-Za-z0-9_]+-/g },
     { kind: 'tmp_claude_path', category: 'tmp_claude_path', re: /(?<![A-Za-z0-9_.-])\/tmp\/claude-\d+/g },
     { kind: 'run_user_path', category: 'run_user_path', re: /(?<![A-Za-z0-9_.-])\/run\/user\/\d+/g },
+  ];
+  if (strong.length > 0) {
+    const S = strong.map(escapeRe).join('|');
     // a hyphenated token that contains a strong name goes whole: <user>-<fleet-name> -> <host>
-    { kind: 'host_strong', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_])(?:[A-Za-z0-9_]+-)*(?:${S})(?:-[A-Za-z0-9_]+)*(?![A-Za-z0-9_])`, 'gi') },
-    // contextual names: case-sensitive lowercase, so the GPU "CUDA" never matches
-    { kind: 'host_at', category: 'host', re: new RegExp(`(?<=@)(?:${C})(?![A-Za-z0-9_-])`, 'g') },
-    { kind: 'host_ssh', category: 'host', re: new RegExp(`(?<=\\bssh\\s+(?:[\\w.-]+@)?)(?:${C})(?![A-Za-z0-9_-])`, 'g') },
-    { kind: 'host_colon', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_./-])(?:${C})(?=:(?!\\d))`, 'g') },
-    { kind: 'host_seg', category: 'host', re: new RegExp(`(?<!(?:local|opt|lib|usr|share)\\/)(?<=\\/)(?:${C})(?=\\/)`, 'g') },
-    { kind: 'host_dotlocal', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_./-])(?:${C})(?=\\.local\\b)`, 'g') },
-    { kind: 'host_cookys', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_])cookys-(?:${C})(?![A-Za-z0-9_])`, 'g') },
+    list.push({ kind: 'host_strong', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_])(?:[A-Za-z0-9_]+-)*(?:${S})(?:-[A-Za-z0-9_]+)*(?![A-Za-z0-9_])`, 'gi') });
+  }
+  if (contextual.length > 0) {
+    const C = contextual.map(escapeRe).join('|');
+    // contextual names: case-sensitive lowercase, so an uppercase acronym never matches
+    list.push(
+      { kind: 'host_at', category: 'host', re: new RegExp(`(?<=@)(?:${C})(?![A-Za-z0-9_-])`, 'g') },
+      { kind: 'host_ssh', category: 'host', re: new RegExp(`(?<=\\bssh\\s+(?:[\\w.-]+@)?)(?:${C})(?![A-Za-z0-9_-])`, 'g') },
+      { kind: 'host_colon', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_./-])(?:${C})(?=:(?!\\d))`, 'g') },
+      { kind: 'host_seg', category: 'host', re: new RegExp(`(?<!(?:local|opt|lib|usr|share)\\/)(?<=\\/)(?:${C})(?=\\/)`, 'g') },
+      { kind: 'host_dotlocal', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_./-])(?:${C})(?=\\.local\\b)`, 'g') },
+      { kind: 'host_cookys', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_])cookys-(?:${C})(?![A-Za-z0-9_])`, 'g') },
+    );
+  }
+  list.push(
     { kind: 'email', category: 'email', re: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![A-Za-z0-9-])/g, accept: isReportableEmail },
     { kind: 'private_ip', category: 'private_ip', re: /(?<![0-9.])(?:\d{1,3}\.){3}\d{1,3}(?![0-9]|\.\d)/g, accept: isPrivateIp },
-  ];
+  );
   for (const { name, pattern } of secrets.patterns) {
     list.push({ kind: `secret:${name}`, category: 'secret', re: new RegExp(pattern.source, 'g') });
   }
@@ -110,11 +158,15 @@ function rules() {
 /**
  * Find every personal-data hit in a text. Overlaps are resolved: the earliest start wins,
  * then the longest, so a hit is reported and replaced exactly once.
+ * @param {string} text
+ * @param {Set<string>|string[]|null} [categories]
  * @returns {Array<{category:string,kind:string,index:number,length:number,match:string}>}
  */
-function findAll(text) {
+function findAll(text, categories = null) {
+  const catSet = categories ? (categories instanceof Set ? categories : new Set(categories)) : null;
   const raw = [];
   for (const r of rules()) {
+    if (catSet && !catSet.has(r.category)) continue;
     r.re.lastIndex = 0;
     let m;
     while ((m = r.re.exec(text)) !== null) {
@@ -177,4 +229,4 @@ function isEnvFileName(p) {
   return base === '.env' || base.endsWith('.env');
 }
 
-module.exports = { CATEGORIES, PLACEHOLDER, findAll, redact, isEnvFileName, isPrivateIp };
+module.exports = { CATEGORIES, PLACEHOLDER, findAll, redact, isEnvFileName, isPrivateIp, rules, hostsFilePath };

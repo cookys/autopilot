@@ -7237,6 +7237,19 @@
       "doc": null,
       "relates": [],
       "summary": "Test/path override for the wait-dispatch-results.js binary invoked by scripts/dispatch-panel.js."
+    },
+    {
+      "name": "AUTOPILOT_LEAK_GUARD_HOSTS",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "~/.autopilot/leak-guard-hosts.json",
+      "readers": [
+        "scripts/lib/personal-data-patterns.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Path of the per-user JSON host deny list ({\"strong\":[...],\"contextual\":[...]}) read by leak-guard and personal-data-redact; defaults to ~/.autopilot/leak-guard-hosts.json."
     }
   ]
 }

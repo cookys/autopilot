@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- leak-guard push hardening (mechanism, no version bump): moved the fleet host deny list out of git to `$AUTOPILOT_LEAK_GUARD_HOSTS` / `~/.autopilot/leak-guard-hosts.json` (missing runs with the local hostname + one stderr line; unreadable or invalid JSON exits 2; fake-name example at `scripts/lib/leak-guard-hosts.example.json`), added `scripts/leak-guard.js --tree <rev> [--categories c1,c2]` (default `host`, skipping binaries and `evidence/`) wired into `.githooks/pre-push`, and refused newly added `evidence/` or `*/evidence/` files (including renames and copies) on pre-push while allowing edits and deletions of existing ones. Tests: `hooks/tests/leak-guard.test.sh`, `scripts/dispatch-panel.test.js`.
 - Secret-output redaction: a default-on PostToolUse Bash hook masks PHP secret defines, env/systemd assignments and shared service tokens in stdout/stderr using a response-shaped `updatedToolOutput` object. `depth0_delegate_gate.secret_print` / `AUTOPILOT_BASH_GUARD_SECRET_MODE` controls both layers: block/warn redact output, off skips. Hook inventory: 49 total, 31 default-on, 18 opt-in. No version bump.
 - Secret-print guard: the existing PreToolUse Bash guard blocks Docker/env/config-file/Kubernetes/systemd unit/drop-in secret dumps by default (`depth0_delegate_gate.secret_print`, `AUTOPILOT_BASH_GUARD_SECRET_MODE`: block/warn/off); `scripts/safe-inspect.js` preserves keys and structure while masking every value with length and SHA-256 prefix.
 - pm-token-split P0 (mechanism, no version bump): work-order plan-first gate (`hooks/_shared/pm-console.js` PM console gate walking up to the first real repo root, `scripts/lib/work-order-plan.js` `Size`/`Plan` marker parser, `session-mode.js set --fleet-task` / `stage-advance.js --to implement` frozen plan receipts, and `hooks/fleet-send-work-order-guard.js` `mcp__fleet__dispatch` check gated on opt-in sub-stem `pm-dispatch-plan-guard`).
@@ -523,6 +524,7 @@
 
 ### Settings changes
 
+- **New `AUTOPILOT_LEAK_GUARD_HOSTS`** (env; file path; default `~/.autopilot/leak-guard-hosts.json`). Path of the per-user host deny list (`{"strong":[...],"contextual":[...]}`) read by `scripts/lib/personal-data-patterns.js`; when missing, leak-guard runs with the local hostname only and writes one stderr line naming the expected path; unreadable or malformed JSON exits 2. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
 - **New `depth0_delegate_gate.secret_print`** (config.json; `block`, `warn` or `off`; default `block`). Blocks Bash commands that would print secret values, including systemd unit/drop-in dumps. Use [safe-inspect](docs/guide/safe-inspect.md) for masked inspection.
 - **New `pm_output_cap.ledger_search_pattern`** (config.json; regex string; default `""`). Matches `Bash` commands or `mcp__*` tool names in opt-in `pm-output-cap` to apply the tighter 30-line cap instead of 40.
 - **New `AUTOPILOT_BASH_GUARD_SECRET_MODE`** (env; `block`, `warn` or `off`; default `block`). Overrides `depth0_delegate_gate.secret_print`; env wins, and invalid values fall back to `block`.

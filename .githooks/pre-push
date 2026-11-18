@@ -51,6 +51,12 @@ if [ -r "$__LG" ] && command -v node >/dev/null 2>&1; then
       __lg_fail=1
     fi
   }
+  __lg_tree_scan() {
+    if ! __lg_out="$(cd "$REPO_ROOT" && node "$__LG" --tree "$1" 2>&1)"; then
+      printf '\n\033[1mleak-guard: %s (tree %s) blocked\033[0m\n%s\n' "${__lg_lref:-HEAD}" "$1" "$__lg_out" >&2
+      __lg_fail=1
+    fi
+  }
   while read -r __lg_lref __lg_lsha __lg_rref __lg_rsha; do
     [ -z "${__lg_lsha:-}" ] && continue
     echo "$__lg_lsha" | grep -qE '^0+$' && continue
@@ -63,6 +69,7 @@ if [ -r "$__LG" ] && command -v node >/dev/null 2>&1; then
       __lg_fail=1
       continue
     fi
+    __lg_tree_scan "$__lg_lsha"
     [ -n "$__lg_raw" ] || continue
     __lg_commits=""
     __lg_bounds=""
@@ -100,6 +107,103 @@ if [ -r "$__LG" ] && command -v node >/dev/null 2>&1; then
     printf 'Fix with the redaction command above in a new commit; this repo is public.\n\n' >&2
     exit 1
   fi
+fi
+
+# --- evidence-guard: no new evidence/ files may be pushed to the remote ---
+# Modifying or deleting existing tracked evidence files is allowed while legacy evidence is retired;
+# adding a path starting with evidence/ or containing /evidence/ (including renames/copies via
+# --no-renames) is refused before layout-lint and the qc-gate.
+__ev_fail=0
+__ev_check_diff() {
+  local __ev_left="$1" __ev_right="$2" __ev_p
+  while IFS= read -r -d '' __ev_p; do
+    case "$__ev_p" in
+      evidence/*|*/evidence/*)
+        __ev_refused+=("$__ev_p")
+        ;;
+    esac
+  done < <(git -C "$REPO_ROOT" -c core.quotepath=false -c diff.renames=false diff --no-renames --diff-filter=A --name-only -z "$__ev_left" "$__ev_right" 2>/dev/null || true)
+}
+while read -r __ev_lref __ev_lsha __ev_rref __ev_rsha; do
+  [ -z "${__ev_lsha:-}" ] && continue
+  echo "$__ev_lsha" | grep -qE '^0+$' && continue
+  __ev_new="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${__ev_lsha}^{commit}" 2>/dev/null || true)"
+  [ -n "$__ev_new" ] || continue
+  __ev_not=(--not)
+  if [ -n "${__ev_rsha:-}" ] && ! echo "$__ev_rsha" | grep -qE '^0+$'; then
+    if git -C "$REPO_ROOT" cat-file -e "${__ev_rsha}^{commit}" 2>/dev/null; then
+      __ev_not+=("$__ev_rsha")
+    fi
+  fi
+  if [ -n "${__PUSH_REMOTE:-}" ]; then
+    __ev_not+=("--remotes=${__PUSH_REMOTE}")
+  else
+    __ev_not+=(--remotes)
+  fi
+  __ev_raw="$(git -C "$REPO_ROOT" rev-list --boundary "$__ev_new" "${__ev_not[@]}" 2>/dev/null)" || continue
+  [ -n "$__ev_raw" ] || continue
+  __ev_commits=""
+  __ev_bounds=""
+  while read -r __ev_line; do
+    [ -n "$__ev_line" ] || continue
+    case "$__ev_line" in
+      -*) __ev_bounds="${__ev_bounds}${__ev_line#-}"$'\n' ;;
+      *)  __ev_commits="${__ev_commits}${__ev_line}"$'\n' ;;
+    esac
+  done <<< "$__ev_raw"
+  [ -n "$__ev_commits" ] || continue
+  __ev_bn=0
+  __ev_b=""
+  while read -r __ev_line; do
+    [ -n "$__ev_line" ] || continue
+    __ev_bn=$((__ev_bn + 1))
+    __ev_b="$__ev_line"
+  done <<< "$__ev_bounds"
+  __ev_refused=()
+  if [ "$__ev_bn" -eq 1 ]; then
+    __ev_check_diff "$__ev_b" "$__ev_new"
+  elif [ "$__ev_bn" -eq 0 ]; then
+    __ev_empty="$(git -C "$REPO_ROOT" hash-object -t tree /dev/null)"
+    __ev_check_diff "$__ev_empty" "$__ev_new"
+  else
+    while read -r __ev_c; do
+      [ -n "$__ev_c" ] || continue
+      if git -C "$REPO_ROOT" rev-parse --verify --quiet "${__ev_c}^2" >/dev/null 2>&1; then
+        while IFS= read -r -d '' __ev_p; do
+          case "$__ev_p" in
+            evidence/*|*/evidence/*)
+              __ev_in_parent=0
+              while read -r __ev_par; do
+                [ -n "$__ev_par" ] || continue
+                if git -C "$REPO_ROOT" cat-file -e "${__ev_par}:${__ev_p}" 2>/dev/null; then
+                  __ev_in_parent=1
+                  break
+                fi
+              done < <(git -C "$REPO_ROOT" rev-parse "${__ev_c}^@" 2>/dev/null || true)
+              [ "$__ev_in_parent" -eq 0 ] && __ev_refused+=("$__ev_p")
+              ;;
+          esac
+        done < <(git -C "$REPO_ROOT" -c core.quotepath=false -c diff.renames=false diff --no-renames --diff-filter=A --name-only -z "${__ev_c}^1" "$__ev_c" 2>/dev/null || true)
+      else
+        __ev_p1="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${__ev_c}^" 2>/dev/null || true)"
+        if [ -n "$__ev_p1" ]; then
+          __ev_check_diff "$__ev_p1" "$__ev_c"
+        else
+          __ev_empty="$(git -C "$REPO_ROOT" hash-object -t tree /dev/null)"
+          __ev_check_diff "$__ev_empty" "$__ev_c"
+        fi
+      fi
+    done <<< "$__ev_commits"
+  fi
+  if [ "${#__ev_refused[@]}" -gt 0 ]; then
+    printf '\n\033[1mpre-push: %s blocked — new evidence file(s) refused:\033[0m\n' "${__ev_lref:-HEAD}" >&2
+    printf '%s\n' "${__ev_refused[@]}" | awk '!seen[$0]++ { print "  " $0 }' >&2
+    __ev_fail=1
+  fi
+done <<< "$__PUSH_STDIN"
+if [ "$__ev_fail" -ne 0 ]; then
+  printf 'evidence stays local; keep it in an untracked directory.\n\n' >&2
+  exit 1
 fi
 
 # --- layout-lint: tracked files stay where the repo layout allows (whole tree, ~0.1 s) ---

@@ -112,6 +112,13 @@ setTimeout(() => {
     { mode: 0o755 },
   );
 
+  const hostsFile = path.join(dir, 'hosts.json');
+  fs.writeFileSync(
+    hostsFile,
+    JSON.stringify({ strong: ['testhost-panel-a'], contextual: ['testpanelctx'] }) + '\n',
+    'utf8',
+  );
+
   return {
     dir,
     binDir,
@@ -119,6 +126,7 @@ setTimeout(() => {
     runsDir,
     fleetBin,
     authorStub,
+    hostsFile,
     cleanup() {
       fs.rmSync(dir, { recursive: true, force: true });
     },
@@ -138,6 +146,7 @@ function runPanel(sb, args, extraEnv = {}, scriptPath = PANEL_JS) {
     PATH: `${sb.binDir}:${process.env.PATH || '/usr/bin:/bin'}`,
     DP_TEST_LOG_DIR: sb.logDir,
     AUTOPILOT_DISPATCH_RUNS_DIR: sb.runsDir,
+    AUTOPILOT_LEAK_GUARD_HOSTS: sb.hostsFile,
     ...extraEnv,
   };
   return spawnSync(process.execPath, [scriptPath, ...args], {
@@ -337,7 +346,7 @@ test('missing scanner rule file fails closed with exit 4 and zero spawns', () =>
       path.join(shadowHooksShared, 'secret-patterns.js'),
     );
     for (const f of fs.readdirSync(path.join(REPO_ROOT, 'scripts', 'lib'))) {
-      if (f === 'leak-guard-hosts.json') continue; // omit rule file intentionally
+      if (f === 'ar-redact-rules.js') continue; // omit rule file intentionally
       const src = path.join(REPO_ROOT, 'scripts', 'lib', f);
       if (fs.statSync(src).isFile()) {
         fs.copyFileSync(src, path.join(shadowLib, f));
@@ -360,6 +369,40 @@ test('missing scanner rule file fails closed with exit 4 and zero spawns', () =>
     assert.equal(res.status, 4, res.stderr);
     assert.equal(readCalls(sb.logDir).length, 0);
     assert.equal(fs.existsSync(outDir), false);
+
+    // Corrupt AUTOPILOT_LEAK_GUARD_HOSTS also fails closed with exit 4 and zero spawns.
+    const badHosts = path.join(sb.dir, 'bad-hosts.json');
+    fs.writeFileSync(badHosts, '{not-json\n', 'utf8');
+    const outBad = path.join(sb.dir, 'out-bad-hosts');
+    const resBad = runPanel(
+      sb,
+      [
+        '--prompt-file', promptFile,
+        '--seat', 'grok:grok-4.7',
+        '--out-dir', outBad,
+        '--author-cmd', sb.authorStub,
+      ],
+      { AUTOPILOT_LEAK_GUARD_HOSTS: badHosts },
+    );
+    assert.equal(resBad.status, 4, resBad.stderr);
+    assert.equal(readCalls(sb.logDir).length, 0);
+    assert.equal(fs.existsSync(outBad), false);
+
+    // Fake host from AUTOPILOT_LEAK_GUARD_HOSTS blocks prompt with exit 4.
+    const hostPrompt = writePrompt(sb, 'host-hit.txt', 'Check node testhost-panel-a status.\n');
+    const outHost = path.join(sb.dir, 'out-host-hit');
+    const resHost = runPanel(
+      sb,
+      [
+        '--prompt-file', hostPrompt,
+        '--seat', 'grok:grok-4.7',
+        '--out-dir', outHost,
+        '--author-cmd', sb.authorStub,
+      ],
+    );
+    assert.equal(resHost.status, 4, resHost.stderr);
+    assert.equal(readCalls(sb.logDir).length, 0);
+    assert.equal(fs.existsSync(outHost), false);
   } finally {
     sb.cleanup();
   }

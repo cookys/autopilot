@@ -37,8 +37,8 @@ const GOLD = {
    "▸ d-89fe394f 1/3  feature/legacy-payment-rewrite 和 feature/social-login 依序 --no-ff 合進 legacy？     執行者 game-lead · 40 分",
    "  背景   兩支分支都過審，合併順序影響 migration 編號",
    "  卡住   game-lead 的 row 不能自己合 main 以外的 legacy 分支",
-   "  建議   可以：先 payment 再 social，CI 綠才合第二支",
    "  [a] 可以 ★    [b] 先不要",
+   "  建議   可以：先 payment 再 social，CI 綠才合第二支",
    "  補充   （按 n 寫補充，會跟答案一起送）",
    "",
    "── 其他待決 2（z 收合）──────────────────────────────",
@@ -62,12 +62,12 @@ const GOLD = {
    "▸ d-4c2e19a0 2/3  馬拉松分支 5 支怎麼合進 release？                       執行者 game-lead · 2 時",
    "  背景   五支分支互相有衝突，合併順序決定誰要 rebase",
    "  卡住   game-lead 只能合 main，release 要你點頭",
-   "  建議   [a] 一次全合；風險是一支壞全壞",
    "  [a] 全部一次合",
    "  [b] 依序合，每支綠才合下一支 ★",
    "  [c] 拆兩批，每批 2–3 支",
    "  [d] 只合前兩支，其餘下週",
    "  [e] 先不要",
+   "  建議   [a] 一次全合；風險是一支壞全壞",
    "  補充   （按 n 寫補充，會跟答案一起送）",
    "",
    "── 其他待決 2（z 收合）───────────────────────────────",
@@ -86,8 +86,8 @@ const GOLD = {
    "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
    "  d-89fe394f 1/3 · game-lead · 40 分",
    "背景 兩支都過審，順序影響 migration",
-   "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
+   "建議 可以：先 payment 再 social",
    "── 其他待決 2（z 收合）──",
    "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
@@ -107,8 +107,8 @@ const GOLD = {
    "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
    "  d-89fe394f 1/3 · game-lead · 40 分",
    "背景 兩支都過審，順序影響 migration",
-   "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
+   "建議 可以：先 payment 再 social",
    "── 其他待決 2（z 展開）──",
    "── 別台（唯讀）──",
    "d-1c0a77e2 h6：GPU 重排 → 到該席答",
@@ -126,8 +126,8 @@ const GOLD = {
    "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
    "  d-89fe394f 1/3 · game-lead · 40 分",
    "背景 兩支都過審，順序影響 migration",
-   "建議 可以：先 payment 再 social",
    "[a] 可以 ★   [b] 先不要",
+   "建議 可以：先 payment 再 social",
    "── 其他待決 2（z 收合）──",
    "d-fb890f48 [測試卡] 請勿作答 · 2時",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
@@ -394,4 +394,32 @@ test('decide keys: an old 6-option card — j moves the focus to option 6, Enter
   expect(press('f', NO_NAV, c).nav.picks).toEqual({})
   expect(press('a', NO_NAV, c).nav.picks).toEqual({ 'd-2b7710cc': 0 })
   expect(press('j', NO_NAV, C160).nav.opt).toBe(null) // a card with 5 options or fewer has no option 6
+})
+
+// Changing this order needs the operator's confirmation first (PM 01M7PCAA).
+test('decide card answer-area order is background < blocks < options < advice < note', () => {
+  const fictional = dec({
+    id: 'd-0a1b2c3d',
+    question: '合成測試：發佈前要不要先跑回歸套件？',
+    background: '合成背景：上一輪改動碰到排程邊界',
+    blocks: '合成卡住：發佈流水線等待確認',
+    options: opts('先跑回歸', '只跑冒煙', '跳過直接發'),
+    recommendation: '先跑回歸：涵蓋排程邊界',
+    source: 'fx-lane',
+    age_s: AGE40,
+  })
+  const withNote = nav({ notes: { 'd-0a1b2c3d': '合成補充備註' } })
+  for (const [cols, rows] of [[160, 40], [80, 24]] as const) {
+    const out = frameRows(decidePage, ctxOf(cols, rows, live(fictional), con([], []), withNote)).map(text)
+    const bg = out.findIndex(r => /^\s*背景\s/.test(r) && r.includes('合成背景'))
+    const blocks = out.findIndex(r => /^\s*卡住\s/.test(r) && r.includes('合成卡住'))
+    const opt = out.findIndex(r => r.includes('[a] 先跑回歸'))
+    const optLast = out.findIndex(r => r.includes('[c] 跳過直接發'))
+    const advice = out.findIndex(r => /^\s*建議\s/.test(r) && r.includes('涵蓋排程邊界'))
+    const note = out.findIndex(r => /^\s*補充\s/.test(r) && r.includes('合成補充備註'))
+    const indices = cols === 80 && blocks === -1 ? [bg, opt, advice, note] : [bg, blocks, opt, advice, note]
+    expect(indices.every(i => i >= 0)).toBe(true)
+    expect(optLast >= opt && optLast < advice).toBe(true)
+    for (let i = 1; i < indices.length; i++) expect(indices[i]).toBeGreaterThan(indices[i - 1])
+  }
 })

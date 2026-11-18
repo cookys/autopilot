@@ -134,9 +134,10 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
     assert.equal(shortRows[0].trim(), '', 'short-content case leaves blank rows above on every tab')
     if (tab === 'decide') {
       const opt = out.findIndex(r => r.includes('Last option'))
+      const advice = out.findIndex(r => r.includes('Fixture reason'))
       const send = out.findIndex(r => r.includes('送出'))
-      assert.ok(opt >= 0 && send > opt, 'option and submit are visible')
-      assert.ok(send - opt <= 2, 'L3 directly below options, at most one rule: ' + JSON.stringify(out.slice(opt, send + 1)))
+      assert.ok(opt >= 0 && advice > opt && send > advice, 'options precede advice, and submit follows the answer area')
+      assert.ok(send - advice <= 2, 'L3 directly below answer area, at most one rule: ' + JSON.stringify(out.slice(advice, send + 1)))
       assert.ok(out.slice(send + 1).every(r => /現況|[─━]/.test(r)), 'only navigation may follow submit')
     }
   })
@@ -148,8 +149,9 @@ for (const [cols, rows] of [[160, 40], [80, 24]]) {
     bottomAligned(short.tree, screen(short.tree, cols, rows), cols, short.win)
     if (tab === 'command') {
       const option = out.findIndex(r => r.includes('Last option'))
+      const advice = out.findIndex(r => r.includes('Fixture reason'))
       const submit = out.findIndex(r => r.includes('送出'))
-      assert.ok(option >= 0 && submit > option && submit - option <= 2, 'held card options directly precede submit')
+      assert.ok(option >= 0 && advice > option && submit > advice && submit - advice <= 2, 'held card answer area directly precedes submit, with options before advice')
       assert.ok(out.slice(submit + 1).every(r => /指揮|[─━]/.test(r)), 'only navigation follows submit')
     }
   })

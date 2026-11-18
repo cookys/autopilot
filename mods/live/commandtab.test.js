@@ -35,7 +35,7 @@ test('page order: summary, hint and data age are cold; the held card and submit 
   assert.ok(at('資料') > 0 && at('資料') < at('待決'), 'data age stays above the hot card')
   assert.ok(at('按按鈕作答') > 0 && at('按按鈕作答') < at('待決'), 'keyboard hint stays above the hot card')
   assert.ok(bar.length > 0 && bar[bar.length - 1].includes('送出'), 'submit is the final control row')
-  assert.ok(body[body.length - 1].includes('再看 diff'), 'other feed cards and blank rows never separate the held card options from submit')
+  assert.ok(body[body.length - 2].includes('再看 diff') && body[body.length - 1].includes('建議'), 'other feed cards and blank rows never separate the held card answer area from submit, and options precede advice')
 })
 
 test('summary: every figure comes from counts (running 2, waiting 1, stalled 3, hosts 2/3, gpu 5/7, quota worst, hints 2)', () => {

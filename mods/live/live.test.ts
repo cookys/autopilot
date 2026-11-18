@@ -6580,9 +6580,9 @@ for (const surface of SURFACES) {
     const rows = await decideRows($)
     const at = rows.findIndex(t => t.startsWith('▲ 2. U6'))
     expect(at).toBeGreaterThan(0)
-    expect(rows[at + 1]).toBe('  請在對話框回答。')
-    expect(rows[at + 2]).toBe('  選項      [ ] 要') // still shown, as plain text
-    expect(rows[at + 3]).toBe('            [ ] 不要')
+    expect(rows[at + 1]).toBe('  選項      [ ] 要') // still shown, as plain text
+    expect(rows[at + 2]).toBe('            [ ] 不要')
+    expect(rows[at + 3]).toBe('  請在對話框回答。')
     expect(rows[rows.length - 1]).toBe('  [ 送出（已答 0/1） ]  答案會貼進這個對話送出') // only the first question counts
     const buttons = await keysOf($, 'Button')
     expect(buttons.filter(k => k.startsWith('opt:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])

@@ -171,10 +171,11 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const S = sRows.length
   if (H <= S) return sRows.slice(-H).map(r => clip(r, ctx.size.cols))
   const avail = H - 1 - S
+  const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const body = r.body.flatMap(x => wrapRow(x, ctx.size.cols))
-    const hasPendingBtn = short && page.id === 'now' && body.some(x => x.some(s => s.press === 'tab:2:decide'))
-    const acts: Row[] = r.actions.length === 0 ? (hasPendingBtn ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
+    const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || (ctx.shortBody === true && decisionCount(ctx) > 0) || body.some(x => x.some(s => s.press === 'tab:2:decide')))
+    const acts: Row[] = r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
     return { body, acts, room: avail - Math.min(acts.length, avail), short }
   }
   let lay = layout(first, ctx.shortBody === true)

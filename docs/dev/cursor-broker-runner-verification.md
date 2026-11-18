@@ -94,3 +94,8 @@ Generator `bash scripts/sync-codex-plugin-skills.sh < /dev/null`: exit 0 (`sync-
 - The local implementer execution path is removed. `--cursor-bin`/`--cursor-fast` parsing is retained because the eval stub and historical consumers reference them; the broker refuses them clearly. The legacy mapper/table remains used by review/author wrappers and the model-name guard.
 - Existing dispatch/context-window failures are outside scope; baseline comparisons record added failures.
 - Cross-family review remains the caller’s independent gate; no reviewer verdict is asserted here.
+
+## First live broker run (2026-11-18)
+
+- Broker run `b024489b9100`, model `composer-2.5`, wall 74 s, diff_sha16 `1a2704d5f0e1d184`.
+- The broker round trip, diff apply and wrapper commit all worked. The dispatch then stopped at the `backlog_single_writer` boundary, because that task edited `project/backlog/BACKLOG.md` by hand; BACKLOG rows are written only through `scripts/project-record.js`. Choose live-run tasks that do not touch BACKLOG.md.

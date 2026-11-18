@@ -33,9 +33,10 @@ async function run([worktree, promptFile, model, timeout, runId, out, runner = '
   try {
     // The worker rail blocks every git transport. Permit ONLY the local file
     // transport for this harness-owned clone command, never for the broker job.
+    const cloneEnv = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
     git(['-c', 'protocol.file.allow=always', 'clone', '-q', '--no-local', '--no-checkout', '--config', 'core.sharedRepository=group', '--', worktree, clone],
-      { env: { ...process.env, GIT_ALLOW_PROTOCOL: 'file' } });
-    git(['-C', clone, 'checkout', '-q', '--detach', git(['-C', worktree, 'rev-parse', 'HEAD'])]);
+      { env: { ...cloneEnv, GIT_ALLOW_PROTOCOL: 'file' } });
+    git(['-C', clone, 'checkout', '-q', '--detach', git(['-C', worktree, 'rev-parse', 'HEAD'])], { env: cloneEnv });
     const { response, success } = await client.request({
       runner, socket: config.socket,
       worktree: clone, prompt, model, timeout_s: Number(timeout),

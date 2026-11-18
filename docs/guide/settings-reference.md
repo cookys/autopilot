@@ -510,6 +510,10 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_FLEET_REPO` | Path to the fleet checkout whose `plugins/claude/src/inbox-cli.ts` backs `scripts/lib/pm-inbox-adapter.js` in `fleet` mode; unset exits 2. | unset |  |
 | `AUTOPILOT_PM_INBOX_MEMBER` | Fleet member handle passed as `--member` to `inbox-cli.ts` by `scripts/lib/pm-inbox-adapter.js`. | `pm--claude` |  |
 | `AUTOPILOT_PM_ACCEPT_CMD` | JSON argv array invoked with the task id appended when `scripts/pm-switchboard.js` auto-accepts a verified `task_result` in `fleet` mode; when unset, auto-accept is unavailable and the item routes to `pending_decision`. | unset |  |
+| `AUTOPILOT_PM_TASK_SHOW_CMD` | JSON argv array invoked with the task id appended by `scripts/lib/pm-inbox-adapter.js` (`getTask`) in `fleet` mode to read `{assignee, attempt, dispatched_at, acceptance}` for `task_result` verification; when unset, task metadata is unavailable and `task_result` items route to `pending_decision`. | unset |  |
+| `AUTOPILOT_PM_SWITCHBOARD_FALLBACK` | Set to `on` or `off` to control the residue-only Sonnet fallback in `scripts/pm-switchboard.js` (invoked through `scripts/dispatch-author.sh --runner claude-native` with a throwaway credentials-only config dir); when `off` and any hour has `> 3` residue items, the next run reopens the fallback for that run and records `fallback_reopened: true`. | `on` |  |
+| `AUTOPILOT_PM_LEAK_STATUS_FILE` | Path to a JSON file containing the four leak-check counts read by `scripts/pm-switchboard.js fallback-status`; when unset or unreadable, `leak_checks` reports `unknown` and `retirable` is `false`. | unset |  |
+| `AUTOPILOT_PM_AUTO_ACCEPT` | Rollback knob (`on` or `off`) for `scripts/pm-switchboard.js`: `off` stops `task_result` auto-accept and routes those items into batched `pending_decision` packets without restoring per-message wakes. | `on` |  |
 
 ## Claude accounts (G37)
 

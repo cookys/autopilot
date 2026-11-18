@@ -529,6 +529,14 @@
 
 ### Settings changes
 
+- **New `AUTOPILOT_PM_SWITCHBOARD`** (env; `on` or `off`; default `on`). Set to `off` to disable `scripts/pm-switchboard.js run` (exits 0 doing nothing).
+- **New `AUTOPILOT_FLEET_REPO`** (env; directory path; default unset). Path to the fleet checkout whose `plugins/claude/src/inbox-cli.ts` backs `scripts/lib/pm-inbox-adapter.js` in `fleet` mode.
+- **New `AUTOPILOT_PM_INBOX_MEMBER`** (env; member handle; default `pm--claude`). Fleet member handle passed as `--member` to `inbox-cli.ts` by `scripts/lib/pm-inbox-adapter.js`.
+- **New `AUTOPILOT_PM_ACCEPT_CMD`** (env; JSON string array; default unset). Command argv invoked with the task id appended when `scripts/pm-switchboard.js` auto-accepts a verified `task_result` in `fleet` mode.
+- **New `AUTOPILOT_PM_TASK_SHOW_CMD`** (env; JSON string array; default unset). Command argv invoked with the task id appended by `scripts/lib/pm-inbox-adapter.js` (`getTask`) in `fleet` mode to read `{assignee, attempt, dispatched_at, acceptance}`; unset routes `task_result` items to `pending_decision`.
+- **New `AUTOPILOT_PM_SWITCHBOARD_FALLBACK`** (env; `on` or `off`; default `on`). Controls the residue-only Sonnet fallback in `scripts/pm-switchboard.js`; when `off` and any hour has `> 3` residue items, the next run reopens the fallback for that run (`fallback_reopened: true`).
+- **New `AUTOPILOT_PM_LEAK_STATUS_FILE`** (env; file path; default unset). JSON file carrying the four leak-check counts read by `scripts/pm-switchboard.js fallback-status` (`unknown` when unset).
+- **New `AUTOPILOT_PM_AUTO_ACCEPT`** (env; `on` or `off`; default `on`). Rollback knob for `scripts/pm-switchboard.js`: `off` stops `task_result` auto-accept and routes those items to batched `pending_decision` packets.
 - **New `AUTOPILOT_DISK_GUARD_MIN_FREE_PCT`** (env; percent; default `20`). Minimum free disk percent below which `scripts/lib/disk-guard.js` first sweeps declared build artifacts and then refuses to create a worktree; `--min-free-pct` wins over it.
 - **New `AUTOPILOT_LEAK_GUARD_HOSTS`** (env; file path; default `~/.autopilot/leak-guard-hosts.json`). Path of the per-user host deny list (`{"strong":[...],"contextual":[...]}`) read by `scripts/lib/personal-data-patterns.js`; when missing, leak-guard runs with the local hostname only and writes one stderr line naming the expected path; unreadable or malformed JSON exits 2. See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
 - **New `depth0_delegate_gate.secret_print`** (config.json; `block`, `warn` or `off`; default `block`). Blocks Bash commands that would print secret values, including systemd unit/drop-in dumps. Use [safe-inspect](docs/guide/safe-inspect.md) for masked inspection.

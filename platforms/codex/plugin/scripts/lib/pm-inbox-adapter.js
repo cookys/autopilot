@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 'use strict';
 
-// pm-inbox-adapter.js — single I/O adapter for the PM inbox ledger.
+// pm-inbox-adapter.js — single I/O adapter for the PM inbox ledger and task metadata.
 //
 // Modes (selected by AUTOPILOT_PM_INBOX_ADAPTER, default "fleet"):
 //   - "fleet": invokes <AUTOPILOT_FLEET_REPO>/plugins/claude/src/inbox-cli.ts via
-//     `node --experimental-transform-types` for list/mark/wake, and runs the JSON
-//     argv array in AUTOPILOT_PM_ACCEPT_CMD (with taskId appended) for accept().
+//     `node --experimental-transform-types` for list/mark/wake, runs the JSON argv
+//     array in AUTOPILOT_PM_ACCEPT_CMD (with taskId appended) for accept(), and runs
+//     the JSON argv array in AUTOPILOT_PM_TASK_SHOW_CMD (with taskId appended) for
+//     getTask(taskId) (unset => returns null => cannot auto-accept => pending).
 //     Refuses to run (exitCode 2) when AUTOPILOT_FLEET_REPO is unset.
-//   - "fixture:<dir>": reads <dir>/inbox.json and appends JSONL records to
-//     <dir>/marks.jsonl, <dir>/wakes.jsonl, and <dir>/accepts.jsonl.
+//   - "fixture:<dir>": reads <dir>/inbox.json and optional <dir>/tasks.json, and
+//     appends JSONL records to <dir>/marks.jsonl, <dir>/wakes.jsonl, <dir>/accepts.jsonl.
 //
 // Member defaults to AUTOPILOT_PM_INBOX_MEMBER || "pm--claude".
 // Node built-ins only.
@@ -46,6 +48,65 @@ function normalizeItemsPayload(parsed, sourceLabel) {
   throw adapterError(`unexpected inbox payload shape from ${sourceLabel}`, 2, 'BAD_PAYLOAD');
 }
 
+function normalizeTaskRecord(raw, fallbackTaskId) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const taskObj = (raw.task && typeof raw.task === 'object' && !Array.isArray(raw.task))
+    ? raw.task
+    : raw;
+  const taskId = typeof taskObj.task_id === 'string' && taskObj.task_id.trim() !== ''
+    ? taskObj.task_id.trim()
+    : (typeof taskObj.id === 'string' && taskObj.id.trim() !== '' ? taskObj.id.trim() : String(fallbackTaskId || '').trim());
+  const assignee = typeof taskObj.assignee === 'string' && taskObj.assignee.trim() !== ''
+    ? taskObj.assignee.trim()
+    : (typeof taskObj.to === 'string' && taskObj.to.trim() !== '' ? taskObj.to.trim() : '');
+  const rawAttempt = taskObj.attempt !== undefined && taskObj.attempt !== null
+    ? taskObj.attempt
+    : taskObj.generation;
+  const parsedAttempt = rawAttempt !== undefined && rawAttempt !== null && String(rawAttempt).trim() !== ''
+    ? Number(rawAttempt)
+    : null;
+  const attempt = Number.isInteger(parsedAttempt) && parsedAttempt > 0 ? parsedAttempt : null;
+  const dispatchedAt = typeof taskObj.dispatched_at === 'string' && taskObj.dispatched_at.trim() !== ''
+    ? taskObj.dispatched_at.trim()
+    : (typeof taskObj.created_at === 'string' && taskObj.created_at.trim() !== '' ? taskObj.created_at.trim() : '');
+  const acceptance = Array.isArray(taskObj.acceptance)
+    ? taskObj.acceptance.map((item) => String(item))
+    : [];
+
+  return {
+    task_id: taskId,
+    assignee,
+    attempt,
+    dispatched_at: dispatchedAt,
+    acceptance,
+  };
+}
+
+function lookupTaskInCollection(parsed, taskId) {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const key = String(taskId || '').trim();
+  if (!key) return null;
+
+  if (Array.isArray(parsed)) {
+    const hit = parsed.find((row) => row && typeof row === 'object' && (row.task_id === key || row.id === key));
+    return hit ? normalizeTaskRecord(hit, key) : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(parsed, key) && parsed[key] && typeof parsed[key] === 'object') {
+    return normalizeTaskRecord(parsed[key], key);
+  }
+
+  if (parsed.tasks && typeof parsed.tasks === 'object') {
+    return lookupTaskInCollection(parsed.tasks, key);
+  }
+
+  if ((parsed.task_id === key || parsed.id === key)) {
+    return normalizeTaskRecord(parsed, key);
+  }
+
+  return null;
+}
+
 function validateMarkArgs(id, disposition, opts = {}) {
   if (typeof id !== 'string' || id.trim() === '') {
     throw adapterError('mark requires a non-empty message id', 2, 'INVALID_ID');
@@ -64,7 +125,7 @@ function validateMarkArgs(id, disposition, opts = {}) {
   return { id: id.trim(), ref, reason };
 }
 
-function parseAcceptCmd(raw) {
+function parseCmdArgv(raw, varName, errorCode) {
   if (raw === undefined || raw === null || String(raw).trim() === '') {
     return null;
   }
@@ -72,10 +133,10 @@ function parseAcceptCmd(raw) {
   try {
     parsed = JSON.parse(String(raw));
   } catch (err) {
-    throw adapterError(`AUTOPILOT_PM_ACCEPT_CMD must be a valid JSON string array: ${err.message}`, 2, 'INVALID_ACCEPT_CMD');
+    throw adapterError(`${varName} must be a valid JSON string array: ${err.message}`, 2, errorCode);
   }
   if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((x) => typeof x === 'string' && x.length > 0)) {
-    throw adapterError('AUTOPILOT_PM_ACCEPT_CMD must be a non-empty JSON array of non-empty strings', 2, 'INVALID_ACCEPT_CMD');
+    throw adapterError(`${varName} must be a non-empty JSON array of non-empty strings`, 2, errorCode);
   }
   return parsed;
 }
@@ -85,16 +146,41 @@ function appendJsonLine(filePath, record) {
   fs.appendFileSync(filePath, `${JSON.stringify(record)}\n`, 'utf8');
 }
 
+function runTaskShowArgv(argv, taskId, env) {
+  const res = spawnSync(argv[0], [...argv.slice(1), taskId], {
+    env: cleanChildEnv(env),
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 30000,
+  });
+  if (res.error || res.status !== 0) {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(String(res.stdout || ''));
+  } catch {
+    return null;
+  }
+  return normalizeTaskRecord(parsed, taskId);
+}
+
 function createFixtureAdapter(dir, member, env) {
   const rootDir = path.resolve(dir);
   const inboxPath = path.join(rootDir, 'inbox.json');
+  const tasksPath = path.join(rootDir, 'tasks.json');
   const marksPath = path.join(rootDir, 'marks.jsonl');
   const wakesPath = path.join(rootDir, 'wakes.jsonl');
   const acceptsPath = path.join(rootDir, 'accepts.jsonl');
   const explicitEmptyAccept = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_PM_ACCEPT_CMD')
     && String(env.AUTOPILOT_PM_ACCEPT_CMD).trim() === '';
   const optionalAcceptArgv = (!explicitEmptyAccept && env.AUTOPILOT_PM_ACCEPT_CMD !== undefined)
-    ? parseAcceptCmd(env.AUTOPILOT_PM_ACCEPT_CMD)
+    ? parseCmdArgv(env.AUTOPILOT_PM_ACCEPT_CMD, 'AUTOPILOT_PM_ACCEPT_CMD', 'INVALID_ACCEPT_CMD')
+    : null;
+  const explicitEmptyTaskShow = Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_PM_TASK_SHOW_CMD')
+    && String(env.AUTOPILOT_PM_TASK_SHOW_CMD).trim() === '';
+  const optionalTaskShowArgv = (!explicitEmptyTaskShow && env.AUTOPILOT_PM_TASK_SHOW_CMD !== undefined)
+    ? parseCmdArgv(env.AUTOPILOT_PM_TASK_SHOW_CMD, 'AUTOPILOT_PM_TASK_SHOW_CMD', 'INVALID_TASK_SHOW_CMD')
     : null;
 
   return {
@@ -102,6 +188,31 @@ function createFixtureAdapter(dir, member, env) {
     member,
     canAccept() {
       return !explicitEmptyAccept;
+    },
+    canShowTask() {
+      return !explicitEmptyTaskShow;
+    },
+    getTask(taskId) {
+      if (typeof taskId !== 'string' || taskId.trim() === '') return null;
+      const cleanId = taskId.trim();
+      if (explicitEmptyTaskShow) return null;
+      if (optionalTaskShowArgv) {
+        return runTaskShowArgv(optionalTaskShowArgv, cleanId, env);
+      }
+      if (!fs.existsSync(tasksPath)) return null;
+      let raw;
+      try {
+        raw = fs.readFileSync(tasksPath, 'utf8');
+      } catch {
+        return null;
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (err) {
+        throw adapterError(`invalid JSON in ${tasksPath}: ${err.message}`, 2, 'TASKS_BAD_JSON');
+      }
+      return lookupTaskInCollection(parsed, cleanId);
     },
     listUnread() {
       let raw;
@@ -194,7 +305,8 @@ function createFleetAdapter(env, member) {
     throw adapterError('AUTOPILOT_FLEET_REPO is unset; set it to the fleet repo path to run in fleet mode', 2, 'FLEET_REPO_UNSET');
   }
   const cliPath = path.join(path.resolve(fleetRepo), FLEET_CLI_REL);
-  const acceptArgv = parseAcceptCmd(env.AUTOPILOT_PM_ACCEPT_CMD);
+  const acceptArgv = parseCmdArgv(env.AUTOPILOT_PM_ACCEPT_CMD, 'AUTOPILOT_PM_ACCEPT_CMD', 'INVALID_ACCEPT_CMD');
+  const taskShowArgv = parseCmdArgv(env.AUTOPILOT_PM_TASK_SHOW_CMD, 'AUTOPILOT_PM_TASK_SHOW_CMD', 'INVALID_TASK_SHOW_CMD');
 
   function runInboxCli(cliArgs) {
     if (!fs.existsSync(cliPath)) {
@@ -219,6 +331,14 @@ function createFleetAdapter(env, member) {
     member,
     canAccept() {
       return acceptArgv !== null;
+    },
+    canShowTask() {
+      return taskShowArgv !== null;
+    },
+    getTask(taskId) {
+      if (!taskShowArgv) return null;
+      if (typeof taskId !== 'string' || taskId.trim() === '') return null;
+      return runTaskShowArgv(taskShowArgv, taskId.trim(), env);
     },
     listUnread() {
       const stdout = runInboxCli(['list', '--member', member, '--disposition', 'unread', '--json']);
@@ -318,6 +438,10 @@ function accept(taskId, note, env = process.env) {
   return createAdapter(env).accept(taskId, note);
 }
 
+function getTask(taskId, env = process.env) {
+  return createAdapter(env).getTask(taskId);
+}
+
 module.exports = {
   DEFAULT_MEMBER,
   FLEET_CLI_REL,
@@ -326,4 +450,5 @@ module.exports = {
   mark,
   wake,
   accept,
+  getTask,
 };

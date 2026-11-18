@@ -7551,6 +7551,70 @@
       "summary": "JSON argv array invoked with the task id appended when pm-switchboard auto-accepts a verified task_result in fleet mode; when unset, auto-accept is unavailable and the item routes to pending_decision."
     },
     {
+      "name": "AUTOPILOT_PM_TASK_SHOW_CMD",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/lib/pm-inbox-adapter.js",
+        "scripts/lib/pm-result-rules.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FLEET_REPO",
+        "AUTOPILOT_PM_ACCEPT_CMD"
+      ],
+      "summary": "JSON argv array invoked with the task id appended to read {assignee, attempt, dispatched_at, acceptance} for pm-switchboard task_result verification in fleet mode; when unset, task metadata is unavailable and task_result items route to pending_decision."
+    },
+    {
+      "name": "AUTOPILOT_PM_SWITCHBOARD_FALLBACK",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": [
+        "scripts/pm-switchboard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_PM_SWITCHBOARD",
+        "AUTOPILOT_PM_LEAK_STATUS_FILE"
+      ],
+      "summary": "Controls the residue-only Sonnet fallback in scripts/pm-switchboard.js (on or off, default on); when off and any hour has > 3 residue items, the next run reopens the fallback for that run and records fallback_reopened: true."
+    },
+    {
+      "name": "AUTOPILOT_PM_LEAK_STATUS_FILE",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/pm-switchboard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_PM_SWITCHBOARD_FALLBACK"
+      ],
+      "summary": "Path to the JSON file carrying the four leak-check counts read by scripts/pm-switchboard.js fallback-status; when unset or unreadable, leak_checks is reported as unknown and retirable is false."
+    },
+    {
+      "name": "AUTOPILOT_PM_AUTO_ACCEPT",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": [
+        "scripts/pm-switchboard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_PM_ACCEPT_CMD",
+        "AUTOPILOT_PM_TASK_SHOW_CMD"
+      ],
+      "summary": "Rollback knob (on or off, default on) for scripts/pm-switchboard.js: off disables task_result auto-accept and routes task_result items into batched pending_decision packets without restoring per-message wakes."
+    },
+    {
       "name": "AUTOPILOT_PM_INBOX_ADAPTER",
       "kind": "env",
       "audience": "internal",

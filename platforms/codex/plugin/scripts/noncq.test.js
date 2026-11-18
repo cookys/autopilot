@@ -235,7 +235,14 @@ function writePace(dir, rows, name = 'pace.v1.json') {
   return file;
 }
 
-function briefFile(dir, text = 'Do the thing.\n') {
+const VALID_BRIEF_HEADER = [
+  'Size: S',
+  'Role: implementer',
+  'Scope: docs/example.md',
+  'Task-Class: simple-script',
+].join('\n');
+
+function briefFile(dir, text = `${VALID_BRIEF_HEADER}\n\nDo the thing.\n`) {
   const f = path.join(dir, 'brief.md');
   write(f, text);
   return f;
@@ -323,6 +330,120 @@ test('(a) add validation: bad kind, review-seat1 without diff, empty accept, bad
   });
   assert.equal(r.status, 2);
   assert.match(r.stderr, /refuse/i);
+});
+
+// ---------------------------------------------------------------------------
+// (a2) add brief header gate (01M7R8SE51BS0XVEAZK6KFF2VG)
+// ---------------------------------------------------------------------------
+test('(a2) add checks brief header: missing all four, missing only Task-Class, complete header, bad Task-Class', () => {
+  const q = mkTmp('noncq-q-hdr-');
+  const work = mkTmp('noncq-w-hdr-');
+  const fleet = makeFleetBin(work);
+  const env = { AUTOPILOT_NONCQ_DIR: q, AUTOPILOT_FLEET_BIN: fleet.bin };
+
+  // Seed one existing item first so we verify queue dir is completely unchanged on refusal.
+  const seedBrief = briefFile(mkTmp('noncq-seed-'));
+  const seeded = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', seedBrief,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], env);
+  assert.equal(seeded.status, 0, seeded.stderr);
+  const beforeTree = snapshotTree(q);
+
+  // 1. Missing all four -> exit 2, message lists all four + example header block, queue dir unchanged
+  const missingAll = path.join(work, 'missing-all.md');
+  write(missingAll, 'Just a plain body without any gate header.\n');
+  const rAll = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', missingAll,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], env);
+  assert.equal(rAll.status, 2, rAll.stderr);
+  const rAllFirstLine = rAll.stderr.split('\n')[0];
+  for (const field of ['Size:', 'Role:', 'Scope:', 'Task-Class:']) {
+    assert.ok(rAllFirstLine.includes(field), `missing-all must list ${field}: ${rAll.stderr}`);
+  }
+  assert.match(rAll.stderr, /範例標頭/);
+  assertTreeUnchanged(beforeTree, snapshotTree(q), 'missing all four headers leaves queue unchanged');
+
+  // Also when queue dir does not exist yet -> nothing created
+  const qFresh = path.join(mkTmp('noncq-q-fresh-'), 'queue');
+  const rFresh = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', missingAll,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], { AUTOPILOT_NONCQ_DIR: qFresh, AUTOPILOT_FLEET_BIN: fleet.bin });
+  assert.equal(rFresh.status, 2);
+  assert.equal(fs.existsSync(qFresh), false, 'refused add must not create queue directory');
+
+  // 2. Missing only Task-Class -> missing line lists ONLY Task-Class
+  const missingClass = path.join(work, 'missing-class.md');
+  write(missingClass, 'Size: S\nRole: implementer\nScope: docs/a.md\n\nBody.\n');
+  const rClass = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', missingClass,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], env);
+  assert.equal(rClass.status, 2, rClass.stderr);
+  const rClassFirstLine = rClass.stderr.split('\n')[0];
+  assert.ok(rClassFirstLine.includes('Task-Class:'), `must list Task-Class: ${rClassFirstLine}`);
+  assert.equal(rClassFirstLine.includes('Size:'), false, `must not list Size: ${rClassFirstLine}`);
+  assert.equal(rClassFirstLine.includes('Role:'), false, `must not list Role: ${rClassFirstLine}`);
+  assert.equal(rClassFirstLine.includes('Scope:'), false, `must not list Scope: ${rClassFirstLine}`);
+  assert.match(rClass.stderr, /範例標頭/);
+  assertTreeUnchanged(beforeTree, snapshotTree(q), 'missing Task-Class leaves queue unchanged');
+
+  // 3. Complete header -> queued as today (pipe-separated + mixed case Task-Class)
+  const completeBrief = path.join(work, 'complete.md');
+  write(completeBrief, 'Size: S | Role: implementer | Scope: docs/a.md | Task-Class: Simple-Script\n\nBody.\n');
+  const rOk = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', completeBrief,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], { ...env, AUTOPILOT_NOW: new Date(NOW_MS + 1000).toISOString() });
+  assert.equal(rOk.status, 0, rOk.stderr);
+  const newId = rOk.stdout.trim();
+  const savedItem = JSON.parse(fs.readFileSync(path.join(q, 'items', newId, 'item.json'), 'utf8'));
+  assert.equal(savedItem.state, 'queued');
+  assert.equal(fs.readFileSync(path.join(q, 'items', newId, 'brief.md'), 'utf8'), fs.readFileSync(completeBrief, 'utf8'));
+  const afterCompleteTree = snapshotTree(q);
+
+  // 4. Bad Task-Class -> exit 2 naming the allowed local_task_classes values
+  const badClass = path.join(work, 'bad-class.md');
+  write(badClass, 'Size: S\nRole: implementer\nScope: docs/a.md\nTask-Class: refactor\n\nBody.\n');
+  const rBad = cli([
+    'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', badClass,
+    '--accept', 'ok', '--prefer', 'grok',
+  ], env);
+  assert.equal(rBad.status, 2, rBad.stderr);
+  assert.match(rBad.stderr, /refactor/);
+  for (const clsName of ['format-convert', 'log-summary', 'simple-script', 'test-scaffold']) {
+    assert.ok(rBad.stderr.includes(clsName), `bad Task-Class error must name ${clsName}: ${rBad.stderr}`);
+  }
+  assertTreeUnchanged(afterCompleteTree, snapshotTree(q), 'bad Task-Class leaves queue unchanged');
+});
+
+test('(a2-neg) negative control: removing the brief header check turns missing-all-four test red', () => {
+  const mutDir = mkTmp('noncq-mut-');
+  try {
+    const src = fs.readFileSync(CLI, 'utf8');
+    const mutated = src.replace('  validateBriefHeader(brief);\n', '');
+    assert.notEqual(mutated, src, 'negative control mutation must remove validateBriefHeader(brief)');
+    const mutCli = path.join(mutDir, 'noncq.js');
+    write(mutCli, mutated, 0o755);
+    fs.symlinkSync(path.join(__dirname, 'lib'), path.join(mutDir, 'lib'), 'dir');
+
+    const q = path.join(mutDir, 'queue');
+    const missingAll = path.join(mutDir, 'missing-all.md');
+    write(missingAll, 'Just a plain body without any gate header.\n');
+    const r = spawnSync(process.execPath, [
+      mutCli, 'add', '--lane', 'ns/courier/lane-a', '--kind', 'research',
+      '--brief', missingAll, '--accept', 'ok', '--prefer', 'grok',
+    ], {
+      encoding: 'utf8',
+      env: baseEnv({ AUTOPILOT_NONCQ_DIR: q }),
+      input: '',
+    });
+    assert.equal(r.status, 0, `without brief header check, missing-all-four must wrongly queue (got ${r.status}: ${r.stderr})`);
+  } finally {
+    fs.rmSync(mutDir, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -888,7 +1009,7 @@ test('(1) inputs listed by path, oversized prompt refused, agy_stdin_ceiling is 
     AUTOPILOT_NONCQ_RAIL_DIR: rails.dir,
     AUTOPILOT_FLEET_BIN: fleet.bin,
   };
-  const brief = briefFile(work, 'Short brief.\n');
+  const brief = briefFile(work, `${VALID_BRIEF_HEADER}\n\nShort brief.\n`);
   const inputBody = 'SECRET_LEDGER_BODY_DO_NOT_INLINE\n';
   const input = path.join(work, 'ledger.md');
   write(input, inputBody);
@@ -929,7 +1050,7 @@ test('(1) inputs listed by path, oversized prompt refused, agy_stdin_ceiling is 
 
   // Brief alone over the 150000-byte gate is refused and leaves no item.
   const bigBrief = path.join(work, 'big-brief.md');
-  write(bigBrief, 'B'.repeat(150001));
+  write(bigBrief, `${VALID_BRIEF_HEADER}\n\n${'B'.repeat(150001)}`);
   const before = fs.readdirSync(path.join(q, 'items')).sort();
   const badBrief = cli([
     'add', '--lane', 'ns/courier/lane-a', '--kind', 'research', '--brief', bigBrief,

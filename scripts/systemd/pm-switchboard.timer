@@ -1,5 +1,6 @@
 # autopilot:pm-switchboard/1
 # Systemd user timer template for the 10-minute PM inbox batch switchboard.
+# pm-switchboard.service uses SuccessExitStatus=3 so exit 3 (waiting on fleet inbox CLI) counts as success.
 [Unit]
 Description=Run the autopilot PM inbox batch switchboard every 10 minutes
 

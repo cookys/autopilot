@@ -338,6 +338,23 @@ function main(argv) {
   return 64;
 }
 
-module.exports = { BARRED_FAMILIES, localEndpoints, CARD, TASK, familyOf, isMarked, check, filterLadder, refusalLine, globToRegex, matchesAny };
+module.exports = {
+  BARRED_FAMILIES,
+  localEndpoints,
+  CARD,
+  TASK,
+  familyOf,
+  isMarked,
+  check,
+  filterLadder,
+  refusalLine,
+  globToRegex,
+  matchesAny,
+  headerLines,
+  headerValue,
+  taskFacts,
+  loadConfig,
+  repoRootOf,
+};
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

@@ -387,4 +387,17 @@ for R in "$R3" "$R4" "$R5" "$R5b" "$R6" "$R7" "$R8"; do
   [ -d "$R" ] && git -C "$R" worktree prune 2>/dev/null || true
 done
 
+# ════════════════════════════════════════════════════════════════════════
+# disk guard — a nearly full disk refuses merge-back before the integration worktree exists.
+# ════════════════════════════════════════════════════════════════════════
+RDG="$TEST_TMP/rdg"; mkrepo "$RDG"
+mkunit "$RDG" ui  rundg "src/ui/a.ts"  "ui change"
+mkunit "$RDG" api rundg "src/api/b.ts" "api change"
+printf '{"free_pct":1}\n' > "$TEST_TMP/dg-statfs.json"
+WT_BEFORE="$(git -C "$RDG" worktree list --porcelain | grep -c '^worktree ')"
+OUT="$(AUTOPILOT_DISK_GUARD_FAKE_STATFS="$TEST_TMP/dg-statfs.json" "$SCRIPT" merge-back --repo "$RDG" --units "$TEST_TMP/units3.jsonl" --run-id rundg --base main 2>/dev/null)"; EXIT=$?
+assert_eq "2" "$EXIT" "disk guard: low free space → precondition exit 2"
+assert_contains "$OUT" "disk-guard: refused" "disk guard: reason names the guard"
+assert_eq "$WT_BEFORE" "$(git -C "$RDG" worktree list --porcelain | grep -c '^worktree ')" "disk guard: no integration worktree created"
+
 finalize_test

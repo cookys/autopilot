@@ -7237,6 +7237,28 @@
       "doc": null,
       "relates": [],
       "summary": "Test/path override for the wait-dispatch-results.js binary invoked by scripts/dispatch-panel.js."
+    },
+    {
+      "name": "AUTOPILOT_DISK_GUARD_MIN_FREE_PCT",
+      "kind": "env",
+      "audience": "user",
+      "group": "residue",
+      "default": "20",
+      "readers": ["scripts/lib/disk-guard.js"],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Minimum free disk percent below which the dispatch rails refuse to create a worktree. Below it, idle declared build output (.autopilot/build-artifacts.json) is swept first and the free space re-checked."
+    },
+    {
+      "name": "AUTOPILOT_DISK_GUARD_FAKE_STATFS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/lib/disk-guard.js"],
+      "doc": null,
+      "relates": [],
+      "summary": "Test seam: path of a JSON file {\"free_pct\": N or [N, ...]} that replaces statfs in scripts/lib/disk-guard.js."
     }
   ]
 }

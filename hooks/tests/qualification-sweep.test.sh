@@ -245,4 +245,11 @@ ENDPOINT_FLAG_COUNT="$(printf '%s\n' "$ENDPOINT_PLAN" | grep -c -- "--endpoint "
 assert_eq "$ENDPOINT_FLAG_COUNT" "1" \
   "exactly one of the four fixture seats forwards --endpoint"
 
+# Stage-0's scratch repo is the dispatch main checkout. Writing dispatch output
+# there while the round runs mutates the boundary snapshot, even for ignored files.
+STAGE0_BODY="$(sed -n '/^stage0_probe() {/,/^}/p' "$SCRIPT")"
+assert_contains "$STAGE0_BODY" 'stage0_probe() {' "stage-0 function body is found"
+assert_not_contains "$STAGE0_BODY" '"$pd/.dispatch' \
+  "stage-0 dispatch output stays outside the probe checkout"
+
 finalize_test

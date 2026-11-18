@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-hetero-cursor-routing.test.sh — the `--runner cursor` / `auto` fail-closed
-# guard, Phase 2 acceptance test. Per docs/plans/2026-08-26-cursor-cli-adaptor.md §3a/§5:
-# "The auto-never-selects-cursor negative control is the single most important test
-# here." R-1: every cursor model id contains grok/gpt/codex/claude, so auto-selection
-# cannot disambiguate a vendor-hosted (Cursor) id from a vendor-native one.
+# model-name guard. Pace may select the broker for an unpinned implementer;
+# a named legacy Cursor-hosted id still cannot be disambiguated by vendor name.
 #
 # Match semantics under test (defined once in dispatch-hetero.sh's set_runner_flags):
 #   (a) prefix-open — ANY "cursor-" prefixed id fails closed, in or out of the Phase 1
@@ -232,7 +230,7 @@ assert_contains "$OUT" "codex binary not found: $UNRESOLVABLE_CODEX_BIN" \
 assert_not_contains "$OUT" "auto-routing refuses" "gpt-5.2 does not trip the cursor guard at all"
 
 # ---------------------------------------------------------------------------
-# 4. `--runner auto` NEVER selects cursor: no case above ever produced
+# 4. Model-name guard refusals never select cursor: no case above produced
 # "runner": "cursor" in its stdout. (implicit: every guard case exits 2 via
 # die_precondition before emit() runs, so no "runner" field is ever produced
 # at all under a guard refusal — the strongest form of "never selects".
@@ -280,14 +278,13 @@ assert_contains "$OUT" "--cursor-fast applies only to --runner cursor" \
   "--cursor-fast + non-cursor runner die_precondition message"
 
 # ---------------------------------------------------------------------------
-# 8. Negative: --cursor-fast together with a full-id --model → die_precondition
-# (the mapper is bypassed on that path, so the flag would otherwise no-op).
+# 8. Negative: broker model + legacy --cursor-fast → die_precondition.
 # ---------------------------------------------------------------------------
 OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --no-verify-tip --branch t-cursor-fast-full-id --prompt-file "$PROMPT" \
-  --runner cursor --model cursor-grok-4.6-high --cursor-fast 2>&1)"; EXIT=$?
+  --runner cursor --model composer-2.5 --cursor-fast 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "--cursor-fast with a full-id --model → exit 2"
-assert_contains "$OUT" "--cursor-fast applies only when --model names a family alias" \
+assert_contains "$OUT" "--cursor-fast is unavailable on the cursor broker" \
   "--cursor-fast + full-id die_precondition message"
 
 # Sentinel check must still hold after the two negative-control cases above
@@ -301,159 +298,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 9. 🔴 STUB END-TO-END COMMITTED DISPATCH (docs/projects/INDEX.md claims the
-# rail was stub-verified end-to-end as {"status":"committed","runner":"cursor"}
-# — this section is the artifact that backs that claim). Ordered AFTER every
-# guard-refusal oracle check above: this section DOES invoke a cursor stub on
-# purpose, so it must not share sentinel state with the refusal cases. It uses
-# a purpose-built stub via --cursor-bin (an absolute path, NOT a PATH lookup)
-# on a completely separate, freshly-created stub dir — never $POISON_DIR,
-# whose stubs deliberately fail — so it cannot touch $SENTINEL_DIR at all and
-# the guard-refusal guarantees above are unaffected. PATH is left at its
-# ambient value (unrestricted) so `node`, `git`, and friends resolve
-# normally — dispatch-hetero.sh needs node on PATH for its own preconditions.
-#
-# The stub: serves a P14-shaped `--list-models` (header, blank line, 16
-# `<id> - <display name>` rows — same fixture as hooks/tests/cursor-model.test.sh)
-# so lib/cursor-model.sh's live-inventory validation passes; otherwise it
-# records the `--model` argv value it actually received (proving what the
-# mapper handed to exec, independent of what the emitted JSON claims), writes
-# a real file into its cwd (the worktree — an actual edit for the wrapper's
-# edit-only-commit path to pick up), drains stdin (the prompt file content),
-# and exits 0.
+# 9. Broker-backed committed dispatch supersedes the retired local CLI cases.
+# The dedicated fixture checks wire keys, sharing, patch application and cleanup.
 # ---------------------------------------------------------------------------
-CURSOR_E2E_BIN_DIR="$TEST_TMP/cursor-e2e-bin"
-mkdir -p "$CURSOR_E2E_BIN_DIR"
-CURSOR_E2E_STUB="$CURSOR_E2E_BIN_DIR/cursor-agent"
-cat > "$CURSOR_E2E_STUB" <<'STUB'
-#!/usr/bin/env bash
-if [ "${1:-}" = "--list-models" ]; then
-  cat <<'EOF'
-Available models
-
-cursor-grok-4.6-low - Grok 4.6 (low)
-cursor-grok-4.6-low-fast - Grok 4.6 (low, fast)
-cursor-grok-4.6-medium - Grok 4.6 (medium)
-cursor-grok-4.6-medium-fast - Grok 4.6 (medium, fast)
-cursor-grok-4.6-high - Grok 4.6 (high)
-cursor-grok-4.6-high-fast - Grok 4.6 (high, fast)
-cursor-grok-4.6-xhigh - Grok 4.6 (xhigh)
-cursor-grok-4.6-xhigh-fast - Grok 4.6 (xhigh, fast)
-gpt-5.3-codex-low - GPT-5.3 Codex (low)
-gpt-5.3-codex-low-fast - GPT-5.3 Codex (low, fast)
-gpt-5.3-codex - GPT-5.3 Codex (medium)
-gpt-5.3-codex-fast - GPT-5.3 Codex (medium, fast)
-gpt-5.3-codex-high - GPT-5.3 Codex (high)
-gpt-5.3-codex-high-fast - GPT-5.3 Codex (high, fast)
-gpt-5.3-codex-xhigh - GPT-5.3 Codex (xhigh)
-gpt-5.3-codex-xhigh-fast - GPT-5.3 Codex (xhigh, fast)
-EOF
-  exit 0
-fi
-: "${CURSOR_E2E_RECORD:?CURSOR_E2E_RECORD not set}"
-# Record the FULL argv (one arg per line, NUL-safe enough for these fixtures)
-# alongside the --model value. Recording only --model left every other flag on
-# the implementer path unasserted: -p, --trust, --force, --workspace and
-# --output-format could all silently change or disappear and no test would
-# notice, even though each one is load-bearing for the edit-only + wrapper-commit
-# posture this rail depends on.
-printf '%s\n' "$@" > "$CURSOR_E2E_RECORD.argv"
-prev=""
-for arg in "$@"; do
-  if [ "$prev" = "--model" ]; then
-    printf '%s' "$arg" > "$CURSOR_E2E_RECORD"
-    break
-  fi
-  prev="$arg"
-done
-cat > /dev/null
-echo "cursor e2e edit" > cursor-e2e-edit.txt
-exit 0
-STUB
-chmod +x "$CURSOR_E2E_STUB"
-
-# --- 9a. family alias, default (non-fast) lane: --model grok46 --effort low. ---
-CURSOR_E2E_RECORD_A="$TEST_TMP/cursor-e2e-received-a.txt"
-: > "$CURSOR_E2E_RECORD_A"
-OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_A" \
-  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --no-verify-tip --branch t-cursor-e2e-alias --prompt-file "$PROMPT" \
-  --runner cursor --model grok46 --effort low --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "cursor e2e (family alias, non-fast): exit 0"
-assert_contains "$OUT" '"status": "committed"' "cursor e2e (family alias, non-fast): status committed"
-assert_contains "$OUT" '"runner": "cursor"' "cursor e2e (family alias, non-fast): runner cursor"
-assert_contains "$OUT" '"model": "cursor-grok-4.6-low"' \
-  "cursor e2e (family alias, non-fast): emitted model is the resolved non-fast id"
-assert_eq "cursor-grok-4.6-low" "$(cat "$CURSOR_E2E_RECORD_A" 2>/dev/null)" \
-  "cursor e2e (family alias, non-fast): stub RECEIVED the resolved non-fast id via --model (not -low-fast)"
-
-# --- 9a'. the REST of the implementer argv, which recording only --model left
-# entirely unasserted. Each of these is load-bearing: -p is print/non-interactive
-# mode, --trust + --force keep cursor-agent from prompting in a headless run,
-# --workspace is what anchors edits at the real worktree (P4/P5 — without it the
-# rail would edit somewhere else and the wrapper would commit nothing), and
-# --output-format stream-json is the bound output contract (P13). A silent change
-# to any of them is a silent change to the rail's posture.
-ARGV_A="$(cat "$CURSOR_E2E_RECORD_A.argv" 2>/dev/null)"
-assert_contains "$ARGV_A" "-p" "cursor e2e argv: -p (print / non-interactive)"
-assert_contains "$ARGV_A" "--trust" "cursor e2e argv: --trust (no headless prompt)"
-assert_contains "$ARGV_A" "--force" "cursor e2e argv: --force (no headless prompt)"
-assert_contains "$ARGV_A" "--workspace" "cursor e2e argv: --workspace (edits anchored at the worktree)"
-assert_contains "$ARGV_A" "--output-format" "cursor e2e argv: --output-format present"
-assert_contains "$ARGV_A" "stream-json" "cursor e2e argv: bound to stream-json (P13)"
-# --workspace must name the ISOLATED dispatch worktree, not merely be present
-# with some value, and specifically NOT the caller's repo: the whole edit-only
-# posture depends on cursor-agent editing the throwaway worktree that the wrapper
-# then commits from. An absolute path pointing back at the sandbox repo would mean
-# the rail edits the caller's tree directly.
-WS_LINE="$(awk '/^--workspace$/{getline; print; exit}' "$CURSOR_E2E_RECORD_A.argv" 2>/dev/null)"
-case "$WS_LINE" in
-  /*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
-  *) fail "cursor e2e argv: --workspace VALUE must be an absolute path (got: $WS_LINE)" ;;
-esac
-if [ "$WS_LINE" = "$SBX" ]; then
-  fail "cursor e2e argv: --workspace must be the isolated dispatch worktree, NOT the caller repo ($SBX)"
-else
-  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
-fi
-assert_contains "$WS_LINE" "t-cursor-e2e-alias" "cursor e2e argv: --workspace names THIS dispatch branch worktree"
-# And the flags cursor-agent rejects must never appear (effort is the model-id
-# suffix on this CLI — P12; cursor-agent errors on both of these).
-case "$ARGV_A" in
-  *--reasoning-effort*) fail "cursor e2e argv: --reasoning-effort must never be passed (cursor-agent rejects it; effort is the model-id suffix)" ;;
-  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
-esac
-case "$ARGV_A" in
-  *$'\n'--effort$'\n'*) fail "cursor e2e argv: --effort must never be passed (cursor-agent rejects it)" ;;
-  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
-esac
-
-# --- 9b. --cursor-fast variant of the same alias: --model grok46 --effort low --cursor-fast. ---
-CURSOR_E2E_RECORD_B="$TEST_TMP/cursor-e2e-received-b.txt"
-: > "$CURSOR_E2E_RECORD_B"
-OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_B" \
-  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --no-verify-tip --branch t-cursor-e2e-alias-fast --prompt-file "$PROMPT" \
-  --runner cursor --model grok46 --effort low --cursor-fast --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "cursor e2e (family alias, --cursor-fast): exit 0"
-assert_contains "$OUT" '"status": "committed"' "cursor e2e (family alias, --cursor-fast): status committed"
-assert_contains "$OUT" '"model": "cursor-grok-4.6-low-fast"' \
-  "cursor e2e (family alias, --cursor-fast): emitted model is the resolved -fast id"
-assert_eq "cursor-grok-4.6-low-fast" "$(cat "$CURSOR_E2E_RECORD_B" 2>/dev/null)" \
-  "cursor e2e (family alias, --cursor-fast): stub RECEIVED the resolved -fast id via --model"
-
-# --- 9c. full-id passthrough (mapper bypassed): --model cursor-grok-4.6-high. ---
-CURSOR_E2E_RECORD_C="$TEST_TMP/cursor-e2e-received-c.txt"
-: > "$CURSOR_E2E_RECORD_C"
-OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_C" \
-  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
-  "$SCRIPT" --no-verify-tip --branch t-cursor-e2e-full-id --prompt-file "$PROMPT" \
-  --runner cursor --model cursor-grok-4.6-high --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "cursor e2e (full-id passthrough): exit 0"
-assert_contains "$OUT" '"status": "committed"' "cursor e2e (full-id passthrough): status committed"
-assert_contains "$OUT" '"model": "cursor-grok-4.6-high"' \
-  "cursor e2e (full-id passthrough): emitted model is the full id, unchanged"
-assert_eq "cursor-grok-4.6-high" "$(cat "$CURSOR_E2E_RECORD_C" 2>/dev/null)" \
-  "cursor e2e (full-id passthrough): stub RECEIVED the full id unchanged (mapper bypassed)"
+CURSOR_BROKER_TEST_CASE=a bash "$REPO_ROOT/hooks/tests/cursor-broker-runner.test.sh" < /dev/null
+assert_eq "$?" 0 "broker end-to-end committed dispatch"
 
 finalize_test

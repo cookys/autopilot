@@ -209,7 +209,7 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.match(roles._why, /hydrogen passed all four prereg bars \(develop d40e9ad43\)/);
 
   assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude', 'deepseek']);
-  assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok', 'kimi']);
+  assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok', 'kimi', 'cursor']);
   assert.deepEqual(roles.author, ['agy', 'glm', 'codex', 'grok', 'agyclaude', 'kimi']);
   assert.deepEqual(roles.priority, {
     implementer: ['agy', 'grok', 'glm', 'agyclaude'],
@@ -224,6 +224,7 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   }
 
   assert.deepEqual(roles.pools, {
+    cursor: { key: 'cursor', runner: 'cursor', model: 'composer-2.5', max_parallel: 1 },
     'codex A': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
     'codex B': { key: 'codex', runner: 'codex', model: 'gpt-6.1-sol' },
     deepseek: roles.pools.deepseek, // the cn_gate seat: pinned field by field in the (deepseek 1) test

@@ -2,6 +2,7 @@
 // Every line is built by a ui.ts component; this file writes no theme key, no glyph literal and no hand-made line (ui-lint.test.js L1, L2, L4-L7).
 
 import { decisionCount, lineState, pendingSourceMissing, stuckLinesOf } from './pages/rows'
+import { PAGE_KEYS } from './pages/layout'
 import { ROLE_WARNING, isUnknownPool, normalizedPools, rankPools } from './pages/quota-pick'
 import type { ConsoleSnapshot } from './console'
 import { T_EN } from './i18n'
@@ -109,7 +110,7 @@ export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | Con
   return { tabs, width: x }
 }
 // Console band row 2 when the pane is closed: the new page names 1-8 (same names as the pane strip, without digits), shortening to first character only when narrow.
-export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, active: BarTabId | ConsoleTab | BandPageId | null, forge: string | null, con: ConsoleSnapshot | null = null): BarStrip {
+export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, active: BarTabId | ConsoleTab | BandPageId | null, forge: string | null, con: ConsoleSnapshot | null = null, numbered = true): BarStrip {
   const needs = snap === null ? {} : tabNeeds(snap)
   const noPendingSrc = pendingSourceMissing({ live: snap, console: con })
   const pending = decisionCount({ live: snap, console: con })
@@ -150,9 +151,10 @@ export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, a
     let x = 0
     for (const b of built.tabs) {
       const label = short ? { ...b.label, text: b.label.text.trim() } : b.label
-      const width = displayWidth(label.text)
-      tabs.push({ id: b.id, label, width, start: x })
-      x += width + 1
+      const pageLabel = numbered && columns >= 80 ? { ...label, text: PAGE_KEYS[b.id] + ' ' + label.text.trim() } : label
+      const numberedWidth = displayWidth(pageLabel.text)
+      tabs.push({ id: b.id, label: pageLabel, width: numberedWidth, start: x })
+      x += numberedWidth + 1
     }
     return { tabs, width: x }
   }

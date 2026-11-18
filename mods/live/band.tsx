@@ -5,7 +5,7 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { BAND_INFO_LABEL, BAND_SEP, displayWidth, fittedBandWidth, layoutBand, plainBandText } from './model'
+import { BAND_INFO_LABEL, BAND_SEP, displayWidth, fittedBandWidth, hhmm, layoutBand, plainBandText } from './model'
 import { PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
@@ -20,6 +20,8 @@ import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
 import type { BandPageId, BarStrip, BarTabId } from './tabs'
+import { staleBadge } from './pages/rows'
+import { mostSevere } from './pages/frame'
 
 type El = (props: any) => any
 
@@ -79,7 +81,7 @@ function drawSegs(el: { Text: El; Button?: El }, segs: Seg[], onSlot: (id: SlotI
 }
 
 // the band's own cells (the line and the ⓘ), and the width they take
-function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL): { nodes: unknown[]; width: number } {
+function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, sourceFailure: Seg | null = null): { nodes: unknown[]; width: number } {
   const { Text, Button } = el
   const extra = displayWidth(infoLabel) - displayWidth(BAND_INFO_LABEL)
   // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
@@ -88,11 +90,26 @@ function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | 
     : <Button key="info" plain autoFocus onPress={onInfo}>{infoLabel}</Button>
   // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + ⓘ), never preset.width on its own.
   const segW = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
+  if (sourceFailure !== null) {
+    const line = plainBandText(sourceFailure.text + ' · autopilot status runs --watch', columns - extra) + BAND_SEP
+    return { nodes: [<Text key="w" {...drawSeg(sourceFailure)} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
+  }
   if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: fittedBandWidth(segW(preset.segs), null, false) + extra }
   if (snap === null || snap.band === null) {
-    const reason = snap === null ? t('band.waiting') : snap.text
+    let reason = snap === null ? t('band.waiting') : snap.text
+    // X4: replace the redundant publication clock with an age, keeping the
+    // complete cause and repair command in the summary's reclaimed cells.
+    if (!legacyTabs && snap?.state === 'stale') {
+      const at = snap.published_at === null ? NaN : Date.parse(snap.published_at)
+      const now = snap.detail.now_ms
+      const age = Number.isFinite(at) && typeof now === 'number' ? t('console.command.age_m', { n: Math.max(0, Math.floor((now - at) / 60000)) }) : ''
+      if (Number.isFinite(at)) for (const key of ['state.stale', 'state.stale_moved']) {
+        if (reason === t(key + '_at', { at: hhmm(at) })) reason = t(key)
+      }
+      reason = GLYPHS.state.failed + ' ' + (age === '' ? '' : age + ' · ') + reason + ' · autopilot status runs --watch'
+    }
     const line = plainBandText(reason, columns - extra) + BAND_SEP
-    return { nodes: [<Text key="w" {...dimProps()} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
+    return { nodes: [<Text key="w" {...(!legacyTabs && snap?.state === 'stale' ? drawSeg(staleBadge(line)) : dimProps())} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
   }
   const line = layoutBand(snap.band.slots, columns - extra)
   return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: fittedBandWidth(segW(line.segs), null, false) + extra }
@@ -118,21 +135,23 @@ export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, sou
   return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }
 }
 
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
+  const sourceFailure = !legacyTabs && con?.snap !== null && con?.snap !== undefined && Object.values(con.snap.sources).some(s => s.state === 'expired')
+    ? mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs: snap?.detail.now_ms ?? con.snap.generated_at_ms }) : null
   // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
-  const fb = forge === null ? null : forgeBar(forge)
-  const speedGlyph = fb === null ? null : GLYPHS.structure.speed
-  const row1Strip = barStrip(snap, t, active as BarTabId | ConsoleTab | null, speedGlyph, usage, con)
+  const fb = forge === null || sourceFailure !== null || (!legacyTabs && snap?.state === 'stale') ? null : forgeBar(forge)
   const forgeW = fb === null ? 0 : fb.width
+  const oldStrip = legacyTabs ? barStrip(snap, t, active as BarTabId | ConsoleTab | null, fb === null ? null : GLYPHS.structure.speed, usage, con) : null
   // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab
-  const more = moreTo !== null
+  const more = legacyTabs && moreTo !== null // X1: the shared strip already carries every page.
   const moreW = more ? displayWidth(GLYPHS.structure.goto) + 1 : 0
-  const strip = con === null ? row1Strip : pageBarStrip(snap, t, Math.max(0, columns - moreW), active, speedGlyph, con.snap)
+  const strip = legacyTabs && con === null ? oldStrip as BarStrip : pageBarStrip(snap, t, Math.max(0, columns - moreW), active, null, con?.snap ?? null, !legacyTabs)
   // M5: in the console band the tab strip is row 2 (pageBarStrip), so row 1 gives the left text every idle cell up to the right-hand controls (BAND_CLOSE_ROOM keeps
   // the `[-]` cell): the stale reason and its whole fix command (`autopilot status runs --watch`) are never cut while blank cells are left. M6: the open Button says what it opens.
-  const leftRoom = con !== null ? columns - BAND_CLOSE_ROOM - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2) : columns - row1Strip.width - 1 - forgeW - moreW
-  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL)
+  if (sourceFailure !== null || (!legacyTabs && snap?.state === 'stale')) quota = null
+  const leftRoom = legacyTabs && con === null ? columns - (oldStrip as BarStrip).width - 1 - forgeW - moreW : columns - BAND_CLOSE_ROOM - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2)
+  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, sourceFailure)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
   void segW
@@ -157,7 +176,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const qw = quota === null ? 0 : displayWidth(quota.text)
   const qpad = quota === null ? 0 : columns - left.width - forgeW - qw
   const qnode = quota === null || qpad < 2 ? [] : [<Text key="[REDACTED]">{' '.repeat(qpad)}</Text>, <Text key="[REDACTED]" {...drawSeg(quota)} wrap="truncate">{quota.text}</Text>]
-  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}</Box>{noTabs ? null : stripRow}</Box>, stripRow, strip, tabsAt: gap }
+  return { node: <Box flexDirection="column"><Box>{left.nodes}{speed}{qnode}</Box>{noTabs ? <Box height={1} width={columns} /> : stripRow}</Box>, stripRow, strip, tabsAt: gap }
 }
 
 // the rule under the bar

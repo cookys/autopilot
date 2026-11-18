@@ -175,8 +175,9 @@ test('M7: missing pending-card source shows ? (never 0) on 現況, 待決 and ba
         const bandRows = (tree.props.children as Node[]).flat().filter(Boolean)
         const decideBtn = walk(bandRows[1]).find(n => n.kind === 'Button' && n.props.key === 'tab:decide')!
         // M6: the extra pet/forge pages make the English menu use short names at 80 columns.
-        expect(flat(decideBtn).trim(), msg).toBe(cols >= (locale === 'en' ? 120 : 80) ? wantBandFull : wantBandShort)
-        expect(flat(bandRows[1]), msg + ' no 0').not.toContain('0')
+        // X1: the shared strip adds page numbers; page 0 is a tab, not a pending-card count.
+        expect(flat(decideBtn).trim(), msg).toBe((cols >= 80 ? '2 ' : '') + (cols >= (locale === 'en' ? 120 : 80) ? wantBandFull : wantBandShort))
+        expect(walk(bandRows[1]).filter(n => n.kind === 'Button').map(n => flat(n).trim().replace(/^\d\s+/, '')).join(' '), msg + ' no 0 count').not.toContain('0')
       }
     }
 
@@ -187,7 +188,7 @@ test('M7: missing pending-card source shows ? (never 0) on 現況, 待決 and ba
       const tree = BandBar(EL as never, live as never, 120, t, { onInfo() {}, onSlot() {}, onTab() {} }, null, null, true, null, { snap: con, tab: 'command', cols: 120 }).node as Node
       const bandRows = (tree.props.children as Node[]).flat().filter(Boolean)
       const decideBtn = walk(bandRows[1]).find(n => n.kind === 'Button' && n.props.key === 'tab:decide')!
-      expect(flat(decideBtn).trim()).toBe(wantBandZero)
+      expect(flat(decideBtn).trim()).toBe('2 ' + wantBandZero) // X1: shared page number.
       const nowText = frameRows(nowPage, { live: live as never, console: con, size: { cols: 120, rows: 30 }, t, nowMs: NOW }).map(rowText).join('\n')
       expect(nowText).not.toContain(wantNoSourcePrefix)
     }

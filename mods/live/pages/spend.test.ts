@@ -1,20 +1,20 @@
 // mods/live/pages/spend.test.ts — page 7 花費 (plan r2 §2 row 7, §3.1, §5): golden rows at 160x40, 120x30, 80x24 and 80x24 stale,
 // fixed height H across every size and state, fold pair (collapsed / expanded) + overflow row, red stale/no-source wrapping, [4] & [z] Buttons, and empty states.
-import { test, expect } from 'claude-code/testing'
-import { FOCUS_ANCHOR_KEY, Pane } from '../pane'
+import type { EngineInterface, On } from 'claude-code'
+import { test, expect, mock } from 'claude-code/testing'
+import { FOCUS_ANCHOR_KEY } from '../pane'
 import { makeT } from '../i18n'
 import * as M from '../model'
 import { displayWidth } from '../model'
+import { paneKey } from '../register'
 import { GLYPHS, PALETTE } from '../ui'
 import type { ConsoleSnapshot } from '../console'
 import { actionRows, brokenRow as frameBroken, frameRows, staleBadge as frameBadge } from './frame'
-import type { Page, PageCtx, Row } from './frame'
+import type { PageCtx, Row } from './frame'
 import { PAGES } from './index'
-import { routeKey } from './keys'
 import { seatQuota } from './now'
 import { brokenRow, staleBadge } from './rows'
-import { spendPage, spendState } from './spend'
-import type { SpendCtx } from './spend'
+import { renderSpend, spendFocusRows, spendPage } from './spend'
 
 const t = makeT('zh-TW')
 const MIN = 60_000
@@ -125,13 +125,11 @@ const ctxOf = (cols: number, rows: number, con: ConsoleSnapshot | null = calmCon
 })
 
 async function feedFresh(): Promise<void> {
-  spendState.reset()
   seatQuota.reset()
   await seatQuota.refresh(okRun(SEAT_JSON), NOW - 40_000)
 }
 
 async function feedStale25m(): Promise<void> {
-  spendState.reset()
   seatQuota.reset()
   await seatQuota.refresh(okRun(SEAT_JSON), NOW - 25 * MIN)
   await seatQuota.refresh(failRun, NOW - 10_000)
@@ -242,218 +240,301 @@ test('spend: negative control confirms diffRows reports planted golden drift', a
   expect(diffRows(out80.slice(17, 22), mutated).length).toBe(1)
 })
 
-test('spend: persisted interaction state on registered spendPage survives rerenders across z expand/collapse and j/k focus movement, and overflows into ↓ 還有 N 列 when tall', async () => {
-  await feedFresh()
-  const regPage = PAGES.find(p => p.id === 'spend')!
-  expect(regPage).toBe(spendPage)
-  const keyState = { page: 'spend', paneFocus: true, focusedButton: false, textMode: false }
-  const sendKey = (k: string) => spendState.apply(routeKey(k, keyState))
+type HostNode = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+const hostNodeText = (n: HostNode): string =>
+  (n.type === 'Link' || n.type === 'Button') && typeof n.props?.label === 'string'
+    ? (n.props.label as string)
+    : (n.children || []).map(c => (typeof c === 'string' ? c : hostNodeText(c as HostNode))).join('')
 
-  const richLive = liveOf(HOURLY_WIDE, {
-    detail: {
-      ...M.NO_DETAIL,
-      now_ms: NOW,
-      project: 'plan/shared-tui',
-      spend: { session: '$3.10', host_all: '$12.40', host_all_n: 12.4, brain: 8.2, cap: 50, mode: 'warn', hourly: HOURLY_WIDE },
-    },
-    account: {
-      account: { email: 'dev@example.com', name: 'Dev', org: 'TeamOrg', role: 'member', plan: 'claude max · 20x', extraUsage: true },
-      quota: [
-        { kind: 'five_hour', pct: 17.4, resetsAtMs: RESET_5H },
-        { kind: 'seven_day', pct: 68.2, resetsAtMs: RESET_7D },
-        { kind: 'spend_limit', pct: 85, resetsAtMs: RESET_7D },
-      ],
-    },
-  })
-
-  try {
-    for (const [cols, rows] of [[160, 40], [120, 30], [80, 24]] as const) {
-      spendState.reset()
-      const ctx = ctxOf(cols, rows, calmConsole(), richLive)
-
-      // 1. Default render through registered spendPage: collapsed, focus 0 on 5h
-      const collapsed = regPage.render(ctx)
-      const framedCollapsed = frameRows(regPage, ctx)
-      expect(collapsed.actions).toEqual([])
-      expect(framedCollapsed.length).toBe(rows)
-      const foldLine = collapsed.body.map(text).find(l => l.includes('[z]'))
-      expect(foldLine).toBeDefined()
-      const stated = Number(/（(\d+) 列）/.exec(foldLine ?? '')?.[1] ?? -1)
-      expect(stated).toBe(5) // spend_limit + brain cap + host split + 24h sum/peak + account
-      expect(collapsed.body.map(text)[1].startsWith(cols >= 100 ? '▸ 5 小時' : '▸5時')).toBe(true)
-      expect(collapsed.body.map(text)[2].startsWith(cols >= 100 ? '  7 天' : ' 7天')).toBe(true)
-
-      // 2. Press z -> rerender registered spendPage -> expanded details appear
-      sendKey('z')
-      const expanded = regPage.render(ctx)
-      const framedExpanded = frameRows(regPage, ctx)
-      expect(expanded.actions).toEqual([])
-      expect(framedExpanded.length).toBe(rows)
-      expect(expanded.body.length - collapsed.body.length).toBe(stated)
-      expect(expanded.body.map(text).some(l => l.includes('[z] 收合明細'))).toBe(true)
-      expect(expanded.body.map(text).some(l => l.includes('brain') && l.includes('$8.20 / $50.00'))).toBe(true)
-      expect(expanded.body.map(text).some(l => l.includes('本機今日 $12.40'))).toBe(true)
-      expect(expanded.body.map(text).some(l => l.includes('24 時合計') && l.includes('尖峰'))).toBe(true)
-      expect(expanded.body.map(text).some(l => l.includes('dev@example.com'))).toBe(true)
-
-      // 3. Press j (and clamp on extra ArrowDown) -> rerender registered spendPage -> focus moves to 7d while expanded stays open
-      sendKey('j')
-      sendKey('ArrowDown')
-      const focused7dOpen = regPage.render(ctx).body.map(text)
-      expect(focused7dOpen[1].startsWith(cols >= 100 ? '  5 小時' : ' 5時')).toBe(true)
-      expect(focused7dOpen[2].startsWith(cols >= 100 ? '▸ 7 天' : '▸7天')).toBe(true)
-      expect(focused7dOpen.some(l => l.includes('[z] 收合明細'))).toBe(true)
-
-      // 4. Press z again -> rerender registered spendPage -> collapses back while focus 1 on 7d survives
-      sendKey('z')
-      const reCollapsed = regPage.render(ctx).body.map(text)
-      expect(reCollapsed.length).toBe(collapsed.body.length)
-      expect(reCollapsed.some(l => l.includes('[z] 展開明細（5 列）'))).toBe(true)
-      expect(reCollapsed.some(l => l.includes('dev@example.com'))).toBe(false)
-      expect(reCollapsed[1].startsWith(cols >= 100 ? '  5 小時' : ' 5時')).toBe(true)
-      expect(reCollapsed[2].startsWith(cols >= 100 ? '▸ 7 天' : '▸7天')).toBe(true)
-
-      // 5. Press k (and clamp on extra ArrowUp) -> rerender registered spendPage -> focus returns to 5h
-      sendKey('k')
-      sendKey('ArrowUp')
-      const focused5h = regPage.render(ctx).body.map(text)
-      expect(focused5h[1].startsWith(cols >= 100 ? '▸ 5 小時' : '▸5時')).toBe(true)
-      expect(focused5h[2].startsWith(cols >= 100 ? '  7 天' : ' 7天')).toBe(true)
-
-      for (const r of [...framedCollapsed, ...framedExpanded]) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
+const framedRowsOf = (tree: HostNode): string[] => {
+  const out: string[] = []
+  const walk = (n: HostNode) => {
+    for (const c of (n.children || []) as HostNode[]) {
+      if (typeof c === 'string') continue
+      if (/^f\d+$/.test(String(c.props?.key))) out.push(hostNodeText(c))
+      else walk(c)
     }
-
-    // SpendCtx override also drives registered spendPage.render without mutating persisted state
-    spendState.reset()
-    const ctxOverride: SpendCtx = { ...ctxOf(160, 40, calmConsole(), richLive), spend: { focus: 1, expanded: true } }
-    const fromCtx = regPage.render(ctxOverride).body.map(text)
-    expect(fromCtx[2].startsWith('▸ 7 天')).toBe(true)
-    expect(fromCtx.some(l => l.includes('[z] 收合明細'))).toBe(true)
-    expect(spendState.view()).toEqual({ focus: 0, expanded: false })
-
-    // Overflow: when expanded body exceeds room (80x11 -> room = 11 - head 1 - strip 1 - emptyState 1 = 8 < 11 body rows), frameRows on registered spendPage ends body with ↓ 還有 N 列
-    sendKey('z')
-    const tightOut = frameRows(regPage, ctxOf(80, 11, calmConsole(), richLive)).map(text)
-    expect(tightOut.length).toBe(11)
-    expect(tightOut[8]).toBe('↓ 還有 4 列')
-    expect(tightOut[9]).toBe('沒有要你處理的事')
-  } finally {
-    spendState.reset()
   }
+  walk(tree)
+  return out
+}
+
+const HOME = '/fake/home'
+const AHOME = HOME + '/.autopilot'
+const LIVE = '/fake/live'
+const REPO = '/work/repo'
+const CWD = REPO + '/sub'
+const KEY = '0000000000000001'
+const ROOT = 'root-spend'
+const SID = 'sid-spend'
+const PUBLISHED = new Date(NOW - 10_000).toISOString()
+
+function setupMountedSpend(on: On, rateLimits: object[] = [
+  { kind: 'five_hour', percentUsed: 17.4, resetsAt: new Date(RESET_5H).toISOString() },
+  { kind: 'seven_day', percentUsed: 68.2, resetsAt: new Date(RESET_7D).toISOString() },
+  { kind: 'spend_limit', percentUsed: 85, resetsAt: new Date(RESET_7D).toISOString() },
+]) {
+  const files: Record<string, string> = {
+    [AHOME + '/live-pointer.json']: JSON.stringify({ schema: 'autopilot.live-pointer/1', live_base: LIVE, autopilot_home: AHOME, written_at: PUBLISHED }),
+    [AHOME + '/session-mode/' + SID + '.json']: JSON.stringify({ session_id: SID, level: 'l5', project_key: KEY, root_run_id: ROOT, expires_at: new Date(NOW + 86_400_000).toISOString() }),
+    [LIVE + '/runs/' + KEY + '--' + ROOT + '.json']: JSON.stringify({
+      schema: 'autopilot.runs-live/1',
+      scope: { project_key: KEY, repo_identity: 'git-common-dir:' + REPO + '/.git', root_run_id: ROOT },
+      published_at: PUBLISHED,
+      observed_at: PUBLISHED,
+      valid_for_s: 180,
+      writer: null,
+      runs: [],
+      counts: { confirmed_live: 0, exited: 0, unknown: 0, fresh_bound_s: 30 },
+      sessions: { [SID]: { session_usd: 3.1, as_of: PUBLISHED } },
+      host_today_usd: 12.4,
+      host_today_as_of: PUBLISHED,
+      host_today_brain_usd: 8.2,
+      brain_cap_usd: 50,
+    }),
+    [LIVE + '/runs/spend-history.json']: JSON.stringify({
+      schema: 'autopilot.spend-history/1',
+      samples: [
+        { at: new Date(NOW - 90 * MIN).toISOString(), usd: 1.0 },
+        { at: new Date(NOW - 45 * MIN).toISOString(), usd: 4.5 },
+        { at: new Date(NOW - 5 * MIN).toISOString(), usd: 6.5 },
+      ],
+    }),
+    [LIVE + '/context/' + SID + '.json']: JSON.stringify({ schema_version: 1, written_at: PUBLISHED, context_window: { used_percentage: 22 } }),
+    [HOME + '/.claude.json']: JSON.stringify({
+      oauthAccount: {
+        emailAddress: 'dev@example.com',
+        displayName: 'Dev',
+        organizationName: 'TeamOrg',
+        organizationRole: 'member',
+        organizationType: 'claude_max',
+        organizationRateLimitTier: 'default_claude_max_20x',
+        hasExtraUsageEnabled: true,
+      },
+    }),
+    [REPO + '/.git/HEAD']: 'ref: refs/heads/main\n',
+  }
+  const env: Record<string, string> = { HOME, AUTOPILOT_LOCALE: 'zh-TW' }
+  let invalidates = 0
+  const closes: string[] = []
+
+  const listDir = (dirPath: string) => {
+    const prefix = dirPath.replace(/\/$/, '') + '/'
+    const seen = new Map<string, 'file' | 'dir'>()
+    for (const p of Object.keys(files)) {
+      if (!p.startsWith(prefix)) continue
+      const rest = p.slice(prefix.length)
+      const slash = rest.indexOf('/')
+      if (slash === -1) seen.set(rest, 'file')
+      else if (!seen.has(rest.slice(0, slash))) seen.set(rest.slice(0, slash), 'dir')
+    }
+    if (seen.size === 0) throw new Error('ENOENT ' + dirPath)
+    return [...seen].map(([name, kind]) => ({ name, kind, size: 1, mtimeMs: NOW - 10_000, isLink: false as const }))
+  }
+  const statPath = (p: string, resolve?: boolean) => {
+    if (files[p] !== undefined) return { kind: 'file' as const, isLink: false as const, size: files[p].length, mtimeMs: NOW - 10_000 }
+    const prefix = p.replace(/\/$/, '') + '/'
+    if (p === CWD || p === REPO || Object.keys(files).some(k => k.startsWith(prefix))) {
+      return { kind: 'dir' as const, isLink: false as const, size: 0, mtimeMs: NOW - 10_000, realPath: resolve ? p : undefined }
+    }
+    throw new Error('ENOENT ' + p)
+  }
+
+  mock.clock(on, { now: NOW })
+  on('env.get', (_$, e) => ({ value: env[e.name] }))
+  on('fs.read', (_$, e) => {
+    const v = files[e.path]
+    if (v === undefined) throw new Error('ENOENT ' + e.path)
+    return { value: v }
+  })
+  on('fs.exists', (_$, e) => ({ value: files[e.path] !== undefined }))
+  on('fs.write', () => ({ value: undefined }))
+  on('fs.list', (_$, e) => ({ value: listDir(e.path) }))
+  on('fs.stat', (_$, e) => ({ value: statPath(e.path, e.resolve) }))
+  on('config.list', () => ({ value: [] }))
+  on('session.id', () => ({ value: SID }))
+  on('session.cwd', () => ({ value: CWD }))
+  on('session.root', () => ({ value: REPO }))
+  on('session.start', () => ({ cwd: CWD }))
+  on('session.end', () => ({ sessionId: SID }))
+  on('session.messages', () => ({ value: [] }))
+  on('session.usage', () => ({ value: { rateLimits } }))
+  on('agent.list', () => ({ value: [] }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine' as const, ref: 0 }))
+  on('ui.invalidate', () => { invalidates += 1; return { value: undefined } })
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.close', (_$, e) => { closes.push(e.id); return { value: undefined } })
+  on('ui.panes', () => ({ value: [] }))
+  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false as const, isStderrTruncated: false as const } }))
+
+  const eng = {
+    clock: { now: async () => NOW, every: () => ({ cancel: () => {} }) },
+    state: { get: async () => ({ value: M.NO_DECIDE }), set: async () => undefined },
+    prompt: { fill: async () => ({ isFilled: true }) },
+    ui: {
+      invalidate: () => { invalidates += 1 },
+      toast: () => {},
+      open: async () => ({ isPlaced: true }),
+      close: async (a: { id: string }) => { closes.push(a.id) },
+    },
+  } as unknown as EngineInterface
+
+  return { eng, closes, getInvalidates: () => invalidates }
+}
+
+async function readMountedPane($: any, bodyRows: number, bodyColumns = 120) {
+  const m = await $.ui.mount({
+    plugin: 'autopilot',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'autopilot-live',
+    props: { title: 'Autopilot', isFocused: true, bodyColumns, placement: 'dock' as const, scroll: { offset: 0, bodyRows }, view: { agentId: undefined } },
+    viewport: { columns: 160, rows: 50, isFullscreen: true },
+  })
+  const tree = (await m.drawn()) as HostNode
+  const buttons = (await m.findAll({ type: 'Button' })) as HostNode[]
+  await m.unmount()
+  return { tree, rows: framedRowsOf(tree), buttons }
+}
+
+async function pressMountedButton($: any, bodyRows: number, match: (b: HostNode) => boolean) {
+  const m = await $.ui.mount({
+    plugin: 'autopilot',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'autopilot-live',
+    props: { title: 'Autopilot', isFocused: true, bodyColumns: 120, placement: 'dock' as const, scroll: { offset: 0, bodyRows }, view: { agentId: undefined } },
+    viewport: { columns: 160, rows: 50, isFullscreen: true },
+  })
+  const buttons = (await m.findAll({ type: 'Button' })) as HostNode[]
+  const target = buttons.find(match)
+  expect(target).toBeDefined()
+  await m.press({ key: target!.props?.key as string })
+  await Promise.resolve()
+  await m.unmount()
+}
+
+test('spend real path (120x12): register key handler -> mounted Pane render toggles z expand/collapse and moves focus with j/k', async ($, on) => {
+  await feedFresh()
+  const { eng } = setupMountedSpend(on)
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+
+  // Switch to page 7 (spend) via the mounted strip Button
+  await pressMountedButton($, 12, b => b.props?.key === 'spend' && b.props?.hotkey === '7')
+
+  // Initial render at 12 rows (room = 9 < 12 expanded rows): starts collapsed, focus marker on 5 小時
+  const init = await readMountedPane($, 12)
+  expect(init.rows.length).toBe(12)
+  expect(init.rows[0]).toContain('花費')
+  expect(init.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
+  expect(init.rows.some(l => l.startsWith('  7 天'))).toBe(true)
+  expect(init.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
+  expect(init.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
+
+  // Press z on the spend page -> render: expanded content shows (with overflow ↓ 還有 4 列)
+  await paneKey(eng, 'z')
+  const open1 = await readMountedPane($, 12)
+  expect(open1.rows.length).toBe(12)
+  expect(open1.rows.some(l => l.includes('收合明細'))).toBe(true)
+  expect(open1.rows.some(l => l.includes('brain') && l.includes('$8.20 / $50.00'))).toBe(true)
+  expect(open1.rows.some(l => l.includes('本機今日 $12.40'))).toBe(true)
+  expect(open1.rows.some(l => l.startsWith('↓ 還有 '))).toBe(true)
+
+  // Press z again -> render: collapsed
+  await paneKey(eng, 'z')
+  const shut = await readMountedPane($, 12)
+  expect(shut.rows.length).toBe(12)
+  expect(shut.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
+  expect(shut.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
+  expect(shut.rows.some(l => l.startsWith('↓ 還有 '))).toBe(false)
+
+  // Press j -> render: focus marker moved one row (and clamps on extra ArrowDown)
+  await paneKey(eng, 'j')
+  await paneKey(eng, 'ArrowDown')
+  const movedDown = await readMountedPane($, 12)
+  expect(movedDown.rows.some(l => l.startsWith('  5 小時'))).toBe(true)
+  expect(movedDown.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
+  expect(movedDown.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
+
+  // Press k -> render: focus marker moved back to 5 小時 (and clamps on extra ArrowUp)
+  await paneKey(eng, 'k')
+  await paneKey(eng, 'ArrowUp')
+  const movedUp = await readMountedPane($, 12)
+  expect(movedUp.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
+  expect(movedUp.rows.some(l => l.startsWith('  7 天'))).toBe(true)
 })
 
-test('spend: Pane mounts [4] jump Button to quota, [z] fold Button toggles expansion and collapse on rerender, and j/k move focus on rerender', async () => {
+test('spend real path (120x30): unfold callback, z / [z] Button, j / k focus movement, [4] quota jump, and direct renderSpend view parameter', async ($, on) => {
   await feedFresh()
-  type Node = { kind: string; props: Record<string, any> }
-  const mk = (kind: string) => (props: Record<string, any>): Node => ({ kind, props })
-  const EL = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link'), Input: mk('Input') }
-  const walk = (n: any, out: Node[] = []): Node[] => {
-    if (!n || typeof n !== 'object') return out
-    if (Array.isArray(n)) { n.forEach(c => walk(c, out)); return out }
-    if (n.kind !== undefined) out.push(n)
-    walk(n.props?.children, out)
-    return out
-  }
-  const flat = (n: any): string => {
-    const c = n?.props?.children
-    return typeof c === 'string' ? c : Array.isArray(c) ? c.flat(9).map((x: any) => (typeof x === 'string' ? x : x?.props ? flat(x) : '')).join('') : c?.props ? flat(c) : ''
-  }
+  const { eng } = setupMountedSpend(on)
+  await $.session.start({ surface: 'terminal', cwd: CWD })
 
-  const richLive = liveOf(HOURLY_WIDE, {
-    detail: {
-      ...M.NO_DETAIL,
-      now_ms: NOW,
-      spend: { session: '$3.10', host_all: '$12.40', host_all_n: 12.4, brain: 8.2, cap: 50, mode: 'warn', hourly: HOURLY_WIDE },
-    },
-  })
-  const pages: Page[] = PAGES
-  const routed: string[] = []
-  const keys: string[] = []
-  const drawPane = () => walk(Pane(
-    EL as never,
-    richLive,
-    'spend',
-    () => {},
-    t,
-    120,
-    () => {},
-    new Set(),
-    () => {},
-    new Set(),
-    null,
-    null,
-    null,
-    null,
-    null,
-    {
-      pages,
-      pageId: 'spend',
-      onPage: id => routed.push(id),
-      onKey: k => { keys.push(k.kind); spendState.apply(k) },
-      console: calmConsole(),
-      nowMs: NOW,
-      rows: 30,
-    },
-  ))
-  const rowTexts = (tree: Node[]) => tree.filter(n => n.kind === 'Box' && /^f\d+$/.test(String(n.props.key ?? ''))).map(flat)
+  // Switch to spend via register key handler ('7')
+  await paneKey(eng, '7')
 
-  try {
-    const tree1 = drawPane()
-    // No empty-label Buttons outside FOCUS_ANCHOR_KEY
-    expect(tree1.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && flat(n).trim() === '')).toEqual([])
+  // Initial tall dock render (120x30): unfold opens details when they fit whole; no empty-label or j/k Buttons
+  const initial = await readMountedPane($, 30)
+  expect(initial.rows.length).toBe(30)
+  expect(initial.buttons.filter(b => b.props?.key !== FOCUS_ANCHOR_KEY && hostNodeText(b).trim() === '')).toEqual([])
+  expect(initial.buttons.find(b => b.props?.hotkey === 'j' || b.props?.hotkey === 'k')).toBeUndefined()
+  expect(initial.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
+  expect(initial.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(true)
+  expect(initial.rows.some(l => l.includes('dev@example.com'))).toBe(true)
 
-    // [4] in body is a clickable Button routing to quota, and strip hotkey '4' also routes to quota
-    const bodyJump = tree1.find(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.endsWith(':quota'))!
-    expect(bodyJump).toBeDefined()
-    expect(flat(bodyJump)).toBe('[4]')
-    bodyJump.props.onPress()
-    expect(routed).toEqual(['quota'])
+  // Press z -> render: expanded content shows
+  await paneKey(eng, 'z')
+  const afterZ1 = await readMountedPane($, 30)
+  expect(afterZ1.rows.some(l => l.includes('收合明細'))).toBe(true)
+  expect(afterZ1.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(true)
+  expect(afterZ1.rows.some(l => l.includes('本機今日 $12.40'))).toBe(true)
+  expect(afterZ1.rows.some(l => l.includes('24 時合計') && l.includes('尖峰'))).toBe(true)
+  expect(afterZ1.rows.some(l => l.includes('dev@example.com'))).toBe(true)
 
-    const strip4 = tree1.find(n => n.kind === 'Button' && n.props.hotkey === '4')!
-    expect(strip4).toBeDefined()
-    expect(flat(strip4).trim()).toBe('額度')
-    strip4.props.onPress()
-    expect(routed).toEqual(['quota', 'quota'])
+  // Press z again -> render: collapsed (explicit fold suppresses auto-unfold)
+  await paneKey(eng, 'z')
+  const afterZ2 = await readMountedPane($, 30)
+  expect(afterZ2.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
+  expect(afterZ2.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
+  expect(afterZ2.rows.some(l => l.includes('dev@example.com'))).toBe(false)
 
-    // Initial Pane render is collapsed with focus on 5 小時
-    expect(rowTexts(tree1).some(l => l.startsWith('▸ 5 小時'))).toBe(true)
-    expect(rowTexts(tree1).some(l => l.includes('$8.20 / $50.00'))).toBe(false)
-    const zBtnOpen = tree1.find(n => n.kind === 'Button' && n.props.hotkey === 'z')!
-    expect(zBtnOpen).toBeDefined()
-    expect(flat(zBtnOpen)).toContain('展開明細')
+  // Press j -> render: focus marker moved one row to 7 天 while staying collapsed
+  await paneKey(eng, 'j')
+  const afterJ = await readMountedPane($, 30)
+  expect(afterJ.rows.some(l => l.startsWith('  5 小時'))).toBe(true)
+  expect(afterJ.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
+  expect(afterJ.rows.some(l => l.includes('展開明細（5 列）'))).toBe(true)
 
-    // Click [z] -> rerender Pane -> expanded details and 收合明細 render
-    zBtnOpen.props.onPress()
-    expect(keys).toEqual(['fold'])
-    const tree2 = drawPane()
-    expect(rowTexts(tree2).some(l => l.includes('$8.20 / $50.00'))).toBe(true)
-    expect(rowTexts(tree2).some(l => l.includes('本機今日 $12.40'))).toBe(true)
-    const zBtnClose = tree2.find(n => n.kind === 'Button' && n.props.hotkey === 'z')!
-    expect(flat(zBtnClose)).toContain('收合明細')
+  // Press visible [z] Button directly on mounted Pane -> expands while keeping focus on 7 天; press [z] Button again -> collapses
+  await pressMountedButton($, 30, b => b.props?.hotkey === 'z')
+  const btnOpen = await readMountedPane($, 30)
+  expect(btnOpen.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
+  expect(btnOpen.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(true)
+  await pressMountedButton($, 30, b => b.props?.hotkey === 'z')
+  const btnShut = await readMountedPane($, 30)
+  expect(btnShut.rows.some(l => l.startsWith('▸ 7 天'))).toBe(true)
+  expect(btnShut.rows.some(l => l.includes('$8.20 / $50.00'))).toBe(false)
 
-    // Move focus with j -> rerender Pane -> ▸ moves to 7 天 while expanded stays open
-    spendState.apply(routeKey('j', { page: 'spend', paneFocus: true, focusedButton: false, textMode: false }))
-    const tree3 = drawPane()
-    expect(rowTexts(tree3).some(l => l.startsWith('  5 小時'))).toBe(true)
-    expect(rowTexts(tree3).some(l => l.startsWith('▸ 7 天'))).toBe(true)
-    expect(rowTexts(tree3).some(l => l.includes('$8.20 / $50.00'))).toBe(true)
+  // Press k -> render: focus marker moved back to 5 小時
+  await paneKey(eng, 'k')
+  const afterK = await readMountedPane($, 30)
+  expect(afterK.rows.some(l => l.startsWith('▸ 5 小時'))).toBe(true)
+  expect(afterK.rows.some(l => l.startsWith('  7 天'))).toBe(true)
 
-    // Click [z] again -> rerender Pane -> collapses details while keeping focus on 7 天
-    zBtnClose.props.onPress()
-    expect(keys).toEqual(['fold', 'fold'])
-    const tree4 = drawPane()
-    expect(rowTexts(tree4).some(l => l.includes('$8.20 / $50.00'))).toBe(false)
-    expect(rowTexts(tree4).some(l => l.startsWith('▸ 7 天'))).toBe(true)
-    expect(flat(tree4.find(n => n.kind === 'Button' && n.props.hotkey === 'z')!)).toContain('展開明細')
+  // Press [4] jump Button in body -> switches mounted Pane to quota (額度)
+  await pressMountedButton($, 30, b => String(b.props?.key ?? '').endsWith(':quota'))
+  const onQuota = await readMountedPane($, 30)
+  expect(onQuota.rows[0]).toContain('額度')
 
-    // Move focus with k -> rerender Pane -> ▸ returns to 5 小時
-    spendState.apply(routeKey('k', { page: 'spend', paneFocus: true, focusedButton: false, textMode: false }))
-    const tree5 = drawPane()
-    expect(rowTexts(tree5).some(l => l.startsWith('▸ 5 小時'))).toBe(true)
-    expect(rowTexts(tree5).some(l => l.startsWith('  7 天'))).toBe(true)
-  } finally {
-    spendState.reset()
-  }
+  // Direct caller view parameter on renderSpend and spendFocusRows row count
+  expect(spendFocusRows(liveOf())).toBe(2)
+  seatQuota.reset()
+  expect(spendFocusRows(null)).toBe(0)
+  await feedFresh()
+  const direct = renderSpend(ctxOf(120, 30, calmConsole(), liveOf()), { focus: 1, expanded: false }).body.map(text)
+  expect(direct[1].startsWith('  5 小時')).toBe(true)
+  expect(direct[2].startsWith('▸ 7 天')).toBe(true)
 })
 
 test('spend: missing and stale sources render red reason rows, wrap without ellipsis truncation, and set empty state appropriately', async () => {

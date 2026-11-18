@@ -21,6 +21,7 @@ import { keyed, scrollFrame } from './scroll'
 import { actionRows, frameRows, STRIP_SPLIT_COLS } from './pages/frame'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
+import { renderSpend } from './pages/spend'
 import type { DecideNav } from './pages/decide'
 import type { KeyAction } from './pages/keys'
 import type { ConsoleSnapshot } from './console'
@@ -143,8 +144,8 @@ function stripView<Id extends string>(el: { Box: El; Text: El; Button?: El }, st
 }
 
 // A page of the registry (pages/index.ts) drawn through frameRows: exactly `rows` rows, the strip entries are Buttons with the digit as hotkey.
-export type PageView = { focus: number; expanded: boolean }
-// view: focus index + expanded flag per page id (fleet, quota); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons)
+export type PageView = { focus: number; expanded: boolean; folded?: boolean }
+// view: focus index + expanded flag per page id (fleet, quota, spend); decide: the 待決 page's nav; onPress gets a Seg `press` that is not a tab switch (fleet:see:, fleet:fold, fill:...); onKey gets a page-local key (the host has no raw key hook: the keys are hidden hotkey Buttons)
 export type FramePane = { pages: readonly Page[]; pageId?: PageId; onPage?: (id: PageId) => void; console: ConsoleSnapshot | null; nowMs: number; rows: number; scroll?: number; view?: Record<string, PageView>; decide?: DecideNav; onPress?: (id: string) => void; onKey?: (k: KeyAction) => void; onText?: (v: string) => void }
 const COMMON_KEYS: Record<string, KeyAction> = { z: { kind: 'fold' } } // the host takes a digit or a lowercase letter as a hotkey: Space is z here. No j / k: a key needs a visible Button to carry it, and a row is its own Button (Tab walks the rows)
 const DECIDE_KEYS: Record<string, KeyAction> = { a: { kind: 'pick', index: 0 }, b: { kind: 'pick', index: 1 }, c: { kind: 'pick', index: 2 }, d: { kind: 'pick', index: 3 }, e: { kind: 'pick', index: 4 }, n: { kind: 'note' }, u: { kind: 'undo' }, h: { kind: 'prev' }, l: { kind: 'next' }, f: { kind: 'fill' }, s: { kind: 'submit' } }
@@ -153,7 +154,7 @@ const OPEN_KEY: Record<string, KeyAction> = { o: { kind: 'open' } }
 const pageKeys = (id: string): Record<string, KeyAction> => (id === 'decide' ? { ...COMMON_KEYS, ...DECIDE_KEYS } : id === 'fleet' || id === 'quota' ? { ...COMMON_KEYS, ...OPEN_KEY } : COMMON_KEYS)
 // every hotkey a framed page binds (f on fleet / quota is the page's own fill action): a visible `[x]` key hint must be one of these (frame.test.ts)
 export const pageHotkeys = (id: string): string[] => [...Object.keys(pageKeys(id)), ...(id === 'fleet' || id === 'quota' ? ['f'] : []), 'i']
-// quota (4) and spend (7) both show the Spend tab when pageId is unset; when pageId is set, quota renders framed quotaPage and spend renders spendTabLines
+// quota (4) and spend (7) both show the Spend tab when pageId is unset; when pageId is set, quota renders framed quotaPage and spend renders framed spendPage
 const PAGE_TAB: Record<string, PaneTab> = { now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend', dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene' }
 export const framedPage = (frame: FramePane | null, tab: PaneTab): Page | undefined => {
   if (frame === null) return undefined
@@ -167,9 +168,9 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const ctx = { live: snap, console: frame.console, size: { cols, rows: frame.rows }, t, nowMs: frame.nowMs, ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
   const view = frame.view?.[page.id] ?? { focus: 0, expanded: false }
   // the pages that take a view are drawn through their view functions; the registry's render() keeps the default view
-  const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page
-  // free rows go to content first: a folded page (fleet lines, a pool's seats) is drawn open when the open body fits whole in the rows the surface has left
-  const unfold = view.expanded ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : undefined
+  const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page.id === 'spend' ? { ...page, render: c => renderSpend(c, view) } : page
+  // free rows go to content first: a folded page (fleet lines, a pool's seats, spend details) is drawn open when the open body fits whole in the rows the surface has left, unless folded by key
+  const unfold = view.expanded || view.folded === true ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : page.id === 'spend' ? (c: PageCtx) => renderSpend(c, { ...view, expanded: true }) : undefined
   const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })
   const stripCount = cols < STRIP_SPLIT_COLS ? Math.min(2, rows.length) : Math.min(1, rows.length)
   // the action rows are exactly the ones the page returned (the frame pads nothing): only those rows may bind a `[x]` hint, never the body rows above them

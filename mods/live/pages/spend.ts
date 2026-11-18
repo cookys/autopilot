@@ -3,11 +3,10 @@
 // Pure: reads seatQuota.view(), ctx.live and ctx.console only; colours through PALETTE / meterKey, glyphs through GLYPHS, stale/missing sources red and never truncated.
 import type { ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
-import type { AccountView, QuotaWindow, Seg, SpendView } from '../model'
+import type { AccountView, LiveSnapshot, QuotaWindow, Seg, SpendView } from '../model'
 import { displayWidth, sparkText, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE, meterKey, money } from '../ui'
 import type { Page, PageCtx } from './frame'
-import type { KeyAction } from './keys'
 import { SEATS_RED_AFTER_MS, seatQuota } from './now'
 import type { SeatQuotaRow } from './now'
 import { poolKey, poolLabel } from './quota-pick'
@@ -16,36 +15,13 @@ import type { Row } from './rows'
 
 export type SpendViewOpts = { focus: number; expanded: boolean }
 export const DEFAULT_VIEW: SpendViewOpts = { focus: 0, expanded: false }
-export type SpendCtx = PageCtx & { spend?: SpendViewOpts; view?: Record<string, SpendViewOpts> }
 
 const clampFocus = (focus: number): number => Math.max(0, Math.min(1, focus))
 
-export function spendReduce(view: SpendViewOpts, key: KeyAction): SpendViewOpts {
-  if (key.kind === 'fold') return { focus: clampFocus(view.focus), expanded: !view.expanded }
-  if (key.kind === 'move') return { ...view, focus: clampFocus(view.focus + key.by) }
-  return view
+export function spendFocusRows(live: LiveSnapshot | null): number {
+  const qWins = live?.account?.quota ?? []
+  return seatQuota.view().row !== null || qWins.some(w => w.kind === 'five_hour' || w.kind === 'seven_day') ? 2 : 0
 }
-
-export function makeSpendState(initial: SpendViewOpts = DEFAULT_VIEW) {
-  let cur: SpendViewOpts = { focus: clampFocus(initial.focus), expanded: initial.expanded }
-  return {
-    view: (): SpendViewOpts => ({ ...cur }),
-    reset: (): void => { cur = { focus: clampFocus(initial.focus), expanded: initial.expanded } },
-    set: (patch: Partial<SpendViewOpts>): SpendViewOpts => {
-      cur = {
-        focus: clampFocus(patch.focus ?? cur.focus),
-        expanded: patch.expanded ?? cur.expanded,
-      }
-      return { ...cur }
-    },
-    apply: (key: KeyAction): SpendViewOpts => {
-      cur = spendReduce(cur, key)
-      return { ...cur }
-    },
-  }
-}
-
-export const spendState = makeSpendState()
 
 const DASH = GLYPHS.structure.empty
 const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, w - displayWidth(text)))
@@ -232,7 +208,7 @@ function buildDetailRows(t: T, sp: SpendView | null, quota: readonly QuotaWindow
   return out
 }
 
-export function spendView(ctx: PageCtx, view: SpendViewOpts = DEFAULT_VIEW): { body: Row[]; actions: Row[] } {
+export function renderSpend(ctx: PageCtx, view: SpendViewOpts = DEFAULT_VIEW): { body: Row[]; actions: Row[] } {
   const { t, size, live, console: con, nowMs } = ctx
   const wide = size.cols >= 100
   const short = ctx.shortBody === true
@@ -312,10 +288,4 @@ export function spendView(ctx: PageCtx, view: SpendViewOpts = DEFAULT_VIEW): { b
   return { body, actions: brokenSource ? [[{ text: t('frame.unknown'), dim: true }]] : [] }
 }
 
-function renderSpend(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
-  const ctx = ctx0 as SpendCtx
-  const view = ctx.spend ?? ctx.view?.spend ?? spendState.view()
-  return spendView(ctx0, view)
-}
-
-export const spendPage: Page = { id: 'spend', key: '7', title: '花費', framed: true, render: renderSpend }
+export const spendPage: Page = { id: 'spend', key: '7', title: '花費', framed: true, render: ctx => renderSpend(ctx) }

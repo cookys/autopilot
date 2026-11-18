@@ -1,3 +1,4 @@
+// W2/W4/V2: true source names/card counts; represented classes do not also count as hidden; one compact fleet action row.
 // UX gate round 2: fictional bus snapshot, rendered through the production frame.
 import { test, expect } from 'claude-code/testing'
 import { frameHeight, frameRows } from './frame'
@@ -68,7 +69,7 @@ test('X2b: 80x20 uses its two content rows for the most severe class then a seve
   expect(rows[0]).toContain('艦隊')
   expect(rows[1]).toMatch(/另有 \d+ 項/)
   expect(rows[1]).toContain('額度 ✗2 ?3')
-  expect(rows[1]).toContain('待決 1')
+  expect(rows[1]).toContain('待決 3 張')
   expect(rows.join('\n')).not.toContain('殘留')
 })
 
@@ -79,7 +80,7 @@ test('X2b: 80x16 uses its single content row for severe fleet and quota counts p
   expect(rows[0]).toContain('艦隊')
   expect(rows[0]).toContain('額度 ✗2 ?3')
   expect(rows[0]).toMatch(/艦隊 ✗2 ⊘4/)
-  expect(rows[0]).toMatch(/另有 \d+/)
+  expect(rows[0]).not.toContain('另有')
   expect(rows[0]).not.toContain('殘留')
 })
 
@@ -96,14 +97,14 @@ test('X2b: a failed miscellaneous exception precedes less severe fleet and quota
   expect(two[1]).toContain('艦隊 ⊘1')
   const failed = con.items
   const one = smallNow(16, con)[0]
-  expect(one).toMatch(/^✗ 現況 ✗1/)
-  expect(one).toMatch(/另有 \d+ 項/)
+  expect(one).toMatch(/^✗ 艦隊 ✗1/)
+  expect(one).not.toContain('另有')
   con.items = []
   expect(smallNow(20, con)[0]).toMatch(/^⊘ 艦隊 /)
   con.items = failed
   con.cards = []; con.counts.decisions = 0
   con.lines = []; con.quota.pools = []
-  expect(smallNow(16, con)[0]).toMatch(/^✗ 現況 ✗1/)
+  expect(smallNow(16, con)[0]).toMatch(/^✗ 艦隊 ✗1/)
 })
 
 test('X2: 80x24 overflow names hidden severity and category, prioritizes the worst quota pool, and gives residue to tab 8', () => {
@@ -164,7 +165,7 @@ test('Y1: a cut 艦隊 list counts hidden states and offers working previous/nex
   expect(out.length).toBe(24)
   expect(out.some(r => /↓ 還有 \d+ 項（○\d+）/.test(r))).toBe(true)
   const compact = frameRows(page, ctx(7, snapshot())).map(text)
-  expect(compact.some(r => /↓ 還有 \d+ 項（✗1 ⊘4 ○3）/.test(r))).toBe(true)
+  expect(compact.join('\n')).toContain('↓ 還有 7 項（⊘4 ○3）') // V2: reclaiming one row shows the other offline line.
   const acts = page.render(ctx(24, con)).actions.flat()
   expect(acts.some(s => s.text.includes('上一線') && s.press === 'fleet:see:乙')).toBe(true)
   expect(acts.some(s => s.text.includes('下一線') && s.press === 'fleet:see:甲')).toBe(true)

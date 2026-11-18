@@ -851,8 +851,6 @@
   "page.fleet.more_items": "{arrow} {n} more items",
   "page.quota.more_pools": "{arrow} {n} more pools ({detail})",
   "page.quota.more_pools_plain": "{arrow} {n} more pools",
-  "page.quota.act_o_short_open": "[o] Seats",
-  "page.quota.act_o_short_close": "[o] Fold",
   "page.quota.act_prev_pool": "Prev pool",
   "page.quota.act_next_pool": "Next pool ({cur}/{total})",
   "page.quota.action_f_c": "[f] Switch",
@@ -861,5 +859,12 @@
   "page.fleet.act_next_line": "Next line",
   "page.quota.f_seats_no_detail": "{n} seats total (no seat list details)",
   "page.decide.details": "Card details ({n} more rows)",
-  "page.decide.details_back": "Back to summary"
+  "page.decide.details_back": "Back to summary",
+  "band.no_console": "No console snapshot",
+  "band.fleet_stale": "Fleet expired {min} min",
+  "band.quota_nopace": "Quota forecast missing",
+  "page.now.quota_stale": "Data expired {min} min",
+  "page.now.quota_waste": "Quota waste",
+  "page.quota.col_proj_s": "Proj",
+  "page.quota.red_summary": "Quota red {n} ({names})"
 }

@@ -5,7 +5,7 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
-import { BAND_INFO_LABEL, BAND_SEP, displayWidth, fittedBandWidth, hhmm, layoutBand, plainBandText } from './model'
+import { BAND_INFO_LABEL, BAND_SEP, displayWidth, fittedBandWidth, hhmm, layoutBand, plainBandText, slotFleet } from './model'
 import { PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
@@ -20,7 +20,7 @@ import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
 import type { BandPageId, BarStrip, BarTabId } from './tabs'
-import { staleBadge } from './pages/rows'
+import { isBriefStale, lineCounts, staleBadge } from './pages/rows'
 import { mostSevere } from './pages/frame'
 
 type El = (props: any) => any
@@ -80,6 +80,18 @@ function drawSegs(el: { Text: El; Button?: El }, segs: Seg[], onSlot: (id: SlotI
   })
 }
 
+// W5: the live snapshot's age/cause also survives a missing console snapshot.
+function staleLiveReason(snap: LiveSnapshot, t: T): string {
+  const at = snap.published_at === null ? NaN : Date.parse(snap.published_at)
+  const now = snap.detail.now_ms
+  const age = Number.isFinite(at) && typeof now === 'number' ? t('console.command.age_m', { n: Math.max(0, Math.floor((now - at) / 60000)) }) : ''
+  let reason = snap.text
+  if (Number.isFinite(at)) for (const key of ['state.stale', 'state.stale_moved']) {
+    if (reason === t(key + '_at', { at: hhmm(at) })) reason = t(key)
+  }
+  return (age === '' ? '' : age + ' · ') + reason
+}
+
 // the band's own cells (the line and the ⓘ), and the width they take
 function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, sourceFailure: Seg | null = null): { nodes: unknown[]; width: number } {
   const { Text, Button } = el
@@ -100,13 +112,7 @@ function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | 
     // X4: replace the redundant publication clock with an age, keeping the
     // complete cause and repair command in the summary's reclaimed cells.
     if (!legacyTabs && snap?.state === 'stale') {
-      const at = snap.published_at === null ? NaN : Date.parse(snap.published_at)
-      const now = snap.detail.now_ms
-      const age = Number.isFinite(at) && typeof now === 'number' ? t('console.command.age_m', { n: Math.max(0, Math.floor((now - at) / 60000)) }) : ''
-      if (Number.isFinite(at)) for (const key of ['state.stale', 'state.stale_moved']) {
-        if (reason === t(key + '_at', { at: hhmm(at) })) reason = t(key)
-      }
-      reason = GLYPHS.state.failed + ' ' + (age === '' ? '' : age + ' · ') + reason + ' · autopilot status runs --watch'
+      reason = GLYPHS.state.failed + ' ' + staleLiveReason(snap, t) + ' · autopilot status runs --watch'
     }
     const line = plainBandText(reason, columns - extra) + BAND_SEP
     return { nodes: [<Text key="w" {...(!legacyTabs && snap?.state === 'stale' ? drawSeg(staleBadge(line)) : dimProps())} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
@@ -137,8 +143,37 @@ export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, sou
 
 export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
-  const sourceFailure = !legacyTabs && con?.snap !== null && con?.snap !== undefined && Object.values(con.snap.sources).some(s => s.state === 'expired')
-    ? mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs: snap?.detail.now_ms ?? con.snap.generated_at_ms }) : null
+  // U1: a caller may have fitted the preset to the old one-row tab budget.
+  // The two-row band has room for the fleet's section name at these widths.
+  if (!legacyTabs && columns >= 120 && preset !== null && preset.segs.some(s => s.slot === 'fleet') && !preset.segs.some(s => s.slot === 'fleet' && s.tag === 'fleetWord')) {
+    const at = preset.segs.findIndex(s => s.slot === 'fleet')
+    const label = slotFleet({ stuck: 0, running: 0, waiting: 0 }, t)!.segs.filter(s => s.tag === 'fleetWord').map(s => ({ ...s, slot: 'fleet' as const }))
+    preset = { segs: [...preset.segs.slice(0, at), ...label, ...preset.segs.slice(at)], width: preset.width + label.reduce((n, s) => n + displayWidth(s.text), 0) }
+  }
+  // W5: report each affected data class, with age, before the repair command.
+  let sourceFailure: Seg | null = null
+  if (!legacyTabs && con !== null) {
+    if (con.snap === null) sourceFailure = staleBadge(GLYPHS.state.failed + ' ' + t('band.no_console') + (snap?.state === 'stale' ? ' · ' + staleLiveReason(snap, t) : ''))
+    else {
+      const nowMs = snap?.detail.now_ms ?? con.snap.generated_at_ms
+      const brief = isBriefStale(con.snap, nowMs)
+      const tasks = con.snap.sources.tasks
+      const old = tasks?.state === 'expired' || tasks?.state === 'stale' || brief.stale
+      const parts: string[] = []
+      if (old || snap?.state === 'stale') {
+        const at = tasks?.at_ms ?? con.snap.generated_at_ms
+        const min = Math.max(0, Math.floor((nowMs - at) / 60000))
+        const counts = lineCounts(con.snap, t)
+        const badges = [['failed', GLYPHS.state.failed], ['stalled', GLYPHS.state.stalled]].filter(([k]) => (counts[k] ?? 0) > 0).map(([k, g]) => g + counts[k]).join(' ')
+        parts.push(t('band.fleet_stale', { min }) + (badges === '' ? '' : '（' + badges + '）'))
+      }
+      const forecast = con.snap.sources.quota_forecast
+      if (forecast !== undefined && forecast.state !== 'ok') parts.push(t('band.quota_nopace'))
+      const other = mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs })
+      if (parts.length === 0 && other !== null) parts.push(other.text.slice((GLYPHS.state.failed + ' ').length))
+      if (parts.length > 0) sourceFailure = staleBadge(GLYPHS.state.failed + ' ' + parts.join(' · '))
+    }
+  }
   // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
   const fb = forge === null || sourceFailure !== null || (!legacyTabs && snap?.state === 'stale') ? null : forgeBar(forge)
   const forgeW = fb === null ? 0 : fb.width

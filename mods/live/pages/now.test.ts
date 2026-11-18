@@ -1,3 +1,4 @@
+// W2/W4/W5/U3: waste has a quota source, card counts are real, stale summaries say age, severe counts lead.
 // pages/now.test.ts — S3, page 1 現況 (r2 mockups 現況 at 160x40, 120x30, 80x24 and the 80x24 state variants). Golden = the page's content rows (header, blank filler, actions and strip
 // stripped; the frame bottom-anchors the body where the mockup draws it top-anchored, so the blank rows between content and actions are not compared).
 import { test, expect } from 'claude-code/testing'
@@ -67,7 +68,7 @@ const feed = async (): Promise<void> => { seatQuota.reset(); await seatQuota.ref
 const GOLD_160 = [
   '→ 待決 3 張卡等你（最舊 40 分）：q',
   '── 全艦隊 ────────────────────────────────────────────',
-  '  產線 51 ｜ ● 執行 6  ⋯ 等待 40  ⊘ 卡住 5 ｜ 主機 17/18 在線',
+  '  產線 51 ｜ ⊘ 卡住 5  ● 執行 6  ⋯ 等待 40 ｜ 主機 17/18 在線',
   // N2 (codeforge B49-B54): 現況 has no row action, so no row carries the ▸ focus mark
   '  ✗ capacity--claude 卡住 2 小時：等待沒寫等誰（wait_untyped）',
   '  ⊘ hangar--claude 01M7N2ZC 證據逾期 40 分',
@@ -88,7 +89,7 @@ const GOLD_120 = GOLD_160
 const GOLD_80 = [
   '→ 待決 3 張卡等你（最舊 40 分）：q',
   '── 全艦隊 ──',
-  '產線 51 ●6 ⋯40 ⊘5 · 主機 17/18',
+  '產線 51 ⊘5 ●6 ⋯40 · 主機 17/18',
   ' ✗ capacity 卡住 2 時：等待沒寫等誰',
   ' ⊘ hangar 01M7N2ZC 證據逾 40 分',
   ' ▲ 主機 h6 離線 12 分',
@@ -266,7 +267,7 @@ test('now R1: on every page at 80x24, 120x30, 160x40, each pool_key appears at m
       const lines = frameRows(page, ctxOf(cols, rows, snap, null)).map(text)
       expect(lines.join('\n')).not.toContain('重置前用完')
       // Exclude the quota focus heading `── 焦點... ──` when counting distinct pool verdict rows per page
-      const verdictLines = lines.filter(l => !l.startsWith('── 焦點'))
+      const verdictLines = lines.filter(l => !l.startsWith('── 焦點') && !(page.id === 'quota' && /判定[紅黃綠]：/.test(l))) // V1: focus detail names its pool.
       for (const k of keys) {
         const label = poolLabel(k)
         const hits = verdictLines.filter(l => l.includes(label) || l.includes(poolKey(k)))
@@ -299,8 +300,8 @@ test('now R2: shortBody (<= 4 rows) combines Button + pending summary first, dro
   const framed6 = frameRows(nowPage, ctxOf(80, 6, c, liveNoRes)).map(text).slice(1, 5)
   expect(framed6[0]).toContain('→ 待決 3 張（最舊 1 天）：')
   expect(framed6[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 17/18（離線 1）')
-  expect(framed6[2]).toBe('✗ 額度 紅 1（trinity）· ? 未知 1（personal）')
-  expect(framed6[3]).toBe('另有 1 項（現況 ▲1）') // X2: include hidden category/severity.
+  expect(framed6[2]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分· ? 未知 1（personal）')
+  expect(framed6[3]).toBe('額度浪費 ▲1') // X2: include hidden category/severity.
 })
 
 test('now C1: short 現況 summarises each class once (pending -> fleet -> quota -> 另有 N 項), omits empty classes, truncates names with … to fit width, bottom-anchors, deduplicates pool_key, and keeps 另有 6 項 at 80x3', () => {
@@ -370,7 +371,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(zh7.slice(1, 3)).toEqual(['', ''])
   expect(zh7[3]).toContain('→ 待決 3 張（最舊 45 分）：')
   expect(zh7[4]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
-  expect(zh7[5]).toBe('✗ 額度 紅 2（F 池、trinity）')
+  expect(zh7[5]).toBe('✗ 額度 紅 2（F 池、trinity） · 資料過期 180 分')
   expect(zh7[6]).toContain('1 現 2 待')
 
   const en7 = frameRows(nowPage, { ...(ctxOf(80, 7, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
@@ -379,7 +380,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(en7[3]).toContain('→ Pending 3 (oldest 45m)：')
   expect(displayWidth(en7[4])).toBeLessThanOrEqual(80)
   expect(en7[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊…) · hosts 17/18 (1 offline)')
-  expect(en7[5]).toBe('✗ quota red 2 (F 池, trinity)')
+  expect(en7[5]).toBe('✗ quota red 2 (F 池, trinity) · Data expired 180 min')
   // At 84 cols (untruncated English fleet row is 83 display cells), neither CJK lane name is truncated
   const en84 = frameRows(nowPage, { ...(ctxOf(84, 7, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
   expect(en84[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊戲線) · hosts 17/18 (1 offline)')
@@ -396,8 +397,8 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(zh6[1]).toBe('')
   expect(zh6[2]).toContain('→ 待決 3 張')
   expect(zh6[3]).toContain('✗ 艦隊 ')
-  expect(zh6[4]).toBe('✗ 額度 紅 2（F 池、trinity）')
-  expect(frameRows(nowPage, ctxOf(80, 3, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗2 ⊘1 · 額度 ✗2 F 池 · 待決 1 · 另有 6 項') // X2b: severity leads; urgent quota and overflow remain visible.
+  expect(zh6[4]).toBe('✗ 額度 紅 2（F 池、trinity） · 資料過期 180 分')
+  expect(frameRows(nowPage, ctxOf(80, 3, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗2 ⊘1 · 額度 ✗2 F 池 · 待決 3 張') // X2b: severity leads; urgent quota and overflow remain visible.
 
   // 3. When unshown items remain (e.g. yellow waste pool + findings exception), row 4 is `另有 N 項`
   const allTiersSnap = con({
@@ -406,12 +407,13 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
     quota: { pools: [...redPoolsWithDup, POOLS.find(p => p.pool === 'personal')!, POOLS.find(p => p.pool === 'grok')!] as never, seats: [] },
   })
   const fullShort = nowPage.render({ ...(ctxOf(80, 14, allTiersSnap, liveNoRes) as object), shortBody: true } as never).body.map(text)
-  expect(fullShort.length).toBe(4)
+  expect(fullShort.length).toBe(5) // W2: quota waste gets its own source row when room permits.
   for (const r of fullShort) expect(displayWidth(r)).toBeLessThanOrEqual(80)
   expect(fullShort[0]).toContain('→ 待決 3 張')
   expect(fullShort[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
-  expect(fullShort[2]).toBe('✗ 額度 紅 2（F 池、trinity）· ? 未知 1（personal）')
-  expect(fullShort[3]).toBe('另有 2 項（現況 ▲1 △1）') // X2: classify the hidden extras.
+  expect(fullShort[2]).toBe('✗ 額度 紅 2（F 池、trinity） · 資料過期 180 分· ? 未知 1（personal）')
+  expect(fullShort[3]).toBe('額度浪費 ▲1')
+  expect(fullShort[4]).toBe('另有 1 項（艦隊 △1）') // X2: classify the hidden extras.
 
   // 4. R14 bottom-anchoring and omitting empty class rows
   const fewerSnap = con({ ...c1Snap, items: [hostItem] as never, lines: [], quota: { pools: [POOLS.find(p => p.pool === 'trinity')!] as never, seats: [] } })
@@ -420,7 +422,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(anchored.slice(1, 3)).toEqual(['', ''])
   expect(anchored[3]).toContain('→ 待決 3 張')
   expect(anchored[4]).toBe('✗ 艦隊 主機 17/18（離線 1）')
-  expect(anchored[5]).toBe('✗ 額度 紅 1（trinity）')
+  expect(anchored[5]).toBe('✗ 額度 紅 1（trinity） · 資料過期 180 分')
   expect(anchored[6]).toContain('1 現 2 待')
 
   // 5. Every pool_key appears at most once (including duplicate pool spellings and multiple unpooled seat_blocked items)

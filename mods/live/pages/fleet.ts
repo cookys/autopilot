@@ -20,6 +20,7 @@ export type FleetView = { focus: number; expanded: boolean }
 export const DEFAULT_VIEW: FleetView = { focus: 0, expanded: false }
 
 const pad = (s: string, w: number): string => s + ' '.repeat(Math.max(0, w - displayWidth(s)))
+const textOf = (row: Row): string => row.map(s => s.text).join('')
 const fit = (s: string, w: number): string => (displayWidth(s) <= w ? s : truncateToWidth(s, w))
 
 type FleetRow = { line: ConsoleLine; sid: StateId; word: string; worst: ConsoleLine['issues'][number] | null }
@@ -66,7 +67,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   const rest = total - head.length // shown + rest = total when folded
   const focus = Math.max(0, Math.min(view.focus, Math.max(0, shown - 1)))
   const sum = lineCounts(snap, ctx.t)
-  const states = (['running', 'waiting', 'stalled', 'failed', 'pending'] as const).filter(k => (sum[k] ?? 0) > 0)
+  const states = (['failed', 'stalled', 'running', 'waiting', 'pending'] as const).filter(k => (sum[k] ?? 0) > 0)
   const stateWord = (k: typeof states[number]): string => ctx.t(k === 'running' ? 'page.fleet.w_run' : k === 'waiting' ? 'page.fleet.w_wait' : k === 'stalled' ? 'page.fleet.w_stuck' : k === 'failed' ? 'page.fleet.w_offline' : 'page.fleet.w_normal')
   const body: Row[] = []
   const lineRows = new Map<Row, FleetRow>()
@@ -178,13 +179,25 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
     ]
     // Y1: wide pages already use all four action rows; append to their inspect row.
     if (wide) actions[1].push({ text: ' · ', dim: true }, ...nav)
-    else actions.push(nav)
+    else actions[0].push({ text: ' · ', dim: true }, ...nav) // V2: one compact operation row.
   }
   // M1: a short body (<= 4 rows) that cannot hold every row ends in `↓ 還有 N 項` instead of dropping rows without a word (the frame drops its own hint in short mode)
   {
     const stripLen = cols < STRIP_SPLIT_COLS ? Math.min(2, ctx.size.rows) : Math.min(1, ctx.size.rows)
     const avail = Math.max(0, ctx.size.rows - 1 - stripLen)
     const room = Math.max(0, avail - Math.min(Math.max(1, actions.length), avail))
+    // V2: tiny panes keep the focus and the most severe fleet fact.
+    if (!wide && room <= 2 && f !== undefined) {
+      const focused = lineRow(f, focus)
+      const host = hostNote()
+      const worst = rows.find(r => r.sid === 'failed' || r.sid === 'stalled')
+      const anomaly: Row = worst === undefined || worst === f ? [] : [{ text: ' · ' + STATES[worst.sid].glyph + ' ' + lineStatusText(worst.line, ctx.t, ctx.nowMs), color: PALETTE.broken }]
+      const minimal = [...focused, ...anomaly, ...host]
+      if (room === 0) return { body: [], actions: [minimal] }
+      if (room === 1) return { body: [minimal], actions }
+      const summary = body.find(r => textOf(r).startsWith(ctx.t('page.fleet.lines_title', { n: total })))
+      return { body: [...(summary === undefined ? [] : [summary]), focused], actions }
+    }
     const flat = body.flatMap(r => wrapRow(r, cols, WRAP_HANG).map(row => ({ row, line: lineRows.get(r) })))
     if (room >= 2 && flat.length > room) {
       const keep = flat.slice(0, room - 1)

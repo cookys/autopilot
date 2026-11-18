@@ -182,7 +182,11 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
       if (tier === 'wide') head.push(padR(t('page.quota.col_exh'), c.exh), padR(t('page.quota.col_seats'), c.seats))
     }
     head.push(verdictHead)
-    headerRows.push(clipRowPlain([{ text: head.join(''), dim: true }], cols))
+    const narrowHead = '    ' + t('page.quota.col_pool') + ' · ' + t('page.quota.col_7d_s') + ' · ' + t('page.quota.col_5h_s')
+      + (paceOk ? ' · ' + t('page.quota.col_proj') : '')
+      + (showReset ? ' · ' + t('page.quota.col_reset_s') : '')
+      + (showBurn ? ' · ' + t('page.quota.col_burn', { h }) : '') + ' · ' + verdictHead
+    headerRows.push(clipRowPlain([{ text: tier === 'narrow' ? narrowHead : head.join(''), dim: true }], cols))
   }
 
   // exactly one row per pool at every width; R4: unknown pools use `?` icon with warning colour role; R10: rate carries `%/時`
@@ -208,8 +212,19 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
         row.push(seg(padR(ex, c.exh)), seg(padR(p.seats === null ? DASH : t('page.quota.seats_n', { n: p.seats }), c.seats)))
       }
     }
+    // V1: narrow rows carry their own column names when the header gives way.
+    if (tier === 'narrow') {
+      row.splice(3)
+      row.push(mark(t('page.quota.col_7d_s').replace(/ /g, '') + ' ' + pct(p.seven_day_pct, isStale) + ' · '),
+        mark(t('page.quota.col_5h_s').replace(/ /g, '') + ' ' + pct(p.five_hour_pct, isStale)))
+      if (paceOk) row.push(mark(' · ' + t('page.quota.col_proj_s') + ' ' + pct(p.projected_pct_at_reset, isStale)))
+      if (showReset) row.push(seg(' · ' + resetText(p.resets_at_ms, tier, dows)))
+      if (showBurn) row.push(mark(' · ' + rate(p.burn_pct_per_h, isStale, t)))
+      // The focused verdict below owns the full reason; avoid repeating stale prose.
+      if (!isStale) row.push(seg(' · ' + svs[i], roleColor(v.role)))
+    }
     const press = 'quota:pool:' + i // the whole row is one Button: it focuses this pool and shows / folds its seats
-    row.push(seg(svs[i], roleColor(v.role)))
+    if (tier !== 'narrow') row.push(seg(svs[i], roleColor(v.role)))
     return clipRowPlain(row.map(sg => ({ ...sg, press })), cols)
   })
 
@@ -223,7 +238,6 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const room = Math.max(0, avail - Math.min(actLen, avail))
 
   const kv = (label: string, text: string, color?: Seg['color']): Row => [{ text: padR(label, 6), dim: true }, color === undefined ? { text } : { text, color }]
-  const openRow: Row = [{ text: '  ' }, { text: t(view.expanded ? 'page.quota.act_o_close' : 'page.quota.act_o_open'), color: PALETTE.action, press: 'quota:open' }] // G11: o is a Button (click works where the pane has no keyboard)
   const mine = q.seats.filter(s => poolKey(s.pool) === poolKey(fp.pool))
   const names = mine.map(s => s.seat)
   const noSeatDetail = mine.length === 0 && (fp.seats ?? 0) > 0 // Z2: an absent detail list does not erase a known total.
@@ -231,7 +245,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const seatsSummary = kv(t('page.quota.f_seats'), (names.length === 0 ? '' : names.slice(0, 2).join(' · ') + (names.length > 2 || (fp.seats ?? 0) > 2 ? ' · … ' : ' ')) + count)
   const seatRowText = (s: QuotaSeat): string => t('page.quota.seat_row', { seat: s.seat, a: pct(s.seven_day_pct, s.stale === true), b: pct(s.five_hour_pct, s.stale === true), age: s.age_min === null ? DASH : t('page.quota.age_m', { n: s.age_min }) })
   const fact = fp.limit_hit === true ? t('page.quota.f_limit_hit') + '，' : ''
-  const verdictRow = kv(t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role))
+  const verdictRow = kv((tier === 'narrow' && ctx.shortBody ? poolLabel(fv.pool) + ' ' : '') + t('page.quota.f_verdict'), t('page.quota.f_verdict_row', { role: roleWord(t, fv.role), text: fact + fv.text }), roleColor(fv.role))
   const blockedRows: Row[] = blockedBy(fp.pool).map(it => {
     const stale = it.facts.stale === true
     // Name the blocked seat here; the pool table and focused verdict already
@@ -271,15 +285,25 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   // M2: at 80 columns a cut table keeps its controls in the action row: `[o] 各席 · 上一池 · 下一池 (1/12)` (each a Button), plus `[f] 換池` when capacity gave advice
   const n = ranked.length
   const navRow = (): Row => clipRowPlain([
-    { text: t(view.expanded ? 'page.quota.act_o_short_close' : 'page.quota.act_o_short_open'), color: PALETTE.action, press: 'quota:open' },
+    { text: t(view.expanded ? 'page.quota.act_o_close' : 'page.quota.act_o_open'), color: PALETTE.action, press: 'quota:open' },
     { text: ' · ', dim: true },
     { text: t('page.quota.act_prev_pool'), color: PALETTE.action, press: 'quota:pool:' + Math.max(0, focus - 1) },
     { text: ' · ', dim: true },
     { text: t('page.quota.act_next_pool', { cur: focus + 1, total: n }), color: PALETTE.action, press: 'quota:pool:' + Math.min(n - 1, focus + 1) },
     ...(fp.switch_suggestion === null ? [] : [{ text: ' · ', dim: true }, { text: t('page.quota.action_f_c'), color: PALETTE.action, press: 'fill:quota:' + fp.pool }]),
   ], cols)
-  const cutActions = (clipped: boolean): Row[] => (clipped && tier === 'narrow' ? [navRow()] : actions)
+  // V4: navigation belongs to the fixed operation row at every width and height.
+  actions.splice(0, actions.length, navRow())
 
+  // V1: at one row the severity class matters more than one pool's detail.
+  if (tier === 'narrow' && room <= 1) {
+    const reds = ranked.filter(v => v.role === 'broken')
+    const unknown = ranked.filter(isUnknownPool).length
+    if (reds.length > 0) {
+      const summary: Row = [{ text: bad + ' ' + t('page.quota.red_summary', { n: reds.length, names: reds.map(v => poolLabel(v.pool)).join(t('sep.list')) }) + (unknown > 0 ? '· ? ' + unknown : ''), color: PALETTE.broken }]
+      return room === 0 ? { body: [], actions: [summary] } : { body: [summary], actions }
+    }
+  }
   if (ctx.shortBody) {
     // R5 compact mode (<= 4 body rows): reserve the focused pool's full wrapped verdict first, then fit pool rows and tail rows within room.
     const vLen = rowsWrappedLen(verdictBlock, cols)
@@ -288,14 +312,12 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     const hLen = rowsWrappedLen(compactHead, cols)
     const picked = pickPools(Math.max(0, room - vLen - hLen), tier === 'narrow')
     const shownPools = picked.rows
-    const navOn = picked.clipped && tier === 'narrow' // the o Button is in the action row then, not in the body
     const tailCandidates: Row[] = []
     if (view.expanded) {
       if (mine.length === 0) tailCandidates.push(noSeatDetail ? seatsSummary : kv(t('page.quota.f_seats'), t('page.quota.seat_none')))
       else mine.forEach((s, i) => tailCandidates.push(kv(i === 0 ? t('page.quota.f_seats') : '', seatRowText(s), s.stale === true ? PALETTE.broken : undefined)))
-      if (!navOn) tailCandidates.push(openRow)
     } else {
-      tailCandidates.push(seatsSummary, ...(navOn ? [] : [openRow]))
+      tailCandidates.push(seatsSummary)
     }
     let rem = room - hLen - rowsWrappedLen(shownPools, cols) - vLen
     const tail: Row[] = []
@@ -305,7 +327,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
       tail.push(r)
       rem -= w
     }
-    return { body: [...compactHead, ...shownPools, ...verdictBlock, ...tail], actions: cutActions(picked.clipped) }
+    return { body: [...compactHead, ...shownPools, ...verdictBlock, ...tail], actions }
   }
 
   const focusTitle = rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: poolLabel(fv.pool) }), null, cols)
@@ -321,7 +343,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   }
   const orderRows: Row[] = tier === 'wide' ? [kv(t('page.quota.f_order'), t(paceOk ? 'page.quota.f_order_pace' : 'page.quota.f_order_nopace'), undefined)] : []
 
-  const fullFocus: Row[] = [[{ text: '' }], focusTitle, openRow, seatsSummary, ...expandedSeatRows, ...switchRows, ...verdictBlock, ...orderRows]
+  const fullFocus: Row[] = [[{ text: '' }], focusTitle, seatsSummary, ...expandedSeatRows, ...switchRows, ...verdictBlock, ...orderRows]
   const fullBody: Row[] = [...headerRows, ...poolRowsAll, ...fullFocus]
   if (room <= 0 || rowsWrappedLen(fullBody, cols) <= room) return { body: fullBody, actions }
 
@@ -329,10 +351,9 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const headLen = rowsWrappedLen(headerRows, cols)
   const focusCandidates: Row[][] = [
     fullFocus,
-    [[{ text: '' }], focusTitle, openRow, seatsSummary, ...expandedSeatRows, ...switchRows, ...verdictBlock],
-    [focusTitle, openRow, seatsSummary, ...expandedSeatRows, ...switchRows, ...verdictBlock],
-    [focusTitle, openRow, seatsSummary, ...verdictBlock],
-    [focusTitle, openRow, ...verdictBlock],
+    [[{ text: '' }], focusTitle, seatsSummary, ...expandedSeatRows, ...switchRows, ...verdictBlock],
+    [focusTitle, seatsSummary, ...expandedSeatRows, ...switchRows, ...verdictBlock],
+    [focusTitle, seatsSummary, ...verdictBlock],
     [focusTitle, ...verdictBlock],
     verdictBlock,
   ]
@@ -345,9 +366,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   if (headLen + 1 + rowsWrappedLen(keptFocus, cols) > room) keptHeader = []
   const poolRoom = Math.max(0, room - rowsWrappedLen(keptHeader, cols) - rowsWrappedLen(keptFocus, cols))
   const picked = pickPools(poolRoom, true)
-  // Z2: the fixed navigation strip owns o when the table is cut.
-  const focusRows = picked.clipped && tier === 'narrow' ? keptFocus.filter(r => r !== openRow) : keptFocus
-  return { body: [...keptHeader, ...picked.rows, ...focusRows], actions: cutActions(picked.clipped) }
+  return { body: [...keptHeader, ...picked.rows, ...keptFocus], actions }
 }
 
 export const quotaPage: Page = { id: 'quota', key: '4', title: '額度', framed: true, render: ctx => renderQuota(ctx) }

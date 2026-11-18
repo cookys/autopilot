@@ -66,8 +66,8 @@ for (const cols of [120, 160]) for (const mode of [false, true]) test(`X4: ${col
   const tree = await band.drawn() as Node
   const summary = text(tree.children?.[0])
   expect(summary).toContain('✗')
-  expect(summary).toContain('資料已過期')
-  expect(summary).toContain('12 分鐘前')
+  expect(summary).toContain('艦隊過期') // W5: identify the stale data class.
+  expect(summary).toContain('12 分') // W5: compact age leaves room for cause and repair.
   expect(summary).toContain('autopilot status runs --watch')
   expect(displayWidth(summary)).toBeLessThanOrEqual(cols - 4)
   expect(tree.children?.filter(n => n?.type === 'Box').length).toBe(2)

@@ -28,6 +28,8 @@ These remain **unverified** (searched + not confirmed, OR only partially probed)
 
 ### Corrected — previously mislabelled as NOT verified
 
+Don't claim cross-platform env vars or CLI subcommands without verifying — by official doc URL OR by running the real tool. Both fabrication (`CODEX_PLUGIN_ROOT` etc. shipped to main) and over-correction (`agy plugin validate` wrongly called fabricated) happened; no URL or tool run means a Spike candidate, not a fact.
+
 Empirical `agy` 1.0.1 testing (2026-05-29) overturned earlier claims in this doc:
 
 - **`agy plugin validate <path>` EXISTS** and exits `[ok]` on this repo (16 skills / 5 agents / 25 hooks processed). The earlier "not in the subcommand list" claim came from a possibly-stale [deepwiki](https://deepwiki.com/google-antigravity/antigravity-cli/2-getting-started) source. The original PM commit's `agy plugin validate .` instruction was correct.

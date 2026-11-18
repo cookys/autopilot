@@ -14,8 +14,9 @@
  * integration branch re-writes the task-status input, detached; knob AUTOPILOT_MERGE_TASK_STATUS). Their opt-outs (AUTOPILOT_AWAITING_OWNER, AUTOPILOT_AGENT_ACTIVITY) are read inside
  * hooks/awaiting-owner.js handle() / hooks/live-session-lib.js, not here. Fifth hosted leg (BL-0327): runs-watch-autostart.js run(payload), the
  * PostToolUse watcher ensure (knob AUTOPILOT_RUNS_WATCH_AUTOSTART=0, read inside). Sixth hosted leg: stuck-hand-lib.js handle(payload), which tells the
- * dispatching session once that a running dispatched hand went quiet (knob AUTOPILOT_STUCK_HAND_MINUTES, 0/off disables, read inside). Fail-open and independent of
- * the audit logging below.
+ * dispatching session once that a running dispatched hand went quiet (knob AUTOPILOT_STUCK_HAND_MINUTES, 0/off disables, read inside). Seventh hosted leg:
+ * prune-merged-branch-lib.js onPostToolUse(payload), which prunes merged remote head branches detached after a push to the integration branch
+ * (knob AUTOPILOT_PRUNE_MERGED_BRANCH, off disables, read inside). Fail-open and independent of the audit logging below.
  */
 
 'use strict';
@@ -52,6 +53,7 @@ function runHook(stdin) {
             try { require('./ask-decision.js').onPostToolUse(p); } catch (e) { process.stderr.write(`audit-log: ask-decision fail-open: ${e && e.message ? e.message : e}\n`); }
           } else if (p.tool_name === 'Bash') {
             try { require('./merge-task-status-lib.js').onPostToolUse(p); } catch (e) { process.stderr.write(`audit-log: merge-task-status fail-open: ${e && e.message ? e.message : e}\n`); }
+            try { require('./prune-merged-branch-lib.js').onPostToolUse(p); } catch (e) { process.stderr.write(`audit-log: prune-merged-branch fail-open: ${e && e.message ? e.message : e}\n`); }
           }
         }
       }

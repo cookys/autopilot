@@ -205,7 +205,7 @@ function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wid
     return out
   }
   if (d.background !== null) out.push(wide ? labelled(t('page.decide.k_bg'), d.background) : [dimSeg(t('page.decide.k_bg')), seg(' ' + d.background)])
-  if (wide && d.blocks !== null) out.push(labelled(t('page.decide.k_blocks'), d.blocks))
+  if (d.blocks !== null) out.push(wide ? labelled(t('page.decide.k_blocks'), d.blocks) : [dimSeg(t('page.decide.k_blocks')), seg(' ' + d.blocks)])
   if (decideDialog(d)) out.push([seg(wide ? '  ' : ''), dimSeg(t('page.decide.in_dialog'))])
   else {
     out.push(...optionRows(d, nav, ctx, wide))

@@ -439,7 +439,7 @@ test('decide card answer-area order is background < blocks < options < advice < 
     const optLast = out.findIndex(r => r.includes('[c] 跳過直接發'))
     const advice = out.findIndex(r => /^\s*建議\s/.test(r) && r.includes('涵蓋排程邊界'))
     const note = out.findIndex(r => /^\s*補充\s/.test(r) && r.includes('合成補充備註'))
-    const indices = cols === 80 && blocks === -1 ? [bg, opt, advice, note] : [bg, blocks, opt, advice, note]
+    const indices = [bg, blocks, opt, advice, note]
     expect(indices.every(i => i >= 0)).toBe(true)
     expect(optLast >= opt && optLast < advice).toBe(true)
     for (let i = 1; i < indices.length; i++) expect(indices[i]).toBeGreaterThan(indices[i - 1])

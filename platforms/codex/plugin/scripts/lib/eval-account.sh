@@ -61,7 +61,8 @@ eval_account_install_wrapper() {
   case "$pinned" in ""|/*) ;; *) echo "eval-account: the pinned claude must be an absolute path: $pinned" >&2; return 2 ;; esac
   cat > "$dir/claude" <<'WRAP'
 #!/usr/bin/env bash
-if [ "${AUTOPILOT_TOKEN_SEAT:-}" = 1 ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+if [ "${AUTOPILOT_TOKEN_SEAT:-}" = "1" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] \
+    && ! { [ -n "${ANTHROPIC_BASE_URL:-}" ] && { [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -n "${ANTHROPIC_API_KEY:-}" ]; }; }; then
   printf '%s\n' 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)' >&2
   exit 78
 fi

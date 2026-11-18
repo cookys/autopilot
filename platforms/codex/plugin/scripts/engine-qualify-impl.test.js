@@ -22,7 +22,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runImplQualification, implSandboxedContainment } = require('./engine-qualify');
+const { runImplCase, runImplQualification, implSandboxedContainment } = require('./engine-qualify');
 const { examIdentityHashOf } = require('../src/engine/capability-evidence');
 
 let assertions = 0;
@@ -86,6 +86,16 @@ const canary = process.env.QUALIFY_CANARY_TOKEN || '';
 // Record the cc-shim env the rail received so the --endpoint binding test can prove the
 // resolver's base_url (and not the ambient env) reached the dispatch.
 try { fs.writeFileSync(${JSON.stringify(path.join(tempRoot, 'fake-env-seen.txt'))}, (process.env.ANTHROPIC_BASE_URL || '') + '\\n' + (process.env.ANTHROPIC_AUTH_TOKEN || '') + '\\n'); } catch (e) {}
+try {
+  fs.appendFileSync(${JSON.stringify(path.join(tempRoot, 'fake-task-facts.jsonl'))}, JSON.stringify({
+    case_id: target.case_id,
+    branch,
+    size: process.env.AUTOPILOT_TASK_SIZE ?? null,
+    role: process.env.AUTOPILOT_TASK_ROLE ?? null,
+    scope: process.env.AUTOPILOT_TASK_SCOPE ?? null,
+    expected_scope: Object.keys(target.repo_files || {}).join(','),
+  }) + '\\n');
+} catch (e) {}
 
 function emit(o) {
   if (args.includes('--sandbox')) {
@@ -948,6 +958,218 @@ function runTrunc(mode, seed, truncate) {
   } catch (error) { missing = error; }
   check(missing && /required implementer sandbox is unavailable/.test(missing.message), `bwrap missing fails closed: ${missing && missing.message}`);
   check(!fs.existsSync(argvFile), 'bwrap missing: nothing was dispatched');
+}
+
+// ── Chinese-family engine qualification & real cn-model-dispatch-gate check ─
+// 1) Stub dispatcher: case dispatch env carries AUTOPILOT_TASK_SIZE=XS,
+//    AUTOPILOT_TASK_ROLE=<examined role>, AUTOPILOT_TASK_SCOPE=<case fixture paths>,
+//    derived from the case itself rather than caller AUTOPILOT_TASK_* env.
+// 2) Real dispatch-hetero.sh + sentinel claude binary (no gate-off override):
+//    - implementer exam on MiniMax-M3.1-Flash passes the real gate check and
+//      reaches the sentinel binary;
+//    - reviewer-role examination of MiniMax-M3.1-Flash is still refused by the
+//      real gate check as review-role (ends infra_abort / no_verdict);
+//    - cases whose fixture paths hit sensitive_paths or core_dirs stay refused.
+{
+  const factsFile = path.join(tempRoot, 'fake-task-facts.jsonl');
+  fs.rmSync(factsFile, { force: true });
+  fs.writeFileSync(path.join(tempRoot, 'fake-blocked.txt'), '0');
+  fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'cn-facts-seed');
+  fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+
+  const savedEnv = {};
+  const envKeys = [
+    'AUTOPILOT_QUALIFY_SEED',
+    'AUTOPILOT_TASK_SIZE',
+    'AUTOPILOT_TASK_ROLE',
+    'AUTOPILOT_TASK_SCOPE',
+    'ANTHROPIC_BASE_URL',
+    'ANTHROPIC_AUTH_TOKEN',
+    'ENGINE_CAPABILITY_DIR',
+    'PATH',
+  ];
+  for (const k of envKeys) {
+    savedEnv[k] = Object.prototype.hasOwnProperty.call(process.env, k) ? process.env[k] : undefined;
+  }
+  const restoreEnv = () => {
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  };
+
+  try {
+    // Pollute caller task-fact env with values that would trigger core-size / review-role / sensitive
+    // if inherited: runImplCase must ignore caller env and derive facts from the case.
+    process.env.AUTOPILOT_QUALIFY_SEED = 'cn-facts-seed';
+    process.env.AUTOPILOT_TASK_SIZE = 'XL';
+    process.env.AUTOPILOT_TASK_ROLE = 'reviewer';
+    process.env.AUTOPILOT_TASK_SCOPE = 'app/.env';
+    process.env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:9/anthropic';
+    process.env.ANTHROPIC_AUTH_TOKEN = 'fake-token-0000';
+
+    const storeCn = fs.mkdtempSync(path.join(tempRoot, 'store-cn-stub-'));
+    const cnStubRes = runImplQualification({
+      ...baseOptions(storeCn),
+      engine: 'MiniMax-M3.1-Flash',
+      model: 'MiniMax-M3.1-Flash',
+      runner: 'cc-shim',
+      family: 'minimax',
+      dispatchBin: path.join(tempRoot, 'disp.sh'),
+    });
+    equal(cnStubRes.qualified, true, 'Chinese-family honest candidate qualifies with case-derived task facts');
+    equal(cnStubRes.row.quality.corpus_pass, '24/24', 'Chinese-family stub run completes 24/24');
+    const seenFacts = readJsonl(factsFile);
+    equal(seenFacts.length, 24, 'all 24 case dispatches recorded task facts');
+    for (const row of seenFacts) {
+      equal(row.size, 'XS', `case ${row.case_id}: AUTOPILOT_TASK_SIZE is XS (not caller XL)`);
+      equal(row.role, 'implementer', `case ${row.case_id}: AUTOPILOT_TASK_ROLE is implementer (not caller reviewer)`);
+      equal(row.scope, row.expected_scope, `case ${row.case_id}: AUTOPILOT_TASK_SCOPE equals fixture file paths`);
+      check(row.scope.length > 0 && !row.scope.includes('.env'), `case ${row.case_id}: scope is non-empty fixture list, not caller .env`);
+    }
+
+    // Real dispatch-hetero.sh + sentinel claude binary (real cn-model-dispatch-gate.js check).
+    const cnIso = fs.mkdtempSync(path.join(tempRoot, 'cn-real-'));
+    const cnTmp = path.join(cnIso, 'tmp');
+    const cnRuns = path.join(cnIso, 'runs');
+    const cnHome = path.join(cnIso, 'home');
+    const cnSentBin = path.join(cnIso, 'sent-bin');
+    fs.mkdirSync(cnTmp, { recursive: true });
+    fs.mkdirSync(cnRuns, { recursive: true });
+    fs.mkdirSync(cnHome, { recursive: true });
+    fs.mkdirSync(cnSentBin, { recursive: true });
+    fs.writeFileSync(path.join(cnSentBin, 'claude'), [
+      '#!/usr/bin/env bash',
+      'printf \'%s\\n\' \'{"type":"result","is_error":false,"result":"SENTINEL_CLAUDE_OK"}\'',
+      'exit 0',
+      '',
+    ].join('\n'), { mode: 0o755 });
+
+    const realHeteroWrap = path.join(cnIso, 'real-dispatch-hetero.sh');
+    fs.writeFileSync(realHeteroWrap, [
+      '#!/usr/bin/env bash',
+      `export HOME=${JSON.stringify(cnHome)} TMPDIR=${JSON.stringify(cnTmp)} AUTOPILOT_DISPATCH_RUNS_DIR=${JSON.stringify(cnRuns)} AUTOPILOT_ACCOUNTS_DIR=${JSON.stringify(path.join(cnIso, 'no-accounts'))} DISPATCH_DETACH=0 CONTEXT_WINDOW_GATE=off AUTOPILOT_CONTEXT_WINDOW_GATE=off`,
+      `exec bash ${JSON.stringify(path.join(__dirname, 'dispatch-hetero.sh'))} "$@"`,
+      '',
+    ].join('\n'), { mode: 0o755 });
+
+    process.env.PATH = `${cnSentBin}${path.delimiter}${savedEnv.PATH || ''}`;
+    process.env.ENGINE_CAPABILITY_DIR = path.join(cnIso, 'cap-store');
+    fs.mkdirSync(process.env.ENGINE_CAPABILITY_DIR, { recursive: true });
+
+    // (a) Implementer role on MiniMax-M3.1-Flash passes the real gate check and reaches sentinel claude.
+    const implRawDir = fs.mkdtempSync(path.join(cnIso, 'raw-impl-'));
+    const implStore = fs.mkdtempSync(path.join(cnIso, 'store-impl-'));
+    const implReal = runImplQualification({
+      ...baseOptions(implStore),
+      engine: 'MiniMax-M3.1-Flash',
+      model: 'MiniMax-M3.1-Flash',
+      runner: 'cc-shim',
+      family: 'minimax',
+      dispatchBin: realHeteroWrap,
+      rawDir: implRawDir,
+      testTruncateAfterCases: 1,
+    });
+    equal(implReal.started_cases, 1, 'real-gate implementer run started 1 case');
+    const implLedger = readJsonl(path.join(implRawDir, 'impl-dispatch-ledger.jsonl'));
+    equal(implLedger.length, 1, 'one ledger row recorded for implementer case');
+    equal(implLedger[0].dispatch_status, 'no_op', `implementer case passed real CN gate and ran sentinel claude (got status=${implLedger[0].dispatch_status}, err=${implLedger[0].dispatch_error || ''})`);
+    check(!String(implLedger[0].dispatch_error || '').includes('cn_model_dispatch_barred'), 'implementer case was not barred by CN gate');
+
+    // (b) Reviewer-role examination of MiniMax-M3.1-Flash is still refused by the real gate check.
+    const revStore = fs.mkdtempSync(path.join(cnIso, 'store-rev-'));
+    const revReal = runImplQualification({
+      ...baseOptions(revStore),
+      role: 'reviewer',
+      engine: 'MiniMax-M3.1-Flash',
+      model: 'MiniMax-M3.1-Flash',
+      runner: 'cc-shim',
+      family: 'minimax',
+      dispatchBin: realHeteroWrap,
+    });
+    equal(revReal.qualified, false, 'reviewer-role examination of minimax does not qualify');
+    equal(revReal.verdict.administration_outcome, 'infra_abort', 'reviewer-role refusal aborts administration as infra_abort');
+    equal(revReal.row.status, 'no_verdict', 'reviewer-role refusal emits no_verdict');
+    check(Array.isArray(revReal.verdict.dispatch_ledger) && revReal.verdict.dispatch_ledger.length > 0,
+      'reviewer-role refusal records dispatch_ledger');
+    for (const row of revReal.verdict.dispatch_ledger) {
+      equal(row.dispatch_status, 'precondition_failed', 'reviewer-role case refused at precondition');
+      equal(row.outcome, 'engine_unavailable', 'reviewer-role precondition maps to engine_unavailable');
+      check(/cn_model_dispatch_barred minimax review-role/.test(String(row.dispatch_error || '')),
+        `reviewer-role refusal names minimax review-role (got: ${row.dispatch_error})`);
+      check(!String(row.agent_log_tail || '').includes('SENTINEL_CLAUDE_OK'),
+        'sentinel claude never ran on refused reviewer-role case');
+    }
+
+    // (c) Fixture paths hitting sensitive_paths or core_dirs stay refused by the real gate check.
+    const implGen = require('../evals/impl-eval-generator');
+    const implGrd = require('../evals/impl-eval-grader');
+    const genHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js'))).digest('hex');
+    const corpusHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', 'evals', 'impl-capability-evidence-corpus.json'))).digest('hex');
+    const sampleAdmin = implGen.generateAdministration({
+      adminSeed: crypto.createHash('sha256').update(`cn-case:${genHash}`).digest('hex'),
+      oracleKey: crypto.createHash('sha256').update(`cn-oracle:${corpusHash}`).digest('hex'),
+    });
+    const templateCase = sampleAdmin.trials[0].cases[0];
+
+    const runSingleCustomCase = (repoFiles) => {
+      const caseWork = fs.mkdtempSync(path.join(cnIso, 'case-work-'));
+      const ledger = [];
+      const rawExchanges = [];
+      const budget = {
+        dispatch_reservation: implGrd.CORPUS.budget.dispatch_reservation,
+        spent: 0,
+        wall_deadline: Date.now() + 300_000,
+        engine_unavailable_seen: 0,
+      };
+      try {
+        runImplCase({
+          caseSpec: { ...templateCase, repo_files: repoFiles },
+          options: {
+            ...baseOptions(fs.mkdtempSync(path.join(cnIso, 'store-single-'))),
+            role: 'implementer',
+            engine: 'MiniMax-M3.1-Flash',
+            model: 'MiniMax-M3.1-Flash',
+            runner: 'cc-shim',
+            family: 'minimax',
+            implSandbox: 'bwrap',
+            dispatchBin: realHeteroWrap,
+          },
+          dispatchTimeout: '60s',
+          workRoot: caseWork,
+          canaryToken: sampleAdmin.canary_token,
+          budget,
+          ledger,
+          rawExchanges,
+        });
+      } finally {
+        fs.rmSync(caseWork, { recursive: true, force: true });
+      }
+      return ledger[0];
+    };
+
+    const sensRow = runSingleCustomCase({ ...templateCase.repo_files, 'app/.env': 'FAKE_KEY=fake-0000\n' });
+    equal(sensRow.dispatch_status, 'precondition_failed', 'sensitive fixture path refused at precondition');
+    equal(sensRow.outcome, 'engine_unavailable', 'sensitive fixture path maps to engine_unavailable');
+    check(/cn_model_dispatch_barred minimax sensitive/.test(String(sensRow.dispatch_error || '')),
+      `sensitive fixture path barred as sensitive (got: ${sensRow.dispatch_error})`);
+    check(!String(sensRow.agent_log_tail || '').includes('SENTINEL_CLAUDE_OK'),
+      'sentinel claude never ran on sensitive fixture path');
+
+    const coreRow = runSingleCustomCase({
+      ...templateCase.repo_files,
+      '.claude/cn-model-gate.json': `${JSON.stringify({ core_dirs: ['src/**'] })}\n`,
+      'src/core-module.js': 'module.exports = 1;\n',
+    });
+    equal(coreRow.dispatch_status, 'precondition_failed', 'core_dirs fixture path refused at precondition');
+    equal(coreRow.outcome, 'engine_unavailable', 'core_dirs fixture path maps to engine_unavailable');
+    check(/cn_model_dispatch_barred minimax core-dir/.test(String(coreRow.dispatch_error || '')),
+      `core_dirs fixture path barred as core-dir (got: ${coreRow.dispatch_error})`);
+    check(!String(coreRow.agent_log_tail || '').includes('SENTINEL_CLAUDE_OK'),
+      'sentinel claude never ran on core_dirs fixture path');
+  } finally {
+    restoreEnv();
+  }
 }
 
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);

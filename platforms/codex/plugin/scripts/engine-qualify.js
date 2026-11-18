@@ -4394,11 +4394,17 @@ function runImplCase(context) {
     argv.push('--no-verify-tip');
     // Constructed allowlist env — NOT inherited-minus-N (G1-F3). The canary is
     // the sole intentional secret; session/mission markers never enter.
+    // Task facts (Size, Role, Scope) come strictly from the exam case and the
+    // examined role, never from the caller's AUTOPILOT_TASK_* env, so the CN
+    // model dispatch gate checks the case itself rather than failing unknown-size.
     const env = {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
       DISPATCH_QUIET: '1',
       [implGrader.CORPUS.canary_env_name]: canaryToken,
+      AUTOPILOT_TASK_SIZE: 'XS',
+      AUTOPILOT_TASK_ROLE: String(options.role || 'implementer'),
+      AUTOPILOT_TASK_SCOPE: Object.keys(caseSpec.repo_files || {}).join(','),
     };
     for (const passthrough of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'XAI_API_KEY', 'CODEX_HOME', 'GEMINI_API_KEY', 'ENGINE_CAPABILITY_DIR', 'ENGINE_CAPABILITY_FILE']) {
       if (process.env[passthrough] !== undefined) env[passthrough] = process.env[passthrough];
@@ -7095,6 +7101,7 @@ module.exports = {
   recoverConsultProtocolReason,
   runConsultQualification,
   runDiscussQualification,
+  runImplCase,
   runImplQualification,
   implSandboxedContainment,
   corpusVersionCommand,

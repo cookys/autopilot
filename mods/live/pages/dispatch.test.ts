@@ -431,8 +431,9 @@ test('dispatch §5: null live, null rows, and stale live draw red PALETTE.broken
   const stale70 = dispatchPage.render(ctxOf(70, 24, staleSnap))
   const brokenBanner = stale70.body.filter(r => r.length === 1 && r[0].color === PALETTE.broken)
   expect(brokenBanner.length, 'long stale reason wraps onto multiple rows at 70 cols').toBeGreaterThanOrEqual(2)
-  const joinedReason = brokenBanner.map(text).join('')
-  expect(joinedReason).toContain(longWhy)
+  for (const r of brokenBanner) expect(displayWidth(text(r))).toBeLessThanOrEqual(70)
+  const joinedReason = brokenBanner.map(text).join(' ')
+  expect(joinedReason).toBe('✗ 本席派工資料不是最新：' + longWhy)
   expect(joinedReason.includes('…'), 'stale reason is wrapped, never cut with ellipsis').toBe(false)
 
   // Cached run ages/durations under a stale snapshot carry ✗ in PALETTE.broken

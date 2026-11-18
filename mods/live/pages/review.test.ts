@@ -13,7 +13,7 @@ import type { DecisionRow, LiveSnapshot } from '../model'
 import type { ConsoleSnapshot } from '../console'
 import { PALETTE } from '../ui'
 import { PAGES } from './index'
-import { actionRows, brokenRow as frameBroken, frameRows, staleBadge as frameBadge } from './frame'
+import { actionRows, brokenRow as frameBroken, frameRows, staleBadge as frameBadge, stripRows } from './frame'
 import type { Page, PageCtx, Row } from './frame'
 import { routeKey } from './keys'
 import type { KeyAction } from './keys'
@@ -434,12 +434,15 @@ test('review: fixed height = H, actions <= A, row width <= cols, and overflow en
   for (const [cols, rows] of [[160, 40], [120, 30], [80, 24]] as const) {
     for (const [name, lv, view] of states) {
       const ctx = ctxOf(cols, rows, lv, okConsole())
+      const sRows = stripRows(reviewPage, ctx, { pages: PAGES })
+      const stripLabel = sRows[sRows.length - 1].find(s => s.press === 'tab:6:review')!.text.replace(/^\d+\s+/, '')
       const raw = renderReview(ctx, view)
       expect(raw.actions.length <= actionRows(rows), `${name}@${cols}x${rows} actions`).toBe(true)
       const paneOut = drawReviewPane(cols, rows, lv, { view: view === undefined ? {} : { review: view } })
       expect(paneOut.rows.length, `${name}@${cols}x${rows} height`).toBe(rows)
       for (const r of paneOut.rows) expect(displayWidth(r) <= cols, `${name}@${cols}x${rows} width`).toBe(true)
-      expect(paneOut.rows[rows - 1], `${name}@${cols}x${rows} strip last`).toContain('審查')
+      expect(paneOut.rows[rows - 1], `${name}@${cols}x${rows} strip last`).toContain(stripLabel)
+      if (cols >= 120) expect(paneOut.rows[rows - 1], `${name}@${cols}x${rows} strip full name`).toContain(t('tab.review'))
       if (view?.expanded === false) {
         expect(paneOut.rows.some(r => r.includes('01M7N33J')), `${name}@${cols}x${rows} folded hides rows`).toBe(false)
       }
@@ -529,7 +532,10 @@ test('review en locale & aligned HEAD: renders cleanly in English across fold/un
     expect(flatFake(enFolded.zBtn as FakeNode)).toBe('unfold decided items')
   }
   const enEmpty = frameRows(reviewPage, ctxOf(80, 24, LIVE_EMPTY, okConsole(), tEn), { pages: PAGES }).map(text)
-  expect(enEmpty[21]).toContain('no review records yet')
+  expect(enEmpty[0]).toBe('Review')
+  expect(enEmpty.slice(1, 20).every(r => r === '')).toBe(true)
+  expect(enEmpty[20]).toContain('no review records yet')
+  expect(enEmpty.slice(20, 22).join('')).toBe('○ ' + EN['page.review.empty'])
   expect(enEmpty[22]).toBe('Nothing needs you')
 
   const enMissing = frameRows(reviewPage, ctxOf(80, 24, null, okConsole(), tEn), { pages: PAGES }).map(text)

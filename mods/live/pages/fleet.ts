@@ -103,7 +103,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   }
   if (total === 0) body.push([{ text: ctx.t('page.fleet.none'), dim: true }])
 
-  const wLine = 20, wState = 8, wOwner = 14, wLast = 7, wLastNarrow = 6
+  const wLine = 20, wState = 8, wOwner = 14, wLast = 7, wLastNarrow = 7
   if (!ctx.shortBody && wide && total > 0) body.push([{ text: '  ' + pad(ctx.t('page.fleet.col_line'), wLine + 2) + pad(ctx.t('page.fleet.col_state'), wState) + pad(ctx.t('page.fleet.col_owner'), wOwner) + pad(ctx.t('page.fleet.col_task'), Math.max(10, cols - 2 - wLine - 2 - wState - wOwner - wLast)) + padL(ctx.t('page.fleet.col_last'), wLast), color: PALETTE.structure }])
   const lineRow = (r: FleetRow, i: number): Row => {
     const st = STATES[r.sid]
@@ -121,7 +121,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
     }
     const lastText = padL((stale ? GLYPHS.state.failed : '') + last, wLastNarrow)
     const lastSeg: Seg = stale ? staleBadge(lastText) : { text: lastText, ...(st.wordKey === undefined ? {} : { color: st.wordKey }) }
-    const labelShown = fit(r.line.label, Math.max(8, cols - 20))
+    const labelShown = fit(r.line.label, Math.max(8, cols - 22))
     const usedLeft = 1 + 2 + displayWidth(labelShown) + 1 + displayWidth(word) + 1
     const taskW = Math.max(2, cols - usedLeft - wLastNarrow)
     return [{ text: mark, press }, { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }), press }, { text: labelShown + ' ', press },

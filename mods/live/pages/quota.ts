@@ -140,7 +140,7 @@ function rowWrappedLen(row: Row, cols: number): number {
   }
   return lines + (hasCur ? 1 : 0)
 }
-const rowsWrappedLen = (list: Row[], cols: number): number => list.reduce((n, r) => n + rowWrappedLen(r, cols), 0)
+export const rowsWrappedLen = (list: Row[], cols: number): number => list.reduce((n, r) => n + rowWrappedLen(r, cols), 0)
 
 export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded: false }): { body: Row[]; actions: Row[] } {
   const { t } = ctx
@@ -267,17 +267,25 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   }
 
   if (ctx.shortBody) {
-    // R5 compact mode (<= 4 body rows): reserve the focused pool's full wrapped verdict first (plus >= 1 pool row when room >= 1), then fill remaining rows with pools and seats.
+    // R5 compact mode (<= 4 body rows): reserve the focused pool's full wrapped verdict first, then fit pool rows and tail rows within room.
     const vLen = rowsWrappedLen(verdictBlock, cols)
-    const maxPools = room <= 0 ? 0 : Math.max(1, room - vLen)
-    const shownPools = pickPools(maxPools, false)
-    const tail: Row[] = []
+    if (room <= 0) return { body: [poolRowsAll[focus], ...verdictBlock], actions }
+    const shownPools = pickPools(Math.max(0, room - vLen), false)
+    const tailCandidates: Row[] = []
     if (view.expanded) {
-      if (mine.length === 0) tail.push(kv(t('page.quota.f_seats'), t('page.quota.seat_none')))
-      else mine.forEach((s, i) => tail.push(kv(i === 0 ? t('page.quota.f_seats') : '', seatRowText(s), s.stale === true ? PALETTE.broken : undefined)))
-      tail.push(openRow)
+      if (mine.length === 0) tailCandidates.push(kv(t('page.quota.f_seats'), t('page.quota.seat_none')))
+      else mine.forEach((s, i) => tailCandidates.push(kv(i === 0 ? t('page.quota.f_seats') : '', seatRowText(s), s.stale === true ? PALETTE.broken : undefined)))
+      tailCandidates.push(openRow)
     } else {
-      tail.push(seatsSummary, openRow)
+      tailCandidates.push(seatsSummary, openRow)
+    }
+    let rem = room - rowsWrappedLen(shownPools, cols) - vLen
+    const tail: Row[] = []
+    for (const r of tailCandidates) {
+      const w = rowWrappedLen(r, cols)
+      if (w > rem) break
+      tail.push(r)
+      rem -= w
     }
     return { body: [...shownPools, ...verdictBlock, ...tail], actions }
   }
@@ -317,7 +325,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   }
   let keptHeader = headerRows
   if (headLen + 1 + rowsWrappedLen(keptFocus, cols) > room) keptHeader = []
-  const poolRoom = Math.max(1, room - rowsWrappedLen(keptHeader, cols) - rowsWrappedLen(keptFocus, cols))
+  const poolRoom = Math.max(0, room - rowsWrappedLen(keptHeader, cols) - rowsWrappedLen(keptFocus, cols))
   const shownPools = pickPools(poolRoom, true)
   return { body: [...keptHeader, ...shownPools, ...keptFocus], actions }
 }

@@ -308,3 +308,38 @@ test('fleet R10 & R11: at 80x24 o/z/f are one row with 3 clickable non-empty But
     expect(raw.endsWith('2 時')).toBe(true)
   }
 })
+
+test('fleet narrow 7-cell ages: at 80x24 with a stale brief, lines aged 15 min (en) and 100 天 (zh-TW) keep every rendered row <= 80 cells with the age at the right edge', () => {
+  const DAY = 86_400_000
+  const agedLines = [
+    line('cap15', 'capacity · h1', 'PM', [issue('wait_untyped', '等待沒寫等誰', 'failed', 15 * MIN)]),
+    line('longlbl', 'long-production-line-label-exceeding-sixty-columns-at-narrow-width', 'PM', [issue('T4', 'member offline check', 'failed', 15 * MIN)]),
+    line('old100', 'revival · h5', 'game-lead', [issue('idle', '閒置過久等待清理與交接確認以及後續排程檢查避免單列過寬換行', 'stalled', 100 * DAY)]),
+  ]
+  const staleBrief = {
+    ...(snapOf({ lines: agedLines }) as Record<string, unknown>),
+    generated_at_ms: NOW - 15 * MIN,
+    sources: { tasks: { at_ms: NOW - 15 * MIN, state: 'stale' }, hosts: { at_ms: NOW - 15 * MIN, state: 'expired' } },
+  }
+
+  for (const [locale, id, wantAge] of [['en', 'cap15', '✗15 min'], ['en', 'longlbl', '✗15 min'], ['zh-TW', 'old100', '✗100 天']] as const) {
+    const ctx = { live: null, console: staleBrief, size: { cols: 80, rows: 24 }, t: makeT(locale), nowMs: NOW } as never
+    const rendered = fleetPage.render(ctx)
+    for (const r of [...rendered.body, ...rendered.actions]) {
+      const raw = r.map(s => s.text).join('')
+      expect(displayWidth(raw), `${locale} render row <= 80: ${raw}`).toBeLessThanOrEqual(80)
+    }
+    const framed = frameRows(fleetPage, ctx)
+    expect(framed.length).toBe(24)
+    for (const r of framed) {
+      const raw = r.map(s => s.text).join('')
+      expect(displayWidth(raw), `${locale} framed row <= 80: ${raw}`).toBeLessThanOrEqual(80)
+    }
+    const targetPress = 'fleet:see:' + id
+    const listRows = framed.filter(r => r.some(s => s.press === targetPress))
+    expect(listRows.length, `${locale} ${id} stays a single unwrapped row`).toBe(1)
+    const rowRaw = listRows[0].map(s => s.text).join('')
+    expect(displayWidth(rowRaw), `${locale} ${id} fixed right edge at 80`).toBe(80)
+    expect(rowRaw.endsWith(wantAge), `${locale} ${id} ends with ${wantAge}: ${rowRaw}`).toBe(true)
+  }
+})

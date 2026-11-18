@@ -747,6 +747,7 @@
   "page.spend.reset": "重置 {t}",
   "page.spend.q_stale": "{min} 分未更新，以上是舊數字",
   "page.spend.q_stale_plain": "本席額度過期，以上是舊數字",
+  "page.spend.q_failed_stale": "fleet seats --quota 指令失敗，用 {age}的舊結果",
   "page.spend.today_label": "今天",
   "page.spend.see_quota": "額度看",
   "page.spend.no_spend": "無來源：沒有花費資料",

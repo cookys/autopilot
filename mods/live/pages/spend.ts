@@ -7,6 +7,7 @@ import type { AccountView, QuotaWindow, Seg, SpendView } from '../model'
 import { displayWidth, sparkText, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE, meterKey, money } from '../ui'
 import type { Page, PageCtx } from './frame'
+import type { KeyAction } from './keys'
 import { SEATS_RED_AFTER_MS, seatQuota } from './now'
 import type { SeatQuotaRow } from './now'
 import { poolKey, poolLabel } from './quota-pick'
@@ -15,6 +16,36 @@ import type { Row } from './rows'
 
 export type SpendViewOpts = { focus: number; expanded: boolean }
 export const DEFAULT_VIEW: SpendViewOpts = { focus: 0, expanded: false }
+export type SpendCtx = PageCtx & { spend?: SpendViewOpts; view?: Record<string, SpendViewOpts> }
+
+const clampFocus = (focus: number): number => Math.max(0, Math.min(1, focus))
+
+export function spendReduce(view: SpendViewOpts, key: KeyAction): SpendViewOpts {
+  if (key.kind === 'fold') return { focus: clampFocus(view.focus), expanded: !view.expanded }
+  if (key.kind === 'move') return { ...view, focus: clampFocus(view.focus + key.by) }
+  return view
+}
+
+export function makeSpendState(initial: SpendViewOpts = DEFAULT_VIEW) {
+  let cur: SpendViewOpts = { focus: clampFocus(initial.focus), expanded: initial.expanded }
+  return {
+    view: (): SpendViewOpts => ({ ...cur }),
+    reset: (): void => { cur = { focus: clampFocus(initial.focus), expanded: initial.expanded } },
+    set: (patch: Partial<SpendViewOpts>): SpendViewOpts => {
+      cur = {
+        focus: clampFocus(patch.focus ?? cur.focus),
+        expanded: patch.expanded ?? cur.expanded,
+      }
+      return { ...cur }
+    },
+    apply: (key: KeyAction): SpendViewOpts => {
+      cur = spendReduce(cur, key)
+      return { ...cur }
+    },
+  }
+}
+
+export const spendState = makeSpendState()
 
 const DASH = GLYPHS.structure.empty
 const padR = (text: string, w: number): string => text + ' '.repeat(Math.max(0, w - displayWidth(text)))
@@ -206,7 +237,7 @@ export function spendView(ctx: PageCtx, view: SpendViewOpts = DEFAULT_VIEW): { b
   const wide = size.cols >= 100
   const short = ctx.shortBody === true
   const indent = wide ? '  ' : ' '
-  const focus = Math.max(0, Math.min(view.focus, 1))
+  const focus = clampFocus(view.focus)
   const qFeed = seatQuota.view()
   const qWins = live?.account?.quota ?? []
   const win5 = qWins.find(w => w.kind === 'five_hour')
@@ -230,18 +261,23 @@ export function spendView(ctx: PageCtx, view: SpendViewOpts = DEFAULT_VIEW): { b
     const label7 = wide ? t('label.quota_7d') : t('page.spend.q_7d_narrow')
     body.push(meterRow({ focused: focus === 0, label: label5, pct: pct5, reset: reset5, wide, stale: staleQuota }))
     body.push(meterRow({ focused: focus === 1, label: label7, pct: pct7, reset: reset7, wide, stale: staleQuota }))
+  }
+  if (row !== null) {
     if (staleQuota) {
       const msg = ageMin > 0 ? t('page.spend.q_stale', { min: ageMin }) : t('page.spend.q_stale_plain')
       body.push(brokenRow(indent + GLYPHS.state.failed + ' ' + msg))
-    } else if (row !== null && qFeed.failed && ageMs !== null) {
+      if (qFeed.failed) {
+        const failMsg = ageMs !== null ? t('page.spend.q_failed_stale', { age: ageOf(t, ageMs) }) : t('page.now.q_failed_none')
+        body.push(brokenRow(indent + GLYPHS.state.failed + ' ' + failMsg))
+      }
+    } else if (qFeed.failed && ageMs !== null) {
       body.push([{ text: indent + t('page.now.q_failed', { n: Math.floor(ageMs / 1000) }), color: PALETTE.attention }])
-    } else if (row === null && qFeed.got_at_ms !== null && ageMs !== null) {
-      body.push(brokenRow(indent + GLYPHS.state.failed + ' ' + t('page.now.q_no_self', { age: ageOf(t, ageMs) })))
-    } else if (row === null && qFeed.failed) {
-      body.push(brokenRow(indent + GLYPHS.state.failed + ' ' + t('page.now.q_failed_none')))
     }
   } else if (qFeed.got_at_ms !== null && ageMs !== null) {
     body.push(brokenRow(indent + GLYPHS.state.failed + ' ' + t('page.now.q_no_self', { age: ageOf(t, ageMs) })))
+    if (qFeed.failed) {
+      body.push(brokenRow(indent + GLYPHS.state.failed + ' ' + t('page.spend.q_failed_stale', { age: ageOf(t, ageMs) })))
+    }
   } else {
     body.push(brokenRow(indent + GLYPHS.state.failed + ' ' + t(qFeed.failed ? 'page.now.q_failed_none' : 'page.now.q_none')))
   }
@@ -272,7 +308,14 @@ export function spendView(ctx: PageCtx, view: SpendViewOpts = DEFAULT_VIEW): { b
 
   if (wide && !short) body.push([{ text: '' }])
   body.push([{ text: indent + t('page.spend.see_quota') + ' ' }, { text: '[4]', press: 'tab:4:quota', color: PALETTE.action }])
-  return { body, actions: [] }
+  const brokenSource = row === null || staleQuota || live === null || live.state !== 'ok' || sp === null
+  return { body, actions: brokenSource ? [[{ text: t('frame.unknown'), dim: true }]] : [] }
 }
 
-export const spendPage: Page = { id: 'spend', key: '7', title: '花費', framed: true, render: ctx => spendView(ctx) }
+function renderSpend(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
+  const ctx = ctx0 as SpendCtx
+  const view = ctx.spend ?? ctx.view?.spend ?? spendState.view()
+  return spendView(ctx0, view)
+}
+
+export const spendPage: Page = { id: 'spend', key: '7', title: '花費', framed: true, render: renderSpend }

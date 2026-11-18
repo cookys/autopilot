@@ -747,6 +747,7 @@
   "page.spend.reset": "resets {t}",
   "page.spend.q_stale": "{min} min since update, figures above are old",
   "page.spend.q_stale_plain": "seat quota stale, figures above are old",
+  "page.spend.q_failed_stale": "fleet seats --quota failed, using cached result from {age}",
   "page.spend.today_label": "today",
   "page.spend.see_quota": "Full quota",
   "page.spend.no_spend": "no source: no spend data published",

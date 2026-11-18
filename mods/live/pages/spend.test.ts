@@ -10,9 +10,11 @@ import type { ConsoleSnapshot } from '../console'
 import { actionRows, brokenRow as frameBroken, frameRows, staleBadge as frameBadge } from './frame'
 import type { Page, PageCtx, Row } from './frame'
 import { PAGES } from './index'
+import { routeKey } from './keys'
 import { seatQuota } from './now'
 import { brokenRow, staleBadge } from './rows'
-import { spendPage, spendView } from './spend'
+import { spendPage, spendState } from './spend'
+import type { SpendCtx } from './spend'
 
 const t = makeT('zh-TW')
 const MIN = 60_000
@@ -123,11 +125,13 @@ const ctxOf = (cols: number, rows: number, con: ConsoleSnapshot | null = calmCon
 })
 
 async function feedFresh(): Promise<void> {
+  spendState.reset()
   seatQuota.reset()
   await seatQuota.refresh(okRun(SEAT_JSON), NOW - 40_000)
 }
 
 async function feedStale25m(): Promise<void> {
+  spendState.reset()
   seatQuota.reset()
   await seatQuota.refresh(okRun(SEAT_JSON), NOW - 25 * MIN)
   await seatQuota.refresh(failRun, NOW - 10_000)
@@ -155,6 +159,7 @@ const GOLD_80_STALE_BODY = [
   '▸5時 ▰▰▱▱▱▱▱▱▱▱ 17% ✗ 重置 03:40',
   ' 7天 ▰▰▰▰▰▰▰▱▱▱ 68% ✗ 重置 週六',
   ' ✗ 25 分未更新，以上是舊數字',
+  ' ✗ fleet seats --quota 指令失敗，用 25 分前的舊結果',
   ' 今天 $3.10 ▁▂▃▅▂▁▂▅▇▃',
   ' 額度看 [4]',
 ]
@@ -207,19 +212,19 @@ test('spend golden: 160x40, 120x30, 80x24 and 80x24 stale match the four mockups
   expect(out80[23]).toContain('7 花')
   expect(raw80[23].find(s => s.press === 'tab:7:spend')?.color).toBe(PALETTE.here)
 
-  // 4. 80x24 stale own-seat quota (header 1 + blank gap 15 + body 6 + calm empty state 1 + strip 1 = 24)
+  // 4. 80x24 stale own-seat quota after refresh failure (header 1 + blank gap 14 + body 7 + unknown action row 1 + strip 1 = 24)
   await feedStale25m()
   const rawStale = frameRows(spendPage, ctxOf(80, 24, calmConsole(), liveOf(HOURLY_NARROW)))
   const out80Stale = rawStale.map(text)
   expect(out80Stale.length).toBe(24)
-  expect(out80Stale.slice(1, 16).every(r => r === '')).toBe(true)
-  expect(diffRows(out80Stale.slice(16, 22), GOLD_80_STALE_BODY)).toEqual([])
-  expect(out80Stale[22]).toBe('沒有要你處理的事')
-  // Stale marks and warning row use PALETTE.broken, no background, no inverse, no bold
-  const warningRow = rawStale[19]
-  expect(warningRow[0].color).toBe(PALETTE.broken)
+  expect(out80Stale.slice(1, 15).every(r => r === '')).toBe(true)
+  expect(diffRows(out80Stale.slice(15, 22), GOLD_80_STALE_BODY)).toEqual([])
+  expect(out80Stale[22]).toBe('資料不足，無法判定')
+  // Stale marks, age warning row and refresh failure reason row use PALETTE.broken, no background, no inverse, no bold
+  expect(rawStale[16].some(s => s.text.includes(GLYPHS.state.failed) && s.color === PALETTE.broken)).toBe(true)
   expect(rawStale[17].some(s => s.text.includes(GLYPHS.state.failed) && s.color === PALETTE.broken)).toBe(true)
-  expect(rawStale[18].some(s => s.text.includes(GLYPHS.state.failed) && s.color === PALETTE.broken)).toBe(true)
+  expect(rawStale[18][0].color).toBe(PALETTE.broken)
+  expect(rawStale[19][0].color).toBe(PALETTE.broken)
   for (const r of rawStale) {
     for (const s of r as (M.Seg & { background?: unknown; inverse?: unknown })[]) {
       expect(s.background).toBeUndefined()
@@ -237,8 +242,13 @@ test('spend: negative control confirms diffRows reports planted golden drift', a
   expect(diffRows(out80.slice(17, 22), mutated).length).toBe(1)
 })
 
-test('spend: fold pair (collapsed vs expanded) reveals exact stated detail count, binds [z] Button, and overflows into ↓ 還有 N 列 when tall', async () => {
+test('spend: persisted interaction state on registered spendPage survives rerenders across z expand/collapse and j/k focus movement, and overflows into ↓ 還有 N 列 when tall', async () => {
   await feedFresh()
+  const regPage = PAGES.find(p => p.id === 'spend')!
+  expect(regPage).toBe(spendPage)
+  const keyState = { page: 'spend', paneFocus: true, focusedButton: false, textMode: false }
+  const sendKey = (k: string) => spendState.apply(routeKey(k, keyState))
+
   const richLive = liveOf(HOURLY_WIDE, {
     detail: {
       ...M.NO_DETAIL,
@@ -256,46 +266,83 @@ test('spend: fold pair (collapsed vs expanded) reveals exact stated detail count
     },
   })
 
-  const viewPage = (expanded: boolean, focus = 0): Page => ({ ...spendPage, render: c => spendView(c, { focus, expanded }) })
+  try {
+    for (const [cols, rows] of [[160, 40], [120, 30], [80, 24]] as const) {
+      spendState.reset()
+      const ctx = ctxOf(cols, rows, calmConsole(), richLive)
 
-  for (const [cols, rows] of [[160, 40], [120, 30], [80, 24]] as const) {
-    const ctx = ctxOf(cols, rows, calmConsole(), richLive)
-    const collapsed = viewPage(false).render(ctx)
-    const expanded = viewPage(true).render(ctx)
-    expect(collapsed.actions).toEqual([])
-    expect(expanded.actions).toEqual([])
+      // 1. Default render through registered spendPage: collapsed, focus 0 on 5h
+      const collapsed = regPage.render(ctx)
+      const framedCollapsed = frameRows(regPage, ctx)
+      expect(collapsed.actions).toEqual([])
+      expect(framedCollapsed.length).toBe(rows)
+      const foldLine = collapsed.body.map(text).find(l => l.includes('[z]'))
+      expect(foldLine).toBeDefined()
+      const stated = Number(/（(\d+) 列）/.exec(foldLine ?? '')?.[1] ?? -1)
+      expect(stated).toBe(5) // spend_limit + brain cap + host split + 24h sum/peak + account
+      expect(collapsed.body.map(text)[1].startsWith(cols >= 100 ? '▸ 5 小時' : '▸5時')).toBe(true)
+      expect(collapsed.body.map(text)[2].startsWith(cols >= 100 ? '  7 天' : ' 7天')).toBe(true)
 
-    const foldLine = collapsed.body.map(text).find(l => l.includes('[z]'))
-    expect(foldLine).toBeDefined()
-    const stated = Number(/（(\d+) 列）/.exec(foldLine ?? '')?.[1] ?? -1)
-    expect(stated).toBe(5) // spend_limit + brain cap + host split + 24h sum/peak + account
-    expect(expanded.body.length - collapsed.body.length).toBe(stated)
-    expect(expanded.body.map(text).some(l => l.includes('[z] 收合明細'))).toBe(true)
-    expect(expanded.body.map(text).some(l => l.includes('brain') && l.includes('$8.20 / $50.00'))).toBe(true)
-    expect(expanded.body.map(text).some(l => l.includes('本機今日 $12.40'))).toBe(true)
-    expect(expanded.body.map(text).some(l => l.includes('24 時合計') && l.includes('尖峰'))).toBe(true)
-    expect(expanded.body.map(text).some(l => l.includes('dev@example.com'))).toBe(true)
+      // 2. Press z -> rerender registered spendPage -> expanded details appear
+      sendKey('z')
+      const expanded = regPage.render(ctx)
+      const framedExpanded = frameRows(regPage, ctx)
+      expect(expanded.actions).toEqual([])
+      expect(framedExpanded.length).toBe(rows)
+      expect(expanded.body.length - collapsed.body.length).toBe(stated)
+      expect(expanded.body.map(text).some(l => l.includes('[z] 收合明細'))).toBe(true)
+      expect(expanded.body.map(text).some(l => l.includes('brain') && l.includes('$8.20 / $50.00'))).toBe(true)
+      expect(expanded.body.map(text).some(l => l.includes('本機今日 $12.40'))).toBe(true)
+      expect(expanded.body.map(text).some(l => l.includes('24 時合計') && l.includes('尖峰'))).toBe(true)
+      expect(expanded.body.map(text).some(l => l.includes('dev@example.com'))).toBe(true)
 
-    const framedCollapsed = frameRows(viewPage(false), ctx)
-    const framedExpanded = frameRows(viewPage(true), ctx)
-    expect(framedCollapsed.length).toBe(rows)
-    expect(framedExpanded.length).toBe(rows)
-    for (const r of [...framedCollapsed, ...framedExpanded]) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
+      // 3. Press j (and clamp on extra ArrowDown) -> rerender registered spendPage -> focus moves to 7d while expanded stays open
+      sendKey('j')
+      sendKey('ArrowDown')
+      const focused7dOpen = regPage.render(ctx).body.map(text)
+      expect(focused7dOpen[1].startsWith(cols >= 100 ? '  5 小時' : ' 5時')).toBe(true)
+      expect(focused7dOpen[2].startsWith(cols >= 100 ? '▸ 7 天' : '▸7天')).toBe(true)
+      expect(focused7dOpen.some(l => l.includes('[z] 收合明細'))).toBe(true)
+
+      // 4. Press z again -> rerender registered spendPage -> collapses back while focus 1 on 7d survives
+      sendKey('z')
+      const reCollapsed = regPage.render(ctx).body.map(text)
+      expect(reCollapsed.length).toBe(collapsed.body.length)
+      expect(reCollapsed.some(l => l.includes('[z] 展開明細（5 列）'))).toBe(true)
+      expect(reCollapsed.some(l => l.includes('dev@example.com'))).toBe(false)
+      expect(reCollapsed[1].startsWith(cols >= 100 ? '  5 小時' : ' 5時')).toBe(true)
+      expect(reCollapsed[2].startsWith(cols >= 100 ? '▸ 7 天' : '▸7天')).toBe(true)
+
+      // 5. Press k (and clamp on extra ArrowUp) -> rerender registered spendPage -> focus returns to 5h
+      sendKey('k')
+      sendKey('ArrowUp')
+      const focused5h = regPage.render(ctx).body.map(text)
+      expect(focused5h[1].startsWith(cols >= 100 ? '▸ 5 小時' : '▸5時')).toBe(true)
+      expect(focused5h[2].startsWith(cols >= 100 ? '  7 天' : ' 7天')).toBe(true)
+
+      for (const r of [...framedCollapsed, ...framedExpanded]) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
+    }
+
+    // SpendCtx override also drives registered spendPage.render without mutating persisted state
+    spendState.reset()
+    const ctxOverride: SpendCtx = { ...ctxOf(160, 40, calmConsole(), richLive), spend: { focus: 1, expanded: true } }
+    const fromCtx = regPage.render(ctxOverride).body.map(text)
+    expect(fromCtx[2].startsWith('▸ 7 天')).toBe(true)
+    expect(fromCtx.some(l => l.includes('[z] 收合明細'))).toBe(true)
+    expect(spendState.view()).toEqual({ focus: 0, expanded: false })
+
+    // Overflow: when expanded body exceeds room (80x11 -> room = 11 - head 1 - strip 1 - emptyState 1 = 8 < 11 body rows), frameRows on registered spendPage ends body with ↓ 還有 N 列
+    sendKey('z')
+    const tightOut = frameRows(regPage, ctxOf(80, 11, calmConsole(), richLive)).map(text)
+    expect(tightOut.length).toBe(11)
+    expect(tightOut[8]).toBe('↓ 還有 4 列')
+    expect(tightOut[9]).toBe('沒有要你處理的事')
+  } finally {
+    spendState.reset()
   }
-
-  // Focus index 1 moves ▸ from 5h to 7d
-  const focus1 = viewPage(false, 1).render(ctxOf(160, 40, calmConsole(), richLive)).body.map(text)
-  expect(focus1[1].startsWith('  5 小時')).toBe(true)
-  expect(focus1[2].startsWith('▸ 7 天')).toBe(true)
-
-  // Overflow: when expanded body exceeds room (e.g. 80x11 -> room = 11 - head 1 - strip 1 - emptyState 1 = 8 < 11 body rows), frameRows ends body with ↓ 還有 N 列
-  const tightOut = frameRows(viewPage(true), ctxOf(80, 11, calmConsole(), richLive)).map(text)
-  expect(tightOut.length).toBe(11)
-  expect(tightOut[8]).toBe('↓ 還有 4 列')
-  expect(tightOut[9]).toBe('沒有要你處理的事')
 })
 
-test('spend: Pane mounts [4] jump Button to quota and [z] fold Button bound to hotkey z', async () => {
+test('spend: Pane mounts [4] jump Button to quota, [z] fold Button toggles expansion and collapse on rerender, and j/k move focus on rerender', async () => {
   await feedFresh()
   type Node = { kind: string; props: Record<string, any> }
   const mk = (kind: string) => (props: Record<string, any>): Node => ({ kind, props })
@@ -322,7 +369,7 @@ test('spend: Pane mounts [4] jump Button to quota and [z] fold Button bound to h
   const pages: Page[] = PAGES
   const routed: string[] = []
   const keys: string[] = []
-  const tree = walk(Pane(
+  const drawPane = () => walk(Pane(
     EL as never,
     richLive,
     'spend',
@@ -342,35 +389,71 @@ test('spend: Pane mounts [4] jump Button to quota and [z] fold Button bound to h
       pages,
       pageId: 'spend',
       onPage: id => routed.push(id),
-      onKey: k => keys.push(k.kind),
+      onKey: k => { keys.push(k.kind); spendState.apply(k) },
       console: calmConsole(),
       nowMs: NOW,
       rows: 30,
     },
   ))
+  const rowTexts = (tree: Node[]) => tree.filter(n => n.kind === 'Box' && /^f\d+$/.test(String(n.props.key ?? ''))).map(flat)
 
-  // No empty-label Buttons outside FOCUS_ANCHOR_KEY
-  expect(tree.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && flat(n).trim() === '')).toEqual([])
+  try {
+    const tree1 = drawPane()
+    // No empty-label Buttons outside FOCUS_ANCHOR_KEY
+    expect(tree1.filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY && flat(n).trim() === '')).toEqual([])
 
-  // [4] in body is a clickable Button routing to quota, and strip hotkey '4' also routes to quota
-  const bodyJump = tree.find(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.endsWith(':quota'))!
-  expect(bodyJump).toBeDefined()
-  expect(flat(bodyJump)).toBe('[4]')
-  bodyJump.props.onPress()
-  expect(routed).toEqual(['quota'])
+    // [4] in body is a clickable Button routing to quota, and strip hotkey '4' also routes to quota
+    const bodyJump = tree1.find(n => n.kind === 'Button' && typeof n.props.key === 'string' && n.props.key.endsWith(':quota'))!
+    expect(bodyJump).toBeDefined()
+    expect(flat(bodyJump)).toBe('[4]')
+    bodyJump.props.onPress()
+    expect(routed).toEqual(['quota'])
 
-  const strip4 = tree.find(n => n.kind === 'Button' && n.props.hotkey === '4')!
-  expect(strip4).toBeDefined()
-  expect(flat(strip4).trim()).toBe('額度')
-  strip4.props.onPress()
-  expect(routed).toEqual(['quota', 'quota'])
+    const strip4 = tree1.find(n => n.kind === 'Button' && n.props.hotkey === '4')!
+    expect(strip4).toBeDefined()
+    expect(flat(strip4).trim()).toBe('額度')
+    strip4.props.onPress()
+    expect(routed).toEqual(['quota', 'quota'])
 
-  // [z] fold hint has a matching Button with hotkey 'z'
-  const zBtn = tree.find(n => n.kind === 'Button' && n.props.hotkey === 'z')!
-  expect(zBtn).toBeDefined()
-  expect(flat(zBtn)).toContain('展開明細')
-  zBtn.props.onPress()
-  expect(keys).toEqual(['fold'])
+    // Initial Pane render is collapsed with focus on 5 小時
+    expect(rowTexts(tree1).some(l => l.startsWith('▸ 5 小時'))).toBe(true)
+    expect(rowTexts(tree1).some(l => l.includes('$8.20 / $50.00'))).toBe(false)
+    const zBtnOpen = tree1.find(n => n.kind === 'Button' && n.props.hotkey === 'z')!
+    expect(zBtnOpen).toBeDefined()
+    expect(flat(zBtnOpen)).toContain('展開明細')
+
+    // Click [z] -> rerender Pane -> expanded details and 收合明細 render
+    zBtnOpen.props.onPress()
+    expect(keys).toEqual(['fold'])
+    const tree2 = drawPane()
+    expect(rowTexts(tree2).some(l => l.includes('$8.20 / $50.00'))).toBe(true)
+    expect(rowTexts(tree2).some(l => l.includes('本機今日 $12.40'))).toBe(true)
+    const zBtnClose = tree2.find(n => n.kind === 'Button' && n.props.hotkey === 'z')!
+    expect(flat(zBtnClose)).toContain('收合明細')
+
+    // Move focus with j -> rerender Pane -> ▸ moves to 7 天 while expanded stays open
+    spendState.apply(routeKey('j', { page: 'spend', paneFocus: true, focusedButton: false, textMode: false }))
+    const tree3 = drawPane()
+    expect(rowTexts(tree3).some(l => l.startsWith('  5 小時'))).toBe(true)
+    expect(rowTexts(tree3).some(l => l.startsWith('▸ 7 天'))).toBe(true)
+    expect(rowTexts(tree3).some(l => l.includes('$8.20 / $50.00'))).toBe(true)
+
+    // Click [z] again -> rerender Pane -> collapses details while keeping focus on 7 天
+    zBtnClose.props.onPress()
+    expect(keys).toEqual(['fold', 'fold'])
+    const tree4 = drawPane()
+    expect(rowTexts(tree4).some(l => l.includes('$8.20 / $50.00'))).toBe(false)
+    expect(rowTexts(tree4).some(l => l.startsWith('▸ 7 天'))).toBe(true)
+    expect(flat(tree4.find(n => n.kind === 'Button' && n.props.hotkey === 'z')!)).toContain('展開明細')
+
+    // Move focus with k -> rerender Pane -> ▸ returns to 5 小時
+    spendState.apply(routeKey('k', { page: 'spend', paneFocus: true, focusedButton: false, textMode: false }))
+    const tree5 = drawPane()
+    expect(rowTexts(tree5).some(l => l.startsWith('▸ 5 小時'))).toBe(true)
+    expect(rowTexts(tree5).some(l => l.startsWith('  7 天'))).toBe(true)
+  } finally {
+    spendState.reset()
+  }
 })
 
 test('spend: missing and stale sources render red reason rows, wrap without ellipsis truncation, and set empty state appropriately', async () => {
@@ -397,6 +480,7 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
   expect(wrapped.some(l => l.includes('$3.10 ✗'))).toBe(true)
   expect(wrapped.join('').replace(/\s+/g, '')).toContain(('本席花費資料過期：' + longReason).replace(/\s+/g, ''))
   expect(wrapped.some(l => l.includes('…'))).toBe(false)
+  expect(wrapped[22]).toBe('資料不足，無法判定')
 
   // 3. Pending card on console updates empty state from 沒有要你處理的事 to 待決 1 張卡等你
   const pendingCon = calmConsole({
@@ -406,7 +490,7 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
   const withCard = frameRows(spendPage, ctxOf(80, 24, pendingCon, liveOf(HOURLY_NARROW))).map(text)
   expect(withCard[22]).toBe('待決 1 張卡等你')
 
-  // 4. Null spend object in ok live snapshot renders red 無來源：沒有花費資料, and null pct renders — (never 0%)
+  // 4. Null spend object in ok live snapshot renders red 無來源：沒有花費資料, null pct renders — (never 0%), and empty state is 資料不足，無法判定
   await seatQuota.refresh(okRun(JSON.stringify([{ seat: 'codeforge--claude', pool_key: 'team', five_hour_pct: null, seven_day_pct: null, stale: false, self: true }])), NOW + 65_000)
   const noSpendLive = liveOf(null, {
     detail: { ...M.NO_DETAIL, now_ms: NOW + 65_000, spend: null },
@@ -417,6 +501,76 @@ test('spend: missing and stale sources render red reason rows, wrap without elli
   expect(noSpendOut.some(l => l.includes('無來源：沒有花費資料'))).toBe(true)
   expect(noSpendOut.some(l => /\b0%/.test(l))).toBe(false)
   expect(noSpendOut.some(l => l.includes('5 小時') && l.includes('—'))).toBe(true)
+  expect(noSpendOut[28]).toBe('資料不足，無法判定')
+
+  // 5. Missing live snapshot with ok console renders red 無來源：本席沒有 live 資料 and 資料不足，無法判定 (never 沒有要你處理的事)
+  await feedFresh()
+  const noLiveWithCon = frameRows(spendPage, ctxOf(80, 24, calmConsole(), null)).map(text)
+  expect(noLiveWithCon.some(l => l.includes('無來源：本席沒有 live 資料'))).toBe(true)
+  expect(noLiveWithCon[22]).toBe('資料不足，無法判定')
+
+  // 6. Unfetched seatQuota feed WITH account quota windows still emits red missing-source warning, wraps without `…`, and sets unknown empty state
+  seatQuota.reset()
+  for (const [loc, wantMissing, wantUnknown] of [
+    ['zh-TW', '無來源：fleet seats --quota 還沒有結果', '資料不足，無法判定'],
+    ['en', 'no source: fleet seats --quota has no result yet', 'Not enough data to judge'],
+  ] as const) {
+    const tr = makeT(loc)
+    const raw80 = frameRows(spendPage, { ...ctxOf(80, 24, calmConsole(), liveOf(HOURLY_NARROW)), t: tr })
+    expect(raw80.length).toBe(24)
+    expect(raw80.map(text).some(l => l.includes('17%'))).toBe(true)
+    expect(raw80.map(text).some(l => l.includes('68%'))).toBe(true)
+    const missingRow80 = raw80.find(r => text(r).includes(wantMissing))!
+    expect(missingRow80).toBeDefined()
+    expect(missingRow80[0].color).toBe(PALETTE.broken)
+    expect(text(raw80[22])).toBe(wantUnknown)
+
+    // At 40 cols (< 41/51 cells), the red missing-source reason wraps across multiple red rows without `…`
+    const raw40 = frameRows(spendPage, { ...ctxOf(40, 24, calmConsole(), liveOf(HOURLY_NARROW)), t: tr })
+    expect(raw40.length).toBe(24)
+    for (const r of raw40) expect(displayWidth(text(r))).toBeLessThanOrEqual(40)
+    expect(raw40.some(r => text(r).includes('…'))).toBe(false)
+    const redRows40 = raw40.filter(r => r.length > 0 && r.every(s => s.color === PALETTE.broken))
+    expect(redRows40.length).toBeGreaterThanOrEqual(2)
+    expect(redRows40.map(text).join('').replace(/\s+/g, '')).toContain(wantMissing.replace(/\s+/g, ''))
+    expect(text(raw40[21])).toBe(wantUnknown)
+  }
+
+  // 7. Stale cached seatQuota row AFTER refresh failure renders BOTH red age warning AND red refresh-failure reason, wrapping without `…`
+  await feedStale25m()
+  for (const [loc, wantAge, wantFail, wantUnknown] of [
+    ['zh-TW', '25 分未更新，以上是舊數字', 'fleet seats --quota 指令失敗，用 25 分前的舊結果', '資料不足，無法判定'],
+    ['en', '25 min since update, figures above are old', 'fleet seats --quota failed, using cached result from 25m ago', 'Not enough data to judge'],
+  ] as const) {
+    const tr = makeT(loc)
+    const raw160 = frameRows(spendPage, { ...ctxOf(160, 40, calmConsole(), liveOf(HOURLY_WIDE)), t: tr })
+    const ageRow = raw160.find(r => text(r).includes(wantAge))!
+    const failRow = raw160.find(r => text(r).includes(wantFail))!
+    expect(ageRow).toBeDefined()
+    expect(failRow).toBeDefined()
+    expect(ageRow[0].color).toBe(PALETTE.broken)
+    expect(failRow[0].color).toBe(PALETTE.broken)
+    expect(text(raw160[38])).toBe(wantUnknown)
+
+    // At 40 cols, the refresh-failure reason (> 40 cells) wraps across red rows without `…`
+    const raw40 = frameRows(spendPage, { ...ctxOf(40, 24, calmConsole(), liveOf(HOURLY_NARROW)), t: tr })
+    expect(raw40.length).toBe(24)
+    for (const r of raw40) expect(displayWidth(text(r))).toBeLessThanOrEqual(40)
+    expect(raw40.some(r => text(r).includes('…'))).toBe(false)
+    const redJoined = raw40.filter(r => r.length > 0 && r.every(s => s.color === PALETTE.broken)).map(text).join('').replace(/\s+/g, '')
+    expect(redJoined).toContain(wantAge.replace(/\s+/g, ''))
+    expect(redJoined).toContain(wantFail.replace(/\s+/g, ''))
+    expect(text(raw40[21])).toBe(wantUnknown)
+  }
+
+  // Flagged stale row (row.stale === true, < 10 min) followed by refresh failure also emits both red rows
+  seatQuota.reset()
+  await seatQuota.refresh(okRun(JSON.stringify([{ seat: 'codeforge--claude', pool_key: 'team', five_hour_pct: 17.4, seven_day_pct: 68.2, stale: true, self: true }])), NOW - 40_000)
+  await seatQuota.refresh(failRun, NOW + 25_000)
+  const flaggedStale = spendPage.render({ ...ctxOf(120, 30, calmConsole(), liveOf(HOURLY_WIDE)), nowMs: NOW + 25_000 })
+  const flaggedBroken = flaggedStale.body.filter(r => r.length > 0 && r[0].color === PALETTE.broken).map(text)
+  expect(flaggedBroken.some(l => l.includes('1 分未更新，以上是舊數字'))).toBe(true)
+  expect(flaggedBroken.some(l => l.includes('fleet seats --quota 指令失敗，用 1 分前的舊結果'))).toBe(true)
 })
 
 test('spend: every state is exactly H rows at 160x40, 120x30, 80x24 and short 80x7, in zh-TW and en; actions never exceed A', async () => {

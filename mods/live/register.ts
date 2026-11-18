@@ -77,6 +77,7 @@ import { PAGES } from './pages/index'
 import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
 import { FOLD_AT, rowsOf as fleetRowsOf } from './pages/fleet'
+import { DEFAULT_REVIEW_VIEW } from './pages/review'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
@@ -1325,7 +1326,7 @@ async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
       else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
       else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
     } else {
-      const v = pageView[id] ?? { focus: 0, expanded: false }
+      const v = pageView[id] ?? (id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
       const last = Math.max(0, focusRows(id, v.expanded) - 1)
       if (k.kind === 'move') pageView[id] = { ...v, focus: Math.min(last, Math.max(0, v.focus + k.by)) }
       else if (k.kind === 'fold') { const expanded = !v.expanded; pageView[id] = { expanded, focus: Math.min(v.focus, Math.max(0, focusRows(id, expanded) - 1)) } }

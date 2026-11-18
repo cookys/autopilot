@@ -6,18 +6,11 @@ import type { CodeReviewView, DecisionRow, DecisionsView, LiveSnapshot, PlanRevi
 import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE, STATES, stateOf, wrapPlain } from '../ui'
 import type { Page, PageCtx } from './frame'
-import type { KeyAction } from './keys'
 import { brokenRow } from './rows'
 import type { Row } from './rows'
 
-export type ReviewPageView = { focus?: number; folded?: boolean }
-export type ReviewPageCtx = PageCtx & { review?: ReviewPageView }
-export const DEFAULT_REVIEW_VIEW: Required<ReviewPageView> = { focus: 0, folded: false }
-
-export function reviewReduce(view: Required<ReviewPageView>, key: KeyAction): Required<ReviewPageView> {
-  if (key.kind === 'fold') return { ...view, folded: !view.folded }
-  return view
-}
+export type ReviewView = { focus: number; expanded: boolean }
+export const DEFAULT_REVIEW_VIEW: ReviewView = { focus: 0, expanded: true }
 
 const WIDE_COLS = 100
 const HOUR_CAP = 14 * 24
@@ -298,17 +291,20 @@ function planRows(ctx: PageCtx, p: PlanReviewView, live: LiveSnapshot, wide: boo
   ], cols)]
 }
 
-export function renderReview(ctx: PageCtx, view?: ReviewPageView): { body: Row[]; actions: Row[] } {
+export function renderReview(ctx: PageCtx, view: ReviewView = DEFAULT_REVIEW_VIEW): { body: Row[]; actions: Row[] } {
   const cols = ctx.size.cols
   const live = ctx.live
+  const unknownActions = (): Row[] => [[dimSeg(ctx.t('frame.unknown'))]]
   if (live === null) {
-    return { body: brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.no_live'), cols), actions: [] }
+    return { body: brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.no_live'), cols), actions: unknownActions() }
   }
   const wide = cols >= WIDE_COLS
-  const folded = view?.folded ?? (ctx as ReviewPageCtx).review?.folded ?? DEFAULT_REVIEW_VIEW.folded
+  const folded = !view.expanded
   const body: Row[] = []
-  if (live.state !== 'ok') {
-    body.push(...brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.stale_live', { why: live.header }), cols))
+  const liveBroken = live.state !== 'ok'
+  if (liveBroken) {
+    const why = live.header.trim() !== '' ? live.header : live.state
+    body.push(...brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.stale_live', { why }), cols))
   }
   const code = live.review?.code ?? null
   const qc = live.detail.qc ?? null
@@ -319,11 +315,12 @@ export function renderReview(ctx: PageCtx, view?: ReviewPageView): { body: Row[]
   if (qc !== null) body.push(...qcRows(ctx, qc, wide))
 
   let foldable = false
+  const decisionsMissing = decisions === null && live.sections?.decisionsNotWired === true
   if (decisions !== null) {
     const dec = decidedRows(ctx, decisions, folded, wide)
     body.push(...dec.rows)
     foldable = dec.foldable
-  } else if (live.sections?.decisionsNotWired === true) {
+  } else if (decisionsMissing) {
     body.push(...brokenRows(GLYPHS.state.failed + ' ' + ctx.t('page.review.decisions_not_wired'), cols))
   }
 
@@ -335,7 +332,9 @@ export function renderReview(ctx: PageCtx, view?: ReviewPageView): { body: Row[]
 
   const actions: Row[] = foldable
     ? [[seg(folded ? ctx.t('page.review.act_unfold') : ctx.t('page.review.act_fold'), { color: PALETTE.action, press: 'key:z' })]]
-    : []
+    : liveBroken || decisionsMissing
+      ? unknownActions()
+      : []
 
   return { body, actions }
 }

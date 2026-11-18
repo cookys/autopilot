@@ -21,6 +21,7 @@ import { keyed, scrollFrame } from './scroll'
 import { actionRows, frameRows, STRIP_SPLIT_COLS } from './pages/frame'
 import { fleetView as fleetPageView } from './pages/fleet'
 import { renderQuota } from './pages/quota'
+import { DEFAULT_REVIEW_VIEW, renderReview } from './pages/review'
 import type { DecideNav } from './pages/decide'
 import type { KeyAction } from './pages/keys'
 import type { ConsoleSnapshot } from './console'
@@ -165,9 +166,9 @@ const HINT_SPLIT = /(?<=^|\s)(?=\[[a-z]\] \S)/
 function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: FramePane, snap: LiveSnapshot | null, onTab: (t: PaneTab) => void, t: T, cols: number) {
   const { Box, Text, Button } = el
   const ctx = { live: snap, console: frame.console, size: { cols, rows: frame.rows }, t, nowMs: frame.nowMs, ...(page.id === 'decide' && frame.decide !== undefined ? { decide: frame.decide } : {}) }
-  const view = frame.view?.[page.id] ?? { focus: 0, expanded: false }
+  const view = frame.view?.[page.id] ?? (page.id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
   // the pages that take a view are drawn through their view functions; the registry's render() keeps the default view
-  const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page
+  const drawn: Page = page.id === 'fleet' ? { ...page, render: c => fleetPageView(c, view) } : page.id === 'quota' ? { ...page, render: c => renderQuota(c, view) } : page.id === 'review' ? { ...page, render: c => renderReview(c, view) } : page
   // free rows go to content first: a folded page (fleet lines, a pool's seats) is drawn open when the open body fits whole in the rows the surface has left
   const unfold = view.expanded ? undefined : page.id === 'fleet' ? (c: PageCtx) => fleetPageView(c, { ...view, expanded: true }) : page.id === 'quota' ? (c: PageCtx) => renderQuota(c, { ...view, expanded: true }) : undefined
   const rows: Row[] = frameRows(drawn, ctx, { pages: frame.pages, ...(unfold === undefined ? {} : { unfold }), ...(frame.scroll === undefined ? {} : { scroll: frame.scroll }) })

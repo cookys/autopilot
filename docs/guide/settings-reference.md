@@ -506,6 +506,10 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_TASK_CLASS` | Task class for a dispatch to `qwen_local` (the family that endpoint serves). One of `format-convert`, `log-summary`, `simple-script`, `test-scaffold`. A `Task-Class:` line in the first 8 lines of the brief is the fallback. Missing refuses `unknown-task-class`; any other value refuses `task-class`. Cloud endpoints ignore it. | unset |  |
 | `AUTOPILOT_RULE_CAPTURE_LOG` | JSONL file where the `lesson-lint.js stop-hook` rule-capture appends one row per Stop whose last operator message matched a rule marker (outcome `block`, `no_rule` or `pass`; never the message text), so the false-block rate can be computed. | `$XDG_STATE_HOME/autopilot/rule-capture.jsonl` (else `~/.local/state/autopilot/rule-capture.jsonl`) | `AUTOPILOT_RULE_CAPTURE_LOG` |
 | `AUTOPILOT_MINIMAX_BASE_URL` | Base URL for the provider-native MiniMax endpoint. | unset |  |
+| `AUTOPILOT_PM_SWITCHBOARD` | Set to `off` to disable `scripts/pm-switchboard.js run` (exits 0 with no inbox reads, marks, wakes or receipts). | `on` |  |
+| `AUTOPILOT_FLEET_REPO` | Path to the fleet checkout whose `plugins/claude/src/inbox-cli.ts` backs `scripts/lib/pm-inbox-adapter.js` in `fleet` mode; unset exits 2. | unset |  |
+| `AUTOPILOT_PM_INBOX_MEMBER` | Fleet member handle passed as `--member` to `inbox-cli.ts` by `scripts/lib/pm-inbox-adapter.js`. | `pm--claude` |  |
+| `AUTOPILOT_PM_ACCEPT_CMD` | JSON argv array invoked with the task id appended when `scripts/pm-switchboard.js` auto-accepts a verified `task_result` in `fleet` mode; when unset, auto-accept is unavailable and the item routes to `pending_decision`. | unset |  |
 
 ## Claude accounts (G37)
 

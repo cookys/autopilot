@@ -1,0 +1,12 @@
+# autopilot:pm-switchboard/1
+# Systemd user timer template for the 10-minute PM inbox batch switchboard.
+[Unit]
+Description=Run the autopilot PM inbox batch switchboard every 10 minutes
+
+[Timer]
+Unit=pm-switchboard.service
+OnCalendar=*:0/10
+Persistent=true
+
+[Install]
+WantedBy=timers.target

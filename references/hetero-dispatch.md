@@ -92,6 +92,40 @@ local implementer then requires its own CLI login again.
 Verification: `hooks/tests/cursor-broker-runner.test.sh` covers wire keys, clone sharing,
 commit/hash/cleanup, billing exhaustion, local model/size refusals, auto choice and failure mapping.
 
+## Kimi broker implementer
+
+Kimi implementers reuse the [Cursor broker](#cursor-broker-implementer) client, shared-clone
+lifecycle, exact request keys and response projection. Default model: `kimi-code/kimi-for-coding`.
+Deployment policy is configurable: `AUTOPILOT_KIMI_BROKER_SOCK` (`/srv/kimi-broker/sock`),
+`AUTOPILOT_KIMI_BROKER_WORK_ROOT` (`/srv/kimi-work`), and
+`AUTOPILOT_KIMI_BROKER_MODEL_PATTERN` (`^kimi-code/[A-Za-z0-9._-]+$`). Invalid patterns and
+nonmatching models fail locally. `AUTOPILOT_KIMI_GROUP_WRAPPER` defaults to `sg` with the
+same `lanegit -c <command>` test seam. No local login is consulted on the default path.
+
+The existing Kimi edit-only directive is prepended exactly once, within the 64 KiB limit.
+The CN-model gate runs before clone creation or a socket connection; transcript, sensitive,
+core/large, novel and review-role work stays barred. Returned diffs are applied to the dispatch
+worktree and committed by the existing wrapper. Clone deletion uses only the validated dispatch
+run-id child path created by this invocation; broker response paths never control cleanup.
+Results include `broker_run_id` and `broker_diff_sha16`. Verdict mapping matches Cursor:
+`stopped_billing` → `failed` / `kimi_stopped_billing`, `timeout` → `failure` with
+`timed_out: true`, and other unsuccessful verdicts → `failed` with the broker reason.
+
+`kimi-quota-observe.js` consumes structured broker verdicts: billing stop blocks selection
+for one hour, done clears it. Implementer pace and topology selection require an actual Unix
+socket and no exhausted observation, regardless of a local binary or login. Measured quota,
+role, CN and qualification rules still apply; no quota percentage is invented. The stock
+disabled list retains minimax and permits eligible broker-backed Kimi implementers.
+A missing broker never falls back to the local CLI. `kimi-local-stop` still blocks local
+reviewer, author, foreman, qualification, version, readiness and capability-probe paths.
+Jury review seats use `dispatch-review.sh` and keep that local-stop gate. Explicit `--kimi-bin`
+also keeps the gate, its test-only allow seam and argv byte guard. Rollback: revert the Kimi
+broker migration and regenerate the Codex mirrors; retain the local-stop gate until local
+CLI execution is separately authorized.
+
+Verification: `hooks/tests/kimi-broker-runner.test.sh` uses a stub socket for commit/hash/cleanup,
+structured quota, model/CN refusal with no connection, and every automatic admission source.
+
 ## Pace-aware engine choice
 
 [`scripts/pace-select.js`](../scripts/pace-select.js) reads existing `capacity.pace/1` telemetry

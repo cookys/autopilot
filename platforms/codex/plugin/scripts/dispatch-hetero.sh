@@ -40,11 +40,10 @@
 #                                              #   `opencode run` headless; --model is a
 #                                              #   provider/model id from `opencode models`
 #                                              #   (e.g. opencode-go/muse-spark-1.3-contributor).
-#                                              #   kimi (EXPLICIT only, never auto — provider/
-#                                              #   alias ids like kimi-code/k3 have no vendor
-#                                              #   family to match on): Kimi Code CLI (Moonshot),
-#                                              #   `-p` argv-only (no --prompt-file, no STDIN) —
-#                                              #   pre-spend argv-byte gate, see --kimi-bin.
+#                                              #   kimi: shared Unix-socket broker; pace eligible.
+#                                              #   Default kimi-code/kimi-for-coding; configurable
+#                                              #   model grammar. No model-name auto inference.
+#                                              #   --kimi-bin selects the local CLI fixture seam.
 #                                              #   pi (EXPLICIT only): pi coding agent over RPC
 #                                              #   (duplex supervisor scripts/lib/pi-rpc-run.js;
 #                                              #   provider default minimax via PI_RPC_PROVIDER).
@@ -124,7 +123,7 @@
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
 #       [--cursor-bin cursor-agent]            # retained legacy option; refused by the broker
 #       [--opencode-bin opencode]              # alternate/pinned OpenCode CLI (test seam)
-#       [--kimi-bin kimi]                      # alternate/pinned Kimi Code CLI (test seam)
+#       [--kimi-bin kimi]                      # explicit local Kimi CLI fixture seam; default broker
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
 #       [--qoder-config-dir <dir>]             # passed as --config-dir only when set
 #       [--cursor-fast]                        # retained legacy option; refused by the broker
@@ -387,7 +386,7 @@ QODER_CONFIG_DIR=""     # --qoder-config-dir; empty means the invocation omits -
 MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
 OPENCODE_BIN="opencode"    # OpenCode CLI runner (`opencode run`); test seam via --opencode-bin
-KIMI_BIN="kimi"            # Kimi Code CLI runner (Moonshot); test seam via --kimi-bin
+KIMI_BIN="kimi"            # Local CLI fixture seam only; default Kimi seat uses the broker
 KEEP=0
 MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=()  # --sibling-ref-prefix; read by main_checkout_fingerprint (lib/main-checkout-boundary.sh)
 MAIN_CHECKOUT_FP_EXCLUDE_PATHS=()     # --sibling-path-prefix; pruned from the fingerprint's stat walk
@@ -511,10 +510,11 @@ PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so the INT/TERM trap and detach declare -p can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
-CURSOR_TIMEOUT_S=""
-CURSOR_BROKER_RESULT=""
-CURSOR_BROKER_VERDICT=""
-CURSOR_BROKER_REASON=""
+BROKER_TIMEOUT_S=""
+BROKER_RESULT=""
+BROKER_VERDICT=""
+BROKER_REASON=""
+BROKER_RUNNER=""
 OPENCODE_VER=""  # opencode --version line, read once at the pre-spend gate (declare -p carries it to the detached child)
 OPENCODE_PROMPT_FILE=""  # opencode combined prompt temp; init early so it is SET for the detach declare -p
 KIMI_PROMPT_FILE=""    # kimi combined prompt temp; init early so it is SET for the detach declare -p
@@ -1250,12 +1250,12 @@ NODE
     tip_verify_fields=", \"tip_verify\": ${TIP_VERIFY_RESULT_JSON}"
   fi
   local broker_fields=""
-  if [ -n "${CURSOR_BROKER_RESULT:-}" ] && [ -f "$CURSOR_BROKER_RESULT" ]; then
-    broker_fields="$(node - "$CURSOR_BROKER_RESULT" <<'NODE'
+  if [ -n "${BROKER_RESULT:-}" ] && [ -f "$BROKER_RESULT" ]; then
+    broker_fields="$(node - "$BROKER_RESULT" "$runner" <<'NODE'
 const fs = require('fs'), crypto = require('crypto');
 const r = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const fields = { broker_run_id: r.run_id, broker_diff_sha16: crypto.createHash('sha256').update(r.diff).digest('hex').slice(0, 16) };
-if (r.verdict !== 'done') fields.reason = r.verdict === 'stopped_billing' ? 'cursor_stopped_billing' : r.reason;
+if (r.verdict !== 'done') fields.reason = r.verdict === 'stopped_billing' ? `${process.argv[3]}_stopped_billing` : r.reason;
 process.stdout.write(', ' + JSON.stringify(fields).slice(1, -1));
 NODE
     )"
@@ -2935,9 +2935,8 @@ set_runner_flags() {
     opencode) IS_OPENCODE=1 ;; # OpenCode CLI (`opencode run`). EXPLICIT only, never auto: its
                                # model ids are provider/model (opencode-go/…, opencode/…) with no
                                # vendor family to match on; the provider prefix is the route.
-    kimi)    IS_KIMI=1 ;;      # Kimi Code CLI (Moonshot). EXPLICIT only, never auto: model
-                               # ids are provider/alias (kimi-code/k3) with no vendor family
-                               # to match on — same rationale as opencode above.
+    kimi)    IS_KIMI=1 ;;      # Shared broker, explicitly named or selected by pace.
+                               # Provider aliases do not imply model-name auto routing.
     qoderclicn) IS_QODER=1 ;;  # Qoder CLI CN. EXPLICIT only, never auto: *qwen*/*qwq* stay fail-closed.
     claude-native) IS_CNATIVE=1; declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;;   # EXPLICIT only; refused without the one-time owner confirmation (see precondition gate)
     auto)
@@ -3262,9 +3261,20 @@ if [ "$IS_CURSOR" -eq 1 ]; then
   cursor_is_broker_model "$MODEL" || die_precondition "cursor broker requires a composer model (default $(cursor_broker_default_model)); got '$MODEL'"
   [ "$CURSOR_FAST" -eq 0 ] || die_precondition "--cursor-fast is unavailable on the cursor broker"
   [ "$BIN_FLAG_CURSOR" -eq 0 ] || die_precondition "--cursor-bin is unavailable on the cursor broker; use AUTOPILOT_CURSOR_GROUP_WRAPPER for tests"
-  CURSOR_TIMEOUT_S="$(normalize_timeout_seconds "$TIMEOUT")" || die_precondition "invalid cursor broker timeout"
-  [[ "$CURSOR_TIMEOUT_S" =~ ^[0-9]+$ ]] && [ "$CURSOR_TIMEOUT_S" -ge 60 ] && [ "$CURSOR_TIMEOUT_S" -le 3600 ] \
+  BROKER_TIMEOUT_S="$(normalize_timeout_seconds "$TIMEOUT")" || die_precondition "invalid cursor broker timeout"
+  [[ "$BROKER_TIMEOUT_S" =~ ^[0-9]+$ ]] && [ "$BROKER_TIMEOUT_S" -ge 60 ] && [ "$BROKER_TIMEOUT_S" -le 3600 ] \
     || die_precondition "cursor broker timeout must be 60-3600 seconds"
+fi
+
+# Explicit --kimi-bin remains a hermetic local-CLI seam; the normal seat uses the broker.
+if [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 0 ]; then
+  [ "$MODEL_IS_DEFAULT" -eq 0 ] || MODEL="$(node -e 'process.stdout.write(require(process.argv[1]).brokerConfig("kimi").defaultModel)' "$SELF_DIR/lib/cursor-broker-client.js")"
+  MODEL_IS_DEFAULT=0
+  _kimi_model_check="$(node -e 'require(process.argv[1]).validateModel(process.argv[2], "kimi")' "$SELF_DIR/lib/cursor-broker-client.js" "$MODEL" 2>&1)" \
+    || die_precondition "$_kimi_model_check"
+  BROKER_TIMEOUT_S="$(normalize_timeout_seconds "$TIMEOUT")" || die_precondition "invalid kimi broker timeout"
+  [[ "$BROKER_TIMEOUT_S" =~ ^[0-9]+$ ]] && [ "$BROKER_TIMEOUT_S" -ge 60 ] && [ "$BROKER_TIMEOUT_S" -le 3600 ] \
+    || die_precondition "kimi broker timeout must be 60-3600 seconds"
 fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
@@ -3415,8 +3425,13 @@ elif [ "$IS_OPENCODE" -eq 1 ]; then
     || { _oc_msg="$(cat "$_oc_verr")"; rm -f "$_oc_verr"; die_precondition "opencode version not usable: ${_oc_msg}"; }
   rm -f "$_oc_verr"
 elif [ "$IS_KIMI" -eq 1 ]; then
+  if [ "$BIN_FLAG_KIMI" -eq 0 ]; then
+    node "$SELF_DIR/lib/cursor-broker-client.js" available kimi || die_precondition "kimi broker unavailable or quota exhausted"
+    command -v "${AUTOPILOT_KIMI_GROUP_WRAPPER:-sg}" >/dev/null 2>&1 || die_precondition "kimi broker group wrapper not found"
+  else
   _kimi_stop="$(node "$SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || die_precondition "$_kimi_stop"
   command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN (install Kimi Code CLI or pass --kimi-bin)"
+  fi
 elif [ "$IS_QODER" -eq 1 ]; then
   # command -v only. runner_bin_fallback would resolve the host install; tests pass --qoder-bin.
   command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (install Qoder CLI CN or pass --qoder-bin)"
@@ -4440,7 +4455,7 @@ _wt_lock_fail() {
 # before kimi starts and with no vendor error to report. KIMI_EDIT_ONLY is set here (not inside
 # run_agent) so the byte count matches EXACTLY what the run arm below sends — same directive
 # text, computed once. Test seam: KIMI_ARGV_LIMIT (default 120000, env-overridable).
-if [ "$IS_KIMI" -eq 1 ]; then
+if [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
   KIMI_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
@@ -4456,8 +4471,9 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 fi
 
 # Count the final packed prompt plus the exact directive before creating a worktree.
-if [ "$IS_CURSOR" -eq 1 ]; then
-  _cursor_prompt_check="$(node -e 'require(process.argv[1]).readPrompt(process.argv[2])' "$SELF_DIR/lib/cursor-broker-client.js" "$PROMPT_FILE" 2>&1)" \
+if [ "$IS_CURSOR" -eq 1 ] || { [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 0 ]; }; then
+  _broker_runner=cursor; [ "$IS_KIMI" -eq 0 ] || _broker_runner=kimi
+  _cursor_prompt_check="$(node -e 'require(process.argv[1]).readPrompt(process.argv[2], process.argv[3])' "$SELF_DIR/lib/cursor-broker-client.js" "$PROMPT_FILE" "$_broker_runner" 2>&1)" \
     || die_precondition "$_cursor_prompt_check"
 fi
 
@@ -5544,8 +5560,8 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
   rm -rf "$OC_PLAN_DIR"
   rm -f "$OPENCODE_PROMPT_FILE"
-elif [ "$IS_KIMI" -eq 1 ]; then
-  # Kimi Code CLI (Moonshot). Stage-0 spike 2026-09-11 (kimi 0.41.0), see
+elif [ "$IS_KIMI" -eq 1 ] && [ "$BIN_FLAG_KIMI" -eq 1 ]; then
+  # Explicit test seam only. Kimi Code CLI (Moonshot). Stage-0 spike 2026-09-11 (kimi 0.41.0), see
   # docs/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md §0:
   #   plain `-p` already edits files in the PROCESS CWD, exit 0, NOT committed by kimi itself
   #   → wrapper-commit rail, same as grok/opencode; `-p` CANNOT combine with
@@ -5564,19 +5580,24 @@ elif [ "$IS_KIMI" -eq 1 ]; then
   rm -f "$KIMI_PROMPT_FILE"
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
-elif [ "$IS_CURSOR" -eq 1 ]; then
-  # All shared-clone/socket operations go through this single replaceable seam.
-  CURSOR_BROKER_RESULT="$LOG.cursor-broker.json"
-  local cursor_group_cmd
-  printf -v cursor_group_cmd '%q ' "$(command -v node)" "$SELF_DIR/lib/cursor-broker-run.js" \
-    "$WT" "$PROMPT_FILE" "$MODEL" "$CURSOR_TIMEOUT_S" "$DISPATCH_RUN_ID" "$CURSOR_BROKER_RESULT"
-  run_worker "${AUTOPILOT_CURSOR_GROUP_WRAPPER:-sg}" lanegit -c "$cursor_group_cmd"
-  if [ -f "$CURSOR_BROKER_RESULT" ]; then
-    CURSOR_BROKER_VERDICT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).verdict)' "$CURSOR_BROKER_RESULT")"
-    CURSOR_BROKER_REASON="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).reason)' "$CURSOR_BROKER_RESULT")"
-    [ "$CURSOR_BROKER_VERDICT" != timeout ] || WORKER_TIMED_OUT=1
-    if [ "$CURSOR_BROKER_VERDICT" != done ] || [ "${AGENT_EXIT:-1}" -eq 0 ]; then
-      node "$SELF_DIR/lib/cursor-quota-observe.js" "$CURSOR_BROKER_VERDICT" >/dev/null 2>&1 || true
+elif [ "$IS_CURSOR" -eq 1 ] || [ "$IS_KIMI" -eq 1 ]; then
+  # Both seats use the same clone, protocol, diff-import and quota-observer rail.
+  BROKER_RUNNER=cursor
+  local broker_group_wrapper="${AUTOPILOT_CURSOR_GROUP_WRAPPER:-sg}" broker_group_cmd
+  if [ "$IS_KIMI" -eq 1 ]; then
+    BROKER_RUNNER=kimi
+    broker_group_wrapper="${AUTOPILOT_KIMI_GROUP_WRAPPER:-sg}"
+  fi
+  BROKER_RESULT="$LOG.$BROKER_RUNNER-broker.json"
+  printf -v broker_group_cmd '%q ' "$(command -v node)" "$SELF_DIR/lib/cursor-broker-run.js" \
+    "$WT" "$PROMPT_FILE" "$MODEL" "$BROKER_TIMEOUT_S" "$DISPATCH_RUN_ID" "$BROKER_RESULT" "$BROKER_RUNNER"
+  run_worker "$broker_group_wrapper" lanegit -c "$broker_group_cmd"
+  if [ -f "$BROKER_RESULT" ]; then
+    BROKER_VERDICT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).verdict)' "$BROKER_RESULT")"
+    BROKER_REASON="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).reason)' "$BROKER_RESULT")"
+    [ "$BROKER_VERDICT" != timeout ] || WORKER_TIMED_OUT=1
+    if [ "$BROKER_VERDICT" != done ] || [ "${AGENT_EXIT:-1}" -eq 0 ]; then
+      node "$SELF_DIR/lib/cursor-broker-client.js" observe "$BROKER_RUNNER" "$BROKER_VERDICT" >/dev/null 2>&1 || true
     fi
   fi
 elif [ "$IS_PI" -eq 1 ]; then
@@ -6782,11 +6803,11 @@ classify_outcome() {
     OUTCOME_EXIT=1
     OUTCOME_ERR="wall timeout (${__wt_secs}s) exceeded — worker terminated"
   fi
-  if [ "${IS_CURSOR:-0}" -eq 1 ] && { [ "${AGENT_EXIT:-0}" -ne 0 ] || [ "${CURSOR_BROKER_VERDICT:-done}" != done ]; }; then
+  if [ -n "${BROKER_RUNNER:-}" ] && { [ "${AGENT_EXIT:-0}" -ne 0 ] || [ "${BROKER_VERDICT:-done}" != done ]; }; then
     if [ "${WORKER_TIMED_OUT:-0}" -ne 1 ]; then
       OUTCOME_STATUS="failed"; OUTCOME_EXIT=1
-      OUTCOME_ERR="${CURSOR_BROKER_REASON:-cursor broker failed}"
-      [ "${CURSOR_BROKER_VERDICT:-}" != stopped_billing ] || OUTCOME_ERR="cursor_stopped_billing"
+      OUTCOME_ERR="${BROKER_REASON:-broker failed}"
+      [ "${BROKER_VERDICT:-}" != stopped_billing ] || OUTCOME_ERR="${BROKER_RUNNER}_stopped_billing"
     fi
   fi
   # After engine_unavailable and wall-timeout overrides, so only a run that
@@ -6946,7 +6967,7 @@ dispatch_detached_run() {
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      CURSOR_TIMEOUT_S CURSOR_BROKER_RESULT CURSOR_BROKER_VERDICT CURSOR_BROKER_REASON \
+      BROKER_TIMEOUT_S BROKER_RESULT BROKER_VERDICT BROKER_REASON BROKER_RUNNER BIN_FLAG_KIMI \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \

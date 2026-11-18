@@ -3,6 +3,7 @@
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_KIMI_LOCAL_ALLOW
 export HOME="$HOOK_HOME"
+export AUTOPILOT_KIMI_BROKER_SOCK="$TEST_SHORT_TMP/absent.sock"
 node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 const assert = require('assert/strict');
 const fs = require('fs');
@@ -30,14 +31,14 @@ for (const allow of [false, true]) {
   assert.equal(fallback.reviewerFallbackChain(fallbackOpts)[0].runner, allow ? 'kimi' : 'grok', 'reviewer fallback');
   assert.equal(fallback.implementerFallbackChain(fallbackOpts)[0].runner, allow ? 'kimi' : 'grok', 'implementer fallback');
   const skips = topology.findUnknownRungs(cached, topology.knownRunnerSet(), {});
-  assert.equal(skips.length, allow ? 0 : topology.RUNG_LISTS.length, 'all cached topology lists');
-  if (!allow) assert.ok(skips.every((s) => s.why === 'kimi_local_stopped'));
+  assert.equal(skips.length, allow ? 1 : topology.RUNG_LISTS.length, 'cached topology checks each transport');
+  assert.ok(skips.every((s) => s.why === (s.list === 'implementer_ladder' ? 'kimi_broker_unavailable' : 'kimi_local_stopped')));
   const run = spawnSync(process.execPath, [path.join(root, 'scripts/resolve-dispatch-topology.js'), '--resolve-live', '--role', 'implementer', '--out', cachePath], {
     env: { ...process.env, ENGINE_CAPABILITY_DIR: path.join(tmp, 'cap'), ENGINE_SCORECARD_DIR: path.join(tmp, 'scores') },
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
   });
   assert.equal(run.status, 0, run.stderr);
-  assert.equal(JSON.parse(run.stdout).effective_tuple.runner, allow ? 'kimi' : 'grok', 'cached live tuple');
+  assert.equal(JSON.parse(run.stdout).effective_tuple.runner, 'grok', 'cached implementer needs a broker regardless of local allow');
 }
 delete process.env.AUTOPILOT_KIMI_LOCAL_ALLOW;
 const binDir = path.join(tmp, 'bin');
@@ -52,7 +53,7 @@ for (const allow of [false, true]) {
     env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
   });
   assert.equal(run.status, 0, run.stderr);
-  assert.equal(JSON.parse(run.stdout).runners_installed.kimi, allow ? fakeKimi : null, 'fresh topology availability');
+  assert.equal(JSON.parse(run.stdout).runners_installed.kimi, null, 'local binary cannot replace missing implementer broker');
   assert.equal(fs.existsSync(record), false, 'topology never starts the binary');
 }
 console.log('PASS stopped/allow auto selectors');

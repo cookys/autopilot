@@ -80,7 +80,7 @@ rehashable artifacts, same-process observations, and caller-authored traces cann
 
 | Script | Purpose |
 |---|---|
-| `scripts/lib/cursor-broker-client.js`, `scripts/lib/cursor-broker-run.js`, `scripts/lib/cursor-quota-observe.js` | Cursor implementer helpers called by `dispatch-hetero.sh`: broker transport, shared clone/diff lifecycle and result-based pace availability. Contract: [Cursor broker](../../../references/hetero-dispatch.md#cursor-broker-implementer). |
+| `scripts/lib/cursor-broker-client.js`, `scripts/lib/cursor-broker-run.js`, `scripts/lib/cursor-quota-observe.js` | Cursor/Kimi implementer helpers called by `dispatch-hetero.sh`: shared broker transport and clone/diff lifecycle, runner-specific quota observers and socket/quota availability. Contract: [Cursor broker](../../../references/hetero-dispatch.md#cursor-broker-implementer). |
 | `scripts/session-mode.js` | `set --size <XS\|S\|M\|L\|XL> [--urgent] [--bug]` creates or merges the session marker (size moves only up); `status` prints it. Session Start step 1. |
 | `scripts/stage-graph.js` | Queries the canonical graph: `nodes`, `next --from`, `limits`, `validate`. Read the sequence and the next node here, never from prose. |
 | `scripts/stage-advance.js` | Records entry into a node; refuses illegal moves (exit 3, `legal_next`) and requests the E1 size bump (exit 4, `bump_to`). Called on entering every prose-written node. |

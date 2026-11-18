@@ -11,6 +11,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+// Broker observations are test inputs, never the host account's ambient quota rows.
+const quotaFixture = fs.mkdtempSync(path.join(fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir(), 'pace-quota-test-'));
+process.env.AUTOPILOT_LIVE_DIR = quotaFixture;
+test.after(() => fs.rmSync(quotaFixture, { recursive: true, force: true }));
 
 const { freshReading } = require('./lib/pace-reading.js');
 const {
@@ -47,7 +51,7 @@ const MISSING_PACE = path.join(FIXTURES_DIR, '__missing_pace__.json');
 const allEndpointsReady = () => true;
 // Small public-doc work admits CN seats for non-review roles; review roles are barred by the CN gate.
 // Omit AUTOPILOT_TASK_ROLE so each call uses its own rail role (env wins over rail role in the gate).
-const testTask = { AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_SCOPE: 'docs/example.md' };
+const testTask = { AUTOPILOT_KIMI_LOCAL_ALLOW: '1', AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_SCOPE: 'docs/example.md' };
 for (const k of ['AUTOPILOT_TASK_ROLE', 'AUTOPILOT_TASK_NOVEL', 'AUTOPILOT_TASK_READS_TRANSCRIPT', 'AUTOPILOT_TASK_CLASS']) {
   delete process.env[k];
 }
@@ -363,8 +367,11 @@ test('(a) reset-weighted quota outranks linear pace; claude rows are never candi
   assert.equal(agyClaudeWin.slack_pts, 70);
 });
 
-test('observer stores are isolated by default; explicit env opts into cursor and kimi observations', () => {
+test('observer stores are isolated by default; explicit env opts into cursor and kimi observations', async () => {
   const observedLiveDir = makeLiveDir();
+  const socket = path.join(observedLiveDir, 'broker.sock');
+  const server = require('net').createServer(conn => conn.destroy());
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
   try {
     const cursor = require('./lib/cursor-quota-observe');
     assert.equal(cursor.observe({ verdict: 'done', liveDir: observedLiveDir }).wrote, true);
@@ -408,10 +415,12 @@ test('observer stores are isolated by default; explicit env opts into cursor and
         roles: { implementer: ['kimi'], _disabled: [] },
         checkEndpoint: allEndpointsReady,
       };
-      assert.equal(selectEngine(kimiOptions).engine, 'kimi');
-      assert.equal(selectEngine({ ...kimiOptions, env: optedInEnv }).engine, null);
+      const brokerEnv = { ...testTask, AUTOPILOT_KIMI_BROKER_SOCK: socket };
+      assert.equal(selectEngine({ ...kimiOptions, env: brokerEnv }).engine, 'kimi');
+      assert.equal(selectEngine({ ...kimiOptions, env: { ...brokerEnv, ...optedInEnv } }).engine, null);
     });
   } finally {
+    await new Promise(resolve => server.close(resolve));
     fs.rmSync(observedLiveDir, { recursive: true, force: true });
   }
 });
@@ -1525,15 +1534,16 @@ test('no kimi highspeed model id in the live roster, implementer/reviewer lists 
 });
 
 test('pace-roles _disabled: a disabled key with a fresh pace row is never returned, enabling it makes it pickable', () => {
-  const pace = priorityPace([paceRow('kimi', 5, 60)]);
+  const pace = priorityPace([paceRow('minimax', 5, 60)]);
   const pools = loadPools();
-  const roles = loadRoles();
-  assert.deepEqual(roles._disabled, ['kimi', 'minimax']);
-  const run = (r) => { try { return selectEngine({ pace, pools, roles: r, role: 'implementer', checkEndpoint: allEndpointsReady, env: { ...process.env, AUTOPILOT_KIMI_LOCAL_ALLOW: '1' } }); } catch (e) { return { error: e.code || e.message }; } };
+  const stock = loadRoles();
+  assert.deepEqual(stock._disabled, ['minimax']);
+  const roles = { ...stock, implementer: [...stock.implementer, 'minimax'] };
+  const run = (r) => { try { return selectEngine({ pace, pools, roles: r, role: 'implementer', checkEndpoint: allEndpointsReady }); } catch (e) { return { error: e.code || e.message }; } };
   const off = run(roles);
-  assert.notEqual(off.engine, 'kimi', JSON.stringify(off));
+  assert.notEqual(off.engine, 'minimax', JSON.stringify(off));
   const on = run({ ...roles, _disabled: [] });
-  assert.equal(on.engine, 'kimi', JSON.stringify(on));
+  assert.equal(on.engine, 'minimax', JSON.stringify(on));
 });
 
 // ---- DeepSeek restricted reviewer seat (PM 01M7EETN): cn_gate pool in pace-roles.json -------------------

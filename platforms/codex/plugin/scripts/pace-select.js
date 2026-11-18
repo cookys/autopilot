@@ -513,10 +513,17 @@ function selectEngine({
   const excluded = normalizeExclude(exclude);
   // pace-roles.json `_disabled`: keys kept in the tables but never offered by the picker (operator: test before enabling).
   // kimi has no usage command: a dispatch-observed exhaustion (kimi-quota-observe.js) is unpickable until its reset.
-  if (require('./lib/kimi-quota-observe').exhaustedKimi({ env: resolvedEnv })) excluded.add('kimi');
+  if (require('./lib/kimi-quota-observe').exhaustedKimi({ env: resolvedEnv, now: now instanceof Date ? now.getTime() : undefined })) excluded.add('kimi');
+  const kimiBrokerAvailable = require('./lib/cursor-broker-client').brokerAvailable('kimi', { env: resolvedEnv, now: now instanceof Date ? now.getTime() : undefined });
   const kimiStopped = require('./lib/kimi-local-stop').isStopped(resolvedEnv);
   const stoppedKeys = new Set();
-  if (kimiStopped) {
+  if (role !== 'implementer' || !kimiBrokerAvailable) {
+    excluded.add('kimi');
+    for (const entry of Object.values(mergedPools)) {
+      if (entry && entry.runner === 'kimi') excluded.add(entry.key);
+    }
+  }
+  if (role !== 'implementer' && kimiStopped) {
     stoppedKeys.add('kimi');
     for (const entry of Object.values(mergedPools)) {
       if (entry && entry.runner === 'kimi') stoppedKeys.add(entry.key);

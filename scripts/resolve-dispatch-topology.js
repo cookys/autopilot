@@ -306,18 +306,23 @@ function resolveCapabilityStoreDir(storeArg) {
   return path.join(os.homedir(), '.autopilot', 'engine-capability');
 }
 
+function kimiAvailableForRole(role) {
+  if (role === 'implementer') return require('./lib/cursor-broker-client').brokerAvailable('kimi');
+  return !require('./lib/kimi-local-stop').isStopped() && !require('./lib/kimi-quota-observe').exhaustedKimi();
+}
+
 function resolveLiveTuple(repoRoot, role, outPath, storeArg, deriveOptions) {
   const topology = loadTopologyNoWrite(repoRoot, outPath, deriveOptions);
   const ladderKey = ladderKeyForRole(role);
   const excludeSet = (deriveOptions && deriveOptions.excludeSet) || new Set();
   const ladder = (Array.isArray(topology[ladderKey]) ? topology[ladderKey] : [])
-    .filter((r) => !(r && r.runner === 'kimi' && require('./lib/kimi-local-stop').isStopped()))
+    .filter((r) => !(r && r.runner === 'kimi' && !kimiAvailableForRole(role)))
     .filter((r) => !(r && excludeSet.size > 0 && seatMatchesExcluded(r.engine, r.effort, r.runner, excludeSet)));
   const ladderTuple = tupleFromLadderRung(ladder[0]);
 
   const pin = readPinForRole(repoRoot, role, storeArg);
-  if (pin && pin.runner === 'kimi' && require('./lib/kimi-local-stop').isStopped()) {
-    process.stderr.write(`${require('./lib/kimi-local-stop').REASON}\n`);
+  if (pin && pin.runner === 'kimi' && !kimiAvailableForRole(role)) {
+    process.stderr.write(`${role === 'implementer' ? 'kimi_broker_unavailable' : require('./lib/kimi-local-stop').REASON}\n`);
     process.exit(3);
   }
   let preferred_tuple;
@@ -432,8 +437,14 @@ function getInstalledRunners(repoRoot) {
   return installed;
 }
 
-function resolveBinaryPath(binaryName, runner) {
-  if (runner === 'kimi' && require('./lib/kimi-local-stop').isStopped()) return null;
+function resolveBinaryPath(binaryName, runner, role = 'implementer') {
+  if (runner === 'kimi' && role !== 'implementer') {
+    if (require('./lib/kimi-local-stop').isStopped() || require('./lib/kimi-quota-observe').exhaustedKimi()) return null;
+  }
+  if (runner === 'kimi' && role === 'implementer') {
+    const broker = require('./lib/cursor-broker-client');
+    return broker.brokerAvailable('kimi') ? broker.brokerConfig('kimi').socket : null;
+  }
   if (!binaryName) return null;
   if (binaryName.includes(path.sep)) {
     try {
@@ -455,7 +466,8 @@ function resolveBinaryPath(binaryName, runner) {
   }
   const home = runnerFallbackHome();
   // Same per-runner table the version probe uses (codex/agy under ~/.local/bin, grok under
-  // ~/.grok/bin, kimi under ~/.kimi-code/bin): PATH was searched first, so it still wins.
+  // ~/.grok/bin, local Kimi under ~/.kimi-code/bin): PATH was searched first;
+  // implementer Kimi returned its broker socket above.
   for (const rel of (RUNNER_BINARY_FALLBACK_PATHS[runner] || [])) {
     if (!home) break;
     const candidate = path.join(home, rel);
@@ -577,7 +589,7 @@ function getQualifiedSeatsForRole(repoRoot, role, runnersInstalled) {
     // when an endpoint for the engine is configured in the environment.
     if (HTTP_RUNNERS.has(runner)) {
       if (!resolveEndpoint(engine, runner)) continue;
-    } else if (!runnersInstalled[runner]) continue;
+    } else if (runner === 'kimi' ? !resolveBinaryPath('kimi', runner, role) : !runnersInstalled[runner]) continue;
 
     // Query scorecard status with the row's runner token (or normalized).
     // When effort is empty/null, omit --effort to query the legacy partition.

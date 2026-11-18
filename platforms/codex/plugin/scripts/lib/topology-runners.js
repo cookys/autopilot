@@ -52,9 +52,15 @@ function findUnknownRungs(doc, known, retired) {
     if (!Array.isArray(doc[list])) continue;
     doc[list].forEach((r, index) => {
       const runner = r && r.runner;
-      if (runner === 'kimi' && require('./kimi-local-stop').isStopped()) {
-        found.push({ list, index, spec: specOf(r), runner, why: 'kimi_local_stopped' });
-        return;
+      if (runner === 'kimi') {
+        const brokerRole = list === 'implementer_ladder';
+        const unavailable = brokerRole
+          ? !require('./cursor-broker-client').brokerAvailable('kimi')
+          : require('./kimi-local-stop').isStopped() || require('./kimi-quota-observe').exhaustedKimi();
+        if (unavailable) {
+          found.push({ list, index, spec: specOf(r), runner, why: brokerRole ? 'kimi_broker_unavailable' : 'kimi_local_stopped' });
+          return;
+        }
       }
       if (typeof runner !== 'string' || known.has(runner)) return;
       found.push({ list, index, spec: specOf(r), runner, why: Object.prototype.hasOwnProperty.call(retired, runner) ? 'retired' : 'unknown' });

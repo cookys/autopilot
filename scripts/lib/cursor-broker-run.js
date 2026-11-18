@@ -7,14 +7,15 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const client = require('./cursor-broker-client');
 
-async function run([worktree, promptFile, model, timeout, runId, out]) {
-  if (!/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(runId)) throw new Error('invalid cursor broker dispatch run id');
-  const prompt = client.readPrompt(promptFile);
-  const root = fs.realpathSync(process.env.AUTOPILOT_CURSOR_WORK_ROOT || '/srv/cursor-work');
+async function run([worktree, promptFile, model, timeout, runId, out, runner = 'cursor']) {
+  const config = client.brokerConfig(runner);
+  if (!/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(runId)) throw new Error(`invalid ${runner} broker dispatch run id`);
+  const prompt = client.readPrompt(promptFile, runner);
+  const root = fs.realpathSync(config.workRoot);
   const clone = path.join(root, runId);
   const git = (args, opts = {}) => {
     const r = spawnSync('git', args, { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, ...opts });
-    if (r.error || r.status !== 0) throw new Error('cursor broker git operation failed');
+    if (r.error || r.status !== 0) throw new Error(`${runner} broker git operation failed`);
     return r.stdout.trim();
   };
   process.umask(0o007);
@@ -36,7 +37,7 @@ async function run([worktree, promptFile, model, timeout, runId, out]) {
       { env: { ...process.env, GIT_ALLOW_PROTOCOL: 'file' } });
     git(['-C', clone, 'checkout', '-q', '--detach', git(['-C', worktree, 'rev-parse', 'HEAD'])]);
     const { response, success } = await client.request({
-      socket: process.env.AUTOPILOT_CURSOR_BROKER_SOCK || '/srv/cursor-broker/sock',
+      runner, socket: config.socket,
       worktree: clone, prompt, model, timeout_s: Number(timeout),
     });
     fs.writeFileSync(out, JSON.stringify(response) + '\n', { mode: 0o600 });

@@ -19,6 +19,7 @@ fs.writeFileSync(path.join(bin, 'kimi'), '#!/bin/sh\nprintf "%s\\n" "$@" >> "$KI
 const prompt = path.join(tmp, 'prompt');
 fs.writeFileSync(prompt, 'update one file\n');
 const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, KIMI_STOP_RECORDER: recorder,
+  AUTOPILOT_KIMI_BROKER_SOCK: path.join(tmp, 'absent.sock'),
   AUTOPILOT_KIMI_LOCAL_ALLOW: '', AUTOPILOT_SESSION_MODE_DIR: path.join(tmp, 'session'),
   AUTOPILOT_DISPATCH_RUNS_DIR: path.join(tmp, 'runs'), AUTOPILOT_RUNNER_HOME_FALLBACK: 'off',
   ENGINE_CAPABILITY_DIR: path.join(tmp, 'capability'), ENGINE_SCORECARD_DIR: path.join(tmp, 'scorecard'),
@@ -27,7 +28,7 @@ for (const k of Object.keys(env)) if (k.startsWith('GIT_') || /^AUTOPILOT_(PAREN
 const git = (...args) => cp.execFileSync('git', ['-C', repo, ...args], { env, stdio: 'pipe' });
 git('init', '-q', '-b', 'develop');
 git('-c', 'user.name=test', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'base');
-const heteroArgs = ['--runner', 'kimi', '--model', 'kimi-code/k3', '--effort', 'high', '--prompt-file', prompt,
+const heteroArgs = ['--runner', 'kimi', '--model', 'kimi-code/k3', '--effort', 'high', '--kimi-bin', path.join(bin, 'kimi'), '--prompt-file', prompt,
   '--context-window', 'off', '--branch', 'feat/kimi-stop', '--no-verify-tip'];
 let heteroScript = path.join(root, 'scripts/dispatch-hetero.sh');
 if (process.env.KIMI_LOCAL_STOP_MUTANT === '1') {
@@ -88,8 +89,8 @@ const roles = { ...pace.loadRoles(), _disabled: [] };
 const pools = pace.loadPools();
 const result = pace.selectEngine({ pace: { schema: 'capacity.pace/1', rows: [] }, pools, roles, role: 'implementer', env, checkEndpoint: () => true });
 assert.notEqual(result.engine, 'kimi');
-assert.ok(result.candidates.some((c) => c.engine === 'kimi' && c.reason === 'kimi_local_stopped'));
-console.log('PASS pace: Kimi excluded with kimi_local_stopped');
+assert.equal(require(path.join(root, 'scripts/lib/cursor-broker-client')).brokerAvailable('kimi', { env }), false);
+console.log('PASS pace: Kimi implementer excluded without a broker');
 // Exercise jury availability with Kimi present on PATH and a dispatch stub that would record a call.
 const dispatch = path.join(tmp, 'dispatch');
 fs.writeFileSync(dispatch, '#!/bin/sh\nprintf called >> "$KIMI_STOP_RECORDER"\n', { mode: 0o755 });

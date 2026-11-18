@@ -13,15 +13,36 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 
 `;
 const MAX_PROMPT_BYTES = 64 * 1024;
-function readPrompt(file) {
+// Both runners share this protocol; only deployment policy differs.
+function brokerConfig(runner = 'cursor', env = process.env) {
+  if (runner === 'cursor') return {
+    runner, socket: env.AUTOPILOT_CURSOR_BROKER_SOCK || '/srv/cursor-broker/sock',
+    workRoot: env.AUTOPILOT_CURSOR_WORK_ROOT || '/srv/cursor-work',
+    modelPattern: /^composer-[0-9][0-9.]*$/, defaultModel: 'composer-2.5',
+    modelError: 'cursor broker requires a composer model', quotaObserver: './cursor-quota-observe',
+  };
+  if (runner === 'kimi') return {
+    runner, socket: env.AUTOPILOT_KIMI_BROKER_SOCK || '/srv/kimi-broker/sock',
+    workRoot: env.AUTOPILOT_KIMI_BROKER_WORK_ROOT || '/srv/kimi-work',
+    modelPattern: new RegExp(env.AUTOPILOT_KIMI_BROKER_MODEL_PATTERN || '^kimi-code/[A-Za-z0-9._-]+$'),
+    defaultModel: 'kimi-code/kimi-for-coding', modelError: 'kimi broker requires a matching model',
+    quotaObserver: './kimi-quota-observe',
+  };
+  throw new Error('unknown broker runner');
+}
+function validateModel(model, runner = 'cursor') {
+  const config = brokerConfig(runner);
+  if (!config.modelPattern.test(model)) throw new Error(config.modelError);
+}
+function readPrompt(file, runner = 'cursor') {
   const prompt = EDIT_ONLY + fs.readFileSync(file, 'utf8');
-  if (Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) throw new Error('cursor broker prompt exceeds 64 KiB (including harness directive)');
+  if (Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) throw new Error(`${runner} broker prompt exceeds 64 KiB (including harness directive)`);
   return prompt;
 }
-function request({ socket, worktree, prompt, model, timeout_s }) {
-  if (Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) throw new Error('cursor broker prompt exceeds 64 KiB');
-  if (!/^composer-[0-9][0-9.]*$/.test(model)) throw new Error('cursor broker requires a composer model');
-  if (!Number.isInteger(timeout_s) || timeout_s < 60 || timeout_s > 3600) throw new Error('cursor broker timeout_s must be an integer 60-3600');
+function request({ socket, worktree, prompt, model, timeout_s, runner = 'cursor' }) {
+  if (Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) throw new Error(`${runner} broker prompt exceeds 64 KiB`);
+  validateModel(model, runner);
+  if (!Number.isInteger(timeout_s) || timeout_s < 60 || timeout_s > 3600) throw new Error(`${runner} broker timeout_s must be an integer 60-3600`);
   return new Promise((resolve, reject) => {
     const conn = net.createConnection(socket);
     const chunks = [];
@@ -29,11 +50,11 @@ function request({ socket, worktree, prompt, model, timeout_s }) {
     // Broker queue time is not job execution time. The caller's watchdog owns
     // the wall limit; do not time out a serialized job merely for waiting.
     conn.on('connect', () => conn.write(JSON.stringify({ worktree, prompt, model, timeout_s }) + '\n'));
-    conn.on('error', () => reject(new Error('cursor broker socket error')));
-    conn.on('end', () => reject(new Error('cursor broker closed before a response line')));
+    conn.on('error', () => reject(new Error(`${runner} broker socket error`)));
+    conn.on('end', () => reject(new Error(`${runner} broker closed before a response line`)));
     conn.on('data', chunk => {
       bytes += chunk.length;
-      if (bytes > 16 * 1024 * 1024) { conn.destroy(); reject(new Error('cursor broker response too large')); return; }
+      if (bytes > 16 * 1024 * 1024) { conn.destroy(); reject(new Error(`${runner} broker response too large`)); return; }
       chunks.push(chunk);
       const buffer = Buffer.concat(chunks);
       const end = buffer.indexOf(10);
@@ -45,27 +66,48 @@ function request({ socket, worktree, prompt, model, timeout_s }) {
           || ['diff', 'log', 'run_id', 'reason'].some(key => typeof raw[key] !== 'string')) throw new Error();
         const response = Object.fromEntries(['diff', 'log', 'run_id', 'verdict', 'reason'].map(key => [key, raw[key]]));
         resolve({ response, success: raw.ok && raw.verdict === 'done' });
-      } catch { reject(new Error('cursor broker invalid response')); }
+      } catch { reject(new Error(`${runner} broker invalid response`)); }
     });
   });
 }
+function brokerAvailable(runner = 'kimi', { env = process.env, now } = {}) {
+  try {
+    const config = brokerConfig(runner, env);
+    if (!fs.statSync(config.socket).isSocket()) return false;
+    const quota = require(config.quotaObserver);
+    return runner === 'kimi' ? !quota.exhaustedKimi({ env, now }) : quota.cursorState({ env, now }) !== 'exhausted';
+  } catch { return false; }
+}
+function observeQuota(runner, verdict) {
+  return require(brokerConfig(runner).quotaObserver).observe({ verdict });
+}
 async function main(argv) {
+  if (argv[0] === 'available') {
+    if (argv.length !== 2) throw new Error('broker available requires runner');
+    return brokerAvailable(argv[1]) ? 0 : 3;
+  }
+  if (argv[0] === 'observe') {
+    if (argv.length !== 3) throw new Error('broker observe requires runner and verdict');
+    observeQuota(argv[1], argv[2]);
+    return 0;
+  }
   const args = {};
-  const keys = new Set(['socket', 'worktree', 'prompt-file', 'model', 'timeout-s', 'out']);
+  const keys = new Set(['socket', 'worktree', 'prompt-file', 'model', 'timeout-s', 'out', 'runner']);
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i].replace(/^--/, '');
     if (!argv[i].startsWith('--') || !keys.has(key) || !argv[i + 1] || key in args) throw new Error('invalid cursor broker client arguments');
     args[key] = argv[i + 1];
   }
-  for (const key of keys) if (!args[key] && key !== 'socket') throw new Error(`missing --${key}`);
+  for (const key of keys) if (!args[key] && !['socket', 'runner'].includes(key)) throw new Error(`missing --${key}`);
+  const runner = args.runner || 'cursor';
   const { response, success } = await request({
-    socket: process.env.AUTOPILOT_CURSOR_BROKER_SOCK || args.socket || '/srv/cursor-broker/sock',
-    worktree: args.worktree, prompt: readPrompt(args['prompt-file']), model: args.model, timeout_s: Number(args['timeout-s']),
+    runner, socket: (runner === 'cursor' && process.env.AUTOPILOT_CURSOR_BROKER_SOCK) || args.socket || brokerConfig(runner).socket,
+    worktree: args.worktree, prompt: readPrompt(args['prompt-file'], runner), model: args.model, timeout_s: Number(args['timeout-s']),
   });
   fs.writeFileSync(args.out, JSON.stringify(response) + '\n', { mode: 0o600 });
   return success ? 0 : 1;
 }
-module.exports = { EDIT_ONLY, MAX_PROMPT_BYTES, readPrompt, request, main };
+module.exports = { EDIT_ONLY, MAX_PROMPT_BYTES, brokerConfig, validateModel, brokerAvailable, observeQuota, readPrompt, request, main };
 if (require.main === module) main(process.argv.slice(2)).then(rc => { process.exitCode = rc; }).catch(err => {
   process.stderr.write(`${err.message}\n`); process.exitCode = 2;
 });

@@ -16,6 +16,13 @@ export AUTOPILOT_TEST_CN_GATE_OFF=1  # Fake Kimi fixtures carry no dispatch Size
 #      plugin refusal, one whose adapter ignores agentFile -> the same checks that pass on the real tree go red
 . "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
+# These are transport fixtures; the dedicated CN/broker suites test the real gate.
+export AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINTS_ENV="$TEST_TMP/no-endpoints.env"
+# Recorders compare child environments; never carry ambient credentials into them.
+for _fixture_name in $(compgen -e); do
+  case "$_fixture_name" in *_TOKEN|*_API_KEY|*_SECRET|*_PASSWORD) unset "$_fixture_name" ;; esac
+done
+unset _fixture_name
 AUTHOR="$REPO_ROOT/scripts/dispatch-author.sh"
 BASE_REV="${ROLE_KIT_KIMI_BASE_REV:-a271be9c9288a6584cdcfe526f059075af8753cf}"
 

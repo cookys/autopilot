@@ -396,7 +396,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(zh6[2]).toContain('→ 待決 3 張')
   expect(zh6[3]).toContain('✗ 艦隊 ')
   expect(zh6[4]).toBe('✗ 額度 紅 2（F 池、trinity）')
-  expect(frameRows(nowPage, ctxOf(80, 3, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('另有 6 項（額度 ✗2 F 池 · 待決 1 · 艦隊 ✗2 ⊘1）') // X2: even one row names the urgent quota.
+  expect(frameRows(nowPage, ctxOf(80, 3, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗2 ⊘1 · 額度 ✗2 F 池 · 待決 1 · 另有 6 項') // X2b: severity leads; urgent quota and overflow remain visible.
 
   // 3. When unshown items remain (e.g. yellow waste pool + findings exception), row 4 is `另有 N 項`
   const allTiersSnap = con({

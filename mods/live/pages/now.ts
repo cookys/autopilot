@@ -406,6 +406,11 @@ function pendingRowOf(ctx: PageCtx, decisions: number, short: boolean): Row | nu
 
 // ---- C1 short-body class summaries (one row per class: pending -> fleet -> quota -> 另有 N 項) ----
 type ShortEntry = { rows: Row[]; count: number; summary?: string }
+const SHORT_SEVERITY = [GLYPHS.state.failed, GLYPHS.state.stalled, GLYPHS.state.unknown, GLYPHS.state.need_you, GLYPHS.state.findings]
+function shortSeverity(e: ShortEntry): number {
+  const rank = SHORT_SEVERITY.findIndex(mark => e.rows.flat().some(s => s.text.trimStart().startsWith(mark)))
+  return rank < 0 ? SHORT_SEVERITY.length : rank
+}
 // X2: overflow retains the category and severity of the items that are hidden.
 function severitySummary(category: string, rows: Row[]): string {
   const counts = new Map<string, number>()
@@ -653,7 +658,12 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     if (con !== null) {
       const fleet = fleetShortSummary(ctx, con, wide)
       const quota = quotaShortSummary(ctx, con, wide)
-      if (fleet.entry !== null) fleet.entry.summary = severitySummary(t('tab.fleet'), exceptionRows(ctx, con, wide))
+      // X2b: miscellaneous exceptions belong to 現況, not the fleet class.
+      if (fleet.entry !== null) fleet.entry.summary = severitySummary(t('tab.fleet'), exceptionRows(ctx, {
+        ...con,
+        items: con.items.filter(i => isOfflineHostExc(i) || (i.line_id !== null && fleet.seenLines.has(i.line_id))),
+        lines: con.lines === null ? null : con.lines.filter(l => fleet.seenLines.has(l.line_id)),
+      }, wide))
       if (quota.entry !== null) quota.entry.summary = severitySummary(t('page.now.quota'), poolRows(ctx, con, wide))
       if (fleet.entry !== null) entries.push(fleet.entry)
       if (quota.entry !== null) entries.push(quota.entry)
@@ -678,7 +688,7 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     if (con === null) entries.push({ rows: wrapRow(broken(t('page.now.no_console')), size.cols), count: 1 })
     else if (entries.length === 0 && extraRows.length === 0 && dataMissing(con, nowMs, t)) entries.push({ rows: wrapRow(broken(t('frame.unknown')), size.cols), count: 1 })
     if (entries.length === 0 && extraRows.length > 0) {
-      for (const r of extraRows) entries.push({ rows: [r], count: 1 })
+      for (const r of extraRows) entries.push({ rows: [r], count: 1, summary: severitySummary(t('tab.now'), [r]) })
       extraRows = []
     }
     if (entries.length === 0) {
@@ -689,14 +699,40 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
       }
     }
     if (entries.length === 0) entries.push({ rows: [[dim((wide ? '  ' : '') + t('page.now.exc_none'))]], count: 1 })
+    // X2b: omitted exceptions also compete for constrained rows. Group each
+    // severity into one class row so repeated failures cannot hide the count.
+    if (extraRows.length > 0 && (room <= 1 || entries.reduce((n, e) => n + e.rows.length, 0) + 1 > room)) {
+      const groups = new Map<number, Row[]>()
+      for (const row of extraRows) {
+        const rank = shortSeverity({ rows: [row], count: 1 })
+        const group = groups.get(rank) ?? []
+        group.push(row)
+        groups.set(rank, group)
+      }
+      for (const [rank, rows] of groups) {
+        const summary = severitySummary(t('tab.now'), rows)
+        const mark = SHORT_SEVERITY[rank]
+        const color = rows.flat().find(s => mark !== undefined && s.text.trimStart().startsWith(mark))?.color
+        const grouped: Row = [{ text: (mark === undefined ? '' : mark + ' ') + summary, ...(color === undefined ? {} : { color }) }]
+        entries.push({ rows: rows.length === 1 ? rows : [grouped], count: rows.length, summary })
+      }
+      extraRows = []
+    }
     const extraCount = extraRows.length
     const extraSummary = extraCount > 0 ? [severitySummary(t('tab.now'), extraRows)] : []
-    // X2: at 80x3 the single row must identify the most urgent class and pool.
+    // X2b: the single row starts with the most severe class, keeping the pool
+    // identity and an overflow count even when there is no room for details.
     if (room <= 1 && con !== null) {
+      entries.sort((a, b) => shortSeverity(a) - shortSeverity(b))
       const q = entries.find(e => e.summary?.startsWith(t('page.now.quota') + ' '))
       const ranked = rankPools(normalizedPools(con) ?? [], nowMs, t)
-      const summaries = [...(q?.summary === undefined ? [] : [q.summary + (ranked.length === 0 ? '' : ' ' + poolLabel(ranked[0].pool))]), ...entries.filter(e => e !== q).map(e => e.summary ?? t('tab.decide') + ' ' + e.count), ...extraSummary]
-      const summary = moreItems(ctx, entries.reduce((n, e) => n + e.count, 0) + extraCount, summaries)
+      const summaries = [...entries.map(e => (e.summary ?? t('tab.decide') + ' ' + e.count) + (e !== q || ranked.length === 0 ? '' : ' ' + poolLabel(ranked[0].pool))), ...extraSummary]
+      const n = entries.reduce((n, e) => n + e.count, 0) + extraCount
+      const tail = ' · ' + t('page.now.more_items', { n })
+      const mark = SHORT_SEVERITY[shortSeverity(entries[0])]
+      const lead = mark === undefined ? '' : mark + ' '
+      const color = entries[0].rows.flat().find(s => s.text.trimStart().startsWith(mark ?? ''))?.color
+      const summary = [...truncateSegs([{ text: lead + summaries.join(' · '), ...(color === undefined ? {} : { color }) }], Math.max(0, size.cols - displayWidth(tail))), dim(tail)]
       return decisions > 0 || avail > 1 ? { body: [summary], actions: [] } : { body: [], actions: [summary] }
     }
     const totalNeeded = entries.reduce((sum, e) => sum + e.rows.length, 0) + (extraCount > 0 ? 1 : 0)
@@ -705,6 +741,9 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
       if (extraCount > 0) out.push(moreItems(ctx, extraCount, extraSummary))
       return { body: out, actions: shortActions }
     }
+    // X2b: when classes compete for rows, failed/stalled/unknown facts precede
+    // a normal pending card. Keep the established class order when all fit.
+    entries.sort((a, b) => shortSeverity(a) - shortSeverity(b))
     const budget = room - 1
     let used = 0
     let kept = 0

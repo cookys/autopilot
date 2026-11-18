@@ -1,6 +1,6 @@
 // UX gate round 2: fictional bus snapshot, rendered through the production frame.
 import { test, expect } from 'claude-code/testing'
-import { frameRows } from './frame'
+import { frameHeight, frameRows } from './frame'
 import type { PageCtx } from './frame'
 import { nowPage } from './now'
 import { fleetPage, fleetView, rowsOf } from './fleet'
@@ -12,6 +12,8 @@ import { consoleFleetCounts } from './rows'
 import type { ConsoleSnapshot, ConsoleLine } from '../console'
 import type { LiveSnapshot } from '../model'
 import { POOLS } from './quota.fixture'
+import { Pane } from '../pane'
+import { PAGES } from './index'
 
 const NOW = 1794200000000, MIN = 60_000
 const t = makeT('zh-TW')
@@ -34,6 +36,75 @@ const snapshot = (): ConsoleSnapshot => ({
 } as ConsoleSnapshot)
 const live = { state: 'ok', text: '', header: '', band: null, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null, sections: NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: { ...NO_DETAIL, residue: { reapable: 2, by_class: {}, at: null, needs_human_count: 0, needs_human_bytes: null, needs_human: [], auto_ran_at: null, auto_removed_count: null, auto_archived_count: null } } } as LiveSnapshot
 const ctx = (rows: number, con = snapshot(), cols = 80): PageCtx => ({ live, console: con, size: { cols, rows }, nowMs: NOW, t })
+
+// X2b: the real host supplies scroll.bodyRows independently of viewport height
+// (register.ts passes it through frameHeight). The measured inline allocations
+// at terminal 80x20 / 80x16 are 4 / 3 rows: header + 2 / 1 content + strip.
+function smallNow(terminalRows: 20 | 16, con = snapshot()): string[] {
+  const hostBodyRows = terminalRows === 20 ? 4 : 3
+  const mk = (kind: string) => (props: Record<string, any>) => ({ kind, props })
+  const el = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button'), Link: mk('Link') }
+  const tree = Pane(el as never, live, 'now', () => {}, t, 80, () => {}, new Set(), () => {}, new Set(), { offset: 0, bodyRows: hostBodyRows }, null, null, null, null, {
+    pages: PAGES, pageId: 'now', console: con, nowMs: NOW, rows: frameHeight(hostBodyRows, 'inline'),
+  })
+  const rows: string[] = []
+  const flat = (n: any): string => typeof n === 'string' ? n : Array.isArray(n) ? n.map(flat).join('') : flat(n?.props?.children ?? '')
+  const walk = (n: any): void => {
+    if (Array.isArray(n)) { n.forEach(walk); return }
+    if (n === null || typeof n !== 'object') return
+    if (n.kind === 'Box' && /^f\d+$/.test(n.props.key ?? '')) rows.push(flat(n))
+    else walk(n.props?.children)
+  }
+  walk(tree)
+  expect(rows.length, 'the supplied host allocation is preserved').toBe(hostBodyRows)
+  for (const row of rows) expect(displayWidth(row)).toBeLessThanOrEqual(80)
+  return rows.slice(1, -1)
+}
+
+test('X2b: 80x20 uses its two content rows for the most severe class then a severity-count overflow summary, dropping residue first', () => {
+  const rows = smallNow(20)
+  expect(rows.length).toBe(2)
+  expect(rows[0]).toMatch(/^✗ (艦隊|額度)/)
+  expect(rows[0]).toContain('艦隊')
+  expect(rows[1]).toMatch(/另有 \d+ 項/)
+  expect(rows[1]).toContain('額度 ✗2 ?3')
+  expect(rows[1]).toContain('待決 1')
+  expect(rows.join('\n')).not.toContain('殘留')
+})
+
+test('X2b: 80x16 uses its single content row for severe fleet and quota counts plus overflow, never residue', () => {
+  const rows = smallNow(16)
+  expect(rows.length).toBe(1)
+  expect(rows[0]).toMatch(/^✗ (艦隊|額度)/)
+  expect(rows[0]).toContain('艦隊')
+  expect(rows[0]).toContain('額度 ✗2 ?3')
+  expect(rows[0]).toMatch(/艦隊 ✗2 ⊘4/)
+  expect(rows[0]).toMatch(/另有 \d+/)
+  expect(rows[0]).not.toContain('殘留')
+})
+
+test('X2b: a failed miscellaneous exception precedes less severe fleet and quota classes in two or one content rows', () => {
+  const con = snapshot()
+  con.lines = [line('丙', 'stalled')]
+  con.counts.summary.hosts = { online: 6, total: 6 }
+  con.quota.pools = [{ ...POOLS[3], pool: 'unknown-only' }] as never
+  con.items = [{ id: 'exc:misc', kind: 'exception', state: 'failed', title: '發布失敗', text: '發布失敗', since_ms: NOW - MIN, line_id: null, to_console: true, facts: {} }] as never
+  const two = smallNow(20, con)
+  expect(two[0]).toBe('✗ 發布失敗')
+  expect(two[1]).toMatch(/另有 \d+ 項/)
+  expect(two[1]).toContain('額度 ?1')
+  expect(two[1]).toContain('艦隊 ⊘1')
+  const failed = con.items
+  const one = smallNow(16, con)[0]
+  expect(one).toMatch(/^✗ 現況 ✗1/)
+  expect(one).toMatch(/另有 \d+ 項/)
+  con.items = []
+  expect(smallNow(20, con)[0]).toMatch(/^⊘ 艦隊 /)
+  con.items = failed
+  con.cards = []; con.counts.decisions = 0
+  con.lines = []; con.quota.pools = []
+  expect(smallNow(16, con)[0]).toMatch(/^✗ 現況 ✗1/)
+})
 
 test('X2: 80x24 overflow names hidden severity and category, prioritizes the worst quota pool, and gives residue to tab 8', () => {
   const con = snapshot()

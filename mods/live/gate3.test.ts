@@ -116,7 +116,7 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     POOLS.find(p => p.pool === 'codex')!, // green
   ]
   const cNow = { ...(snap(oneRedOneUnknown, { cards: [], lines: [c.lines![1]] }) as object), items: [] } as ConsoleSnapshot
-  expect(frameRows(nowPage, { ...(ctxOf(80, 4, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('另有 4 項（額度 ✗1 ?1 trinity · 艦隊 ✗1）') // X2: urgency and category in the only row.
+  expect(frameRows(nowPage, { ...(ctxOf(80, 4, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗1 · 額度 ✗1 ?1 trinity · 另有 4 項') // X2b: severe classes lead; pool identity and overflow remain visible.
   for (const H of [5, 6, 7]) {
     const nOut = frameRows(nowPage, { ...(ctxOf(80, H, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
     expect(nOut.length).toBe(H)

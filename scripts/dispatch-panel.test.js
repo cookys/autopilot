@@ -857,3 +857,53 @@ process.exit(0);
     sb.cleanup();
   }
 });
+
+test('codex:astra resolves to gpt-6.2-astra and explicit codex:gpt-6-astra remains allowed', () => {
+  const { resolveSeat } = require('./dispatch-panel');
+  const sb = makeSandbox();
+  try {
+    const promptFile = writePrompt(sb, 'clean.txt', 'Compare panel seat alias routing.\n');
+
+    const aliasSeat = resolveSeat(
+      { raw: 'codex:astra', runner: 'codex', model: 'astra', effort: '' },
+      promptFile,
+    );
+    assert.equal(aliasSeat.allowed, true);
+    assert.equal(aliasSeat.runner, 'codex');
+    assert.equal(aliasSeat.model, 'gpt-6.2-astra');
+
+    const explicitRollbackSeat = resolveSeat(
+      { raw: 'codex:gpt-6-astra', runner: 'codex', model: 'gpt-6-astra', effort: '' },
+      promptFile,
+    );
+    assert.equal(explicitRollbackSeat.allowed, true);
+    assert.equal(explicitRollbackSeat.runner, 'codex');
+    assert.equal(explicitRollbackSeat.model, 'gpt-6-astra');
+
+    const outDir = path.join(sb.dir, 'out-astra-alias');
+    const res = runPanel(sb, [
+      '--prompt-file', promptFile,
+      '--seat', 'codex:astra',
+      '--seat', 'codex:gpt-6-astra',
+      '--out-dir', outDir,
+      '--author-cmd', sb.authorStub,
+    ]);
+    assert.equal(res.status, 0, res.stderr);
+    const panel = JSON.parse(fs.readFileSync(path.join(outDir, 'panel.json'), 'utf8'));
+    assert.equal(panel.complete, true);
+    assert.equal(panel.seats.length, 2);
+    assert.equal(panel.seats[0].seat, 'codex:astra');
+    assert.equal(panel.seats[0].status, 'ok');
+    assert.equal(fs.readFileSync(panel.seats[0].out_path, 'utf8'), 'response-from:codex:gpt-6.2-astra\n');
+    assert.equal(panel.seats[1].seat, 'codex:gpt-6-astra');
+    assert.equal(panel.seats[1].status, 'ok');
+    assert.equal(fs.readFileSync(panel.seats[1].out_path, 'utf8'), 'response-from:codex:gpt-6-astra\n');
+
+    const calls = readCalls(sb.logDir);
+    assert.equal(calls.length, 2);
+    const pairs = calls.map((c) => `${c.runner}:${c.model}`).sort();
+    assert.deepEqual(pairs, ['codex:gpt-6-astra', 'codex:gpt-6.2-astra']);
+  } finally {
+    sb.cleanup();
+  }
+});

@@ -77,7 +77,7 @@ const RUNNER_ALIASES = Object.freeze({
 const MODEL_ALIASES = Object.freeze({
   hydrogen: 'gemini-4-hydrogen-high',
   carbon: 'gemini-4-carbon-high',
-  astra: 'gpt-6-astra',
+  astra: 'gpt-6.2-astra', // rollback: set back to 'gpt-6-astra'
   fable: 'opus',
 });
 const CLAUDE_CLI_ALIASES = new Set(SEAT_CLAUDE_ALIASES);
@@ -90,6 +90,7 @@ const ALLOWED_FAMILIES = new Set(['anthropic', 'openai', 'google', 'xai']);
 // data-class-policy.json, and lib/cursor-model.sh.
 const SUPPLEMENTAL_MODELS_BY_RUNNER = Object.freeze({
   codex: [
+    'gpt-6.2-astra',
     'gpt-6-astra',
     'gpt-6.1-sol',
     'gpt-6-sol',

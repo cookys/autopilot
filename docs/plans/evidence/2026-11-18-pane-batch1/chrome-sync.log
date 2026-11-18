@@ -1,0 +1,6 @@
+── sync-agent-bodies: bash scripts/sync-agent-bodies.sh
+── sync-model-routing: bash scripts/sync-model-routing.sh
+── sync-codex-plugin-skills: bash scripts/sync-codex-plugin-skills.sh
+── sync-opencode-plugin: bash scripts/sync-opencode-plugin.sh
+── hook-harness-matrix: node scripts/hook-harness-matrix.js --write
+{"mode":"generate","changed":false,"ran":["sync-agent-bodies","sync-model-routing","sync-codex-plugin-skills","sync-opencode-plugin","hook-harness-matrix"],"skipped":["sync-version (no generate cmd)","check-canonical-invariants (no generate cmd)","check-readme-parity (no generate cmd)","check-hook-inventory (no generate cmd)","check-config-docs (no generate cmd)","check-quota-adapters (no generate cmd)","check-claude-md-inventory (no generate cmd)","check-js-syntax (no generate cmd)","check-backlog-entries (no generate cmd)","check-contract-schema (no generate cmd)","check-profile-catalog (no generate cmd)"],"unknown_only":[],"failures":[],"ok":true}

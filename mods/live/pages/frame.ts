@@ -25,9 +25,9 @@ export interface Page { id: PageId; key: string; title: string; framed?: true; r
 export type ExtraTab = { id: string; key: string; label: string }
 export type FrameOpts = { scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[] }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
 
-// the pane's height is fixed: the rows the host offers, at most 24, whatever the page shows (PM 01M7N33J: the screen must not jump on a page switch)
+// Height is fixed for the host allocation: a dock beside chat uses every row; an inline (stacked) pane is capped at 24.
 export const FRAME_MAX_ROWS = 24
-export const frameHeight = (available: number): number => Math.max(0, Math.min(available, FRAME_MAX_ROWS))
+export const frameHeight = (available: number, placement: 'dock' | 'inline' = 'inline'): number => Math.max(0, placement === 'dock' ? available : Math.min(available, FRAME_MAX_ROWS))
 
 export const actionRows = (rows: number): number => (rows >= 32 ? 6 : 4)
 
@@ -104,7 +104,7 @@ function wrapRow(row: Row, cols: number): Row[] {
 
 // The host draws every hotkey Button as `<key>: <label>`, so each Button is one cell wider than its text (`1 現況` -> `1: 現況`). A Button is measured with that prefix, and every pair of
 // neighbouring Buttons has a one-cell separator. Under 66 columns the strip takes 2 rows (entries 1-6 on row 1, then 7, 8, 9, 0, i on row 2); at 66+ columns it takes 1 row. Labels shorten to
-// their first character only when a row does not fit; no entry is ever dropped and every Button keeps a non-empty label.
+// compact localized names only when a row does not fit; pet, forge and Fleet never become ambiguous action letters. No entry is dropped.
 export const STRIP_SPLIT_COLS = 66
 const HOST_PREFIX = 1
 const HELP_KEY = 'i'
@@ -116,7 +116,7 @@ export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const helpLabel = ctx.t('frame.help')
   const esc = '  Esc ' + ctx.t('frame.close')
   type Form = 'full' | 'short'
-  const labelOf = (x: { label: string }, f: Form): string => (f === 'full' ? x.label : first(x.label))
+  const labelOf = (x: { id?: string; label: string }, f: Form): string => (f === 'full' ? x.label : x.id === 'pet' || x.id === 'forge' || x.id === 'fleet' ? ctx.t('tab.' + x.id + '_short') : first(x.label))
   const entrySeg = (x: { id: string; key: string; label: string }, f: Form): Seg => {
     const on = x.id === active
     return { text: x.key + ' ' + labelOf(x, f), press: 'tab:' + x.key + ':' + x.id, ...(on ? { color: PALETTE.here } : {}) }

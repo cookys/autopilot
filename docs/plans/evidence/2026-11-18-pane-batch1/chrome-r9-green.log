@@ -1,0 +1,26 @@
+
+mods/live/chrome.test.ts:
+(pass) R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label [11.44ms]
+(pass) R7: pressing 1 on 現況 keeps the pane open on 現況 [0.35ms]
+(pass) R7 mounted: current-page digit Button does not call ui.close or change the 現況 header [282.20ms]
+(pass) R9: collapsed band shows snapshot pending and fault counts, [+], no digit keys, exactly two rows [14.75ms]
+
+mods/live/fixed-height.test.ts:
+(pass) band: 160 columns, 2 rows closed and on every tab, in every state (r2 §3.1) [23.20ms]
+(pass) band: 120 columns, 2 rows closed and on every tab, in every state (r2 §3.1) [10.42ms]
+(pass) band: 80 columns, 2 rows closed and on every tab, in every state (r2 §3.1) [7.21ms]
+(pass) band: no transition artefacts — no open-panel button, no › next chip (r2 §3.2, UX gate 沒有過渡產物) [4.34ms]
+(pass) pane: 160x40, every tab and state draws the same row count (r2 §3.1) [122.06ms]
+(pass) pane: 120x30, every tab and state draws the same row count (r2 §3.1) [85.73ms]
+(pass) pane: 80x24, every tab and state draws the same row count (r2 §3.1) [67.22ms]
+
+mods/live/gate3.test.ts:
+(pass) gate3 item 1: quota draws exactly one row per pool at 160x40, 120x30, 80x24 and narrow docked widths, no continuation fragment, short verdict in table, full verdict in focus, dropping 重置 then 近 6 時 [17.78ms]
+(pass) gate3 item 2: when body has 4 rows or fewer, no section title and no column header are drawn; 額度 shows >= 1 pool row and 現況 shows >= 1 item ordered red pools -> unknown pools -> stuck lines [5.55ms]
+(pass) gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0, i) and >= 66 uses 1 row across all pages, fitting host "<key>: " width [41.59ms]
+(pass) gate3 item 4: BandBar with pane closed in console mode draws new page names 1-8 as Buttons without digit hotkeys and no old console tab names [2.50ms]
+(pass) gate4 empty state with pending cards: 3 pending cards (console.cards or live.pending) with sources ok on 艦隊 and 額度 shows page.now.go_decide (after frame.unknown_pools when n > 0), never 沒有要你處理的事 or 沒有待決卡 [6.26ms]
+
+ 16 pass
+ 0 fail
+Ran 16 tests across 3 files. [0.62s]

@@ -77,3 +77,30 @@ red -> green gate3 item 2: when body has 4 rows or fewer, no section title and n
 red -> green gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0, i) and >= 66 uses 1 row across all pages, fitting host "<key>: " width
 red -> green gate3 item 4: BandBar with pane closed in console mode draws new page names 1-8 as Buttons without digit hotkeys and no old console tab names
 red -> green gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names 1-8 without digit hotkeys and no old tab name, and pressing any name opens the pane on that page (terminal)
+
+# UX round 2 part B: pane chrome (base 28bae06a659cc67b39685042027cdc3405184d70)
+red -> green R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label
+R6: chrome-r6-red.log exit 1; chrome-r6-green.log exit 0 (225 pass, 0 fail).
+red -> green R7: pressing 1 on 現況 keeps the pane open on 現況
+red -> green R7 mounted: current-page digit Button does not call ui.close or change the 現況 header
+red -> green keys: decide (not text mode) — 1–8 only switch page (own key stays), a–e pick option 0–4
+red -> green keys: one meaning per key — digits, 9, 0, ? switch page identically on every page
+R7: chrome-r7-red.log exit 1; chrome-r7-green.log exit 0 (11 pass, 0 fail).
+red -> green R9: collapsed band shows snapshot pending and fault counts, [+], no digit keys, exactly two rows
+R9: chrome-r9-red.log exit 1; chrome-r9-green.log exit 0 (16 pass, 0 fail).
+red -> green R12: action role uses the accessible light-theme link token with contrast >= 4.5:1
+R12: chrome-r12-red.log exit 1; chrome-r12-green.log exit 0 (28 pass, 0 fail); chrome-lint.log exit 0 (56 pass).
+red -> green R13: dock uses all 40 available rows with strip last; inline stays capped at 24
+red -> green R13 mounted: host dock bodyRows reaches the last row at 160x40 and 120x30; inline 80x24 stays capped
+R13: chrome-r13-red.log exit 1; chrome-r13-green.log exit 0 (269 pass, 0 fail).
+red -> green decide keys: n opens the note mode; digits and letters are text until Enter saves or Esc drops; page digits win again after
+red -> green pane review fix: folding the 艦隊 page clamps the focus to the last shown row (terminal)
+Follow-ups: chrome-suite-before-compat.log exit 1 (1442 pass, 21 fail) exposed the additional R7 assertion and tall-dock focus clamp; subsequent full run exit 1 (1448 pass, 15 baseline fail). Legacy-only toggle behavior retained.
+red -> green R12 legend: action help follows the link role instead of promising purple
+Legend: chrome-legend-red.log exit 1; chrome-legend-green.log exit 0 (8 pass, 0 fail).
+FINAL: AUTOPILOT_MODS_REAL_CLAUDE=<caller real binary> bash mods/live/run-tests.sh < /dev/null: exit 1; 1449 pass, 15 fail; preceding Node suites 186 pass, 0 fail. See chrome-suite.log and chrome-suite.exit.
+FINAL: sorted fail-line diff vs caller bandrow-brief/fb.txt: exit 0, empty output; chrome-failures.txt has exactly 15 lines; chrome-failures.diff is empty.
+FINAL: bash scripts/sync-all.sh exit 0; bash scripts/sync-all.sh --check exit 0; both ok=true. git diff --check exit 0.
+File inventory and explicit deferred/out-of-scope items: chrome-report.md. No push; independent cross-family review remains with caller.
+Evidence hygiene: scripts/redact-personal.js redacted fixture home paths and host names in the two full-suite logs; failure names and counts unchanged.
+Evidence formatting: log-line trailing whitespace normalized; test names/results unchanged. Repository pre-commit gate and staged leak guard both exit 0.

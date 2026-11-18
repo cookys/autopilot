@@ -188,7 +188,7 @@ test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) 
       const tree = Pane(EL as never, LIVE0, 'now', () => {}, loc, cols, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: shown, console: c, nowMs: NOW, rows: 24 } as never)
       const allBtns = walk(tree).filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY)
       expect(allBtns.filter(b => flat(b).trim() === '').map(b => b.props.key), cols + ': no empty-label Button').toEqual([])
-      expect(allBtns.filter(b => /^[0-9]$/.test(b.props.hotkey ?? '')).map(b => b.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'])
+      expect(allBtns.filter(b => /^[0-9]$/.test(b.props.hotkey ?? '')).map(b => b.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'])
       expect(allBtns.some(b => b.props.hotkey === 'i' && flat(b).trim().length > 0)).toBe(true)
     }
     expect(counts.size, cols + ': strip row count never changes between pages').toBe(1)

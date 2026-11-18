@@ -362,7 +362,7 @@ test('decide keys: n opens the note mode; digits and letters are text until Ente
   const dropped = press('Escape', n, C160).nav
   expect(dropped.textMode).toBe(false)
   expect(dropped.notes).toEqual({})
-  expect(routeKey('2', { page: 'decide', paneFocus: true, focusedButton: false, textMode: false }).kind).toBe('close') // outside text mode the page digit wins again (routeKey: same page closes)
+  expect(routeKey('2', { page: 'decide', paneFocus: true, focusedButton: false, textMode: false }).kind).toBe('none') // outside text mode the page digit wins again; selecting the current page is idempotent
 })
 
 test('decide keys: h l move between cards (clamped), z folds, f fills the prompt without sending', () => {

@@ -107,7 +107,7 @@ type El = (props: any) => any
 // The tab strip (ui.ts `strip`): Buttons when the surface has them (a click or Enter switches the tab), plain Text otherwise. The active tab is a bold name, and
 // the baseline under the strip carries a `claude` run of `━` beneath it (a strip that wraps keeps the bold alone). A tab that holds something for the owner is
 // drawn attention bold (no badge, no count).
-// There is no `›` next-tab chip any more: a tab is chosen by its digit (the Button's hotkey, PAGE_DIGIT) or a click, and the digit of the tab showing closes the pane (register.ts).
+// There is no `›` next-tab chip any more: a tab is chosen by its digit (the Button's hotkey, PAGE_DIGIT) or a click, and the digit of the tab showing leaves it open (register.ts).
 function tabStrip(el: { Box: El; Text: El; Button?: El }, tab: PaneTab, onTab: (t: PaneTab) => void, snap: LiveSnapshot | null, t: T, cols: number) {
   return stripView(el, stripOf(snap, { t, cols }, tab, false) as Strip<PaneTab>, onTab, PAGE_DIGIT)
 }
@@ -200,10 +200,10 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       const sg = r[j]
       const m = sg.press === undefined ? null : /^tab:(\d):(\w+)$/.exec(sg.press)
       const to = m === null ? undefined : PAGE_TAB[m[2]]
-      if (m !== null && to !== undefined && Button !== undefined) {
+      if (m !== null && frame.pages.some(p => p.id === m[2]) && Button !== undefined) {
         // the strip owns the digit hotkey; the host draws `<digit>: <label>`, so the label is the page name alone. A page's own `[2]` action is a click target only.
         const label = <Text key={'g' + j} {...drawSeg(sg)} wrap="truncate">{isStrip ? sg.text.replace(/^\d+\s+/, '') : sg.text}</Text>
-        const choose = () => (frame.onPage !== undefined ? frame.onPage(m[2] as PageId) : onTab(to))
+        const choose = () => (frame.onPage !== undefined ? frame.onPage(m[2] as PageId) : to === undefined ? undefined : onTab(to))
         nodes.push(isStrip ? <Button key={m[2]} plain {...(typing ? {} : { hotkey: m[1] })} onPress={choose}>{label}</Button> : <Button key={'a:' + i + ':' + m[2]} plain onPress={choose}>{label}</Button>)
         continue
       }

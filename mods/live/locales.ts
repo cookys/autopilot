@@ -737,8 +737,21 @@ export const EN: Record<string, string> = {
   "page.fleet.act_fold_c": "[z] Unfold",
   "page.fleet.act_fold_c_open": "[z] Fold",
   "page.fleet.act_nudge_c": "[f] Nudge",
-  "page.now.pending_no_source": "Pending ? (no source)",
-  "page.decide.pending_no_source": "Pending ? (no source)"
+  "page.now.pending_no_source": "Pending ? (no source: {why})",
+  "page.decide.pending_no_source": "Pending ? (no source: {why})",
+  "page.now.nosrc_pointer": "no pointer file",
+  "page.now.nosrc_console": "no console snapshot",
+  "page.now.fleet_offline_named": "offline {n} lines ({names})",
+  "page.now.fleet_offline_bare": "offline {n} lines",
+  "page.now.fleet_stuck_named": "stuck {n} lines ({names})",
+  "page.now.fleet_stuck_bare": "stuck {n} lines",
+  "page.now.fleet_idle_named": "idle {n} lines ({names})",
+  "page.now.fleet_idle_bare": "idle {n} lines",
+  "page.now.fleet_hosts_off": "hosts {online}/{total} ({off} offline)",
+  "page.now.quota_red_named": "red {n} ({names})",
+  "page.now.quota_red_bare": "red {n}",
+  "page.now.quota_unknown_named": "unknown {n} ({names})",
+  "page.now.quota_unknown_bare": "unknown {n}"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -1476,6 +1489,19 @@ export const ZH_TW: Record<string, string> = {
   "page.fleet.act_fold_c": "[z] 展開",
   "page.fleet.act_fold_c_open": "[z] 收合",
   "page.fleet.act_nudge_c": "[f] 催辦",
-  "page.now.pending_no_source": "待決 ? 張（無來源）",
-  "page.decide.pending_no_source": "待決 ? 張（無來源）"
+  "page.now.pending_no_source": "待決 ? 張（無來源：{why}）",
+  "page.decide.pending_no_source": "待決 ? 張（無來源：{why}）",
+  "page.now.nosrc_pointer": "沒有指標檔",
+  "page.now.nosrc_console": "沒有 console 快照",
+  "page.now.fleet_offline_named": "離線 {n} 線（{names}）",
+  "page.now.fleet_offline_bare": "離線 {n} 線",
+  "page.now.fleet_stuck_named": "卡住 {n} 線（{names}）",
+  "page.now.fleet_stuck_bare": "卡住 {n} 線",
+  "page.now.fleet_idle_named": "閒置 {n} 線（{names}）",
+  "page.now.fleet_idle_bare": "閒置 {n} 線",
+  "page.now.fleet_hosts_off": "主機 {online}/{total}（離線 {off}）",
+  "page.now.quota_red_named": "紅 {n}（{names}）",
+  "page.now.quota_red_bare": "紅 {n}",
+  "page.now.quota_unknown_named": "未知 {n}（{names}）",
+  "page.now.quota_unknown_bare": "未知 {n}"
 }

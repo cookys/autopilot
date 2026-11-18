@@ -11,7 +11,7 @@ import type { DecideState, LiveDecision, Seg } from '../model'
 import { GLYPHS, PALETTE, wrapPlain } from '../ui'
 import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, pendingSourceMissing } from './rows'
+import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow } from './rows'
 import type { Row } from './rows'
 
 // ---- view state and the key reducer ----
@@ -252,7 +252,7 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
   const m = modelOf(ctx)
   const noPendingSrc = pendingSourceMissing(ctx)
   const body: Row[] = []
-  if (noPendingSrc) body.push(noSource(ctx, 'page.decide.pending_no_source'))
+  if (noPendingSrc) body.push(...wrapRow(brokenRow(GLYPHS.state.failed + ' ' + t('page.decide.pending_no_source', { why: pendingMissingReason(ctx, t) })), ctx.size.cols))
   // §5: a source that is stale or missing says so in red, with its reason
   if (ctx.live === null) body.push(noSource(ctx, 'page.decide.nosrc_live'))
   else if (ctx.live.state !== 'ok') body.push(...brokenRows(GLYPHS.state.failed + ' ' + t('page.decide.stale_live', { why: ctx.live.header }), ctx.size.cols))

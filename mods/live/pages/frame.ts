@@ -14,7 +14,7 @@ import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE } from '../ui'
 import { PAGES } from './index'
 import { STRIP_SPLIT_COLS } from './layout'
-import { brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount } from './rows'
+import { brokenRow, decisionCount, poolsNeedLook, sourceMissing, staleBadge, unknownPoolCount, wrapRow } from './rows'
 import type { Row } from './rows'
 
 export type { Row } from './rows'
@@ -75,32 +75,6 @@ function clip(row: Row, cols: number): Row {
     break
   }
   return out.length === 0 ? blank() : out
-}
-
-// A row wider than the pane is wrapped onto further rows at the width, never cut with an ellipsis: a reason or a command shown half is worse than a taller page (A10, G6).
-function wrapRow(row: Row, cols: number): Row[] {
-  if (cols <= 0 || row.reduce((w, x) => w + displayWidth(x.text), 0) <= cols) return [row]
-  const out: Row[] = []
-  let cur: Row = []
-  let used = 0
-  for (const seg of row) {
-    let buf = ''
-    for (const ch of seg.text) {
-      const w = displayWidth(ch)
-      if (used + w > cols) {
-        if (buf !== '') cur.push({ ...seg, text: buf })
-        out.push(cur)
-        cur = []
-        buf = ''
-        used = 0
-      }
-      buf += ch
-      used += w
-    }
-    if (buf !== '') cur.push({ ...seg, text: buf })
-  }
-  if (cur.length > 0) out.push(cur)
-  return out
 }
 
 // The host draws every hotkey Button as `<key>: <label>`, so each Button is one cell wider than its text (`1 現況` -> `1: 現況`). A Button is measured with that prefix, and every pair of
@@ -174,12 +148,12 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
     const body = r.body.flatMap(x => wrapRow(x, ctx.size.cols))
-    const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || (ctx.shortBody === true && decisionCount(ctx) > 0) || body.some(x => x.some(s => s.press === 'tab:2:decide')))
+    const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || decisionCount(ctx) > 0 || body.some(x => x.some(s => s.press === 'tab:2:decide')))
     const acts: Row[] = r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
     return { body, acts, room: avail - Math.min(acts.length, avail), short }
   }
-  let lay = layout(first, ctx.shortBody === true)
-  if (lay.room <= 4 && ctx.shortBody !== true) {
+  let lay = layout(first, ctx.shortBody === true || avail <= 4)
+  if ((lay.room <= 4 || avail <= 4) && ctx.shortBody !== true) {
     const compact = page.render({ ...ctx, shortBody: true })
     if (compact.actions.length <= full) lay = layout(compact, true)
   } else if (opts.unfold !== undefined && lay.body.length < lay.room && lay.room > 4) {

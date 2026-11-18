@@ -144,7 +144,7 @@ test('now: frameRows is exactly H rows at every size and every state, actions ne
 test('now: null console and null live draw the no-source row, never throw', async () => {
   seatQuota.reset()
   const out = content(80, 24, null, null)
-  expect(out.some(r => r.includes('待決 ? 張（無來源）'))).toBe(true)
+  expect(out.some(r => r.includes('待決 ? 張（無來源：沒有指標檔、沒有 console 快照）'))).toBe(true)
   expect(out.some(r => r.includes('無來源：沒有 console 資料'))).toBe(true)
   expect(out.some(r => r.includes('無來源：本席沒有 live 資料'))).toBe(true)
   const red = nowPage.render(ctxOf(80, 24, null, null)).body.flat().filter(s => s.text.includes('無來源'))
@@ -274,7 +274,7 @@ test('now R1: on every page at 80x24, 120x30, 160x40, each pool_key appears at m
   }
 })
 
-test('now R2: shortBody (<= 4 rows) combines Button + pending summary first, drops duplicate 到待決頁 action row, orders pending -> red pools -> offline hosts -> stuck lines -> unknown -> yellow, and turns overflow into 另有 N 項', () => {
+test('now R2: shortBody (<= 4 rows) combines Button + pending summary first, drops duplicate 到待決頁 action row, summarises each class once (pending -> fleet -> quota), and shows 另有 N 項 only for what is still not shown', () => {
   seatQuota.reset()
   const cards = [
     { id: 'd-00000001', question: '合併主幹前是否要先凍結第二波評測排程並通知各線負責人確認相容性與回滾方案', status: 'open' as const, opened_at_ms: NOW - 24 * 60 * MIN, executor_display: 'PM' },
@@ -284,24 +284,24 @@ test('now R2: shortBody (<= 4 rows) combines Button + pending summary first, dro
   const pools = [
     POOLS.find(p => p.pool === 'trinity')!, // red
     POOLS.find(p => p.pool === 'personal')!, // unknown
-    POOLS.find(p => p.pool === 'grok')!, // yellow (waste)
+    POOLS.find(p => p.pool === 'grok')!, // yellow (waste -> not in red/unknown quota summary, counted in 另有 N 項)
   ]
   const lines = [{ line_id: 'rec', label: '復原線', lead_display: 'PM', issues: [{ rule: 'T4', state: 'failed', subject: '成員離線', since_ms: NOW - 20 * MIN, to_console: true }] }]
   const c = con({ counts: { ...con().counts, decisions: 3 }, cards, items: [], lines, quota: { pools: pools as never, seats: [] }, sources: { hosts: { at_ms: NOW - 10_000, state: 'ok' }, tasks: { at_ms: NOW - 10_000, state: 'ok' }, quota_forecast: { at_ms: NOW - 10_000, state: 'ok' } } })
-  const shortRendered = nowPage.render({ ...(ctxOf(80, 7, c, live({ detail: { ...(live() as any).detail, residue: null } })) as object), shortBody: true } as never)
+  const liveNoRes = live({ detail: { ...(live() as any).detail, residue: null } })
+  const shortRendered = nowPage.render({ ...(ctxOf(80, 7, c, liveNoRes) as object), shortBody: true } as never)
   expect(shortRendered.actions).toEqual([])
   expect(shortRendered.body[0][0].press).toBe('tab:2:decide')
   expect(text(shortRendered.body[0]).startsWith('→ 待決 3 張（最舊 1 天）：合併主幹前')).toBe(true)
   expect(text(shortRendered.body[0]).endsWith('…')).toBe(true)
-  const framed = frameRows(nowPage, ctxOf(80, 7, c, live({ detail: { ...(live() as any).detail, residue: null } }))).map(text).slice(1, 6)
-  expect(framed[0]).toContain('→ 待決 3 張（最舊 1 天）：')
-  expect(framed[1]).toContain('trinity')
-  expect(framed[2]).toBe('✗ 主機 離線 1 台')
-  expect(framed[3]).toContain('復原線')
-  expect(framed[4]).toBe('另有 2 項')
+  const framed6 = frameRows(nowPage, ctxOf(80, 6, c, liveNoRes)).map(text).slice(1, 5)
+  expect(framed6[0]).toContain('→ 待決 3 張（最舊 1 天）：')
+  expect(framed6[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 17/18（離線 1）')
+  expect(framed6[2]).toBe('✗ 額度 紅 1（trinity）· ? 未知 1（personal）')
+  expect(framed6[3]).toBe('另有 1 項')
 })
 
-test('now C1: 80x24 short 現況 with 3 pending cards, 2 red pools, 1 offline host and 2 stuck lines renders pending Button without 到待決頁, orders red pools and offline host before stuck lines, shows 另有 N 項 on overflow, bottom-anchors and deduplicates pool_key', () => {
+test('now C1: short 現況 summarises each class once (pending -> fleet -> quota -> 另有 N 項), omits empty classes, truncates names with … to fit width, bottom-anchors, deduplicates pool_key, and keeps 另有 6 項 at 80x3', () => {
   seatQuota.reset()
   type Node = { kind: string; props: Record<string, any> }
   const mk = (kind: string) => (props: Record<string, any>): Node => ({ kind, props })
@@ -345,14 +345,14 @@ test('now C1: 80x24 short 現況 with 3 pending cards, 2 red pools, 1 offline ho
   })
   const liveNoRes = live({ detail: { ...(live() as any).detail, residue: null } })
 
-  // 1. Rendered through Pane at 80 cols, short inline height 7 (80x24 inline pane): pending row is a clickable Button with non-empty label, no separate 到待決頁 row, strip on last row
+  // 1. Rendered through Pane at 80 cols, short inline height 7 (80x24 inline pane): pending row is a clickable Button, bottom-anchored above fleet + quota class rows, strip on last row
   const opened: string[] = []
   const tree = Pane(EL as never, liveNoRes, 'now', () => {}, t, 80, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: PAGES, pageId: 'now', onPage: id => opened.push(id), console: c1Snap, nowMs: NOW, rows: 7 })
   const nodes = walk(tree)
   const rowBoxes = nodes.filter(n => n.kind === 'Box' && /^f\d+$/.test(String(n.props.key ?? '')))
   expect(rowBoxes.length).toBe(7)
   expect(rowBoxes.map(flatNode).join('\n')).not.toContain('到待決頁')
-  const pendingBtn = nodes.find(n => n.kind === 'Button' && n.props.key === 'a:1:decide')
+  const pendingBtn = nodes.find(n => n.kind === 'Button' && /^a:\d+:decide$/.test(String(n.props.key ?? '')))
   expect(pendingBtn, 'pending row is a Button').toBeDefined()
   expect(flatNode(pendingBtn).startsWith('→ 待決 3 張（最舊 45 分）：是否先將第二批')).toBe(true)
   expect(flatNode(pendingBtn).trim().length).toBeGreaterThan(0)
@@ -361,63 +361,60 @@ test('now C1: 80x24 short 現況 with 3 pending cards, 2 red pools, 1 offline ho
   const stripBtns = walk(rowBoxes[6]).filter(n => n.kind === 'Button' && n.props.key !== FOCUS_ANCHOR_KEY)
   expect(stripBtns.filter(b => /^[0-9]$/.test(b.props.hotkey ?? '')).map(b => b.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'])
 
-  // 2. Freed action row goes to content: 5 body rows show pending + 2 red pools + 1 offline host + 另有 2 項 (zh-TW and en), never silently dropped
+  // 2. Class summary rows (zh-TW and en): pending, fleet, quota each appear once; nothing hidden -> no 另有 N 項
   const zh7 = frameRows(nowPage, ctxOf(80, 7, c1Snap, liveNoRes), { pages: PAGES }).map(text)
   expect(zh7.length).toBe(7)
   expect(zh7.join('\n')).not.toContain('到待決頁')
-  expect(zh7[1]).toContain('→ 待決 3 張（最舊 45 分）：')
-  expect(zh7[2]).toContain('F 池')
-  expect(zh7[3]).toContain('trinity')
-  expect(zh7[4]).toContain('主機 h6 離線 12 分')
-  expect(zh7[5]).toBe('另有 2 項')
+  expect(zh7.slice(1, 3)).toEqual(['', ''])
+  expect(zh7[3]).toContain('→ 待決 3 張（最舊 45 分）：')
+  expect(zh7[4]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
+  expect(zh7[5]).toBe('✗ 額度 紅 2（F 池、trinity）')
   expect(zh7[6]).toContain('1 現 2 待')
 
   const en7 = frameRows(nowPage, { ...(ctxOf(80, 7, c1Snap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
   expect(en7.length).toBe(7)
   expect(en7.join('\n')).not.toContain('Open the pending page')
-  expect(en7[1]).toContain('→ Pending 3 (oldest 45m)：')
-  expect(en7[5]).toBe('2 more items')
+  expect(en7[3]).toContain('→ Pending 3 (oldest 45m)：')
+  expect(en7[4]).toBe('✗ Fleet offline 1 lines (復原線) · stuck 1 lines (遊戲線) · hosts 17/18 (1 offline)')
+  expect(en7[5]).toBe('✗ quota red 2 (F 池, trinity)')
 
-  // Summary-only offline host (no host item in console.items, summary.hosts 17/18) also surfaces in the offline-host slot
+  // Summary-only offline host (no host item in console.items, summary.hosts 17/18) also surfaces in the fleet summary row
   const summaryOnlySnap = con({ ...c1Snap, items: dupPoolItems as never })
   const sumZh7 = frameRows(nowPage, ctxOf(80, 7, summaryOnlySnap, liveNoRes), { pages: PAGES }).map(text)
-  expect(sumZh7[4]).toBe('✗ 主機 離線 1 台')
-  expect(sumZh7[5]).toBe('另有 2 項')
+  expect(sumZh7[4]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
   const sumEn7 = frameRows(nowPage, { ...(ctxOf(80, 7, summaryOnlySnap, liveNoRes) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
-  expect(sumEn7[4]).toBe('✗ hosts 1 offline')
-  expect(sumEn7[5]).toBe('2 more items')
+  expect(sumEn7[4]).toContain('hosts 17/18 (1 offline)')
 
-  // Even at H=6 (4 body rows -> 另有 3 項) and H=3 (1 body row -> 另有 6 項), overflow is never silently dropped
-  expect(frameRows(nowPage, ctxOf(80, 6, c1Snap, liveNoRes), { pages: PAGES }).map(text)[4]).toBe('另有 3 項')
+  // At H=6 (4 body rows: 1 blank + 3 class rows when all items are summarised) and H=3 (1 body row -> 另有 6 項), overflow is never silently dropped
+  const zh6 = frameRows(nowPage, ctxOf(80, 6, c1Snap, liveNoRes), { pages: PAGES }).map(text)
+  expect(zh6[1]).toBe('')
+  expect(zh6[2]).toContain('→ 待決 3 張')
+  expect(zh6[3]).toContain('✗ 艦隊 ')
+  expect(zh6[4]).toBe('✗ 額度 紅 2（F 池、trinity）')
   expect(frameRows(nowPage, ctxOf(80, 3, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('另有 6 項')
 
-  // 3. Full C1 order when all items fit: pending -> red pools -> offline hosts -> stuck/offline lines -> unknown pools -> yellow, one row each
+  // 3. When unshown items remain (e.g. yellow waste pool + findings exception), row 4 is `另有 N 項`
   const allTiersSnap = con({
     ...c1Snap,
     items: [...dupPoolItems, hostItem, { id: 'exc:y1', kind: 'exception', severity: 9, state: 'findings', needs_operator: true, title: '語音線等你沒有卡', text: '語音線等你回覆', since_ms: NOW - 30 * MIN, line_id: null, to_console: true, answerable_by: [], facts: {} }] as never,
     quota: { pools: [...redPoolsWithDup, POOLS.find(p => p.pool === 'personal')!, POOLS.find(p => p.pool === 'grok')!] as never, seats: [] },
   })
   const fullShort = nowPage.render({ ...(ctxOf(80, 14, allTiersSnap, liveNoRes) as object), shortBody: true } as never).body.map(text)
-  expect(fullShort.length).toBe(9)
+  expect(fullShort.length).toBe(4)
   for (const r of fullShort) expect(displayWidth(r)).toBeLessThanOrEqual(80)
   expect(fullShort[0]).toContain('→ 待決 3 張')
-  expect(fullShort[1]).toContain('F 池')
-  expect(fullShort[2]).toContain('trinity')
-  expect(fullShort[3]).toContain('主機 h6 離線 12 分')
-  expect(fullShort[4]).toContain('復原線')
-  expect(fullShort[5]).toContain('遊戲線')
-  expect(fullShort[6]).toContain('personal')
-  expect(fullShort[7]).toContain('grok')
-  expect(fullShort[8]).toContain('語音線等你沒有卡')
+  expect(fullShort[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
+  expect(fullShort[2]).toBe('✗ 額度 紅 2（F 池、trinity）· ? 未知 1（personal）')
+  expect(fullShort[3]).toBe('另有 2 項')
 
-  // 4. R14 bottom-anchoring: spare rows stay above content and strip stays on last row
+  // 4. R14 bottom-anchoring and omitting empty class rows
   const fewerSnap = con({ ...c1Snap, items: [hostItem] as never, lines: [], quota: { pools: [POOLS.find(p => p.pool === 'trinity')!] as never, seats: [] } })
   const anchored = frameRows(nowPage, ctxOf(80, 7, fewerSnap, liveNoRes), { pages: PAGES }).map(text)
   expect(anchored.length).toBe(7)
   expect(anchored.slice(1, 3)).toEqual(['', ''])
   expect(anchored[3]).toContain('→ 待決 3 張')
-  expect(anchored[4]).toContain('trinity')
-  expect(anchored[5]).toContain('主機 h6 離線 12 分')
+  expect(anchored[4]).toBe('✗ 艦隊 主機 17/18（離線 1）')
+  expect(anchored[5]).toBe('✗ 額度 紅 1（trinity）')
   expect(anchored[6]).toContain('1 現 2 待')
 
   // 5. Every pool_key appears at most once (including duplicate pool spellings and multiple unpooled seat_blocked items)
@@ -441,6 +438,126 @@ test('now C1: 80x24 short 現況 with 3 pending cards, 2 red pools, 1 offline ho
       expect(hits.length, `${k}: ${hits.join(' | ')}`).toBeLessThanOrEqual(1)
     }
   }
+})
+
+test('now C1 acceptance: at 80x24 inline (4 body rows) with pending + 2 offline lanes + 2 offline hosts + 2 red pools + 3 unknown pools, each of the three class rows appears exactly once; empty classes are omitted and wide names truncate with …', () => {
+  seatQuota.reset()
+  const cards = [
+    { id: 'd-a0000001', question: '是否批准第二階段產線切換與額度重分配方案', status: 'open' as const, opened_at_ms: NOW - 24 * 60 * MIN, executor_display: 'PM' },
+    { id: 'd-a0000002', question: 'q2', status: 'open' as const, opened_at_ms: NOW - 60 * MIN, executor_display: 'PM' },
+    { id: 'd-a0000003', question: 'q3', status: 'open' as const, opened_at_ms: NOW - 10 * MIN, executor_display: 'PM' },
+  ]
+  const offlineTwo = [
+    { line_id: 'jia', label: '甲', lead_display: 'PM', issues: [{ rule: 'T4', state: 'failed', subject: '成員離線', since_ms: NOW - 30 * MIN, to_console: true }] },
+    { line_id: 'yi', label: '乙', lead_display: 'PM', issues: [{ rule: 'T4', state: 'failed', subject: '成員離線', since_ms: NOW - 20 * MIN, to_console: true }] },
+  ]
+  const baseRed = { ...POOLS[3], limit_hit: true, stranded_seats: 1 }
+  const baseUnk = { ...POOLS[3], limit_hit: true, stranded_seats: null }
+  const poolsFive = [
+    { ...baseRed, pool: 'C' },
+    { ...baseRed, pool: 'D' },
+    { ...baseUnk, pool: 'F' },
+    { ...baseUnk, pool: 'G-unknown-pool-alpha-long-label' },
+    { ...baseUnk, pool: 'H-unknown-pool-beta-long-label' },
+  ]
+  const okSources = { hosts: { at_ms: NOW - 10_000, state: 'ok' as const }, tasks: { at_ms: NOW - 10_000, state: 'ok' as const }, cards: { at_ms: NOW - 10_000, state: 'ok' as const }, quota_now: { at_ms: NOW - 10_000, state: 'ok' as const }, quota_forecast: { at_ms: NOW - 10_000, state: 'ok' as const } }
+  const snap = con({
+    counts: { ...con().counts, decisions: 3, summary: { ...con().counts.summary, hosts: { online: 4, total: 6 } } },
+    cards,
+    items: [],
+    lines: offlineTwo,
+    quota: { pools: poolsFive as never, seats: [] },
+    sources: okSources,
+  })
+  const liveNoRes = live({ detail: { ...(live() as any).detail, residue: null } })
+
+  // 80x6 (4 body rows in an 80x24 inline pane) AND shortBody on 80x24
+  for (const rows of [
+    frameRows(nowPage, ctxOf(80, 6, snap, liveNoRes), { pages: PAGES }).map(text).slice(1, 5).filter(r => r !== ''),
+    nowPage.render({ ...(ctxOf(80, 24, snap, liveNoRes) as object), shortBody: true } as never).body.map(text),
+  ]) {
+    expect(rows.filter(r => r.startsWith('→ 待決 ')).length).toBe(1)
+    expect(rows.filter(r => r.includes('艦隊')).length).toBe(1)
+    expect(rows.filter(r => r.includes('額度')).length).toBe(1)
+    expect(rows[0]).toContain('→ 待決 3 張（最舊 1 天）：')
+    expect(rows[1]).toBe('✗ 艦隊 離線 2 線（甲、乙）· 主機 4/6（離線 2）')
+    expect(rows[2]).toBe('✗ 額度 紅 2（C、D）· ? 未知 3（F、…）')
+    for (const r of rows) expect(displayWidth(r)).toBeLessThanOrEqual(80)
+  }
+
+  // Colours go through PALETTE: fleet & red quota use broken, unknown quota uses attention
+  const renderedBody = nowPage.render({ ...(ctxOf(80, 6, snap, liveNoRes) as object) } as never).body
+  expect(renderedBody[1][0].color).toBe(PALETTE.broken)
+  expect(renderedBody[2][0].color).toBe(PALETTE.broken)
+  expect(renderedBody[2][2].color).toBe(PALETTE.attention)
+
+  // Omit class rows when empty: no pending -> 2 rows; no fleet -> 2 rows; no quota -> 2 rows
+  const noPendingSnap = con({ ...snap, counts: { ...snap.counts, decisions: 0 }, cards: [] })
+  expect(nowPage.render(ctxOf(80, 6, noPendingSnap, liveNoRes)).body.map(text)).toEqual([
+    '✗ 艦隊 離線 2 線（甲、乙）· 主機 4/6（離線 2）',
+    '✗ 額度 紅 2（C、D）· ? 未知 3（F、…）',
+  ])
+  const noFleetSnap = con({ ...snap, lines: [], counts: { ...snap.counts, summary: { ...snap.counts.summary, hosts: { online: 6, total: 6 } } } })
+  const noFleetRows = nowPage.render(ctxOf(80, 6, noFleetSnap, liveNoRes)).body.map(text)
+  expect(noFleetRows.length).toBe(2)
+  expect(noFleetRows[0]).toContain('→ 待決 3 張')
+  expect(noFleetRows[1]).toBe('✗ 額度 紅 2（C、D）· ? 未知 3（F、…）')
+  const noQuotaSnap = con({ ...snap, quota: { pools: [POOLS.find(p => p.pool === 'codex')!] as never, seats: [] } })
+  const noQuotaRows = nowPage.render(ctxOf(80, 6, noQuotaSnap, liveNoRes)).body.map(text)
+  expect(noQuotaRows.length).toBe(2)
+  expect(noQuotaRows[0]).toContain('→ 待決 3 張')
+  expect(noQuotaRows[1]).toBe('✗ 艦隊 離線 2 線（甲、乙）· 主機 4/6（離線 2）')
+
+  // Short unknown pool names (F, G, H) fit in full at 80 cols and truncate to `（F、…）` at 38 cols
+  const shortUnkSnap = con({
+    ...snap,
+    quota: { pools: [{ ...baseRed, pool: 'C' }, { ...baseRed, pool: 'D' }, { ...baseUnk, pool: 'F' }, { ...baseUnk, pool: 'G' }, { ...baseUnk, pool: 'H' }] as never, seats: [] },
+  })
+  expect(nowPage.render(ctxOf(80, 6, shortUnkSnap, liveNoRes)).body.map(text)[2]).toBe('✗ 額度 紅 2（C、D）· ? 未知 3（F、G、H）')
+  expect(nowPage.render(ctxOf(38, 7, shortUnkSnap, liveNoRes)).body.map(text)[2]).toBe('✗ 額度 紅 2（C、D）· ? 未知 3（F、…）')
+
+  // Long lane names truncate with `…` while keeping `· 主機 4/6（離線 2）` intact within 80 cols
+  const longLinesSnap = con({
+    ...snap,
+    lines: [
+      { line_id: 'l1', label: 'alpha-production-lane-very-long-one', lead_display: 'PM', issues: [{ rule: 'T4', state: 'failed', subject: '離線', since_ms: NOW - 30 * MIN, to_console: true }] },
+      { line_id: 'l2', label: 'beta-production-lane-very-long-two', lead_display: 'PM', issues: [{ rule: 'T4', state: 'failed', subject: '離線', since_ms: NOW - 20 * MIN, to_console: true }] },
+    ],
+  })
+  const fleetLongRow = nowPage.render(ctxOf(80, 6, longLinesSnap, liveNoRes)).body.map(text)[1]
+  expect(displayWidth(fleetLongRow)).toBeLessThanOrEqual(80)
+  expect(fleetLongRow).toContain('✗ 艦隊 離線 2 線（alpha-production-lane-very-long-one、…）· 主機 4/6（離線 2）')
+})
+
+test('now M7: pending_no_source derives missing reason from pointer file / console snapshot (only the missing ones) and wraps without truncating at 80 and 40 columns', () => {
+  seatQuota.reset()
+  const noPointerLive = live({ state: 'no-pointer', header: '沒有指標檔 · 請執行：autopilot status runs --watch', band: null, pending: [] })
+  const noProjectLive = live({ state: 'no-project', header: '沒有專案 · 請執行：autopilot status runs --watch', band: null, pending: [] })
+  const noCardsCon = con({ counts: { ...con().counts, decisions: 0 }, cards: null, sources: { ...con().sources, cards: { at_ms: null, state: 'no_source' } } })
+
+  // 1. Both pointer file and console snapshot absent: full reason at 80 cols and wrapped (never truncated) at 40 cols (24-row and shortBody 7-row)
+  for (const [cols, rows] of [[80, 24], [40, 24], [80, 6], [40, 7]] as const) {
+    const framed = frameRows(nowPage, ctxOf(cols, rows, null, noPointerLive), { pages: PAGES }).map(text)
+    expect(framed.length).toBe(rows)
+    for (const r of framed) expect(displayWidth(r)).toBeLessThanOrEqual(cols)
+    const joined = framed.join('')
+    expect(joined).toContain('✗ 待決 ? 張（無來源：沒有指標檔、沒有 console 快照）')
+    const reasonRows = framed.filter(r => r.includes('待決 ? 張') || r.includes('console 快照）'))
+    for (const r of reasonRows) expect(r).not.toContain('…')
+
+    const enFramed = frameRows(nowPage, { ...(ctxOf(cols, rows, null, noPointerLive) as object), t: makeT('en') } as never, { pages: PAGES }).map(text)
+    expect(enFramed.join('')).toContain('✗ Pending ? (no source: no pointer file, no console snapshot)')
+  }
+
+  // 2. Only pointer file absent (console snapshot exists, but has no card source)
+  const ptrOnly = frameRows(nowPage, ctxOf(80, 24, noCardsCon, noPointerLive), { pages: PAGES }).map(text).join('')
+  expect(ptrOnly).toContain('✗ 待決 ? 張（無來源：沒有指標檔）')
+  expect(ptrOnly).not.toContain('沒有 console 快照')
+
+  // 3. Only console snapshot absent (pointer file exists; session has no project)
+  const conOnly = frameRows(nowPage, ctxOf(80, 24, null, noProjectLive), { pages: PAGES }).map(text).join('')
+  expect(conOnly).toContain('✗ 待決 ? 張（無來源：沒有 console 快照）')
+  expect(conOnly).not.toContain('沒有指標檔')
 })
 
 test('now R8 & R11: stale fleet.brief (> 10 min) marks 全艦隊 summary row; stale seat pending marks pending row; wide exception title cuts with … keeping age at right edge', async () => {

@@ -280,6 +280,28 @@ test('decide A10: a stale reason is never truncated: at 70 columns it wraps onto
   expect(out.every(r => displayWidth(text(r)) <= 70)).toBe(true)
 })
 
+test('decide M7: pending_no_source names only the missing sources and wraps without truncating at 80 and 40 columns', () => {
+  const noPointer = { state: 'no-pointer', header: '沒有指標檔', pending: [] } as never
+  const noProject = { state: 'no-project', header: '沒有專案', pending: [] } as never
+  const noCardsCon = con(null, [], [], { cards: { at_ms: null, state: 'no_source' } })
+
+  for (const cols of [80, 40] as const) {
+    const out = frameRows(decidePage, ctxOf(cols, 24, noPointer, null))
+    expect(out.length).toBe(24)
+    for (const r of out) expect(displayWidth(text(r))).toBeLessThanOrEqual(cols)
+    expect(out.map(text).join('')).toContain('✗ 待決 ? 張（無來源：沒有指標檔、沒有 console 快照）')
+    expect(out.map(text).filter(r => r.includes('…'))).toEqual([])
+  }
+
+  const ptrOnly = frameRows(decidePage, ctxOf(80, 24, noPointer, noCardsCon)).map(text).join('')
+  expect(ptrOnly).toContain('✗ 待決 ? 張（無來源：沒有指標檔）')
+  expect(ptrOnly).not.toContain('沒有 console 快照')
+
+  const conOnly = frameRows(decidePage, ctxOf(80, 24, noProject, null)).map(text).join('')
+  expect(conOnly).toContain('✗ 待決 ? 張（無來源：沒有 console 快照）')
+  expect(conOnly).not.toContain('沒有指標檔')
+})
+
 test('decide: a long list never changes the frame height (overflow ends in the more row)', () => {
   const many = Array.from({ length: 30 }, (_, i) => card('d-' + String(i).padStart(8, '0'), '第 ' + i + ' 張', 'PM', H))
   for (const [cols, rows] of SIZES) {

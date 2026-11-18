@@ -733,6 +733,19 @@
   "page.fleet.act_fold_c": "[z] Unfold",
   "page.fleet.act_fold_c_open": "[z] Fold",
   "page.fleet.act_nudge_c": "[f] Nudge",
-  "page.now.pending_no_source": "Pending ? (no source)",
-  "page.decide.pending_no_source": "Pending ? (no source)"
+  "page.now.pending_no_source": "Pending ? (no source: {why})",
+  "page.decide.pending_no_source": "Pending ? (no source: {why})",
+  "page.now.nosrc_pointer": "no pointer file",
+  "page.now.nosrc_console": "no console snapshot",
+  "page.now.fleet_offline_named": "offline {n} lines ({names})",
+  "page.now.fleet_offline_bare": "offline {n} lines",
+  "page.now.fleet_stuck_named": "stuck {n} lines ({names})",
+  "page.now.fleet_stuck_bare": "stuck {n} lines",
+  "page.now.fleet_idle_named": "idle {n} lines ({names})",
+  "page.now.fleet_idle_bare": "idle {n} lines",
+  "page.now.fleet_hosts_off": "hosts {online}/{total} ({off} offline)",
+  "page.now.quota_red_named": "red {n} ({names})",
+  "page.now.quota_red_bare": "red {n}",
+  "page.now.quota_unknown_named": "unknown {n} ({names})",
+  "page.now.quota_unknown_bare": "unknown {n}"
 }

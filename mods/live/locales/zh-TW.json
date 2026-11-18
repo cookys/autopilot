@@ -733,6 +733,19 @@
   "page.fleet.act_fold_c": "[z] 展開",
   "page.fleet.act_fold_c_open": "[z] 收合",
   "page.fleet.act_nudge_c": "[f] 催辦",
-  "page.now.pending_no_source": "待決 ? 張（無來源）",
-  "page.decide.pending_no_source": "待決 ? 張（無來源）"
+  "page.now.pending_no_source": "待決 ? 張（無來源：{why}）",
+  "page.decide.pending_no_source": "待決 ? 張（無來源：{why}）",
+  "page.now.nosrc_pointer": "沒有指標檔",
+  "page.now.nosrc_console": "沒有 console 快照",
+  "page.now.fleet_offline_named": "離線 {n} 線（{names}）",
+  "page.now.fleet_offline_bare": "離線 {n} 線",
+  "page.now.fleet_stuck_named": "卡住 {n} 線（{names}）",
+  "page.now.fleet_stuck_bare": "卡住 {n} 線",
+  "page.now.fleet_idle_named": "閒置 {n} 線（{names}）",
+  "page.now.fleet_idle_bare": "閒置 {n} 線",
+  "page.now.fleet_hosts_off": "主機 {online}/{total}（離線 {off}）",
+  "page.now.quota_red_named": "紅 {n}（{names}）",
+  "page.now.quota_red_bare": "紅 {n}",
+  "page.now.quota_unknown_named": "未知 {n}（{names}）",
+  "page.now.quota_unknown_bare": "未知 {n}"
 }

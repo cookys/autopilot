@@ -2,13 +2,39 @@
 // A leaf module: it imports only types, ui.ts and quota-pick.ts (no page), never pages/index or a page, so a page can import it without a load cycle (frame -> index -> page -> frame).
 import { isStepCard } from '../model'
 import type { LiveSnapshot, Seg } from '../model'
-import { PALETTE, STATES, type StateId } from '../ui'
+import { PALETTE, STATES, displayWidth, type StateId } from '../ui'
 
 export type Row = Seg[]
 
 // §5: stale, expired and no_source all use the broken role (red text colour, no background, no inverse); the number stays, the reason is written beside it
 export const staleBadge = (text: string): Seg => ({ text, color: PALETTE.broken })
 export const brokenRow = (text: string): Row => [staleBadge(text)]
+
+// Wrap a row onto further rows at `cols` without dropping or truncating characters, so a broken/no-source reason is never cut with `…` (A10, G6, M7).
+export function wrapRow(row: Row, cols: number): Row[] {
+  if (cols <= 0 || row.reduce((w, x) => w + displayWidth(x.text), 0) <= cols) return [row]
+  const out: Row[] = []
+  let cur: Row = []
+  let used = 0
+  for (const seg of row) {
+    let buf = ''
+    for (const ch of seg.text) {
+      const w = displayWidth(ch)
+      if (used + w > cols) {
+        if (buf !== '') cur.push({ ...seg, text: buf })
+        out.push(cur)
+        cur = []
+        buf = ''
+        used = 0
+      }
+      buf += ch
+      used += w
+    }
+    if (buf !== '') cur.push({ ...seg, text: buf })
+  }
+  if (cur.length > 0) out.push(cur)
+  return out
+}
 
 // ---- shared across pages (gate round 1 & round 2) ----
 import type { ConsoleIssue, ConsoleLine, ConsoleSnapshot } from '../console'
@@ -59,6 +85,19 @@ export function pendingSourceMissing(ctx: { console: ConsoleSnapshot | null; liv
   const hasConsole = con !== null && con.cards !== null && con.sources.cards?.state !== 'no_source'
   const hasLive = live !== null && (live.state === 'ok' || live.pending.some(d => !isStepCard(d)))
   return !hasConsole && !hasLive
+}
+
+// why pendingSourceMissing is true: list only the sources that are actually absent (pointer file absent, console snapshot absent)
+export function pendingMissingReason(ctx: { console: ConsoleSnapshot | null; live: LiveSnapshot | null }, t: T): string {
+  const { console: con, live } = ctx
+  const reasons: string[] = []
+  if (live === null || live.state === 'no-pointer') reasons.push(t('page.now.nosrc_pointer'))
+  if (con === null) reasons.push(t('page.now.nosrc_console'))
+  if (reasons.length === 0) {
+    if (con !== null && (con.cards === null || con.sources.cards?.state === 'no_source')) reasons.push(t('page.decide.nosrc_cards'))
+    else reasons.push(t('page.decide.nosrc_live'))
+  }
+  return reasons.join(t('sep.list'))
 }
 
 // production lines that carry at least one issue, ordered failed -> stalled -> console-surfaced -> oldest issue first

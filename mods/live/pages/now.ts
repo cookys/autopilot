@@ -11,7 +11,7 @@ import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankP
 import type { Verdict } from './quota-pick'
 import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
-import { brokenRow, dataMissing, decisionCount, isBriefStale, lineState, lineTotal, pendingSourceMissing, staleBadge, stuckLinesOf } from './rows'
+import { brokenRow, dataMissing, decisionCount, isBriefStale, lineState, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, wrapRow } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -355,12 +355,13 @@ function pendingRowOf(ctx: PageCtx, decisions: number, short: boolean): Row | nu
   const { t, size, live, nowMs } = ctx
   const liveStale = live !== null && live.state !== 'ok'
   if (pendingSourceMissing(ctx)) {
+    const why = pendingMissingReason(ctx, t)
     if (live !== null && live.state === 'stale') {
       const raw = (live.header ?? '').trim()
       const shortWhy = (raw.split(' · ')[0] ?? '').trim() || t('page.fleet.state_stale')
-      return [staleBadge(GLYPHS.state.failed + ' ' + t('page.now.pending_no_source') + '  ' + GLYPHS.state.failed + ' ' + t('page.now.pending_stale', { why: shortWhy }))]
+      return [staleBadge(GLYPHS.state.failed + ' ' + t('page.now.pending_no_source', { why }) + '  ' + GLYPHS.state.failed + ' ' + t('page.now.pending_stale', { why: shortWhy }))]
     }
-    return [staleBadge(GLYPHS.state.failed + ' ' + t('page.now.pending_no_source'))]
+    return [staleBadge(GLYPHS.state.failed + ' ' + t('page.now.pending_no_source', { why }))]
   }
   if (decisions <= 0 && !liveStale) return null
   const oldest = oldestDecision(ctx)
@@ -387,6 +388,204 @@ function pendingRowOf(ctx: PageCtx, decisions: number, short: boolean): Row | nu
   return [{ text: truncateToWidth(text, size.cols), color: PALETTE.attention, press: 'tab:2:decide' }]
 }
 
+// ---- C1 short-body class summaries (one row per class: pending -> fleet -> quota -> 另有 N 項) ----
+type ShortEntry = { rows: Row[]; count: number }
+const rowWidth = (r: Row): number => r.reduce((w, s) => w + displayWidth(s.text), 0)
+const joinSummaryParts = (parts: string[]): string =>
+  parts.reduce((acc, p, i) => (i === 0 ? p : acc + (acc.endsWith('）') ? '· ' : ' · ') + p), '')
+
+function fitNameList(names: string[], listSep: string, innerBudget: number): string | null {
+  if (names.length === 0 || innerBudget < 1) return null
+  const full = names.join(listSep)
+  if (displayWidth(full) <= innerBudget) return full
+  for (let k = names.length - 1; k >= 1; k--) {
+    const cand = names.slice(0, k).join(listSep) + listSep + '…'
+    if (displayWidth(cand) <= innerBudget) return cand
+  }
+  const cut = truncateToWidth(full, innerBudget)
+  return cut === '' ? null : cut
+}
+
+function formatFleetBody(groups: { labels: string[]; fmt: (names: string | null) => string }[], hostPart: string | null, head: string, listSep: string, availCols: number): string {
+  if (groups.length === 0) return hostPart ?? ''
+  const fullNames = groups.map(g => g.labels.join(listSep))
+  const build = (picked: (string | null)[]): string =>
+    joinSummaryParts([...groups.map((g, i) => g.fmt(picked[i])), ...(hostPart === null ? [] : [hostPart])])
+  const fullStr = build(fullNames)
+  if (displayWidth(head + fullStr) <= availCols) return fullStr
+  for (let m = groups.length; m >= 1; m--) {
+    const shell = build(groups.map((_, i) => (i < m ? '' : null)))
+    const totalInner = availCols - displayWidth(head + shell)
+    if (totalInner < m) continue
+    const picked: (string | null)[] = Array.from({ length: groups.length }, () => null)
+    const needCut: number[] = []
+    let rem = totalInner
+    const equalShare = Math.floor(totalInner / m)
+    for (let i = 0; i < m; i++) {
+      const w = displayWidth(fullNames[i])
+      if (w <= equalShare && w >= 1) {
+        picked[i] = fullNames[i]
+        rem -= w
+      } else {
+        needCut.push(i)
+      }
+    }
+    needCut.forEach((idx, k) => {
+      const left = needCut.length - k
+      const budget = Math.max(1, k === needCut.length - 1 ? rem : Math.floor(rem / left))
+      const got = fitNameList(groups[idx].labels, listSep, budget) ?? '…'
+      picked[idx] = got
+      rem -= displayWidth(got)
+    })
+    return build(picked)
+  }
+  return build(groups.map(() => null))
+}
+
+function fleetShortSummary(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): { entry: ShortEntry | null; seenLines: Set<string> } {
+  const { t, size } = ctx
+  const stuck = stuckLinesOf(con)
+  const seenLines = new Set(stuck.map(s => s.line.line_id))
+  const lineMap = new Map((con.lines ?? []).map(l => [l.line_id, l]))
+  const offlineLabels: string[] = []
+  const stuckLabels: string[] = []
+  const idleLabels: string[] = []
+  let hasFailedLine = false
+  for (const { line } of stuck) {
+    const ls = lineState(line, t)
+    if (ls.sid === 'failed') hasFailedLine = true
+    if (ls.word === t('page.fleet.w_offline')) offlineLabels.push(line.label)
+    else if (ls.word === t('page.fleet.idle')) idleLabels.push(line.label)
+    else stuckLabels.push(line.label)
+  }
+  for (const i of con.items) {
+    if (i.kind !== 'exception' || i.to_console !== true || i.id.startsWith('quota:') || isOfflineHostExc(i) || i.line_id === null || seenLines.has(i.line_id)) continue
+    if (i.state !== 'failed' && i.state !== 'stalled') continue
+    const ln = lineMap.get(i.line_id)
+    const label = ln?.label ?? i.line_id
+    seenLines.add(i.line_id)
+    if (i.state === 'failed') hasFailedLine = true
+    if (/^exc:T4:/i.test(i.id) || /offline|離線/i.test(i.title) || /offline|離線/i.test(i.text)) offlineLabels.push(label)
+    else if (/^exc:T3:/i.test(i.id) || /閒置|\bidle\b/i.test(i.title)) idleLabels.push(label)
+    else stuckLabels.push(label)
+  }
+  const hostExcItems = con.items.filter(isOfflineHostExc)
+  const hs = con.sources.hosts
+  const h = con.counts.summary.hosts
+  const hasHostCounts = hs?.state !== 'no_source' && typeof h.online === 'number' && typeof h.total === 'number'
+  const summaryOffline = hasHostCounts ? Math.max(0, h.total - h.online) : 0
+  const offlineHostCount = Math.max(summaryOffline, hostExcItems.length)
+  let hostPart: string | null = null
+  if (offlineHostCount > 0) {
+    if (hasHostCounts) {
+      const total = Math.max(h.total, offlineHostCount)
+      const online = Math.max(0, Math.min(h.online, total - offlineHostCount))
+      hostPart = t('page.now.fleet_hosts_off', { online, total, off: offlineHostCount })
+    } else {
+      hostPart = t('page.now.hosts') + ' ' + t('page.fleet.hosts_off', { n: offlineHostCount })
+    }
+  }
+  const lineCount = offlineLabels.length + stuckLabels.length + idleLabels.length
+  const fleetCount = lineCount + offlineHostCount
+  if (fleetCount === 0) return { entry: null, seenLines }
+  const groups: { labels: string[]; fmt: (names: string | null) => string }[] = []
+  if (offlineLabels.length > 0) {
+    const n = offlineLabels.length
+    groups.push({ labels: offlineLabels, fmt: names => (names === null ? t('page.now.fleet_offline_bare', { n }) : t('page.now.fleet_offline_named', { n, names })) })
+  }
+  if (stuckLabels.length > 0) {
+    const n = stuckLabels.length
+    groups.push({ labels: stuckLabels, fmt: names => (names === null ? t('page.now.fleet_stuck_bare', { n }) : t('page.now.fleet_stuck_named', { n, names })) })
+  }
+  if (idleLabels.length > 0) {
+    const n = idleLabels.length
+    groups.push({ labels: idleLabels, fmt: names => (names === null ? t('page.now.fleet_idle_bare', { n }) : t('page.now.fleet_idle_named', { n, names })) })
+  }
+  const icon = offlineLabels.length > 0 || offlineHostCount > 0 || hasFailedLine ? GLYPHS.state.failed : GLYPHS.state.stalled
+  const head = icon + ' ' + t('tab.fleet') + ' '
+  const availCols = Math.max(1, size.cols - (wide ? 2 : 0))
+  const bodyText = formatFleetBody(groups, hostPart, head, t('sep.list'), availCols)
+  const row = truncateSegs([...(wide ? [dim('  ')] : []), { text: head + bodyText, color: PALETTE.broken }], size.cols)
+  return { entry: { rows: [row], count: fleetCount }, seenLines }
+}
+
+function quotaShortSummary(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): { entry: ShortEntry | null; yellowPools: Verdict[] } {
+  const { t, size, nowMs } = ctx
+  const pools = normalizedPools(con)
+  const seenPools = new Set((pools ?? []).map(p => poolKey(p.pool)))
+  const ranked = pools === null ? [] : rankPools(pools, nowMs, t)
+  const redLabels = ranked.filter(v => v.role === 'broken').map(v => poolLabel(v.pool))
+  for (const i of con.items) {
+    if (!isSeatBlocked(i) || i.to_console === false) continue
+    if (typeof i.facts.pool === 'string') {
+      const pk = poolKey(i.facts.pool)
+      if (seenPools.has(pk)) continue
+      seenPools.add(pk)
+      redLabels.push(poolLabel(i.facts.pool))
+    } else {
+      redLabels.push(typeof i.facts.seat === 'string' ? i.facts.seat : i.title)
+    }
+  }
+  const unkLabels = ranked.filter(isUnknownPool).map(v => poolLabel(v.pool))
+  const yellowPools = ranked.filter(v => v.role === ROLE_WARNING && !isUnknownPool(v))
+  const quotaCount = redLabels.length + unkLabels.length
+  if (quotaCount === 0) return { entry: null, yellowPools }
+  const listSep = t('sep.list')
+  const availCols = Math.max(1, size.cols - (wide ? 2 : 0))
+  const rn = redLabels.length
+  const un = unkLabels.length
+  if (rn > 0 && un === 0) {
+    const lead = GLYPHS.state.failed + ' ' + t('page.now.quota') + ' '
+    const inner = availCols - displayWidth(lead + t('page.now.quota_red_named', { n: rn, names: '' }))
+    const names = fitNameList(redLabels, listSep, inner)
+    const redStr = names === null ? t('page.now.quota_red_bare', { n: rn }) : t('page.now.quota_red_named', { n: rn, names })
+    return { entry: { rows: [truncateSegs([...(wide ? [dim('  ')] : []), { text: lead + redStr, color: PALETTE.broken }], size.cols)], count: quotaCount }, yellowPools }
+  }
+  if (rn === 0) {
+    const lead = GLYPHS.state.unknown + ' ' + t('page.now.quota') + ' '
+    const inner = availCols - displayWidth(lead + t('page.now.quota_unknown_named', { n: un, names: '' }))
+    const names = fitNameList(unkLabels, listSep, inner)
+    const unkStr = names === null ? t('page.now.quota_unknown_bare', { n: un }) : t('page.now.quota_unknown_named', { n: un, names })
+    return { entry: { rows: [truncateSegs([...(wide ? [dim('  ')] : []), { text: lead + unkStr, color: PALETTE.attention }], size.cols)], count: quotaCount }, yellowPools }
+  }
+  const lead = GLYPHS.state.failed + ' ' + t('page.now.quota') + ' '
+  const unkLead = GLYPHS.state.unknown + ' '
+  const buildBoth = (rNames: string | null, uNames: string | null): Row => {
+    const rStr = rNames === null ? t('page.now.quota_red_bare', { n: rn }) : t('page.now.quota_red_named', { n: rn, names: rNames })
+    const uStr = uNames === null ? t('page.now.quota_unknown_bare', { n: un }) : t('page.now.quota_unknown_named', { n: un, names: uNames })
+    const sep = rStr.endsWith('）') ? '· ' : ' · '
+    return [...(wide ? [dim('  ')] : []), { text: lead + rStr, color: PALETTE.broken }, plain(sep), { text: unkLead + uStr, color: PALETTE.attention }]
+  }
+  const rFull = redLabels.join(listSep)
+  const uFull = unkLabels.join(listSep)
+  const candFull = buildBoth(rFull, uFull)
+  if (rowWidth(candFull) <= size.cols) return { entry: { rows: [candFull], count: quotaCount }, yellowPools }
+  const totalInner = size.cols - rowWidth(buildBoth('', ''))
+  let row: Row
+  if (totalInner >= 2) {
+    const wR = displayWidth(rFull)
+    const wU = displayWidth(uFull)
+    const half = Math.floor(totalInner / 2)
+    let rPicked: string
+    let uPicked: string
+    if (wR <= half) {
+      rPicked = rFull
+      uPicked = fitNameList(unkLabels, listSep, totalInner - wR) ?? '…'
+    } else if (wU <= totalInner - half) {
+      uPicked = uFull
+      rPicked = fitNameList(redLabels, listSep, totalInner - wU) ?? '…'
+    } else {
+      rPicked = fitNameList(redLabels, listSep, Math.ceil(totalInner / 2)) ?? '…'
+      uPicked = fitNameList(unkLabels, listSep, Math.max(1, totalInner - displayWidth(rPicked))) ?? '…'
+    }
+    row = truncateSegs(buildBoth(rPicked, uPicked), size.cols)
+  } else {
+    const rOnlyInner = size.cols - rowWidth(buildBoth('', null))
+    row = truncateSegs(rOnlyInner >= 1 ? buildBoth(fitNameList(redLabels, listSep, rOnlyInner), null) : buildBoth(null, null), size.cols)
+  }
+  return { entry: { rows: [row], count: quotaCount }, yellowPools }
+}
+
 // ---- the page ----
 function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const { t, size, console: con, live, nowMs } = ctx
@@ -398,57 +597,32 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   const residue = live?.detail.residue?.reapable ?? 0
   if (residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }])
 
-  if (ctx.shortBody === true) {
-    // C1 (PM ruling): Short body: pending Button row (drop duplicate jump_decide action row so its row goes to content) ->
-    // red pools -> offline hosts -> stuck/offline lines -> unknown pools -> yellow; overflow -> `另有 N 項`
+  const stripLen = size.cols < STRIP_SPLIT_COLS ? Math.min(2, size.rows) : Math.min(1, size.rows)
+  const avail = Math.max(0, size.rows - 1 - stripLen)
+  const firstActLen = Math.max(1, actions.length)
+  const firstRoom = Math.max(0, avail - Math.min(firstActLen, avail))
+  if (ctx.shortBody === true || avail <= 4 || firstRoom <= 4) {
+    // C1: Short body (<= 4 rows) renders one summary row per CLASS (pending -> fleet -> quota -> `另有 N 項` for what is still not shown).
     const shortActions: Row[] = decisions > 0 ? actions.slice(1) : actions
-    const stripLen = size.cols < STRIP_SPLIT_COLS ? Math.min(2, size.rows) : Math.min(1, size.rows)
-    const avail = Math.max(0, size.rows - 1 - stripLen)
     const actLen = decisions > 0 ? shortActions.length : Math.max(1, shortActions.length)
     const room = Math.max(0, avail - Math.min(actLen, avail))
-    const items: Row[] = []
+    const entries: ShortEntry[] = []
     const pRow = pendingRowOf(ctx, decisions, true)
-    if (pRow !== null) items.push(truncateSegs(pRow, size.cols))
+    const pNoTruncate = pendingSourceMissing(ctx) || (live !== null && live.state !== 'ok')
+    if (pRow !== null) entries.push({ rows: pNoTruncate ? wrapRow(pRow, size.cols) : [truncateSegs(pRow, size.cols)], count: 1 })
+    let extraRows: Row[] = []
     if (con !== null) {
-      const pools = normalizedPools(con)
-      const seenPools = new Set((pools ?? []).map(p => poolKey(p.pool)))
-      const ranked = pools === null ? [] : rankPools(pools, nowMs, t)
-      const stateWords = [t('page.fleet.w_offline'), t('page.fleet.idle'), t('page.fleet.w_stuck')]
-      const stuck = stuckLinesOf(con)
-      const stuckIds = new Set(stuck.map(s => s.line.line_id))
-      const stuckRows: Row[] = stuck.map(({ line }) => {
-        const ls = lineState(line, t)
-        const g = glyph(ls.sid)
-        const subj = ls.worst !== null && typeof ls.worst.subject === 'string' ? ls.worst.subject : ''
-        const desc = subj !== '' && stateWords.some(w => subj.includes(w)) ? line.label + ' ' + subj : line.label + ' ' + ls.word + (subj === '' ? '' : '：' + subj)
-        return truncateSegs([...(wide ? [dim('  ')] : []), { text: g.text + ' ', ...(g.color === undefined ? {} : { color: g.color }) }, plain(desc)], size.cols)
-      })
+      const fleet = fleetShortSummary(ctx, con, wide)
+      const quota = quotaShortSummary(ctx, con, wide)
+      if (fleet.entry !== null) entries.push(fleet.entry)
+      if (quota.entry !== null) entries.push(quota.entry)
       const toShortExc = (it: ConsoleItem): Row => {
         const g = glyph(it.state)
         const body = wide ? it.text : it.title
         return truncateSegs([...(wide ? [dim('  ')] : []), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }, plain(' ' + body)], size.cols)
       }
-      const unpooledBlocked: Row[] = con.items
-        .filter((i: ConsoleItem) => {
-          if (!isSeatBlocked(i) || i.to_console === false) return false
-          if (typeof i.facts.pool !== 'string') return true
-          const pk = poolKey(i.facts.pool)
-          if (seenPools.has(pk)) return false
-          seenPools.add(pk)
-          return true
-        })
-        .map(toShortExc)
-      const hostExcItems = con.items.filter(isOfflineHostExc)
-      const hs = con.sources.hosts
-      const h = con.counts.summary.hosts
-      const summaryOffline = hs?.state === 'no_source' ? 0 : typeof h.online === 'number' && typeof h.total === 'number' ? Math.max(0, h.total - h.online) : 0
-      const unnamedOffline = Math.max(0, summaryOffline - hostExcItems.length)
-      const offlineHosts: Row[] = [
-        ...hostExcItems.map(toShortExc),
-        ...(unnamedOffline > 0 ? [truncateSegs([...(wide ? [dim('  ')] : []), { text: GLYPHS.state.failed + ' ' + t('page.now.hosts') + ' ' + t('page.fleet.hosts_off', { n: unnamedOffline }), color: PALETTE.broken }], size.cols)] : []),
-      ]
-      const seenExcLines = new Set(stuckIds)
-      const rawExc = con.items
+      const seenExcLines = new Set(fleet.seenLines)
+      const otherExc = con.items
         .filter((i: ConsoleItem) => {
           if (i.kind !== 'exception' || i.to_console !== true || i.id.startsWith('quota:') || isOfflineHostExc(i)) return false
           if (i.line_id === null) return true
@@ -456,32 +630,49 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
           seenExcLines.add(i.line_id)
           return true
         })
-        .sort((a, b) => (a.line_id !== null ? 0 : 1) - (b.line_id !== null ? 0 : 1))
-      const redExc = rawExc.filter(i => i.state === 'failed' || i.state === 'stalled').map(toShortExc)
-      const yellowExc = rawExc.filter(i => i.state !== 'failed' && i.state !== 'stalled').map(toShortExc)
-      const redPools = [...ranked.filter(v => v.role === 'broken').map(v => truncateSegs(poolRowOf(ctx, v, wide), size.cols)), ...unpooledBlocked]
-      const unknownPools = ranked.filter(isUnknownPool).map(v => truncateSegs(poolRowOf(ctx, v, wide), size.cols))
-      const yellowPools = ranked.filter(v => v.role === ROLE_WARNING && !isUnknownPool(v)).map(v => truncateSegs(poolRowOf(ctx, v, wide), size.cols))
-      items.push(...redPools, ...offlineHosts, ...stuckRows, ...redExc, ...unknownPools, ...yellowPools, ...yellowExc)
+        .map(toShortExc)
+      const yellowPoolRows = quota.yellowPools.map(v => truncateSegs(poolRowOf(ctx, v, wide), size.cols))
+      extraRows = [...otherExc, ...yellowPoolRows]
     }
-    if (con === null) items.push(truncateSegs(broken(t('page.now.no_console')), size.cols))
-    else if (items.length === 0 && dataMissing(con, nowMs, t)) items.push(truncateSegs(broken(t('frame.unknown')), size.cols))
-    if (items.length === 0) {
-      if (live !== null) items.push(...seatRows(ctx, live, wide).map(r => truncateSegs(r, size.cols)))
-      else items.push(truncateSegs(broken(t('page.now.no_live')), size.cols))
+    if (con === null) entries.push({ rows: wrapRow(broken(t('page.now.no_console')), size.cols), count: 1 })
+    else if (entries.length === 0 && extraRows.length === 0 && dataMissing(con, nowMs, t)) entries.push({ rows: wrapRow(broken(t('frame.unknown')), size.cols), count: 1 })
+    if (entries.length === 0 && extraRows.length > 0) {
+      for (const r of extraRows) entries.push({ rows: [r], count: 1 })
+      extraRows = []
     }
-    if (items.length === 0) items.push([dim((wide ? '  ' : '') + t('page.now.exc_none'))])
-    if (room > 0 && items.length > room) {
-      const keep = room - 1
-      return { body: [...items.slice(0, keep), truncateSegs([{ text: t('page.now.more_items', { n: items.length - keep }), dim: true }], size.cols)], actions: shortActions }
+    if (entries.length === 0) {
+      if (live !== null) {
+        for (const r of seatRows(ctx, live, wide)) entries.push({ rows: [truncateSegs(r, size.cols)], count: 1 })
+      } else {
+        entries.push({ rows: wrapRow(broken(t('page.now.no_live')), size.cols), count: 1 })
+      }
     }
-    return { body: items, actions: shortActions }
+    if (entries.length === 0) entries.push({ rows: [[dim((wide ? '  ' : '') + t('page.now.exc_none'))]], count: 1 })
+    const extraCount = extraRows.length
+    const totalNeeded = entries.reduce((sum, e) => sum + e.rows.length, 0) + (extraCount > 0 ? 1 : 0)
+    if (room <= 0 || totalNeeded <= room) {
+      const out: Row[] = entries.flatMap(e => e.rows)
+      if (extraCount > 0) out.push(truncateSegs([{ text: t('page.now.more_items', { n: extraCount }), dim: true }], size.cols))
+      return { body: out, actions: shortActions }
+    }
+    const budget = room - 1
+    let used = 0
+    let kept = 0
+    for (const e of entries) {
+      if (used + e.rows.length > budget) break
+      used += e.rows.length
+      kept++
+    }
+    const hiddenCount = entries.slice(kept).reduce((sum, e) => sum + e.count, 0) + extraCount
+    const out: Row[] = entries.slice(0, kept).flatMap(e => e.rows)
+    if (hiddenCount > 0) out.push(truncateSegs([{ text: t('page.now.more_items', { n: hiddenCount }), dim: true }], size.cols))
+    return { body: out, actions: shortActions }
   }
 
   const body: Row[] = []
   // 1. the pending count and the oldest card's title come first (G2, R2, R8); the [2] jump stays in the action area
   const pRow = pendingRowOf(ctx, decisions, false)
-  if (pRow !== null) body.push(pRow)
+  if (pRow !== null) body.push(...(pendingSourceMissing(ctx) || (live !== null && live.state !== 'ok') ? wrapRow(pRow, size.cols) : [pRow]))
   body.push(ruleRow(t('page.now.fleet'), wide))
   if (con === null) body.push(broken(t('page.now.no_console')))
   else {

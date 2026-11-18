@@ -68,7 +68,7 @@ import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, le
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
-import { Pane, noteInputKey, resetNoteInputs } from './pane'
+import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV } from './pages/decide'
@@ -1295,6 +1295,7 @@ async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
 async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Promise<void> {
   if (legacy) {
     if (t === paneTab) {
+      markPaneClosed()
       try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
       return
     }
@@ -1318,11 +1319,65 @@ const focusRows = (id: string, expanded: boolean): number => {
 }
 let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
 const framePageId = (): string => panePage
+// B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
+// On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
+// so digits 1-9 and 0 type into the prompt instead of firing strip hotkeys. Bump the Button key epoch on every placement move and,
+// when the pane held (or was opened with) focus, reclaim focus on the new placement's anchor after this render commits.
+let panePlacement: 'dock' | 'inline' | null = null
+let panePlacementEpoch = 0
+let paneFocused = false
+let paneOpenAsked = false
+let paneOpened = false
+function markPaneOpen(): void {
+  paneOpened = true
+  paneOpenAsked = true
+  panePlacement = null
+}
+function markPaneClosed(): void {
+  paneOpened = false
+  paneOpenAsked = false
+  paneFocused = false
+  panePlacement = null
+}
+async function restorePaneFocus($: EngineInterface, reopen: boolean, key: string | null, epochAtMove: number): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  if (panePlacementEpoch !== epochAtMove) return
+  if (reopen && paneOpened) await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true }).catch(() => undefined)
+  if (key === null || panePlacementEpoch !== epochAtMove) return
+  await $.ui.focus({ requestId: PANE_ID, key }).catch(() => undefined)
+}
+function syncPanePlacement($: EngineInterface, placement: 'dock' | 'inline' | undefined, isFocused: boolean | undefined): number {
+  const next = placement === 'dock' || placement === 'inline' ? placement : null
+  const focused = isFocused === true
+  if (next !== null && panePlacement !== null && next !== panePlacement) {
+    panePlacementEpoch += 1
+    const wantFocus = paneFocused || focused || paneOpenAsked
+    const reopen = paneOpened
+    panePlacement = next
+    if (wantFocus) {
+      paneFocused = true
+      paneOpenAsked = reopen
+      const typingNote = panePage === 'decide' && decideLocal.textMode
+      void restorePaneFocus($, reopen, typingNote ? null : focusAnchorKey(panePlacementEpoch), panePlacementEpoch)
+    }
+    return panePlacementEpoch
+  }
+  if (next !== null) panePlacement = next
+  if (focused) {
+    paneFocused = true
+    paneOpenAsked = false
+  } else if (!paneOpenAsked) {
+    paneFocused = false
+  }
+  return panePlacementEpoch
+}
 // A key of the framed page (a visible hotkey Button or routeKey, pane.tsx). 待決 goes through decideReduce; fleet, quota and spend keep a focus row and a fold.
 export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
   try {
     if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
     if (k.kind === 'close') {
+      markPaneClosed()
       try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
       return
     }
@@ -1398,6 +1453,8 @@ export async function startLive($: EngineInterface): Promise<void> {
   }
   paneTab = 'now'
   panePage = 'now'
+  markPaneClosed()
+  panePlacementEpoch = 0
   pageView = {}
   decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
   resetNoteInputs()
@@ -1419,6 +1476,7 @@ export async function startLive($: EngineInterface): Promise<void> {
 export function registerLive(on: Parameters<Register>[0]): void {
   // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ and slots are the ways to open it
   on('command.run', { command: 'live-pane' }, async ($) => {
+    markPaneOpen()
     await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
     return {}
   })
@@ -1493,6 +1551,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       try {
         const tab = await mine
         if (seq === pressSeq) { paneTab = tab; panePage = pageOfTab(tab) }
+        markPaneOpen()
         $.ui.invalidate('ui.render')
         await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
       } finally {
@@ -1509,6 +1568,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       panePage = pageId
       if (unfold !== null) folded.delete(unfold)
       try {
+        markPaneOpen()
         $.ui.invalidate('ui.render')
         await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
       } finally {
@@ -1777,7 +1837,28 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => { const legacy = (e.props as { legacyTabs?: boolean }).legacyTabs === true; return consoleOn && legacy ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($), null, legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: await $.clock.now(), rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') } })) })
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
+    const legacy = (e.props as { legacyTabs?: boolean }).legacyTabs === true
+    if (consoleOn && legacy) return consolePaneOf($, e)
+    hostScrollHome($, e.props.scroll, paneTab)
+    decideCols = paneWidth(e.props.bodyColumns)
+    decideInputs = inputsFor(e.surface)
+    await decideRepair($, await read($, DECIDE))
+    decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }
+    const decideNow = await $.clock.now()
+    const fleet = await fleetFor($)
+    const frameNow = legacy ? 0 : await $.clock.now()
+    const epoch = legacy ? 0 : syncPanePlacement($, e.props.placement, e.props.isFocused)
+    return Pane(
+      $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
+      () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') },
+      expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') },
+      folded, e.props.scroll ?? null,
+      { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
+      decideScroll, fleet, null,
+      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch },
+    )
+  })
 
   // All live and console tabs share the bottom window; scroll keys move its
   // offset. A host without a frame still receives the event through next(e).

@@ -1941,3 +1941,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PM 01M7DKWK sub-item 5 (5b+5c), fleet task 01M7DM1XGAHFBJSG6RBE12R382
 - **Pointer**: project/plans/2026-11-12-ctx-reset-sweep.md
 - **Context**: ctx-reset W1 merged (d32f422c3); W2 sweep plan merged at project/plans/2026-11-12-ctx-reset-sweep.md, not yet implemented. Also indexed in project/backlog/pm-01m7dkwk-subitems.md.
+
+### grok 額度只能靠發真請求來量
+- **Id**: BL-0470
+- **Status**: open
+- **Since**: 2026-11-18
+- **Origin**: peer
+- **Reporter**: pm--claude
+- **Report**: fleet 01M7Q37HXRN6C966R0RFSFQJRR (PM, 2026-11-18)
+- **Reply**: unknown
+- **Problem**: 要知道 grok 週池重置了沒，現在只能送一件真的請求看會不會回 402；沒有只讀的用量查詢。
+- **Impact**: 每次量額度都要花一次真請求，池滿時還會多記一次失敗；capacity 的讀數只能等有人派工才更新。
+- **Trigger**: ready
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PM 01M7Q37H（capacity 工單 01M7Q34V）
+- **Pointer**: none
+- **Context**: Add a read-only grok usage-probe (no model request) feeding capacity's reading, same shape as the other quota adapters; until then the 11-19 11:45 Taipei reset check uses one minimal dispatch-author grok request.

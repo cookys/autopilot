@@ -49,7 +49,7 @@ function consolePane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
     const decide = con.decide ?? null
     const ctx = { t, cols, expanded: new Set<string>(), folded: con.folded ?? new Set<string>(), fleet: null, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), ...(decide.now === undefined ? {} : { now: decide.now }), inputs: decide.inputs && el.Input !== undefined } }) }
     const view = commandView(con.nav.snap, con.live ?? null, ctx, con.now ?? con.nav.snap.generated_at_ms)
-    const line = lineView(el, decide, con.onToggle ?? (() => {}), () => {})
+    const line = lineView(el, decide, con.onToggle ?? (() => {}), () => {}, con.epoch ?? 0)
     const scroll = con.scroll ?? null
     if (scroll !== null && win !== null) {
       keyed(win, 'console:' + tab)
@@ -200,7 +200,7 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
   const drawRow = (r: Row, i: number) => {
     if (i === noteAt && el.Input !== undefined) {
       const Input = el.Input
-      return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} autoFocus />{Button === undefined ? null : <Button key="note:cancel" plain onPress={() => frame.onKey?.({ kind: 'text_cancel' })}><Text>{t('page.decide.act_cancel')}</Text></Button>}</Box>
+      return <Box key={'f' + i}><Input key="[REDACTED]" placeholder={t('page.decide.act_text')} value={frame.decide?.textBuf ?? ''} onInput={(v: string) => frame.onText?.(v)} onSubmit={() => frame.onKey?.({ kind: 'text_save' })} autoFocus />{Button === undefined ? null : <Button key={'note:cancel' + ep} plain onPress={() => frame.onKey?.({ kind: 'text_cancel' })}><Text>{t('page.decide.act_cancel')}</Text></Button>}</Box>
     }
     const isStrip = i >= rows.length - stripCount
     // a `[x] label` hint binds a letter only in an ACTION row (a head or body row can quote `[a]` or `buf[i]`), at the start of the text or after a space (one form: the host draws the Button `x: label`, so the text never also carries `[x]`)
@@ -251,8 +251,9 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
 }
 
 // how one PaneLine is drawn (shared by the tabs and the console's 指揮 page): plain segments, a press row of Buttons, a text field, a toggle Button, a goto Button
-function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, decide: DecideActs | null, onToggle: (id: string) => void, onTab: (t: PaneTab) => void) {
+function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, decide: DecideActs | null, onToggle: (id: string) => void, onTab: (t: PaneTab) => void, epoch = 0) {
   const { Box, Text, Link, Button, Input } = el
+  const ep = epoch > 0 ? ':' + epoch : ''
   const segsOf = (l: PaneLine): Seg[] => l.segs ?? [{ text: l.text }]
   const drawn = (l: PaneLine) => segsOf(l).map((x, j) => <Text key={'g' + j} {...drawSeg(x)} wrap="truncate">{x.text}</Text>)
   // a line with no segments is the blank (drawn as a one-cell Text: an empty Text takes no row); every other line is a row of segments
@@ -275,7 +276,7 @@ function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, 
           if (r.href !== undefined && Link !== undefined) return <Link key={'lnk:' + j + ':' + r.href} href={r.href} label={r.segs.map(s => s.text).join('')} />
           return r.press === undefined || Button === undefined || decide === null
             ? <Box key={'r' + j}>{texts}</Box>
-            : <Button key={r.press.replace(/^pick:/, 'opt:')} plain onPress={() => decide.onPress(r.press as string)}>{texts}</Button>
+            : <Button key={r.press.replace(/^pick:/, 'opt:') + ep} plain onPress={() => decide.onPress(r.press as string)}>{texts}</Button>
         })}
       </Box>
     )
@@ -296,10 +297,10 @@ function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, 
     : l.segs !== undefined && (l.kind === 'choice' || l.segs.some(x => x.press !== undefined || x.href !== undefined))
     ? pressLine(l, i, k)
     : l.toggle !== undefined && Button !== undefined
-    ? <Button key={k + 'b' + i} plain onPress={() => onToggle(l.toggle as string)}>{drawn(l)}</Button>
+    ? <Button key={k + 'b' + i + ep} plain onPress={() => onToggle(l.toggle as string)}>{drawn(l)}</Button>
     // a line that carries a `goto` tab (a projection row, design plan §2.3) is a Button that opens that tab
     : l.goto !== undefined && Button !== undefined
-    ? <Button key={k + 'g' + i} plain onPress={() => onTab(l.goto as PaneTab)}>{drawn(l)}</Button>
+    ? <Button key={k + 'g' + i + ep} plain onPress={() => onTab(l.goto as PaneTab)}>{drawn(l)}</Button>
     : plainLine(l, i, k)
   return line
 }
@@ -307,8 +308,9 @@ function lineView(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, 
 export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El }, snap: LiveSnapshot | null, tab: PaneTab = 'now', onTab: (t: PaneTab) => void = () => {}, t: T = T_EN, bodyColumns: number | null = null, onNext: () => void = () => {}, expanded: ReadonlySet<string> = new Set(), onToggle: (id: string) => void = () => {}, folded: ReadonlySet<string> = new Set(), scroll: ScrollView | null = null, decide: DecideActs | null = null, win: ScrollModel | null = null, fleet: FleetView | null = null, con: ConsolePane | null = null, frame: FramePane | null = null) {
   const { Box, Text, Link, Button, Input } = el
   const cols = paneWidth(bodyColumns)
+  const epoch = con !== null ? (con.epoch ?? 0) : (frame?.epoch ?? 0)
   const ctx = { t, cols, expanded, folded, fleet, ...(decide === null ? {} : { decide: { ...decide.state, ...(decide.batch === undefined ? {} : { batch: decide.batch }), ...(decide.now === undefined ? {} : { now: decide.now }), inputs: decide.inputs && Input !== undefined } }) }
-  const line = lineView(el, decide, onToggle, (g: PaneTab) => onTab(g))
+  const line = lineView(el, decide, onToggle, (g: PaneTab) => onTab(g), epoch)
   if (con !== null) {
     // 本席: the header (spend, context), then 現況, 派工, 審查 under a dim name each; the lines are the ones the non-console tabs draw
     const own = snap === null ? null : { parts: [{ title: null, lines: headerLines(snap, ctx) }, { title: t('console.self.now'), lines: nowLines(snap, ctx) }, { title: t('console.self.dispatch'), lines: dispatchLines(snap, ctx) }, { title: t('console.self.review'), lines: reviewTabLines(snap, ctx) }], draw: line }
@@ -316,7 +318,7 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
   }
   const framed = framedPage(frame, tab)
   if (frame !== null && framed !== undefined) return framedView(el, framed, frame, snap, onTab, t, cols)
-  const strip = tabStrip(el, tab, onTab, snap, t, cols, frame?.epoch ?? 0)
+  const strip = tabStrip(el, tab, onTab, snap, t, cols, epoch)
   if (snap === null) {
     return (
       <Box flexDirection="column" height={scroll?.bodyRows} justifyContent="flex-end">

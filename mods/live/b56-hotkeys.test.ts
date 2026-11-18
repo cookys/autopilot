@@ -324,6 +324,7 @@ function statPath(files: Tree, p: string, resolve?: boolean) {
 function fakeHost(on: On) {
   const files = baseFiles()
   const opens: { id: string; focus?: boolean }[] = []
+  let invalidates = 0
   mock.clock(on, { now: NOW_FRESH })
   on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? HOME : e.name === 'AUTOPILOT_LOCALE' ? 'zh-TW' : undefined }))
   on('fs.read', (_$, e) => {
@@ -343,7 +344,10 @@ function fakeHost(on: On) {
   on('session.end', () => ({ sessionId: SID }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'engine' as const, ref: 0 }))
-  on('ui.invalidate', () => ({ value: undefined }))
+  on('ui.invalidate', () => {
+    invalidates += 1
+    return { value: undefined }
+  })
   on('ui.toast', () => ({ value: undefined }))
   on('ui.open', (_$, e) => {
     opens.push({ id: e.id, focus: e.focus })
@@ -352,7 +356,7 @@ function fakeHost(on: On) {
   on('ui.close', () => ({ value: undefined }))
   on('ui.panes', () => ({ value: [] }))
   on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false as const, isStderrTruncated: false as const } }))
-  return { opens }
+  return { opens, invalidates: () => invalidates }
 }
 
 type MountedNode = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
@@ -377,7 +381,7 @@ const framedRowsOf = (tree: MountedNode): string[] => {
 
 for (const surface of SURFACES) {
   test('b56 placement sync: register.ts increases epoch on dock <-> inline moves and keeps it unchanged on same-placement re-renders (' + surface + ')', async ($, on) => {
-    fakeHost(on)
+    const host = fakeHost(on)
     await $.session.start({ surface, cwd: CWD })
     await $.command.run({ command: 'live-pane', args: '' })
 
@@ -430,13 +434,19 @@ for (const surface of SURFACES) {
     expect(s1.digitHotkeys).toEqual(DIGITS_ALL)
     expect(s1.digitKeys).toEqual(DIGIT_PAGE_IDS.map(id => id + ':1'))
 
-    // Pressing a rotated page Button in the inline placement selects that page without bumping epoch
+    // Pressing a rotated page Button in the inline placement invalidates and selects that page without bumping epoch on the next render
+    // (fakeHost stubs ui.invalidate, so like live.test.ts / review.test.ts we mount the host's next render after the press)
+    const invBefore = host.invalidates()
     await inline1.press({ key: 'decide:1' })
-    const afterPress = await inspect(inline1)
+    expect(host.invalidates()).toBeGreaterThan(invBefore)
+    await inline1.unmount()
+
+    const inline1AfterPress = await mountPane('inline', false)
+    const afterPress = await inspect(inline1AfterPress)
     expect(afterPress.rows[0]?.startsWith('待決')).toBe(true)
     expect(afterPress.frameKey).toBe('frame:1')
     expect(afterPress.anchorKey).toBe(FOCUS_ANCHOR_KEY + ':1')
-    await inline1.unmount()
+    await inline1AfterPress.unmount()
 
     // Another re-render at inline without a placement change: epoch stays 1
     const inline1Again = await mountPane('inline', true)

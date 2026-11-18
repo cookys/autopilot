@@ -48,16 +48,18 @@ test('gate2 item 1: the strip row does not move between a short page and a long 
   expect(rows[0]).toBe(23)
 })
 
-test('gate2 item 1: actions sit directly above the strip, the body starts under the head, only the leftover is blank between them', () => {
+test('gate2 item 1: actions sit directly above the strip, the body touches the actions, only the leftover above the body is blank', () => {
   const out = frameRows(PAGES.find(p => p.id === 'pet') as Page, ctxOf(160, 24, snap(POOLS.map(p => ({ ...p, stranded_seats: 1 })), { cards: [] })) as never, { pages: PAGES }).map(text)
   expect(out.length).toBe(24)
   const last = out.length - 1
   expect(out[last - 1]).toContain('沒有待決卡') // the action row is right above the strip
-  expect(out[1].trim(), 'the body is laid out from the top').not.toBe('')
+  const content = out.indexOf(t('frame.pet_todo'))
+  expect(content, 'the body touches the first action').toBe(last - 2)
   const blanks = out.map((l, i) => (l.trim() === '' ? i : -1)).filter(i => i >= 0)
   expect(blanks.length).toBeGreaterThan(0)
   expect(blanks.every((i, k) => k === 0 || i === blanks[k - 1] + 1), 'the blank rows are one run').toBe(true)
-  expect(blanks[blanks.length - 1]).toBe(last - 2) // the run ends right above the action rows
+  expect(blanks[0]).toBe(1) // padding starts after the fixed header
+  expect(blanks[blanks.length - 1]).toBe(content - 1) // padding ends directly above content
 })
 
 test('gate2 item 1: free rows unfold first (folded fleet lines, a pool\'s seats) and the surface stays H rows', () => {

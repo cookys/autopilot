@@ -5,7 +5,7 @@
 //   row 0          header: the page name, then the most severe broken marker (staleBadge) when a source is broken
 //   body rows      the page's rows, wrapped (never cut) to the width; an overflow turns the LAST row into `↓ 還有 N 列`, the total unchanged
 //   A rows         the actions (at most 6 when H >= 32 else 4), directly under the body; none -> one row: `沒有待決卡`, or `資料不足，無法判定` when a source is missing or a pool's verdict is unknown
-//   Never a blank filler row between the content and the strip (gate round 1, G1): a page with little to say is drawn SHORTER than the surface, the body takes every row the actions leave.
+//   Spare body rows go ABOVE the content (R14): the pane keeps its fixed height and the last content row touches the actions.
 //   last row       tab strip: `1 現況 2 待決 ...  i 說明  Esc 收起`; each tab entry carries press `tab:<digit>:<id>`; every entry 1-8, 9, 0 and i stays, the names shorten first (G7)
 import type { ConsoleSnapshot } from '../console'
 import type { T } from '../i18n'
@@ -158,9 +158,9 @@ export function stripRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   ])]
 }
 
-// EXACTLY ctx.size.rows rows, whatever the page returned, and the strip is always at the bottom (fixed height, PM 01M7N33J): head, the body laid out from the top, the actions right above the strip.
+// EXACTLY ctx.size.rows rows, whatever the page returned, and the strip is always at the bottom (fixed height, PM 01M7N33J): head, padding, bottom-anchored body, actions, strip.
 // Free rows go to content first: when the body is shorter than its room and the caller offers `unfold` (the page drawn with its folds open), the unfolded body is used if it fits whole.
-// Only the rows that are really left over stay blank, between the body and the action rows (G1: never squeeze the content to nothing while blank rows exist).
+// Only the rows that are really left over stay blank, above the body (R14); its last content row is directly above the actions.
 export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[] {
   const H = ctx.size.rows
   const full = actionRows(H)
@@ -201,5 +201,5 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     }
   }
   const gap: Row[] = Array.from({ length: room - shown.length }, blank)
-  return [head, ...shown, ...gap, ...(A === 0 ? [] : acts.slice(-A)), ...sRows].map(r => clip(r, ctx.size.cols))
+  return [head, ...gap, ...shown, ...(A === 0 ? [] : acts.slice(-A)), ...sRows].map(r => clip(r, ctx.size.cols))
 }

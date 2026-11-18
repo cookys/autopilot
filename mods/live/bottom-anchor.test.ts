@@ -11,6 +11,8 @@ import { parseConsole } from './console'
 import { shellPlan, parsePanel } from './shell'
 import { speedView } from './speedview'
 import full from './fixtures/console/console-full.fixture'
+import { frameHeight, frameRows, stripRows } from './pages/frame'
+import { PAGES } from './pages/index'
 
 const assert = {
   ok(value: unknown, message?: string) { expect(Boolean(value), message).toBe(true) },
@@ -39,7 +41,7 @@ function render(n0, width, givenHeight?) {
   const n = norm(n0)
   if (n === null || n === undefined) return []
   if (typeof n === 'string') return [cut(n, width)]
-  const p = n.props
+  const p = n.props ?? {}
   width = p.width ?? width
   const height = p.height ?? givenHeight
   if (n.type !== 'Box') {
@@ -212,4 +214,90 @@ test('shell overflow: default opens at bottom, scrolling up survives redraw', ()
   const offset = model.offset
   draw()
   assert.equal(model.offset, offset)
+})
+
+const R14_SIZES = [[80, 24, 'inline'], [120, 30, 'dock'], [160, 40, 'dock']] as const
+const rowText = row => row.map(s => s.text).join('')
+
+test('R14: every page bottom-anchors short content in a fixed frame at all three sizes and H=5..7', () => {
+  const sizes = [...R14_SIZES, ...[60, 80, 120, 160].flatMap(cols => [5, 6, 7].map(rows => [cols, rows, 'dock'] as const))]
+  for (const [cols, available, placement] of sizes) for (const page of PAGES) {
+    const H = frameHeight(available, placement)
+    const ctx = { live: null, console: null, size: { cols, rows: H }, t, nowMs: 0 }
+    const body = [[{ text: page.id + ' first' }], [{ text: page.id + ' last' }]]
+    const actions = [[{ text: page.id + ' action' }]]
+    const out = frameRows({ ...page, render: () => ({ body, actions }) }, ctx).map(rowText)
+    const S = stripRows(page, ctx).length
+    const kept = body.slice(0, Math.min(body.length, H - S - 2)).map(rowText)
+    const at = out.indexOf(kept[0])
+    const action = out.indexOf(page.id + ' action')
+    const label = page.id + ' ' + cols + 'x' + H
+    expect(out.length, label).toBe(H)
+    expect(out[0], label + ' header').toBe(t('tab.' + page.id))
+    expect(action, label + ' action precedes strip').toBe(H - S - 1)
+    expect(out.slice(-S), label + ' strip remains last').toEqual(stripRows(page, ctx).map(rowText))
+    expect(out.slice(at, action), label + ' content order and adjacency').toEqual(kept)
+    expect(out.slice(1, at).every(r => r.trim() === ''), label + ' padding only above content').toBe(true)
+    expect(at - 1, label + ' all spare rows are above content').toBe(H - S - 2 - kept.length)
+  }
+})
+
+test('R14: real page content ends directly above actions with null or short snapshots', () => {
+  for (const [cols, available, placement] of R14_SIZES) for (const page of PAGES) for (const live of [null, snap()]) {
+    const H = frameHeight(available, placement)
+    const ctx = { live, console: null, size: { cols, rows: H }, t, nowMs: 1794200000000 }
+    const source = page.render(ctx)
+    const out = frameRows(page, ctx).map(rowText)
+    const S = stripRows(page, ctx).length
+    const action = H - S - Math.max(1, source.actions.length)
+    const body = out.slice(1, action)
+    const label = page.id + ' ' + cols + 'x' + H
+    expect(out.length, label).toBe(H)
+    if (source.body.length === 0) expect(body.every(r => r.trim() === ''), label + ' empty body').toBe(true)
+    else {
+      expect(body[body.length - 1].trim(), label + ' content touches actions').not.toBe('')
+      const first = body.findIndex(r => r.trim() !== '')
+      expect(body.slice(0, first).every(r => r.trim() === ''), label + ' leading padding').toBe(true)
+    }
+  }
+})
+
+test('R14 mounted: every page keeps content adjacent to actions at 80x24 inline and 120x30/160x40 dock', async ($, on) => {
+  on('clock.now', () => ({ value: 1794200000000 }))
+  for (const [columns, rows, placement] of R14_SIZES) {
+    const cols = placement === 'dock' ? columns / 2 : columns
+    const mounted = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-live', props: { title: 'Autopilot', isFocused: true, bodyColumns: cols, placement, scroll: { offset: 0, bodyRows: rows }, view: { agentId: undefined } }, viewport: { columns, rows, isFullscreen: true } })
+    for (const page of PAGES) {
+      const home = (await mounted.findAll({ type: 'Button' })).find(b => b.props.hotkey === '1' || b.props.key === 'now')
+      expect(home, 'return to the modern page strip').toBeDefined()
+      await mounted.press({ key: home!.props.key })
+      const button = (await mounted.findAll({ type: 'Button' })).find(b => b.props.hotkey === page.key)
+      expect(button, 'page ' + page.id + ' is reachable').toBeDefined()
+      await mounted.press({ key: button!.props.key })
+      const tree = await mounted.drawn()
+      if (!page.framed) {
+        // These registry shells still use the original pane renderer. Exercise
+        // that real selection and its bottom controls, without replacing content.
+        const out = screen(tree, cols, rows)
+        const tabs = walk(tree).find(n => n.props?.key === 'tabs')
+        expect(tabs, page.id + ' strip exists').toBeDefined()
+        const chrome = render(tabs, cols)
+        expect(chrome.length, page.id + ' strip has visible rows').toBeGreaterThan(0)
+        expect(out.length, page.id + ' fixed viewport').toBe(rows)
+        expect(out.slice(-chrome.length), page.id + ' strip is last').toEqual(chrome)
+        expect(out[out.length - chrome.length - 1].trim(), page.id + ' content touches strip').not.toBe('')
+        expect(out[0].trim(), page.id + ' spare rows precede content').toBe('')
+        continue
+      }
+      const rendered = walk(tree).filter(n => /^f\d+$/.test(n.props?.key ?? '')).map(textOf)
+      const S = cols < 66 ? 2 : 1
+      const action = rendered.length - S - 1 // no snapshot: every page has the single empty-state action
+      const label = page.id + ' ' + columns + 'x' + rows
+      expect(rendered.length, label + ' fixed height').toBe(rows)
+      expect(rendered[action].trim(), label + ' action exists').not.toBe('')
+      expect(rendered[action - 1].trim(), label + ' content touches action').not.toBe('')
+      expect(rendered[1].trim(), label + ' spare rows precede content').toBe('')
+    }
+    await mounted.unmount()
+  }
 })

@@ -73,9 +73,13 @@ test('frame: layout, header on row 0, strip on the last row, A = 6 from 32 rows 
   expect(text(rows[bodyRoom - 1])).toBe('body ' + (bodyRoom - 2))
 })
 
-test('frame: no action says 沒有待決卡 on one row only; a short body keeps the strip on the last row, blank rows only between the body and the actions', () => {
+test('frame: no action says 沒有待決卡 on one row only; a short body keeps the strip on the last row, blank rows only above the body', () => {
   const rows = frameRows(withBody(PAGES[2], 2, 0), ctxOf({ cols: 80, rows: 24 }, WHOLE), { pages: PAGES })
-  expect(rows.map(text).slice(0, 3)).toEqual(['艦隊', 'body 0', 'body 1'])
+  const out = rows.map(text)
+  const first = out.indexOf('body 0')
+  expect(out[0]).toBe('艦隊')
+  expect(out.slice(first, out.length - 1)).toEqual(['body 0', 'body 1', '沒有待決卡'])
+  expect(out.slice(1, first).every(r => r === '')).toBe(true)
   expect(rows.length).toBe(24)
   expect(text(rows[22])).toBe('沒有待決卡') // directly above the strip
   expect(rows.filter(r => text(r) === '沒有待決卡').length).toBe(1)

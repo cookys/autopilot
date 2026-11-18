@@ -7473,6 +7473,21 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Path of the per-user JSON host deny list ({\"strong\":[...],\"contextual\":[...]}) read by leak-guard and personal-data-redact; defaults to ~/.autopilot/leak-guard-hosts.json."
+    },
+    {
+      "name": "AUTOPILOT_RUNNER_VETTED_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "~/.autopilot/runner-vetted.json",
+      "readers": [
+        "scripts/lib/runner-pins.js",
+        "scripts/runner-pin-check.js",
+        "scripts/runner-smoke.js"
+      ],
+      "doc": "docs/scripts-inventory.md",
+      "relates": [],
+      "note": "Path override for the host-local runner-vetted.json overlay (autopilot.runner-vetted/1) written on runner-smoke PASS and read by runner-pin-check; defaults to ~/.autopilot/runner-vetted.json."
     }
   ]
 }

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
-// runner-smoke.js — daily read-only smoke gate for pinned engine CLIs.
+// runner-smoke.js — daily read-only smoke gate for engine CLIs in config/runner-pins.json.
 //
-// For each installed runner in config/runner-pins.json (or --only <runner>), sends ONE
-// short token prompt ("Reply with exactly the word PINEAPPLE-<6 random hex> and nothing
-// else.") through the SAME read-only dispatch wrapper the rails use:
+// For each runner in config/runner-pins.json installed on this host (or --only <runner>),
+// sends ONE short token prompt ("Reply with exactly the word PINEAPPLE-<6 random hex> and
+// nothing else.") through the SAME read-only dispatch wrapper the rails use:
 //   - scripts/dispatch-author.sh (scratch cwd, read-only posture, zero repo writes)
 //   - scripts/lib/opencode-containment.js (locked review containment, empty non-git cwd,
 //     event audit) for opencode, which dispatch-author.sh does not support.
@@ -14,6 +14,12 @@
 // Writes receipt JSON (schema "autopilot.runner-smoke/1") to:
 //   $XDG_RUNTIME_DIR/autopilot/runner-smoke/<YYYY-MM-DD>.json
 //   (fallback: ~/.autopilot/runner-smoke/<YYYY-MM-DD>.json)
+//
+// On a PASS for a runner, atomically appends {version, receipt_sha256, vetted_at}
+// (idempotent per runner+version, temp+rename) to the host-local vetted overlay:
+//   ${AUTOPILOT_RUNNER_VETTED_FILE:-$HOME/.autopilot/runner-vetted.json}
+//   (schema "autopilot.runner-vetted/1")
+// A FAIL never writes. --dry-run never writes.
 //
 // With --notify <fleet-addr>: on failure ONLY, runs:
 //   fleet send <addr> "<one line per failed runner>"
@@ -28,8 +34,11 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const {
+  VETTED_OVERLAY_SCHEMA,
   DEFAULT_PINS_PATH,
   loadPinTable,
+  resolveVettedPath,
+  loadVettedOverlay,
   resolvePinBinary,
   probeRunnerVersion,
 } = require('./lib/runner-pins.js');
@@ -112,9 +121,10 @@ function usage(code) {
     '',
     'Options:',
     '  --only <runner>        Run smoke only for the named installed runner.',
-    '  --dry-run              Print the execution plan as JSON; invoke nothing.',
+    '  --dry-run              Print the execution plan as JSON; invoke and write nothing.',
     '  --notify <fleet-addr>  On failure only, send one line per failed runner via `fleet send`.',
     '  --pins <path>          Override path to config/runner-pins.json.',
+    '  --vetted <path>        Override host overlay path (else AUTOPILOT_RUNNER_VETTED_FILE or ~/.autopilot/runner-vetted.json).',
     '  --receipt-dir <dir>    Override receipt output directory.',
     '  --date <YYYY-MM-DD>    Override local date stamp for receipt filename.',
     '  --timeout <dur>        Per-runner dispatch timeout (default: 3m).',
@@ -133,6 +143,7 @@ function parseArgs(argv) {
     dryRun: false,
     notify: null,
     pinsPath: DEFAULT_PINS_PATH,
+    vettedPath: null,
     receiptDir: null,
     date: null,
     timeout: '3m',
@@ -153,6 +164,10 @@ function parseArgs(argv) {
     } else if (arg === '--pins') {
       if (i + 1 >= argv.length || !argv[i + 1]) usage(2);
       opts.pinsPath = path.resolve(argv[i + 1]);
+      i += 1;
+    } else if (arg === '--vetted') {
+      if (i + 1 >= argv.length || !argv[i + 1]) usage(2);
+      opts.vettedPath = path.resolve(argv[i + 1]);
       i += 1;
     } else if (arg === '--receipt-dir') {
       if (i + 1 >= argv.length || !argv[i + 1]) usage(2);
@@ -211,7 +226,7 @@ function resolveTargetSpec(runner, entry) {
   return {
     runner,
     bin: entry.bin,
-    pinned_version: entry.version,
+    vetted: [...entry.vetted],
     wrapper,
     dispatch_runner: dispatchRunner,
     model,
@@ -219,20 +234,20 @@ function resolveTargetSpec(runner, entry) {
   };
 }
 
-function selectTargets(table, onlyRunner) {
+function selectTargets(table, onlyRunner, env = process.env) {
   if (onlyRunner) {
     if (!Object.prototype.hasOwnProperty.call(table.runners, onlyRunner)) {
       throw new Error(`unknown runner "${onlyRunner}" (not in pin table)`);
     }
     const entry = table.runners[onlyRunner];
-    if (entry.installed === false) {
-      throw new Error(`runner "${onlyRunner}" is marked installed=false in pin table`);
+    if (!resolvePinBinary(onlyRunner, entry.bin, env)) {
+      throw new Error(`runner "${onlyRunner}" is not installed on this host (binary "${entry.bin}" not found)`);
     }
     return [{ runner: onlyRunner, entry, target: resolveTargetSpec(onlyRunner, entry) }];
   }
   const out = [];
   for (const [runner, entry] of Object.entries(table.runners)) {
-    if (entry.installed === false) continue;
+    if (!resolvePinBinary(runner, entry.bin, env)) continue;
     out.push({ runner, entry, target: resolveTargetSpec(runner, entry) });
   }
   return out;
@@ -473,9 +488,44 @@ function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
 function writeReceiptAtomic(receiptPath, doc) {
   const dir = path.dirname(receiptPath);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const bytes = `${JSON.stringify(doc, null, 2)}\n`;
   const tmpFile = `${receiptPath}.tmp.${process.pid}`;
-  fs.writeFileSync(tmpFile, `${JSON.stringify(doc, null, 2)}\n`, { mode: 0o600 });
+  fs.writeFileSync(tmpFile, bytes, { mode: 0o600 });
   fs.renameSync(tmpFile, receiptPath);
+  return crypto.createHash('sha256').update(bytes, 'utf8').digest('hex');
+}
+
+function appendSmokePassesToOverlay(vettedPath, rows, receiptSha256, vettedAt) {
+  const passed = rows.filter(
+    (r) => r.pass === true && typeof r.version === 'string' && r.version.trim() !== '',
+  );
+  if (passed.length === 0) return false;
+  const overlay = loadVettedOverlay(vettedPath, { allowMissing: true });
+  const runners = { ...overlay.runners };
+  let changed = false;
+  for (const row of passed) {
+    const current = Array.isArray(runners[row.runner]) ? [...runners[row.runner]] : [];
+    if (!current.some((item) => item.version === row.version)) {
+      current.push({
+        version: row.version,
+        receipt_sha256: receiptSha256,
+        vetted_at: vettedAt,
+      });
+      runners[row.runner] = current;
+      changed = true;
+    }
+  }
+  if (!changed) return false;
+  const outDoc = {
+    schema: VETTED_OVERLAY_SCHEMA,
+    runners,
+  };
+  const dir = path.dirname(vettedPath);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const tmpFile = `${vettedPath}.tmp.${process.pid}`;
+  fs.writeFileSync(tmpFile, `${JSON.stringify(outDoc, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmpFile, vettedPath);
+  return true;
 }
 
 function notifyFailures(fleetBin, fleetAddr, failedRows) {
@@ -503,10 +553,12 @@ function notifyFailures(fleetBin, fleetAddr, failedRows) {
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
+  const vettedPath = resolveVettedPath(opts.vettedPath, process.env);
   let table;
   let items;
   try {
     table = loadPinTable(opts.pinsPath);
+    loadVettedOverlay(vettedPath, { allowMissing: true });
     items = selectTargets(table, opts.only);
   } catch (err) {
     process.stderr.write(`runner-smoke: ${err.message}\n`);
@@ -523,12 +575,13 @@ function main() {
       dry_run: true,
       date: dateStr,
       receipt_path: receiptPath,
+      vetted_path: vettedPath,
       notify: opts.notify,
       prompt_template: 'Reply with exactly the word PINEAPPLE-<6-hex> and nothing else.',
       runners: items.map(({ runner, target }) => ({
         runner,
         bin: target.bin,
-        pinned_version: target.pinned_version,
+        vetted: target.vetted,
         wrapper: target.wrapper,
         dispatch_runner: target.dispatch_runner,
         model: target.model,
@@ -562,7 +615,7 @@ function main() {
       const t0 = process.hrtime.bigint();
       const verProbe = probeRunnerVersion(item.runner, item.entry);
       let outcome;
-      if (!verProbe.found) {
+      if (!verProbe.ok) {
         outcome = {
           rail_exit: 2,
           rail_classification: 'precondition_failed',
@@ -592,18 +645,25 @@ function main() {
 
   const failedRows = rows.filter((r) => !r.pass);
   const allPass = failedRows.length === 0;
+  const finishedAt = new Date().toISOString();
   const receipt = {
     schema: SMOKE_SCHEMA,
     date: dateStr,
     started_at: startedAt,
-    finished_at: new Date().toISOString(),
+    finished_at: finishedAt,
     ok: allPass,
     pass_count: rows.length - failedRows.length,
     fail_count: failedRows.length,
     runners: rows,
   };
 
-  writeReceiptAtomic(receiptPath, receipt);
+  const receiptSha256 = writeReceiptAtomic(receiptPath, receipt);
+  try {
+    appendSmokePassesToOverlay(vettedPath, rows, receiptSha256, finishedAt);
+  } catch (err) {
+    process.stderr.write(`runner-smoke: failed to update vetted overlay: ${err.message}\n`);
+    process.exit(2);
+  }
   process.stdout.write(`${JSON.stringify({ ...receipt, receipt_path: receiptPath }, null, 2)}\n`);
 
   if (!allPass && opts.notify) {
@@ -620,6 +680,7 @@ if (require.main === module) {
 module.exports = {
   SMOKE_SCHEMA,
   RUNNER_SMOKE_TARGETS,
+  appendSmokePassesToOverlay,
   localDateString,
   parseArgs,
   resolveReceiptDir,

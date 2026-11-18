@@ -33,10 +33,15 @@ eval_account_probe skill-opt || exit $?
 . "$AUTOPILOT_DIR/scripts/lib/token-seat.sh"
 _ts_msg="$(token_seat_guard)" || { printf '%s\n' "$_ts_msg" >&2; exit 78; }
 
-# A parent CLAUDE_CODE_OAUTH_TOKEN is the child's auth whether or not AUTOPILOT_TOKEN_SEAT=1
-# (the other spawn sites pass that variable through and do not replace it). Do not read the
-# host credentials file in that case. No parent token and no account layer: the file path below.
-if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" && "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
+_HAS_ENDPOINT_AUTH=0
+if [[ -n "${ANTHROPIC_BASE_URL:-}" && ( -n "${ANTHROPIC_AUTH_TOKEN:-}" || -n "${ANTHROPIC_API_KEY:-}" ) ]]; then
+  _HAS_ENDPOINT_AUTH=1
+fi
+
+# A parent CLAUDE_CODE_OAUTH_TOKEN (or an explicit endpoint + auth) is the child's auth
+# whether or not AUTOPILOT_TOKEN_SEAT=1 (the other spawn sites pass that variable through
+# and do not replace it). Do not read the host credentials file in that case.
+if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" && "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 && "$_HAS_ENDPOINT_AUTH" != 1 ]]; then
 # Extract OAuth token
 if [[ ! -f "$CRED_FILE" ]]; then
   echo "ERROR: $CRED_FILE not found. Are you logged into Claude Code?" >&2
@@ -86,7 +91,7 @@ echo "Skill: $SKILL_PATH" >&2
 echo "Results: $RESULTS_DIR" >&2
 echo "" >&2
 
-if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" && "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
+if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" && "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 && "$_HAS_ENDPOINT_AUTH" != 1 ]]; then
   export ANTHROPIC_API_KEY="$TOKEN"
 fi
 
@@ -108,7 +113,8 @@ trap 'rm -rf "$WRAPPER_DIR"' EXIT
 mkdir -p "$WRAPPER_DIR"
 cat > "$WRAPPER_DIR/claude" <<'EOF'
 #!/usr/bin/env bash
-if [ "${AUTOPILOT_TOKEN_SEAT:-}" = 1 ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+if [ "${AUTOPILOT_TOKEN_SEAT:-}" = "1" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] \
+    && ! { [ -n "${ANTHROPIC_BASE_URL:-}" ] && { [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || [ -n "${ANTHROPIC_API_KEY:-}" ]; }; }; then
   printf '%s\n' 'token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)' >&2
   exit 78
 fi
@@ -160,17 +166,28 @@ _cred_file = os.path.expanduser('~/.claude/.credentials.json')
 # A parent CLAUDE_CODE_OAUTH_TOKEN (declared token seat or not) is the same rule the other spawn sites use: inherit it, never open the host file.
 def _patched(*args, **kwargs):
     parent = os.environ.get('CLAUDE_CODE_OAUTH_TOKEN') or ''
-    if os.environ.get('AUTOPILOT_TOKEN_SEAT') == '1' and not parent:
+    base_url = os.environ.get('ANTHROPIC_BASE_URL') or ''
+    ep_auth = os.environ.get('ANTHROPIC_AUTH_TOKEN') or os.environ.get('ANTHROPIC_API_KEY') or ''
+    has_ep = bool(base_url and ep_auth)
+    if os.environ.get('AUTOPILOT_TOKEN_SEAT') == '1' and not parent and not has_ep:
         sys.stderr.write('token seat refused: AUTOPILOT_TOKEN_SEAT=1 but CLAUDE_CODE_OAUTH_TOKEN is missing; refusing to spawn claude (would fall back to the host login)\n')
         sys.exit(78)
     if os.environ.get('AUTOPILOT_ACCOUNT') or parent:
         token = os.environ['CLAUDE_CODE_OAUTH_TOKEN']
+        kwargs['client'] = anthropic.Anthropic(api_key=token)
+    elif has_ep:
+        client_kw = {'base_url': base_url}
+        if os.environ.get('ANTHROPIC_AUTH_TOKEN'):
+            client_kw['auth_token'] = os.environ['ANTHROPIC_AUTH_TOKEN']
+        if os.environ.get('ANTHROPIC_API_KEY'):
+            client_kw['api_key'] = os.environ['ANTHROPIC_API_KEY']
+        kwargs['client'] = anthropic.Anthropic(**client_kw)
     else:
         # Re-read token every call (handles OAuth refresh mid-run)
         token = json.load(open(_cred_file))['claudeAiOauth']['accessToken']
         os.environ['ANTHROPIC_API_KEY'] = token
-    # Force new client with fresh token
-    kwargs['client'] = anthropic.Anthropic(api_key=token)
+        # Force new client with fresh token
+        kwargs['client'] = anthropic.Anthropic(api_key=token)
     override = os.environ.get('IMPROVE_MODEL_OVERRIDE') or 'claude-haiku-4-5-20251001'
     if override:
         kwargs['model'] = override

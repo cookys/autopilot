@@ -5,7 +5,7 @@
 # the stub's sha256 is the empty string, not sha256(test-token-A).
 # The stub writes only the sha256. It never writes the token.
 . "$(dirname "$0")/lib.sh"
-unset CLAUDE_CODE_OAUTH_TOKEN AUTOPILOT_TOKEN_SEAT
+unset CLAUDE_CODE_OAUTH_TOKEN AUTOPILOT_TOKEN_SEAT ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX"

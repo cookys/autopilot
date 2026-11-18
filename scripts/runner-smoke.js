@@ -43,10 +43,14 @@ const {
   probeRunnerVersion,
 } = require('./lib/runner-pins.js');
 const opencodeContainment = require('./lib/opencode-containment.js');
+const { redactText } = require('./lib/ar-redact-rules.js');
 
 const SMOKE_SCHEMA = 'autopilot.runner-smoke/1';
 const DISPATCH_AUTHOR_SH = path.join(__dirname, 'dispatch-author.sh');
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const STDERR_TAIL_CHARS = 1500;
+const STDOUT_TAIL_CHARS = 500;
+const NOTIFY_STDERR_CHARS = 200;
 
 // Cheap / non-frontier model per runner used only to prove the binary runs
 // (never expensive tiers: fable, astra, carbon, or argon). Codex effort is
@@ -280,6 +284,39 @@ function stripPseudoTtyChrome(text) {
     .join('\n');
 }
 
+function redactTail(raw, maxChars) {
+  const str = String(raw || '');
+  if (str === '') return '';
+  // Redact a wider window before slicing so a secret straddling the tail boundary cannot leak a suffix.
+  const window = str.length > maxChars * 4 ? str.slice(-(maxChars * 4)) : str;
+  const redacted = redactText(window).text;
+  return redacted.length > maxChars ? redacted.slice(-maxChars) : redacted;
+}
+
+function formatSpawnError(err) {
+  if (!err) return undefined;
+  const code = err.code ? String(err.code) : '';
+  const message = err.message ? String(err.message) : String(err);
+  if (code && message) {
+    return message.startsWith(code) ? message : `${code}: ${message}`;
+  }
+  return code || message || undefined;
+}
+
+function extractRunFailureDetails(run) {
+  const details = {
+    stderr_tail: redactTail(run && run.stderr, STDERR_TAIL_CHARS),
+    stdout_tail: redactTail(run && run.stdout, STDOUT_TAIL_CHARS),
+  };
+  if (run && run.error) {
+    const spawnError = formatSpawnError(run.error);
+    if (spawnError !== undefined) {
+      details.spawn_error = spawnError;
+    }
+  }
+  return details;
+}
+
 function parseLastJsonObject(stdout) {
   const lines = String(stdout || '').split(/\r?\n/);
   for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -390,11 +427,15 @@ function runDispatchAuthorSmoke(item, paths, opts) {
   }
 
   const pass = railExit === 0 && railClassification === 'authored' && answer.includes(token);
-  return {
+  const outcome = {
     rail_exit: railExit,
     rail_classification: railClassification,
     pass,
   };
+  if (!pass) {
+    Object.assign(outcome, extractRunFailureDetails(run));
+  }
+  return outcome;
 }
 
 function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
@@ -457,6 +498,7 @@ function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
       rail_exit: 124,
       rail_classification: 'timeout',
       pass: false,
+      ...extractRunFailureDetails(run),
     };
   }
   if (run.error || run.status !== 0) {
@@ -464,6 +506,7 @@ function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
       rail_exit: Number.isInteger(run.status) && run.status !== 0 ? run.status : 3,
       rail_classification: 'runner_failed',
       pass: false,
+      ...extractRunFailureDetails(run),
     };
   }
 
@@ -473,6 +516,7 @@ function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
       rail_exit: 4,
       rail_classification: 'containment_breach',
       pass: false,
+      ...extractRunFailureDetails(run),
     };
   }
 
@@ -482,15 +526,20 @@ function runOpencodeContainedSmoke(item, actualVersion, paths, opts) {
       rail_exit: 1,
       rail_classification: 'empty_output',
       pass: false,
+      ...extractRunFailureDetails(run),
     };
   }
 
   const pass = answer.includes(token);
-  return {
+  const outcome = {
     rail_exit: 0,
     rail_classification: 'authored',
     pass,
   };
+  if (!pass) {
+    Object.assign(outcome, extractRunFailureDetails(run));
+  }
+  return outcome;
 }
 
 function writeReceiptAtomic(receiptPath, doc) {
@@ -537,9 +586,13 @@ function appendSmokePassesToOverlay(vettedPath, rows, receiptSha256, vettedAt) {
 }
 
 function notifyFailures(fleetBin, fleetAddr, failedRows) {
-  const lines = failedRows.map((row) => (
-    `runner-smoke FAIL ${row.runner}: version=${row.version || 'missing'} rail_exit=${row.rail_exit} classification=${row.rail_classification} wall=${row.wall_seconds}s`
-  ));
+  const lines = failedRows.map((row) => {
+    const line = `runner-smoke FAIL ${row.runner}: version=${row.version || 'missing'} rail_exit=${row.rail_exit} classification=${row.rail_classification} wall=${row.wall_seconds}s`;
+    const stderrPreview = typeof row.stderr_tail === 'string'
+      ? row.stderr_tail.slice(0, NOTIFY_STDERR_CHARS).replace(/[\r\n]+/g, ' ').trim()
+      : '';
+    return stderrPreview ? `${line} stderr=${stderrPreview}` : line;
+  });
   const body = lines.join('\n');
   const env = { ...process.env };
   delete env.AUTOPILOT_TOKEN_SEAT;
@@ -635,7 +688,7 @@ function main() {
         outcome = runDispatchAuthorSmoke(item, paths, opts);
       }
       const wallSeconds = Number(Number(process.hrtime.bigint() - t0) / 1e9).toFixed(3);
-      rows.push({
+      const row = {
         runner: item.runner,
         model: item.target.model,
         effort: item.target.effort,
@@ -645,7 +698,19 @@ function main() {
         pass: outcome.pass,
         result: outcome.pass ? 'pass' : 'fail',
         wall_seconds: Number(wallSeconds),
-      });
+      };
+      if (!outcome.pass) {
+        if (typeof outcome.stderr_tail === 'string') {
+          row.stderr_tail = outcome.stderr_tail;
+        }
+        if (typeof outcome.stdout_tail === 'string') {
+          row.stdout_tail = outcome.stdout_tail;
+        }
+        if (typeof outcome.spawn_error === 'string' && outcome.spawn_error !== '') {
+          row.spawn_error = outcome.spawn_error;
+        }
+      }
+      rows.push(row);
     }
   } finally {
     if (scratchRoot) fs.rmSync(scratchRoot, { recursive: true, force: true });

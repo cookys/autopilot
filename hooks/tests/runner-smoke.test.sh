@@ -216,6 +216,12 @@ case "$*" in
     ;;
 esac
 printf 'grok %s\n' "$*" >> "$PROMPT_LOG"
+if [ -n "${FAKE_GROK_STDERR:-}" ]; then
+  printf '%s\n' "$FAKE_GROK_STDERR" >&2
+fi
+if [ -n "${FAKE_GROK_EXIT:-}" ]; then
+  exit "$FAKE_GROK_EXIT"
+fi
 pfile=""
 args=("$@")
 i=0
@@ -252,6 +258,18 @@ if [ "${1:-}" = "--version" ]; then
   exit 0
 fi
 printf 'opencode %s\n' "$*" >> "$PROMPT_LOG"
+if [ -n "${FAKE_OPENCODE_SLEEP:-}" ]; then
+  exec sleep "$FAKE_OPENCODE_SLEEP"
+fi
+if [ -n "${FAKE_OPENCODE_STDERR:-}" ]; then
+  printf '%s\n' "$FAKE_OPENCODE_STDERR" >&2
+fi
+if [ -n "${FAKE_OPENCODE_EXIT:-}" ]; then
+  exit "$FAKE_OPENCODE_EXIT"
+fi
+if [ "${FAKE_OPENCODE_EMPTY:-}" = "1" ]; then
+  exit 0
+fi
 node -e '
 const fs = require("fs");
 const prompt = fs.readFileSync(0, "utf8");
@@ -571,6 +589,7 @@ for (const r of doc.runners) {
   if (r.rail_exit !== 0 || r.rail_classification !== "authored") process.exit(4);
   if (typeof r.version !== "string" || !r.version) process.exit(5);
   if (typeof r.wall_seconds !== "number" || r.wall_seconds < 0) process.exit(6);
+  if ("stderr_tail" in r || "stdout_tail" in r || "spawn_error" in r) process.exit(13);
 }
 const vetted = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 if (vetted.schema !== "autopilot.runner-vetted/1") process.exit(7);
@@ -642,6 +661,91 @@ if (ov.runners.grok) process.exit(3);
 process.stdout.write("ok");
 ' "$FAIL_RECEIPT" "$PARTIAL_OVERLAY")"
 assert_eq "$FAIL_RECEIPT_CHECK" "ok" "failure receipt records grok fail and never writes failed grok into overlay"
+
+# --- 5b. Failed smoke receipt carries redacted stderr_tail/stdout_tail/spawn_error + notify stderr= ---
+rm -f "$FLEET_LOG"
+OC_FAIL_RECEIPTS="$TEST_TMP/oc-fail-receipts"
+OC_FAIL_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/oc-fail-vetted.json" PATH="$FAKE_OC_BIN:$PATH" FAKE_OPENCODE_STDERR="boom: model not found" FAKE_OPENCODE_EXIT=3 node "$SMOKE_JS" --pins "$FIXTURE_OC_PINS" --only opencode --notify test/canary/ops --receipt-dir "$OC_FAIL_RECEIPTS" --date 2026-11-25 < /dev/null 2>&1)"; OC_FAIL_RC=$?
+assert_eq "$OC_FAIL_RC" "1" "opencode runner exit 3 returns exit 1"
+OC_FAIL_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "opencode");
+if (!row || row.rail_exit !== 3 || row.rail_classification !== "runner_failed") process.exit(1);
+if (typeof row.stderr_tail !== "string" || !row.stderr_tail.includes("boom: model not found")) process.exit(2);
+if (row.stdout_tail !== "") process.exit(3);
+if ("spawn_error" in row) process.exit(4);
+process.stdout.write("ok");
+' "$OC_FAIL_RECEIPTS/2026-11-25.json")"
+assert_eq "$OC_FAIL_CHECK" "ok" "opencode exit 3 receipt row carries stderr_tail containing boom: model not found and empty stdout_tail"
+assert_contains "$(cat "$FLEET_LOG")" "stderr=boom" "opencode FAIL notify line contains stderr=boom"
+
+rm -f "$FLEET_LOG"
+GROK_FAIL_RECEIPTS="$TEST_TMP/grok-fail-receipts"
+GROK_FAIL_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/grok-fail-vetted.json" FAKE_GROK_STDERR="boom: model not found" FAKE_GROK_EXIT=3 node "$SMOKE_JS" --only grok --notify test/canary/ops --receipt-dir "$GROK_FAIL_RECEIPTS" --date 2026-11-25 < /dev/null 2>&1)"; GROK_FAIL_RC=$?
+assert_eq "$GROK_FAIL_RC" "1" "grok runner exit 3 returns exit 1"
+GROK_FAIL_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "grok");
+if (!row || row.rail_exit !== 3 || row.rail_classification !== "runner_failed") process.exit(1);
+if (typeof row.stderr_tail !== "string" || !row.stderr_tail.includes("boom: model not found")) process.exit(2);
+if (typeof row.stdout_tail !== "string" || row.stdout_tail.length === 0) process.exit(3);
+process.stdout.write("ok");
+' "$GROK_FAIL_RECEIPTS/2026-11-25.json")"
+assert_eq "$GROK_FAIL_CHECK" "ok" "grok exit 3 receipt row carries stderr_tail containing boom: model not found"
+assert_contains "$(cat "$FLEET_LOG")" "stderr=" "grok FAIL notify line appends stderr="
+assert_contains "$(cat "$FLEET_LOG")" "boom: model not found" "grok FAIL notify line includes boom: model not found"
+
+rm -f "$FLEET_LOG"
+FAKE_ANT_SECRET="$(printf '%s%s%s' 'sk-' 'ant-' 'test00000000000000000000')"
+FAKE_XAI_SECRET="$(printf '%s%s' 'xai-' 'test00000000000000000000')"
+REDACT_RECEIPTS="$TEST_TMP/redact-fail-receipts"
+REDACT_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/redact-vetted.json" PATH="$FAKE_OC_BIN:$PATH" FAKE_OPENCODE_STDERR="$(printf 'line1 %s\nline2 %s' "$FAKE_ANT_SECRET" "$FAKE_XAI_SECRET")" FAKE_OPENCODE_EXIT=3 node "$SMOKE_JS" --pins "$FIXTURE_OC_PINS" --only opencode --notify test/canary/ops --receipt-dir "$REDACT_RECEIPTS" --date 2026-11-25 < /dev/null 2>&1)"; REDACT_RC=$?
+assert_eq "$REDACT_RC" "1" "redacted stderr failure returns exit 1"
+REDACT_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "opencode");
+if (!row || typeof row.stderr_tail !== "string") process.exit(1);
+if (row.stderr_tail.includes(process.argv[2]) || row.stderr_tail.includes(process.argv[3])) process.exit(2);
+if (!row.stderr_tail.includes("[REDACTED:anthropic]") || !row.stderr_tail.includes("[REDACTED:xai]")) process.exit(3);
+process.stdout.write("ok");
+' "$REDACT_RECEIPTS/2026-11-25.json" "$FAKE_ANT_SECRET" "$FAKE_XAI_SECRET")"
+assert_eq "$REDACT_CHECK" "ok" "secret-like tokens in stderr are redacted in stored stderr_tail"
+assert_not_contains "$(cat "$FLEET_LOG")" "$FAKE_ANT_SECRET" "FAIL notify line never leaks anthropic secret"
+assert_not_contains "$(cat "$FLEET_LOG")" "$FAKE_XAI_SECRET" "FAIL notify line never leaks xai secret"
+assert_contains "$(cat "$FLEET_LOG")" "stderr=line1 [REDACTED:anthropic] line2 [REDACTED:xai]" "FAIL notify line converts newlines to spaces and keeps redacted stderr"
+
+rm -f "$FLEET_LOG"
+EMPTY_RECEIPTS="$TEST_TMP/empty-fail-receipts"
+EMPTY_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/empty-vetted.json" PATH="$FAKE_OC_BIN:$PATH" FAKE_OPENCODE_EMPTY=1 node "$SMOKE_JS" --pins "$FIXTURE_OC_PINS" --only opencode --notify test/canary/ops --receipt-dir "$EMPTY_RECEIPTS" --date 2026-11-25 < /dev/null 2>&1)"; EMPTY_RC=$?
+assert_eq "$EMPTY_RC" "1" "empty_output failure returns exit 1"
+EMPTY_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "opencode");
+if (!row || row.rail_classification !== "empty_output") process.exit(1);
+if (row.stderr_tail !== "" || row.stdout_tail !== "") process.exit(2);
+if ("spawn_error" in row) process.exit(3);
+process.stdout.write("ok");
+' "$EMPTY_RECEIPTS/2026-11-25.json")"
+assert_eq "$EMPTY_CHECK" "ok" "empty stderr/stdout stay empty strings on empty_output receipt row"
+assert_not_contains "$(cat "$FLEET_LOG")" "stderr=" "empty stderr_tail omits stderr= from FAIL notify line"
+
+TIMEOUT_RECEIPTS="$TEST_TMP/timeout-fail-receipts"
+TIMEOUT_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/timeout-vetted.json" PATH="$FAKE_OC_BIN:$PATH" FAKE_OPENCODE_SLEEP=5 node "$SMOKE_JS" --pins "$FIXTURE_OC_PINS" --only opencode --timeout 1s --receipt-dir "$TIMEOUT_RECEIPTS" --date 2026-11-25 < /dev/null 2>&1)"; TIMEOUT_RC=$?
+assert_eq "$TIMEOUT_RC" "1" "timeout failure returns exit 1"
+TIMEOUT_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "opencode");
+if (!row || row.rail_exit !== 124 || row.rail_classification !== "timeout") process.exit(1);
+if (typeof row.spawn_error !== "string" || !row.spawn_error.includes("ETIMEDOUT")) process.exit(2);
+if (row.stderr_tail !== "" || row.stdout_tail !== "") process.exit(3);
+process.stdout.write("ok");
+' "$TIMEOUT_RECEIPTS/2026-11-25.json")"
+assert_eq "$TIMEOUT_CHECK" "ok" "timeout failure records spawn_error with ETIMEDOUT"
 
 # --- 6. runner-smoke.js: --only <runner> + ~/.autopilot/{runner-smoke,runner-vetted.json} default fallbacks ---
 rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG" "$HOME/.autopilot/runner-vetted.json"
@@ -754,5 +858,20 @@ rm -f "$PROMPT_LOG"
 MUT_NO_GUARD_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/mut-no-guard-vetted.json" node "$MUT_DIR/scripts/runner-smoke-no-model-guard.js" --pins "$EXPENSIVE_PINS" --only agy --receipt-dir "$TEST_TMP/mut-no-guard-receipts" --date 2026-11-24 < /dev/null 2>&1)"; MUT_NO_GUARD_RC=$?
 assert_eq "$MUT_NO_GUARD_RC" "0" "negative control: removing expensive-model guard lets gemini-4-carbon-low run and exit 0"
 assert_file_exists "$CALL_LOG" "negative control: removing expensive-model guard invokes fake agy runner"
+
+sed_mutant "$SMOKE_JS" "$MUT_DIR/scripts/runner-smoke-no-stderr.js" 's/stderr_tail: redactTail/omitted_stderr_tail: redactTail/'
+rm -f "$FLEET_LOG"
+MUT_NO_STDERR_RECEIPTS="$TEST_TMP/mut-no-stderr-receipts"
+MUT_NO_STDERR_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/mut-no-stderr-vetted.json" PATH="$FAKE_OC_BIN:$PATH" FAKE_OPENCODE_STDERR="boom: model not found" FAKE_OPENCODE_EXIT=3 node "$MUT_DIR/scripts/runner-smoke-no-stderr.js" --pins "$FIXTURE_OC_PINS" --only opencode --notify test/canary/ops --receipt-dir "$MUT_NO_STDERR_RECEIPTS" --date 2026-11-26 < /dev/null 2>&1)"; MUT_NO_STDERR_RC=$?
+assert_eq "$MUT_NO_STDERR_RC" "1" "negative control: dropping stderr_tail still exits 1 on runner failure"
+MUT_NO_STDERR_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const row = doc.runners.find((r) => r.runner === "opencode");
+if (!row || "stderr_tail" in row) process.exit(1);
+process.stdout.write("ok");
+' "$MUT_NO_STDERR_RECEIPTS/2026-11-26.json")"
+assert_eq "$MUT_NO_STDERR_CHECK" "ok" "negative control: dropping stderr_tail omits stderr_tail from receipt row (first test goes red)"
+assert_not_contains "$(cat "$FLEET_LOG")" "stderr=boom" "negative control: dropping stderr_tail omits stderr=boom from FAIL notify line"
 
 finalize_test

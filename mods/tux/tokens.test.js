@@ -11,6 +11,7 @@ const CONTRACT_PATH = path.join(__dirname, '..', 'live', 'band-statusline-contra
 const MODEL_TS_PATH = path.join(__dirname, '..', 'live', 'model.ts');
 
 const EXPECTED_SCHEMA = 'autopilot.tux-tokens/1';
+const EXPECTED_TOP_LEVEL_KEYS = ['schema', 'roles', 'glyphs', 'terms', 'thresholds'];
 const EXPECTED_ROLE_KEYS = [
   'attention',
   'here',
@@ -26,6 +27,18 @@ const EXPECTED_ROLE_KEYS = [
   'needs_human',
   'link',
 ];
+const EXPECTED_STATE_GLYPH_KEYS = [
+  'done',
+  'running',
+  'idle',
+  'waiting_on',
+  'needs_human',
+  'attention',
+  'broken',
+  'overdue',
+  'stale',
+  'offline',
+];
 const EXPECTED_TERM_KEYS = [
   'pending_decision',
   'dispatch',
@@ -36,9 +49,34 @@ const EXPECTED_TERM_KEYS = [
   'overdue',
   'no_source',
   'offline',
+  'unmeasured',
+  'read_at',
+  'source',
+  'target',
+  'measured',
+  'gap',
+  'just_now',
+  'minutes_ago',
+  'expired',
+  'hidden_detail',
+];
+const NEW_TERM_KEYS = [
+  'unmeasured',
+  'read_at',
+  'source',
+  'target',
+  'measured',
+  'gap',
+  'just_now',
+  'minutes_ago',
+  'expired',
+  'hidden_detail',
 ];
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b|^0x[0-9a-fA-F]+$/;
 const GLYPH_RE = /[\u2190-\u2bff\u25a0-\u25ff\p{Extended_Pictographic}\ufe0f\u20e3]/u;
+const EXTENDED_PICTOGRAPHIC_RE = /\p{Extended_Pictographic}/u;
+const EMOJI_PRESENTATION_RE = /\p{Emoji_Presentation}/u;
+const ASCII_ALNUM_RE = /^[A-Za-z0-9]$/;
 
 function readText(filePath) {
   return fs.readFileSync(filePath, 'utf8');
@@ -140,12 +178,41 @@ function assertRoleThemeKeys(tokens, themeKeys) {
   }
 }
 
+function assertStateGlyphs(tokens) {
+  assert.ok(
+    tokens && typeof tokens === 'object' && tokens.glyphs && typeof tokens.glyphs === 'object' && !Array.isArray(tokens.glyphs),
+    'tokens.glyphs must be an object',
+  );
+  assert.deepEqual(Object.keys(tokens.glyphs), ['state'], 'tokens.glyphs must have only the state key');
+  const stateGlyphs = tokens.glyphs.state;
+  assert.ok(
+    stateGlyphs && typeof stateGlyphs === 'object' && !Array.isArray(stateGlyphs),
+    'tokens.glyphs.state must be an object',
+  );
+  assert.deepEqual(
+    Object.keys(stateGlyphs),
+    EXPECTED_STATE_GLYPH_KEYS,
+    'glyphs.state must have the exact 10 keys',
+  );
+  const seen = new Set();
+  for (const [key, val] of Object.entries(stateGlyphs)) {
+    assert.strictEqual(typeof val, 'string', `glyphs.state.${key} must be a string`);
+    assert.ok(!val.includes('\uFE0F'), `glyphs.state.${key} must not contain U+FE0F`);
+    assert.strictEqual(Array.from(val).length, 1, `glyphs.state.${key} must be a single Unicode code point`);
+    assert.ok(!EMOJI_PRESENTATION_RE.test(val), `glyphs.state.${key} must not match Emoji_Presentation`);
+    assert.ok(!EXTENDED_PICTOGRAPHIC_RE.test(val), `glyphs.state.${key} must not match Extended_Pictographic`);
+    assert.ok(!ASCII_ALNUM_RE.test(val), `glyphs.state.${key} must not be an ASCII letter or digit`);
+    seen.add(val);
+  }
+  assert.strictEqual(seen.size, EXPECTED_STATE_GLYPH_KEYS.length, 'glyphs.state values must all be distinct');
+}
+
 function assertTermsAndSchema(tokens, rawText) {
   assert.ok(tokens && typeof tokens === 'object' && !Array.isArray(tokens), 'tokens must be an object');
-  assert.deepEqual(Object.keys(tokens), ['schema', 'roles', 'terms', 'thresholds'], 'top-level keys must match schema');
+  assert.deepEqual(Object.keys(tokens), EXPECTED_TOP_LEVEL_KEYS, 'top-level keys must match schema');
   assert.strictEqual(tokens.schema, EXPECTED_SCHEMA, 'schema must equal autopilot.tux-tokens/1');
   assert.ok(tokens.terms && typeof tokens.terms === 'object' && !Array.isArray(tokens.terms), 'tokens.terms must be an object');
-  assert.deepEqual(Object.keys(tokens.terms), EXPECTED_TERM_KEYS, 'terms must have the exact 9 keys');
+  assert.deepEqual(Object.keys(tokens.terms), EXPECTED_TERM_KEYS, 'terms must have the exact 19 keys');
   for (const [key, val] of Object.entries(tokens.terms)) {
     assert.ok(val && typeof val === 'object' && !Array.isArray(val), `terms.${key} must be an object`);
     assert.deepEqual(Object.keys(val), ['zh-TW', 'en'], `terms.${key} must have zh-TW and en keys`);
@@ -154,9 +221,19 @@ function assertTermsAndSchema(tokens, rawText) {
     assert.strictEqual(typeof val.en, 'string', `terms.${key}.en must be a string`);
     assert.ok(val.en.trim().length > 0, `terms.${key}.en must be non-empty`);
   }
+  for (const key of NEW_TERM_KEYS) {
+    assert.ok(Object.prototype.hasOwnProperty.call(tokens.terms, key), `missing new term: ${key}`);
+    assert.ok(tokens.terms[key]['zh-TW'].trim().length > 0, `terms.${key}["zh-TW"] must be non-empty`);
+    assert.ok(tokens.terms[key].en.trim().length > 0, `terms.${key}.en must be non-empty`);
+  }
+  assert.ok(tokens.terms.minutes_ago['zh-TW'].includes('{n}'), 'terms.minutes_ago["zh-TW"] must contain {n}');
+  assert.ok(tokens.terms.minutes_ago.en.includes('{n}'), 'terms.minutes_ago.en must contain {n}');
   for (const str of collectStrings(tokens)) {
     assert.ok(!HEX_RE.test(str), `hex value forbidden in tokens.json: ${str}`);
-    assert.ok(!GLYPH_RE.test(str), `glyph forbidden in tokens.json: ${str}`);
+  }
+  const { glyphs: _glyphs, ...nonGlyphTokens } = tokens;
+  for (const str of collectStrings(nonGlyphTokens)) {
+    assert.ok(!GLYPH_RE.test(str), `glyph forbidden outside glyphs in tokens.json: ${str}`);
   }
   if (rawText !== null) {
     assert.strictEqual(rawText, `${JSON.stringify(tokens, null, 2)}\n`, 'tokens.json must use two-space indent and trailing newline');
@@ -181,12 +258,17 @@ test('3: every roles value is a ThemeKey string literal from mods/live/model.ts'
   assertRoleThemeKeys(tokens, themeKeys);
 });
 
-test('4: every terms entry has non-empty zh-TW and en strings; schema equals autopilot.tux-tokens/1', () => {
+test('4: every terms entry has non-empty zh-TW and en strings; minutes_ago keeps {n}; schema equals autopilot.tux-tokens/1', () => {
   const { raw, tokens } = readTokens();
   assertTermsAndSchema(tokens, raw);
 });
 
-test('negative controls: mutated roles.attention, thresholds.warn, and unknown role value each fail their check', () => {
+test('5: glyphs.state has the exact 10 distinct single-code-point non-emoji marks', () => {
+  const { tokens } = readTokens();
+  assertStateGlyphs(tokens);
+});
+
+test('negative controls: mutated roles.attention, thresholds.warn, glyphs.state, minutes_ago, and unknown role value each fail their check', () => {
   const { tokens } = readTokens();
   const palette = parsePalette(readText(UI_TS_PATH));
   const contract = JSON.parse(readText(CONTRACT_PATH));
@@ -207,4 +289,62 @@ test('negative controls: mutated roles.attention, thresholds.warn, and unknown r
   assert.throws(() => {
     assertTermsAndSchema({ ...tokens, terms: { ...tokens.terms, stale: { 'zh-TW': '', en: 'Stale' } } }, null);
   }, /non-empty/);
+
+  assert.throws(() => {
+    assertTermsAndSchema({ ...tokens, terms: { ...tokens.terms, unmeasured: { 'zh-TW': '未量測', en: '   ' } } }, null);
+  }, /non-empty/);
+
+  assert.throws(() => {
+    assertTermsAndSchema({ ...tokens, terms: { ...tokens.terms, minutes_ago: { 'zh-TW': '5 分鐘前', en: '{n} min ago' } } }, null);
+  }, /minutes_ago\["zh-TW"\] must contain \{n\}/);
+
+  assert.throws(() => {
+    assertTermsAndSchema({ ...tokens, terms: { ...tokens.terms, minutes_ago: { 'zh-TW': '{n} 分鐘前', en: '5 min ago' } } }, null);
+  }, /minutes_ago\.en must contain \{n\}/);
+
+  assert.throws(() => {
+    assertTermsAndSchema({ ...tokens, terms: { ...tokens.terms, gap: { 'zh-TW': '✓ 差距', en: 'Gap' } } }, null);
+  }, /glyph forbidden/);
+
+  const { glyphs: _removedGlyphs, ...withoutGlyphs } = tokens;
+  assert.throws(() => {
+    assertStateGlyphs(withoutGlyphs);
+  }, /tokens\.glyphs must be an object/);
+
+  const { offline: _removedOffline, ...nineGlyphs } = tokens.glyphs.state;
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: nineGlyphs } });
+  }, /exact 10 keys/);
+
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: { ...tokens.glyphs.state, running: tokens.glyphs.state.done } } });
+  }, /distinct/);
+
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: { ...tokens.glyphs.state, done: '✓\uFE0F' } } });
+  }, /U\+FE0F/);
+
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: { ...tokens.glyphs.state, done: '✓✓' } } });
+  }, /single Unicode code point/);
+
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: { ...tokens.glyphs.state, done: '' } } });
+  }, /single Unicode code point/);
+
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: { ...tokens.glyphs.state, done: '✅' } } });
+  }, /Emoji_Presentation/);
+
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: { ...tokens.glyphs.state, broken: '⚙' } } });
+  }, /Extended_Pictographic/);
+
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: { ...tokens.glyphs.state, done: 'x' } } });
+  }, /ASCII letter or digit/);
+
+  assert.throws(() => {
+    assertStateGlyphs({ ...tokens, glyphs: { state: { ...tokens.glyphs.state, done: '7' } } });
+  }, /ASCII letter or digit/);
 });

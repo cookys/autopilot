@@ -7,6 +7,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+// Diagnostics (reply-language.jsonl) land in a throwaway live dir, never the machine's real one.
+const LIVE_DIR = fs.mkdtempSync(path.join(fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir(), 'owner-guard-live-'));
+process.env.AUTOPILOT_LIVE_DIR = LIVE_DIR;
+process.on('exit', () => fs.rmSync(LIVE_DIR, { recursive: true, force: true }));
 const guard = require('./owner-question-guard');
 const cards = require('../scripts/open-decision');
 
@@ -407,7 +411,55 @@ test('reply language check is opt-in, env beats config, combines with question b
     encoding: 'utf8',
   });
   assert.equal(offCli.status, 0);
-  assert.equal(offCli.stdout, '');
+  // owner_question_guard off silences the question guard only: reply_language has its own switch (a live seat with the
+  // guard off never had its English replies checked).
+  const offOut = JSON.parse(offCli.stdout);
+  assert.equal(offOut.decision, 'block');
+  assert.ok(offOut.reason.startsWith('回覆要用正體中文'));
+  assert.doesNotMatch(offOut.reason, /open-decision\.js/);
+
+  const bothOff = spawnSync(process.execPath, [hookPath], {
+    input: payload,
+    env: { ...f.env, AUTOPILOT_OWNER_QUESTION_GUARD: 'off', AUTOPILOT_REPLY_LANGUAGE: 'off' },
+    encoding: 'utf8',
+  });
+  assert.equal(bothOff.status, 0);
+  assert.equal(bothOff.stdout, '');
+});
+
+test('reply language waits for a final reply that reaches the transcript after Stop fires, and logs a content-free line', (t) => {
+  const f = fixture(t);
+  withReplyLang(t, 'zh-Hant');
+  const user = { type: 'user', message: { role: 'user', content: '<channel source="fleet">status?</channel>' } };
+  const english = { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'All unit tests passed on the branch. I merged the changes and cleaned up the temporary worktree.' }] } };
+  fs.writeFileSync(f.transcript_path, `${JSON.stringify(user)}\n${JSON.stringify({ type: 'attachment' })}\n`);
+  // Claude Code writes the final reply line after Stop fires: a worker appends it 300 ms into the hook's read.
+  const { Worker } = require('node:worker_threads');
+  const w = new Worker(`const fs=require('fs');const {workerData:d}=require('worker_threads');setTimeout(()=>fs.appendFileSync(d.tp,d.line),300);`, { eval: true, workerData: { tp: f.transcript_path, line: `${JSON.stringify(english)}\n` } });
+  t.after(() => w.terminate());
+  const out = guard.decide({ cwd: f.cwd, transcript_path: f.transcript_path, session_id: 'synthetic-late' }, { guardOn: false });
+  assert.equal(out?.decision, 'block');
+  const logged = fs.readFileSync(path.join(LIVE_DIR, 'reply-language.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  const last = logged[logged.length - 1];
+  assert.equal(last.session, 'synthetic-late');
+  assert.equal(last.outcome, 'block');
+  assert.ok(last.waited_ms > 0);
+  assert.ok(!JSON.stringify(logged).includes('unit tests'), 'the log never carries reply text');
+});
+
+test('--replay-language prints per-reply verdicts and numbers, never the reply text', (t) => {
+  const f = fixture(t);
+  const rows = [
+    { type: 'user', message: { role: 'user', content: 'go' } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: '已完成合併，套件全綠，接著處理下一件工作。' }] } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'All unit tests passed on the branch. I merged the changes and cleaned up the temporary worktree.' }] } },
+  ];
+  fs.writeFileSync(f.transcript_path, rows.map(JSON.stringify).join('\n'));
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'owner-question-guard.js'), '--replay-language', f.transcript_path, '2'], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  const out = JSON.parse(r.stdout);
+  assert.deepEqual(out.map((x) => x.verdict), ['block', 'pass']);
+  assert.ok(!r.stdout.includes('unit tests') && !r.stdout.includes('合併'));
 });
 
 test('negative controls turn the closed-card, second-stop and reply-language assertions red', (t) => {
@@ -416,7 +468,8 @@ test('negative controls turn the closed-card, second-stop and reply-language ass
   const source = fs.readFileSync(sourcePath, 'utf8');
   for (const [name, before, after] of [
     ['closed card must block', "return card && ['open', 'awaiting_operator_action'].includes(cardState(card.entry));", 'return true;'],
-    ['second Stop must block again', 'function decide(input) {', 'function decide(input) {\n  if (input.stop_hook_active === true) return null;'],
+    ['second Stop must block again', 'function decide(input, opts = {}) {', 'function decide(input, opts = {}) {\n  if (input.stop_hook_active === true) return null;'],
+    ['reply language waits for a final reply that reaches the transcript after Stop fires, and logs a content-free line', 'const READ_SETTLE_MS = 2000;', 'const READ_SETTLE_MS = 0;'],
     ['reply language zh-Hant blocks pure English reply', 'const LANGUAGE_MIN_CJK_RATIO = 0.60;', 'const LANGUAGE_MIN_CJK_RATIO = 0;'],
   ]) {
     assert.equal(source.split(before).length, 2, 'mutation anchor occurs once');

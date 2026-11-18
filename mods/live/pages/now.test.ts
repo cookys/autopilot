@@ -418,7 +418,7 @@ test('now C1: 80x24 short 現況 with 3 pending cards, 2 red pools, 1 offline ho
   expect(anchored[3]).toContain('→ 待決 3 張')
   expect(anchored[4]).toContain('trinity')
   expect(anchored[5]).toContain('主機 h6 離線 12 分')
-  expect(anchored[6]).toContain('1 現況')
+  expect(anchored[6]).toContain('1 現 2 待')
 
   // 5. Every pool_key appears at most once (including duplicate pool spellings and multiple unpooled seat_blocked items)
   const unpooledDupSnap = con({

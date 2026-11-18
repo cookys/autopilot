@@ -48,21 +48,23 @@ const SMOKE_SCHEMA = 'autopilot.runner-smoke/1';
 const DISPATCH_AUTHOR_SH = path.join(__dirname, 'dispatch-author.sh');
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// Cheapest model each runner already uses in .claude/dispatch-config.md /
-// .claude/review-loop-config.md / roster defaults. Codex effort is pinned to
-// "high" ONLY (never "xhigh").
+// Cheap / non-frontier model per runner used only to prove the binary runs
+// (never expensive tiers: fable, astra, carbon, or argon). Codex effort is
+// pinned to "high" ONLY (never "xhigh").
+const EXPENSIVE_SMOKE_MODEL_RE = /fable|astra|carbon|argon/i;
+
 const RUNNER_SMOKE_TARGETS = Object.freeze({
   codex: Object.freeze({
     wrapper: 'dispatch-author',
     dispatch_runner: 'codex',
-    model: 'gpt-6-astra',
+    model: 'gpt-6.2-sol',
     effort: 'high',
   }),
   agy: Object.freeze({
     wrapper: 'dispatch-author',
     dispatch_runner: 'agy',
-    model: 'gemini-4-carbon-low',
-    effort: 'low',
+    model: 'gemini-4-hydrogen-high',
+    effort: 'high',
   }),
   claude: Object.freeze({
     wrapper: 'dispatch-author',
@@ -219,6 +221,12 @@ function resolveTargetSpec(runner, entry) {
   const wrapper = entry.smoke_wrapper || (base ? base.wrapper : 'dispatch-author');
   const dispatchRunner = entry.dispatch_runner || (base ? base.dispatch_runner : runner);
   const model = entry.smoke_model || base.model;
+  if (EXPENSIVE_SMOKE_MODEL_RE.test(model)) {
+    throw new Error(
+      `refusing expensive smoke model "${model}" for runner "${runner}" `
+      + '(fable/astra/carbon/argon are reserved for hard problems, not smoke checks)',
+    );
+  }
   const effort = runner === 'codex' ? 'high' : (entry.smoke_effort || (base ? base.effort : 'low'));
   if (runner === 'codex' && effort !== 'high') {
     throw new Error(`codex smoke effort must be "high" (never xhigh); got "${effort}"`);

@@ -490,13 +490,63 @@ function questionCardReason(input, text) {
     + '再次 Stop 仍會檢查。若為誤判，可改寫、引用，或每個命中各加一行 OWNER-GUARD-FALSE-POSITIVE [class,...] 完整命中句 :: 理由（照上面句子與所有 class；理由 1–240 字元，每則回覆最多 8 行，不接受萬用字元）。';
 }
 
-function decide(input) {
+// Claude Code can run Stop hooks before the turn's final reply line reaches the transcript. When the newest
+// entry is not assistant text, re-read for up to READ_SETTLE_MS before deciding (a real session missed every reply).
+const READ_SETTLE_MS = 2000;
+const READ_STEP_MS = 100;
+function sleepMs(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+function lastEntryIsAssistantText(raw) {
+  const lines = raw.split('\n');
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (!lines[i].trim()) continue;
+    let e;
+    try { e = JSON.parse(lines[i]); } catch { continue; }
+    const role = e && (e.type || (e.message && e.message.role));
+    if (role !== 'user' && role !== 'assistant') continue; // bookkeeping lines (attachment, api-request, ...) say nothing
+    if (role === 'user') return false;
+    const c = e.message && e.message.content;
+    return typeof c === 'string' ? Boolean(c.trim()) : Array.isArray(c) && c.some((b) => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim());
+  }
+  return false;
+}
+function readSettledTranscript(tp, settleMs = READ_SETTLE_MS) {
+  let raw = fs.readFileSync(tp, 'utf8');
+  const until = Date.now() + settleMs;
+  while (!lastEntryIsAssistantText(raw) && Date.now() < until) {
+    sleepMs(READ_STEP_MS);
+    raw = fs.readFileSync(tp, 'utf8');
+  }
+  return { raw, waitedMs: settleMs - Math.max(0, until - Date.now()) };
+}
+
+// One content-free line per Stop for the reply-language check, so a live seat can be verified without reading its transcript.
+function logLanguage(rec) {
+  try {
+    const dir = require('./live-session-lib.js').liveBase();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(require('path').join(dir, 'reply-language.jsonl'), `${JSON.stringify({ ts: new Date().toISOString(), ...rec })}\n`);
+  } catch { /* diagnostics never block a Stop */ }
+}
+
+function decide(input, opts = {}) {
   const tp = input.transcript_path;
-  if (typeof tp !== 'string' || !tp) return null;
-  const text = lastAssistantText(fs.readFileSync(tp, 'utf8'));
+  const langOn = replyLanguageActive();
+  const guardOn = opts.guardOn !== false;
+  if (typeof tp !== 'string' || !tp) {
+    if (langOn) logLanguage({ session: input.session_id || null, active: true, outcome: 'no_transcript_path' });
+    return null;
+  }
+  const { raw, waitedMs } = langOn ? readSettledTranscript(tp, opts.settleMs) : { raw: fs.readFileSync(tp, 'utf8'), waitedMs: 0 };
+  const text = lastAssistantText(raw);
+  const lang = langOn && text ? languageCheck(text) : null;
+  if (langOn) {
+    const st = text ? stripForLanguage(text) : '';
+    const cjk = (st.match(CJK_IDEOGRAPH_RE) || []).length;
+    const letters = (st.match(ASCII_LETTER_RE) || []).length;
+    logLanguage({ session: input.session_id || null, active: true, guard_on: guardOn, waited_ms: waitedMs, outcome: !text ? 'no_text' : lang ? 'block' : 'pass', cjk, letters });
+  }
   if (!text) return null;
-  const lang = replyLanguageActive() ? languageCheck(text) : null;
-  const guardReason = questionCardReason(input, text);
+  const guardReason = guardOn ? questionCardReason(input, text) : null;
   if (!lang && !guardReason) return null;
   const reasons = [
     ...(lang ? [lang.reason] : []),
@@ -507,16 +557,40 @@ function decide(input) {
 
 function main() {
   try {
-    if (optedOut(envBag(), loadCfg())) return;
+    const guardOn = !optedOut(envBag(), loadCfg());
+    if (!guardOn && !replyLanguageActive()) return;
     const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-    const out = decide(input && typeof input === 'object' ? input : {});
+    const out = decide(input && typeof input === 'object' ? input : {}, { guardOn });
     if (out) process.stdout.write(`${JSON.stringify(out)}\n`);
   } catch (err) {
     process.stderr.write(`owner-question-guard: fail-open: ${err && err.message}\n`);
   }
 }
 
-if (require.main === module) main();
+// Replay the language check over the last N assistant replies of a transcript; prints numbers and verdicts, never text.
+function replayLanguage(tp, n = 2) {
+  const out = [];
+  const lines = fs.readFileSync(tp, 'utf8').split('\n');
+  for (let i = lines.length - 1; i >= 0 && out.length < n; i -= 1) {
+    let e;
+    try { e = JSON.parse(lines[i]); } catch { continue; }
+    if (!e || e.type !== 'assistant') continue;
+    const c = e.message && e.message.content;
+    const text = Array.isArray(c) ? c.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n') : typeof c === 'string' ? c : '';
+    if (!text.trim()) continue;
+    const st = stripForLanguage(text);
+    const cjk = (st.match(CJK_IDEOGRAPH_RE) || []).length;
+    const letters = (st.match(ASCII_LETTER_RE) || []).length;
+    out.push({ line: i + 1, chars: text.length, cjk, letters, verdict: languageCheck(text) ? 'block' : 'pass' });
+  }
+  return out;
+}
+
+if (require.main === module) {
+  if (process.argv[2] === '--replay-language') {
+    process.stdout.write(`${JSON.stringify(replayLanguage(process.argv[3], Number(process.argv[4]) || 2))}\n`);
+  } else main();
+}
 module.exports = {
   findOwnerQuestion,
   findHits,
@@ -527,6 +601,8 @@ module.exports = {
   languageCheck,
   replyLanguageActive,
   decide,
+  replayLanguage,
+  lastEntryIsAssistantText,
   OWNER_WAIT_PATTERNS,
   HIT_PATTERNS,
   SIMPLIFIED_TO_TRADITIONAL,

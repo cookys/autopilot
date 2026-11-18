@@ -1134,4 +1134,129 @@ set -e
 assert_eq "$rc" "1" "legacy fixture --ready keeps the lint exit"
 assert_eq "$(ready_count "$o")" "0" "legacy rows are not READY"
 
+# --- id_pattern in checkNextId / reporter Id, and outside-git pointer hint ---
+details_of() {
+  printf '%s' "$1" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{try{const j=JSON.parse(d);process.stdout.write(j.violations.map(v=>v.detail).join("\n"))}catch(e){process.stdout.write("unparsable")}})'
+}
+blp_row() { # <title> <id>
+  printf '%s\n' "### $1" "- **Id**: $2" '- **Status**: open' '- **Since**: 2026-11-18' \
+    '- **Origin**: self' '- **Problem**: 測試設定的編號樣式' '- **Impact**: 編號檢查失敗會擋住提交' \
+    '- **Trigger**: when tests run' '- **Trigger-Type**: ready' '- **Effort**: S' \
+    '- **Source**: suite' '- **Pointer**: docs/plans/ok.md'
+}
+
+d="$(repo idp-ok)"
+printf '%s\n' 'style: heading' 'id_pattern: BLP-\d{4}' > "$d/.claude/backlog-config.md"
+{
+  printf '<!-- next-id: BLP-0011 -->\n\n'
+  blp_row 'Pattern row nine' BLP-0009
+  printf '\n'
+  blp_row 'Pattern row ten' BLP-0010
+} > "$d/docs/BACKLOG.md"
+IDP_OK_DIR="$d"
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC" "0" "id_pattern BLP-\\d{4}: BLP-0009/BLP-0010 below next-id BLP-0011 exits 0"
+assert_eq "$(codes_of "$GATE_OUT")" "" "id_pattern BLP-\\d{4}: zero violations on BLP-0009/BLP-0010"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "id_pattern BLP-\\d{4}: clean with explicit --config"
+
+d="$(repo idp-at-next)"
+printf '%s\n' 'style: heading' 'id_pattern: BLP-\d{4}' > "$d/.claude/backlog-config.md"
+{
+  printf '<!-- next-id: BLP-0011 -->\n\n'
+  blp_row 'Pattern row at mark' BLP-0011
+} > "$d/docs/BACKLOG.md"
+IDP_AT_DIR="$d"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC" "1" "id_pattern BLP-\\d{4}: entry BLP-0011 at next-id BLP-0011 exits 1"
+assert_eq "$(codes_of "$GATE_OUT")" "bad_id:Id:Pattern row at mark" "id_pattern BLP-\\d{4}: entry BLP-0011 at next-id BLP-0011 is bad_id"
+assert_contains "$(details_of "$GATE_OUT")" "BLP-0011 is not below next-id BLP-0011" "id_pattern BLP-\\d{4}: high-water mark detail names BLP-0011"
+
+d="$(repo idp-bad-mark)"
+printf '%s\n' 'style: heading' 'id_pattern: BLP-\d{4}' > "$d/.claude/backlog-config.md"
+{
+  printf '<!-- next-id: BL-0011 -->\n\n'
+  blp_row 'Pattern row nine' BLP-0009
+} > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC" "1" "id_pattern BLP-\\d{4}: BL-0011 next-id marker exits 1"
+assert_eq "$(codes_of "$GATE_OUT")" "bad_id:Id:" "id_pattern BLP-\\d{4}: BL-0011 next-id marker is bad_id"
+assert_contains "$(details_of "$GATE_OUT")" 'expected BLP-\d{4}' "id_pattern BLP-\\d{4}: bad next-id message names configured pattern"
+
+d="$(repo idp-bad-entry)"
+printf '%s\n' 'style: heading' 'id_pattern: BLP-\d{4}' > "$d/.claude/backlog-config.md"
+{
+  printf '<!-- next-id: BLP-0011 -->\n\n'
+  blp_row 'Unanchored extra digit' BLP-00099
+  printf '\n'
+  blp_row 'Wrong prefix entry' BL-0009
+} > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC" "1" "id_pattern BLP-\\d{4}: anchored check rejects BLP-00099 and BL-0009"
+assert_eq "$(codes_of "$GATE_OUT")" "bad_id:Id:Unanchored extra digit|bad_id:Id:Wrong prefix entry" "id_pattern BLP-\\d{4}: non-matching entry ids are bad_id"
+assert_contains "$(details_of "$GATE_OUT")" 'BLP-00099 (expected BLP-\d{4})' "id_pattern BLP-\\d{4}: unanchored entry id names configured pattern"
+assert_contains "$(details_of "$GATE_OUT")" 'BL-0009 (expected BLP-\d{4})' "id_pattern BLP-\\d{4}: wrong-prefix entry id names configured pattern"
+
+d="$(repo idp-last-digits)"
+printf '%s\n' 'style: heading' 'id_pattern: P2-BLP-\d{4}' > "$d/.claude/backlog-config.md"
+{
+  printf '<!-- next-id: P2-BLP-0011 -->\n\n'
+  blp_row 'Multi digit ok' P2-BLP-0009
+} > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "0:" "id_pattern P2-BLP-\\d{4}: last run of digits (9 < 11) passes"
+{
+  printf '<!-- next-id: P2-BLP-0011 -->\n\n'
+  blp_row 'Multi digit at mark' P2-BLP-0011
+} > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d" --config "$d/.claude/backlog-config.md"
+assert_eq "$GATE_RC:$(codes_of "$GATE_OUT")" "1:bad_id:Id:Multi digit at mark" "id_pattern P2-BLP-\\d{4}: last run of digits (11 >= 11) is bad_id"
+
+d="$(repo idp-default)"
+{
+  printf '<!-- next-id: BLP-0011 -->\n\n'
+  blp_row 'Default config row' BLP-0009
+} > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$GATE_RC" "1" "default config: BLP-0011/BLP-0009 exits 1"
+assert_contains "$(details_of "$GATE_OUT")" "BLP-0009 (expected BL-NNNN)" "default config: entry bad_id still says BL-NNNN"
+assert_contains "$(details_of "$GATE_OUT")" "next-id BLP-0011 (expected BL-NNNN)" "default config: next-id bad_id still says BL-NNNN"
+
+nogit="$TEST_TMP/outside-git"
+mkdir -p "$nogit/docs/plans"
+printf '# ok\n' > "$nogit/docs/plans/ok.md"
+printf '%s\n' \
+  '### Outside git row' \
+  '- **Status**: open' \
+  '- **Trigger**: when tests run' \
+  '- **Effort**: S' \
+  '- **Source**: suite' \
+  '- **Pointer**: docs/plans/ok.md' \
+  > "$nogit/docs/BACKLOG.md"
+set +e
+NOGIT_OUT="$(node "$GATE" --backlog "$nogit/docs/BACKLOG.md" --mode block --json 2>/dev/null)"
+NOGIT_RC=$?
+set -e
+assert_eq "$NOGIT_RC" "1" "outside git repo: pointer_unresolved blocks in block mode"
+assert_eq "$(codes_of "$NOGIT_OUT")" "pointer_unresolved:Pointer:Outside git row" "outside git repo: violation code stays pointer_unresolved"
+assert_contains "$(details_of "$NOGIT_OUT")" "not inside a git repository; pointers resolve from the git root" "outside git repo: detail explains git root pointer resolution"
+
+d="$(repo in-git-pu)"
+printf '%s\n' '### Inside git missing ptr' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: docs/plans/nope.md' > "$d/docs/BACKLOG.md"
+gate_run "$GATE" "$d"
+assert_eq "$(codes_of "$GATE_OUT")" "pointer_unresolved:Pointer:Inside git missing ptr" "inside git repo: missing pointer is pointer_unresolved"
+assert_not_contains "$(details_of "$GATE_OUT")" "not inside a git repository" "inside git repo: detail has no outside-git hint"
+
+m="$(mutate idp-off 's/function hasIdPattern(cfg) {/function hasIdPattern() { return false;/')"
+gate_run "$m" "$IDP_OK_DIR" --config "$IDP_OK_DIR/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "yes" "id_pattern mutation: ignoring cfg.id_pattern breaks BLP-0009/BLP-0010"
+m="$(mutate idp-cmp 's/b.n >= mm.n/false/')"
+gate_run "$m" "$IDP_AT_DIR" --config "$IDP_AT_DIR/.claude/backlog-config.md"
+assert_eq "$(json_has_code "$GATE_OUT" bad_id)" "no" "id_pattern high-water mutation: skipping entry comparison misses BLP-0011 >= BLP-0011"
+m="$(mutate nogit-off 's/if (!inGitRepo) {/if (false) {/')"
+set +e
+NOGIT_MUT_OUT="$(node "$m" --backlog "$nogit/docs/BACKLOG.md" --mode block --json 2>/dev/null)"
+set -e
+assert_not_contains "$(details_of "$NOGIT_MUT_OUT")" "not inside a git repository" "outside-git mutation: disabling hint removes detail text"
+
 finalize_test

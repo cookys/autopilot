@@ -86,6 +86,9 @@ const {
   replyUnanswered,
   reportPairs,
   blIdEnforced,
+  hasIdPattern,
+  expectedIdPattern,
+  parseEntryId,
   withNextIdMark,
   fieldOptedIn,
   checkEntry,
@@ -169,7 +172,7 @@ function gitToplevel(dir) {
   try {
     return execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
       encoding: 'utf8',
-    }).trim();
+    }).trim() || null;
   } catch {
     return null;
   }
@@ -561,27 +564,30 @@ function collectEntries(text, style, cfg) {
 // or above the mark, or a BL- Id with no mark at all, means two writers can hand out one number.
 function checkNextId(text, entries, cfg) {
   const vios = [];
+  const expected = expectedIdPattern(cfg);
   const blIds = [];
   for (const ent of entries) {
     if (!ent.id || ent.tableId) continue;
-    const id = String(ent.id).trim();
-    const m = id.match(BL_ID_RE);
-    if (m) blIds.push({ id, n: Number(m[1]), title: (ent.fields && ent.fields.Title) || ent.title || '' });
+    const parsed = parseEntryId(ent.id, cfg);
+    if (parsed) blIds.push({ id: parsed.id, n: parsed.n, title: (ent.fields && ent.fields.Title) || ent.title || '' });
   }
   const mark = String(text || '').match(NEXT_ID_RE);
   if (mark) {
-    const mm = mark[1].match(BL_ID_RE);
+    const mm = parseEntryId(mark[1], cfg);
     if (!mm) {
-      vios.push({ code: 'bad_id', title: '', field: 'Id', detail: `next-id ${mark[1]} (expected BL-NNNN)` });
-    } else {
+      vios.push({ code: 'bad_id', title: '', field: 'Id', detail: `next-id ${mark[1]} (expected ${expected})` });
+    } else if (mm.n != null) {
       for (const b of blIds) {
-        if (b.n >= Number(mm[1])) {
+        if (b.n != null && b.n >= mm.n) {
           vios.push({ code: 'bad_id', title: b.title, field: 'Id', detail: `${b.id} is not below next-id ${mark[1]}; raise the next-id comment` });
         }
       }
     }
   } else if (blIds.length && blIdEnforced(cfg)) {
-    vios.push({ code: 'bad_id', title: '', field: 'Id', detail: 'BL- Ids with no <!-- next-id: BL-NNNN --> high-water mark' });
+    const missingDetail = hasIdPattern(cfg)
+      ? `Ids with no <!-- next-id: ... --> high-water mark (expected ${expected})`
+      : 'BL- Ids with no <!-- next-id: BL-NNNN --> high-water mark';
+    vios.push({ code: 'bad_id', title: '', field: 'Id', detail: missingDetail });
   }
   return vios;
 }
@@ -615,7 +621,7 @@ function collectViolations(text, cfg, repoRoot, now, existsFn) {
     violations.push(...checkEntry(ent, ecfg, repoRoot, now, existsFn));
   }
   violations.push(...checkNextId(text, entries, ecfg));
-  if (style === 'heading') violations.push(...checkQueueLinks(entries, text));
+  if (style === 'heading') violations.push(...checkQueueLinks(entries, text, ecfg));
   const byTitle = new Map();
   for (const v of violations) {
     const t = v.title || '';
@@ -711,6 +717,7 @@ function runCheck(opts, at) {
   const backlogPath = path.resolve(opts.backlog);
   let text;
   let repoRoot;
+  let inGitRepo = true;
   if (at) {
     text = at.text;
     repoRoot = at.repoRoot;
@@ -722,7 +729,9 @@ function runCheck(opts, at) {
       process.exit(2);
     }
     const backlogDir = path.dirname(backlogPath);
-    repoRoot = gitToplevel(backlogDir) || backlogDir;
+    const gitRoot = gitToplevel(backlogDir);
+    inGitRepo = Boolean(gitRoot);
+    repoRoot = gitRoot || backlogDir;
   }
   const cfg = loadGateConfig(opts, repoRoot);
   const allowPath = opts.allowlist
@@ -734,6 +743,13 @@ function runCheck(opts, at) {
   const now = Date.now();
   const style = cfg.style || 'heading';
   const { entries, violations } = collectViolations(text, cfg, repoRoot, now, at && at.existsFn);
+  if (!inGitRepo) {
+    for (const v of violations) {
+      if (v.code === 'pointer_unresolved') {
+        v.detail = `${v.detail} (not inside a git repository; pointers resolve from the git root)`;
+      }
+    }
+  }
   if (!at) violations.push(...checkSidecarOrphans(text, backlogPath));
   // Sidecar findings are file-level; re-attach so isReady sees the full per-title list.
   if (!at) {
@@ -756,10 +772,10 @@ function runCheck(opts, at) {
   const report = buildReport(cfg, backlogPath, style, entries.length, byteLen(text), annotated);
   // --ready is additive. Lint exit stays report.exit, including when nothing is READY.
   if (opts.ready) {
-    const nextId = nextIdFromText(text);
+    const nextId = nextIdFromText(text, cfg);
     const ready = [];
     for (const ent of entries) {
-      if (!isReady(ent, { entries, nextId })) continue;
+      if (!isReady(ent, { entries, nextId, cfg })) continue;
       const f = ent.fields || {};
       ready.push({
         Id: String(f.Id || ent.id || '').trim(),
@@ -1159,6 +1175,19 @@ function runSelfTest() {
     add('bad_id-not-below-next-id', 'heading', mark(1) + miniHeading(peer), ['bad_id']);
     add('bad_id-no-next-id', 'heading', miniHeading(peer), ['bad_id'],
       { required_fields: ['Id', 'Since', 'Origin', 'Problem', 'Impact'] });
+    const blpMark = '<!-- next-id: BLP-0011 -->\n';
+    add('id-pattern-ok', 'heading',
+      blpMark + miniHeading({ ...peer, Id: 'BLP-0009' }) + '\n' + miniHeading({ ...peer, Title: 'Second pattern row', Id: 'BLP-0010' }),
+      [], { id_pattern: 'BLP-\\d{4}' });
+    add('id-pattern-not-below-next-id', 'heading',
+      blpMark + miniHeading({ ...peer, Id: 'BLP-0011' }),
+      ['bad_id'], { id_pattern: 'BLP-\\d{4}' });
+    add('id-pattern-bad-mark', 'heading',
+      '<!-- next-id: BL-0011 -->\n' + miniHeading({ ...peer, Id: 'BLP-0009' }),
+      ['bad_id'], { id_pattern: 'BLP-\\d{4}' });
+    add('id-pattern-unanchored-entry', 'heading',
+      blpMark + miniHeading({ ...peer, Id: 'BLP-00099' }),
+      ['bad_id'], { id_pattern: 'BLP-\\d{4}' });
     // Not opted in: a reporter-field line is what the old gate made of it, extra content.
     add('legacy-reporter-line-heading', 'heading', miniHeading({ ...base, Since: 'last week', Origin: 'external' }),
       ['extra_content']);

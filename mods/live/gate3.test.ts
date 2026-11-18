@@ -105,7 +105,8 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     expect(qBody.length).toBeLessThanOrEqual(4)
     expect(qBody.some(l => l.includes('──')), 'H=' + H + ' quota: no section title').toBe(false)
     expect(qBody.some(l => l.includes('重置') || l.includes('7 天')), 'H=' + H + ' quota: no column header').toBe(false)
-    expect(qBody.some(l => l.includes('還有')), 'H=' + H + ' quota: scroll hint does not eat a body row').toBe(false)
+    // M2: a cut narrow table uses a pool-count hint once two pool-area rows fit; a pool row still stays visible.
+    expect(qBody.some(l => /↓ 還有 \d+ 池（/.test(l)), 'H=' + H + ' quota: hidden-pool hint').toBe(H >= 6)
     expect(qBody.filter(l => /^[▸ ] [✗?▲✓] \S/.test(l)).length, 'H=' + H + ' quota: >= 1 pool row').toBeGreaterThanOrEqual(1)
   }
   // 現況 with no pending cards, 1 red pool, 1 unknown pool, and 1 offline/stuck line in a short body (C1: one summary row per class: fleet -> quota -> 另有 N 項)
@@ -225,13 +226,14 @@ test('gate3 item 4: BandBar with pane closed in console mode draws new page name
   for (const name of ['現況', '待決', '艦隊', '額度', '派工', '審查', '花費', '殘留']) expect(row2Text).toContain(name)
   for (const old of ['指揮', '團隊', '主機', '本席']) expect(row2Text).not.toContain(old)
   const row2Btns = walk(kids[1]).filter(n => n.kind === 'Button')
-  expect(row2Btns.map(b => b.props.key)).toEqual(['tab:now', 'tab:decide', 'tab:fleet', 'tab:quota', 'tab:dispatch', 'tab:review', 'tab:spend', 'tab:hygiene'])
+  // M6: the closed band also lists the pet and forge pages, without digit hotkeys.
+  expect(row2Btns.map(b => b.props.key)).toEqual(['tab:now', 'tab:decide', 'tab:fleet', 'tab:quota', 'tab:dispatch', 'tab:review', 'tab:spend', 'tab:hygiene', 'tab:pet', 'forge'])
   for (const b of row2Btns) {
     expect(b.props.hotkey, 'no digit hotkey on band Button').toBeUndefined()
     expect(flat(b).trim().length).toBeGreaterThan(0)
     b.props.onPress()
   }
-  expect(pressed).toEqual(['now', 'decide', 'fleet', 'quota', 'dispatch', 'review', 'spend', 'hygiene'])
+  expect(pressed).toEqual(['now', 'decide', 'fleet', 'quota', 'dispatch', 'review', 'spend', 'hygiene', 'pet', 'forge'])
   void MIN
 })
 

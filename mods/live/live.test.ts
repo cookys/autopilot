@@ -3681,7 +3681,9 @@ test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names
   for (const name of ['現況', '待決', '艦隊', '額度', '派工', '審查', '花費', '殘留']) expect(row2Text, 'row 2 carries ' + name).toContain(name)
   for (const old of ['指揮', '團隊', '主機', '本席']) expect(row2Text, 'row 2 drops old tab ' + old).not.toContain(old)
   const tabBtns = bandBtns.filter(b => String(b.props?.key).startsWith('tab:'))
-  expect(tabBtns.map(b => String(b.props?.key))).toEqual(['tab:now', 'tab:decide', 'tab:fleet', 'tab:quota', 'tab:dispatch', 'tab:review', 'tab:spend', 'tab:hygiene'])
+  // M6: row 2 adds pet and forge; forge keeps its own Button key outside the tab:* list.
+  expect(tabBtns.map(b => String(b.props?.key))).toEqual(['tab:now', 'tab:decide', 'tab:fleet', 'tab:quota', 'tab:dispatch', 'tab:review', 'tab:spend', 'tab:hygiene', 'tab:pet'])
+  expect(bandBtns.some(b => b.props?.key === 'forge')).toBe(true)
   for (const b of bandBtns) expect(b.props?.hotkey, 'no hotkey on band Button ' + String(b.props?.key)).toBeUndefined()
   const cases: [string, string, string][] = [
     ['tab:now', '現況', '── 全艦隊'],
@@ -3764,19 +3766,21 @@ test('G33a review g1: the heartbeat file is not the gate: a link, a non-file, an
   await start($, 'terminal')
   const path = LIVE + '/codeforge/mod-alive/' + SID_A + '.json'
   const at = (ms: number) => g33Alive({ written_at_ms: NOW_FRESH + ms })
+  // poll2: the first tick polls console and seat quota too; all three feeds stay throttled below.
+  const firstTick = ['fleet console --json', 'fleet seats --quota --json', 'fleet tasks --tree --json']
   g33Put(w, at(4_000), { isLink: true })
   await w.clock.advance(5_000)
-  expect(ran).toEqual(['fleet tasks --tree --json'])
+  expect(ran).toEqual(firstTick)
   expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
   g33Put(w, at(9_000), { kind: 'other' })
   await w.clock.advance(5_000) // inside the TTL: the bad file does not cause another run, and does not cancel the one that happened
-  expect(ran).toEqual(['fleet tasks --tree --json'])
+  expect(ran).toEqual(firstTick)
   const texts = await g33Band($, BAND_PROPS.maxRows, 240)
   expect(texts.join('')).toContain('⊘ 2  ● 1  ⋯ 1')
   expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
   w.statErrors[path] = 'EACCES: permission denied, stat'
   await w.clock.advance(5_000)
-  expect(ran).toEqual(['fleet tasks --tree --json'])
+  expect(ran).toEqual(firstTick)
   expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
 })
 test('G23 Fleet tab: a failing `fleet` says so; a tick while another tab shows still runs the CLI and the tab stays never-fetched (terminal)', async ($, on) => {
@@ -3787,7 +3791,9 @@ test('G23 Fleet tab: a failing `fleet` says so; a tick while another tab shows s
   await paneParts($, 'terminal', 'now')
   await w.clock.advance(60_000)
   expect(ran.length).toBeGreaterThan(0)
-  expect(ran.every(a => a === 'fleet tasks --tree --json')).toBe(true)
+  // poll2: every tick also refreshes console and seat quota while another tab shows.
+  expect(ran.every(a => ['fleet tasks --tree --json', 'fleet console --json', 'fleet seats --quota --json'].includes(a))).toBe(true)
+  for (const cmd of ['fleet tasks --tree --json', 'fleet console --json', 'fleet seats --quota --json']) expect(ran).toContain(cmd)
   await paneParts($, 'terminal', 'fleet')
   const texts = (await paneParts($, 'terminal', 'fleet')).texts
   expect(texts.some(t => t.includes('the last fetch failed: fleet: hub unreachable'))).toBe(true)

@@ -71,7 +71,8 @@ test('R9: collapsed band shows snapshot pending and fault counts, [+], no digit 
     const tree = BandBar(EL as never, null, cols, makeT(locale), { onInfo() {}, onSlot() {}, onTab() {} }, null, null, true, null, { snap: con, tab: 'command', cols }).node as Node
     const rows = (tree.props.children as Node[]).flat().filter(Boolean)
     expect(rows.length).toBe(2)
-    expect(flat(rows[0])).toContain('[+]')
+    // M6: the open-pane control names the pane, distinct from the band's own fold control.
+    expect(flat(rows[0])).toContain(makeT(locale)('band.open_pane'))
     const buttons = walk(rows[1]).filter(n => n.kind === 'Button')
     expect(buttons.every(b => b.props.hotkey === undefined)).toBe(true)
     const decide = buttons.find(b => b.props.key === 'tab:decide')!
@@ -173,7 +174,8 @@ test('M7: missing pending-card source shows ? (never 0) on 現況, 待決 and ba
         const tree = BandBar(EL as never, live as never, cols, t, { onInfo() {}, onSlot() {}, onTab() {} }, null, null, true, null, { snap: con, tab: 'command', cols }).node as Node
         const bandRows = (tree.props.children as Node[]).flat().filter(Boolean)
         const decideBtn = walk(bandRows[1]).find(n => n.kind === 'Button' && n.props.key === 'tab:decide')!
-        expect(flat(decideBtn).trim(), msg).toBe(cols >= 80 ? wantBandFull : wantBandShort)
+        // M6: the extra pet/forge pages make the English menu use short names at 80 columns.
+        expect(flat(decideBtn).trim(), msg).toBe(cols >= (locale === 'en' ? 120 : 80) ? wantBandFull : wantBandShort)
         expect(flat(bandRows[1]), msg + ' no 0').not.toContain('0')
       }
     }

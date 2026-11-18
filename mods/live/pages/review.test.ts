@@ -535,7 +535,9 @@ test('review en locale & aligned HEAD: renders cleanly in English across fold/un
   expect(enEmpty[0]).toBe('Review')
   expect(enEmpty.slice(1, 20).every(r => r === '')).toBe(true)
   expect(enEmpty[20]).toContain('no review records yet')
-  expect(enEmpty.slice(20, 22).join('')).toBe('○ ' + EN['page.review.empty'])
+  // N3: continuation rows hang by two cells; remove only that layout indent to compare the whole message.
+  expect(enEmpty[21].startsWith('  ')).toBe(true)
+  expect(enEmpty[20] + enEmpty[21].slice(2)).toBe('○ ' + EN['page.review.empty'])
   expect(enEmpty[22]).toBe('Nothing needs you')
 
   const enMissing = frameRows(reviewPage, ctxOf(80, 24, null, okConsole(), tEn), { pages: PAGES }).map(text)

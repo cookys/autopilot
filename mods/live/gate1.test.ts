@@ -148,7 +148,8 @@ test('gate G10: one set of names: pool "F 池" on every page, line states 離線
   const c2 = { ...c0, lines: [mk('甲', [issue('member_offline')]), mk('乙', []), mk('丙', [issue('wait_untyped')])] } as ConsoleSnapshot
   const out = screen(fleetPage, 160, 40, c2)
   expect(out.find(l => l.includes('甲'))).toContain('離線')
-  expect(out.find(l => l.includes('乙'))).toContain('閒置')
+  // M4: an issue-free line is normal; only an explicit idle issue means 閒置.
+  expect(out.find(l => l.includes('乙'))).toContain('正常')
   expect(out.find(l => l.includes('丙'))).toContain('卡住')
   expect(out.join('\n')).not.toContain('無異常')
 })

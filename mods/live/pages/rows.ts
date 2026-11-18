@@ -62,7 +62,8 @@ function wrapHanging(row: Row, cols: number, hang: number): Row[] {
     while (i < chars.length && chars[i].ch === ' ') i++ // a continuation never starts with a blank of its own (the indent is the hang)
   }
   return lines.map((ln, li) => {
-    const out: Row = li === 0 ? [] : [{ text: ' '.repeat(hang) }]
+    // N3: the hanging indent keeps the continued text's colour, including a wholly red source-reason row.
+    const out: Row = li === 0 ? [] : [{ text: ' '.repeat(hang), color: row[ln[0].si].color }]
     let lastSi = -1
     for (const c of ln) {
       if (c.si === lastSi) { const prev = out[out.length - 1]; out[out.length - 1] = { ...prev, text: prev.text + c.ch } }

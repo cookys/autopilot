@@ -7473,6 +7473,83 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Path of the per-user JSON host deny list ({\"strong\":[...],\"contextual\":[...]}) read by leak-guard and personal-data-redact; defaults to ~/.autopilot/leak-guard-hosts.json."
+    },
+    {
+      "name": "AUTOPILOT_PM_SWITCHBOARD",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "on",
+      "readers": [
+        "scripts/pm-switchboard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FLEET_REPO",
+        "AUTOPILOT_PM_INBOX_MEMBER"
+      ],
+      "summary": "Set to off to disable scripts/pm-switchboard.js run (exits 0 doing nothing)."
+    },
+    {
+      "name": "AUTOPILOT_FLEET_REPO",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/lib/pm-inbox-adapter.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_PM_INBOX_MEMBER",
+        "AUTOPILOT_PM_SWITCHBOARD"
+      ],
+      "summary": "Path to the fleet checkout whose plugins/claude/src/inbox-cli.ts backs the PM inbox adapter in fleet mode; unset exits 2."
+    },
+    {
+      "name": "AUTOPILOT_PM_INBOX_MEMBER",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": "pm--claude",
+      "readers": [
+        "scripts/lib/pm-inbox-adapter.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FLEET_REPO"
+      ],
+      "summary": "Fleet member handle passed as --member to inbox-cli.ts by the PM inbox adapter."
+    },
+    {
+      "name": "AUTOPILOT_PM_ACCEPT_CMD",
+      "kind": "env",
+      "audience": "user",
+      "group": "dispatch",
+      "default": null,
+      "readers": [
+        "scripts/lib/pm-inbox-adapter.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_FLEET_REPO"
+      ],
+      "summary": "JSON argv array invoked with the task id appended when pm-switchboard auto-accepts a verified task_result in fleet mode; when unset, auto-accept is unavailable and the item routes to pending_decision."
+    },
+    {
+      "name": "AUTOPILOT_PM_INBOX_ADAPTER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": "fleet",
+      "readers": [
+        "scripts/lib/pm-inbox-adapter.js"
+      ],
+      "doc": null,
+      "relates": [
+        "AUTOPILOT_FLEET_REPO"
+      ],
+      "note": "Selects the PM inbox adapter backend: fleet (default) or fixture:<dir> (hermetic JSON/JSONL directory seam)."
     }
   ]
 }

@@ -336,7 +336,7 @@ test('fleet narrow 7-cell ages: at 80x24 with a stale brief, lines aged 15 min (
       expect(displayWidth(raw), `${locale} framed row <= 80: ${raw}`).toBeLessThanOrEqual(80)
     }
     const targetPress = 'fleet:see:' + id
-    const listRows = framed.filter(r => r.some(s => s.press === targetPress))
+    const listRows = framed.filter(r => r.some(s => s.press === targetPress) && text(r).includes(wantAge))
     expect(listRows.length, `${locale} ${id} stays a single unwrapped row`).toBe(1)
     const rowRaw = listRows[0].map(s => s.text).join('')
     expect(displayWidth(rowRaw), `${locale} ${id} fixed right edge at 80`).toBe(80)

@@ -760,6 +760,23 @@
       "type": "boolean"
     },
     {
+      "name": "reply_language",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/owner-question-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_REPLY_LANGUAGE",
+        "owner_question_guard"
+      ],
+      "summary": "Set to \"zh-Hant\" to make owner-question-guard block an assistant reply that is not Traditional Chinese (CJK ratio under 60% when letters + CJK >= 20, or containing simplified-only characters). Unset or any other value leaves the check off.",
+      "type": "string"
+    },
+    {
       "name": "per_turn_gate.verifier",
       "kind": "config_key",
       "audience": "user",
@@ -4981,6 +4998,22 @@
       ],
       "doc": "docs/guide/settings-reference.md",
       "summary": "Set to off, false, 0 or no to disable only the bare card id check. A d- plus 8 hex id needs a plain-language subject next to it."
+    },
+    {
+      "name": "AUTOPILOT_REPLY_LANGUAGE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/owner-question-guard.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "reply_language",
+        "AUTOPILOT_OWNER_QUESTION_GUARD"
+      ],
+      "summary": "Environment override of reply_language (beats ~/.autopilot/config.json). Set to \"zh-Hant\" to require Traditional Chinese replies in owner-question-guard; any other value disables the check even when reply_language is set in config.json."
     },
     {
       "name": "AUTOPILOT_SEND_WORK_ORDER_GUARD",

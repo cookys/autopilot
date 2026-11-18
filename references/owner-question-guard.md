@@ -85,6 +85,33 @@ input errors remain fail-open with a stderr diagnostic. The hook never writes
 cards or tasks. Reverting the v2 commit restores the previous behavior; consumers
 must account for its reply-wide id and second-Stop bypasses before doing that.
 
+## Opt-in reply language check (`zh-Hant`)
+
+Set `AUTOPILOT_REPLY_LANGUAGE=zh-Hant`, or `"reply_language": "zh-Hant"` in
+`~/.autopilot/config.json` when the environment variable is unset, to enforce
+Traditional Chinese replies on `lastAssistantText`. The environment variable beats
+`config.json`; any other value or absent leaves the check off so other lanes are
+unaffected. `AUTOPILOT_OWNER_QUESTION_GUARD=off` (`false`/`0`/`no`, or
+`owner_question_guard: false`) still disables the entire hook.
+
+`stripForLanguage()` removes fenced code blocks, inline code spans, `http`/`https`
+and bare `host/path` URLs, file paths (tokens containing `/` or ending in a file
+extension such as `.js`, `.sh`, `.md`, `.json`), card ids (`d-` + 8 hex), request
+ids (`r-` + 8 hex), 26-char Crockford base32 ULIDs, and 7–64 hex shas while
+keeping quoted `「…」` Chinese text. On what remains:
+
+- **Ratio check**: counts CJK ideographs (`U+4E00`–`U+9FFF`, `U+3400`–`U+4DBF`)
+  and ASCII letters (`[A-Za-z]`). Skipped when `letters + CJK < 20` (short replies
+  such as `go` or pure-code replies pass). Blocks when `CJK / (letters + CJK) < 0.60`.
+- **Simplified-character check**: blocks when any of the 60 tracked simplified-only
+  characters (`SIMPLIFIED_TO_TRADITIONAL`) appears, naming up to 5 unique hits
+  with their Traditional replacements (for example `这→這`).
+
+The block reason starts with `回覆要用正體中文（技術名詞和 id 可保留原文）；請改寫。`,
+followed by the measured percentage and/or hit list. When question, card or
+bare-id checks also fire on the same reply, one combined block is returned with
+the language reason first.
+
 ## Replay and regression checks
 
 Run `node scripts/replay-stop-guard.js --dir <transcript-directory>` from the
@@ -101,8 +128,10 @@ node --test hooks/owner-question-guard.test.js scripts/replay-stop-guard.test.js
 bash hooks/tests/owner-question-guard.test.sh
 ```
 
-Fixtures are synthetic and stores are temporary. The Node suite runs two isolated
+Fixtures are synthetic and stores are temporary. The Node suite runs three isolated
 source mutations: allowing any card id must make `closed card must block` fail
 with exit 1; reinstating the second-Stop bypass must make `second Stop must block
-again` fail with exit 1. Production source is not overwritten by those controls.
+again` fail with exit 1; setting `LANGUAGE_MIN_CJK_RATIO` to `0` must make
+`reply language zh-Hant blocks pure English reply` fail with exit 1. Production
+source is not overwritten by those controls.
 Real replay inputs belong outside the repository and must not be copied into it.

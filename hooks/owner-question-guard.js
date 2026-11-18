@@ -17,6 +17,10 @@
  * immediately before it. Code spans, fences and the quote exclusions above hide an id.
  * Full syntax, quote exclusions and replay contract: references/owner-question-guard.md.
  *
+ * Opt-in reply language check: AUTOPILOT_REPLY_LANGUAGE=zh-Hant (env beats config) or
+ * `reply_language: "zh-Hant"` in ~/.autopilot/config.json blocks a reply whose stripped
+ * text has CJK / (letters + CJK) < 0.60 (when letters + CJK >= 20) or simplified-only chars.
+ *
  * Opt-out: AUTOPILOT_OWNER_QUESTION_GUARD=off (false/0/no) or `owner_question_guard: false`
  * in ~/.autopilot/config.json. Bare-id check only: AUTOPILOT_BARE_CARD_ID_LINT=off
  * (false/0/no). Fail-open: any error -> one stderr line, exit 0.
@@ -128,6 +132,83 @@ function loadCfg() {
     const c = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
     return c && typeof c === 'object' ? c : {};
   } catch { return {}; }
+}
+
+function replyLanguageActive(env = envBag(), cfg = null) {
+  if (env && env.AUTOPILOT_REPLY_LANGUAGE !== undefined) {
+    return typeof env.AUTOPILOT_REPLY_LANGUAGE === 'string' && env.AUTOPILOT_REPLY_LANGUAGE.trim() === 'zh-Hant';
+  }
+  const c = cfg || loadCfg();
+  return Boolean(c && typeof c.reply_language === 'string' && c.reply_language.trim() === 'zh-Hant');
+}
+
+const LANGUAGE_MIN_CHARS = 20;
+const LANGUAGE_MIN_CJK_RATIO = 0.60;
+const LANGUAGE_BLOCK_LEAD = '回覆要用正體中文（技術名詞和 id 可保留原文）；請改寫。';
+const CJK_IDEOGRAPH_RE = /[\u3400-\u4dbf\u4e00-\u9fff]/g;
+const ASCII_LETTER_RE = /[A-Za-z]/g;
+const FILE_EXT_RE = /(?<![A-Za-z0-9_])[A-Za-z0-9._~@-]+\.(?:js|cjs|mjs|jsx|ts|cts|mts|tsx|sh|bash|zsh|ps1|py|rb|go|rs|c|cc|cpp|h|hpp|java|kt|swift|php|cs|lua|pl|sql|md|mdx|txt|rst|json|jsonl|jsonc|yaml|yml|toml|ini|cfg|conf|env|xml|html|htm|css|scss|less|svg|png|jpg|jpeg|gif|webp|ico|pdf|csv|tsv|log|lock|bak|tmp|tar|gz|tgz|zip|xz|zst|patch|diff|service|timer|socket|wasm|proto|graphql|vue|svelte)(?::\d+(?::\d+)?)?(?![A-Za-z0-9_-])/gi;
+
+const SIMPLIFIED_TO_TRADITIONAL = Object.freeze({
+  这: '這', 应: '應', 该: '該', 档: '檔', 讯: '訊', 说: '說', 对: '對', 时: '時', 问: '問', 题: '題',
+  们: '們', 个: '個', 会: '會', 来: '來', 过: '過', 还: '還', 没: '沒', 么: '麼', 进: '進', 发: '發',
+  现: '現', 经: '經', 让: '讓', 实: '實', 码: '碼', 处: '處', 务: '務', 认: '認', 设: '設', 计: '計',
+  运: '運', 关: '關', 门: '門', 间: '間', 东: '東', 写: '寫', 选: '選', 项: '項', 测: '測', 试: '試',
+  错: '錯', 误: '誤', 输: '輸', 状: '狀', 态: '態', 报: '報', 达: '達', 变: '變', 将: '將', 与: '與',
+  动: '動', 质: '質', 级: '級', 无: '無', 为: '為', 数: '數', 据: '據', 库: '庫', 节: '節', 点: '點',
+});
+
+// Strip code, URLs, paths and machine ids before measuring reply language; quoted 「」 Chinese stays.
+function stripForLanguage(text) {
+  if (typeof text !== 'string' || !text) return '';
+  let t = text.replace(/```[\s\S]*?(?:```|$)/g, ' ');
+  t = t.replace(/(?:^|\n)[ \t]*~~~[\s\S]*?(?:\n[ \t]*~~~|$)/g, '\n');
+  t = t.replace(/(`+)((?:(?!\1)[^\n])*)\1/g, ' ');
+  t = t.replace(/\bhttps?:\/\/[A-Za-z0-9._~:/?#@!$&*+=%-]+/gi, ' ');
+  t = t.replace(/\b(?:localhost|(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?::\d+)?\/[A-Za-z0-9._~:/?#@!$&*+=%-]*/gi, ' ');
+  t = t.replace(/(?:~|\.{1,2})?\/[A-Za-z0-9._~+:@#/-]+|[A-Za-z0-9._~+@:-]+\/[A-Za-z0-9._~+:@#/-]*/g, ' ');
+  t = t.replace(FILE_EXT_RE, ' ');
+  t = t.replace(/\bd-[0-9a-f]{8}\b/gi, ' ');
+  t = t.replace(/\br-[0-9a-f]{8}\b/gi, ' ');
+  t = t.replace(/\b[0-9A-HJKMNP-TV-Z]{26}\b/gi, ' ');
+  t = t.replace(/\b[0-9a-f]{7,64}\b/gi, ' ');
+  return t;
+}
+
+function languageCheck(text) {
+  const stripped = stripForLanguage(text);
+  const cjk = (stripped.match(CJK_IDEOGRAPH_RE) || []).length;
+  const letters = (stripped.match(ASCII_LETTER_RE) || []).length;
+  const total = letters + cjk;
+  const ratio = total > 0 ? cjk / total : null;
+  const lowRatio = total >= LANGUAGE_MIN_CHARS && ratio < LANGUAGE_MIN_CJK_RATIO;
+  const simplified = [];
+  const seen = new Set();
+  for (const ch of stripped) {
+    const trad = SIMPLIFIED_TO_TRADITIONAL[ch];
+    if (trad && !seen.has(ch)) {
+      seen.add(ch);
+      simplified.push(`${ch}→${trad}`);
+      if (simplified.length >= 5) break;
+    }
+  }
+  if (!lowRatio && !simplified.length) return null;
+  const parts = [LANGUAGE_BLOCK_LEAD];
+  if (lowRatio) {
+    const pct = Number((ratio * 100).toFixed(1));
+    parts.push(`中文字比例 ${pct}%（需至少 60%）。`);
+  }
+  if (simplified.length) {
+    parts.push(`偵測到簡體字：${simplified.join('、')}。`);
+  }
+  return {
+    decision: 'block',
+    reason: parts.join(''),
+    cjk,
+    letters,
+    ratio,
+    simplified,
+  };
 }
 
 // Drop fenced blocks and inline code: a question mark inside code is not a question to the owner.
@@ -359,11 +440,7 @@ function isAutonomous(sessionId) {
   } catch { return false; }
 }
 
-function decide(input) {
-  const tp = input.transcript_path;
-  if (typeof tp !== 'string' || !tp) return null;
-  const text = lastAssistantText(fs.readFileSync(tp, 'utf8'));
-  if (!text) return null;
+function questionCardReason(input, text) {
   const rs = rootState(input);
   const unboundIds = rs.root && rs.unbound.length ? new Set(rs.unbound.map((u) => u.id.toLowerCase())) : null;
   const hits = unresolvedHits(text, input.cwd || process.cwd(), unboundIds);
@@ -376,20 +453,17 @@ function decide(input) {
     // Non-PM lane sessions keep the pre-v2 rule: a request id or any d- card id in the reply silences the question guard.
     // A bare id still blocks, and only with the subject message: the lane is not told to open a card.
     if (REQUEST_ID.test(text) || /\bd-[0-9a-f]{8}\b/i.test(text)) {
-      return bare.length ? { decision: 'block', reason: bareCardReason(bare) } : null;
+      return bare.length ? bareCardReason(bare) : null;
     }
     const first = hits[0].sentence;
     const quoted = first.length > 120 ? `${first.slice(0, 120)}…` : first;
     const req = shellQuotePath(path.join(__dirname, '..', 'scripts', 'request-decision.js'));
-    return {
-      decision: 'block',
-      reason: `偵測到這則回覆在等 owner 回答，但沒有請求編號。偵測到的句子：「${quoted}」。`
-        + `請用 node ${req} send --question <問題> --option <標籤>::<說明> --option <標籤>::<說明> --recommendation <建議> --boundary <邊界> 把問題、選項與建議送給 PM。`
-        + '不可逆還要帶 --snapshot 與 --blast-radius。回覆必須寫出請求編號（r- 加 8 個 hex）。'
-        + '若這句不是要 owner 回答（修辭、轉述別人的問題、列舉選項），請改寫句子避免誤判。',
-    };
+    return `偵測到這則回覆在等 owner 回答，但沒有請求編號。偵測到的句子：「${quoted}」。`
+      + `請用 node ${req} send --question <問題> --option <標籤>::<說明> --option <標籤>::<說明> --recommendation <建議> --boundary <邊界> 把問題、選項與建議送給 PM。`
+      + '不可逆還要帶 --snapshot 與 --blast-radius。回覆必須寫出請求編號（r- 加 8 個 hex）。'
+      + '若這句不是要 owner 回答（修辭、轉述別人的問題、列舉選項），請改寫句子避免誤判。';
   }
-  if (!hits.length && !namedUnbound.length) return { decision: 'block', reason: bareCardReason(bare) };
+  if (!hits.length && !namedUnbound.length) return bareCardReason(bare);
   const shown = hits.map((h) => `[${h.classes.join(',')}] ${h.sentence}`).join('\n');
   const autonomous = isAutonomous(input.session_id);
   const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
@@ -401,22 +475,34 @@ function decide(input) {
     ...(unboundNote ? [unboundNote] : []),
     ...(hits.length ? [`以下句子需要 owner 回答、操作或後續提醒，但同句沒有本地 live 卡片或有 due 的 fleet task：\n${shown}`] : []),
   ].join('\n');
-  return {
-    decision: 'block',
-    reason: `${lead}\n`
-      + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --executor <執行者位址> --question <問題> [--background <背景>] --option <標籤>::<說明> --option <標籤>::<說明> [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] --not-authorized <邊界>[:<為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
-      + '--not-authorized 必填，邊界只能是 read_only、reversible、external、irreversible（resolve-doa 的行動類別）或 goal-change、scope-expansion、resources-2x、red-line（董事會批准項）；'
-      + '本 session 的 DOA 內會自動放行的類別，open 會拒絕（exit 3）。'
-      + (autonomous ? '本 session 是自主模式（l3–l6）：若這件事在 DOA 內請自行決定，不要開卡，直接改寫回覆、不要再問 owner。' : '')
-      + (rs.root
-        ? `本 session 的 root 是 ${rs.root}，帶 --root-run-id 可將卡片綁定此 root。`
-        : '本 session 沒有可用的 root，卡片會放在本專案的未綁定範圍。')
-      + 'open 必填 --category（七類之一：money|identity|presence|goal|public-release|unbackable-loss|authority，只有這七類問題會送到 operator，沒帶或不在其中 exit 7、卡片不會寫入）、--executor（執行答覆的位址，沒帶 exit 2）、非空的 --question 與至少兩個 --option（沒有或只有一個會被擋，exit 2；純打字回答的問題改帶 --free-text 且不能同時帶 --option）；其餘旗標（上列方括號者）可省略。'
-      + '每個命中句必須寫出自己的 live 卡片編號（d- 加 8 個 hex，狀態 open 或 awaiting_operator_action）；closed、pending_dispatch、未知卡號及其他句的卡號都不算。'
-      + '或在同句寫 fleet task <args> --due YYYY-MM-DD（可帶 ISO 時間），或 task_id=<id> due=YYYY-MM-DD。'
-      + `owner 從即時面板回答後，會送來第一行是 [待決回覆] 的訊息，卡片會自動關閉；手動關閉用 node ${OPEN_DECISION_CMD} close --id <id>。`
-      + '再次 Stop 仍會檢查。若為誤判，可改寫、引用，或每個命中各加一行 OWNER-GUARD-FALSE-POSITIVE [class,...] 完整命中句 :: 理由（照上面句子與所有 class；理由 1–240 字元，每則回覆最多 8 行，不接受萬用字元）。',
-  };
+  return `${lead}\n`
+    + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --category <money|identity|presence|goal|public-release|unbackable-loss|authority> --executor <執行者位址> --question <問題> [--background <背景>] --option <標籤>::<說明> --option <標籤>::<說明> [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] --not-authorized <邊界>[:<為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
+    + '--not-authorized 必填，邊界只能是 read_only、reversible、external、irreversible（resolve-doa 的行動類別）或 goal-change、scope-expansion、resources-2x、red-line（董事會批准項）；'
+    + '本 session 的 DOA 內會自動放行的類別，open 會拒絕（exit 3）。'
+    + (autonomous ? '本 session 是自主模式（l3–l6）：若這件事在 DOA 內請自行決定，不要開卡，直接改寫回覆、不要再問 owner。' : '')
+    + (rs.root
+      ? `本 session 的 root 是 ${rs.root}，帶 --root-run-id 可將卡片綁定此 root。`
+      : '本 session 沒有可用的 root，卡片會放在本專案的未綁定範圍。')
+    + 'open 必填 --category（七類之一：money|identity|presence|goal|public-release|unbackable-loss|authority，只有這七類問題會送到 operator，沒帶或不在其中 exit 7、卡片不會寫入）、--executor（執行答覆的位址，沒帶 exit 2）、非空的 --question 與至少兩個 --option（沒有或只有一個會被擋，exit 2；純打字回答的問題改帶 --free-text 且不能同時帶 --option）；其餘旗標（上列方括號者）可省略。'
+    + '每個命中句必須寫出自己的 live 卡片編號（d- 加 8 個 hex，狀態 open 或 awaiting_operator_action）；closed、pending_dispatch、未知卡號及其他句的卡號都不算。'
+    + '或在同句寫 fleet task <args> --due YYYY-MM-DD（可帶 ISO 時間），或 task_id=<id> due=YYYY-MM-DD。'
+    + `owner 從即時面板回答後，會送來第一行是 [待決回覆] 的訊息，卡片會自動關閉；手動關閉用 node ${OPEN_DECISION_CMD} close --id <id>。`
+    + '再次 Stop 仍會檢查。若為誤判，可改寫、引用，或每個命中各加一行 OWNER-GUARD-FALSE-POSITIVE [class,...] 完整命中句 :: 理由（照上面句子與所有 class；理由 1–240 字元，每則回覆最多 8 行，不接受萬用字元）。';
+}
+
+function decide(input) {
+  const tp = input.transcript_path;
+  if (typeof tp !== 'string' || !tp) return null;
+  const text = lastAssistantText(fs.readFileSync(tp, 'utf8'));
+  if (!text) return null;
+  const lang = replyLanguageActive() ? languageCheck(text) : null;
+  const guardReason = questionCardReason(input, text);
+  if (!lang && !guardReason) return null;
+  const reasons = [
+    ...(lang ? [lang.reason] : []),
+    ...(guardReason ? [guardReason] : []),
+  ];
+  return { decision: 'block', reason: reasons.join('\n') };
 }
 
 function main() {
@@ -431,4 +517,17 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { findOwnerQuestion, findHits, unresolvedHits, unresolvedBareIds, lastAssistantText, decide, OWNER_WAIT_PATTERNS, HIT_PATTERNS };
+module.exports = {
+  findOwnerQuestion,
+  findHits,
+  unresolvedHits,
+  unresolvedBareIds,
+  lastAssistantText,
+  stripForLanguage,
+  languageCheck,
+  replyLanguageActive,
+  decide,
+  OWNER_WAIT_PATTERNS,
+  HIT_PATTERNS,
+  SIMPLIFIED_TO_TRADITIONAL,
+};

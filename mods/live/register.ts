@@ -69,6 +69,7 @@ import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane, noteInputKey, resetNoteInputs } from './pane'
+import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
 import { decideReduce, NO_NAV } from './pages/decide'
 import type { DecideNav } from './pages/decide'
@@ -78,6 +79,7 @@ import { frameHeight } from './pages/frame'
 import type { PageId } from './pages/frame'
 import { FOLD_AT, rowsOf as fleetRowsOf } from './pages/fleet'
 import { DEFAULT_REVIEW_VIEW } from './pages/review'
+import { spendFocusRows } from './pages/spend'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
@@ -1306,21 +1308,27 @@ async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Pro
 }
 
 // ---- the framed pages' own state (pages/*.ts are pure): focus + fold per page id, and the 待決 page's nav (cursor, fold, note text) beside the DECIDE atom ----
-let pageView: Record<string, { focus: number; expanded: boolean }> = {}
-// how many rows of a page can hold the focus (▸): fleet shows FOLD_AT lines until unfolded, quota every pool; the clamp for j/k and fold
+let pageView: Record<string, { focus: number; expanded: boolean; folded?: boolean }> = {}
+// how many rows of a page can hold the focus (▸): fleet shows FOLD_AT lines until unfolded, quota every pool, spend its two meter rows; the clamp for j/k and fold
 const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'fleet') { const n = consoleSnap?.lines === null || consoleSnap === null ? 0 : fleetRowsOf(consoleSnap.lines).length; return expanded ? n : Math.min(FOLD_AT, n) }
   if (id === 'quota') return consoleSnap?.quota.pools?.length ?? 0
+  if (id === 'spend') return spendFocusRows(snapshot)
   return 1
 }
 let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
 const framePageId = (): string => panePage
-// A key of the framed page (a hidden hotkey Button, pane.tsx). 待決 goes through decideReduce; fleet and quota keep a focus row and a fold.
-async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
+// A key of the framed page (a visible hotkey Button or routeKey, pane.tsx). 待決 goes through decideReduce; fleet, quota and spend keep a focus row and a fold.
+export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
   try {
+    if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
+    if (k.kind === 'close') {
+      try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
+      return
+    }
     const id = framePageId()
-    const nowMs = await $.clock.now()
     if (id === 'decide') {
+      const nowMs = await $.clock.now()
       const st = await read($, DECIDE)
       const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs }
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
@@ -1333,12 +1341,23 @@ async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
       const v = pageView[id] ?? (id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
       const last = Math.max(0, focusRows(id, v.expanded) - 1)
       if (k.kind === 'move') pageView[id] = { ...v, focus: Math.min(last, Math.max(0, v.focus + k.by)) }
-      else if (k.kind === 'fold') { const expanded = !v.expanded; pageView[id] = { expanded, focus: Math.min(v.focus, Math.max(0, focusRows(id, expanded) - 1)) } }
+      else if (k.kind === 'fold') { const expanded = !v.expanded; pageView[id] = { expanded, folded: !expanded, focus: Math.min(v.focus, Math.max(0, focusRows(id, expanded) - 1)) } }
     }
   } catch (_e) {
     // a key never takes the session down
   }
   void $.ui.invalidate('ui.render')
+}
+export async function paneKey($: EngineInterface, key: string, over: { paneFocus?: boolean; focusedButton?: boolean } = {}): Promise<KeyAction> {
+  const page = framePageId()
+  const act = routeKey(key, {
+    page,
+    paneFocus: over.paneFocus ?? true,
+    focusedButton: over.focusedButton ?? false,
+    textMode: page === 'decide' && decideLocal.textMode,
+  })
+  if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
+  return act
 }
 async function fillPrompt($: EngineInterface, text: string): Promise<void> {
   const out = await $.prompt.fill({ text, mode: 'replace' })
@@ -1348,14 +1367,15 @@ async function fillPrompt($: EngineInterface, text: string): Promise<void> {
 async function framePress($: EngineInterface, id: string): Promise<void> {
   try {
     if (id === 'fleet:fold') { await frameKey($, { kind: 'fold' }); return } // use the same focus clamp as the fold key, including when a tall dock auto-unfolded the body
-    else if (id === 'quota:open') pageView.quota = { ...(pageView.quota ?? { focus: 0, expanded: false }), expanded: !(pageView.quota?.expanded ?? false) }
+    else if (id === 'quota:open') { const expanded = !(pageView.quota?.expanded ?? false); pageView.quota = { ...(pageView.quota ?? { focus: 0, expanded: false }), expanded, folded: !expanded } }
     else if (id.startsWith('fleet:see:')) {
       const at = consoleSnap?.lines == null ? -1 : fleetRowsOf(consoleSnap.lines).findIndex(r => r.line.line_id === id.slice('fleet:see:'.length))
-      pageView.fleet = { ...(pageView.fleet ?? { focus: 0, expanded: false }), expanded: true, ...(at < 0 ? {} : { focus: at }) } // a row is its own Button: pressing it focuses that line and shows it
+      pageView.fleet = { ...(pageView.fleet ?? { focus: 0, expanded: false }), expanded: true, folded: false, ...(at < 0 ? {} : { focus: at }) } // a row is its own Button: pressing it focuses that line and shows it
     } else if (id.startsWith('quota:pool:')) {
       const at = Number(id.slice('quota:pool:'.length))
       const v = pageView.quota ?? { focus: 0, expanded: false }
-      pageView.quota = { focus: at, expanded: v.focus === at ? !v.expanded : true } // the pool's own row: press it to show its seats, press it again to fold them
+      const expanded = v.focus === at ? !v.expanded : true
+      pageView.quota = { focus: at, expanded, folded: !expanded } // the pool's own row: press it to show its seats, press it again to fold them
     }
     else if (id.startsWith('fill:quota:')) {
       const pool = id.slice('fill:quota:'.length)

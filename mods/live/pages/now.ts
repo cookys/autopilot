@@ -11,7 +11,7 @@ import { ROLE_WARNING, isUnknownPool, normalizedPools, poolKey, poolLabel, rankP
 import type { Verdict } from './quota-pick'
 import { STRIP_SPLIT_COLS } from './layout'
 import type { Page, PageCtx } from './frame'
-import { WRAP_HANG, brokenRow, dataMissing, decisionCount, isBriefStale, lineState, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, wrapRow } from './rows'
+import { WRAP_HANG, brokenRow, dataMissing, decisionCount, isBriefStale, lineCounts, lineState, lineStatusText, lineTotal, pendingMissingReason, pendingSourceMissing, staleBadge, stuckLinesOf, wrapRow } from './rows'
 import type { Row } from './rows'
 
 type T = PageCtx['t']
@@ -143,11 +143,12 @@ function quotaWorstSeg(ctx: PageCtx, wide: boolean): Seg[] {
   return [{ text: (w.role === 'broken' && !wide ? GLYPHS.state.failed + ' ' : '') + (wide ? t('page.now.quota_worst') + ' ' : '') + w.pool + ' ' + w.text, color }]
 }
 
-const LINE_ORDER = ['running', 'waiting', 'stalled', 'failed'] as const
-const lineWord = (t: T, k: (typeof LINE_ORDER)[number]): string => (k === 'running' ? t('page.now.line_running') : k === 'waiting' ? t('page.now.line_waiting') : k === 'stalled' ? t('page.now.line_stalled') : t('page.now.line_failed'))
+const LINE_ORDER = ['running', 'waiting', 'stalled', 'failed', 'pending'] as const
+const lineWord = (t: T, k: (typeof LINE_ORDER)[number]): string => (k === 'running' ? t('page.now.line_running') : k === 'waiting' ? t('page.now.line_waiting') : k === 'stalled' ? t('page.now.line_stalled') : k === 'pending' ? t('page.fleet.w_normal') : t('page.now.line_failed'))
 function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] {
   const { t, size } = ctx
   const s = con.counts.summary
+  const counts = lineCounts(con, t)
   const total = lineTotal(con)
   // N4: an old snapshot keeps its old values, each with the ✗ mark, and says its age once (`產線 9✗ ●2 ⋯1 ⊘6 · 主機 4/6✗ · ✗ 資料已過期 12 分前`)
   const bs = isBriefStale(con, ctx.nowMs)
@@ -156,7 +157,7 @@ function overviewRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[] 
   const lead: Seg[] = wide ? [plain('  ' + t('page.now.lines') + ' '), totalSeg, plain(' ｜ ')] : [plain(t('page.now.lines') + ' '), totalSeg, plain(' ')]
   const chips: Seg[] = []
   for (const k of LINE_ORDER) {
-    const n = s.lines[k]
+    const n = counts[k]
     if (n === undefined || n === 0) continue
     const g = glyph(k)
     const word = wide ? ' ' + lineWord(t, k) + ' ' + n : n + ''
@@ -241,19 +242,20 @@ function exceptionRows(ctx: PageCtx, con: ConsoleSnapshot, wide: boolean): Row[]
     const meta = { line, rank: RANK[useLs ? ls.sid : it.state] ?? 2, since }
     const lead: Seg[] = [dim(' ' + (wide ? ' ' : '')), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }]
     if (stale) return { row: [...lead, staleBadge(' ' + body + ' ' + GLYPHS.state.failed + ' ' + t('page.now.seat_blocked_stale', { source: String(f.source ?? '?') }))], ...meta }
-    const left: Seg[] = [...lead, plain(' ' + body + (line && !wide ? '（' + ageUnit(t, nowMs - since) + '）' : ''))]
-    return { row: wide ? rightAlign(left, ageOf(t, nowMs - it.since_ms), size.cols - 1) : truncateSegs(left, size.cols), ...meta }
+    const detail = line && ls?.word !== t('page.fleet.idle') ? '：' + body : ''
+    const left: Seg[] = [...lead, plain(' ' + (line ? lineStatusText(ln!, t, nowMs) + detail : body))]
+    return { row: line ? truncateSegs(left, size.cols) : wide ? rightAlign(left, ageOf(t, nowMs - it.since_ms), size.cols - 1) : truncateSegs(left, size.cols), ...meta }
   })
   for (const ln of con.lines ?? []) {
     if (coveredLines.has(ln.line_id) || !ln.issues.some(x => x.to_console)) continue
     const ls = lineState(ln, t)
     if (ls.worst === null) continue
     const g = glyph(ls.sid)
-    const subj = typeof ls.worst.subject === 'string' ? ls.worst.subject : ''
-    const body = subj !== '' && stateWords.some(w => subj.includes(w)) ? ln.label + ' ' + subj : ln.label + ' ' + ls.word + (subj === '' ? '' : '：' + subj)
     const lead: Seg[] = [dim(' ' + (wide ? ' ' : '')), { text: g.text, ...(g.color === undefined ? {} : { color: g.color }) }]
-    const left: Seg[] = [...lead, plain(' ' + body + (wide ? '' : '（' + ageUnit(t, nowMs - ls.worst.since_ms) + '）'))]
-    entries.push({ row: wide ? rightAlign(left, ageOf(t, nowMs - ls.worst.since_ms), size.cols - 1) : truncateSegs(left, size.cols), line: true, rank: RANK[ls.sid] ?? 2, since: ls.worst.since_ms })
+    const subject = typeof ls.worst.subject === 'string' ? ls.worst.subject : ''
+    const detail = ls.word !== t('page.fleet.idle') && subject !== '' ? '：' + subject : ''
+    const left: Seg[] = [...lead, plain(' ' + lineStatusText(ln, t, nowMs) + detail)]
+    entries.push({ row: truncateSegs(left, size.cols), line: true, rank: RANK[ls.sid] ?? 2, since: ls.worst.since_ms })
   }
   const lineSorted = entries.filter(e => e.line).sort((a, b) => a.rank - b.rank || a.since - b.since)
   let k = 0
@@ -403,7 +405,22 @@ function pendingRowOf(ctx: PageCtx, decisions: number, short: boolean): Row | nu
 }
 
 // ---- C1 short-body class summaries (one row per class: pending -> fleet -> quota -> 另有 N 項) ----
-type ShortEntry = { rows: Row[]; count: number }
+type ShortEntry = { rows: Row[]; count: number; summary?: string }
+// X2: overflow retains the category and severity of the items that are hidden.
+function severitySummary(category: string, rows: Row[]): string {
+  const counts = new Map<string, number>()
+  const marks = ['failed', 'unknown', 'stalled', 'need_you', 'findings', 'running', 'waiting', 'pending', 'done'].map(k => (GLYPHS.state as Record<string, string>)[k])
+  for (const r of rows) {
+    const text = r.map(s => s.text).join('').trimStart()
+    const g = marks.find(g => text.startsWith(g))
+    if (g !== undefined) counts.set(g, (counts.get(g) ?? 0) + 1)
+  }
+  const badges = marks.filter(g => counts.has(g)).map(g => g + counts.get(g))
+  return category + ' ' + (badges.length > 0 ? badges.join(' ') : rows.length)
+}
+function moreItems(ctx: PageCtx, n: number, summaries: string[]): Row {
+  return truncateSegs([{ text: ctx.t('page.now.more_items', { n }) + (summaries.length === 0 ? '' : '（' + summaries.join(' · ') + '）'), dim: true }], ctx.size.cols)
+}
 const rowWidth = (r: Row): number => r.reduce((w, s) => w + displayWidth(s.text), 0)
 const joinSummaryParts = (parts: string[]): string =>
   parts.reduce((acc, p, i) => (i === 0 ? p : acc + (acc.endsWith('）') ? '· ' : ' · ') + p), '')
@@ -617,7 +634,7 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
   // the pending sentence is the first body row; the action row is only the jump (item 5: one sentence, not two)
   if (decisions > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.jump_decide')), plain('  '), { text: '[2]', press: 'tab:2:decide', color: PALETTE.action }])
   const residue = live?.detail.residue?.reapable ?? 0
-  if (residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }])
+  if (wide && residue > 0) actions.push([plain(GLYPHS.structure.answer + ' ' + t('page.now.go_residue', { n: residue })), plain('  '), { text: '[8]', press: 'tab:8:hygiene', color: PALETTE.action }]) // X2: narrow panes use the fixed tab 8 Button.
 
   const stripLen = size.cols < STRIP_SPLIT_COLS ? Math.min(2, size.rows) : Math.min(1, size.rows)
   const avail = Math.max(0, size.rows - 1 - stripLen)
@@ -636,6 +653,8 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     if (con !== null) {
       const fleet = fleetShortSummary(ctx, con, wide)
       const quota = quotaShortSummary(ctx, con, wide)
+      if (fleet.entry !== null) fleet.entry.summary = severitySummary(t('tab.fleet'), exceptionRows(ctx, con, wide))
+      if (quota.entry !== null) quota.entry.summary = severitySummary(t('page.now.quota'), poolRows(ctx, con, wide))
       if (fleet.entry !== null) entries.push(fleet.entry)
       if (quota.entry !== null) entries.push(quota.entry)
       const toShortExc = (it: ConsoleItem): Row => {
@@ -671,10 +690,19 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     }
     if (entries.length === 0) entries.push({ rows: [[dim((wide ? '  ' : '') + t('page.now.exc_none'))]], count: 1 })
     const extraCount = extraRows.length
+    const extraSummary = extraCount > 0 ? [severitySummary(t('tab.now'), extraRows)] : []
+    // X2: at 80x3 the single row must identify the most urgent class and pool.
+    if (room <= 1 && con !== null) {
+      const q = entries.find(e => e.summary?.startsWith(t('page.now.quota') + ' '))
+      const ranked = rankPools(normalizedPools(con) ?? [], nowMs, t)
+      const summaries = [...(q?.summary === undefined ? [] : [q.summary + (ranked.length === 0 ? '' : ' ' + poolLabel(ranked[0].pool))]), ...entries.filter(e => e !== q).map(e => e.summary ?? t('tab.decide') + ' ' + e.count), ...extraSummary]
+      const summary = moreItems(ctx, entries.reduce((n, e) => n + e.count, 0) + extraCount, summaries)
+      return decisions > 0 || avail > 1 ? { body: [summary], actions: [] } : { body: [], actions: [summary] }
+    }
     const totalNeeded = entries.reduce((sum, e) => sum + e.rows.length, 0) + (extraCount > 0 ? 1 : 0)
     if (room <= 0 || totalNeeded <= room) {
       const out: Row[] = entries.flatMap(e => e.rows)
-      if (extraCount > 0) out.push(truncateSegs([{ text: t('page.now.more_items', { n: extraCount }), dim: true }], size.cols))
+      if (extraCount > 0) out.push(moreItems(ctx, extraCount, extraSummary))
       return { body: out, actions: shortActions }
     }
     const budget = room - 1
@@ -687,11 +715,12 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     }
     const hiddenCount = entries.slice(kept).reduce((sum, e) => sum + e.count, 0) + extraCount
     const out: Row[] = entries.slice(0, kept).flatMap(e => e.rows)
-    if (hiddenCount > 0) out.push(truncateSegs([{ text: t('page.now.more_items', { n: hiddenCount }), dim: true }], size.cols))
+    if (hiddenCount > 0) out.push(moreItems(ctx, hiddenCount, [...entries.slice(kept).map(e => e.summary ?? t('tab.decide') + ' ' + e.count), ...extraSummary]))
     return { body: out, actions: shortActions }
   }
 
   const body: Row[] = []
+  const categories = new Map<Row, string>()
   // 1. the pending count and the oldest card's title come first (G2, R2, R8); the [2] jump stays in the action area
   const pRow = pendingRowOf(ctx, decisions, false)
   // N3: a pending reason kept whole wraps at a clause boundary with the 2-cell hanging indent, so no orphan word sits under the status-glyph column
@@ -703,7 +732,12 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     // 2. the stuck lines and the other exceptions, 3. every red pool in full
     const exc = exceptionRows(ctx, con, wide)
     const pr = poolRows(ctx, con, wide)
-    body.push(...exc, ...pr)
+    const room = firstRoom
+    const overflowing = [...body, ...exc, ...pr].reduce((n, r) => n + wrapRow(r, size.cols, WRAP_HANG).length, 0) > room
+    // X2: the worst quota pool is visible before a long exception list can hide it.
+    body.push(...(overflowing && pr.length > 0 ? [pr[0], ...exc, ...pr.slice(1)] : [...exc, ...pr]))
+    for (const r of exc) categories.set(r, t('tab.fleet'))
+    for (const r of pr) categories.set(r, t('page.now.quota'))
     // "no exceptions" is only said when nothing is missing and no pool needs a look (G4)
     if (exc.length === 0 && pr.length === 0) body.push(dataMissing(con, nowMs, t) ? broken(t('frame.unknown')) : [dim((wide ? '  ' : '') + t('page.now.exc_none'))])
   }
@@ -716,6 +750,23 @@ function render(ctx: PageCtx): { body: Row[]; actions: Row[] } {
     body.push(...seatRows(ctx, live, wide))
     const rec = recentRows(live, wide, size.cols)
     if (rec.length > 0) body.push(blank(), ruleRow(t('page.now.recent'), wide), ...rec)
+  }
+  if (body.reduce((n, r) => n + wrapRow(r, size.cols, WRAP_HANG).length, 0) > firstRoom) {
+    const kept: Row[] = []
+    let i = 0
+    for (; i < body.length; i++) {
+      const wrapped = wrapRow(body[i], size.cols, WRAP_HANG)
+      if (kept.length + wrapped.length > firstRoom - 1) break
+      kept.push(...wrapped)
+    }
+    const hidden = body.slice(i).filter(r => r.some(s => s.text.trim() !== '') && !r.every(s => s.color === PALETTE.structure))
+    const groups = new Map<string, Row[]>()
+    for (const r of hidden) {
+      const category = categories.get(r) ?? t('page.now.seat_plain')
+      groups.set(category, [...(groups.get(category) ?? []), r])
+    }
+    const summaries = [...groups].sort(([a], [b]) => Number(b === t('page.now.quota')) - Number(a === t('page.now.quota'))).map(([c, rs]) => severitySummary(c, rs))
+    return { body: [...kept, moreItems(ctx, hidden.length, summaries)], actions }
   }
   return { body, actions }
 }

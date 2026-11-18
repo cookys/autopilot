@@ -1,3 +1,4 @@
+// Z2: positive seat totals retain the count and explain the missing detail list.
 // quota.test.ts — the 額度 page (plan r2 §4.1, g2 A1 / A3 / A7 / A10 / A11): golden rows of the mockup states, exactly H rows through frameRows at 160x40 / 120x30 / 80x24,
 // the no-source rows, null staying null, the action area, the red markers (theme keys through PALETTE only, no background, no inverse).
 // The goldens are the 額度 drawings of s0b/mockups.md row for row, with these known differences: the mockup's first line (seat, ages, branch) is the frame's header row, not the body;
@@ -31,7 +32,7 @@ const GOLDEN = {
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
-    "席    共 1 席",
+    "席    共 1 席（席位清單沒有明細）",
     "換池  沒有換池資料（capacity 尚未提供）",
     "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
     "排序  紅：已用完 > 最早用完 > 過期（最舊在前）；黃：浪費比例多的在前；最後才是綠",
@@ -49,7 +50,7 @@ const GOLDEN = {
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
-    "席    共 1 席",
+    "席    共 1 席（席位清單沒有明細）",
     "換池  沒有換池資料（capacity 尚未提供）",
     "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
   ],
@@ -66,7 +67,7 @@ const GOLDEN = {
     "",
     "── 焦點 trinity ────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
-    "席    共 1 席",
+    "席    共 1 席（席位清單沒有明細）",
     "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
   ],
   nopaceNarrow: [
@@ -82,7 +83,7 @@ const GOLDEN = {
     "",
     "── 焦點 trinity ────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
-    "席    共 1 席",
+    "席    共 1 席（席位清單沒有明細）",
     "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
   ],
   nopaceWide: [
@@ -99,7 +100,7 @@ const GOLDEN = {
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  [o] 展開各席",
-    "席    共 1 席",
+    "席    共 1 席（席位清單沒有明細）",
     "換池  沒有換池資料（capacity 尚未提供）",
     "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
     "排序  已用完 > 過期（最舊在前）> 7 天最高",
@@ -117,8 +118,8 @@ const GOLDEN = {
     "",
     "── 焦點池 trinity ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "  [o] 收合各席",
-    "席    共 1 席",
-    "      席位清單沒有這個池的席位",
+    "席    共 1 席（席位清單沒有明細）",
+    // Z2: the count row explains the missing detail; no contradictory empty row.
     "換池  沒有換池資料（capacity 尚未提供）",
     "判定  紅：180 分未更新（>10 分；statusline 沒在跑）",
     "排序  紅：已用完 > 最早用完 > 過期（最舊在前）；黃：浪費比例多的在前；最後才是綠",
@@ -242,7 +243,7 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   expect(compactBody[0]).toContain('✗ 180 分未更新')
   expect(compactBody[0]).not.toContain('statusline 沒在跑')
   expect(compactBody[1]).toBe('判定  紅：180 分未更新（>10 分；statusline 沒在跑）')
-  expect(compactBody[2]).toBe('席    共 1 席')
+  expect(compactBody[2]).toBe('席    共 1 席（席位清單沒有明細）')
   expect(compactBody[3]).toBe('  [o] 展開各席')
 
   // Long full verdict (> 80 cols) wraps across remaining body rows and is never truncated
@@ -252,7 +253,7 @@ test('quota: compact mode (80x7, shortBody) suppresses only headings and column 
   const wrappedBody = wrappedOut.slice(1, 5)
   expect(wrappedBody.join('').replace(/\s+/g, '')).toContain(('判定紅：180分未更新（>10分；' + longNote + '）').replace(/\s+/g, ''))
   expect(wrappedBody.some(l => l.includes('…'))).toBe(false)
-  expect(wrappedBody[3]).toBe('席    共 1 席')
+  expect(wrappedBody[3]).toBe('席    共 1 席（席位清單沒有明細）')
 
   // Expanded seats follow the full verdict only while they fit in the remaining body rows
   const openPage = { ...quotaPage, render: (c: Parameters<typeof renderQuota>[0]) => renderQuota(c, { focus: 0, expanded: true }) }

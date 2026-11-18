@@ -158,7 +158,7 @@ test('now: overflow at 80x24 ends in the more row and keeps 24 rows', async () =
   const ex = Array.from({ length: 9 }, (_, i) => ({ ...con().items[0], id: 'e' + i, title: 'lane' + i + ' 卡住' }))
   const out = frameRows(nowPage, ctxOf(80, 24, con({ items: ex as never }))).map(text)
   expect(out.length).toBe(24)
-  expect(out.some(r => r.includes('還有'))).toBe(true)
+  expect(out.some(r => /另有 \d+ 項（/.test(r))).toBe(true) // X2: categorized item summary.
   expect(out[out.length - 1]).toMatch(/1\D*2\D*3/)
 })
 
@@ -299,7 +299,7 @@ test('now R2: shortBody (<= 4 rows) combines Button + pending summary first, dro
   expect(framed6[0]).toContain('→ 待決 3 張（最舊 1 天）：')
   expect(framed6[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 17/18（離線 1）')
   expect(framed6[2]).toBe('✗ 額度 紅 1（trinity）· ? 未知 1（personal）')
-  expect(framed6[3]).toBe('另有 1 項')
+  expect(framed6[3]).toBe('另有 1 項（現況 ▲1）') // X2: include hidden category/severity.
 })
 
 test('now C1: short 現況 summarises each class once (pending -> fleet -> quota -> 另有 N 項), omits empty classes, truncates names with … to fit width, bottom-anchors, deduplicates pool_key, and keeps 另有 6 項 at 80x3', () => {
@@ -396,7 +396,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(zh6[2]).toContain('→ 待決 3 張')
   expect(zh6[3]).toContain('✗ 艦隊 ')
   expect(zh6[4]).toBe('✗ 額度 紅 2（F 池、trinity）')
-  expect(frameRows(nowPage, ctxOf(80, 3, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('另有 6 項')
+  expect(frameRows(nowPage, ctxOf(80, 3, c1Snap, liveNoRes), { pages: PAGES }).map(text)[1]).toBe('另有 6 項（額度 ✗2 F 池 · 待決 1 · 艦隊 ✗2 ⊘1）') // X2: even one row names the urgent quota.
 
   // 3. When unshown items remain (e.g. yellow waste pool + findings exception), row 4 is `另有 N 項`
   const allTiersSnap = con({
@@ -410,7 +410,7 @@ test('now C1: short 現況 summarises each class once (pending -> fleet -> quota
   expect(fullShort[0]).toContain('→ 待決 3 張')
   expect(fullShort[1]).toBe('✗ 艦隊 離線 1 線（復原線）· 卡住 1 線（遊戲線）· 主機 17/18（離線 1）')
   expect(fullShort[2]).toBe('✗ 額度 紅 2（F 池、trinity）· ? 未知 1（personal）')
-  expect(fullShort[3]).toBe('另有 2 項')
+  expect(fullShort[3]).toBe('另有 2 項（現況 ▲1 △1）') // X2: classify the hidden extras.
 
   // 4. R14 bottom-anchoring and omitting empty class rows
   const fewerSnap = con({ ...c1Snap, items: [hostItem] as never, lines: [], quota: { pools: [POOLS.find(p => p.pool === 'trinity')!] as never, seats: [] } })

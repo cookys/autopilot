@@ -224,7 +224,8 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const openRow: Row = [{ text: '  ' }, { text: t(view.expanded ? 'page.quota.act_o_close' : 'page.quota.act_o_open'), color: PALETTE.action, press: 'quota:open' }] // G11: o is a Button (click works where the pane has no keyboard)
   const mine = q.seats.filter(s => poolKey(s.pool) === poolKey(fp.pool))
   const names = mine.map(s => s.seat)
-  const count = fp.seats === null ? t('page.quota.f_seats_unknown') : t('page.quota.f_seats_n', { n: fp.seats })
+  const noSeatDetail = mine.length === 0 && (fp.seats ?? 0) > 0 // Z2: an absent detail list does not erase a known total.
+  const count = noSeatDetail ? t('page.quota.f_seats_no_detail', { n: fp.seats! }) : fp.seats === null ? t('page.quota.f_seats_unknown') : t('page.quota.f_seats_n', { n: fp.seats })
   const seatsSummary = kv(t('page.quota.f_seats'), (names.length === 0 ? '' : names.slice(0, 2).join(' · ') + (names.length > 2 || (fp.seats ?? 0) > 2 ? ' · … ' : ' ')) + count)
   const seatRowText = (s: QuotaSeat): string => t('page.quota.seat_row', { seat: s.seat, a: pct(s.seven_day_pct, s.stale === true), b: pct(s.five_hour_pct, s.stale === true), age: s.age_min === null ? DASH : t('page.quota.age_m', { n: s.age_min }) })
   const fact = fp.limit_hit === true ? t('page.quota.f_limit_hit') + '，' : ''
@@ -286,7 +287,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     const navOn = picked.clipped && tier === 'narrow' // the o Button is in the action row then, not in the body
     const tailCandidates: Row[] = []
     if (view.expanded) {
-      if (mine.length === 0) tailCandidates.push(kv(t('page.quota.f_seats'), t('page.quota.seat_none')))
+      if (mine.length === 0) tailCandidates.push(noSeatDetail ? seatsSummary : kv(t('page.quota.f_seats'), t('page.quota.seat_none')))
       else mine.forEach((s, i) => tailCandidates.push(kv(i === 0 ? t('page.quota.f_seats') : '', seatRowText(s), s.stale === true ? PALETTE.broken : undefined)))
       if (!navOn) tailCandidates.push(openRow)
     } else {
@@ -306,7 +307,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   const focusTitle = rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: poolLabel(fv.pool) }), null, cols)
   const expandedSeatRows: Row[] = []
   if (view.expanded) {
-    if (mine.length === 0) expandedSeatRows.push(kv('', t('page.quota.seat_none')))
+    if (mine.length === 0 && !noSeatDetail) expandedSeatRows.push(kv('', t('page.quota.seat_none')))
     for (const s of mine) expandedSeatRows.push(kv('', seatRowText(s), s.stale === true ? PALETTE.broken : undefined))
   }
   const switchRows: Row[] = []
@@ -340,7 +341,9 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
   if (headLen + 1 + rowsWrappedLen(keptFocus, cols) > room) keptHeader = []
   const poolRoom = Math.max(0, room - rowsWrappedLen(keptHeader, cols) - rowsWrappedLen(keptFocus, cols))
   const picked = pickPools(poolRoom, true)
-  return { body: [...keptHeader, ...picked.rows, ...keptFocus], actions: cutActions(picked.clipped) }
+  // Z2: the fixed navigation strip owns o when the table is cut.
+  const focusRows = picked.clipped && tier === 'narrow' ? keptFocus.filter(r => r !== openRow) : keptFocus
+  return { body: [...keptHeader, ...picked.rows, ...focusRows], actions: cutActions(picked.clipped) }
 }
 
 export const quotaPage: Page = { id: 'quota', key: '4', title: '額度', framed: true, render: ctx => renderQuota(ctx) }

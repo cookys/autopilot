@@ -78,7 +78,7 @@ test('R9: collapsed band shows snapshot pending and fault counts, [+], no digit 
     const decide = buttons.find(b => b.props.key === 'tab:decide')!
     const fleet = buttons.find(b => b.props.key === 'tab:fleet')!
     expect(flat(decide).trim().endsWith('(3)'), locale + ' ' + cols + ' decide: ' + flat(decide)).toBe(count > 0)
-    expect(flat(fleet).trim().endsWith('(✗2)'), locale + ' ' + cols + ' fleet: ' + flat(fleet)).toBe(count > 0)
+    expect(flat(fleet).trim().endsWith('(✗2 ○4)'), locale + ' ' + cols + ' fleet: ' + flat(fleet)).toBe(count > 0) // X3: include the same four unlisted/normal lines as the page summary.
     expect(flat(decide)).not.toContain('(0)')
     expect(flat(fleet)).not.toContain('(✗0)')
     if (cols >= 40) expect(hostWidth(rows[1])).toBeLessThanOrEqual(cols)

@@ -1,3 +1,4 @@
+// Y3: line status and duration use the shared grammar.
 // gate1.test.ts — UX gate round 1 (98f70cbe6) findings G1-G10: each test reproduces one finding; the screens are the frame's, drawn from the shared console fixture.
 import { test, expect } from 'claude-code/testing'
 import { frameRows } from './pages/frame'
@@ -39,7 +40,7 @@ test('gate G2: 現況 at 80 columns: pending count + oldest card title, then stu
   const first = out.slice(1).find(l => l.trim() !== '') as string
   expect(first, 'the first content row is the pending count').toContain('待決')
   expect(first, 'and carries the oldest card title').toContain(oldest.question.slice(0, 6))
-  const iStuck = out.findIndex(l => l.includes('復原線成員離線'))
+  const iStuck = out.findIndex(l => l.includes('復原線 離線（'))
   const names = ['trinity', 'twgame', 'personal', 'team']
   const at = names.map(n => out.findIndex(l => l.includes(n) && l.includes('池') === false || l.includes(n)))
   expect(iStuck, 'stuck lines are on the page').toBeGreaterThan(0)
@@ -151,5 +152,5 @@ test('gate G10: one set of names: pool "F 池" on every page, line states 離線
   // M4: an issue-free line is normal; only an explicit idle issue means 閒置.
   expect(out.find(l => l.includes('乙'))).toContain('正常')
   expect(out.find(l => l.includes('丙'))).toContain('卡住')
-  expect(out.join('\n')).not.toContain('無異常')
+  expect(out.join('\n')).toContain('正常（無異常明細）') // X3: explicitly label missing issue detail.
 })

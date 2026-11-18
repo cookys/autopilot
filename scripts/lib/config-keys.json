@@ -5648,6 +5648,20 @@
       "summary": "Set to \"off\" to stop merging task-status input into the band."
     },
     {
+      "name": "AUTOPILOT_PRUNE_MERGED_BRANCH",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": "on",
+      "readers": [
+        "hooks/audit-log.js",
+        "hooks/prune-merged-branch-lib.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Set to \"off\" to stop deleting merged remote head branches after pushing to the integration branch."
+    },
+    {
       "name": "AUTOPILOT_MIN_REVIEWED_SEATS",
       "kind": "env",
       "audience": "user",

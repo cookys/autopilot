@@ -124,7 +124,10 @@ export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, a
   const qRed = verdicts.filter(v => v.role === 'broken' && !isUnknownPool(v)).length
   const qUnk = verdicts.filter(v => isUnknownPool(v)).length
   const qWarn = verdicts.filter(v => v.role === ROLE_WARNING && !isUnknownPool(v)).length
-  const G = ui.GLYPHS.state
+  const G = {
+    failed: ui.glyphOf(ui.stateOf('console', 'FAILED')), stalled: ui.glyphOf(ui.stateOf('console', 'STALLED')),
+    unknown: ui.glyphOf(ui.stateOf('qc', 'UNKNOWN')), need_you: ui.glyphOf(ui.stateOf('console', 'NEED_YOU')),
+  }
   const marks = (name: string, parts: [string, number][]): string => {
     const p = parts.filter(([, n]) => n > 0)
     return p.length === 0 ? name : name + '(' + p.map(([g, n]) => g + n).join(' ') + ')'

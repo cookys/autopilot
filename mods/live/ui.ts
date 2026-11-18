@@ -480,6 +480,8 @@ export type Ctx = { t: Translate; cols: number; expanded?: ReadonlySet<string> }
 export const val = (s: string, o: { role?: 'value' | 'prose'; fmt?: FmtKind; bold?: boolean; dim?: boolean; here?: boolean; tone?: 'dim' | 'strong'; fact?: FactId } = {}): Frag => frag([sg(s, { role: o.role ?? 'value', ...(o.fmt ? { fmt: o.fmt } : {}), ...(o.here ? { here: true } : {}), ...(o.bold || o.tone === 'strong' ? { bold: true } : {}), ...(o.dim || o.tone === 'dim' ? { dim: true } : {}) })], o.fact)
 export const fmtd = (kind: FmtKind, s: string, fact?: FactId): Frag => frag([sg(s, { role: 'value', fmt: kind })], fact)
 // the state glyph (state colour) and, unless `word: false`, its word (same colour)
+// the bare state glyph, for a caller that may not read GLYPHS or STATES itself (tabs.ts, lint L7)
+export const glyphOf = (s: Stated): string => STATES[s.id].glyph
 export function stateLead(u: Ctx, s: Stated, o: { word?: boolean; wordW?: number } = {}): Frag {
   const st = STATES[s.id]
   const segs: Seg[] = [sg(st.glyph, { ...tone(st.key), role: 'glyph' })]

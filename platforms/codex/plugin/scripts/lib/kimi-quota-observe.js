@@ -54,11 +54,13 @@ function record(c, nowS) {
 }
 
 // observe({rc, text, liveDir, now}) -> { wrote, state, code? }
-function observe({ rc, text, liveDir, now } = {}) {
+function observe({ rc, text, verdict, liveDir, now, env = process.env } = {}) {
   const nowS = Math.floor((now === undefined ? Date.now() : now) / 1000);
-  const dir = liveDir || obs.liveDirOrNull({});
+  const dir = liveDir || obs.liveDirOrNull({ env });
   if (!dir) return { wrote: false, code: 'live_dir_unavailable' };
-  const c = classify(rc, text, nowS);
+  const c = verdict === undefined ? classify(rc, text, nowS)
+    : verdict === 'stopped_billing' ? { state: 'exhausted', reason: 'quota', reset_at: nowS + UNKNOWN_RESET_TTL_S }
+      : verdict === 'done' ? { state: 'available' } : null;
   if (!c) return { wrote: false, state: null };
   const b = obs.buildRecord(record(c, nowS));
   if (!b.ok) return { wrote: false, state: c.state, code: b.code };

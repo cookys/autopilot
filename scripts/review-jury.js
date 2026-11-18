@@ -165,10 +165,8 @@ function onPath(bin) {
 }
 
 function runnerFound(seat) {
+  if (seat.bin === 'kimi') return require('./lib/cursor-broker-client').brokerAvailable('kimi');
   if (onPath(seat.bin)) return true;
-  if (seat.bin === 'kimi') {
-    try { fs.accessSync(path.join(os.homedir(), '.kimi-code', 'bin', 'kimi'), fs.constants.X_OK); return true; } catch { return false; }
-  }
   return false;
 }
 

@@ -49,14 +49,74 @@
   },
   "entries": [
     {
+      "kind": "env",
+      "audience": "internal",
+      "doc": "references/hetero-dispatch.md",
+      "name": "AUTOPILOT_KIMI_BROKER_SOCK",
+      "class": "path_seam",
+      "default": "/srv/kimi-broker/sock",
+      "readers": [
+        "scripts/lib/cursor-broker-client.js"
+      ],
+      "relates": [
+        "AUTOPILOT_KIMI_BROKER_WORK_ROOT",
+        "AUTOPILOT_KIMI_GROUP_WRAPPER"
+      ],
+      "note": "Kimi broker Unix socket; automatic availability requires a socket and no exhausted quota observation."
+    },
+    {
+      "kind": "env",
+      "audience": "internal",
+      "doc": "references/hetero-dispatch.md",
+      "name": "AUTOPILOT_KIMI_BROKER_WORK_ROOT",
+      "class": "path_seam",
+      "default": "/srv/kimi-work",
+      "readers": [
+        "scripts/lib/cursor-broker-client.js"
+      ],
+      "relates": [
+        "AUTOPILOT_KIMI_BROKER_SOCK"
+      ],
+      "note": "Shared standalone Kimi clone root, configurable until broker deployment paths are finalized."
+    },
+    {
+      "kind": "env",
+      "audience": "internal",
+      "doc": "references/hetero-dispatch.md",
+      "name": "AUTOPILOT_KIMI_BROKER_MODEL_PATTERN",
+      "class": "plumbing",
+      "default": "^kimi-code/[A-Za-z0-9._-]+$",
+      "readers": [
+        "scripts/lib/cursor-broker-client.js"
+      ],
+      "relates": [
+        "AUTOPILOT_KIMI_BROKER_SOCK"
+      ],
+      "note": "Allowed Kimi broker model grammar; nonmatching models or invalid patterns fail locally before connecting. Default model kimi-code/kimi-for-coding."
+    },
+    {
+      "kind": "env",
+      "audience": "internal",
+      "doc": "references/hetero-dispatch.md",
+      "name": "AUTOPILOT_KIMI_GROUP_WRAPPER",
+      "class": "test_seam",
+      "default": "sg",
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "relates": [
+        "AUTOPILOT_KIMI_BROKER_WORK_ROOT"
+      ],
+      "note": "Executable accepting sg argument shape lanegit -c command, covering clone and socket operations in tests."
+    },
+    {
       "name": "AUTOPILOT_CURSOR_BROKER_SOCK",
       "kind": "env",
       "audience": "internal",
       "class": "path_seam",
       "default": "/srv/cursor-broker/sock",
       "readers": [
-        "scripts/lib/cursor-broker-client.js",
-        "scripts/lib/cursor-broker-run.js"
+        "scripts/lib/cursor-broker-client.js"
       ],
       "doc": "references/hetero-dispatch.md",
       "relates": [
@@ -72,7 +132,7 @@
       "class": "path_seam",
       "default": "/srv/cursor-work",
       "readers": [
-        "scripts/lib/cursor-broker-run.js"
+        "scripts/lib/cursor-broker-client.js"
       ],
       "doc": "references/hetero-dispatch.md",
       "relates": [

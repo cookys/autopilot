@@ -315,6 +315,10 @@ function providerObservation(tuple, axis, status, now, ttlSeconds, evidenceClass
 const SAFE_BINARY_PROBE_TIMEOUT_MS = 20000;
 
 function probeSafeSurface({ tuple }) {
+  if (tuple.runner === 'kimi') {
+    const available = require('../../scripts/lib/cursor-broker-client').brokerAvailable('kimi');
+    return { status: available ? 'ready' : 'blocked', evidence_class: 'safe-surface', reason: available ? null : 'broker_unavailable' };
+  }
   const binary = BINARY_BY_RUNNER[tuple.runner] || tuple.runner;
   const version = spawnSync(binary, ['--version'], {
     cwd: REPO_ROOT,

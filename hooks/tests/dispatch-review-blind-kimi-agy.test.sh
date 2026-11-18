@@ -15,6 +15,13 @@
 # Negative controls run: audit calls disabled -> 73 FAILs; non-blind kimi argv + "--x" -> byte-compare FAILs.
 . "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/lib/dispatch-review-fixtures.sh"
+# These are transport fixtures; the dedicated CN/broker suites test the real gate.
+export AUTOPILOT_TEST_CN_GATE_OFF=1 AUTOPILOT_ENDPOINTS_ENV="$TEST_TMP/no-endpoints.env"
+# Recorders compare child environments; never carry ambient credentials into them.
+for _fixture_name in $(compgen -e); do
+  case "$_fixture_name" in *_TOKEN|*_API_KEY|*_SECRET|*_PASSWORD) unset "$_fixture_name" ;; esac
+done
+unset _fixture_name
 # RED at c1fafbfba: AUTOPILOT_PARENT_SESSION_ID=x bash hooks/tests/dispatch-review-blind-kimi-agy.test.sh -> rc=1,
 #   "non-blind agy base run has no parent id ...: unexpected 'AUTOPILOT_PARENT_SESSION_ID=' in output"; green with the call below.
 scrub_session_env

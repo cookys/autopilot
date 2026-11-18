@@ -428,6 +428,10 @@ function getInstalledRunners(repoRoot) {
 }
 
 function resolveBinaryPath(binaryName, runner) {
+  if (runner === 'kimi') {
+    const broker = require('./lib/cursor-broker-client');
+    return broker.brokerAvailable('kimi') ? broker.brokerConfig('kimi').socket : null;
+  }
   if (!binaryName) return null;
   if (binaryName.includes(path.sep)) {
     try {
@@ -449,7 +453,7 @@ function resolveBinaryPath(binaryName, runner) {
   }
   const home = runnerFallbackHome();
   // Same per-runner table the version probe uses (codex/agy under ~/.local/bin, grok under
-  // ~/.grok/bin, kimi under ~/.kimi-code/bin): PATH was searched first, so it still wins.
+  // ~/.grok/bin): PATH was searched first; Kimi is handled by its broker above.
   for (const rel of (RUNNER_BINARY_FALLBACK_PATHS[runner] || [])) {
     if (!home) break;
     const candidate = path.join(home, rel);

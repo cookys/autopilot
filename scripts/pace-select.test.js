@@ -11,6 +11,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+// Broker observations are test inputs, never the host account's ambient quota rows.
+const quotaFixture = fs.mkdtempSync(path.join(fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir(), 'pace-quota-test-'));
+process.env.AUTOPILOT_LIVE_DIR = quotaFixture;
+test.after(() => fs.rmSync(quotaFixture, { recursive: true, force: true }));
 
 const { freshReading } = require('./lib/pace-reading.js');
 const {
@@ -1447,15 +1451,16 @@ test('no kimi highspeed model id in the live roster, implementer/reviewer lists 
 });
 
 test('pace-roles _disabled: a disabled key with a fresh pace row is never returned, enabling it makes it pickable', () => {
-  const pace = priorityPace([paceRow('kimi', 5, 60)]);
+  const pace = priorityPace([paceRow('minimax', 5, 60)]);
   const pools = loadPools();
-  const roles = loadRoles();
-  assert.deepEqual(roles._disabled, ['kimi', 'minimax']);
+  const stock = loadRoles();
+  assert.deepEqual(stock._disabled, ['minimax']);
+  const roles = { ...stock, implementer: [...stock.implementer, 'minimax'] };
   const run = (r) => { try { return selectEngine({ pace, pools, roles: r, role: 'implementer', checkEndpoint: allEndpointsReady }); } catch (e) { return { error: e.code || e.message }; } };
   const off = run(roles);
-  assert.notEqual(off.engine, 'kimi', JSON.stringify(off));
+  assert.notEqual(off.engine, 'minimax', JSON.stringify(off));
   const on = run({ ...roles, _disabled: [] });
-  assert.equal(on.engine, 'kimi', JSON.stringify(on));
+  assert.equal(on.engine, 'minimax', JSON.stringify(on));
 });
 
 // ---- DeepSeek restricted reviewer seat (PM 01M7EETN): cn_gate pool in pace-roles.json -------------------

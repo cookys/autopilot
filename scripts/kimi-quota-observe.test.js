@@ -7,7 +7,8 @@ const os = require('os');
 const path = require('path');
 const q = require('./lib/kimi-quota-observe');
 const obs = require('./lib/account-observation');
-const { selectEngine } = require('./pace-select');
+const { selectEngine, loadRoles } = require('./pace-select');
+const net = require('net');
 
 const live = fs.mkdtempSync(path.join(os.tmpdir(), 'kimi-quota-'));
 fs.chmodSync(live, 0o700);
@@ -53,21 +54,32 @@ test('an unrelated error writes nothing', () => {
   fs.rmSync(other, { recursive: true, force: true });
 });
 
-test('pace-select never returns an exhausted kimi (negative control: available is returned)', () => {
-  const pace = { schema: 'capacity.pace/1', rows: [{ key: 'kimi', used_pct: 5, expected_pct: 60, stale: false }] };
-  const pick = () => {
-    try { return selectEngine({ pace, role: 'implementer', pools: undefined, roles: { implementer: ['kimi'], _disabled: [] } }); } catch (e) { return { error: e.code || e.message }; }
-  };
-  const saved = process.env.AUTOPILOT_LIVE_DIR;
-  process.env.AUTOPILOT_LIVE_DIR = live;
+test('pace-select never returns an exhausted kimi (negative control: available broker is returned)', async () => {
+  const socket = path.join(live, 'broker.sock');
+  let connections = 0;
+  const server = net.createServer(conn => { connections++; conn.destroy(); });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
+  let clock = Date.now();
+  const pace = { schema: 'capacity.pace/1', rows: [{ pool: 'kimi', used_pct: 5, expected_pct: 60, stale: false, hours_to_reset: 12 }] };
+  const env = { ...process.env, AUTOPILOT_LIVE_DIR: live, AUTOPILOT_KIMI_BROKER_SOCK: socket,
+    AUTOPILOT_TASK_SIZE: 'S', AUTOPILOT_TASK_SCOPE: 'docs/example.md' };
+  const roles = loadRoles();
+  const pick = () => selectEngine({ pace, role: 'implementer', roles, env, now: new Date(clock) });
   try {
-    q.observe({ rc: 0, text: 'ok', liveDir: live, now: Date.now() });
-    const ok = pick();
-    q.observe({ rc: 1, text: '429 rate limit retry in 10 minutes', liveDir: live, now: Date.now() });
-    const bad = pick();
-    assert.notEqual(JSON.stringify(ok), JSON.stringify(bad), 'exhaustion changes the pick');
-    assert.doesNotMatch(JSON.stringify(bad), /"key":"kimi"|"engine":"kimi/);
-  } finally { if (saved === undefined) delete process.env.AUTOPILOT_LIVE_DIR; else process.env.AUTOPILOT_LIVE_DIR = saved; }
+    q.observe({ verdict: 'done', liveDir: live, now: clock });
+    assert.equal(pick().engine, 'kimi', 'clear quota and a broker socket admit the measured seat');
+    q.observe({ verdict: 'stopped_billing', liveDir: live, now: clock });
+    assert.notEqual(pick().engine, 'kimi', 'billing stop excludes the same seat');
+    clock += (q.UNKNOWN_RESET_TTL_S + 1) * 1000;
+    assert.equal(pick().engine, 'kimi', 'expired exhaustion admits a recheck');
+    q.observe({ verdict: 'stopped_billing', liveDir: live, now: clock });
+    assert.notEqual(pick().engine, 'kimi');
+    q.observe({ verdict: 'done', text: 'old quota error', liveDir: live, now: clock });
+    assert.equal(pick().engine, 'kimi', 'structured done clears old quota text');
+    env.AUTOPILOT_KIMI_BROKER_SOCK = path.join(live, 'absent.sock');
+    assert.notEqual(pick().engine, 'kimi', 'clear quota cannot substitute for the socket');
+    assert.equal(connections, 0, 'availability never connects to the stub broker');
+  } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
 test.after(() => { fs.rmSync(live, { recursive: true, force: true }); });

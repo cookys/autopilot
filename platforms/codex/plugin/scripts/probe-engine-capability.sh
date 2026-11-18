@@ -238,10 +238,12 @@ case "$RUNNER" in
     fi
     ;;
   kimi)
-    # Kimi Code CLI is routinely NOT on bare PATH. Mirror dispatch-review.sh's
-    # resolution order exactly (PATH, then the well-known install path) — a probe
-    # that resolves the binary differently from the dispatcher would report on a
-    # different tool than the one dispatch actually runs.
+    if [ "$SAFE" -eq 1 ]; then
+      # Automatic status/capacity checks never consult this account's local login.
+      if node "$SELF_DIR/lib/cursor-broker-client.js" available kimi; then
+        BINARY_FOUND=1
+      fi
+    else
     _fb="$(runner_bin_fallback kimi)"
     if command -v "$_fb" >/dev/null 2>&1; then
       KIMI_BIN="$(command -v "$_fb")"
@@ -251,6 +253,8 @@ case "$RUNNER" in
     if [ -n "$KIMI_BIN" ]; then
       BINARY_FOUND=1
       RUNNER_VERSION="$("$KIMI_BIN" --version 2>&1 | head -n 1 || echo "unknown")"
+    fi
+
     fi
     ;;
   opencode)
@@ -295,6 +299,11 @@ else
   # `unknown` never overrides a known status regardless of confidence (see
   # mergeCurrentState J1 guard), so this stays medium to match the probe contract.
   CONFIDENCE="medium"
+fi
+
+if [ "$RUNNER" = kimi ] && [ "$SAFE" -eq 1 ]; then
+  EVIDENCE="Kimi broker socket unavailable or observed quota exhausted"
+  [ "$BINARY_FOUND" -eq 0 ] || EVIDENCE="Kimi broker socket present; no exhausted observation"
 fi
 
 # 2. Check if we should execute live spend

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # Fake Kimi fixtures carry no dispatch Size/Role/Scope.
 # RED at 92455ca3: migrated layout (config/agents + dangling alias) reviewed -> expected 0 got 1 (2 FAIL); launcher seeds config/agents -> file missing (1 FAIL)
 # dispatch-review-blind-kimi-agy.test.sh — final-panel isolation phase 3: the BLIND kimi/agy rail.
 #

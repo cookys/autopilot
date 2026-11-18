@@ -487,6 +487,7 @@ function qualifyingEngines(pace, pools, opts = {}) {
     const entry = Object.prototype.hasOwnProperty.call(pools, poolName) ? pools[poolName] : null;
     // Unmapped pool name: not a verdict. It must not be read as "no quota".
     if (!entry) continue;
+    if (entry.runner === 'kimi' && require('./lib/kimi-local-stop').isStopped(opts.env || process.env)) continue;
     if (row.class === 'claude' || row.class === 'scarce') continue;
     const status = typeof row.status === 'string' ? row.status : '';
     // `ok` is in-use with quota still left. ALERT_behind is the waste alert.
@@ -1034,7 +1035,7 @@ function cmdDrain(flags, env = process.env, opts = {}) {
   };
 
   const requireHoursLt24 = opts.requireHoursLt24 !== false;
-  const qualified = qualifyingEngines(pace, pools, { requireHoursLt24 });
+  const qualified = qualifyingEngines(pace, pools, { requireHoursLt24, env });
   actions.qualifying = [...qualified.keys()];
 
   const runBody = () => {

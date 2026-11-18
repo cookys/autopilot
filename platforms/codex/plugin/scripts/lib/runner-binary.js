@@ -194,6 +194,7 @@ function runnerFallbackHome() {
 
 /** Absolute path of `binary` on PATH (or a runner's well-known fallback), else null. */
 function resolveBinaryPath(binary, runner) {
+  if (runner === 'kimi' && require('./kimi-local-stop').isStopped()) return null;
   if (binary.includes(path.sep)) {
     try {
       fs.accessSync(binary, fs.constants.X_OK);
@@ -326,6 +327,9 @@ function versionLineRefusalReason(line) {
  * `spawn` is injectable so tests can drive the guard without a real binary.
  */
 function resolveRunnerVersion(runner, options = {}) {
+  if (runner === 'kimi' && require('./kimi-local-stop').isStopped()) {
+    return { ok: false, runner, binary: 'kimi', binary_path: null, version_line: '', reason: 'kimi_local_stopped', stderr: '' };
+  }
   const spawn = options.spawn || spawnSync;
   const binary = versionBinaryFor(runner);
   if (binary === null) {

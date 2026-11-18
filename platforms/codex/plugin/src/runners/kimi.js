@@ -48,6 +48,9 @@ function publicFailure(status, error, transportEnvelope = null, privateRawRefere
 }
 
 function inspectKimiSurface(options = {}) {
+  if (require('../../scripts/lib/kimi-local-stop').isStopped(options.env || process.env)) {
+    return { ready: false, version: null, reason: require('../../scripts/lib/kimi-local-stop').REASON };
+  }
   const bin = typeof options.bin === 'string' && options.bin.length > 0 ? options.bin : RUNNER;
   const execute = typeof options.spawnSync === 'function' ? options.spawnSync : spawnSync;
   const timeout = Number.isInteger(options.timeoutMs) && options.timeoutMs > 0
@@ -117,6 +120,9 @@ function writePrivateRawArtifact(rawRoot, stdout, stderr) {
 }
 
 function runKimiAuthor(input = {}, options = {}) {
+  if (require('../../scripts/lib/kimi-local-stop').isStopped(input.env || options.env || process.env)) {
+    return publicFailure('precondition_failed', require('../../scripts/lib/kimi-local-stop').REASON);
+  }
   if (!ALLOWED_MODELS.has(input.model)) {
     return publicFailure('precondition_failed', 'kimi_model_must_be_kimi-code_k3');
   }

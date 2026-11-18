@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
 # PM 01M7975S: bash spawn paths. Parent token test-token-A reaches the child as
 # sha256(test-token-A). A declared token seat with no token exits non-zero and the
 # stub is never invoked. An ordinary seat (no flag) is unchanged.

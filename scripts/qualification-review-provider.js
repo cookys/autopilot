@@ -1224,6 +1224,7 @@ function verifyClaudeRuntimeIdentity(stdoutText, declared) {
 // install path): an exam that resolves the binary differently from the
 // dispatcher would be grading a different installation than the one that ships.
 function resolveCliBin(kind) {
+  if (kind === 'kimi' && require('./lib/kimi-local-stop').isStopped()) throw new Error(require('./lib/kimi-local-stop').REASON);
   if (process.env.QRP_CLI_BIN) return process.env.QRP_CLI_BIN;
   if (kind !== 'kimi') return kind;
   const fs = require('fs');
@@ -1364,6 +1365,7 @@ async function callCli(kind, bin, model, effort, timeoutMs, prompt) {
 }
 
 function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
+  if (kind === 'kimi' && require('./lib/kimi-local-stop').isStopped()) throw new Error(require('./lib/kimi-local-stop').REASON);
   const { spawn } = require('child_process');
   const fs = require('fs');
   const os = require('os');
@@ -1992,6 +1994,9 @@ async function main() {
     fail(error.message);
   }
   const cliKind = process.env.QRP_CLI_KIND;
+  if (transport === 'cli' && cliKind === 'kimi' && require('./lib/kimi-local-stop').isStopped()) {
+    fail(require('./lib/kimi-local-stop').REASON);
+  }
   if (!['http', 'cli'].includes(transport)) {
     fail(`QRP_TRANSPORT must be http or cli (got: ${transport})`);
   }

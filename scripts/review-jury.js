@@ -165,6 +165,7 @@ function onPath(bin) {
 }
 
 function runnerFound(seat) {
+  if (seat.bin === 'kimi' && require('./lib/kimi-local-stop').isStopped()) return false;
   if (onPath(seat.bin)) return true;
   if (seat.bin === 'kimi') {
     try { fs.accessSync(path.join(os.homedir(), '.kimi-code', 'bin', 'kimi'), fs.constants.X_OK); return true; } catch { return false; }

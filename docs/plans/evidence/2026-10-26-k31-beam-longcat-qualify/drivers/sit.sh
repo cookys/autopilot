@@ -5,6 +5,9 @@
 set -uo pipefail
 LANE="${1:?lane}"; ROLE="${2:?role}"; MODE="${3:---write}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$LANE" = k31 ]; then
+  node "$HERE/../../../../../scripts/lib/kimi-local-stop.js" check || exit $?
+fi
 AP=/home/cookys/projects/autopilot; LP=/home/cookys/projects/llm-playground
 D="$HERE/out/$LANE-$ROLE"; mkdir -p "$D"; LOG="$D/intake.log"
 case "$LANE" in

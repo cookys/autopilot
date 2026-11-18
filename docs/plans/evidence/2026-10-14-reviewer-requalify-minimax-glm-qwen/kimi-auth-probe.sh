@@ -2,6 +2,7 @@
 # kimi-auth-probe.sh — one tiny prompt through the STAGED kimi home (never the real ~/.kimi-code writes sessions).
 # Re-seeds credentials from the real home (read-only), then asks for PONG. exit 0 = usable, 3 = credential unusable.
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+node "$REPO/scripts/lib/kimi-local-stop.js" check || exit $?
 source "$REPO/scripts/lib/qualify-stage-credentials.sh"
 ROOT="$HOME/.autopilot/qualify-staging/reviewer-kimi-k3"; H="$ROOT/kimi-home"; KD="$H/.kimi-code"
 mkdir -p "$KD/credentials" "$KD/oauth"; chmod 700 "$ROOT" "$H" "$KD" "$KD/credentials" "$KD/oauth" 2>/dev/null || true

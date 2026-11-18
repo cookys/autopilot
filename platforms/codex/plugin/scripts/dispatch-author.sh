@@ -1007,6 +1007,7 @@ if [ "$RUNNER" = "agy" ]; then
 fi
 
 if [ "$RUNNER" = "kimi" ]; then
+  _kimi_stop="$(node "$_AUTHOR_SELF_DIR/lib/kimi-local-stop.js" check 2>&1)" || die_precondition "$_kimi_stop"
   KIMI_BIN="$(runner_bin_fallback "${BIN:-kimi}")"
   command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN"
   # The adapter (src/runners/kimi.js) spawns `kimi` by name. When the fallback found it off PATH

@@ -1450,7 +1450,7 @@ test('pace-roles _disabled: a disabled key with a fresh pace row is never return
   const pools = loadPools();
   const roles = loadRoles();
   assert.deepEqual(roles._disabled, ['kimi', 'minimax']);
-  const run = (r) => { try { return selectEngine({ pace, pools, roles: r, role: 'implementer', checkEndpoint: allEndpointsReady }); } catch (e) { return { error: e.code || e.message }; } };
+  const run = (r) => { try { return selectEngine({ pace, pools, roles: r, role: 'implementer', checkEndpoint: allEndpointsReady, env: { ...process.env, AUTOPILOT_KIMI_LOCAL_ALLOW: '1' } }); } catch (e) { return { error: e.code || e.message }; } };
   const off = run(roles);
   assert.notEqual(off.engine, 'kimi', JSON.stringify(off));
   const on = run({ ...roles, _disabled: [] });

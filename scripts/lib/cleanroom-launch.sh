@@ -125,6 +125,12 @@ done
 case "$PROFILE" in
   kimi|agy) RUNNER="$PROFILE" ;;
 esac
+if [ "$RUNNER" = "kimi" ]; then
+  _kimi_stop="$(node "$_SELF/kimi-local-stop.js" check 2>&1)" || {
+    printf '{ "schema_version": 1, "artifact_type": "cleanroom_launch", "profile": "kimi", "runner": "kimi", "exit_status": 3, "timed_out": false, "seat_root_removed": false, "seat_root": "", "error": "%s" }\n' "$(json_escape "$_kimi_stop")"
+    exit 3
+  }
+fi
 if [ -n "$KIMI_EFFORT" ]; then
   [ "$RUNNER" = "kimi" ] || usage_die "--kimi-effort applies to --profile kimi only"
   case "$KIMI_EFFORT" in low|high|max) ;; *) usage_die "--kimi-effort must be low|high|max (got: $KIMI_EFFORT)" ;; esac

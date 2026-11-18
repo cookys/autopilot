@@ -315,6 +315,7 @@ fi
 exit 0
 STUB
 chmod +x "$FAKE_BIN_DIR/kimi"
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1 # These cases intentionally seat the fake Kimi.
 
 write_scorecard_row "kimi-engine" "kimi" "high" 10.0 "qualified" 601 "reviewer"
 
@@ -402,6 +403,7 @@ SCRIPT_UNDER_TEST="$TEST_TMP/mut-nokimi/scripts/resolve-dispatch-topology.js" th
 assert_contains "$(seat_summary "$TOPOLOGY_OUT" reviewer_ladder)" "kimi-code/k3.1-pro" "Case 8b NC: without panel eligibility the kimi seat is still in reviewer_ladder"
 assert_not_contains "$(seat_summary "$TOPOLOGY_OUT" plan_review_panel)" "kimi-code/k3.1-pro" "Case 8b NC: but the panel loses it"
 rm -f "$FAKE_BIN_DIR/claude"
+unset AUTOPILOT_KIMI_LOCAL_ALLOW
 
 # -----------------------------------------------------------------------------
 # Case 9: --exclude-seats removes seat from every list and panel

@@ -52,6 +52,10 @@ function findUnknownRungs(doc, known, retired) {
     if (!Array.isArray(doc[list])) continue;
     doc[list].forEach((r, index) => {
       const runner = r && r.runner;
+      if (runner === 'kimi' && require('./kimi-local-stop').isStopped()) {
+        found.push({ list, index, spec: specOf(r), runner, why: 'kimi_local_stopped' });
+        return;
+      }
       if (typeof runner !== 'string' || known.has(runner)) return;
       found.push({ list, index, spec: specOf(r), runner, why: Object.prototype.hasOwnProperty.call(retired, runner) ? 'retired' : 'unknown' });
     });

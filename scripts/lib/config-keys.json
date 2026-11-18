@@ -1520,6 +1520,17 @@
       "note": "Path of the claude binary profile-health.js runs `auth status --json` with (default: claude on PATH). Tests point it at a stub."
     },
     {
+      "name": "AUTOPILOT_KIMI_LOCAL_ALLOW",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/lib/kimi-local-stop.js"],
+      "doc": null,
+      "relates": [],
+      "summary": "Test-only bypass of the local Kimi stop; must never be set in production."
+    },
+    {
       "name": "AUTOPILOT_TEST_CN_GATE_OFF",
       "kind": "env",
       "audience": "internal",

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
+export AUTOPILOT_TEST_CN_GATE_OFF=1  # Fake Kimi fixtures carry no dispatch Size/Role/Scope.
 # --role-kit <dir> on the kimi arm of dispatch-author. No model call: `kimi` is a stub (FAKE only) that records its argv, env,
 # cwd and a copy of the --agent-file it was handed (the rail deletes its own copy after the run).
 #  (a) no kit      -> kimi argv is exactly --model/--prompt/--output-format; argv, env and cwd are byte-identical to the

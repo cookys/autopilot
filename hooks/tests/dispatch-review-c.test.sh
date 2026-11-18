@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export AUTOPILOT_KIMI_LOCAL_ALLOW=1  # Test-only: this suite uses fake Kimi binaries.
 export AUTOPILOT_TEST_CN_GATE_OFF=1  # cn-model gate: sentinel dispatch tests carry no Size/Role/Scope
 # dispatch-review.sh test, shard c (split from dispatch-review.test.sh for wall time).
 . "$(dirname "$0")/lib.sh"

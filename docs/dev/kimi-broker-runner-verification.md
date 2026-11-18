@@ -107,3 +107,9 @@ The new suite is executable on disk; Git mode must be 100755 at staging. The Cur
 - The exact wire protocol has no effort field. Broker deployment owns effort; explicit local `--kimi-bin` retains its legacy environment control and argv byte guard. Existing parser validation remains; no extra wire key or invented effort mapping was added.
 - Explicit author/reviewer/qualification/version and live-spend local transports remain outside this implementer change. Existing qualification, role and CN gates remain authoritative.
 - No version bump, release, push, merge, deployment or credential rotation. Independent review by another model family remains the caller's gate; no cross-family reviewer verdict is asserted here.
+
+## Live broker availability (2026-11-18)
+
+- The shared kimi broker socket `/srv/kimi-broker/sock` went live at 19:02 Taipei time; hangar test run `6076788e4c9c`.
+- The socket directory is group `lanegit` (mode 2750), so a dispatching shell must carry that group (`sg lanegit -c ...`); without it the availability check reports the broker as absent and kimi is not selected.
+- The local kimi CLI stays stopped (`scripts/lib/kimi-local-stop.js`); only implementer jobs sent through the broker are admitted.

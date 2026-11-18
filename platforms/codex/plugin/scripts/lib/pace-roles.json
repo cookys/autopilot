@@ -18,7 +18,8 @@
     "agyclaude",
     "codex",
     "grok",
-    "kimi"
+    "kimi",
+    "cursor"
   ],
   "author": [
     "agy",
@@ -89,6 +90,12 @@
     }
   },
   "pools": {
+    "cursor": {
+      "key": "cursor",
+      "runner": "cursor",
+      "model": "composer-2.5",
+      "max_parallel": 1
+    },
     "codex A": {
       "key": "codex",
       "runner": "codex",

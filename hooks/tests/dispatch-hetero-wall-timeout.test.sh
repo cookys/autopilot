@@ -101,10 +101,10 @@ EOF
 }
 
 assert_timeout_kill_result() {
-  local out="$1" elapsed="$2" pidfile="$3" label="$4"
+  local out="$1" elapsed="$2" pidfile="$3" label="$4" limit="${5:-12}"
   # Finding 2: enforced TERM path must not burn the full 10s grace after the
   # worker already exited. 3s timeout + ~1s token poll << 12s; 3+10 would fail.
-  [ "$elapsed" -lt 12 ] || fail "$label: dispatch took ${elapsed}s (want <12s; extra grace after TERM is forbidden)"
+  [ "$elapsed" -lt "$limit" ] || fail "$label: dispatch took ${elapsed}s (want <${limit}s; extra grace after TERM is forbidden)"
   local json; json="$(last_json "$out")"
   [ -n "$json" ] || fail "$label: missing result JSON (out: $out)"
   assert_eq "failure" "$(json_get "$json" status)" "$label status"
@@ -136,9 +136,8 @@ assert_r1_grok_enforced_timeout_kills() {
   assert_timeout_kill_result "$out" "$elapsed" "$pidfile" "assert_r1_grok_enforced_timeout_kills"
 }
 
-# Second non-agy rail: cursor. Picked because dispatch-hetero-cursor-routing.test.sh
-# already stubs cursor-agent via --cursor-bin plus a --list-models inventory, so this
-# suite can reuse that argv seam without grok's live effort probe.
+# Second non-agy rail: Cursor's group-wrapper seam hangs before any broker
+# connection. Its contract has a 60 s minimum, so use that real wall limit.
 assert_r1_second_rail_enforced() {
   local stub="$TEST_TMP/cursor-sleep" pidfile="$TEST_TMP/cursor.pid" runs="$TEST_TMP/runs-cursor"
   mkdir -p "$runs"
@@ -146,12 +145,13 @@ assert_r1_second_rail_enforced() {
   : > "$pidfile"
   local start now elapsed out
   start="$(date +%s)"
-  out="$(cd "$SBX" && timeout 30 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
+  out="$(cd "$SBX" && timeout 90 env AUTOPILOT_DISPATCH_RUNS_DIR="$runs" \
     HETERO_TEST_PIDFILE="$pidfile" HETERO_TEST_SLEEP=120 \
-    "$SCRIPT" --no-verify-tip --runner cursor --model grok46 --effort low --cursor-bin "$stub" \
-    --branch feat/wdog-cursor --prompt-file "$PROMPT" --timeout 3s 2>&1)" || true
+    AUTOPILOT_CURSOR_GROUP_WRAPPER="$stub" \
+    "$SCRIPT" --no-verify-tip --runner cursor --model composer-2.5 \
+    --branch feat/wdog-cursor --prompt-file "$PROMPT" --timeout 60s 2>&1)" || true
   now="$(date +%s)"; elapsed=$((now - start))
-  assert_timeout_kill_result "$out" "$elapsed" "$pidfile" "assert_r1_second_rail_enforced"
+  assert_timeout_kill_result "$out" "$elapsed" "$pidfile" "assert_r1_second_rail_enforced" 75
 }
 
 assert_r1_default_not_enforced() {

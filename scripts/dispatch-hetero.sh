@@ -48,13 +48,9 @@
 #                                              #   pi (EXPLICIT only): pi coding agent over RPC
 #                                              #   (duplex supervisor scripts/lib/pi-rpc-run.js;
 #                                              #   provider default minimax via PI_RPC_PROVIDER).
-#                                              #   cursor (EXPLICIT only, never auto — every cursor
-#                                              #   model id contains grok/gpt/codex/claude, so
-#                                              #   auto-selection cannot disambiguate vendor-hosted
-#                                              #   from vendor-native): Cursor CLI (cursor-agent),
-#                                              #   one OAuth login over ~60 models. --model names a
-#                                              #   family alias (grok46|codex53) resolved by
-#                                              #   lib/cursor-model.sh, or a full model id verbatim.
+#                                              #   cursor: shared Unix-socket broker implementer.
+#                                              #   Default composer-2.5; composer models only.
+#                                              #   Pace may select it; the model-name guard remains.
 #       [--pace-role <role>]                   # override the default implementer quota-selection role.
 #                                              #   No named runner/model: pace-select chooses by quota,
 #                                              #   records engine_choice + pace_choice; pace_unknown
@@ -126,17 +122,12 @@
 #       [--codex-bin codex]                    # alternate/pinned codex (test seam; avoids a
 #                                              #   stale codex earlier in PATH lacking the flag)
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
-#       [--cursor-bin cursor-agent]            # alternate/pinned Cursor CLI (test seam)
+#       [--cursor-bin cursor-agent]            # retained legacy option; refused by the broker
 #       [--opencode-bin opencode]              # alternate/pinned OpenCode CLI (test seam)
 #       [--kimi-bin kimi]                      # alternate/pinned Kimi Code CLI (test seam)
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
 #       [--qoder-config-dir <dir>]             # passed as --config-dir only when set
-#       [--cursor-fast]                        # cursor: opt into the `-fast` model-id lane
-#                                              #   (default non-fast). Runner-scoped: any other
-#                                              #   --runner is a die_precondition, same posture as
-#                                              #   --endpoint with a non-cc-shim runner. Also a
-#                                              #   die_precondition together with a --model that
-#                                              #   already names a full id (mapper bypassed there).
+#       [--cursor-fast]                        # retained legacy option; refused by the broker
 #       [--no-campaign]                        # ordinary backlog work outside any campaign.
 #                                              #   Under Mission enforce this admits the dispatch
 #                                              #   and records campaign_scope=none_declared plus
@@ -360,7 +351,7 @@ fi
 # Default is the agy implementer id gemini-4-carbon-low (literal; the flash alias cannot
 # resolve to carbon). agy_resolve_model_alias() echoes a non-alias unchanged and still
 # resolves a gemini-flash[-tier] alias against the live inventory. The id is agy-only, so
-# a non-agy runner without --model is refused rather than handed it (see MODEL_IS_DEFAULT).
+# a non-agy runner without --model is refused (Cursor has its own broker default).
 MODEL="gemini-4-carbon-low"
 MODEL_IS_DEFAULT=1
 BASE="develop"
@@ -520,7 +511,10 @@ PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so the INT/TERM trap and detach declare -p can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
-CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
+CURSOR_TIMEOUT_S=""
+CURSOR_BROKER_RESULT=""
+CURSOR_BROKER_VERDICT=""
+CURSOR_BROKER_REASON=""
 OPENCODE_VER=""  # opencode --version line, read once at the pre-spend gate (declare -p carries it to the detached child)
 OPENCODE_PROMPT_FILE=""  # opencode combined prompt temp; init early so it is SET for the detach declare -p
 KIMI_PROMPT_FILE=""    # kimi combined prompt temp; init early so it is SET for the detach declare -p
@@ -1121,7 +1115,6 @@ NODE
       [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
       [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
       [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
-      [ "${IS_CURSOR:-0}" -eq 1 ] && log_format="jsonl"
       usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
     fi
     case "$usage_json" in
@@ -1256,6 +1249,18 @@ NODE
   if [ -n "${TIP_VERIFY_RESULT_JSON:-}" ]; then
     tip_verify_fields=", \"tip_verify\": ${TIP_VERIFY_RESULT_JSON}"
   fi
+  local broker_fields=""
+  if [ -n "${CURSOR_BROKER_RESULT:-}" ] && [ -f "$CURSOR_BROKER_RESULT" ]; then
+    broker_fields="$(node - "$CURSOR_BROKER_RESULT" <<'NODE'
+const fs = require('fs'), crypto = require('crypto');
+const r = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const fields = { broker_run_id: r.run_id, broker_diff_sha16: crypto.createHash('sha256').update(r.diff).digest('hex').slice(0, 16) };
+if (r.verdict !== 'done') fields.reason = r.verdict === 'stopped_billing' ? 'cursor_stopped_billing' : r.reason;
+process.stdout.write(', ' + JSON.stringify(fields).slice(1, -1));
+NODE
+    )"
+  fi
+  tip_verify_fields="$tip_verify_fields$broker_fields"
   hetero_log_fallback "$1"
   local _emit_json
   _emit_json="$(printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "num_turns": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s%s%s%s }\n' \
@@ -2926,8 +2931,7 @@ set_runner_flags() {
     grok)    IS_GROK=1 ;;
     cc-shim) IS_CCSHIM=1; declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
     pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
-    cursor)  IS_CURSOR=1 ;;    # Cursor CLI (cursor-agent). EXPLICIT only, never auto — see the
-                               # auto-branch fail-closed guard below (R-1).
+    cursor)  IS_CURSOR=1 ;;    # Shared broker; model-name guard stays below.
     opencode) IS_OPENCODE=1 ;; # OpenCode CLI (`opencode run`). EXPLICIT only, never auto: its
                                # model ids are provider/model (opencode-go/…, opencode/…) with no
                                # vendor family to match on; the provider prefix is the route.
@@ -3250,22 +3254,17 @@ if [ "$CURSOR_FAST" -eq 1 ]; then
   [ "$IS_CURSOR" -eq 1 ] || die_precondition "--cursor-fast applies only to --runner cursor (got runner: $RUNNER)"
 fi
 
-# --- cursor effort resolution (post-parse): a family alias (grok46|codex53) is resolved
-# to a full model id via lib/cursor-model.sh; a full id already supplied passes through
-# untouched, and --cursor-fast against a full id is a die_precondition (the mapper is
-# bypassed on that path, so the flag would otherwise be silently ignored).
-# The alias test uses cursor_is_family_alias (lib/cursor-model.sh's single source of
-# truth over _CURSOR_FAMILIES) rather than a literal `grok46|codex53` case pattern here:
-# a family added to _CURSOR_FAMILIES and not to a hand-restated pattern would silently
-# fall through as an already-full id instead of being resolved. ---
+# Broker implementers accept composer ids only. Legacy CLI options still have
+# repository consumers, so retain parsing but refuse them rather than ignoring.
 if [ "$IS_CURSOR" -eq 1 ]; then
-  if cursor_is_family_alias "$MODEL"; then
-    MODEL="$(cursor_model_for "$CURSOR_BIN" "$MODEL" "$EFFORT" "$CURSOR_FAST")" \
-      || die_precondition "cursor model resolution failed for family '$MODEL' effort '$EFFORT'"
-  else
-    [ "$CURSOR_FAST" -eq 1 ] \
-      && die_precondition "--cursor-fast applies only when --model names a family alias; pass the -fast id directly"
-  fi
+  [ "$MODEL_IS_DEFAULT" -eq 0 ] || MODEL="$(cursor_broker_default_model)"
+  MODEL_IS_DEFAULT=0
+  cursor_is_broker_model "$MODEL" || die_precondition "cursor broker requires a composer model (default $(cursor_broker_default_model)); got '$MODEL'"
+  [ "$CURSOR_FAST" -eq 0 ] || die_precondition "--cursor-fast is unavailable on the cursor broker"
+  [ "$BIN_FLAG_CURSOR" -eq 0 ] || die_precondition "--cursor-bin is unavailable on the cursor broker; use AUTOPILOT_CURSOR_GROUP_WRAPPER for tests"
+  CURSOR_TIMEOUT_S="$(normalize_timeout_seconds "$TIMEOUT")" || die_precondition "invalid cursor broker timeout"
+  [[ "$CURSOR_TIMEOUT_S" =~ ^[0-9]+$ ]] && [ "$CURSOR_TIMEOUT_S" -ge 60 ] && [ "$CURSOR_TIMEOUT_S" -le 3600 ] \
+    || die_precondition "cursor broker timeout must be 60-3600 seconds"
 fi
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
@@ -3406,7 +3405,7 @@ elif [ "$IS_GROK" -eq 1 ]; then
   GROK_BIN="$(runner_bin_fallback "$GROK_BIN")"
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN (install xAI Grok Build CLI or pass --grok-bin)"
 elif [ "$IS_CURSOR" -eq 1 ]; then
-  command -v "$CURSOR_BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $CURSOR_BIN (install Cursor CLI or pass --cursor-bin)"
+  command -v "${AUTOPILOT_CURSOR_GROUP_WRAPPER:-sg}" >/dev/null 2>&1 || die_precondition "cursor broker group wrapper not found"
 elif [ "$IS_OPENCODE" -eq 1 ]; then
   command -v "$OPENCODE_BIN" >/dev/null 2>&1 || die_precondition "opencode binary not found: $OPENCODE_BIN (install OpenCode CLI or pass --opencode-bin)"
   # The ONE `--version` run of this call (lib/opencode-containment.js picks the v1 or v2 adaptor from
@@ -4455,6 +4454,12 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
 fi
 
+# Count the final packed prompt plus the exact directive before creating a worktree.
+if [ "$IS_CURSOR" -eq 1 ]; then
+  _cursor_prompt_check="$(node -e 'require(process.argv[1]).readPrompt(process.argv[2])' "$SELF_DIR/lib/cursor-broker-client.js" "$PROMPT_FILE" 2>&1)" \
+    || die_precondition "$_cursor_prompt_check"
+fi
+
 if [ "$WORKTREE_REUSED" -eq 0 ]; then
   # Disk guard (build-artifact-reap): sweeps idle declared build output, then refuses on a nearly full
   # disk, before any record, branch or worktree exists. Only exit 3 refuses; a guard crash degrades.
@@ -4676,7 +4681,6 @@ abort_dispatch() {
   [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
-  [ -n "$CURSOR_PROMPT_FILE" ] && rm -f "$CURSOR_PROMPT_FILE"
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
@@ -5560,29 +5564,20 @@ elif [ "$IS_KIMI" -eq 1 ]; then
   # Part 3: kimi has no usage command; its result is the quota signal (429 -> exhausted + reset, clean -> available).
   node "$SELF_DIR/lib/kimi-quota-observe.js" observe --rc "${AGENT_EXIT:-0}" --log-file "$LOG" >/dev/null 2>&1 || true
 elif [ "$IS_CURSOR" -eq 1 ]; then
-  # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see
-  # docs/plans/2026-08-26-cursor-cli-adaptor.md §0.1:
-  #   P4/P5 cwd AND --workspace anchor edits → no agy-style absolute-path anchor.
-  #   P6 edit-only by default → wrapper commits, same rail as grok.
-  #   P3 --trust is MANDATORY headlessly. P8 -f auto-approves tools. P7 -p reads stdin.
-  #   P12 effort is the MODEL ID, not a flag — do NOT add --reasoning-effort.
-  CURSOR_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
-Make ONLY the file edits the task requires, in the current working directory. Do NOT
-git commit, git push, or open a PR — the harness commits your edits and a separate review
-verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
-===
-
-"
-  # Feed the prompt via STDIN (P7), NOT a positional argv arg: a large task prompt as one
-  # arg can hit ARG_MAX before cursor-agent runs. --workspace anchors edits at the real
-  # worktree (P4/P5), so no agy-style absolute-path anchor is needed. Same edit-only +
-  # wrapper-commit rail as grok.
-  CURSOR_PROMPT_FILE="$(mktemp -t dispatch-hetero-cursor-prompt-XXXXXX)"
-  printf '%s' "${CURSOR_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CURSOR_PROMPT_FILE"
-  run_worker bash -c 'cd "$1" && exec "$2" -p --trust --force --workspace "$1" \
-      --model "$4" --output-format stream-json < "$3"' \
-      _ "$WT" "$CURSOR_BIN" "$CURSOR_PROMPT_FILE" "$MODEL"
-  rm -f "$CURSOR_PROMPT_FILE"
+  # All shared-clone/socket operations go through this single replaceable seam.
+  CURSOR_BROKER_RESULT="$LOG.cursor-broker.json"
+  local cursor_group_cmd
+  printf -v cursor_group_cmd '%q ' "$(command -v node)" "$SELF_DIR/lib/cursor-broker-run.js" \
+    "$WT" "$PROMPT_FILE" "$MODEL" "$CURSOR_TIMEOUT_S" "$DISPATCH_RUN_ID" "$CURSOR_BROKER_RESULT"
+  run_worker "${AUTOPILOT_CURSOR_GROUP_WRAPPER:-sg}" lanegit -c "$cursor_group_cmd"
+  if [ -f "$CURSOR_BROKER_RESULT" ]; then
+    CURSOR_BROKER_VERDICT="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).verdict)' "$CURSOR_BROKER_RESULT")"
+    CURSOR_BROKER_REASON="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).reason)' "$CURSOR_BROKER_RESULT")"
+    [ "$CURSOR_BROKER_VERDICT" != timeout ] || WORKER_TIMED_OUT=1
+    if [ "$CURSOR_BROKER_VERDICT" != done ] || [ "${AGENT_EXIT:-1}" -eq 0 ]; then
+      node "$SELF_DIR/lib/cursor-quota-observe.js" "$CURSOR_BROKER_VERDICT" >/dev/null 2>&1 || true
+    fi
+  fi
 elif [ "$IS_PI" -eq 1 ]; then
   # Directive channel (Phase 2): forward the R0 ledger coords to the supervisor so a
   # depth-0 `directive-send` actually DELIVERS mid-run on the production pi path (the
@@ -6786,6 +6781,13 @@ classify_outcome() {
     OUTCOME_EXIT=1
     OUTCOME_ERR="wall timeout (${__wt_secs}s) exceeded — worker terminated"
   fi
+  if [ "${IS_CURSOR:-0}" -eq 1 ] && { [ "${AGENT_EXIT:-0}" -ne 0 ] || [ "${CURSOR_BROKER_VERDICT:-done}" != done ]; }; then
+    if [ "${WORKER_TIMED_OUT:-0}" -ne 1 ]; then
+      OUTCOME_STATUS="failed"; OUTCOME_EXIT=1
+      OUTCOME_ERR="${CURSOR_BROKER_REASON:-cursor broker failed}"
+      [ "${CURSOR_BROKER_VERDICT:-}" != stopped_billing ] || OUTCOME_ERR="cursor_stopped_billing"
+    fi
+  fi
   # After engine_unavailable and wall-timeout overrides, so only a run that
   # stays question_suspected emits. Still before any terminal stage-transition.
   _emit_question_waiting_event || true
@@ -6943,7 +6945,8 @@ dispatch_detached_run() {
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN CURSOR_BIN OPENCODE_BIN OPENCODE_VER KIMI_BIN QODER_BIN QODER_CONFIG_DIR KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER ENDPOINT PACE_ROLE ENGINE_CHOICE_JSON PACE_CHOICE_JSON EFFORT CLAUDE_EFFORT_ARG \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_CURSOR IS_OPENCODE IS_KIMI IS_QODER IS_CNATIVE CNATIVE_CONFIG_DIR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT GITCONFIG_SNAPSHOT_FILE GITCONFIG_DRIFT_KEYS EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE CURSOR_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
+      CURSOR_TIMEOUT_S CURSOR_BROKER_RESULT CURSOR_BROKER_VERDICT CURSOR_BROKER_REASON \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID WORKER_FALLBACK_PGID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE OPENCODE_PROMPT_FILE KIMI_PROMPT_FILE QODER_PROMPT_FILE KIMI_EDIT_ONLY \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON CCSHIM_ENVELOPE \
       PROVIDER_ERROR_RUNNER PROVIDER_ERROR_STATUS PROVIDER_ERROR_FIELD \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

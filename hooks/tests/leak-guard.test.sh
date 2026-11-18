@@ -11,11 +11,14 @@ USERSDIR="/Us""ers"
 PERSONAL="$HOMEDIR/someone/proj"
 TMPCL="/tmp/claude-""1000/scratch"
 RUNUSER="/run/user/""1000/x"
-HOSTA="cu""da"
+HOSTA="test""word"
 SK="sk-""$(printf 'A%.0s' $(seq 1 24))"
 GHP="ghp_""$(printf 'b%.0s' $(seq 1 36))"
 REG="$TEST_TMP/registry.json"
 printf '{"version":1,"entries":[]}\n' > "$REG"
+HOSTS_FILE="$TEST_TMP/hosts.json"
+printf '{"strong":["testhost-a","testhost-b"],"contextual":["%s"]}\n' "$HOSTA" > "$HOSTS_FILE"
+export AUTOPILOT_LEAK_GUARD_HOSTS="$HOSTS_FILE"
 
 export GIT_AUTHOR_NAME=lg GIT_AUTHOR_EMAIL=lg@example.com GIT_COMMITTER_NAME=lg GIT_COMMITTER_EMAIL=lg@example.com
 R="$TEST_TMP/repo"
@@ -141,12 +144,12 @@ chk 1 "ssh host context" "ssh $HOSTA uptime"
 chk 1 "host: label" "$HOSTA: busy"
 chk 1 "/host/ segment" "dev/$HOSTA/x"
 chk 0 "GPU device name" "torch.device('$HOSTA:0')"
-chk 0 "GPU word upper" "CUDA toolkit"
-chk 0 "GPU toolkit path" "/usr/local/$HOSTA/lib"
+chk 0 "contextual word upper" "TESTWORD toolkit"
+chk 0 "usr local path" "/usr/local/$HOSTA/lib"
 chk 0 "bare ordinary word" "the $HOSTA toolkit is great"
 
 # ── NC5: new categories — email, composite host, flattened home, runtime ids (each red, with a green twin) ──
-MAIL="al""ice@corp""mail.org"
+MAIL="user@""example.invalid"
 printf 'contact %s\n' "$MAIL" > "$R/src/m.txt"; git -C "$R" add -A
 OUT="$(guard)"; assert_eq "$?" "1" "NC5a: a personal e-mail address is red"
 assert_contains "$OUT" "[email]" "NC5a: names email"
@@ -154,9 +157,9 @@ reset_stage
 for ok in "noreply@anthr""opic.com" "bob@example.com" "bob@example.org" "bob@example.net"; do
   chk 0 "allowed e-mail $ok" "mail $ok"
 done
-chk 1 "other noreply is not allowed" "mail noreply@corp""mail.org"
-chk 1 "composite host token" "on cookys-7840""hs today"
-chk 1 "composite host token, any prefix" "on lab-itx-""win-box"
+chk 1 "other noreply is not allowed" "mail noreply@""example.invalid"
+chk 1 "composite host token" "on cookys-testhost-a today"
+chk 1 "composite host token, any prefix" "on lab-testhost-b-box"
 chk 1 "flattened home dir" "dir -ho""me-alice-projects-x"
 chk 1 "flattened Users dir" "dir -Us""ers-alice-projects-x"
 chk 0 "flattened placeholder" "dir -ho""me-<user>-projects-x"
@@ -164,13 +167,13 @@ chk 1 "tmp/claude-1234" "see /tmp/claude-""1234"
 chk 0 "tmp/claude-<uid> placeholder" "see /tmp/claude-<uid>/x"
 chk 0 "run/user/<uid> placeholder" "see /run/user/<uid>/x"
 RC5="$TEST_TMP/rc5"; mkdir -p "$RC5"
-CH="cookys-7840""hs"; FH="-ho""me-alice-projects-x"; TC="/tmp/claude-""1234/y"; RU="/run/user/""1234/z"
+CH="cookys-testhost-a"; FH="-ho""me-alice-projects-x"; TC="/tmp/claude-""1234/y"; RU="/run/user/""1234/z"
 NR="noreply@anthr""opic.com"
 printf 'a %s\nb %s\nc %s\nd %s\ne %s\nf %s\n' "$MAIL" "$CH" "$FH" "$TC" "$RU" "$NR" > "$RC5/in.md"
 node "$REDACT" "$RC5/in.md" >/dev/null 2>&1; assert_eq "$?" "0" "NC5 redact: write mode exits 0"
 assert_eq "$(cat "$RC5/in.md")" "$(printf 'a <email>\nb <host>\nc -home-<user>-projects-x\nd /tmp/claude-<uid>/y\ne /run/user/<uid>/z\nf %s' "$NR")" "NC5 redact: output is exactly the expected placeholders"
 # NC6: two distinct hosts on one line are lettered in order; a repeat reuses its letter; one host stays <host>
-H1="cookys-7840""hs"; H2="itx-""win"
+H1="cookys-testhost-a"; H2="testhost-b"
 printf 'x %s and %s then %s again\ny only %s\n' "$H1" "$H2" "$H1" "$H2" > "$RC5/mh.md"
 node "$REDACT" "$RC5/mh.md" >/dev/null 2>&1; assert_eq "$?" "0" "NC6 redact: multi-host write mode exits 0"
 assert_eq "$(cat "$RC5/mh.md")" "$(printf 'x <host-a> and <host-b> then <host-a> again\ny only <host>')" "NC6 redact: distinct hosts on one line are lettered; single host stays <host>"
@@ -235,7 +238,7 @@ redaction_ok() { # redaction_ok <lib dir>  -> prints OK or FAIL
 }
 assert_eq "$(redaction_ok "$REPO_ROOT/scripts/lib")" "OK" "redact mutation: real lib passes the redaction check"
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT/scripts/lib" "$MUT/hooks/_shared"
-cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$REPO_ROOT"/scripts/lib/personal-data-redact.js "$REPO_ROOT"/scripts/lib/leak-guard-hosts.json "$MUT/scripts/lib/"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$REPO_ROOT"/scripts/lib/personal-data-redact.js "$MUT/scripts/lib/"
 cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT/hooks/_shared/"
 node -e '
   const fs = require("fs"); const f = process.argv[1];
@@ -292,7 +295,7 @@ hostword_ok() { # hostword_ok <lib dir> -> OK | FAIL
 }
 assert_eq "$(hostword_ok "$REPO_ROOT/scripts/lib")" "OK" "hostname word: plain-word local host is context-only, a distinctive one (digit/hyphen) stays strong"
 MUT2="$TEST_TMP/mut2"; mkdir -p "$MUT2/scripts/lib" "$MUT2/hooks/_shared"
-cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$REPO_ROOT"/scripts/lib/leak-guard-hosts.json "$MUT2/scripts/lib/"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$MUT2/scripts/lib/"
 cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT2/hooks/_shared/"
 node -e '
   const fs = require("fs"); const f = process.argv[1];
@@ -325,7 +328,7 @@ git -C "$R" reset -q --hard "$BASE"; git -C "$R" clean -qfd
 
 # ── BL-0348 item 6: a failing registry check must exit (fail() is not swallowed) ──
 MUT3="$TEST_TMP/mut3"; mkdir -p "$MUT3/scripts/lib" "$MUT3/hooks/_shared"
-cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$REPO_ROOT"/scripts/lib/leak-guard-hosts.json "$MUT3/scripts/lib/"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$MUT3/scripts/lib/"
 cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT3/hooks/_shared/"
 node -e '
   const fs = require("fs"); const s = fs.readFileSync(process.argv[1], "utf8");
@@ -343,7 +346,7 @@ reset_stage
 # ── BL-0348 item 7: more than 26 distinct hosts on one line get unique letter labels ──
 MH="$RC5/many.md"
 node -e '
-  const hs = []; for (let i = 0; i < 28; i++) hs.push("p" + i + "-7840" + "hs");
+  const hs = []; for (let i = 0; i < 28; i++) hs.push("p" + i + "-testhost-a");
   require("fs").writeFileSync(process.argv[1], "x " + hs.join(" ") + "\n");
 ' "$MH"
 node "$REDACT" "$MH" >/dev/null 2>&1; assert_eq "$?" "0" "host letters: 28-host line redacts"
@@ -542,7 +545,6 @@ ZERO="$(printf '%040d' 0)"
 mkdir -p "$LP/scripts/lib" "$LP/hooks/_shared"
 cp "$REPO_ROOT/scripts/leak-guard.js" "$LP/scripts/leak-guard.js"
 cp "$REPO_ROOT/scripts/lib/personal-data-patterns.js" "$LP/scripts/lib/personal-data-patterns.js"
-cp "$REPO_ROOT/scripts/lib/leak-guard-hosts.json" "$LP/scripts/lib/leak-guard-hosts.json"
 cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$LP/hooks/_shared/secret-patterns.js"
 printf '{"version":1,"entries":[]}\n' > "$LP/scripts/leak-guard-registry.json"
 assert_neq "$TAG" "$PUB" "push-tag: annotated tag object is not the commit"
@@ -642,7 +644,6 @@ git -C "$LR" config commit.gpgsign false
 mkdir -p "$LR/src" "$LR/scripts/lib" "$LR/hooks/_shared"
 cp "$REPO_ROOT/scripts/leak-guard.js" "$LR/scripts/leak-guard.js"
 cp "$REPO_ROOT/scripts/lib/personal-data-patterns.js" "$LR/scripts/lib/personal-data-patterns.js"
-cp "$REPO_ROOT/scripts/lib/leak-guard-hosts.json" "$LR/scripts/lib/leak-guard-hosts.json"
 cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$LR/hooks/_shared/secret-patterns.js"
 printf '{"version":1,"entries":[]}\n' > "$LR/scripts/leak-guard-registry.json"
 printf 'root %s/r\n' "$PERSONAL" > "$LR/src/rootleak.txt"
@@ -674,5 +675,335 @@ LG_PUSH_RC=$?
 assert_eq "$LG_PUSH_RC" "0" "push-root twin: a clean root commit pushed to an empty remote passes"
 assert_not_contains "$LG_PUSH_OUT" "blocked" "push-root twin: a clean root is not blocked"
 assert_not_contains "$LG_PUSH_OUT" "rootleak.txt" "push-root twin: the other root's leak is not scanned"
+
+# ── Part 1: per-user host deny list leaves the tracked tree ──
+assert_eq "$([ ! -e "$REPO_ROOT/scripts/lib/leak-guard-hosts.json" ] && echo absent || echo present)" "absent" "hosts-file: tracked scripts/lib/leak-guard-hosts.json is deleted"
+assert_eq "$([ ! -e "$REPO_ROOT/platforms/codex/plugin/scripts/lib/leak-guard-hosts.json" ] && echo absent || echo present)" "absent" "hosts-file: codex mirror leak-guard-hosts.json is deleted"
+assert_eq "$([ -f "$REPO_ROOT/scripts/lib/leak-guard-hosts.example.json" ] && echo present || echo absent)" "present" "hosts-file: leak-guard-hosts.example.json exists"
+
+# Missing file at default ~/.autopilot/leak-guard-hosts.json: runs with local hostname only + 1 stderr line (not an error)
+reset_stage
+printf 'on testhost-a today\n' > "$R/src/h.txt"; git -C "$R" add src/h.txt
+MISS_ERR="$TEST_TMP/miss.err"
+MISS_OUT="$(cd "$R" && env -u AUTOPILOT_LEAK_GUARD_HOSTS HOME="$TEST_TMP/empty-home" node "$GUARD" --staged --registry "$REG" --json 2>"$MISS_ERR")"
+MISS_RC=$?
+assert_eq "$MISS_RC" "0" "hosts-file missing: default path absent exits 0 (not an error)"
+assert_contains "$(cat "$MISS_ERR")" "$TEST_TMP/empty-home/.autopilot/leak-guard-hosts.json" "hosts-file missing: stderr names the expected default path"
+assert_eq "$(wc -l < "$MISS_ERR" | tr -d ' ')" "1" "hosts-file missing: prints exactly one stderr line"
+# Local hostname still matches when host file is absent
+LOCAL_MISS="$(env -u AUTOPILOT_LEAK_GUARD_HOSTS HOME="$TEST_TMP/empty-home" node -e '
+  const os = require("os"); os.hostname = () => "localbox-9";
+  const p = require(process.argv[1]);
+  process.stdout.write(String(p.findAll("run on localbox-9 now").length));
+' "$REPO_ROOT/scripts/lib/personal-data-patterns.js" 2>/dev/null)"
+assert_eq "$LOCAL_MISS" "1" "hosts-file missing: local distinctive hostname is still matched"
+# Default ~/.autopilot/leak-guard-hosts.json is read when AUTOPILOT_LEAK_GUARD_HOSTS is unset
+mkdir -p "$TEST_TMP/def-home/.autopilot"
+printf '{"strong":["testhost-a"],"contextual":[]}\n' > "$TEST_TMP/def-home/.autopilot/leak-guard-hosts.json"
+DEF_OUT="$(cd "$R" && env -u AUTOPILOT_LEAK_GUARD_HOSTS HOME="$TEST_TMP/def-home" node "$GUARD" --staged --registry "$REG" 2>&1)"
+DEF_RC=$?
+assert_eq "$DEF_RC" "1" "hosts-file default: ~/.autopilot/leak-guard-hosts.json blocks fake host"
+assert_contains "$DEF_OUT" "[host]" "hosts-file default: reports host category"
+reset_stage
+
+# Unreadable or invalid JSON host list exits 2 (never a pass)
+echo "clean check" >> "$R/src/a.txt"; git -C "$R" add src/a.txt
+printf '{bad-json\n' > "$TEST_TMP/bad-hosts.json"
+BADH_OUT="$(cd "$R" && AUTOPILOT_LEAK_GUARD_HOSTS="$TEST_TMP/bad-hosts.json" node "$GUARD" --staged --registry "$REG" 2>&1)"
+assert_eq "$?" "2" "hosts-file invalid JSON: leak-guard exits 2"
+printf '{"strong":"not-an-array"}\n' > "$TEST_TMP/malformed-hosts.json"
+MALH_OUT="$(cd "$R" && AUTOPILOT_LEAK_GUARD_HOSTS="$TEST_TMP/malformed-hosts.json" node "$GUARD" --staged --registry "$REG" 2>&1)"
+assert_eq "$?" "2" "hosts-file malformed schema: leak-guard exits 2"
+mkdir -p "$TEST_TMP/hosts-as-dir"
+DIRH_OUT="$(cd "$R" && AUTOPILOT_LEAK_GUARD_HOSTS="$TEST_TMP/hosts-as-dir" node "$GUARD" --staged --registry "$REG" 2>&1)"
+assert_eq "$?" "2" "hosts-file unreadable directory: leak-guard exits 2"
+AUTOPILOT_LEAK_GUARD_HOSTS="$TEST_TMP/bad-hosts.json" node "$REDACT" --check "$R/src/a.txt" >/dev/null 2>&1
+assert_eq "$?" "2" "hosts-file invalid JSON: redact-personal exits 2"
+reset_stage
+
+# ── Part 2: leak-guard --tree <rev> [--categories ...] + pre-push full-tree host scan ──
+LT="$TEST_TMP/lgtree"
+git init -q "$LT"
+git -C "$LT" config core.hooksPath /dev/null
+git -C "$LT" config commit.gpgsign false
+mkdir -p "$LT/src" "$LT/evidence" "$LT/docs/plans/evidence/r1" "$LT/scripts/lib" "$LT/hooks/_shared"
+cp "$REPO_ROOT/scripts/leak-guard.js" "$LT/scripts/leak-guard.js"
+cp "$REPO_ROOT/scripts/lib/personal-data-patterns.js" "$LT/scripts/lib/personal-data-patterns.js"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$LT/hooks/_shared/secret-patterns.js"
+printf '{"version":1,"entries":[]}\n' > "$LT/scripts/leak-guard-registry.json"
+
+# Commit 1 (already on remote): old file with fake host name + non-host personal path + binary with host + evidence files with host
+printf 'deployed to testhost-a yesterday\n' > "$LT/src/legacy-host.txt"
+printf 'legacy path %s/x and ip 192.%s.55.4\n' "$PERSONAL" 168 > "$LT/src/legacy-other.txt"
+printf 'bin\0testhost-a\n' > "$LT/src/blob.bin"
+printf 'host testhost-a in top evidence\n' > "$LT/evidence/note.md"
+printf 'host testhost-a in nested evidence\n' > "$LT/docs/plans/evidence/r1/log.md"
+git -C "$LT" add src evidence docs
+git -C "$LT" commit -q -m "old published tree"
+LT_PUB="$(git -C "$LT" rev-parse HEAD)"
+git -C "$LT" update-ref refs/remotes/origin/develop "$LT_PUB"
+
+# Direct --tree CLI checks
+TREE_JSON="$(cd "$LT" && node "$GUARD" --tree "$LT_PUB" --registry "$REG" --json)"
+TREE_RC=$?
+assert_eq "$TREE_RC" "1" "tree-cli: --tree flags fake host in tracked file (exit 1)"
+assert_contains "$TREE_JSON" '"file": "src/legacy-host.txt"' "tree-cli: JSON names src/legacy-host.txt"
+assert_contains "$TREE_JSON" '"category": "host"' "tree-cli: JSON category is host"
+assert_not_contains "$TREE_JSON" "legacy-other.txt" "tree-cli: default --tree ignores home_path and private_ip"
+assert_not_contains "$TREE_JSON" "blob.bin" "tree-cli: binary file is skipped"
+assert_not_contains "$TREE_JSON" "evidence/" "tree-cli: evidence/ directories are excluded"
+
+TREE_MULTI="$(cd "$LT" && node "$GUARD" --tree "$LT_PUB" --categories host,home_path,private_ip --registry "$REG" --json)"
+assert_eq "$?" "1" "tree-cli: --categories host,home_path,private_ip exits 1"
+assert_contains "$TREE_MULTI" '"category": "home_path"' "tree-cli: --categories includes home_path when asked"
+assert_contains "$TREE_MULTI" '"category": "private_ip"' "tree-cli: --categories includes private_ip when asked"
+
+(cd "$LT" && node "$GUARD" --tree "no-such-revision" --registry "$REG" >/dev/null 2>&1)
+assert_eq "$?" "2" "tree-cli: unknown revision exits 2"
+(cd "$LT" && node "$GUARD" --tree "$LT_PUB" --categories not_a_category --registry "$REG" >/dev/null 2>&1)
+assert_eq "$?" "2" "tree-cli: unknown category exits 2"
+(cd "$LT" && node "$GUARD" --staged --tree "$LT_PUB" --registry "$REG" >/dev/null 2>&1)
+assert_eq "$?" "2" "tree-cli: conflicting mode flags exit 2"
+
+# Pre-push RED: pushing a clean commit on top of an old, already-pushed commit whose tree still has testhost-a blocks
+echo "clean work" > "$LT/src/feature.txt"
+git -C "$LT" add src/feature.txt
+git -C "$LT" commit -q -m "clean commit on top"
+LT_NEW="$(git -C "$LT" rev-parse HEAD)"
+LT_PUSH_OUT="$(cd "$LT" && printf '%s\n' "refs/heads/feature $LT_NEW refs/heads/feature $LT_PUB" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LT_PUSH_RC=$?
+assert_eq "$LT_PUSH_RC" "1" "push-tree: fake host in an old, already-pushed file blocks pre-push"
+assert_contains "$LT_PUSH_OUT" "src/legacy-host.txt:1" "push-tree: names the old file and line"
+assert_contains "$LT_PUSH_OUT" "[host]" "push-tree: names the host category"
+
+# Pre-push GREEN + evidence exclusion: removing testhost-a from src/legacy-host.txt while keeping testhost-a in evidence/ passes
+printf 'deployed to <host> yesterday\n' > "$LT/src/legacy-host.txt"
+git -C "$LT" add src/legacy-host.txt
+git -C "$LT" commit -q -m "redact host in src while evidence keeps host"
+LT_CLEAN="$(git -C "$LT" rev-parse HEAD)"
+LT_PUSH_OUT="$(cd "$LT" && printf '%s\n' "refs/heads/feature $LT_CLEAN refs/heads/feature $LT_PUB" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+LT_PUSH_RC=$?
+assert_eq "$LT_PUSH_RC" "0" "push-tree twin: same tree without host in non-evidence files passes (evidence/ host does not block)"
+
+# ── Part 3: pre-push refuses newly added evidence/ files; allows modify and delete ──
+LE="$TEST_TMP/lgev"
+git init -q "$LE"
+git -C "$LE" config core.hooksPath /dev/null
+git -C "$LE" config commit.gpgsign false
+mkdir -p "$LE/src" "$LE/evidence" "$LE/docs/plans/evidence/x" "$LE/scripts/lib" "$LE/hooks/_shared"
+cp "$REPO_ROOT/scripts/leak-guard.js" "$LE/scripts/leak-guard.js"
+cp "$REPO_ROOT/scripts/lib/personal-data-patterns.js" "$LE/scripts/lib/personal-data-patterns.js"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$LE/hooks/_shared/secret-patterns.js"
+printf '{"version":1,"entries":[]}\n' > "$LE/scripts/leak-guard-registry.json"
+
+echo "base file" > "$LE/src/plain.md"
+echo "existing nested evidence" > "$LE/docs/plans/evidence/x/old.md"
+echo "existing top evidence" > "$LE/evidence/old-top.md"
+git -C "$LE" add src evidence docs
+git -C "$LE" commit -q -m "base with existing evidence"
+LE_BASE="$(git -C "$LE" rev-parse HEAD)"
+git -C "$LE" update-ref refs/remotes/origin/develop "$LE_BASE"
+
+# (3a) RED: adding docs/plans/evidence/x/new.md is refused
+git -C "$LE" checkout -q -B ev-add "$LE_BASE"
+echo "new local evidence" > "$LE/docs/plans/evidence/x/new.md"
+git -C "$LE" add docs/plans/evidence/x/new.md
+git -C "$LE" commit -q -m "add nested evidence"
+LE_ADD="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-add $LE_ADD refs/heads/ev-add $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence: adding docs/plans/evidence/x/new.md is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/new.md" "push-evidence: prints the refused nested evidence path"
+assert_contains "$LE_OUT" "evidence stays local; keep it in an untracked directory." "push-evidence: prints the local-evidence guidance"
+
+# (3b) RED: adding top-level evidence/new-top.md is refused
+git -C "$LE" checkout -q -B ev-top "$LE_BASE"
+echo "new top evidence" > "$LE/evidence/new-top.md"
+git -C "$LE" add evidence/new-top.md
+git -C "$LE" commit -q -m "add top evidence"
+LE_TOP="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-top $LE_TOP refs/heads/ev-top $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence: adding top-level evidence/new-top.md is refused"
+assert_contains "$LE_OUT" "evidence/new-top.md" "push-evidence: prints the refused top-level evidence path"
+
+# (3c) RED: renaming or copying an existing file into evidence/ is refused
+git -C "$LE" checkout -q -B ev-mv "$LE_BASE"
+git -C "$LE" mv src/plain.md docs/plans/evidence/x/renamed.md
+git -C "$LE" commit -q -m "rename into evidence"
+LE_MV="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-mv $LE_MV refs/heads/ev-mv $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence: renaming a file into docs/plans/evidence/ is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/renamed.md" "push-evidence: prints the renamed evidence path"
+
+git -C "$LE" checkout -q -B ev-cp "$LE_BASE"
+cp "$LE/src/plain.md" "$LE/docs/plans/evidence/x/copied.md"
+git -C "$LE" add docs/plans/evidence/x/copied.md
+git -C "$LE" commit -q -m "copy into evidence"
+LE_CP="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-cp $LE_CP refs/heads/ev-cp $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence: copying a file into docs/plans/evidence/ is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/copied.md" "push-evidence: prints the copied evidence path"
+
+# (3d) GREEN: modifying an existing evidence file passes
+git -C "$LE" checkout -q -B ev-mod "$LE_BASE"
+echo "updated content" >> "$LE/docs/plans/evidence/x/old.md"
+echo "updated top" >> "$LE/evidence/old-top.md"
+git -C "$LE" add docs/plans/evidence/x/old.md evidence/old-top.md
+git -C "$LE" commit -q -m "modify existing evidence"
+LE_MOD="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-mod $LE_MOD refs/heads/ev-mod $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-evidence twin: modifying an existing evidence file passes"
+
+# (3e) GREEN: deleting an existing evidence file passes
+git -C "$LE" checkout -q -B ev-del "$LE_BASE"
+git -C "$LE" rm -q docs/plans/evidence/x/old.md evidence/old-top.md
+git -C "$LE" commit -q -m "delete existing evidence"
+LE_DEL="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-del $LE_DEL refs/heads/ev-del $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-evidence twin: deleting an existing evidence file passes"
+
+# (3f) GREEN: adding a file whose name contains 'evidence' without an evidence/ segment passes
+git -C "$LE" checkout -q -B ev-nonseg "$LE_BASE"
+echo "ok" > "$LE/src/evidence-helper.txt"
+git -C "$LE" add src/evidence-helper.txt
+git -C "$LE" commit -q -m "add non-evidence file"
+LE_NONSEG="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-nonseg $LE_NONSEG refs/heads/ev-nonseg $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-evidence twin: file without evidence/ directory segment passes"
+
+# (3g) RED regression: one pushed commit adds docs/plans/evidence/x/new.md and the next deletes it -> push refused
+git -C "$LE" checkout -q -B ev-add-del "$LE_BASE"
+echo "transient evidence" > "$LE/docs/plans/evidence/x/new.md"
+git -C "$LE" add docs/plans/evidence/x/new.md
+git -C "$LE" commit -q -m "add transient evidence"
+git -C "$LE" rm -q docs/plans/evidence/x/new.md
+git -C "$LE" commit -q -m "delete transient evidence"
+LE_ADD_DEL="$(git -C "$LE" rev-parse HEAD)"
+assert_eq "$(git -C "$LE" diff --name-only "$LE_BASE" "$LE_ADD_DEL")" "" "push-evidence add-del: endpoint trees are identical"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-add-del $LE_ADD_DEL refs/heads/ev-add-del $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence add-del: adding then deleting docs/plans/evidence/x/new.md in pushed range is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/new.md" "push-evidence add-del: names docs/plans/evidence/x/new.md"
+assert_contains "$LE_OUT" "evidence stays local; keep it in an untracked directory." "push-evidence add-del: prints local-evidence guidance"
+
+# (3h) RED regression: same add-then-delete range pushed as a brand-new ref (remote sha all zeros, --not --remotes) is refused
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-add-del-new $LE_ADD_DEL refs/heads/ev-add-del-new $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence add-del new-ref: new ref with transient evidence commit is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/new.md" "push-evidence add-del new-ref: names docs/plans/evidence/x/new.md"
+
+# (3i) RED: rename into evidence/ in commit 1, renamed back out in commit 2 -> push refused
+git -C "$LE" checkout -q -B ev-mv-back "$LE_BASE"
+git -C "$LE" mv src/plain.md docs/plans/evidence/x/mv-temp.md
+git -C "$LE" commit -q -m "rename into evidence temporarily"
+git -C "$LE" mv docs/plans/evidence/x/mv-temp.md src/plain.md
+git -C "$LE" commit -q -m "rename back out of evidence"
+LE_MV_BACK="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-mv-back $LE_MV_BACK refs/heads/ev-mv-back $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence mv-back: temporary rename into evidence/ is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/mv-temp.md" "push-evidence mv-back: names docs/plans/evidence/x/mv-temp.md"
+
+# (3j) GREEN twin: adding and deleting a non-evidence file across pushed commits passes
+git -C "$LE" checkout -q -B ev-clean-transient "$LE_BASE"
+echo "temp" > "$LE/src/temp.md"
+git -C "$LE" add src/temp.md
+git -C "$LE" commit -q -m "add src/temp.md"
+git -C "$LE" rm -q src/temp.md
+git -C "$LE" commit -q -m "delete src/temp.md"
+LE_CLEAN_TR="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-clean-transient $LE_CLEAN_TR refs/heads/ev-clean-transient $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-evidence add-del twin: transient non-evidence file passes"
+
+# (3k) Merge commit: clean merge of an already-published evidence file passes; evil merge adding new evidence/ is refused
+git -C "$LE" checkout -q -B ev-pub-side "$LE_BASE"
+echo "already published on remote" > "$LE/docs/plans/evidence/x/pub-side.md"
+git -C "$LE" add docs/plans/evidence/x/pub-side.md
+git -C "$LE" commit -q -m "published side evidence"
+LE_PUB_SIDE="$(git -C "$LE" rev-parse HEAD)"
+git -C "$LE" update-ref refs/remotes/origin/ev-pub-side "$LE_PUB_SIDE"
+git -C "$LE" checkout -q -B ev-merge-ok "$LE_BASE"
+echo "feature change" > "$LE/src/feat-m.txt"
+git -C "$LE" add src/feat-m.txt
+git -C "$LE" commit -q -m "feature work"
+git -C "$LE" merge -q --no-ff -m "merge published side" ev-pub-side
+LE_MERGE_OK="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-merge-ok $LE_MERGE_OK refs/heads/ev-merge-ok $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-evidence merge twin: merging already-on-remote evidence file passes"
+
+git -C "$LE" checkout -q -B ev-merge-evil "$LE_BASE"
+echo "feature change 2" > "$LE/src/feat-m2.txt"
+git -C "$LE" add src/feat-m2.txt
+git -C "$LE" commit -q -m "feature work 2"
+git -C "$LE" merge -q --no-ff --no-commit ev-pub-side >/dev/null 2>&1
+echo "smuggled in merge" > "$LE/docs/plans/evidence/x/evil-merge.md"
+git -C "$LE" add docs/plans/evidence/x/evil-merge.md
+git -C "$LE" commit -q -m "evil merge adds evidence"
+LE_MERGE_EVIL="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-merge-evil $LE_MERGE_EVIL refs/heads/ev-merge-evil $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence evil merge: merge introducing new evidence/ absent from all parents is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/evil-merge.md" "push-evidence evil merge: names docs/plans/evidence/x/evil-merge.md"
+assert_not_contains "$LE_OUT" "pub-side.md" "push-evidence evil merge: does not blame parent's published evidence file"
+
+# ── Part 4: leak-guard --tree scans mode 120000 (symlink) blobs without dereferencing (+ codex mirror) ──
+LSYM="$TEST_TMP/lgsym"
+git init -q "$LSYM"
+git -C "$LSYM" config core.hooksPath /dev/null
+git -C "$LSYM" config commit.gpgsign false
+mkdir -p "$LSYM/src" "$LSYM/docs/plans/evidence/r1" "$LSYM/scripts/lib" "$LSYM/hooks/_shared"
+cp "$REPO_ROOT/scripts/leak-guard.js" "$LSYM/scripts/leak-guard.js"
+cp "$REPO_ROOT/scripts/lib/personal-data-patterns.js" "$LSYM/scripts/lib/personal-data-patterns.js"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$LSYM/hooks/_shared/secret-patterns.js"
+printf '{"version":1,"entries":[]}\n' > "$LSYM/scripts/leak-guard-registry.json"
+
+echo "clean file" > "$LSYM/src/ok.txt"
+printf 'host testhost-a inside excluded evidence file\n' > "$LSYM/docs/plans/evidence/r1/log.md"
+ln -s "../testhost-a/missing-share" "$LSYM/src/host-link"
+ln -s "../docs/plans/evidence/r1/log.md" "$LSYM/src/clean-link"
+ln -s "../testhost-a/ev-share" "$LSYM/docs/plans/evidence/r1/ev-link"
+git -C "$LSYM" add src docs
+git -C "$LSYM" commit -q -m "published tree with symlinks"
+LSYM_PUB="$(git -C "$LSYM" rev-parse HEAD)"
+git -C "$LSYM" update-ref refs/remotes/origin/develop "$LSYM_PUB"
+
+assert_contains "$(git -C "$LSYM" ls-tree "$LSYM_PUB" -- src/host-link)" "120000 blob" "tree-symlink: src/host-link is stored as mode 120000 blob"
+
+SYM_JSON="$(cd "$LSYM" && node "$GUARD" --tree "$LSYM_PUB" --registry "$REG" --json)"
+SYM_RC=$?
+assert_eq "$SYM_RC" "1" "tree-symlink: --tree blocks tracked 120000 symlink whose target contains testhost-a"
+assert_contains "$SYM_JSON" '"file": "src/host-link"' "tree-symlink: JSON names src/host-link"
+assert_contains "$SYM_JSON" '"category": "host"' "tree-symlink: JSON reports host category"
+assert_contains "$SYM_JSON" '"snippet": "testhost-a"' "tree-symlink: JSON reports matched host snippet"
+assert_not_contains "$SYM_JSON" "clean-link" "tree-symlink: symlink with clean target text is not dereferenced"
+assert_not_contains "$SYM_JSON" "ev-link" "tree-symlink: symlink under evidence/ stays excluded"
+
+SYM_MIRROR_JSON="$(cd "$LSYM" && node "$REPO_ROOT/platforms/codex/plugin/scripts/leak-guard.js" --tree "$LSYM_PUB" --registry "$REG" --json)"
+assert_eq "$?" "1" "tree-symlink mirror: codex mirror --tree also blocks 120000 symlink target with testhost-a"
+assert_contains "$SYM_MIRROR_JSON" '"file": "src/host-link"' "tree-symlink mirror: codex mirror names src/host-link"
+
+echo "unrelated change" > "$LSYM/src/next.txt"
+git -C "$LSYM" add src/next.txt
+git -C "$LSYM" commit -q -m "clean commit over published symlink"
+LSYM_NEW="$(git -C "$LSYM" rev-parse HEAD)"
+LSYM_PUSH_OUT="$(cd "$LSYM" && printf '%s\n' "refs/heads/feature $LSYM_NEW refs/heads/feature $LSYM_PUB" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-tree-symlink: already-pushed symlink whose target contains testhost-a blocks pre-push"
+assert_contains "$LSYM_PUSH_OUT" "src/host-link:1" "push-tree-symlink: names src/host-link:1"
+assert_contains "$LSYM_PUSH_OUT" "[host]" "push-tree-symlink: names host category"
+
+ln -sfn "../clean-share/target" "$LSYM/src/host-link"
+git -C "$LSYM" add src/host-link
+git -C "$LSYM" commit -q -m "point symlink at clean target"
+LSYM_CLEAN="$(git -C "$LSYM" rev-parse HEAD)"
+LSYM_PUSH_OUT="$(cd "$LSYM" && printf '%s\n' "refs/heads/feature $LSYM_CLEAN refs/heads/feature $LSYM_PUB" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-tree-symlink twin: clean symlink target passes pre-push"
+
+MUT4="$TEST_TMP/mut4"; mkdir -p "$MUT4/scripts/lib" "$MUT4/hooks/_shared"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$MUT4/scripts/lib/"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT4/hooks/_shared/"
+node -e '
+  const fs = require("fs"); const s = fs.readFileSync(process.argv[1], "utf8");
+  const t = s.replace("if (type !== \x27blob\x27) continue;", "if (type !== \x27blob\x27 || meta[0] === \x27120000\x27) continue;");
+  if (t === s) { process.stderr.write("mutation did not apply\n"); process.exit(3); }
+  fs.writeFileSync(process.argv[2], t);
+' "$REPO_ROOT/scripts/leak-guard.js" "$MUT4/scripts/leak-guard.js"
+assert_eq "$?" "0" "tree-symlink NC: 120000 skip restored in mutant copy"
+(cd "$LSYM" && node "$MUT4/scripts/leak-guard.js" --tree "$LSYM_PUB" --registry "$REG" >/dev/null 2>&1)
+assert_eq "$?" "0" "tree-symlink NC: with 120000 skipped, --tree misses the symlink host leak"
 
 finalize_test

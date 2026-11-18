@@ -161,6 +161,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `AUTOPILOT_AGENT_ACTIVITY` | Set to "off" to stop the subagent activity stamps. | on |  |
 | `AUTOPILOT_MERGE_TASK_STATUS` | Set to "off" to stop merging task-status input into the band. | on |  |
 | `AUTOPILOT_CAPTURE_PAYLOAD` | Set to "1" to write hook payloads to disk for debugging (scripts/toggle-payload-capture.js). | off |  |
+| `AUTOPILOT_LEAK_GUARD_HOSTS` | Path of the per-user JSON host deny list (`{"strong":[...],"contextual":[...]}`) read by `scripts/leak-guard.js` and `scripts/redact-personal.js`; missing falls back to the local hostname only with one stderr notice, unreadable or malformed fails closed (exit 2). | `~/.autopilot/leak-guard-hosts.json` |  |
 
 ## Update notice
 
@@ -406,6 +407,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 | `AUTOPILOT_AGENT_ACTIVITY` | Set to "off" to stop the subagent activity stamps. | on |  |
 | `AUTOPILOT_MERGE_TASK_STATUS` | Set to "off" to stop merging task-status input into the band. | on |  |
 | `AUTOPILOT_CAPTURE_PAYLOAD` | Set to "1" to write hook payloads to disk for debugging (scripts/toggle-payload-capture.js). | off |  |
+| `AUTOPILOT_LEAK_GUARD_HOSTS` | Path of the per-user JSON host deny list (`{"strong":[...],"contextual":[...]}`) read by `scripts/leak-guard.js` and `scripts/redact-personal.js`; missing falls back to the local hostname only with one stderr notice, unreadable or malformed fails closed (exit 2). | `~/.autopilot/leak-guard-hosts.json` |  |
 
 ## Update notice
 

@@ -14,6 +14,7 @@
  * Output never echoes the original value.
  */
 const { redactFile } = require('./lib/personal-data-redact');
+const patterns = require('./lib/personal-data-patterns');
 
 const args = process.argv.slice(2);
 let mode = 'write';
@@ -37,6 +38,13 @@ if (args.includes('--check') && args.includes('--dry-run')) {
 }
 if (files.length === 0) {
   process.stderr.write('redact-personal: no files given\n');
+  process.exit(2);
+}
+
+try {
+  patterns.rules();
+} catch (e) {
+  process.stderr.write(`redact-personal: ${e.message}\n`);
   process.exit(2);
 }
 

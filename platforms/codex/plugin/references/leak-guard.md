@@ -4,7 +4,7 @@ Keeps personal data out of tracked files. Two scripts share one pattern engine.
 
 | Piece | File |
 |---|---|
-| Pattern engine | `scripts/lib/personal-data-patterns.js` (host list: `scripts/lib/leak-guard-hosts.json`) |
+| Pattern engine | `scripts/lib/personal-data-patterns.js` (per-user host list: `$AUTOPILOT_LEAK_GUARD_HOSTS`, else `~/.autopilot/leak-guard-hosts.json`; fake-name template: `scripts/lib/leak-guard-hosts.example.json`) |
 | Gate | `scripts/leak-guard.js` |
 | Per-file exemptions | `scripts/leak-guard-registry.json` |
 | Redactor | `scripts/redact-personal.js` over `scripts/lib/personal-data-redact.js` |
@@ -14,7 +14,7 @@ Keeps personal data out of tracked files. Two scripts share one pattern engine.
 
 - Home paths under `/home` or `/Users` (the user name must not start with a dot), including the flattened Claude Code project-dir form `-home-<user>-`; `/tmp/claude-<digits>`; `/run/user/<digits>`.
 - E-mail addresses, except `noreply@anthropic.com` and any address at `example.com`, `example.org` or `example.net` (a list, not any noreply). A git author identity that must stay is registered per file.
-- Host names: the local hostname and the fleet list. Ordinary words (`pico`, `cuda`, `gentoo`) count only in a host context: `@name`, `ssh name`, `name:` not followed by a digit, a `/name/` path segment not under `local|opt|lib|usr|share`, `name.local`, `cookys-name`. A hyphenated token that contains a strong name is replaced whole (a `cookys-` prefix plus a fleet name becomes `<host>`). Lowercase only, so the GPU word never matches.
+- Host names: the local hostname and the per-user fleet list (`$AUTOPILOT_LEAK_GUARD_HOSTS` if set, else `~/.autopilot/leak-guard-hosts.json`, shape `{"strong":[...],"contextual":[...]}`). When the host-list file is absent, the engine runs with the local hostname only and writes one stderr line naming the expected path; an unreadable or malformed file fails closed (exit 2). Ordinary words (`alpha`, `beta`, `testnode`) count only in a host context: `@name`, `ssh name`, `name:` not followed by a digit, a `/name/` path segment not under `local|opt|lib|usr|share`, `name.local`, `cookys-name`. A hyphenated token that contains a strong name is replaced whole (a `cookys-` prefix plus a fleet name becomes `<host>`). Contextual words match lowercase only, so uppercase acronyms never match.
 - Private IPv4: 10/8, 172.16/12, 192.168/16, 100.64/10.
 - Credential shapes: the prefixes of `hooks/_shared/secret-patterns.js` (reused, not copied).
 - A file named `.env` or `*.env`.
@@ -23,7 +23,7 @@ There is no benign-list. A false positive gets a per-file registry entry.
 
 ## The gate
 
-`node scripts/leak-guard.js --staged` (pre-commit, step 1c) or `--range A..B` (CI, `.github/workflows/checks.yml`). Only lines a change adds are read, with rename detection, so history and pure moves are never re-judged. The diff filter is `ACMRT`: a typechange (a symlink swapped for a regular file) is scanned too. Exit 0 clean, 1 findings, 2 for a usage or git error or a bad registry. There is no warn mode.
+`node scripts/leak-guard.js --staged` (pre-commit, step 1c), `--range A..B` (`.githooks/pre-push` and `.github/workflows/checks.yml`), or `--tree <rev> [--categories c1,c2]` (`.githooks/pre-push`). `--staged` and `--range` read only lines a change adds, with rename detection (`ACMRT`, so a symlink swapped for a regular file is scanned too). `--tree <rev>` scans every tracked text file at `<rev>` (`git ls-tree -r` + `git cat-file --batch`, skipping binaries and any `evidence/` directory) for `--categories` (default for `--tree` is `host` only). `.githooks/pre-push` also refuses any pushed range that adds a file (`A`, including renames and copies) under `evidence/` or `*/evidence/`. Exit 0 clean, 1 findings, 2 for a usage or git error or a bad registry/host list. There is no warn mode.
 
 On a block it prints `file:line  [category]  value` for every hit and one runnable `redact-personal.js` command covering all blocked files. The command uses absolute paths, so it runs as printed from any directory.
 
@@ -37,7 +37,7 @@ Restoring cleaned data adds it back, so a plain `git revert` of a redaction comm
 
 ## The registry
 
-`scripts/leak-guard-registry.json`: `{"version":1,"entries":[{"path","category","reason"}]}`. One full repo path and one category per entry, with a reason. A glob, a directory, an unknown category or a missing reason makes the registry invalid. A missing or invalid registry fails the gate. The registry holds only files that are edited and must keep a hit (guard tests and docs, `endpoints.env.example` and mirrors). Frozen history needs no entry because it is never an added line.
+`scripts/leak-guard-registry.json`: `{"version":1,"entries":[{"path","category","reason"}]}`. One full repo path and one category per entry, with a reason. A glob, a directory, an unknown category or a missing reason makes the registry invalid. A missing or invalid registry fails the gate. The registry holds only files that are edited and must keep a hit (guard tests and docs, `endpoints.env.example` and mirrors).
 
 ## The redactor
 
@@ -45,4 +45,4 @@ Restoring cleaned data adds it back, so a plain `git revert` of a redaction comm
 
 ## Negative controls (all in the test)
 
-Evidence-directory file with a home path is red; directory and glob registry entries are refused; missing or broken registry is red; planted home path, synthetic key and new `.env` are red; a pure rename of a file with a legacy hit is green; the redactor test goes red when replacement is switched off.
+Evidence-directory file with a home path is red on `--staged`; directory and glob registry entries are refused; missing or broken registry or broken host list is exit 2; planted home path, synthetic key and new `.env` are red; a pure rename of a file with a legacy hit is green; `--tree` catches a host name in an already-pushed file while ignoring `evidence/`; pre-push refuses newly added `evidence/` files while allowing modifications and deletions; the redactor test goes red when replacement is switched off.

@@ -1,0 +1,9 @@
+{
+  "strong": [
+    "testhost-a",
+    "testbox-01"
+  ],
+  "contextual": [
+    "testnode"
+  ]
+}

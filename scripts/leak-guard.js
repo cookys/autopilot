@@ -3,17 +3,21 @@
 /*
  * leak-guard.js — block personal data from entering tracked files.
  *
- *   node scripts/leak-guard.js [--staged | --range A..B] [--registry FILE] [--json]
+ *   node scripts/leak-guard.js [--staged | --range A..B | --tree <rev>] [--categories c1,c2] [--registry FILE] [--json]
  *
- * Scans ONLY the lines a change ADDS (git diff -U0 --find-renames, filter ACMRT), so history is
- * never re-judged and a pure rename of an old file adds nothing. Patterns: scripts/lib/
- * personal-data-patterns.js (home/tmp/run paths, host names, private IPs, credential shapes,
- * and a file named .env or *.env).
+ * --staged and --range scan ONLY the lines a change ADDS (git diff -U0 --find-renames, filter ACMRT),
+ * so history is never re-judged and a pure rename of an old file adds nothing.
+ * --tree <rev> scans every tracked text file and symlink target (120000 blob, read without
+ * dereferencing) at that revision (git ls-tree -r + git cat-file --batch, skipping binaries and any
+ * evidence/ directory) for the categories named by --categories (comma-separated; default for --tree
+ * is host only).
+ * Patterns: scripts/lib/personal-data-patterns.js (home/tmp/run paths, host names, private IPs,
+ * credential shapes, e-mail addresses, and a file named .env or *.env).
  *
  * Exemptions: scripts/leak-guard-registry.json only (override with --registry). One entry per
  * file and category: {"path": "<full repo path>", "category": "<category>", "reason": "<why>"}.
  * A glob, a directory, or a missing reason is rejected. There is no directory exemption and no
- * warn mode. A registry that is missing, unparsable or malformed is itself a failure (exit 2).
+ * warn mode. A registry (or host list) that is unreadable, unparsable or malformed fails (exit 2).
  *
  * On a block it prints every file:line and category, then one runnable redaction command
  * (scripts/redact-personal.js) covering all blocked files.
@@ -34,23 +38,45 @@ function fail(code, msg) {
 }
 
 function parseArgs(argv) {
-  const o = { mode: 'staged', range: '', registry: null, json: false };
+  const o = { mode: 'staged', range: '', tree: '', categories: null, registry: null, json: false };
+  let explicitMode = null;
+  const setMode = (m) => {
+    if (explicitMode && explicitMode !== m) fail(2, '--staged, --range, and --tree are mutually exclusive');
+    explicitMode = m;
+    o.mode = m;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--staged') o.mode = 'staged';
+    if (a === '--staged') setMode('staged');
     else if (a === '--range') {
-      o.mode = 'range';
+      setMode('range');
       o.range = argv[++i] || '';
       if (!o.range) fail(2, '--range needs A..B');
+    } else if (a === '--tree') {
+      setMode('tree');
+      o.tree = argv[++i] || '';
+      if (!o.tree || o.tree.startsWith('-')) fail(2, '--tree needs a revision');
+    } else if (a === '--categories') {
+      const raw = argv[++i] || '';
+      if (!raw) fail(2, '--categories needs a comma-separated list');
+      const cats = raw.split(',').map((s) => s.trim()).filter(Boolean);
+      if (cats.length === 0) fail(2, '--categories needs at least one category');
+      for (const c of cats) {
+        if (!patterns.CATEGORIES.includes(c)) {
+          fail(2, `unknown category ${c} (expected one of ${patterns.CATEGORIES.join(', ')})`);
+        }
+      }
+      o.categories = new Set(cats);
     } else if (a === '--registry') {
       o.registry = argv[++i];
       if (!o.registry) fail(2, '--registry needs a file');
     } else if (a === '--json') o.json = true;
     else if (a === '-h' || a === '--help') {
-      process.stdout.write('usage: leak-guard.js [--staged | --range A..B] [--registry FILE] [--json]\n');
+      process.stdout.write('usage: leak-guard.js [--staged | --range A..B | --tree <rev>] [--categories c1,c2] [--registry FILE] [--json]\n');
       process.exit(0);
     } else fail(2, `unknown argument ${a}`);
   }
+  if (!o.categories && o.mode === 'tree') o.categories = new Set(['host']);
   return o;
 }
 
@@ -120,6 +146,7 @@ function diffArgs(o, extra) {
 
 /** File-name findings (env files). A pure rename of an already-.env name is history, not new. */
 function envNameFindings(root, o) {
+  if (o.categories && !o.categories.has('env_file')) return [];
   const toks = git(root, diffArgs(o, ['--name-status', '-z'])).split('\0');
   const out = [];
   for (let i = 0; i < toks.length && toks[i] !== ''; ) {
@@ -164,11 +191,12 @@ function diffLines(text, sign) {
 }
 
 /** Findings in the added lines of a diff, plus the text of each flagged line (file\0line -> text). */
-function scanAdded(added) {
+function scanAdded(added, categories) {
   const out = [];
   const texts = new Map();
+  if (categories && [...categories].every((c) => c === 'env_file')) return { findings: out, texts };
   for (const { file, line, content } of added) {
-    for (const h of patterns.findAll(content)) {
+    for (const h of patterns.findAll(content, categories)) {
       const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
       out.push({ file, line, category: h.category, snippet });
       texts.set(`${file}\0${line}`, content);
@@ -179,7 +207,105 @@ function scanAdded(added) {
 
 /** The whole base..head diff is the floor: whatever it flags is blocked unless a revert allowance below covers it. */
 function contentFindings(root, o) {
-  return scanAdded(diffLines(git(root, diffArgs(o, ['-U0'])), '+'));
+  return scanAdded(diffLines(git(root, diffArgs(o, ['-U0'])), '+'), o.categories);
+}
+
+/**
+ * Full-tree scan at <rev> (git ls-tree -r + git cat-file --batch; regular and 120000 symlink
+ * blobs scanned without dereferencing; binaries skipped).
+ * Reports hits for o.categories (default: host only).
+ */
+function treeFindings(root, o) {
+  const rev = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${o.tree}^{tree}`], { cwd: root, encoding: 'utf8' });
+  if (rev.error) fail(2, `git failed: ${rev.error.message}`);
+  if (rev.status !== 0) fail(2, `unknown revision: ${o.tree}`);
+  const treeOid = rev.stdout.trim();
+
+  const ls = git(root, ['ls-tree', '-r', '-z', treeOid]);
+  const wantEnv = o.categories.has('env_file');
+  const wantContent = [...o.categories].some((c) => c !== 'env_file');
+  const out = [];
+  const entries = [];
+  const uniqueOids = [];
+  const seenOids = new Set();
+
+  for (const rec of ls.split('\0')) {
+    if (!rec) continue;
+    const tab = rec.indexOf('\t');
+    if (tab < 0) continue;
+    const meta = rec.slice(0, tab).trim().split(/\s+/);
+    const type = meta[1];
+    const oid = meta[2];
+    const file = rec.slice(tab + 1);
+    // Both regular files (100644/100755) and symlinks (120000, whose git blob holds the stored
+    // link target text, read via git cat-file --batch without dereferencing) have type === 'blob'.
+    if (type !== 'blob') continue;
+    // Files under any evidence/ directory are excluded from the tree scan for now
+    // (they will be removed by the release export).
+    if (file.startsWith('evidence/') || file.includes('/evidence/')) continue;
+    if (wantEnv && patterns.isEnvFileName(file)) {
+      out.push({ file, line: 0, category: 'env_file', snippet: path.basename(file) });
+    }
+    if (wantContent) {
+      entries.push({ oid, file });
+      if (!seenOids.has(oid)) {
+        seenOids.add(oid);
+        uniqueOids.push(oid);
+      }
+    }
+  }
+
+  if (uniqueOids.length === 0) return out;
+
+  const batch = spawnSync('git', ['-c', 'core.quotepath=false', 'cat-file', '--batch'], {
+    cwd: root,
+    input: `${uniqueOids.join('\n')}\n`,
+    maxBuffer: 1024 * 1024 * 1024,
+  });
+  if (batch.error) fail(2, `git failed: ${batch.error.message}`);
+  if (batch.status !== 0) {
+    fail(2, `git cat-file --batch exited ${batch.status}: ${(batch.stderr ? batch.stderr.toString('utf8') : '').trim()}`);
+  }
+
+  const buf = batch.stdout;
+  const blobHits = new Map();
+  let pos = 0;
+  while (pos < buf.length) {
+    const nl = buf.indexOf(10, pos);
+    if (nl < 0) fail(2, 'git cat-file --batch: truncated header');
+    const hdr = buf.subarray(pos, nl).toString('utf8');
+    const sp1 = hdr.indexOf(' ');
+    const sp2 = sp1 >= 0 ? hdr.indexOf(' ', sp1 + 1) : -1;
+    if (sp1 < 0 || sp2 < 0) fail(2, `git cat-file --batch: unexpected header: ${hdr}`);
+    const oid = hdr.slice(0, sp1);
+    const size = parseInt(hdr.slice(sp2 + 1), 10);
+    if (!Number.isFinite(size) || size < 0) fail(2, `git cat-file --batch: bad size in header: ${hdr}`);
+    const bodyStart = nl + 1;
+    const bodyEnd = bodyStart + size;
+    if (bodyEnd > buf.length) fail(2, `git cat-file --batch: truncated object ${oid}`);
+    const body = buf.subarray(bodyStart, bodyEnd);
+    pos = bodyEnd + 1;
+    if (body.includes(0)) {
+      blobHits.set(oid, []);
+      continue;
+    }
+    const hits = [];
+    const lines = body.toString('utf8').split('\n');
+    for (let idx = 0; idx < lines.length; idx++) {
+      for (const h of patterns.findAll(lines[idx], o.categories)) {
+        const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
+        hits.push({ line: idx + 1, category: h.category, snippet });
+      }
+    }
+    blobHits.set(oid, hits);
+  }
+
+  for (const { oid, file } of entries) {
+    for (const h of blobHits.get(oid) || []) {
+      out.push({ file, line: h.line, category: h.category, snippet: h.snippet });
+    }
+  }
+  return out;
 }
 
 const REVERT_TRAILER = 'Leak-Guard-Allow-Revert';
@@ -325,12 +451,22 @@ function main() {
   if (top.status !== 0) fail(2, 'not inside a git work tree');
   const root = top.stdout.trim();
   const exempt = loadRegistry(o.registry ? path.resolve(o.registry) : path.join(root, DEFAULT_REGISTRY), root);
+  try {
+    patterns.rules();
+  } catch (e) {
+    fail(2, e.message);
+  }
 
   const seen = new Set();
-  const content = contentFindings(root, o);
   const findings = [];
-  const candidates = [...envNameFindings(root, o), ...content.findings];
-  const kept = applyRevertAllowance(root, o, candidates, content.texts);
+  let kept;
+  if (o.mode === 'tree') {
+    kept = treeFindings(root, o);
+  } else {
+    const content = contentFindings(root, o);
+    const candidates = [...envNameFindings(root, o), ...content.findings];
+    kept = applyRevertAllowance(root, o, candidates, content.texts);
+  }
   for (const f of kept) {
     if (exempt.has(`${f.file}\0${f.category}`)) continue;
     const key = `${f.file}\0${f.line}\0${f.category}\0${f.snippet}`;

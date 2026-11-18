@@ -47,6 +47,7 @@ node --test "$here/pages/quota-pick.test.js" < /dev/null
 # now.test.ts (S3: the 現況 page goldens at 160x40 / 120x30 / 80x24, the seat_blocked rows, the own-seat quota feed) is picked up the same way
 # pages/fleet.test.ts (S2: the 艦隊 page golden rows, fixed height, no-source and stale rows, key presses) is picked up the same way
 # decide.test.ts (S1: the 待決 page, golden against the codeforge mockups, and its key reducer) is picked up the same way
+# pane-poll.test.ts (the real tick runs `fleet console --json` and `fleet seats --quota --json` on every page and with the pane closed, console.json or not) is picked up the same way
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

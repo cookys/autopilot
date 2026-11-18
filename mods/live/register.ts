@@ -155,7 +155,9 @@ export function liveTick($: EngineInterface): Promise<void> {
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   await consoleTick($).catch(() => undefined) // the console mode and its snapshot (below); the tick is the only place either is read
-  if (consoleOn) void seatQuota.refresh(argv => $.process.run([...argv], { timeoutMs: SEATS_TIMEOUT_MS }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => undefined) // the 現況 page's seat quota row: 60 s cache inside the feed, never awaited by a render
+  // NOT gated by the console mode: the framed pages (現況 · 待決 · 艦隊 · 額度 · 花費 ...) are drawn in every session and read the seat quota row and the console snapshot,
+  // so the polls run whether the pane is open or not and whatever .claude/console.json says (pane-poll.test.ts holds this)
+  void seatQuota.refresh(argv => $.process.run([...argv], { timeoutMs: SEATS_TIMEOUT_MS }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => undefined) // the 現況 page's seat quota row: 60 s cache inside the feed, never awaited by a render
   kickFleet($, nowMs) // the band's own fleet segment reads the summary this publishes; the feed's TTL spaces the runs
   await shellTick($, nowMs).catch(() => undefined)
 }
@@ -208,8 +210,8 @@ async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
 let decideCursor = 0 // the card the O4 shell's main window shows (an index into the band's batch, bandBatch: the pending cards and the ones closed elsewhere; clamped at every draw)
 let decideLastId: string | null = null // the card answered last from the shell (the progress row names it)
 // ---- the operator-console mode (plan §3.1; consoletabs.ts): on only where the session's repo has .claude/console.json = {"schema":"autopilot.console/1","mode":"program"} (findConsoleConfig; optional
-// "ingest_from": "<address>=pace ..." passes validated ^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+=[a-z]+$ tokens via FLEET_CONSOLE_INGEST_FROM, omitted when absent/empty). Off, every line
-// below that reads these is skipped and the band and the pane are what they were. ONE navigation state (consoleTab) for the band's tabs and the pane's: pressing either sets it, both draw it.
+// "ingest_from": "<address>=pace ..." passes validated ^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+=[a-z]+$ tokens via FLEET_CONSOLE_INGEST_FROM, omitted when absent/empty). Off, the band and
+// the legacy console pane are what they were; the snapshot itself (consoleSnap) is still polled, because the framed pages read it in every session. ONE navigation state (consoleTab) for the band's tabs and the pane's: pressing either sets it, both draw it.
 // The snapshot comes from consoleSource (a top-level function declaration: the mod loader follows `$` only into declared functions, so it cannot be a swappable variable); it comes from consolefeed.ts: `fleet console --json` (at most once a minute, never while drawing), else the courier's HOME/.local/state/fleet/console.json; neither = null = no source. ----
 let consoleOn = false
 let consoleTab: ConsoleTab = 'command'
@@ -242,7 +244,9 @@ async function consoleTick($: EngineInterface): Promise<void> {
     if (found.on && !consoleOn && barTab !== 'forge') barTab = null // the strip turns to the console tabs: a band tab left open would keep its body under a 指揮 highlight
     consoleOn = found.on
   }
-  const snap = consoleOn ? await consoleSource($) : null
+  // the snapshot is fetched in every session, console mode or not: the framed pages draw 待決 / 艦隊 / 額度 from it (a null here is "無來源：沒有 console 快照" on every page).
+  // The console mode only decides the band strip and the legacy console pane (both still check consoleOn before reading consoleSnap).
+  const snap = await consoleSource($)
   if (snap !== consoleSnap) { consoleSnap = snap; changed = true }
   if (changed) void $.ui.invalidate('ui.render')
 }

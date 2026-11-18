@@ -184,6 +184,18 @@
       ]
     },
     {
+      "id": "check-test-exec-bits",
+      "title": "every tracked hooks/tests/*.test.sh has index mode 100755",
+      "generator": null,
+      "check": "node scripts/check-test-exec-bits.js",
+      "fix": "git update-index --chmod=+x <path> && chmod +x <path>",
+      "tier": "both",
+      "trigger": [
+        "hooks/tests/",
+        "scripts/check-test-exec-bits.js"
+      ]
+    },
+    {
       "id": "check-backlog-entries",
       "title": "project/backlog/BACKLOG.md rows vs references/backlog-entry.md (mode from .claude/backlog-config.md; ratchet allowlist)",
       "generator": null,

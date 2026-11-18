@@ -104,11 +104,14 @@ SHA_REPO_B="$(git -C "$AUTHOR_B" rev-parse HEAD)"
 git -C "$AUTHOR_B" -c protocol.file.allow=always push -q -u origin develop
 git -c protocol.file.allow=always clone -q -b develop "$BARE_B" "$CLONE_B"
 
-# Timestamps relative to SHA_RULE (1700001000s = 2023-11-14T22:30:00Z)
-ISO_AFTER="2023-11-14T22:35:00Z"
+# Timestamps relative to setup reflogs (wall-clock) and SHA_RULE (1700001000s = 2023-11-14T22:30:00Z)
+NOW_SEC="$(date +%s)"
+PULLED_PRESENT_SEC="$(git -C "$CLONE_PULLED" reflog show --date=unix --format='%gd' -n 1 HEAD | sed -n 's/.*@{\([0-9]*\)}.*/\1/p')"
+assert_neq "$PULLED_PRESENT_SEC" "" "CLONE_PULLED reflog timestamp extracted"
+ISO_AFTER="$(node -e 'process.stdout.write(new Date(Number(process.argv[1]) * 1000).toISOString())' "$((NOW_SEC + 3600))")"
 ISO_BEFORE="2023-11-14T22:25:00Z"
-MS_AFTER=1700002500000
-MS_AT_COMMIT=1700001000000
+MS_AFTER="$(( (NOW_SEC + 7200) * 1000 ))"
+MS_AT_PRESENT="$(( PULLED_PRESENT_SEC * 1000 ))"
 
 # ── Case 1: seat whose clone pulled the commit and started after it -> effective, exit 0 ──
 INV_EFF="$TEST_TMP/inv-effective.json"
@@ -137,11 +140,12 @@ const s1 = lines[1];
 const sum = lines[2].summary;
 process.stdout.write([
   s0.seat, s0.verdict, JSON.stringify(s0.failed), String(s0.reason), s0.head, s0.commit_time,
+  s0.present_since, s0.present_since_source, s0.loaded_at,
   s1.seat, s1.verdict, JSON.stringify(s1.failed),
   sum.effective, sum.stale, sum.unknown, sum.total
 ].join("|"));
 ')"
-assert_eq "$PARSED_EFF" "seat-iso|effective|[]|null|${SHA_RULE}|1700001000|seat-ms-probe|effective|[]|2|0|0|2" "JSONL seat fields and summary match contract"
+assert_eq "$PARSED_EFF" "seat-iso|effective|[]|null|${SHA_RULE}|1700001000|${PULLED_PRESENT_SEC}|reflog|${ISO_AFTER}|seat-ms-probe|effective|[]|2|0|0|2" "JSONL seat fields and summary match contract"
 
 # --json single document mode
 run_check --inventory "$INV_EFF" --commit "$SHA_RULE" --json
@@ -194,9 +198,9 @@ process.stdout.write(d.seats.map((s) => `${s.seat}:${s.verdict}:${s.failed.join(
 ')"
 assert_eq "$REMOTE_CHECK" "seat-ahead-of-origin:stale:remote;seat-no-origin-ref:stale:remote" "both unpushed and no-remote-ref report stale with failed=[remote]"
 
-# ── Case 4: session started before (or at) commit time -> stale, failed includes session_start ──
+# ── Case 4: rules loaded before (or at) present_since -> stale, failed includes loaded ──
 INV_START="$TEST_TMP/inv-old-session.json"
-node - "$INV_START" "$LOCAL_HOST" "$CLONE_PULLED" "$ISO_BEFORE" "$MS_AT_COMMIT" <<'NODE'
+node - "$INV_START" "$LOCAL_HOST" "$CLONE_PULLED" "$ISO_BEFORE" "$MS_AT_PRESENT" <<'NODE'
 const fs = require('fs');
 const [out, host, repo, isoBefore, msAt] = process.argv.slice(2);
 fs.writeFileSync(out, JSON.stringify({
@@ -209,12 +213,12 @@ fs.writeFileSync(out, JSON.stringify({
 NODE
 
 run_check --inventory "$INV_START" --commit "$SHA_RULE" --json
-assert_exit_code "$RC" 1 "session started before commit -> exit 1"
+assert_exit_code "$RC" 1 "loaded before present_since -> exit 1"
 START_CHECK="$(printf '%s' "$OUT" | node -e '
 const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
 process.stdout.write(d.seats.map((s) => `${s.seat}:${s.verdict}:${s.failed.join(",")}`).join(";"));
 ')"
-assert_eq "$START_CHECK" "seat-before:stale:session_start;seat-exact-same-sec:stale:session_start" "session before/equal commit_time -> failed=[session_start]"
+assert_eq "$START_CHECK" "seat-before:stale:loaded;seat-exact-same-sec:stale:loaded" "loaded before/equal present_since -> failed=[loaded]"
 
 # ── Case 5: probe ok:false -> stale, failed includes probe (+ multi-failure accumulation) ──
 INV_PROBE="$TEST_TMP/inv-probe.json"
@@ -236,7 +240,7 @@ PROBE_CHECK="$(printf '%s' "$OUT" | node -e '
 const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
 process.stdout.write(d.seats.map((s) => `${s.seat}:${s.verdict}:${s.failed.join(",")}`).join(";"));
 ')"
-assert_eq "$PROBE_CHECK" "seat-probe-fail:stale:probe;seat-multi-fail:stale:head,session_start,probe" "probe failure and multi-failure list all failed checks"
+assert_eq "$PROBE_CHECK" "seat-probe-fail:stale:probe;seat-multi-fail:stale:head,loaded,probe" "probe failure and multi-failure list all failed checks"
 
 # ── Case 6: missing repo path / null start / other host / unresolved sha -> unknown with reason, exit 2 ──
 INV_UNK="$TEST_TMP/inv-unknown.json"
@@ -264,7 +268,7 @@ const parts = d.seats.map((s) => `${s.seat}:${s.verdict}:${s.reason || "-"}:${s.
 parts.push(`sum=${d.summary.effective}/${d.summary.stale}/${d.summary.unknown}/${d.summary.total}`);
 process.stdout.write(parts.join(";"));
 ')"
-assert_eq "$UNK_CHECK" "seat-ok:effective:-:0;seat-missing-repo:unknown:missing_repo:0;seat-null-start:unknown:missing_session_started_at:0;seat-other-host:unknown:other_host:0;seat-unresolved-sha:unknown:unresolved_commit:0;sum=1/0/4/5" "unknown reasons and summary counts match"
+assert_eq "$UNK_CHECK" "seat-ok:effective:-:0;seat-missing-repo:unknown:missing_repo:0;seat-null-start:unknown:no_load_time:0;seat-other-host:unknown:other_host:0;seat-unresolved-sha:unknown:unresolved_commit:0;sum=1/0/4/5" "unknown reasons and summary counts match"
 
 # Verify read-only default: CLONE_UNFETCHED was NOT fetched by the check above
 UNFETCHED_REMOTE_TIP="$(git -C "$CLONE_UNFETCHED" rev-parse origin/main)"
@@ -363,11 +367,11 @@ run_check --inventory "$INV_HEAD" --commit "$SHA_RULE"
 assert_exit_code "$RC" 1 "real checker blocks unpulled clone"
 
 MUT_START="$TEST_TMP/mut-start.js"
-sed_mutant "$SRC" "$MUT_START" 's#!(parsedStart.ms > commitTimeSec . 1000)#false#'
+sed_mutant "$SRC" "$MUT_START" 's#!(loadedAtMs > presentSinceSec . 1000)#false#'
 run_check_bin "$MUT_START" --inventory "$INV_START" --commit "$SHA_RULE"
-assert_exit_code "$RC" 0 "negative control: disabling session_start comparison lets pre-commit session pass"
+assert_exit_code "$RC" 0 "negative control: disabling loaded comparison lets stale load pass"
 run_check --inventory "$INV_START" --commit "$SHA_RULE"
-assert_exit_code "$RC" 1 "real checker blocks pre-commit session"
+assert_exit_code "$RC" 1 "real checker blocks stale load"
 
 MUT_PROBE="$TEST_TMP/mut-probe.js"
 sed_mutant "$SRC" "$MUT_PROBE" 's#if (seat.probe.ok !== true) {#if (false) {#'
@@ -384,5 +388,224 @@ run_check_bin "$MUT_PROBE" --inventory "$INV_ONE_PROBE" --commit "$SHA_RULE"
 assert_exit_code "$RC" 0 "negative control: disabling probe check lets failed probe pass"
 run_check --inventory "$INV_ONE_PROBE" --commit "$SHA_RULE"
 assert_exit_code "$RC" 1 "real checker blocks failed probe"
+
+# ── Case 10: host matching (<prefix>-<seat.host>, exact, first DNS label, no substring) + --host ──
+INV_HOST="$TEST_TMP/inv-host.json"
+node - "$INV_HOST" "$CLONE_PULLED" "$ISO_AFTER" <<'NODE'
+const fs = require('fs');
+const [out, repo, started] = process.argv.slice(2);
+fs.writeFileSync(out, JSON.stringify({
+  schema: 'autopilot.rule-effect-inventory/1',
+  seats: [
+    { seat: 'seat-short', host: 'node701', repo, session_started_at: started },
+    { seat: 'seat-exact', host: 'owner-node701', repo, session_started_at: started },
+    { seat: 'seat-substr', host: 'de701', repo, session_started_at: started },
+  ],
+}));
+NODE
+
+run_check --inventory "$INV_HOST" --commit "$SHA_RULE" --host owner-node701 --json
+assert_exit_code "$RC" 2 "short + exact matched, substring de701 stays other_host -> exit 2"
+HOST_CHECK="$(printf '%s' "$OUT" | node -e '
+const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
+process.stdout.write(d.seats.map((s) => `${s.seat}:${s.verdict}:${s.reason || "-"}`).join(";"));
+')"
+assert_eq "$HOST_CHECK" "seat-short:effective:-;seat-exact:effective:-;seat-substr:unknown:other_host" "host matching handles <prefix>- stripping and exact without substring match"
+
+INV_DNS="$TEST_TMP/inv-dns.json"
+node - "$INV_DNS" "$CLONE_PULLED" "$ISO_AFTER" <<'NODE'
+const fs = require('fs');
+const [out, repo, started] = process.argv.slice(2);
+fs.writeFileSync(out, JSON.stringify({
+  schema: 'autopilot.rule-effect-inventory/1',
+  seats: [{ seat: 'seat-dns', host: 'owner-node701', repo, session_started_at: started }],
+}));
+NODE
+run_check --inventory "$INV_DNS" --commit "$SHA_RULE" --host owner-node701.corp.example.net --json
+assert_exit_code "$RC" 0 "first DNS label matches seat.host -> exit 0"
+
+# Negative control: revert <prefix>- branch -> short host turns unknown/other_host (red)
+INV_SHORT_ONLY="$TEST_TMP/inv-short-only.json"
+node - "$INV_SHORT_ONLY" "$CLONE_PULLED" "$ISO_AFTER" <<'NODE'
+const fs = require('fs');
+const [out, repo, started] = process.argv.slice(2);
+fs.writeFileSync(out, JSON.stringify({
+  schema: 'autopilot.rule-effect-inventory/1',
+  seats: [{ seat: 'seat-short', host: 'node701', repo, session_started_at: started }],
+}));
+NODE
+MUT_HOST="$TEST_TMP/mut-host.js"
+sed_mutant "$SRC" "$MUT_HOST" 's#if (localHostname.endsWith(`-\${seatHost}`)) return true;#if (false) return true;#'
+run_check_bin "$MUT_HOST" --inventory "$INV_SHORT_ONLY" --commit "$SHA_RULE" --host owner-node701
+assert_exit_code "$RC" 2 "negative control: reverting prefix-strip host branch rejects short seat.host as unknown/other_host"
+run_check --inventory "$INV_SHORT_ONLY" --commit "$SHA_RULE" --host owner-node701
+assert_exit_code "$RC" 0 "real checker accepts short seat.host via prefix strip"
+
+# ── Case 11: loaded check (last_compact_at, present_since reflog vs commit_time, --transcript) ──
+BARE_L="$TEST_TMP/remote-loaded.git"
+AUTHOR_L="$TEST_TMP/author-loaded"
+CLONE_L="$TEST_TMP/clone-loaded"
+git init --bare -q "$BARE_L"
+git -C "$BARE_L" symbolic-ref HEAD refs/heads/main
+git init -q "$AUTHOR_L"
+git -C "$AUTHOR_L" checkout -q -b main
+git -C "$AUTHOR_L" config protocol.file.allow always
+git -C "$AUTHOR_L" remote add origin "$BARE_L"
+
+T_BASE_L=$((NOW_SEC - 7200))
+printf '# rules base\n' > "$AUTHOR_L/CLAUDE.md"
+git -C "$AUTHOR_L" add CLAUDE.md
+GIT_AUTHOR_DATE="@$T_BASE_L" GIT_COMMITTER_DATE="@$T_BASE_L" \
+  git -C "$AUTHOR_L" commit -q -m "chore: base"
+git -C "$AUTHOR_L" -c protocol.file.allow=always push -q -u origin main
+git -c protocol.file.allow=always clone -q "$BARE_L" "$CLONE_L"
+git -C "$CLONE_L" config protocol.file.allow always
+
+# Commit C at t0 = NOW_SEC - 3600; CLONE_L pulls C later at t2 (~NOW_SEC)
+T0_SEC=$((NOW_SEC - 3600))
+printf '# rules v2\n' > "$AUTHOR_L/CLAUDE.md"
+git -C "$AUTHOR_L" add CLAUDE.md
+GIT_AUTHOR_DATE="@$T0_SEC" GIT_COMMITTER_DATE="@$T0_SEC" \
+  git -C "$AUTHOR_L" commit -q -m "docs: v2 rule"
+SHA_L="$(git -C "$AUTHOR_L" rev-parse HEAD)"
+git -C "$AUTHOR_L" -c protocol.file.allow=always push -q origin main
+
+git -C "$CLONE_L" -c protocol.file.allow=always pull -q --ff-only origin main
+T2_SEC="$(git -C "$CLONE_L" reflog show --date=unix --format='%gd' -n 1 HEAD | sed -n 's/.*@{\([0-9]*\)}.*/\1/p')"
+assert_neq "$T2_SEC" "" "CLONE_L reflog timestamp t2 extracted"
+
+T1_ISO="$(node -e 'process.stdout.write(new Date(Number(process.argv[1]) * 1000).toISOString())' "$((T0_SEC - 1800))")"
+T_MID_ISO="$(node -e 'process.stdout.write(new Date(Number(process.argv[1]) * 1000).toISOString())' "$((NOW_SEC - 1800))")"
+T_AFTER_ISO="$(node -e 'process.stdout.write(new Date(Number(process.argv[1]) * 1000).toISOString())' "$((T2_SEC + 600))")"
+
+# 11a) 04:57 case: session_started_at < t0 and last_compact_at between t0 and t2 -> stale; > t2 -> effective
+INV_0457="$TEST_TMP/inv-0457.json"
+node - "$INV_0457" "$LOCAL_HOST" "$CLONE_L" "$T1_ISO" "$T_MID_ISO" <<'NODE'
+const fs = require('fs');
+const [out, host, repo, t1, tMid] = process.argv.slice(2);
+fs.writeFileSync(out, JSON.stringify({
+  schema: 'autopilot.rule-effect-inventory/1',
+  seats: [{ seat: 'seat-0457', host, repo, session_started_at: t1, last_compact_at: tMid }],
+}));
+NODE
+run_check --inventory "$INV_0457" --commit "$SHA_L" --json
+assert_exit_code "$RC" 1 "compact between commit_time and present_since -> stale (exit 1)"
+CHECK_0457="$(printf '%s' "$OUT" | node -e '
+const s = JSON.parse(require("fs").readFileSync(0, "utf8")).seats[0];
+process.stdout.write(`${s.verdict}|${s.failed.join(",")}|${s.present_since}|${s.present_since_source}|${s.loaded_at}`);
+')"
+assert_eq "$CHECK_0457" "stale|loaded|${T2_SEC}|reflog|${T_MID_ISO}" "04:57 case records loaded failure and reflog present_since"
+
+INV_AFTER_COMPACT="$TEST_TMP/inv-after-compact.json"
+node - "$INV_AFTER_COMPACT" "$LOCAL_HOST" "$CLONE_L" "$T1_ISO" "$T_AFTER_ISO" <<'NODE'
+const fs = require('fs');
+const [out, host, repo, t1, tAfter] = process.argv.slice(2);
+fs.writeFileSync(out, JSON.stringify({
+  schema: 'autopilot.rule-effect-inventory/1',
+  seats: [{ seat: 'seat-compacted-after', host, repo, session_started_at: t1, last_compact_at: tAfter }],
+}));
+NODE
+run_check --inventory "$INV_AFTER_COMPACT" --commit "$SHA_L" --json
+assert_exit_code "$RC" 0 "last_compact_at > present_since -> effective (exit 0)"
+
+# 11b) Multi-entry reflog: newer commit D on top of C at t3 > t2; compact at t2+1 (< t3) stays effective because oldest consecutive entry is t2
+sleep 2
+printf 'note\n' > "$CLONE_L/NOTE.md"
+git -C "$CLONE_L" add NOTE.md
+git -C "$CLONE_L" commit -q -m "chore: unrelated follow-up"
+git -C "$CLONE_L" -c protocol.file.allow=always push -q origin main
+MS_BETWEEN_T2_T3="$(( (T2_SEC + 1) * 1000 ))"
+INV_MULTI_REFLOG="$TEST_TMP/inv-multi-reflog.json"
+node - "$INV_MULTI_REFLOG" "$LOCAL_HOST" "$CLONE_L" "$T1_ISO" "$MS_BETWEEN_T2_T3" <<'NODE'
+const fs = require('fs');
+const [out, host, repo, t1, msBetween] = process.argv.slice(2);
+fs.writeFileSync(out, JSON.stringify({
+  schema: 'autopilot.rule-effect-inventory/1',
+  seats: [{ seat: 'seat-multi-reflog', host, repo, session_started_at: t1, last_compact_at: Number(msBetween) }],
+}));
+NODE
+run_check --inventory "$INV_MULTI_REFLOG" --commit "$SHA_L" --json
+assert_exit_code "$RC" 0 "present_since picks oldest consecutive reflog entry t2 rather than newest t3"
+MULTI_REFLOG_CHECK="$(printf '%s' "$OUT" | node -e '
+const s = JSON.parse(require("fs").readFileSync(0, "utf8")).seats[0];
+process.stdout.write(`${s.present_since}|${s.present_since_source}`);
+')"
+assert_eq "$MULTI_REFLOG_CHECK" "${T2_SEC}|reflog" "multi-entry reflog reports t2 with source reflog"
+
+# 11c) --transcript with two compact_boundary lines uses newest and applies only to --seat
+TRANSCRIPT_FILE="$TEST_TMP/transcript.jsonl"
+cat > "$TRANSCRIPT_FILE" <<EOF
+{"type":"user","timestamp":"$T1_ISO","message":"hi"}
+{malformed-trailing-or-partial-line
+{"type":"system","subtype":"compact_boundary","timestamp":"$T_MID_ISO","compactMetadata":{"trigger":"auto"}}
+{"type":"assistant","timestamp":"$T_AFTER_ISO","message":"ok"}
+{"type":"system","subtype":"compact_boundary","timestamp":"$T_AFTER_ISO","compactMetadata":{"trigger":"auto"}}
+EOF
+
+INV_TRANSCRIPT="$TEST_TMP/inv-transcript.json"
+node - "$INV_TRANSCRIPT" "$LOCAL_HOST" "$CLONE_L" "$T1_ISO" <<'NODE'
+const fs = require('fs');
+const [out, host, repo, t1] = process.argv.slice(2);
+fs.writeFileSync(out, JSON.stringify({
+  schema: 'autopilot.rule-effect-inventory/1',
+  seats: [
+    { seat: 'seat-tr-target', host, repo, session_started_at: t1 },
+    { seat: 'seat-tr-other', host, repo, session_started_at: t1 },
+  ],
+}));
+NODE
+run_check --inventory "$INV_TRANSCRIPT" --commit "$SHA_L" --transcript "$TRANSCRIPT_FILE" --seat seat-tr-target --json
+assert_exit_code "$RC" 1 "transcript applies only to named --seat; other seat stays stale"
+TR_CHECK="$(printf '%s' "$OUT" | node -e '
+const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
+process.stdout.write(d.seats.map((s) => `${s.seat}:${s.verdict}:${s.loaded_at}`).join(";"));
+')"
+T1_NORM="$(node -e 'process.stdout.write(new Date(process.argv[1]).toISOString())' "$T1_ISO")"
+assert_eq "$TR_CHECK" "seat-tr-target:effective:${T_AFTER_ISO};seat-tr-other:stale:${T1_NORM}" "--transcript picks newest compact_boundary and scopes strictly to --seat"
+
+run_check --inventory "$INV_TRANSCRIPT" --commit "$SHA_L" --transcript "$TRANSCRIPT_FILE"
+assert_exit_code "$RC" 3 "--transcript without --seat exits 3"
+
+# 11d) No reflog entry -> falls back to commit time, present_since_source = commit_time
+BARE_NR="$TEST_TMP/remote-noreflog.git"
+REPO_NOREFLOG="$TEST_TMP/repo-noreflog"
+git init --bare -q "$BARE_NR"
+git -C "$BARE_NR" symbolic-ref HEAD refs/heads/main
+git init -q "$REPO_NOREFLOG"
+git -C "$REPO_NOREFLOG" checkout -q -b main
+git -C "$REPO_NOREFLOG" config protocol.file.allow always
+git -C "$REPO_NOREFLOG" remote add origin "$BARE_NR"
+printf '# noreflog rule\n' > "$REPO_NOREFLOG/CLAUDE.md"
+git -C "$REPO_NOREFLOG" add CLAUDE.md
+GIT_AUTHOR_DATE="@1700001000" GIT_COMMITTER_DATE="@1700001000" \
+  git -C "$REPO_NOREFLOG" commit -q -m "docs: rule"
+SHA_NR="$(git -C "$REPO_NOREFLOG" rev-parse HEAD)"
+git -C "$REPO_NOREFLOG" -c protocol.file.allow=always push -q -u origin main
+git -C "$REPO_NOREFLOG" reflog expire --expire-unreachable=all --expire=all --all
+
+INV_NOREFLOG="$TEST_TMP/inv-noreflog.json"
+node - "$INV_NOREFLOG" "$LOCAL_HOST" "$REPO_NOREFLOG" <<'NODE'
+const fs = require('fs');
+const [out, host, repo] = process.argv.slice(2);
+fs.writeFileSync(out, JSON.stringify({
+  schema: 'autopilot.rule-effect-inventory/1',
+  seats: [{ seat: 'seat-noreflog', host, repo, last_compact_at: 1700001100000 }],
+}));
+NODE
+run_check --inventory "$INV_NOREFLOG" --commit "$SHA_NR" --json
+assert_exit_code "$RC" 0 "expired reflog falls back to commit_time -> effective (exit 0)"
+NR_CHECK="$(printf '%s' "$OUT" | node -e '
+const s = JSON.parse(require("fs").readFileSync(0, "utf8")).seats[0];
+process.stdout.write(`${s.verdict}|${s.present_since}|${s.present_since_source}`);
+')"
+assert_eq "$NR_CHECK" "effective|1700001000|commit_time" "no reflog entry falls back to commit_time with source=commit_time"
+
+# 11e) Negative control: compare loaded_at against commitTimeSec instead of presentSinceSec -> 04:57 case turns wrongly effective
+MUT_CT="$TEST_TMP/mut-commit-time.js"
+sed_mutant "$SRC" "$MUT_CT" 's#!(loadedAtMs > presentSinceSec . 1000)#!(loadedAtMs > commitTimeSec * 1000)#'
+run_check_bin "$MUT_CT" --inventory "$INV_0457" --commit "$SHA_L"
+assert_exit_code "$RC" 0 "negative control: comparing against commit_time makes 04:57 case wrongly effective"
+run_check --inventory "$INV_0457" --commit "$SHA_L"
+assert_exit_code "$RC" 1 "real checker blocks 04:57 case using present_since"
 
 finalize_test

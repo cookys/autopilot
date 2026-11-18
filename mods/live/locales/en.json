@@ -306,6 +306,7 @@
   "header.session": "session",
   "header.host": "host today",
   "header.ctx": "ctx",
+  "page.now.project_unknown": "Project {id} (state unavailable)",
   "pane.overflow": "{n} more rows below",
   "pane.overflow_more": "more rows below",
   "now.sum_runs": "{n} runs",

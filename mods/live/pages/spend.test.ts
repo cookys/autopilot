@@ -140,7 +140,7 @@ const GOLD_WIDE_BODY = [
   '▸ 5 小時  ▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  17%    重置 03:40',
   '  7 天    ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱  68%    重置 11-21 週六 12:00',
   '  今天    $3.10 · 近 24 小時 ▁▁▂▃▅▂▁▁▁▂▂▃▁▁▁▁▂▅█▃▂▁▁▁',
-  '',
+  // X5: the former internal spacer moves to the frame's top padding.
   '  額度看 [4]',
 ]
 
@@ -179,23 +179,23 @@ test('spend: registry places framed spendPage at key 7 with title 花費', () =>
 })
 
 test('spend golden: 160x40, 120x30, 80x24 and 80x24 stale match the four mockups row for row with fixed height H', async () => {
-  // 1. 160x40 (header 1 + blank gap 31 + body 6 + calm empty state 1 + strip 1 = 40)
+  // X5: 160x40 (header 1 + blank gap 32 + body 5 + calm empty state 1 + strip 1 = 40)
   await feedFresh()
   const out160 = frameRows(spendPage, ctxOf(160, 40)).map(text)
   expect(out160.length).toBe(40)
   expect(out160[0]).toBe('花費')
-  expect(out160.slice(1, 32).every(r => r === '')).toBe(true)
-  expect(diffRows(out160.slice(32, 38), GOLD_WIDE_BODY)).toEqual([])
+  expect(out160.slice(1, 33).every(r => r === '')).toBe(true)
+  expect(diffRows(out160.slice(33, 38), GOLD_WIDE_BODY)).toEqual([])
   expect(out160[38]).toBe('沒有要你處理的事')
   expect(out160[39]).toContain('7 花費')
   expect(out160[39]).toContain('i 說明  Esc 收起')
 
-  // 2. 120x30 (header 1 + blank gap 21 + body 6 + calm empty state 1 + strip 1 = 30)
+  // X5: 120x30 (header 1 + blank gap 22 + body 5 + calm empty state 1 + strip 1 = 30)
   const out120 = frameRows(spendPage, ctxOf(120, 30)).map(text)
   expect(out120.length).toBe(30)
   expect(out120[0]).toBe('花費')
-  expect(out120.slice(1, 22).every(r => r === '')).toBe(true)
-  expect(diffRows(out120.slice(22, 28), GOLD_WIDE_BODY)).toEqual([])
+  expect(out120.slice(1, 23).every(r => r === '')).toBe(true)
+  expect(diffRows(out120.slice(23, 28), GOLD_WIDE_BODY)).toEqual([])
   expect(out120[28]).toBe('沒有要你處理的事')
   expect(out120[29]).toContain('7 花費')
 

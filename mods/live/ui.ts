@@ -1160,7 +1160,9 @@ export const barValue = (cells: number): Frag => frag([sg(GLYPHS.chart.meterOn.r
 
 // the props a drawn Text gets from one segment: pane.tsx / band.tsx spread this, so they carry no colour decision of their own (§6.1)
 export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | undefined; dimColor: boolean | undefined } {
-  return { color: s.color, bold: s.bold, dimColor: s.dim }
+  // Y6: runtime inputs can escape TypeScript; only the semantic palette reaches Text.
+  const color = s.color !== undefined && Object.values(PALETTE).includes(s.color) ? s.color : undefined
+  return { color, bold: s.bold, dimColor: s.dim }
 }
 
 // `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `▲ 要你決定`)

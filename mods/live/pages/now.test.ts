@@ -74,7 +74,7 @@ const GOLD_160 = [
   '  ▲ 主機 h6 離線 12 分',
   '  ? 額度 personal 判定未知：缺換池資料（capacity）',
   '── 本席 codeforge--claude ────────────────────────────',
-  '  位置   plan/shared-tui · 階段 plan · ctx 41%',
+  '  位置   plan/shared-tui · 階段 plan · 上下文 41%', // Z3: Chinese context label
   '  任務   ⋯ 01M7N307 r2 草稿 03:00 · 1/3',
   '  背景   ● 盤點子代理 4 分',
   '  派工   ● 1 執行中（sonnet hand 23 分）',
@@ -94,7 +94,7 @@ const GOLD_80 = [
   ' ▲ 主機 h6 離線 12 分',
   '? 額度 personal 判定未知：缺換池資料（capacity）',
   '── 本席 codeforge ──',
-  'plan/shared-tui · plan · ctx 41%',
+  'plan/shared-tui · plan · 上下文 41%', // Z3: Chinese context label
   '⋯ 01M7N307 r2 草稿 03:00',
   '背景 ● 盤點子代理 4 分',
   '派工 ● 1 · 審查 2/2 · 花費 7 天 68%',
@@ -155,7 +155,8 @@ test('now: null console and null live draw the no-source row, never throw', asyn
 
 test('now: overflow at 80x24 ends in the more row and keeps 24 rows', async () => {
   await feed()
-  const ex = Array.from({ length: 9 }, (_, i) => ({ ...con().items[0], id: 'e' + i, title: 'lane' + i + ' 卡住' }))
+  // X5: content no longer contains spacer rows; keep enough real rows to overflow.
+  const ex = Array.from({ length: 30 }, (_, i) => ({ ...con().items[0], id: 'e' + i, title: 'lane' + i + ' 卡住' }))
   const out = frameRows(nowPage, ctxOf(80, 24, con({ items: ex as never }))).map(text)
   expect(out.length).toBe(24)
   expect(out.some(r => r.includes('還有'))).toBe(true)

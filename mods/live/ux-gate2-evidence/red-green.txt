@@ -1,0 +1,289 @@
+=== X5-red: plugin test exit=1 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(fail) X5: quota table, detail, actions and strip have no intervening empty rows [9.17ms]
+  AssertionError: 80: padding belongs above the content
+
+  expect(received).toEqual()
+
+  Expected: []
+  Received: [""]
+(fail) X5: the inert focus anchor shares the final strip row instead of adding a row below it [4.91ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: 30
+  Received: 31
+
+ 0 pass
+ 2 fail
+Ran 2 tests across 1 file. [0.55s]
+
+=== X5-green: plugin test exit=0 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [10.59ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [4.70ms]
+
+ 2 pass
+ 0 fail
+Ran 2 tests across 1 file. [0.59s]
+
+=== Y2-red: plugin test exit=1 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [9.67ms]
+(fail) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [0.93ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: "合成背景"
+  Received: undefined
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [3.35ms]
+
+ 2 pass
+ 1 fail
+Ran 3 tests across 1 file. [0.48s]
+
+=== Y2-green: plugin test exit=0 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [11.26ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [4.60ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [3.61ms]
+
+ 3 pass
+ 0 fail
+Ran 3 tests across 1 file. [0.52s]
+
+=== Y4-red: plugin test exit=1 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [12.82ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [6.52ms]
+(fail) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [2.84ms]
+  AssertionError: one compact header before the percentages
+
+  expect(received).toBeGreaterThanOrEqual()
+
+  Expected: >= 0
+  Received: -1
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [5.29ms]
+
+ 3 pass
+ 1 fail
+Ran 4 tests across 1 file. [0.45s]
+
+=== Y4-green: plugin test exit=0 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [11.22ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [5.56ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [2.08ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [3.52ms]
+
+ 4 pass
+ 0 fail
+Ran 4 tests across 1 file. [0.42s]
+
+=== Z1-red: plugin test exit=1 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [8.62ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [3.88ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [1.57ms]
+(fail) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.23ms]
+  AssertionError: 40: ✗ 額度 180 分未更新（>10 分，statusline |  沒在跑）
+
+  expect(received).toBe()
+
+  Expected: true
+  Received: false
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [2.94ms]
+
+ 4 pass
+ 1 fail
+Ran 5 tests across 1 file. [0.36s]
+
+=== Z1-green: plugin test exit=0 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [8.37ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [3.78ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [1.25ms]
+(pass) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.59ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [2.67ms]
+
+ 5 pass
+ 0 fail
+Ran 5 tests across 1 file. [0.39s]
+
+=== Z3-red: plugin test exit=1 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [7.22ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [3.28ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [1.11ms]
+(pass) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.32ms]
+(fail) Z3: a project hash without stage has a Chinese explanation and missing context says 上下文 — [1.93ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "專案"
+  Received: "  位置   3ebbdc778104dcc3 · ctx —"
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [2.51ms]
+
+ 5 pass
+ 1 fail
+Ran 6 tests across 1 file. [0.41s]
+
+=== Z3-green: plugin test exit=0 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [8.32ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [3.82ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [1.21ms]
+(pass) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.53ms]
+(pass) Z3: a project hash without stage has a Chinese explanation and missing context says 上下文 — [2.00ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [3.84ms]
+
+ 6 pass
+ 0 fail
+Ran 6 tests across 1 file. [0.39s]
+
+=== Z4-red: plugin test exit=1 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [7.12ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [3.33ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [1.09ms]
+(pass) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.34ms]
+(pass) Z3: a project hash without stage has a Chinese explanation and missing context says 上下文 — [1.84ms]
+(fail) Z4: the focused decision title keeps (1/3 · 1 天) on the same row at every pane width [0.73ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "(1/3 · 1 天)"
+  Received: "▸ 合成卡：先跑回歸嗎？"
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [2.41ms]
+
+ 6 pass
+ 1 fail
+Ran 7 tests across 1 file. [0.33s]
+
+=== Z4-green: plugin test exit=0 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [7.76ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [3.40ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [1.08ms]
+(pass) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.41ms]
+(pass) Z3: a project hash without stage has a Chinese explanation and missing context says 上下文 — [1.93ms]
+(pass) Z4: the focused decision title keeps (1/3 · 1 天) on the same row at every pane width [2.70ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [2.77ms]
+
+ 7 pass
+ 0 fail
+Ran 7 tests across 1 file. [0.36s]
+
+=== Y6-red: plugin test exit=1 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [8.59ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [4.44ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [2.63ms]
+(pass) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.90ms]
+(pass) Z3: a project hash without stage has a Chinese explanation and missing context says 上下文 — [2.76ms]
+(pass) Z4: the focused decision title keeps (1/3 · 1 天) on the same row at every pane width [3.74ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [2.87ms]
+
+mods/live/ux-gate2.test.ts:
+(fail) Y6: the drawing helper admits semantic theme roles and rejects legacy raw colour escapes [2.47ms]
+  AssertionError: expect(received).toBeUndefined()
+
+  Expected: undefined
+  Received: "\u001b[38;5;153m"
+
+ 7 pass
+ 1 fail
+Ran 8 tests across 2 files. [0.38s]
+
+=== Y6-green: plugin test exit=0 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(pass) X5: quota table, detail, actions and strip have no intervening empty rows [7.64ms]
+(pass) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [3.36ms]
+(pass) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [1.08ms]
+(pass) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.30ms]
+(pass) Z3: a project hash without stage has a Chinese explanation and missing context says 上下文 — [1.77ms]
+(pass) Z4: the focused decision title keeps (1/3 · 1 天) on the same row at every pane width [2.56ms]
+(pass) X5: the inert focus anchor shares the final strip row instead of adding a row below it [2.37ms]
+
+mods/live/ux-gate2.test.ts:
+(pass) Y6: the drawing helper admits semantic theme roles and rejects legacy raw colour escapes [2.37ms]
+
+ 8 pass
+ 0 fail
+Ran 8 tests across 2 files. [0.33s]
+
+=== Final tests against immutable base daedf7fbd824ef6f3e807ebc2cdfe0a2b846cb54: plugin test exit=1 ===
+
+mods/live/pages/ux-gate2.test.ts:
+(fail) X5: quota table, detail, actions and strip have no intervening empty rows [8.79ms]
+  AssertionError: 80: padding belongs above the content
+
+  expect(received).toEqual()
+
+  Expected: []
+  Received: [""]
+(fail) Y2: a remote card keeps the complete answer area in PM order and directs answering to h1 [1.02ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: "合成背景"
+  Received: undefined
+(fail) Y4: the 80x24 quota table labels 7-day, 5-hour and projected percentages, including compact rendering [2.06ms]
+  AssertionError: one compact header before the percentages
+
+  expect(received).toBeGreaterThanOrEqual()
+
+  Expected: >= 0
+  Received: -1
+(fail) Z1: wrap at clause boundaries, keeping statusline 沒在跑 and · z 收合 whole [1.89ms]
+  AssertionError: 40: ✗ 額度 180 分未更新（>10 分，statusline |  沒在跑）
+
+  expect(received).toBe()
+
+  Expected: true
+  Received: false
+(fail) Z3: a project hash without stage has a Chinese explanation and missing context says 上下文 — [2.90ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "專案"
+  Received: "  位置   3ebbdc778104dcc3 · ctx —"
+(fail) Z4: the focused decision title keeps (1/3 · 1 天) on the same row at every pane width [1.83ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "(1/3 · 1 天)"
+  Received: "▸ 合成卡：先跑回歸嗎？"
+(fail) X5: the inert focus anchor shares the final strip row instead of adding a row below it [3.86ms]
+  AssertionError: expect(received).toBe()
+
+  Expected: 30
+  Received: 31
+
+mods/live/ux-gate2.test.ts:
+(fail) Y6: the drawing helper admits semantic theme roles and rejects legacy raw colour escapes [4.10ms]
+  AssertionError: expect(received).toBeUndefined()
+
+  Expected: undefined
+  Received: "\u001b[38;5;153m"
+
+ 0 pass
+ 8 fail
+Ran 8 tests across 2 files. [0.55s]
+
+=== Final affected tests: plugin test exit=0 ===
+ 512 pass
+ 0 fail
+Ran 512 tests across 17 files. [2.86s]
+
+=== Final affected tests after X5 golden updates: plugin test exit=0 ===
+ 519 pass
+ 0 fail
+Ran 519 tests across 18 files. [2.52s]

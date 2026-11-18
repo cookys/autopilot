@@ -141,7 +141,7 @@ test('N1 (S1-full-p2-160x40 row 27): 待決 focuses the card that has waited lon
   expect(text(o.body[0])).toContain('1/3')
   const narrow = decidePage.render(ctx(80, 24, decideCon(CARDS), decideLive)).body.map(text)
   expect(narrow[0]).toContain('測試機第二槽插電')
-  expect(narrow[1]).toContain('1/3')
+  expect(narrow[0]).toContain('1/3') // Z4: progress stays beside the title
 })
 
 test('N2 (S1-full-p1-160x40 row 19): 現況 draws no ▸ focus mark and orders the line rows like 艦隊 (longest first), with the duration', () => {

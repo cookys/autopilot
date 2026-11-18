@@ -462,7 +462,7 @@ const openRecent = ($: any, surface: (typeof SURFACES)[number] = 'terminal') => 
 // `session … · host … · ctx …`, or the state text of a non-ok snapshot
 const paneHeader = async ($: any, surface: (typeof SURFACES)[number]) => {
   const rows = (await paneParts($, surface)).head
-  const row = rows.find(l => /ctx/.test(l)) ?? (rows[0] as string)
+  const row = rows.find(l => /上下文|ctx/.test(l)) ?? (rows[0] as string) // Z3: either locale
   const at = Math.min(...['工作階段', 'session'].map(k => row.indexOf(k)).filter(i => i >= 0), row.length)
   return row.slice(at === row.length ? 0 : at).trimEnd()
 }
@@ -478,7 +478,7 @@ for (const surface of SURFACES) {
     world(on, base())
     await start($, surface)
     expect(await bandText($, surface)).toBe(FRESH_TEXT())
-    expect((await paneHeader($, surface))).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
+    expect((await paneHeader($, surface))).toBe('工作階段 $0.42 · 本機今日 $3.10 · 上下文 37%') // Z3: localized context label
   })
 
   test('band: two sessions of one repo each show their own sid cost and ctx (' + surface + ')', async ($, on) => {
@@ -486,9 +486,9 @@ for (const surface of SURFACES) {
     await start($, surface)
     const text = await paneHeader($, surface)
     expect(text).toContain('工作階段 $9.99 · 本機今日 $3.10')
-    expect(text).toContain('ctx 88%')
+    expect(text).toContain('上下文 88%') // Z3: localized context label
     expect(text).not.toContain('$0.42')
-    expect(text).not.toContain('ctx 37%')
+    expect(text).not.toContain('上下文 37%') // Z3: localized context label
     expect(w.reads.filter(p => p.includes(SID_A))).toEqual([]) // never read the other sid's context/marker
   })
 
@@ -499,9 +499,9 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     const text = await paneHeader($, surface)
-    expect(text).toBe('工作階段 $— · 本機今日 $— · ctx —')
+    expect(text).toBe('工作階段 $— · 本機今日 $— · 上下文 —') // Z3: localized context label
     expect(text).not.toContain('$0')
-    expect(text).not.toContain('ctx 0')
+    expect(text).not.toContain('上下文 0') // Z3: localized context label
   })
 
   test('band: a context file older than 120 s is absent, not stale data (' + surface + ')', async ($, on) => {
@@ -509,7 +509,7 @@ for (const surface of SURFACES) {
     files[LIVE + '/context/' + SID_A + '.json'] = j(context(37, '2026-10-04T09:50:00.000Z'))
     world(on, files)
     await start($, surface)
-    expect(await paneHeader($, surface)).toContain('ctx —')
+    expect(await paneHeader($, surface)).toContain('上下文 —') // Z3: localized context label
   })
 
   test('band: no pointer / unreadable pointer (' + surface + ')', async ($, on) => {
@@ -559,7 +559,7 @@ for (const surface of SURFACES) {
     await $.session.end({ reason: 'clear', sessionId: SID_A, resume: {} } as never)
     await w.clock.advance(5000) // the timer must have survived the clear
     expect(await bandText($, surface)).toContain('疑似卡住 repo')
-    expect(await paneHeader($, surface)).toBe('工作階段 $— · 本機今日 $3.10 · ctx —')
+    expect(await paneHeader($, surface)).toBe('工作階段 $— · 本機今日 $3.10 · 上下文 —') // Z3: localized context label
   })
 
   // Root liveness parity: the same table is read by hooks/session-root-liveness.test.js against scripts/session-mode.js readSessionRoot.
@@ -1473,7 +1473,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     const text = await bandText($, surface)
     expect(text).not.toMatch(/\$|ctx|host|session/)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · 上下文 37%') // Z3: localized context label
   })
 
   test('pane: when a decision is awaited it is the first section, built from the model decision; the Link stays (' + surface + ')', async ($, on) => {
@@ -1483,7 +1483,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     let pane = await paneParts($, surface, 'now')
     expect(pane.head[0]).toContain('▲ 要你決定') // the global header's verdict line (verdict · project · since) is drawn above the tab body
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%') // and carries the spend / ctx metrics
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · 上下文 37%') // Z3: localized context metrics
     const rule = pane.texts.findIndex(t => t.startsWith('▾ 要你處理')) // the awaited decision is the first section (before "where you are")
     expect(rule).toBe(0)
     expect(rule).toBeLessThan(pane.texts.findIndex(t => t.startsWith('▾ 位置'))) // a foldable section, open by default
@@ -1847,7 +1847,7 @@ for (const surface of SURFACES) {
     const w = world(on, files, NOW_FRESH, SID_RAW)
     await start($, surface)
     expect((await bandParts($, surface)).line1.endsWith('已完成 1 項')).toBe(true)
-    expect(await paneHeader($, surface)).toContain('ctx 55%') // the context file name is sanitised too
+    expect(await paneHeader($, surface)).toContain('上下文 55%') // Z3: localized label; the context file name is sanitised too
     files[P_TASKS(SID_FILE)] = j({ ...tasksFile({}, SID_RAW), schema: 'other/1' })
     // wrong schema: the file is absent, so no manifest means no task section at all
     await w.clock.advance(5000)
@@ -2233,18 +2233,18 @@ for (const surface of SURFACES) {
     files[P_SOURCES] = j(manifest({ context: OFF }))
     const w = world(on, files)
     await start($, surface)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 來源未接')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · 上下文 來源未接') // Z3: localized context label
     files[P_SOURCES] = j(manifest())
     files[LIVE + '/context/' + SID_A + '.json'] = j({ schema_version: 1, session_id: SID_A, written_at: '2026-10-04T10:00:20.000Z', writer: 'context-budget', window_source: 'unknown', model: {}, context_window: { context_window_size: null, used_percentage: null, total_input_tokens: 90000, current_usage: {} } })
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx —')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · 上下文 —') // Z3: localized context label
     files[LIVE + '/context/' + SID_A + '.json'] = j({ schema_version: 1, session_id: SID_A, written_at: '2026-10-04T10:00:20.000Z', writer: 'context-budget', window_source: 'observed', model: {}, context_window: { context_window_size: 1000000, used_percentage: 9, total_input_tokens: 90000, current_usage: {} } })
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 9%')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · 上下文 9%') // Z3: localized context label
     // data beats the manifest
     files[P_SOURCES] = j(manifest({ context: OFF }))
     await w.clock.advance(5000)
-    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · ctx 9%')
+    expect(await paneHeader($, surface)).toBe('工作階段 $0.42 · 本機今日 $3.10 · 上下文 9%') // Z3: localized context label
   })
 }
 
@@ -3228,7 +3228,7 @@ for (const surface of SURFACES) {
 
     const now = await tab('now')
     expect(now.head[0]).toContain('⊘ 疑似卡住  repo')
-    expect(now.head.join('\n')).toContain('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
+    expect(now.head.join('\n')).toContain('工作階段 $0.42 · 本機今日 $3.10 · 上下文 37%') // Z3: localized context label
     expect(has(now.texts, '階段', 'implement', '已在此階段 3m', 'M!·l5')).toBe(true)
     expect(has(now.texts, '單元', '▰▰▰▱▱ 3/5', 'band (deliverable)', '2 個審查家族')).toBe(true)
     const walk = now.texts.find(t => t.includes('◐')) as string // the stage-walk diagram: five nodes, the third is the current one
@@ -5938,7 +5938,7 @@ for (const surface of SURFACES) {
     const heads = rawHeads.map(h => h.map(l => l.replace(OVERFLOW, (_m, d: string) => " ".repeat(12 + d.length)).trimEnd())) // the hint is 12 + digits cells wide
     expect(heads[0].length, 'the header has a verdict line and the blank under it').toBeGreaterThanOrEqual(2)
     expect(heads[0][0]).toContain('⊘ 疑似卡住  repo')
-    expect(heads[0].join('\n')).toContain('工作階段 $0.42 · 本機今日 $3.10 · ctx 37%')
+    expect(heads[0].join('\n')).toContain('工作階段 $0.42 · 本機今日 $3.10 · 上下文 37%') // Z3: localized context label
     expect(heads[0][heads[0].length - 1]).toBe('')
     heads.forEach((h, i) => expect(h, 'tab ' + i).toEqual(heads[0]))
     // the hint is the ONLY difference: every raw header carries exactly one, and the raw headers differ from one another (different tree heights)

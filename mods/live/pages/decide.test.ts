@@ -31,10 +31,11 @@ const card = (id: string, question: string, who: string, ago: number) => ({ id, 
 const H = 3600000
 const AGE40 = 2400
 
+// Z4: progress and age stay together on the title row.
 const GOLD = {
  "w160": {
   "body": [
-   "▸ d-89fe394f 1/3  feature/legacy-payment-rewrite 和 feature/social-login 依序 --no-ff 合進 legacy？     執行者 game-lead · 40 分",
+   "▸ d-89fe394f  feature/legacy-payment-rewrite 和 feature/social-login 依序 --no-ff 合進 legacy？     執行者 game-lead (1/3 · 40 分)",
    "  背景   兩支分支都過審，合併順序影響 migration 編號",
    "  卡住   game-lead 的 row 不能自己合 main 以外的 legacy 分支",
    "  [a] 可以 ★    [b] 先不要",
@@ -59,7 +60,7 @@ const GOLD = {
  },
  "w120": {
   "body": [
-   "▸ d-4c2e19a0 2/3  馬拉松分支 5 支怎麼合進 release？                       執行者 game-lead · 2 時",
+   "▸ d-4c2e19a0  馬拉松分支 5 支怎麼合進 release？                       執行者 game-lead (2/3 · 2 時)",
    "  背景   五支分支互相有衝突，合併順序決定誰要 rebase",
    "  卡住   game-lead 只能合 main，release 要你點頭",
    "  [a] 全部一次合",
@@ -83,8 +84,8 @@ const GOLD = {
  },
  "c80": {
   "body": [
-   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
-   "  d-89fe394f 1/3 · game-lead · 40 分",
+   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？ (1/3 · 40 分)",
+   "  d-89fe394f · game-lead",
    "背景 兩支都過審，順序影響 migration",
    "[a] 可以 ★   [b] 先不要",
    "建議 可以：先 payment 再 social",
@@ -104,8 +105,8 @@ const GOLD = {
  },
  "c80_folded": {
   "body": [
-   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
-   "  d-89fe394f 1/3 · game-lead · 40 分",
+   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？ (1/3 · 40 分)",
+   "  d-89fe394f · game-lead",
    "背景 兩支都過審，順序影響 migration",
    "[a] 可以 ★   [b] 先不要",
    "建議 可以：先 payment 再 social",
@@ -123,8 +124,8 @@ const GOLD = {
  },
  "c80_open": {
   "body": [
-   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
-   "  d-89fe394f 1/3 · game-lead · 40 分",
+   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？ (1/3 · 40 分)",
+   "  d-89fe394f · game-lead",
    "背景 兩支都過審，順序影響 migration",
    "[a] 可以 ★   [b] 先不要",
    "建議 可以：先 payment 再 social",
@@ -144,8 +145,8 @@ const GOLD = {
  },
  "c80_sent": {
   "body": [
-   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？",
-   "  d-89fe394f 1/3 · game-lead · 40 分",
+   "▸ payment 和 social-login 依序 --no-ff 合進 legacy？ (1/3 · 40 分)",
+   "  d-89fe394f · game-lead",
    "已送出：[b] 先不要",
    "── 其他待決 2（z 收合）──",
    "d-fd51ee8d 308 現場量 30 格 · 1天",
@@ -168,8 +169,8 @@ const GOLD = {
  },
  "c80_old6": {
   "body": [
-   "▸ 六條合併策略選哪一條？",
-   "  d-2b7710cc 1/1 · game-lead · 3 時（舊卡，6 個選項）",
+   "▸ 六條合併策略選哪一條？ (1/1 · 3 時)",
+   "  d-2b7710cc · game-lead（舊卡，6 個選項）",
    "[a] 全合  [b] 依序  [c] 兩批",
    "[d] 前兩支  [e] 先不要",
    "[f6] 第 6 項：只合 hotfix",
@@ -316,14 +317,14 @@ test('decide: a console card in focus is read-only and names the seat that answe
   const ctx = ctxOf(80, 24, live(), con160, nav({}))
   const o = decidePage.render(ctx)
   expect(text(o.body[0])).toContain('下次到 308 現場時量 30 格')
-  expect(text(o.body[1])).toContain('d-fd51ee8d 1/2 · 308')
-  expect(text(o.actions[0])).toBe('這張要到 308 答，這裡只能看')
+  expect(text(o.body[1])).toContain('d-fd51ee8d · 308') // Z4: progress is now on the title
+  expect(text(o.actions[0])).toBe('到 308 答') // Y2: answering destination replaces submit
 })
 
 test('decide R2 & R11: at 80x24 card question comes before owner seat and age; wide single-row other-card titles cut with … keeping age fixed at right edge', () => {
   const out80 = decidePage.render(ctxOf(80, 24, live(own80), con80)).body.map(text)
-  expect(out80[0]).toBe('▸ payment 和 social-login 依序 --no-ff 合進 legacy？')
-  expect(out80[1]).toContain('game-lead · 40 分')
+  expect(out80[0]).toBe('▸ payment 和 social-login 依序 --no-ff 合進 legacy？               (1/3 · 40 分)') // Z4: suffix on title
+  expect(out80[1]).toContain('d-89fe394f · game-lead') // Z4: age moved to title
 
   const longTitle = '這是一張標題非常非常長的待決卡用來測試單列清單項目過寬時以省略號截斷且時間固定在右邊界絕不換行'
   const cWide = con([card('d-aaaaaaaa', longTitle, 'PM', 2 * H)], [])

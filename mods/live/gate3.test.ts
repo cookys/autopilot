@@ -59,8 +59,10 @@ test('gate3 item 1: quota draws exactly one row per pool at 160x40, 120x30, 80x2
       expect(bodyRows[section]).toContain('──')
       expect(bodyRows[section + 1]).toContain(loc('page.quota.col_pool'))
       const tableStart = section + 2
-      const blankIdx = bodyRows.findIndex((l, i) => i >= tableStart && l.trim() === '')
-      const tableRegion = blankIdx >= 0 ? bodyRows.slice(tableStart, blankIdx) : bodyRows.slice(tableStart)
+      // X5: detail follows the table directly; its heading, rather than a blank, ends the table.
+      const focusIdx = bodyRows.findIndex((l, i) => i >= tableStart && l.includes('──'))
+      const tableRegion = focusIdx >= 0 ? bodyRows.slice(tableStart, focusIdx) : bodyRows.slice(tableStart)
+      expect(bodyRows.slice(tableStart).some(l => l.trim() === ''), 'X5: no internal padding').toBe(false)
       const poolRows = bodyRows.filter(l => /^[▸ ] [✗?▲✓] \S/.test(l))
       expect(tableRegion.length, cols + 'x' + rows + ': table region rows == pools shown').toBe(POOLS.length)
       expect(poolRows.length, cols + 'x' + rows + ': pool rows drawn == pools shown').toBe(POOLS.length)

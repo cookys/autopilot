@@ -14,6 +14,7 @@ export const brokenRow = (text: string): Row => [staleBadge(text)]
 // `hang` > 0 (N3): every continuation row starts with `hang` blank cells (a hanging indent, so the left status-glyph column stays clean), and a row breaks after a clause
 // boundary (：，、；。· ） / blank) when that boundary is in the second half of the row; otherwise it breaks at the width as before.
 const CLAUSE_END = /[：，、；。·）／\s]/
+const STRONG_CLAUSE_END = /[：，、；。／]/
 export const WRAP_HANG = 2 // the hang the frame wraps a body row with (frame.ts re-exports it)
 export function wrapRow(row: Row, cols: number, hang = 0): Row[] {
   if (cols <= 0 || row.reduce((w, x) => w + displayWidth(x.text), 0) <= cols) return [row]
@@ -52,9 +53,20 @@ function wrapHanging(row: Row, cols: number, hang: number): Row[] {
     let j = i
     while (j < chars.length && used + chars[j].w <= lim) { used += chars[j].w; j++ }
     if (j < chars.length) {
-      let k = j
-      while (k > i && !CLAUSE_END.test(chars[k - 1].ch)) k--
-      if (k > i && (k - i) * 2 >= j - i) j = k
+      // Z1: punctuation outranks spaces inside a clause. A middle dot belongs
+      // to the following hint, so `· z 收合` moves together to the next row.
+      let clause = -1
+      for (let k = i + 1; k <= j; k++) {
+        if (STRONG_CLAUSE_END.test(chars[k - 1].ch)) clause = k
+        if (chars[k]?.ch === '·') clause = k
+      }
+      const clauseWidth = chars.slice(i, Math.max(i, clause)).reduce((w, c) => w + c.w, 0)
+      if (clause > i && clauseWidth * 2 >= used) j = clause
+      else {
+        let k = j
+        while (k > i && !CLAUSE_END.test(chars[k - 1].ch)) k--
+        if (k > i && (k - i) * 2 >= j - i) j = k
+      }
     }
     if (j === i) j = i + 1
     lines.push(chars.slice(i, j))

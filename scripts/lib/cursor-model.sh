@@ -63,6 +63,11 @@
 [ -n "${_AUTOPILOT_CURSOR_MODEL_SH:-}" ] && return 0
 _AUTOPILOT_CURSOR_MODEL_SH=1
 
+# Broker implementer contract. The legacy CLI mapper below remains for the
+# review/author consumers; dispatch-hetero uses only these broker entry points.
+cursor_broker_default_model() { printf '%s\n' 'composer-2.5'; }
+cursor_is_broker_model() { [[ "$1" =~ ^composer-[0-9][0-9.]*$ ]]; }
+
 # ---------------------------------------------------------------------------
 # The table. Two families, four genuine effort levels each; `max` clamps to
 # each family's `xhigh` ceiling (not a distinct table row).

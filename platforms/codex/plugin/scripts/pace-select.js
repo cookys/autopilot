@@ -453,7 +453,7 @@ function quotaReading(row, now = new Date()) {
 }
 
 function compareReadings(a, b) {
-  const rank = r => r.status === 'schedule_only' ? 2 : Number(r.status === 'stale_recent');
+  const rank = r => ['schedule_only', 'observed_available'].includes(r.status) ? 2 : Number(r.status === 'stale_recent');
   return rank(a) - rank(b)
     || b.score - a.score || (b.slack ?? -Infinity) - (a.slack ?? -Infinity);
 }
@@ -513,7 +513,7 @@ function selectEngine({
   const excluded = normalizeExclude(exclude);
   // pace-roles.json `_disabled`: keys kept in the tables but never offered by the picker (operator: test before enabling).
   // kimi has no usage command: a dispatch-observed exhaustion (kimi-quota-observe.js) is unpickable until its reset.
-  if (require('./lib/kimi-quota-observe').exhaustedKimi({})) excluded.add('kimi');
+  if (require('./lib/kimi-quota-observe').exhaustedKimi({ env: resolvedEnv })) excluded.add('kimi');
   const kimiStopped = require('./lib/kimi-local-stop').isStopped(resolvedEnv);
   const stoppedKeys = new Set();
   if (kimiStopped) {
@@ -523,6 +523,8 @@ function selectEngine({
     }
     for (const key of stoppedKeys) excluded.add(key);
   }
+  const cursorState = require('./lib/cursor-quota-observe').cursorState({ env: resolvedEnv, now: now instanceof Date ? now.getTime() : undefined });
+  if (role !== 'implementer' || cursorState !== 'available') excluded.add('cursor');
   if (Array.isArray(resolvedRoles._disabled)) for (const k of resolvedRoles._disabled) if (typeof k === 'string') excluded.add(k);
   let allowedKeys;
   if (useQualified) {
@@ -640,6 +642,12 @@ function selectEngine({
 
   // Preserve schedule-only diagnostics, but a seat without quota ranks below every usable reading.
   for (const entry of readyPools.values()) {
+    // A successful broker observation admits Cursor without inventing a usage
+    // percentage. Rank it behind all measured readings, including recent stale.
+    if (entry.key === 'cursor' && cursorState === 'available' && !bestByKey.has(entry.key) && !overCeiling.has(entry.key)) {
+      bestByKey.set(entry.key, { key: entry.key, entry, low: false,
+        reading: { pool: 'cursor', slack: null, used_pct: null, expected_pct: null, score: -Infinity, status: 'observed_available' } });
+    }
     if (entry.schedule_only === true && !bestByKey.has(entry.key)) {
       bestByKey.set(entry.key, {
         key: entry.key,

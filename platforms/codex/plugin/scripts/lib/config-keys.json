@@ -49,6 +49,53 @@
   },
   "entries": [
     {
+      "name": "AUTOPILOT_CURSOR_BROKER_SOCK",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "/srv/cursor-broker/sock",
+      "readers": [
+        "scripts/lib/cursor-broker-client.js",
+        "scripts/lib/cursor-broker-run.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [
+        "AUTOPILOT_CURSOR_WORK_ROOT",
+        "AUTOPILOT_CURSOR_GROUP_WRAPPER"
+      ],
+      "note": "Unix socket override for hermetic Cursor broker tests."
+    },
+    {
+      "name": "AUTOPILOT_CURSOR_WORK_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "/srv/cursor-work",
+      "readers": [
+        "scripts/lib/cursor-broker-run.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [
+        "AUTOPILOT_CURSOR_BROKER_SOCK"
+      ],
+      "note": "Shared standalone clone root override for hermetic broker tests."
+    },
+    {
+      "name": "AUTOPILOT_CURSOR_GROUP_WRAPPER",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": "sg",
+      "readers": [
+        "scripts/dispatch-hetero.sh"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [
+        "AUTOPILOT_CURSOR_WORK_ROOT"
+      ],
+      "note": "Executable with sg argument shape (lanegit -c command), covering all clone and socket operations."
+    },
+    {
       "name": "autoCompactEnabled",
       "kind": "cc_setting",
       "audience": "user",

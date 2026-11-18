@@ -179,6 +179,7 @@ const DEFAULT_REGISTRY = {
       { name: '.qc', purpose: 'QC verdict files read by the pre-push qc gate' },
       { name: 'agents', purpose: 'methodology agent prompts' },
       { name: 'bin', purpose: 'autopilot CLI entry' },
+      { name: 'config', purpose: 'pinned runner versions and static operational tables' },
       { name: 'docs', purpose: 'documentation, plans, projects, backlog, evidence (split up from P1 on)' },
       { name: 'evals', purpose: 'evaluation harness and preregistered corpora' },
       { name: 'hooks', purpose: 'hook main files, hooks.json, opt-in manifest and the hook test suite' },

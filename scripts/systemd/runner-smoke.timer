@@ -1,0 +1,13 @@
+# autopilot:runner-smoke/1
+# Systemd user timer template for the daily runner smoke gate.
+[Unit]
+Description=Run the autopilot engine CLI smoke gate daily
+
+[Timer]
+Unit=runner-smoke.service
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

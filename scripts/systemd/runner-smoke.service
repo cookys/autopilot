@@ -1,0 +1,14 @@
+# autopilot:runner-smoke/1
+# Systemd user service template for the daily runner smoke gate.
+# Substitute @REPO_PATH@ and @FLEET_ADDRESS@ at install time, write under
+# ~/.config/systemd/user/, then enable runner-smoke.timer manually.
+# Opens no credential files directly; runs read-only through the dispatch wrappers.
+[Unit]
+Description=Daily autopilot engine CLI smoke gate
+
+[Service]
+Type=oneshot
+UnsetEnvironment=AUTOPILOT_TOKEN_SEAT AUTOPILOT_SESSION_ID
+StandardInput=null
+ExecStart=/usr/bin/env node @REPO_PATH@/scripts/runner-smoke.js --notify @FLEET_ADDRESS@
+TimeoutStartSec=900

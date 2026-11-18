@@ -1,28 +1,29 @@
 {
-  "schema": "autopilot.runner-pins/1",
+  "schema": "autopilot.runner-pins/2",
   "runners": {
     "codex": {
       "bin": "codex",
-      "installed": true,
-      "version": "codex-cli 0.166.0",
+      "vetted": [
+        "codex-cli 0.166.0"
+      ],
       "version_cmd": ["codex", "--version"],
       "autoupdate": "none-known",
-      "vetted_at": "2026-11-19",
-      "vetted_by": "in-service 2026-11-19"
+      "source": "in-service 2026-11-19"
     },
     "agy": {
       "bin": "agy",
-      "installed": true,
-      "version": "1.5.11",
+      "vetted": [
+        "1.5.11"
+      ],
       "version_cmd": ["agy", "--version"],
       "autoupdate": "none-known",
-      "vetted_at": "2026-11-19",
-      "vetted_by": "in-service 2026-11-19"
+      "source": "in-service 2026-11-19"
     },
     "claude": {
       "bin": "claude",
-      "installed": true,
-      "version": "2.1.327 (Claude Code)",
+      "vetted": [
+        "2.1.327 (Claude Code)"
+      ],
       "version_cmd": ["claude", "--version"],
       "autoupdate": {
         "kind": "env",
@@ -30,53 +31,46 @@
         "value": "1",
         "source": "readlink -f \"$(command -v claude)\" -> $HOME/.local/share/claude/versions/2.1.327 package binary strings: process.env.DISABLE_AUTOUPDATER, {type:\"env\",envVar:\"DISABLE_AUTOUPDATER\"}, DISABLE_AUTOUPDATER:\"1\""
       },
-      "vetted_at": "2026-11-19",
-      "vetted_by": "in-service 2026-11-19"
+      "source": "in-service 2026-11-19"
     },
     "grok": {
       "bin": "grok",
-      "installed": true,
-      "version": "grok 1.0.77 (50ca579fa996) [stable]",
+      "vetted": [
+        "grok 1.0.77 (50ca579fa996) [stable]"
+      ],
       "version_cmd": ["grok", "--version"],
       "autoupdate": "none-known",
-      "vetted_at": "2026-11-19",
-      "vetted_by": "in-service 2026-11-19"
+      "source": "in-service 2026-11-19"
     },
     "cursor": {
       "bin": "cursor-agent",
-      "installed": true,
-      "version": "2026.11.17-f532c45",
+      "vetted": [
+        "2026.11.17-f532c45"
+      ],
       "version_cmd": ["cursor-agent", "--version"],
       "autoupdate": "none-known",
-      "vetted_at": "2026-11-19",
-      "vetted_by": "in-service 2026-11-19"
+      "source": "in-service 2026-11-19"
     },
     "kimi": {
       "bin": "kimi",
-      "installed": false,
-      "version": null,
+      "vetted": [],
       "version_cmd": ["kimi", "--version"],
       "autoupdate": "none-known",
-      "vetted_at": "2026-11-19",
-      "vetted_by": "in-service 2026-11-19"
+      "source": "in-service 2026-11-19"
     },
     "qwen": {
       "bin": "qwen",
-      "installed": false,
-      "version": null,
+      "vetted": [],
       "version_cmd": ["qwen", "--version"],
       "autoupdate": "none-known",
-      "vetted_at": "2026-11-19",
-      "vetted_by": "in-service 2026-11-19"
+      "source": "in-service 2026-11-19"
     },
     "opencode": {
       "bin": "opencode",
-      "installed": false,
-      "version": null,
+      "vetted": [],
       "version_cmd": ["opencode", "--version"],
       "autoupdate": "none-known",
-      "vetted_at": "2026-11-19",
-      "vetted_by": "in-service 2026-11-19"
+      "source": "in-service 2026-11-19"
     }
   }
 }

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# runner-smoke.test.sh — hermetic tests for config/runner-pins.json,
-# scripts/runner-pin-check.js, scripts/runner-smoke.js, scripts/lib/runner-pins.js,
-# and scripts/systemd/runner-smoke.{service,timer}.
-# Uses fake runner binaries and a fake `fleet` binary first on PATH; makes zero real model calls.
+# runner-smoke.test.sh — hermetic tests for config/runner-pins.json (v2),
+# host-local runner-vetted.json overlay, scripts/runner-pin-check.js,
+# scripts/runner-smoke.js, scripts/lib/runner-pins.js, and
+# scripts/systemd/runner-smoke.{service,timer}.
+# Uses fake runner binaries and a fake `fleet` binary first on PATH; makes zero real model calls
+# and never touches the real ~/.autopilot/runner-vetted.json.
 
 . "$(dirname "$0")/lib.sh"
 
@@ -12,11 +14,12 @@ export HOME="$TEST_TMP/home"
 export XDG_RUNTIME_DIR="$TEST_TMP/xdg-run"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"
+export AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/runner-vetted.json"
 mkdir -p "$HOME" "$XDG_RUNTIME_DIR" "$AUTOPILOT_SESSION_MODE_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 
-# --- 0. Shipped files, codex plugin mirrors, and systemd template contracts ---
+# --- 0. Shipped files, codex plugin mirrors, v2 schema, and systemd template contracts ---
 PINS_JSON="$REPO_ROOT/config/runner-pins.json"
 PIN_CHECK_JS="$REPO_ROOT/scripts/runner-pin-check.js"
 SMOKE_JS="$REPO_ROOT/scripts/runner-smoke.js"
@@ -43,6 +46,19 @@ cmp -s "$SMOKE_JS" "$REPO_ROOT/platforms/codex/plugin/scripts/runner-smoke.js"
 assert_eq "$?" "0" "runner-smoke.js matches codex mirror"
 cmp -s "$PINS_LIB_JS" "$REPO_ROOT/platforms/codex/plugin/scripts/lib/runner-pins.js"
 assert_eq "$?" "0" "lib/runner-pins.js matches codex mirror"
+
+SHIPPED_PINS_CHECK="$(node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+if (doc.schema !== "autopilot.runner-pins/2") process.exit(1);
+for (const [name, entry] of Object.entries(doc.runners)) {
+  if (!Array.isArray(entry.vetted)) process.exit(2);
+  if ("installed" in entry || "version" in entry) process.exit(3);
+  if (!entry.bin || !Array.isArray(entry.version_cmd) || !entry.autoupdate || !entry.source) process.exit(4);
+}
+process.stdout.write("ok");
+' "$PINS_JSON")"
+assert_eq "$SHIPPED_PINS_CHECK" "ok" "shipped config/runner-pins.json uses schema autopilot.runner-pins/2 with vetted arrays and no v1 installed/version fields"
 
 SERVICE_TEXT="$(cat "$SMOKE_SERVICE")"
 TIMER_TEXT="$(cat "$SMOKE_TIMER")"
@@ -293,8 +309,7 @@ doc.runners.codex.autoupdate = {
 };
 doc.runners.opencode = {
   ...doc.runners.opencode,
-  installed: true,
-  version: "1.19.5",
+  vetted: ["1.19.5"],
   autoupdate: {
     kind: "config",
     file: ".config/opencode/opencode.json",
@@ -308,36 +323,122 @@ doc.runners.opencode = {
 fs.writeFileSync(process.argv[2], JSON.stringify(doc, null, 2) + "\n");
 ' "$PINS_JSON" "$FIXTURE_OC_PINS"
 
-# --- 1. runner-pin-check.js: matching fake versions -> exit 0, drift false ---
+# --- 0b. Legacy v1 table is refused with a clear migration message ---
+V1_PINS="$TEST_TMP/legacy-v1-pins.json"
+cat > "$V1_PINS" <<'EOF'
+{
+  "schema": "autopilot.runner-pins/1",
+  "runners": {
+    "agy": {
+      "bin": "agy",
+      "installed": true,
+      "version": "1.5.11",
+      "version_cmd": ["agy", "--version"],
+      "autoupdate": "none-known",
+      "vetted_at": "2026-11-19",
+      "vetted_by": "in-service 2026-11-19"
+    }
+  }
+}
+EOF
+V1_CHECK_OUT="$(node "$PIN_CHECK_JS" --pins "$V1_PINS" < /dev/null 2>&1)"; V1_CHECK_RC=$?
+assert_eq "$V1_CHECK_RC" "2" "pin-check refuses legacy v1 table with exit 2"
+assert_contains "$V1_CHECK_OUT" "autopilot.runner-pins/1" "v1 refusal names autopilot.runner-pins/1"
+assert_contains "$V1_CHECK_OUT" "autopilot.runner-pins/2" "v1 refusal names migration target autopilot.runner-pins/2"
+assert_contains "$V1_CHECK_OUT" "no longer supported" "v1 refusal states v1 is no longer supported"
+
+V1_SMOKE_OUT="$(node "$SMOKE_JS" --pins "$V1_PINS" --dry-run < /dev/null 2>&1)"; V1_SMOKE_RC=$?
+assert_eq "$V1_SMOKE_RC" "2" "runner-smoke refuses legacy v1 table with exit 2"
+assert_contains "$V1_SMOKE_OUT" "autopilot.runner-pins/2" "runner-smoke v1 refusal names autopilot.runner-pins/2"
+
+# --- 0c. Absent runners (absent from PATH + version_cmd fails to spawn) -> status absent, drift false, exit 0 ---
+NODE_EXE="$(command -v node)"
+ABSENT_PATH_DIR="$TEST_TMP/absent-only-bin"
+mkdir -p "$ABSENT_PATH_DIR"
+printf '#!/nonexistent/interpreter-for-spawn-failure\n' > "$ABSENT_PATH_DIR/codex"
+chmod +x "$ABSENT_PATH_DIR/codex"
+ALL_ABSENT_OUT="$(PATH="$ABSENT_PATH_DIR" "$NODE_EXE" "$PIN_CHECK_JS" < /dev/null 2>&1)"; ALL_ABSENT_RC=$?
+assert_eq "$ALL_ABSENT_RC" "0" "pin-check with all runners absent or failing to spawn exits 0"
+ALL_ABSENT_CHECK="$(printf '%s\n' "$ALL_ABSENT_OUT" | "$NODE_EXE" -e '
+const rows = require("fs").readFileSync(0, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+if (rows.length !== 8) process.exit(1);
+for (const r of rows) {
+  if (r.status !== "absent" || r.drift !== false || r.vetted_source !== null || r.actual !== null) process.exit(2);
+}
+process.stdout.write("ok");
+')"
+assert_eq "$ALL_ABSENT_CHECK" "ok" "absent from PATH and spawn-failed version_cmd both report status=absent, drift=false, vetted_source=null"
+
+# --- 1. runner-pin-check.js: installed fakes in table.vetted -> vetted/table; absent -> absent/null ---
+rm -f "$AUTOPILOT_RUNNER_VETTED_FILE"
 PIN_JSONL_OUT="$(DISABLE_AUTOUPDATER=1 node "$PIN_CHECK_JS" < /dev/null 2>&1)"; PIN_JSONL_RC=$?
-assert_eq "$PIN_JSONL_RC" "0" "pin-check matching versions exits 0 (JSONL)"
+assert_eq "$PIN_JSONL_RC" "0" "pin-check matching table.vetted versions exits 0 (JSONL)"
 PIN_JSONL_CHECK="$(printf '%s\n' "$PIN_JSONL_OUT" | node -e '
 const fs = require("fs");
 const lines = fs.readFileSync(0, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
 if (lines.length !== 8) process.exit(10);
 if (lines.some((r) => r.drift !== false)) process.exit(11);
 const byRunner = Object.fromEntries(lines.map((r) => [r.runner, r]));
+for (const inst of ["codex", "agy", "claude", "grok", "cursor"]) {
+  if (byRunner[inst].status !== "vetted" || byRunner[inst].vetted_source !== "table") process.exit(17);
+}
+for (const abs of ["kimi", "qwen", "opencode"]) {
+  if (byRunner[abs].status !== "absent" || byRunner[abs].vetted_source !== null || byRunner[abs].actual !== null) process.exit(16);
+}
 if (byRunner.codex.autoupdate_state !== "none-known") process.exit(12);
 if (byRunner.claude.autoupdate_state !== "disabled") process.exit(13);
 if (byRunner.opencode.autoupdate_state !== "none-known") process.exit(14);
 if (byRunner.agy.autoupdate_state !== "none-known") process.exit(15);
-if (byRunner.kimi.actual !== null || byRunner.qwen.actual !== null || byRunner.opencode.actual !== null) process.exit(16);
 process.stdout.write("ok");
 ')"
-assert_eq "$PIN_JSONL_CHECK" "ok" "pin-check JSONL emits 8 rows with drift:false and verified autoupdate_state"
+assert_eq "$PIN_JSONL_CHECK" "ok" "pin-check JSONL emits 8 rows with vetted/table for installed and absent/null for missing"
 
 PIN_DOC_OUT="$(DISABLE_AUTOUPDATER=1 node "$PIN_CHECK_JS" --json < /dev/null 2>&1)"; PIN_DOC_RC=$?
 assert_eq "$PIN_DOC_RC" "0" "pin-check --json matching versions exits 0"
 PIN_DOC_CHECK="$(printf '%s' "$PIN_DOC_OUT" | node -e '
 const doc = JSON.parse(require("fs").readFileSync(0, "utf8"));
-if (doc.schema !== "autopilot.runner-pins/1") process.exit(1);
+if (doc.schema !== "autopilot.runner-pins/2") process.exit(1);
 if (doc.ok !== true || doc.drift !== false) process.exit(2);
 if (!Array.isArray(doc.runners) || doc.runners.length !== 8) process.exit(3);
 process.stdout.write("ok");
 ')"
-assert_eq "$PIN_DOC_CHECK" "ok" "pin-check --json returns valid autopilot.runner-pins/1 document"
+assert_eq "$PIN_DOC_CHECK" "ok" "pin-check --json returns valid autopilot.runner-pins/2 document"
 
-# --- 1b. config autoupdate inspection + unpinned-runner drift + opencode containment smoke ---
+# --- 1a. Version only in host overlay -> vetted/overlay; version in both -> vetted/table ---
+SEEDED_OVERLAY="$TEST_TMP/seeded-overlay.json"
+cat > "$SEEDED_OVERLAY" <<'EOF'
+{
+  "schema": "autopilot.runner-vetted/1",
+  "runners": {
+    "grok": [
+      {
+        "version": "grok 1.0.89 (fleet-seat) [stable]",
+        "receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "vetted_at": "2026-11-19T01:00:00Z"
+      }
+    ],
+    "codex": [
+      {
+        "version": "codex-cli 0.166.0",
+        "receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "vetted_at": "2026-11-19T01:00:00Z"
+      }
+    ]
+  }
+}
+EOF
+PIN_OVERLAY_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$SEEDED_OVERLAY" FAKE_GROK_VERSION="grok 1.0.89 (fleet-seat) [stable]" node "$PIN_CHECK_JS" < /dev/null 2>&1)"; PIN_OVERLAY_RC=$?
+assert_eq "$PIN_OVERLAY_RC" "0" "pin-check with overlay-vetted version exits 0"
+PIN_OVERLAY_CHECK="$(printf '%s\n' "$PIN_OVERLAY_OUT" | node -e '
+const rows = require("fs").readFileSync(0, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+const byRunner = Object.fromEntries(rows.map((r) => [r.runner, r]));
+if (byRunner.grok.status !== "vetted" || byRunner.grok.vetted_source !== "overlay" || byRunner.grok.drift !== false) process.exit(1);
+if (byRunner.codex.status !== "vetted" || byRunner.codex.vetted_source !== "table" || byRunner.codex.drift !== false) process.exit(2);
+process.stdout.write("ok");
+')"
+assert_eq "$PIN_OVERLAY_CHECK" "ok" "version only in overlay reports vetted/overlay while version in table reports vetted/table"
+
+# --- 1b. config autoupdate inspection + unvetted empty-list runner + opencode containment smoke ---
 PIN_CFG_OUT="$(DISABLE_AUTOUPDATER=1 PATH="$FAKE_OC_BIN:$PATH" node "$PIN_CHECK_JS" --pins "$FIXTURE_OC_PINS" < /dev/null 2>&1)"; PIN_CFG_RC=$?
 assert_eq "$PIN_CFG_RC" "0" "pin-check fixture config autoupdate exits 0"
 PIN_CFG_CHECK="$(printf '%s\n' "$PIN_CFG_OUT" | node -e '
@@ -346,35 +447,38 @@ const byRunner = Object.fromEntries(rows.map((r) => [r.runner, r]));
 if (byRunner.codex.autoupdate_state !== "disabled") process.exit(1);
 if (byRunner.claude.autoupdate_state !== "disabled") process.exit(2);
 if (byRunner.opencode.autoupdate_state !== "disabled") process.exit(3);
+if (byRunner.opencode.status !== "vetted" || byRunner.opencode.vetted_source !== "table") process.exit(4);
 process.stdout.write("ok");
 ')"
 assert_eq "$PIN_CFG_CHECK" "ok" "pin-check inspects TOML and JSON config autoupdate files"
 
 UNPINNED_OUT="$(PATH="$FAKE_OC_BIN:$PATH" node "$PIN_CHECK_JS" < /dev/null 2>&1)"; UNPINNED_RC=$?
-assert_eq "$UNPINNED_RC" "1" "pin-check flags installed=false runner when binary appears on PATH"
+assert_eq "$UNPINNED_RC" "1" "pin-check flags installed runner with empty vetted set and no overlay entry as unvetted"
 
-OC_SMOKE_OUT="$(PATH="$FAKE_OC_BIN:$PATH" node "$SMOKE_JS" --pins "$FIXTURE_OC_PINS" --only opencode --date 2026-11-18 < /dev/null 2>&1)"; OC_SMOKE_RC=$?
+OC_SMOKE_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/oc-vetted.json" PATH="$FAKE_OC_BIN:$PATH" node "$SMOKE_JS" --pins "$FIXTURE_OC_PINS" --only opencode --date 2026-11-18 < /dev/null 2>&1)"; OC_SMOKE_RC=$?
 assert_eq "$OC_SMOKE_RC" "0" "runner-smoke exercises opencode-containment wrapper via fixture pins"
 
-# --- 2. runner-pin-check.js: one fake prints a different version -> exit 1, drift true ---
+# --- 2. runner-pin-check.js: installed fake at unknown version -> unvetted, drift true, exit 1 ---
 PIN_DRIFT_OUT="$(FAKE_GROK_VERSION="grok 1.9.99 (unvetted) [stable]" node "$PIN_CHECK_JS" < /dev/null 2>&1)"; PIN_DRIFT_RC=$?
-assert_eq "$PIN_DRIFT_RC" "1" "pin-check drifted fake version exits 1"
+assert_eq "$PIN_DRIFT_RC" "1" "pin-check unknown fake version exits 1"
 PIN_DRIFT_CHECK="$(printf '%s\n' "$PIN_DRIFT_OUT" | node -e '
 const rows = require("fs").readFileSync(0, "utf8").trim().split("\n").map((l) => JSON.parse(l));
 const drifted = rows.filter((r) => r.drift === true);
 if (drifted.length !== 1 || drifted[0].runner !== "grok") process.exit(1);
-if (drifted[0].actual !== "grok 1.9.99 (unvetted) [stable]") process.exit(2);
+if (drifted[0].status !== "unvetted" || drifted[0].vetted_source !== null) process.exit(2);
+if (drifted[0].actual !== "grok 1.9.99 (unvetted) [stable]") process.exit(3);
 process.stdout.write("ok");
 ')"
-assert_eq "$PIN_DRIFT_CHECK" "ok" "pin-check marks only drifted runner drift:true"
+assert_eq "$PIN_DRIFT_CHECK" "ok" "pin-check marks unknown version status=unvetted, drift=true, vetted_source=null"
 
-# --- 3. runner-smoke.js --dry-run calls no fake runner, no fleet fake, writes no receipt ---
-rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG" "$XDG_RUNTIME_DIR/autopilot/runner-smoke/2026-11-19.json"
+# --- 3. runner-smoke.js --dry-run calls no fake runner, no fleet fake, writes no receipt and no overlay ---
+rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG" "$XDG_RUNTIME_DIR/autopilot/runner-smoke/2026-11-19.json" "$AUTOPILOT_RUNNER_VETTED_FILE"
 DRY_OUT="$(node "$SMOKE_JS" --dry-run --notify test/canary/ops --date 2026-11-19 < /dev/null 2>&1)"; DRY_RC=$?
 assert_eq "$DRY_RC" "0" "runner-smoke --dry-run exits 0"
 assert_file_absent "$CALL_LOG" "--dry-run invokes zero fake runner binaries"
 assert_file_absent "$FLEET_LOG" "--dry-run invokes zero fleet calls"
 assert_file_absent "$XDG_RUNTIME_DIR/autopilot/runner-smoke/2026-11-19.json" "--dry-run writes no receipt"
+assert_file_absent "$AUTOPILOT_RUNNER_VETTED_FILE" "--dry-run writes no runner-vetted overlay"
 DRY_PLAN_CHECK="$(printf '%s' "$DRY_OUT" | node -e '
 const doc = JSON.parse(require("fs").readFileSync(0, "utf8"));
 if (doc.schema !== "autopilot.runner-smoke/1" || doc.dry_run !== true) process.exit(1);
@@ -411,16 +515,23 @@ process.stdout.write("ok");
 ')"
 assert_eq "$LOCAL_DATE_CHECK" "ok" "runner-smoke default receipt filename uses local date (2026-11-19 in +08:00 vs 2026-11-18Z)"
 
-# --- 4. runner-smoke.js: all fakes echo PINEAPPLE token -> exit 0, receipt written, fleet NOT called ---
-rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG"
+# --- 4. runner-smoke.js PASS writes overlay entry with receipt sha256; running twice does not duplicate ---
+rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG" "$AUTOPILOT_RUNNER_VETTED_FILE"
+PRE_SMOKE_PIN_OUT="$(FAKE_CODEX_VERSION="codex-cli 0.170.0" node "$PIN_CHECK_JS" < /dev/null 2>&1)"; PRE_SMOKE_PIN_RC=$?
+assert_eq "$PRE_SMOKE_PIN_RC" "1" "codex 0.170.0 is unvetted before smoke PASS"
+
 PASS_RECEIPT="$XDG_RUNTIME_DIR/autopilot/runner-smoke/2026-11-19.json"
-SMOKE_PASS_OUT="$(node "$SMOKE_JS" --notify test/canary/ops --date 2026-11-19 < /dev/null 2>&1)"; SMOKE_PASS_RC=$?
+SMOKE_PASS_OUT="$(FAKE_CODEX_VERSION="codex-cli 0.170.0" node "$SMOKE_JS" --notify test/canary/ops --date 2026-11-19 < /dev/null 2>&1)"; SMOKE_PASS_RC=$?
 assert_eq "$SMOKE_PASS_RC" "0" "runner-smoke all pass exits 0"
 assert_file_exists "$PASS_RECEIPT" "runner-smoke writes receipt under XDG_RUNTIME_DIR/autopilot/runner-smoke/<date>.json"
+assert_file_exists "$AUTOPILOT_RUNNER_VETTED_FILE" "runner-smoke PASS writes host-local runner-vetted overlay"
 assert_file_absent "$FLEET_LOG" "runner-smoke all pass does NOT call fleet"
 PASS_RECEIPT_CHECK="$(node -e '
+const crypto = require("crypto");
 const fs = require("fs");
-const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const receiptBytes = fs.readFileSync(process.argv[1], "utf8");
+const expectedSha = crypto.createHash("sha256").update(receiptBytes, "utf8").digest("hex");
+const doc = JSON.parse(receiptBytes);
 if (doc.schema !== "autopilot.runner-smoke/1") process.exit(1);
 if (doc.ok !== true || doc.pass_count !== 5 || doc.fail_count !== 0) process.exit(2);
 for (const r of doc.runners) {
@@ -429,16 +540,55 @@ for (const r of doc.runners) {
   if (typeof r.version !== "string" || !r.version) process.exit(5);
   if (typeof r.wall_seconds !== "number" || r.wall_seconds < 0) process.exit(6);
 }
-process.stdout.write("ok");
-' "$PASS_RECEIPT")"
-assert_eq "$PASS_RECEIPT_CHECK" "ok" "all-pass receipt records schema, version, rail_exit, rail_classification, pass, wall_seconds"
+const vetted = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (vetted.schema !== "autopilot.runner-vetted/1") process.exit(7);
+if (!Array.isArray(vetted.runners.codex) || vetted.runners.codex.length !== 1) process.exit(8);
+const codexEntry = vetted.runners.codex[0];
+if (codexEntry.version !== "codex-cli 0.170.0") process.exit(9);
+if (codexEntry.receipt_sha256 !== expectedSha) process.exit(10);
+if (codexEntry.vetted_at !== doc.finished_at) process.exit(11);
+for (const abs of ["kimi", "qwen", "opencode"]) {
+  if (vetted.runners[abs]) process.exit(12);
+}
+process.stdout.write(expectedSha);
+' "$PASS_RECEIPT" "$AUTOPILOT_RUNNER_VETTED_FILE")"
+assert_eq "${#PASS_RECEIPT_CHECK}" "64" "all-pass receipt and overlay record matching 64-hex receipt_sha256 and vetted_at"
 assert_contains "$(cat "$PROMPT_LOG")" 'model_reasoning_effort="high"' "codex smoke uses reasoning effort high"
 assert_not_contains "$(cat "$PROMPT_LOG")" 'model_reasoning_effort="xhigh"' "codex smoke never uses reasoning effort xhigh"
 
-# --- 5. runner-smoke.js: one fake omits token -> exit 1, fleet called once naming that runner ---
+POST_SMOKE_PIN_OUT="$(FAKE_CODEX_VERSION="codex-cli 0.170.0" node "$PIN_CHECK_JS" < /dev/null 2>&1)"; POST_SMOKE_PIN_RC=$?
+assert_eq "$POST_SMOKE_PIN_RC" "0" "codex 0.170.0 passes pin-check via host overlay after smoke PASS"
+POST_SMOKE_SRC="$(printf '%s\n' "$POST_SMOKE_PIN_OUT" | node -e '
+const rows = require("fs").readFileSync(0, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+const codex = rows.find((r) => r.runner === "codex");
+process.stdout.write(`${codex.status}/${codex.vetted_source}/${codex.drift}`);
+')"
+assert_eq "$POST_SMOKE_SRC" "vetted/overlay/false" "pin-check reports vetted/overlay/false after smoke PASS"
+
+SMOKE_PASS2_OUT="$(FAKE_CODEX_VERSION="codex-cli 0.170.0" node "$SMOKE_JS" --date 2026-11-20 < /dev/null 2>&1)"; SMOKE_PASS2_RC=$?
+assert_eq "$SMOKE_PASS2_RC" "0" "second smoke PASS exits 0"
+DEDUP_CHECK="$(node -e '
+const fs = require("fs");
+const vetted = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+for (const r of ["codex", "agy", "claude", "grok", "cursor"]) {
+  if (!Array.isArray(vetted.runners[r]) || vetted.runners[r].length !== 1) process.exit(1);
+}
+if (vetted.runners.codex[0].receipt_sha256 !== process.argv[2]) process.exit(2);
+process.stdout.write("ok");
+' "$AUTOPILOT_RUNNER_VETTED_FILE" "$PASS_RECEIPT_CHECK")"
+assert_eq "$DEDUP_CHECK" "ok" "running smoke PASS twice is idempotent and does not duplicate overlay entries"
+
+# --- 5. runner-smoke.js FAIL never writes failed runner to overlay + calls fleet once ---
+FAIL_ONLY_OVERLAY="$TEST_TMP/fail-only-vetted.json"
+rm -f "$FAIL_ONLY_OVERLAY"
+FAIL_ONLY_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$FAIL_ONLY_OVERLAY" FAKE_BAD_RUNNER=grok FAKE_GROK_VERSION="grok 1.0.88 (bad)" node "$SMOKE_JS" --only grok --date 2026-11-20 < /dev/null 2>&1)"; FAIL_ONLY_RC=$?
+assert_eq "$FAIL_ONLY_RC" "1" "runner-smoke --only grok exits 1 on failure"
+assert_file_absent "$FAIL_ONLY_OVERLAY" "smoke FAIL never creates or writes runner-vetted overlay"
+
 rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG"
+PARTIAL_OVERLAY="$TEST_TMP/partial-fail-vetted.json"
 FAIL_RECEIPT="$XDG_RUNTIME_DIR/autopilot/runner-smoke/2026-11-20.json"
-SMOKE_FAIL_OUT="$(FAKE_BAD_RUNNER=grok node "$SMOKE_JS" --notify test/canary/ops --date 2026-11-20 < /dev/null 2>&1)"; SMOKE_FAIL_RC=$?
+SMOKE_FAIL_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$PARTIAL_OVERLAY" FAKE_BAD_RUNNER=grok FAKE_GROK_VERSION="grok 1.0.88 (bad)" node "$SMOKE_JS" --notify test/canary/ops --date 2026-11-20 < /dev/null 2>&1)"; SMOKE_FAIL_RC=$?
 assert_eq "$SMOKE_FAIL_RC" "1" "runner-smoke exits 1 when a runner omits the token"
 assert_file_exists "$FAIL_RECEIPT" "runner-smoke writes receipt on failure"
 assert_file_exists "$FLEET_LOG" "runner-smoke calls fleet on failure"
@@ -455,19 +605,80 @@ const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 if (doc.ok !== false || doc.pass_count !== 4 || doc.fail_count !== 1) process.exit(1);
 const grok = doc.runners.find((r) => r.runner === "grok");
 if (!grok || grok.pass !== false || grok.result !== "fail") process.exit(2);
+const ov = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (ov.runners.grok) process.exit(3);
 process.stdout.write("ok");
-' "$FAIL_RECEIPT")"
-assert_eq "$FAIL_RECEIPT_CHECK" "ok" "failure receipt records grok fail and 4 passes"
+' "$FAIL_RECEIPT" "$PARTIAL_OVERLAY")"
+assert_eq "$FAIL_RECEIPT_CHECK" "ok" "failure receipt records grok fail and never writes failed grok into overlay"
 
-# --- 6. runner-smoke.js: --only <runner> + ~/.autopilot/runner-smoke fallback when XDG_RUNTIME_DIR unset ---
-rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG"
+# --- 6. runner-smoke.js: --only <runner> + ~/.autopilot/{runner-smoke,runner-vetted.json} default fallbacks ---
+rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG" "$HOME/.autopilot/runner-vetted.json"
 FALLBACK_RECEIPT="$HOME/.autopilot/runner-smoke/2026-11-21.json"
-ONLY_OUT="$(env -u XDG_RUNTIME_DIR node "$SMOKE_JS" --only cursor --date 2026-11-21 < /dev/null 2>&1)"; ONLY_RC=$?
+ONLY_OUT="$(env -u XDG_RUNTIME_DIR -u AUTOPILOT_RUNNER_VETTED_FILE node "$SMOKE_JS" --only cursor --date 2026-11-21 < /dev/null 2>&1)"; ONLY_RC=$?
 assert_eq "$ONLY_RC" "0" "runner-smoke --only cursor exits 0"
 assert_file_exists "$FALLBACK_RECEIPT" "runner-smoke falls back to ~/.autopilot/runner-smoke/<date>.json"
+assert_file_exists "$HOME/.autopilot/runner-vetted.json" "runner-smoke falls back to ~/.autopilot/runner-vetted.json when AUTOPILOT_RUNNER_VETTED_FILE unset"
 ONLY_PROMPT_COUNT="$(wc -l < "$PROMPT_LOG" | tr -d ' ')"
 assert_eq "$ONLY_PROMPT_COUNT" "1" "--only cursor dispatches exactly one runner prompt"
 assert_contains "$(cat "$PROMPT_LOG")" "cursor-agent" "--only cursor invokes cursor-agent only"
+
+# --- 6b. runner-pin-check.js --suggest-table unions two overlays (read-only) ---
+OV_ONE="$TEST_TMP/suggest-ov-1.json"
+OV_TWO="$TEST_TMP/suggest-ov-2.json"
+cat > "$OV_ONE" <<'EOF'
+{
+  "schema": "autopilot.runner-vetted/1",
+  "runners": {
+    "codex": [
+      { "version": "codex-cli 0.166.0", "receipt_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "vetted_at": "2026-11-19T01:00:00Z" },
+      { "version": "codex-cli 0.168.0", "receipt_sha256": "2222222222222222222222222222222222222222222222222222222222222222", "vetted_at": "2026-11-19T02:00:00Z" }
+    ],
+    "grok": [
+      { "version": "grok 1.0.70 (seat-a) [stable]", "receipt_sha256": "3333333333333333333333333333333333333333333333333333333333333333", "vetted_at": "2026-11-19T01:00:00Z" }
+    ],
+    "claude": [
+      { "version": "2.1.325 (Claude Code)", "receipt_sha256": "4444444444444444444444444444444444444444444444444444444444444444", "vetted_at": "2026-11-19T01:00:00Z" }
+    ]
+  }
+}
+EOF
+cat > "$OV_TWO" <<'EOF'
+{
+  "schema": "autopilot.runner-vetted/1",
+  "runners": {
+    "codex": [
+      { "version": "codex-cli 0.170.0", "receipt_sha256": "5555555555555555555555555555555555555555555555555555555555555555", "vetted_at": "2026-11-19T03:00:00Z" },
+      { "version": "codex-cli 0.168.0", "receipt_sha256": "6666666666666666666666666666666666666666666666666666666666666666", "vetted_at": "2026-11-19T03:00:00Z" }
+    ],
+    "grok": [
+      { "version": "grok 1.0.89 (seat-b) [stable]", "receipt_sha256": "7777777777777777777777777777777777777777777777777777777777777777", "vetted_at": "2026-11-19T03:00:00Z" }
+    ],
+    "claude": [
+      { "version": "2.1.327 (Claude Code)", "receipt_sha256": "8888888888888888888888888888888888888888888888888888888888888888", "vetted_at": "2026-11-19T03:00:00Z" }
+    ]
+  }
+}
+EOF
+PINS_SUM_BEFORE="$(cksum < "$PINS_JSON")"
+OV1_SUM_BEFORE="$(cksum < "$OV_ONE")"
+OV2_SUM_BEFORE="$(cksum < "$OV_TWO")"
+SUGGEST_OUT="$(node "$PIN_CHECK_JS" --suggest-table "$OV_ONE" "$OV_TWO" < /dev/null 2>&1)"; SUGGEST_RC=$?
+assert_eq "$SUGGEST_RC" "0" "runner-pin-check --suggest-table exits 0"
+assert_eq "$(cksum < "$PINS_JSON")" "$PINS_SUM_BEFORE" "--suggest-table leaves config/runner-pins.json untouched"
+assert_eq "$(cksum < "$OV_ONE")" "$OV1_SUM_BEFORE" "--suggest-table leaves first overlay untouched"
+assert_eq "$(cksum < "$OV_TWO")" "$OV2_SUM_BEFORE" "--suggest-table leaves second overlay untouched"
+SUGGEST_CHECK="$(printf '%s' "$SUGGEST_OUT" | node -e '
+const { validatePinTable } = require(process.argv[1]);
+const doc = validatePinTable(JSON.parse(require("fs").readFileSync(0, "utf8")));
+if (doc.schema !== "autopilot.runner-pins/2") process.exit(1);
+if (JSON.stringify(doc.runners.codex.vetted) !== JSON.stringify(["codex-cli 0.166.0", "codex-cli 0.168.0", "codex-cli 0.170.0"])) process.exit(2);
+if (JSON.stringify(doc.runners.grok.vetted) !== JSON.stringify(["grok 1.0.70 (seat-a) [stable]", "grok 1.0.89 (seat-b) [stable]"])) process.exit(3);
+if (JSON.stringify(doc.runners.claude.vetted) !== JSON.stringify(["2.1.325 (Claude Code)", "2.1.327 (Claude Code)"])) process.exit(4);
+if (JSON.stringify(doc.runners.kimi.vetted) !== JSON.stringify([])) process.exit(5);
+if (doc.runners.claude.autoupdate.env !== "DISABLE_AUTOUPDATER") process.exit(6);
+process.stdout.write("ok");
+' "$PINS_LIB_JS")"
+assert_eq "$SUGGEST_CHECK" "ok" "--suggest-table produces valid v2 table unioning deduplicated vetted versions across overlays"
 
 # --- 7. Negative controls (sed_mutant): prove gates go red when checks are weakened ---
 MUT_DIR="$TEST_TMP/mutants"
@@ -475,9 +686,9 @@ mkdir -p "$MUT_DIR/scripts/lib"
 cp "$PIN_CHECK_JS" "$MUT_DIR/scripts/runner-pin-check.js"
 cp "$REPO_ROOT/scripts/lib/runner-binary.js" "$MUT_DIR/scripts/lib/runner-binary.js"
 cp "$REPO_ROOT/scripts/lib/kimi-local-stop.js" "$MUT_DIR/scripts/lib/kimi-local-stop.js"
-sed_mutant "$PINS_LIB_JS" "$MUT_DIR/scripts/lib/runner-pins.js" 's/probe\.actual !== pinned/false/'
-MUT_PIN_OUT="$(FAKE_GROK_VERSION="grok 9.9.9" node "$MUT_DIR/scripts/runner-pin-check.js" --pins "$PINS_JSON" < /dev/null 2>&1)"; MUT_PIN_RC=$?
-assert_eq "$MUT_PIN_RC" "0" "negative control: mutating runner-pins.js drift predicate lets drifted version slip through"
+sed_mutant "$PINS_LIB_JS" "$MUT_DIR/scripts/lib/runner-pins.js" "s/status === 'unvetted'/false/"
+MUT_PIN_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/no-vetted.json" FAKE_GROK_VERSION="grok 9.9.9" node "$MUT_DIR/scripts/runner-pin-check.js" --pins "$PINS_JSON" < /dev/null 2>&1)"; MUT_PIN_RC=$?
+assert_eq "$MUT_PIN_RC" "0" "negative control: mutating runner-pins.js drift predicate lets unvetted version slip through"
 
 cp "$PINS_LIB_JS" "$MUT_DIR/scripts/lib/runner-pins.js"
 cp "$REPO_ROOT/scripts/lib/opencode-containment.js" "$MUT_DIR/scripts/lib/opencode-containment.js"
@@ -491,11 +702,18 @@ for f in "$REPO_ROOT"/scripts/lib/*; do
   [ -e "$MUT_DIR/scripts/lib/$b" ] || ln -s "$f" "$MUT_DIR/scripts/lib/$b"
 done
 sed_mutant "$SMOKE_JS" "$MUT_DIR/scripts/runner-smoke.js" 's/answer\.includes(token)/true/'
-MUT_SMOKE_OUT="$(FAKE_BAD_RUNNER=cursor node "$MUT_DIR/scripts/runner-smoke.js" --pins "$PINS_JSON" --only cursor --receipt-dir "$TEST_TMP/mut-receipts" --date 2026-11-22 < /dev/null 2>&1)"; MUT_SMOKE_RC=$?
+MUT_SMOKE_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/mut-vetted.json" FAKE_BAD_RUNNER=cursor node "$MUT_DIR/scripts/runner-smoke.js" --pins "$PINS_JSON" --only cursor --receipt-dir "$TEST_TMP/mut-receipts" --date 2026-11-22 < /dev/null 2>&1)"; MUT_SMOKE_RC=$?
 assert_eq "$MUT_SMOKE_RC" "0" "negative control: mutating runner-smoke.js token check lets wrong answer pass"
 
 sed_mutant "$SMOKE_JS" "$MUT_DIR/scripts/runner-smoke-utc.js" 's/localDateString()/new Date().toISOString().slice(0, 10)/'
 MUT_UTC_DATE="$(NODE_OPTIONS="--require $FAKE_CLOCK_JS" TZ=Asia/Taipei node "$MUT_DIR/scripts/runner-smoke-utc.js" --pins "$PINS_JSON" --dry-run < /dev/null | node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).date)')"
 assert_eq "$MUT_UTC_DATE" "2026-11-18" "negative control: reverting localDateString() to UTC date mis-stamps +08:00 receipt as 2026-11-18"
+
+sed_mutant "$SMOKE_JS" "$MUT_DIR/scripts/runner-smoke-badvet.js" 's/r\.pass === true/true/'
+MUT_BAD_VET="$TEST_TMP/mut-bad-vetted.json"
+rm -f "$MUT_BAD_VET"
+MUT_BADVET_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$MUT_BAD_VET" FAKE_BAD_RUNNER=cursor node "$MUT_DIR/scripts/runner-smoke-badvet.js" --pins "$PINS_JSON" --only cursor --receipt-dir "$TEST_TMP/mut-receipts2" --date 2026-11-23 < /dev/null 2>&1)"; MUT_BADVET_RC=$?
+assert_eq "$MUT_BADVET_RC" "1" "negative control: bad-vetted mutant still exits 1 on smoke failure"
+assert_file_exists "$MUT_BAD_VET" "negative control: mutating r.pass === true writes failed version into overlay"
 
 finalize_test

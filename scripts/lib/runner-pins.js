@@ -1,7 +1,12 @@
 'use strict';
 
 // runner-pins.js — shared loader, schema validator, binary resolver, version
-// prober, and read-only autoupdate-state inspector for config/runner-pins.json.
+// prober, host-local vetted-overlay reader, v2 table union builder, and
+// read-only autoupdate-state inspector for config/runner-pins.json.
+//
+// Table schema: "autopilot.runner-pins/2" (legacy v1 is refused).
+// Host overlay: ${AUTOPILOT_RUNNER_VETTED_FILE:-$HOME/.autopilot/runner-vetted.json}
+//               schema "autopilot.runner-vetted/1".
 //
 // Reuses scripts/lib/runner-binary.js (the canonical owner of PATH + fallback
 // binary resolution, mirroring scripts/lib/runner-fallback-bin.sh and
@@ -20,10 +25,11 @@ const {
   stripVersionControlChars,
 } = require('./runner-binary.js');
 
-const PIN_SCHEMA = 'autopilot.runner-pins/1';
+const PIN_SCHEMA = 'autopilot.runner-pins/2';
+const LEGACY_PIN_SCHEMA_V1 = 'autopilot.runner-pins/1';
+const VETTED_OVERLAY_SCHEMA = 'autopilot.runner-vetted/1';
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_PINS_PATH = path.join(REPO_ROOT, 'config', 'runner-pins.json');
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Pin-table runner keys that map onto a distinct canonical key in runner-binary.js.
 const BINARY_RUNNER_MAP = Object.freeze({
@@ -81,6 +87,12 @@ function validatePinTable(doc) {
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
     throw new Error('runner-pins: root must be a JSON object');
   }
+  if (doc.schema === LEGACY_PIN_SCHEMA_V1) {
+    throw new Error(
+      `runner-pins: schema "${LEGACY_PIN_SCHEMA_V1}" (v1) is no longer supported; `
+      + `migrate to "${PIN_SCHEMA}" with per-runner vetted: [...]`,
+    );
+  }
   if (doc.schema !== PIN_SCHEMA) {
     throw new Error(`runner-pins: expected schema "${PIN_SCHEMA}", got ${JSON.stringify(doc.schema)}`);
   }
@@ -106,20 +118,13 @@ function validatePinTable(doc) {
     if (entry.version_cmd[0] !== entry.bin) {
       throw new Error(`runner-pins: runners.${runner}.version_cmd[0] must equal bin ("${entry.bin}")`);
     }
-    const installed = entry.installed !== false;
-    if (installed) {
-      if (typeof entry.version !== 'string' || entry.version.trim() === '') {
-        throw new Error(`runner-pins: installed runner "${runner}" requires a non-empty version string`);
-      }
-    } else if (entry.version !== null && typeof entry.version !== 'string') {
-      throw new Error(`runner-pins: absent runner "${runner}" version must be null or string`);
+    if (!Array.isArray(entry.vetted)
+        || entry.vetted.some((v) => typeof v !== 'string' || v.trim() === '')) {
+      throw new Error(`runner-pins: runners.${runner}.vetted must be an array of non-empty version strings`);
     }
     validateAutoupdateSpec(runner, entry.autoupdate);
-    if (typeof entry.vetted_at !== 'string' || !DATE_RE.test(entry.vetted_at)) {
-      throw new Error(`runner-pins: runners.${runner}.vetted_at must be YYYY-MM-DD`);
-    }
-    if (typeof entry.vetted_by !== 'string' || entry.vetted_by.trim() === '') {
-      throw new Error(`runner-pins: runners.${runner}.vetted_by must be a non-empty string`);
+    if (entry.source !== undefined && (typeof entry.source !== 'string' || entry.source.trim() === '')) {
+      throw new Error(`runner-pins: runners.${runner}.source must be a non-empty string`);
     }
   }
   return doc;
@@ -130,6 +135,96 @@ function loadPinTable(pinsPath = DEFAULT_PINS_PATH) {
   const raw = fs.readFileSync(resolved, 'utf8');
   const parsed = JSON.parse(raw);
   return validatePinTable(parsed);
+}
+
+function resolveVettedPath(explicitPath, env = process.env) {
+  if (typeof explicitPath === 'string' && explicitPath.trim() !== '') {
+    return path.resolve(explicitPath.trim());
+  }
+  const fromEnv = env && env.AUTOPILOT_RUNNER_VETTED_FILE;
+  if (typeof fromEnv === 'string' && fromEnv.trim() !== '') {
+    return path.resolve(fromEnv.trim());
+  }
+  const home = (env && typeof env.HOME === 'string' && env.HOME.trim() !== '')
+    ? path.resolve(env.HOME.trim())
+    : os.homedir();
+  return path.join(home, '.autopilot', 'runner-vetted.json');
+}
+
+function validateVettedOverlay(doc) {
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+    throw new Error('runner-vetted: root must be a JSON object');
+  }
+  if (doc.schema !== VETTED_OVERLAY_SCHEMA) {
+    throw new Error(`runner-vetted: expected schema "${VETTED_OVERLAY_SCHEMA}", got ${JSON.stringify(doc.schema)}`);
+  }
+  let rawMap;
+  if (Object.prototype.hasOwnProperty.call(doc, 'runners')) {
+    if (!doc.runners || typeof doc.runners !== 'object' || Array.isArray(doc.runners)) {
+      throw new Error('runner-vetted: runners must be a JSON object');
+    }
+    rawMap = doc.runners;
+  } else {
+    rawMap = {};
+    for (const [key, val] of Object.entries(doc)) {
+      if (key === 'schema') continue;
+      rawMap[key] = val;
+    }
+  }
+  const normalized = {};
+  for (const [runner, entries] of Object.entries(rawMap)) {
+    if (typeof runner !== 'string' || runner.trim() === '') {
+      throw new Error('runner-vetted: runner key must be a non-empty string');
+    }
+    if (!Array.isArray(entries)) {
+      throw new Error(`runner-vetted: ${runner} must map to an array of vetted entries`);
+    }
+    normalized[runner] = entries.map((item, idx) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw new Error(`runner-vetted: ${runner}[${idx}] must be an object`);
+      }
+      if (typeof item.version !== 'string' || item.version.trim() === '') {
+        throw new Error(`runner-vetted: ${runner}[${idx}].version must be a non-empty string`);
+      }
+      if (typeof item.receipt_sha256 !== 'string' || item.receipt_sha256.trim() === '') {
+        throw new Error(`runner-vetted: ${runner}[${idx}].receipt_sha256 must be a non-empty string`);
+      }
+      if (typeof item.vetted_at !== 'string' || item.vetted_at.trim() === '') {
+        throw new Error(`runner-vetted: ${runner}[${idx}].vetted_at must be a non-empty string`);
+      }
+      return {
+        version: item.version,
+        receipt_sha256: item.receipt_sha256,
+        vetted_at: item.vetted_at,
+      };
+    });
+  }
+  return {
+    schema: VETTED_OVERLAY_SCHEMA,
+    runners: normalized,
+  };
+}
+
+function loadVettedOverlay(vettedPath, options = {}) {
+  const allowMissing = options.allowMissing !== false;
+  const env = options.env || process.env;
+  const resolved = resolveVettedPath(vettedPath, env);
+  let raw;
+  try {
+    raw = fs.readFileSync(resolved, 'utf8');
+  } catch (err) {
+    if (allowMissing && err && err.code === 'ENOENT') {
+      return { schema: VETTED_OVERLAY_SCHEMA, runners: {} };
+    }
+    throw new Error(`runner-vetted: cannot read "${resolved}": ${err.message}`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`runner-vetted: invalid JSON in "${resolved}": ${err.message}`);
+  }
+  return validateVettedOverlay(parsed);
 }
 
 function scanPathForBinary(binary, pathValue) {
@@ -353,6 +448,7 @@ function probeRunnerVersion(runner, entry, options = {}) {
   if (!binaryPath) {
     return {
       found: false,
+      spawned: false,
       ok: false,
       binary_path: null,
       actual: null,
@@ -375,9 +471,21 @@ function probeRunnerVersion(runner, entry, options = {}) {
   } finally {
     if (probeDataDir) fs.rmSync(probeDataDir, { recursive: true, force: true });
   }
-  if (run.error || run.status !== 0) {
+  if (run.error) {
+    const timedOut = run.error.code === 'ETIMEDOUT';
     return {
       found: true,
+      spawned: timedOut,
+      ok: false,
+      binary_path: binaryPath,
+      actual: null,
+      exit_code: Number.isInteger(run.status) ? run.status : null,
+    };
+  }
+  if (run.status !== 0) {
+    return {
+      found: true,
+      spawned: true,
       ok: false,
       binary_path: binaryPath,
       actual: null,
@@ -391,6 +499,7 @@ function probeRunnerVersion(runner, entry, options = {}) {
   const firstLine = lines.length > 0 ? lines[0] : null;
   return {
     found: true,
+    spawned: true,
     ok: firstLine !== null,
     binary_path: binaryPath,
     actual: firstLine,
@@ -399,38 +508,98 @@ function probeRunnerVersion(runner, entry, options = {}) {
 }
 
 function checkAllPins(table, options = {}) {
+  const overlay = options.overlay
+    ? validateVettedOverlay(options.overlay)
+    : loadVettedOverlay(options.vettedPath, { allowMissing: true, env: options.env || process.env });
   const rows = [];
   let anyDrift = false;
   for (const [runner, entry] of Object.entries(table.runners)) {
-    const installedExpected = entry.installed !== false;
-    const pinned = entry.version === undefined ? null : entry.version;
+    const tableVetted = new Set(entry.vetted);
+    const overlayEntries = Array.isArray(overlay.runners[runner]) ? overlay.runners[runner] : [];
+    const overlayVetted = new Set(overlayEntries.map((item) => item.version));
     const probe = probeRunnerVersion(runner, entry, options);
     const autoupdateState = inspectAutoupdateState(entry, options);
-    let drift = false;
-    if (installedExpected) {
-      drift = !probe.ok || probe.actual !== pinned;
-    } else if (probe.found) {
-      drift = probe.actual !== pinned;
+    let status;
+    let vettedSource = null;
+    if (!probe.spawned) {
+      status = 'absent';
+    } else if (probe.ok && tableVetted.has(probe.actual)) {
+      status = 'vetted';
+      vettedSource = 'table';
+    } else if (probe.ok && overlayVetted.has(probe.actual)) {
+      status = 'vetted';
+      vettedSource = 'overlay';
+    } else {
+      status = 'unvetted';
     }
+    const drift = status === 'unvetted';
     if (drift) anyDrift = true;
     rows.push({
       runner,
-      pinned,
       actual: probe.actual,
+      status,
       drift,
+      vetted_source: vettedSource,
       autoupdate_state: autoupdateState,
     });
   }
   return { ok: !anyDrift, drift: anyDrift, rows };
 }
 
+function suggestPinTable(baseTable, overlayPaths) {
+  validatePinTable(baseTable);
+  if (!Array.isArray(overlayPaths) || overlayPaths.length === 0) {
+    throw new Error('runner-pins: --suggest-table requires at least one overlay file');
+  }
+  const perRunnerSets = {};
+  for (const runner of Object.keys(baseTable.runners)) {
+    perRunnerSets[runner] = new Set();
+  }
+  for (const overlayPath of overlayPaths) {
+    const overlay = loadVettedOverlay(overlayPath, { allowMissing: false });
+    for (const [runner, entries] of Object.entries(overlay.runners)) {
+      if (!Object.prototype.hasOwnProperty.call(perRunnerSets, runner)) {
+        throw new Error(`runner-pins: overlay "${overlayPath}" names unknown runner "${runner}" (not in pin table)`);
+      }
+      for (const item of entries) {
+        perRunnerSets[runner].add(item.version);
+      }
+    }
+  }
+  const suggestedRunners = {};
+  for (const [runner, entry] of Object.entries(baseTable.runners)) {
+    const nextEntry = {
+      bin: entry.bin,
+      vetted: [...perRunnerSets[runner]].sort(),
+      version_cmd: [...entry.version_cmd],
+      autoupdate: entry.autoupdate && typeof entry.autoupdate === 'object'
+        ? { ...entry.autoupdate }
+        : entry.autoupdate,
+    };
+    if (entry.source !== undefined) {
+      nextEntry.source = entry.source;
+    }
+    suggestedRunners[runner] = nextEntry;
+  }
+  return validatePinTable({
+    schema: PIN_SCHEMA,
+    runners: suggestedRunners,
+  });
+}
+
 module.exports = {
   PIN_SCHEMA,
+  LEGACY_PIN_SCHEMA_V1,
+  VETTED_OVERLAY_SCHEMA,
   DEFAULT_PINS_PATH,
   validatePinTable,
   loadPinTable,
+  resolveVettedPath,
+  validateVettedOverlay,
+  loadVettedOverlay,
   resolvePinBinary,
   inspectAutoupdateState,
   probeRunnerVersion,
   checkAllPins,
+  suggestPinTable,
 };

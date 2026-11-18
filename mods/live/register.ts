@@ -1325,7 +1325,7 @@ const focusRows = (id: string, expanded: boolean): number => {
   if (id === 'spend') return spendFocusRows(snapshot)
   return 1
 }
-let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
 const framePageId = (): string => panePage
 // B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
 // On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
@@ -1395,7 +1395,7 @@ export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> 
       const st = await read($, DECIDE)
       const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs }
       const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
-      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt }
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset }
       if (r.nav.picks !== st.picks || r.nav.notes !== st.notes) await update($, DECIDE, s => ({ ...s, picks: r.nav.picks, notes: r.nav.notes }))
       if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
       else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
@@ -1429,7 +1429,8 @@ async function fillPrompt($: EngineInterface, text: string): Promise<void> {
 // A press inside a framed page: `fleet:fold`, `fleet:see:<line_id>` (open the list so the line is on screen; nothing is sent), `fill:quota:<pool>` (the pool's switch suggestion into the prompt) and any other `fill:<text>`.
 async function framePress($: EngineInterface, id: string): Promise<void> {
   try {
-    if (id === 'fleet:fold') { await frameKey($, { kind: 'fold' }); return } // use the same focus clamp as the fold key, including when a tall dock auto-unfolded the body
+    if (/^decide:detail:\d+$/.test(id)) { decideLocal = { ...decideLocal, detailOffset: Number(id.slice('decide:detail:'.length)) } }
+    else if (id === 'fleet:fold') { await frameKey($, { kind: 'fold' }); return } // use the same focus clamp as the fold key, including when a tall dock auto-unfolded the body
     else if (id === 'quota:open') { const expanded = !(pageView.quota?.expanded ?? false); pageView.quota = { ...(pageView.quota ?? { focus: 0, expanded: false }), expanded, folded: !expanded } }
     else if (id.startsWith('fleet:see:')) {
       const at = consoleSnap?.lines == null ? -1 : fleetRowsOf(consoleSnap.lines).findIndex(r => r.line.line_id === id.slice('fleet:see:'.length))

@@ -19,7 +19,7 @@ const text = (n: any): string => typeof n === 'string' ? n : Array.isArray(n) ? 
 const walk = (n: any): Node[] => !n || typeof n !== 'object' ? [] : Array.isArray(n) ? n.flatMap(walk) : [n, ...walk(n.children)]
 const buttons = (n: any): Node[] => walk(n).filter(n => n.type === 'Button')
 
-function host(on: On, now = NOW, expiredConsole = false, consoleMode = expiredConsole) {
+function host(on: On, now = NOW, expiredConsole = false, consoleMode = expiredConsole, consoleFixture?: unknown) {
   const files: Record<string, string> = {
     [HOME + '/.autopilot/live-pointer.json']: JSON.stringify({ schema: 'autopilot.live-pointer/1', live_base: LIVE, autopilot_home: HOME + '/.autopilot' }),
     [HOME + '/.autopilot/session-mode/' + SID + '.json']: JSON.stringify({ session_id: SID, project_key: KEY, expires_at: '2026-10-05T10:00:00.000Z' }),
@@ -53,7 +53,7 @@ function host(on: On, now = NOW, expiredConsole = false, consoleMode = expiredCo
   on('ui.close', () => { open = false; return { value: undefined } })
   on('ui.panes', () => ({ value: open ? [{ id: PANE, title: 'Autopilot', isShown: true, isFocused: true, isPlaced: true }] : [] }))
   on('ui.scroll', (_, e) => { scrolls.push(e); return { value: undefined } })
-  on('process.run', (_, e) => ({ value: { exitCode: expiredConsole && e.argv.includes('console') ? 0 : 1, stdout: expiredConsole && e.argv.includes('console') ? JSON.stringify({ ...full, generated_at_ms: now, sources: { tasks: { at_ms: now - 12 * 60_000, state: 'expired' }, quota: { at_ms: now, state: 'ok' } } }) : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('process.run', (_, e) => ({ value: { exitCode: expiredConsole && e.argv.includes('console') ? 0 : 1, stdout: expiredConsole && e.argv.includes('console') ? JSON.stringify(consoleFixture ?? { ...full, generated_at_ms: now, sources: { tasks: { at_ms: now - 12 * 60_000, state: 'expired' }, quota: { at_ms: now, state: 'ok' } } }) : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   return { clock, scrolls, isOpen: () => open, close: () => { open = false } }
 }
 
@@ -201,4 +201,42 @@ test('Y6: the drawing helper admits semantic theme roles and rejects legacy raw 
   for (const color of ['\u001b[38;5;153m', '\u001b[38;5;220m', '38;5;153', '38;5;220', '#afd7ff', '#ffd700']) {
     expect(drawSeg({ text: '合成文字', color: color as never }).color).toBeUndefined()
   }
+})
+
+// W3: exercise the production register.ts detail handler, not only a callback spy.
+test('W3: mounted remote detail buttons page through the full text and return to the answer summary', async ($, on) => {
+  const long = '合成背景：' + '需要確認排程與回歸邊界。'.repeat(36) + '背景全文末尾'
+  const h = host(on, NOW, true, true, { ...full, generated_at_ms: NOW,
+      sources: { cards: { at_ms: NOW, state: 'ok' } },
+      cards: [{ id: 'd-0a1b2c3d', question: '合成長卡', status: 'open', executor_display: 'h1', opened_at_ms: NOW - 60000,
+        background: long, blocks: '等確認才能繼續', options: [{ label: '先跑回歸', description: '', recommended: true }, { label: '暫緩', description: '' }], recommendation: '先跑回歸' }], items: [],
+    })
+  await $.session.start({ surface: 'terminal', cwd: REPO })
+  await h.clock.advance(5000)
+  await h.clock.advance(5000)
+  let pane = await mountPane($, 80, 10)
+  await pane.press({ key: 'decide' })
+  await pane.unmount()
+  pane = await mountPane($, 80, 10)
+  const seen: string[] = []
+  for (let i = 0; i < 30; i++) {
+    const tree = await pane.drawn()
+    seen.push(text(tree))
+    expect(buttons(tree).some(n => n.props?.hotkey === 'a' || n.props?.hotkey === 'b')).toBe(false)
+    const next = buttons(tree).find(n => text(n).includes('展開答題區'))
+    if (next === undefined) break
+    await pane.press({ key: next.props!.key })
+    await pane.unmount()
+    pane = await mountPane($, 80, 10)
+  }
+  expect(seen.length).toBeGreaterThan(1)
+  expect(seen.join('')).toContain('背景全文末尾')
+  const back = buttons(await pane.drawn()).find(n => text(n).includes('收回答題區'))
+  expect(back).toBeDefined()
+  await pane.press({ key: back!.props!.key })
+  await pane.unmount()
+  pane = await mountPane($, 80, 10)
+  expect(text(await pane.drawn())).toContain('[a] 先跑回歸')
+  await pane.unmount()
+  await $.session.end({ reason: 'exit' })
 })

@@ -31,6 +31,8 @@ const card = (id: string, question: string, who: string, ago: number) => ({ id, 
 const H = 3600000
 const AGE40 = 2400
 
+// V3: z and f coexist in the same operation row.
+// W3: one operation row, no undo before sending, and an explicit blocks row.
 // Z4: progress and age stay together on the title row.
 const GOLD = {
  "w160": {
@@ -51,11 +53,7 @@ const GOLD = {
    "  步驟  01M7N2TZ 上線後看 pane 截圖"
   ],
   "actions": [
-   "已選 a 可以（尚未送出）",
-   "a–b: 選項（每張卡最多 5 個選項 a–e）   [n] 補充（輸入中數字字母都是文字，Enter/Esc 結束）",
-   "[s] 送出焦點卡（Enter 按下焦點按鈕）   [u] 送出後 10 秒內撤回",
-   "[h] 上一張  [l] 下一張  [z] 收合其他待決",
-   "[f] 回報填入提示列（不送出）"
+   "◆ a [n] 補充 [s] 送出 [h] 上張 [l] 下張 [z] 收合其他 [f] 填入提示列"
   ]
  },
  "w120": {
@@ -76,10 +74,7 @@ const GOLD = {
    "  d-fb890f48  [測試卡] carddispatch 真 courier 紅綠，請勿在面板作答               PM · 2 時"
   ],
   "actions": [
-   "已選 c 拆兩批，每批 2–3 支（尚未送出）",
-   "a–e: 選項（卡上限 5 個）   [n] 補充（輸入中數字字母都是文字，Enter/Esc 結束）",
-   "[s] 送出焦點卡（Enter 按下焦點按鈕）   [u] 送出後 10 秒內撤回   [f] 回報填入提示列（不送出）",
-   "[h] 上一張  [l] 下一張  [z] 收合其他待決"
+   "◆ c [n] 補充 [s] 送出 [h] 上張 [l] 下張 [z] 收合其他 [f] 填入提示列"
   ]
  },
  "c80": {
@@ -87,6 +82,7 @@ const GOLD = {
    "▸ payment 和 social-login 依序 --no-ff 合進 legacy？ (1/3 · 40 分)",
    "  d-89fe394f · game-lead",
    "背景 兩支都過審，順序影響 migration",
+   "卡住 game-lead 只能合 main，legacy 要你點頭",
    "[a] 可以 ★   [b] 先不要",
    "建議 可以：先 payment 再 social",
    "── 其他待決 2（z 收合）──",
@@ -98,9 +94,7 @@ const GOLD = {
    "01M7N2TZ 上線後看截圖"
   ],
   "actions": [
-   "已選 a（尚未送出） [n] 補充",
-   "[s] 送出  [u] 10 秒內撤回",
-   "[h] 上張 [l] 下張 [f] 填入提示列"
+   "◆ a [n] 補充 [s] 送出 [h] 上張 [l] 下張 [z] 收合其他 [f] 填入提示列"
   ]
  },
  "c80_folded": {
@@ -108,6 +102,7 @@ const GOLD = {
    "▸ payment 和 social-login 依序 --no-ff 合進 legacy？ (1/3 · 40 分)",
    "  d-89fe394f · game-lead",
    "背景 兩支都過審，順序影響 migration",
+   "卡住 game-lead 只能合 main，legacy 要你點頭",
    "[a] 可以 ★   [b] 先不要",
    "建議 可以：先 payment 再 social",
    "── 其他待決 2（z 展開）──",
@@ -117,9 +112,7 @@ const GOLD = {
    "01M7N2TZ 上線後看截圖"
   ],
   "actions": [
-   "已選 a（尚未送出） [n] 補充",
-   "[s] 送出  [u] 10 秒內撤回",
-   "[h] 上張 [l] 下張 [z] 展開其他"
+   "◆ a [n] 補充 [s] 送出 [h] 上張 [l] 下張 [z] 展開其他 [f] 填入提示列"
   ]
  },
  "c80_open": {
@@ -127,6 +120,7 @@ const GOLD = {
    "▸ payment 和 social-login 依序 --no-ff 合進 legacy？ (1/3 · 40 分)",
    "  d-89fe394f · game-lead",
    "背景 兩支都過審，順序影響 migration",
+   "卡住 game-lead 只能合 main，legacy 要你點頭",
    "[a] 可以 ★   [b] 先不要",
    "建議 可以：先 payment 再 social",
    "── 其他待決 2（z 收合）──",
@@ -138,9 +132,7 @@ const GOLD = {
    "01M7N2TZ 上線後看截圖"
   ],
   "actions": [
-   "已選 a（尚未送出） [n] 補充",
-   "[s] 送出  [u] 10 秒內撤回",
-   "[h] 上張 [l] 下張 [f] 填入提示列"
+   "◆ a [n] 補充 [s] 送出 [h] 上張 [l] 下張 [z] 收合其他 [f] 填入提示列"
   ]
  },
  "c80_sent": {
@@ -155,8 +147,7 @@ const GOLD = {
    "d-1c0a77e2 h6：GPU 重排 → 到該席答"
   ],
   "actions": [
-   "已送出 b，8 秒內按 u 撤回",
-   "[h] 上張 [l] 下張（可先看別張）"
+   "已送出 b  [u] 8 秒內撤回 [h] 上張 [l] 下張"
   ]
  },
  "c80_zero": {
@@ -171,15 +162,14 @@ const GOLD = {
   "body": [
    "▸ 六條合併策略選哪一條？ (1/1 · 3 時)",
    "  d-2b7710cc · game-lead（舊卡，6 個選項）",
+   "卡住 —",
    "[a] 全合  [b] 依序  [c] 兩批",
    "[d] 前兩支  [e] 先不要",
    "[f6] 第 6 項：只合 hotfix",
    "── 其他待決 0 ──"
   ],
   "actions": [
-   "已選 第 6 項 只合 hotfix（尚未送出）",
-   "[s] 送出焦點項（Enter 按下焦點按鈕）   [u] 10 秒內撤回",
-   "j/k 移焦點   [n] 補充"
+   "◆ f6 [n] 補充 [s] 送出 [h] 上張 [l] 下張 [f] 填入提示列"
   ]
  }
 } as Record<string, { body: string[]; actions: string[] }>
@@ -190,7 +180,7 @@ const step160 = dec({ title: '01M7N2TZ 上線後看 pane 截圖', question: '01M
 const con160 = con([card('d-fb890f48', '[測試卡] carddispatch 真 courier 紅綠，請勿在面板作答', 'PM', 2 * H), card('d-fd51ee8d', '下次到 308 現場時量 30 格（要你到場，只能回報）', '308', 24 * H)], [mirror('h6 席：GPU slot 重排要你點頭', 'h6')], farLines)
 const own120 = dec({ id: 'd-4c2e19a0', question: '馬拉松分支 5 支怎麼合進 release？', background: '五支分支互相有衝突，合併順序決定誰要 rebase', blocks: 'game-lead 只能合 main，release 要你點頭', recommendation: '依序合，每支綠才合下一支', options: opts('全部一次合', '依序合，每支綠才合下一支', '拆兩批，每批 2–3 支', '只合前兩支，其餘下週', '先不要'), source: 'game-lead', age_s: 2 * 3600 })
 const con120 = con(con160.cards, [])
-const own80 = dec({ id: 'd-89fe394f', question: 'payment 和 social-login 依序 --no-ff 合進 legacy？', background: '兩支都過審，順序影響 migration', recommendation: '可以：先 payment 再 social', options: opts('可以', '先不要'), source: 'game-lead', age_s: AGE40 })
+const own80 = dec({ id: 'd-89fe394f', question: 'payment 和 social-login 依序 --no-ff 合進 legacy？', background: '兩支都過審，順序影響 migration', blocks: 'game-lead 只能合 main，legacy 要你點頭', recommendation: '可以：先 payment 再 social', options: opts('可以', '先不要'), source: 'game-lead', age_s: AGE40 })
 const step80 = dec({ title: '01M7N2TZ 上線後看截圖', question: '01M7N2TZ 上線後看截圖', kind: 'step' })
 const con80 = con([card('d-fb890f48', '[測試卡] 請勿作答', 'PM', 2 * H), card('d-fd51ee8d', '308 現場量 30 格', '308', 24 * H)], [mirror('h6：GPU 重排', 'h6')], farLines)
 const old6 = dec({ id: 'd-2b7710cc', question: '六條合併策略選哪一條？', options: opts('全合', '依序', '兩批', '前兩支', '先不要', '只合 hotfix'), source: 'game-lead', age_s: 3 * 3600 })
@@ -318,7 +308,7 @@ test('decide: a console card in focus is read-only and names the seat that answe
   const o = decidePage.render(ctx)
   expect(text(o.body[0])).toContain('下次到 308 現場時量 30 格')
   expect(text(o.body[1])).toContain('d-fd51ee8d · 308') // Z4: progress is now on the title
-  expect(text(o.actions[0])).toBe('到 308 答') // Y2: answering destination replaces submit
+  expect(text(o.actions[0])).toBe('到 308 答 [h] 上張 [l] 下張 [z] 收合其他') // W3: one control row. // Y2: answering destination replaces submit
 })
 
 test('decide R2 & R11: at 80x24 card question comes before owner seat and age; wide single-row other-card titles cut with … keeping age fixed at right edge', () => {
@@ -342,9 +332,9 @@ test('decide: option 6 of an old card, text mode and a held card draw their own 
   const wide = ctxOf(160, 40, live(own160), con([], []), nav({ textMode: true, textBuf: '先 12' })).valueOf() as never
   const o = decidePage.render(wide)
   expect(o.body.map(text).some(r => r.includes('補充   先 12_'))).toBe(true)
-  expect(o.actions.map(text)).toEqual(['輸入補充中（數字字母都是文字）', 'Enter 存補充   [Esc] 放棄'])
+  expect(o.actions.map(text)).toEqual(['輸入補充中（數字字母都是文字） Enter 存補充   [Esc] 放棄']) // W3
   const held = decidePage.render(ctxOf(160, 40, live(own160), con([], []), nav({ picks: { 'd-89fe394f': 0 }, hold: { 'd-89fe394f': nowMs - 3500 } })))
-  expect(held.actions.map(text)[0]).toBe('已送出 a  [u] 7 秒內撤回')
+  expect(held.actions.map(text)[0]).toBe('已送出 a  [u] 7 秒內撤回 [h] 上張 [l] 下張') // W3
 })
 
 // ---- the key reducer: routeKey's page-local kinds, applied ----

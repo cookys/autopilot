@@ -1,0 +1,23 @@
+✔ page order: summary, hint and data age are cold; the held card and submit stay last (14.268487ms)
+✔ summary: every figure comes from counts (running 2, waiting 1, stalled 3, hosts 2/3, gpu 5/7, quota worst, hints 2) (1.854051ms)
+✔ exceptions: only to_console === true rows (quota + exceptions); a card item never; the T7 own-card exception is drawn (1.00896ms)
+✔ negative control: flipping one exception to_console to false removes it from the page (red before green) (2.40032ms)
+✔ queue: the held card is a full card (options), the others are plain rows; the waiting_step card has the report Button that fills, never submits (1.681296ms)
+✔ queue count is counts.decisions, not a count of rows (0.767736ms)
+✔ a card of another host (the mirror) is not in the queue: no card items are drawn from items, only cards[] (0.764229ms)
+✔ data age: fresh sources say their age, expired says 過期, no_source says 無來源; the line fits every width (7.203293ms)
+✔ stale fixture: hosts empty but expired draws 過期 where the figures were (1.076788ms)
+✔ empty fixture: the queue and the exceptions say there is nothing, not a blank section (0.327156ms)
+✔ cards missing says 無來源 in the queue; an empty cards array says there is no open question (1.191123ms)
+✔ folding: a folded exceptions section hides its rows and keeps its header (0.646167ms)
+✔ no raw member address, IP or login name is drawn anywhere on the page, both locales and all widths (8.235177ms)
+✔ the module copy of console-full.json (for the plugin-test drawing test) equals the official JSON (0.948075ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 219.374428
+exit=0

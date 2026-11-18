@@ -65,7 +65,7 @@ test('frame: layout, header on row 0, strip on the last row, A = 6 from 32 rows 
   expect(text(rows[0])).toBe('待決')
   expect(text(rows[29])).toContain('1 現況')
   expect(text(rows[29])).toContain('2 待決')
-  expect(text(rows[29])).toContain('i 說明  Esc 收起')
+  expect(text(rows[29])).toContain('i 說明') // V5: close with host ✕ / band [-]; Escape belongs to its focused surface.
   expect(text(rows[28])).toBe('act 1') // the last action is the bottom row, directly over the strip
   expect(text(rows[27])).toBe('act 0')
   const bodyRoom = 30 - 2 - 2 // two actions: the area is as tall as the actions, not a fixed A

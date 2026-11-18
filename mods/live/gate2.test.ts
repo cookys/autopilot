@@ -23,8 +23,8 @@ const snap = (pools: unknown[] = POOLS, o: Parameters<typeof consoleOf>[1] = {})
 const SIZES: [number, number][] = [[80, 24], [120, 30], [160, 40], [60, 9]]
 const hOf = (rows: number): number => frameHeight(rows)
 
-test('gate2 item 1: the height is fixed min(available, 24); every page at every size is exactly H rows with the strip on row H-1', () => {
-  expect([frameHeight(40), frameHeight(30), frameHeight(24), frameHeight(9)]).toEqual([24, 24, 24, 9])
+test('gate2 item 1: W1: the height uses the host allocation; every page at every size is exactly H rows with the strip on row H-1', () => {
+  expect([frameHeight(40), frameHeight(30), frameHeight(24), frameHeight(9)]).toEqual([40, 30, 24, 9])
   expect(FRAME_MAX_ROWS).toBe(24)
   const states: [string, unknown][] = [['no console', null], ['whole', snap()], ['unknown pools', snap(POOLS)]]
   const bad: string[] = []
@@ -45,7 +45,7 @@ test('gate2 item 1: the strip row does not move between a short page and a long 
   const at = (p: Page, c: unknown) => frameRows(p, ctxOf(160, hOf(40), c) as never, { pages: PAGES }).findIndex(r => text(r).includes('1 現況'))
   const rows = [at(nowPage, null), at(nowPage, snap()), at(fleetPage, snap()), at(quotaPage, snap()), at(PAGES.find(p => p.id === 'pet') as Page, snap())]
   expect(new Set(rows).size).toBe(1)
-  expect(rows[0]).toBe(23)
+  expect(rows[0]).toBe(39) // W1: all 40 host body rows.
 })
 
 test('gate2 item 1: actions sit directly above the strip, the body touches the actions, only the leftover above the body is blank', () => {
@@ -219,11 +219,14 @@ test('gate2 item 8: the strip never has a label-less Button; i keeps its Button 
 })
 
 test('gate2 item 9: the zh-TW decide nav hints split into [h] and [l] Buttons (single space before [l])', () => {
-  const rows = hostRows('decide', 70, 24, { rows: 24 })
-  void rows
-  for (const k of ['page.decide.act_nav_c', 'page.decide.act_nav_held', 'page.decide.act_nav']) {
-    const parts = t(k).split(/(?<=^|\s)(?=\[[a-z]\] \S)/).filter(x => x.trim() !== '')
-    expect(parts.length, k).toBe(2)
+  // W3: open, held and sent now share the compact navigation string. Verify
+  // the rendered Buttons for all three states instead of retired locale ids.
+  const live = { ...(LIVE0 as object), pending: [dec('d-aaaa0001'), dec('d-aaaa0002')] }
+  for (const state of [NO_NAV, { ...NO_NAV, picks: { 'd-aaaa0001': 0 }, hold: { 'd-aaaa0001': NOW - 2000 } }, { ...NO_NAV, sent: { 'd-aaaa0001': NOW - 12000 } }]) {
+    const rows = hostRows('decide', 70, 24, { decide: state }, live)
+    expect(rows.flatMap(r => r.buttons).filter(b => b.props.hotkey === 'h' || b.props.hotkey === 'l').map(b => b.props.hotkey)).toEqual(['h', 'l'])
+    const parts = t('page.decide.act_nav_c').split(/(?<=^|\s)(?=\[[a-z]\] \S)/).filter(x => x.trim() !== '')
+    expect(parts.length).toBe(2)
   }
 })
 

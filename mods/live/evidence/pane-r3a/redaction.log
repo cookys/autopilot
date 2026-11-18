@@ -1,0 +1,25 @@
+mods/live/docs/w1-host-row.md: redacted 1 (home_path=1)
+mods/live/evidence/pane-r3a/acceptance.log: clean
+mods/live/evidence/pane-r3a/affected-final.log: clean
+mods/live/evidence/pane-r3a/affected.log: clean
+mods/live/evidence/pane-r3a/final-checks.log: clean
+mods/live/evidence/pane-r3a/suite-initial.log: redacted 95 (home_path=95)
+mods/live/evidence/pane-r3a/suite.log: redacted 95 (home_path=95)
+mods/live/evidence/pane-r3a/u2-green.log: clean
+mods/live/evidence/pane-r3a/u2-red.log: clean
+mods/live/evidence/pane-r3a/ui-lint.log: clean
+mods/live/evidence/pane-r3a/v3-green.log: clean
+mods/live/evidence/pane-r3a/v3-red.log: clean
+mods/live/evidence/pane-r3a/v5-green.log: clean
+mods/live/evidence/pane-r3a/v5-red.log: clean
+mods/live/evidence/pane-r3a/w1-green.log: clean
+mods/live/evidence/pane-r3a/w1-host.log: redacted 1 (home_path=1)
+mods/live/evidence/pane-r3a/w1-red.log: clean
+mods/live/evidence/pane-r3a/w1-regression.log: clean
+mods/live/evidence/pane-r3a/w3-fixture.log: clean
+mods/live/evidence/pane-r3a/w3-green.log: clean
+mods/live/evidence/pane-r3a/w3-mounted.log: clean
+mods/live/evidence/pane-r3a/w3-red.log: clean
+mods/live/evidence/pane-r3a/w3-regression-initial.log: clean
+mods/live/evidence/pane-r3a/w3-regression.log: clean
+mods/live/evidence/pane-r3a/receipt.md: clean

@@ -13,10 +13,11 @@ import type { KeyAction } from './keys'
 import type { Page, PageCtx } from './frame'
 import { brokenRow, pendingMissingReason, pendingSourceMissing, wrapRow } from './rows'
 import type { Row } from './rows'
+import { STRIP_SPLIT_COLS } from './layout'
 
 // ---- view state and the key reducer ----
 // DecideState (model.ts) carries picks, notes, sent and hold (the 10 s undo window, by card id); the rest is this page's own: which card shows in full, whether the others are folded, the note mode and its buffer, the focused option beyond a)–e)
-export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null }
+export type DecideNav = DecideState & { cursor: number; folded: boolean; textMode: boolean; textBuf: string; opt: number | null; detailOffset?: number }
 export const NO_NAV: DecideNav = { ...NO_DECIDE, cursor: 0, folded: false, textMode: false, textBuf: '', opt: null }
 export type DecideCtx = PageCtx & { decide?: DecideNav }
 export type DecideEffect = { kind: 'send'; id: string; line: string } | { kind: 'undo'; id: string } | { kind: 'fill'; text: string } | null
@@ -96,8 +97,8 @@ export function decideReduce(nav: DecideNav, key: KeyAction, ctx: PageCtx, nowMs
       delete hold[d.id]
       return { nav: { ...nav, cursor, hold }, effect: { kind: 'undo', id: d.id } }
     }
-    case 'prev': return same({ cursor: Math.max(0, cursor - 1), opt: null })
-    case 'next': return same({ cursor: Math.min(Math.max(0, m.all.length - 1), cursor + 1), opt: null })
+    case 'prev': return same({ cursor: Math.max(0, cursor - 1), opt: null, detailOffset: 0 })
+    case 'next': return same({ cursor: Math.min(Math.max(0, m.all.length - 1), cursor + 1), opt: null, detailOffset: 0 })
     case 'fold': return same({ folded: !nav.folded })
     case 'fill': {
       const text = d === null ? null : decideFillText(d, nav)
@@ -190,7 +191,7 @@ function noteRow(d: LiveDecision, nav: DecideNav, ctx: PageCtx, wide: boolean): 
 }
 
 // the card in full: the seat's own card with its options
-function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wide: boolean, readOnly = false): Row[] {
+function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wide: boolean, readOnly = false, compactOptions = false): Row[] {
   const { t } = ctx
   const cols = ctx.size.cols
   const who = d.source ?? ''
@@ -212,17 +213,18 @@ function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wid
     return out
   }
   if (d.background !== null) out.push(wide ? labelled(t('page.decide.k_bg'), d.background) : [dimSeg(t('page.decide.k_bg')), seg(' ' + d.background)])
-  if (d.blocks !== null) out.push(wide ? labelled(t('page.decide.k_blocks'), d.blocks) : [dimSeg(t('page.decide.k_blocks')), seg(' ' + d.blocks)])
+  const blocks = d.blocks ?? '—' // W3: absence is explicit; the answer area's labels stay stable.
+  out.push(wide ? labelled(t('page.decide.k_blocks'), blocks) : [dimSeg(t('page.decide.k_blocks')), seg(' ' + blocks)])
   if (decideDialog(d)) out.push([seg(wide ? '  ' : ''), dimSeg(t('page.decide.in_dialog'))])
   else {
-    if (readOnly) d.options.forEach((o, i) => {
+    if (readOnly && !compactOptions) d.options.forEach((o, i) => {
       out.push([seg((wide ? '  ' : '') + '[' + letterOf(i) + '] ' + o.label + (recommendedIndex(d) === i ? ' ' + GLYPHS.structure.recommend : ''))])
       if (o.description !== '') out.push([dimSeg((wide ? '      ' : '    ') + o.description)])
     })
-    else out.push(...optionRows(d, nav, ctx, wide))
+    else out.push(...optionRows(d, nav, ctx, wide).map(r => readOnly ? r.map(({ press: _press, ...s }) => s) : r))
   }
   if (d.recommendation !== null) out.push(wide ? labelled(t('page.decide.k_advice'), d.recommendation) : [dimSeg(t('page.decide.k_advice')), seg(' ' + d.recommendation)])
-  if (readOnly) out.push(wide ? labelled(t('page.decide.k_note'), t('page.decide.act_readonly', { seat: d.source ?? '-' })) : [dimSeg(t('page.decide.k_note')), seg(' ' + t('page.decide.act_readonly', { seat: d.source ?? '-' }))])
+  if (readOnly) out.push(wide ? labelled(t('page.decide.k_note'), '—') : [dimSeg(t('page.decide.k_note')), seg(' —')]) // U2: the destination belongs only in the action row.
   else if (d.options.length <= MAX_OPTS) out.push(...noteRow(d, nav, ctx, wide))
   else if (nav.textMode) out.push(...noteRow(d, nav, ctx, wide))
   return out
@@ -235,6 +237,33 @@ function conCard(c: ConsoleCard, pos: string, ctx: PageCtx, wide: boolean): Row[
   return ownCard({ id: c.id, title: null, question: c.question, source: c.executor_display,
     opened_at: null, age_s: Math.max(0, (ctx.nowMs - c.opened_at_ms) / 1000), background: c.background ?? null, blocks: c.blocks ?? null,
     options, recommendation, why: null, not_authorized: null, stale: false, origin: null, orphaned: false }, pos, NO_NAV, ctx, wide, true)
+}
+
+// W3: keep the PM-ordered answer summary visible in a short host allocation.
+// Full text remains reachable through click targets, in bounded pages; counts
+// below describe hidden detail rows only, never bus card/line/pool totals.
+function cardWindow(cur: Item, pos: string, nav: DecideNav, ctx: PageCtx, wide: boolean): Row[] {
+  const full = (cur.kind === 'own' ? ownCard(cur.d, pos, nav, ctx, wide) : conCard(cur.c, pos, ctx, wide))
+    .flatMap(r => wrapRow(r, ctx.size.cols))
+  const room = Math.max(1, ctx.size.rows - 2 - (ctx.size.cols < STRIP_SPLIT_COLS ? 2 : 1))
+  if (full.length <= room) return full
+  const take = Math.max(1, room - 1)
+  const offset = Math.max(0, Math.min(nav.detailOffset ?? 0, full.length))
+  const more = (at: number): Seg => seg(GLYPHS.structure.behind + ' ' + ctx.t('page.decide.details', { n: full.length - at }), { press: 'decide:detail:' + (at + 1) })
+  const back: Seg = seg(GLYPHS.structure.folded + ' ' + ctx.t('page.decide.details_back'), { press: 'decide:detail:0' })
+  if (offset > 0) {
+    const start = offset - 1
+    const end = Math.min(full.length, start + take)
+    return [...full.slice(start, end), [back, ...(end < full.length ? [seg('  '), more(end)] : [])]]
+  }
+  const d = cur.kind === 'own' ? cur.d : { ...cur.c, source: cur.c.executor_display, age_s: Math.max(0, (ctx.nowMs - cur.c.opened_at_ms) / 1000), opened_at: null, id: cur.c.id }
+  const compact = { ...d, background: d.background == null ? null : truncateToWidth(d.background, Math.max(4, ctx.size.cols - 7)),
+    blocks: d.blocks == null ? null : truncateToWidth(d.blocks, Math.max(4, ctx.size.cols - 7)),
+    recommendation: d.recommendation == null ? null : truncateToWidth(d.recommendation, Math.max(4, ctx.size.cols - 7)),
+    options: (d.options ?? []).map(o => ({ ...o, description: '', label: truncateToWidth(o.label, Math.max(4, Math.floor(ctx.size.cols / Math.min(3, (d.options ?? []).length)) - 12)) })) } as LiveDecision
+  const summary = ownCard(compact, pos, nav, ctx, false, cur.kind === 'con', true)
+  summary.splice(1, 1) // the focused title already identifies the card; reclaim the separate id/seat row.
+  return [...summary.slice(0, take), [more(0)]]
 }
 
 // Keep a visible gutter between each list question and its owner/age column;
@@ -264,6 +293,7 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
   const m = modelOf(ctx)
   const noPendingSrc = pendingSourceMissing(ctx)
   const body: Row[] = []
+  let focusEnd = 0
   if (noPendingSrc) body.push(...wrapRow(brokenRow(GLYPHS.state.failed + ' ' + t('page.decide.pending_no_source', { why: pendingMissingReason(ctx, t) })), ctx.size.cols))
   // §5: a source that is stale or missing says so in red, with its reason
   if (ctx.live === null) body.push(noSource(ctx, 'page.decide.nosrc_live'))
@@ -285,7 +315,8 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
     if (!noPendingSrc && ctx.live !== null) body.push([seg(GLYPHS.state.pending + ' '), dimSeg(t('page.decide.none_cards'))])
   } else {
     const pos = String(cursor + 1) + '/' + String(total)
-    body.push(...(cur.kind === 'own' ? ownCard(cur.d, pos, nav, ctx, wide) : conCard(cur.c, pos, ctx, wide)))
+    body.push(...cardWindow(cur, pos, nav, ctx, wide))
+    focusEnd = body.length
     if (wide) body.push([seg('')])
     const rest = m.all.filter((_, i) => i !== cursor)
     const label = rest.length === 0 ? t('page.decide.sec_others_plain', { n: 0 }) : nav.folded ? t('page.decide.sec_others_folded', { n: rest.length }) : t('page.decide.sec_others_open', { n: rest.length })
@@ -324,16 +355,24 @@ function render(ctx0: PageCtx): { body: Row[]; actions: Row[] } {
 
   // the action area: the state of the focused card, then the keys that work now
   if (cur !== undefined) actions.push(...actionRows(cur, cursor, nav, ctx, wide, roomy, total))
-  return { body, actions }
+  // W3: focus content and its detail controls take precedence over the other-card
+  // list. h/l still visit every bus card (the title keeps its real position/total).
+  const room = Math.max(0, ctx.size.rows - 1 - (ctx.size.cols < STRIP_SPLIT_COLS ? 2 : 1) - actions.length)
+  if (body.length > room && focusEnd < room) {
+    const hidden = body.length - room + 1
+    return { body: [...body.slice(0, Math.max(0, room - 1)), [dimSeg(ctx.t('frame.more', { n: hidden, arrow: GLYPHS.structure.behind }))]], actions }
+  }
+  return { body: body.slice(0, room), actions }
 }
 
-function actionRows(cur: Item, cursor: number, nav: DecideNav, ctx: PageCtx, wide: boolean, roomy: boolean, total = 1): Row[] {
+// W3: reserve one action row. Options stay in the body and undo exists only
+// during a real hold; verbose explanations belong to the card, not the controls.
+function actionRows(cur: Item, _cursor: number, nav: DecideNav, ctx: PageCtx, wide: boolean, _roomy: boolean, total = 1): Row[] {
   const { t } = ctx
-  const R = (text: string): Row => [seg(text)]
-  const navKeys = wide ? t('page.decide.act_nav') : t('page.decide.act_nav_c')
-  // M3: the `其他待決 N（z 收合）` header asks for z, so the read-only card's key row carries the z Button too (2.1.327 + tmux types a bare z into the prompt)
-  const conFold = nav.folded ? (wide ? t('page.decide.act_fold_open') : t('page.decide.act_fold_open_c')) : wide ? t('page.decide.act_fold_close') : t('page.decide.act_fold_close_c')
-  if (cur.kind === 'con') return [R(t('page.decide.act_readonly', { seat: cur.c.executor_display ?? '-' })), R(navKeys + (total > 1 ? '  ' + conFold : ''))]
+  const R = (...parts: string[]): Row[] => [[seg(parts.filter(Boolean).join(' '))]]
+  const navKeys = t('page.decide.act_nav_c')
+  const fold = nav.folded ? t('page.decide.act_fold_open_c') : t('page.decide.act_fold_close_c')
+  if (cur.kind === 'con') return R(t('page.decide.act_readonly', { seat: cur.c.executor_display ?? '-' }), navKeys, total > 1 ? fold : '')
   const d = cur.d
   const sent = d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
   const hold = d.id === null ? undefined : nav.hold?.[d.id]
@@ -341,26 +380,13 @@ function actionRows(cur: Item, cursor: number, nav: DecideNav, ctx: PageCtx, wid
   const k = pick === null ? '' : letterOf(pick)
   if (hold !== undefined) {
     const left = Math.max(0, Math.ceil((hold + DECIDE_UNDO_MS - ctx.nowMs) / 1000))
-    return [R(t('page.decide.act_held', { k, n: left })), R(t('page.decide.act_nav_held'))]
+    return R(t('page.decide.act_held', { k, n: left }), navKeys)
   }
-  if (sent) return [R(t('page.decide.act_sent', { k })), R(t('page.decide.act_nav_held'))]
-  if (nav.textMode) return [R(t('page.decide.act_text')), R(t('page.decide.act_text_keys'))]
-  if (decideDialog(d)) return [R(navKeys)]
-  const n = d.options.length
-  const fold = nav.folded ? (wide ? t('page.decide.act_fold_open') : t('page.decide.act_fold_open_c')) : wide ? t('page.decide.act_fold_close') : ''
-  if (n > MAX_OPTS) {
-    const picked = pick === null ? t('page.decide.act_none') : t('page.decide.act6_pick', { n: pick + 1, label: d.options[pick].label })
-    return [R(picked), R(t('page.decide.act6_send')), R(t('page.decide.act6_keys'))]
-  }
-  const picked = pick === null ? t('page.decide.act_none') : wide ? t('page.decide.act_picked', { k, label: d.options[pick].label }) : t('page.decide.act_picked_c', { k })
-  if (!wide) {
-    return [R(picked + ' ' + t('page.decide.act_note_c')), R(t('page.decide.act_send_c') + '  ' + t('page.decide.act_undo_c')), R(navKeys + ' ' + (nav.folded ? fold : t('page.decide.act_fill_c')))]
-  }
-  const range = n <= 1 ? 'a:' : t('page.decide.act_range', { last: letterOf(n - 1) })
-  const pickHelp = roomy ? t('page.decide.act_pick_roomy') : t('page.decide.act_pick_tight')
-  const rows = [R(picked), R(range + ' ' + pickHelp + '   ' + t('page.decide.act_note')), R(t('page.decide.act_send') + '   ' + t('page.decide.act_undo') + (roomy ? '' : '   ' + t('page.decide.act_fill'))), R(navKeys + '  ' + fold)]
-  if (roomy) rows.push(R(t('page.decide.act_fill')))
-  return rows
+  if (sent) return R(t('page.decide.act_sent', { k }), navKeys)
+  if (nav.textMode) return R(t('page.decide.act_text'), t('page.decide.act_text_keys'))
+  if (decideDialog(d)) return R(navKeys)
+  return R(k === '' ? '' : GLYPHS.structure.decisions + ' ' + k, t('page.decide.act_note_c'), t('page.decide.act_send_c'), navKeys,
+    total > 1 ? fold : '', t('page.decide.act_fill_c')) // V3: folding never replaces filling.
 }
 
 export const decidePage: Page = { id: 'decide', key: '2', title: '待決', framed: true, render }

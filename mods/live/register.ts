@@ -58,6 +58,7 @@ import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
 import { normalizedPools } from './pages/quota-pick'
+import { consoleFleetCounts } from './pages/rows'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
@@ -1639,11 +1640,13 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // forgeMore: something was timed but the band has no room for the label (its smallest form) and its tab; the strip then ends in a dim `›` Button (key 'more') that opens the forge view, so the keyboard still reaches it
     let forgeMore = false
     let bandPreset: { segs: Seg[]; width: number } | null = null
-    const fleetNow = await read($, FLEET)
     const snap = snapshot
-    const fleetSlot = snap !== null && snap.band !== null && !consoleOn && fleetNow.fetchedMs !== null
-      ? slotFleet({ stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting }, t)
-      : null
+    const fleetNow = await read($, FLEET)
+    // X3: a bus snapshot owns every pane/band count. Preserve the existing
+    // task-only band when no console snapshot has ever been available.
+    const fleetCounts = consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : fleetNow.fetchedMs !== null
+      ? { stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting } : null
+    const fleetSlot = snap !== null && snap.band !== null && !consoleOn ? slotFleet(fleetCounts, t) : null
     if (fleetSlot !== null && snap !== null && snap.band !== null) {
       const base = snap.band.slots
       const atV = base.findIndex(s => s.id === 'verdict')

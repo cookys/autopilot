@@ -1,7 +1,7 @@
 // mods/live/tabs.ts — the tab builders of the live pane (project/plans/2026-10-13-live-pane-design-system.md §6.1): 現況, 派工, 審查, 用量, 殘留 and ?.
 // Every line is built by a ui.ts component; this file writes no theme key, no glyph literal and no hand-made line (ui-lint.test.js L1, L2, L4-L7).
 
-import { decisionCount, lineState, pendingSourceMissing, stuckLinesOf } from './pages/rows'
+import { decisionCount, consoleFleetCounts, lineState, pendingSourceMissing, stuckLinesOf } from './pages/rows'
 import { PAGE_KEYS } from './pages/layout'
 import { ROLE_WARNING, isUnknownPool, normalizedPools, rankPools } from './pages/quota-pick'
 import type { ConsoleSnapshot } from './console'
@@ -115,10 +115,7 @@ export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, a
   const noPendingSrc = pendingSourceMissing({ live: snap, console: con })
   const pending = decisionCount({ live: snap, console: con })
   // M6: the fleet count marks only failed / stuck lines with ✗; idle lines are counted apart with ⊘ (an idle line is not an error)
-  const stuck = stuckLinesOf(con)
-  const idleWord = t('page.fleet.idle')
-  const idleN = stuck.filter(s => lineState(s.line, t).word === idleWord).length
-  const faults = stuck.length - idleN
+  const fleetCounts = con === null ? { failed: 0, stuck: 0, running: 0, waiting: 0, normal: 0 } : consoleFleetCounts(con, t)
   // M6: 額度 carries the same pool counts the quota page draws: red ✗, unknown ?, yellow ▲ (a closed band must not read as all-clear)
   const pools = normalizedPools(con)
   const verdicts = pools === null ? [] : rankPools(pools, con?.generated_at_ms ?? 0, t)
@@ -127,6 +124,7 @@ export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, a
   const qWarn = verdicts.filter(v => v.role === ROLE_WARNING && !isUnknownPool(v)).length
   const G = {
     failed: ui.glyphOf(ui.stateOf('console', 'FAILED')), stalled: ui.glyphOf(ui.stateOf('console', 'STALLED')),
+    running: ui.glyphOf(ui.stateOf('console', 'RUNNING')), waiting: ui.glyphOf(ui.stateOf('console', 'WAITING')), normal: ui.glyphOf(ui.stateOf('console', 'PENDING')),
     unknown: ui.glyphOf(ui.stateOf('qc', 'UNKNOWN')), need_you: ui.glyphOf(ui.stateOf('console', 'NEED_YOU')),
   }
   const marks = (name: string, parts: [string, number][]): string => {
@@ -138,9 +136,9 @@ export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, a
     const list = BAND_PAGE_TABS.map(id => {
       const full = t('tab.' + id)
       const name = short ? first(full) : full
-      const label = id === 'fleet' && idleN > 0 ? marks(name, [[G.failed, faults], [G.stalled, idleN]])
+      const label = id === 'fleet' ? marks(name, [[G.failed, fleetCounts.failed], [G.stalled, fleetCounts.stuck], [G.running, fleetCounts.running], [G.waiting, fleetCounts.waiting], [G.normal, fleetCounts.normal]])
         : id === 'quota' ? marks(name, [[G.failed, qRed], [G.unknown, qUnk], [G.need_you, qWarn]])
-          : ui.tabCountLabel(name, id === 'decide' ? (noPendingSrc ? null : pending) : id === 'fleet' ? faults : 0, id === 'fleet')
+          : ui.tabCountLabel(name, id === 'decide' ? (noPendingSrc ? null : pending) : 0, false)
       return { id: id as BandPageId | 'forge', label, ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }
     })
     // M6: the closed band lists every pane page the pane strip has: 9 寵物 and 0 鍛 too (the forge label is the mod's own when one is drawn)

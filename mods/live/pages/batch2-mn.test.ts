@@ -45,7 +45,7 @@ test('M1 (S1-full-p3-80x24 row 16): a cut 80-column 艦隊 page keeps the summar
   expect(out.length).toBe(7)
   const sum = out.find(r => r.includes('產線 9'))
   expect(sum, 'the summary row stays').toBeDefined()
-  expect(sum).toContain('●2 ⋯1 ⊘6')
+  expect(sum).toContain('⊘1 ✗2 ○6') // X3: counts are classified from the same nine bus lines.
   expect(sum).toContain('✗ 離線 2 台主機')
   expect(out.some(r => /↓ 還有 \d+ 項/.test(r)), 'the cut list says how much is hidden').toBe(true)
   for (const r of out) expect(M.displayWidth(r)).toBeLessThanOrEqual(80)

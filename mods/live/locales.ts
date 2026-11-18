@@ -641,10 +641,8 @@ export const EN: Record<string, string> = {
   "page.fleet.col_state": "State",
   "page.fleet.col_owner": "Owner",
   "page.fleet.col_task": "Task / evidence",
-  "page.fleet.col_last": "Since",
   "page.fleet.age_min": "{n} min",
   "page.fleet.age_hour": "{n} h",
-  "page.fleet.age_day": "{n} d",
   "page.fleet.folded": "{rest} more folded ({shown}+{rest}={total}) · z to unfold",
   "page.fleet.unfolded": "{rest} unfolded ({shown}+{rest}={total}) · z to fold",
   "page.fleet.hosts_title": "Hosts {online}/{total} online",
@@ -881,7 +879,10 @@ export const EN: Record<string, string> = {
   "page.quota.act_prev_pool": "Prev pool",
   "page.quota.act_next_pool": "Next pool ({cur}/{total})",
   "page.quota.action_f_c": "[f] Switch",
-  "page.decide.act_fold_close_c": "[z] fold others"
+  "page.decide.act_fold_close_c": "[z] fold others",
+  "page.fleet.act_prev_line": "Previous line",
+  "page.fleet.act_next_line": "Next line",
+  "page.quota.f_seats_no_detail": "{n} seats total (no seat list details)"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -1523,10 +1524,8 @@ export const ZH_TW: Record<string, string> = {
   "page.fleet.col_state": "狀態",
   "page.fleet.col_owner": "負責",
   "page.fleet.col_task": "任務 / 證據",
-  "page.fleet.col_last": "上次",
   "page.fleet.age_min": "{n} 分",
   "page.fleet.age_hour": "{n} 時",
-  "page.fleet.age_day": "{n} 天",
   "page.fleet.folded": "另 {rest} 條折疊（{shown}+{rest}={total}）· z 展開",
   "page.fleet.unfolded": "已展開 {rest} 條（{shown}+{rest}={total}）· z 收合",
   "page.fleet.hosts_title": "主機 {online}/{total} 在線",
@@ -1763,5 +1762,8 @@ export const ZH_TW: Record<string, string> = {
   "page.quota.act_prev_pool": "上一池",
   "page.quota.act_next_pool": "下一池 ({cur}/{total})",
   "page.quota.action_f_c": "[f] 換池",
-  "page.decide.act_fold_close_c": "[z] 收合其他"
+  "page.decide.act_fold_close_c": "[z] 收合其他",
+  "page.fleet.act_prev_line": "上一線",
+  "page.fleet.act_next_line": "下一線",
+  "page.quota.f_seats_no_detail": "共 {n} 席（席位清單沒有明細）"
 }

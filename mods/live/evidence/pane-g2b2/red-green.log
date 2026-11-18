@@ -1,0 +1,129 @@
+Base commit: daedf7fbd824ef6f3e807ebc2cdfe0a2b846cb54
+X2 red command: AUTOPILOT_MODS_REAL_CLAUDE=$HOME/.local/share/claude/versions/2.1.327 bash mods/live/run-tests.sh < /dev/null
+Other red/green runs: same isolated real-Claude plugin runner, focused wrapper with production sources and ux-gate2-share.test.ts (no model calls).
+Focused wrapper manifest: name=autopilot, hooks.modules=[../mods/live/register.ts], types=./mods/live/types/index.d.ts
+
+=== X2 RED: exit 1 ===
+(fail) X2: 80x24 overflow names hidden severity and category, prioritizes the worst quota pool, and gives residue to tab 8 [13.84ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+(fail) X2: the only available row at 80x3 names the worst category, its counts and the most urgent pool [7.43ms]
+  AssertionError: expect(received).toContain()
+  
+  Expected: containing "額度 ✗2 ?3"
+  Received: "現況\n→ 殘留 2 項可清  [8]\n1 現 2 待 3 艦 4 額 5 派 6 審 7 花 8 殘 9 寵 0 鍛  i 說明  Esc 收起"
+
+=== X2 GREEN: exit 0 ===
+
+mods/live/pages/ux-gate2-share.test.ts:
+(pass) X2: 80x24 overflow names hidden severity and category, prioritizes the worst quota pool, and gives residue to tab 8 [8.04ms]
+(pass) X2: the only available row at 80x3 names the worst category, its counts and the most urgent pool [2.74ms]
+
+ 2 pass
+ 0 fail
+Ran 2 tests across 1 file. [0.43s]
+
+=== X3 RED: exit 1 ===
+(fail) X3: 現況, 艦隊 and the band count the same snapshot as the expanded rows, including offline and normal lines [2.04ms]
+  AssertionError: expect(received).toContain()
+  
+  Expected: containing "✗2"
+  Received: "產線 9 ●2 ⋯1 ⊘6 · 主機 4/6"
+
+ 2 pass
+ 1 fail
+Ran 3 tests across 1 file. [0.43s]
+=== X3 GREEN: exit 0 ===
+
+mods/live/pages/ux-gate2-share.test.ts:
+(pass) X2: 80x24 overflow names hidden severity and category, prioritizes the worst quota pool, and gives residue to tab 8 [6.76ms]
+(pass) X2: the only available row at 80x3 names the worst category, its counts and the most urgent pool [1.88ms]
+(pass) X3: 現況, 艦隊 and the band count the same snapshot as the expanded rows, including offline and normal lines [1.93ms]
+
+ 3 pass
+ 0 fail
+Ran 3 tests across 1 file. [0.36s]
+
+=== Y1 RED: exit 1 ===
+(fail) Y1: a cut 艦隊 list counts hidden states and offers working previous/next line Buttons at 80x24 [0.91ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+
+ 3 pass
+ 1 fail
+Ran 4 tests across 1 file. [0.34s]
+=== Y1 GREEN: exit 0 ===
+
+mods/live/pages/ux-gate2-share.test.ts:
+(pass) X2: 80x24 overflow names hidden severity and category, prioritizes the worst quota pool, and gives residue to tab 8 [7.68ms]
+(pass) X2: the only available row at 80x3 names the worst category, its counts and the most urgent pool [2.22ms]
+(pass) X3: 現況, 艦隊 and the band count the same snapshot as the expanded rows, including offline and normal lines [2.81ms]
+(pass) Y1: a cut 艦隊 list counts hidden states and offers working previous/next line Buttons at 80x24 [2.88ms]
+
+ 4 pass
+ 0 fail
+Ran 4 tests across 1 file. [0.38s]
+
+=== Y3 RED: exit 1 ===
+(fail) Y3: both pages share 產線 狀態（時長）, with 220 minutes shown once as 3 時 40 分 [0.51ms]
+  AssertionError: expect(received).toContain()
+  
+  Expected: containing "己線 閒置（3 時 40 分）"
+  Received: " ⊘ 己線閒置 220 分（3 時）"
+
+ 4 pass
+ 1 fail
+Ran 5 tests across 1 file. [0.35s]
+=== Y3 GREEN: exit 0 ===
+
+mods/live/pages/ux-gate2-share.test.ts:
+(pass) X2: 80x24 overflow names hidden severity and category, prioritizes the worst quota pool, and gives residue to tab 8 [6.52ms]
+(pass) X2: the only available row at 80x3 names the worst category, its counts and the most urgent pool [1.77ms]
+(pass) X3: 現況, 艦隊 and the band count the same snapshot as the expanded rows, including offline and normal lines [1.95ms]
+(pass) Y1: a cut 艦隊 list counts hidden states and offers working previous/next line Buttons at 80x24 [1.87ms]
+(pass) Y3: both pages share 產線 狀態（時長）, with 220 minutes shown once as 3 時 40 分 [1.01ms]
+
+ 5 pass
+ 0 fail
+Ran 5 tests across 1 file. [0.32s]
+
+=== Z2 RED: exit 1 ===
+(fail) Z2: a positive seat total with no seat records says the detail is missing, and o appears once [1.01ms]
+  AssertionError: expect(received).toContain()
+  
+  Expected: containing "共 1 席（席位清單沒有明細）"
+  Received: "── 額度池 · 預測由 fleet 算 · 近 6 時 ────────────────────────────── 資料 0 秒前\n    池         7 天  5 時  重置    近 6 時    預測  判定\n▸ ✓ single      80%   12%  週四21 +0.4%/時     98%  會用到 98%\n\n── 焦點 single ─────────────────────────────────────────────────────────────────\n  [o] 展開各席\n席    共 1 席\n判定  綠：會用到 98%"
+
+ 5 pass
+ 1 fail
+Ran 6 tests across 1 file. [0.33s]
+=== Z2 GREEN: exit 0 ===
+
+mods/live/pages/ux-gate2-share.test.ts:
+(pass) X2: 80x24 overflow names hidden severity and category, prioritizes the worst quota pool, and gives residue to tab 8 [6.85ms]
+(pass) X2: the only available row at 80x3 names the worst category, its counts and the most urgent pool [1.99ms]
+(pass) X3: 現況, 艦隊 and the band count the same snapshot as the expanded rows, including offline and normal lines [2.25ms]
+(pass) Y1: a cut 艦隊 list counts hidden states and offers working previous/next line Buttons at 80x24 [2.11ms]
+(pass) Y3: both pages share 產線 狀態（時長）, with 220 minutes shown once as 3 時 40 分 [1.12ms]
+(pass) Z2: a positive seat total with no seat records says the detail is missing, and o appears once [2.33ms]
+
+ 6 pass
+ 0 fail
+Ran 6 tests across 1 file. [0.34s]
+
+=== X2 no-pending edge RED: exit 1 ===
+(fail) X2: at 80x3 quota severity stays visible with no pending decision, and seat-only quota data does not throw [1.39ms]
+  AssertionError: expect(received).toContain()
+  
+  Expected: containing "額度 ✗2 ?3"
+  Received: "現況\n3 池判定未知（缺換池資料）；沒有待決卡\n1 現 2 待 3 艦 4 額 5 派 6 審 7 花 8 殘 9 寵 0 鍛  i 說明  Esc 收起"
+=== Y1 focus outside window RED: exit 1 ===
+(fail) Y1: a cut 艦隊 list counts hidden states and offers working previous/next line Buttons at 80x24 [6.98ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false

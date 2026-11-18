@@ -10,7 +10,7 @@ import { displayWidth, truncateToWidth } from '../model'
 import { GLYPHS, PALETTE, STATES, type StateId } from '../ui'
 import type { Page, PageCtx } from './frame'
 import { STRIP_SPLIT_COLS } from './layout'
-import { WRAP_HANG, brokenRow, isBriefStale, lineState, lineTotal, staleBadge, wrapRow } from './rows'
+import { WRAP_HANG, brokenRow, isBriefStale, lineCounts, lineState, lineStatusText, lineTotal, staleBadge, wrapRow } from './rows'
 import type { Row } from './rows'
 
 
@@ -20,7 +20,6 @@ export type FleetView = { focus: number; expanded: boolean }
 export const DEFAULT_VIEW: FleetView = { focus: 0, expanded: false }
 
 const pad = (s: string, w: number): string => s + ' '.repeat(Math.max(0, w - displayWidth(s)))
-const padL = (s: string, w: number): string => ' '.repeat(Math.max(0, w - displayWidth(s))) + s
 const fit = (s: string, w: number): string => (displayWidth(s) <= w ? s : truncateToWidth(s, w))
 
 type FleetRow = { line: ConsoleLine; sid: StateId; word: string; worst: ConsoleLine['issues'][number] | null }
@@ -31,15 +30,8 @@ export function rowsOf(lines: ConsoleLine[], t: T = makeT('zh-TW')): FleetRow[] 
     const { sid, word, worst } = lineState(line, t)
     return { line, sid, word, worst }
   })
-  const rank = (r: FleetRow): number => (r.worst === null ? 9 : RANK[r.worst.state] ?? 2)
+  const rank = (r: FleetRow): number => (r.worst === null ? 9 : RANK[r.sid] ?? 2)
   return out.sort((a, b) => rank(a) - rank(b) || (a.worst?.since_ms ?? Infinity) - (b.worst?.since_ms ?? Infinity) || a.line.label.localeCompare(b.line.label))
-}
-
-function age(ms: number, ctx: PageCtx): string {
-  const d = Math.max(0, ctx.nowMs - ms)
-  if (d >= 86_400_000) return ctx.t('page.fleet.age_day', { n: Math.floor(d / 86_400_000) })
-  if (d >= 3_600_000) return ctx.t('page.fleet.age_hour', { n: Math.floor(d / 3_600_000) })
-  return ctx.t('page.fleet.age_min', { n: Math.floor(d / 60_000) })
 }
 
 // the full reason of one broken source (A10: never truncated here; the frame clips only a row that is wider than the pane)
@@ -55,7 +47,7 @@ const task = (r: FleetRow): string => (r.worst === null ? GLYPHS.structure.empty
 // M4: a line with no issue record is normal, said so with the reason the detail is missing (never 閒置)
 const whyOf = (r: FleetRow, ctx: PageCtx): string => (r.worst === null ? ctx.t('page.fleet.no_issue_detail') : r.worst.subject + '（' + r.worst.rule + '）')
 
-export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body: Row[]; actions: Row[] } {
+export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body: Row[]; actions: Row[]; overflow?: true } {
   const snap = ctx.console
   const none = (): { body: Row[]; actions: Row[] } => ({ body: [brokenRow(GLYPHS.state.failed + ' ' + ctx.t('page.fleet.no_source'))], actions: [] })
   if (snap === null || snap.lines === null) return none()
@@ -73,9 +65,17 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
   const shown = view.expanded ? rows.length : head.length
   const rest = total - head.length // shown + rest = total when folded
   const focus = Math.max(0, Math.min(view.focus, Math.max(0, shown - 1)))
-  const sum = snap.counts.summary.lines
-  const run = sum.running ?? 0, wait = sum.waiting ?? 0, stuck = sum.stalled ?? 0
+  const sum = lineCounts(snap, ctx.t)
+  const states = (['running', 'waiting', 'stalled', 'failed', 'pending'] as const).filter(k => (sum[k] ?? 0) > 0)
+  const stateWord = (k: typeof states[number]): string => ctx.t(k === 'running' ? 'page.fleet.w_run' : k === 'waiting' ? 'page.fleet.w_wait' : k === 'stalled' ? 'page.fleet.w_stuck' : k === 'failed' ? 'page.fleet.w_offline' : 'page.fleet.w_normal')
   const body: Row[] = []
+  const lineRows = new Map<Row, FleetRow>()
+  const hiddenBadges = (hidden: FleetRow[]): string => {
+    const counts = new Map<StateId, number>()
+    for (const r of hidden) counts.set(r.sid, (counts.get(r.sid) ?? 0) + 1)
+    if (unlisted > 0) counts.set('pending', (counts.get('pending') ?? 0) + unlisted)
+    return (['failed', 'stalled', 'running', 'waiting', 'pending'] as const).filter(k => counts.has(k)).map(k => STATES[k].glyph + counts.get(k)).join(' ')
+  }
 
   const tasksReason = sourceReason(ctx, snap, 'tasks')
   if (tasksReason !== null) body.push(brokenRow(tasksReason))
@@ -94,9 +94,7 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
     const staleNote = bs.stale ? GLYPHS.state.failed + ' ' + ctx.t('page.fleet.sum_stale', { min: bs.min, why: ctx.t('page.now.hosts_expired') }) : null
     if (wide) {
       const core: Row = [{ text: RULE2 + ' ' + ctx.t('page.fleet.lines_title', { n: total }) + '：', color: PALETTE.structure },
-        { text: STATES.running.glyph + ' ' + ctx.t('page.fleet.w_run') + ' ' }, num(String(run), STATES.running.key),
-        { text: '  ' + STATES.waiting.glyph + ' ' + ctx.t('page.fleet.w_wait') + ' ' }, num(String(wait), STATES.waiting.key),
-        { text: '  ' + STATES.stalled.glyph + ' ' + ctx.t('page.fleet.w_stuck') + ' ' }, num(String(stuck), STATES.stalled.key)]
+        ...states.flatMap((k, i) => [{ text: (i > 0 ? '  ' : '') + STATES[k].glyph + ' ' + stateWord(k) + ' ' }, num(String(sum[k]), STATES[k].key)])]
       if (staleNote !== null) {
         core.push(staleBadge('  ' + staleNote))
         const used = core.reduce((w, s) => w + displayWidth(s.text), 0)
@@ -107,46 +105,46 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
         body.push(core)
       }
     } else {
-      const core: Row = [{ text: ctx.t('page.fleet.lines_title', { n: total }) + ' ' }, num(STATES.running.glyph + String(run), STATES.running.key), { text: ' ' }, num(STATES.waiting.glyph + String(wait), STATES.waiting.key), { text: ' ' }, num(STATES.stalled.glyph + String(stuck), STATES.stalled.key), ...hostNote()]
+      const core: Row = [{ text: ctx.t('page.fleet.lines_title', { n: total }) + ' ' }, ...states.flatMap((k, i) => [...(i > 0 ? [{ text: ' ' }] : []), num(STATES[k].glyph + String(sum[k]), STATES[k].key)]), ...hostNote()]
       if (staleNote !== null) core.push(staleBadge('  ' + staleNote))
       body.push(core)
     }
   }
   if (total === 0) body.push([{ text: ctx.t('page.fleet.none'), dim: true }])
 
-  const wLine = 20, wState = 8, wOwner = 14, wLast = 7, wLastNarrow = 7
-  if (!ctx.shortBody && wide && total > 0) body.push([{ text: '  ' + pad(ctx.t('page.fleet.col_line'), wLine + 2) + pad(ctx.t('page.fleet.col_state'), wState) + pad(ctx.t('page.fleet.col_owner'), wOwner) + pad(ctx.t('page.fleet.col_task'), Math.max(10, cols - 2 - wLine - 2 - wState - wOwner - wLast)) + padL(ctx.t('page.fleet.col_last'), wLast), color: PALETTE.structure }])
+  if (!ctx.shortBody && wide && total > 0) body.push([{ text: '  ' + pad(ctx.t('page.fleet.col_line') + ' / ' + ctx.t('page.fleet.col_state'), 48) + pad(ctx.t('page.fleet.col_owner'), 14) + ctx.t('page.fleet.col_task'), color: PALETTE.structure }])
   const lineRow = (r: FleetRow, i: number): Row => {
     const st = STATES[r.sid]
     const mark = i === focus ? GLYPHS.structure.folded : ' '
-    const word = r.word
-    const last = r.worst === null ? GLYPHS.structure.empty : age(r.worst.since_ms, ctx)
     const press = 'fleet:see:' + r.line.line_id
+    const status = lineStatusText(r.line, ctx.t, ctx.nowMs, wide ? Math.min(46, cols - 4) : cols - 3 - (stale ? 2 : 0))
+    const core: Row = [{ text: mark + (wide ? ' ' : ''), press }, { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }), press }, { text: status, press }]
     if (wide) {
-      const lastText = padL((stale ? GLYPHS.state.failed : '') + last, wLast)
-      const lastSeg: Seg = stale ? staleBadge(lastText) : { text: lastText, ...(st.wordKey === undefined ? {} : { color: st.wordKey }) }
-      const taskW = Math.max(10, cols - 2 - 2 - wLine - wState - wOwner - wLast)
-      return [{ text: mark + ' ', press }, { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }), press },
-        { text: pad(fit(r.line.label, wLine), wLine), press }, { text: pad(word, wState), ...(st.wordKey === undefined ? {} : { color: st.wordKey }) },
-        { text: pad(fit(r.line.lead_display ?? GLYPHS.structure.empty, wOwner - 1), wOwner) }, { text: pad(fit(task(r), taskW - 1), taskW) }, lastSeg]
+      const used = core.reduce((n, s) => n + displayWidth(s.text), 0)
+      core.push({ text: ' '.repeat(Math.max(2, 50 - used)) + pad(fit(r.line.lead_display ?? GLYPHS.structure.empty, 13), 14) })
     }
-    const lastText = padL((stale ? GLYPHS.state.failed : '') + last, wLastNarrow)
-    const lastSeg: Seg = stale ? staleBadge(lastText) : { text: lastText, ...(st.wordKey === undefined ? {} : { color: st.wordKey }) }
-    const labelShown = fit(r.line.label, Math.max(8, cols - 22))
-    const usedLeft = 1 + 2 + displayWidth(labelShown) + 1 + displayWidth(word) + 1
-    const taskW = Math.max(2, cols - usedLeft - wLastNarrow)
-    return [{ text: mark, press }, { text: st.glyph + ' ', ...(st.key === undefined ? {} : { color: st.key }), press }, { text: labelShown + ' ', press },
-      { text: word + ' ', ...(st.wordKey === undefined ? {} : { color: st.wordKey }) }, { text: pad(fit(task(r), Math.max(1, taskW - 1)), taskW) }, lastSeg]
+    // Keep substantive evidence; an idle subject only repeats the status/duration.
+    if (r.worst !== null && r.word !== ctx.t('page.fleet.idle')) {
+      const used = core.reduce((n, s) => n + displayWidth(s.text), 0)
+      const room = cols - used - 2 - (stale ? 2 : 0)
+      if (room > 0) {
+        const text = task(r)
+        core.push({ text: '  ' + (displayWidth(text) > room ? pad(fit(text, room), room) : text) })
+      }
+    }
+    if (stale) core.push(staleBadge(' ' + GLYPHS.state.failed))
+    return core
   }
-  head.forEach((r, i) => body.push(lineRow(r, i)))
+  const addLine = (r: FleetRow, i: number): void => { const row = lineRow(r, i); lineRows.set(row, r); body.push(row) }
+  head.forEach(addLine)
   if (rest > 0) {
     const foldText = unlisted === 0
       ? (view.expanded ? ctx.t('page.fleet.unfolded', { rest: expandedNamed, shown: head.length, total }) : ctx.t('page.fleet.folded', { rest: expandedNamed, shown: head.length, total }))
       : expandedNamed > 0
         ? (view.expanded ? ctx.t('page.fleet.unfolded_unlisted', { exp: expandedNamed, shown: head.length, listed: rows.length, unlisted, total }) : ctx.t('page.fleet.folded_unlisted', { exp: expandedNamed, unlisted, shown: head.length, rest, total }))
         : ctx.t('page.fleet.unlisted_only', { unlisted, shown: head.length, total })
-    body.push([{ text: (wide ? '  ' : ' ') + (stale ? GLYPHS.state.failed + ' ' : '') + GLYPHS.state.pending + ' ' + foldText, color: stale ? PALETTE.broken : PALETTE.idle, ...(expandedNamed > 0 ? { press: 'fleet:fold' } : {}) }])
-    if (view.expanded && expandedNamed > 0) rows.slice(FOLD_AT).forEach((r, i) => body.push(lineRow(r, FOLD_AT + i)))
+    body.push([{ text: (wide ? '  ' : ' ') + (stale ? GLYPHS.state.failed + ' ' : '') + GLYPHS.state.pending + ' ' + foldText + '（' + hiddenBadges(rows.slice(FOLD_AT)) + '）', color: stale ? PALETTE.broken : PALETTE.idle, ...(expandedNamed > 0 ? { press: 'fleet:fold' } : {}) }])
+    if (view.expanded && expandedNamed > 0) rows.slice(FOLD_AT).forEach((r, i) => addLine(r, FOLD_AT + i))
   }
 
   // hosts: the console's own counts (summary.hosts); the per-host list is not in the parsed snapshot
@@ -172,15 +170,34 @@ export function fleetView(ctx: PageCtx, view: FleetView = DEFAULT_VIEW): { body:
       ])
     }
   }
+  if (f !== undefined) {
+    const nav: Row = [
+      { text: ctx.t('page.fleet.act_prev_line'), color: PALETTE.action, press: 'fleet:see:' + rows[Math.max(0, focus - 1)].line.line_id },
+      { text: ' · ', dim: true },
+      { text: ctx.t('page.fleet.act_next_line'), color: PALETTE.action, press: 'fleet:see:' + rows[Math.min(rows.length - 1, focus + 1)].line.line_id },
+    ]
+    // Y1: wide pages already use all four action rows; append to their inspect row.
+    if (wide) actions[1].push({ text: ' · ', dim: true }, ...nav)
+    else actions.push(nav)
+  }
   // M1: a short body (<= 4 rows) that cannot hold every row ends in `↓ 還有 N 項` instead of dropping rows without a word (the frame drops its own hint in short mode)
-  if (ctx.shortBody === true) {
+  {
     const stripLen = cols < STRIP_SPLIT_COLS ? Math.min(2, ctx.size.rows) : Math.min(1, ctx.size.rows)
     const avail = Math.max(0, ctx.size.rows - 1 - stripLen)
     const room = Math.max(0, avail - Math.min(Math.max(1, actions.length), avail))
-    const flat = body.flatMap(r => wrapRow(r, cols, WRAP_HANG))
+    const flat = body.flatMap(r => wrapRow(r, cols, WRAP_HANG).map(row => ({ row, line: lineRows.get(r) })))
     if (room >= 2 && flat.length > room) {
       const keep = flat.slice(0, room - 1)
-      return { body: [...keep, [{ text: (wide ? '  ' : ' ') + ctx.t('page.fleet.more_items', { n: flat.length - keep.length, arrow: GLYPHS.structure.behind }), color: stale ? PALETTE.broken : PALETTE.idle }]], actions }
+      // Y1: moving to a line beyond the first window must reveal that line.
+      if (!keep.some(r => r.line === f)) {
+        const focused = flat.find(r => r.line === f)
+        if (focused !== undefined) keep[keep.length - 1] = focused
+      }
+      const visible = new Set(keep.flatMap(r => r.line === undefined ? [] : [r.line.line.line_id]))
+      const hidden = rows.filter(r => !visible.has(r.line.line_id))
+      const n = hidden.length + unlisted
+      const hint = ctx.t('page.fleet.more_items', { n, arrow: GLYPHS.structure.behind }) + (n > 0 ? '（' + hiddenBadges(hidden) + '）' : '')
+      return { body: [...keep.map(r => r.row), [{ text: (wide ? '  ' : ' ') + hint, color: stale ? PALETTE.broken : PALETTE.idle }]], actions, overflow: true }
     }
   }
   return { body, actions }

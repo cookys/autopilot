@@ -22,10 +22,10 @@ export type { Row } from './rows'
 export interface PageCtx { live: LiveSnapshot | null; console: ConsoleSnapshot | null; size: { cols: number; rows: number }; t: T; nowMs: number; shortBody?: boolean; steps?: readonly Step[] }
 export type PageId = 'now' | 'decide' | 'fleet' | 'quota' | 'dispatch' | 'review' | 'spend' | 'hygiene' | 'pet' | 'forge' | 'help'
 // `framed` (optional, additive): true once the page is filled in; pane.tsx draws a framed page through frameRows and an unframed shell the old way, so S0 changes nothing on screen
-export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[] } }
+export interface Page { id: PageId; key: string; title: string; framed?: true; render(ctx: PageCtx): { body: Row[]; actions: Row[]; overflow?: true } }
 // a tab the frame's strip shows next to the pages (the old tabs that still draw the old way): `key` is its digit
 export type ExtraTab = { id: string; key: string; label: string }
-export type FrameOpts = { scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[] }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
+export type FrameOpts = { scroll?: number; unfold?: (ctx: PageCtx) => { body: Row[]; actions: Row[]; overflow?: true }; pages?: readonly Page[]; extra?: readonly ExtraTab[]; active?: string }
 
 // Height is fixed for the host allocation: a dock beside chat uses every row; an inline (stacked) pane is capped at 24.
 export const FRAME_MAX_ROWS = 24
@@ -164,7 +164,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
     const open = opts.unfold(ctx)
     if (open.actions.length <= full) {
       const alt = layout(open, false)
-      if (alt.body.length <= alt.room) lay = alt
+      if (alt.body.length <= alt.room && open.overflow !== true) lay = alt // Y1: a page-budgeted overflow still does not fit whole.
     }
   }
   const { body, acts, room, short } = lay

@@ -118,7 +118,7 @@ test('gate3 item 2: when body has 4 rows or fewer, no section title and no colum
     POOLS.find(p => p.pool === 'codex')!, // green
   ]
   const cNow = { ...(snap(oneRedOneUnknown, { cards: [], lines: [c.lines![1]] }) as object), items: [] } as ConsoleSnapshot
-  expect(frameRows(nowPage, { ...(ctxOf(80, 4, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('另有 4 項')
+  expect(frameRows(nowPage, { ...(ctxOf(80, 4, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)[1]).toBe('✗ 艦隊 ✗1 · 額度 ✗1 ?1 trinity · 另有 4 項') // X2b: severe classes lead; pool identity and overflow remain visible.
   for (const H of [5, 6, 7]) {
     const nOut = frameRows(nowPage, { ...(ctxOf(80, H, cNow) as object), live: LIVE0 } as never, { pages: PAGES }).map(text)
     expect(nOut.length).toBe(H)
@@ -166,7 +166,7 @@ test('gate3 item 2 (R2/C1 pending-first): short body with pending cards puts com
   expect(nBody[1]).toBe('→ 待決 3 張（最舊 1 天）：是否先切流到備援節點再重啟語音線服務')
   expect(nBody[2]).toBe('✗ 艦隊 離線 1 線（復原線）· 主機 2/3（離線 1）')
   expect(nBody[3]).toBe('✗ 額度 紅 1（trinity）· ? 未知 1（personal）')
-  expect(nBody[4]).toBe('另有 1 項')
+  expect(nBody[4]).toBe('另有 1 項（現況 ▲1）') // X2: include hidden category/severity.
 })
 
 test('gate3 item 3: at 40, 49, 60, 65 and 66 columns every entry (1-8, 9, 0, i) is present with a non-empty label, < 66 uses 2 rows (1-6 then 7, 8, 9, 0, i) and >= 66 uses 1 row across all pages, fitting host "<key>: " width', () => {

@@ -1,6 +1,6 @@
 // mods/live/pages/rows.ts — the section 5 red marker helpers, shared by frame.ts and every page (plan r2 §5).
 // A leaf module: it imports only types, ui.ts and quota-pick.ts (no page), never pages/index or a page, so a page can import it without a load cycle (frame -> index -> page -> frame).
-import { isStepCard } from '../model'
+import { isStepCard, truncateToWidth } from '../model'
 import type { LiveSnapshot, Seg } from '../model'
 import { PALETTE, STATES, displayWidth, type StateId } from '../ui'
 
@@ -101,13 +101,45 @@ export function lineState(line: ConsoleLine, t: T): LineStateInfo {
   const surfaced = (x: ConsoleIssue): number => (x.to_console ? 0 : 1)
   const worst = [...line.issues].sort((a, b) => rank(a) - rank(b) || surfaced(a) - surfaced(b) || a.since_ms - b.since_ms)[0] ?? null
   // M4: a line with no issue record is a normal line (the feed's summary counts it as running / waiting); it is never drawn as 閒置
-  if (worst === null) return { sid: 'pending', word: t('page.fleet.w_normal'), worst: null }
+  if (worst === null) return { sid: 'pending', word: t('page.fleet.no_issue_detail'), worst: null }
   const subj = typeof worst.subject === 'string' ? worst.subject : ''
   const isOffline = /^T4$/i.test(worst.rule) || /offline|離線/i.test(worst.rule) || /offline|離線/i.test(subj)
   const isIdle = !isOffline && (/^T3$/i.test(worst.rule) || /(?:^|[_-])idle(?:$|[_-])|閒置/i.test(worst.rule) || /閒置|\bidle\b/i.test(subj))
   const word = isOffline ? t('page.fleet.w_offline') : isIdle ? t('page.fleet.idle') : t('page.fleet.w_stuck')
-  const sid: StateId = worst.state in STATES ? (worst.state as StateId) : 'stalled'
+  const sid: StateId = isOffline ? 'failed' : worst.state in STATES ? (worst.state as StateId) : 'stalled' // X3: offline is always ✗.
   return { sid, word, worst }
+}
+
+// X3: bus line detail is authoritative wherever available. Unlisted lines carry
+// no state detail; keep their count as ○ rather than inventing running/idle states.
+export function lineCounts(con: ConsoleSnapshot, t: T): Partial<Record<StateId, number>> {
+  if (con.lines === null || con.lines.length === 0) return { ...con.counts.summary.lines }
+  const counts: Partial<Record<StateId, number>> = {}
+  for (const line of con.lines) {
+    const { sid } = lineState(line, t)
+    counts[sid] = (counts[sid] ?? 0) + 1
+  }
+  const unlisted = Math.max(0, lineTotal(con) - con.lines.length)
+  if (unlisted > 0) counts.pending = (counts.pending ?? 0) + unlisted
+  return counts
+}
+
+export function consoleFleetCounts(con: ConsoleSnapshot, t: T) {
+  const c = lineCounts(con, t)
+  return { failed: c.failed ?? 0, stuck: c.stalled ?? 0, running: c.running ?? 0, waiting: c.waiting ?? 0, normal: c.pending ?? 0 }
+}
+
+// Y3: one duration and one line/status grammar on both pages; issue subjects
+// often contain an older rounded duration and must not supply the status text.
+export function lineDuration(ms: number, t: T): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000))
+  const h = Math.floor(minutes / 60), m = minutes % 60
+  return h === 0 ? t('page.fleet.age_min', { n: m }) : t('page.fleet.age_hour', { n: h }) + (m === 0 ? '' : ' ' + t('page.fleet.age_min', { n: m }))
+}
+export function lineStatusText(line: ConsoleLine, t: T, nowMs: number, cols = Infinity): string {
+  const s = lineState(line, t)
+  const suffix = ' ' + s.word + (s.worst === null ? '' : '（' + lineDuration(nowMs - s.worst.since_ms, t) + '）')
+  return truncateToWidth(line.label, Math.max(1, cols - displayWidth(suffix))) + suffix
 }
 
 // true when fleet.brief (console snapshot / tasks source) is older than 10 minutes or expired (R8)

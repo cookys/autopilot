@@ -149,6 +149,11 @@ const { spawnSync } = require('child_process');
 const seatStore = require('../src/engine/final-panel-seat-store');
 const { TERMINAL_STATES: MISSION_TERMINAL_STATES } = require('../src/engine/mission-convergence');
 const { loadResidueConfig } = require('./lib/residue-config');
+const {
+  readProcCwds,
+  findLivePids,
+  logWorktreeRemoval,
+} = require('./lib/worktree-removal-log');
 
 // An `unknown` seat subtree (campaign not found in the readable journal generations) may still
 // belong to a parked, resumable campaign whose rows rotated out; no lock proves nothing about it.
@@ -721,18 +726,20 @@ function readProcUse() {
   let pids;
   try { pids = fs.readdirSync(root).filter((n) => /^[0-9]+$/.test(n)); } catch { return null; }
   if (pids.length === 0) return null;
+  const cwdMap = readProcCwds(root);
   const items = [];
   let readable = 0;
   const clean = (p) => p.replace(/ \(deleted\)$/, '');
   const real = (p) => { try { return fs.realpathSync(p); } catch { return p; } };
   for (const pid of pids) {
-    const me = Number(pid) === process.pid;
-    const add = (via, file) => items.push({ pid: Number(pid), via, file });
-    let cwd = null;
-    for (const via of ['cwd', 'exe', 'root']) {
+    const numPid = Number(pid);
+    const me = numPid === process.pid;
+    const add = (via, file) => items.push({ pid: numPid, via, file });
+    const cwd = cwdMap.has(numPid) ? cwdMap.get(numPid) : null;
+    if (cwd !== null) { readable++; add('cwd', cwd); }
+    for (const via of ['exe', 'root']) {
       try {
         const t = clean(fs.readlinkSync(`${root}/${pid}/${via}`)); readable++;
-        if (via === 'cwd') cwd = t;
         if (via !== 'root' || t !== '/') add(via, t);
       } catch { /* gone, or not readable by us */ }
     }
@@ -1053,12 +1060,12 @@ function removeMarkerWorktree(mainPath, w) {
   const script = 'st=$(git -C "$1" status --porcelain --untracked-files=all) || exit 3; '
     + 'st=$(printf "%s\\n" "$st" | grep -v -E "^\\?\\? \\.autopilot-worktree(\\.lock)?$" || true); '
     + '[ -z "$st" ] || exit 4; exec git -C "$2" worktree remove --force "$1"';
-  const r = spawnSync('flock', ['-n', path.join(w.path, '.autopilot-worktree.lock'), 'bash', '-c', script, '_', w.path, mainPath], { encoding: 'utf8' });
-  if (r.error) return { ok: false, why: `flock unavailable: ${r.error.message}` };
-  if (r.status === 0) return { ok: true };
-  if (r.status === 1 && !(r.stderr || '').trim()) return { ok: false, why: 'lock held (live) at removal time' };
-  if (r.status === 4) return { ok: false, why: 'became dirty before removal' };
-  return { ok: false, why: `worktree remove failed (rc ${r.status}): ${(r.stderr || '').trim().slice(0, 200)}` };
+  const r = spawnSync('flock', ['-n', '-E', '75', path.join(w.path, '.autopilot-worktree.lock'), 'bash', '-c', script, '_', w.path, mainPath], { encoding: 'utf8' });
+  if (r.error) return { ok: false, lock: 'unavailable', outcome: 'failed', why: `flock unavailable: ${r.error.message}` };
+  if (r.status === 0) return { ok: true, lock: 'held_by_us', outcome: 'removed' };
+  if (r.status === 75 || (r.status === 1 && !(r.stderr || '').trim())) return { ok: false, lock: 'unavailable', outcome: 'skipped', why: 'lock held (live) at removal time' };
+  if (r.status === 4) return { ok: false, lock: 'held_by_us', outcome: 'skipped', why: 'became dirty before removal' };
+  return { ok: false, lock: 'held_by_us', outcome: 'failed', why: `worktree remove failed (rc ${r.status}): ${(r.stderr || '').trim().slice(0, 200)}` };
 }
 
 // Tmp phase of `reap --auto`: the daily, host-wide prune of the shared temp root. Registry kinds scratch|evidence only
@@ -1108,30 +1115,76 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
     git(mainPath, ['worktree', 'prune']);
     const still = new Set(listWorktrees(mainPath).map((x) => path.resolve(x.path)));
     for (const w of missing) {
-      if (still.has(w.path)) { kept.push({ kind: 'worktree', path: w.path, class: w.class, why: 'git worktree prune did not drop the entry (locked?)' }); failedWorktrees.add(w.path); }
-      else removed.push({ kind: 'worktree', path: w.path, class: w.class, reason: 'missing_dir' });
+      if (still.has(w.path)) {
+        kept.push({ kind: 'worktree', path: w.path, class: w.class, why: 'git worktree prune did not drop the entry (locked?)' });
+        failedWorktrees.add(w.path);
+        logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: 'missing_dir', lock: 'unavailable', live_pids: [], outcome: 'failed' });
+      } else {
+        removed.push({ kind: 'worktree', path: w.path, class: w.class, reason: 'missing_dir' });
+        logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: 'missing_dir', lock: 'unavailable', live_pids: [], outcome: 'removed' });
+      }
     }
   }
 
   // 2. marker worktrees
   for (const w of rows) {
     if (w.class === 'missing-dir') continue;
-    const keep = (why) => kept.push({ kind: 'worktree', path: w.path, class: w.class, why });
+    const keep = (why, extra) => kept.push(Object.assign({ kind: 'worktree', path: w.path, class: w.class, why }, extra || {}));
     if (w.class === 'live' || w.class === 'dirty' || w.class === 'unverifiable') { keep(w.class); continue; }
     if (w.marker_valid !== true) { keep(w.marker_valid === false ? 'marker_invalid' : 'no_marker'); continue; }
     const m = w.marker_strict;
-    if (w.cwd_busy !== false) { keep(w.cwd_busy === null ? 'proc_unavailable' : (w.in_use && w.in_use.via && w.in_use.via !== 'cwd' ? 'process_in_use' : 'process_cwd_inside')); continue; }
+    const livePids = findLivePids(w.path, { procRoot: procRootDir() });
+    if (w.cwd_busy !== false || livePids.length > 0) {
+      const why = w.cwd_busy === null
+        ? 'proc_unavailable'
+        : (livePids.length > 0
+          ? 'process_cwd_inside'
+          : (w.in_use && w.in_use.via && w.in_use.via !== 'cwd' ? 'process_in_use' : 'process_cwd_inside'));
+      keep(why, livePids.length > 0 ? { live_pids: livePids } : undefined);
+      logWorktreeRemoval({
+        remover: 'repo-residue-sweep.js',
+        path: w.path,
+        branch: w.branch,
+        reason: why === 'process_cwd_inside' ? 'live_process_cwd' : why,
+        lock: w.lock_held === false ? 'free' : 'unavailable',
+        live_pids: livePids,
+        outcome: 'skipped',
+      });
+      continue;
+    }
     if (w.lease === 'lease' && !w.lease_expired) { keep('explicit_lease_unexpired'); continue; }
     if (w.class !== 'clean-integrated' && !w.lease_expired) { keep('lease_not_expired'); continue; }
     if (w.detached || w.head_is_branch_tip !== true) { keep('detached_or_head_not_branch_tip'); continue; }
     if (m.branch !== w.branch) { keep('marker_branch_mismatch'); continue; }
     if (!sig.reliable && m.root_run_id !== m.run_id) { keep('campaign_signal_unavailable'); continue; }
     if (sig.reliable && heldByCampaign(m.root_run_id)) { keep('unresolved_campaign'); continue; }
+    const livePidsNow = findLivePids(w.path, { procRoot: procRootDir() });
     const again = busyNow(w.path); // a process may have started since the scan above
-    if (again.busy) { keep(again.unknown ? 'proc_unavailable' : 'process_in_use'); continue; }
+    if (livePidsNow.length > 0 || again.busy) {
+      const why = livePidsNow.length > 0 ? 'process_cwd_inside' : (again.unknown ? 'proc_unavailable' : 'process_in_use');
+      const pids = livePidsNow.length > 0 ? livePidsNow : (typeof again.pid === 'number' ? [again.pid] : []);
+      keep(why, pids.length > 0 ? { live_pids: pids } : undefined);
+      logWorktreeRemoval({
+        remover: 'repo-residue-sweep.js',
+        path: w.path,
+        branch: w.branch,
+        reason: livePidsNow.length > 0 ? 'live_process_cwd' : why,
+        lock: 'free',
+        live_pids: pids,
+        outcome: 'skipped',
+      });
+      continue;
+    }
     const r = removeMarkerWorktree(mainPath, w);
-    if (r.ok) removed.push({ kind: 'worktree', path: w.path, class: w.class, reason: w.class === 'clean-integrated' ? 'integrated' : 'lease_expired', branch: w.branch });
-    else { keep(r.why); failedWorktrees.add(w.path); }
+    const reason = w.class === 'clean-integrated' ? 'integrated' : 'lease_expired';
+    if (r.ok) {
+      removed.push({ kind: 'worktree', path: w.path, class: w.class, reason, branch: w.branch });
+      logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason, lock: r.lock, live_pids: [], outcome: 'removed' });
+    } else {
+      keep(r.why);
+      failedWorktrees.add(w.path);
+      logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: r.why || reason, lock: r.lock || 'unavailable', live_pids: [], outcome: r.outcome || 'failed' });
+    }
   }
 
   // 3. branches (re-read: removals above may free a branch)
@@ -1481,24 +1534,87 @@ function main() {
   const actions = { worktrees_removed: [], worktrees_kept: [], branches_deleted: [], branches_kept: [], final_panel_seats_removed: [], final_panel_seats_kept: [], anchors: null };
   // `reap --worktree <path>` (repeatable) narrows the run to those worktrees and skips the branch and seat phases; it never widens the candidate set
   const onlyWt = o.worktrees.map((p) => path.resolve(p));
+  const removeManualWorktree = (w, force) => {
+    const lp = path.join(w.path, '.autopilot-worktree.lock');
+    if (w.class !== 'missing-dir' && fs.existsSync(lp)) {
+      const args = ['-n', '-E', '75', lp, 'git', '-C', mainPath, 'worktree', 'remove', ...(force ? ['--force'] : []), w.path];
+      const fr = spawnSync('flock', args, { encoding: 'utf8', env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0' } });
+      if (fr.error) return { ok: false, lock: 'unavailable', outcome: 'failed', err: String(fr.error.message || fr.error) };
+      if (fr.status === 75) return { ok: false, lock: 'unavailable', outcome: 'skipped', err: 'lock held (live) at removal time' };
+      return { ok: fr.status === 0, lock: 'held_by_us', outcome: fr.status === 0 ? 'removed' : 'failed', err: fr.stderr || '' };
+    }
+    const gr = git(mainPath, ['worktree', 'remove', ...(force ? ['--force'] : []), w.path]);
+    return { ok: gr.ok, lock: w.class === 'missing-dir' ? 'unavailable' : 'free', outcome: gr.ok ? 'removed' : 'failed', err: gr.err };
+  };
   for (const w of worktrees) {
     if (onlyWt.length > 0 && !onlyWt.includes(w.path)) continue;
     if (w.class !== 'missing-dir') {
+      const livePids = findLivePids(w.path, { procRoot: procRootDir() });
+      if (livePids.length > 0) {
+        const why = `in use by pid ${livePids[0]} (cwd: ${w.path})`;
+        actions.worktrees_kept.push({ path: w.path, class: 'busy', was: w.class, kept: true, why, live_pids: livePids });
+        logWorktreeRemoval({
+          remover: 'repo-residue-sweep.js',
+          path: w.path,
+          branch: w.branch,
+          reason: 'live_process_cwd',
+          lock: w.lock_held === false ? 'free' : 'unavailable',
+          live_pids: livePids,
+          outcome: 'skipped',
+        });
+        continue;
+      }
       const use = busyNow(w.path); // fresh, right before any deletion: the scan the button came from may be old
-      if (use.busy) { actions.worktrees_kept.push({ path: w.path, class: 'busy', was: w.class, kept: true, why: use.why }); continue; }
+      if (use.busy) {
+        const pids = typeof use.pid === 'number' ? [use.pid] : [];
+        actions.worktrees_kept.push({ path: w.path, class: 'busy', was: w.class, kept: true, why: use.why, live_pids: pids });
+        logWorktreeRemoval({
+          remover: 'repo-residue-sweep.js',
+          path: w.path,
+          branch: w.branch,
+          reason: use.unknown ? 'proc_unavailable' : 'process_in_use',
+          lock: w.lock_held === false ? 'free' : 'unavailable',
+          live_pids: pids,
+          outcome: 'skipped',
+        });
+        continue;
+      }
     }
     if (w.class === 'live' || w.class === 'unverifiable' || w.class === 'clean-unintegrated') { actions.worktrees_kept.push({ path: w.path, class: w.class, why: w.reason }); continue; }
+    if (w.marker_strict && w.marker_strict.valid && w.marker_strict.lease && Number(w.marker_strict.retention_expires_at) > Date.now() / 1000) {
+      actions.worktrees_kept.push({ path: w.path, class: w.class, why: 'explicit_lease_unexpired' });
+      logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: 'explicit_lease_unexpired', lock: w.lock_held === false ? 'free' : 'unavailable', live_pids: [], outcome: 'skipped' });
+      continue;
+    }
     if (tooYoung(w.age_days)) { actions.worktrees_kept.push({ path: w.path, class: w.class, why: `younger than ${o.olderThanDays} days` }); continue; }
     if (w.class === 'dirty') {
       const rec = findPreserveRecord(o.preserveDir, w);
       if (!rec || !rec.valid) { actions.worktrees_kept.push({ path: w.path, class: w.class, why: rec ? `preserve record invalid: ${rec.why}` : 'no verified preserve record under --preserve-dir' }); continue; }
-      const r = git(mainPath, ['worktree', 'remove', '--force', w.path]);
-      if (r.ok) actions.worktrees_removed.push({ path: w.path, class: w.class, preserve_record: rec.dir }); else actions.worktrees_kept.push({ path: w.path, class: w.class, why: `worktree remove failed: ${r.err.trim()}` });
+      const r = removeManualWorktree(w, true);
+      if (r.ok) {
+        actions.worktrees_removed.push({ path: w.path, class: w.class, preserve_record: rec.dir });
+        logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: 'preserved_dirty', lock: r.lock, live_pids: [], outcome: 'removed' });
+      } else {
+        actions.worktrees_kept.push({ path: w.path, class: w.class, why: `worktree remove failed: ${r.err.trim()}` });
+        logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: `worktree remove failed: ${r.err.trim()}`, lock: r.lock, live_pids: [], outcome: r.outcome });
+      }
       continue;
     }
-    const r = w.class === 'missing-dir' ? git(mainPath, ['worktree', 'remove', '--force', w.path]) : git(mainPath, ['worktree', 'remove', w.path]);
-    if (r.ok || w.class === 'missing-dir') { if (!r.ok) git(mainPath, ['worktree', 'prune']); actions.worktrees_removed.push({ path: w.path, class: w.class }); }
-    else actions.worktrees_kept.push({ path: w.path, class: w.class, why: `worktree remove failed: ${r.err.trim()}` });
+    const r = removeManualWorktree(w, w.class === 'missing-dir');
+    if (r.ok || w.class === 'missing-dir') {
+      if (!r.ok) git(mainPath, ['worktree', 'prune']);
+      const stillPresent = w.class === 'missing-dir' && listWorktrees(mainPath).some((x) => path.resolve(x.path) === w.path);
+      if (stillPresent) {
+        actions.worktrees_kept.push({ path: w.path, class: w.class, why: 'git worktree prune did not drop the entry' });
+        logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: 'missing_dir', lock: 'unavailable', live_pids: [], outcome: 'failed' });
+      } else {
+        actions.worktrees_removed.push({ path: w.path, class: w.class });
+        logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: w.class === 'missing-dir' ? 'missing_dir' : 'clean_integrated', lock: r.lock, live_pids: [], outcome: 'removed' });
+      }
+    } else {
+      actions.worktrees_kept.push({ path: w.path, class: w.class, why: `worktree remove failed: ${r.err.trim()}` });
+      logWorktreeRemoval({ remover: 'repo-residue-sweep.js', path: w.path, branch: w.branch, reason: `worktree remove failed: ${r.err.trim()}`, lock: r.lock, live_pids: [], outcome: r.outcome });
+    }
   }
   // branches: only integrated + not checked out (re-read checkouts after the removals above)
   const stillCheckedOut = new Set(listWorktrees(mainPath).map((x) => x.branch).filter(Boolean));

@@ -1156,6 +1156,16 @@ for path in "${snapshot_paths[@]}"; do
       raced_reason="marker_identity_changed"
     fi
   fi
+  if [ -z "$raced_reason" ] \
+     && ! _wt_check_live_or_log_skip "reap-dispatch-worktrees.sh" "$path" "$branch" "live_process_cwd" "held_by_us"; then
+    item="$(worktree_object "$path" "$branch" "$tip" "live" "live_process_cwd")"
+    append_item owned_items "$item"
+    append_item live_items "$item"
+    remaining_owned_count=$((remaining_owned_count + 1))
+    [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
+    _WT_PROBE_FD=""
+    continue
+  fi
   if [ -z "$raced_reason" ]; then
     persist_branch_inventory "$path" "$branch" "$tip" "$marker_digest" \
       || raced_reason="inventory_persist_failed"
@@ -1166,6 +1176,7 @@ for path in "${snapshot_paths[@]}"; do
   [ -n "$raced_reason" ] \
     || node "$(dirname "${BASH_SOURCE[0]}")/reap-build-artifacts.js" reap --worktree "$path" >/dev/null 2>&1 || true
   if [ -z "$raced_reason" ] && git_common worktree remove "$path" >/dev/null 2>&1; then
+    _wt_log_removal "reap-dispatch-worktrees.sh" "$path" "$branch" "dead_clean_exact" "held_by_us" "removed"
     reaped_item="$(worktree_object "$path" "$branch" "$tip" "reaped" "dead_clean_exact")"
     append_item reaped_items "$reaped_item"
     append_item inventory_record_items "$(printf \
@@ -1174,6 +1185,11 @@ for path in "${snapshot_paths[@]}"; do
       "$(json_escape "$_INVENTORY_RECORD_PATH")")"
   else
     [ -n "$raced_reason" ] || raced_reason="remove_failed"
+    if [ "$raced_reason" = "remove_failed" ]; then
+      _wt_log_removal "reap-dispatch-worktrees.sh" "$path" "$branch" "$raced_reason" "held_by_us" "failed"
+    else
+      _wt_log_removal "reap-dispatch-worktrees.sh" "$path" "$branch" "$raced_reason" "held_by_us" "skipped"
+    fi
     item="$(worktree_object "$path" "$branch" "$tip" "raced" "$raced_reason")"
     append_item owned_items "$item"
     append_item raced_items "$item"

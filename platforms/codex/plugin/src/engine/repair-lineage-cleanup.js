@@ -4,6 +4,11 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const {
+  findLivePids,
+  probeWorktreeLock,
+  logWorktreeRemoval,
+} = require('../../scripts/lib/worktree-removal-log');
 
 function git(cwd, args) {
   const child = spawnSync('git', args, {
@@ -116,7 +121,32 @@ function removeRetainedWorktree({
   if (status.error || status.signal || status.status !== 0 || status.stdout.length > 0) {
     throw new Error('retained worktree is dirty');
   }
-  return git(cwd, ['worktree', 'remove', absoluteWorktree]);
+  const lockState = probeWorktreeLock(absoluteWorktree);
+  const livePids = findLivePids(absoluteWorktree);
+  if (livePids.length > 0) {
+    logWorktreeRemoval({
+      remover: 'repair-lineage-cleanup.js',
+      path: absoluteWorktree,
+      branch: expectedBranch,
+      reason: 'live_process_cwd',
+      lock: lockState,
+      live_pids: livePids,
+      outcome: 'skipped',
+    });
+    throw new Error(`retained worktree has live process cwd (${livePids.join(',')})`);
+  }
+  const removed = git(cwd, ['worktree', 'remove', absoluteWorktree]);
+  const ok = !removed.error && !removed.signal && removed.status === 0;
+  logWorktreeRemoval({
+    remover: 'repair-lineage-cleanup.js',
+    path: absoluteWorktree,
+    branch: expectedBranch,
+    reason: ok ? 'repair_lineage_cleanup' : (removed.stderr || 'remove_failed'),
+    lock: lockState,
+    live_pids: [],
+    outcome: ok ? 'removed' : 'failed',
+  });
+  return removed;
 }
 
 if (require.main === module) {

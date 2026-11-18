@@ -97,28 +97,28 @@ The absolute real-Claude binary is the caller-provided 2.1.327 binary; `$HOME` a
 ```text
 (fail) X1: 120x30 open pane leaves only its shared navigation on screen [626.62ms]
   AssertionError: expect(received).toEqual()
-  
+
   Expected: []
   Received: [
     "tab:now",
 (fail) X1: 120x30 closed band lists shared page numbers 1-9 and 0 [515.00ms]
   AssertionError: expect(received).toEqual()
-  
+
   Expected: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
   Received: [undefined, undefined, undefined, undefined, undefined]
-  
+
 (fail) X1: 160x40 open pane leaves only its shared navigation on screen [516.62ms]
   AssertionError: expect(received).toEqual()
-  
+
   Expected: []
   Received: [
     "tab:now",
 (fail) X1: 160x40 closed band lists shared page numbers 1-9 and 0 [495.90ms]
   AssertionError: expect(received).toEqual()
-  
+
   Expected: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
   Received: [undefined, undefined, undefined, undefined, undefined]
-  
+
 ```
 
 `x4-red.log` — exit 1:
@@ -126,28 +126,28 @@ The absolute real-Claude binary is the caller-provided 2.1.327 binary; `$HOME` a
 ```text
 (fail) X4: 120x30 stale 12 minutes, pane closed, keeps the full reason and repair in two band rows [500.52ms]
   AssertionError: expect(received).toContain()
-  
+
   Expected: containing "✗"
   Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ ⓘ "
-  
+
 (fail) X4: 120x30 stale 12 minutes, pane open, keeps the full reason and repair in two band rows [392.37ms]
   AssertionError: expect(received).toContain()
-  
+
   Expected: containing "✗"
   Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ ⓘ "
-  
+
 (fail) X4: 160x40 stale 12 minutes, pane closed, keeps the full reason and repair in two band rows [384.43ms]
   AssertionError: expect(received).toContain()
-  
+
   Expected: containing "✗"
   Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ ⓘ "
-  
+
 (fail) X4: 160x40 stale 12 minutes, pane open, keeps the full reason and repair in two band rows [369.38ms]
   AssertionError: expect(received).toContain()
-  
+
   Expected: containing "✗"
   Received: "資料過舊 · 上次發佈 18:00 · watcher 沒有在發佈 │ ⓘ "
-  
+
 ```
 
 `k1-visible-red.log` — exit 1:
@@ -155,15 +155,15 @@ The absolute real-Claude binary is the caller-provided 2.1.327 binary; `$HOME` a
 ```text
 (fail) K1: at 80x24 pressing 0 after an old scroll offset shows the forge header on the first row [379.07ms]
   AssertionError: expect(received).toBe()
-  
+
   Expected: "forge"
   Received: ""
-  
+
 (fail) K1: every page has exactly one shared strip with the same digit mapping and labels at 80x24 [389.56ms]
   AssertionError: forge navigation
-  
+
   expect(received).toEqual()
-  
+
   Expected: [
 ```
 
@@ -172,22 +172,22 @@ The absolute real-Claude binary is the caller-provided 2.1.327 binary; `$HOME` a
 ```text
 (fail) Z3: page 0 is labelled 鍛 in both shared strips at 80 columns [352.42ms]
   AssertionError: expect(received).toBe()
-  
+
   Expected: "0 鍛"
   Received: "鍛"
-  
+
 (fail) Z3: page 0 is labelled 鍛 in both shared strips at 120 columns [330.86ms]
   AssertionError: expect(received).toBe()
-  
+
   Expected: "鍛"
   Received: "forge"
-  
+
 (fail) Z3: page 0 is labelled 鍛 in both shared strips at 160 columns [315.58ms]
   AssertionError: expect(received).toBe()
-  
+
   Expected: "鍛"
   Received: "forge"
-  
+
 ```
 
 `x4-source-mode-red.log` — exit 1:
@@ -195,16 +195,16 @@ The absolute real-Claude binary is the caller-provided 2.1.327 binary; `$HOME` a
 ```text
 (fail) X4: 120 columns expired console source stays visible beside a fresh live snapshot, console mode false [712.43ms]
   AssertionError: expect(received).toContain()
-  
+
   Expected: containing "✗"
   Received: "◌ 待命 │ ⓘ "
-  
+
 (fail) X4: 160 columns expired console source stays visible beside a fresh live snapshot, console mode false [504.08ms]
   AssertionError: expect(received).toContain()
-  
+
   Expected: containing "✗"
   Received: "◌ 待命 │ ⓘ "
-  
+
 ```
 
 

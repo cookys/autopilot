@@ -16,7 +16,19 @@ const quotaFixture = fs.mkdtempSync(path.join(fs.existsSync('/dev/shm') ? '/dev/
 process.env.AUTOPILOT_LIVE_DIR = quotaFixture;
 test.after(() => fs.rmSync(quotaFixture, { recursive: true, force: true }));
 
-const { freshReading } = require('./lib/pace-reading.js');
+const {
+  freshReading,
+  isBehindPaceRow,
+  isBehindPaceStatus,
+  isSeenAtFresh,
+  BEHIND_PACE_STATUSES,
+} = require('./lib/pace-reading.js');
+const {
+  resolveAuditPath,
+  evaluateBehindSignal,
+  DEFAULT_BROKER_AUDIT,
+  DEFAULT_DAILY_RUN_TARGETS,
+} = require('./lib/broker-run-pace.js');
 const {
   selectEngine: rawSelectEngine,
   loadPools,
@@ -48,6 +60,10 @@ const SEAT_FALLBACK_CLI = path.join(__dirname, 'lib', 'seat-fallback.js');
 const SCORECARD_CLI = path.join(__dirname, 'engine-scorecard.js');
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'pace-select');
 const MISSING_PACE = path.join(FIXTURES_DIR, '__missing_pace__.json');
+const MISSING_CURSOR_AUDIT = path.join(FIXTURES_DIR, '__missing_cursor_audit__.tsv');
+const MISSING_KIMI_AUDIT = path.join(FIXTURES_DIR, '__missing_kimi_audit__.tsv');
+process.env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
+process.env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
 const allEndpointsReady = () => true;
 // Small public-doc work admits CN seats for non-review roles; review roles are barred by the CN gate.
 // Omit AUTOPILOT_TASK_ROLE so each call uses its own rail role (env wins over rail role in the gate).
@@ -78,6 +94,16 @@ test.afterEach(() => {
 function selectEngine(options = {}) {
   const env = { ...(options.env || process.env) };
   env.AUTOPILOT_LIVE_DIR = options.env?.AUTOPILOT_LIVE_DIR || testLiveDir;
+  if (!options.env || !Object.prototype.hasOwnProperty.call(options.env, 'AUTOPILOT_CURSOR_BROKER_AUDIT')) {
+    env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
+  } else if (options.env.AUTOPILOT_CURSOR_BROKER_AUDIT === undefined) {
+    delete env.AUTOPILOT_CURSOR_BROKER_AUDIT;
+  }
+  if (!options.env || !Object.prototype.hasOwnProperty.call(options.env, 'AUTOPILOT_KIMI_BROKER_AUDIT')) {
+    env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
+  } else if (options.env.AUTOPILOT_KIMI_BROKER_AUDIT === undefined) {
+    delete env.AUTOPILOT_KIMI_BROKER_AUDIT;
+  }
   return rawSelectEngine({ ...options, env });
 }
 
@@ -133,17 +159,18 @@ function cli(args, envExtra = {}) {
   // Hermetic default: isolate from host ~/.autopilot/qualified.v1.json and endpoints.env
   // unless a test explicitly overrides AUTOPILOT_QUALIFIED_FILE or AUTOPILOT_ENDPOINT_GLM_*.
   env.AUTOPILOT_QUALIFIED_FILE = path.join(FIXTURES_DIR, '__missing_qualified__.json');
+  env.AUTOPILOT_CURSOR_BROKER_AUDIT = MISSING_CURSOR_AUDIT;
+  env.AUTOPILOT_KIMI_BROKER_AUDIT = MISSING_KIMI_AUDIT;
   env.AUTOPILOT_ENDPOINTS_ENV = '/nonexistent';
   env.AUTOPILOT_ENDPOINT_GLM_URL = 'https://glm.example.invalid/v1';
   env.AUTOPILOT_ENDPOINT_GLM_TOKEN = 'test-glm-token';
   delete env.AUTOPILOT_ENDPOINT_GLM_TRANSPORT;
   Object.assign(env, envExtra);
   env.AUTOPILOT_LIVE_DIR = envExtra.AUTOPILOT_LIVE_DIR || testLiveDir;
-  if (
-    Object.prototype.hasOwnProperty.call(envExtra, 'AUTOPILOT_QUALIFIED_FILE')
-    && envExtra.AUTOPILOT_QUALIFIED_FILE === undefined
-  ) {
-    delete env.AUTOPILOT_QUALIFIED_FILE;
+  for (const k of ['AUTOPILOT_QUALIFIED_FILE', 'AUTOPILOT_CURSOR_BROKER_AUDIT', 'AUTOPILOT_KIMI_BROKER_AUDIT']) {
+    if (Object.prototype.hasOwnProperty.call(envExtra, k) && envExtra[k] === undefined) {
+      delete env[k];
+    }
   }
   return spawnSync(process.execPath, [CLI, ...args], {
     encoding: 'utf8',
@@ -236,6 +263,11 @@ test('pace-roles.json: matches scorecard qualification allowlists, codex pools, 
   assert.match(roles._why, /agyclaude: reviewer and implementer pass 2026-11-13/);
   assert.match(roles._why, /minimax: failed both 2026-11-13/);
   assert.match(roles._why, /hydrogen passed all four prereg bars \(develop d40e9ad43\)/);
+  assert.doesNotMatch(roles._why, /kimi-code\/k3\.1-pro/);
+  assert.match(roles._why, /model from scripts\/lib\/noncq-pools\.json/);
+  assert.match(roles._why, /ALERT_behind or behind_early/);
+  assert.match(roles._why, /seen_at/);
+  assert.match(roles._why, /yes\/no preference/);
 
   assert.deepEqual(roles.reviewer, ['agy', 'glm', 'codex', 'grok', 'agyclaude', 'deepseek']);
   assert.deepEqual(roles.implementer, ['agy', 'glm', 'agyclaude', 'codex', 'grok', 'kimi', 'cursor']);
@@ -409,10 +441,12 @@ test('observer stores are isolated by default; explicit env opts into cursor and
 
       const kimi = require('./lib/kimi-quota-observe');
       assert.equal(kimi.observe({ rc: 1, text: '429 retry-after: 3600', liveDir: observedLiveDir }).wrote, true);
+      const kimiNow = new Date();
       const kimiOptions = {
-        pace: priorityPace([paceRow('kimi', 10, 40)]),
+        pace: priorityPace([paceRow('kimi', 10, 40, { seen_at: kimiNow.toISOString() })]),
         role: 'implementer',
         roles: { implementer: ['kimi'], _disabled: [] },
+        now: kimiNow,
         checkEndpoint: allEndpointsReady,
       };
       const brokerEnv = { ...testTask, AUTOPILOT_KIMI_BROKER_SOCK: socket };
@@ -2011,6 +2045,926 @@ test('cc-shim named pool matching: --named-endpoint isolates pools and runner-on
     assert.equal(cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, '--named-endpoint', '']).status, 2);
     assert.equal(cli(['--role', 'implementer', '--dispatch', '--pace', pacePath, '--named-endpoint']).status, 2);
   } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Fleet-Task 01M7QARGF5VS61N2JFJF4R2E77: behind-pace preference for cursor and kimi (real pace or daily-run proxy).
+const TAIPEI_1500_ISO = '2026-11-18T15:00:00+08:00';
+const TAIPEI_1500_DATE = new Date(TAIPEI_1500_ISO);
+
+test('behind-pace config & behind-pace helper: reuses pace-reading ALERT_behind|behind_early and configures targets/audit paths', () => {
+  const roles = loadRoles();
+  assert.deepEqual(roles.daily_run_targets, { cursor: 15, kimi: 12 });
+  assert.deepEqual(roles.broker_audit, {
+    cursor: '/srv/cursor-broker/audit.tsv',
+    kimi: '/srv/kimi-broker/audit.tsv',
+  });
+  assert.deepEqual(DEFAULT_DAILY_RUN_TARGETS, { cursor: 15, kimi: 12 });
+  assert.deepEqual(DEFAULT_BROKER_AUDIT, {
+    cursor: '/srv/cursor-broker/audit.tsv',
+    kimi: '/srv/kimi-broker/audit.tsv',
+  });
+  assert.equal(resolveAuditPath('cursor', { roles, env: {} }), '/srv/cursor-broker/audit.tsv');
+  assert.equal(resolveAuditPath('kimi', { roles, env: {} }), '/srv/kimi-broker/audit.tsv');
+  assert.equal(
+    resolveAuditPath('cursor', { roles, env: { AUTOPILOT_CURSOR_BROKER_AUDIT: '/custom/cursor-audit.tsv' } }),
+    '/custom/cursor-audit.tsv',
+  );
+  assert.equal(
+    resolveAuditPath('kimi', { roles, env: { AUTOPILOT_KIMI_BROKER_AUDIT: '/custom/kimi-audit.tsv' } }),
+    '/custom/kimi-audit.tsv',
+  );
+
+  assert.deepEqual(BEHIND_PACE_STATUSES, ['ALERT_behind', 'behind_early']);
+  assert.equal(isBehindPaceStatus('ALERT_behind'), true);
+  assert.equal(isBehindPaceStatus('behind_early'), true);
+  assert.equal(isBehindPaceStatus('ok'), false);
+  assert.equal(isBehindPaceStatus('WARN_ahead'), false);
+  assert.equal(isBehindPaceRow({ pool: 'cursor', stale: false, status: 'ALERT_behind', used_pct: 10, expected_pct: 55 }), true);
+  assert.equal(isBehindPaceRow({ pool: 'cursor', stale: false, status: 'behind_early', used_pct: 10, expected_pct: 55 }), true);
+  assert.equal(isBehindPaceRow({ pool: 'cursor', stale: false, status: 'ok', used_pct: 10, expected_pct: 55 }), false);
+  assert.equal(isBehindPaceRow({ pool: 'cursor', stale: true, status: 'ALERT_behind', used_pct: 10, expected_pct: 55 }), false);
+  assert.equal(isBehindPaceRow({ pool: 'cursor', stale: false, status: 'ALERT_behind', used_pct: null, expected_pct: 55 }), false);
+});
+
+test('behind-pace (1): cursor proxy behind (2 runs at 15:00 Taipei, target 15) beats high-score agy -> cursor chosen, basis proxy_runs', () => {
+  const cursor = require('./lib/cursor-quota-observe');
+  cursor.observe({ verdict: 'done', liveDir: testLiveDir });
+
+  const pace = priorityPace([
+    paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+    { pool: 'cursor', class: 'other', status: 'no_source', stale: false, used_pct: null, expected_pct: null, hours_to_reset: null },
+  ]);
+  const env = {
+    ...process.env,
+    AUTOPILOT_LIVE_DIR: testLiveDir,
+    AUTOPILOT_CURSOR_BROKER_AUDIT: fixturePath('cursor-audit-behind.tsv'),
+  };
+  const res = selectEngine({
+    pace,
+    role: 'implementer',
+    now: TAIPEI_1500_DATE,
+    env,
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'cursor');
+  assert.equal(res.runner, 'cursor');
+  assert.equal(res.model, 'composer-2.5');
+  assert.equal(res.basis, 'proxy_runs');
+  assert.equal(res.runs_today, 2);
+  assert.equal(res.daily_target, 15);
+  assert.equal(res.expected_runs, 9.375);
+  assert.equal(res.note, 'runs per day, not quota percent');
+  assert.equal(res.runner_up, 'agy');
+  assert.deepEqual(
+    res.candidates.find((c) => c.engine === 'cursor'),
+    {
+      engine: 'cursor',
+      pool: 'cursor',
+      slack_pts: null,
+      basis: 'proxy_runs',
+      runs_today: 2,
+      daily_target: 15,
+      expected_runs: 9.375,
+      note: 'runs per day, not quota percent',
+    },
+  );
+
+  // CLI --now + env override agrees end-to-end.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-cursor-behind-'));
+  try {
+    const pacePath = path.join(dir, 'pace.json');
+    fs.writeFileSync(pacePath, JSON.stringify(pace));
+    const cliRes = cli(
+      ['--role', 'implementer', '--pace', pacePath, '--now', TAIPEI_1500_ISO, '--json'],
+      { AUTOPILOT_CURSOR_BROKER_AUDIT: fixturePath('cursor-audit-behind.tsv') },
+    );
+    assert.equal(cliRes.status, 0, cliRes.stderr);
+    const cliOut = JSON.parse(cliRes.stdout);
+    assert.equal(cliOut.engine, 'cursor');
+    assert.equal(cliOut.basis, 'proxy_runs');
+    assert.equal(cliOut.runs_today, 2);
+    assert.equal(cliOut.daily_target, 15);
+    assert.equal(cliOut.expected_runs, 9.375);
+    assert.equal(cliOut.note, 'runs per day, not quota percent');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('behind-pace (2): cursor proxy ahead (12 runs at 15:00 Taipei) -> choice unchanged, candidates still carry proxy fields', () => {
+  const cursor = require('./lib/cursor-quota-observe');
+  cursor.observe({ verdict: 'done', liveDir: testLiveDir });
+
+  const pace = priorityPace([paceRow('agy', 10, 50, { hours_to_reset: 4 })]);
+  const res = selectEngine({
+    pace,
+    role: 'implementer',
+    now: TAIPEI_1500_DATE,
+    env: {
+      ...process.env,
+      AUTOPILOT_LIVE_DIR: testLiveDir,
+      AUTOPILOT_CURSOR_BROKER_AUDIT: fixturePath('cursor-audit-ahead.tsv'),
+    },
+    checkEndpoint: allEndpointsReady,
+  });
+  assert.equal(res.engine, 'agy');
+  assert.equal(res.selected_by, 'quota_score');
+  assert.equal(Object.prototype.hasOwnProperty.call(res, 'basis'), false);
+  assert.deepEqual(
+    res.candidates.find((c) => c.engine === 'cursor'),
+    {
+      engine: 'cursor',
+      pool: 'cursor',
+      slack_pts: null,
+      basis: 'proxy_runs',
+      runs_today: 12,
+      daily_target: 15,
+      expected_runs: 9.375,
+      note: 'runs per day, not quota percent',
+    },
+  );
+});
+
+test('behind-pace (3): kimi behind but prompt file fails cn gate (no Size line, or Size M) -> kimi not chosen, reason starts cn_gate:', async () => {
+  const sockDir = makeLiveDir();
+  const socket = path.join(sockDir, 'broker.sock');
+  const server = require('net').createServer((conn) => conn.destroy());
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
+  try {
+    const pace = priorityPace([paceRow('agy', 10, 50, { hours_to_reset: 4 })]);
+    const baseEnv = {
+      ...process.env,
+      AUTOPILOT_LIVE_DIR: testLiveDir,
+      AUTOPILOT_KIMI_BROKER_SOCK: socket,
+      AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
+      AUTOPILOT_TASK_SIZE: '',
+      AUTOPILOT_TASK_SCOPE: '',
+    };
+
+    const noSize = selectEngine({
+      pace,
+      role: 'implementer',
+      files: [fixturePath('prompt-no-size.md')],
+      now: TAIPEI_1500_DATE,
+      env: baseEnv,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(noSize.engine, 'agy');
+    const noSizeKimi = noSize.candidates.find((c) => c.engine === 'kimi');
+    assert.ok(noSizeKimi, 'kimi should appear in candidates with gate reason');
+    assert.match(noSizeKimi.reason, /^cn_gate:/);
+    assert.equal(noSizeKimi.reason, 'cn_gate:unknown-size');
+    assert.equal(noSizeKimi.basis, 'proxy_runs');
+    assert.equal(noSizeKimi.runs_today, 2);
+    assert.equal(noSizeKimi.daily_target, 12);
+    assert.equal(noSizeKimi.expected_runs, 7.5);
+    assert.equal(noSizeKimi.note, 'runs per day, not quota percent');
+
+    const sizeM = selectEngine({
+      pace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-m.md')],
+      now: TAIPEI_1500_DATE,
+      env: baseEnv,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(sizeM.engine, 'agy');
+    const sizeMKimi = sizeM.candidates.find((c) => c.engine === 'kimi');
+    assert.ok(sizeMKimi);
+    assert.match(sizeMKimi.reason, /^cn_gate:/);
+    assert.equal(sizeMKimi.reason, 'cn_gate:core-size');
+
+    // Every --prompt-file must pass: [passing, failing] still blocks kimi with cn_gate:core-size.
+    const mixedFiles = selectEngine({
+      pace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md'), fixturePath('prompt-size-m.md')],
+      now: TAIPEI_1500_DATE,
+      env: baseEnv,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(mixedFiles.engine, 'agy');
+    assert.equal(mixedFiles.candidates.find((c) => c.engine === 'kimi')?.reason, 'cn_gate:core-size');
+
+    // No prompt file -> kimi is not preferred even when env admits CN tasks.
+    const noPrompt = selectEngine({
+      pace,
+      role: 'implementer',
+      files: [],
+      now: TAIPEI_1500_DATE,
+      env: {
+        ...baseEnv,
+        AUTOPILOT_TASK_SIZE: 'S',
+        AUTOPILOT_TASK_SCOPE: 'docs/example.md',
+      },
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(noPrompt.engine, 'agy');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(sockDir, { recursive: true, force: true });
+  }
+});
+
+test('behind-pace (4): kimi behind, prompt passes gate, broker available -> kimi chosen; model from noncq-pools.json & exclusions respected', async () => {
+  const sockDir = makeLiveDir();
+  const socket = path.join(sockDir, 'broker.sock');
+  const server = require('net').createServer((conn) => conn.destroy());
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-kimi-behind-'));
+  try {
+    const pace = priorityPace([
+      paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+      { pool: 'kimi', class: 'other', status: 'no_source', stale: false, used_pct: null, expected_pct: null, hours_to_reset: null },
+    ]);
+    const env = {
+      ...process.env,
+      AUTOPILOT_LIVE_DIR: testLiveDir,
+      AUTOPILOT_KIMI_BROKER_SOCK: socket,
+      AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
+      AUTOPILOT_TASK_SIZE: '',
+      AUTOPILOT_TASK_SCOPE: '',
+    };
+    const res = selectEngine({
+      pace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env,
+      checkEndpoint: allEndpointsReady,
+    });
+    const expectedKimiModel = loadPools().kimi.model;
+    assert.equal(typeof expectedKimiModel, 'string');
+    assert.notEqual(expectedKimiModel, '');
+    assert.equal(res.engine, 'kimi');
+    assert.equal(res.runner, 'kimi');
+    assert.equal(res.model, expectedKimiModel);
+    assert.equal(res.basis, 'proxy_runs');
+    assert.equal(res.runs_today, 2);
+    assert.equal(res.daily_target, 12);
+    assert.equal(res.expected_runs, 7.5);
+    assert.equal(res.note, 'runs per day, not quota percent');
+    assert.equal(res.runner_up, 'agy');
+
+    // CLI --prompt-file + --now selects kimi.
+    const pacePath = path.join(dir, 'pace.json');
+    fs.writeFileSync(pacePath, JSON.stringify(pace));
+    const cliRes = cli(
+      [
+        '--role', 'implementer',
+        '--pace', pacePath,
+        '--prompt-file', fixturePath('prompt-size-s.md'),
+        '--now', TAIPEI_1500_ISO,
+        '--json',
+      ],
+      {
+        AUTOPILOT_KIMI_BROKER_SOCK: socket,
+        AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
+        AUTOPILOT_TASK_SIZE: '',
+        AUTOPILOT_TASK_SCOPE: '',
+      },
+    );
+    assert.equal(cliRes.status, 0, cliRes.stderr);
+    const cliOut = JSON.parse(cliRes.stdout);
+    assert.equal(cliOut.engine, 'kimi');
+    assert.equal(cliOut.model, expectedKimiModel);
+    assert.equal(cliOut.basis, 'proxy_runs');
+
+    // Both cursor and kimi behind via proxy_runs: behind is a yes/no preference only (no shortfall scaling),
+    // so allowlist order (kimi before cursor) holds whether cursor has 2 runs or 8 runs.
+    const cursor = require('./lib/cursor-quota-observe');
+    cursor.observe({ verdict: 'done', liveDir: testLiveDir });
+    const bothRes = selectEngine({
+      pace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env: {
+        ...env,
+        AUTOPILOT_CURSOR_BROKER_AUDIT: fixturePath('cursor-audit-behind.tsv'),
+      },
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(bothRes.engine, 'kimi');
+    assert.equal(bothRes.runner_up, 'cursor');
+
+    const cursorEightAudit = path.join(dir, 'cursor-8.tsv');
+    const eightRows = ['ts\trun_id\trunner\tverdict'];
+    for (let i = 1; i <= 8; i += 1) {
+      eightRows.push(`2026-11-18T0${Math.min(i, 9)}:00:00+08:00\tr-${i}\tcursor\tdone`);
+    }
+    fs.writeFileSync(cursorEightAudit, `${eightRows.join('\n')}\n`);
+    const cursorEightRes = selectEngine({
+      pace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env: {
+        ...env,
+        AUTOPILOT_CURSOR_BROKER_AUDIT: cursorEightAudit,
+      },
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(cursorEightRes.engine, 'kimi');
+    assert.equal(cursorEightRes.runner_up, 'cursor');
+
+    // Exclusions still apply first: --exclude, _disabled, broker unavailable, exhausted-kimi, and over_ceiling are never resurrected.
+    assert.equal(
+      selectEngine({
+        pace,
+        role: 'implementer',
+        exclude: 'kimi',
+        files: [fixturePath('prompt-size-s.md')],
+        now: TAIPEI_1500_DATE,
+        env,
+        checkEndpoint: allEndpointsReady,
+      }).engine,
+      'agy',
+    );
+    assert.equal(
+      selectEngine({
+        pace,
+        role: 'implementer',
+        roles: { ...loadRoles(), _disabled: ['minimax', 'kimi'] },
+        files: [fixturePath('prompt-size-s.md')],
+        now: TAIPEI_1500_DATE,
+        env,
+        checkEndpoint: allEndpointsReady,
+      }).engine,
+      'agy',
+    );
+    assert.equal(
+      selectEngine({
+        pace,
+        role: 'implementer',
+        files: [fixturePath('prompt-size-s.md')],
+        now: TAIPEI_1500_DATE,
+        env: { ...env, AUTOPILOT_KIMI_BROKER_SOCK: path.join(dir, 'missing.sock') },
+        checkEndpoint: allEndpointsReady,
+      }).engine,
+      'agy',
+    );
+
+    const kimiQuota = require('./lib/kimi-quota-observe');
+    kimiQuota.observe({ verdict: 'stopped_billing', liveDir: testLiveDir, now: TAIPEI_1500_DATE.getTime() });
+    assert.equal(
+      selectEngine({
+        pace,
+        role: 'implementer',
+        files: [fixturePath('prompt-size-s.md')],
+        now: TAIPEI_1500_DATE,
+        env,
+        checkEndpoint: allEndpointsReady,
+      }).engine,
+      'agy',
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(sockDir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('behind-pace (5): real pace row for kimi with finite used/expected wins -> basis pace, proxy ignored even if audit says behind', async () => {
+  const sockDir = makeLiveDir();
+  const socket = path.join(sockDir, 'broker.sock');
+  const server = require('net').createServer((conn) => conn.destroy());
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
+  try {
+    const env = {
+      ...process.env,
+      AUTOPILOT_LIVE_DIR: testLiveDir,
+      AUTOPILOT_KIMI_BROKER_SOCK: socket,
+      AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
+      AUTOPILOT_TASK_SIZE: '',
+      AUTOPILOT_TASK_SCOPE: '',
+    };
+
+    // Real pace row has status "ok" (not ALERT_behind / behind_early) -> proxy audit (2 runs) is ignored; agy wins by quota_score.
+    const okPace = priorityPace([
+      paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+      paceRow('kimi', 50, 40, { status: 'ok', hours_to_reset: 48, seen_at: '2026-11-18T06:00:00Z' }),
+    ]);
+    const notBehind = selectEngine({
+      pace: okPace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(notBehind.engine, 'agy');
+    const kimiCand = notBehind.candidates.find((c) => c.engine === 'kimi');
+    assert.deepEqual(kimiCand, {
+      engine: 'kimi',
+      pool: 'kimi',
+      slack_pts: -10,
+      basis: 'pace',
+    });
+
+    // Real pace row has status "ALERT_behind" (even with lower quota_score than agy) -> kimi preferred on basis "pace".
+    const behindPace = priorityPace([
+      paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+      paceRow('kimi', 10, 75, { status: 'ALERT_behind', hours_to_reset: 100, seen_at: '2026-11-18T06:00:00Z' }),
+    ]);
+    const alertRes = selectEngine({
+      pace: behindPace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(alertRes.engine, 'kimi');
+    assert.equal(alertRes.basis, 'pace');
+    assert.equal(Object.prototype.hasOwnProperty.call(alertRes, 'runs_today'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(alertRes, 'note'), false);
+    assert.deepEqual(
+      alertRes.candidates.find((c) => c.engine === 'kimi'),
+      {
+        engine: 'kimi',
+        pool: 'kimi',
+        slack_pts: 65,
+        basis: 'pace',
+      },
+    );
+
+    // Over-ceiling fresh row is still blocked even if status were ALERT_behind.
+    const overCeilingPace = priorityPace([
+      paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+      paceRow('kimi', 90, 95, { status: 'ALERT_behind', hours_to_reset: 10, seen_at: '2026-11-18T06:00:00Z' }),
+    ]);
+    const overRes = selectEngine({
+      pace: overCeilingPace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(overRes.engine, 'agy');
+    assert.equal(overRes.candidates.find((c) => c.engine === 'kimi')?.reason, 'over_ceiling');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(sockDir, { recursive: true, force: true });
+  }
+});
+
+test('behind-pace (6): missing audit file -> no throw, basis none, old behaviour preserved', async () => {
+  const sockDir = makeLiveDir();
+  const socket = path.join(sockDir, 'broker.sock');
+  const server = require('net').createServer((conn) => conn.destroy());
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
+  try {
+    const cursor = require('./lib/cursor-quota-observe');
+    cursor.observe({ verdict: 'done', liveDir: testLiveDir });
+
+    const env = {
+      ...process.env,
+      AUTOPILOT_LIVE_DIR: testLiveDir,
+      AUTOPILOT_KIMI_BROKER_SOCK: socket,
+      AUTOPILOT_CURSOR_BROKER_AUDIT: MISSING_CURSOR_AUDIT,
+      AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
+      AUTOPILOT_TASK_SIZE: '',
+      AUTOPILOT_TASK_SCOPE: '',
+    };
+
+    const withAgy = selectEngine({
+      pace: priorityPace([paceRow('agy', 25, 50, { hours_to_reset: 12 })]),
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(withAgy.engine, 'agy');
+    assert.deepEqual(
+      withAgy.candidates.find((c) => c.engine === 'cursor'),
+      { engine: 'cursor', pool: 'cursor', slack_pts: null, basis: 'none' },
+    );
+    assert.deepEqual(
+      withAgy.candidates.find((c) => c.engine === 'kimi'),
+      { engine: 'kimi', reason: 'unknown', basis: 'none' },
+    );
+
+    // When all measured pools are unknown, cursor remains the last fallback with basis "none".
+    const fallbackOnly = selectEngine({
+      pace: { schema: 'capacity.pace/1', generated_at: '2026-11-18T07:00:00Z', rows: [] },
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(fallbackOnly.engine, 'cursor');
+    assert.equal(fallbackOnly.status, 'observed_available');
+    assert.equal(fallbackOnly.basis, 'none');
+    assert.equal(Object.prototype.hasOwnProperty.call(fallbackOnly, 'runs_today'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(fallbackOnly, 'note'), false);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(sockDir, { recursive: true, force: true });
+  }
+});
+
+test('behind-pace (2a): fresh pace row counts as behind iff status is ALERT_behind or behind_early', async () => {
+  const sockDir = makeLiveDir();
+  const socket = path.join(sockDir, 'broker.sock');
+  const server = require('net').createServer((conn) => conn.destroy());
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
+  try {
+    const cursor = require('./lib/cursor-quota-observe');
+    cursor.observe({ verdict: 'done', liveDir: testLiveDir });
+
+    const env = {
+      ...process.env,
+      AUTOPILOT_LIVE_DIR: testLiveDir,
+      AUTOPILOT_KIMI_BROKER_SOCK: socket,
+      AUTOPILOT_CURSOR_BROKER_AUDIT: fixturePath('cursor-audit-behind.tsv'),
+      AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
+      AUTOPILOT_TASK_SIZE: '',
+      AUTOPILOT_TASK_SCOPE: '',
+    };
+
+    // Positive: both ALERT_behind and behind_early count as behind for cursor and kimi.
+    for (const behindStatus of ['ALERT_behind', 'behind_early']) {
+      const cursorPace = priorityPace([
+        paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+        paceRow('cursor', 20, 45, { status: behindStatus, hours_to_reset: 100 }),
+      ]);
+      const cursorRes = selectEngine({
+        pace: cursorPace,
+        role: 'implementer',
+        exclude: 'kimi',
+        now: TAIPEI_1500_DATE,
+        env,
+        checkEndpoint: allEndpointsReady,
+      });
+      assert.equal(cursorRes.engine, 'cursor', `cursor must be behind for status=${behindStatus}`);
+      assert.equal(cursorRes.selected_by, 'behind_pace');
+      assert.equal(cursorRes.reason, 'behind_pace');
+      assert.equal(cursorRes.basis, 'pace');
+      assert.equal(cursorRes.runner_up, 'agy');
+
+      const kimiPace = priorityPace([
+        paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+        paceRow('kimi', 20, 45, { status: behindStatus, hours_to_reset: 100, seen_at: '2026-11-18T06:30:00Z' }),
+      ]);
+      const kimiRes = selectEngine({
+        pace: kimiPace,
+        role: 'implementer',
+        exclude: 'cursor',
+        files: [fixturePath('prompt-size-s.md')],
+        now: TAIPEI_1500_DATE,
+        env,
+        checkEndpoint: allEndpointsReady,
+      });
+      assert.equal(kimiRes.engine, 'kimi', `kimi must be behind for status=${behindStatus}`);
+      assert.equal(kimiRes.selected_by, 'behind_pace');
+      assert.equal(kimiRes.reason, 'behind_pace');
+      assert.equal(kimiRes.basis, 'pace');
+      assert.equal(kimiRes.runner_up, 'agy');
+    }
+
+    // Negative: any other status on a fresh pace row is NOT behind (and retires the behind audit proxy).
+    for (const nonBehindStatus of ['ok', 'WARN_ahead', 'WARN_kimi_low', 'WARN_cursor_low', 'no_source', 'window_unknown', 'behind', 'ok+stale', '', null]) {
+      const cursorPace = priorityPace([
+        paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+        paceRow('cursor', 20, 75, { status: nonBehindStatus, hours_to_reset: 100 }),
+      ]);
+      const cursorRes = selectEngine({
+        pace: cursorPace,
+        role: 'implementer',
+        exclude: 'kimi',
+        now: TAIPEI_1500_DATE,
+        env,
+        checkEndpoint: allEndpointsReady,
+      });
+      assert.equal(cursorRes.engine, 'agy', `cursor must NOT be behind for status=${JSON.stringify(nonBehindStatus)}`);
+      assert.equal(cursorRes.selected_by, 'quota_score');
+      assert.equal(cursorRes.candidates.find((c) => c.engine === 'cursor')?.basis, 'pace');
+
+      const kimiPace = priorityPace([
+        paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+        paceRow('kimi', 20, 75, { status: nonBehindStatus, hours_to_reset: 100, seen_at: '2026-11-18T06:30:00Z' }),
+      ]);
+      const kimiRes = selectEngine({
+        pace: kimiPace,
+        role: 'implementer',
+        exclude: 'cursor',
+        files: [fixturePath('prompt-size-s.md')],
+        now: TAIPEI_1500_DATE,
+        env,
+        checkEndpoint: allEndpointsReady,
+      });
+      assert.equal(kimiRes.engine, 'agy', `kimi must NOT be behind for status=${JSON.stringify(nonBehindStatus)}`);
+      assert.equal(kimiRes.selected_by, 'quota_score');
+      assert.equal(kimiRes.candidates.find((c) => c.engine === 'kimi')?.basis, 'pace');
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(sockDir, { recursive: true, force: true });
+  }
+});
+
+test('behind-pace (2b): kimi reading freshness is judged by row seen_at, not reset_at or file mtime', async () => {
+  const sockDir = makeLiveDir();
+  const socket = path.join(sockDir, 'broker.sock');
+  const server = require('net').createServer((conn) => conn.destroy());
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-kimi-seen-at-'));
+  try {
+    const baseEnv = {
+      ...process.env,
+      AUTOPILOT_LIVE_DIR: testLiveDir,
+      AUTOPILOT_KIMI_BROKER_SOCK: socket,
+      AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
+      AUTOPILOT_TASK_SIZE: '',
+      AUTOPILOT_TASK_SCOPE: '',
+    };
+
+    // 1. Fresh seen_at (30 min ago at TAIPEI_1500_DATE = 2026-11-18T07:00:00Z) counts as fresh even when
+    //    reset_at is in the past, hours_to_reset is null, stale is true, and pace file mtime is 17 days old.
+    const freshSeenPace = priorityPace([
+      paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+      {
+        pool: 'kimi',
+        class: 'other',
+        status: 'behind_early',
+        stale: true,
+        seen_at: '2026-11-18T06:30:00Z',
+        reset_at: '2026-11-10T00:00:00Z',
+        hours_to_reset: null,
+        used_pct: 15,
+        expected_pct: 60,
+      },
+    ]);
+    const freshPacePath = path.join(dir, 'pace-fresh-seen.json');
+    fs.writeFileSync(freshPacePath, JSON.stringify(freshSeenPace));
+    const oldMtime = new Date('2026-11-01T00:00:00Z');
+    fs.utimesSync(freshPacePath, oldMtime, oldMtime);
+
+    const freshRes = selectEngine({
+      pace: freshSeenPace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env: baseEnv,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(freshRes.engine, 'kimi');
+    assert.equal(freshRes.basis, 'pace');
+    assert.equal(freshRes.status, 'fresh');
+    assert.equal(freshRes.selected_by, 'behind_pace');
+    assert.equal(freshRes.slack_pts, 45);
+
+    const freshCli = cli(
+      [
+        '--role', 'implementer',
+        '--pace', freshPacePath,
+        '--prompt-file', fixturePath('prompt-size-s.md'),
+        '--now', TAIPEI_1500_ISO,
+        '--json',
+      ],
+      {
+        AUTOPILOT_KIMI_BROKER_SOCK: socket,
+        AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
+        AUTOPILOT_TASK_SIZE: '',
+        AUTOPILOT_TASK_SCOPE: '',
+      },
+    );
+    assert.equal(freshCli.status, 0, freshCli.stderr);
+    const freshCliOut = JSON.parse(freshCli.stdout);
+    assert.equal(freshCliOut.engine, 'kimi');
+    assert.equal(freshCliOut.basis, 'pace');
+    assert.equal(freshCliOut.status, 'fresh');
+
+    // Exact 24 h boundary on seen_at is still fresh even with reset_at null and stale: true.
+    assert.equal(isSeenAtFresh({ pool: 'kimi', seen_at: '2026-11-17T07:00:00Z' }, TAIPEI_1500_DATE), true);
+    const boundaryRes = selectEngine({
+      pace: priorityPace([
+        paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+        {
+          pool: 'kimi',
+          class: 'other',
+          status: 'ALERT_behind',
+          stale: true,
+          seen_at: '2026-11-17T07:00:00Z',
+          reset_at: null,
+          hours_to_reset: null,
+          used_pct: 10,
+          expected_pct: 55,
+        },
+      ]),
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env: baseEnv,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(boundaryRes.engine, 'kimi');
+    assert.equal(boundaryRes.basis, 'pace');
+
+    // 2. Stale, missing, or future seen_at is NOT fresh even when stale: false, reset_at is 6 days in the future,
+    //    hours_to_reset is finite, and the pace file mtime on disk is brand new (now).
+    for (const badSeenAt of ['2026-11-17T06:59:59Z', '2026-11-15T07:00:00Z', null, undefined, '2026-11-18T07:00:01Z']) {
+      const kimiRow = {
+        pool: 'kimi',
+        class: 'other',
+        status: 'ALERT_behind',
+        stale: false,
+        reset_at: '2026-11-24T07:00:00Z',
+        hours_to_reset: 144,
+        used_pct: 10,
+        expected_pct: 75,
+      };
+      if (badSeenAt !== undefined) kimiRow.seen_at = badSeenAt;
+      assert.equal(isSeenAtFresh(kimiRow, TAIPEI_1500_DATE), false, `seen_at=${String(badSeenAt)} must not be fresh`);
+
+      const staleSeenPace = {
+        schema: 'capacity.pace/1',
+        generated_at: TAIPEI_1500_ISO,
+        rows: [
+          paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+          kimiRow,
+        ],
+      };
+      const stalePacePath = path.join(dir, 'pace-stale-seen.json');
+      fs.writeFileSync(stalePacePath, JSON.stringify(staleSeenPace));
+      fs.utimesSync(stalePacePath, TAIPEI_1500_DATE, TAIPEI_1500_DATE);
+
+      const staleRes = selectEngine({
+        pace: staleSeenPace,
+        role: 'implementer',
+        files: [fixturePath('prompt-size-s.md')],
+        now: TAIPEI_1500_DATE,
+        env: baseEnv,
+        checkEndpoint: allEndpointsReady,
+      });
+      assert.equal(staleRes.engine, 'agy', `stale/missing seen_at=${String(badSeenAt)} must not prefer kimi`);
+      assert.deepEqual(
+        staleRes.candidates.find((c) => c.engine === 'kimi'),
+        { engine: 'kimi', reason: 'unknown', basis: 'none' },
+      );
+
+      const staleCli = cli(
+        [
+          '--role', 'implementer',
+          '--pace', stalePacePath,
+          '--prompt-file', fixturePath('prompt-size-s.md'),
+          '--now', TAIPEI_1500_ISO,
+          '--json',
+        ],
+        {
+          AUTOPILOT_KIMI_BROKER_SOCK: socket,
+          AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
+          AUTOPILOT_TASK_SIZE: '',
+          AUTOPILOT_TASK_SCOPE: '',
+        },
+      );
+      assert.equal(staleCli.status, 0, staleCli.stderr);
+      assert.equal(JSON.parse(staleCli.stdout).engine, 'agy');
+    }
+
+    // A stale-seen_at kimi row with status "ok" and future reset_at does NOT retire the daily-run proxy.
+    const staleOkFallback = selectEngine({
+      pace: {
+        schema: 'capacity.pace/1',
+        generated_at: TAIPEI_1500_ISO,
+        rows: [
+          paceRow('agy', 10, 50, { hours_to_reset: 4 }),
+          {
+            pool: 'kimi',
+            class: 'other',
+            status: 'ok',
+            stale: false,
+            seen_at: '2026-11-17T06:59:59Z',
+            reset_at: '2026-11-24T07:00:00Z',
+            hours_to_reset: 144,
+            used_pct: 50,
+            expected_pct: 40,
+          },
+        ],
+      },
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env: {
+        ...baseEnv,
+        AUTOPILOT_KIMI_BROKER_AUDIT: fixturePath('kimi-audit-behind.tsv'),
+      },
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(staleOkFallback.engine, 'kimi');
+    assert.equal(staleOkFallback.basis, 'proxy_runs');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(sockDir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('behind-pace (2c): behind signal is a yes/no preference only with no proportional boost by points behind', async () => {
+  const sockDir = makeLiveDir();
+  const socket = path.join(sockDir, 'broker.sock');
+  const server = require('net').createServer((conn) => conn.destroy());
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pace-behind-yesno-'));
+  try {
+    const cursor = require('./lib/cursor-quota-observe');
+    cursor.observe({ verdict: 'done', liveDir: testLiveDir });
+
+    const env = {
+      ...process.env,
+      AUTOPILOT_LIVE_DIR: testLiveDir,
+      AUTOPILOT_KIMI_BROKER_SOCK: socket,
+      AUTOPILOT_CURSOR_BROKER_AUDIT: MISSING_CURSOR_AUDIT,
+      AUTOPILOT_KIMI_BROKER_AUDIT: MISSING_KIMI_AUDIT,
+      AUTOPILOT_TASK_SIZE: '',
+      AUTOPILOT_TASK_SCOPE: '',
+    };
+
+    // 1. Both behind on pace rows: cursor is only 5 pts behind (score 20) while kimi is 70 pts behind (score 0.9).
+    //    No proportional boost for being 70 pts behind -> cursor wins by ordinary quota score.
+    const diffScorePace = priorityPace([
+      paceRow('agy', 5, 50, { status: 'ok', hours_to_reset: 1 }),
+      paceRow('cursor', 20, 25, { status: 'behind_early', hours_to_reset: 4 }),
+      paceRow('kimi', 10, 80, { status: 'ALERT_behind', hours_to_reset: 100, seen_at: '2026-11-18T06:30:00Z' }),
+    ]);
+    const res1 = selectEngine({
+      pace: diffScorePace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(res1.engine, 'cursor');
+    assert.equal(res1.runner_up, 'kimi');
+    assert.equal(res1.selected_by, 'behind_pace');
+
+    // 2. Equal quota scores: cursor being 75 pts behind vs kimi being 5 pts behind never boosts cursor over kimi.
+    const equalScorePace = priorityPace([
+      paceRow('agy', 5, 50, { status: 'ok', hours_to_reset: 1 }),
+      paceRow('kimi', 20, 25, { status: 'behind_early', hours_to_reset: 24, seen_at: '2026-11-18T06:30:00Z' }),
+      paceRow('cursor', 20, 95, { status: 'ALERT_behind', hours_to_reset: 24 }),
+    ]);
+    const res2 = selectEngine({
+      pace: equalScorePace,
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(res2.engine, 'kimi');
+    assert.equal(res2.runner_up, 'cursor');
+    assert.equal(res2.selected_by, 'behind_pace');
+
+    // 3. Proxy runs: cursor 1/9.375 runs (large shortfall) vs kimi 7/7.5 runs (tiny shortfall) -> no shortfall
+    //    field on evaluateBehindSignal or selectEngine, and kimi still precedes cursor without proportional boost.
+    const cursorOneRun = path.join(dir, 'cursor-1.tsv');
+    fs.writeFileSync(cursorOneRun, 'ts\trun_id\trunner\tverdict\n2026-11-18T09:00:00+08:00\tc-1\tcursor\tdone\n');
+    const kimiSevenRuns = path.join(dir, 'kimi-7.tsv');
+    const kimiRows = ['ts\trun_id\trunner\tverdict'];
+    for (let i = 1; i <= 7; i += 1) {
+      kimiRows.push(`2026-11-18T0${i}:00:00+08:00\tk-${i}\tkimi\tdone`);
+    }
+    fs.writeFileSync(kimiSevenRuns, `${kimiRows.join('\n')}\n`);
+
+    const proxyEnv = {
+      ...env,
+      AUTOPILOT_CURSOR_BROKER_AUDIT: cursorOneRun,
+      AUTOPILOT_KIMI_BROKER_AUDIT: kimiSevenRuns,
+    };
+    const sig = evaluateBehindSignal({
+      key: 'cursor',
+      paceRows: [],
+      poolNames: new Set(['cursor']),
+      roles: loadRoles(),
+      now: TAIPEI_1500_DATE,
+      env: proxyEnv,
+    });
+    assert.equal(sig.behind, true);
+    assert.equal(Object.prototype.hasOwnProperty.call(sig, 'shortfall'), false);
+
+    const res3 = selectEngine({
+      pace: priorityPace([paceRow('agy', 5, 50, { status: 'ok', hours_to_reset: 1 })]),
+      role: 'implementer',
+      files: [fixturePath('prompt-size-s.md')],
+      now: TAIPEI_1500_DATE,
+      env: proxyEnv,
+      checkEndpoint: allEndpointsReady,
+    });
+    assert.equal(res3.engine, 'kimi');
+    assert.equal(res3.runner_up, 'cursor');
+    assert.equal(res3.selected_by, 'behind_pace');
+    assert.equal(Object.prototype.hasOwnProperty.call(res3, 'shortfall'), false);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(sockDir, { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

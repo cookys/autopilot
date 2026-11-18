@@ -7423,6 +7423,36 @@
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Path of the per-user JSON host deny list ({\"strong\":[...],\"contextual\":[...]}) read by leak-guard and personal-data-redact; defaults to ~/.autopilot/leak-guard-hosts.json."
+    },
+    {
+      "name": "AUTOPILOT_CURSOR_BROKER_AUDIT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "/srv/cursor-broker/audit.tsv",
+      "readers": [
+        "scripts/lib/broker-run-pace.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [
+        "AUTOPILOT_KIMI_BROKER_AUDIT"
+      ],
+      "note": "Overrides pace-roles.json broker_audit.cursor (default /srv/cursor-broker/audit.tsv) for the daily-run behind-pace proxy in pace-select.js."
+    },
+    {
+      "name": "AUTOPILOT_KIMI_BROKER_AUDIT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "/srv/kimi-broker/audit.tsv",
+      "readers": [
+        "scripts/lib/broker-run-pace.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [
+        "AUTOPILOT_CURSOR_BROKER_AUDIT"
+      ],
+      "note": "Overrides pace-roles.json broker_audit.kimi (default /srv/kimi-broker/audit.tsv) for the daily-run behind-pace proxy in pace-select.js."
     }
   ]
 }

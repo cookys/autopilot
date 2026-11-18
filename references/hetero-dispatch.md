@@ -155,12 +155,33 @@ scripts/dispatch-review.sh --diff-file change.diff --spec-file brief.md
   The CN dispatch gate receives the task brief, diff and role before endpoint checks or ranking.
   Availability windows, seam dates, endpoint readiness and the DeepSeek pairing requirement still apply.
   `class: "claude"` rows are excluded.
-- **Quota score**: among eligible fresh keys below the ceiling, maximize
-  `(100 - used_pct) / max(hours_to_reset, 1)` to use quota before reset. Equal scores prefer larger
-  slack (`expected_pct - used_pct`), then the existing `priority.<role>` order. Alias pools use the
-  same comparison. Priority, linear pace and `WARN_*_low` no longer override the score;
-  `selected_by` is `quota_score`, `low_keys` is diagnostic, and `over_pace` reports whether the
-  winner's slack is below -10. `reviewer_exclude` still reports the winner's family keys.
+- **Cursor / Kimi behind-pace preference**: for `implementer` dispatches, eligible `cursor` and
+  `kimi` seats (`kimi` also requires at least one `--prompt-file` and every `--prompt-file` passing
+  `scripts/lib/cn-model-dispatch-gate.js`, else it is excluded with `reason: "cn_gate:<reason>"`;
+  with no `--prompt-file`, `kimi` is not preferred and stays on the ordinary rules) get a yes/no
+  preference **before** normally-scored candidates whenever behind pace (`selected_by` / `reason` =
+  `"behind_pace"`). Behind is never scaled or boosted proportionally by how many points behind a pool
+  is. `over_ceiling`, `--exclude`, `_disabled`, broker-unavailable and exhausted-kimi rules apply first
+  and are never overridden by behind-pace preference. When a fresh `capacity.pace/1` row with finite
+  `used_pct` and `expected_pct` exists for that pool (for `kimi`, reading freshness is judged by row
+  `seen_at` within 24 h, never by `reset_at` or file mtime), it wins (`basis: "pace"`, behind iff
+  `status` is `ALERT_behind` or `behind_early` in `scripts/lib/pace-reading.js`; any other status is
+  not behind). Otherwise `scripts/lib/broker-run-pace.js` counts today's completed `Asia/Taipei` runs
+  from `broker_audit` in `scripts/lib/pace-roles.json` (defaults `/srv/cursor-broker/audit.tsv` and
+  `/srv/kimi-broker/audit.tsv`, overridable via `AUTOPILOT_CURSOR_BROKER_AUDIT` and
+  `AUTOPILOT_KIMI_BROKER_AUDIT`) against `daily_run_targets` (`{ "cursor": 15, "kimi": 12 }` times
+  the elapsed fraction of the Taipei day; `basis: "proxy_runs"`). This daily-run proxy measures runs
+  per day, not quota percent (`note: "runs per day, not quota percent"`, alongside `runs_today`,
+  `daily_target` and `expected_runs` on the winner and in `candidates`), and is retired automatically
+  when a fresh `capacity.pace/1` reading exists. Missing or unreadable audit files emit `basis: "none"`,
+  never throw, and preserve existing fallback behaviour (`cursor` last fallback when not behind).
+- **Quota score**: among eligible fresh keys below the ceiling (when no behind-pace `cursor`/`kimi`
+  is preferred), maximize `(100 - used_pct) / max(hours_to_reset, 1)` to use quota before reset.
+  Equal scores prefer larger slack (`expected_pct - used_pct`), then the existing `priority.<role>`
+  order. Alias pools use the same comparison. Priority, linear pace and `WARN_*_low` no longer
+  override the score; `selected_by` is `quota_score`, `low_keys` is diagnostic, and `over_pace`
+  reports whether the winner's slack is below -10. `reviewer_exclude` still reports the winner's
+  family keys.
 - **Ceiling**: `PACE_CEILING_PCT` in `scripts/lib/pace-roles.json` defaults to **85**; an alternate
   roles config via `$AUTOPILOT_PACE_ROLES` can override it. Readings at or above it are excluded
   from automatic selection and listed with `reason: "over_ceiling"`. A fresh high reading is

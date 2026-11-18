@@ -291,7 +291,8 @@ function seatRows(ctx: PageCtx, live: LiveSnapshot, wide: boolean): Row[] {
   const out: Row[] = []
   const stage = d.marker?.stage ?? d.stage?.current ?? null
   const proj = d.project ?? live.project_key
-  const where = [proj, stage === null ? null : wide ? t('page.now.stage', { stage }) : stage, live.metrics === undefined ? null : 'ctx ' + live.metrics.ctx].filter((x): x is string => x !== null)
+  const project = proj !== null && stage === null && /^[0-9a-f]{16,64}$/i.test(proj) ? t('page.now.project_unknown', { id: proj }) : proj
+  const where = [project, stage === null ? null : wide ? t('page.now.stage', { stage }) : stage, live.metrics === undefined ? null : t('header.ctx') + ' ' + live.metrics.ctx].filter((x): x is string => x !== null)
   if (where.length > 0) out.push(labelled(t('page.now.l_where'), wide, plain(where.join(' · '))))
   const tasks = live.sections.tasks
   if (tasks !== null && tasks.total > 0) {

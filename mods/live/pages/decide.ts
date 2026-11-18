@@ -190,7 +190,7 @@ function noteRow(d: LiveDecision, nav: DecideNav, ctx: PageCtx, wide: boolean): 
 }
 
 // the card in full: the seat's own card with its options
-function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wide: boolean): Row[] {
+function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wide: boolean, readOnly = false): Row[] {
   const { t } = ctx
   const cols = ctx.size.cols
   const who = d.source ?? ''
@@ -199,8 +199,10 @@ function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wid
   const out: Row[] = []
   const mark = seg(GLYPHS.structure.folded + ' ', { color: PALETTE.here })
   const id0 = d.id === null ? '' : d.id + ' '
-  if (wide) out.push(leftRight([mark, seg(id0 + pos + '  ' + d.question + old)], who === '' ? age : t('page.decide.exec', { who }) + ' · ' + age, cols))
-  else out.push([mark, seg(d.question)], [dimSeg('  ' + [id0 + pos, who, age].filter(s => s !== '').join(' · ') + old)])
+  // Z4: reserve the progress/age suffix before shortening the question.
+  const progress = '(' + [pos, age].filter(Boolean).join(' · ') + ')'
+  if (wide) out.push(leftRight([mark, seg(id0 + ' ' + d.question + old)], (who === '' ? '' : t('page.decide.exec', { who }) + '  ') + progress, cols))
+  else out.push(leftRight([mark, seg(d.question)], progress, cols), [dimSeg('  ' + [id0.trim(), who].filter(Boolean).join(' · ') + old)])
   const sent = d.id !== null && nav.sent[d.id] !== undefined && nav.fixing?.[d.id] === undefined
   const held = d.id !== null && nav.hold?.[d.id] !== undefined
   const pick = decidePick(d, nav)
@@ -213,21 +215,26 @@ function ownCard(d: LiveDecision, pos: string, nav: DecideNav, ctx: PageCtx, wid
   if (d.blocks !== null) out.push(wide ? labelled(t('page.decide.k_blocks'), d.blocks) : [dimSeg(t('page.decide.k_blocks')), seg(' ' + d.blocks)])
   if (decideDialog(d)) out.push([seg(wide ? '  ' : ''), dimSeg(t('page.decide.in_dialog'))])
   else {
-    out.push(...optionRows(d, nav, ctx, wide))
+    if (readOnly) d.options.forEach((o, i) => {
+      out.push([seg((wide ? '  ' : '') + '[' + letterOf(i) + '] ' + o.label + (recommendedIndex(d) === i ? ' ' + GLYPHS.structure.recommend : ''))])
+      if (o.description !== '') out.push([dimSeg((wide ? '      ' : '    ') + o.description)])
+    })
+    else out.push(...optionRows(d, nav, ctx, wide))
   }
   if (d.recommendation !== null) out.push(wide ? labelled(t('page.decide.k_advice'), d.recommendation) : [dimSeg(t('page.decide.k_advice')), seg(' ' + d.recommendation)])
-  if (d.options.length <= MAX_OPTS) out.push(...noteRow(d, nav, ctx, wide))
+  if (readOnly) out.push(wide ? labelled(t('page.decide.k_note'), t('page.decide.act_readonly', { seat: d.source ?? '-' })) : [dimSeg(t('page.decide.k_note')), seg(' ' + t('page.decide.act_readonly', { seat: d.source ?? '-' }))])
+  else if (d.options.length <= MAX_OPTS) out.push(...noteRow(d, nav, ctx, wide))
   else if (nav.textMode) out.push(...noteRow(d, nav, ctx, wide))
   return out
 }
 
-// a console card, seen from this seat: the question and which seat answers it (R2: on 80x24 question first, owner seat and age after)
+// Y2: the same answer area in PM order, with inert options and the answering seat.
 function conCard(c: ConsoleCard, pos: string, ctx: PageCtx, wide: boolean): Row[] {
-  const who = c.executor_display ?? ''
-  const age = ageOf(ctx, c.opened_at_ms)
-  const mark = seg(GLYPHS.structure.folded + ' ', { color: PALETTE.here })
-  if (wide) return [leftRight([mark, seg(c.id + ' ' + pos + '  ' + c.question)], who === '' ? age : ctx.t('page.decide.exec', { who }) + ' · ' + age, ctx.size.cols)]
-  return [[mark, seg(c.question)], [dimSeg('  ' + [c.id + ' ' + pos, who, age].filter(s => s !== '').join(' · '))]]
+  const options = c.options ?? []
+  const recommendation = c.recommendation ?? options.find(o => o.recommended === true)?.label ?? null
+  return ownCard({ id: c.id, title: null, question: c.question, source: c.executor_display,
+    opened_at: null, age_s: Math.max(0, (ctx.nowMs - c.opened_at_ms) / 1000), background: c.background ?? null, blocks: c.blocks ?? null,
+    options, recommendation, why: null, not_authorized: null, stale: false, origin: null, orphaned: false }, pos, NO_NAV, ctx, wide, true)
 }
 
 // Keep a visible gutter between each list question and its owner/age column;

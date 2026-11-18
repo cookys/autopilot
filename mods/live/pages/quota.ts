@@ -169,7 +169,9 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     headerRows.push(rule(title, right, cols))
     if (!paceOk && tier !== 'narrow') headerRows.push(clipRowPlain([{ text: '(' + t('page.quota.title_nopace_note') + ')', dim: true }], cols))
 
-    // column header
+  }
+
+  { // Y4: the percentage columns keep one compact header, even without section chrome.
     const head: string[] = ['    ' + padR(t('page.quota.col_pool'), c.pool)]
     const short = tier === 'narrow'
     head.push(numCell(t(short ? 'page.quota.col_7d_s' : 'page.quota.col_7d'), false, c.d7), numCell(t(short ? 'page.quota.col_5h_s' : 'page.quota.col_5h'), false, c.h5))
@@ -281,7 +283,9 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     // R5 compact mode (<= 4 body rows): reserve the focused pool's full wrapped verdict first, then fit pool rows and tail rows within room.
     const vLen = rowsWrappedLen(verdictBlock, cols)
     if (room <= 0) return { body: [poolRowsAll[focus], ...verdictBlock], actions }
-    const picked = pickPools(Math.max(0, room - vLen), tier === 'narrow')
+    const compactHead = room > 4 && room >= vLen + 2 ? headerRows : []
+    const hLen = rowsWrappedLen(compactHead, cols)
+    const picked = pickPools(Math.max(0, room - vLen - hLen), tier === 'narrow')
     const shownPools = picked.rows
     const navOn = picked.clipped && tier === 'narrow' // the o Button is in the action row then, not in the body
     const tailCandidates: Row[] = []
@@ -292,7 +296,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
     } else {
       tailCandidates.push(seatsSummary, ...(navOn ? [] : [openRow]))
     }
-    let rem = room - rowsWrappedLen(shownPools, cols) - vLen
+    let rem = room - hLen - rowsWrappedLen(shownPools, cols) - vLen
     const tail: Row[] = []
     for (const r of tailCandidates) {
       const w = rowWrappedLen(r, cols)
@@ -300,7 +304,7 @@ export function renderQuota(ctx: PageCtx, view: QuotaView = { focus: 0, expanded
       tail.push(r)
       rem -= w
     }
-    return { body: [...shownPools, ...verdictBlock, ...tail], actions: cutActions(picked.clipped) }
+    return { body: [...compactHead, ...shownPools, ...verdictBlock, ...tail], actions: cutActions(picked.clipped) }
   }
 
   const focusTitle = rule(t(tier === 'narrow' ? 'page.quota.focus_title_s' : view.expanded ? 'page.quota.focus_title_open' : 'page.quota.focus_title', { pool: poolLabel(fv.pool) }), null, cols)

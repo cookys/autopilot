@@ -246,9 +246,9 @@ function framedView(el: { Box: El; Text: El; Button?: El }, page: Page, frame: F
       }
       nodes.push(text(sg.text, 'g' + j))
     }
-    return <Box key={'f' + i}>{nodes}</Box>
+    return <Box key={'f' + i}>{nodes}{i === rows.length - 1 ? focusAnchor(el, epoch) : null}</Box>
   }
-  return <Box {...(epoch > 0 ? { key: 'frame:' + epoch } : {})} flexDirection="column" height={frame.rows}>{rows.map(drawRow)}{focusAnchor(el, epoch)}</Box>
+  return <Box {...(epoch > 0 ? { key: 'frame:' + epoch } : {})} flexDirection="column" height={frame.rows}>{rows.map(drawRow)}</Box>
 }
 
 // how one PaneLine is drawn (shared by the tabs and the console's 指揮 page): plain segments, a press row of Buttons, a text field, a toggle Button, a goto Button

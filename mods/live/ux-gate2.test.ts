@@ -2,7 +2,7 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import { PAGES } from './pages/index'
-import { displayWidth, PALETTE } from './ui'
+import { displayWidth, PALETTE, drawSeg } from './ui'
 import { makeT } from './i18n'
 import full from './fixtures/console/console-full.fixture'
 
@@ -194,4 +194,11 @@ test('X1: each closed-band page button opens its matching framed page and leaves
     h.close() // Simulate the host's Escape; the testing client has no ui.close method.
   }
   await $.session.end({ reason: 'exit' })
+})
+
+test('Y6: the drawing helper admits semantic theme roles and rejects legacy raw colour escapes', () => {
+  for (const color of Object.values(PALETTE)) expect(drawSeg({ text: '合成文字', color }).color).toBe(color)
+  for (const color of ['\u001b[38;5;153m', '\u001b[38;5;220m', '38;5;153', '38;5;220', '#afd7ff', '#ffd700']) {
+    expect(drawSeg({ text: '合成文字', color: color as never }).color).toBeUndefined()
+  }
 })

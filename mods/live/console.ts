@@ -14,7 +14,7 @@ export type ConsoleSourceState = 'ok' | 'stale' | 'expired' | 'no_source'
 export const FACT_KEYS = ['seat', 'pool', 'resets_at', 'source', 'window', 'resets_at_text', 'stale', 'pct', 'projected', 'exhaust_h'] as const
 export type ConsoleFacts = Record<string, string | number | boolean>
 export type ConsoleItem = { id: string; kind: 'card' | 'exception' | 'hint' | 'quota' | 'seat_blocked'; severity: number; state: string; needs_operator: boolean; title: string; text: string; since_ms: number; line_id: string | null; to_console: boolean | null; answerable_by: string[]; facts: ConsoleFacts }
-export type ConsoleCard = { id: string; question: string; status: 'open' | 'awaiting_operator_action' | 'waiting_step' | 'relayed_unconfirmed'; opened_at_ms: number; executor_display: string | null }
+export type ConsoleCard = { id: string; question: string; status: 'open' | 'awaiting_operator_action' | 'waiting_step' | 'relayed_unconfirmed'; opened_at_ms: number; executor_display: string | null; background?: string | null; blocks?: string | null; recommendation?: string | null; options?: { label: string; description: string; recommended?: boolean }[] }
 export type ConsoleIssue = { rule: string; state: string; subject: string; since_ms: number; to_console: boolean }
 export type ConsoleLine = { line_id: string; label: string; lead_display: string | null; issues: ConsoleIssue[] }
 export type ConsoleSnapshot = { generated_at_ms: number; sources: Record<string, { at_ms: number | null; state: ConsoleSourceState }>; counts: { decisions: number; exceptions: number; quota_risk: number; tabs: Record<string, [string, number][]>; summary: { lines: Record<string, number>; hosts: Record<string, number>; hints: number; quota_worst: string | null } }; items: ConsoleItem[]; quota: ConsoleQuota; cards: ConsoleCard[] | null; lines: ConsoleLine[] | null }
@@ -105,7 +105,14 @@ function parseCard(v: Obj): ConsoleCard | null {
   if (!CARD_ID.test(id)) return null // the id reaches the prompt box (a fill: press) and the shell; only the decision card id form crosses the trust boundary
   const executor_display: unknown = v.executor_display
   if (executor_display !== null && typeof executor_display !== 'string') return null
-  return { id, question, status: status as ConsoleCard['status'], opened_at_ms, executor_display }
+  const details: Partial<ConsoleCard> = {}
+  // Y2: retain only typed answer-area fields; a legacy title-only card keeps its shape.
+  for (const key of ['background', 'blocks', 'recommendation'] as const) {
+    if (typeof v[key] === 'string' || v[key] === null) details[key] = s(v[key])
+  }
+  if (Array.isArray(v.options)) details.options = v.options.flatMap(o => isObj(o) && typeof o.label === 'string'
+    ? [{ label: o.label, description: s(o.description) ?? '', ...(typeof o.recommended === 'boolean' ? { recommended: o.recommended } : {}) }] : [])
+  return { id, question, status: status as ConsoleCard['status'], opened_at_ms, executor_display, ...details }
 }
 
 function parseIssue(v: Obj): ConsoleIssue | null {

@@ -151,7 +151,7 @@ export function frameRows(page: Page, ctx: PageCtx, opts: FrameOpts = {}): Row[]
   const avail = H - 1 - S
   const droppedDecideAct = first.actions.some(x => x.some(s => s.press === 'tab:2:decide'))
   const layout = (r: { body: Row[]; actions: Row[] }, short = false) => {
-    const body = r.body.flatMap(x => wrapRow(x, ctx.size.cols, WRAP_HANG)) // N3: a kept-whole reason wraps at a clause boundary with a 2-cell hanging indent, never back to column 0
+    const body = r.body.filter(x => x.some(s => s.text.trim() !== '')).flatMap(x => wrapRow(x, ctx.size.cols, WRAP_HANG)) // X5: spare rows belong above the content; N3: reasons keep their hanging indent
     const omitEmptyAct = short && page.id === 'now' && (droppedDecideAct || decisionCount(ctx) > 0 || body.some(x => x.some(s => s.press === 'tab:2:decide')))
     const acts: Row[] = r.actions.length === 0 ? (omitEmptyAct ? [] : [[{ text: emptyState(ctx, page), dim: true }]]) : r.actions
     return { body, acts, room: avail - Math.min(acts.length, avail), short }

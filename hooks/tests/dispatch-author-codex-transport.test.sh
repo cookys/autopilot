@@ -1056,7 +1056,7 @@ SQ_REPO="$SQ_DIR/repo"
 SQ_TMP="$SQ_DIR/tmp"
 mkdir -p "$SQ_BIN" "$SQ_BIN_NO_SP" "$SQ_MINBIN" "$SQ_REPO" "$SQ_TMP"
 
-for tool in bash sed id head env; do
+for tool in bash sed id head env cat; do
   ln -s "$(command -v "$tool")" "$SQ_MINBIN/$tool"
 done
 if [ -x /usr/bin/true ]; then
@@ -1169,7 +1169,9 @@ for arg in "$@"; do
     exit 0
   fi
 done
-readlink "/proc/$$/fd/2" > "$sq_dir/last-stderr-path" 2>/dev/null || : > "$sq_dir/last-stderr-path"
+sq_stderr_target="$(readlink "/proc/$$/fd/2" 2>/dev/null || true)"
+printf '%s\n' "$sq_stderr_target" > "$sq_dir/last-stderr-path"
+printf '%s\n' "$sq_stderr_target" >> "$sq_dir/stderr-paths"
 sidecar=""
 args=("$@")
 idx=0
@@ -1221,7 +1223,7 @@ cat > "$SQ_MANIFEST" <<'SQ_JSON'
   "artifact_type": "plan_review_manifest",
   "logical_plan_id": "sudo-quiet-codex-plan",
   "minimum_distinct_families": 1,
-  "max_attempts_per_seat": 1,
+  "max_attempts_per_seat": 2,
   "seats": [
     {
       "id": "architect",
@@ -1312,7 +1314,7 @@ assert_contains "${SQ_DET_SILENT_FB#*$'\n'}" " -E " "control silent sudo without
 
 # 3. End-to-end real detection + launch + plan-review envelope under warning sudo.
 printf 'warn' > "$SQ_DIR/sudo-mode"
-rm -f "$SQ_DIR/last-stderr-path" "$SQ_DIR/codex-prewarn"
+rm -f "$SQ_DIR/last-stderr-path" "$SQ_DIR/stderr-paths" "$SQ_DIR/codex-prewarn"
 SQ_OUT_GREEN="$SQ_DIR/plan-review-green.json"
 SQ_ERR_GREEN="$SQ_DIR/plan-review-green.stderr"
 env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
@@ -1328,6 +1330,7 @@ env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u A
 SQ_GREEN_RC=$?
 assert_eq "$SQ_GREEN_RC" "0" "sudo warning e2e: dispatch-plan-review exits 0 ($(cat "$SQ_ERR_GREEN" 2>/dev/null))"
 assert_eq "$(sq_artifact_field "$SQ_OUT_GREEN" verdict)" "READY" "sudo warning e2e: plan-review verdict is READY"
+assert_eq "$(sq_artifact_field "$SQ_OUT_GREEN" attempts.length)" "1" "sudo warning e2e: READY seat finishes on attempt 1"
 
 SQ_GREEN_STDERR="$(cat "$SQ_DIR/last-stderr-path" 2>/dev/null || true)"
 assert_file_exists "$SQ_GREEN_STDERR" "sudo warning e2e: codex private stderr file exists on disk"
@@ -1346,7 +1349,7 @@ assert_eq "$SQ_GREEN_GOT_SHA" "$SQ_GREEN_WANT_SHA" "sudo warning e2e: envelope s
 
 # 4. Failed chrome-frame codex run still records sha256 of the actual stderr file (not empty string).
 printf '%s\n' "unexpected pre-banner stderr noise" > "$SQ_DIR/codex-prewarn"
-rm -f "$SQ_DIR/last-stderr-path"
+rm -f "$SQ_DIR/last-stderr-path" "$SQ_DIR/stderr-paths"
 SQ_OUT_FAIL="$SQ_DIR/plan-review-fail.json"
 SQ_ERR_FAIL="$SQ_DIR/plan-review-fail.stderr"
 env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
@@ -1362,13 +1365,23 @@ env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u A
 SQ_FAIL_RC=$?
 rm -f "$SQ_DIR/codex-prewarn"
 assert_eq "$SQ_FAIL_RC" "4" "failed chrome check e2e: dispatch-plan-review exits 4 (transport_exhausted)"
+assert_eq "$(sq_artifact_field "$SQ_OUT_FAIL" attempts.length)" "2" \
+  "failed chrome check e2e: codex seat exhausts both attempts"
 assert_eq "$(sq_artifact_field "$SQ_OUT_FAIL" attempts.0.transport_envelope.outcome.exit_status)" "3" \
-  "failed chrome check e2e: codex seat attempt records exit_status 3"
+  "failed chrome check e2e: codex seat attempt 1 records exit_status 3"
+assert_eq "$(sq_artifact_field "$SQ_OUT_FAIL" attempts.1.transport_envelope.outcome.exit_status)" "3" \
+  "failed chrome check e2e: codex seat attempt 2 records exit_status 3"
+SQ_FAIL_STDERR_0="$(sed -n '1p' "$SQ_DIR/stderr-paths" 2>/dev/null || true)"
 SQ_FAIL_STDERR="$(cat "$SQ_DIR/last-stderr-path" 2>/dev/null || true)"
-assert_file_exists "$SQ_FAIL_STDERR" "failed chrome check e2e: codex stderr file retained on disk"
+assert_file_exists "$SQ_FAIL_STDERR_0" "failed chrome check e2e: codex attempt 1 stderr file retained on disk"
+assert_file_exists "$SQ_FAIL_STDERR" "failed chrome check e2e: codex attempt 2 stderr file retained on disk"
+assert_neq "$SQ_FAIL_STDERR_0" "$SQ_FAIL_STDERR" "failed chrome check e2e: attempts 1 and 2 retain distinct stderr files"
 assert_eq "$(sq_artifact_field "$SQ_OUT_FAIL" attempts.0.transport_envelope.output_digests.stderr_sha256)" \
+  "$(sq_file_sha256 "$SQ_FAIL_STDERR_0")" \
+  "failed chrome check e2e: attempt 1 envelope stderr_sha256 equals sha256 of attempt 1 codex stderr file"
+assert_eq "$(sq_artifact_field "$SQ_OUT_FAIL" attempts.1.transport_envelope.output_digests.stderr_sha256)" \
   "$(sq_file_sha256 "$SQ_FAIL_STDERR")" \
-  "failed chrome check e2e: envelope stderr_sha256 equals sha256 of retained codex stderr file"
+  "failed chrome check e2e: attempt 2 envelope stderr_sha256 equals sha256 of retained codex stderr file"
 
 # 5. Negative control (reproducing develop pre-fix sources): both new assertions go RED.
 SQ_MUT_ROOT="$SQ_DIR/mutant-root"
@@ -1377,6 +1390,8 @@ cp -R "$REPO_ROOT/scripts" "$SQ_MUT_ROOT/scripts"
 ln -s "$REPO_ROOT/src" "$SQ_MUT_ROOT/src"
 ln -s "$REPO_ROOT/hooks" "$SQ_MUT_ROOT/hooks"
 ln -s "$REPO_ROOT/schemas" "$SQ_MUT_ROOT/schemas"
+ln -s "$REPO_ROOT/references" "$SQ_MUT_ROOT/references"
+ln -s "$REPO_ROOT/.claude-plugin" "$SQ_MUT_ROOT/.claude-plugin"
 node - "$SQ_MUT_ROOT" <<'SQ_PATCH'
 const fs = require('fs');
 const path = require('path');
@@ -1404,7 +1419,7 @@ SQ_PATCH
 assert_eq "$?" "0" "negative control: pre-fix mutant sources constructed"
 
 printf 'warn' > "$SQ_DIR/sudo-mode"
-rm -f "$SQ_DIR/last-stderr-path"
+rm -f "$SQ_DIR/last-stderr-path" "$SQ_DIR/stderr-paths"
 SQ_OUT_MUT="$SQ_DIR/plan-review-mutant.json"
 SQ_ERR_MUT="$SQ_DIR/plan-review-mutant.stderr"
 env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u AUTOPILOT_SESSION_ID \
@@ -1419,8 +1434,12 @@ env -u WORKER_MOUNT_FORCE_MODE -u WORKER_MOUNT_MODE -u AUTOPILOT_TOKEN_SEAT -u A
   > "$SQ_OUT_MUT" 2> "$SQ_ERR_MUT" < /dev/null
 SQ_MUT_RC=$?
 assert_eq "$SQ_MUT_RC" "4" "negative control red (Fix 1): pre-fix --preserve-env warning exhausts codex seat (exit 4)"
+assert_eq "$(sq_artifact_field "$SQ_OUT_MUT" attempts.length)" "2" \
+  "negative control red (Fix 1): pre-fix codex seat exhausts both attempts"
 assert_eq "$(sq_artifact_field "$SQ_OUT_MUT" attempts.0.transport_envelope.outcome.exit_status)" "3" \
-  "negative control red (Fix 1): pre-fix codex seat attempt failed with exit_status 3"
+  "negative control red (Fix 1): pre-fix codex seat attempt 1 failed with exit_status 3"
+assert_eq "$(sq_artifact_field "$SQ_OUT_MUT" attempts.1.transport_envelope.outcome.exit_status)" "3" \
+  "negative control red (Fix 1): pre-fix codex seat attempt 2 failed with exit_status 3"
 SQ_MUT_STDERR="$(cat "$SQ_DIR/last-stderr-path" 2>/dev/null || true)"
 assert_eq "$(sq_first_nonblank_line "$SQ_MUT_STDERR")" \
   "sudo: preserving the entire environment is not supported, '--preserve-env' is ignored" \
@@ -1433,5 +1452,8 @@ fi
 assert_eq "$(sq_artifact_field "$SQ_OUT_MUT" attempts.0.transport_envelope.output_digests.stderr_sha256)" \
   "$SQ_EMPTY_SHA" \
   "negative control red (Fix 2): pre-fix dispatch-plan-review hashed empty wrapper stderr instead of codex stderr file"
+assert_eq "$(sq_artifact_field "$SQ_OUT_MUT" attempts.1.transport_envelope.output_digests.stderr_sha256)" \
+  "$SQ_EMPTY_SHA" \
+  "negative control red (Fix 2): pre-fix attempt 2 also hashed empty wrapper stderr instead of codex stderr file"
 
 finalize_test

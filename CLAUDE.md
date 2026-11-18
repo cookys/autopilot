@@ -7,6 +7,14 @@
 - Not goals now: 升版到 3.1；hosted CI；改名、轉私有、建 public repo（這三件要 operator 本人動手）。
 - Source: 出處：10/31 定稿 addendum C；operator 11/5 說的「盤點完，全部 refactor」、角色套件的方向，d-c76529c3「做，撥額度」，以及 11/5 版號規則（3.0.0.0 大版、開發中 alpha 遞增）。；操作員 d-fb9989dc 定案（2026-11-05）
 
+## This repo is yours
+
+This repo is yours and you are its long-term maintainer. When you see something broken, stale, duplicated or untested, fix it within your grant without waiting to be assigned; what you cannot fix goes into the backlog with its impact stated. Do not leave problems for "whoever comes later".
+
+## Within your grant, stop only at acceptance
+
+Work inside your grant stops only at acceptance: a real user has walked the core path on the real build, with one line of evidence (screenshot, command or URL). Green tests, a passing review and a push are intermediate steps. Stop midway only for a tier-2 destructive op, something outside your grant, or a Goal/milestone change; when you stop, say so once with options and a recommendation.
+
 For Claude Code sessions working **on** the autopilot plugin itself. Skill-runtime conventions live in each skill's `SKILL.md`. Other agents (Codex, OpenCode, Antigravity): [`AGENTS.md`](AGENTS.md); portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
 
 [Original wording](docs/dev/_archive/entry-docs/claude-md-detail.md). Directory rules load when a session reads or edits a file there: `scripts/CLAUDE.md`, `skills/CLAUDE.md`, `references/CLAUDE.md`, `platforms/CLAUDE.md`, `mods/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below.
@@ -63,7 +71,7 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 - Mission graphs: node `verification_commands` stay fast and fixed, never `bash hooks/tests/run.sh`; the whole suite runs once, alone, before a campaign merges into `develop`; red means no merge. Editing a sealed graph breaks its pinned digest.
 - The merge gate runs `check-phase-review-receipt.js` against the branch tip being merged, never the last reviewed head; any product-code delta after the reviewed head needs its own review, and at the generation cap only a PM ruling plus a post-head ledger passes ([`skills/dev-flow/references/hetero-loops.md`](skills/dev-flow/references/hetero-loops.md)).
 - No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow.
-- Destructive or irreversible ops (force-push, history rewrite, mass delete, `reset --hard`, overwriting live config) need a snapshot, a stated blast radius and explicit operator confirmation; never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)).
+- Never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)); destructive ops follow the global Red lines tiers.
 - A SHIP-AS-IS reviewed branch merges to `develop` once suites are green, never batched; `check-unmerged-ship.js` flags it after 1 h.
 - A dispatch brief that relies on rules in a subdirectory must say "read <subdir>/AGENTS.md first".
 - Cloud Kimi/GLM/Qwen/DeepSeek/MiniMax/qoder: no transcript/sensitive/core/novel/review-role (`scripts/lib/cn-model-dispatch-gate.js`). qwen_local review skip is shipped-only until 2026-11-21.

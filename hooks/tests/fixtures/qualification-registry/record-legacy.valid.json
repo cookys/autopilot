@@ -11,7 +11,7 @@
  "latency": {
   "sample_wall_time_s": 0
  },
- "origin_host": "cookys-7840hs",
+ "origin_host": "testhost-a",
  "raw": {
   "capability_score": 0.7,
   "corpus_version": "spike-e2e@2026-06-29",

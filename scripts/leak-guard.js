@@ -8,9 +8,9 @@
  * --staged and --range scan ONLY the lines a change ADDS (git diff -U0 --find-renames, filter ACMRT),
  * so history is never re-judged and a pure rename of an old file adds nothing.
  * --tree <rev> scans every tracked text file and symlink target (120000 blob, read without
- * dereferencing) at that revision (git ls-tree -r + git cat-file --batch, skipping binaries and any
- * evidence/ directory) for the categories named by --categories (comma-separated; default for --tree
- * is host only).
+ * dereferencing) at that revision (git ls-tree -r + git cat-file --batch, skipping binaries, any
+ * evidence/ directory, and the sha256-pinned frozen eval-pack entries in TREE_EXEMPT_FILES) for the
+ * categories named by --categories (comma-separated; default for --tree is host only).
  * Patterns: scripts/lib/personal-data-patterns.js (home/tmp/run paths, host names, private IPs,
  * credential shapes, e-mail addresses, and a file named .env or *.env).
  *
@@ -24,6 +24,7 @@
  *
  * Exit: 0 clean | 1 findings | 2 usage, git failure, or bad registry (never a pass).
  */
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -31,6 +32,68 @@ const patterns = require('./lib/personal-data-patterns');
 
 const DEFAULT_REGISTRY = 'scripts/leak-guard-registry.json';
 const GLOB_CHARS = /[*?[\]{}]/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
+
+// frozen eval packs, already public, pinned by manifest.json;
+// evals/ is excluded from the 3.0 public export; PM ruling 01M7PFWX.
+const TREE_EXEMPT_FILES = Object.freeze([
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-dc/scripts/resolve-review-loop.sh',
+    sha256: 'b491ee63d90fa5ebac0d8b9eed9a5e58a574b575760a4050c28c56bb7bf40e10',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v2/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v3/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v4/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v5/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v6/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v7/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v8/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v9/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v10/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v11/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+  Object.freeze({
+    path: 'evals/skill-onoff/packs/fixture-scripts-sg-red-v12/scripts/resolve-review-loop.sh',
+    sha256: 'a9acf889121c4e14c88f8b96a998bd3ec2a752fb025943800081f8234227bd6f',
+  }),
+]);
 
 function fail(code, msg) {
   process.stderr.write(`leak-guard: ${msg}\n`);
@@ -210,12 +273,53 @@ function contentFindings(root, o) {
   return scanAdded(diffLines(git(root, diffArgs(o, ['-U0'])), '+'), o.categories);
 }
 
+function loadTreeExemptMap() {
+  const overrideFile = process.env.LEAK_GUARD_TEST_TREE_EXEMPT || '';
+  let list = TREE_EXEMPT_FILES;
+  let source = 'TREE_EXEMPT_FILES';
+  if (overrideFile) {
+    source = overrideFile;
+    let raw;
+    try {
+      raw = fs.readFileSync(overrideFile, 'utf8');
+    } catch (e) {
+      fail(2, `tree exempt list unreadable: ${overrideFile} (${e.code || e.message})`);
+    }
+    try {
+      list = JSON.parse(raw);
+    } catch (e) {
+      fail(2, `tree exempt list is not valid JSON: ${overrideFile} (${e.message})`);
+    }
+    if (!Array.isArray(list)) {
+      fail(2, `tree exempt list malformed: ${overrideFile} must be a JSON array`);
+    }
+  }
+  const map = new Map();
+  list.forEach((e, i) => {
+    const at = `${source}[${i}]`;
+    if (!e || typeof e !== 'object' || Array.isArray(e)) fail(2, `${at}: not an object`);
+    if (Object.keys(e).sort().join(',') !== 'path,sha256') fail(2, `${at}: keys must be exactly path, sha256`);
+    if (typeof e.path !== 'string' || !e.path) fail(2, `${at}: path must be a non-empty string`);
+    if (GLOB_CHARS.test(e.path) || e.path.endsWith('/') || e.path.startsWith('/') || e.path.startsWith('./') || e.path.split('/').includes('..')) {
+      fail(2, `${at}: path must be a literal repo-relative file path (${e.path})`);
+    }
+    if (typeof e.sha256 !== 'string' || !SHA256_RE.test(e.sha256)) {
+      fail(2, `${at}: sha256 must be 64 lowercase hex chars`);
+    }
+    if (map.has(e.path)) fail(2, `${at}: duplicate path (${e.path})`);
+    map.set(e.path, e.sha256);
+  });
+  return map;
+}
+
 /**
  * Full-tree scan at <rev> (git ls-tree -r + git cat-file --batch; regular and 120000 symlink
- * blobs scanned without dereferencing; binaries skipped).
+ * blobs scanned without dereferencing; binaries skipped; sha256-pinned TREE_EXEMPT_FILES skipped
+ * only while their blob sha256 at <rev> matches).
  * Reports hits for o.categories (default: host only).
  */
 function treeFindings(root, o) {
+  const treeExempt = loadTreeExemptMap();
   const rev = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${o.tree}^{tree}`], { cwd: root, encoding: 'utf8' });
   if (rev.error) fail(2, `git failed: ${rev.error.message}`);
   if (rev.status !== 0) fail(2, `unknown revision: ${o.tree}`);
@@ -228,6 +332,7 @@ function treeFindings(root, o) {
   const entries = [];
   const uniqueOids = [];
   const seenOids = new Set();
+  const needShaOids = new Set();
 
   for (const rec of ls.split('\0')) {
     if (!rec) continue;
@@ -243,11 +348,12 @@ function treeFindings(root, o) {
     // Files under any evidence/ directory are excluded from the tree scan for now
     // (they will be removed by the release export).
     if (file.startsWith('evidence/') || file.includes('/evidence/')) continue;
-    if (wantEnv && patterns.isEnvFileName(file)) {
-      out.push({ file, line: 0, category: 'env_file', snippet: path.basename(file) });
-    }
-    if (wantContent) {
-      entries.push({ oid, file });
+    const isCandidate = wantContent || (wantEnv && patterns.isEnvFileName(file));
+    if (!isCandidate) continue;
+    const pinnedSha = treeExempt.get(file);
+    entries.push({ oid, file, pinnedSha });
+    if (pinnedSha) needShaOids.add(oid);
+    if (wantContent || pinnedSha) {
       if (!seenOids.has(oid)) {
         seenOids.add(oid);
         uniqueOids.push(oid);
@@ -255,54 +361,64 @@ function treeFindings(root, o) {
     }
   }
 
-  if (uniqueOids.length === 0) return out;
-
-  const batch = spawnSync('git', ['-c', 'core.quotepath=false', 'cat-file', '--batch'], {
-    cwd: root,
-    input: `${uniqueOids.join('\n')}\n`,
-    maxBuffer: 1024 * 1024 * 1024,
-  });
-  if (batch.error) fail(2, `git failed: ${batch.error.message}`);
-  if (batch.status !== 0) {
-    fail(2, `git cat-file --batch exited ${batch.status}: ${(batch.stderr ? batch.stderr.toString('utf8') : '').trim()}`);
-  }
-
-  const buf = batch.stdout;
   const blobHits = new Map();
-  let pos = 0;
-  while (pos < buf.length) {
-    const nl = buf.indexOf(10, pos);
-    if (nl < 0) fail(2, 'git cat-file --batch: truncated header');
-    const hdr = buf.subarray(pos, nl).toString('utf8');
-    const sp1 = hdr.indexOf(' ');
-    const sp2 = sp1 >= 0 ? hdr.indexOf(' ', sp1 + 1) : -1;
-    if (sp1 < 0 || sp2 < 0) fail(2, `git cat-file --batch: unexpected header: ${hdr}`);
-    const oid = hdr.slice(0, sp1);
-    const size = parseInt(hdr.slice(sp2 + 1), 10);
-    if (!Number.isFinite(size) || size < 0) fail(2, `git cat-file --batch: bad size in header: ${hdr}`);
-    const bodyStart = nl + 1;
-    const bodyEnd = bodyStart + size;
-    if (bodyEnd > buf.length) fail(2, `git cat-file --batch: truncated object ${oid}`);
-    const body = buf.subarray(bodyStart, bodyEnd);
-    pos = bodyEnd + 1;
-    if (body.includes(0)) {
-      blobHits.set(oid, []);
-      continue;
+  const blobSha256 = new Map();
+  if (uniqueOids.length > 0) {
+    const batch = spawnSync('git', ['-c', 'core.quotepath=false', 'cat-file', '--batch'], {
+      cwd: root,
+      input: `${uniqueOids.join('\n')}\n`,
+      maxBuffer: 1024 * 1024 * 1024,
+    });
+    if (batch.error) fail(2, `git failed: ${batch.error.message}`);
+    if (batch.status !== 0) {
+      fail(2, `git cat-file --batch exited ${batch.status}: ${(batch.stderr ? batch.stderr.toString('utf8') : '').trim()}`);
     }
-    const hits = [];
-    const lines = body.toString('utf8').split('\n');
-    for (let idx = 0; idx < lines.length; idx++) {
-      for (const h of patterns.findAll(lines[idx], o.categories)) {
-        const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
-        hits.push({ line: idx + 1, category: h.category, snippet });
+
+    const buf = batch.stdout;
+    let pos = 0;
+    while (pos < buf.length) {
+      const nl = buf.indexOf(10, pos);
+      if (nl < 0) fail(2, 'git cat-file --batch: truncated header');
+      const hdr = buf.subarray(pos, nl).toString('utf8');
+      const sp1 = hdr.indexOf(' ');
+      const sp2 = sp1 >= 0 ? hdr.indexOf(' ', sp1 + 1) : -1;
+      if (sp1 < 0 || sp2 < 0) fail(2, `git cat-file --batch: unexpected header: ${hdr}`);
+      const oid = hdr.slice(0, sp1);
+      const size = parseInt(hdr.slice(sp2 + 1), 10);
+      if (!Number.isFinite(size) || size < 0) fail(2, `git cat-file --batch: bad size in header: ${hdr}`);
+      const bodyStart = nl + 1;
+      const bodyEnd = bodyStart + size;
+      if (bodyEnd > buf.length) fail(2, `git cat-file --batch: truncated object ${oid}`);
+      const body = buf.subarray(bodyStart, bodyEnd);
+      pos = bodyEnd + 1;
+      if (needShaOids.has(oid)) {
+        blobSha256.set(oid, crypto.createHash('sha256').update(body).digest('hex'));
       }
+      if (!wantContent || body.includes(0)) {
+        blobHits.set(oid, []);
+        continue;
+      }
+      const hits = [];
+      const lines = body.toString('utf8').split('\n');
+      for (let idx = 0; idx < lines.length; idx++) {
+        for (const h of patterns.findAll(lines[idx], o.categories)) {
+          const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
+          hits.push({ line: idx + 1, category: h.category, snippet });
+        }
+      }
+      blobHits.set(oid, hits);
     }
-    blobHits.set(oid, hits);
   }
 
-  for (const { oid, file } of entries) {
-    for (const h of blobHits.get(oid) || []) {
-      out.push({ file, line: h.line, category: h.category, snippet: h.snippet });
+  for (const { oid, file, pinnedSha } of entries) {
+    if (pinnedSha && blobSha256.get(oid) === pinnedSha) continue;
+    if (wantEnv && patterns.isEnvFileName(file)) {
+      out.push({ file, line: 0, category: 'env_file', snippet: path.basename(file) });
+    }
+    if (wantContent) {
+      for (const h of blobHits.get(oid) || []) {
+        out.push({ file, line: h.line, category: h.category, snippet: h.snippet });
+      }
     }
   }
   return out;
@@ -497,4 +613,6 @@ function main() {
   process.exit(1);
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { TREE_EXEMPT_FILES };

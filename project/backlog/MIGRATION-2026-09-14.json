@@ -11,13 +11,13 @@
       "sidecar": "project/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md"
     },
     {
-      "title": "PEER-REPORTED (308-8f): an agy hand commits to the MAIN checkout from inside its worktree — REPRODUCED, FIXED v2.36.37",
-      "slug": "peer-reported-308-8f-an-agy-hand-commits-to-the-main-checkout-from-inside-its-wo",
+      "title": "PEER-REPORTED (testhost-a): an agy hand commits to the MAIN checkout from inside its worktree — REPRODUCED, FIXED v2.36.37",
+      "slug": "peer-reported-testhost-a-an-agy-hand-commits-to-the-main-checkout-from-inside-its-wo",
       "bytes_before": 1713,
       "bytes_after": 618,
       "moved_bytes": 1588,
       "moved_sha256": "ee58287d7bd919119bc008554898bc528456e008cedc50dccbb585542fe1e59b",
-      "sidecar": "docs/backlog/peer-reported-308-8f-an-agy-hand-commits-to-the-main-checkout-from-inside-its-wo.md"
+      "sidecar": "docs/backlog/peer-reported-testhost-a-an-agy-hand-commits-to-the-main-checkout-from-inside-its-wo.md"
     },
     {
       "title": "Dev mode layer ③ (marketplace clone) as a symlink — spike before changing dev-setup",
@@ -29,13 +29,13 @@
       "sidecar": "docs/backlog/dev-mode-layer-marketplace-clone-as-a-symlink-spike-before-changing-dev-setup.md"
     },
     {
-      "title": "PEER-REPORTED (cuda, for revival.3d): a backlog ENTRY has no schema, no DI, and no mechanical gate — so backlogs become work journals",
-      "slug": "peer-reported-cuda-for-revival-3d-a-backlog-entry-has-no-schema-no-di-and-no-mec",
+      "title": "PEER-REPORTED (host-b, for revival.3d): a backlog ENTRY has no schema, no DI, and no mechanical gate — so backlogs become work journals",
+      "slug": "peer-reported-host-b-for-revival-3d-a-backlog-entry-has-no-schema-no-di-and-no-mec",
       "bytes_before": 2576,
       "bytes_after": 645,
       "moved_bytes": 2436,
       "moved_sha256": "10174aa7ac3160cd50e7ca7d0dbf5f8e94aa7929ba786fe38a2afc8efa1b1ad4",
-      "sidecar": "docs/backlog/peer-reported-cuda-for-revival-3d-a-backlog-entry-has-no-schema-no-di-and-no-mec.md"
+      "sidecar": "docs/backlog/peer-reported-host-b-for-revival-3d-a-backlog-entry-has-no-schema-no-di-and-no-mec.md"
     },
     {
       "title": "Managed rail: `--resume` with a disposition authority drops the prior findings and terminal-stops the campaign",
@@ -83,40 +83,40 @@
       "sidecar": "docs/backlog/managed-campaign-intake-a-rejected-intake-sometimes-releases-the-mission-claim-a.md"
     },
     {
-      "title": "PEER-REPORTED (chatgpt-tunnel-host via cuda): a non-Claude foreman rail — and two contract defects that are not really about foremen",
-      "slug": "peer-reported-chatgpt-tunnel-host-via-cuda-a-non-claude-foreman-rail-and-two-con",
+      "title": "PEER-REPORTED (testhost-a via host-b): a non-Claude foreman rail — and two contract defects that are not really about foremen",
+      "slug": "peer-reported-testhost-a-via-host-b-a-non-claude-foreman-rail-and-two-con",
       "bytes_before": 4090,
       "bytes_after": 723,
       "moved_bytes": 3951,
       "moved_sha256": "de0e6b8ec69ae770d601ad4e7c9377745687898cf990f6dc5efb3e059683777b",
-      "sidecar": "docs/backlog/peer-reported-chatgpt-tunnel-host-via-cuda-a-non-claude-foreman-rail-and-two-con.md"
+      "sidecar": "docs/backlog/peer-reported-testhost-a-via-host-b-a-non-claude-foreman-rail-and-two-con.md"
     },
     {
-      "title": "PEER-REPORTED (7840hs, unverified locally): four dispatch-layer defects, three of them silent",
-      "slug": "peer-reported-7840hs-unverified-locally-four-dispatch-layer-defects-three-of-the",
+      "title": "PEER-REPORTED (testhost-a, unverified locally): four dispatch-layer defects, three of them silent",
+      "slug": "peer-reported-testhost-a-unverified-locally-four-dispatch-layer-defects-three-of-the",
       "bytes_before": 4887,
       "bytes_after": 682,
       "moved_bytes": 4789,
       "moved_sha256": "37e6f761b1c425df333415ade4fb15fff48962cd56047f470fb359f7984c4382",
-      "sidecar": "docs/backlog/peer-reported-7840hs-unverified-locally-four-dispatch-layer-defects-three-of-the.md"
+      "sidecar": "docs/backlog/peer-reported-testhost-a-unverified-locally-four-dispatch-layer-defects-three-of-the.md"
     },
     {
-      "title": "PEER-REPORTED (308 dogfood): acceptance records no accepted SHA, so containment cannot be checked mechanically",
-      "slug": "peer-reported-308-dogfood-acceptance-records-no-accepted-sha-so-containment-cann",
+      "title": "PEER-REPORTED (testhost-a dogfood): acceptance records no accepted SHA, so containment cannot be checked mechanically",
+      "slug": "peer-reported-testhost-a-dogfood-acceptance-records-no-accepted-sha-so-containment-cann",
       "bytes_before": 6303,
       "bytes_after": 687,
       "moved_bytes": 6188,
       "moved_sha256": "23c0c2333d4f25bfdeb92079fc59c12df73b36a997b7cb1d01a1a9e685c453c5",
-      "sidecar": "docs/backlog/peer-reported-308-dogfood-acceptance-records-no-accepted-sha-so-containment-cann.md"
+      "sidecar": "docs/backlog/peer-reported-testhost-a-dogfood-acceptance-records-no-accepted-sha-so-containment-cann.md"
     },
     {
-      "title": "PEER-REPORTED (openclaw): an active l5 marker deadlocks the bounded campaign /l5 itself launched — MAIN CLAIM CLOSED v2.36.28, two side effects open",
-      "slug": "peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its",
+      "title": "PEER-REPORTED (host-b): an active l5 marker deadlocks the bounded campaign /l5 itself launched — MAIN CLAIM CLOSED v2.36.28, two side effects open",
+      "slug": "peer-reported-host-b-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its",
       "bytes_before": 4518,
       "bytes_after": 430,
       "moved_bytes": 4363,
       "moved_sha256": "d280a470e4f30fa5b16853645524f8f30fc284cd0faa49fc0cdb29ba52c45ed4",
-      "sidecar": "project/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md"
+      "sidecar": "project/backlog/peer-reported-host-b-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md"
     },
     {
       "title": "Reconnaissance and implementation share one leaf bash budget, so a leaf can exhaust it before touching code",

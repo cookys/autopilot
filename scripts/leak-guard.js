@@ -7,9 +7,10 @@
  *
  * --staged and --range scan ONLY the lines a change ADDS (git diff -U0 --find-renames, filter ACMRT),
  * so history is never re-judged and a pure rename of an old file adds nothing.
- * --tree <rev> scans every tracked text file at that revision (git ls-tree -r + git cat-file --batch,
- * skipping binaries and any evidence/ directory) for the categories named by --categories (comma-
- * separated; default for --tree is host only).
+ * --tree <rev> scans every tracked text file and symlink target (120000 blob, read without
+ * dereferencing) at that revision (git ls-tree -r + git cat-file --batch, skipping binaries and any
+ * evidence/ directory) for the categories named by --categories (comma-separated; default for --tree
+ * is host only).
  * Patterns: scripts/lib/personal-data-patterns.js (home/tmp/run paths, host names, private IPs,
  * credential shapes, e-mail addresses, and a file named .env or *.env).
  *
@@ -210,7 +211,8 @@ function contentFindings(root, o) {
 }
 
 /**
- * Full-tree scan at <rev> (git ls-tree -r + git cat-file --batch; binaries skipped).
+ * Full-tree scan at <rev> (git ls-tree -r + git cat-file --batch; regular and 120000 symlink
+ * blobs scanned without dereferencing; binaries skipped).
  * Reports hits for o.categories (default: host only).
  */
 function treeFindings(root, o) {
@@ -232,11 +234,12 @@ function treeFindings(root, o) {
     const tab = rec.indexOf('\t');
     if (tab < 0) continue;
     const meta = rec.slice(0, tab).trim().split(/\s+/);
-    const mode = meta[0];
     const type = meta[1];
     const oid = meta[2];
     const file = rec.slice(tab + 1);
-    if (type !== 'blob' || mode === '120000') continue;
+    // Both regular files (100644/100755) and symlinks (120000, whose git blob holds the stored
+    // link target text, read via git cat-file --batch without dereferencing) have type === 'blob'.
+    if (type !== 'blob') continue;
     // Files under any evidence/ directory are excluded from the tree scan for now
     // (they will be removed by the release export).
     if (file.startsWith('evidence/') || file.includes('/evidence/')) continue;

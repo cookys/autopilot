@@ -870,4 +870,140 @@ LE_NONSEG="$(git -C "$LE" rev-parse HEAD)"
 LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-nonseg $LE_NONSEG refs/heads/ev-nonseg $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
 assert_eq "$?" "0" "push-evidence twin: file without evidence/ directory segment passes"
 
+# (3g) RED regression: one pushed commit adds docs/plans/evidence/x/new.md and the next deletes it -> push refused
+git -C "$LE" checkout -q -B ev-add-del "$LE_BASE"
+echo "transient evidence" > "$LE/docs/plans/evidence/x/new.md"
+git -C "$LE" add docs/plans/evidence/x/new.md
+git -C "$LE" commit -q -m "add transient evidence"
+git -C "$LE" rm -q docs/plans/evidence/x/new.md
+git -C "$LE" commit -q -m "delete transient evidence"
+LE_ADD_DEL="$(git -C "$LE" rev-parse HEAD)"
+assert_eq "$(git -C "$LE" diff --name-only "$LE_BASE" "$LE_ADD_DEL")" "" "push-evidence add-del: endpoint trees are identical"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-add-del $LE_ADD_DEL refs/heads/ev-add-del $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence add-del: adding then deleting docs/plans/evidence/x/new.md in pushed range is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/new.md" "push-evidence add-del: names docs/plans/evidence/x/new.md"
+assert_contains "$LE_OUT" "evidence stays local; keep it in an untracked directory." "push-evidence add-del: prints local-evidence guidance"
+
+# (3h) RED regression: same add-then-delete range pushed as a brand-new ref (remote sha all zeros, --not --remotes) is refused
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-add-del-new $LE_ADD_DEL refs/heads/ev-add-del-new $ZERO" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence add-del new-ref: new ref with transient evidence commit is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/new.md" "push-evidence add-del new-ref: names docs/plans/evidence/x/new.md"
+
+# (3i) RED: rename into evidence/ in commit 1, renamed back out in commit 2 -> push refused
+git -C "$LE" checkout -q -B ev-mv-back "$LE_BASE"
+git -C "$LE" mv src/plain.md docs/plans/evidence/x/mv-temp.md
+git -C "$LE" commit -q -m "rename into evidence temporarily"
+git -C "$LE" mv docs/plans/evidence/x/mv-temp.md src/plain.md
+git -C "$LE" commit -q -m "rename back out of evidence"
+LE_MV_BACK="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-mv-back $LE_MV_BACK refs/heads/ev-mv-back $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence mv-back: temporary rename into evidence/ is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/mv-temp.md" "push-evidence mv-back: names docs/plans/evidence/x/mv-temp.md"
+
+# (3j) GREEN twin: adding and deleting a non-evidence file across pushed commits passes
+git -C "$LE" checkout -q -B ev-clean-transient "$LE_BASE"
+echo "temp" > "$LE/src/temp.md"
+git -C "$LE" add src/temp.md
+git -C "$LE" commit -q -m "add src/temp.md"
+git -C "$LE" rm -q src/temp.md
+git -C "$LE" commit -q -m "delete src/temp.md"
+LE_CLEAN_TR="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-clean-transient $LE_CLEAN_TR refs/heads/ev-clean-transient $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-evidence add-del twin: transient non-evidence file passes"
+
+# (3k) Merge commit: clean merge of an already-published evidence file passes; evil merge adding new evidence/ is refused
+git -C "$LE" checkout -q -B ev-pub-side "$LE_BASE"
+echo "already published on remote" > "$LE/docs/plans/evidence/x/pub-side.md"
+git -C "$LE" add docs/plans/evidence/x/pub-side.md
+git -C "$LE" commit -q -m "published side evidence"
+LE_PUB_SIDE="$(git -C "$LE" rev-parse HEAD)"
+git -C "$LE" update-ref refs/remotes/origin/ev-pub-side "$LE_PUB_SIDE"
+git -C "$LE" checkout -q -B ev-merge-ok "$LE_BASE"
+echo "feature change" > "$LE/src/feat-m.txt"
+git -C "$LE" add src/feat-m.txt
+git -C "$LE" commit -q -m "feature work"
+git -C "$LE" merge -q --no-ff -m "merge published side" ev-pub-side
+LE_MERGE_OK="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-merge-ok $LE_MERGE_OK refs/heads/ev-merge-ok $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-evidence merge twin: merging already-on-remote evidence file passes"
+
+git -C "$LE" checkout -q -B ev-merge-evil "$LE_BASE"
+echo "feature change 2" > "$LE/src/feat-m2.txt"
+git -C "$LE" add src/feat-m2.txt
+git -C "$LE" commit -q -m "feature work 2"
+git -C "$LE" merge -q --no-ff --no-commit ev-pub-side >/dev/null 2>&1
+echo "smuggled in merge" > "$LE/docs/plans/evidence/x/evil-merge.md"
+git -C "$LE" add docs/plans/evidence/x/evil-merge.md
+git -C "$LE" commit -q -m "evil merge adds evidence"
+LE_MERGE_EVIL="$(git -C "$LE" rev-parse HEAD)"
+LE_OUT="$(cd "$LE" && printf '%s\n' "refs/heads/ev-merge-evil $LE_MERGE_EVIL refs/heads/ev-merge-evil $LE_BASE" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-evidence evil merge: merge introducing new evidence/ absent from all parents is refused"
+assert_contains "$LE_OUT" "docs/plans/evidence/x/evil-merge.md" "push-evidence evil merge: names docs/plans/evidence/x/evil-merge.md"
+assert_not_contains "$LE_OUT" "pub-side.md" "push-evidence evil merge: does not blame parent's published evidence file"
+
+# ── Part 4: leak-guard --tree scans mode 120000 (symlink) blobs without dereferencing (+ codex mirror) ──
+LSYM="$TEST_TMP/lgsym"
+git init -q "$LSYM"
+git -C "$LSYM" config core.hooksPath /dev/null
+git -C "$LSYM" config commit.gpgsign false
+mkdir -p "$LSYM/src" "$LSYM/docs/plans/evidence/r1" "$LSYM/scripts/lib" "$LSYM/hooks/_shared"
+cp "$REPO_ROOT/scripts/leak-guard.js" "$LSYM/scripts/leak-guard.js"
+cp "$REPO_ROOT/scripts/lib/personal-data-patterns.js" "$LSYM/scripts/lib/personal-data-patterns.js"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$LSYM/hooks/_shared/secret-patterns.js"
+printf '{"version":1,"entries":[]}\n' > "$LSYM/scripts/leak-guard-registry.json"
+
+echo "clean file" > "$LSYM/src/ok.txt"
+printf 'host testhost-a inside excluded evidence file\n' > "$LSYM/docs/plans/evidence/r1/log.md"
+ln -s "../testhost-a/missing-share" "$LSYM/src/host-link"
+ln -s "../docs/plans/evidence/r1/log.md" "$LSYM/src/clean-link"
+ln -s "../testhost-a/ev-share" "$LSYM/docs/plans/evidence/r1/ev-link"
+git -C "$LSYM" add src docs
+git -C "$LSYM" commit -q -m "published tree with symlinks"
+LSYM_PUB="$(git -C "$LSYM" rev-parse HEAD)"
+git -C "$LSYM" update-ref refs/remotes/origin/develop "$LSYM_PUB"
+
+assert_contains "$(git -C "$LSYM" ls-tree "$LSYM_PUB" -- src/host-link)" "120000 blob" "tree-symlink: src/host-link is stored as mode 120000 blob"
+
+SYM_JSON="$(cd "$LSYM" && node "$GUARD" --tree "$LSYM_PUB" --registry "$REG" --json)"
+SYM_RC=$?
+assert_eq "$SYM_RC" "1" "tree-symlink: --tree blocks tracked 120000 symlink whose target contains testhost-a"
+assert_contains "$SYM_JSON" '"file": "src/host-link"' "tree-symlink: JSON names src/host-link"
+assert_contains "$SYM_JSON" '"category": "host"' "tree-symlink: JSON reports host category"
+assert_contains "$SYM_JSON" '"snippet": "testhost-a"' "tree-symlink: JSON reports matched host snippet"
+assert_not_contains "$SYM_JSON" "clean-link" "tree-symlink: symlink with clean target text is not dereferenced"
+assert_not_contains "$SYM_JSON" "ev-link" "tree-symlink: symlink under evidence/ stays excluded"
+
+SYM_MIRROR_JSON="$(cd "$LSYM" && node "$REPO_ROOT/platforms/codex/plugin/scripts/leak-guard.js" --tree "$LSYM_PUB" --registry "$REG" --json)"
+assert_eq "$?" "1" "tree-symlink mirror: codex mirror --tree also blocks 120000 symlink target with testhost-a"
+assert_contains "$SYM_MIRROR_JSON" '"file": "src/host-link"' "tree-symlink mirror: codex mirror names src/host-link"
+
+echo "unrelated change" > "$LSYM/src/next.txt"
+git -C "$LSYM" add src/next.txt
+git -C "$LSYM" commit -q -m "clean commit over published symlink"
+LSYM_NEW="$(git -C "$LSYM" rev-parse HEAD)"
+LSYM_PUSH_OUT="$(cd "$LSYM" && printf '%s\n' "refs/heads/feature $LSYM_NEW refs/heads/feature $LSYM_PUB" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "1" "push-tree-symlink: already-pushed symlink whose target contains testhost-a blocks pre-push"
+assert_contains "$LSYM_PUSH_OUT" "src/host-link:1" "push-tree-symlink: names src/host-link:1"
+assert_contains "$LSYM_PUSH_OUT" "[host]" "push-tree-symlink: names host category"
+
+ln -sfn "../clean-share/target" "$LSYM/src/host-link"
+git -C "$LSYM" add src/host-link
+git -C "$LSYM" commit -q -m "point symlink at clean target"
+LSYM_CLEAN="$(git -C "$LSYM" rev-parse HEAD)"
+LSYM_PUSH_OUT="$(cd "$LSYM" && printf '%s\n' "refs/heads/feature $LSYM_CLEAN refs/heads/feature $LSYM_PUB" | bash "$REPO_ROOT/.githooks/pre-push" origin 2>&1)"
+assert_eq "$?" "0" "push-tree-symlink twin: clean symlink target passes pre-push"
+
+MUT4="$TEST_TMP/mut4"; mkdir -p "$MUT4/scripts/lib" "$MUT4/hooks/_shared"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$MUT4/scripts/lib/"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT4/hooks/_shared/"
+node -e '
+  const fs = require("fs"); const s = fs.readFileSync(process.argv[1], "utf8");
+  const t = s.replace("if (type !== \x27blob\x27) continue;", "if (type !== \x27blob\x27 || meta[0] === \x27120000\x27) continue;");
+  if (t === s) { process.stderr.write("mutation did not apply\n"); process.exit(3); }
+  fs.writeFileSync(process.argv[2], t);
+' "$REPO_ROOT/scripts/leak-guard.js" "$MUT4/scripts/leak-guard.js"
+assert_eq "$?" "0" "tree-symlink NC: 120000 skip restored in mutant copy"
+(cd "$LSYM" && node "$MUT4/scripts/leak-guard.js" --tree "$LSYM_PUB" --registry "$REG" >/dev/null 2>&1)
+assert_eq "$?" "0" "tree-symlink NC: with 120000 skipped, --tree misses the symlink host leak"
+
 finalize_test

@@ -111,8 +111,9 @@ fi
 
 # --- evidence-guard: no new evidence/ files may be pushed to the remote ---
 # Modifying or deleting existing tracked evidence files is allowed while legacy evidence is retired;
-# adding a path starting with evidence/ or containing /evidence/ (including renames/copies via
-# --no-renames) is refused before layout-lint and the qc-gate.
+# adding a path starting with evidence/ or containing /evidence/ in ANY newly pushed commit
+# (including renames/copies via --no-renames, even if a later commit in the push deletes it) is
+# refused before layout-lint and the qc-gate.
 __ev_fail=0
 __ev_check_diff() {
   local __ev_left="$1" __ev_right="$2" __ev_p
@@ -124,77 +125,68 @@ __ev_check_diff() {
     esac
   done < <(git -C "$REPO_ROOT" -c core.quotepath=false -c diff.renames=false diff --no-renames --diff-filter=A --name-only -z "$__ev_left" "$__ev_right" 2>/dev/null || true)
 }
+__ev_added_in_diff() {
+  local __ev_a="$1" __ev_b="$2" __ev_target="$3" __ev_item
+  while IFS= read -r -d '' __ev_item; do
+    [ "$__ev_item" = "$__ev_target" ] && return 0
+  done < <(git -C "$REPO_ROOT" -c core.quotepath=false -c diff.renames=false diff --no-renames --diff-filter=A --name-only -z "$__ev_a" "$__ev_b" -- "$__ev_target" 2>/dev/null || true)
+  return 1
+}
 while read -r __ev_lref __ev_lsha __ev_rref __ev_rsha; do
   [ -z "${__ev_lsha:-}" ] && continue
   echo "$__ev_lsha" | grep -qE '^0+$' && continue
   __ev_new="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${__ev_lsha}^{commit}" 2>/dev/null || true)"
   [ -n "$__ev_new" ] || continue
   __ev_not=(--not)
+  __ev_have_rsha=0
   if [ -n "${__ev_rsha:-}" ] && ! echo "$__ev_rsha" | grep -qE '^0+$'; then
     if git -C "$REPO_ROOT" cat-file -e "${__ev_rsha}^{commit}" 2>/dev/null; then
       __ev_not+=("$__ev_rsha")
+      __ev_have_rsha=1
     fi
   fi
   if [ -n "${__PUSH_REMOTE:-}" ]; then
     __ev_not+=("--remotes=${__PUSH_REMOTE}")
-  else
+  elif [ "$__ev_have_rsha" -eq 0 ]; then
     __ev_not+=(--remotes)
   fi
-  __ev_raw="$(git -C "$REPO_ROOT" rev-list --boundary "$__ev_new" "${__ev_not[@]}" 2>/dev/null)" || continue
-  [ -n "$__ev_raw" ] || continue
-  __ev_commits=""
-  __ev_bounds=""
-  while read -r __ev_line; do
-    [ -n "$__ev_line" ] || continue
-    case "$__ev_line" in
-      -*) __ev_bounds="${__ev_bounds}${__ev_line#-}"$'\n' ;;
-      *)  __ev_commits="${__ev_commits}${__ev_line}"$'\n' ;;
-    esac
-  done <<< "$__ev_raw"
-  [ -n "$__ev_commits" ] || continue
-  __ev_bn=0
-  __ev_b=""
-  while read -r __ev_line; do
-    [ -n "$__ev_line" ] || continue
-    __ev_bn=$((__ev_bn + 1))
-    __ev_b="$__ev_line"
-  done <<< "$__ev_bounds"
-  __ev_refused=()
-  if [ "$__ev_bn" -eq 1 ]; then
-    __ev_check_diff "$__ev_b" "$__ev_new"
-  elif [ "$__ev_bn" -eq 0 ]; then
-    __ev_empty="$(git -C "$REPO_ROOT" hash-object -t tree /dev/null)"
-    __ev_check_diff "$__ev_empty" "$__ev_new"
-  else
-    while read -r __ev_c; do
-      [ -n "$__ev_c" ] || continue
-      if git -C "$REPO_ROOT" rev-parse --verify --quiet "${__ev_c}^2" >/dev/null 2>&1; then
-        while IFS= read -r -d '' __ev_p; do
-          case "$__ev_p" in
-            evidence/*|*/evidence/*)
-              __ev_in_parent=0
-              while read -r __ev_par; do
-                [ -n "$__ev_par" ] || continue
-                if git -C "$REPO_ROOT" cat-file -e "${__ev_par}:${__ev_p}" 2>/dev/null; then
-                  __ev_in_parent=1
-                  break
-                fi
-              done < <(git -C "$REPO_ROOT" rev-parse "${__ev_c}^@" 2>/dev/null || true)
-              [ "$__ev_in_parent" -eq 0 ] && __ev_refused+=("$__ev_p")
-              ;;
-          esac
-        done < <(git -C "$REPO_ROOT" -c core.quotepath=false -c diff.renames=false diff --no-renames --diff-filter=A --name-only -z "${__ev_c}^1" "$__ev_c" 2>/dev/null || true)
-      else
-        __ev_p1="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${__ev_c}^" 2>/dev/null || true)"
-        if [ -n "$__ev_p1" ]; then
-          __ev_check_diff "$__ev_p1" "$__ev_c"
-        else
-          __ev_empty="$(git -C "$REPO_ROOT" hash-object -t tree /dev/null)"
-          __ev_check_diff "$__ev_empty" "$__ev_c"
-        fi
-      fi
-    done <<< "$__ev_commits"
+  if ! __ev_commits="$(git -C "$REPO_ROOT" rev-list "$__ev_new" "${__ev_not[@]}" 2>/dev/null)"; then
+    printf 'pre-push: %s: could not list commits not already on the remote - push blocked\n' "${__ev_lref:-HEAD}" >&2
+    __ev_fail=1
+    continue
   fi
+  [ -n "$__ev_commits" ] || continue
+  __ev_refused=()
+  __ev_empty=""
+  while read -r __ev_c; do
+    [ -n "$__ev_c" ] || continue
+    if git -C "$REPO_ROOT" rev-parse --verify --quiet "${__ev_c}^2" >/dev/null 2>&1; then
+      while IFS= read -r -d '' __ev_p; do
+        case "$__ev_p" in
+          evidence/*|*/evidence/*)
+            __ev_in_parent=0
+            while read -r __ev_par; do
+              [ -n "$__ev_par" ] || continue
+              if git -C "$REPO_ROOT" cat-file -e "${__ev_par}^{commit}" 2>/dev/null \
+                 && ! __ev_added_in_diff "$__ev_par" "$__ev_c" "$__ev_p"; then
+                __ev_in_parent=1
+                break
+              fi
+            done < <(git -C "$REPO_ROOT" rev-parse "${__ev_c}^@" 2>/dev/null || true)
+            [ "$__ev_in_parent" -eq 0 ] && __ev_refused+=("$__ev_p")
+            ;;
+        esac
+      done < <(git -C "$REPO_ROOT" -c core.quotepath=false -c diff.renames=false diff --no-renames --diff-filter=A --name-only -z "${__ev_c}^1" "$__ev_c" 2>/dev/null || true)
+    else
+      __ev_p1="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${__ev_c}^1" 2>/dev/null || true)"
+      if [ -n "$__ev_p1" ]; then
+        __ev_check_diff "$__ev_p1" "$__ev_c"
+      else
+        [ -n "$__ev_empty" ] || __ev_empty="$(git -C "$REPO_ROOT" hash-object -t tree /dev/null)"
+        __ev_check_diff "$__ev_empty" "$__ev_c"
+      fi
+    fi
+  done <<< "$__ev_commits"
   if [ "${#__ev_refused[@]}" -gt 0 ]; then
     printf '\n\033[1mpre-push: %s blocked — new evidence file(s) refused:\033[0m\n' "${__ev_lref:-HEAD}" >&2
     printf '%s\n' "${__ev_refused[@]}" | awk '!seen[$0]++ { print "  " $0 }' >&2

@@ -478,11 +478,17 @@ XDG_ROT="$TEST_TMP/xdg-rot"
 mkdir -p "$XDG_ROT/autopilot"
 node -e '
 const fs = require("fs");
-const p = process.argv[1];
+const { MAX_LOG_BYTES } = require(process.argv[1]);
+const p = process.argv[2];
+const targetBytes = MAX_LOG_BYTES - 10;
+const emptyBytes = Buffer.byteLength(JSON.stringify({ pad: "" }) + "\n");
 const chunk = JSON.stringify({ pad: "x".repeat(1000) }) + "\n";
-const count = Math.floor((2 * 1024 * 1024 - 100) / Buffer.byteLength(chunk));
-fs.writeFileSync(p, chunk.repeat(count));
-' "$XDG_ROT/autopilot/worktree-removals.jsonl" < /dev/null
+const chunkBytes = Buffer.byteLength(chunk);
+const count = Math.floor((targetBytes - emptyBytes) / chunkBytes);
+const rem = targetBytes - count * chunkBytes;
+const tail = JSON.stringify({ pad: "x".repeat(rem - emptyBytes) }) + "\n";
+fs.writeFileSync(p, chunk.repeat(count) + tail);
+' "$REPO_ROOT/scripts/lib/worktree-removal-log.js" "$XDG_ROT/autopilot/worktree-removals.jsonl" < /dev/null
 
 XDG_RUNTIME_DIR="$XDG_ROT" node "$REPO_ROOT/scripts/lib/worktree-removal-log.js" log \
   --remover "rotation-check.js" --path "$TEST_TMP/rot-wt" --branch "feat/rot" \

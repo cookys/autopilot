@@ -5,11 +5,11 @@
 //   node scripts/project-record.js [--target <dir>] [--key <k>] [--json] <subcommand> [flags]
 //
 //   backlog new   --title T --trigger S --trigger-type TT --effort E --origin O --source S (--problem S|--problem-file F|--problem -)
-//                 --impact S [--type bug|feature|debt|question|chore] [--reporter R --report M --reply R] [--pointer P]
+//                 --impact S [--type debt] [--reporter R --report M --reply R] [--pointer P]
 //                 [--context C|--context-file F] [--relates ULID]...
 //   backlog reply <id> --reply "<date> <ptr>"            backlog close <id> done|cancelled|superseded [--commit SHA] [--by REF]
 //   backlog sync  <id>                                    (put an open store record's row into BACKLOG.md; no store write)
-//   backlog import <BL-id> [--type bug|feature|debt|question|chore] (import an existing BACKLOG.md row into the store; no file write)
+//   backlog import <BL-id> [--type debt] (import an existing BACKLOG.md row into the store; no file write)
 //   decision new  --title T --rationale-file F|- [--ledger-row ID] [--area A] [--relates ULID]... [--decides ULID]...
 //   decision supersede <old> <same flags>                adr new --title T --body-file F|- [--status active|open] [--adr-dir D]
 //   adr supersede <old> <same flags>                     lesson new --title T --category build|debug|arch|env|api --body-file F|-
@@ -44,7 +44,7 @@ const { HippoError } = hippo;
 const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const KEY_RE = /^[0-9a-f]{16}$/;
 const AREA_RE = /^[a-z0-9][a-z0-9._-]*$/;
-const TYPES = ['bug', 'feature', 'debt', 'question', 'chore'];
+const BACKLOG_TYPE = 'debt';
 const DEFAULT_ADR_DIR = 'docs/dev/adr';
 const COUNTER_RE = /^(count|hits|uses|views)$/;
 
@@ -240,7 +240,7 @@ const H = {};
 H['backlog new'] = {
   parse(f) {
     const type = f.type === undefined ? 'debt' : f.type;
-    if (!TYPES.includes(type)) throw refuse('invalid-value', 'type', `${type} (expected ${TYPES.join('|')})`);
+    if (type !== BACKLOG_TYPE) throw refuse('invalid-value', 'type', `${type} (expected ${BACKLOG_TYPE}: hippo's autopilot-backlog importer derives that type for every row, any other type shows up as drift on re-import)`);
     const input = {
       title: f.title, trigger: f.trigger, triggerType: f['trigger-type'], effort: f.effort, origin: f.origin, source: f.source,
       problem: textOpt(f, 'problem'), impact: f.impact, reporter: f.reporter, report: f.report, reply: f.reply, pointer: f.pointer,
@@ -261,8 +261,26 @@ H['backlog new'] = {
     const r = rf.backlogNew(repo, p.input, { clock });
     return p.relates.length ? Object.assign(r, { info_lines: r.info_lines.concat(['files mode keeps no relations; --relates was not recorded']) }) : r;
   },
-  plan(repo, p, key, v) {
-    const fl = v.fields;
+  plan(repo, p, key, v, state) {
+    let curV = v;
+    const idx = state === 'spool' ? null : storeProvenanceIndex(repo);
+    const view = state === 'spool' ? null : rf.backlogView(repo);
+    if (idx && view && p.relates.length) {
+      const relRefs = [];
+      for (const id of p.relates) {
+        const r = idx.byId.get(id);
+        if (r && !relRefs.includes(r)) relRefs.push(r);
+      }
+      if (relRefs.length) {
+        const mentioned = new Set(mentionRefsFromFields(curV.fields, view.nextId));
+        const missing = relRefs.filter((r) => !mentioned.has(r));
+        if (missing.length) {
+          p.input.context = appendRelatedContext(p.input.context, missing);
+          curV = H['backlog new'].validate(repo, p, state);
+        }
+      }
+    }
+    const fl = curV.fields;
     const tags = [`origin:${fl.Origin.toLowerCase()}`].concat(effortTags(fl.Effort), [triggerTag(fl['Trigger-Type'])]);
     const rt = fl.Reporter ? reporterTag(fl.Reporter) : null;
     if (rt) tags.push(rt);
@@ -271,7 +289,14 @@ H['backlog new'] = {
     const body = ['Since', 'Report', 'Reply', 'Problem', 'Impact', 'Trigger', 'Source', 'Pointer', 'Context']
       .filter((n) => fl[n] != null).map((n) => `- **${n}**: ${fl[n]}`).join('\n') + '\n';
     const steps = [{ op: 'create', ref: 'root', kind: 'issue', argv, body, key }];
-    for (const id of p.relates) steps.push({ op: 'link', from: 'root', rel: 'relates_to', to: id, leak_ok: false });
+    const linkIds = new Set(p.relates);
+    if (idx) {
+      for (const r of mentionRefsFromFields(fl, view ? view.nextId : null)) {
+        const tid = idx.byRef.get(r);
+        if (tid) linkIds.add(tid);
+      }
+    }
+    for (const id of linkIds) steps.push({ op: 'link', from: 'root', rel: 'relates_to', to: id, leak_ok: false });
     // reported_by needs a full fleet address as Reporter and a ULID message id as Report; otherwise the id stays in the body only
     if (fl.Reporter && /^[^/\s]+\/[^/\s]+\/[^/\s]+$/.test(fl.Reporter) && ULID_RE.test(fl.Report || '')) {
       steps.push({ op: 'link', from: 'root', rel: 'reported_by', to: `fleet:${fl.Reporter}#${fl.Report}`, leak_ok: true });
@@ -516,6 +541,78 @@ H['handoff close'] = {
 // Each `after` runs once the store write succeeded (never on a spool or a refusal) and puts the same change into the file with the
 // files-mode writer. It returns an info line (or null) and throws RecordError/RuleViolationError when the file step is refused.
 
+const MENTION_REF_RE = /(?<![A-Za-z0-9_-])(BL-\d{4,}|ADR-\d{4,})(?![0-9A-Za-z_-])/g;
+
+function provenanceRef(rec) {
+  const pv = rec && rec.provenance;
+  if (!pv || !pv.value) return null;
+  if (pv.kind === 'autopilot-backlog' && rules.BL_ID_RE.test(pv.value)) return pv.value;
+  if (pv.kind === 'adr-dir' && /^ADR-\d{4,}$/.test(pv.value)) return pv.value;
+  return null;
+}
+
+function storeProvenanceIndex(repo) {
+  const r = hippo.run(repo, ['list', '--history', '--limit', '1000000']);
+  if (r.exit !== 0) throw new HippoRefusal(r);
+  const byRef = new Map();
+  const byId = new Map();
+  for (const rec of (r.data && r.data.records) || []) {
+    const ref = provenanceRef(rec);
+    if (!ref) continue;
+    byRef.set(ref, rec.id);
+    byId.set(rec.id, ref);
+  }
+  return { byRef, byId };
+}
+
+function mentionRefsFromText(text, selfRef) {
+  const out = [];
+  const seen = new Set();
+  for (const hit of String(text || '').matchAll(MENTION_REF_RE)) {
+    const ref = hit[1];
+    if (ref === selfRef || seen.has(ref)) continue;
+    seen.add(ref);
+    out.push(ref);
+  }
+  return out;
+}
+
+function mentionRefsFromFields(fields, selfRef) {
+  const parts = [];
+  for (const k of Object.keys(fields || {})) {
+    if (k === 'Id' || k === 'Status' || k === 'Since') continue;
+    if (fields[k] != null) parts.push(String(fields[k]));
+  }
+  return mentionRefsFromText(parts.join('\n'), selfRef);
+}
+
+function appendRelatedContext(context, refs) {
+  if (!refs.length) return context;
+  const cur = String(context == null ? '' : context).trim();
+  const existing = new Set(mentionRefsFromText(cur, null));
+  const missing = refs.filter((r) => !existing.has(r));
+  if (!missing.length) return cur || undefined;
+  const suffix = `Related: ${missing.join(', ')}`;
+  return cur ? `${cur}; ${suffix}` : suffix;
+}
+
+function bodyWithContext(body, ctx) {
+  const lines = String(body || '').split('\n');
+  let replaced = false;
+  const out = lines.map((l) => {
+    if (/^- \*\*Context\*\*:\s?/.test(l)) {
+      replaced = true;
+      return `- **Context**: ${ctx}`;
+    }
+    return l;
+  });
+  if (!replaced) {
+    while (out.length && out[out.length - 1] === '') out.pop();
+    out.push(`- **Context**: ${ctx}`, '');
+  }
+  return out.join('\n').replace(/\n*$/, '\n');
+}
+
 function provenanceBl(rec) {
   const pv = rec.provenance;
   return pv && pv.kind === 'autopilot-backlog' && rules.BL_ID_RE.test(pv.value) ? pv.value : null;
@@ -581,8 +678,67 @@ H['backlog sync'] = {
   parse: (f, pos) => ({ id: pos[0] }),
   validate(repo, p, state) { if (state !== 'files') ulidArg(p.id, 'backlog sync'); return null; },
   files() { throw usage('backlog sync: this repo has no hippo store; BACKLOG.md is the store here'); },
-  plan: (repo, p, key) => ({ key, steps: [] }),
-  after: (repo, p) => ensureRow(repo, p.id) || 'nothing to write (the record is closed or the project has no backlog file)',
+  plan(repo, p, key) {
+    const rec = showRecord(repo, p.id);
+    const idx = storeProvenanceIndex(repo);
+    const selfRef = provenanceRef(rec);
+    const b = bullets(rec.body);
+    const rel = hippo.run(repo, ['related', rec.id, '--rel', 'relates_to', '--depth', '1']);
+    if (rel.exit !== 0) throw new HippoRefusal(rel);
+    const edges = ((rel.data && rel.data.edges) || []).filter((e) => e.rel === 'relates_to' && e.state === 'present');
+    const existingLinked = new Set();
+    const outgoingRefs = [];
+    for (const e of edges) {
+      const other = e.source === rec.id ? e.target : e.source;
+      existingLinked.add(other);
+      if (e.source === rec.id) {
+        const ref = idx.byId.get(e.target);
+        if (ref && !outgoingRefs.includes(ref)) outgoingRefs.push(ref);
+      }
+    }
+    const steps = [];
+    if (rec.type !== BACKLOG_TYPE) steps.push({ op: 'set', id: rec.id, field: 'type', value: BACKLOG_TYPE });
+    const mentioned = mentionRefsFromText(`${rec.title || ''}\n${rec.body || ''}`, selfRef);
+    for (const ref of mentioned) {
+      const tid = idx.byRef.get(ref);
+      if (tid && tid !== rec.id && !existingLinked.has(tid)) {
+        existingLinked.add(tid);
+        steps.push({ op: 'link', from: rec.id, rel: 'relates_to', to: tid, leak_ok: false });
+      }
+    }
+    if (rec.status === 'open' && rf.backlogView(repo) && outgoingRefs.length) {
+      const mSet = new Set(mentioned);
+      const missing = outgoingRefs.filter((r) => !mSet.has(r));
+      if (missing.length) {
+        const nextCtx = appendRelatedContext(b.Context, missing);
+        if (nextCtx && nextCtx !== String(b.Context || '').trim()) {
+          const cfg = rf.gateConfig(repo);
+          const ctxCap = rules.effectiveCap(cfg, 'Context');
+          if (ctxCap && rules.byteLen(nextCtx) > ctxCap) {
+            throw new rules.RuleViolationError([{ code: 'cap_exceeded', title: rec.title || '', field: 'Context', detail: `${rules.byteLen(nextCtx)} > ${ctxCap}` }]);
+          }
+          steps.push({ op: 'edit', id: rec.id, body: bodyWithContext(rec.body, nextCtx) });
+        }
+      }
+    }
+    return { key, steps };
+  },
+  after(repo, p) {
+    const rowMsg = ensureRow(repo, p.id);
+    if (!rowMsg) return 'nothing to write (the record is closed or the project has no backlog file)';
+    const rec = showRecord(repo, p.id);
+    const bl = provenanceBl(rec);
+    if (bl && rf.backlogHasRow(repo, bl)) {
+      const storeCtx = String(bullets(rec.body).Context || '').trim();
+      const row = rf.backlogReadRow(repo, bl);
+      const fileCtx = String(row.fields.Context || '').trim();
+      if (storeCtx && storeCtx !== fileCtx) {
+        rf.backlogSetContext(repo, { id: bl, context: storeCtx });
+        return `BACKLOG.md row ${bl} Context updated`;
+      }
+    }
+    return rowMsg;
+  },
 };
 
 const AGREE_ROW_BULLETS = ['Since', 'Problem', 'Impact', 'Trigger', 'Source', 'Pointer', 'Context', 'Report', 'Reply'];
@@ -591,7 +747,7 @@ H['backlog import'] = {
   needsRead: true,
   parse(f, pos) {
     const type = f.type === undefined ? 'debt' : f.type;
-    if (!TYPES.includes(type)) throw refuse('invalid-value', 'type', `${type} (expected ${TYPES.join('|')})`);
+    if (type !== BACKLOG_TYPE) throw refuse('invalid-value', 'type', `${type} (expected ${BACKLOG_TYPE}: hippo's autopilot-backlog importer derives that type for every row, any other type shows up as drift on re-import)`);
     const blId = String(pos[0] || '').trim();
     if (!rules.BL_ID_RE.test(blId)) throw usage(`backlog import: expected BL-NNNN, got ${pos[0]}`);
     return { blId, type };
@@ -672,6 +828,13 @@ H['backlog import'] = {
     const body = ['Since', 'Report', 'Reply', 'Problem', 'Impact', 'Trigger', 'Source', 'Pointer', 'Context']
       .filter((n) => fl[n] != null).map((n) => `- **${n}**: ${fl[n]}`).join('\n') + '\n';
     const steps = [{ op: 'create', ref: 'root', kind: 'issue', argv, body, key }];
+    const idx = storeProvenanceIndex(repo);
+    const linkIds = new Set();
+    for (const ref of mentionRefsFromFields(fl, p.blId)) {
+      const tid = idx.byRef.get(ref);
+      if (tid) linkIds.add(tid);
+    }
+    for (const tid of linkIds) steps.push({ op: 'link', from: 'root', rel: 'relates_to', to: tid, leak_ok: false });
     if (fl.Reporter && /^[^/\s]+\/[^/\s]+\/[^/\s]+$/.test(fl.Reporter) && ULID_RE.test(fl.Report || '')) {
       steps.push({ op: 'link', from: 'root', rel: 'reported_by', to: `fleet:${fl.Reporter}#${fl.Report}`, leak_ok: true });
     }
@@ -738,7 +901,7 @@ function hippoMode(g, cmd, handler, p, det) {
     throw new HippoError(`${cmd} reads the existing record before it writes, so it cannot be spooled: ${det.reason}; retry once hippo works`, 5, 'environment');
   }
   err(`record key: ${key} (retry with --key ${key})`);
-  const plan = handler.plan(repo, p, key, v);
+  const plan = handler.plan(repo, p, key, v, state);
   if (state === 'spool') return spoolIt(g, repo, cmd, plan, key, det.reason, state);
   const res = hippo.execute(repo, plan);
   if (!res.ok && res.spool) return spoolIt(g, repo, cmd, plan, key, res.reason, state);

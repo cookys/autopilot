@@ -1478,7 +1478,7 @@ function runReconcile(args) {
   })();
   const root = det.repo_root;
   if (det.state === 'files') die(2, `no hippo store in ${root}`);
-  if (det.state !== 'hippo') die(5, `hippo unusable in ${root}: ${det.reason}`);
+  if (det.state !== 'hippo' && det.state !== 'hippo-problems') die(5, `hippo unusable in ${root}: ${det.reason}`);
   let backlogPath = args.backlog;
   if (!backlogPath) {
     const r = spawnSync('bash', [path.join(SCRIPT_DIR, 'resolve-project-paths.sh'), '--target', root, '--field', 'backlog'], { encoding: 'utf8' });

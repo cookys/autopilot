@@ -517,5 +517,54 @@ pr --target "$R_VW" backlog close "$VW1" done; eq 0 "$RC" "view: close -> exit 0
 assert_not_contains "$(cat "$R_VW/docs/BACKLOG.md")" "### View row" "view: close removed the row"
 pr --target "$R_VW" backlog sync "$VW1"; eq 0 "$RC" "view: sync of a closed record is a no-op"
 
+# --- backlog import <BL-id>: imports an existing BACKLOG.md row into the store without changing the file
+R_IMP="$(hs_mkrepo imp store)"
+mkdir -p "$R_IMP/docs"
+printf '# Backlog\n\n<!-- next-id: BL-0010 -->\n' > "$R_IMP/docs/BACKLOG.md"
+git -C "$R_IMP" add -A >/dev/null && git -C "$R_IMP" commit -q -m impbase || fail "imp base"
+pr --target "$R_RS_F" backlog import BL-0001; eq 2 "$RC" "backlog import: refused in files mode -> exit 2"
+pr --target "$R_IMP" backlog import not-bl; eq 2 "$RC" "backlog import: non-BL id -> exit 2"
+pr --target "$R_IMP" backlog import BL-9999; eq 4 "$RC" "backlog import: missing row -> exit 4"
+node -e '
+  const fs = require("fs");
+  const p = process.argv[1];
+  let s = fs.readFileSync(p, "utf8").replace(/<!--\s*next-id:\s*BL-\d+\s*-->/, "<!-- next-id: BL-0010 -->");
+  s = s.replace(/\n*$/, "") + "\n\n" + [
+    "### Imported peer row from existing backlog",
+    "- **Id**: BL-0009",
+    "- **Status**: open",
+    "- **Since**: 2026-11-14",
+    "- **Origin**: peer",
+    "- **Reporter**: pm--claude",
+    "- **Report**: fleet 01M7DKWKB6 (PM, 2026-11-14)",
+    "- **Reply**: unknown",
+    "- **Problem**: Existing row bypassed the single writer.",
+    "- **Impact**: Store reconcile fails on BL-0009.",
+    "- **Trigger**: ready",
+    "- **Trigger-Type**: ready",
+    "- **Effort**: M",
+    "- **Source**: PEER-REPORTED pm--claude 2026-11-14",
+    "- **Pointer**: none",
+    "- **Context**: Imported through backlog import.",
+  ].join("\n") + "\n";
+  fs.writeFileSync(p, s);
+' "$R_IMP/docs/BACKLOG.md"
+REC_PRE="$(node "$PLUGIN/scripts/check-backlog-entries.js" --hippo --reconcile --target "$R_IMP" 2>/dev/null)"; REC_PRE_RC=$?
+eq 1 "$REC_PRE_RC" "backlog import: unimported row fails reconcile before import"
+assert_contains "$REC_PRE" "BL-0009" "backlog import: reconcile names BL-0009 before import"
+BL_SUM_BEFORE="$(cksum < "$R_IMP/docs/BACKLOG.md")"
+pr --target "$R_IMP" --json backlog import BL-0009; eq 0 "$RC" "backlog import: imports BL-0009 -> exit 0"
+IMP_ID="$(printf '%s' "$OUT" | jf 'd.id')"
+eq "$BL_SUM_BEFORE" "$(cksum < "$R_IMP/docs/BACKLOG.md")" "backlog import: leaves BACKLOG.md byte-identical"
+REC_POST="$(node "$PLUGIN/scripts/check-backlog-entries.js" --hippo --reconcile --target "$R_IMP" 2>/dev/null)"; REC_POST_RC=$?
+eq 0 "$REC_POST_RC" "backlog import: reconcile exits 0 after import"
+eq 0 "$(printf '%s' "$REC_POST" | jf 'd.new_count')" "backlog import: reconcile reports 0 new violations"
+pr --target "$R_IMP" --json backlog import BL-0009; eq 0 "$RC" "backlog import: idempotent rerun -> exit 0"
+eq "$IMP_ID" "$(printf '%s' "$OUT" | jf 'd.id')" "backlog import: rerun returns same store ULID"
+eq 0 "$(printf '%s' "$OUT" | jf 'd.created.length')" "backlog import: rerun creates no second record"
+sed -i 's/^- \*\*Problem\*\*: Existing row bypassed the single writer\./- **Problem**: Hand mutated after import./' "$R_IMP/docs/BACKLOG.md"
+pr --target "$R_IMP" backlog import BL-0009; eq 1 "$RC" "backlog import: refuses to mask a post-import field mismatch"
+assert_contains "$ERR" "differing field" "backlog import: conflict names differing field"
+
 hs_exit_check
 finalize_test

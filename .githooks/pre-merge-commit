@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# autopilot pre-merge-commit — test-identity gate only (KR4 / G8).
+# autopilot pre-merge-commit — test-identity + backlog single-writer gates.
 #
 # Activated by:  scripts/install-hooks.sh  (sets core.hooksPath=.githooks)
 
@@ -15,5 +15,14 @@ if [ -r "$__TIG_LIB" ]; then
   if ! test_identity_gate_bypassed; then
     test_identity_refuse_commit_idents || exit 1
   fi
+fi
+
+# --- backlog single writer: BACKLOG.md is not hand-edited once a hippo store exists ---
+if ! SW_OUT="$(node scripts/check-backlog-single-writer.js --staged 2>&1)"; then
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "pre-merge-commit: backlog single-writer gate failed" >&2
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "$SW_OUT" >&2
+  exit 1
 fi
 exit 0

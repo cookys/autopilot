@@ -1,0 +1,14 @@
+---
+id: 01M7PSKXDPR3JJ7HPPHZWYM3PE
+kind: issue
+created: 2026-11-18T07:40:52.534Z
+---
+- **Since**: 2026-11-14
+- **Report**: fleet 01M7DKWKB6 (PM, 2026-11-14)
+- **Reply**: unknown
+- **Problem**: 長工作階段每次喚醒都重讀整個脈絡而燒額度，脈絡快滿時工作線也只能停下等人工重開。第一階段的量測與判定已合併，第二階段掃描重開計畫也已就緒，但尚未實作。
+- **Impact**: 高脈絡工作階段持續消耗額度，且滿載時無人值守的工作線仍無法自動安全交接重啟。
+- **Trigger**: ready
+- **Source**: PM 01M7DKWK sub-item 5 (5b+5c), fleet task 01M7DM1XGAHFBJSG6RBE12R382
+- **Pointer**: project/plans/2026-11-12-ctx-reset-sweep.md
+- **Context**: ctx-reset W1 merged (d32f422c3); W2 sweep plan merged at project/plans/2026-11-12-ctx-reset-sweep.md, not yet implemented. Also indexed in project/backlog/pm-01m7dkwk-subitems.md.

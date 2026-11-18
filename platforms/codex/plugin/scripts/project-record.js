@@ -9,6 +9,7 @@
 //                 [--context C|--context-file F] [--relates ULID]...
 //   backlog reply <id> --reply "<date> <ptr>"            backlog close <id> done|cancelled|superseded [--commit SHA] [--by REF]
 //   backlog sync  <id>                                    (put an open store record's row into BACKLOG.md; no store write)
+//   backlog import <BL-id> [--type bug|feature|debt|question|chore] (import an existing BACKLOG.md row into the store; no file write)
 //   decision new  --title T --rationale-file F|- [--ledger-row ID] [--area A] [--relates ULID]... [--decides ULID]...
 //   decision supersede <old> <same flags>                adr new --title T --body-file F|- [--status active|open] [--adr-dir D]
 //   adr supersede <old> <same flags>                     lesson new --title T --category build|debug|arch|env|api --body-file F|-
@@ -72,6 +73,7 @@ const SUBS = {
   'backlog reply': { f: { reply: 'v' }, pos: [1, 3] },
   'backlog close': { f: { commit: 'v', by: 'v' }, pos: [2, 2] },
   'backlog sync': { f: {}, pos: [1, 1] },
+  'backlog import': { f: { type: 'v' }, pos: [1, 1] },
   'decision new': { f: DECISION, pos: [0, 0] },
   'decision supersede': { f: DECISION, pos: [1, 1] },
   'adr new': { f: ADR, pos: [0, 0] },
@@ -583,6 +585,116 @@ H['backlog sync'] = {
   after: (repo, p) => ensureRow(repo, p.id) || 'nothing to write (the record is closed or the project has no backlog file)',
 };
 
+const AGREE_ROW_BULLETS = ['Since', 'Problem', 'Impact', 'Trigger', 'Source', 'Pointer', 'Context', 'Report', 'Reply'];
+
+H['backlog import'] = {
+  needsRead: true,
+  parse(f, pos) {
+    const type = f.type === undefined ? 'debt' : f.type;
+    if (!TYPES.includes(type)) throw refuse('invalid-value', 'type', `${type} (expected ${TYPES.join('|')})`);
+    const blId = String(pos[0] || '').trim();
+    if (!rules.BL_ID_RE.test(blId)) throw usage(`backlog import: expected BL-NNNN, got ${pos[0]}`);
+    return { blId, type };
+  },
+  key(p) {
+    return crypto.createHash('sha256').update(`backlog-import:${p.blId}`).digest('hex').slice(0, 16);
+  },
+  files() {
+    throw usage('backlog import: this repo has no hippo store; BACKLOG.md is the store here');
+  },
+  validate(repo, p, state) {
+    if (state === 'files') return null;
+    const row = rf.backlogReadRow(repo, p.blId);
+    const st = String(row.fields.Status || 'open').trim();
+    const proposed = {
+      title: row.fields.Title,
+      id: row.fields.Id,
+      status: st,
+      since: row.fields.Since,
+      origin: row.fields.Origin,
+      reporter: row.fields.Reporter,
+      report: row.fields.Report,
+      reply: row.fields.Reply,
+      problem: row.fields.Problem,
+      impact: row.fields.Impact,
+      trigger: row.fields.Trigger,
+      triggerType: row.fields['Trigger-Type'],
+      effort: row.fields.Effort,
+      source: row.fields.Source,
+      pointer: row.fields.Pointer,
+      context: row.fields.Context,
+    };
+    const cfg = Object.assign({}, rf.gateConfig(repo), { done_retention_days: 1e9 });
+    const v = rules.assertProposedValid(proposed, { cfg, repoRoot: repo, now: nowDate().getTime(), existingTitles: [] });
+    return Object.assign({}, v, { rel: row.rel, status: st });
+  },
+  plan(repo, p, key, v) {
+    const ex = hippo.run(repo, ['list', '--history', '--limit', '1000000']);
+    if (ex.exit !== 0) throw new HippoRefusal(ex);
+    const existing = (ex.data.records || []).find(
+      (r) => r.kind === 'issue' && r.provenance && r.provenance.kind === 'autopilot-backlog' && r.provenance.value === p.blId
+    );
+    if (existing) {
+      const rec = showRecord(repo, existing.id);
+      const recInput = inputFromRecord(rec);
+      const b = bullets(rec.body);
+      const wantFields = {
+        Title: rec.title,
+        Since: b.Since,
+        Problem: b.Problem,
+        Impact: b.Impact,
+        Trigger: b.Trigger,
+        Source: b.Source,
+        Pointer: b.Pointer,
+        Context: b.Context,
+        Report: b.Report,
+        Reply: b.Reply,
+        Origin: recInput.origin,
+        Effort: recInput.effort,
+        'Trigger-Type': recInput.triggerType,
+      };
+      const diff = ['Title'].concat(AGREE_ROW_BULLETS, ['Origin', 'Effort', 'Trigger-Type']).filter((k) => {
+        const a = v.fields[k] == null ? '' : String(v.fields[k]).trim();
+        const c = wantFields[k] == null ? '' : String(wantFields[k]).trim();
+        return a !== c;
+      });
+      if (diff.length) {
+        throw new rf.RecordError('view_conflict', `${p.blId} already has store record ${existing.id} with differing field(s): ${diff.join(', ')}`);
+      }
+      return { key, steps: [], existingId: existing.id, info: [`${p.blId} already imported as ${existing.id}`] };
+    }
+    const fl = v.fields;
+    const tags = [`origin:${fl.Origin.toLowerCase()}`].concat(effortTags(fl.Effort), [triggerTag(fl['Trigger-Type'])]);
+    const rt = fl.Reporter ? reporterTag(fl.Reporter) : null;
+    if (rt) tags.push(rt);
+    const argv = ['--title', fl.Title, '--type', p.type, '--status', 'open'];
+    for (const t of tags) argv.push('--tag', t);
+    const body = ['Since', 'Report', 'Reply', 'Problem', 'Impact', 'Trigger', 'Source', 'Pointer', 'Context']
+      .filter((n) => fl[n] != null).map((n) => `- **${n}**: ${fl[n]}`).join('\n') + '\n';
+    const steps = [{ op: 'create', ref: 'root', kind: 'issue', argv, body, key }];
+    if (fl.Reporter && /^[^/\s]+\/[^/\s]+\/[^/\s]+$/.test(fl.Reporter) && ULID_RE.test(fl.Report || '')) {
+      steps.push({ op: 'link', from: 'root', rel: 'reported_by', to: `fleet:${fl.Reporter}#${fl.Report}`, leak_ok: true });
+    }
+    if (/^shipped\b/.test(v.status)) steps.push({ op: 'close', id: 'root', status: 'done' });
+    else if (/^dropped\b/.test(v.status)) steps.push({ op: 'close', id: 'root', status: 'cancelled' });
+    return { key, steps };
+  },
+  after(repo, p, res, v) {
+    const id = res.ids.root;
+    if (!id) return null;
+    const rec = showRecord(repo, id);
+    const have = provenanceBl(rec);
+    if (have && have !== p.blId) {
+      throw new rf.RecordError('view_conflict', `${id} already has provenance ${have}, expected ${p.blId}`);
+    }
+    if (!have) {
+      const r = hippo.run(repo, ['set', id, 'provenance', '--kind', 'autopilot-backlog', '--value', p.blId, '--locator', `${v.rel}#${p.blId}`]);
+      if (r.exit !== 0) throw new HippoRefusal(r);
+    }
+    return `imported ${p.blId} into store (${id}); BACKLOG.md unchanged`;
+  },
+};
+
 // ---- output ------------------------------------------------------------------------------------------------------------
 
 function out(s) { process.stdout.write(`${s}\n`); }
@@ -638,10 +750,10 @@ function hippoMode(g, cmd, handler, p, det) {
     return res.exit;
   }
   const info = (plan.info || []).slice();
-  const id = res.ids.root || null;
+  const id = res.ids.root || plan.existingId || null;
   if (handler.after) {
     try {
-      const line = handler.after(repo, p, res);
+      const line = handler.after(repo, p, res, v);
       if (line) info.push(line);
     } catch (e) {
       if (!(e instanceof HippoRefusal || e instanceof rf.RecordError || e instanceof rules.RuleViolationError)) throw e;

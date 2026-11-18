@@ -34,6 +34,7 @@
 // $.session.id() is read on EVERY tick: /clear gives the session a new id while the timer keeps running (S7).
 // Every clock comparison uses $.clock.now(), so a test with a mocked clock decides fresh / stale.
 
+import { probePane } from './pane-probe'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { newTracker, parseAdvisories, takeNew } from './advisories'
@@ -48,26 +49,39 @@ import { NO_BATCH, actionable, answerPlan, answerOf, batchSync, cardKey, draftOf
 import type { DecideBatch } from './decidebatch'
 import { applyPick, holdSend, reopen, sendNow, tickHold, undoHold } from './decideundo'
 import type { ClaimCard, UndoDeps } from './decideundo'
-import { BAND_MIN_COLS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
-import { findConsoleMode, parseConsole } from './console'
+import { BAND_MIN_COLS, BAND_PAGE_TABS, FORGE_LABEL_MIN, barStrip, decideTabLines, usageTabFits } from './tabs'
+import { findConsoleConfig, parseConsole } from './console'
 import { CONSOLE_FILE, CONSOLE_TIMEOUT_MS, makeConsoleFeed } from './consolefeed'
 import type { ConsoleSnapshot } from './console'
 import { consoleSlotTab, nextConsoleTab } from './consoletabs'
 import type { ConsoleNav, ConsoleTab } from './consoletabs'
 
-import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, speedContent, stackBand, stackRows, usageDraw } from './band'
+import { BandBar, bandQuotaSeg, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, cardSplit, speedContent, stackBand, stackRows, usageDraw } from './band'
 import type { SpeedPlacement } from './band'
+import { normalizedPools } from './pages/quota-pick'
+import { consoleFleetCounts } from './pages/rows'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
-import type { BarTabId, ScrollView } from './tabs'
+import type { BandPageId, BarTabId, ScrollView } from './tabs'
 import { MAIN_CONTENT_ROWS, SHELL_ROWS, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan, usageRows } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
-import { Pane, noteInputKey, resetNoteInputs } from './pane'
+import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
+import { routeKey } from './pages/keys'
+import type { KeyAction } from './pages/keys'
+import { decideReduce, NO_NAV } from './pages/decide'
+import type { DecideNav } from './pages/decide'
+import { SEATS_TIMEOUT_MS, seatQuota } from './pages/now'
+import { PAGES } from './pages/index'
+import { frameHeight } from './pages/frame'
+import type { PageId } from './pages/frame'
+import { FOLD_AT, rowsOf as fleetRowsOf } from './pages/fleet'
+import { DEFAULT_REVIEW_VIEW } from './pages/review'
+import { spendFocusRows } from './pages/spend'
 import { FILL_PRESS } from './commandtab'
 import { type ScrollModel, fixedWindow, keyed, newScroll, scrollHook } from './scroll'
 import type { ShowRequest } from '../viewer/model'
@@ -101,6 +115,7 @@ let liveBaseSeen: string | null = null // the live base the pointer named on the
 let factsPrunedAt = -Infinity // band-facts cleanup runs at most once a minute; session.start resets it
 let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read every refresh; null draws no pet
 let paneTab: PaneTab = 'now'
+let panePage: PageId = 'now'
 // the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, kicked on every tick and when the Fleet tab is drawn. The TTL inside the feed keeps the runs 30 s apart.
 // Never awaited by a render.
 const fleetFeed = makeFleetFeed()
@@ -142,6 +157,9 @@ export function liveTick($: EngineInterface): Promise<void> {
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   await consoleTick($).catch(() => undefined) // the console mode and its snapshot (below); the tick is the only place either is read
+  // NOT gated by the console mode: the framed pages (現況 · 待決 · 艦隊 · 額度 · 花費 ...) are drawn in every session and read the seat quota row and the console snapshot,
+  // so the polls run whether the pane is open or not and whatever .claude/console.json says (pane-poll.test.ts holds this)
+  void seatQuota.refresh(argv => $.process.run([...argv], { timeoutMs: SEATS_TIMEOUT_MS }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => undefined) // the 現況 page's seat quota row: 60 s cache inside the feed, never awaited by a render
   kickFleet($, nowMs) // the band's own fleet segment reads the summary this publishes; the feed's TTL spaces the runs
   await shellTick($, nowMs).catch(() => undefined)
 }
@@ -193,16 +211,18 @@ async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
 }
 let decideCursor = 0 // the card the O4 shell's main window shows (an index into the band's batch, bandBatch: the pending cards and the ones closed elsewhere; clamped at every draw)
 let decideLastId: string | null = null // the card answered last from the shell (the progress row names it)
-// ---- the operator-console mode (plan §3.1; consoletabs.ts): on only where the session's repo has .claude/console.json = {"schema":"autopilot.console/1","mode":"program"} (findConsoleMode). Off, every line
-// below that reads these is skipped and the band and the pane are what they were. ONE navigation state (consoleTab) for the band's tabs and the pane's: pressing either sets it, both draw it.
+// ---- the operator-console mode (plan §3.1; consoletabs.ts): on only where the session's repo has .claude/console.json = {"schema":"autopilot.console/1","mode":"program"} (findConsoleConfig; optional
+// "ingest_from": "<address>=pace ..." passes validated ^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+=[a-z]+$ tokens via FLEET_CONSOLE_INGEST_FROM, omitted when absent/empty). Off, the band and
+// the legacy console pane are what they were; the snapshot itself (consoleSnap) is still polled, because the framed pages read it in every session. ONE navigation state (consoleTab) for the band's tabs and the pane's: pressing either sets it, both draw it.
 // The snapshot comes from consoleSource (a top-level function declaration: the mod loader follows `$` only into declared functions, so it cannot be a swappable variable); it comes from consolefeed.ts: `fleet console --json` (at most once a minute, never while drawing), else the courier's HOME/.local/state/fleet/console.json; neither = null = no source. ----
 let consoleOn = false
 let consoleTab: ConsoleTab = 'command'
 let consoleSnap: ConsoleSnapshot | null = null
 let consoleCwd: string | null = null // the cwd the mode was last read for; a different cwd (a new session in another repo) reads it again at the next tick
 let consoleReadMs = -Infinity
+let consoleIngestFrom: string | null = null
 const CONSOLE_MODE_EVERY_MS = 10_000 // the config file is read again at most this often
-const consoleFeed = makeConsoleFeed()
+let consoleFeed = makeConsoleFeed() // per session: startLive makes a new one, so the 60 s throttle and the snapshot of an earlier session do not leak
 async function consoleSource($: EngineInterface): Promise<ConsoleSnapshot | null> {
   const nowMs = await $.clock.now()
   const before = consoleFeed.current(nowMs)
@@ -217,14 +237,18 @@ async function consoleTick($: EngineInterface): Promise<void> {
   const cwd = await $.session.cwd()
   let changed = false
   if (cwd !== consoleCwd || nowMs - consoleReadMs >= CONSOLE_MODE_EVERY_MS) {
-    const on = await findConsoleMode(cwd, p => readText($, p))
+    const found = await findConsoleConfig(cwd, p => readText($, p))
     consoleCwd = cwd
     consoleReadMs = nowMs
-    changed = on !== consoleOn
-    if (on && !consoleOn && barTab !== 'forge') barTab = null // the strip turns to the console tabs: a band tab left open would keep its body under a 指揮 highlight
-    consoleOn = on
+    consoleIngestFrom = found.ingestFrom
+    consoleFeed.setIngestFrom(found.ingestFrom)
+    changed = found.on !== consoleOn
+    if (found.on && !consoleOn && barTab !== 'forge') barTab = null // the strip turns to the console tabs: a band tab left open would keep its body under a 指揮 highlight
+    consoleOn = found.on
   }
-  const snap = consoleOn ? await consoleSource($) : null
+  // the snapshot is fetched in every session, console mode or not: the framed pages draw 待決 / 艦隊 / 額度 from it (a null here is "無來源：沒有 console 快照" on every page).
+  // The console mode only decides the band strip and the legacy console pane (both still check consoleOn before reading consoleSnap).
+  const snap = await consoleSource($)
   if (snap !== consoleSnap) { consoleSnap = snap; changed = true }
   if (changed) void $.ui.invalidate('ui.render')
 }
@@ -240,7 +264,7 @@ const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['
   const now = await $.clock.now()
   return Pane($.ui.resolve(e), snapshot, 'now', () => {}, tr, e.props.bodyColumns, () => {}, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, null, null, null, null, {
     nav: consoleNav(),
-    onTab: (tab: ConsoleTab) => { consoleTab = tab; $.ui.invalidate('ui.render'); void ringToNext($) },
+    onTab: (tab: ConsoleTab) => { consoleTab = tab; $.ui.invalidate('ui.render') },
     onNext: () => { consoleTab = nextConsoleTab(consoleTab); $.ui.invalidate('ui.render') },
     live: snapshot,
     now,
@@ -636,6 +660,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
     published_at: published,
     session_as_of: sessionUsd(env, sid).as_of,
     host_as_of: typeof env.host_today_as_of === 'string' ? env.host_today_as_of : null,
+    detail: { ...NO_DETAIL, now_ms: nowMs }, // X4: non-ok snapshots still need the clock to show their data age.
   }
   if (fresh.length === 0) {
     const failure = await launchFailure($, autopilotHome, scope.key)
@@ -1251,15 +1276,186 @@ const FORGE_BELOW_MIN_COLS = 26 // the narrowest the mod below is asked for its 
 const SPEED_PLACEMENT: SpeedPlacement = 'beside'
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
+const PAGE_TAB_OF: Partial<Record<PageId, PaneTab>> = {
+  now: 'now', decide: 'decide', fleet: 'fleet', quota: 'spend',
+  dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene', help: 'legend',
+}
+const PAGE_CONSOLE_OF: Partial<Record<PageId, ConsoleTab>> = {
+  now: 'command', decide: 'command', fleet: 'team', quota: 'quota',
+  dispatch: 'self', review: 'self', spend: 'quota', hygiene: 'self',
+}
+const SLOT_PAGE_OF: Partial<Record<SlotId, BandPageId>> = {
+  verdict: 'now', decisions: 'decide', fleet: 'fleet', quota: 'quota',
+  dispatch: 'dispatch', review: 'review', spend: 'spend', hygiene: 'hygiene',
+}
+const pageOfTab = (t: PaneTab): PageId => (t === 'spend' ? 'quota' : t === 'legend' ? 'help' : t)
 
-// After a press on a tab Button (a click, or Tab / arrows + Enter) the keyboard ring returns to the `›` chip, so the next Enter steps on instead of
-// re-pressing the tab that was just chosen. Best effort: a pane that does not hold the keys refuses, and the tab has switched anyway.
-async function ringToNext($: EngineInterface): Promise<void> {
-  try {
-    await $.ui.focus({ requestId: PANE_ID, key: 'next' })
-  } catch (_e) {
-    // not holding the keyboard: nothing to move
+// A page digit selects that page; pressing the current page again leaves the pane and its state alone.
+async function panePagePress($: EngineInterface, id: PageId): Promise<void> {
+  if (id === panePage) return
+  panePage = id
+  paneTab = PAGE_TAB_OF[id] ?? paneTab
+  keyed(decideScroll, 'page:' + id) // K1: a different page starts at its first row.
+  void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
+  decideLocal = { ...decideLocal, textMode: false, textBuf: '' } // a tab press ends a note being typed: the mode must not outlive the page
+  $.ui.invalidate('ui.render')
+}
+
+async function paneTabPress($: EngineInterface, t: PaneTab, legacy = false): Promise<void> {
+  if (legacy) {
+    if (t === paneTab) {
+      markPaneClosed()
+      try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
+      return
+    }
+    paneTab = t
+    panePage = pageOfTab(t)
+    decideLocal = { ...decideLocal, textMode: false, textBuf: '' }
+    $.ui.invalidate('ui.render')
+    return
   }
+  return panePagePress($, pageOfTab(t))
+}
+
+// ---- the framed pages' own state (pages/*.ts are pure): focus + fold per page id, and the 待決 page's nav (cursor, fold, note text) beside the DECIDE atom ----
+let pageView: Record<string, { focus: number; expanded: boolean; folded?: boolean }> = {}
+// how many rows of a page can hold the focus (▸): fleet shows FOLD_AT lines until unfolded, quota every pool, spend its two meter rows; the clamp for j/k and fold
+const focusRows = (id: string, expanded: boolean): number => {
+  if (id === 'fleet') { const n = consoleSnap?.lines === null || consoleSnap === null ? 0 : fleetRowsOf(consoleSnap.lines).length; return expanded ? n : Math.min(FOLD_AT, n) }
+  if (id === 'quota') return consoleSnap?.quota.pools?.length ?? 0
+  if (id === 'spend') return spendFocusRows(snapshot)
+  return 1
+}
+let decideLocal: Pick<DecideNav, 'cursor' | 'folded' | 'textMode' | 'textBuf' | 'opt' | 'detailOffset'> = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
+const framePageId = (): string => panePage
+// B56: crossing the side-dock width threshold unmounts `<Pane placement="dock">` and mounts `<Pane placement="inline">` (or back).
+// On CC 2.1.327 that remount drops the pane's keyboard focus to the prompt and collides on the previous placement's Button keys,
+// so digits 1-9 and 0 type into the prompt instead of firing strip hotkeys. Bump the Button key epoch on every placement move and,
+// when the pane held (or was opened with) focus, reclaim focus on the new placement's anchor after this render commits.
+let panePlacement: 'dock' | 'inline' | null = null
+let panePlacementEpoch = 0
+let paneFocused = false
+let paneOpenAsked = false
+let paneOpened = false
+function markPaneOpen(): void {
+  paneOpened = true
+  paneOpenAsked = true
+  panePlacement = null
+}
+function markPaneClosed(): void {
+  paneOpened = false
+  paneOpenAsked = false
+  paneFocused = false
+  panePlacement = null
+}
+async function restorePaneFocus($: EngineInterface, reopen: boolean, key: string | null, epochAtMove: number): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  if (panePlacementEpoch !== epochAtMove) return
+  if (reopen && paneOpened) await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true }).catch(() => undefined)
+  if (key === null || panePlacementEpoch !== epochAtMove) return
+  await $.ui.focus({ requestId: PANE_ID, key }).catch(() => undefined)
+}
+function syncPanePlacement($: EngineInterface, placement: 'dock' | 'inline' | undefined, isFocused: boolean | undefined): number {
+  const next = placement === 'dock' || placement === 'inline' ? placement : null
+  const focused = isFocused === true
+  if (next !== null && panePlacement !== null && next !== panePlacement) {
+    panePlacementEpoch += 1
+    const wantFocus = paneFocused || focused || paneOpenAsked
+    const reopen = paneOpened
+    panePlacement = next
+    if (wantFocus) {
+      paneFocused = true
+      paneOpenAsked = reopen
+      const typingNote = panePage === 'decide' && decideLocal.textMode
+      void restorePaneFocus($, reopen, typingNote ? null : focusAnchorKey(panePlacementEpoch), panePlacementEpoch)
+    }
+    return panePlacementEpoch
+  }
+  if (next !== null) panePlacement = next
+  if (focused) {
+    paneFocused = true
+    paneOpenAsked = false
+  } else if (!paneOpenAsked) {
+    paneFocused = false
+  }
+  return panePlacementEpoch
+}
+// A key of the framed page (a visible hotkey Button or routeKey, pane.tsx). 待決 goes through decideReduce; fleet, quota and spend keep a focus row and a fold.
+export async function frameKey($: EngineInterface, k: KeyAction): Promise<void> {
+  try {
+    if (k.kind === 'page') { await panePagePress($, k.to as PageId); return }
+    if (k.kind === 'close') {
+      markPaneClosed()
+      try { await $.ui.close({ id: PANE_ID }) } catch (_e) { /* already closed */ }
+      return
+    }
+    const id = framePageId()
+    if (id === 'decide') {
+      const nowMs = await $.clock.now()
+      const st = await read($, DECIDE)
+      const ctx = { live: snapshot, console: consoleSnap, size: { cols: decideCols, rows: 24 }, t: tr, nowMs }
+      const r = decideReduce({ ...st, ...decideLocal }, k, ctx, nowMs)
+      decideLocal = { cursor: r.nav.cursor, folded: r.nav.folded, textMode: r.nav.textMode, textBuf: r.nav.textBuf, opt: r.nav.opt, detailOffset: r.nav.detailOffset }
+      if (r.nav.picks !== st.picks || r.nav.notes !== st.notes) await update($, DECIDE, s => ({ ...s, picks: r.nav.picks, notes: r.nav.notes }))
+      if (r.effect?.kind === 'send') await holdDecide($) // the hold and the claim stay decideundo's: the reducer's own hold is not written
+      else if (r.effect?.kind === 'undo') await undoDecide($, r.effect.id)
+      else if (r.effect?.kind === 'fill') await fillPrompt($, r.effect.text)
+    } else {
+      const v = pageView[id] ?? (id === 'review' ? DEFAULT_REVIEW_VIEW : { focus: 0, expanded: false })
+      const last = Math.max(0, focusRows(id, v.expanded) - 1)
+      if (k.kind === 'move') pageView[id] = { ...v, focus: Math.min(last, Math.max(0, v.focus + k.by)) }
+      else if (k.kind === 'fold') { const expanded = !v.expanded; pageView[id] = { expanded, folded: !expanded, focus: Math.min(v.focus, Math.max(0, focusRows(id, expanded) - 1)) } }
+    }
+  } catch (_e) {
+    // a key never takes the session down
+  }
+  void $.ui.invalidate('ui.render')
+}
+export async function paneKey($: EngineInterface, key: string, over: { paneFocus?: boolean; focusedButton?: boolean } = {}): Promise<KeyAction> {
+  const page = framePageId()
+  const act = routeKey(key, {
+    page,
+    paneFocus: over.paneFocus ?? true,
+    focusedButton: over.focusedButton ?? false,
+    textMode: page === 'decide' && decideLocal.textMode,
+  })
+  if (act.kind !== 'none' && act.kind !== 'pass' && act.kind !== 'button') await frameKey($, act)
+  return act
+}
+async function fillPrompt($: EngineInterface, text: string): Promise<void> {
+  const out = await $.prompt.fill({ text, mode: 'replace' })
+  if (!out.isFilled) $.ui.toast(tr('console.command.fill_refused'))
+}
+// A press inside a framed page: `fleet:fold`, `fleet:see:<line_id>` (open the list so the line is on screen; nothing is sent), `fill:quota:<pool>` (the pool's switch suggestion into the prompt) and any other `fill:<text>`.
+async function framePress($: EngineInterface, id: string): Promise<void> {
+  try {
+    if (/^decide:detail:\d+$/.test(id)) { decideLocal = { ...decideLocal, detailOffset: Number(id.slice('decide:detail:'.length)) } }
+    else if (id === 'fleet:fold') { await frameKey($, { kind: 'fold' }); return } // use the same focus clamp as the fold key, including when a tall dock auto-unfolded the body
+    else if (id === 'quota:open') { const expanded = !(pageView.quota?.expanded ?? false); pageView.quota = { ...(pageView.quota ?? { focus: 0, expanded: false }), expanded, folded: !expanded } }
+    else if (id.startsWith('fleet:see:')) {
+      const at = consoleSnap?.lines == null ? -1 : fleetRowsOf(consoleSnap.lines).findIndex(r => r.line.line_id === id.slice('fleet:see:'.length))
+      pageView.fleet = { ...(pageView.fleet ?? { focus: 0, expanded: false }), expanded: true, folded: false, ...(at < 0 ? {} : { focus: at }) } // a row is its own Button: pressing it focuses that line and shows it
+    } else if (id.startsWith('quota:pool:')) {
+      const at = Number(id.slice('quota:pool:'.length))
+      const v = pageView.quota ?? { focus: 0, expanded: false }
+      const expanded = v.focus === at ? !v.expanded : true
+      pageView.quota = { focus: at, expanded, folded: !expanded } // the pool's own row: press it to show its seats, press it again to fold them
+    } else if (id.startsWith('spend:meter:')) {
+      const at = Number(id.slice('spend:meter:'.length))
+      const v = pageView.spend ?? { focus: 0, expanded: false }
+      const last = Math.max(0, focusRows('spend', v.expanded) - 1)
+      if (Number.isFinite(at)) pageView.spend = { ...v, focus: Math.min(last, Math.max(0, at)) } // a meter row is its own Button: pressing it moves the focus marker
+    }
+    else if (id.startsWith('fill:quota:')) {
+      const pool = id.slice('fill:quota:'.length)
+      const sug = consoleSnap?.quota.pools?.find(p => p.pool === pool)?.switch_suggestion ?? null
+      if (sug !== null) await fillPrompt($, sug)
+    } else if (id.startsWith(FILL_PRESS)) await fillPrompt($, id.slice(FILL_PRESS.length))
+  } catch (_e) {
+    // a press never takes the session down
+  }
+  void $.ui.invalidate('ui.render')
 }
 
 // the live mod's session start. A function of its own because Claude Code refuses a second matcher-less `session.start` hook in one plugin: the composed module
@@ -1271,7 +1467,14 @@ export async function startLive($: EngineInterface): Promise<void> {
     // a host without commands: the band's own controls still open the pane
   }
   paneTab = 'now'
+  panePage = 'now'
+  markPaneClosed()
+  panePlacementEpoch = 0
+  pageView = {}
+  decideLocal = { cursor: NO_NAV.cursor, folded: NO_NAV.folded, textMode: NO_NAV.textMode, textBuf: NO_NAV.textBuf, opt: NO_NAV.opt }
   resetNoteInputs()
+  consoleReadMs = -Infinity
+  consoleFeed = makeConsoleFeed(undefined, undefined, consoleIngestFrom)
   barTab = null
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
@@ -1288,6 +1491,7 @@ export async function startLive($: EngineInterface): Promise<void> {
 export function registerLive(on: Parameters<Register>[0]): void {
   // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ and slots are the ways to open it
   on('command.run', { command: 'live-pane' }, async ($) => {
+    markPaneOpen()
     await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
     return {}
   })
@@ -1340,10 +1544,12 @@ export function registerLive(on: Parameters<Register>[0]): void {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
+    const legacyTabs = (e.props as { legacyTabs?: boolean }).legacyTabs === true
     // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
     // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
     // is listed until it closes, however it was opened). No hotkey: the band's autoFocus puts the keyboard path at Ctrl+x Tab, Enter.
     const info = async () => {
+      if (!legacyTabs) return pageOpen('now')
       if (consoleOn) return consoleInfo()
       const seq = ++pressSeq
       const prev = decided
@@ -1361,7 +1567,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
       decided = mine
       try {
         const tab = await mine
-        if (seq === pressSeq) paneTab = tab
+        if (seq === pressSeq) { paneTab = tab; panePage = pageOfTab(tab) }
+        markPaneOpen()
         $.ui.invalidate('ui.render')
         await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
       } finally {
@@ -1371,33 +1578,40 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // a slot pressed opens the pane on the tab that explains it (model.ts slotTab). It is a press like the ⓘ's: it takes a sequence number, so an
     // ⓘ press still in flight becomes stale and cannot drag the tab back, and it records its tab as `decided` while its open is in flight, so an
     // ⓘ landing meanwhile steps on from the slot's tab instead of reading a pane $.ui.panes() does not list yet.
-    const openOn = async (tab: PaneTab, unfold: string | null = null) => {
+    const openOn = async (tab: PaneTab, unfold: string | null = null, pageId: PageId = pageOfTab(tab)) => {
       const seq = ++pressSeq
       decided = Promise.resolve(tab)
       paneTab = tab
+      await panePagePress($, pageId) // K1: band and slot navigation also enter at the top.
       if (unfold !== null) folded.delete(unfold)
       try {
+        markPaneOpen()
         $.ui.invalidate('ui.render')
         await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
       } finally {
         if (seq === pressSeq) decided = null
       }
     }
-    // the console mode's two presses: the same navigation state (consoleTab) for the ⓘ, the slots, the band's tabs and the pane's tabs; the pane opens on it
-    const consoleOpen = async (tab: ConsoleTab) => {
-      consoleTab = tab
-      $.ui.invalidate('ui.render')
-      await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
+    // console mode: band row 2 shows the new page names 1-8 (without digit hotkeys); pressing one opens the pane on that page
+    const pageOpen = async (id: BandPageId, unfold: string | null = null, legacyCon?: ConsoleTab) => {
+      const tab = PAGE_TAB_OF[id] ?? 'now'
+      consoleTab = legacyCon ?? PAGE_CONSOLE_OF[id] ?? 'command'
+      decideLocal = { ...decideLocal, textMode: false, textBuf: '' }
+      await openOn(tab, unfold, id)
     }
     const consoleInfo = async () => {
       let isOpen = false
       try { isOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ }
-      await consoleOpen(isOpen ? nextConsoleTab(consoleTab) : 'command')
+      const nextCon = isOpen ? nextConsoleTab(consoleTab) : 'command'
+      const at = BAND_PAGE_TABS.indexOf(panePage as BandPageId)
+      const nextPage: BandPageId = isOpen && at >= 0 ? BAND_PAGE_TABS[(at + 1) % BAND_PAGE_TABS.length] : 'now'
+      await pageOpen(nextPage, null, nextCon)
     }
-    const slot = (id: SlotId) => (consoleOn ? consoleOpen(consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id)))
-    // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a console tab only sets the shared tab (the forge tab keeps this behaviour)
-    const onTab = (id: BarTabId | ConsoleTab) => {
-      if (consoleOn && id !== 'forge') { void consoleOpen(id as ConsoleTab); return }
+    const slot = (id: SlotId) => (consoleOn ? pageOpen(SLOT_PAGE_OF[id] ?? 'now', slotUnfolds(id), consoleSlotTab(id)) : openOn(slotTab(id), slotUnfolds(id), id === 'spend' ? 'spend' : undefined))
+    // a tab of the band row: the open tab is a memory state; pressing it again closes it. In the console mode a page tab opens the pane on that page (the forge tab keeps its band behaviour)
+    const onTab = (id: BarTabId | ConsoleTab | BandPageId) => {
+      if (!legacyTabs) { void pageOpen(id as BandPageId); return }
+      if (consoleOn && id !== 'forge') { void pageOpen(id as BandPageId); return }
       barTab = barTab === id ? null : (id as BarTabId)
       $.ui.invalidate('ui.render')
     }
@@ -1421,18 +1635,20 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest.
     // Console mode stays at FORGE_LABEL_MAX and never draws the pet (the console band's bytes stay what they were). Outside it, 48 holds a 5-step spark plus the pet: that label is 31 cells and 30 drops the pet.
     const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
-    const con = consoleOn ? { ...consoleNav(), cols: columns } : null // the console mode's band strip (consoletabs.ts), null = the tabs the band always had
+    const con = !legacyTabs || consoleOn ? { ...consoleNav(), cols: columns } : null // X1/X4: the shared strip reads the same source health and counts as the pages in every mode.
     const usageOn = con !== null || usageTabFits(columns, t, GLYPHS.structure.speed) // no 用量 tab in the console mode, so it is never hidden behind the `›`
     const labelMax = consoleOn ? FORGE_LABEL_MAX : 48
     const labelCols = Math.min(labelMax, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed, usageOn, con).width - 1 - 2)
     // forgeMore: something was timed but the band has no room for the label (its smallest form) and its tab; the strip then ends in a dim `›` Button (key 'more') that opens the forge view, so the keyboard still reaches it
     let forgeMore = false
     let bandPreset: { segs: Seg[]; width: number } | null = null
-    const fleetNow = await read($, FLEET)
     const snap = snapshot
-    const fleetSlot = snap !== null && snap.band !== null && !consoleOn && fleetNow.fetchedMs !== null
-      ? slotFleet({ stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting }, t)
-      : null
+    const fleetNow = await read($, FLEET)
+    // X3: a bus snapshot owns every pane/band count. Preserve the existing
+    // task-only band when no console snapshot has ever been available.
+    const fleetCounts = consoleSnap !== null ? consoleFleetCounts(consoleSnap, t) : fleetNow.fetchedMs !== null
+      ? { stuck: fleetNow.totals.stuck, running: fleetNow.totals.running, waiting: fleetNow.totals.waiting } : null
+    const fleetSlot = snap !== null && snap.band !== null && !consoleOn ? slotFleet(fleetCounts, t) : null
     if (fleetSlot !== null && snap !== null && snap.band !== null) {
       const base = snap.band.slots
       const atV = base.findIndex(s => s.id === 'verdict')
@@ -1467,7 +1683,12 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const hidden: BarTabId[] = [...(usageOn ? [] : ['usage' as const]), ...(forgeMore ? ['forge' as const] : [])]
     const at = active === null ? -1 : hidden.indexOf(active)
     const moreTo: BarTabId | null = hidden.length === 0 ? null : at < 0 ? hidden[0] : (hidden[at + 1] ?? active)
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, con !== null && active !== 'forge' ? consoleTab : active, forge, usageOn, moreTo, con, bandPreset)
+    const bandNow = await $.clock.now()
+    const qSrc = consoleSnap?.sources.quota?.state
+    // the band is two rows: row 2 is the tab row while the pane is closed. With the pane open the pane's own strip is the only tab row on screen (folds A4).
+    let paneOpen = false
+    if (!legacyTabs || consoleOn) { try { paneOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs)
     // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
     if (active !== 'decide' || rows < SHELL_ROWS) bandBatch = NO_BATCH // the batch lives while the card view is drawn
     if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
@@ -1597,7 +1818,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           progress = progressRow(el, unit.length === 0 ? [] : layoutBand(unit, mainCols - 1).segs.slice(0, -1), slot)
           quick = [] // the shell's quick row stays (the card keys use it); outside a card it is blank, so the frame keeps its height
         }
-        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: bar.node }))
+        return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: bar.stripRow }))
       }
     }
     let content: unknown[] = []
@@ -1605,7 +1826,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       // the room under the bar and the rule: the speed view (ours) and, when there is room for it, the mod below's full view (Ferris, pet, memory, brain)
       // When this tab is shut the mod below is not asked and its element is not in our tree. Its Raster is then not mounted, so its `$.ui.blit` is denied (host contract: `{ deny }` when nothing of the
       // caller's is mounted there) and the screen shows only our tree: no stale picture (checked in a real terminal, BL-0359 round 2). The mod resends its frame once it is drawn again.
-      const room = rows - 2
+      const room = rows - 2 // the speed tab's thresholds are pinned by the speed-tab tests (known red until its own follow-up); with the two-row bar it is one row over budget
       if (room >= SPEED_ROWS) {
         const stack = SPEED_PLACEMENT === 'stack'
         const view = speedView(steps, stack ? SPEED_ROWS : Math.min(room, FORGE_FULL_ROWS), columns, t)
@@ -1620,13 +1841,13 @@ export function registerLive(on: Parameters<Register>[0]): void {
       }
     } else if (active === 'decide') {
       // the pane's own 待決 lines, compact; a press is the pane's decidePress, and the draw is asked again once it has written the state
-      content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, rows - 2)
+      content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, rows - 3)
     } else if (active !== null) {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot })
     }
-    if (active !== 'forge' && rows < 2 + content.length) return bar.node // the rule and the rows do not fit: the first row alone stays
+    if (active !== 'forge' && rows < 3 + content.length) return bar.node // the two bar rows, the rule and the rows do not fit: the two bar rows alone stay
     // The fleet counts are on the band's own line (slotFleet). Nothing is handed to the mod below for a second row.
-    if ((content.length === 0 && (active === null || active === 'forge')) || rows < 2) return bar.node // an open tab with no row of its own still draws its rule: the ━ shows which tab is open
+    if ((content.length === 0 && (active === null || active === 'forge')) || rows < 3) return bar.node // an open tab with no row of its own still draws its rule: the ━ shows which tab is open
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 
@@ -1636,7 +1857,34 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return model === undefined ? next(e) : scrollHook(model, e, next, () => { void $.ui.invalidate('ui.render') })
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => consoleOn ? consolePaneOf($, e) : (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideInputs = inputsFor(e.surface), await decideRepair($, await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, now: await $.clock.now(), inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } }, decideScroll, await fleetFor($))))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
+    const legacy = (e.props as { legacyTabs?: boolean }).legacyTabs === true
+    if (consoleOn && legacy) {
+      const tree = await consolePaneOf($, e)
+      await probePane($, e, tree)
+      return tree
+    }
+    hostScrollHome($, e.props.scroll, paneTab)
+    decideCols = paneWidth(e.props.bodyColumns)
+    decideInputs = inputsFor(e.surface)
+    await decideRepair($, await read($, DECIDE))
+    decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }
+    const decideNow = await $.clock.now()
+    const fleet = await fleetFor($)
+    const frameNow = legacy ? 0 : await $.clock.now()
+    const epoch = legacy ? 0 : syncPanePlacement($, e.props.placement, e.props.isFocused)
+    const tree = Pane(
+      $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
+      () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') },
+      expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') },
+      folded, e.props.scroll ?? null,
+      { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
+      decideScroll, fleet, null,
+      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}) },
+    )
+    await probePane($, e, tree)
+    return tree
+  })
 
   // All live and console tabs share the bottom window; scroll keys move its
   // offset. A host without a frame still receives the event through next(e).

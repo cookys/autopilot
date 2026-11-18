@@ -34,7 +34,7 @@ const ctxOf = (t: ReturnType<typeof makeT>, cols: number, decide?: DecideView) =
 const texts = (ls: PaneLine[]): string[] => ls.map(l => l.text.trimEnd())
 const pressIds = (ls: PaneLine[]): string[] => ls.flatMap(l => [...new Set((l.segs ?? []).flatMap(s => (s.press === undefined ? [] : [s.press])))])
 
-test('DECIDE card: context and notes precede options, then submit in the key/value grammar (key at column 2, value at column 12), a blank between cards', () => {
+test('DECIDE card: question, then rows in the key/value grammar (key at column 2, value at column 12), a blank between cards', () => {
   const zh = makeT('zh-TW')
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view()))
   const t = texts(ls)
@@ -49,7 +49,7 @@ test('DECIDE card: context and notes precede options, then submit in the key/val
   const advice = at('  建議      ')
   const note = ls.findIndex(l => l.field !== undefined && l.field.key === 'note:d-4290499d')
   expect(bg).toBe(2)
-  expect([bg < blocks, blocks < advice, advice < note, note < row], 'the order is 背景, 卡住, 建議, 補充, 選項').toEqual([true, true, true, true])
+  expect([bg < blocks, blocks < row, row < advice, advice < note], 'the order is 背景, 卡住, 選項, 建議, 補充').toEqual([true, true, true, true])
   expect(t[row + 1]).toBe('            照現況') // every option shows its description under it, not only the picked one
   expect(t[row + 2]).toBe('            [ ] 完整顯示')
   expect(t[row + 3]).toBe('            全列出來')
@@ -352,12 +352,12 @@ test('DECIDE copy: the note placeholder and the submit label say a written answe
 })
 
 // ---- review round 1 ----
-test('DECIDE rows: 背景 → 卡住 → 建議 → 補充 → 選項, a row with nothing to say is not drawn, the source is never drawn, 建議 is `<option>：<reason>` with no star (negative controls)', () => {
+test('DECIDE rows: 背景 → 卡住 → 選項 → 建議 → 補充, a row with nothing to say is not drawn, the source is never drawn, 建議 is `<option>：<reason>` with no star (negative controls)', () => {
   const zh = makeT('zh-TW')
   const full = (over: Partial<LiveDecision>) => decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], ...over })]), ctxOf(zh, 76, view()))
   const one = (over: Partial<LiveDecision>) => texts(full(over))
   const all = one({ background: '為什麼問', recommendation: '甲', why: '少一屏', blocks: '下一個派工', source: 'lane-x', not_authorized: '深度零不能決定' })
-  const keys = ['  背景      為什麼問', '  卡住      下一個派工', '  建議      甲', '            少一屏', '  補充', '  選項      [ ] ★ 甲', '            [ ] 乙']
+  const keys = ['  背景      為什麼問', '  卡住      下一個派工', '  選項      [ ] ★ 甲', '            [ ] 乙', '  建議      甲', '            少一屏', '  補充']
   expect(keys.map(k => all.indexOf(k)), 'every row is there').not.toContain(-1)
   expect(keys.map(k => all.indexOf(k)), 'in this order').toEqual(keys.map(k => all.indexOf(k)).slice().sort((a, b) => a - b))
   expect(all.join('\n'), 'the source is data for the assistant, not the owner').not.toMatch(/lane-x|來源/)
@@ -780,4 +780,29 @@ test('bandinput fill text: head line, then the line decideLine writes for the sa
 test('bandinput fill text: a card with no id and a dialog card (ask_user_question) have none', () => {
   expect(decideFillText(dec(null, 'no id', { options: [OPT('a')] }), view())).toBeNull()
   expect(decideFillText(dec('d-11112222', 'dialog', { options: [OPT('a')], origin: 'ask_user_question' }), view())).toBeNull()
+})
+
+// Changing this order needs the operator's confirmation first (PM 01M7PCAA).
+test('decide card answer-area order is background < blocks < options < advice < note', () => {
+  const zh = makeT('zh-TW')
+  const card = dec('d-0a1b2c3d', '合成測試：發佈前要不要先跑回歸套件？', {
+    background: '合成背景：上一輪改動碰到排程邊界',
+    blocks: '合成卡住：發佈流水線等待確認',
+    options: [OPT('先跑回歸'), OPT('只跑冒煙'), OPT('跳過直接發')],
+    recommendation: '先跑回歸',
+    why: '涵蓋排程邊界',
+  })
+  for (const cols of [160, 80] as const) {
+    const ls = decideTabLines(snapOf([card]), ctxOf(zh, cols, view()))
+    const out = texts(ls)
+    const bg = out.findIndex(r => r.startsWith('  背景') && r.includes('合成背景'))
+    const blocks = out.findIndex(r => r.startsWith('  卡住') && r.includes('合成卡住'))
+    const opt = ls.findIndex(l => l.kind === 'choice' && l.text.includes('先跑回歸'))
+    const optLast = ls.findIndex(l => l.kind === 'choice' && l.text.includes('跳過直接發'))
+    const advice = out.findIndex(r => r.startsWith('  建議') && r.includes('先跑回歸'))
+    const note = ls.findIndex(l => l.field?.key === 'note:d-0a1b2c3d')
+    const indices = [bg, blocks, opt, optLast, advice, note]
+    expect(indices.every(i => i >= 0)).toBe(true)
+    for (let i = 1; i < indices.length; i++) expect(indices[i]).toBeGreaterThan(indices[i - 1])
+  }
 })

@@ -1,6 +1,10 @@
 // mods/live/tabs.ts — the tab builders of the live pane (project/plans/2026-10-13-live-pane-design-system.md §6.1): 現況, 派工, 審查, 用量, 殘留 and ?.
 // Every line is built by a ui.ts component; this file writes no theme key, no glyph literal and no hand-made line (ui-lint.test.js L1, L2, L4-L7).
 
+import { decisionCount, consoleFleetCounts, lineState, pendingSourceMissing, stuckLinesOf } from './pages/rows'
+import { PAGE_KEYS } from './pages/layout'
+import { ROLE_WARNING, isUnknownPool, normalizedPools, rankPools } from './pages/quota-pick'
+import type { ConsoleSnapshot } from './console'
 import { T_EN } from './i18n'
 import { ratioLevel } from './band-contract.ts'
 import type { T } from './i18n'
@@ -82,9 +86,11 @@ export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, h
 // ---- the band's own tab row (layout E1): the first four pane tabs, the band's own 用量 tab and, when a mod below draws one, a forge tab, right-aligned on the band's row. The labels and their weights are
 // ui.strip()'s (` name ` per tab, one space after each); the rule under an open tab is built from the SAME widths (ui.tabRule), so the `━` stands exactly under the label by construction. ----
 export type BarTabId = 'now' | 'decide' | 'dispatch' | 'review' | 'usage' | 'forge'
+export const BAND_PAGE_TABS = ['now', 'decide', 'fleet', 'quota', 'dispatch', 'review', 'spend', 'hygiene'] as const
+export type BandPageId = (typeof BAND_PAGE_TABS)[number]
 // 'usage' is the band's own tab (the token table of forge-stats, drawn in the O4 shell); it is no pane tab: where the shell is not drawn its open button opens the pane's 花費 tab
 export const BAR_PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'usage'] as const
-export type BarTab = { id: BarTabId | ConsoleTab; label: Seg; width: number; start: number } // start counts from the row's first tab
+export type BarTab = { id: BarTabId | ConsoleTab | BandPageId; label: Seg; width: number; start: number } // start counts from the row's first tab
 export type BarStrip = { tabs: BarTab[]; width: number } // width counts the space after each tab
 // forge: the forge tab's text (one string the mod below drew), or null for no forge tab
 // usage: false leaves the 用量 tab out (the band has no room for it; a dim `›` ends the row instead, see usageTabFits; forgeTab is the forge tab's text, the caller's glyph)
@@ -102,6 +108,56 @@ export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | Con
     x += width + 1
   }
   return { tabs, width: x }
+}
+// Console band row 2 when the pane is closed: the new page names 1-8 (same names as the pane strip, without digits), shortening to first character only when narrow.
+export function pageBarStrip(snap: LiveSnapshot | null, t: T, columns: number, active: BarTabId | ConsoleTab | BandPageId | null, forge: string | null, con: ConsoleSnapshot | null = null, numbered = true): BarStrip {
+  const needs = snap === null ? {} : tabNeeds(snap)
+  const noPendingSrc = pendingSourceMissing({ live: snap, console: con })
+  const pending = decisionCount({ live: snap, console: con })
+  // M6: the fleet count marks only failed / stuck lines with ✗; idle lines are counted apart with ⊘ (an idle line is not an error)
+  const fleetCounts = con === null ? { failed: 0, stuck: 0, running: 0, waiting: 0, normal: 0 } : consoleFleetCounts(con, t)
+  // M6: 額度 carries the same pool counts the quota page draws: red ✗, unknown ?, yellow ▲ (a closed band must not read as all-clear)
+  const pools = normalizedPools(con)
+  const verdicts = pools === null ? [] : rankPools(pools, con?.generated_at_ms ?? 0, t)
+  const qRed = verdicts.filter(v => v.role === 'broken' && !isUnknownPool(v)).length
+  const qUnk = verdicts.filter(v => isUnknownPool(v)).length
+  const qWarn = verdicts.filter(v => v.role === ROLE_WARNING && !isUnknownPool(v)).length
+  const G = {
+    failed: ui.glyphOf(ui.stateOf('console', 'FAILED')), stalled: ui.glyphOf(ui.stateOf('console', 'STALLED')),
+    running: ui.glyphOf(ui.stateOf('console', 'RUNNING')), waiting: ui.glyphOf(ui.stateOf('console', 'WAITING')), normal: ui.glyphOf(ui.stateOf('console', 'PENDING')),
+    unknown: ui.glyphOf(ui.stateOf('qc', 'UNKNOWN')), need_you: ui.glyphOf(ui.stateOf('console', 'NEED_YOU')),
+  }
+  const marks = (name: string, parts: [string, number][]): string => {
+    const p = parts.filter(([, n]) => n > 0)
+    return p.length === 0 ? name : name + '(' + p.map(([g, n]) => g + n).join(' ') + ')'
+  }
+  const first = (s: string): string => [...s][0] ?? s
+  const build = (short: boolean): BarStrip => {
+    const list = BAND_PAGE_TABS.map(id => {
+      const full = t('tab.' + id)
+      const name = short ? first(full) : full
+      const label = id === 'fleet' ? marks(name, [[G.failed, fleetCounts.failed], [G.stalled, fleetCounts.stuck], [G.running, fleetCounts.running], [G.waiting, fleetCounts.waiting], [G.normal, fleetCounts.normal]])
+        : id === 'quota' ? marks(name, [[G.failed, qRed], [G.unknown, qUnk], [G.need_you, qWarn]])
+          : ui.tabCountLabel(name, id === 'decide' ? (noPendingSrc ? null : pending) : 0, false)
+      return { id: id as BandPageId | 'forge', label, ...((needs as Record<string, TabNeed | undefined>)[id] === undefined ? {} : { need: true }) }
+    })
+    // M6: the closed band lists every pane page the pane strip has: 9 寵物 and 0 鍛 too (the forge label is the mod's own when one is drawn)
+    const pet = { id: 'pet' as BandPageId | 'forge', label: short ? first(t('tab.pet')) : t('tab.pet') }
+    const act = active === 'forge' ? ('forge' as const) : null
+    const built = ui.strip<BandPageId | 'forge'>({ t, cols: 100000 }, act, [...list, pet, { id: 'forge' as const, label: forge ?? t('tab.forge_band') }], false)
+    const tabs: BarTab[] = []
+    let x = 0
+    for (const b of built.tabs) {
+      const label = short ? { ...b.label, text: b.label.text.trim() } : b.label
+      const pageLabel = numbered && columns >= 80 ? { ...label, text: PAGE_KEYS[b.id] + ' ' + label.text.trim() } : label
+      const numberedWidth = displayWidth(pageLabel.text)
+      tabs.push({ id: b.id, label: pageLabel, width: numberedWidth, start: x })
+      x += numberedWidth + 1
+    }
+    return { tabs, width: x }
+  }
+  const full = build(false)
+  return full.width <= columns ? full : build(true)
 }
 // The forge tab's label room: the narrowest worth asking for, and the cells the indicator keeps at least (register.ts reads both).
 export const FORGE_LABEL_MIN = 5
@@ -358,8 +414,8 @@ function nowLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 }
 // ================= Decide (待決) =================
 // The owner's open questions under one section header (`▾ 待你回答  3 ───`), one card each. A card is the question (bold, wraps, never repeated), then rows in the pane's key/value
-// grammar (key at column 2, value at column 12): 背景 (why it is asked) → 卡住 (what stalls) → 建議 (the recommendation and its reason, no star) → 補充 (the note field) → 選項
-// (Buttons; the recommended one starred, the picked one bold). A row with nothing to say is not drawn. A blank line separates cards. Under the cards one Button sends every
+// grammar (key at column 2, value at column 12): 背景 (why it is asked) → 卡住 (what stalls) → 選項 (Buttons; the recommended one starred, the picked one bold) → 建議
+// (the recommendation and its reason, no star) → 補充 (the note field). A row with nothing to say is not drawn. A blank line separates cards. Under the cards one Button sends every
 // answered question as a single prompt (register.ts) and says where the answers go. A phone has no text field, so a question without options says to answer in the conversation.
 function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const t = ctx.t
@@ -402,6 +458,9 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     const pick = decidePick(d, dv)
     const rec = recommendedIndex(d)
     const dialog = decideDialog(d)
+    if (d.options.length > 0) {
+      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(locked || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F, descriptions: d.options.map(o => o.description) })) // every description stays visible
+    }
     if (d.recommendation !== null) { // the recommended option's own label when it matches one, else the recommendation as written; the reason goes on the row below it
       const what = rec === null ? d.recommendation : d.options[rec].label
       out.push(...ui.cardRow(u, t('decide.k_advice'), what, { fact: F })) // the option name on the first row, the reason on its own rows below
@@ -416,9 +475,6 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
       if (id !== null && dv.inputs && !dialog) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))
       else if (dialog) out.push(...ui.detail(u, t('decide.in_dialog'), { fact: F }))
       else if (d.options.length === 0 || id === null) out.push(...ui.detail(u, t('decide.in_chat'), { fact: F }))
-    }
-    if (d.options.length > 0) {
-      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(locked || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F, descriptions: d.options.map(o => o.description) })) // keep options adjacent to the submit strip; every description stays visible
     }
     out.push(ui.blank()) // the one body blank (design plan 4, the 待決 exception): cards are told apart by a drawn empty row
   })
@@ -483,7 +539,7 @@ function decideLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
 export const decideTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(decideLinesRaw(snap, ctx), ctx.cols)
 // The 待決 band's compact form (band.tsx draws it): the first open question's title rows and option rows (the pane's own lines, wrapped at `ctx.cols`, never cut), a pointer row,
 // then the send row(s). The background and the option descriptions stay in the pane: when the first card has any, the pointer row `decide.band_bg` says so instead of showing half a
-// sentence. `maxRows` is the room the band has under its bar and rule (register.ts passes rows - 2): when title + options + pointer + send row do not fit, the rows from the top stay
+// sentence. `maxRows` is the room the band has under its bar and rule (register.ts passes rows - 3): when title + options + pointer + send row do not fit, the rows from the top stay
 // up to the room and the pointer becomes `decide.band_more` (the pane has the rest); the send row always stays. No `maxRows` = no limit.
 export function decideBandPlan(snap: LiveSnapshot, ctx: PaneCtx, maxRows?: number): { rows: PaneLine[]; pointer: 'decide.band_bg' | 'decide.band_more' | null; bars: PaneLine[]; empty: boolean } {
   const lines = decideTabLines(snap, ctx)

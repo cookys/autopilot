@@ -10,17 +10,32 @@
 // never carried into the result (fixtures/console/leak.json plants both; console.test.js pins their absence from the parse result).
 
 export type ConsoleSourceState = 'ok' | 'stale' | 'expired' | 'no_source'
-export type ConsoleItem = { id: string; kind: 'card' | 'exception' | 'hint' | 'quota'; severity: number; state: string; needs_operator: boolean; title: string; text: string; since_ms: number; line_id: string | null; to_console: boolean | null; answerable_by: string[] }
-export type ConsoleCard = { id: string; question: string; status: 'open' | 'awaiting_operator_action' | 'waiting_step' | 'relayed_unconfirmed'; opened_at_ms: number; executor_display: string | null }
+// the facts a page may read (a closed list: an extra key, such as a raw member address in a patrol item, is left behind); values are strings, numbers or booleans only
+export const FACT_KEYS = ['seat', 'pool', 'resets_at', 'source', 'window', 'resets_at_text', 'stale', 'pct', 'projected', 'exhaust_h'] as const
+export type ConsoleFacts = Record<string, string | number | boolean>
+export type ConsoleItem = { id: string; kind: 'card' | 'exception' | 'hint' | 'quota' | 'seat_blocked'; severity: number; state: string; needs_operator: boolean; title: string; text: string; since_ms: number; line_id: string | null; to_console: boolean | null; answerable_by: string[]; facts: ConsoleFacts }
+export type ConsoleCard = { id: string; question: string; status: 'open' | 'awaiting_operator_action' | 'waiting_step' | 'relayed_unconfirmed'; opened_at_ms: number; executor_display: string | null; background?: string | null; blocks?: string | null; recommendation?: string | null; options?: { label: string; description: string; recommended?: boolean }[] }
 export type ConsoleIssue = { rule: string; state: string; subject: string; since_ms: number; to_console: boolean }
 export type ConsoleLine = { line_id: string; label: string; lead_display: string | null; issues: ConsoleIssue[] }
-export type ConsoleSnapshot = { generated_at_ms: number; sources: Record<string, { at_ms: number | null; state: ConsoleSourceState }>; counts: { decisions: number; exceptions: number; quota_risk: number; tabs: Record<string, [string, number][]>; summary: { lines: Record<string, number>; hosts: Record<string, number>; hints: number; quota_worst: string | null } }; items: ConsoleItem[]; cards: ConsoleCard[] | null; lines: ConsoleLine[] | null }
+export type ConsoleSnapshot = { generated_at_ms: number; sources: Record<string, { at_ms: number | null; state: ConsoleSourceState }>; counts: { decisions: number; exceptions: number; quota_risk: number; tabs: Record<string, [string, number][]>; summary: { lines: Record<string, number>; hosts: Record<string, number>; hints: number; quota_worst: string | null } }; items: ConsoleItem[]; quota: ConsoleQuota; cards: ConsoleCard[] | null; lines: ConsoleLine[] | null }
+
+// one element of `quota.pools[]` (fleet 01M7N4EK); a field the feed lacks is null, never 0
+export type QuotaPool = {
+  pool: string; seven_day_pct: number | null; five_hour_pct: number | null; resets_at_ms: number | null; burn_pct_per_h: number | null; burn_window_h: number | null
+  projected_pct_at_reset: number | null; projected_exhaustion_at_ms: number | null; verdict: string | null; limit_hit: boolean | null; stale: boolean | null; stale_age_min: number | null
+  stale_note: string | null; observed_at_ms: number | null; stranded_seats: number | null; stranded_seat_list: string[] | null; switched: string | boolean | null; seats: number | null
+  projection_source: string | null; switch_suggestion: string | null
+}
+export type QuotaSeat = { seat: string; pool: string; seven_day_pct: number | null; five_hour_pct: number | null; stale: boolean | null; age_min: number | null }
+// pools null = the feed has no quota.pools (no source); [] = the feed says there is no pool
+export type ConsoleQuota = { pools: QuotaPool[] | null; seats: QuotaSeat[] }
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
 const s = (v: unknown): string | null => (typeof v === 'string' ? v : null)
 const n = (v: unknown): number | null => (typeof v === 'number' ? v : null)
 const b = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null)
+const fin = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
 // each element parser: null on a missing or wrong-typed required field; the nullable fields accept an explicit null
 function parseItem(v: Obj): ConsoleItem | null {
@@ -41,8 +56,43 @@ function parseItem(v: Obj): ConsoleItem | null {
   return {
     id, kind: kind as ConsoleItem['kind'], severity, state, needs_operator, title, text, since_ms, line_id,
     to_console: b(v.to_console),
+    facts: parseFacts(v.facts),
     answerable_by: Array.isArray(answerable_by) ? answerable_by.filter((x): x is string => typeof x === 'string') : [],
   }
+}
+
+function parseFacts(v: unknown): ConsoleFacts {
+  const out: ConsoleFacts = {}
+  if (!isObj(v)) return out
+  for (const k of FACT_KEYS) { const x = v[k]; if (typeof x === 'string' || typeof x === 'boolean' || (typeof x === 'number' && Number.isFinite(x))) out[k] = x }
+  return out
+}
+
+function parsePool(v: unknown): QuotaPool | null {
+  if (!isObj(v)) return null
+  const pool = s(v.pool)
+  if (pool === null) return null
+  const list = Array.isArray(v.stranded_seat_list) ? v.stranded_seat_list.filter((x): x is string => typeof x === 'string') : null
+  const sw = v.switched
+  return {
+    pool, seven_day_pct: fin(v.seven_day_pct), five_hour_pct: fin(v.five_hour_pct), resets_at_ms: fin(v.resets_at_ms), burn_pct_per_h: fin(v.burn_pct_per_h),
+    burn_window_h: fin(v.burn_window_h), projected_pct_at_reset: fin(v.projected_pct_at_reset), projected_exhaustion_at_ms: fin(v.projected_exhaustion_at_ms), verdict: s(v.verdict),
+    limit_hit: b(v.limit_hit), stale: b(v.stale), stale_age_min: fin(v.stale_age_min), stale_note: s(v.stale_note), observed_at_ms: fin(v.observed_at_ms),
+    stranded_seats: fin(v.stranded_seats), stranded_seat_list: list, switched: typeof sw === 'string' || typeof sw === 'boolean' ? sw : null, seats: fin(v.seats),
+    projection_source: s(v.projection_source), switch_suggestion: s(v.switch_suggestion),
+  }
+}
+
+function parseSeat(v: unknown): QuotaSeat | null {
+  if (!isObj(v)) return null
+  const seat = s(v.seat)
+  const pool = s(v.pool)
+  return seat === null || pool === null ? null : { seat, pool, seven_day_pct: fin(v.seven_day_pct), five_hour_pct: fin(v.five_hour_pct), stale: b(v.stale), age_min: fin(v.age_min) }
+}
+
+function parseQuota(v: unknown): ConsoleQuota {
+  if (!isObj(v) || !Array.isArray(v.pools)) return { pools: null, seats: [] }
+  return { pools: v.pools.map(parsePool).filter((p): p is QuotaPool => p !== null), seats: Array.isArray(v.seats) ? v.seats.map(parseSeat).filter((x): x is QuotaSeat => x !== null) : [] }
 }
 
 const CARD_ID = /^d-[0-9a-f]{8}$/
@@ -55,7 +105,14 @@ function parseCard(v: Obj): ConsoleCard | null {
   if (!CARD_ID.test(id)) return null // the id reaches the prompt box (a fill: press) and the shell; only the decision card id form crosses the trust boundary
   const executor_display: unknown = v.executor_display
   if (executor_display !== null && typeof executor_display !== 'string') return null
-  return { id, question, status: status as ConsoleCard['status'], opened_at_ms, executor_display }
+  const details: Partial<ConsoleCard> = {}
+  // Y2: retain only typed answer-area fields; a legacy title-only card keeps its shape.
+  for (const key of ['background', 'blocks', 'recommendation'] as const) {
+    if (typeof v[key] === 'string' || v[key] === null) details[key] = s(v[key])
+  }
+  if (Array.isArray(v.options)) details.options = v.options.flatMap(o => isObj(o) && typeof o.label === 'string'
+    ? [{ label: o.label, description: s(o.description) ?? '', ...(typeof o.recommended === 'boolean' ? { recommended: o.recommended } : {}) }] : [])
+  return { id, question, status: status as ConsoleCard['status'], opened_at_ms, executor_display, ...details }
 }
 
 function parseIssue(v: Obj): ConsoleIssue | null {
@@ -137,30 +194,50 @@ export function parseConsole(text: string): ConsoleSnapshot | null {
     generated_at_ms: generated_at_ms ?? 0,
     sources,
     counts: parseCounts(counts),
+    quota: parseQuota(raw.quota),
     items: itemsIn.map(v => (isObj(v) ? parseItem(v) : null)).filter((x): x is ConsoleItem => x !== null),
     cards: cardsIn === null ? null : cardsIn.map(v => (isObj(v) ? parseCard(v) : null)).filter((x): x is ConsoleCard => x !== null),
     lines: linesIn === null ? null : linesIn.map(v => (isObj(v) ? parseLine(v) : null)).filter((x): x is ConsoleLine => x !== null),
   }
 }
 
-// the repo config .claude/console.json: true only for an object whose schema is exactly autopilot.console/1 and whose mode is exactly program
-export function consoleModeOf(text: string | null): boolean {
-  if (text === null) return false
-  let raw: unknown
-  try { raw = JSON.parse(text) } catch { return false }
-  if (!isObj(raw)) return false
-  return s(raw.schema) === 'autopilot.console/1' && s(raw.mode) === 'program'
+export const INGEST_FROM_TOKEN = /^[a-z0-9._-]+\/[a-z0-9._-]+\/[a-z0-9._-]+=[a-z]+$/
+export type ConsoleConfig = { on: boolean; ingestFrom: string | null }
+
+export function parseIngestFrom(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const kept = v.split(/\s+/).filter(tok => INGEST_FROM_TOKEN.test(tok))
+  return kept.length > 0 ? kept.join(' ') : null
 }
 
-// the mode of the session's repo: walk up from `cwd` to the FIRST directory that holds a `.git` (a directory with HEAD, or a gitfile) and read that repo's `.claude/console.json`; a parent repo's file is never
-// borrowed. The mod cannot run git, so `readText` is the caller's file reader (null = absent or unreadable). false for no repo, no file, broken JSON, a foreign schema and any mode but program.
-export async function findConsoleMode(cwd: string, readText: (path: string) => Promise<string | null>): Promise<boolean> {
+// the repo config .claude/console.json: on only for an object whose schema is exactly autopilot.console/1 and whose mode is exactly program;
+// optional ingest_from ("<address>=pace ...") keeps only tokens matching ^[a-z0-9._-]+/[a-z0-9._-]+/[a-z0-9._-]+=[a-z]+$ (joined by ' '; null when absent or none match)
+export function consoleConfigOf(text: string | null): ConsoleConfig {
+  if (text === null) return { on: false, ingestFrom: null }
+  let raw: unknown
+  try { raw = JSON.parse(text) } catch { return { on: false, ingestFrom: null } }
+  if (!isObj(raw)) return { on: false, ingestFrom: null }
+  if (s(raw.schema) !== 'autopilot.console/1' || s(raw.mode) !== 'program') return { on: false, ingestFrom: null }
+  return { on: true, ingestFrom: parseIngestFrom(raw.ingest_from) }
+}
+
+export function consoleModeOf(text: string | null): boolean {
+  return consoleConfigOf(text).on
+}
+
+// the config of the session's repo: walk up from `cwd` to the FIRST directory that holds a `.git` (a directory with HEAD, or a gitfile) and read that repo's `.claude/console.json`; a parent repo's file is never
+// borrowed. The mod cannot run git, so `readText` is the caller's file reader (null = absent or unreadable). on is false (ingestFrom null) for no repo, no file, broken JSON, a foreign schema and any mode but program.
+export async function findConsoleConfig(cwd: string, readText: (path: string) => Promise<string | null>): Promise<ConsoleConfig> {
   let dir = cwd
   for (let i = 0; i < 16 && dir !== ''; i++) {
-    if ((await readText(dir + '/.git/HEAD')) !== null || (await readText(dir + '/.git')) !== null) return consoleModeOf(await readText(dir + '/.claude/console.json'))
+    if ((await readText(dir + '/.git/HEAD')) !== null || (await readText(dir + '/.git')) !== null) return consoleConfigOf(await readText(dir + '/.claude/console.json'))
     const cut = dir.lastIndexOf('/')
     if (cut <= 0) break
     dir = dir.slice(0, cut)
   }
-  return false
+  return { on: false, ingestFrom: null }
+}
+
+export async function findConsoleMode(cwd: string, readText: (path: string) => Promise<string | null>): Promise<boolean> {
+  return (await findConsoleConfig(cwd, readText)).on
 }

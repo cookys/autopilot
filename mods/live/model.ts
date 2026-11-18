@@ -1284,7 +1284,7 @@ const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(
 
 // ================= stage-graph P7: the one-line band (contract ②) and the panel's facts =================
 // Colours are theme keys used as TEXT colour only (owner decision 5): no backgroundColor, no inverse, no raw colour.
-export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged'
+export type ThemeKey = 'claude' | 'warning' | 'error' | 'success' | 'suggestion' | 'inactive' | 'subtle' | 'merged' | 'remember'
 export type SlotId = 'verdict' | 'fleet' | 'position' | 'unit' | 'dispatch' | 'review' | 'decisions' | 'spend' | 'quota' | 'hygiene'
 // tag: which part the width table may drop or shorten (age, k/N, 族, the bar, the stage text). fleet* tags are the one-line band's own drops (layoutBandLine).
 export type SegTag = 'age' | 'kn' | 'fam' | 'bar' | 'stage' | 'live' | 'stalled' | 'chip' | 'wt' | 'walk' | 'dot' | 'reason' | 'round' | 'qc' | 'amt' | 'pct' | 'bar10' | 'bar5' | 'bar3' | 'qx' | 'fleetWord' | 'fleetRun' | 'fleetWait' | 'fleetStuck'
@@ -1491,11 +1491,13 @@ export function slotVerdict(v: { mark: string; word: string; key: ThemeKey | und
 // The fleet summary on the band's own line, right after the verdict: `艦隊 ⊘ N  ● N  ⋯ N`. The word is dim; each count is a chip whose glyph carries the
 // theme key (stuck broken, running running, waiting idle) and whose number is plain. Both the glyph and the number carry the drop tag, so a width step
 // that removes a count removes the number with it. Zeros stay (a fetched summary always names all three). Null hides the slot: nothing has been fetched.
-export function slotFleet(c: { stuck: number; running: number; waiting: number } | null | undefined, t: T = T_EN): Slot | null {
+export function slotFleet(c: { stuck: number; running: number; waiting: number; failed?: number; normal?: number } | null | undefined, t: T = T_EN): Slot | null {
   if (c == null) return null
   const chip = (glyph: string, n: number, color: ThemeKey, tag: SegTag): Seg[] => ui.chipSegs([sp(glyph, { color, tag })], [sp(String(n), { tag })])
   const chips = ui.chipsJoin([
+    ...((c.failed ?? 0) > 0 ? [chip(GS.failed, c.failed!, PALETTE.broken, 'fleetStuck')] : []),
     chip(GS.stalled, c.stuck, PALETTE.broken, 'fleetStuck'),
+    ...((c.normal ?? 0) > 0 ? [chip(GS.pending, c.normal!, PALETTE.idle, 'fleetWait')] : []),
     chip(GS.running, c.running, PALETTE.running, 'fleetRun'),
     chip(GS.waiting, c.waiting, PALETTE.idle, 'fleetWait'),
   ], 'next')
@@ -1848,7 +1850,10 @@ export function layoutBandLine(slots: readonly Slot[], columns: number, speed: r
     let last: BandLineLayout | null = null
     for (let n = 0; n <= steps.length; n++) {
       const drop = new Set<BandNarrowId>()
-      for (const step of steps.slice(0, n)) for (const id of step) drop.add(id)
+      for (const step of steps.slice(0, n)) for (const id of step) {
+        if (id === 'fleetWord' && columns >= 120) continue // U1: wide bands always name the fleet group.
+        drop.add(id)
+      }
       const band = layoutBand(narrowSlots(list, drop), bandCols)
       const nextSpeed = narrowSpeed(speed, drop)
       last = { band, speed: nextSpeed, applied: n }

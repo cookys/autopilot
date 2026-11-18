@@ -1,0 +1,14 @@
+
+mods/live/chrome.test.ts:
+(pass) R6: strip at 80, 70 and 60 columns binds 1-8, 9, 0, i with named labels and no action-letter label [9.57ms]
+(pass) R7: pressing 1 on 現況 keeps the pane open on 現況 [0.30ms]
+(pass) R7 mounted: current-page digit Button does not call ui.close or change the 現況 header [254.94ms]
+(fail) R9: collapsed band shows snapshot pending and fault counts, [+], no digit keys, exactly two rows [1.87ms]
+  AssertionError: expect(received).toContain()
+
+  Expected: containing "[+]"
+  Received: "即時 · 等待第一份快照 │ ⓘ "
+
+ 3 pass
+ 1 fail
+Ran 4 tests across 1 file. [0.55s]

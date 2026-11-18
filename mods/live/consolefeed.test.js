@@ -23,11 +23,15 @@ const calls = fn => { const f = async a => { f.n++; f.argv = a; return fn(a) }; 
 const file = text => async () => text
 const REAL = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'console', 'fleet-real-shape.json'), 'utf8'))
 
-test('a: the command succeeds -> snapshot from the command, source ok; a second call within 60 s does not run it again', async () => {
+const FICTIONAL_INGEST = 'ns/courier-a/capacity=pace ns/courier-a/fleet-cli=pace'
+
+test('a: key absent -> plain fleet console --json (no env prefix), source ok; a second call within 60 s does not run it again', async () => {
   const feed = F.makeConsoleFeed()
   const run = calls(ok(snapText(NOW)))
   assert.equal(await feed.refresh(run, file(null), C.parseConsole, NOW), true)
   assert.deepEqual(run.argv, ['fleet', 'console', '--json'])
+  assert.deepEqual(F.CONSOLE_ARGV, ['fleet', 'console', '--json'])
+  assert.equal('CONSOLE_INGEST_FROM' in F, false)
   const s = feed.current(NOW)
   assert.equal(s.sources.cards.state, 'ok')
   assert.equal(await feed.refresh(run, file(null), C.parseConsole, NOW + 59_000), false)
@@ -35,6 +39,74 @@ test('a: the command succeeds -> snapshot from the command, source ok; a second 
   assert.equal(feed.current(NOW + 59_000), s)
   assert.equal(await feed.refresh(run, file(null), C.parseConsole, NOW + 60_000), true)
   assert.equal(run.n, 2)
+})
+
+test('a2: ingest_from present in console.json -> env FLEET_CONSOLE_INGEST_FROM=<value> fleet console --json as one argv element', async () => {
+  const repo = {
+    '/r/.git/HEAD': 'ref: refs/heads/x\n',
+    '/r/.claude/console.json': JSON.stringify({ schema: 'autopilot.console/1', mode: 'program', ingest_from: FICTIONAL_INGEST }),
+  }
+  const cfg = await C.findConsoleConfig('/r/sub', async p => (Object.hasOwn(repo, p) ? repo[p] : null))
+  assert.deepEqual(cfg, { on: true, ingestFrom: FICTIONAL_INGEST })
+  const feed = F.makeConsoleFeed()
+  feed.setIngestFrom(cfg.ingestFrom)
+  const run = calls(ok(snapText(NOW)))
+  assert.equal(await feed.refresh(run, file(null), C.parseConsole, NOW), true)
+  // the space-separated sender list stays ONE argv element after env, never split on space
+  assert.deepEqual(run.argv, ['env', `FLEET_CONSOLE_INGEST_FROM=${FICTIONAL_INGEST}`, 'fleet', 'console', '--json'])
+})
+
+test('a3: ingest_from absent, blank, or non-string in console.json -> plain fleet console --json with no env prefix', async () => {
+  for (const extra of [{}, { ingest_from: '' }, { ingest_from: '   \t  ' }, { ingest_from: null }, { ingest_from: 42 }, { ingest_from: [FICTIONAL_INGEST] }]) {
+    const repo = {
+      '/r/.git/HEAD': 'ref: refs/heads/x\n',
+      '/r/.claude/console.json': JSON.stringify({ schema: 'autopilot.console/1', mode: 'program', ...extra }),
+    }
+    const cfg = await C.findConsoleConfig('/r', async p => (Object.hasOwn(repo, p) ? repo[p] : null))
+    assert.deepEqual(cfg, { on: true, ingestFrom: null })
+    const feed = F.makeConsoleFeed()
+    feed.setIngestFrom(cfg.ingestFrom)
+    const run = calls(ok(snapText(NOW)))
+    assert.equal(await feed.refresh(run, file(null), C.parseConsole, NOW), true)
+    assert.deepEqual(run.argv, ['fleet', 'console', '--json'])
+  }
+})
+
+test('a4: malformed ingest_from tokens are dropped; surviving tokens get the env prefix, and all-malformed gets no prefix', async () => {
+  const mixed = [
+    'ns/courier-a/capacity=pace',
+    'UPPER/courier-a/x=pace',
+    'not-an-address',
+    'ns/only-two=pace',
+    'ns/a/b/extra=pace',
+    'ns/a/b=pace1',
+    'ns/a/b=p_q',
+    'ns/a/b=',
+    'ns/a/b=pace;id',
+    '$HOME/a/b=pace',
+    'ns/courier-a/fleet-cli=pace',
+  ].join('   ')
+  const cfg = C.consoleConfigOf(JSON.stringify({ schema: 'autopilot.console/1', mode: 'program', ingest_from: mixed }))
+  assert.deepEqual(cfg, { on: true, ingestFrom: FICTIONAL_INGEST })
+  // consolefeed.ts also enforces the token grammar at its own boundary
+  const directFeed = F.makeConsoleFeed(F.CONSOLE_EVERY_MS, F.CONSOLE_STALE_MS, mixed)
+  const runMixed = calls(ok(snapText(NOW)))
+  assert.equal(await directFeed.refresh(runMixed, file(null), C.parseConsole, NOW), true)
+  assert.deepEqual(runMixed.argv, ['env', `FLEET_CONSOLE_INGEST_FROM=${FICTIONAL_INGEST}`, 'fleet', 'console', '--json'])
+
+  const allBad = 'UPPER/a/b=pace bad-token ns/a/b=123 ns/two=pace ns/a/b/c=pace'
+  const badCfg = C.consoleConfigOf(JSON.stringify({ schema: 'autopilot.console/1', mode: 'program', ingest_from: allBad }))
+  assert.deepEqual(badCfg, { on: true, ingestFrom: null })
+  const badFeed = F.makeConsoleFeed(F.CONSOLE_EVERY_MS, F.CONSOLE_STALE_MS, allBad)
+  const runBad = calls(ok(snapText(NOW)))
+  assert.equal(await badFeed.refresh(runBad, file(null), C.parseConsole, NOW), true)
+  assert.deepEqual(runBad.argv, ['fleet', 'console', '--json'])
+
+  // clearing ingest_from removes the env prefix and allows an immediate refresh
+  directFeed.setIngestFrom(allBad)
+  const runCleared = calls(ok(snapText(NOW + 1000)))
+  assert.equal(await directFeed.refresh(runCleared, file(null), C.parseConsole, NOW + 1000), true)
+  assert.deepEqual(runCleared.argv, ['fleet', 'console', '--json'])
 })
 
 test('b: the command exits non-zero or throws (a timeout) -> the console.json fallback is read and a console/1 file is accepted', async () => {

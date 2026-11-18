@@ -1,0 +1,8 @@
+Host: $HOME/.local/share/claude/versions/2.1.327
+sha256: 343c744baa14bfd38286a7cb90871051f04379956da6c5b803a9e66019a76ac9
+byte 345242391 wo=Math.max(0,je-Hj(po,co)),To=Ze?wo:Math.min(wo,At),Eo=Math.max(0,Ne-(co?Eme:0)),bo=co?Uj:jj,Do=co?Eo:Math.max(0,Eo-tfe-bo),dn=Math.max(0,At-To),Uo=h2e({component:"Pane",requestId:R.id,owner:R.plugin
+byte 345242855 placement:Ze?"dock":"inline",scroll:{offset:0,bodyRows:wo},view:fn}}),[R.id,R.title,L,pn,Eo,Ze,wo,fn]),Uo),()=>null),{drawn:Go}=No,Lo=X(()=>vUt(Go),[Go]),Nn=X(()=>vJ(Go),[Go]),zo=ue((Wi)=>{if(Wi===nul
+byte 345246374 borderStyle:co?"round":void 0,borderDimColor:!L,borderTopDimColor:!L&&!et,borderTopColor:et?"suggestion":void 0,paddingX:co?1:0,children:[po?e(eX,{open:N,shownId:R.id,columns:Do,heldId:sr,onPick:Yr}):
+byte 345246695 height:Ze?wo:void 0,maxHeight:wo,overflowY:"hidden",children:e(m2e,{content:pt,offset:Vo,columns:Eo,rows:wo,keptColumns:0,children:e(Evr,{value:Eo,children:No.node})})})]}),e(KJ,{inset:bo,isHeld:Dn,on
+Boundary: inline co=!Ze, round border outside clipped mod body; dock has no round border.
+exit=0

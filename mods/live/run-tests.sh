@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # mods/live/run-tests.sh — run the live mod's suites (gen-locales.js --check, live.test.ts, load-source.test.ts) with `claude plugin test`.
 #
+# live.test.ts is split in three files (live.test.ts, live2.test.ts, live3.test.ts; live.part1.ts / live.part2.ts only set which third a file registers): `claude plugin test` runs each file in a child
+# that prints ONE report line to a pipe, and a line over about 128 KiB is cut, which reads as "the file did not load". One file of ~800 tests is about 200 KB; a third each is well under.
+#
 # `claude plugin test <folder>` runs a plugin's *.test.ts files against the real engine, and a plugin loads its hooks module from the
 # `modules` key of hooks/hooks.json. The suite is written for a plugin named `autopilot` ($.state refs are owner-checked) whose
 # modules entry is ../mods/live/register.ts. This script builds that throwaway wrapper in a temp dir:
@@ -37,7 +40,14 @@ node --test "$here/commandtab.test.js"
 node --test "$here/consolepages.test.js"
 # the console data source (consolefeed.ts: fleet console --json, the 60 s interval, the console.json fallback, staleness, garbage input)
 node --test "$here/consolefeed.test.js"
+# the quota page's pick (pages/quota-pick.ts: worstPool / rankPools, g2 A1 / A7 order, the no-pace fallback): pure, imports the real source
+node --test "$here/pages/quota-pick.test.js" < /dev/null
 # console.test.ts (C1 U8: KR8 order and counts, the leak red light) is picked up by `claude plugin test` below with the other *.test.ts files
+# frame.test.ts (S0: the fixed-height pane frame, the page registry, the pane key table, the strip without the › chip) is picked up the same way
+# now.test.ts (S3: the 現況 page goldens at 160x40 / 120x30 / 80x24, the seat_blocked rows, the own-seat quota feed) is picked up the same way
+# pages/fleet.test.ts (S2: the 艦隊 page golden rows, fixed height, no-source and stale rows, key presses) is picked up the same way
+# decide.test.ts (S1: the 待決 page, golden against the codeforge mockups, and its key reducer) is picked up the same way
+# pane-poll.test.ts (the real tick runs `fleet console --json` and `fleet seats --quota --json` on every page and with the pane closed, console.json or not) is picked up the same way
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

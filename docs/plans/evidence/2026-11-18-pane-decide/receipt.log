@@ -1,0 +1,9 @@
+# S1 decide page — negative control (2026-11-18, base cdf73aad6)
+green: decide.test.ts 27 pass / 0 fail
+break: golden w160 action row "已選 a 可以（尚未送出）" changed to "已選 b ..." in the test file
+red:   25 pass / 2 fail (decide golden w160; the norm control row)
+revert: test file restored
+green: 27 pass / 0 fail
+# full suite (bash mods/live/run-tests.sh), base cdf73aad6: 1328 tests across 21 files, 81 fail (band/E1/speed/bandsent..., all pre-existing)
+# full suite at tip: gen-locales/ui-lint/node gates ok; claude plugin test 558 tests across 22 files, 8 fail:
+#   registry (frame.test.ts: decide no longer an empty shell), pane-attach 1/2/3 x desktop/terminal (old 待決 tab content, now drawn by the framed page: pane.tsx wiring), "live.test.ts did not load" (process ends silently after the layout-typed-100 render; a pristine cdf73aad6 copy run on live.test.ts alone ends at the same place)

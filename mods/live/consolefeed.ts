@@ -4,6 +4,9 @@
 // spawned or read while drawing, and a failure never throws. Syntax is erasable, so `node` imports this file directly.
 import type { ConsoleSnapshot } from './console'
 
+// optional `.claude/console.json` key `ingest_from` ("<address>=pace ..."): only tokens matching INGEST_FROM_TOKEN are kept and passed via
+// `env FLEET_CONSOLE_INGEST_FROM=<value>` as ONE argv element (never split on spaces); absent or no valid token runs plain `fleet console --json`
+export const INGEST_FROM_TOKEN = /^[a-z0-9._-]+\/[a-z0-9._-]+\/[a-z0-9._-]+=[a-z]+$/
 export const CONSOLE_ARGV = ['fleet', 'console', '--json'] as const
 export const CONSOLE_EVERY_MS = 60_000 // one refresh per interval, success or failure
 export const CONSOLE_TIMEOUT_MS = 5_000
@@ -11,10 +14,23 @@ export const CONSOLE_STALE_MS = 5 * 60_000 // a fallback file older than this is
 export const CONSOLE_MAX_BYTES = 2_000_000
 export const CONSOLE_FILE = '.local/state/fleet/console.json' // under the state home's parent: HOME/.local/state/fleet/console.json
 
+export function sanitizeIngestFrom(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const kept = v.split(/\s+/).filter(tok => INGEST_FROM_TOKEN.test(tok))
+  return kept.length > 0 ? kept.join(' ') : null
+}
+
+export function consoleArgv(ingestFrom?: unknown): readonly string[] {
+  const clean = sanitizeIngestFrom(ingestFrom)
+  return clean === null ? CONSOLE_ARGV : ['env', `FLEET_CONSOLE_INGEST_FROM=${clean}`, ...CONSOLE_ARGV]
+}
+
 export type ConsoleRunner = (argv: readonly string[]) => Promise<{ exitCode: number; stdout: string; stderr?: string; isStdoutTruncated?: boolean }>
 export type ConsoleFeed = {
   // the snapshot to draw as of nowMs: the same object until it changes (identity is what the tick compares); null = no source
   current: (nowMs: number) => ConsoleSnapshot | null
+  // updates the untrusted ingest_from value from .claude/console.json for subsequent command runs
+  setIngestFrom: (ingestFrom: unknown) => void
   // runs the command (else reads the file) when the interval has passed and none is in flight; true when it ran
   refresh: (run: ConsoleRunner, readFile: () => Promise<string | null>, parse: (text: string) => ConsoleSnapshot | null, nowMs: number) => Promise<boolean>
 }
@@ -26,13 +42,15 @@ export function staleOf(snap: ConsoleSnapshot): ConsoleSnapshot {
   return { ...snap, sources }
 }
 
-export function makeConsoleFeed(everyMs = CONSOLE_EVERY_MS, staleMs = CONSOLE_STALE_MS): ConsoleFeed {
+export function makeConsoleFeed(everyMs = CONSOLE_EVERY_MS, staleMs = CONSOLE_STALE_MS, initialIngestFrom: unknown = null): ConsoleFeed {
   let snap: ConsoleSnapshot | null = null
   let fromFile = false
   let raw: string | null = null
   let staleSnap: ConsoleSnapshot | null = null // memoised staleOf(snap), so identity holds between ticks
   let triedMs: number | null = null
   let busy = false
+  let ingest = sanitizeIngestFrom(initialIngestFrom)
+  let argv: readonly string[] = ingest === null ? CONSOLE_ARGV : ['env', `FLEET_CONSOLE_INGEST_FROM=${ingest}`, ...CONSOLE_ARGV]
   const accept = (s: ConsoleSnapshot | null, file: boolean, text: string | null): void => {
     const nextRaw = s === null ? null : text
     if (nextRaw === raw && file === fromFile) return
@@ -48,6 +66,13 @@ export function makeConsoleFeed(everyMs = CONSOLE_EVERY_MS, staleMs = CONSOLE_ST
       if (staleSnap === null) staleSnap = staleOf(snap)
       return staleSnap
     },
+    setIngestFrom: (next: unknown) => {
+      const clean = sanitizeIngestFrom(next)
+      if (clean === ingest) return
+      ingest = clean
+      argv = clean === null ? CONSOLE_ARGV : ['env', `FLEET_CONSOLE_INGEST_FROM=${clean}`, ...CONSOLE_ARGV]
+      triedMs = null
+    },
     refresh: async (run, readFile, parse, nowMs) => {
       if (busy) return false
       if (triedMs !== null && nowMs - triedMs < everyMs) return false
@@ -57,7 +82,7 @@ export function makeConsoleFeed(everyMs = CONSOLE_EVERY_MS, staleMs = CONSOLE_ST
         let got: ConsoleSnapshot | null = null
         let text: string | null = null
         try {
-          const r = await run(CONSOLE_ARGV)
+          const r = await run(argv)
           if (r.exitCode === 0 && r.isStdoutTruncated !== true && r.stdout.length <= CONSOLE_MAX_BYTES) { text = r.stdout; got = parse(text) }
         } catch (_e) {
           got = null

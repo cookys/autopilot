@@ -484,11 +484,15 @@ const doc = JSON.parse(require("fs").readFileSync(0, "utf8"));
 if (doc.schema !== "autopilot.runner-smoke/1" || doc.dry_run !== true) process.exit(1);
 const codex = doc.runners.find((r) => r.runner === "codex");
 if (!codex || codex.effort !== "high") process.exit(2);
+if (codex.model !== "gpt-6.2-sol") process.exit(5);
+const agy = doc.runners.find((r) => r.runner === "agy");
+if (!agy || agy.model !== "gemini-4-hydrogen-high") process.exit(6);
+if (doc.runners.some((r) => /fable|astra|carbon|argon/i.test(r.model))) process.exit(7);
 if (doc.runners.some((r) => r.effort === "xhigh")) process.exit(3);
 if (doc.runners.length !== 5) process.exit(4);
 process.stdout.write("ok");
 ')"
-assert_eq "$DRY_PLAN_CHECK" "ok" "--dry-run plan uses schema autopilot.runner-smoke/1 and codex effort high"
+assert_eq "$DRY_PLAN_CHECK" "ok" "--dry-run plan uses schema autopilot.runner-smoke/1, cheap models (gpt-6.2-sol, gemini-4-hydrogen-high), and codex effort high"
 
 # --- 3b. runner-smoke.js default receipt filename uses host local date, not UTC date ---
 FAKE_CLOCK_JS="$TEST_TMP/fake-clock.js"
@@ -514,6 +518,34 @@ if (!doc.receipt_path.endsWith("/2026-11-19.json")) process.exit(2);
 process.stdout.write("ok");
 ')"
 assert_eq "$LOCAL_DATE_CHECK" "ok" "runner-smoke default receipt filename uses local date (2026-11-19 in +08:00 vs 2026-11-18Z)"
+
+# --- 3c. runner-smoke.js refuses expensive smoke models (fable|astra|carbon|argon) with exit 2 ---
+EXPENSIVE_PINS="$TEST_TMP/expensive-smoke-pins.json"
+node -e '
+const fs = require("fs");
+const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+doc.runners.agy.smoke_model = "gemini-4-carbon-low";
+fs.writeFileSync(process.argv[2], JSON.stringify(doc, null, 2) + "\n");
+' "$PINS_JSON" "$EXPENSIVE_PINS"
+
+rm -f "$CALL_LOG"
+rm -f "$PROMPT_LOG"
+rm -f "$FLEET_LOG"
+EXPENSIVE_DRY_OUT="$(node "$SMOKE_JS" --pins "$EXPENSIVE_PINS" --only agy --dry-run < /dev/null 2>&1)"; EXPENSIVE_DRY_RC=$?
+assert_eq "$EXPENSIVE_DRY_RC" "2" "runner-smoke --dry-run refuses smoke_model gemini-4-carbon-low with exit 2"
+assert_contains "$EXPENSIVE_DRY_OUT" "gemini-4-carbon-low" "dry-run refusal names rejected smoke_model"
+assert_file_absent "$CALL_LOG" "refused expensive smoke_model invokes zero fake runner binaries (--dry-run)"
+
+rm -f "$CALL_LOG"
+rm -f "$PROMPT_LOG"
+rm -f "$FLEET_LOG"
+EXPENSIVE_RUN_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/exp-vetted.json" node "$SMOKE_JS" --pins "$EXPENSIVE_PINS" --only agy --receipt-dir "$TEST_TMP/exp-receipts" --date 2026-11-24 < /dev/null 2>&1)"; EXPENSIVE_RUN_RC=$?
+assert_eq "$EXPENSIVE_RUN_RC" "2" "runner-smoke run refuses smoke_model gemini-4-carbon-low with exit 2"
+assert_contains "$EXPENSIVE_RUN_OUT" "gemini-4-carbon-low" "run refusal names rejected smoke_model"
+assert_file_absent "$CALL_LOG" "refused expensive smoke_model never calls runner binary"
+assert_file_absent "$PROMPT_LOG" "refused expensive smoke_model never dispatches runner prompt"
+assert_file_absent "$TEST_TMP/exp-receipts/2026-11-24.json" "refused expensive smoke_model writes no receipt"
+assert_file_absent "$TEST_TMP/exp-vetted.json" "refused expensive smoke_model writes no vetted overlay"
 
 # --- 4. runner-smoke.js PASS writes overlay entry with receipt sha256; running twice does not duplicate ---
 rm -f "$CALL_LOG" "$PROMPT_LOG" "$FLEET_LOG" "$AUTOPILOT_RUNNER_VETTED_FILE"
@@ -715,5 +747,12 @@ rm -f "$MUT_BAD_VET"
 MUT_BADVET_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$MUT_BAD_VET" FAKE_BAD_RUNNER=cursor node "$MUT_DIR/scripts/runner-smoke-badvet.js" --pins "$PINS_JSON" --only cursor --receipt-dir "$TEST_TMP/mut-receipts2" --date 2026-11-23 < /dev/null 2>&1)"; MUT_BADVET_RC=$?
 assert_eq "$MUT_BADVET_RC" "1" "negative control: bad-vetted mutant still exits 1 on smoke failure"
 assert_file_exists "$MUT_BAD_VET" "negative control: mutating r.pass === true writes failed version into overlay"
+
+sed_mutant "$SMOKE_JS" "$MUT_DIR/scripts/runner-smoke-no-model-guard.js" 's/EXPENSIVE_SMOKE_MODEL_RE\.test(model)/false/'
+rm -f "$CALL_LOG"
+rm -f "$PROMPT_LOG"
+MUT_NO_GUARD_OUT="$(AUTOPILOT_RUNNER_VETTED_FILE="$TEST_TMP/mut-no-guard-vetted.json" node "$MUT_DIR/scripts/runner-smoke-no-model-guard.js" --pins "$EXPENSIVE_PINS" --only agy --receipt-dir "$TEST_TMP/mut-no-guard-receipts" --date 2026-11-24 < /dev/null 2>&1)"; MUT_NO_GUARD_RC=$?
+assert_eq "$MUT_NO_GUARD_RC" "0" "negative control: removing expensive-model guard lets gemini-4-carbon-low run and exit 0"
+assert_file_exists "$CALL_LOG" "negative control: removing expensive-model guard invokes fake agy runner"
 
 finalize_test

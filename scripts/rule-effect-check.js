@@ -4,23 +4,32 @@
 /**
  * rule-effect-check.js — deterministic fleet rule-rollout checker.
  *
- * Checks whether each seat in a fleet inventory actually runs a pushed rule commit:
- *   1. remote:        `git -C <repo> merge-base --is-ancestor <sha> <remote_ref>`
- *   2. head:          `git -C <repo> merge-base --is-ancestor <sha> HEAD`
- *   3. session_start: `session_started_at` is strictly after the commit's committer
- *                     timestamp (`git -C <repo> log -1 --format=%ct <sha>`)
- *   4. probe:         if `probe` is present on the seat, `probe.ok === true`
+ * Checks whether each local seat in a fleet inventory actually runs a pushed rule commit:
+ *   1. remote: `git -C <repo> merge-base --is-ancestor <sha> <remote_ref>`
+ *   2. head:   `git -C <repo> merge-base --is-ancestor <sha> HEAD`
+ *   3. loaded: `loaded_at` (latest of `session_started_at`, `last_compact_at`, and newest
+ *              `compact_boundary` timestamp from `--transcript` for `--seat`) is strictly
+ *              after `present_since` (oldest consecutive `HEAD` reflog entry from newest
+ *              backwards containing `<sha>`, or commit `%ct` fallback)
+ *   4. probe:  if `probe` is present on the seat, `probe.ok === true`
  *
- * Read-only by default: never fetches unless `--fetch` is given, never mutates any repo.
+ * Host matching: a seat is local when `seat.host` equals the local hostname (or `--host`),
+ * equals the hostname with a leading `<prefix>-` removed (hostname ends with `-<seat.host>`),
+ * or equals the first DNS label of the hostname.
+ *
+ * Read-only by default: never fetches unless `--fetch` is given, never mutates any repo,
+ * and never searches for transcripts itself.
  *
  * Usage:
  *   node scripts/rule-effect-check.js --inventory <file.json> --commit <sha>
- *       [--commit <repo>=<sha> ...] [--all-hosts] [--fetch] [--json]
+ *       [--commit <repo>=<sha> ...] [--host <name>] [--all-hosts]
+ *       [--transcript <jsonl> --seat <address>] [--fetch] [--json]
  *
  * Inventory schema: "autopilot.rule-effect-inventory/1"
  * Output:
  *   Default (JSONL): one JSON line per seat
- *     {seat, host, repo, verdict, failed, reason, head, commit_time, session_started_at}
+ *     {seat, host, repo, verdict, failed, reason, head, commit_time, session_started_at,
+ *      loaded_at, present_since, present_since_source}
  *   then one summary line
  *     {summary: {effective, stale, unknown, total}}
  *   --json: single JSON document
@@ -39,6 +48,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { StringDecoder } = require('string_decoder');
 
 const INVENTORY_SCHEMA = 'autopilot.rule-effect-inventory/1';
 const OUTPUT_SCHEMA = 'autopilot.rule-effect/1';
@@ -67,12 +77,16 @@ class UsageError extends Error {}
 function usageText() {
   return (
     'Usage: node scripts/rule-effect-check.js --inventory <file.json> --commit <sha> '
-    + '[--commit <repo>=<sha> ...] [--all-hosts] [--fetch] [--json]\n'
+    + '[--commit <repo>=<sha> ...] [--host <name>] [--all-hosts] '
+    + '[--transcript <jsonl> --seat <address>] [--fetch] [--json]\n'
     + '\n'
     + 'Options:\n'
     + '  --inventory <file.json>  Seat inventory (schema autopilot.rule-effect-inventory/1)\n'
     + '  --commit <sha|repo=sha>  Rule commit SHA, or per-repo mapping (repeatable)\n'
-    + '  --all-hosts              Check repo paths locally even when seat.host != os.hostname()\n'
+    + '  --host <name>            Override detected local hostname for seat matching\n'
+    + '  --all-hosts              Check repo paths locally even when seat.host does not match local host\n'
+    + '  --transcript <jsonl>     Claude Code JSONL transcript to read compact_boundary timestamps from\n'
+    + '  --seat <address>         Seat address to apply --transcript to (required with --transcript)\n'
     + '  --fetch                  Run git fetch on each seat remote before checking\n'
     + '  --json                   Emit single autopilot.rule-effect/1 JSON document\n'
     + '  --help, -h               Print this help and exit 0\n'
@@ -120,6 +134,9 @@ function parseArgs(argv) {
   const opts = {
     help: false,
     inventory: null,
+    host: null,
+    transcript: null,
+    seat: null,
     allHosts: false,
     fetch: false,
     json: false,
@@ -159,6 +176,39 @@ function parseArgs(argv) {
       opts.inventory = val;
       continue;
     }
+    if (arg === '--host' || arg.startsWith('--host=')) {
+      const val = arg === '--host' ? argv[++i] : arg.slice('--host='.length);
+      if (val === undefined || val.trim() === '' || /\s/.test(val) || (arg === '--host' && val.startsWith('--'))) {
+        throw new UsageError('--host requires a non-empty hostname');
+      }
+      if (opts.host !== null) {
+        throw new UsageError('--host may only be specified once');
+      }
+      opts.host = val;
+      continue;
+    }
+    if (arg === '--transcript' || arg.startsWith('--transcript=')) {
+      const val = arg === '--transcript' ? argv[++i] : arg.slice('--transcript='.length);
+      if (val === undefined || val === '' || (arg === '--transcript' && val.startsWith('--'))) {
+        throw new UsageError('--transcript requires a file path');
+      }
+      if (opts.transcript !== null) {
+        throw new UsageError('--transcript may only be specified once');
+      }
+      opts.transcript = val;
+      continue;
+    }
+    if (arg === '--seat' || arg.startsWith('--seat=')) {
+      const val = arg === '--seat' ? argv[++i] : arg.slice('--seat='.length);
+      if (val === undefined || val.trim() === '' || (arg === '--seat' && val.startsWith('--'))) {
+        throw new UsageError('--seat requires a seat address');
+      }
+      if (opts.seat !== null) {
+        throw new UsageError('--seat may only be specified once');
+      }
+      opts.seat = val;
+      continue;
+    }
     if (arg === '--commit' || arg.startsWith('--commit=')) {
       const val = arg === '--commit' ? argv[++i] : arg.slice('--commit='.length);
       if (val === undefined || val === '' || (arg === '--commit' && val.startsWith('--'))) {
@@ -176,6 +226,9 @@ function parseArgs(argv) {
     }
     if (opts.commits.defaultCommit === null && opts.commits.byRepo.length === 0) {
       throw new UsageError('at least one --commit <sha> or --commit <repo>=<sha> is required');
+    }
+    if (opts.transcript !== null && !opts.seat) {
+      throw new UsageError('--seat <address> is required with --transcript');
     }
   }
   return opts;
@@ -235,6 +288,14 @@ function loadInventory(inventoryPath) {
     ) {
       throw new UsageError(`seats[${i}].session_started_at must be an ISO 8601 string, epoch ms number, or null`);
     }
+    if (
+      s.last_compact_at !== undefined
+      && s.last_compact_at !== null
+      && typeof s.last_compact_at !== 'string'
+      && typeof s.last_compact_at !== 'number'
+    ) {
+      throw new UsageError(`seats[${i}].last_compact_at must be an ISO 8601 string, epoch ms number, or null`);
+    }
     if (s.probe !== undefined && s.probe !== null) {
       if (!isPlainObject(s.probe) || typeof s.probe.ok !== 'boolean') {
         throw new UsageError(`seats[${i}].probe must be an object with boolean "ok"`);
@@ -248,7 +309,7 @@ function loadInventory(inventoryPath) {
   return doc;
 }
 
-function parseSessionStartMs(raw) {
+function parseTimestampMs(raw) {
   if (raw === null || raw === undefined) return { state: 'null', ms: null };
   if (typeof raw === 'number') {
     if (!Number.isFinite(raw) || raw <= 0) return { state: 'invalid', ms: null };
@@ -398,7 +459,107 @@ function resolveExpectedCommit(realRepo, seatRepo, remoteRef, commits) {
   return { sha: null, reason: 'unmapped_commit' };
 }
 
-function unknownResult(seat, reason, head, commitTime) {
+function isLocalHost(seatHost, localHostname) {
+  if (typeof seatHost !== 'string' || typeof localHostname !== 'string') return false;
+  if (seatHost === '' || localHostname === '') return false;
+  if (seatHost === localHostname) return true;
+  if (localHostname.endsWith(`-${seatHost}`)) return true;
+  const firstLabel = localHostname.split('.')[0];
+  return firstLabel !== '' && seatHost === firstLabel;
+}
+
+function parseCompactBoundaryLineMs(rawLine) {
+  const line = rawLine.trim();
+  if (!line || !line.includes('compact_boundary')) return null;
+  let rec;
+  try {
+    rec = JSON.parse(line);
+  } catch (_e) {
+    return null;
+  }
+  if (!isPlainObject(rec) || rec.subtype !== 'compact_boundary') return null;
+  const parsed = parseTimestampMs(rec.timestamp);
+  return parsed.state === 'ok' ? parsed.ms : null;
+}
+
+function readTranscriptCompactMs(transcriptPath) {
+  let fd;
+  try {
+    fd = fs.openSync(transcriptPath, 'r');
+  } catch (err) {
+    throw new UsageError(`cannot read transcript ${transcriptPath}: ${err.message}`);
+  }
+  let newestMs = null;
+  const CHUNK_SIZE = 64 * 1024;
+  const buf = Buffer.alloc(CHUNK_SIZE);
+  const decoder = new StringDecoder('utf8');
+  let leftover = '';
+  try {
+    for (;;) {
+      const bytesRead = fs.readSync(fd, buf, 0, CHUNK_SIZE, null);
+      if (bytesRead === 0) break;
+      const text = leftover + decoder.write(buf.subarray(0, bytesRead));
+      const lines = text.split('\n');
+      leftover = lines.pop();
+      for (const line of lines) {
+        const ms = parseCompactBoundaryLineMs(line);
+        if (ms !== null && (newestMs === null || ms > newestMs)) {
+          newestMs = ms;
+        }
+      }
+    }
+    const tail = leftover + decoder.end();
+    if (tail) {
+      const ms = parseCompactBoundaryLineMs(tail);
+      if (ms !== null && (newestMs === null || ms > newestMs)) {
+        newestMs = ms;
+      }
+    }
+  } catch (err) {
+    throw new UsageError(`cannot read transcript ${transcriptPath}: ${err.message}`);
+  } finally {
+    try { fs.closeSync(fd); } catch (_e) { /* ignore */ }
+  }
+  return newestMs;
+}
+
+function resolvePresentSince(realRepo, resolvedSha, commitTimeSec) {
+  const reflogRes = runGit(realRepo, ['reflog', 'show', '--date=unix', '--format=%H %gd', 'HEAD']);
+  if (reflogRes.error) {
+    return { error: 'git_error', timeSec: null, source: null };
+  }
+  if (reflogRes.status !== 0 || !reflogRes.stdout) {
+    return { error: null, timeSec: commitTimeSec, source: 'commit_time' };
+  }
+
+  let oldestSec = null;
+  const lines = reflogRes.stdout.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const m = /^([0-9a-fA-F]{40,64})\s+.*@\{(\d+)\}$/.exec(line);
+    if (!m) continue;
+    const entrySha = m[1];
+    const entrySec = Number(m[2]);
+    if (!Number.isFinite(entrySec)) continue;
+
+    const ancRes = runGit(realRepo, ['merge-base', '--is-ancestor', resolvedSha, entrySha]);
+    if (ancRes.error) {
+      return { error: 'git_error', timeSec: null, source: null };
+    }
+    if (ancRes.status !== 0) {
+      break;
+    }
+    oldestSec = entrySec;
+  }
+
+  if (oldestSec !== null) {
+    return { error: null, timeSec: oldestSec, source: 'reflog' };
+  }
+  return { error: null, timeSec: commitTimeSec, source: 'commit_time' };
+}
+
+function unknownResult(seat, reason, head, commitTime, extra = {}) {
   return {
     seat: seat.seat,
     host: seat.host,
@@ -409,6 +570,9 @@ function unknownResult(seat, reason, head, commitTime) {
     head,
     commit_time: commitTime,
     session_started_at: seat.session_started_at === undefined ? null : seat.session_started_at,
+    loaded_at: extra.loadedAt !== undefined ? extra.loadedAt : null,
+    present_since: extra.presentSince !== undefined ? extra.presentSince : null,
+    present_since_source: extra.presentSinceSource !== undefined ? extra.presentSinceSource : null,
   };
 }
 
@@ -419,14 +583,15 @@ function readHeadSha(realRepo) {
   return sha || null;
 }
 
-function checkSeat(seat, opts, localHostname, fetchCache) {
+function checkSeat(seat, opts, localHostname, fetchCache, transcriptCompactMs = null) {
   const repo = seat.repo === undefined ? null : seat.repo;
   const sessionStartedRaw = seat.session_started_at === undefined ? null : seat.session_started_at;
+  const lastCompactRaw = seat.last_compact_at === undefined ? null : seat.last_compact_at;
   const remoteRef = (typeof seat.remote_ref === 'string' && seat.remote_ref !== '')
     ? seat.remote_ref
     : DEFAULT_REMOTE_REF;
 
-  if (!opts.allHosts && seat.host !== localHostname) {
+  if (!opts.allHosts && !isLocalHost(seat.host, localHostname)) {
     return unknownResult(seat, 'other_host', null, null);
   }
 
@@ -535,11 +700,31 @@ function checkSeat(seat, opts, localHostname, fetchCache) {
     }
   }
 
-  // 3. session start after commit's committer time
-  const parsedStart = parseSessionStartMs(sessionStartedRaw);
-  if (parsedStart.state === 'ok') {
-    if (!(parsedStart.ms > commitTimeSec * 1000)) {
-      failed.push('session_start');
+  // 3. rules loaded strictly after checkout HEAD has continuously contained the commit
+  const presentSince = resolvePresentSince(realRepo, resolvedSha, commitTimeSec);
+  if (presentSince.error) {
+    return unknownResult(seat, presentSince.error, head, commitTimeSec);
+  }
+  const presentSinceSec = presentSince.timeSec;
+  const presentSinceSource = presentSince.source;
+
+  const parsedStart = parseTimestampMs(sessionStartedRaw);
+  const parsedCompact = parseTimestampMs(lastCompactRaw);
+  const seatTranscriptMs = (opts.transcript && opts.seat && seat.seat === opts.seat)
+    ? transcriptCompactMs
+    : null;
+
+  const loadCandidates = [];
+  if (parsedStart.state === 'ok') loadCandidates.push(parsedStart.ms);
+  if (parsedCompact.state === 'ok') loadCandidates.push(parsedCompact.ms);
+  if (seatTranscriptMs !== null) loadCandidates.push(seatTranscriptMs);
+
+  const loadedAtMs = loadCandidates.length > 0 ? Math.max(...loadCandidates) : null;
+  const loadedAtIso = loadedAtMs !== null ? new Date(loadedAtMs).toISOString() : null;
+
+  if (loadedAtMs !== null) {
+    if (!(loadedAtMs > presentSinceSec * 1000)) {
+      failed.push('loaded');
     }
   }
 
@@ -561,14 +746,31 @@ function checkSeat(seat, opts, localHostname, fetchCache) {
       head,
       commit_time: commitTimeSec,
       session_started_at: sessionStartedRaw,
+      loaded_at: loadedAtIso,
+      present_since: presentSinceSec,
+      present_since_source: presentSinceSource,
     };
   }
 
-  if (parsedStart.state === 'null') {
-    return unknownResult(seat, 'missing_session_started_at', head, commitTimeSec);
+  const extra = {
+    loadedAt: loadedAtIso,
+    presentSince: presentSinceSec,
+    presentSinceSource,
+  };
+  if (loadedAtMs === null) {
+    if (parsedStart.state === 'invalid') {
+      return unknownResult(seat, 'invalid_session_started_at', head, commitTimeSec, extra);
+    }
+    if (parsedCompact.state === 'invalid') {
+      return unknownResult(seat, 'invalid_last_compact_at', head, commitTimeSec, extra);
+    }
+    return unknownResult(seat, 'no_load_time', head, commitTimeSec, extra);
   }
   if (parsedStart.state === 'invalid') {
-    return unknownResult(seat, 'invalid_session_started_at', head, commitTimeSec);
+    return unknownResult(seat, 'invalid_session_started_at', head, commitTimeSec, extra);
+  }
+  if (parsedCompact.state === 'invalid') {
+    return unknownResult(seat, 'invalid_last_compact_at', head, commitTimeSec, extra);
   }
 
   return {
@@ -581,16 +783,22 @@ function checkSeat(seat, opts, localHostname, fetchCache) {
     head,
     commit_time: commitTimeSec,
     session_started_at: sessionStartedRaw,
+    loaded_at: loadedAtIso,
+    present_since: presentSinceSec,
+    present_since_source: presentSinceSource,
   };
 }
 
 function checkInventory(doc, opts, localHostname = os.hostname()) {
   const fetchCache = new Map();
+  const transcriptCompactMs = opts.transcriptCompactMs !== undefined
+    ? opts.transcriptCompactMs
+    : (opts.transcript ? readTranscriptCompactMs(opts.transcript) : null);
   const seats = [];
   const summary = { effective: 0, stale: 0, unknown: 0, total: doc.seats.length };
 
   for (const seat of doc.seats) {
-    const res = checkSeat(seat, opts, localHostname, fetchCache);
+    const res = checkSeat(seat, opts, localHostname, fetchCache, transcriptCompactMs);
     seats.push(res);
     summary[res.verdict] += 1;
   }
@@ -614,7 +822,8 @@ function main(argv = process.argv.slice(2), io = {}) {
       return 0;
     }
     const doc = loadInventory(opts.inventory);
-    const { seats, summary, exitCode } = checkInventory(doc, opts, io.hostname || os.hostname());
+    const localHostname = opts.host || io.hostname || os.hostname();
+    const { seats, summary, exitCode } = checkInventory(doc, opts, localHostname);
     if (opts.json) {
       stdout.write(`${JSON.stringify({ schema: OUTPUT_SCHEMA, seats, summary }, null, 2)}\n`);
     } else {
@@ -643,7 +852,11 @@ module.exports = {
   OUTPUT_SCHEMA,
   parseArgs,
   loadInventory,
-  parseSessionStartMs,
+  parseTimestampMs,
+  parseSessionStartMs: parseTimestampMs,
+  isLocalHost,
+  readTranscriptCompactMs,
+  resolvePresentSince,
   checkSeat,
   checkInventory,
   main,

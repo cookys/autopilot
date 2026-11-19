@@ -1883,3 +1883,56 @@ test('BL-0434 negative control: a runner whose skip detector returns nothing cou
     fs.rmSync(dir, { recursive: true, force: true });
   } finally { r.cleanup(); }
 });
+
+test('BL-0467: >50% selection prints warning to stderr and sets over_half/widened_by in --json; <=50% does not', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/wide.js': 'console.log("wide");\n',
+    'hooks/tests/tool.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/tool.js"\nnode "$ROOT/scripts/wide.js"\n',
+    'hooks/tests/other.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/other.js"\nnode "$ROOT/scripts/wide.js"\n',
+  });
+  try {
+    // >50%: 2 of 3 suites
+    const headOver = r.change({ 'scripts/wide.js': 'console.log("wide2");\n' });
+    const plain = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', headOver], { encoding: 'utf8' });
+    assert.strictEqual(plain.status, 0, plain.stderr);
+    assert.strictEqual(plain.stdout, 'hooks/tests/other.test.sh\nhooks/tests/tool.test.sh\n');
+    assert.match(plain.stderr, /^affected-suites: WARNING selected 2\/3 \(67%\) — widened by: scripts\/wide\.js \(2 suites\)\n$/);
+
+    const jsonRes = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', headOver, '--json'], { encoding: 'utf8' });
+    assert.strictEqual(jsonRes.status, 0, jsonRes.stderr);
+    const doc = JSON.parse(jsonRes.stdout);
+    assert.strictEqual(doc.over_half, true);
+    assert.deepStrictEqual(doc.widened_by, [{ path: 'scripts/wide.js', suites: 2 }]);
+
+    // <=50%: 1 of 3 suites
+    const headUnder = r.change({ 'hooks/tests/lone.test.sh': '#!/usr/bin/env bash\necho lone2\n' });
+    // Note: diff from headOver to headUnder only touches lone.test.sh
+    const underPlain = spawnSync('node', [SEL, '--root', r.dir, '--base', headOver, '--head', headUnder], { encoding: 'utf8' });
+    assert.strictEqual(underPlain.status, 0, underPlain.stderr);
+    assert.strictEqual(underPlain.stderr, '');
+    const underJson = JSON.parse(execFileSync('node', [SEL, '--root', r.dir, '--base', headOver, '--head', headUnder, '--json'], { encoding: 'utf8' }));
+    assert.strictEqual(underJson.over_half, undefined);
+    assert.strictEqual(underJson.widened_by, undefined);
+  } finally { r.cleanup(); }
+});
+
+test('BL-0467 negative control: threshold 1.01 suppresses the >50% warning', () => {
+  const r = makeRepo({
+    ...LAYOUT,
+    'scripts/wide.js': 'console.log("wide");\n',
+    'hooks/tests/tool.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/tool.js"\nnode "$ROOT/scripts/wide.js"\n',
+    'hooks/tests/other.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/other.js"\nnode "$ROOT/scripts/wide.js"\n',
+  });
+  try {
+    const headOver = r.change({ 'scripts/wide.js': 'console.log("wide2");\n' });
+    const env = { ...process.env, AFFECTED_SUITES_OVER_HALF_THRESHOLD: '1.01' };
+    const plain = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', headOver], { encoding: 'utf8', env });
+    assert.strictEqual(plain.status, 0, plain.stderr);
+    assert.strictEqual(plain.stderr, '');
+    const jsonRes = spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', headOver, '--json'], { encoding: 'utf8', env });
+    assert.strictEqual(jsonRes.status, 0, jsonRes.stderr);
+    const doc = JSON.parse(jsonRes.stdout);
+    assert.strictEqual(doc.over_half, undefined);
+  } finally { r.cleanup(); }
+});

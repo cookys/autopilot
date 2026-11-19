@@ -86,6 +86,7 @@ assert_one_json_line() {
       [ -z "$line" ] && continue
       case "$line" in
         reap:*) ;;
+        stage-event:*) ;;
         *) fail "$1: unexpected stderr: $line" ;;
       esac
     done <<< "$LAND_ERR"

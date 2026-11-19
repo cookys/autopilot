@@ -2,6 +2,7 @@
 'use strict';
 
 // land-branch.js — merge a reviewed branch into the base and optionally push develop.
+// Stage event: `[stage:merged] <merge sha>` after a landed or merged_not_pushed commit (scripts/lib/stage-event.js).
 // Runs in the current git repo (a scratch clone). Stops at the first failure.
 // Stdout is exactly one JSON line. Command output goes to the log file.
 //
@@ -551,7 +552,10 @@ function main() {
     if (result.status !== 0) finish({ status: 'check_failed', checks }, 1);
   }
 
-  if (!opts.push) finish({ status: 'merged_not_pushed', checks }, 0);
+  if (!opts.push) {
+    noteMerged(git, opts.fleetTask);
+    finish({ status: 'merged_not_pushed', checks }, 0);
+  }
 
   const again = git(['fetch', opts.remote]);
   if (again.status !== 0) finish({ status: 'fetch_failed', detail: tail(again.stderr || again.stdout), checks }, 1);
@@ -567,7 +571,20 @@ function main() {
   } catch (error) {
     reapNote(`reap: warning: ${error && error.message ? error.message : error}`);
   }
+  noteMerged(git, opts.fleetTask);
   finish({ status: 'landed', checks }, 0);
+}
+
+function noteMerged(git, taskId) {
+  const sha = headSha(git);
+  if (!sha) return;
+  try {
+    require('./lib/stage-event').emitStage({
+      taskId, stage: 'merged', sha, detail: sha, repoRoot: process.cwd(),
+    });
+  } catch (error) {
+    process.stderr.write(`stage-event: ${error.message}\n`);
+  }
 }
 
 main();

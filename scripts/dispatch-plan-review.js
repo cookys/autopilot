@@ -3,6 +3,8 @@
 
 /**
  * Durable heterogeneous plan-review session controller.
+ * Stage event: `[stage:plan/review-genN] <verdict> receipt=<sha>` per generation, and
+ * `[stage:plan/frozen] <path>@<sha>` when the plan is first sealed (scripts/lib/stage-event.js).
  *
  * Identity: canonical git repository + caller-stable logical_plan_id. A ticket,
  * runner, model, process, cwd, or session change cannot open another budget.
@@ -1873,6 +1875,20 @@ function artifactExitCode(artifact) {
   return artifact.verdict === 'STOP' ? 3 : 0;
 }
 
+function emitPlanStage(opts, stage, sha, detail) {
+  try {
+    require('./lib/stage-event').emitStage({
+      taskId: opts.fleetTask || '',
+      stage,
+      sha,
+      detail,
+      repoRoot: opts.repoRoot,
+    });
+  } catch (error) {
+    process.stderr.write(`stage-event: ${error.message}\n`);
+  }
+}
+
 function finish(payload, code) {
   process.stdout.write(`${JSON.stringify(publicArtifact(payload), null, 2)}\n`);
   process.exit(cnRefusedSeats.length > 0 ? 2 : code);
@@ -2115,6 +2131,7 @@ function main() {
           artifacts: [],
         };
         atomicWriteJson(statePath, state);
+        emitPlanStage(opts, 'plan/frozen', planSha, `${opts.planFile}@${planSha}`);
         crashAt('after_session_init');
       } else {
         state = loadState(statePath);
@@ -2319,7 +2336,11 @@ function main() {
       atomicWriteJson(statePath, state);
     });
   });
-  if (early) finish(early, artifactExitCode(early));
+  if (early) {
+    const receiptSha = sha256(JSON.stringify(early));
+    emitPlanStage(opts, `plan/review-gen${opts.generation}`, receiptSha, `${early.verdict} receipt=${receiptSha}`);
+    finish(early, artifactExitCode(early));
+  }
   crashAt('after_claim');
   // Stage graph (plan §2.7 writers): entering a real review round (a claim is held). Fail-open.
   stageWrite({ to: 'plan-review' });
@@ -2633,6 +2654,8 @@ function main() {
     // Same-node update: ONLY the families of seats whose review completed (transport ok + verdict parsed).
     // Manifest / planned families are written nowhere. Fail-open.
     stageWrite({ to: 'plan-review', families: completedReviews.map((seat) => seat.family) });
+    const receiptSha = sha256(JSON.stringify(artifact));
+    emitPlanStage(opts, `plan/review-gen${opts.generation}`, receiptSha, `${artifact.verdict} receipt=${receiptSha}`);
     finish(artifact, artifactExitCode(artifact));
   } catch (error) {
     // A failed run must not render as a live panel with hours remaining

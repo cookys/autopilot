@@ -14,6 +14,7 @@
 // an atomic rename. Legality comes from scripts/stage-graph.js (CLI); this script owns no graph rules.
 // The marker is telemetry (ADR-0001): gates re-derive, never trust a stage claim.
 //
+// Finish node also writes `[stage:finish] <HEAD sha>` through scripts/lib/stage-event.js.
 // Fleet (D8a): after a `--to` write succeeds, a marker with `fleet_task_id` gets one progress line
 // `[stage:<coarse>/<node>]` plus ` <unit>` when the marker has a unit (`scripts/lib/fleet-task.js`,
 // `$FLEET_BIN task update`). Coarse map: plan -> plan; implement, verify -> build; code-review, qc-gate -> review;
@@ -188,7 +189,25 @@ function afterWrite(result, marker, text, coarse) {
   }
   if (text) reportFleet(id, text);
   else process.stderr.write(`stage-advance: no coarse stage for node ${marker.stage}; no fleet progress line\n`);
+  if (marker.stage === 'finish') emitFinish(id, marker);
   return result;
+}
+
+function emitFinish(taskId, marker) {
+  const root = marker.repo_root || process.cwd();
+  let sha = '';
+  try {
+    const r = spawnSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+    if (r.status === 0) sha = (r.stdout || '').trim();
+  } catch { /* no sha, no finish event */ }
+  if (!sha) return;
+  try {
+    require('./lib/stage-event').emitStage({
+      taskId, stage: 'finish', sha, detail: sha, repoRoot: root,
+    });
+  } catch (error) {
+    process.stderr.write(`stage-event: ${error.message}\n`);
+  }
 }
 
 function parseUnit(raw) {

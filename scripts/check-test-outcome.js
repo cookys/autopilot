@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // check-test-outcome.js — decide whether a pushed SHA has a trustworthy "tests ran green" outcome.
+// Stage event: `[stage:qc/pass] <head sha>` or `[stage:qc/fail] <head sha>` (scripts/lib/stage-event.js).
 //
 // Usage:
 //   node scripts/check-test-outcome.js --base <ref> --head <ref> [options]
@@ -95,6 +96,7 @@ function parseArgs(argv) {
     else if (x === '--budget-s') a.budgetS = Number(argv[++i]);
     else if (x === '--seed') a.seed = Number(argv[++i]);
     else if (x === '--record-file') a.recordFile = argv[++i];
+    else if (x === '--fleet-task') a.fleetTask = argv[++i];
     else if (x === '--help' || x === '-h') a.help = true;
     else throw new Error(`unknown option: ${x}`);
   }
@@ -111,7 +113,22 @@ function emit(obj, lines, code) {
   process.exit(code);
 }
 
+let outcomeArgs = {};
+
 function verdict(fields, lines, code) {
+  if (fields && (fields.verdict === 'pass' || fields.verdict === 'refuse') && fields.head) {
+    try {
+      require('./lib/stage-event').emitStage({
+        taskId: outcomeArgs.fleetTask || '',
+        stage: fields.verdict === 'pass' ? 'qc/pass' : 'qc/fail',
+        sha: fields.head,
+        detail: fields.head,
+        repoRoot: outcomeArgs.root,
+      });
+    } catch (error) {
+      process.stderr.write(`stage-event: ${error.message}\n`);
+    }
+  }
   const obj = {
     schema: 1,
     verdict: fields.verdict,
@@ -233,6 +250,7 @@ function main(argv) {
     process.stderr.write('outcome gate: bad --rerun, --sample, or --budget-s\n');
     return 2;
   }
+  outcomeArgs = a;
   const root = path.resolve(a.root || path.join(__dirname, '..'));
   let head;
   let base;

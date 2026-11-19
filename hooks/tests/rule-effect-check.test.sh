@@ -5,6 +5,10 @@
 TEST_NAME="rule-effect-check"
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_TOKEN_SEAT AUTOPILOT_SESSION_ID
+# This sandbox injects GIT_CONFIG_COUNT protocol.file.allow=never, which blocks the
+# file:// remotes the suite builds. Count 0 drops that injection; local repo config remains.
+export GIT_CONFIG_COUNT=0
+unset GIT_ALLOW_PROTOCOL
 
 SRC="$REPO_ROOT/scripts/rule-effect-check.js"
 assert_file_exists "$SRC" "scripts/rule-effect-check.js exists"
@@ -607,5 +611,94 @@ run_check_bin "$MUT_CT" --inventory "$INV_0457" --commit "$SHA_L"
 assert_exit_code "$RC" 0 "negative control: comparing against commit_time makes 04:57 case wrongly effective"
 run_check --inventory "$INV_0457" --commit "$SHA_L"
 assert_exit_code "$RC" 1 "real checker blocks 04:57 case using present_since"
+
+# ── --seats mode (hangar builds no inventory JSON) ───────────────────────────
+SEATS_BARE="$TEST_TMP/seats-remote.git"
+SEATS_REPO="$TEST_TMP/seats-rule-repo"
+git init --bare -q "$SEATS_BARE"
+git -C "$SEATS_BARE" symbolic-ref HEAD refs/heads/develop
+git init -q "$SEATS_REPO"
+git -C "$SEATS_REPO" checkout -q -b develop
+git -C "$SEATS_REPO" config protocol.file.allow always
+git -C "$SEATS_REPO" remote add origin "$SEATS_BARE"
+printf '# seats rule\n' > "$SEATS_REPO/CLAUDE.md"
+git -C "$SEATS_REPO" add CLAUDE.md
+GIT_AUTHOR_DATE="@1700003000" GIT_COMMITTER_DATE="@1700003000" \
+  git -C "$SEATS_REPO" commit -q -m "docs: seats claude rule"
+SHA_SEATS_CLAUDE="$(git -C "$SEATS_REPO" rev-parse HEAD)"
+printf 'not a rule\n' > "$SEATS_REPO/OTHER.txt"
+git -C "$SEATS_REPO" add OTHER.txt
+GIT_AUTHOR_DATE="@1700004000" GIT_COMMITTER_DATE="@1700004000" \
+  git -C "$SEATS_REPO" commit -q -m "chore: later non-claude"
+SHA_SEATS_LATER="$(git -C "$SEATS_REPO" rev-parse HEAD)"
+git -C "$SEATS_REPO" -c protocol.file.allow=always push -q -u origin develop
+SEATS_REPO_ABS="$(cd "$SEATS_REPO" && pwd)"
+
+SEATS_PROJECTS="$TEST_TMP/fake-projects"
+mkdir -p "$SEATS_PROJECTS/proj-a"
+SECRET_MARKER="super-secret-token-9f3a"
+SEATS_NOW="$(date +%s)"
+SEATS_AFTER_ISO="$(node -e 'process.stdout.write(new Date((Number(process.argv[1]) + 7200) * 1000).toISOString())' "$SEATS_NOW")"
+SEATS_OLD_ISO="2020-01-01T00:00:00.000Z"
+cat > "$SEATS_PROJECTS/proj-a/sid-eff.jsonl" <<EOF
+{"type":"user","timestamp":"2024-01-01T00:00:00.000Z","message":{"content":"$SECRET_MARKER"}}
+{"type":"system","subtype":"compact_boundary","timestamp":"$SEATS_AFTER_ISO","message":{"content":"$SECRET_MARKER"}}
+EOF
+cat > "$SEATS_PROJECTS/proj-a/sid-stale.jsonl" <<EOF
+{"type":"user","timestamp":"$SEATS_OLD_ISO","message":"x"}
+{"type":"system","subtype":"compact_boundary","timestamp":"$SEATS_OLD_ISO"}
+EOF
+
+SEATS_OK="$TEST_TMP/seats-ok.tsv"
+printf 'seat\thost\tsid\n# skipped\n\nlocal-eff\t%s\tsid-eff\nforeign-seat\t%s\tsid-foreign\n' \
+  "$LOCAL_HOST" "$OTHER_HOST" > "$SEATS_OK"
+
+run_check --seats "$SEATS_OK" --rule-repo "$SEATS_REPO" --rule-ref origin/develop \
+  --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 0 "seats: compact after rule commit -> exit 0"
+SEATS_EFF="$(printf '%s' "$OUT" | node -e '
+const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const s = d.seats[0];
+process.stdout.write([
+  d.seats.length, s.seat, s.verdict, s.rule_commit, s.rule_repo, s.time_source,
+  d.summary.effective, d.summary.stale, d.summary.unknown, d.summary.total,
+  d.seats.some((x) => x.seat === "foreign-seat") ? "present" : "absent"
+].join("|"));
+')"
+assert_eq "$SEATS_EFF" "1|local-eff|effective|${SHA_SEATS_CLAUDE}|${SEATS_REPO_ABS}|transcript|1|0|0|1|absent" \
+  "seats: effective uses newest CLAUDE.md commit; foreign host omitted from output and total"
+assert_not_contains "$OUT" "$SECRET_MARKER" "seats: secret message field absent from stdout"
+assert_not_contains "$ERR" "$SECRET_MARKER" "seats: secret message field absent from stderr"
+assert_neq "$SHA_SEATS_CLAUDE" "$SHA_SEATS_LATER" "fixture: later non-CLAUDE.md commit differs"
+
+SEATS_STALE="$TEST_TMP/seats-stale.tsv"
+printf 'local-stale\t%s\tsid-stale\n' "$LOCAL_HOST" > "$SEATS_STALE"
+run_check --seats "$SEATS_STALE" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST"
+assert_exit_code "$RC" 1 "seats: transcript older than rule commit -> exit 1"
+STALE_V="$(printf '%s\n' "$OUT" | node -e '
+const lines = require("fs").readFileSync(0, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+process.stdout.write(lines[0].verdict + "|" + lines[0].time_source);
+')"
+assert_eq "$STALE_V" "stale|transcript" "seats: older transcript is stale with time_source transcript"
+
+SEATS_MISS="$TEST_TMP/seats-miss.tsv"
+printf 'local-miss\t%s\tsid-missing\nforeign-seat\t%s\tsid-foreign\n' "$LOCAL_HOST" "$OTHER_HOST" > "$SEATS_MISS"
+run_check --seats "$SEATS_MISS" --rule-repo "$SEATS_REPO" --projects-dir "$SEATS_PROJECTS" --host "$LOCAL_HOST" --json
+assert_exit_code "$RC" 2 "seats: missing transcript -> exit 2"
+MISS_V="$(printf '%s' "$OUT" | node -e '
+const d = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const s = d.seats[0];
+process.stdout.write([s.verdict, s.reason, s.time_source, d.seats.length, d.summary.unknown, d.summary.total].join("|"));
+')"
+assert_eq "$MISS_V" "unknown|transcript_missing|missing|1|1|1" "seats: transcript_missing, foreign row not counted"
+
+SEATS_BAD="$TEST_TMP/seats-bad.tsv"
+printf '# c\n\nseat\thost\tsid\na\tb\n' > "$SEATS_BAD"
+run_check --seats "$SEATS_BAD" --rule-repo "$SEATS_REPO" --host "$LOCAL_HOST"
+assert_exit_code "$RC" 3 "seats: bad column count -> exit 3"
+assert_contains "$ERR" "line 4" "seats: bad column count names the line number"
+
+run_check --seats "$SEATS_OK" --inventory "$INV_EFF" --host "$LOCAL_HOST"
+assert_exit_code "$RC" 3 "seats: --seats with --inventory -> exit 3"
 
 finalize_test

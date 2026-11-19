@@ -17,13 +17,16 @@
  * equals the hostname with a leading `<prefix>-` removed (hostname ends with `-<seat.host>`),
  * or equals the first DNS label of the hostname.
  *
- * Read-only by default: never fetches unless `--fetch` is given, never mutates any repo,
- * and never searches for transcripts itself.
+ * Read-only by default: never fetches unless `--fetch` is given, never mutates any repo.
+ * `--inventory` mode never searches for transcripts. `--seats` mode streams one JSONL
+ * transcript per local seat and keeps only timestamp plus record type/subtype.
  *
  * Usage:
  *   node scripts/rule-effect-check.js --inventory <file.json> --commit <sha>
  *       [--commit <repo>=<sha> ...] [--host <name>] [--all-hosts]
  *       [--transcript <jsonl> --seat <address>] [--fetch] [--json]
+ *   node scripts/rule-effect-check.js --seats <seats.tsv> [--rule-repo <path>]
+ *       [--rule-ref <ref>] [--projects-dir <dir>] [--host <name>] [--json] [--fetch]
  *
  * Inventory schema: "autopilot.rule-effect-inventory/1"
  * Output:
@@ -34,6 +37,8 @@
  *     {summary: {effective, stale, unknown, total}}
  *   --json: single JSON document
  *     {schema: "autopilot.rule-effect/1", seats: [...], summary: {effective, stale, unknown, total}}
+ *   --seats adds rule_repo (absolute), rule_commit (full sha), time_source
+ *     ("transcript" | "missing") on each emitted seat. Foreign-host rows are omitted.
  *
  * Exit codes:
  *   0 = every seat is effective
@@ -79,9 +84,15 @@ function usageText() {
     'Usage: node scripts/rule-effect-check.js --inventory <file.json> --commit <sha> '
     + '[--commit <repo>=<sha> ...] [--host <name>] [--all-hosts] '
     + '[--transcript <jsonl> --seat <address>] [--fetch] [--json]\n'
+    + '       node scripts/rule-effect-check.js --seats <seats.tsv> [--rule-repo <path>] '
+    + '[--rule-ref <ref>] [--projects-dir <dir>] [--host <name>] [--json] [--fetch]\n'
     + '\n'
     + 'Options:\n'
     + '  --inventory <file.json>  Seat inventory (schema autopilot.rule-effect-inventory/1)\n'
+    + '  --seats <seats.tsv>      seat, host, sid TSV (mutually exclusive with --inventory)\n'
+    + '  --rule-repo <path>       Git checkout whose CLAUDE.md history is the rule (default: this repo)\n'
+    + '  --rule-ref <ref>         Ref to search for the newest CLAUDE.md commit (default: origin/develop)\n'
+    + '  --projects-dir <dir>     Claude projects dir; transcript is <dir>/*/<sid>.jsonl\n'
     + '  --commit <sha|repo=sha>  Rule commit SHA, or per-repo mapping (repeatable)\n'
     + '  --host <name>            Override detected local hostname for seat matching\n'
     + '  --all-hosts              Check repo paths locally even when seat.host does not match local host\n'
@@ -134,6 +145,10 @@ function parseArgs(argv) {
   const opts = {
     help: false,
     inventory: null,
+    seats: null,
+    ruleRepo: null,
+    ruleRef: null,
+    projectsDir: null,
     host: null,
     transcript: null,
     seat: null,
@@ -163,6 +178,50 @@ function parseArgs(argv) {
     }
     if (arg === '--json') {
       opts.json = true;
+      continue;
+    }
+    if (arg === '--seats' || arg.startsWith('--seats=')) {
+      const val = arg === '--seats' ? argv[++i] : arg.slice('--seats='.length);
+      if (val === undefined || val === '' || (arg === '--seats' && val.startsWith('--'))) {
+        throw new UsageError('--seats requires a TSV path');
+      }
+      if (opts.seats !== null) {
+        throw new UsageError('--seats may only be specified once');
+      }
+      opts.seats = val;
+      continue;
+    }
+    if (arg === '--rule-repo' || arg.startsWith('--rule-repo=')) {
+      const val = arg === '--rule-repo' ? argv[++i] : arg.slice('--rule-repo='.length);
+      if (val === undefined || val === '' || (arg === '--rule-repo' && val.startsWith('--'))) {
+        throw new UsageError('--rule-repo requires a path');
+      }
+      if (opts.ruleRepo !== null) {
+        throw new UsageError('--rule-repo may only be specified once');
+      }
+      opts.ruleRepo = val;
+      continue;
+    }
+    if (arg === '--rule-ref' || arg.startsWith('--rule-ref=')) {
+      const val = arg === '--rule-ref' ? argv[++i] : arg.slice('--rule-ref='.length);
+      if (val === undefined || val.trim() === '' || /\s/.test(val) || val.startsWith('-')) {
+        throw new UsageError('--rule-ref requires a git ref');
+      }
+      if (opts.ruleRef !== null) {
+        throw new UsageError('--rule-ref may only be specified once');
+      }
+      opts.ruleRef = val;
+      continue;
+    }
+    if (arg === '--projects-dir' || arg.startsWith('--projects-dir=')) {
+      const val = arg === '--projects-dir' ? argv[++i] : arg.slice('--projects-dir='.length);
+      if (val === undefined || val === '' || (arg === '--projects-dir' && val.startsWith('--'))) {
+        throw new UsageError('--projects-dir requires a directory path');
+      }
+      if (opts.projectsDir !== null) {
+        throw new UsageError('--projects-dir may only be specified once');
+      }
+      opts.projectsDir = val;
       continue;
     }
     if (arg === '--inventory' || arg.startsWith('--inventory=')) {
@@ -221,14 +280,32 @@ function parseArgs(argv) {
   }
 
   if (!opts.help) {
-    if (!opts.inventory) {
-      throw new UsageError('--inventory is required');
+    if (opts.seats && opts.inventory) {
+      throw new UsageError('--seats and --inventory are mutually exclusive');
     }
-    if (opts.commits.defaultCommit === null && opts.commits.byRepo.length === 0) {
-      throw new UsageError('at least one --commit <sha> or --commit <repo>=<sha> is required');
-    }
-    if (opts.transcript !== null && !opts.seat) {
-      throw new UsageError('--seat <address> is required with --transcript');
+    if (opts.seats) {
+      if (opts.commits.defaultCommit !== null || opts.commits.byRepo.length > 0) {
+        throw new UsageError('--commit cannot be combined with --seats');
+      }
+      if (opts.transcript !== null || opts.seat !== null) {
+        throw new UsageError('--transcript/--seat cannot be combined with --seats');
+      }
+      if (opts.allHosts) {
+        throw new UsageError('--all-hosts cannot be combined with --seats');
+      }
+    } else {
+      if (opts.ruleRepo !== null || opts.ruleRef !== null || opts.projectsDir !== null) {
+        throw new UsageError('--rule-repo, --rule-ref and --projects-dir require --seats');
+      }
+      if (!opts.inventory) {
+        throw new UsageError('--inventory is required');
+      }
+      if (opts.commits.defaultCommit === null && opts.commits.byRepo.length === 0) {
+        throw new UsageError('at least one --commit <sha> or --commit <repo>=<sha> is required');
+      }
+      if (opts.transcript !== null && !opts.seat) {
+        throw new UsageError('--seat <address> is required with --transcript');
+      }
     }
   }
   return opts;
@@ -482,14 +559,13 @@ function parseCompactBoundaryLineMs(rawLine) {
   return parsed.state === 'ok' ? parsed.ms : null;
 }
 
-function readTranscriptCompactMs(transcriptPath) {
+function forEachTranscriptLine(transcriptPath, onLine) {
   let fd;
   try {
     fd = fs.openSync(transcriptPath, 'r');
   } catch (err) {
     throw new UsageError(`cannot read transcript ${transcriptPath}: ${err.message}`);
   }
-  let newestMs = null;
   const CHUNK_SIZE = 64 * 1024;
   const buf = Buffer.alloc(CHUNK_SIZE);
   const decoder = new StringDecoder('utf8');
@@ -501,26 +577,213 @@ function readTranscriptCompactMs(transcriptPath) {
       const text = leftover + decoder.write(buf.subarray(0, bytesRead));
       const lines = text.split('\n');
       leftover = lines.pop();
-      for (const line of lines) {
-        const ms = parseCompactBoundaryLineMs(line);
-        if (ms !== null && (newestMs === null || ms > newestMs)) {
-          newestMs = ms;
-        }
-      }
+      for (const line of lines) onLine(line);
     }
     const tail = leftover + decoder.end();
-    if (tail) {
-      const ms = parseCompactBoundaryLineMs(tail);
-      if (ms !== null && (newestMs === null || ms > newestMs)) {
-        newestMs = ms;
-      }
-    }
+    if (tail) onLine(tail);
   } catch (err) {
+    if (err instanceof UsageError) throw err;
     throw new UsageError(`cannot read transcript ${transcriptPath}: ${err.message}`);
   } finally {
     try { fs.closeSync(fd); } catch (_e) { /* ignore */ }
   }
+}
+
+function parseLineTimestampMs(rawLine) {
+  const line = rawLine.trim();
+  if (!line || !line.includes('"timestamp"')) return null;
+  let rec;
+  try {
+    rec = JSON.parse(line);
+  } catch (_e) {
+    return null;
+  }
+  if (!isPlainObject(rec)) return null;
+  const parsed = parseTimestampMs(rec.timestamp);
+  return parsed.state === 'ok' ? parsed.ms : null;
+}
+
+function readTranscriptCompactMs(transcriptPath) {
+  let newestMs = null;
+  forEachTranscriptLine(transcriptPath, (line) => {
+    const ms = parseCompactBoundaryLineMs(line);
+    if (ms !== null && (newestMs === null || ms > newestMs)) newestMs = ms;
+  });
   return newestMs;
+}
+
+function readTranscriptSeatTimes(transcriptPath) {
+  let sessionStartedMs = null;
+  let lastCompactMs = null;
+  forEachTranscriptLine(transcriptPath, (line) => {
+    const anyMs = parseLineTimestampMs(line);
+    if (anyMs !== null && (sessionStartedMs === null || anyMs < sessionStartedMs)) {
+      sessionStartedMs = anyMs;
+    }
+    const compactMs = parseCompactBoundaryLineMs(line);
+    if (compactMs !== null && (lastCompactMs === null || compactMs > lastCompactMs)) {
+      lastCompactMs = compactMs;
+    }
+  });
+  return { sessionStartedMs, lastCompactMs };
+}
+
+function loadSeatsTsv(seatsPath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(seatsPath, 'utf8');
+  } catch (err) {
+    throw new UsageError(`cannot read seats ${seatsPath}: ${err.message}`);
+  }
+  const rows = [];
+  let headerSeen = false;
+  const lines = raw.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineNo = i + 1;
+    let line = lines[i];
+    if (line.endsWith('\r')) line = line.slice(0, -1);
+    if (line.trim() === '' || line.startsWith('#')) continue;
+    const cols = line.split('\t');
+    if (!headerSeen && cols[0] === 'seat') {
+      headerSeen = true;
+      continue;
+    }
+    headerSeen = true;
+    if (cols.length !== 3) {
+      throw new UsageError(`seats ${seatsPath}: line ${lineNo}: expected 3 tab-separated columns, got ${cols.length}`);
+    }
+    const [seat, host, sid] = cols;
+    if (seat.trim() === '' || host.trim() === '' || sid.trim() === '') {
+      throw new UsageError(`seats ${seatsPath}: line ${lineNo}: seat, host and sid must be non-empty`);
+    }
+    rows.push({ seat, host, sid });
+  }
+  if (rows.length === 0) {
+    throw new UsageError(`seats ${seatsPath}: no data rows`);
+  }
+  return rows;
+}
+
+function defaultRuleRepo() {
+  const res = runGit(path.dirname(__filename), ['rev-parse', '--show-toplevel']);
+  if (res.error || res.status !== 0) {
+    throw new UsageError('cannot resolve git toplevel for --rule-repo default');
+  }
+  const top = res.stdout.trim();
+  if (!top) throw new UsageError('cannot resolve git toplevel for --rule-repo default');
+  return top;
+}
+
+function resolveRuleCommit(ruleRepo, ruleRef) {
+  const logRes = runGit(ruleRepo, ['log', '-1', '--format=%H', ruleRef, '--', ':(glob)**/CLAUDE.md']);
+  if (logRes.error) {
+    throw new UsageError(`cannot read rule commit in ${ruleRepo}: ${logRes.error.message}`);
+  }
+  if (logRes.status !== 0) {
+    throw new UsageError(`cannot read rule commit from ${ruleRef} in ${ruleRepo}`);
+  }
+  const sha = logRes.stdout.trim();
+  if (!/^[0-9a-f]{40}$/i.test(sha)) {
+    throw new UsageError(`no CLAUDE.md commit reachable from ${ruleRef} in ${ruleRepo}`);
+  }
+  return sha;
+}
+
+function findSeatTranscript(projectsDir, sid) {
+  if (typeof sid !== 'string' || sid === '' || sid.includes('/') || sid.includes('\\') || sid.includes('..')) {
+    return null;
+  }
+  let entries;
+  try {
+    entries = fs.readdirSync(projectsDir, { withFileTypes: true });
+  } catch (_e) {
+    return null;
+  }
+  const dirs = entries.filter((ent) => ent.isDirectory()).map((ent) => ent.name).sort();
+  for (const dir of dirs) {
+    const candidate = path.join(projectsDir, dir, `${sid}.jsonl`);
+    try {
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch (_e) { /* next */ }
+  }
+  return null;
+}
+
+function msToIso(ms) {
+  return ms === null ? null : new Date(ms).toISOString();
+}
+
+function withSeatMeta(row, ruleRepo, ruleCommit, timeSource) {
+  return {
+    ...row,
+    rule_repo: ruleRepo,
+    rule_commit: ruleCommit,
+    time_source: timeSource,
+  };
+}
+
+function checkSeats(opts, localHostname) {
+  const ruleRepo = path.resolve(opts.ruleRepo || defaultRuleRepo());
+  const ruleRef = opts.ruleRef || 'origin/develop';
+  const projectsDir = opts.projectsDir
+    ? path.resolve(opts.projectsDir)
+    : path.join(os.homedir(), '.claude', 'projects');
+  const ruleCommit = resolveRuleCommit(ruleRepo, ruleRef);
+  const rows = loadSeatsTsv(opts.seats);
+  const localRows = rows.filter((row) => isLocalHost(row.host, localHostname));
+
+  const slots = localRows.map((row) => {
+    const transcriptPath = findSeatTranscript(projectsDir, row.sid);
+    if (!transcriptPath) return { kind: 'missing', row };
+    const times = readTranscriptSeatTimes(transcriptPath);
+    return {
+      kind: 'check',
+      row,
+      seat: {
+        seat: row.seat,
+        host: row.host,
+        repo: ruleRepo,
+        remote_ref: ruleRef,
+        session_started_at: msToIso(times.sessionStartedMs),
+        last_compact_at: msToIso(times.lastCompactMs),
+      },
+    };
+  });
+
+  const checkOpts = {
+    ...opts,
+    allHosts: false,
+    transcript: null,
+    seat: null,
+    commits: { defaultCommit: ruleCommit, byRepo: [], seenKeys: new Set() },
+  };
+  const toCheck = slots.filter((slot) => slot.kind === 'check').map((slot) => slot.seat);
+  let checked = [];
+  if (toCheck.length > 0) {
+    checked = checkInventory({ seats: toCheck }, checkOpts, localHostname).seats;
+  }
+  let cursor = 0;
+  const seats = slots.map((slot) => {
+    if (slot.kind === 'missing') {
+      const unknown = unknownResult(
+        { seat: slot.row.seat, host: slot.row.host, repo: ruleRepo },
+        'transcript_missing',
+        null,
+        null,
+      );
+      return withSeatMeta(unknown, ruleRepo, ruleCommit, 'missing');
+    }
+    const res = checked[cursor];
+    cursor += 1;
+    return withSeatMeta(res, ruleRepo, ruleCommit, 'transcript');
+  });
+
+  const summary = { effective: 0, stale: 0, unknown: 0, total: seats.length };
+  for (const seat of seats) summary[seat.verdict] += 1;
+  let exitCode = 0;
+  if (summary.stale > 0) exitCode = 1;
+  else if (summary.unknown > 0) exitCode = 2;
+  return { seats, summary, exitCode };
 }
 
 function resolvePresentSince(realRepo, resolvedSha, commitTimeSec) {
@@ -821,9 +1084,11 @@ function main(argv = process.argv.slice(2), io = {}) {
       stdout.write(usageText());
       return 0;
     }
-    const doc = loadInventory(opts.inventory);
     const localHostname = opts.host || io.hostname || os.hostname();
-    const { seats, summary, exitCode } = checkInventory(doc, opts, localHostname);
+    const evaluated = opts.seats
+      ? checkSeats(opts, localHostname)
+      : checkInventory(loadInventory(opts.inventory), opts, localHostname);
+    const { seats, summary, exitCode } = evaluated;
     if (opts.json) {
       stdout.write(`${JSON.stringify({ schema: OUTPUT_SCHEMA, seats, summary }, null, 2)}\n`);
     } else {

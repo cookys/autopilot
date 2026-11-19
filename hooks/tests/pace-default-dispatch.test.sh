@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Real rails with sentinel PATH: quota selection, caller pins and manifest evidence.
 . "$(dirname "$0")/lib.sh"
+install_cli_sentinels
 # Drop any inherited task/token-seat env so brief headers and rail role control the CN gate.
 unset AUTOPILOT_TASK_SIZE AUTOPILOT_TASK_ROLE AUTOPILOT_TASK_SCOPE AUTOPILOT_TASK_NOVEL AUTOPILOT_TASK_READS_TRANSCRIPT AUTOPILOT_TASK_CLASS AUTOPILOT_TOKEN_SEAT AUTOPILOT_ENDPOINT_GLM_TRANSPORT
 export AUTOPILOT_ENDPOINTS_ENV=/nonexistent
@@ -93,20 +94,23 @@ assert_contains "$(cat "$TEST_TMP/hetero.err")" 'pace: chose codex' 'hetero is d
 result="$(node -e 'const m=require(process.argv[1]); console.log(m.pace_choice?.engine)' "$AUTOPILOT_DISPATCH_RUNS_DIR/pace-hetero.manifest.json" 2>/dev/null)"
 assert_eq "$result" codex 'hetero manifest records pace_choice'
 
-# Missing telemetry leaves the historical agy default intact and returns success.
-cat > "$TEST_TMP/agy-default" <<'SENTINEL'
+# Missing telemetry leaves the unpinned cheap default (grok-4.7, low) intact and returns success.
+cat > "$TEST_TMP/grok-default" <<'SENTINEL'
 #!/usr/bin/env bash
-printf 'legacy agy\n' > quota-sentinel.txt
-git add quota-sentinel.txt
-git -c user.name=test -c user.email=test@example.com commit -qm 'test: legacy default'
-printf '{"conversation_id":"fixture","response":"done","status":"SUCCESS"}\n'
+case " $* " in
+  *" __autopilot_probe__ "*)
+    echo "Error: --effort/--reasoning-effort: unknown effort level '__autopilot_probe__'; use one of: xhigh, high, medium, low" >&2
+    exit 2 ;;
+esac
+if [ "${1:-}" = "--version" ]; then echo "grok-cli 0.2.111 (test stub)"; exit 0; fi
+printf 'default grok\n' > quota-sentinel.txt
 SENTINEL
-chmod +x "$TEST_TMP/agy-default"
-make_agy_stub_versioned "$TEST_TMP/agy-default"
-(cd "$repo" && AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json" bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch feat/no-pace --prompt-file "$TEST_TMP/brief" --agy-bin "$TEST_TMP/agy-default") > "$TEST_TMP/missing.out" 2> "$TEST_TMP/missing.err"
-assert_eq "$?" 0 'missing pace dispatch exits 0 with historical default'
+chmod +x "$TEST_TMP/grok-default"
+(cd "$repo" && AUTOPILOT_PACE_FILE="$TEST_TMP/missing-pace.json" bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --branch feat/no-pace --prompt-file "$TEST_TMP/brief" --grok-bin "$TEST_TMP/grok-default") > "$TEST_TMP/missing.out" 2> "$TEST_TMP/missing.err"
+assert_eq "$?" 0 'missing pace dispatch exits 0 with the cheap default'
 assert_contains "$(cat "$TEST_TMP/missing.err")" 'pace_unknown' 'missing telemetry fallback is visible'
-assert_contains "$(cat "$TEST_TMP/missing.out")" '"runner": "agy"' 'missing telemetry preserves agy default'
+assert_contains "$(cat "$TEST_TMP/missing.out")" '"runner": "grok"' 'missing telemetry lands on the grok default'
+assert_contains "$(cat "$TEST_TMP/missing.out")" '"model": "grok-4.7"' 'missing telemetry default model is grok-4.7'
 # The author rail itself supplies its role when the brief only names size/scope.
 printf 'Size: S\nScope: docs/example.md\nWrite a public documentation note.\n' > "$TEST_TMP/small-brief"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-fixture"

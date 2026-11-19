@@ -7,6 +7,7 @@
 # An explicit --model / --effort always wins. Stub binaries only: never a real CLI.
 . "$(dirname "$0")/lib.sh"
 
+install_cli_sentinels
 TEST_NAME="impl-defaults"
 scrub_session_env
 unset AUTOPILOT_TOKEN_SEAT AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \

@@ -3,6 +3,7 @@
 # RED at 2efd32b23: waiting worker_event count was 0 (expected 1) and watch-foreman printed no CONDITION line containing waiting.
 # RED at ad7ba935c: waiting reason was the agy non-zero footer, not the stub line; chinese reason was byte-cut to 67 characters and ended in U+FFFD (expected 200 characters of the stub line).
 . "$(dirname "$0")/lib.sh"
+install_cli_sentinels
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
@@ -93,7 +94,7 @@ bash "$RL" init --ledger "$LEDGER" >/dev/null
 bash "$RL" stage-acquire --ledger "$LEDGER" --run-id qrun --stage implement --pid "$$" >/dev/null
 ERR="$TEST_TMP/q.err"
 OUT="$(cd "$SBX" && env DISPATCH_QUIET=1 DISPATCH_DETACH=0 \
-  "$SCRIPT" --no-verify-tip --branch hands/bl0012/q --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" \
+  "$SCRIPT" --no-verify-tip --branch hands/bl0012/q --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" --runner agy \
   --ledger "$LEDGER" --run-id qrun --stage implement 2>"$ERR")"
 EC=$?
 assert_eq "$EC" "1" "question_suspected exits 1"
@@ -110,7 +111,7 @@ LEDGER_OK="$TEST_TMP/ok.jsonl"
 bash "$RL" init --ledger "$LEDGER_OK" >/dev/null
 bash "$RL" stage-acquire --ledger "$LEDGER_OK" --run-id okrun --stage implement --pid "$$" >/dev/null
 OUT="$(cd "$SBX" && env DISPATCH_QUIET=1 DISPATCH_DETACH=0 \
-  "$SCRIPT" --no-verify-tip --branch hands/bl0012/ok --prompt-file "$PROMPT" --agy-bin "$STUB_OK" \
+  "$SCRIPT" --no-verify-tip --branch hands/bl0012/ok --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --runner agy \
   --ledger "$LEDGER_OK" --run-id okrun --stage implement 2>/dev/null)"
 EC=$?
 assert_eq "$EC" "0" "committed hand exits 0"
@@ -121,7 +122,7 @@ assert_eq "$ROWS" "0" "committed hand writes no waiting worker_event"
 # --- 3. no ledger: same status and exit, and no event error -------------------
 ERR2="$TEST_TMP/nolegder.err"
 OUT="$(cd "$SBX" && env DISPATCH_QUIET=1 DISPATCH_DETACH=0 \
-  "$SCRIPT" --no-verify-tip --branch hands/bl0012/noleg --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" \
+  "$SCRIPT" --no-verify-tip --branch hands/bl0012/noleg --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" --runner agy \
   2>"$ERR2")"
 EC=$?
 assert_eq "$EC" "1" "ledger-less question_suspected still exits 1"

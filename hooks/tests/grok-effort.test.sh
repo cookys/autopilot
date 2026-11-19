@@ -7,6 +7,7 @@
 # per-model enum bug (grok-4.5 rejects xhigh; 4.6+ accept) shipped under it (2026-09-23).
 . "$(dirname "$0")/lib.sh"
 
+install_cli_sentinels
 TEST_NAME="grok-effort"
 OUT="$(bash "$REPO_ROOT/scripts/test-grok-effort.sh" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "scripts/test-grok-effort.sh passes"

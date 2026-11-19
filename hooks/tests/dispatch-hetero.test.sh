@@ -10,6 +10,7 @@
 #   (c) exit 0 + no commit       → no_op        (status no_op,      exit 1)
 #   (d) timeout/non-zero + none  → QUESTION_SUSPECTED (status question_suspected, exit 1)
 . "$(dirname "$0")/lib.sh"
+install_cli_sentinels
 # Ambient mission harness env must not poison hermetic unit tests.
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \

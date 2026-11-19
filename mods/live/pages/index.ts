@@ -13,10 +13,11 @@ import { dispatchPage } from './dispatch'
 import { spendPage } from './spend'
 import { forgePage } from './forge'
 import { legendLines } from '../tabs'
+import { petPage } from '../pettab'
 
-// A6 (g2 folds): 1-8, then 9 pet, 0 forge, i help, all drawn through frameRows. The pet page is a placeholder until P2 (the body says so); 5-8 are shells
-// that keep their old tab's content until batch 2 moves it; forge and help are shells.
-const pet = (): Page => ({ id: 'pet', key: '9', title: '寵物', framed: true, render: ctx => ({ body: [[{ text: ctx.t('frame.pet_todo'), dim: true }]], actions: [] }) })
+// A6 (g2 folds): 1-8, then 9 pet, 0 forge, i help, all drawn through frameRows. 5-8 are shells
+// that keep their old tab's content until batch 2 moves it; help is a shell.
+const pet = (): Page => petPage
 
 export const PAGES: Page[] = [
   nowPage,

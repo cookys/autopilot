@@ -54,7 +54,7 @@ test('gate2 item 1: actions sit directly above the strip, the body touches the a
   expect(out.length).toBe(24)
   const last = out.length - 1
   expect(out[last - 1]).toContain('沒有待決卡') // the action row is right above the strip
-  const content = out.indexOf(t('frame.pet_todo'))
+  const content = out.indexOf(t('page.pet.none'))
   expect(content, 'the body touches the first action').toBe(last - 2)
   const blanks = out.map((l, i) => (l.trim() === '' ? i : -1)).filter(i => i >= 0)
   expect(blanks.length).toBeGreaterThan(0)

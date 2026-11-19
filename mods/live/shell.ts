@@ -1,9 +1,11 @@
-// mods/live/shell.ts — the O4 band shell, pure half (panel-band contract 2026-11-06): the width tiers, the frame geometry, the reader of codeforge's `forge-stats.panel`
-// (`codeforge.panel/1` with the optional `side`), and the right-hand summary columns. No engine value in here and no JSX: band.tsx draws what this file plans.
+// mods/live/shell.ts — the O4 band shell, pure half (panel-band contract 2026-11-06): the width tiers, the frame geometry,
+// transitional usage columns (readLegacyUsage from panel.ts), and the right-hand summary columns. No engine value in here and no JSX: band.tsx draws what this file plans.
 // Syntax is erasable and every runtime import carries `.ts`, so `node --test` can load this file (shell.test.js).
 // Colours: only PALETTE roles (ui.ts) as text colour; no background, no inverse, no bold. One colour, one meaning: main window `here`, other windows `idle`, dividers `structure`.
 
 import type { Seg } from './model.ts'
+import { STALE_MS, readLegacyUsage } from './panel.ts'
+import type { PanelLine, PanelRead, SideData, Tiers } from './panel.ts'
 import { GLYPHS, PALETTE, displayWidth, wrapPlain } from './ui.ts'
 
 // ---- tiers (contract 1.1): written on bodyColumns, the width the band is handed. Not derived from the terminal width. The tab row's own 160/120/80 table (model.ts layoutBand) is
@@ -56,59 +58,9 @@ export function shellGeometry(bodyColumns: number, noRight = false): Geometry | 
   return { tier, left: LEFT_COLS, main, right }
 }
 
-// ---- the panel reader (contract 2): forge-stats writes `codeforge.panel/1`; we only read it ----
-export type PanelLine = { text: string; tone?: string }[]
-export type Tiers = Record<string, PanelLine[]>
-export type SideData = { usage: Tiers | null; usageFull: Tiers | null; memory: Tiers | null }
-// absent: nothing written (null / undefined); bad: not an object; old: another schema (or none); ok: codeforge.panel/1
-// usage: the top-level `usage` tiers (the 用量 tab of the band), money lines already dropped
-export type PanelRead = { status: 'absent' | 'bad' | 'old' | 'ok'; ageMs: number | null; side: SideData | null; usage: Tiers | null }
-export const PANEL_SCHEMA = 'codeforge.panel/1'
-export const STALE_MS = 60_000
-// codeforge's tone words (PanelTone); written as one string so no theme-key literal stands here (ui-lint L8: colours are PALETTE roles)
-const TONES = new Set('subtle inactive dim bold mono success'.split(' '))
-// text read from another process's file is cleaned once, here at the trust boundary: C0 (ESC, CR, TAB…), DEL and C1 controls become nothing, a newline a space
+// ---- the panel reader lives in panel.ts (tux-guidelines L19): shell.ts uses the transitional readLegacyUsage() exit only ----
 const clean = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\x00-\x1f\x7f-\x9f]/g, '')
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-
-// a tiers table: numeric keys, each a list of lines, each line a list of {text, tone?}. A tier that breaks the shape is dropped; a table with no tier left is null.
-// noMoney: a line any of whose parts carries `$` is dropped (the usage tab draws no money; the same rule as for `side`, per line)
-function tiersOf(v: unknown, noMoney = false): Tiers | null {
-  if (!isObj(v) || !isObj(v.tiers)) return null
-  const out: Tiers = {}
-  for (const [k, lines] of Object.entries(v.tiers)) {
-    if (!/^\d+$/.test(k) || !Array.isArray(lines)) continue
-    const rows: PanelLine[] = []
-    let ok = true
-    for (const line of lines) {
-      if (!Array.isArray(line)) { ok = false; break }
-      const parts: PanelLine = []
-      for (const p of line) {
-        if (!isObj(p) || typeof p.text !== 'string') { ok = false; break }
-        parts.push(typeof p.tone === 'string' && TONES.has(p.tone) ? { text: clean(p.text), tone: p.tone } : { text: clean(p.text) })
-      }
-      if (!ok) break
-      rows.push(parts)
-    }
-    if (ok) out[k] = noMoney ? rows.filter(r => !r.some(p => p.text.includes('$'))) : rows
-  }
-  return Object.keys(out).length === 0 ? null : out
-}
-
-// A side table that carries money is not drawn at all (the producer already refuses to write one; this is the second lock). Each part of `side` is read on its own: a broken `usage`
-// does not take `memory` down. Unknown fields are ignored.
-export function parsePanel(value: unknown, nowMs: number): PanelRead {
-  if (value === null || value === undefined) return { status: 'absent', ageMs: null, side: null, usage: null }
-  if (!isObj(value)) return { status: 'bad', ageMs: null, side: null, usage: null }
-  if (value.schema !== PANEL_SCHEMA) return { status: 'old', ageMs: null, side: null, usage: null }
-  const at = value.updated_at_ms
-  const ageMs = typeof at === 'number' && Number.isFinite(at) ? Math.max(0, nowMs - at) : null
-  const usage = tiersOf(value.usage, true)
-  const s = value.side
-  if (!isObj(s) || JSON.stringify(s).includes('$')) return { status: 'ok', ageMs, side: null, usage }
-  const side = { usage: tiersOf(s.usage), usageFull: tiersOf(s.usage_full), memory: tiersOf(s.memory) }
-  return { status: 'ok', ageMs, side: side.usage === null && side.usageFull === null && side.memory === null ? null : side, usage }
-}
 
 // the largest tier whose key is not wider than the column's inner width; null when none fits (a column is never given a line made for a wider one)
 export function pickTier(tiers: Tiers | null, inner: number): PanelLine[] | null {
@@ -178,6 +130,9 @@ export function usageRows(panel: PanelRead, cols: number, rows: number, t: T): S
   if (mins !== null) out[0] = [{ text: t('shell.stale', { n: mins }) + ' ', dim: true }, ...out[0]]
   return out.map(r => clipSegs(r, cols - 1))
 }
+export function legacyUsageRows(panelRaw: unknown, nowMs: number, cols: number, rows: number, t: T): Seg[][] {
+  return usageRows(readLegacyUsage(panelRaw, nowMs), cols, rows, t)
+}
 
 // ---- the roundtable summary ----
 export type RoomRow = { seq: number; from: string; kind: string; text: string }
@@ -239,7 +194,9 @@ export type ShellInput = {
   menuTitle: string
   mainTitle: string
   room: { rows: readonly RoomRow[]; fresh: number }
-  panel: PanelRead
+  panel?: PanelRead
+  panelRaw?: unknown
+  nowMs?: number
   fleet: readonly FleetLaneSum[]
   footLeft?: string // right-aligned in the bottom frame of the left window (the card position, `3/8`)
   footMain?: string // right-aligned in the bottom frame of the main window (the one-line hint)
@@ -293,7 +250,8 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
   if (geo === null) return null
   const bodyRows = inp.bodyRows ?? BODY_ROWS
   const compact = inp.compact === true
-  const { t, panel } = inp
+  const { t } = inp
+  const panel = inp.panel ?? readLegacyUsage(inp.panelRaw, inp.nowMs ?? 0)
   const side = panel.side
   const mins = staleMinutes(panel)
   const lead: Seg[] | null = mins !== null ? [{ text: t('shell.stale', { n: mins }), dim: true }] : null

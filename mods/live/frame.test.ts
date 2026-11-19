@@ -28,11 +28,11 @@ const withBody = (p: Page, body: number, actions: number): Page => ({ ...p, rend
 const text = (r: Row): string => r.map(s => s.text).join('')
 const stale = (): NonNullable<PageCtx['console']> => ({ ...(SNAP as NonNullable<typeof SNAP>), sources: { fleet: { at_ms: NOW - 6 * 60000, state: 'stale' }, quota: { at_ms: null, state: 'no_source' } } })
 
-test('registry: eleven pages in key order 1-8, 9 pet, 0 forge, i help; shells are empty, the pet page is a placeholder (g2 folds A6)', () => {
+test('registry: eleven pages in key order 1-8, 9 pet, 0 forge, i help; shells are empty, the pet page renders its no-pet state when absent (g2 folds A6)', () => {
   expect(PAGES.map(p => p.id + p.key)).toEqual(['now1', 'decide2', 'fleet3', 'quota4', 'dispatch5', 'review6', 'spend7', 'hygiene8', 'pet9', 'forge0', 'helpi'])
   for (const p of PAGES) {
     const r = p.render(ctxOf(SIZES[0]))
-    if (p.id === 'pet') expect(r.body.map(x => x.map(g => g.text).join(''))).toEqual(['寵物分頁還沒上線'])
+    if (p.id === 'pet') expect(r.body.map(x => x.map(g => g.text).join(''))).toEqual(['沒有寵物資料'])
     else if (p.id === 'decide') {
       expect(r.body).toEqual([])
       expect(r.actions.map(x => x.map(g => g.text).join('')).join('')).toBe(t('shell.on_band'))
@@ -365,4 +365,55 @@ test('gate G11: every key in a page key table has a Button with that hotkey and 
   need('quota', hotkeys(drawn('spend', { console: consoleOf(POOLS.map(p => ({ ...p, switch_suggestion: 'personal -> team' }))) })), pageHotkeys('quota').filter(k => k !== 'z')) // z folds nothing on the quota page
   need('now', hotkeys(drawn('now', {})), ['i'])
   expect(missing).toEqual([])
+})
+
+test('pet page: renders sprite + stat rows bottom-anchored at 80x24 and 120x30, draws 2-cell fallback under 80 cols, and rejects invalid tuples without crashing', () => {
+  const petPage = PAGES.find(p => p.id === 'pet')!
+  const sprite = [String.fromCodePoint(0x2584, 0x2588, 0x2584), String.fromCodePoint(0x2588, 0x2580, 0x2588)]
+  const validPanel = {
+    schema: 'codeforge.panel/1',
+    updated_at_ms: NOW,
+    pet: {
+      title: 'Mochi Lv.3',
+      icon: { id: 'cat', emoji: '🐱', fallback: ':3', text: '🐱' },
+      sprite,
+      tiers: {
+        60: [[{ text: 'HP 60  EXP 42%' }]],
+        100: [[{ text: 'HP 100  EXP 42%  MOOD good' }]],
+      },
+    },
+  }
+  for (const size of [{ cols: 80, rows: 24 }, { cols: 120, rows: 30 }]) {
+    const rows = frameRows(petPage, { ...ctxOf(size), pet: validPanel }, { pages: PAGES })
+    expect(rows.length).toBe(size.rows)
+    for (const r of rows) expect(displayWidth(text(r))).toBeLessThanOrEqual(size.cols)
+    const rendered = rows.map(text)
+    expect(rendered[0]).toBe('寵物')
+    // bottom-anchored: body sits directly above empty-state action row (rows - 2) and strip (rows - 1)
+    const statLine = size.cols >= 100 ? 'HP 100  EXP 42%  MOOD good' : 'HP 60  EXP 42%'
+    expect(rendered[size.rows - 3]).toBe(statLine)
+    expect(rendered[size.rows - 4]).toBe(sprite[1])
+    expect(rendered[size.rows - 5]).toBe(sprite[0])
+    expect(rendered[size.rows - 6]).toBe('🐱 Mochi Lv.3')
+    expect(rendered.slice(1, size.rows - 6).every(r => r === '')).toBe(true)
+  }
+  // 79 cols (< 80): draws entry fallback (:3) instead of payload text (🐱)
+  const r79 = frameRows(petPage, { ...ctxOf({ cols: 79, rows: 24 }), pet: validPanel }, { pages: PAGES }).map(text)
+  expect(r79.some(l => l.startsWith(':3 Mochi Lv.3'))).toBe(true)
+  expect(r79.some(l => l.includes('🐱'))).toBe(false)
+  // Negative controls: ⚠️, CJK two chars, valid text + invalid fallback at 79 cols -> no pet
+  for (const [cols, icon] of [
+    [80, { id: 'cat', emoji: '⚠️', fallback: ':3', text: '⚠️' }],
+    [80, { id: 'cat', emoji: '🐱', fallback: '寵物', text: '寵物' }],
+    [79, { id: 'cat', emoji: '🐱', fallback: 'xx', text: '🐱' }],
+  ] as const) {
+    const bad = { ...validPanel, pet: { ...validPanel.pet, icon } }
+    const out = frameRows(petPage, { ...ctxOf({ cols, rows: 24 }), pet: bad }, { pages: PAGES }).map(text)
+    expect(out.some(l => l === '沒有寵物資料')).toBe(true)
+    expect(out.some(l => l.includes('Mochi'))).toBe(false)
+  }
+  // Mounted in Pane: zero Image nodes
+  const tree = walk(Pane(EL as never, LIVE0, 'now', () => {}, t, 80, () => {}, new Set(), () => {}, new Set(), null, null, null, null, null, { pages: PAGES, pageId: 'pet', console: null, nowMs: NOW, rows: 24, pet: validPanel } as never))
+  expect(tree.some(n => n.kind === 'Image')).toBe(false)
+  expect(tree.some(n => n.kind === 'Text' && flat(n).includes('🐱 Mochi Lv.3'))).toBe(true)
 })

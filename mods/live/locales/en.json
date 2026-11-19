@@ -496,7 +496,7 @@
   "tab.pet_short": "Pet",
   "tab.forge_short": "forge",
   "tab.help": "Help",
-  "frame.pet_todo": "The pet page is not live yet",
+  "page.pet.none": "No pet data",
   "tab.quota": "Quota",
   "frame.help": "help",
   "frame.nothing": "No pending cards",

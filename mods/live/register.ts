@@ -66,10 +66,10 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BandPageId, BarTabId, ScrollView } from './tabs'
-import { BODY_ROWS, MAIN_CONTENT_ROWS, SHELL_MENUS, SHELL_MIN_ROWS, SHELL_ROWS, type ShellMenuId, type ShellPlan, cardRows, freshCount, isCompact, leftItems, leftTitle, newestSeq, nextShellMenu, parsePanel, parseRoom, progressSegs, roomLines, shellContentRows, shellGeometry, shellPlan, usageRows } from './shell'
+import { BODY_ROWS, MAIN_CONTENT_ROWS, SHELL_MENUS, SHELL_MIN_ROWS, SHELL_ROWS, type ShellMenuId, type ShellPlan, cardRows, freshCount, isCompact, leftItems, leftTitle, legacyUsageRows, newestSeq, nextShellMenu, parseRoom, progressSegs, roomLines, shellContentRows, shellGeometry, shellPlan } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
-import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
+import type { FleetLaneSum, RoomRow } from './shell'
 import { focusAnchorKey, Pane, noteInputKey, resetNoteInputs } from './pane'
 import { routeKey } from './pages/keys'
 import type { KeyAction } from './pages/keys'
@@ -1780,7 +1780,6 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const panelRaw = await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
       const fleet = await read($, FLEET)
       const lanes: FleetLaneSum[] = fleet.lanes.map(l => ({ lane: l.lane, needYou: l.needYou, failed: l.failed, stuck: l.stuck, running: l.running, waiting: l.waiting }))
-      const panel: PanelRead = parsePanel(panelRaw, nowMs)
       const grouped = new Map<string, LiveDecision[]>()
       for (const d of pendingAll) {
         const k = cardKey(d)
@@ -1836,7 +1835,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const planInp = {
         columns, t, menuTitle: leftTitle(cardMode ? 'cards' : 'tabs', t('tab.decide'), t),
         mainTitle: cardMode ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : menuWord,
-        room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes,
+        room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panelRaw, nowMs, fleet: lanes,
         ...(cardMode ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}), // the card view re-plans with the hint of the options it actually draws
         ...(cardMode ? { noRight: true } : {}),
         bodyRows: Math.min(BODY_ROWS, shellContentRows(rows) + (isCompact(rows) ? 0 : 2)), compact: isCompact(rows), // r4: a short band gets a short frame
@@ -1928,7 +1927,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           quick = quickOf(sendN, Object.values(st.hold ?? {}))
         } else {
           const content = plan.compact ? plan.bodyRows : plan.bodyRows - 2
-          const lines = shellMenu === 'u' ? usageRows(panel, mainCols, content, t) : shellMenu === 'r' ? roomLines(shellRoom.rows, mainCols, content) : null
+          const lines = shellMenu === 'u' ? legacyUsageRows(panelRaw, nowMs, mainCols, content, t) : shellMenu === 'r' ? roomLines(shellRoom.rows, mainCols, content) : null
           main = lines === null
             ? shellNote(el, t(shellMenu === 'p' ? 'shell.pet_soon' : shellMenu === 'h' ? 'shell.help_body' : 'decide.none'))
             : usageDraw(el, lines.length === 0 ? [[{ text: t('shell.room_none'), dim: true }]] : lines)
@@ -1998,6 +1997,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const fleet = await fleetFor($)
     const frameNow = legacy ? 0 : await $.clock.now()
     const epoch = legacy ? 0 : syncPanePlacement($, e.props.placement, e.props.isFocused)
+    const petPanel = !legacy && panePage === 'pet'
+      ? await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
+      : undefined
     const tree = Pane(
       $.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { void paneTabPress($, t, legacy) }, tr, e.props.bodyColumns,
       () => { paneTab = nextTab(paneTab); panePage = pageOfTab(paneTab); $.ui.invalidate('ui.render') },
@@ -2005,7 +2007,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       folded, e.props.scroll ?? null,
       { state: decideState, batch: decideBatch, now: decideNow, inputs: decideInputs, onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) }, onKeep: (key: string, value: string) => { void decideKeep($, key, value) } },
       decideScroll, fleet, null,
-      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}) },
+      legacy ? null : { pages: PAGES, pageId: panePage, onPage: (id: PageId) => { void panePagePress($, id) }, console: consoleSnap, nowMs: frameNow, rows: frameHeight(e.props.scroll?.bodyRows ?? 24, e.props.placement), view: pageView, decide: { ...decideState, ...decideLocal }, onPress: (id: string) => { void framePress($, id) }, onKey: (k: KeyAction) => { void frameKey($, k) }, onText: (v: string) => { decideLocal = { ...decideLocal, textBuf: v }; void $.ui.invalidate('ui.render') }, epoch, ...(panePage === 'forge' ? { steps: validSteps(await read($, STEPS)) } : {}), ...(panePage === 'pet' ? { pet: petPanel } : {}) },
     )
     await probePane($, e, tree)
     return tree

@@ -1575,6 +1575,17 @@
       "invalid_effect": "anything but a boolean (or env true/false/1/0/yes/no) is ignored, so the source stays"
     },
     {
+      "name": "AUTOPILOT_FLEET_WRITEBACK_TIMEOUT_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": "3000",
+      "readers": ["hooks/subagent-fleet-task.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Timeout in ms for the fleet call that writes a dispatch ending line to the parent Fleet-Task; on timeout the hook swallows it and exits 0. Tests shorten it."
+    },
+    {
       "name": "AUTOPILOT_FLEET_BIN",
       "kind": "env",
       "audience": "internal",

@@ -447,9 +447,10 @@ for (const surface of SURFACES) {
     const eng = pluginEngine(w)
     await $.session.start({ surface, cwd: CWD })
 
-    // Before `show`: no `給你看` row and no `要你做或看` section
+    // Before `show`: the pane no longer draws a decision page. The one line points at the band.
     const initial = await readDecidePane($, surface)
-    expect(initial.rows.some(r => r.includes('此帳號沒有 console 快照'))).toBe(true) // the framed 待決 page's own empty state (plan r2 §5)
+    expect(initial.rows.some(r => r.includes('待決在 band 上（d）'))).toBe(true)
+    expect(initial.rows.some(r => r.includes('此帳號沒有 console 快照'))).toBe(false)
     expect(initial.rows.some(r => r.includes('給你看'))).toBe(false)
     expect(initial.rows.some(r => r.includes('要你做或看'))).toBe(false)
     expect(initial.buttons.filter(k => k.startsWith('look:') || k.startsWith('dismiss:'))).toEqual([])
@@ -469,8 +470,8 @@ for (const surface of SURFACES) {
 
     await advance(w, 5000)
     const afterShow = await readDecidePane($, surface)
-    expect(afterShow.rows.some(r => /^── 要你做或看 ─+$/.test(r))).toBe(true)
-    expect(afterShow.rows.some(r => r.includes('查看') && r.includes('給你看：plan.md（repo）'))).toBe(true)
+    expect(afterShow.rows.some(r => r.includes('待決在 band 上（d）'))).toBe(true)
+    expect(afterShow.rows.some(r => r.includes('給你看') || r.includes('要你做或看'))).toBe(false)
 
     // Unrelated update 1: fresh envelope spend/counts, fresh context %, and a republished model.json with an unrelated decision card
     const nextPublished = new Date(w.nowMs).toISOString()
@@ -490,10 +491,8 @@ for (const surface of SURFACES) {
     await advance(w, 5000)
 
     const afterUnrelated = await readDecidePane($, surface)
-    // the framed page has no spend / context header (plan r2 §2 row 2: the header is the page name); the unrelated decision card and the 給你看 row both show
-    expect(afterUnrelated.rows.some(r => r.includes('要採用哪個方案？'))).toBe(true)
-    expect(afterUnrelated.rows.some(r => r.includes('查看') && r.includes('給你看：plan.md（repo）'))).toBe(true)
-    expect(afterUnrelated.rows.filter(r => r.includes('給你看：plan.md（repo）')).length).toBe(1)
+    expect(afterUnrelated.rows.some(r => r.includes('待決在 band 上（d）'))).toBe(true)
+    expect(afterUnrelated.rows.some(r => r.includes('要採用哪個方案？') || r.includes('給你看'))).toBe(false)
 
     // The framed page draws no 關閉 / reopen Buttons for a 給你看 row (plan r2 §2 row 2): the durable close and the viewer reopen stay covered at the model level by the negative control test below.
     expect(afterUnrelated.buttons.filter(k => k.includes('d-look0001'))).toEqual([])
@@ -510,7 +509,8 @@ for (const surface of SURFACES) {
     await advance(w, 5000)
 
     const afterStaleModel = await readDecidePane($, surface)
-    expect(afterStaleModel.rows.some(r => r.includes('要你做或看'))).toBe(true) // the look card is still in the durable store (nothing closed it from the framed page)
+    expect(afterStaleModel.rows.some(r => r.includes('待決在 band 上（d）'))).toBe(true)
+    expect(afterStaleModel.rows.some(r => r.includes('要你做或看') || r.includes('給你看'))).toBe(false)
   })
 }
 
@@ -660,9 +660,8 @@ for (const surface of SURFACES) {
     await $.session.start({ surface, cwd: CWD })
 
     const drawn = await readDecidePane($, surface)
-    // the framed 待決 page shows the card and its options as rows; attachments are not drawn there (plan r2 §2 row 2), so no show: Button, no Link, and nothing from `javascript:` reaches the tree
-    expect(drawn.rows.some(r => r.includes('請確認規格與 PR'))).toBe(true)
-    expect(drawn.rows.some(r => r.includes('核准') && r.includes('退回'))).toBe(true)
+    expect(drawn.rows.some(r => r.includes('待決在 band 上（d）'))).toBe(true)
+    expect(drawn.rows.some(r => r.includes('請確認規格與 PR') || r.includes('核准'))).toBe(false)
     expect(drawn.buttons.filter(k => k.startsWith('show:'))).toEqual([])
     expect(drawn.links).toEqual([])
     expect(drawn.rows.some(r => r.includes('javascript:'))).toBe(false)
@@ -798,19 +797,8 @@ for (const surface of SURFACES) {
     await $.session.start({ surface, cwd: CWD })
 
     const drawn = await readDecidePane($, surface)
-    const decCardAt = drawn.rows.findIndex(r => r.includes('d-dec-m1') && r.includes('要採用哪個方案？'))
-    const stepsHeaderAt = drawn.rows.findIndex(r => /^── 要你做或看 ─+$/.test(r))
-    const stepCardAt = drawn.rows.findIndex(r => r.includes('步驟') && r.includes('請到瀏覽器完成登入'))
-    const lookCardAt = drawn.rows.findIndex(r => r.includes('查看') && r.includes('給你看：plan.md（repo）'))
-
-    expect(decCardAt).toBeGreaterThan(0)
-    expect(stepsHeaderAt).toBeGreaterThan(decCardAt)
-    expect(stepCardAt).toBeGreaterThan(stepsHeaderAt)
-    expect(lookCardAt).toBeGreaterThan(stepCardAt)
-    expect(drawn.rows.some(r => r.includes('甲') && r.includes('乙'))).toBe(true)
-    // a decision is never listed under 要你做或看, and a step / look card never takes an option row
-    expect(drawn.rows.slice(stepsHeaderAt).some(r => r.includes('要採用哪個方案？'))).toBe(false)
-    expect(drawn.rows.slice(0, stepsHeaderAt).some(r => r.includes('請到瀏覽器完成登入') || r.includes('給你看'))).toBe(false)
+    expect(drawn.rows.some(r => r.includes('待決在 band 上（d）'))).toBe(true)
+    expect(drawn.rows.some(r => r.includes('要採用哪個方案？') || r.includes('要你做或看') || r.includes('請到瀏覽器完成登入') || r.includes('給你看'))).toBe(false)
     expect(drawn.buttons.filter(k => k.startsWith('opt:') || k.startsWith('dismiss:') || k.startsWith('look:'))).toEqual([])
   })
 }

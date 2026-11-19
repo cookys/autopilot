@@ -170,7 +170,7 @@ const MIN = 60_000
 const step = (i) => ({ at: i, model: 'm', isSubagent: false, ttftMs: 100, decodeMs: 2000, outTokens: 200, tps: 80 })
 const flat = (n) => typeof n === 'string' ? n : Array.isArray(n) ? n.map(flat).join('') : n?.props ? flat(n.props.children) : ''
 
-async function rowOf(cols, { snap = 'full', tasks = 'ok', forecast = 'ok', quotaText = null, noTabs = false, forgeRow = false, rowAt = 0 } = {}) {
+async function rowOf(cols, { snap = 'full', tasks = 'ok', forecast = 'ok', quotaText = null, noTabs = false, forgeRow = false, rowAt = 0, sources = {} } = {}) {
   const { parseConsole } = await import('./console.ts')
   const { BandBar } = await import('./band.tsx')
   const { speedLabelParts } = await import('./speedview.ts')
@@ -181,6 +181,7 @@ async function rowOf(cols, { snap = 'full', tasks = 'ok', forecast = 'ok', quota
   raw.generated_at_ms = NOW
   raw.sources.tasks = { at_ms: tasks === 'expired' ? NOW - 12 * MIN : NOW, state: tasks }
   raw.sources.quota_forecast = { at_ms: forecast === 'ok' ? NOW : null, state: forecast }
+  for (const [k, state] of Object.entries(sources)) raw.sources[k] = { at_ms: state === 'ok' ? NOW : null, state }
   const parsed = snap === 'null' ? null : parseConsole(JSON.stringify(raw))
   const mk = (kind) => (props) => ({ kind, props })
   const EL = { Box: mk('Box'), Text: mk('Text'), Button: mk('Button') }
@@ -234,4 +235,19 @@ test('(d) the repair line: drawn on row 2 when the pane is open and a source is 
   assert.equal((await rowOf(120, { snap: 'null', noTabs: true, forgeRow: true, rowAt: 1 })).includes(repair), false)
   assert.equal((await rowOf(120, { snap: 'null', noTabs: true, forgeRow: true, rowAt: 0 })).includes(repair), false)
   assert.match(await rowOf(120, { snap: 'null', noTabs: true, forgeRow: true, rowAt: 0 }), /tok\/s/)
+})
+
+// r4 D: fleet's console snapshot reports slots, metrics, answer_log and changes as no_source on purpose (not implemented yet). That is not a failure: the band shows a source error only for
+// tasks, peers, cards and quota_now.
+test('(e) slots / metrics / answer_log / changes no_source draw no error row; tasks no_source still does', async () => {
+  const fine = { tasks: 'ok', peers: 'ok', cards: 'ok', quota_now: 'ok' }
+  const planned = { slots: 'no_source', metrics: 'no_source', answer_log: 'no_source', changes: 'no_source' }
+  for (const at of [0, 1]) {
+    const row = await rowOf(120, { sources: { ...fine, ...planned }, noTabs: true, rowAt: at })
+    assert.equal(row.includes('✗'), false, 'row ' + at + ': ' + row)
+    assert.equal(row.includes('槽位'), false)
+    assert.equal(row.includes('autopilot status runs --watch'), false)
+  }
+  const bad = await rowOf(120, { sources: { ...fine, ...planned, tasks: 'no_source' }, noTabs: true, rowAt: 1 })
+  assert.equal(bad.includes('autopilot status runs --watch'), true, bad)
 })

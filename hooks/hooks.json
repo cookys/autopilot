@@ -192,7 +192,7 @@
         ]
       },
       {
-        "matcher": "mcp__fleet__send|mcp__fleet__dispatch",
+        "matcher": "mcp__fleet__send|mcp__fleet__reply|mcp__fleet__dispatch",
         "hooks": [
           {
             "type": "command",

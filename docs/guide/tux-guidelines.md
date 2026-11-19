@@ -401,7 +401,7 @@ kind 的優先序是 `a`、`c`、`a*`、`b`。`a`：token 已在那台主機，l
 
 | 編號 | 規則 | 一行測試 | 負向控制 |
 | :--- | :--- | :--- | :--- |
-| **L19** | 本節繪製只接受 `fleet.console/1` 快照；原始碼不出現 `pace.v1`、`capacity.quota-pane`、`codeforge.panel`。`REFRESH_FALLBACK_MS` 滿足 `30000 < n < 5400000` | 掃描繪製模組，三個字串為 `[]`，並讀該常數 | 植入 `readFile('out/pace.v1.json')`，或把常數改成 1000，變紅 |
+| **L19** | 本節繪製只接受 `fleet.console/1` 快照；原始碼不出現 `pace.v1`、`capacity.quota-pane`、`codeforge.panel`，亦不得 import／re-export `mods/live/panel.ts`。`REFRESH_FALLBACK_MS` 滿足 `30000 < n < 5400000`。繪製模組：`shell.ts`、`band.tsx`、 `consolepages.ts`；例外：`panel.ts`（僅讀取 `codeforge.panel/1`）、`pettab.ts`（僅限 `readPet()` 之 `pet` 欄位，嚴禁 `pace.v1`／`quota`／`usage`／`.side`；過渡期 `shell.ts` 僅白名單 `readLegacyUsage`） | 掃描繪製模組，三個字串與 `panel.ts` import／re-export 皆為 `[]`，反向掃描 `pettab.ts` 為 `[]`，並讀該常數 | 植入 `readFile('out/pace.v1.json')`、`codeforge.panel`、`from './panel'` 或於 `pettab.ts` 植入 `panel.usage`，或把常數改成 1000，變紅 |
 | **L20** | `cache_read_24h` 不得加進 `tokens_24h` 或 `tokens_7d` | `{tokens_24h:10, cache_read_24h:7}` 的 tok 格是 10、讀格是 7 | 相加成 17 變紅 |
 | **L21** | 不新鮮列不含 `%`、不含 `✦`、不含 `正常`，必含 `—` 與 `陳舊`、`過期`、`無來源` 之一 | fixture 的 `pool-c-reset`、`pool-c-old`、`pool-d-none` | 陳舊列仍畫 `91%` 變紅 |
 | **L22** | 120／160／200 每一列的 `displayWidth` 等於該寬（`ui.ts` 的 `cellWidth`，中文兩格） | 渲染 §6.8 九個框，逐列斷言 | 少一格變紅 |

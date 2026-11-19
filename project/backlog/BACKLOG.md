@@ -130,22 +130,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: seedclean g3 review (adb8f4b0, de92deb9, 76f11d50)
 - **Pointer**: project/backlog/docsz6-hardening-notes.md
 
-### band「待你動手 N」改放最上面的選單列
-- **Id**: BL-0422
-- **Status**: open
-- **Since**: 2026-11-07
-- **Origin**: peer
-- **Reporter**: codeforge
-- **Report**: fleet 01M6SZVASD (2026-11-07)
-- **Reply**: none
-- **Problem**: 待你動手的數字是全域的，不是單張卡的，放在主視窗標題語意不對；改放最上面的選單列，前提是 80 欄寬放得下、不截字。
-- **Impact**: 數字位置會讓人誤以為只屬於目前這張卡。
-- **Trigger**: next change to the band top menu row
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: codeforge fleet 01M6SZVASD (2026-11-07)
-- **Pointer**: project/backlog/docsz6-hardening-notes.md
-
 ### panel 一次送多張卡時 claim 依序執行，掛掉時整批卡很久
 - **Id**: BL-0423
 - **Status**: open

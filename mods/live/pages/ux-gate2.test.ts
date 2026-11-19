@@ -39,11 +39,8 @@ test('Y2: a remote card keeps the complete answer area in PM order and directs a
   for (const [cols, rows] of [[80, 24], [120, 30], [160, 40]] as const) {
     const ctx = { ...ctxOf(cols, rows, con) as any, live }
     const out = frameRows(decidePage, ctx).map(text)
-    const indices = ['合成背景', '合成卡住', '[a] 先跑回歸', '建議', '補充'].map(s => out.findIndex(r => r.includes(s)))
-    expect(indices.every(i => i >= 0), cols + ': complete card').toBe(true)
-    for (let i = 1; i < indices.length; i++) expect(indices[i]).toBeGreaterThan(indices[i - 1])
-    expect(out.some(r => r.includes('涵蓋排程邊界'))).toBe(true)
-    expect(out.some(r => r.includes('到 h1 答'))).toBe(true)
+    expect(out.join('\n')).toContain('待決在 band 上（d）')
+    expect(out.some(r => r.includes('[a] 先跑回歸') || r.includes('到 h1 答'))).toBe(false)
     expect(decidePage.render(ctx).body.flat().some(s => s.press?.startsWith('key:'))).toBe(false)
     for (const key of [{ kind: 'pick', index: 0 }, { kind: 'submit' }, { kind: 'fill' }] as const) {
       const r = decideReduce(NO_NAV, key, ctx, NOW)
@@ -110,10 +107,10 @@ test('Z4: the focused decision title keeps (1/3 · 1 天) on the same row at eve
       const pending = own ? cards.map(c => ({ ...c, source: 'h1', age_s: null, opened_at: new Date(c.opened_at_ms).toISOString(), title: null, why: null, origin: null, orphaned: false, stale: false, not_authorized: null })) : []
       const ctx = { ...ctxOf(cols, rows, consoleOf([], { cards: own ? [] : cards })) as any, live: { ...live as any, pending } }
       const out = frameRows(decidePage, ctx).map(text)
-      const title = out.find(r => r.startsWith('▸ ')) ?? ''
-      expect(title).toContain('合成卡')
-      expect(title).toContain('(1/3 · 1 天)')
-      expect(displayWidth(title)).toBeLessThanOrEqual(cols)
+      const line = out.find(r => r.includes('待決在 band 上（d）')) ?? ''
+      expect(line).toContain('待決在 band 上（d）')
+      expect(out.some(r => r.includes('合成卡') || r.includes('(1/3'))).toBe(false)
+      expect(displayWidth(line)).toBeLessThanOrEqual(cols)
     }
   }
 })

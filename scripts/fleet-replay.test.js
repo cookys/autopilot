@@ -48,7 +48,7 @@ function makeHermeticRepo(name) {
   runGit(repoDir, ['remote', 'add', 'origin', originDir]);
   fs.writeFileSync(path.join(repoDir, 'app.txt'), 'v1\n', 'utf8');
   runGit(repoDir, ['add', 'app.txt']);
-  runGit(repoDir, ['commit', '-qm', 'initial commit']);
+  runGit(repoDir, ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'initial commit']);
   const branch = runGit(repoDir, ['symbolic-ref', '--short', 'HEAD']);
   runGit(repoDir, ['push', '-q', '-u', 'origin', branch]);
 

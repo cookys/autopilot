@@ -7643,6 +7643,36 @@
         "AUTOPILOT_FLEET_REPO"
       ],
       "note": "Selects the PM inbox adapter backend: fleet (default) or fixture:<dir> (hermetic JSON/JSONL directory seam)."
+    },
+    {
+      "name": "AUTOPILOT_CURSOR_BROKER_AUDIT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "/srv/cursor-broker/audit.tsv",
+      "readers": [
+        "scripts/lib/broker-run-pace.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [
+        "AUTOPILOT_KIMI_BROKER_AUDIT"
+      ],
+      "note": "Overrides pace-roles.json broker_audit.cursor (default /srv/cursor-broker/audit.tsv) for the daily-run behind-pace proxy in pace-select.js."
+    },
+    {
+      "name": "AUTOPILOT_KIMI_BROKER_AUDIT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": "/srv/kimi-broker/audit.tsv",
+      "readers": [
+        "scripts/lib/broker-run-pace.js"
+      ],
+      "doc": "references/hetero-dispatch.md",
+      "relates": [
+        "AUTOPILOT_CURSOR_BROKER_AUDIT"
+      ],
+      "note": "Overrides pace-roles.json broker_audit.kimi (default /srv/kimi-broker/audit.tsv) for the daily-run behind-pace proxy in pace-select.js."
     }
   ]
 }

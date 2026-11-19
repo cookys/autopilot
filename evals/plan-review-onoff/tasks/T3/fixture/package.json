@@ -1,0 +1,1 @@
+{ "name": "svc", "scripts": { "check": "node scripts/check.js" } }

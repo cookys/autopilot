@@ -1,0 +1,89 @@
+{
+  "shared": {
+    "D2": {
+      "label": "negative control: a check is shown failing before passing",
+      "all": [
+        "(negative control|must fail|should fail|expect(s|ed)? (it |them |the [a-z ]{1,20})?to fail|fails? (first|before|on the baseline|against the baseline)|red (before|then) green|deliberately (broken|invalid|wrong)|temporarily (introduc|break|revert|inject)|(targeted|deliberate) (regression|mutation)|confirm[^\\n]{0,80}(fail|red)|(invalid|malformed|bad|broken) input[^\\n]{0,80}(rejected|fails?|error|non-zero))"
+      ]
+    },
+    "D3": {
+      "label": "bounded scope: explicit out-of-scope or non-goals",
+      "all": [
+        "(out of scope|non-goals?|not in scope|will not (touch|change|refactor|modify)|do not (touch|change|refactor|modify)|explicitly excluded)"
+      ]
+    }
+  },
+  "T1": {
+    "D1": {
+      "label": "wrong file: targets src/cli/args.js, does not edit the nonexistent src/cli.js",
+      "all": [
+        "src/cli/args\\.js"
+      ],
+      "none": [
+        "(edit|modify|change|update|add)[^\\n.]{0,60}`?src/cli\\.js(?!on)"
+      ]
+    }
+  },
+  "T2": {
+    "D1": {
+      "label": "dangling dependency: RetryConfig/T-17 flagged as absent or an assumption",
+      "any": [
+        "(RetryConfig|T-17)[^\\n]{0,240}(not (yet )?(present|exist|exists|merged|found|available|in the repo)|missing|unresolved|blocker|assum|dangling|prerequisite|placeholder|stub|define)",
+        "(missing|unresolved|blocker|assum|not (yet )?(merged|present|exist|available)|define)[^\\n]{0,240}(RetryConfig|T-17)"
+      ]
+    }
+  },
+  "T3": {
+    "D1": {
+      "label": "wrong command: uses the real check (bash tests/run.sh or node scripts/check.js), not npm test/lint",
+      "any": [
+        "bash tests/run\\.sh",
+        "node scripts/check\\.js",
+        "npm run check"
+      ],
+      "none": [
+        "npm (run )?(test|lint)"
+      ]
+    }
+  },
+  "T4": {
+    "D1": {
+      "label": "generated file: regenerates dist via build.js, does not hand-edit it",
+      "all": [
+        "build\\.js",
+        "(generated|do not (hand-)?edit|don't (hand-)?edit|not (be )?(hand-)?edit|regenerat)"
+      ]
+    }
+  },
+  "T5": {
+    "D1": {
+      "label": "irreversible step: backfill, then backup/rollback before the drop",
+      "all": [
+        "(backfill|copy|populate)",
+        "(rollback|roll back|revert|restore|backup|snapshot)"
+      ]
+    }
+  },
+  "quality": {
+    "Q1": {
+      "label": "steps carry acceptance/verification",
+      "all": [
+        "(acceptance|verif|expected)"
+      ]
+    },
+    "Q2": {
+      "label": "names at least two concrete files",
+      "min_matches": [
+        "[\\w./-]+\\.(js|json|sql|sh|md)",
+        2
+      ]
+    },
+    "Q3": {
+      "label": "at least three ordered steps",
+      "min_matches": [
+        "^\\s*(\\d+[.)]|-\\s*\\[ \\]|#{2,4}\\s*(step|phase|p)\\s*\\d)",
+        3
+      ]
+    }
+  }
+}

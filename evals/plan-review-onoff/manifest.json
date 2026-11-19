@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "plan-review-onoff",
+  "minimum_distinct_families": 1,
+  "max_attempts_per_seat": 2,
+  "seats": [
+    {
+      "id": "reviewer", "runner": "agy", "model": "gemini-4-hydrogen-high",
+      "effort": "high", "endpoint": "default", "role": "plan-reviewer",
+      "family": "google", "readiness_status": "ready",
+      "qualification_status": "qualified", "required": true,
+      "excluded_families": [], "fallbacks": []
+    }
+  ]
+}

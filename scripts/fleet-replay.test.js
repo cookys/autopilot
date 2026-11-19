@@ -134,7 +134,7 @@ function buildSwitchboardFixture(repoInfo) {
       source: 'inbox',
       from: 'ns/host/lane-a',
       message_id: 'm05',
-      kind: 'chat',
+      kind: 'note',
       reply_to: null,
       disposition: 'unread',
       fyi: false,
@@ -146,7 +146,7 @@ function buildSwitchboardFixture(repoInfo) {
       source: 'inbox',
       from: 'ns/host/lane-b',
       message_id: 'm06',
-      kind: 'chat',
+      kind: 'note',
       reply_to: null,
       disposition: 'unread',
       fyi: false,
@@ -158,7 +158,7 @@ function buildSwitchboardFixture(repoInfo) {
       source: 'inbox',
       from: 'ns/host/lane-d',
       message_id: 'm07',
-      kind: 'chat',
+      kind: 'note',
       reply_to: null,
       disposition: 'unread',
       fyi: false,
@@ -289,12 +289,13 @@ test('switchboard mode: 12-line synthetic fixture counts, bad_lines, both ratios
   assert.equal(report.wakes_per_hour.max, 1);
 
   assert.deepEqual(report.by_kind.chat, {
-    total: 8,
+    total: 5,
     auto_accept: 0,
     needs_decision: 2,
     no_action: 3,
-    residue: 3,
+    residue: 0,
   });
+  assert.equal(report.by_kind.note.residue, 3);
   assert.equal(report.by_kind.task_result.auto_accept, 1);
   assert.equal(report.by_from_top20.length, 6);
   assert.equal(report.by_from_top20[0].from, 'ns/host/lane-a');
@@ -346,7 +347,7 @@ test('switchboard samples: 50 deterministic rows each, exact 4 fields, body120 <
       source: 'inbox',
       from: sender,
       message_id: `res-${id}`,
-      kind: 'chat',
+      kind: 'note',
       reply_to: null,
       disposition: 'unread',
       fyi: false,
@@ -414,7 +415,7 @@ test('verdict thresholds: 9% keep_rules, 16% add_sonnet_fallback, 12% borderline
         source: 'inbox',
         from: 'ns/host/lane-a',
         message_id: `v-${String(i).padStart(3, '0')}`,
-        kind: i < residueCount ? 'chat' : 'ack',
+        kind: i < residueCount ? 'note' : 'ack',
         reply_to: null,
         disposition: 'unread',
         fyi: false,
@@ -694,4 +695,80 @@ test('residue breakdown appears in --human output', () => {
   });
   assert.equal(res.status, 0, res.stderr);
   assert.match(res.stdout, /殘餘分組/);
+});
+
+// --- courier and lane-chat rules (synthetic fixtures only) ---
+const { classifyItem: classifyForRules } = require('./pm-switchboard.js');
+
+function chatItem(from, content, extra = {}) {
+  return { message_id: extra.id || 'm-1', from, kind: 'chat', content, fyi: Boolean(extra.fyi) };
+}
+const COURIER = 'ns/host/courier';
+
+test('courier [fleet result] and result-wake ids need ruling', () => {
+  const a = classifyForRules(chatItem(COURIER, '[fleet result] task X done'));
+  assert.equal(a.disposition, 'pending_decision');
+  assert.equal(a.rule, 'courier_result');
+  assert.equal(a.isResidue, false);
+  const b = classifyForRules(chatItem(COURIER, 'something else', { id: 'result-wake-abc' }));
+  assert.equal(b.rule, 'courier_result');
+});
+
+test('courier patrol escalation needs ruling', () => {
+  const a = classifyForRules(chatItem(COURIER, '[fleet patrol] escalation: lane stuck?'));
+  assert.equal(a.disposition, 'pending_decision');
+  assert.equal(a.rule, 'courier_patrol_escalation');
+  const b = classifyForRules(chatItem(COURIER, '[fleet task T1] LOST: a--claude unreachable'));
+  assert.equal(b.rule, 'courier_patrol_escalation');
+});
+
+test('courier patrol digest, wait_over and card-audit are no action', () => {
+  for (const [content, id] of [
+    ['[fleet patrol] 3 tasks ok, anything?', 'm-1'],
+    ['patrol ok', 'm-1'],
+    ['x', 'wait_over-1'],
+    ['x', 'card-audit-1'],
+  ]) {
+    const r = classifyForRules(chatItem(COURIER, content, { id }));
+    assert.equal(r.disposition, 'no_action', content);
+    assert.equal(r.rule, 'courier_digest');
+  }
+});
+
+test('courier line with an unknown prefix is unchanged (unclassified residue)', () => {
+  const r = classifyForRules(chatItem(COURIER, '[fleet rule] task T1 something'));
+  assert.equal(r.rule, 'unclassified');
+  assert.equal(r.isResidue, true);
+});
+
+test('plain lane chat needs ruling; fyi lane chat is no action', () => {
+  const plain = classifyForRules(chatItem('ns/host/lane--claude', 'did a thing'));
+  assert.equal(plain.disposition, 'pending_decision');
+  assert.equal(plain.rule, 'lane_chat');
+  assert.equal(plain.isResidue, false);
+  const fyi = classifyForRules(chatItem('ns/host/lane--claude', 'did a thing', { fyi: true }));
+  assert.equal(fyi.disposition, 'no_action');
+  assert.equal(fyi.isResidue, false);
+});
+
+test('synthetic 50-line mixed fixture leaves under 10% residual', () => {
+  const msgs = [];
+  const add = (from, content, extra = {}) => msgs.push({
+    id: `s-${msgs.length}`, from, kind: 'chat', content, fyi: extra.fyi === true, received_ms: 1000 + msgs.length,
+    ...(extra.rest || {}),
+  });
+  for (let i = 0; i < 10; i++) add(COURIER, '[fleet result] done');
+  for (let i = 0; i < 5; i++) add(COURIER, '[fleet patrol] escalation');
+  for (let i = 0; i < 10; i++) add(COURIER, '[fleet patrol] digest');
+  for (let i = 0; i < 4; i++) add(COURIER, 'wait', {}), msgs[msgs.length - 1].id = `wait_over-${i}`;
+  for (let i = 0; i < 9; i++) add('ns/h/lane--claude', 'plain note');
+  for (let i = 0; i < 9; i++) add('ns/h/lane--claude', 'fyi note', { fyi: true });
+  add(COURIER, '[fleet rule] unknown-prefix');
+  add('ns/h/other--claude', 'another note');
+  assert.equal(msgs.length, 49);
+  add(COURIER, '[fleet result] done');
+  assert.equal(msgs.length, 50);
+  const report = replaySwitchboard(msgs);
+  assert.ok(report.counts.residue / 50 < 0.1, `residue ${report.counts.residue}/50`);
+  assert.equal(report.counts.residue, 1);
 });

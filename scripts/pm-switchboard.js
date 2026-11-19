@@ -282,6 +282,28 @@ function hasQuestionToPm(content) {
   return false;
 }
 
+const COURIER_FROM_RE = /(?:^|\/)courier$/;
+const OPERATOR_FROM_RE = /(?:^|\/)operator$/;
+
+// Courier-authored chat (from `*/courier`), classified by id/first-line prefix. Returns
+// { disposition, rule } or null when the prefix is unknown (falls through to later rules).
+function classifyCourierItem(item) {
+  const id = String((item && (item.message_id || item.id)) || '');
+  const first = String((item && item.content) || '').split('\n')[0].trim();
+  if (/^result-wake-/.test(id) || /^\[fleet result\]/i.test(first)) {
+    return { disposition: 'pending_decision', rule: 'courier_result' };
+  }
+  if (/^\[fleet patrol\][^\n]*\bescalat/i.test(first) || /^\[fleet task [^\]]+\]\s*(?:LOST|STUCK|ESCALAT)/i.test(first)) {
+    return { disposition: 'pending_decision', rule: 'courier_patrol_escalation' };
+  }
+  if (/^\[fleet patrol\]/i.test(first) || /^patrol\b/i.test(first)
+    || /^wait[-_]over\b/i.test(id) || /^\[(?:fleet )?wait[-_ ]over\]/i.test(first)
+    || /^card[-_]audit\b/i.test(id) || /^\[(?:fleet )?card[-_ ]audit\]/i.test(first)) {
+    return { disposition: 'no_action', rule: 'courier_digest' };
+  }
+  return null;
+}
+
 function classifyItem(item, opts = {}) {
   const category = item && typeof item.category === 'string' ? item.category.trim().toLowerCase() : '';
   const kind = item && typeof item.kind === 'string' ? item.kind.trim().toLowerCase() : '';
@@ -299,6 +321,13 @@ function classifyItem(item, opts = {}) {
   }
   if (category === 'credential_redline' || hasCredentialRedlineMention(content)) {
     return { disposition: 'pending_decision', rule: 'credential_redline', failedChecks: [], isResidue: false, immediate: true };
+  }
+
+  // 1b. courier's own messages: known prefixes only; unknown prefixes fall through unchanged
+  const from = item && typeof item.from === 'string' ? item.from.trim() : '';
+  if (COURIER_FROM_RE.test(from)) {
+    const c = classifyCourierItem(item);
+    if (c) return { ...c, failedChecks: [], isResidue: false, immediate: false };
   }
 
   // 2. decision_request, waiting_on PM, declined, failed, question to PM -> batched pending_decision
@@ -410,6 +439,11 @@ function classifyItem(item, opts = {}) {
   }
   if (kind === 'wake' || category === 'wake') {
     return { disposition: 'no_action', rule: 'wake', failedChecks: [], isResidue: false, immediate: false };
+  }
+
+  // 5b. plain chat from a lane (not courier, not operator) with no status header and no fyi
+  if (kind === 'chat' && from && !COURIER_FROM_RE.test(from) && !OPERATOR_FROM_RE.test(from) && !status) {
+    return { disposition: 'pending_decision', rule: 'lane_chat', failedChecks: [], isResidue: false, immediate: false };
   }
 
   // 6. anything else -> pending_decision tagged 「未分類」, counted as residue

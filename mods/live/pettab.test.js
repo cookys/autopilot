@@ -134,3 +134,8 @@ test('readPet SpriteData: a short row, a row count other than height, or empty/m
   assert.equal(P.readPet(validPanel({ sprite: spriteData([]) })).pet.sprite, null)
   assert.equal(P.readPet(validPanel({ sprite: { width: 4, height: 4, transparent: '.', palette: {} } })).pet.sprite, null)
 })
+
+test('readPet SpriteData: height 6 gives exactly ceil(6/2)=3 rows, a fully transparent row pair stays as a blank row', () => {
+  const sprite = spriteData([['#..#', '#..#', '....', '....', '.xx.', '.xx.']], { width: 4, height: 6 })
+  assert.deepEqual(P.readPet(validPanel({ sprite })).pet.sprite, [[{ text: '█  █' }], [{ text: '' }], [{ text: ' ██' }]])
+})

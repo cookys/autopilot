@@ -52,7 +52,9 @@ function pixelOn(v: unknown): boolean {
   return true
 }
 
-function rasterRowsFromPixels(grid: unknown[]): PanelLine[] | null {
+// keepBlank (SpriteData frames only): a row pair with no lit cell stays as an empty line, so the
+// output is exactly ceil(height/2) rows; other callers drop blank rows.
+function rasterRowsFromPixels(grid: unknown[], keepBlank = false): PanelLine[] | null {
   if (grid.length === 0 || !grid.every(r => Array.isArray(r))) return null
   const [TOP, BOT, FULL] = [String.fromCodePoint(0x2580), String.fromCodePoint(0x2584), String.fromCodePoint(0x2588)]
   const out: PanelLine[] = []
@@ -68,6 +70,7 @@ function rasterRowsFromPixels(grid: unknown[]): PanelLine[] | null {
     }
     const trimmed = line.replace(/\s+$/, '')
     if (trimmed !== '') out.push([{ text: clean(trimmed) }])
+    else if (keepBlank) out.push([{ text: '' }])
   }
   return out.length === 0 ? null : out
 }
@@ -119,7 +122,7 @@ function spriteFrameLines(raw: Record<string, unknown>): PanelLine[] | null {
     if (cells.length !== w) return null
     grid.push(cells.map(c => c !== transparent))
   }
-  return rasterRowsFromPixels(grid)
+  return rasterRowsFromPixels(grid, true)
 }
 
 function matchPetIcon(raw: unknown): PetIconEntry | null {

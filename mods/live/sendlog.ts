@@ -1,9 +1,6 @@
 // Persistent failure log for 待決 sends and background claims: appends one JSON line per failure to `<live dir>/decide-send.jsonl`.
-export type SendLogFs = {
-  read: (path: string) => Promise<string>
-  write: (path: string, content: string) => Promise<unknown>
-}
-
+// `read` and `write` are plain functions. The mod loader refuses a noun of `$` as a value, so a caller spells
+// `(p) => $.fs.read(p)` and `(p, t) => $.fs.write(p, t)` at the call site and never passes `$.fs` itself.
 export type SendLogEntry = {
   ts: number
   event: 'post_refused' | 'claim_failed'
@@ -14,7 +11,8 @@ export type SendLogEntry = {
 let pending: Promise<void> = Promise.resolve()
 
 export async function appendSendLog(
-  fs: SendLogFs,
+  read: (path: string) => Promise<string>,
+  write: (path: string, content: string) => Promise<unknown>,
   liveDir: string | null,
   entry: SendLogEntry,
 ): Promise<void> {
@@ -24,8 +22,8 @@ export async function appendSendLog(
   // within this mod instance so overlapping failures keep all lines.
   const append = async () => {
     let previous = ''
-    try { previous = await fs.read(path) } catch (_) { /* first failure creates the file */ }
-    await fs.write(path, previous + JSON.stringify(entry) + '\n')
+    try { previous = await read(path) } catch (_) { /* first failure creates the file */ }
+    await write(path, previous + JSON.stringify(entry) + '\n')
   }
   pending = pending.then(append).catch(() => {}) // a log write failure must never break sending or the pane
   await pending

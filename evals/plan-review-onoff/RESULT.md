@@ -2,6 +2,8 @@
 
 Verdict: `P0: ON 21 vs OFF 8, bar ON-OFF >= 5 and quality within 2, PASS` (defects caught, max 30 per arm; quality ON 30 vs OFF 29 of 30).
 
+Conclusion limits: 10 paired cells, each run once, regex scoring, one cheap reviewer seat. This is a go/no-go screen, not an effect size. The task-specific trap D1 was 7/10 in both arms, so P5 acceptance must measure the D1-class catch rate on real M tasks after it ships (PM ruling 01M7RW00).
+
 Pack and bar frozen in commit `349b07e6a` before any scored cell ran. 10 paired cells, run once. Seats: author/reviser codex `gpt-6.2-sol` low; reviewer agy `gemini-4-hydrogen-high` (no fallback was used; every attempt was the reviewer seat, success).
 
 | task | defects OFF | defects ON | quality OFF | quality ON |

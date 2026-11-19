@@ -806,13 +806,16 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
     role: 'author',
     checkEndpoint: (ep) => ep !== 'glm',
   });
-  assert.equal(glmDown.engine, 'agy');
-  assert.equal(glmDown.slack_pts, -15);
+  // BL-0468: agy is WARN_ahead, demoted below grok (used_pct 51 → slack -11).
+  assert.equal(glmDown.engine, 'grok');
+  assert.equal(glmDown.pool, 'grok-cli');
+  assert.equal(glmDown.slack_pts, -11);
   assert.equal(glmDown.selected_by, 'quota_score');
   assert.equal(glmDown.over_pace, true);
 
   // When glm endpoint is not ready (injected, no shell spawn), glm is listed as
   // { engine: "glm", reason: "endpoint_not_ready" } and grok (+14) is chosen instead.
+  // BL-0468: agy is WARN_ahead, demoted below the on-pace grok
   const checkedUnready = [];
   const whenNotReady = selectEngine({
     pace,
@@ -828,7 +831,9 @@ test('(h) endpoint readiness: glm has best slack (+30) but endpoint_not_ready ->
   assert.equal(whenNotReady.engine, 'grok');
   assert.equal(whenNotReady.runner, 'grok');
   assert.equal(whenNotReady.model, 'grok-4.7');
+  assert.equal(whenNotReady.pool, 'grok-cli');
   assert.equal(whenNotReady.slack_pts, 14);
+  assert.equal(whenNotReady.selected_by, 'quota_score');
   assert.equal(whenNotReady.over_pace, false);
   assert.deepEqual(whenNotReady.candidates, [
     { engine: 'agy', pool: 'agy', slack_pts: -15, basis: 'pace', demoted: 'ahead' },
@@ -1003,7 +1008,7 @@ test('(i) qualified.v1.json eligibility: fail-only excluded, provisional allowed
     const authorOut = JSON.parse(authorPick.stdout);
     assert.equal(authorOut.engine, 'agy');
     assert.equal(authorOut.qualified_source, exportedPath);
-    assert.deepEqual(authorOut.candidates, [{ engine: 'agy', pool: 'agy', slack_pts: -25 }]);
+    assert.deepEqual(authorOut.candidates, [{ engine: 'agy', pool: 'agy', slack_pts: -25, basis: 'pace', demoted: 'ahead' }]);
 
     // 5. Negative control: invalid schema or invented result in an existing qualified file fails closed (exit 2).
     const badPath = path.join(tmpDir, 'bad-qualified.json');

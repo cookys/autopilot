@@ -201,6 +201,17 @@
             "onFailure": "continue"
           }
         ]
+      },
+      {
+        "matcher": "mcp__fleet__dispatch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/fleet-dispatch-class.js",
+            "timeout": 5,
+            "onFailure": "continue"
+          }
+        ]
       }
     ],
     "PostToolUse": [

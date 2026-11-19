@@ -29,6 +29,7 @@ node --test "$here/gen-locales.test.js"
 node --test "$here/ui-lint.test.js"
 node --test "$here/band-split.test.js"
 node --test "$here/band-keep-speed.test.js"
+node --test "$here/band-no-error-text.test.js"
 # the O4 shell planner (tiers, geometry, the forge-stats panel reader, the right-hand columns): pure, imports the real shell.ts
 node --test "$here/shell.test.js"
 # the operator-console snapshot (the fleet.console/1 trust-boundary parser, the console.json mode reader, fictional fixtures): pure, imports the real console.ts

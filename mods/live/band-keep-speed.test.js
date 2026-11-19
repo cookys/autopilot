@@ -193,18 +193,18 @@ async function rowOf(cols, { forecast = 'no_source', liveState = 'ok', steps = 3
   return flat(rows[0])
 }
 
-test('(a) quota_forecast no_source and 3 timed main steps: failure text and tok/s', async () => {
+test('(a) quota_forecast no_source and 3 timed main steps: waiting cells and tok/s, no error sentence', async () => {
   const row = await rowOf(120)
-  assert.match(row, /額度無預測來源/)
+  assert.match(row, /^x │/)
+  assert.equal(row.includes('額度無預測來源'), false)
   assert.match(row, /tok\/s/)
 })
 
-test('(b) 60 cols: tok/s stays and the failure text is truncated', async () => {
+test('(b) 60 cols: tok/s stays and the repair command stays off row 1', async () => {
   const row = await rowOf(60)
   assert.match(row, /tok\/s/)
-  assert.match(row, /✗/)
-  assert.match(row, /額度/)
-  assert.match(row, /…/)
+  assert.match(row, /^x │/)
+  assert.equal(row.includes('額度無預測來源'), false)
   assert.equal(row.includes('autopilot status runs --watch'), false)
 })
 
@@ -216,5 +216,6 @@ test('(c) stale live snapshot and timed steps still show tok/s', async () => {
 test('(d) no timed steps: no tok/s', async () => {
   const row = await rowOf(120, { steps: 0 })
   assert.equal(row.includes('tok/s'), false)
-  assert.match(row, /額度無預測來源/)
+  assert.match(row, /^x │/)
+  assert.equal(row.includes('額度無預測來源'), false)
 })

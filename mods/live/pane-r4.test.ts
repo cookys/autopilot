@@ -18,8 +18,10 @@ test('R4-1: 120x30 open pane keeps stale fleet class, age and quota cause above 
   con.sources = { tasks: { state: 'expired', at_ms: NOW - 12 * MIN }, quota_forecast: { state: 'no_source', at_ms: null } }
   const rows = bandRows(band(120, con))
   expect(rows.length).toBe(2)
-  expect(flat(rows[0])).toContain('艦隊過期 12 分')
-  expect(flat(rows[0])).toContain('額度無預測來源')
+  expect(flat(rows[0])).toContain('x')
+  expect(flat(rows[0])).not.toContain('艦隊過期')
+  expect(flat(rows[0])).not.toContain('額度無預測來源')
+  expect(flat(rows[0])).not.toContain('autopilot status runs --watch')
   expect(flat(rows[1])).toBe('  autopilot status runs --watch')
   for (const row of rows) expect(displayWidth(flat(row))).toBeLessThanOrEqual(116)
 })

@@ -20,7 +20,7 @@ import type { ConsoleNav, ConsoleTab } from './consoletabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
 import type { BandPageId, BarStrip, BarTabId } from './tabs'
-import { isBriefStale, lineCounts, staleBadge } from './pages/rows'
+import { isBriefStale, staleBadge } from './pages/rows'
 import { mostSevere } from './pages/frame'
 
 type El = (props: any) => any
@@ -63,9 +63,24 @@ export function scrollHint(el: { Box: El; Text: El; Button?: El }, t: T, above: 
 }
 
 // consecutive segs of one slot become one Button; a seg with no slot (a separator) stays a bare Text
-function drawSegs(el: { Text: El; Button?: El }, segs: Seg[], onSlot: (id: SlotId) => void) {
+const FLEET_COUNT = new Set(['fleetRun', 'fleetWait', 'fleetStuck'])
+
+// Stale fleet counts are not drawn. The cell becomes the short marker; a fleet cell with no counts stays as it is.
+function maskFleetCounts(segs: Seg[], t: T): Seg[] {
+  if (!segs.some(s => s.slot === 'fleet' && s.tag !== undefined && FLEET_COUNT.has(s.tag))) return segs
+  const marker: Seg = { text: t('band.fleet_unknown'), slot: 'fleet', tag: 'fleetWord' }
+  let placed = false
+  const out: Seg[] = []
+  for (const s of segs) {
+    if (s.slot !== 'fleet') { out.push(s); continue }
+    if (!placed) { out.push(marker); placed = true }
+  }
+  return out
+}
+
+function drawSegs(el: { Text: El; Button?: El }, segs: Seg[], onSlot: (id: SlotId) => void, dimAll = false) {
   const { Text, Button } = el
-  const text = (s: Seg, i: number) => <Text key={'s' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>
+  const text = (s: Seg, i: number) => <Text key={'s' + i} {...drawSeg(s)} {...(dimAll ? dimProps() : {})} wrap="truncate">{s.text}</Text>
   const runs: { slot: SlotId | undefined; at: number; segs: Seg[] }[] = []
   segs.forEach((s, i) => {
     const last = runs[runs.length - 1]
@@ -93,7 +108,7 @@ function staleLiveReason(snap: LiveSnapshot, t: T): string {
 }
 
 // the band's own cells (the line and the ⓘ), and the width they take
-function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, sourceFailure: Seg | null = null, repairInline = true): { nodes: unknown[]; width: number } {
+function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T, onSlot: (id: SlotId) => void, preset: { segs: Seg[]; width: number } | null = null, infoLabel = BAND_INFO_LABEL, legacyTabs = false, fleetUnknown = false): { nodes: unknown[]; width: number } {
   const { Text, Button } = el
   const extra = displayWidth(infoLabel) - displayWidth(BAND_INFO_LABEL)
   // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls
@@ -102,23 +117,21 @@ function bandCells(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | 
     : <Button key="info" plain autoFocus onPress={onInfo}>{infoLabel}</Button>
   // a fitted line (the fleet segment is on it): draw those segs, do not run layoutBand again. The width is the shared fitted width (segs + ⓘ), never preset.width on its own.
   const segW = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
-  if (sourceFailure !== null) {
-    const line = plainBandText(sourceFailure.text + (repairInline ? ' · autopilot status runs --watch' : ''), columns - extra) + BAND_SEP
-    return { nodes: [<Text key="w" {...drawSeg(sourceFailure)} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
+  const dimCells = !legacyTabs && snap?.state === 'stale' && snap.band !== null
+  if (preset !== null) {
+    const segs = fleetUnknown ? maskFleetCounts(preset.segs, t) : preset.segs
+    return { nodes: [...drawSegs(el, segs, onSlot, dimCells), icon], width: fittedBandWidth(segW(segs), null, false) + extra }
   }
-  if (preset !== null) return { nodes: [...drawSegs(el, preset.segs, onSlot), icon], width: fittedBandWidth(segW(preset.segs), null, false) + extra }
   if (snap === null || snap.band === null) {
     let reason = snap === null ? t('band.waiting') : snap.text
-    // X4: replace the redundant publication clock with an age, keeping the
-    // complete cause and repair command in the summary's reclaimed cells.
-    if (!legacyTabs && snap?.state === 'stale') {
-      reason = GLYPHS.state.failed + ' ' + staleLiveReason(snap, t) + (repairInline ? ' · autopilot status runs --watch' : '')
-    }
+    // X4: a missing band still names the stale cause. The repair command stays off this row.
+    if (!legacyTabs && snap?.state === 'stale') reason = GLYPHS.state.failed + ' ' + staleLiveReason(snap, t)
     const line = plainBandText(reason, columns - extra) + BAND_SEP
     return { nodes: [<Text key="w" {...(!legacyTabs && snap?.state === 'stale' ? drawSeg(staleBadge(line)) : dimProps())} wrap="truncate">{line}</Text>, icon], width: fittedBandWidth(displayWidth(line), null, false) + extra }
   }
   const line = layoutBand(snap.band.slots, columns - extra)
-  return { nodes: [...drawSegs(el, line.segs, onSlot), icon], width: fittedBandWidth(segW(line.segs), null, false) + extra }
+  const segs = fleetUnknown ? maskFleetCounts(line.segs, t) : line.segs
+  return { nodes: [...drawSegs(el, segs, onSlot, dimCells), icon], width: fittedBandWidth(segW(segs), null, false) + extra }
 }
 
 export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T = T_EN, onSlot: (id: SlotId) => void = () => {}) {
@@ -141,7 +154,7 @@ export function bandQuotaSeg(pools: QuotaPool[] | null, nowMs: number, t: T, sou
   return { text: t('console.command.sum_quota') + ' ' + (w.role === 'broken' ? GLYPHS.state.failed + ' ' : '') + w.pool + ' ' + w.text, color }
 }
 
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | ConsoleTab | BandPageId | null, forge: readonly ForgeSegment[] | null, usage = true, moreTo: BarTabId | null = null, con: (ConsoleNav & { cols: number }) | null = null, preset: { segs: Seg[]; width: number } | null = null, quota: Seg | null = null, noTabs = false, legacyTabs = false, forgeRow = false): { node: unknown; stripRow: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
   // R4-4: the host may reduce band columns beside an open pane; the terminal's
   // width is not this budget. A visible fleet group always keeps its name.
@@ -150,32 +163,30 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
     const label = slotFleet({ stuck: 0, running: 0, waiting: 0 }, t)!.segs.filter(s => s.tag === 'fleetWord').map(s => ({ ...s, slot: 'fleet' as const }))
     preset = { segs: [...preset.segs.slice(0, at), ...label, ...preset.segs.slice(at)], width: preset.width + label.reduce((n, s) => n + displayWidth(s.text), 0) }
   }
-  // W5: report each affected data class, with age, before the repair command.
-  let sourceFailure: Seg | null = null
+  // A missing or stale source is not an error sentence on row 1 (guideline §1.1 rule 4).
+  // 'band.no_console', 'band.fleet_stale' and 'band.quota_nopace' stay in the string table and are not drawn here.
+  // The same conditions still drop the quota segment and, with the pane open, keep the repair on row 2.
+  let sourceBad = false
+  let fleetUnknown = false
   if (!legacyTabs && con !== null) {
-    if (con.snap === null) sourceFailure = staleBadge(GLYPHS.state.failed + ' ' + t('band.no_console') + (snap?.state === 'stale' ? ' · ' + staleLiveReason(snap, t) : ''))
+    if (con.snap === null) sourceBad = true
     else {
       const nowMs = snap?.detail.now_ms ?? con.snap.generated_at_ms
       const brief = isBriefStale(con.snap, nowMs)
       const tasks = con.snap.sources.tasks
-      const old = tasks?.state === 'expired' || tasks?.state === 'stale' || brief.stale
-      const parts: string[] = []
-      if (old || snap?.state === 'stale') {
-        const at = tasks?.at_ms ?? con.snap.generated_at_ms
-        const min = Math.max(0, Math.floor((nowMs - at) / 60000))
-        const counts = lineCounts(con.snap, t)
-        const badges = [['failed', GLYPHS.state.failed], ['stalled', GLYPHS.state.stalled]].filter(([k]) => (counts[k] ?? 0) > 0).map(([k, g]) => g + counts[k]).join(' ')
-        parts.push(t('band.fleet_stale', { min }) + (badges === '' ? '' : '（' + badges + '）'))
-      }
+      fleetUnknown = tasks?.state === 'expired' || tasks?.state === 'stale' || brief.stale
+      if (fleetUnknown || snap?.state === 'stale') sourceBad = true
       const forecast = con.snap.sources.quota_forecast
-      if (forecast !== undefined && forecast.state !== 'ok') parts.push(t('band.quota_nopace'))
-      const other = mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs })
-      if (parts.length === 0 && other !== null) parts.push(other.text.slice((GLYPHS.state.failed + ' ').length))
-      if (parts.length > 0) sourceFailure = staleBadge(GLYPHS.state.failed + ' ' + parts.join(' · '))
+      if (forecast !== undefined && forecast.state !== 'ok') sourceBad = true
+      if (!sourceBad) {
+        const other = mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs })
+        if (other !== null) sourceBad = true
+      }
     }
   }
-  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
-  const fb = forge === null || sourceFailure !== null || (!legacyTabs && snap?.state === 'stale') ? null : forgeBar(forge)
+  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view.
+  // The rate is measured on this seat. A failed data source or a stale live snapshot does not clear it; the failure line is what narrows.
+  const fb = forge === null ? null : forgeBar(forge)
   const forgeW = fb === null ? 0 : fb.width
   const oldStrip = legacyTabs ? barStrip(snap, t, active as BarTabId | ConsoleTab | null, fb === null ? null : GLYPHS.structure.speed, usage, con) : null
   // `moreTo`: a tab has no room (用量, or forge with something timed), so a dim `›` ends the row: a Button (key 'more'), so Tab / Enter still reach the hidden tab
@@ -184,11 +195,11 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
   const strip = legacyTabs && con === null ? oldStrip as BarStrip : pageBarStrip(snap, t, Math.max(0, columns - moreW), active, null, con?.snap ?? null, !legacyTabs)
   // M5: in the console band the tab strip is row 2 (pageBarStrip), so row 1 gives the left text every idle cell up to the right-hand controls (BAND_CLOSE_ROOM keeps
   // the `[-]` cell): the stale reason and its whole fix command (`autopilot status runs --watch`) are never cut while blank cells are left. M6: the open Button says what it opens.
-  if (sourceFailure !== null || (!legacyTabs && snap?.state === 'stale')) quota = null
+  if (sourceBad || (!legacyTabs && snap?.state === 'stale')) quota = null
   const leftRoom = legacyTabs && con === null ? columns - (oldStrip as BarStrip).width - 1 - forgeW - moreW : columns - BAND_CLOSE_ROOM - forgeW - moreW - (quota === null ? 0 : displayWidth(quota.text) + 2)
-  // R4-1: the open pane owns navigation; its spare band row holds the repair whole.
-  const repairBelow = noTabs && !legacyTabs && (sourceFailure !== null || snap?.state === 'stale')
-  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, sourceFailure, !repairBelow)
+  // R4-1: the open pane owns navigation; its spare band row holds the repair whole. Row 1 never carries the command. `forgeRow`: that row under the band is forge-stats' summary (PM G33), so the repair is not drawn here.
+  const repairBelow = noTabs && !legacyTabs && !forgeRow && (sourceBad || snap?.state === 'stale')
+  const left = bandCells(el, snap, Math.max(1, leftRoom), hd.onInfo, t, hd.onSlot, preset, con !== null && !noTabs ? t('band.open_pane') + ' ' : BAND_INFO_LABEL, legacyTabs, fleetUnknown)
   // the same fitted width as layoutBandLine: segs + ⓘ + speed + ›. The gap is whatever is left before the strip, at least one cell. tabsAt stops before the ›.
   const segW = preset !== null ? preset.segs.reduce((n, s) => n + displayWidth(s.text), 0) : left.width - displayWidth(BAND_INFO_LABEL)
   void segW

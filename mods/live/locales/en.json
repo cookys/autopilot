@@ -869,6 +869,7 @@
   "page.decide.details_back": "Back to summary",
   "band.no_console": "No console snapshot",
   "band.fleet_stale": "Fleet expired {min} min",
+  "band.fleet_unknown": "Fleet ?",
   "band.quota_nopace": "Quota forecast missing",
   "page.now.quota_stale": "Data expired {min} min",
   "page.now.quota_waste": "Quota waste",

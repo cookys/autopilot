@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "logical_plan_id": "fleet-stage-graph-binding-2026-11-19",
-  "generation": 1,
+  "generation": 2,
   "findings": [
     {
       "fingerprint": "c439329a05644a7c6f22fdcc36a2f3e475d531a8fc495ae376ebc15b3e6921a5",

@@ -66,7 +66,7 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, othersView, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BandPageId, BarTabId, ScrollView } from './tabs'
-import { MAIN_CONTENT_ROWS, SHELL_MENUS, SHELL_ROWS, type ShellMenuId, type ShellPlan, cardRows, freshCount, leftItems, leftTitle, newestSeq, nextShellMenu, parsePanel, parseRoom, progressSegs, roomLines, shellGeometry, shellPlan, usageRows } from './shell'
+import { BODY_ROWS, MAIN_CONTENT_ROWS, SHELL_MENUS, SHELL_MIN_ROWS, SHELL_ROWS, type ShellMenuId, type ShellPlan, cardRows, freshCount, isCompact, leftItems, leftTitle, newestSeq, nextShellMenu, parsePanel, parseRoom, progressSegs, roomLines, shellContentRows, shellGeometry, shellPlan, usageRows } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
@@ -316,6 +316,8 @@ const consolePaneOf = async ($: EngineInterface, e: Parameters<EngineInterface['
 let bandShellOff = false // console mode / framed pages: another page name was pressed, so the default 待決 shell stays closed until 待決 is pressed again; reset at session start
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 let shellMenu: ShellMenuId = 'd' // the O4 shell's menu (d 待決 by default). It is not barTab: d/r/u/p/h and 9 only change this.
+let geomSeen: string | null = null // `maxRows x bodyColumns` of the last band draw that was logged (band-geometry.log); reset at session start
+let geomLines: string[] | null = null // the log's lines (the last 200); read once per session, then kept in memory because the fs hook only writes whole files
 let shellOn = false // the last AbovePrompt draw was the shell (ui.scroll follows the card window only then)
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript
@@ -1301,6 +1303,19 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
   await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent), hold: keep(s.hold ?? {}), fixing: keep(s.fixing ?? {}), dismissed: keep(s.dismissed ?? {}) }))
 }
 
+// r4 B(c): what the host gave the band, once per change, as one JSON line `{ts, maxRows, bodyColumns, shellRows}` in `<live base>/band-geometry.log` (the live base the pointer names, as every other live file),
+// so a real-pane screenshot can be set against the rows the draw got. The file is rewritten whole (the plugin fs only writes); it keeps the last 200 lines. A failed write never stops the draw.
+async function logBandGeometry($: EngineInterface, maxRows: number, bodyColumns: number, shellRows: number): Promise<void> {
+  const key = maxRows + 'x' + bodyColumns
+  if (key === geomSeen || liveBaseSeen === null) return
+  geomSeen = key
+  const path = liveBaseSeen + '/band-geometry.log'
+  if (geomLines === null) geomLines = ((await readText($, path)) ?? '').split('\n').filter(l => l !== '')
+  geomLines.push(JSON.stringify({ ts: await $.clock.now(), maxRows, bodyColumns, shellRows }))
+  if (geomLines.length > 200) geomLines.splice(0, geomLines.length - 200)
+  await $.fs.write(path, geomLines.join('\n') + '\n').catch(() => undefined)
+}
+
 // the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs
 const FORGE_LABEL_MAX = 30
 const FORGE_FULL_ROWS = 12
@@ -1517,6 +1532,8 @@ export async function startLive($: EngineInterface): Promise<void> {
   shellMenu = 'd'
   shellOn = false
   bandShellOff = false
+  geomSeen = null
+  geomLines = null
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
@@ -1736,7 +1753,12 @@ export function registerLive(on: Parameters<Register>[0]): void {
     if (!legacyTabs || consoleOn) { try { paneOpen = (await $.ui.panes()).some(p => p.id === PANE_ID) } catch (_e) { /* the engine could not list panes: treat the pane as closed */ } }
     // The O4 shell is the band's normal state whenever the host gave 12 rows and the width holds a main window.
     // It does not wait for a band tab, and it does not care whether the pane is open. legacyTabs keeps the old bar only under 12 rows (the E1 suites).
-    const shellFits = rows >= SHELL_ROWS && shellGeometry(columns) !== null && snapshot !== null
+    // r4: the console band and the framed pages (the PM's pane) take the shell from SHELL_MIN_ROWS up, whatever legacyTabs says and with or without a live snapshot; the older tab-row band
+    // (legacyTabs, no console) keeps its own layout and only shows the shell with a band tab open at SHELL_ROWS.
+    const shellMode = !legacyTabs || consoleOn
+    const shellFits = shellMode
+      ? rows >= SHELL_MIN_ROWS && shellGeometry(columns) !== null
+      : rows >= SHELL_ROWS && shellGeometry(columns) !== null && snapshot !== null && active !== null && active !== 'forge'
     // No shell and no tab open, a row to spare under the band's own two and a forge-stats that draws the summary row (its heartbeat says so): that row goes to the mod below (PM G33).
     // While it holds the row the repair line is not drawn on the band (it stays in the pane and the page).
     let forgeRow: unknown | null = null
@@ -1746,19 +1768,21 @@ export function registerLive(on: Parameters<Register>[0]): void {
       if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') forgeRow = answer
     }
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge, usageOn, moreTo, con, bandPreset, consoleOn && consoleSnap !== null ? bandQuotaSeg(normalizedPools(consoleSnap), bandNow, t, qSrc) : null, paneOpen, legacyTabs, forgeRow !== null)
-    if (!legacyTabs && rows < SHELL_ROWS) {
+    if (shellMode && rows < SHELL_MIN_ROWS) {
       const n = snapshot === null ? 0 : new Set(snapshot.pending.filter(d => !isStepCard(d)).map(cardKey)).size
-      return stackRows(el, shellNote(el, t('shell.short_height', { n, m: rows })))
+      await logBandGeometry($, rows, columns, 1)
+      return stackRows(el, shellNote(el, t('shell.short_height', { n, m: rows, min: SHELL_MIN_ROWS })))
     }
     if (shellMenu !== 'd' || !shellFits) bandBatch = NO_BATCH // the batch lives while the 待決 card view is drawn
-    if (shellFits && snapshot !== null) {
+    const pendingAll: LiveDecision[] = snapshot === null ? [] : snapshot.pending
+    if (shellFits) {
       const nowMs = await $.clock.now()
       const panelRaw = await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
       const fleet = await read($, FLEET)
       const lanes: FleetLaneSum[] = fleet.lanes.map(l => ({ lane: l.lane, needYou: l.needYou, failed: l.failed, stuck: l.stuck, running: l.running, waiting: l.waiting }))
       const panel: PanelRead = parsePanel(panelRaw, nowMs)
       const grouped = new Map<string, LiveDecision[]>()
-      for (const d of snapshot.pending) {
+      for (const d of pendingAll) {
         const k = cardKey(d)
         const g = grouped.get(k)
         if (g === undefined) grouped.set(k, [d])
@@ -1815,6 +1839,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes,
         ...(cardMode ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}), // the card view re-plans with the hint of the options it actually draws
         ...(cardMode ? { noRight: true } : {}),
+        bodyRows: Math.min(BODY_ROWS, shellContentRows(rows) + (isCompact(rows) ? 0 : 2)), compact: isCompact(rows), // r4: a short band gets a short frame
       }
       const plan0 = shellPlan(planInp)
       if (plan0 !== null) {
@@ -1866,25 +1891,31 @@ export function registerLive(on: Parameters<Register>[0]): void {
             fix: fixable && fixId !== null ? { label: t('decide.fix'), onPress: () => { void decidePress($, 'fix:' + fixId).then(redraw) } } : null,
             advice: cur === undefined || (cur.recommendation === null && cur.why === null) ? null : { label: cur.recommendation ?? '', why: cur.why },
             notAuthorized: cur === undefined ? null : cur.not_authorized,
-            width: mainCols - 1, onPress: pickPress,
+            width: mainCols - 1, onPress: pickPress, compact: plan.compact,
             options: cur === undefined || optN === 0 || cur.id === null ? [] : cur.options.map((o, k) => ({ label: o.label, description: o.description, picked: decidePick(cur, st) === k, recommended: cur.recommendation === o.label, key: optKey(cur.id as string, k) })),
           }, t)
           // the frame is as tall as the card, between the 6 content rows of the ordinary frame and what the host's maxRows leaves (the menu row, the quick row and the two frames take 4, the divider and
           // the progress row 2); the tree is never taller than maxRows (the host would open a window of its own over the quick row). A card taller than that goes to the split view (§12.10): the rows
           // scroll over a scrollbar, the options and the Buttons stand fixed under them. Each card has its own offset (bandScroll).
-          const avail = rows - 6
+          const avail = shellContentRows(rows)
           let whole = view(false)
           const split = whole.rows.length > avail
           // the strip has priority (§12.10: the options stand in view): it takes its place whenever one scrolling row and the page row still fit above it, even at 12 rows where that leaves the rows less than the 3 the ruling wants (reported); a strip too tall for that, or a card with nothing to press (locked), scrolls whole with the page Buttons alone
-          if (split && !curLocked) { const sp = view(true); if (avail - (1 + sp.strip.length) >= 2) whole = sp }
-          const room = split ? avail : Math.max(MAIN_CONTENT_ROWS, whole.rows.length)
-          if (room + 2 !== plan.bodyRows) { const again = shellPlan({ ...planInp, bodyRows: room + 2 }); if (again !== null) plan = again }
+          if (split && !curLocked && !plan.compact) { const sp = view(true); if (avail - (1 + sp.strip.length) >= 2) whole = sp }
+          const room = split ? avail : Math.min(avail, Math.max(MAIN_CONTENT_ROWS, whole.rows.length))
+          if (room + (plan.compact ? 0 : 2) !== plan.bodyRows) { const again = shellPlan({ ...planInp, bodyRows: room + (plan.compact ? 0 : 2) }); if (again !== null) plan = again }
           const model = bandModel('decide')
           keyed(model, curKey)
           const page = (by: number) => { model.offset = Math.max(0, Math.min(model.max, model.offset + by * Math.max(1, model.room))); redraw() }
           // the hint names only the options whose Button is in the tree: all of them when drawn whole or in the strip, else those in the window (a Button off the tree has no hotkey)
           let seen = whole.keyed.map(x => x.k)
-          if (split) { const sc = cardSplit(el, t, { top: whole.rows, strip: whole.strip, room, cells: plan.geo.main, model, onPage: page }); main = sc.rows; seen = whole.keyed.filter(x => x.at === null || (x.at >= sc.from && x.at < sc.to)).map(x => x.k) }
+          if (split && plan.compact) {
+            // r4: a window of 4 rows or fewer has no room for a strip or page Buttons: the title, the options and then the rest of the card, scrolled by the wheel and the scroll keys
+            const win = fixedWindow(whole.rows.length, room, model)
+            main = whole.rows.slice(win.offset, win.offset + win.rows)
+            seen = whole.keyed.filter(x => x.at === null || (x.at >= win.offset && x.at < win.offset + win.rows)).map(x => x.k)
+          }
+          else if (split) { const sc = cardSplit(el, t, { top: whole.rows, strip: whole.strip, room, cells: plan.geo.main, model, onPage: page }); main = sc.rows; seen = whole.keyed.filter(x => x.at === null || (x.at >= sc.from && x.at < sc.to)).map(x => x.k) }
           else { fixedWindow(whole.rows.length, room, model); main = whole.rows }
           const hint = curLocked || seen.length === 0 ? '' : seen.every((k, i) => k === i) && (seen.length > 1 || optN === 1) ? t('shell.hint_pick', { n: seen.length }) : t('shell.hint_pick_some')
           if (hint !== (optN > 0 && !curLocked ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '')) { const again = shellPlan({ ...planInp, footMain: hint, bodyRows: plan.bodyRows }); if (again !== null) plan = again }
@@ -1896,7 +1927,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const sendN = live.filter(d => decideOpen(d, st) && !decideHeld(d, st) && decideLine(d, st) !== null).length
           quick = quickOf(sendN, Object.values(st.hold ?? {}))
         } else {
-          const lines = shellMenu === 'u' ? usageRows(panel, mainCols, MAIN_CONTENT_ROWS, t) : shellMenu === 'r' ? roomLines(shellRoom.rows, mainCols, MAIN_CONTENT_ROWS) : null
+          const content = plan.compact ? plan.bodyRows : plan.bodyRows - 2
+          const lines = shellMenu === 'u' ? usageRows(panel, mainCols, content, t) : shellMenu === 'r' ? roomLines(shellRoom.rows, mainCols, content) : null
           main = lines === null
             ? shellNote(el, t(shellMenu === 'p' ? 'shell.pet_soon' : shellMenu === 'h' ? 'shell.help_body' : 'decide.none'))
             : usageDraw(el, lines.length === 0 ? [[{ text: t('shell.room_none'), dim: true }]] : lines)
@@ -1906,9 +1938,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
           quick = quickOf(0, [])
         }
         const menu = shellMenuRow(el, t, {
-          selected: shellMenu, pending: nonStep.length, room: shellRoom.rows.length, awaiting: (snapshot.awaiting ?? []).length, columns,
+          selected: shellMenu, pending: nonStep.length, room: shellRoom.rows.length, awaiting: (snapshot?.awaiting ?? []).length, columns,
           onSelect: (id) => { shellMenu = id; redraw() },
         })
+        await logBandGeometry($, rows, columns, plan.bodyRows + 4)
         return stackRows(el, Shell(el, { plan, left, onLeft, main, progress, quick, bar: menu }))
       }
     }

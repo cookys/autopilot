@@ -3454,6 +3454,13 @@ const g33Band = async ($: any, maxRows = BAND_PROPS.maxRows, bodyColumns = BAND_
   await ui.unmount()
   return texts
 }
+// the band's drawn text with the Buttons' labels (the shell's menu row is Buttons: walkTexts reads Text nodes only)
+const g33Str = async ($: any, maxRows = BAND_PROPS.maxRows, bodyColumns = BAND_PROPS.bodyColumns) => {
+  const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-g33s', props: { ...BAND_PROPS, maxRows, bodyColumns }, viewport: { columns: Math.max(bodyColumns, 120), rows: 50, isFullscreen: true } })
+  const str = rowStr((await ui.drawn()) as Node)
+  await ui.unmount()
+  return str
+}
 const g33Ran = (on: On) => {
   const ran: string[] = []
   on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } } })
@@ -3576,9 +3583,10 @@ test('C1 U7: console mode: an alive forge-stats with summary_row is asked for on
   // console mode does not withhold the row: the ask depends only on the heartbeat, the open tab, the rows and the columns
   expect(forgeRowAsk(null, await g33AliveNow(g33Alive()), BAND_PROPS.maxRows, 120)).toEqual(ASK(120))
   expect(forgeRowAsk(null, await g33AliveNow(g33Alive()), 2, 120)).toBe(null)
-  const row = texts.join(' ')
-  for (const name of ['現況', '待決', '艦隊', '額度', '派工', '審查', '花費', '殘留']) expect(row.includes(name)).toBe(true)
-  for (const old of ['指揮', '團隊', '主機', '本席']) expect(row.includes(old)).toBe(false)
+  const row = await g33Str($)
+  // r4 (rewritten to the shell contract): the console band is the O4 shell from 6 rows up, so its menu row carries the shell menus, not the old page names
+  for (const name of ['待決', '圓桌', '用量', '寵物']) expect(row.includes(name), name + ' in ' + row.slice(-300)).toBe(true)
+  for (const old of ['指揮', '團隊', '主機', '本席', '現況']) expect(row.includes(old)).toBe(false)
   const flat = texts.join('')
   expect(flat.includes('⊘ 2')).toBe(false) // the console band does not grow a fleet segment on row 1
 })
@@ -3700,59 +3708,44 @@ const bandTabKeys = async ($: any, opts: { panesOpen: boolean }, w: any) => {
   const tree = (await ui.drawn()) as Node
   const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
   await ui.unmount()
-  return { text: walkTexts(tree).map(textOf).join(' '), tabs: buttons.filter(b => String(b.props?.key).startsWith('tab:')).map(b => String(b.props?.key)) }
+  return { text: rowStr(tree), tabs: buttons.filter(b => String(b.props?.key).startsWith('tab:')).map(b => String(b.props?.key)) }
 }
 test('pane review fix: console mode, pane OPEN: the band draws (no throw) and no tab row of its own (terminal)', async ($, on) => {
   const w = await framedWorld($, on)
   const r = await bandTabKeys($, { panesOpen: true }, w)
-  expect(r.text.includes('疑似卡住'), 'the band drew: ' + r.text.slice(0, 80)).toBe(true)
-  expect(r.tabs, 'no tab row on the band while the pane is open').toEqual([])
+  // r4 (rewritten to the shell contract): the shell is drawn whether or not the pane is open; its menu row is the only row of tabs (the 待決 entry), the old page tab row is gone
+  expect(r.text.includes('待決') && r.text.includes('圓桌'), 'the band drew the shell: ' + r.text.slice(-300)).toBe(true)
+  expect(r.tabs, 'no page tab row on the band while the pane is open').toEqual(['tab:decide'])
 })
 test('pane UX fix: console mode, pane CLOSED: the band draws its tab row (row 2) (terminal)', async ($, on) => {
   const w = await framedWorld($, on)
   const r = await bandTabKeys($, { panesOpen: false }, w)
-  expect(r.text.includes('疑似卡住'), 'the band drew: ' + r.text.slice(0, 80)).toBe(true)
-  expect(r.tabs.length, 'the closed pane leaves the tab row on the band: ' + r.text.slice(0, 160)).toBeGreaterThanOrEqual(3)
+  // r4 (rewritten to the shell contract): the closed pane draws the same shell menu row (待決 圓桌 用量 寵物 說明), not the old page tab row
+  expect(r.text.includes('待決') && r.text.includes('寵物'), 'the band drew the shell: ' + r.text.slice(-300)).toBe(true)
+  expect(r.tabs, 'the shell menu row replaces the page tab row').toEqual(['tab:decide'])
 })
 test('gate3 item 4: console mode, pane CLOSED: band row 2 has the new page names 1-8 without digit hotkeys and no old tab name, and pressing any name but 待決 opens the pane on that page (terminal)', async ($, on) => {
+  // r4 (rewritten to the shell contract): with the pane closed the console band is the O4 shell. Its menu row (待決 圓桌 用量 寵物 說明) has no old page or tab name, no digit hotkey on a menu entry
+  // (the digits 0/7/8/9 are the quick row's), and pressing a menu entry switches the band's own window: it opens no pane page.
   const w = await framedWorld($, on)
   w.panes = []
   const bandUi = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-gate3-band', props: { ...BAND_PROPS, maxRows: 6 }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
   const bandTree = (await bandUi.drawn()) as Node
   const bandBtns = (await bandUi.findAll({ type: 'Button' })) as Node[]
   await bandUi.unmount()
-  const [, row2] = ((bandTree.children || []) as Node[])
-  const row2Text = walkTexts(row2).map(textOf).join(' ')
-  for (const name of ['現況', '待決', '艦隊', '額度', '派工', '審查', '花費', '殘留']) expect(row2Text, 'row 2 carries ' + name).toContain(name)
-  for (const old of ['指揮', '團隊', '主機', '本席']) expect(row2Text, 'row 2 drops old tab ' + old).not.toContain(old)
-  const tabBtns = bandBtns.filter(b => String(b.props?.key).startsWith('tab:'))
-  // M6: row 2 adds pet and forge; forge keeps its own Button key outside the tab:* list.
-  expect(tabBtns.map(b => String(b.props?.key))).toEqual(['tab:now', 'tab:decide', 'tab:fleet', 'tab:quota', 'tab:dispatch', 'tab:review', 'tab:spend', 'tab:hygiene', 'tab:pet'])
-  expect(bandBtns.some(b => b.props?.key === 'forge')).toBe(true)
-  for (const b of bandBtns) expect(b.props?.hotkey, 'no hotkey on band Button ' + String(b.props?.key)).toBeUndefined()
-  const cases: [string, string, string][] = [
-    ['tab:now', '現況', '── 全艦隊'],
-    ['tab:decide', '待決', '待決在 band 上（d）'],
-    ['tab:fleet', '艦隊', '復原線'],
-    ['tab:quota', '額度', '── 額度池'],
-    ['tab:dispatch', '派工', '── 執行中 2'],
-    ['tab:review', '審查', '還沒有審查紀錄'],
-    ['tab:spend', '花費', '今天    $0.42'],
-    ['tab:hygiene', '殘留', '殘留：無來源（沒有 worktree 殘留資料）'],
-  ]
-  for (const [key, header, bodyMarker] of cases) {
+  const row1Text = rowStr(bandTree) // the menu row's Buttons are in the tree with the frame and the quick row
+  for (const name of ['待決', '圓桌', '用量', '寵物', '說明']) expect(row1Text, 'menu row carries ' + name).toContain(name)
+  for (const old of ['指揮', '團隊', '主機', '本席', '現況']) expect(row1Text, 'menu row drops old tab ' + old).not.toContain(old)
+  const keys = bandBtns.map(b => String(b.props?.key))
+  for (const k of ['tab:decide', 'menu:r', 'menu:u', 'menu:p', 'menu:h']) expect(keys, 'menu entry ' + k).toContain(k)
+  for (const b of bandBtns.filter(x => String(x.props?.key).startsWith('menu:') || String(x.props?.key).startsWith('tab:'))) expect(String(b.props?.hotkey ?? ''), 'no digit hotkey on menu Button ' + String(b.props?.key)).not.toMatch(/^[0-9]$/)
+  for (const key of ['menu:r', 'menu:u', 'menu:p', 'menu:h']) {
     w.panes = []
     w.opens.length = 0
     const b = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-gate3-' + key, props: { ...BAND_PROPS, maxRows: 6 }, viewport: { columns: 160, rows: 40, isFullscreen: true } })
     await b.press({ key })
     await b.unmount()
-    expect(w.opens.map(o => o.id), key + ' opens the pane').toEqual(['autopilot-live'])
-    const p = await framedMount($)
-    const pTree = (await p.drawn()) as Node
-    await p.unmount()
-    const rows = framedRows(pTree)
-    expect(rows[0].startsWith(header), key + ' header').toBe(true)
-    expect(rows.slice(1, -1).join('\n'), key + ' body').toContain(bodyMarker)
+    expect(w.opens.length, key + ' opens no pane page').toBe(0)
   }
 })
 // PM seat (console on, legacyTabs absent, pane open, 18 rows): pressing the 待決 band tab sets the band tab, so the O4 shell is drawn (12 rows or more), not the two-row strip
@@ -6868,10 +6861,11 @@ for (const surface of SURFACES) {
     const speedText = speed === undefined ? '' : walkTexts(speed).map(textOf).join('')
     const text = cellsOf(tree).map(c => c.text).join('')
     await ui.unmount()
-    expect(speedText).toMatch(/ϟ \d{2} tok\/s [▁▂▃▄▅▆▇█]{5}/)
-    expect(speedText).not.toContain('Ferris')
-    expect(speedText).not.toContain('Lv.')
-    expect(text).toContain('艦隊') // the pane is closed: row 2 draws the new 1-8 page names
+    // r4 (rewritten to the shell contract): at 6 rows the console band is the shell, whose menu row has no speed Button; the console band still draws no pet and no old tab name
+    expect(speedText === '' || /ϟ \d{2} tok\/s [▁▂▃▄▅▆▇█]{5}/.test(speedText)).toBe(true)
+    expect(text).not.toContain('Ferris')
+    expect(text).not.toContain('Lv.')
+    expect(text).toContain('圓桌') // the shell's menu row
     expect(text).not.toContain('指揮')
   })
 
@@ -7176,7 +7170,8 @@ for (const surface of SURFACES) {
 
   // The band's tab row at one width: the keys of its Buttons, the row's Button text, and whether the speed view is drawn under it.
   const stripAt = async ($: any, columns: number, press: string[] = []) => {
-    for (const key of press) { const a = await mount($, { bodyColumns: columns }); await a.press({ key }); await a.unmount() }
+    // r4 (rewritten): the presses go to the 11-row strip, the one place the `›` and the tab Buttons live (an open tab at 12 rows or more is the shell, which has no `›`); the draw read back is at the suite's 20 rows
+    for (const key of press) { const a = await mount($, { bodyColumns: columns, maxRows: 11 }); await a.press({ key }); await a.unmount() }
     const b = await mount($, { bodyColumns: columns })
     const buttons = ((await b.findAll({ type: 'Button' })) as Node[]).filter(n => typeof n.props?.key === 'string' && (n.props.key === 'more' || n.props.key === 'forge' || (n.props.key as string).startsWith('tab:')))
     const tree = (await b.drawn()) as Node
@@ -7631,7 +7626,7 @@ for (const surface of SURFACES) {
     Object.assign(files, extra)
     return world(on, files, nowMs)
   }
-  const mountShell = ($: any, columns: number, maxRows = 12, extra: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-shell', props: { ...BAND_PROPS, maxRows, bodyColumns: columns, ...extra }, viewport: { columns: columns + 5, rows: 50, isFullscreen: true } })
+  const mountShell = ($: any, columns: number, maxRows = 12, extra: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-shell', props: { ...BAND_PROPS, legacyTabs: false, maxRows, bodyColumns: columns, ...extra }, viewport: { columns: columns + 5, rows: 50, isFullscreen: true } })
   const drawShell = async ($: any, columns: number, press: string[] = [], maxRows = 12, extra: Record<string, unknown> = {}) => {
     for (const key of press) {
       const ui = await mountShell($, columns, maxRows, extra)
@@ -7942,10 +7937,10 @@ for (const surface of SURFACES) {
     shellWorld(on)
     await start($, surface)
     await drawShell($, 240, ['tab:decide'])
-    const small = await drawShell($, 240, [], 11)
+    const small = await drawShell($, 240, [], 11, { legacyTabs: true }) // the old bar (legacyTabs, no console) keeps its tab-row layout under 12 rows
     expect(small.rows.some(r => r.includes('╭'))).toBe(false)
     expect(small.rows.length).toBeLessThanOrEqual(11)
-    const eight = await drawShell($, 240, [], 8) // the tab is still open (a memory state); 8 rows are no room for the frame
+    const eight = await drawShell($, 240, [], 8, { legacyTabs: true }) // the tab is still open (a memory state); 8 rows are no room for the frame
     expect(eight.rows.some(r => r.includes('╭'))).toBe(false)
     await start($, surface) // a new session, no key: the shell is the normal state once 12 rows fit
     const none = await drawShell($, 240, [], 12)
@@ -8093,11 +8088,11 @@ for (const surface of SURFACES) {
     const w = shellWorld(on, { '/fake/forge-panel.json': usageRowsOf(3) })
     await start($, surface)
     await drawShell($, 160, ['menu:u'])
-    const small = await drawShell($, 160, [], 6)
+    const small = await drawShell($, 160, [], 6, { legacyTabs: true })
     expect(small.rows.some(r => r.includes('╭'))).toBe(false)
     expect(small.buttons).not.toContain('open:usage')
     const before = w.opens.length
-    await drawShell($, 160, ['info'], 6)
+    await drawShell($, 160, ['info'], 6, { legacyTabs: true })
     expect(w.opens.length).toBeGreaterThan(before)
   })
 
@@ -8360,7 +8355,7 @@ for (const surface of SURFACES) {
     const shell = await mountShell($, 160, 18)
     await shell.unmount()
     expect(w.opens.length, 'the shell has no ⓘ and does not open the pane').toBe(1)
-    const again = await mountShell($, 160, 6) // the legacy bar, under 12 rows, still has the ⓘ
+    const again = await mountShell($, 160, 6, { legacyTabs: true }) // the legacy bar, under 12 rows, still has the ⓘ
     await again.press({ key: 'info' })
     await again.unmount()
     expect(w.opens.length).toBe(2)
@@ -8712,8 +8707,8 @@ for (const surface of SURFACES) {
     // the tab-row layout (a host that gives fewer than 12 rows): measured and reported, not asserted equal: dispatch and review carry a summary row of their own
     for (const tab of ['now', 'decide', 'dispatch', 'review', 'usage']) {
       await start($, surface)
-      const probe = await drawShell($, 160, [], 11)
-      const d = await drawShell($, 160, [probe.buttons.includes('tab:' + tab) ? 'tab:' + tab : 'more'], 11)
+      const probe = await drawShell($, 160, [], 11, { legacyTabs: true })
+      const d = await drawShell($, 160, [probe.buttons.includes('tab:' + tab) ? 'tab:' + tab : 'more'], 11, { legacyTabs: true })
       heights['tabrow-' + tab + '@160'] = d.tree.type === 'Box' && d.tree.props?.flexDirection === 'column' ? d.rows.length : 1
     }
     if (surface === 'terminal') console.log('BAND-HEIGHTS ' + JSON.stringify(heights))
@@ -8785,14 +8780,15 @@ for (const surface of SURFACES) {
     expect(room.rows[1], '9 moved off 待決').not.toContain('第 1 張')
   })
 
-  test('O4 shell: under 12 rows with the legacy tabs off is one hint line (' + surface + ')', async ($, on) => {
+  // r4: the shell now takes the rows it gets from 6 up (the r4 A tests); the one hint line is what is left under SHELL_MIN_ROWS
+  test('O4 shell: under 6 rows with the legacy tabs off is one hint line (' + surface + ')', async ($, on) => {
     shellWorld(on)
     await start($, surface)
-    const d = await drawShell($, 155, [], 8, { legacyTabs: false })
+    const d = await drawShell($, 155, [], 5, { legacyTabs: false })
     const drawn = d.rows.filter(r => r.trim() !== '')
     expect(drawn.length).toBe(1)
     expect(drawn[0]).toContain('視窗高度不足')
-    expect(drawn[0]).toContain('目前 8')
+    expect(drawn[0]).toContain('目前 5')
     expect(drawn[0]).toContain('待決')
     expect(d.rows.some(r => r.includes('╭'))).toBe(false)
     expect(d.rows.join('\n')).not.toContain('1 現況')
@@ -8825,6 +8821,65 @@ for (const surface of SURFACES) {
       expect(colsOf(body, '│')[2], 'main frame at ' + cols).toBe(27)
       for (const row of rows) expect(placeEnd(row).end, 'row width at ' + cols).toBeLessThanOrEqual(cols)
     }
+  })
+
+  // ---- r4 A / B: the PM's pane is 49 rows x 209 cols; the host hands the band 19, 17 or fewer rows. The shell takes the rows it gets (6 at least) instead of waiting for 12. ----
+  const r4Card = { id: 'd-r4card01', question: '題', background: null, options: [{ label: '甲', description: '短' }], recommendation: null, why: null }
+  const r4World = async ($: any, on: any, snapNull: boolean) => {
+    const files = consoleFiles()
+    if (!snapNull) files[W_MODEL] = j(model({ needs_decision: true, decisions: [r4Card] }))
+    const w = world(on, files, NOW_FRESH)
+    await start($, surface)
+    await w.clock.advance(5_000)
+    await w.clock.advance(5_000)
+    return w
+  }
+  for (const legacyTabs of [false, true]) for (const snapNull of [false, true]) for (const columns of [155, 205]) {
+    test('O4 r4 A/B: PM case (console on, legacyTabs ' + legacyTabs + ', snapshot ' + (snapNull ? 'null' : 'live') + ', ' + columns + ' columns): the shell is drawn at 19, 17, 11, 8 and 6 rows, menu row first, quick row last, rows = min(maxRows, 12) (' + surface + ')', async ($, on) => {
+      await r4World($, on, snapNull)
+      for (const maxRows of [19, 17, 11, 8, 6]) {
+        const d = await drawShell($, columns, [], maxRows, { legacyTabs })
+        const at = 'maxRows ' + maxRows + ': ' + d.all.map(r => r.slice(0, 30)).join(' | ')
+        expect(d.all.length, 'tree rows ' + at).toBe(Math.min(maxRows, 12))
+        expect(d.all[0], 'menu row first ' + at).toContain('待決')
+        expect(d.all[0].includes('╭'), 'menu row is not a frame ' + at).toBe(false)
+        expect(d.all[1].startsWith('╭'), 'top frame second ' + at).toBe(true)
+        expect(d.all[d.all.length - 1], 'quick row last ' + at).toContain('0:')
+        for (const r of d.all) expect(displayWidth(r), 'row width ' + at).toBeLessThanOrEqual(columns)
+        expect(d.buttons.filter(k => k.startsWith('tab:') && k !== 'tab:decide'), 'no old tab bar ' + at).toEqual([])
+        expect(d.all.join('').includes('1 現況'), 'no old tab row ' + at).toBe(false)
+        if (!snapNull) {
+          expect(d.all.join('\n'), 'the card title is drawn ' + at).toContain('題')
+          expect(d.all.join('\n'), 'the first option is drawn ' + at).toContain('1:')
+        }
+      }
+    })
+  }
+  test('O4 r4 A: under 6 rows the band is ONE hint line with the real row count (' + surface + ')', async ($, on) => {
+    await r4World($, on, false)
+    for (const maxRows of [5, 2]) {
+      const d = await drawShell($, 155, [], maxRows, { legacyTabs: false })
+      expect(d.all.length, 'one row at ' + maxRows).toBe(1)
+      expect(d.all[0].trim()).toBe('待決 1 張 · 視窗高度不足（目前 ' + maxRows + ' 列，需要 6 列）')
+    }
+  })
+  test('O4 r4 B(c): a change of maxRows or bodyColumns appends one line to band-geometry.log, an unchanged draw appends none (' + surface + ')', async ($, on) => {
+    const w = await r4World($, on, false)
+    const logOf = () => (w.bodies[LIVE + '/band-geometry.log'] ?? '').split('\n').filter(l => l !== '')
+    const n0 = logOf().length
+    await drawShell($, 155, [], 19, { legacyTabs: false })
+    const n1 = logOf().length
+    expect(n1 - n0, 'a first draw writes one line').toBe(1)
+    await drawShell($, 155, [], 19, { legacyTabs: false })
+    expect(logOf().length, 'the same geometry writes none').toBe(n1)
+    await drawShell($, 205, [], 17, { legacyTabs: false })
+    const lines = logOf()
+    expect(lines.length, 'a change writes one more').toBe(n1 + 1)
+    const last = JSON.parse(lines[lines.length - 1])
+    expect(last.maxRows).toBe(17)
+    expect(last.bodyColumns).toBe(205)
+    expect(last.shellRows).toBe(12)
+    expect(typeof last.ts).toBe('number')
   })
 
   test('O4 shell: a card with no title uses the first sentence, ★ does not need why, a long description wraps under its column, and a step copy is one list row (' + surface + ')', async ($, on) => {

@@ -29,6 +29,8 @@ type El = (props: any) => any
 export const BAND_ROWS = 1
 // M5: the cells row 1 of the console band keeps free at its right end for the `[-]` control (three cells and a gap)
 export const BAND_CLOSE_ROOM = 4
+// r4 D: the console sources whose failure the band shows; slots, metrics, answer_log and changes are no_source on purpose in fleet's snapshot
+const BAND_SOURCES = ['tasks', 'peers', 'cards', 'quota_now'] as const
 
 // The band is the final row next to the prompt; open content grows above it.
 export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
@@ -179,7 +181,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       const forecast = con.snap.sources.quota_forecast
       if (forecast !== undefined && forecast.state !== 'ok') sourceBad = true
       if (!sourceBad) {
-        const other = mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs })
+        const other = mostSevere({ live: snap, console: con.snap, size: { cols: columns, rows: 2 }, t, nowMs }, BAND_SOURCES)
         if (other !== null) sourceBad = true
       }
     }
@@ -334,7 +336,7 @@ export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unk
   const rows: unknown[] = [<Box key="menu">{d.bar}</Box>]
   rows.push(<Box key="top">{segsOf(plan.top, 't')}</Box>)
   const body = plan.bodyRows
-  const content = body - 2
+  const content = plan.compact ? body : body - 2 // r4: a compact frame has no divider and no progress row
   const S = GLYPHS.structure
   for (let r = 0; r < body; r++) {
     const item = d.left[r]
@@ -441,6 +443,7 @@ export type CardView = {
   grey: boolean // an answered card (sent, or closed elsewhere): the question and the options are dim theme text, the card stays in its place
   fix: { label: string; onPress: () => void } | null // the pane's 改答案 on a card sent from here
   fill: { label: string; onPress: () => void } | null // the button that puts the reply line in the prompt box (`$.prompt.fill`): an option card's 附註／其他回答, a typed card's 打字回答; null where the surface has no prompt box or the card is a dialog's
+  compact?: boolean // r4: a window of 4 content rows or fewer: the title row, then the options, then the rest of the card (scrolled)
   width: number // the main window's inner width less the pad
   onPress: (k: number) => void
 }
@@ -485,7 +488,8 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
     bgLines = rows.length - before
   }
   // two background rows when the card is drawn whole, so a one-line question puts the first option on band row 5 at every tier
-  if (!v.split) while (bgLines < 2) { line('bgpad' + bgLines, ' ') ; bgLines++ }
+  if (!v.split && v.compact !== true) while (bgLines < 2) { line('bgpad' + bgLines, ' ') ; bgLines++ }
+  const optFrom = rows.length
   v.options.forEach((o, k) => {
     if (v.split) {
       const hotkey = k < 6 ? String(k + 1) : undefined
@@ -547,6 +551,7 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
       rows.push(<Box key={'od' + k + '_' + i}><Text {...dimProps()} wrap="truncate">{' '.repeat(Math.min(indent, Math.max(0, w - 1))) + piece}</Text></Box>)
     })
   })
+  const optTo2 = rows.length
   if (v.advice !== null) {
     block('ad', keys[1], v.advice.label, false)
     if (v.advice.why !== null) block('aw', null, v.advice.why, false)
@@ -554,6 +559,12 @@ export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t:
   if (v.notAuthorized !== null) block('na', keys[2], v.notAuthorized, false)
   if (fillBtn !== null) optTo.push(<Box key="fill"><Text>{' '}</Text>{fillBtn}</Box>)
   if (v.meta === null && v.note !== null) line('note', v.note, true)
+  if (v.compact === true && !v.split && optTo2 > optFrom) {
+    // the first row of the question stays on top, the options come next, and everything else (the rest of the question, the state line, the background, the advice) follows and scrolls
+    const re = [...rows.slice(0, 1), ...rows.slice(optFrom, optTo2), ...rows.slice(1, optFrom), ...rows.slice(optTo2)]
+    keyed.forEach(x => { if (x.at !== null && x.at >= optFrom && x.at < optTo2) x.at = x.at - optFrom + 1 })
+    return { rows: re, strip, keyed }
+  }
   return { rows, strip, keyed }
 }
 

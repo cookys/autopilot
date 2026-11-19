@@ -40,8 +40,9 @@ export { staleBadge, brokenRow }
 
 const SEVERITY: Record<string, number> = { no_source: 3, expired: 2, stale: 1 }
 // the most severe broken source of the console snapshot as one marker, null when every source is ok (the header shows it; the band's summary row takes the same one)
-export function mostSevere(ctx: PageCtx): Seg | null {
-  const sources = ctx.console === null ? [] : Object.entries(ctx.console.sources)
+// `only`: the sources that count (the band: tasks, peers, cards and quota_now; the others, such as slots, metrics, answer_log and changes, are reported no_source on purpose until fleet implements them)
+export function mostSevere(ctx: PageCtx, only?: readonly string[]): Seg | null {
+  const sources = ctx.console === null ? [] : Object.entries(ctx.console.sources).filter(([name]) => only === undefined || only.includes(name))
   let best: { name: string; state: string; at: number | null } | null = null
   for (const [name, s] of sources) {
     if ((SEVERITY[s.state] ?? 0) > (best === null ? 0 : SEVERITY[best.state] ?? 0)) best = { name, state: s.state, at: s.at_ms }

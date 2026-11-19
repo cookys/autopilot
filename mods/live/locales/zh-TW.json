@@ -447,7 +447,7 @@
   "shell.help": "說明",
   "shell.help_body": "d 待決，r 圓桌，u 用量，p 寵物，h 說明。數字 9 換下一個選單。",
   "shell.pet_soon": "寵物：尚未接上",
-  "shell.short_height": "待決 {n} 張 · 視窗高度不足 12 列（目前 {m} 列）",
+  "shell.short_height": "待決 {n} 張 · 視窗高度不足（目前 {m} 列，需要 {min} 列）",
   "shell.on_band": "待決在 band 上（d）",
   "shell.step_mark": "要你做",
   "shell.send": "送出 {n} 張",

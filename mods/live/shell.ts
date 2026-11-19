@@ -17,6 +17,13 @@ export function bandTier(bodyColumns: number): Tier {
 
 // ---- geometry (contract 1.2): the left column is 26 wide at every tier, the main window starts at the same column and grows to the right up to 76 ----
 export const SHELL_ROWS = 12 // menu row, top frame, BODY_ROWS body rows, bottom frame, quick row (ux-v7: the progress row moved inside the main window)
+// r4: the host gives the band what is left of half the terminal (49 rows with a status line: 17 to 19), so the shell takes the rows it gets: SHELL_ROWS at most, SHELL_MIN_ROWS at least
+// (menu row, top frame, 2 body rows, bottom frame, quick row). From COMPACT_BELOW rows up the main window keeps its divider and progress row; under it the body is content only.
+export const SHELL_MIN_ROWS = 6
+export const COMPACT_BELOW = 9
+export const isCompact = (rows: number): boolean => rows < COMPACT_BELOW
+// the main window's content rows (no divider, no progress row) that `rows` band rows leave: the menu row, two frames and the quick row take 4; the divider and the progress row 2 more when kept
+export const shellContentRows = (rows: number): number => Math.max(1, isCompact(rows) ? rows - 4 : rows - 6)
 export const BODY_ROWS = 8 // the main window's last two rows are the divider ├─┤ and the progress row; the six above are its content
 export const MAIN_CONTENT_ROWS = BODY_ROWS - 2
 export const LEFT_COLS = 26 // the left FRAME spans columns 0–25; the drawn inner text is two cells narrower so a gap can sit at column 26
@@ -237,11 +244,12 @@ export type ShellInput = {
   footLeft?: string // right-aligned in the bottom frame of the left window (the card position, `3/8`)
   footMain?: string // right-aligned in the bottom frame of the main window (the one-line hint)
   noRight?: boolean // the card view: no right-hand columns, the main window is as wide as the band allows (shellGeometry)
-  bodyRows?: number // the frame's body rows when the content grows up past BODY_ROWS (the card view); right-hand columns are only drawn at BODY_ROWS
+  bodyRows?: number // the frame's body rows when the content grows up past BODY_ROWS (the card view) or is cut to what a short band leaves (r4); right-hand columns are only drawn at BODY_ROWS
+  compact?: boolean // r4: a band under COMPACT_BELOW rows: the body is content only (no divider, no progress row)
   awaiting?: number // the count is drawn on the top menu row (band.tsx), not in a window title
 }
 export type ShellColumn = { id: ColId; inner: number; rows: Seg[][] } // BODY_ROWS rows, each padded to exactly `inner` cells
-export type ShellPlan = { geo: Geometry; bodyRows: number; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[]; divider: { left: Seg; right: Seg; rule: Seg }; separate: boolean; leftInner: number }
+export type ShellPlan = { geo: Geometry; bodyRows: number; compact: boolean; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[]; divider: { left: Seg; right: Seg; rule: Seg }; separate: boolean; leftInner: number }
 
 const border = (role: 'here' | 'idle'): Partial<Seg> => ({ color: PALETTE[role] })
 function frameRow(kind: 'top' | 'bottom', widths: readonly number[], titles: readonly Seg[][], separate = false): Seg[] {
@@ -284,6 +292,7 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
   const geo = shellGeometry(inp.columns, inp.noRight === true)
   if (geo === null) return null
   const bodyRows = inp.bodyRows ?? BODY_ROWS
+  const compact = inp.compact === true
   const { t, panel } = inp
   const side = panel.side
   const mins = staleMinutes(panel)
@@ -337,6 +346,8 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
     }
   })
 
+  // a band shorter than BODY_ROWS body rows draws the first rows of each column (a room column keeps its newest, the bottom ones)
+  if (bodyRows < BODY_ROWS) for (const c of columns) c.rows = c.id === 'room' || c.id === 'roomUsage' ? c.rows.slice(BODY_ROWS - bodyRows) : c.rows.slice(0, bodyRows)
   const widths = [leftInner, geo.main, ...columns.map(c => c.inner)]
   const v = GLYPHS.structure.bandSep
   const verts = widths.concat([0]).map((_w, i) => ({ text: v, ...border(i === 1 || i === 2 ? 'here' : 'idle') }) as Seg)
@@ -344,7 +355,7 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
   const divider = { left: { text: f.frameLeftT, ...border('here') } as Seg, right: { text: f.frameRightT, ...border('here') } as Seg, rule: { text: f.rule.repeat(geo.main), color: PALETTE.structure } as Seg }
   const foot = (text: string | undefined): Seg[] => (text === undefined || text === '' ? [] : [{ text }])
   const bottomTitles: Seg[][] = [foot(inp.footLeft), foot(inp.footMain)]
-  return { geo, bodyRows, top: frameRow('top', widths, titles, separate), bottom: frameRow('bottom', widths, bottomTitles, separate), verts, columns, divider, separate, leftInner }
+  return { geo, bodyRows, compact, top: frameRow('top', widths, titles, separate), bottom: frameRow('bottom', widths, bottomTitles, separate), verts, columns, divider, separate, leftInner }
 }
 
 // the marks band.tsx draws (it sets no colour of its own): a picked option's ◆ and the `│` between the quick row's slots

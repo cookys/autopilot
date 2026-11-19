@@ -27,6 +27,8 @@ node "$here/gen-band-contract.js" --check
 node --test "$here/gen-locales.test.js"
 # the glyph tables, vocabulary and the all-mod design lints (L3, I5 (a), I20, L1b-L9 over every mods/* source): imports the real ui.ts, so the tables it lints are the ones the pane draws
 node --test "$here/ui-lint.test.js"
+# shared tux: strict PALETTE = tokens.roles, manifest shas, golden locks (negative controls included)
+node --test "$here/../tux/tokens.test.js" "$here/../tux/golden.test.js"
 node --test "$here/band-split.test.js"
 node --test "$here/band-keep-speed.test.js"
 node --test "$here/band-no-error-text.test.js"
@@ -60,6 +62,8 @@ printf '%s\n' '{"name":"autopilot","version":"0.0.0","description":"throwaway wr
 printf '%s\n' '{"modules":["../mods/live/register.ts"]}' > "$tmp/hooks/hooks.json"
 cp -r "$here" "$tmp/mods/live"
 cp -r "$here/../viewer" "$tmp/mods/viewer"
+cp -r "$here/../tux" "$tmp/mods/tux"
+rm -f "$tmp/mods/tux/"*.test.js
 rm -f "$tmp/mods/live/run-tests.sh"
 rm -f "$tmp/mods/viewer/"*.test.ts "$tmp/mods/viewer/"*.test.js "$tmp/mods/viewer/run-tests.sh" # the viewer suites run from their own wrapper
 

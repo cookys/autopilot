@@ -6,7 +6,8 @@
 // `ui.scroll` (register.ts). Without a frame (a host that gave no room) the plain tree is drawn and the engine scrolls it.
 // Colour: the hint lines are dim (no theme key, no background, no inverse); the text's own colours are the engine's highlighter.
 
-import { PALETTE, displayWidth } from '../live/ui'
+import { PALETTE } from '../tux/palette.ts'
+import { displayWidth } from '../tux/width.ts'
 import { frameOf, scrollFrame, sliceCells, wrapCells } from '../live/scroll'
 import type { ScrollModel } from '../live/scroll'
 import { DIFF_CHUNK_CHARS, totalTokens } from './model'

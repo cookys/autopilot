@@ -4,25 +4,17 @@
 //   - readLegacyUsage(): transitional whitelist for shell.ts usageRows / shellPlan until P6b removes it.
 // Syntax is erasable and every runtime import carries `.ts`, so `node --test` loads this file directly.
 
-import { GLYPHS } from './ui.ts'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { PANEL_SCHEMA, PANEL_TONES } from '../tux/contracts/panel.ts'
 
-export type PanelLine = { text: string; tone?: string }[]
-export type Tiers = Record<string, PanelLine[]>
-export type SideData = { usage: Tiers | null; usageFull: Tiers | null; memory: Tiers | null }
-// absent: nothing written (null / undefined); bad: not an object; old: another schema (or none); ok: codeforge.panel/1
-// usage: the top-level `usage` tiers (the 用量 tab of the band), money lines already dropped
-export type PanelRead = { status: 'absent' | 'bad' | 'old' | 'ok'; ageMs: number | null; side: SideData | null; usage: Tiers | null }
+export { PANEL_SCHEMA, PANEL_TONES, PANEL_TIER_KEYS } from '../tux/contracts/panel.ts'
+export type { PanelLine, Tiers, SideData, PanelRead, PetIconEntry, PetPanel, PetRead } from '../tux/contracts/panel.ts'
 
-export type PetIconEntry = { id: 'cat' | 'chick' | 'crab'; emoji: string; fallback: string; text: string }
-export type PetPanel = { title: string; sprite: PanelLine[] | null; tiers: Tiers | null; icon: PetIconEntry }
-export type PetRead = { pet: PetPanel | null }
-
-export const PANEL_SCHEMA = 'codeforge.panel/1'
 export const STALE_MS = 60_000
 
 const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
 const clean = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\x00-\x1f\x7f-\x9f]/g, '')
-const TONES = new Set('subtle inactive dim bold mono success'.split(' '))
+const TONES = new Set<string>(PANEL_TONES)
 
 function lineOf(v: unknown): PanelLine | null {
   if (!Array.isArray(v)) return null

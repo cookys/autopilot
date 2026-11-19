@@ -2,7 +2,9 @@
 // A leaf module: it imports only types, ui.ts and quota-pick.ts (no page), never pages/index or a page, so a page can import it without a load cycle (frame -> index -> page -> frame).
 import { isStepCard, truncateToWidth } from '../model'
 import type { LiveSnapshot, Seg } from '../model'
-import { PALETTE, STATES, displayWidth, type StateId } from '../ui'
+import { PALETTE } from '../../tux/palette.ts'
+import { displayWidth } from '../../tux/width.ts'
+import { STATES, type StateId } from '../ui'
 
 export type Row = Seg[]
 

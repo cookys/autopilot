@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "files": {
+    "contracts/panel.ts": "a0b990e861061bd61d6e318ea42b10b43ef71344634c8a203d96fe32d3a2d203",
+    "format.ts": "4827550224ef8f905f067028130bef3e6a625d0b244ab7863f7c4076a22cd5b5",
+    "glyphs.ts": "053e51c471d48e81853e3afd17c7744bf3ab50e442883f96c658cc78fce8f4c5",
+    "golden-render.js": "6bcfb298afb1ba8d7e02d1fb4c75764b564e58b37b5c73ca8d1b8f244ca484a8",
+    "golden.test.js": "f96bc80f09eb3ce78b0cb5d097f55657a0d41c4f8d6d60a632038e800fd8dbea",
+    "golden/dur-cases.json": "8c9983617d3153eeb5bdab446e1467ae9b7230fb00c0709e94793eb0c97f970f",
+    "golden/glyphs.json": "d95ae12352a2c57fa1c5e695575ef37ffbbe39ccc2fa8ea0e264325bab1a9b07",
+    "golden/layout-bottom-120.txt": "91fd554d987159b467b2e21d6f50269a45e8fdf912798f0104792e19ea43e9f3",
+    "golden/layout-bottom-80.txt": "91fd554d987159b467b2e21d6f50269a45e8fdf912798f0104792e19ea43e9f3",
+    "golden/panel-cases.json": "3ada25b2922fbcfcc8dc43fc63fce4b11981f0a9d434f7f3d9eea4d931e5254d",
+    "golden/pct-cases.json": "cbf86fb6d21b2b704e57f6ef6317e2eb31c8e55d3b4f7278595fd9836a2cd16f",
+    "golden/tabrow-120.txt": "b56ec96fcc80790d484439e99abba100c83611312a56c4efaf50c3c35007bd4a",
+    "golden/tabrow-160.txt": "b56ec96fcc80790d484439e99abba100c83611312a56c4efaf50c3c35007bd4a",
+    "golden/tabrow-80.txt": "56a79c16cbaf5e89a121f889a42e7d38752d78d8395da3fbc61653b46ec63865",
+    "golden/tabrow-console-120.txt": "d10ac973f92ceb1cd37b06fc6ff0c1258b477f908c6a116d8a6856b3c0548e3f",
+    "golden/tabrow-console-80.txt": "5f4eb88d6e7ff016e27aca6c355355f19e59b5925cd72f31ab84912b0e7aaa50",
+    "golden/width-cases.json": "673db00e2705376a6a31765400872621e178d215e4327b4cc223a506aed38e40",
+    "index.js": "da13eb52ba3c9f7e611f73fa1bbafa66b33f879a6a88d14d9b3bca8ecdfbc0fe",
+    "palette.ts": "2e555b34f219cf8a47d940b339f74f3064b8a7f150731c115bdaf114d95d72b5",
+    "strip.ts": "9aaf8520067ac2f2182cbab7199ac320fd8e51581b700b977e116da4bd66a9b8",
+    "tiers.ts": "798baf1346325f8115f28b0bee6efb2d5c7c92b60a240c72e0d7970a3faab8e0",
+    "tokens.json": "e43fafa639e6291897b217e7a85b77c94e2337d337436cc8f9b178a53ab304ba",
+    "tokens.test.js": "f5c59397d38709d3d429a058d2bc6b26a9d990d952f6a3ee89aa032f3d91d7b6",
+    "width.ts": "6be702aa5edda8fd5c0410e3f3c2167a98fda29ca3f8a0775c7fad91b2374d88"
+  }
+}

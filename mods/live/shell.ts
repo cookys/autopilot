@@ -6,7 +6,10 @@
 import type { Seg } from './model.ts'
 import { STALE_MS, readLegacyUsage } from './panel.ts'
 import type { PanelLine, PanelRead, SideData, Tiers } from './panel.ts'
-import { GLYPHS, PALETTE, displayWidth, wrapPlain } from './ui.ts'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { PALETTE } from '../tux/palette.ts'
+import { displayWidth } from '../tux/width.ts'
+import { wrapPlain } from './ui.ts'
 
 // ---- tiers (contract 1.1): written on bodyColumns, the width the band is handed. Not derived from the terminal width. The tab row's own 160/120/80 table (model.ts layoutBand) is
 // another thing: neither refers to the other. ----

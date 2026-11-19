@@ -12,23 +12,36 @@
 import type { PaneLine, PaneTab, Seg, ThemeKey } from './model'
 import { ratioLevel } from './band-contract.ts'
 
+import { ANSI_RE, cellWidth, displayWidth } from '../tux/width.ts'
+import { EMOJI_BANNED, GLYPHS, NEW_GLYPHS, emojiViolations, glyphTableViolations, petIconViolations, tableGlyphs, verifiedOk } from '../tux/glyphs.ts'
+import type { GlyphTables, PetIcon } from '../tux/glyphs.ts'
+import { PALETTE } from '../tux/palette.ts'
+import type { PaletteRole } from '../tux/palette.ts'
+import { dur, pct, pctInt } from '../tux/format.ts'
+import { cutProse, strip } from '../tux/strip.ts'
+import type { Strip, StripTab } from '../tux/strip.ts'
+
+export { ANSI_RE, cellWidth, displayWidth }
+export { EMOJI_BANNED, GLYPHS, NEW_GLYPHS, emojiViolations, glyphTableViolations, petIconViolations, tableGlyphs, verifiedOk }
+export type { GlyphTables, PetIcon }
+export { PALETTE }
+export type { PaletteRole }
+export { dur, pct, pctInt }
+export { cutProse, strip }
+export type { Strip, StripTab }
+
+// Band tab badges keep their glyph and number formatting in the shared UI layer (pageBarStrip).
+export const tabCountLabel = (label: string, count: number | null, broken = false): string =>
+  count === null ? label + '(?)' : label + (count > 0 ? '(' + (broken ? GLYPHS.state.failed : '') + count + ')' : '')
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // display width (moved here from model.ts, which re-exports it)
 
-export function cellWidth(c: number): number {
-  if (c === 0 || (c >= 0x0300 && c <= 0x036f) || (c >= 0x200b && c <= 0x200f) || (c >= 0xfe00 && c <= 0xfe0f) || (c >= 0x20d0 && c <= 0x20ff)) return 0
-  if ((c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0x303e) || (c >= 0x3041 && c <= 0x33ff) || (c >= 0x3400 && c <= 0x4dbf)
-    || (c >= 0x4e00 && c <= 0x9fff) || (c >= 0xa000 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) || (c >= 0xf900 && c <= 0xfaff)
-    || (c >= 0xfe30 && c <= 0xfe4f) || (c >= 0xff00 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6)
-    || (c >= 0x1f300 && c <= 0x1f64f) || (c >= 0x1f900 && c <= 0x1f9ff) || (c >= 0x20000 && c <= 0x3fffd)) return 2
-  return 1
-}
 // Terminal cell width of a string: East Asian Wide / Fullwidth = 2, combining and zero-width = 0, everything else (the band glyphs included) = 1.
 // An ANSI escape sequence (CSI, OSC, two-byte) is not drawn: it is 0 cells.
 // An address and an escape sequence are the two units a wrap never splits. Both are matched here, once, and the spans are in code points (the unit every wrap array uses), never UTF-16 offsets.
 // URL: http(s)://, then anything but a blank, a bracket or quote, CJK punctuation (U+3000-303F), CJK ideographs (U+4E00-9FFF, U+20000-3FFFD) and the full-width forms (U+FF00-FFEF); a trailing sentence mark is not part of it.
 export const URL_RE = /https?:\/\/[^\s<>"'\u3000-\u303f\u4e00-\u9fff\uff00-\uffef\u{20000}-\u{3fffd}]+/gu
-export const ANSI_RE = /\u001b(?:\[[0-?]*[ -\/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/gu
 const cpLen = (s: string): number => { let n = 0; for (const _ of s) n += 1; return n }
 export function urlSpans(text: string): { start: number; end: number }[] {
   const out: { start: number; end: number }[] = []
@@ -41,12 +54,6 @@ export function urlSpans(text: string): { start: number; end: number }[] {
 export function ansiSpans(text: string): { start: number; end: number }[] {
   if (!text.includes('\u001b')) return []
   return [...text.matchAll(ANSI_RE)].map(m => { const start = cpLen(text.slice(0, m.index as number)); return { start, end: start + cpLen(m[0]) } })
-}
-const ANSI_ALL = new RegExp(ANSI_RE.source, 'gu')
-export function displayWidth(text: string): number {
-  let w = 0
-  for (const ch of text.includes('\u001b') ? text.replace(ANSI_ALL, '') : text) w += cellWidth(ch.codePointAt(0) as number)
-  return w
 }
 const padCells = (text: string, width: number): string => text + ' '.repeat(Math.max(0, width - displayWidth(text)))
 const padLeft = (text: string, width: number): string => ' '.repeat(Math.max(0, width - displayWidth(text))) + text
@@ -63,39 +70,15 @@ export type StateId = (typeof STATE_IDS)[number]
 // The glyph tables (§3.2, §3.4). Three groups that do not cross: state glyphs, structure glyphs, chart glyphs. `verified` records, per glyph that is new to
 // the vocabulary, where it was checked to draw in ONE cell: confirmed 2026-10-13 by the owner (ssh + tmux, all ten single-cell); was `pending-owner` until the owner ran `node mods/live/glyph-check.js` in the real ssh + tmux
 // terminal (P0 b). `↓` is East Asian Ambiguous and its width is still unchecked (`pending-owner`); the owner's 2026-10-14 ruling settled only its meaning (behind upstream, nothing else), see the plan §8. `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
-export type PetIcon = { id: 'cat' | 'chick' | 'crab'; emoji: string; fallback: string; verified: string }
-export const GLYPHS = {
-  state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⋯', stopped: '◌', skipped: '∅', unknown: '?', stale: '~' },
-  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★', fresh: '✦', frameTL: '╭', frameTR: '╮', frameBL: '╰', frameBR: '╯', frameDown: '┬', frameUp: '┴', frameLeftT: '├', frameRightT: '┤', answer: '→' },
-  chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
-  scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
-  spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
-  fallback: { stalled: '◍', findings: '!' },
-  // Pet tab icons (shared-TUI §6): fixed 2-cell emoji with 2-char printable ASCII fallback for < 80 cols / plain terminals. Exempt from tableGlyphs() and linted separately via petIconViolations.
-  pet: {
-    icons: {
-      cat: { id: 'cat', emoji: '🐱', fallback: ':3', verified: 'pending-owner' },
-      chick: { id: 'chick', emoji: '🐣', fallback: 'o<', verified: 'pending-owner' },
-      crab: { id: 'crab', emoji: '🦀', fallback: '}{', verified: 'pending-owner' },
-    } as Record<string, PetIcon>,
-  },
-  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '★': 'pending-owner', '⋯': 'pending-owner', '✦': 'pending-owner', '╭': 'pending-owner', '╮': 'pending-owner', '╰': 'pending-owner', '╯': 'pending-owner', '┬': 'pending-owner', '┴': 'pending-owner', '├': 'pending-owner', '┤': 'pending-owner', '→': 'pending-owner' } as Record<string, string>,
-}
-// glyphs that are new to the pane's vocabulary: each must carry a `verified` entry (L3)
-export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '★', '⋯', '✦', '╭', '╮', '╰', '╯', '┬', '┴', '├', '┤', '→'] as const
-// Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
-export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
+// Glyph tables, palette and the shared formatters live in mods/tux (re-exported above). One copy.
 
-// The semantic palette (owner ruling 2026-10-16): ONE colour means ONE thing. This table is the only place in mods/live that names a theme key; every colour the pane
+// The semantic palette (owner ruling 2026-10-16): ONE colour means ONE thing. The PALETTE table in mods/tux/palette.ts is the only place that names a theme key; every colour the pane
 // and the band draw goes through a ROLE here (ui-lint L8 reads the sources and fails on a theme-key literal anywhere else). A role with no entry (`undefined`) is the
 // default text colour, `dim` is a weight (not a key), and bold is a whitelist (BOLD_USES below).
 //   attention  (warning)    = the owner must look or act        here      (claude)     = you are here
 //   broken     (error)      = failed, stalled or over the cap   done      (success)    = finished
 //   running    (suggestion) = running now                       idle      (inactive)   = nothing to do
 //   structure  (subtle)     = rules, fold marks, separators     action    (remember)     = you can press this (a pressable `[ ... ]` button or option, never a state)
-export type PaletteRole = 'attention' | 'here' | 'broken' | 'done' | 'running' | 'idle' | 'structure' | 'action'
-// The action role uses the host link token: light RGB(0,0,255) / ANSI 21 (8.59:1 on white), with its native dark-theme counterpart.
-export const PALETTE: Record<PaletteRole, ThemeKey> = { attention: 'warning', here: 'claude', broken: 'error', done: 'success', running: 'suggestion', idle: 'inactive', structure: 'subtle', action: 'remember' }
 // the one bold whitelist: a section title, the verdict line, the active tab name, a tab name that needs the owner, a decision card's question, a picked decision option and the send button. Nothing else is bold.
 export const BOLD_USES = ['header title', 'verdict line', 'active tab name', 'needing tab name', 'question title', 'picked option', 'send button'] as const
 // which whitelist entry a bold segment belongs to, or null (a violation); invariant I4 reads this so the test never keeps its own copy of the list
@@ -138,59 +121,6 @@ export const isStale = (kind: FreshKind, ageMs: number): boolean => ageMs > FRES
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // glyph and vocabulary lint (the pure checks behind I5 (a), I20 and ui-lint.test.js L3; tests also call them on planted tables)
 
-const EXT_PICT = /\p{Extended_Pictographic}/u
-const EMOJI_PRES_ONE = /^\p{Emoji_Presentation}$/u
-export type GlyphTables = { state: Record<string, string>; structure: Record<string, string>; chart: Record<string, string>; scrollbar?: Record<string, string>; spark?: readonly string[]; fallback?: Record<string, string>; pet?: { icons?: Record<string, Partial<PetIcon>> }; verified?: Record<string, string> }
-// I5 (c) for one text: an emoji-presentation hazard. `allowPictographic` is true for kind 'detail' lines only. Digits, `#` and `*` are legal (keycap bases, not pictographs).
-export function emojiViolations(text: string, allowPictographic = false): string[] {
-  const out: string[] = []
-  for (const ch of text) {
-    const cp = ch.codePointAt(0) as number
-    if (cp === 0xfe0f) out.push('U+FE0F (emoji variation selector)')
-    else if (cp === 0x20e3) out.push('U+20E3 (keycap mark)')
-    else if ((EMOJI_BANNED as readonly string[]).includes(ch)) out.push('banned emoji-prone glyph ' + ch)
-    else if (!allowPictographic && EXT_PICT.test(ch)) out.push('Extended_Pictographic ' + ch)
-  }
-  return out
-}
-export const tableGlyphs = (g: GlyphTables): string[] => [...Object.values(g.state), ...Object.values(g.structure), ...Object.values(g.chart), ...Object.values(g.scrollbar ?? {}), ...(g.spark ?? []), ...Object.values(g.fallback ?? {})]
-// a `verified` entry is `pending-owner` or `<YYYY-MM-DD> <terminal>`; anything else (`yes`, ``, `pending`) is refused
-export const verifiedOk = (v: unknown): boolean => typeof v === 'string' && (v === 'pending-owner' || /^\d{4}-\d{2}-\d{2} \S/.test(v))
-// Pet icon whitelist check (shared-TUI §6): separate from glyphTableViolations so 1-cell enforcement stays intact while pet icons pin 2-cell Emoji_Presentation + 2-char printable ASCII fallback.
-export function petIconViolations(g: GlyphTables = GLYPHS): string[] {
-  const icons = g.pet?.icons
-  if (icons === undefined || typeof icons !== 'object' || icons === null || Object.keys(icons).length === 0) return ['GLYPHS.pet.icons is missing or empty']
-  const out: string[] = []
-  for (const [k, entry] of Object.entries(icons)) {
-    const at = 'pet.icons.' + k
-    if (typeof entry !== 'object' || entry === null) { out.push(at + ': not an object'); continue }
-    const emoji = entry.emoji
-    if (typeof emoji !== 'string' || emoji.length === 0) out.push(at + ': missing emoji')
-    else {
-      if (/\uFE0F/u.test(emoji)) out.push(at + ' emoji ' + emoji + ': contains U+FE0F')
-      if ([...emoji].length !== 1) out.push(at + ' emoji ' + emoji + ': must be a single code point')
-      if (!EMOJI_PRES_ONE.test(emoji)) out.push(at + ' emoji ' + emoji + ': must be Emoji_Presentation')
-      if ((EMOJI_BANNED as readonly string[]).includes(emoji)) out.push(at + ' emoji ' + emoji + ': banned emoji-prone glyph')
-      if (displayWidth(emoji) !== 2) out.push(at + ' emoji ' + emoji + ': draws ' + displayWidth(emoji) + ' cells, must be 2')
-    }
-    const fb = entry.fallback
-    if (typeof fb !== 'string' || !/^[\x20-\x7e]{2}$/.test(fb) || displayWidth(fb) !== 2) out.push(at + ' fallback ' + JSON.stringify(fb) + ': must be two printable ASCII characters')
-    if (!verifiedOk(entry.verified)) out.push(at + ' verified ' + JSON.stringify(entry.verified) + ': invalid verified entry')
-  }
-  return out
-}
-// I5 (a) + L3: every glyph is non-emoji, and each new-to-vocabulary glyph carries a `verified` entry
-export function glyphTableViolations(g: GlyphTables = GLYPHS): string[] {
-  const out: string[] = []
-  for (const glyph of tableGlyphs(g)) for (const v of emojiViolations(glyph)) out.push(`glyph ${glyph}: ${v}`)
-  for (const glyph of tableGlyphs(g)) if (displayWidth(glyph) !== 1) out.push(`glyph ${glyph}: draws ${displayWidth(glyph)} cells, a table glyph must be exactly one`)
-  for (const glyph of NEW_GLYPHS) {
-    if (!tableGlyphs(g).includes(glyph)) continue
-    const v = g.verified?.[glyph]
-    if (!verifiedOk(v)) out.push(`glyph ${glyph} is new to the vocabulary and has no \`verified\` entry`)
-  }
-  return out
-}
 // I20 (tables): one glyph, one meaning. No glyph character under two meanings across the state, structure and chart tables; the ten state glyphs are pairwise distinct.
 // (the fallbacks are alternatives for an existing meaning, so they are exempt from the cross-table check.)
 // The one deliberate exception to one-glyph-one-meaning: the scrollbar's track and thumb are drawn with characters another table already owns (a vertical line, a full block), in
@@ -234,21 +164,7 @@ export function money(n: number): string {
   const [whole, frac] = Math.abs(n).toFixed(2).split('.')
   return (neg ? '-' : '') + '$' + whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + frac
 }
-// a ratio (1.17 = 117%) -> integer, floored, no space. The epsilon keeps 0.58 * 100 = 57.999... from reading 57.
-export const pct = (ratio: number): string => Math.floor(ratio * 100 + 1e-9) + '%'
 const two = (n: number): string => (n < 10 ? '0' : '') + n
-// at most two units, minutes zero-padded after hours: 29s, 5m, 8h05m, 4d04h; >= 7 d as 27d
-export function dur(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return '—'
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return s + 's'
-  const m = Math.floor(s / 60)
-  if (m < 60) return m + 'm'
-  const h = Math.floor(m / 60)
-  if (h < 24) return h + 'h' + two(m % 60) + 'm'
-  const d = Math.floor(h / 24)
-  return d >= 7 ? d + 'd' : d + 'd' + two(h % 24) + 'h'
-}
 export const ago = (ms: number, t: Translate): string => t('ago', { age: dur(ms) })
 // HH:MM when `ms` is on the same local day as `nowMs`, MM-DD otherwise
 export function clock(ms: number, nowMs: number): string {
@@ -280,19 +196,6 @@ export function idTail(id: string, width: number): string {
     w += cw
   }
   return '…' + out.replace(/^[-_.]+/, '')
-}
-// prose too long: cut from the right with `…`
-export function cutProse(text: string, width: number): string {
-  if (displayWidth(text) <= width) return text
-  let out = ''
-  let w = 1
-  for (const ch of text) {
-    const cw = cellWidth(ch.codePointAt(0) as number)
-    if (w + cw > width) break
-    out += ch
-    w += cw
-  }
-  return out + '…'
 }
 // number first, then the measure word from the string table; never `N*`
 export const count = (n: number, measure: string): string => n + ' ' + measure
@@ -1203,49 +1106,6 @@ export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | 
 }
 
 // `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `▲ 要你決定`)
-export type StripTab<Id extends string = PaneTab> = { id: Id; label: string; need?: boolean }
-export type Strip<Id extends string = PaneTab> = {
-  next: Seg | null // the next-tab chip `›`
-  tabs: { id: Id; on: boolean; label: Seg }[]
-  rule: Seg[] // the baseline under the strip; on one row it carries the active mark (`━` under the active label)
-  rows: number // drawn rows: the strip's wrapped rows + the baseline
-  exact: boolean // the strip fits one row, so `rows` is certain and the `━` mark is drawn
-}
-// Q1 (owner 2026-10-13, revised 2026-10-16): no background; the active tab name is bold default text (attention bold when it needs the owner) and the `here` colour
-// is only the run of `━` in the baseline; a strip that wraps falls back to bold alone. The `›` next-page button is an action, not a place: dim.
-// Band tab badges keep their glyph and number formatting in the shared UI layer.
-export const tabCountLabel = (label: string, count: number | null, broken = false): string =>
-  count === null ? label + '(?)' : label + (count > 0 ? '(' + (broken ? GLYPHS.state.failed : '') + count + ')' : '')
-export function strip<Id extends string = PaneTab>(u: Ctx, active: Id | null, tabs: readonly StripTab<Id>[], hasNext: boolean): Strip<Id> {
-  const next = hasNext ? sg(GLYPHS.structure.goto, { dim: true, role: 'glyph' }) : null
-  const built = tabs.map(tb => {
-    const on = tb.id === active
-    const needs = tb.need === true
-    // any tab that needs the owner is attention bold (the active one too: the `━` run marks where you are); the active one otherwise default bold, the rest dim.
-    // `here` tags the active label for I4 and the strip test; it is not a colour
-    const o: SegOpts = on ? { ...(needs ? { color: PALETTE.attention } : {}), bold: true, here: true, role: 'tab' } : needs ? { color: PALETTE.attention, bold: true, role: 'tab' } : { dim: true, role: 'tab' }
-    const label = sg(' ' + tb.label + ' ', o)
-    return { id: tb.id, on, label, width: displayWidth(label.text) + 1 }
-  })
-  let rows = 1
-  let x = next === null ? 0 : displayWidth(next.text) + 1
-  let w = x
-  let markAt = -1
-  let markW = 0
-  for (const b of built) {
-    if (w > 0 && w + b.width > u.cols) { rows++; w = 0 }
-    if (b.on) { markAt = x; markW = displayWidth(b.label.text) }
-    w += b.width
-    x += b.width
-  }
-  const exact = rows === 1
-  const bar = (n: number, glyph: string, o: SegOpts): Seg[] => (n > 0 ? [sg(glyph.repeat(n), { role: 'rule', ...o })] : [])
-  const rule: Seg[] = exact && markAt >= 0
-    ? [...bar(markAt, GLYPHS.structure.rule, { color: PALETTE.structure }), ...bar(markW, GLYPHS.structure.tabMark, { color: PALETTE.here, here: true }), ...bar(u.cols - markAt - markW, GLYPHS.structure.rule, { color: PALETTE.structure })]
-    : bar(u.cols, GLYPHS.structure.rule, { color: PALETTE.structure })
-  return { next, tabs: built.map(({ id, on, label }) => ({ id, on, label })), rule, rows: rows + 1, exact }
-}
-
 // ---- the forge label on the band's left, after the ⓘ: `│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1` (the live mod draws it itself, BL-0359; the strip keeps one short `ϟ` tab that opens its full view) ----
 // Colours (owner ruling 2026-11-01, d-1081338d; plan section 12.11): the speed is `running` (how fast the running work goes: `ϟ` and the trend), its number default text, its unit dim,
 // the ` · ` `structure`, the pet dim; a speed of `—` (nothing measured) is `idle` as a whole. No new meaning for any role.
@@ -1322,7 +1182,7 @@ export function forgeFit(parts: readonly ForgeSegment[], cols: number): ForgeSeg
 export type ForgeBar = { segs: Seg[]; width: number }
 export function forgeBar(parts: readonly ForgeSegment[]): ForgeBar {
   const idle = parts.find(g => g.role === 'value')?.text === '—'
-  const segs: Seg[] = [sg('│ ', { color: PALETTE.structure, role: 'rule' }), ...parts.map(g => forgeSeg(g, idle))]
+  const segs: Seg[] = [sg(GLYPHS.structure.bandSep + ' ', { color: PALETTE.structure, role: 'rule' }), ...parts.map(g => forgeSeg(g, idle))]
   return { segs, width: segs.reduce((n, g) => n + displayWidth(g.text), 0) }
 }
 

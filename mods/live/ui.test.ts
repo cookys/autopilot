@@ -254,8 +254,10 @@ test('palette: every state colour is a PALETTE role; need_you draws only its mar
   expect(STATES.stalled.key).toBe(PALETTE.broken)
   expect(STATES.running.key).toBe(PALETTE.running)
   expect(STATES.done.key).toBe(PALETTE.done)
-  // one colour, one meaning: the seven roles map to seven distinct keys
-  expect(new Set(Object.values(PALETTE)).size).toBe(Object.keys(PALETTE).length)
+  // 2026-10-16: the eight original roles stay pairwise distinct. Later tokens.json roles may share a theme key
+  // (stale/idle, overdue/broken, waiting_on/structure, link/running); needs_human is merged. Strict key equality is tokens.test.js.
+  const core = ['attention', 'here', 'broken', 'done', 'running', 'idle', 'structure', 'action'] as const
+  expect(new Set(core.map(id => PALETTE[id])).size).toBe(core.length)
 })
 
 test('palette: a meter is plain below 80 %, attention from 80 %, broken from 100 %; its bar and percent are not bold', () => {

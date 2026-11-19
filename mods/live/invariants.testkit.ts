@@ -2,7 +2,9 @@
 // locales x widths) and now.test.ts (every tab, P5). Test support only: nothing in the pane imports it.
 import type { PaneLine } from './model'
 import type { makeT } from './i18n'
-import { GLYPHS, STATES, boldUseOf, displayWidth, emojiViolations, emphasisViolations, isMade } from './ui'
+import { GLYPHS, emojiViolations } from '../tux/glyphs.ts'
+import { displayWidth } from '../tux/width.ts'
+import { STATES, boldUseOf, emphasisViolations, isMade } from './ui'
 
 type Tr = ReturnType<typeof makeT>
 // ---- the invariants I1 to I8 and I10 over a tab's lines (line 0, the legacy global header, is P4's: it is unbranded until the verdict header replaces it) ----

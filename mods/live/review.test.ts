@@ -6,7 +6,9 @@ import { makeT } from './i18n'
 import { NO_DETAIL, NO_SECTIONS, mergeDecisions, readDecisions } from './model'
 import { reviewTabLines } from './tabs'
 import type { DecisionRow, DecisionsView, LiveSnapshot, PaneLine, ReviewSeat } from './model'
-import { GLYPHS, STATES, displayWidth, isMade } from './ui'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { displayWidth } from '../tux/width.ts'
+import { STATES, isMade } from './ui'
 import { violations } from './invariants.testkit'
 const leading = (text: string): number => text.length - text.trimStart().length
 

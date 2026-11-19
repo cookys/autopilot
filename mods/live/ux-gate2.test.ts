@@ -2,7 +2,9 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import { PAGES } from './pages/index'
-import { displayWidth, PALETTE, drawSeg } from './ui'
+import { PALETTE } from '../tux/palette.ts'
+import { displayWidth } from '../tux/width.ts'
+import { drawSeg } from './ui'
 import { makeT } from './i18n'
 import full from './fixtures/console/console-full.fixture'
 

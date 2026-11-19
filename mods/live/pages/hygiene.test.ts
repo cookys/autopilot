@@ -12,7 +12,7 @@ import { hygienePage, hygieneView } from './hygiene'
 import type { HygieneCtx, HygieneView } from './hygiene'
 import { brokenRow, staleBadge } from './rows'
 import { makeT } from '../i18n'
-import { PALETTE } from '../ui'
+import { PALETTE } from '../../tux/palette.ts'
 import { POOLS, closeGap, consoleOf } from './quota.fixture'
 
 const t = makeT('zh-TW')

@@ -1,0 +1,230 @@
+{
+  "schema": "codeforge.panel/1",
+  "tones": [
+    "subtle",
+    "inactive",
+    "dim",
+    "bold",
+    "mono",
+    "success"
+  ],
+  "tierKeys": {
+    "panel": [
+      40,
+      60,
+      80,
+      100,
+      120
+    ],
+    "side": [
+      30,
+      40,
+      50
+    ]
+  },
+  "cases": [
+    {
+      "name": "ok",
+      "fn": "readLegacyUsage",
+      "nowMs": 5000,
+      "input": {
+        "schema": "codeforge.panel/1",
+        "updated_at_ms": 1000,
+        "usage": {
+          "tiers": {
+            "40": [
+              [
+                {
+                  "text": "ok"
+                }
+              ]
+            ]
+          }
+        },
+        "side": {
+          "usage": {
+            "tiers": {
+              "30": [
+                [
+                  {
+                    "text": "side"
+                  }
+                ]
+              ]
+            }
+          }
+        }
+      },
+      "expect": {
+        "status": "ok",
+        "ageMs": 4000,
+        "side": {
+          "usage": {
+            "30": [
+              [
+                {
+                  "text": "side"
+                }
+              ]
+            ]
+          },
+          "usageFull": null,
+          "memory": null
+        },
+        "usage": {
+          "40": [
+            [
+              {
+                "text": "ok"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "pet-icon",
+      "fn": "readPet",
+      "input": {
+        "schema": "codeforge.panel/1",
+        "pet": {
+          "title": "cat",
+          "sprite": null,
+          "tiers": {
+            "40": [
+              [
+                {
+                  "text": "hp"
+                }
+              ]
+            ]
+          },
+          "icon": {
+            "id": "cat",
+            "emoji": "🐱",
+            "fallback": ":3",
+            "text": "🐱"
+          }
+        }
+      },
+      "expect": {
+        "pet": {
+          "title": "cat",
+          "sprite": null,
+          "tiers": {
+            "40": [
+              [
+                {
+                  "text": "hp"
+                }
+              ]
+            ]
+          },
+          "icon": {
+            "id": "cat",
+            "emoji": "🐱",
+            "fallback": ":3",
+            "text": "🐱"
+          }
+        }
+      }
+    },
+    {
+      "name": "unknown-tone",
+      "fn": "readLegacyUsage",
+      "nowMs": 5000,
+      "input": {
+        "schema": "codeforge.panel/1",
+        "updated_at_ms": 1000,
+        "usage": {
+          "tiers": {
+            "40": [
+              [
+                {
+                  "text": "keep",
+                  "tone": "warning"
+                }
+              ]
+            ]
+          }
+        }
+      },
+      "expect": {
+        "status": "ok",
+        "ageMs": 4000,
+        "side": null,
+        "usage": {
+          "40": [
+            [
+              {
+                "text": "keep"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "missing-fields",
+      "fn": "readPet",
+      "input": {
+        "schema": "codeforge.panel/1"
+      },
+      "expect": {
+        "pet": null
+      }
+    },
+    {
+      "name": "usage-side-poison",
+      "fn": "readLegacyUsage",
+      "nowMs": 5000,
+      "input": {
+        "schema": "codeforge.panel/1",
+        "updated_at_ms": 1000,
+        "usage": {
+          "tiers": {
+            "40": [
+              [
+                {
+                  "text": "keep"
+                }
+              ],
+              [
+                {
+                  "text": "$1"
+                }
+              ]
+            ]
+          }
+        },
+        "side": {
+          "usage": {
+            "tiers": {
+              "30": [
+                [
+                  {
+                    "text": "$2"
+                  }
+                ]
+              ]
+            }
+          }
+        }
+      },
+      "expect": {
+        "status": "ok",
+        "ageMs": 4000,
+        "side": null,
+        "usage": {
+          "40": [
+            [
+              {
+                "text": "keep"
+              }
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}

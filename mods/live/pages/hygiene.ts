@@ -7,7 +7,9 @@
 // Import order: pages/frame.ts imports ./index, which imports this file; import ./frame (or ./index) before ./hygiene in tests.
 import type { LoadSourceView, NeedsHumanEntry, ResidueView } from '../model'
 import { displayWidth, residueTally, truncateToWidth } from '../model'
-import { GLYPHS, PALETTE, residueNameOf, residueWhy, wrapPlain } from '../ui'
+import { GLYPHS } from '../../tux/glyphs.ts'
+import { PALETTE } from '../../tux/palette.ts'
+import { residueNameOf, residueWhy, wrapPlain } from '../ui'
 import type { Page, PageCtx } from './frame'
 import { brokenRow, staleBadge } from './rows'
 import type { Row } from './rows'

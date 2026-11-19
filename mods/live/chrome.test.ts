@@ -1,6 +1,7 @@
 // UX gate round 2 part B: exercise the pane chrome through the real components.
 import { test, expect } from 'claude-code/testing'
-import { PALETTE, actionSeg } from './ui'
+import { PALETTE } from '../tux/palette.ts'
+import { actionSeg } from './ui'
 import { BandBar } from './band'
 import { consoleOf, NOW } from './pages/quota.fixture'
 import type { ConsoleSnapshot } from './console'

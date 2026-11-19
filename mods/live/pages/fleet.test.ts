@@ -12,7 +12,7 @@ import { nowPage } from './now'
 import { fleetPage, fleetView, FOLD_AT } from './fleet'
 import { lineState, staleBadge, brokenRow } from './rows'
 import { makeT } from '../i18n'
-import { PALETTE } from '../ui'
+import { PALETTE } from '../../tux/palette.ts'
 import { closeGap } from './quota.fixture'
 
 const t = makeT('zh-TW')

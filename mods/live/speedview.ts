@@ -7,7 +7,9 @@ import type { T } from './i18n'
 import type { Seg } from './model'
 import { fmtCount, fmtMs, fmtTps, mainSteps, recentTimed, shortModel, summarize } from './speed'
 import type { Step } from './speed'
-import { displayWidth, GLYPHS, PALETTE } from './ui'
+import { GLYPHS } from '../tux/glyphs.ts'
+import { PALETTE } from '../tux/palette.ts'
+import { displayWidth } from '../tux/width.ts'
 import type { ForgeSegment } from './ui'
 
 const DASH = GLYPHS.structure.empty

@@ -215,6 +215,31 @@
       ]
     },
     {
+      "id": "gen-tux",
+      "title": "mods/tux/palette.ts from tokens.json roles and thresholds",
+      "generator": "node scripts/gen-tux.js",
+      "check": "node scripts/gen-tux.js --check",
+      "fix": "node scripts/gen-tux.js",
+      "tier": "both",
+      "trigger": [
+        "mods/tux/tokens.json",
+        "mods/tux/palette.ts",
+        "scripts/gen-tux.js"
+      ]
+    },
+    {
+      "id": "tux-manifest",
+      "title": "mods/tux VERSION.manifest hashes every tux file except VERSION and the manifest",
+      "generator": "node scripts/tux-manifest.js",
+      "check": "node scripts/tux-manifest.js --check",
+      "fix": "node scripts/tux-manifest.js",
+      "tier": "both",
+      "trigger": [
+        "mods/tux/",
+        "scripts/tux-manifest.js"
+      ]
+    },
+    {
       "id": "check-backlog-entries",
       "title": "project/backlog/BACKLOG.md rows vs references/backlog-entry.md (mode from .claude/backlog-config.md; ratchet allowlist)",
       "generator": null,

@@ -4,7 +4,7 @@
 // A batch is the run of cards from the first pending question until nothing is pending (or the view is opened again). A card is ANSWERED once it was SENT (an option press only selects:
 // the owner can still change the pick and the note until send); it then stays where it is, greyed, with the answer and a 改答案 button, and takes no focus. A reopened (fixing) card is open again.
 import { decideDialog, decidePick } from './model'
-import { GLYPHS } from './ui'
+import { GLYPHS } from '../tux/glyphs.ts'
 import type { DecideState, LiveDecision, PaneLine } from './model'
 
 export type DecideBatch = {

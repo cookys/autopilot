@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { displayWidth } from '../ui'
+import { displayWidth } from '../../tux/width.ts'
 import { renderQuota } from './quota'
 import { fleetView } from './fleet'
 

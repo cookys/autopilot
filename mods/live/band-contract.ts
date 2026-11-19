@@ -5,6 +5,7 @@
 // The published per-session band-facts file copies this same object (see band-statusline-map.md).
 // ◷ (`age`) means elapsed. That sentence stays in the map; it is not a contract key.
 
+import { pctInt } from '../tux/format.ts'
 import { BAND_CONTRACT_RAW } from './band-contract-data.ts'
 
 export type BandContract = {
@@ -54,5 +55,5 @@ export function ratioLevel(ratio: number): 'ok' | 'warn' | 'over' {
 // Integer percent, floored. The epsilon keeps a ratio that is an integer percent from reading one below (0.58 * 100).
 export function floorPercent(ratio: number): number {
   if (BAND_CONTRACT.round !== 'floor') throw new Error('band-statusline-contract: round is not floor')
-  return Math.floor(ratio * 100 + 1e-9)
+  return pctInt(ratio)
 }

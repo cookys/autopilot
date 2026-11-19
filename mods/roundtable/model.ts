@@ -2,7 +2,7 @@
 // Imports a function from the live design system (cell width). Syntax is erasable so node --test can load this file.
 // A trailing line with no newline is partial and ignored. A line that is not one valid row is skipped.
 
-import { cellWidth } from '../live/ui.ts'
+import { cellWidth } from '../tux/width.ts'
 
 export type RoomKind = 'say' | 'relay' | 'system'
 export type LineRole = 'here' | 'attention' | 'broken' | 'text' | 'structure'

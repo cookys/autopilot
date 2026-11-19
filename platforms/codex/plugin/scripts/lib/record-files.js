@@ -274,6 +274,36 @@ function backlogReply(repo, input, opts) {
   return { id: input.id, paths_written: [rel(repo, backlogAbs)], info_lines: [] };
 }
 
+function backlogSetContext(repo, input) {
+  const cfg = gateConfig(repo);
+  const backlogAbs = backlogFile(repo);
+  const original = fs.readFileSync(backlogAbs, 'utf8');
+  const loc = locateRow(original, input.id);
+  const fields = rowFields(loc, original, cfg);
+  const ctx = String(input.context == null ? '' : input.context).replace(/[\r\n]+/g, ' ').trim();
+  if (!ctx) throw new RuleViolationError([{ code: 'missing_field', title: fields.Title || '', field: 'Context', detail: 'Context missing' }]);
+  const ctxCap = rules.effectiveCap(cfg, 'Context');
+  if (ctxCap && rules.byteLen(ctx) > ctxCap) {
+    throw new RuleViolationError([{ code: 'cap_exceeded', title: fields.Title || '', field: 'Context', detail: `${rules.byteLen(ctx)} > ${ctxCap}` }]);
+  }
+  const cr = loc.lines[loc.start].endsWith('\r') ? '\r' : '';
+  const i = lineIndex(loc, 'Context');
+  if (i >= 0) {
+    loc.lines[i] = `- **Context**: ${ctx}${cr}`;
+  } else {
+    let ins = loc.end;
+    while (ins > loc.start + 1 && loc.lines[ins - 1].trim() === '') ins -= 1;
+    loc.lines.splice(ins, 0, `- **Context**: ${ctx}${cr}`);
+  }
+  writeAtomic(backlogAbs, loc.lines.join('\n'));
+  const g = runGate(repo, backlogAbs);
+  if (g.status !== 0) {
+    writeAtomic(backlogAbs, original);
+    throw new RecordError('gate_failed', `check-backlog-entries.js refused Context update (exit ${g.status}); nothing was kept:\n${g.out.trim()}`);
+  }
+  return { id: input.id, paths_written: [rel(repo, backlogAbs)], info_lines: [] };
+}
+
 function backlogClose(repo, input, opts) {
   const o = opts || {};
   const how = input.how;
@@ -539,7 +569,7 @@ function handoffClose(repo, input, opts) {
 
 module.exports = {
   RecordError, RuleViolationError,
-  backlogNew, backlogReply, backlogClose, backlogView, backlogHasRow, backlogReadRow,
+  backlogNew, backlogReply, backlogSetContext, backlogClose, backlogView, backlogHasRow, backlogReadRow,
   decisionNew, decisionSupersede,
   adrNew, adrSupersede,
   lessonNew,

@@ -566,5 +566,89 @@ sed -i 's/^- \*\*Problem\*\*: Existing row bypassed the single writer\./- **Prob
 pr --target "$R_IMP" backlog import BL-0009; eq 1 "$RC" "backlog import: refuses to mask a post-import field mismatch"
 assert_contains "$ERR" "differing field" "backlog import: conflict names differing field"
 
+# --- relates_to parity: backlog new --relates & text mentions match `hippo import --from autopilot-backlog`, and backlog sync repairs missing links
+R_REL="$(hs_mkrepo relpar store)"
+mkdir -p "$R_REL/docs"
+cp -r "$FIX/dot-claude" "$R_REL/.claude"
+printf '# Backlog\n\n<!-- next-id: BL-0001 -->\n' > "$R_REL/docs/BACKLOG.md"
+git -C "$R_REL" add -A -f >/dev/null && git -C "$R_REL" commit -q -m relbase || fail "relbase"
+pr --target "$R_REL" --json backlog new --title "Parity target A" "${BL_FLAGS[@]}"; eq 0 "$RC" "relates parity: create A -> exit 0"
+REL_A="$(printf '%s' "$OUT" | jf 'd.id')"
+BL_A="$(H "$R_REL" show "$REL_A" | jf 'd.data.record.provenance.value')"
+pr --target "$R_REL" --json backlog new --title "Parity target B" "${BL_FLAGS[@]}"; eq 0 "$RC" "relates parity: create B -> exit 0"
+REL_B="$(printf '%s' "$OUT" | jf 'd.id')"
+BL_B="$(H "$R_REL" show "$REL_B" | jf 'd.data.record.provenance.value')"
+
+pr --target "$R_REL" --json backlog new --title "Parity linked via relates" "${BL_FLAGS[@]}" --context "Depends on prior row." --relates "$REL_A"
+eq 0 "$RC" "relates parity: backlog new --relates -> exit 0"
+REL_C="$(printf '%s' "$OUT" | jf 'd.id')"
+eq 1 "$(edges "$R_REL" "$REL_C" relates_to)" "relates parity: --relates creates relates_to edge"
+assert_contains "$(cat "$R_REL/docs/BACKLOG.md")" "Related: $BL_A" "relates parity: row Context carries $BL_A for importer"
+
+pr --target "$R_REL" --json backlog new --title "Mention linked row" "${BL_FLAGS[@]}" --context "See $BL_A and $BL_B for baseline."
+eq 0 "$RC" "relates parity: backlog new with BL mentions -> exit 0"
+REL_D="$(printf '%s' "$OUT" | jf 'd.id')"
+eq 2 "$(edges "$R_REL" "$REL_D" relates_to)" "relates parity: text mentions create relates_to edges in store"
+
+REL_REC="$(node "$PLUGIN/scripts/check-backlog-entries.js" --hippo --reconcile --target "$R_REL" 2>/dev/null)"; REL_REC_RC=$?
+eq 0 "$REL_REC_RC" "relates parity: reconcile clean after backlog new --relates"
+eq 0 "$(printf '%s' "$REL_REC" | jf 'd.new_count')" "relates parity: 0 new reconcile violations"
+
+R_REL_IMP="$(hs_mkrepo relpar-imp store)"
+H "$R_REL_IMP" import --from autopilot-backlog "$R_REL/docs/BACKLOG.md" >/dev/null
+eq 0 "$?" "relates parity: hippo import --from autopilot-backlog succeeds"
+rel_prov_set() {
+  local repo="$1" title="$2"
+  local id
+  id="$(H "$repo" list --history | jf "d.data.records.find(r=>r.title===$(node -e 'console.log(JSON.stringify(process.argv[1]))' "$title")).id")"
+  H "$repo" related "$id" --rel relates_to --depth 1 | node -e '
+    const d=JSON.parse(require("fs").readFileSync(0,"utf8"));
+    const id=process.argv[1];
+    const repo=process.argv[2];
+    const {execFileSync}=require("child_process");
+    const hippo=process.argv[3]||"hippo";
+    const out=[];
+    for (const e of (d.data.edges||[])) {
+      if (e.rel!=="relates_to" || e.state!=="present" || e.source!==id) continue;
+      const s=JSON.parse(execFileSync(hippo,["--json","-C",repo,"show",e.target],{encoding:"utf8"}));
+      if (s.data && s.data.record && s.data.record.provenance) out.push(s.data.record.provenance.value);
+    }
+    console.log(out.sort().join(","));
+  ' "$id" "$repo" "$HIPPO_BIN"
+}
+eq "$(rel_prov_set "$R_REL" "Parity linked via relates")" "$(rel_prov_set "$R_REL_IMP" "Parity linked via relates")" "relates parity: --relates round trip yields identical relates_to set"
+eq "$(rel_prov_set "$R_REL" "Mention linked row")" "$(rel_prov_set "$R_REL_IMP" "Mention linked row")" "relates parity: text-mention round trip yields identical relates_to set"
+
+# backlog sync repairs missing relates_to edges from store body mentions (the historical BL-0457..0461 drift)
+DRIFT_BODY="$(printf '%s\n' '- **Since**: 2026-11-09' '- **Problem**: Historical drift.' '- **Impact**: Missing link.' '- **Trigger**: ready' '- **Source**: self 2026-11-09' '- **Pointer**: none' "- **Context**: Drifted mention of $BL_A without store edge.")"
+DRIFT_ID="$(printf '%s\n' "$DRIFT_BODY" | "$HIPPO_BIN" --json -C "$R_REL" new issue --title "Historical drifted row" --status open --tag origin:self --tag effort:s --tag trigger:ready --body-file - | jf 'd.data.ids[0]')"
+H "$R_REL" link "$DRIFT_ID" relates_to "$REL_B" >/dev/null
+pr --target "$R_REL" backlog sync "$DRIFT_ID"; eq 0 "$RC" "backlog sync: repairs links and writes row -> exit 0"
+eq 2 "$(edges "$R_REL" "$DRIFT_ID" relates_to)" "backlog sync: adds missing relates_to link ($BL_A) alongside existing ($BL_B)"
+assert_contains "$(cat "$R_REL/docs/BACKLOG.md")" "$BL_B" "backlog sync: syncs unmentioned store relates_to target ($BL_B) into Context"
+REL_SYNC_REC="$(node "$PLUGIN/scripts/check-backlog-entries.js" --hippo --reconcile --target "$R_REL" 2>/dev/null)"; REL_SYNC_RC=$?
+eq 0 "$REL_SYNC_RC" "backlog sync: reconcile clean after bidirectional sync"
+
+# type parity: the importer derives debt for every row, so the writer refuses other types and sync repairs an existing one (BL-0470 was chore)
+pr --target "$R_REL" backlog new --title "Chore typed" --type chore "${BL_FLAGS[@]}"; eq 3 "$RC" "type parity: backlog new --type chore -> exit 3"
+CHORE_ID="$(printf '%s\n' '- **Since**: 2026-11-09' '- **Problem**: Typed chore.' '- **Impact**: Type drift.' '- **Trigger**: ready' '- **Source**: self 2026-11-09' '- **Pointer**: none' | "$HIPPO_BIN" --json -C "$R_REL" new issue --title "Chore typed row" --type chore --status open --tag origin:self --tag effort:s --tag trigger:ready --body-file - | jf 'd.data.ids[0]')"
+pr --target "$R_REL" backlog sync "$CHORE_ID"; eq 0 "$RC" "type parity: backlog sync of a chore record -> exit 0"
+eq debt "$(H "$R_REL" show "$CHORE_ID" | jf 'd.data.record.type')" "type parity: backlog sync sets type to debt"
+
+# provenance index covers every page of `hippo list` (default page is 50): a mention of a row past the first page still gets its link
+R_PG="$(hs_mkrepo pagination store)"
+mkdir -p "$R_PG/docs"
+cp -r "$FIX/dot-claude" "$R_PG/.claude"
+{ printf '# Backlog\n\n<!-- next-id: BL-0056 -->\n\n'
+  for n in $(seq 1 55); do
+    printf '### Filler row %s\n- **Id**: BL-%04d\n- **Status**: open\n- **Since**: 2026-11-09\n- **Origin**: self\n- **Problem**: Filler problem %s.\n- **Impact**: Filler impact %s.\n- **Trigger**: ready\n- **Trigger-Type**: ready\n- **Effort**: S\n- **Source**: self 2026-11-09\n- **Pointer**: none\n\n' "$n" "$n" "$n" "$n"
+  done; } > "$R_PG/docs/BACKLOG.md"
+H "$R_PG" import --from autopilot-backlog "$R_PG/docs/BACKLOG.md" >/dev/null; eq 0 "$?" "pagination: import of 55 rows -> exit 0"
+git -C "$R_PG" add -A -f >/dev/null && git -C "$R_PG" commit -q -m pgbase || fail "pgbase"
+BL_PG_LATE="$(H "$R_PG" list --history | jf 'Array.from({length:55},(_,i)=>"BL-"+String(i+1).padStart(4,"0")).find(b=>!d.data.records.some(r=>r.provenance&&r.provenance.value===b))')"
+assert_contains "$BL_PG_LATE" "BL-" "pagination: the default list page leaves some row out ($BL_PG_LATE)"
+pr --target "$R_PG" --json backlog new --title "Mentions late row" "${BL_FLAGS[@]}" --context "See $BL_PG_LATE for baseline."; eq 0 "$RC" "pagination: backlog new -> exit 0"
+eq 1 "$(edges "$R_PG" "$(printf '%s' "$OUT" | jf 'd.id')" relates_to)" "pagination: mention of a row beyond the first 50 records creates its relates_to edge"
+
 hs_exit_check
 finalize_test

@@ -398,4 +398,64 @@ FILES_REC="$(node "$ADMIT_JS" --input "$PORTFOLIO_JSON" --backlog "$RAF/$BL" --c
 assert_eq "$FILES_RC" 0 "admit-backlog-follow-ups without store still exits 0"
 assert_contains "$(cat "$RAF/$BL")" "<!-- autopilot-follow-up:" "store-less repo keeps direct follow-up marker write"
 
+# --- Commit 2: zh-TW refusal message, hand-raised next-id refusal, and .githooks/pre-commit via git commit
+RNID="$(mk nextid store)"
+sed -i 's/<!-- next-id: BL-0001 -->/<!-- next-id: BL-0099 -->/' "$RNID/$BL"
+git -C "$RNID" add "$BL"
+guard "$RNID"
+assert_eq "$RC" 1 "hand-raised next-id without adding matching rows is red"
+assert_contains "$OUT" "next_id_hand_edited" "names next_id_hand_edited"
+assert_contains "$OUT" "禁止直接手改 BACKLOG.md" "refusal uses zh-TW message"
+assert_contains "$OUT" "node scripts/project-record.js backlog new|sync" "refusal points at project-record.js backlog new|sync"
+
+# negative control: mutating ENFORCE_NEXT_ID_GUARD to false in a temp copy stops catching hand-raised next-id
+MUT_SCRIPTS="$TEST_TMP/mut-scripts"
+cp -r "$REPO_ROOT/scripts" "$MUT_SCRIPTS"
+sed -i 's/const ENFORCE_NEXT_ID_GUARD = true;/const ENFORCE_NEXT_ID_GUARD = false;/' "$MUT_SCRIPTS/check-backlog-single-writer.js"
+MUT_OUT="$(node "$MUT_SCRIPTS/check-backlog-single-writer.js" --staged --target "$RNID" 2>&1 < /dev/null)"; MUT_RC=$?
+assert_eq "$MUT_RC" 0 "mutant without next-id guard fails to catch hand-raised next-id ($MUT_OUT)"
+git -C "$RNID" reset -q HEAD "$BL"; git -C "$RNID" checkout -q -- "$BL"
+
+# real .githooks/pre-commit through git commit: hand row -> refused, hand next-id -> refused, writer write -> allowed
+# the repo carries its own copy of scripts/, so the dev-checkout rule applies: the plugin dir is only usable as a store with the committed id "autopilot"
+RBL=docs/BACKLOG.md
+RPC="$(hs_mkrepo precommit)"
+"$HIPPO_BIN" --json -C "$RPC" init --visibility internal --id autopilot >/dev/null || fail "hippo init precommit"
+mkdir -p "$RPC/docs" "$RPC/hooks/tests/lib" "$RPC/references"
+printf '# BACKLOG\n\n<!-- next-id: BL-0001 -->\n\n' > "$RPC/$RBL"
+cp -r "$REPO_ROOT/.githooks" "$RPC/.githooks"
+chmod +x "$RPC/.githooks/"*
+cp -r "$REPO_ROOT/scripts" "$RPC/scripts"
+# the manifest sync rituals need the whole plugin tree; this scratch repo only exercises the single-writer step of the real hook
+printf '#!/usr/bin/env bash\nexit 0\n' > "$RPC/scripts/sync-all.sh"
+cp -r "$REPO_ROOT/hooks/_shared" "$RPC/hooks/_shared"
+# the copied scripts/ make project-detect see the plugin layout; pin the layout the way a consumer repo does
+cp -r "$REPO_ROOT/hooks/tests/fixtures/record-files/base/dot-claude" "$RPC/.claude"
+cp "$REPO_ROOT/hooks/tests/lib/suite-residue-reap.sh" "$RPC/hooks/tests/lib/suite-residue-reap.sh"
+cp "$REPO_ROOT/references/blind-dispatch.md" "$RPC/references/blind-dispatch.md"
+git -C "$RPC" config core.hooksPath "$RPC/.githooks"
+# the harness exports a test author (t@t) that the pre-commit test-identity gate refuses; real commits below use a non-test one
+pcommit() { GIT_AUTHOR_NAME="Precommit Lane" GIT_AUTHOR_EMAIL="lane@autopilot-precommit.dev" GIT_COMMITTER_NAME="Precommit Lane" GIT_COMMITTER_EMAIL="lane@autopilot-precommit.dev" git -C "$RPC" commit "$@"; }
+git -C "$RPC" add -A -f >/dev/null && git -C "$RPC" commit -q --no-verify -m "precommit base" || fail "precommit base"
+
+printf '### hand bypass row\n- **Id**: BL-0001\n- **Status**: open\n' >> "$RPC/$RBL"
+git -C "$RPC" add "$RBL"
+PC_HAND="$(pcommit -m "hand row bypass" 2>&1 < /dev/null)"; PC_HAND_RC=$?
+assert_eq "$PC_HAND_RC" 1 "git commit via .githooks/pre-commit refuses hand-added BACKLOG.md row"
+assert_contains "$PC_HAND" "backlog single-writer gate failed" "pre-commit prints single-writer banner"
+assert_contains "$PC_HAND" "node scripts/project-record.js backlog new|sync" "pre-commit points at backlog new|sync"
+git -C "$RPC" reset -q HEAD "$RBL"; git -C "$RPC" checkout -q -- "$RBL"
+
+sed -i 's/<!-- next-id: BL-0001 -->/<!-- next-id: BL-0050 -->/' "$RPC/$RBL"
+git -C "$RPC" add "$RBL"
+PC_NID="$(pcommit -m "hand next-id bypass" 2>&1 < /dev/null)"; PC_NID_RC=$?
+assert_eq "$PC_NID_RC" 1 "git commit via .githooks/pre-commit refuses hand-raised next-id"
+assert_contains "$PC_NID" "next_id_hand_edited" "pre-commit names next_id_hand_edited"
+git -C "$RPC" reset -q HEAD "$RBL"; git -C "$RPC" checkout -q -- "$RBL"
+
+newrow "$RPC" "precommit writer row" >/dev/null || fail "newrow in RPC"
+git -C "$RPC" add -A -f >/dev/null
+PC_OK="$(pcommit -m "writer backlog commit" 2>&1 < /dev/null)"; PC_OK_RC=$?
+assert_eq "$PC_OK_RC" 0 "git commit via .githooks/pre-commit allows project-record.js write ($PC_OK)"
+
 finalize_test

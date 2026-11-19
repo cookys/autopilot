@@ -411,6 +411,14 @@ function execute(repo, plan, opts = {}) {
       const r = run(repo, ['edit', id, '--body-file', '-'], { input: nl(step.body) });
       if (r.exit !== 0) return fail(i, step, r);
       out.created.push({ index: i, op: 'edit', id });
+    } else if (step.op === 'set') {
+      const id = ref(step.id);
+      const s = run(repo, ['show', id]);
+      if (s.exit !== 0) return fail(i, step, s);
+      if (s.data.record[step.field] === step.value) { out.skipped.push({ index: i, op: 'set', id, reason: `${step.field} equal` }); continue; }
+      const r = run(repo, ['set', id, step.field, step.value]);
+      if (r.exit !== 0) return fail(i, step, r);
+      out.created.push({ index: i, op: 'set', id, field: step.field });
     } else {
       throw new HippoError(`unknown step op: ${step.op}`);
     }

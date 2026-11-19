@@ -412,6 +412,7 @@ assert_contains "$OUT" "node scripts/project-record.js backlog new|sync" "refusa
 MUT_SCRIPTS="$TEST_TMP/mut-scripts"
 cp -r "$REPO_ROOT/scripts" "$MUT_SCRIPTS"
 sed -i 's/const ENFORCE_NEXT_ID_GUARD = true;/const ENFORCE_NEXT_ID_GUARD = false;/' "$MUT_SCRIPTS/check-backlog-single-writer.js"
+grep -q 'const ENFORCE_NEXT_ID_GUARD = false;' "$MUT_SCRIPTS/check-backlog-single-writer.js" || fail "mutation anchor drifted: ENFORCE_NEXT_ID_GUARD = true not found in check-backlog-single-writer.js"
 MUT_OUT="$(node "$MUT_SCRIPTS/check-backlog-single-writer.js" --staged --target "$RNID" 2>&1 < /dev/null)"; MUT_RC=$?
 assert_eq "$MUT_RC" 0 "mutant without next-id guard fails to catch hand-raised next-id ($MUT_OUT)"
 git -C "$RNID" reset -q HEAD "$BL"; git -C "$RNID" checkout -q -- "$BL"
